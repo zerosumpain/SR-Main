@@ -62,6 +62,15 @@
   const flying = $derived(Boolean(pilot?.enabled && !pilot.stopReason));
   const release = $derived(deliveryState?.release);
   const blockedFromRelease = $derived(deliveryState ? releaseBlocker(deliveryState) : 'Loading.');
+  /**
+   * The revision a verdict is about: the one the preview is serving, which is
+   * what the owner is actually looking at. It is deliberately NOT always the
+   * newest candidate — a working preview is retained while the next revision is
+   * checked — and judging the thing on screen is the only honest reading.
+   */
+  const judgedRevision = $derived(deliveryState?.preview.revision ?? deliveryState?.candidate ?? null);
+  const previewIsBehind = $derived(Boolean(judgedRevision && deliveryState?.candidate && judgedRevision !== deliveryState.candidate));
+  let request = $state('');
   async function refresh() {
     if (refreshing) return; refreshing = true;
     try {
@@ -81,9 +90,16 @@
         initialized = true;
       }
       if (snapshot && snapshot.delivery.state.candidate !== evidenceCandidate) {
+        // Keep what is in the boxes. Under an unattended run the candidate
+        // advances every round, and clearing the fields threw away observations
+        // the owner was in the middle of typing — which is most of why saving
+        // evidence "did not work". A verdict is recorded against the revision
+        // actually on screen, so a moving candidate does not invalidate it.
         evidenceCandidate = snapshot.delivery.state.candidate;
-        evidence = {}; verdicts = {};
-        if (!busy) error = 'The candidate changed. Review its new preview before recording fresh evidence.';
+        for (const c of snapshot.delivery.state.criteria) {
+          if (evidence[c.id] === undefined) evidence[c.id] = c.evidence;
+          if (verdicts[c.id] === undefined) verdicts[c.id] = c.verdict;
+        }
       }
     } catch { connection = 'Disconnected — saved work is retained'; }
     finally { refreshing = false; }
@@ -353,22 +369,52 @@
         {#if previewHref}<div class:phone class="wk-preview"><iframe title="Isolated feature preview" src={previewHref} sandbox="allow-scripts allow-forms allow-same-origin allow-downloads"></iframe></div>{/if}
 
         <h2 class="wk-h2">Acceptance evidence</h2>
-        <p class="wk-muted">Candidate {deliveryState.candidate?.slice(0, 12) ?? 'not prepared'}. Leave these fields unchanged to let the model inspect and assess them when you continue. Your saved verdicts take precedence.</p>
+        <p class="wk-muted">Candidate {deliveryState.candidate?.slice(0, 12) ?? 'not prepared'}. Leave these fields unchanged to let the reviewer assess them when you continue; your own verdict always takes precedence over its.</p>
+        {#if previewIsBehind}
+          <p class="wk-stamp">You are judging revision {judgedRevision?.slice(0, 8)}, which is what the preview is serving. The worker has since produced {deliveryState.candidate?.slice(0, 8)}; your verdict is recorded against what you looked at and will be reassessed when that revision gets a preview.</p>
+        {/if}
         <div class="wk-rows">
           {#each deliveryState.criteria as criterion (criterion.id)}
-            <form class="wk-row wk-criterion" onsubmit={(e) => { e.preventDefault(); void act('criterion', { criterionId: criterion.id, verdict: verdicts[criterion.id] ?? 'unverified', evidence: evidence[criterion.id] ?? '' }); }}>
-              <p class="wk-criterion-text">{criterion.text}</p>
-              {#if criterion.assessment?.revision === deliveryState.candidate}
-                <div class="wk-assessment"><strong>{criterion.assessment.independent ? 'Independent review' : 'Self-review'}: {criterion.assessment.verdict} · {criterion.assessment.basis}</strong><p>{criterion.assessment.evidence}</p><span class="wk-stamp">{criterion.assessment.model} · {new Date(criterion.assessment.at).toLocaleString()}{criterion.revision === deliveryState.candidate && criterion.verdict !== 'unverified' ? ' · your saved verdict takes precedence' : ''}</span>{#if criterion.assessment.independent === false}<p class="wk-warn">Judged by the same model that wrote the change. Pin a Development adversary in the model settings to get a second opinion.</p>{/if}</div>
+            <form class="wk-row wk-criterion" onsubmit={(e) => { e.preventDefault(); void act('criterion', { criterionId: criterion.id, verdict: verdicts[criterion.id] ?? 'unverified', evidence: evidence[criterion.id] ?? '', judgedRevision }); }}>
+              <p class="wk-criterion-text">{criterion.text}{#if criterion.addedBy === 'owner'}<span class="wk-added">added by you</span>{/if}</p>
+              <!-- What the run thought, kept whether or not it is current and
+                   whether or not the owner has overruled it. It used to be
+                   hidden the moment the candidate moved on and erased the moment
+                   a verdict was saved, which left the owner judging with the
+                   reasoning taken away. -->
+              {#if criterion.assessment}
+                {@const assessment = criterion.assessment}
+                {@const stale = assessment.revision !== deliveryState.candidate}
+                {@const overruled = criterion.revision === deliveryState.candidate && criterion.verdict !== 'unverified'}
+                <div class="wk-assessment" class:stale>
+                  <p class="wk-eyebrow">What the reviewer thought</p>
+                  <p class="wk-verdict tone-{assessment.verdict === 'passed' ? 'good' : assessment.verdict === 'failed' ? 'urgent' : 'watch'}">{assessment.verdict} · {assessment.basis === 'observed' ? 'seen in the browser' : 'read from the diff'}</p>
+                  <p>{assessment.evidence}</p>
+                  <span class="wk-stamp">{assessment.independent ? 'Independent reviewer' : 'Same model that wrote the change'} · {assessment.model} · {new Date(assessment.at).toLocaleString()} · revision {assessment.revision.slice(0, 8)}{stale ? ' (an earlier revision)' : ''}{overruled ? ' · your verdict takes precedence' : ''}</span>
+                  {#if assessment.independent === false}<p class="wk-warn">No separate adversary is pinned, so this is the build marking its own homework. Pin a Development adversary in the model settings.</p>{/if}
+                </div>
+              {:else}
+                <p class="wk-stamp wk-none">Not assessed yet. Continue automatically to have the reviewer judge it.</p>
               {/if}
               <div class="wk-criterion-controls">
                 <label class="wk-field wk-narrow"><span class="wk-label">Verdict</span><select aria-label="Verdict for {criterion.text}" bind:value={verdicts[criterion.id]}><option value="unverified">Not exercised</option><option value="passed">Passed</option><option value="failed">Failed</option><option value="blocked">Blocked</option></select></label>
                 <label class="wk-field"><span class="wk-label">Evidence</span><textarea aria-label="Evidence for {criterion.text}" bind:value={evidence[criterion.id]} rows="2" placeholder="What was tested, observed or blocked"></textarea></label>
               </div>
-              <div class="wk-actions"><button class="wk-ghost" disabled={busy || running || !deliveryState.candidate || (!!deliveryState.preview.revision && deliveryState.preview.revision !== deliveryState.candidate)}>Save evidence</button><span class="wk-stamp">Recorded: {criterion.verdict}</span></div>
+              <div class="wk-actions">
+                <button class="wk-ghost" disabled={busy || !judgedRevision}>Save evidence</button>
+                <span class="wk-stamp">Recorded: {criterion.verdict}{criterion.revision ? ` on ${criterion.revision.slice(0, 8)}` : ''}</span>
+              </div>
             </form>
           {/each}
         </div>
+
+        <h2 class="wk-h2">Anything else you want</h2>
+        <p class="wk-muted">Add a follow-up here and it becomes an acceptance criterion on this feature: the build cannot be accepted until it is met, and the next instruction to the worker is built from it. Use it for what this feature should also do — a separate piece of work is a new commission.</p>
+        <form class="wk-form" onsubmit={async (e) => { e.preventDefault(); if (await act('request', { request })) request = ''; }}>
+          <label class="wk-field"><span class="wk-label">Feature request</span><textarea bind:value={request} required rows="2" placeholder="For example: remember the last comparison I looked at and open on it next time."></textarea></label>
+          <button class="wk-run" disabled={busy || !deliveryState.brief.acceptedAt}>Add to this feature</button>
+          {#if !deliveryState.brief.acceptedAt}<span class="wk-stamp">Accept the brief first.</span>{/if}
+        </form>
 
       {:else}
         <SectionHead
@@ -444,8 +490,37 @@
 </DaydreamShell>
 
 <style>
-  .wk-assessment { grid-column: 1 / -1; padding: 12px 0; border-top: 1px solid var(--line-hair); font-size: var(--fs-nav); }
+  /* The reviewer's own column, set apart from the owner's controls: a rule down
+     the left says "this is a report", the way the alert bands do. */
+  .wk-assessment {
+    grid-column: 1 / -1;
+    margin: 4px 0 12px;
+    padding: 11px 0 11px 14px;
+    border-left: 3px solid var(--accent-ink);
+    background: var(--surface-sunken);
+    font-size: var(--fs-nav);
+    line-height: 1.5;
+  }
+  .wk-assessment.stale { border-left-color: var(--line-strong); opacity: 0.8; }
   .wk-assessment p { margin: 6px 0; }
+  .wk-verdict {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .wk-verdict.tone-good { color: var(--good); }
+  .wk-verdict.tone-urgent { color: var(--error); }
+  .wk-verdict.tone-watch { color: var(--warn); }
+  .wk-none { display: block; margin: 4px 0 12px; }
+  .wk-added {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    margin-left: 10px;
+  }
   .wk-warn { color: var(--warn); }
   .wk {
     max-width: 1500px;

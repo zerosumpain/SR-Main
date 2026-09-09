@@ -23,7 +23,10 @@ export interface Criterion {
   text: string;
   verdict: 'unverified' | 'passed' | 'failed' | 'blocked';
   evidence: string;
+  /** The revision this verdict judges — the one the owner had on screen. */
   revision: string | null;
+  /** Set when the owner added this after the brief was accepted. */
+  addedBy?: 'owner';
   /**
    * A reviewer's judgement, always subordinate to an owner verdict.
    *

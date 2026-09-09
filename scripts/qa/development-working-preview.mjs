@@ -51,7 +51,11 @@ try {
       await (await iframe.contentFrame()).waitForLoadState('networkidle');
       await frame.getByRole('button', { name: 'Save preference', exact: true }).click();
       await frame.getByText('Preference saved', { exact: true }).waitFor();
-      assert.equal(await page.getByRole('button', { name: 'Save evidence', exact: true }).isDisabled(), true);
+      // Recording an observation about the revision on screen is allowed even
+      // while the worker runs — that is the point of a working preview, and
+      // refusing it was what stopped an owner progressing. Acceptance is still
+      // protected, which is asserted on the Delivery tab below.
+      assert.equal(await page.getByRole('button', { name: 'Save evidence', exact: true }).first().isDisabled(), false);
       if (scenario === 'failed') await page.getByRole('alert').filter({ hasText: 'Synthetic replacement failed' }).waitFor();
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
       await page.screenshot({ path: `/tmp/development-working-${scenario}-${width}.png`, fullPage: true });

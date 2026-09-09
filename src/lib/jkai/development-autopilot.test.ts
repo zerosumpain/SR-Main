@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { newDelivery, autopilotActive, releaseBlocker } from './development';
+import { newDelivery, autopilotActive, releaseBlocker, criterionResult } from './development';
 import { parseReleaseVeto, coachingInstruction } from './development-review.server';
 import { prBody } from './development-release.server';
 import { developmentLane } from '$lib/builds/development-progress';
@@ -174,5 +174,28 @@ describe('nothing carries the token out of a failed command', () => {
     return import('./development-release.server').then(({ redactCommandOutput }) => {
       expect(redactCommandOutput('remote: https://x-access-token:tok123@github.com', 'tok123')).not.toContain('tok123');
     });
+  });
+});
+
+describe('an owner verdict judges what was on screen', () => {
+  it('holds only while the candidate is the revision it judged', () => {
+    const previewed = 'a'.repeat(40);
+    const criterion = { id: 'criterion-1', text: 'Save it', verdict: 'passed' as const, evidence: 'I saw it save', revision: previewed };
+    // While the candidate is what the owner looked at, their verdict rules.
+    expect(criterionResult(criterion, previewed)).toMatchObject({ verdict: 'passed', source: 'owner' });
+    // Once the worker moves past it, the stale verdict must not leak into
+    // acceptance — which is what makes recording it against the PREVIEWED
+    // revision safe even while the build is running.
+    expect(criterionResult(criterion, 'b'.repeat(40))).toMatchObject({ verdict: 'unverified' });
+  });
+
+  it('keeps the reviewer’s assessment beside the owner’s verdict rather than replacing it', () => {
+    const previewed = 'a'.repeat(40);
+    const assessment = { verdict: 'failed' as const, basis: 'inferred' as const, evidence: 'No handler', model: 'reviewer/model', independent: true, revision: previewed, at: 'now' };
+    const owner = { id: 'criterion-1', text: 'Save it', verdict: 'passed' as const, evidence: 'I saw it save', revision: previewed, assessment };
+    // The owner wins the verdict...
+    expect(criterionResult(owner, previewed)).toMatchObject({ verdict: 'passed', source: 'owner' });
+    // ...and the reasoning survives to be read beside it.
+    expect(owner.assessment.evidence).toBe('No handler');
   });
 });
