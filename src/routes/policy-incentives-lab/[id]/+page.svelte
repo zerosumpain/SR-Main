@@ -24,9 +24,10 @@
   const step = $derived(page.url.searchParams.get('step') ?? 'overview');
   const tabs = [['overview', 'First look'], ['evidence', 'Policy evidence'], ['actors', 'People and organisations'], ['builder', 'Choices and trade-offs'], ['runner', 'Try a scenario'], ['results', 'Results'], ['audit', 'Audit and export']];
   let busy = $state(false); let message = $state(''); let success = $state('');
-  let sourceTitle = $state(''); let publisher = $state(''); let publicationDate = $state(''); let sourceUrl = $state(''); let sourceText = $state(''); let publicMaterial = $state(false); let synthetic = $state(false); let upload: HTMLInputElement;
+  let sourceTitle = $state(''); let publisher = $state(''); let publicationDate = $state(''); let sourceUrl = $state(''); let sourceText = $state(''); let publicMaterial = $state(false); let synthetic = $state(false); let upload = $state<HTMLInputElement>();
   function chooseExample(example: PolicyExample) { sourceTitle = example.title; publisher = example.publisher; publicationDate = example.publication_date; sourceUrl = example.source_url; synthetic = false; success = 'Publication details filled in. Paste or upload its text below; check that the edition matches.'; }
-  $effect(() => { const example = POLICY_EXAMPLES.find(e => e.id === page.url.searchParams.get('example')); if (example) chooseExample(example); });
+  let appliedExample = $state('');
+  $effect(() => { const example = POLICY_EXAMPLES.find(e => e.id === page.url.searchParams.get('example')); if (example && appliedExample !== example.id) { appliedExample = example.id; chooseExample(example); } });
   let modelText = $state(''); let selectedActor = $state(''); let selectedVersion = $state(''); let selectedRun = $state('');
   let simulationType = $state<RunConfig['simulation_type']>('normal-form'); let scenario = $state<RunConfig['scenario']>('baseline'); let seed = $state(42); let rounds = $state(20); let parameterText = $state('{}'); let scenarioName = $state(''); let distributionOpen = $state(false);
   let sensitivityText = $state('[]');

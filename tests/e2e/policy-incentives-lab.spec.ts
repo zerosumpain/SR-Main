@@ -139,8 +139,11 @@ test('novice onboarding, publication catalogue and first look before any simulat
   const reportLink = page.getByRole('link', { name: 'Download first look (Markdown)' });
   const report = await request.get((await reportLink.getAttribute('href'))!, { headers: { cookie: `authjs.session-token=${token}` } });
   expect(report.status()).toBe(200); expect(await report.text()).toContain('UNREVIEWED HYPOTHESES');
+  await page.evaluate(async () => { await Promise.all(document.getAnimations().filter(a => a.effect?.getTiming().iterations !== Infinity).map(a => a.finished.catch(() => {}))); });
+  await page.getByRole('region', { name: 'First-look red-team dashboard' }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: '/tmp/policy-lab-first-look-desktop.png', fullPage: false });
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('region', { name: 'First-look red-team dashboard' }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: '/tmp/policy-lab-first-look-mobile.png', fullPage: false });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole('link', { name: 'Choices and trade-offs', exact: true }).click();
