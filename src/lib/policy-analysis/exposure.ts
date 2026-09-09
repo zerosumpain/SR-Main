@@ -57,9 +57,13 @@ export function bandOf(exposure: number): (typeof BANDS)[number] {
 }
 
 /**
- * Stamp `exposure` and `band` onto every exploitation play, and set the
- * artefact's confidence to the same figure so existing surfaces that read
- * confidence rank plays sensibly too.
+ * Stamp `exposure` and `band` onto every exploitation play.
+ *
+ * `confidence` is deliberately left alone. It means "how sure is this?" — the
+ * inspector says so in as many words — and exposure means "how badly could this
+ * hurt?". Writing one into the other made the inspector tell a reader it was 62%
+ * confident a play exists when the 62% was its severity, and it let a paper with
+ * several severe plays win every confidence-ordered query on the site.
  */
 export function scoreExploits(artefacts: Artefact[]): Artefact[] {
   for (const a of artefacts) {
@@ -67,7 +71,6 @@ export function scoreExploits(artefacts: Artefact[]): Artefact[] {
     const exposure = exposureOf(a.data);
     a.data.exposure = Number(exposure.toFixed(4));
     a.data.band = bandOf(exposure).band;
-    a.confidence = Number(exposure.toFixed(4));
   }
   return artefacts;
 }

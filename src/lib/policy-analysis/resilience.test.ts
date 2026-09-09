@@ -273,7 +273,8 @@ describe('ranking an exploitation play is reproducible arithmetic', () => {
     scoreExploits([a]);
     expect(a.data.exposure).toBeCloseTo(0.8, 3);
     expect(a.data.band).toBe('severe');
-    expect(a.confidence).toBe(a.data.exposure);
+    // Severity is not certainty: `confidence` stays whatever the analysis said.
+    expect(a.confidence).toBeNull();
   });
 });
 
