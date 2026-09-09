@@ -318,3 +318,62 @@ describe('a verdict drawn from a fragment is not a verdict', () => {
       .rejects.toThrow('More of the policy graph was discarded than kept');
   });
 });
+
+describe('one malformed artefact costs one artefact', () => {
+  const source = passage('passage_0001');
+  const good = decomposition('s1_000_', source, 'what landlords achieve');
+
+  it('accepts an artefact that omits a field meaning nothing for its kind', () => {
+    // The exact shape that cost a live assessment a passage on 2026-09-09: an
+    // actor with no `toId` key at all, where absent and null mean the same thing.
+    const actor = { ...good.artefacts[2] } as Record<string, unknown>;
+    delete actor.toId;
+    delete actor.fromId;
+    delete actor.relation;
+    const triaged = triageOutput({ artefacts: [...good.artefacts.slice(0, 2), actor, good.artefacts[3]], warnings: [] }, 1, [source]);
+    expect(triaged.rejected).toEqual([]);
+    expect(triaged.artefacts).toHaveLength(4);
+    expect(triaged.artefacts.find((a) => a.kind === 'actor')!.toId).toBeNull();
+  });
+
+  it('drops only the artefact that is genuinely wrong, and names the field', () => {
+    const broken = { ...good.artefacts[0], page: 'page three' };
+    const triaged = triageOutput({ artefacts: [broken, ...good.artefacts.slice(1)], warnings: [] }, 1, [source]);
+    expect(triaged.artefacts.map((a) => a.kind).sort()).toEqual(['actor', 'assumption', 'mechanism']);
+    expect(triaged.rejected).toHaveLength(1);
+    expect(triaged.rejected[0]).toMatchObject({ id: 's1_000_claim', kind: 'claim', code: 'contract' });
+    expect(triaged.rejected[0].reason).toContain('page');
+    expect(triaged.warnings.join(' ')).toContain('s1_000_claim (claim)');
+  });
+
+  it('still refuses a response that is not an envelope at all', () => {
+    expect(() => triageOutput({ nonsense: true }, 1, [source])).toThrow('invalid structured');
+    expect(() => triageOutput('not json', 1, [source])).toThrow('invalid structured');
+  });
+});
+
+describe('an artefact that names its source has cited it', () => {
+  const source = passage('passage_0001');
+
+  it('folds sourceId into refs instead of discarding the artefact', () => {
+    // The shape a live model returns: sourceId set, refs left empty. Thirteen of
+    // eighteen artefacts in one production response looked exactly like this.
+    const bare = {
+      ...artefact('s1_000_claim', 'claim', 'Outcome focus', 'The standards are said to be outcome focused.', { category: 'objective', notes: 'Stated.' }),
+      origin: 'extracted_fact' as const, sourceId: source.id, sourceQuote: 'what landlords achieve', refs: [],
+    };
+    const triaged = triageOutput({ artefacts: [bare], warnings: [] }, 1, [source]);
+    expect(triaged.rejected).toEqual([]);
+    expect(triaged.artefacts[0].refs).toEqual([source.id]);
+  });
+
+  it('does not invent a link to something that is not there', () => {
+    const bogus = {
+      ...artefact('s1_000_claim', 'claim', 'Outcome focus', 'x', { category: 'objective', notes: 'n' }),
+      origin: 'extracted_fact' as const, sourceId: 'passage_9999', sourceQuote: 'what landlords achieve', refs: [],
+    };
+    const triaged = triageOutput({ artefacts: [bogus], warnings: [] }, 1, [source]);
+    expect(triaged.artefacts).toEqual([]);
+    expect(triaged.rejected[0].code).toBe('provenance');
+  });
+});

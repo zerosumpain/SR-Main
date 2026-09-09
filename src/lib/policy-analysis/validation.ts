@@ -1,4 +1,4 @@
-import { dataSchemas, STAGE_KINDS, stageOutputSchema, type Artefact, type StageOutput } from './contracts';
+import { artefactSchema, dataSchemas, looseOutputSchema, STAGE_KINDS, stageOutputSchema, type Artefact, type StageOutput } from './contracts';
 import { locateQuote } from './quotes';
 
 export class PolicyError extends Error {
@@ -23,6 +23,11 @@ function structuralFault(a: Artefact, all: Map<string, Artefact>, stage: number)
  * rewritten to the document's own wording for the span it located.
  */
 function semanticFault(a: Artefact, all: Map<string, Artefact>, stage: number): Fault | null {
+  // An artefact that names its source and leaves `refs` empty is stating the same
+  // link twice and recording it once. Fold it in rather than rejecting: measured
+  // on a live run, THIRTEEN OF EIGHTEEN artefacts in one response were lost to
+  // exactly this, which is also what was driving the corrective round-trips.
+  if (a.sourceId && all.has(a.sourceId) && !a.refs.includes(a.sourceId)) a.refs = [a.sourceId, ...a.refs];
   if (a.kind !== 'passage' && !a.refs.length) return fault('provenance', 'An artefact has no supporting evidence links.');
   if (a.refs.some((id) => id === a.id || !all.has(id))) return fault('provenance', 'An artefact cites an unavailable source.');
   if (stage === 1 && ['claim', 'mechanism', 'actor'].includes(a.kind) && a.origin !== 'extracted_fact') return fault('extraction', 'The document inventory must distinguish literal extraction from assumptions.');
@@ -127,9 +132,30 @@ export type TriagedOutput = StageOutput & { rejected: Rejection[] };
  * individual artefacts never becomes leniency about the assessment.
  */
 export function triageOutput(raw: unknown, stage: number, prior: Artefact[]): TriagedOutput {
-  const parsed = stageOutputSchema.safeParse(raw);
-  if (!parsed.success) throw new PolicyError('contract', 'The model returned an invalid structured result. Resume to retry.');
-  return triageArtefacts(parsed.data, stage, prior);
+  // Parsed WITHOUT the artefacts, then each artefact on its own. Parsing them as
+  // one array of strict members put the all-or-nothing failure back a level: on
+  // 2026-09-09 a live assessment lost a whole passage because one artefact of
+  // eighteen left out a field that means nothing for its kind.
+  const envelope = looseOutputSchema.safeParse(raw);
+  if (!envelope.success) throw new PolicyError('contract', 'The model returned an invalid structured result. Resume to retry.');
+  const malformed: Rejection[] = [];
+  const artefacts: Artefact[] = [];
+  for (const [index, candidate] of envelope.data.artefacts.entries()) {
+    const one = artefactSchema.safeParse(candidate);
+    if (one.success) { artefacts.push(one.data as Artefact); continue; }
+    const where = one.error.issues.slice(0, 3).map((i) => `${i.path.join('.') || 'artefact'}: ${i.message}`).join('; ');
+    const named = candidate && typeof candidate === 'object' ? String((candidate as { id?: unknown }).id ?? `item ${index + 1}`) : `item ${index + 1}`;
+    malformed.push({ id: named, kind: String((candidate as { kind?: unknown })?.kind ?? 'unknown'), code: 'contract', reason: `An artefact did not match the contract (${where}).` });
+  }
+  const warnings = (envelope.data.warnings ?? []).filter((w): w is string => typeof w === 'string').slice(0, 100);
+  const triaged = triageArtefacts({ artefacts, warnings }, stage, prior);
+  if (!malformed.length) return triaged;
+  const names = malformed.slice(0, 6).map((r) => `${r.id} (${r.kind})`).join(', ');
+  return {
+    artefacts: triaged.artefacts,
+    warnings: clampWarnings([...triaged.warnings, `${malformed.length} model output${malformed.length === 1 ? ' was' : 's were'} discarded and are not part of this assessment — ${malformed[0].reason} Affected: ${names}${malformed.length > 6 ? `, and ${malformed.length - 6} more` : ''}.`]),
+    rejected: [...malformed, ...triaged.rejected],
+  };
 }
 
 /**
