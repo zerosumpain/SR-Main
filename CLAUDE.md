@@ -222,3 +222,11 @@ First-class workflow channel with multi-account support.
 - `GMAIL_TOKEN_ENCRYPTION_KEY` — 32-byte hex — AES-256-GCM key for stored refresh tokens. If lost, all encrypted `gmail_accounts` rows become unrecoverable.
 
 **Google Cloud Console setup:** The OAuth client needs `https://strangeramblings.com/api/gmail/callback` and `http://localhost:5173/api/gmail/callback` in its authorized redirect URIs, plus the `gmail.modify`, `gmail.send`, and `gmail.labels` scopes enabled on the consent screen.
+
+## Policy Incentives Lab
+
+`/policy-incentives-lab` and `/api/policy-incentives-lab` are strictly owner-session-only, including in development. Do not register them as public/shareable projects, add public navigation links, or use the LAN preview's synthetic-session injection. Use the shared Auth.js owner allow-list on each server entry point.
+
+Canonical Zod contracts live in `src/lib/policy-incentives-lab/schemas.ts`. Numerical execution is deterministic TypeScript. All numerical assumptions and model items require server-recorded approval before sealing/running. Draft changes clear approvals; saved model versions and runs are immutable. Behavioural changes bump `ENGINE_VERSION`. Every LLM call uses `$lib/llm/client`, produces candidates only and is schema/evidence-validated. No source text or LLM output executes as code. Fixtures and sample reports must remain explicitly synthetic.
+
+See `docs/policy-incentives-lab/README.md` for local operation and tests. Preserve the cumulative local batch; no automatic PR, merge or production deployment.

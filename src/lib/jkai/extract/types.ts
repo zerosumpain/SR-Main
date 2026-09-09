@@ -39,6 +39,9 @@ export interface ExtractResult {
 }
 
 export interface ExtractOptions {
+  /** Optional caller resource bounds, checked before retaining PDF page text. */
+  maxPages?: number;
+  maxCharacters?: number;
   pages?: { from: number; to: number };
   language?: string;
 }

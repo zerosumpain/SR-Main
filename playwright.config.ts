@@ -11,7 +11,8 @@ export default defineConfig({
 	use: {
 		baseURL: `http://localhost:${PORT}`,
 	},
-	webServer: {
+	// Use the existing isolated preview without starting a host process with live env.
+	webServer: process.env.PLAYWRIGHT_EXTERNAL_SERVER === '1' ? undefined : {
 		command: `NODE_OPTIONS=--max-old-space-size=8192 npm run dev -- --port ${PORT}`,
 		url: `http://localhost:${PORT}`,
 		reuseExistingServer: true,

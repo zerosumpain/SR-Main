@@ -57,3 +57,4 @@ tests/scripts/select-tests.test.ts
 tests/scripts/source-footprint.test.ts
 tests/security/permissions-policy.test.ts
 tests/skills/tool-names-exist.test.ts
+tests/lib/policy-incentives-lab/sample.test.ts
