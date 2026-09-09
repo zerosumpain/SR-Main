@@ -28,11 +28,25 @@ export const BANDS = [
 
 export type Band = (typeof BANDS)[number]['band'];
 
+/**
+ * Concealment has a floor and the other three do not.
+ *
+ * A zero is meaningful for incentive (nobody would run it), ease (nobody could)
+ * and impact (it costs the policy nothing) — each genuinely takes a play off the
+ * table, and the geometric mean should collapse. Concealment is different: an
+ * OVERT play — open lobbying, a public veto, judicial review, visible
+ * non-compliance — is honestly scored zero and is still a threat. Without a floor
+ * the ranking sent every unhidden play to the bottom, which is the opposite of a
+ * red team.
+ */
+const FLOOR: Record<string, number> = { concealment: 0.15 };
+
 /** Geometric mean of the four factors, on [0,1]. */
 export function exposureOf(data: Record<string, unknown>): number {
   const values = EXPOSURE_FACTORS.map(([key]) => {
     const v = Number(data[key]);
-    return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0;
+    const clamped = Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0;
+    return Math.max(clamped, FLOOR[key] ?? 0);
   });
   if (values.some((v) => v === 0)) return 0;
   return Math.exp(values.reduce((sum, v) => sum + Math.log(v), 0) / values.length);

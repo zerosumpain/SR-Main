@@ -65,11 +65,26 @@ export async function loadArtefacts(id: string, tx: DbExecutor = db): Promise<Ar
   for (const link of links) byFrom.set(link.fromId, [...(byFrom.get(link.fromId) ?? []), link.toId]);
   return rows.map(({ analysisId: _analysisId, stage: _stage, createdAt: _createdAt, updatedAt: _updatedAt, ...a }) => ({ ...a, refs: byFrom.get(a.id) ?? [] }) as Artefact);
 }
+/** Page counts and extraction errors, without the document's text a second time. */
+function summariseExtraction(metadata: unknown): unknown {
+  if (!metadata || typeof metadata !== 'object') return metadata;
+  const m = metadata as { kind?: string; pages?: { index: number; text?: string; error?: string }[] };
+  if (!Array.isArray(m.pages)) return metadata;
+  return {
+    ...m,
+    pages: m.pages.map((p) => ({ index: p.index, characters: p.text?.length ?? 0, ...(p.error ? { error: p.error } : {}) })),
+  };
+}
+
 export async function detail(owner: string, id: string) {
   const analysis = await ownedAnalysis(owner, id);
   if (!analysis) return null;
   const stages = await db.select().from(policyStages).where(eq(policyStages.analysisId, id)).orderBy(asc(policyStages.ordinal));
-  const documents = await db.select({ id: policyDocuments.id, filename: policyDocuments.filename, mimeType: policyDocuments.mimeType, size: policyDocuments.size, sha256: policyDocuments.sha256, metadata: policyDocuments.metadata }).from(policyDocuments).where(eq(policyDocuments.analysisId, id));
+  const rawDocuments = await db.select({ id: policyDocuments.id, filename: policyDocuments.filename, mimeType: policyDocuments.mimeType, size: policyDocuments.size, sha256: policyDocuments.sha256, metadata: policyDocuments.metadata }).from(policyDocuments).where(eq(policyDocuments.analysisId, id));
+  // `metadata.pages[].text` is a SECOND full copy of the extracted document — up
+  // to 600,000 characters — and it rode the response on first load and on every
+  // six-second poll while a run was active. The page wants the shape, not the text.
+  const documents = rawDocuments.map((d) => ({ ...d, metadata: summariseExtraction(d.metadata) }));
   const executions = await db.select({ execution: policyExecutions }).from(policyExecutions).innerJoin(policyStages, eq(policyStages.id, policyExecutions.stageId)).where(eq(policyStages.analysisId, id)).orderBy(asc(policyExecutions.startedAt));
   // Model prompts/output are private audit data, fetched separately on demand.
   const calls = await db.select({ id: policyModelCalls.id, executionId: policyModelCalls.executionId, callKey: policyModelCalls.callKey, promptVersion: policyModelCalls.promptVersion, inputHash: policyModelCalls.inputHash, status: policyModelCalls.status, provider: policyModelCalls.provider, model: policyModelCalls.model, usage: policyModelCalls.usage, startedAt: policyModelCalls.startedAt, completedAt: policyModelCalls.completedAt, error: policyModelCalls.error }).from(policyModelCalls).innerJoin(policyExecutions, eq(policyExecutions.id, policyModelCalls.executionId)).innerJoin(policyStages, eq(policyStages.id, policyExecutions.stageId)).where(eq(policyStages.analysisId, id));
@@ -135,20 +150,32 @@ export async function neighbourSummaries(owner: string, exclude: string): Promis
     .from(policyAnalyses)
     .where(and(eq(policyAnalyses.owner, owner), inArray(policyAnalyses.status, ['completed', 'completed_with_gaps'])))
     .orderBy(desc(policyAnalyses.completedAt)).limit(NEIGHBOUR_LIMIT + 1);
-  const shortlist = others.filter((o) => o.id !== exclude).slice(0, NEIGHBOUR_LIMIT);
+  // A redraft of the SAME paper is not another policy. Submitting v2 after acting
+  // on v1's plays is the intended way to use this, and without the hash check the
+  // two drafts would be reported as conflicting with each other.
+  const [mine] = await db.select({ sha256: policyDocuments.sha256 }).from(policyDocuments).where(eq(policyDocuments.analysisId, exclude));
+  const shas = await db.select({ analysisId: policyDocuments.analysisId, sha256: policyDocuments.sha256 }).from(policyDocuments).where(inArray(policyDocuments.analysisId, others.map((o) => o.id)));
+  const sameDocument = new Set(shas.filter((d) => mine && d.sha256 === mine.sha256).map((d) => d.analysisId));
+  const shortlist = others.filter((o) => o.id !== exclude && !sameDocument.has(o.id)).slice(0, NEIGHBOUR_LIMIT);
   if (!shortlist.length) return [];
-  const rows = await db.select({ analysisId: policyArtefacts.analysisId, id: policyArtefacts.id, kind: policyArtefacts.kind, label: policyArtefacts.label, statement: policyArtefacts.statement, data: policyArtefacts.data })
+  // Queried per analysis, not once across all of them: a single confident
+  // assessment used to fill the whole budget and leave the others with nothing,
+  // silently. Exploits carry `confidence = exposure`, so a paper with several
+  // severe plays scores near 1.0 and would always have been the one that won.
+  const perAnalysis = await Promise.all(shortlist.map((o) => db
+    .select({ analysisId: policyArtefacts.analysisId, id: policyArtefacts.id, kind: policyArtefacts.kind, label: policyArtefacts.label, statement: policyArtefacts.statement, data: policyArtefacts.data })
     .from(policyArtefacts)
-    .where(and(inArray(policyArtefacts.analysisId, shortlist.map((o) => o.id)), inArray(policyArtefacts.kind, NEIGHBOUR_KINDS)))
-    // `desc()` alone is NULLS FIRST in Postgres, which would fill the comparison
-    // budget with exactly the rows an assessment was least sure about. The
-    // kind/id tiebreak keeps the 60-row cut stable between runs.
+    .where(and(eq(policyArtefacts.analysisId, o.id), inArray(policyArtefacts.kind, NEIGHBOUR_KINDS)))
+    // `desc()` alone is NULLS FIRST in Postgres, which would fill the budget with
+    // exactly the rows an assessment was least sure about. The kind/id tiebreak
+    // keeps the cut stable between runs.
     .orderBy(sql`${policyArtefacts.confidence} DESC NULLS LAST`, asc(policyArtefacts.kind), asc(policyArtefacts.id))
-    .limit(shortlist.length * NEIGHBOUR_ARTEFACTS);
+    .limit(NEIGHBOUR_ARTEFACTS)));
+  const rows = perAnalysis.flat();
   return shortlist.map((o) => ({
     id: o.id, title: o.title, policyArea: o.policyArea, jurisdiction: o.jurisdiction,
     completedAt: o.completedAt ? o.completedAt.toISOString() : null,
-    artefacts: rows.filter((r) => r.analysisId === o.id).slice(0, NEIGHBOUR_ARTEFACTS)
+    artefacts: rows.filter((r) => r.analysisId === o.id)
       // Actors carry their type and aliases so identity can be judged on more
       // than a matching label - see `crossIdentityHints`.
       .map((r) => ({ id: r.id, kind: r.kind, label: r.label, statement: r.statement.slice(0, 600), entityType: r.kind === 'actor' ? String(r.data.entityType ?? '') : undefined, aliases: r.kind === 'actor' && Array.isArray(r.data.aliases) ? (r.data.aliases as string[]).slice(0, 12) : undefined })),

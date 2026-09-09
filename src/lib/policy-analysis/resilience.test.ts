@@ -11,6 +11,7 @@ import { artefact, PATTERNS, type Artefact } from './contracts';
 import { locateQuote } from './quotes';
 import { PolicyError, triageArtefacts, triageOutput, validateOutput } from './validation';
 import { encodedSize, fitToBudget } from './budget';
+import { bandOf, exposureOf, scoreExploits } from './exposure';
 import { executeStage } from './pipeline';
 import { fixtureModel } from '../../../tests/fixtures/policy-analysis/model';
 import { ingest } from './server/ingest';
@@ -231,5 +232,46 @@ describe('a stage aggregate is not a single model response', () => {
     expect(triaged.artefacts).toHaveLength(4);
     expect(triaged.warnings).toHaveLength(60);
     expect(triaged.warnings.at(-1)).toContain('191 further warnings');
+  });
+});
+
+describe('ranking an exploitation play is reproducible arithmetic', () => {
+  const play = (over: Record<string, number>) => ({ incentive: 0.5, ease: 0.5, impact: 0.5, concealment: 0.5, ...over });
+
+  it('is the geometric mean, so four equal factors read as that figure', () => {
+    expect(exposureOf(play({}))).toBeCloseTo(0.5, 6);
+    expect(exposureOf(play({ incentive: 0.8, ease: 0.8, impact: 0.8, concealment: 0.8 }))).toBeCloseTo(0.8, 6);
+  });
+
+  it('gives the same answer every time, and orders the same way', () => {
+    const a = play({ incentive: 0.9, ease: 0.7, impact: 0.8, concealment: 0.6 });
+    expect(exposureOf(a)).toBe(exposureOf({ ...a }));
+    expect(exposureOf(a)).toBeGreaterThan(exposureOf(play({ incentive: 0.3 })));
+  });
+
+  it('takes a play off the table when nobody wants it, could do it, or it does no harm', () => {
+    for (const dead of ['incentive', 'ease', 'impact']) expect(exposureOf(play({ [dead]: 0 }))).toBe(0);
+  });
+
+  it('keeps an OVERT play on the table — visible is not harmless', () => {
+    // Open lobbying, a public veto, judicial review: honestly concealment 0, and
+    // a red team that ranked those last would be no red team at all.
+    const overt = exposureOf(play({ incentive: 0.9, ease: 0.8, impact: 0.9, concealment: 0 }));
+    expect(overt).toBeGreaterThan(0.35);
+    expect(bandOf(overt).band).not.toBe('limited');
+    // It should still rank below the same play if it were also unseen.
+    expect(overt).toBeLessThan(exposureOf(play({ incentive: 0.9, ease: 0.8, impact: 0.9, concealment: 0.9 })));
+  });
+
+  it('bands on the figure, and stamps both onto the artefact', () => {
+    expect(bandOf(0.75).band).toBe('severe');
+    expect(bandOf(0.55).band).toBe('significant');
+    expect(bandOf(0.35).band).toBe('moderate');
+    expect(bandOf(0.1).band).toBe('limited');
+    const a = artefact('s10_000_x', 'exploit', 'A play', 'x', play({ incentive: 0.8, ease: 0.8, impact: 0.8, concealment: 0.8 }));
+    scoreExploits([a]);
+    expect(a.data.exposure).toBeCloseTo(0.8, 3);
+    expect(a.data.band).toBe('severe');
+    expect(a.confidence).toBe(a.data.exposure);
   });
 });

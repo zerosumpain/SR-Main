@@ -1,6 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { db, type DbExecutor } from '$lib/db';
-import { policyAnalyses, policyDocuments, policyExecutions, policyStages, workflowRuns } from '$lib/db/schema';
+import { policyAnalyses, policyDocuments, policyExecutions, policyModelCalls, policyStages, workflowRuns } from '$lib/db/schema';
 import { executeStage } from '../pipeline';
 import { PolicyError } from '../validation';
 import { ingest } from './ingest';
@@ -14,6 +14,17 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Interruptions are free, but not infinitely free. */
 const EXECUTION_CEILING = 12;
+
+/**
+ * A runaway guard on model calls, not a budget.
+ *
+ * A 400-page document at `deep` legitimately issues several hundred calls — one
+ * per passage at stage 1 alone, plus profiles, research, ten patterns, eight
+ * scenarios and a red-team pass per actor. Nothing bounded the total, so a
+ * pathological document could have spent without limit. This stops a run that has
+ * clearly lost the plot; it is deliberately far above any real assessment.
+ */
+const MODEL_CALL_CEILING = 1500;
 
 /**
  * A stage's wall clock, sized to its fan-out.
@@ -81,6 +92,11 @@ export async function executePolicyRun(claimed: { id: string; input: Record<stri
   const all = await loadArtefacts(analysisId);
   const signal = AbortSignal.any([abort.signal, AbortSignal.timeout(stageBudgetMs(started.stage.ordinal, all))]);
   try {
+    const [{ made }] = await db.select({ made: sql<number>`count(*)::int` }).from(policyModelCalls)
+      .innerJoin(policyExecutions, eq(policyExecutions.id, policyModelCalls.executionId))
+      .innerJoin(policyStages, eq(policyStages.id, policyExecutions.stageId))
+      .where(eq(policyStages.analysisId, analysisId));
+    if (made >= MODEL_CALL_CEILING) throw new PolicyError('budget', `This assessment has made ${made.toLocaleString()} model calls, past the ${MODEL_CALL_CEILING.toLocaleString()} this implementation allows for one document. Completed stages are retained; submit a shorter document or split it.`);
     const previousStages = await db.select({ warnings: policyStages.warnings }).from(policyStages).where(eq(policyStages.analysisId, analysisId));
     // `content` is base64 of up to 10 MB and only stage 0 has any use for it.
     // Selecting the whole row on all thirteen stages moved ~13 MB through the
