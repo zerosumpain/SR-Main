@@ -7,8 +7,13 @@ async function call(action, fields = {}) {
   const response = await fetch(`http://127.0.0.1:5280/${action}`, { dispatcher, method: 'POST',
     headers: { authorization: `Bearer ${process.env.BUILDER_WORKSPACE_BROKER_TOKEN}`, 'content-type': 'application/json' },
     body: JSON.stringify({ buildId, ...fields }), signal: AbortSignal.timeout(900000) });
-  if (!response.ok) throw new Error(`Broker ${action} failed with HTTP ${response.status}`);
-  return response.json();
+  // Carry the broker's own message. Without it a failed release says only
+  // "HTTP 400" and the reason — a feature build that died, a slot that was
+  // taken, a workspace that moved — is left on a container nobody thinks to
+  // open. That cost an hour of archaeology on 2026-09-09.
+  const body = await response.text();
+  if (!response.ok) throw new Error(`Broker ${action} failed with HTTP ${response.status}: ${body.slice(0, 1200)}`);
+  return JSON.parse(body);
 }
 try {
   await call('prepare');
