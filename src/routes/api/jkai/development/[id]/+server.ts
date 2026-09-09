@@ -32,7 +32,16 @@ export const POST: RequestHandler = async ({ params, request }) => {
   const delivery = await loadDelivery(id);
   if (!delivery) throw error(404, 'Development workspace not found');
   const revision = Number(body.revision);
-  if (!Number.isInteger(revision) || revision !== delivery.revision) return json({ error: 'The workspace changed; refresh before saving.' }, { status: 409 });
+  // Two kinds of write, and only one of them can afford an optimistic lock over
+  // the WHOLE workspace. Recording a verdict or adding a request touches one
+  // field of one criterion and carries its own guards — while an unattended run
+  // is going, the worker writes every few seconds, so a workspace-wide revision
+  // check meant the owner's own observations were refused as "the workspace
+  // changed" almost every time they pressed the button.
+  const SCOPED = ['criterion', 'request', 'note', 'remove_note', 'steer'];
+  if (!SCOPED.includes(body.action) && (!Number.isInteger(revision) || revision !== delivery.revision)) {
+    return json({ error: 'The workspace changed; refresh before saving.' }, { status: 409 });
+  }
   const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, id));
   try {
     if (delivery.state.stage === 'integrating' && body.action !== 'accept') throw new Error('Batch integration is in progress.');
@@ -121,17 +130,44 @@ export const POST: RequestHandler = async ({ params, request }) => {
         break;
       }
       case 'criterion': {
-        if (['running', 'queued'].includes(build.status) || (delivery.state.preview.revision && delivery.state.preview.revision !== delivery.state.candidate)) throw new Error('Wait for the current revision to be previewed before recording evidence.');
+        // A verdict is a judgement about the revision the owner actually looked
+        // at, which is the one the preview is serving — not necessarily the
+        // newest candidate. Those two diverge constantly by design: a working
+        // preview is deliberately retained while the next revision is checked.
+        // Recording against the preview's revision is what makes the judgement
+        // true, and `criterionResult` already ignores a verdict once the
+        // candidate has moved past it, so nothing stale can leak into
+        // acceptance.
         if (delivery.state.acceptedAt) throw new Error('Start a new revision before changing evidence for accepted work.');
-        if (body.candidate !== delivery.state.candidate) throw new Error('The candidate changed; review the new preview.');
-        if (!delivery.state.candidate) throw new Error('There is no candidate to evaluate.');
+        const judged = typeof body.judgedRevision === 'string' && body.judgedRevision
+          ? body.judgedRevision
+          : delivery.state.preview.revision ?? delivery.state.candidate;
+        if (!judged) throw new Error('There is nothing to judge yet — build a preview first.');
+        if (judged !== delivery.state.preview.revision && judged !== delivery.state.candidate) throw new Error('That revision is no longer in this workspace; reload and look at the current preview.');
         if (!['passed', 'failed', 'blocked', 'unverified'].includes(body.verdict)) throw new Error('Invalid verdict');
         const evidence = text(body.evidence);
         if (!evidence && body.verdict !== 'unverified') throw new Error('Describe the evidence or blocker');
         if (!delivery.state.criteria.some((c) => c.id === body.criterionId)) throw new Error('Criterion not found');
-        await mutateDelivery(id, 'criterion_reviewed', (s) => ({ ...s, acceptedAt: null, criteria: s.criteria.map((c) => c.id === body.criterionId ?
-          { ...c, verdict: body.verdict, evidence, revision: s.candidate, assessment: undefined } : c) }), revision);
+        // The reviewer's assessment is KEPT. It is what the run thought, and the
+        // owner reads it beside their own verdict; `criterionResult` gives the
+        // owner precedence without either one erasing the other.
+        await mutateDelivery(id, 'criterion_reviewed', (s) => ({ ...s, criteria: s.criteria.map((c) => c.id === body.criterionId ?
+          { ...c, verdict: body.verdict, evidence, revision: judged } : c) }));
         break;
+      }
+      case 'request': {
+        // A follow-up ask becomes an acceptance criterion, because that is the
+        // only thing in this system that actually holds a build to something:
+        // an unmet criterion blocks acceptance and is what the next coaching
+        // instruction is built from. Anything else would be a note nobody reads.
+        if (!delivery.state.brief.acceptedAt) throw new Error('Accept the brief first; then anything you add here becomes part of what this feature must do.');
+        const request = text(body.request, 1000);
+        if (!request) throw new Error('Describe what else you want from this feature.');
+        if (delivery.state.criteria.length >= 30) throw new Error('This feature already has thirty acceptance criteria. Commission a second feature instead.');
+        const saved = await mutateDelivery(id, 'feature_requested', (s) => ({ ...s, acceptedAt: null,
+          criteria: [...s.criteria, { id: `criterion-${s.criteria.length + 1}-${Date.now().toString(36)}`, text: request, verdict: 'unverified' as const, evidence: '', revision: null, addedBy: 'owner' as const }] }));
+        await enqueuePendingMessage(id, `The owner has added an acceptance criterion to this feature. It is now part of what must be true before the work can be accepted:\n${request}`);
+        return json({ ok: true, criteria: saved.state.criteria.length });
       }
       case 'close_preview':
         if (['running', 'queued'].includes(build.status)) throw new Error('Pause the build before closing its preview.');
