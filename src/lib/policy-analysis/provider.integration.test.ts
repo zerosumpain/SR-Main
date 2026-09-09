@@ -20,7 +20,7 @@ const local = process.env.POLICY_LOCAL_TESTS === '1' && /^postgres(?:ql)?:\/\/[^
 describe.skipIf(!local)('persisted model audit and stage checkpoints', () => {
   it('records provider metadata and malformed output, and reuses a validated call after an interrupted stage', async () => {
     const bytes = readFileSync('tests/fixtures/policy-analysis/policy.txt');
-    const a = await createAnalysis('preview@example.test', { title: 'Synthetic provider audit fixture', jurisdiction: null, policyArea: null, context: null, filename: 'fixture.txt', mimeType: 'text/plain', bytes });
+    const a = await createAnalysis('preview@example.test', { title: 'Synthetic provider audit fixture', jurisdiction: null, policyArea: null, context: null, depth: 'standard' as const, filename: 'fixture.txt', mimeType: 'text/plain', bytes });
     try {
       const [stage] = await db.select().from(policyStages).where(eq(policyStages.analysisId, a.id)).orderBy(asc(policyStages.ordinal)).limit(1);
       const [execution] = await db.insert(policyExecutions).values({ stageId: stage.id, runId: stage.runId! }).returning();

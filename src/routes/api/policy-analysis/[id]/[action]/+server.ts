@@ -23,7 +23,7 @@ export const GET: RequestHandler = async (event) => {
   }
   if (event.params.action === 'audit') {
     const id = event.url.searchParams.get('call');
-    if (!id || !/^[0-9a-f-]{36}$/i.test(id)) error(400, 'A model call is required.');
+    if (!id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) error(400, 'A model call is required.');
     const [row] = await db.select({ call: policyModelCalls }).from(policyModelCalls).innerJoin(policyExecutions, eq(policyExecutions.id, policyModelCalls.executionId)).innerJoin(policyStages, eq(policyStages.id, policyExecutions.stageId)).where(and(eq(policyStages.analysisId, event.params.id), eq(policyModelCalls.id, id)));
     if (!row) error(404, 'Model call not found.');
     return json(row.call);

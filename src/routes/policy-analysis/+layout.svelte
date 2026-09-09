@@ -2,7 +2,13 @@
   import HealthShell from '$lib/components/health/hub/HealthShell.svelte';
   let { children } = $props();
 </script>
-<HealthShell path="/policy-analysis" kicker="Policy analysis" footer={['Private analysis', 'Evidence · incentives · uncertainty']}>
+<!--
+  `unifiedNav` puts the site's shared 48px cell bar above this page rather than
+  the /health family's editorial masthead. Every owner surface outside /health
+  itself — /research, /decks, /projects, /blog, /drive — does the same; without
+  it this page would wear another section's chrome.
+-->
+<HealthShell path="/policy-analysis" unifiedNav kicker="Red team" footer={['Private assessment', 'Incentives · evidence · uncertainty']}>
   <main class="policy-page">{@render children()}</main>
 </HealthShell>
 <style>

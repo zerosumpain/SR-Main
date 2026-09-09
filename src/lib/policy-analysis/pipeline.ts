@@ -4,6 +4,7 @@ import { clampWarnings, PolicyError, triageArtefacts, triageOutput } from './val
 import { modelApplicability } from './models';
 import { crossIdentityHints, preserveAmbiguity } from './entities';
 import { runPolicyTests } from './tests';
+import { documentShingles, quotesDocument } from './query-guard';
 import type { ModelCall } from './server/provider';
 import type { Research } from './server/research';
 
@@ -32,12 +33,19 @@ export type PipelineDeps = { model: ModelCall; research: Research; signal: Abort
  */
 const CONSECUTIVE_LIMIT = 3;
 
+/** Ceilings on a stage's assembled output, which no envelope bounds. */
+const MAX_STAGE_ARTEFACTS = 4000;
+const MAX_REFS = 200;
+
 export async function executeStage(input: StageInput, deps: PipelineDeps): Promise<StageOutput> {
   const { stage } = input;
   const limits = DEPTH_LIMITS[input.depth ?? 'standard'];
   const output: StageOutput = { artefacts: [], warnings: [] };
   let consecutive = 0;
-  let lastFault: PolicyError | null = null;
+  // A holder, not a bare `let`: control-flow narrowing pins a `let` initialised
+  // to null at `null` for the outer scope, so every read after the closure that
+  // assigns it types as `never`.
+  const fault: { last: PolicyError | null } = { last: null };
 
   // Identifiers are capped at 100 characters, and a fan-out key can be a resolved
   // actor id that is nearly that long on its own. The prefix is therefore a short
@@ -45,9 +53,17 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
   let seq = 0;
   const request = async (key: string, context: Artefact[], extra: Record<string, unknown> = {}) => {
     deps.signal.throwIfAborted();
-    const slot = key === 'main' ? 'main' : String(seq++);
+    const slot = key === 'main' ? 'main' : String(seq++).padStart(3, '0');
     const raw = await deps.model(stage, key, { ...input, artefacts: context, idPrefix: `s${stage}_${slot}_`, targetActorId: stage === 4 || stage === 10 ? key : null, targetPattern: stage === 7 ? key : null, targetScenario: stage === 9 ? key : null, modelLibrary: stage === 7 ? modelApplicability(input.artefacts) : undefined, ...extra });
     const result = triageOutput(raw, stage, [...input.artefacts, ...output.artefacts]);
+    // Retrieved sources are minted by the retrieval adapter and nowhere else. The
+    // kind is permitted at this stage so the server's own rows validate, which
+    // would otherwise let a model hand back a source — and a URL — of its own.
+    const authored = result.artefacts.filter((a) => a.kind === 'research_source');
+    if (authored.length) {
+      result.artefacts = result.artefacts.filter((a) => a.kind !== 'research_source');
+      result.warnings.push(`${authored.length} model-authored source${authored.length === 1 ? '' : 's'} were discarded: evidence comes from retrieval, never from the model.`);
+    }
     output.artefacts.push(...result.artefacts); output.warnings.push(...result.warnings);
     return result;
   };
@@ -61,7 +77,7 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     } catch (err) {
       deps.signal.throwIfAborted();
       if (!(err instanceof PolicyError)) throw err;
-      lastFault = err;
+      fault.last = err;
       consecutive++;
       output.warnings.push(`${describe} could not be assessed: ${err.message} It is missing from this stage.`);
       if (consecutive >= CONSECUTIVE_LIMIT) throw new PolicyError(err.code, `${CONSECUTIVE_LIMIT} consecutive parts of this stage failed for the same reason. ${err.message}`);
@@ -132,7 +148,14 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
   const pursue = async (questions: Artefact[], round: number) => {
     for (const question of questions) question.data.priority = Number(priority(question).toFixed(4));
     questions.sort((a, b) => priority(b) - priority(a));
-    const researched = await deps.research(questions, deps.signal, limits.results);
+    // A query that reproduces the paper verbatim would put an unpublished policy
+    // into a third party's query logs. The prompt asks for a bounded public
+    // query; this is what enforces it.
+    const corpus = documentShingles(input.artefacts);
+    const safe = questions.filter((q) => !quotesDocument(String(q.data.searchStrategy ?? ''), corpus));
+    if (safe.length < questions.length) output.warnings.push(`${questions.length - safe.length} research question${questions.length - safe.length === 1 ? ' was' : 's were'} not searched because the query quoted the policy document; the document is not sent to a search provider.`);
+    if (!safe.length) return;
+    const researched = await deps.research(safe, deps.signal, limits.results);
     output.artefacts.push(...researched.artefacts);
     output.warnings.push(...researched.warnings.map((w) => round > 1 ? `Enquiry round ${round}: ${w}` : w));
   };
@@ -144,7 +167,7 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     // the dashboard all rank by the same reproducible figure.
     for (const a of output.artefacts) if (a.kind === 'assumption') a.data.priority = Number(priority(a).toFixed(4));
     const missing = kinds('claim', 'mechanism', 'assumption', 'actor');
-    if (missing.length) throw new PolicyError(lastFault?.code ?? 'coverage', `The document did not yield the required claim, mechanism, assumption and actor inventory.${lastFault ? ` Last reason: ${lastFault.message}` : ''}`);
+    if (missing.length) throw new PolicyError(fault.last?.code ?? 'coverage', `The document did not yield the required claim, mechanism, assumption and actor inventory.${fault.last ? ` Last reason: ${fault.last.message}` : ''}`);
   }
   if (stage === 2) {
     output.artefacts = preserveAmbiguity(output.artefacts, input.artefacts);
@@ -152,7 +175,7 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     if (!mentions.every((m) => output.artefacts.some((a) => a.kind === 'actor' && (a.data.mentions as string[]).includes(m.id)))) throw new PolicyError('coverage', 'Entity resolution omitted source mentions.');
   }
   if (stage === 3 && kinds('node', 'edge').length) throw new PolicyError('coverage', 'The graph stage did not produce inspectable nodes and relationships.');
-  if (stage === 4 && !output.artefacts.some((a) => a.kind === 'profile')) throw new PolicyError(lastFault?.code ?? 'coverage', `No actor could be profiled, so there are no incentives to reason about.${lastFault ? ` Last reason: ${lastFault.message}` : ''}`);
+  if (stage === 4 && !output.artefacts.some((a) => a.kind === 'profile')) throw new PolicyError(fault.last?.code ?? 'coverage', `No actor could be profiled, so there are no incentives to reason about.${fault.last ? ` Last reason: ${fault.last.message}` : ''}`);
   if (stage === 5) {
     const questions = output.artefacts.filter((a) => a.kind === 'research_question');
     if (!questions.length || questions.length > limits.questions || questions.length !== output.artefacts.length) throw new PolicyError('coverage', `Research planning must produce between one and ${limits.questions} targeted questions.`);
@@ -171,9 +194,9 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
       await pursue(followUps, round);
     }
   }
-  if (stage === 7) requireMajority(output, PATTERNS, (a) => String(a.data.pattern), 'interaction model', lastFault);
-  if (stage === 9) requireMajority(output, SCENARIOS, (a) => String(a.data.scenario), 'scenario', lastFault);
-  if (stage === 10 && !output.artefacts.some((a) => a.kind === 'exploit')) throw new PolicyError(lastFault?.code ?? 'coverage', `No actor could be red-teamed, so the assessment has no exploitation playbook.${lastFault ? ` Last reason: ${lastFault.message}` : ''}`);
+  if (stage === 7) requireMajority(output, PATTERNS, (a) => String(a.data.pattern), 'interaction model', fault.last);
+  if (stage === 9) requireMajority(output, SCENARIOS, (a) => String(a.data.scenario), 'scenario', fault.last);
+  if (stage === 10 && !output.artefacts.some((a) => a.kind === 'exploit')) throw new PolicyError(fault.last?.code ?? 'coverage', `No actor could be red-teamed, so the assessment has no exploitation playbook.${fault.last ? ` Last reason: ${fault.last.message}` : ''}`);
   if (stage === SYNTHESIS_STAGE) {
     // A missing chapter is a gap the reader should see named, not a reason to
     // throw away a whole assessment. Only the headline, the exploitation
@@ -185,10 +208,20 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
   }
   // Stage 11 is the one stage that may legitimately produce nothing: a reader
   // with a single policy has no cross-policy exposure, and saying so is the answer.
-  if (!output.artefacts.length && stage !== 11) throw new PolicyError(lastFault?.code ?? 'coverage', `This stage produced no artefacts.${lastFault ? ` Last reason: ${lastFault.message}` : ''}`);
+  if (!output.artefacts.length && stage !== 11) throw new PolicyError(fault.last?.code ?? 'coverage', `This stage produced no artefacts.${fault.last ? ` Last reason: ${fault.last.message}` : ''}`);
 
   const final = triageArtefacts(output, stage, input.artefacts);
-  return { artefacts: final.artefacts, warnings: clampWarnings(final.warnings) };
+  // A single response is bounded by its envelope; the assembled stage was not,
+  // and `policy_provenance` grows with the square of a runaway fan-out.
+  const kept = final.artefacts.slice(0, MAX_STAGE_ARTEFACTS);
+  const warnings = [...final.warnings];
+  if (final.artefacts.length > kept.length) warnings.push(`This stage produced ${final.artefacts.length} items and only the first ${MAX_STAGE_ARTEFACTS} were kept. The assessment is incomplete for this stage.`);
+  for (const a of kept) {
+    if (a.refs.length <= MAX_REFS) continue;
+    warnings.push(`“${a.label}” cited ${a.refs.length} sources; only the first ${MAX_REFS} are recorded.`);
+    a.refs = a.refs.slice(0, MAX_REFS);
+  }
+  return { artefacts: kept, warnings: clampWarnings(warnings) };
 }
 
 /**
@@ -196,11 +229,11 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
  * majority the stage has not done its job; with one, the absences are named in the
  * assessment and the run continues as `completed_with_gaps`.
  */
-function requireMajority(output: StageOutput, library: readonly string[], of: (a: Artefact) => string, noun: string, lastFault: PolicyError | null) {
+function requireMajority(output: StageOutput, library: readonly string[], of: (a: Artefact) => string, noun: string, last: PolicyError | null) {
   const covered = new Set(output.artefacts.map(of));
+  const assessed = library.length - library.filter((key) => !covered.has(key)).length;
   const missing = library.filter((key) => !covered.has(key));
-  const covered_ = library.length - missing.length;
-  if (covered_ * 2 <= library.length) throw new PolicyError(lastFault?.code ?? 'coverage', `Only ${covered_} of ${library.length} ${noun}s could be assessed.${lastFault ? ` Last reason: ${lastFault.message}` : ''}`);
+  if (assessed * 2 <= library.length) throw new PolicyError(last?.code ?? 'coverage', `Only ${assessed} of ${library.length} ${noun}s could be assessed.${last ? ` Last reason: ${last.message}` : ''}`);
   if (missing.length) output.warnings.push(`${missing.length} of ${library.length} ${noun}s were not assessed: ${missing.map((m) => m.replaceAll('_', ' ')).join(', ')}. Treat the assessment as incomplete on those grounds.`);
 }
 

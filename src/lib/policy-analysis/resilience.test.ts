@@ -168,7 +168,7 @@ describe('a fixed library reports its gaps instead of losing the run', () => {
 
   it('completes with a named gap when a minority of the library fails', async () => {
     const { all, research, signal } = await build();
-    const skipped = new Set([PATTERNS[1], PATTERNS[3], PATTERNS[5]]);
+    const skipped = new Set<(typeof PATTERNS)[number]>([PATTERNS[1], PATTERNS[3], PATTERNS[5]]);
     const model = async (stage: number, key: string, raw: unknown) => {
       if (skipped.has(key as (typeof PATTERNS)[number])) throw new PolicyError('contract', 'Synthetic contract failure.');
       return fixtureModel(stage, key, raw);

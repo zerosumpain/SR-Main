@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { policyModelCalls, policyExecutions } from '$lib/db/schema';
 import { getLLMClient } from '$lib/llm/client';
@@ -45,7 +45,10 @@ export function modelCaller(executionId: string, runId: string, signal: AbortSig
     const [execution] = await db.select().from(policyExecutions).where(eq(policyExecutions.id, executionId));
     const [cached] = await db.select({ output: policyModelCalls.output }).from(policyModelCalls)
       .innerJoin(policyExecutions, eq(policyExecutions.id, policyModelCalls.executionId))
-      .where(and(eq(policyExecutions.stageId, execution.stageId), eq(policyModelCalls.inputHash, inputHash), eq(policyModelCalls.promptVersion, PROMPT_VERSION), eq(policyModelCalls.status, 'completed'))).limit(1);
+      .where(and(eq(policyExecutions.stageId, execution.stageId), eq(policyModelCalls.inputHash, inputHash), eq(policyModelCalls.promptVersion, PROMPT_VERSION), eq(policyModelCalls.status, 'completed')))
+      // Several attempts of the same stage can leave more than one match; take the
+      // most recent rather than whatever the planner happens to hand back first.
+      .orderBy(desc(policyModelCalls.completedAt)).limit(1);
     if (cached) {
       const reused = accept(triageOutput(cached.output, stage, prior), prefix).output;
       return { artefacts: reused.artefacts, warnings: [...fitted.notes, ...reused.warnings] };

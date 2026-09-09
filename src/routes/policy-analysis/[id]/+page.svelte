@@ -1,41 +1,134 @@
 <script lang="ts">
+  // The assessment, read as a dashboard rather than as a database.
+  //
+  // The reader is a policy professional deciding whether a paper is safe to send
+  // out, not an engineer inspecting artefacts. So the page is ordered as an
+  // argument — verdict, then how the policy can be beaten, then who would beat
+  // it, then where it is structurally thin, then what breaks it, then what the
+  // evidence actually supports — and every section can be opened down to the
+  // sentence in the document it came from through ONE inspector.
+  //
+  // Nothing here decides what matters: the shaping lives in
+  // `$lib/policy-analysis/view`, so it is testable without mounting anything.
   import { onMount, tick } from 'svelte';
   import { invalidateAll } from '$app/navigation';
   import type { PageData } from './$types';
-  import type { Kind } from '$lib/policy-analysis/contracts';
+  import { REPORT_SECTIONS } from '$lib/policy-analysis/contracts';
+  import * as view from '$lib/policy-analysis/view';
+  import type { Band } from '$lib/policy-analysis/view';
   import ArtefactValue from '$lib/components/policy-analysis/ArtefactValue.svelte';
   import PolicyGraph from '$lib/components/policy-analysis/PolicyGraph.svelte';
+  import Verdict from '$lib/components/policy-analysis/Verdict.svelte';
+  import ExposurePlot from '$lib/components/policy-analysis/ExposurePlot.svelte';
+  import PlayCard from '$lib/components/policy-analysis/PlayCard.svelte';
+  import CheckGrid from '$lib/components/policy-analysis/CheckGrid.svelte';
+  import ActorBoard from '$lib/components/policy-analysis/ActorBoard.svelte';
+  import EvidenceMix from '$lib/components/policy-analysis/EvidenceMix.svelte';
+  import CrossPolicy from '$lib/components/policy-analysis/CrossPolicy.svelte';
+
   let { data }: { data: PageData } = $props();
-  const sections: { name: string; kinds: Kind[] }[] = [
-    { name: 'Overview', kinds: ['finding'] }, { name: 'Findings', kinds: ['finding', 'assumption'] },
-    { name: 'Claims and mechanisms', kinds: ['claim', 'mechanism', 'passage'] },
-    { name: 'Actors and incentives', kinds: ['actor', 'profile', 'alias', 'resolution_candidate'] },
-    { name: 'Knowledge graph', kinds: ['node', 'edge'] }, { name: 'Evidence', kinds: ['evidence', 'research_question', 'research_source'] },
-    { name: 'Game-theoretic models', kinds: ['model'] }, { name: 'Automated tests', kinds: ['test'] },
-    { name: 'Scenarios', kinds: ['scenario'] }, { name: 'Recommendations', kinds: ['recommendation'] },
-    { name: 'Run log and provenance', kinds: [] },
-  ];
-  let tab = $state('Overview'); let search = $state(''); let selectedId = $state<string | null>(null);
-  let busy = $state(false); let message = $state(''); let refreshError = $state(''); let now = $state(Date.now());
+
+  let selectedId = $state<string | null>(null);
+  let bandFilter = $state<Band | null>(null);
+  let busy = $state(false);
+  let message = $state('');
+  let refreshError = $state('');
+  let now = $state(Date.now());
   let audit = $state<unknown>(null);
+  let openLog = $state(false);
+  let confirmDelete = $state(false);
+  // Where focus was when the inspector opened. Not $state: nothing reactive
+  // reads it, and a DOM node in reactive state is a proxy waiting to happen.
+  let opener: HTMLElement | null = null;
+
+  const SECTIONS = [
+    { id: 'verdict', letter: 'A', name: 'Verdict' },
+    { id: 'playbook', letter: 'B', name: 'How it can be beaten' },
+    { id: 'actors', letter: 'C', name: 'Who is in the room' },
+    { id: 'checks', letter: 'D', name: 'Where it is thin' },
+    { id: 'scenarios', letter: 'E', name: 'What breaks it' },
+    { id: 'evidence', letter: 'F', name: 'Evidence and enquiry' },
+    { id: 'cross', letter: 'G', name: 'Across policies' },
+    { id: 'report', letter: 'H', name: 'The written assessment' },
+    { id: 'provenance', letter: 'I', name: 'Run log and provenance' },
+  ];
+
   const active = $derived(['queued', 'running'].includes(data.analysis.status));
   const completed = $derived(data.stages.filter((s) => s.status === 'completed').length);
-  const selected = $derived(data.artefacts.find((a) => a.id === selectedId));
-  const provenance = $derived(data.artefactMetadata.find((a) => a.id === selectedId));
-  const warnings = $derived(data.stages.flatMap((s) => s.warnings.map((w) => `${s.ordinal + 1}. ${w}`)));
-  const reportOrder = ['executive_assessment', 'scope_methodology', 'objectives', 'actors', 'mechanisms', 'high_risk_assumptions', 'test_results', 'strategic_responses', 'scenarios', 'evidence_gaps', 'confidence_uncertainty', 'distribution', 'unresolved_questions'];
-  const filtered = $derived(data.artefacts.filter((a) => sections.find((s) => s.name === tab)?.kinds.includes(a.kind) && (!search || `${a.label} ${a.statement}`.toLowerCase().includes(search.toLowerCase()))).sort((a, b) => tab === 'Overview' ? reportOrder.indexOf(String(a.data.section)) - reportOrder.indexOf(String(b.data.section)) : 0));
-  const fmt = (v: Date | string | null) => v ? new Date(v).toLocaleString() : 'Not yet';
-  function inspect(id: string) { selectedId = id; window.history.replaceState(null, '', `#${encodeURIComponent(id)}`); void tick().then(() => { document.getElementById('policy-inspector')?.scrollIntoView({ block: 'start' }); document.getElementById('policy-inspector')?.focus({ preventScroll: true }); }); }
-  async function refresh() { try { await invalidateAll(); refreshError = ''; } catch { refreshError = 'Progress could not refresh. The background run is independent of this connection.'; } }
+  const artefacts = $derived(data.artefacts);
+  const plays = $derived(view.plays(artefacts));
+  const shownPlays = $derived(bandFilter ? plays.filter((p) => p.band === bandFilter) : plays);
+  const bands = $derived(view.bandCounts(plays));
+  const actors = $derived(view.actorBoard(artefacts, plays));
+  const checks = $derived(view.checks(artefacts));
+  const tiles = $derived(view.tiles(artefacts, plays));
+  const headline = $derived(view.headline(artefacts));
+  const sections = $derived(view.findingsBySection(artefacts));
+  const recommendations = $derived(view.of(artefacts, 'recommendation'));
+  const fragile = $derived(view.fragileAssumptions(artefacts));
+  const scenarios = $derived(view.of(artefacts, 'scenario'));
+  const models = $derived(view.of(artefacts, 'model'));
+  const crossFound = $derived(view.of(artefacts, 'cross_policy'));
+  const warnings = $derived(data.stages.flatMap((s) => s.warnings.map((w) => ({ stage: s.name, text: w }))));
+  const crossUnavailable = $derived(warnings.some((w) => w.text.includes('No other completed policy assessment')));
+  const selected = $derived(artefacts.find((a) => a.id === selectedId) ?? null);
+  const running = $derived(data.stages.find((s) => s.status === 'running') ?? null);
+  // A stage that fans out over twenty passages sat on "2 of 13" for its whole
+  // life. The model-call rows already knew how far in it was.
+  const runningCalls = $derived(running ? data.calls.filter((c) => data.executions.some((e) => e.id === c.executionId && e.stageId === running.id)).length : 0);
+  const provenance = $derived(data.artefactMetadata.find((a) => a.id === selectedId) ?? null);
+
+  const fmt = (v: Date | string | null) => (v ? new Date(v).toLocaleString() : 'Not yet');
+  const pct = (v: number | null) => (v === null ? 'unknown' : `${Math.round(v * 100)}%`);
+
+  function inspect(id: string) {
+    if (!selectedId && document.activeElement instanceof HTMLElement) opener = document.activeElement;
+    selectedId = id;
+    window.history.replaceState(null, '', `#${encodeURIComponent(id)}`);
+    void tick().then(() => {
+      const panel = document.getElementById('policy-inspector');
+      panel?.scrollIntoView({ block: 'nearest' });
+      panel?.focus({ preventScroll: true });
+    });
+  }
+
+  /** Closing must hand focus back, or the keyboard reader lands at the top of the page. */
+  function closeInspector() {
+    selectedId = null;
+    void tick().then(() => { opener?.focus(); opener = null; });
+  }
+
+  async function destroy() {
+    busy = true; message = '';
+    try {
+      const response = await fetch(`/api/policy-analysis/${data.analysis.id}`, { method: 'DELETE' });
+      if (!response.ok) { message = 'Could not delete this assessment.'; return; }
+      window.location.href = '/policy-analysis';
+    } catch { message = 'Connection interrupted. The assessment may not have been deleted.'; }
+    finally { busy = false; }
+  }
+
+  async function refresh() {
+    try { await invalidateAll(); refreshError = ''; }
+    catch { refreshError = 'Progress could not refresh. The background run is independent of this connection.'; }
+  }
+
   onMount(() => {
     selectedId = decodeURIComponent(window.location.hash.slice(1)) || null;
+    // Timer handles are deliberately plain `let`: nothing reactive reads them,
+    // and making them $state would subscribe this effect to its own writes.
     let stopped = false;
-    const timer = setInterval(() => { now = Date.now(); }, 1000);
-    async function poll() { if (stopped) return; if (active && !document.hidden) await refresh(); if (!stopped) polling = setTimeout(poll, 6000); }
-    let polling = setTimeout(poll, 6000);
-    return () => { stopped = true; clearInterval(timer); clearTimeout(polling); };
+    const ticker = setInterval(() => { now = Date.now(); }, 1000);
+    let polling: ReturnType<typeof setTimeout>;
+    async function poll() {
+      if (stopped) return;
+      if (active && !document.hidden) await refresh();
+      if (!stopped) polling = setTimeout(poll, 6000);
+    }
+    polling = setTimeout(poll, 6000);
+    return () => { stopped = true; clearInterval(ticker); clearTimeout(polling); };
   });
+
   async function control(action: 'cancel' | 'resume') {
     busy = true; message = '';
     try {
@@ -45,6 +138,7 @@
     } catch { message = 'Connection interrupted. Refresh to check the saved run state.'; }
     finally { busy = false; }
   }
+
   async function showAudit(id: string) {
     try {
       const response = await fetch(`/api/policy-analysis/${data.analysis.id}/audit?call=${id}`);
@@ -53,76 +147,360 @@
     } catch { message = 'Could not load this model call.'; }
   }
 </script>
+
+<svelte:window onkeydown={(e) => { if (e.key === 'Escape' && selectedId) { e.preventDefault(); closeInspector(); } }} />
 <svelte:head><title>{data.analysis.title} — Policy analysis</title><meta name="robots" content="noindex,nofollow" /></svelte:head>
+
 <a href="/policy-analysis">← All policy analyses</a>
+<p class="eyebrow">{data.analysis.jurisdiction ?? 'Jurisdiction not specified'} · {data.analysis.policyArea ?? 'Policy assessment'} · {data.analysis.depth === 'deep' ? 'Deep enquiry' : 'Standard enquiry'}</p>
 <h1>{data.analysis.title}</h1>
-<p class="eyebrow">{data.analysis.jurisdiction ?? 'Jurisdiction not specified'} · {data.analysis.policyArea ?? 'Policy assessment'}</p>
+<p class="standfirst">
+  A red-team assessment: how this policy can be beaten by the people it governs, who would do it, and what
+  the evidence does and does not support. It is written to find weaknesses, not to assure the paper.
+</p>
+
 <section class="progress" aria-label="Analysis progress">
-  <div class="toolbar"><strong role="status">{data.analysis.status.replaceAll('_', ' ')}</strong><span>{completed} / {data.stages.length} stages complete</span><button class="nm-save-btn" onclick={refresh}>Refresh</button>
+  <div class="toolbar">
+    <strong role="status">{data.analysis.status.replaceAll('_', ' ')}</strong>
+    <span>{completed} of {data.stages.length} stages complete</span>
+    <button class="nm-save-btn" onclick={refresh}>Refresh</button>
     {#if active}<button class="nm-save-btn" disabled={busy} onclick={() => control('cancel')}>Cancel run</button>{/if}
-    {#if ['failed', 'cancelled'].includes(data.analysis.status)}<button class="nm-save-btn" disabled={busy} onclick={() => control('resume')}>Resume incomplete stages</button>{/if}
+    {#if ['failed', 'cancelled'].includes(data.analysis.status)}<button class="nm-save-btn" disabled={busy} onclick={() => control('resume')}>Resume from the last completed stage</button>{/if}
   </div>
   <progress max={data.stages.length} value={completed} aria-label="Completed stages"></progress>
-  <p class="muted">Elapsed {Math.max(0, Math.floor(((data.analysis.completedAt ? new Date(data.analysis.completedAt).getTime() : now) - new Date(data.analysis.createdAt).getTime()) / 60000))} min · Last update {fmt(data.heartbeat ?? data.analysis.updatedAt)}</p>
-  {#if active}<p>You can leave this page. Progress is saved between stages and recovers after worker restarts. This page refreshes while visible.</p>{/if}
-  {#if completed < data.stages.length}<p class="warning">Partial work: the assessment is incomplete until all stages finish. Available artefacts are shown below.</p>{/if}
+  <p class="muted">
+    {Math.max(0, Math.floor(((data.analysis.completedAt ? new Date(data.analysis.completedAt).getTime() : now) - new Date(data.analysis.createdAt).getTime()) / 60000))} minutes elapsed · last update {fmt(data.heartbeat ?? data.analysis.updatedAt)}
+  </p>
+  {#if running}<p class="muted">Now running <strong>{running.name}</strong>{#if runningCalls} — {runningCalls} model call{runningCalls === 1 ? '' : 's'} made so far in this stage{/if}.</p>{/if}
+  {#if active}<p>You can close this page. Every stage is saved as it finishes and the run recovers from a restart on its own.</p>{/if}
   {#if data.analysis.error}<p class="warning" role="alert">{data.analysis.error}</p>{/if}
   {#if message || refreshError}<p class="warning" role="alert">{message || refreshError}</p>{/if}
-  <details open={completed < data.stages.length}><summary>Stage progress and timing</summary>
-    <ol class="stages">{#each data.stages as stage}<li><strong>{stage.name}</strong><span>{stage.status === 'pending' ? 'Not yet completed' : stage.status} · attempts {stage.attempts}</span>{#if stage.startedAt}<span class="muted">Started {fmt(stage.startedAt)}{#if stage.completedAt} · finished {fmt(stage.completedAt)}{/if}</span>{/if}{#if stage.error}<span class="warning">{stage.error}</span>{/if}</li>{/each}</ol>
+  <details open={completed < data.stages.length}>
+    <summary>Stage by stage</summary>
+    <ol class="stages">
+      {#each data.stages as stage (stage.id)}
+        <li class:done={stage.status === 'completed'} class:failed={stage.status === 'failed'}>
+          <strong>{stage.name}</strong>
+          <span>{stage.status === 'pending' ? 'not started' : stage.status}{stage.attempts ? ` · ${stage.attempts} failed attempt${stage.attempts === 1 ? '' : 's'}` : ''}</span>
+          {#if stage.startedAt}<span class="muted">{fmt(stage.startedAt)}{#if stage.completedAt} → {fmt(stage.completedAt)}{/if}</span>{/if}
+          {#if stage.error}<span class="warning">{stage.error}</span>{/if}
+        </li>
+      {/each}
+    </ol>
   </details>
-  {#if warnings.length}<details open><summary>{warnings.length} extraction or evidence warnings</summary><ul>{#each warnings as warning}<li>{warning}</li>{/each}</ul></details>{/if}
+  {#if warnings.length}
+    <details>
+      <summary>{warnings.length} thing{warnings.length === 1 ? '' : 's'} this assessment could not establish</summary>
+      <ul class="gaps">{#each warnings as w, i (i)}<li><span class="muted">{w.stage}</span> {w.text}</li>{/each}</ul>
+    </details>
+  {/if}
 </section>
-<nav class="tabs" aria-label="Assessment sections">{#each sections as section}<button class:current={tab === section.name} aria-pressed={tab === section.name} onclick={() => { tab = section.name; search = ''; }}>{section.name}</button>{/each}</nav>
+
+<nav class="rail" aria-label="Sections">
+  {#each SECTIONS as s (s.id)}<a href={`#${s.id}`}><span class="letter">{s.letter}</span>{s.name}</a>{/each}
+</nav>
+
+<div id="verdict" class="anchor"></div>
+<Verdict {headline} {tiles} {bands} status={data.analysis.status} {inspect} onband={(b) => { bandFilter = bandFilter === b ? null : b; document.getElementById('playbook')?.scrollIntoView(); }} />
+
+<section id="playbook" class="section">
+  <p class="kicker">B / How it can be beaten</p>
+  <h2>The exploitation playbook</h2>
+  <p class="strap">
+    Each play is something an actor named in the policy could do to serve itself at the policy's expense.
+    They are ranked by a single figure — the even blend of how much the actor gains, how easily it can be
+    done, how much of the objective it destroys, and how poorly the policy would notice.
+  </p>
+
+  {#if plays.length}
+    <ExposurePlot {plays} {inspect} />
+    <div class="filter">
+      <span class="sr-label">Showing</span>
+      <button class:on={bandFilter === null} onclick={() => (bandFilter = null)}>All {plays.length}</button>
+      {#each bands.filter((b) => b.count) as b (b.band)}
+        <button class:on={bandFilter === b.band} onclick={() => (bandFilter = bandFilter === b.band ? null : b.band)}>{b.count} {b.band}</button>
+      {/each}
+    </div>
+    <div class="plays">
+      {#each shownPlays as play, i (play.artefact.id)}<PlayCard {play} rank={plays.indexOf(play) + 1} {inspect} />{/each}
+    </div>
+  {:else}
+    <p class="empty">No exploitation play has been produced yet. This is the tenth of thirteen stages, so it arrives late in a run.</p>
+  {/if}
+</section>
+
+<section id="actors" class="section">
+  <p class="kicker">C / Who is in the room</p>
+  <h2>Actors, and what actually moves them</h2>
+  <p class="strap">
+    What each body says it wants, what its position rewards, who it answers to, and — the question an
+    assurance review never asks — who is better off if this policy fails.
+  </p>
+  <ActorBoard {actors} {inspect} />
+</section>
+
+<section id="checks" class="section">
+  <p class="kicker">D / Where it is thin</p>
+  <h2>Twelve structural checks</h2>
+  <p class="strap">
+    These are the only figures on this page no model produced. Each walks the relationships the policy
+    states and asks whether the counterpart it depends on is there — responsibility with authority,
+    accountability with resources, a measure with someone who owns its data. A check with nothing to look
+    at is <em>not</em> a pass.
+  </p>
+  <CheckGrid {checks} {inspect} />
+</section>
+
+<section id="scenarios" class="section">
+  <p class="kicker">E / What breaks it</p>
+  <h2>Conditions, models and sensitivity</h2>
+  <p class="strap">
+    Eight standing conditions the policy has to survive, and the interaction patterns each one runs
+    through. These are semi-formal hypotheses about behaviour, not simulations, and they say so.
+  </p>
+
+  {#if fragile.length}
+    <div class="fragile">
+      <p class="sr-label">The assumptions most likely to change the conclusion</p>
+      <ol>
+        {#each fragile.slice(0, 5) as a (a.id)}
+          <li>
+            <button class="link" onclick={() => inspect(a.id)}>{a.label}</button>
+            <span class="muted">importance {pct(Number(a.data.importance))} · uncertainty {pct(Number(a.data.uncertainty))} · consequence {pct(Number(a.data.consequence))}</span>
+            <p>{a.statement}</p>
+          </li>
+        {/each}
+      </ol>
+    </div>
+  {/if}
+
+  <div class="cards">
+    {#each scenarios as s (s.id)}
+      <article class="card">
+        <p class="kicker-sm">{String(s.data.scenario).replaceAll('_', ' ')}</p>
+        <h3>{s.label}</h3>
+        <p>{s.statement}</p>
+        {#if s.data.detectability}<p class="muted"><strong>Would we see it?</strong> {String(s.data.detectability)}</p>{/if}
+        <button class="link" onclick={() => inspect(s.id)}>Sensitivity and evidence →</button>
+      </article>
+    {/each}
+  </div>
+
+  {#if models.length}
+    <details class="models">
+      <summary>{models.length} interaction models assessed</summary>
+      <ul>
+        {#each models as m (m.id)}
+          <li>
+            <button class="link" onclick={() => inspect(m.id)}>{String(m.data.pattern).replaceAll('_', ' ')}</button>
+            <span class="muted">{String(m.data.applicability ?? '')}</span>
+          </li>
+        {/each}
+      </ul>
+    </details>
+  {/if}
+</section>
+
+<section id="evidence" class="section">
+  <p class="kicker">F / Evidence and enquiry</p>
+  <h2>What is actually supported</h2>
+  <p class="strap">
+    Every claim in the paper linked to something outside it, or explicitly not. A search excerpt is weak
+    evidence and is labelled as one; a retrieval date is not a publication date.
+  </p>
+  <EvidenceMix
+    mix={view.evidenceMix(artefacts)}
+    questions={view.of(artefacts, 'research_question')}
+    sources={view.of(artefacts, 'research_source')}
+    {inspect}
+  />
+</section>
+
+<section id="cross" class="section">
+  <p class="kicker">G / Across policies</p>
+  <h2>Weaknesses that span more than one policy</h2>
+  <p class="strap">
+    Some failures do not exist in any single document: one body told two incompatible things, a burden that
+    is bearable once and not three times, an assumption several policies all rest on.
+  </p>
+  <CrossPolicy found={crossFound} inbound={data.inbound ?? []} unavailable={crossUnavailable} {inspect} />
+</section>
+
+<section id="report" class="section">
+  <p class="kicker">H / The written assessment</p>
+  <h2>Chapter and verse</h2>
+  {#if recommendations.length}
+    <div class="recommendations">
+      <p class="sr-label">Redesign options — normative judgements, not findings</p>
+      {#each recommendations as r (r.id)}
+        <article class="rec">
+          <h3>{r.label}</h3>
+          <p>{r.statement}</p>
+          {#if r.data.change}<p><strong>Change.</strong> {String(r.data.change)}</p>{/if}
+          {#if r.data.tradeoffs}<p><strong>Trade-off.</strong> {String(r.data.tradeoffs)}</p>{/if}
+          {#if r.data.burdenBearers}<p class="muted"><strong>Who carries it.</strong> {(r.data.burdenBearers as string[]).join(', ')}</p>{/if}
+          <button class="link" onclick={() => inspect(r.id)}>Findings behind it →</button>
+        </article>
+      {/each}
+    </div>
+  {/if}
+  {#each sections as section (section.section)}
+    <div class="chapter">
+      <h3>{section.label}</h3>
+      {#each section.items as f (f.id)}
+        <div class="finding">
+          <p class="kicker-sm">{f.origin.replaceAll('_', ' ')}</p>
+          <p>{f.statement}</p>
+          <button class="link" onclick={() => inspect(f.id)}>Trace to test, hypothesis and passage ({f.refs.length}) →</button>
+        </div>
+      {/each}
+    </div>
+  {:else}
+    <p class="empty">The written assessment is produced by the final stage and is not available yet.</p>
+  {/each}
+  {#if sections.length && sections.length < REPORT_SECTIONS.length}
+    <p class="muted">{REPORT_SECTIONS.length - sections.length} of the {REPORT_SECTIONS.length} chapters are missing from this assessment.</p>
+  {/if}
+</section>
+
+<section id="provenance" class="section">
+  <p class="kicker">I / Run log and provenance</p>
+  <h2>Everything behind the page</h2>
+  <p class="strap">
+    Every completed stage has an immutable execution record; every model call keeps its prompt version,
+    input, output, provider and reported usage. Provider secrets and raw errors are excluded.
+  </p>
+
+  <details>
+    <summary>The policy as a graph</summary>
+    <PolicyGraph {artefacts} {inspect} />
+  </details>
+
+  {#each data.documents as document (document.id)}
+    <div class="ruled">
+      <a href={`/api/policy-analysis/${data.analysis.id}/document`}>Download {document.filename}</a>
+      <p class="muted">{document.mimeType} · {document.size.toLocaleString()} bytes · SHA-256 {document.sha256}</p>
+      <details><summary>Document structure and extraction metadata</summary><ArtefactValue value={document.metadata} all={artefacts} {inspect} /></details>
+    </div>
+  {/each}
+
+  <div class="danger">
+    <p class="sr-label">Remove it</p>
+    <p class="muted">Deletes the uploaded paper, every artefact, the provenance graph and the model-call audit. It cannot be undone.</p>
+    {#if confirmDelete}
+      <div class="toolbar">
+        <button class="nm-save-btn" disabled={busy} onclick={destroy}>Yes, delete “{data.analysis.title}” permanently</button>
+        <button class="link" onclick={() => (confirmDelete = false)}>Keep it</button>
+      </div>
+    {:else}
+      <button class="link" onclick={() => (confirmDelete = true)}>Delete this assessment and its document</button>
+    {/if}
+  </div>
+
+  <details bind:open={openLog}>
+    <summary>{data.calls.length} model calls across {data.executions.length} executions</summary>
+    {#if openLog}
+      {#each data.executions as execution (execution.id)}
+        <div class="ruled">
+          <strong>{data.stages.find((s) => s.id === execution.stageId)?.name}</strong>
+          <p class="muted">{execution.status} · {fmt(execution.startedAt)} → {fmt(execution.completedAt)}</p>
+          {#if execution.error}<p>{execution.error}</p>{/if}
+        </div>
+      {/each}
+      {#each data.calls as call (call.id)}
+        <div class="ruled">
+          <button class="link" onclick={() => showAudit(call.id)}>{call.callKey} · {call.status}</button>
+          <p class="muted">{call.promptVersion} · {call.provider ?? 'provider not reported'} · {call.model ?? 'model not resolved'} · {fmt(call.startedAt)}</p>
+          {#if call.error}<p class="warning">{call.error}</p>{/if}
+        </div>
+      {/each}
+      {#if audit}<details open><summary>Model call audit</summary><pre>{JSON.stringify(audit, null, 2)}</pre></details>{/if}
+    {/if}
+  </details>
+</section>
+
 {#if selected}
-  <aside id="policy-inspector" tabindex="-1" class="inspector" aria-label="Artefact and evidence inspector">
-    <div class="toolbar"><strong>{selected.label}</strong><button class="nm-save-btn" onclick={() => selectedId = null}>Close inspector</button></div>
-    <div class="eyebrow">{selected.kind.replaceAll('_', ' ')} · {selected.origin.replaceAll('_', ' ')}</div>
+  <aside id="policy-inspector" tabindex="-1" class="inspector" aria-label="Evidence inspector">
+    <div class="toolbar">
+      <strong>{selected.label}</strong>
+      <button class="nm-save-btn" onclick={closeInspector}>Close</button>
+    </div>
+    <p class="kicker-sm">{selected.kind.replaceAll('_', ' ')} · {selected.origin.replaceAll('_', ' ')}</p>
     <p>{selected.statement}</p>
-    {#if provenance}<p class="muted">Created in stage {provenance.stage + 1} · updated {fmt(provenance.updatedAt)}</p>{/if}<p class="muted">Confidence: {selected.confidence === null ? 'unknown' : `${Math.round(selected.confidence * 100)}% (model or extraction confidence; not a calibrated probability)`} · {selected.id}</p>
-    {#if selected.page || selected.section}<p class="muted">{selected.page ? `Page ${selected.page} · ` : ''}{selected.section ?? ''}{selected.startOffset !== null ? ` · text offsets ${selected.startOffset}–${selected.endOffset}` : ''}</p>{/if}
+    {#if provenance}<p class="muted">Produced in stage {provenance.stage + 1} · updated {fmt(provenance.updatedAt)}</p>{/if}
+    <p class="muted">Confidence {pct(selected.confidence)} — a model or extraction judgement, not a calibrated probability · {selected.id}</p>
+    {#if selected.page || selected.section}
+      <p class="muted">{selected.page ? `Page ${selected.page} · ` : ''}{selected.section ?? ''}{selected.startOffset !== null ? ` · characters ${selected.startOffset}–${selected.endOffset}` : ''}</p>
+    {/if}
     {#if selected.sourceQuote}<blockquote>{selected.sourceQuote}</blockquote>{/if}
     {#if selected.url}<a href={selected.url} target="_blank" rel="noopener noreferrer">Open external source</a>{/if}
-    <div class="toolbar">{#each selected.refs as ref}<button class="reference" onclick={() => inspect(ref)}>↗ {data.artefacts.find((a) => a.id === ref)?.label ?? ref}</button>{/each}</div>
-    <details><summary>Structured fields</summary><ArtefactValue value={selected.data} all={data.artefacts} {inspect} /></details>
+    {#if selected.refs.length}
+      <p class="sr-label">Rests on</p>
+      <div class="refs">
+        {#each selected.refs as ref (ref)}
+          <button class="link" onclick={() => inspect(ref)}>↗ {artefacts.find((a) => a.id === ref)?.label ?? ref}</button>
+        {/each}
+      </div>
+    {/if}
+    <details><summary>All structured fields</summary><ArtefactValue value={selected.data} all={artefacts} {inspect} /></details>
   </aside>
 {/if}
-<h2>{tab}</h2>
-{#if tab === 'Knowledge graph'}<PolicyGraph artefacts={data.artefacts} {inspect} />
-{:else if tab === 'Run log and provenance'}
-  <p>Every completed stage has an immutable execution record. Model calls retain prompt version, inputs, outputs, provider and reported usage. Provider secrets and raw errors are excluded.</p>
-  {#each data.documents as document}<div class="ruled"><a href={`/api/policy-analysis/${data.analysis.id}/document`}>Download {document.filename}</a><p class="muted">{document.mimeType} · {document.size.toLocaleString()} bytes · SHA-256 {document.sha256}</p><details><summary>Document structure and extraction metadata</summary><ArtefactValue value={document.metadata} all={data.artefacts} {inspect} /></details></div>{/each}
-  {#each data.executions as execution}<div class="ruled"><strong>{data.stages.find((s) => s.id === execution.stageId)?.name}</strong><p class="muted">{execution.status} · {fmt(execution.startedAt)} → {fmt(execution.completedAt)}</p>{#if execution.error}<p>{execution.error}</p>{/if}</div>{/each}
-  {#each data.calls as call}<div class="ruled"><button class="reference" onclick={() => showAudit(call.id)}>{call.callKey} · {call.status}</button><p class="muted">{call.promptVersion} · {call.provider ?? 'Provider not reported'} · {call.model ?? 'Model not resolved'} · {fmt(call.startedAt)}</p><details><summary>Token and cost accounting</summary><pre>{JSON.stringify(call.usage, null, 2)}</pre></details></div>{/each}
-  {#if audit}<details open><summary>Model call audit</summary><pre>{JSON.stringify(audit, null, 2)}</pre></details>{/if}
-{:else}
-  {#if tab === 'Overview'}<p class="muted">This assessment separates paper statements, external evidence, structural inferences, behavioural hypotheses, model results and normative recommendations. Confidence values describe extraction or analyst judgement, not measured probabilities.</p>{/if}
-  <label for="artefact-search" class="muted">Search this section</label><input id="artefact-search" class="nm-text-input" type="search" bind:value={search} />
-  {#each filtered as item}
-    <article class="ruled">
-      <div class="eyebrow">{item.origin.replaceAll('_', ' ')}{#if item.kind === 'finding'} · {String(item.data.section).replaceAll('_', ' ')}{/if}</div>
-      <h3>{item.label}</h3>
-      {#if item.kind === 'test'}<strong>{String(item.data.result).replaceAll('_', ' ')}</strong>{/if}
-      <p>{item.statement}</p>
-      <div class="toolbar"><button class="reference" onclick={() => inspect(item.id)}>Inspect artefact and evidence ({item.refs.length})</button><span class="muted">Confidence {item.confidence === null ? 'unknown' : `${Math.round(item.confidence * 100)}%`}</span></div>
-      {#if ['profile', 'model', 'test', 'scenario', 'recommendation', 'evidence'].includes(item.kind)}<details><summary>Details</summary><ArtefactValue value={item.data} all={data.artefacts} {inspect} /></details>{/if}
-    </article>
-  {:else}<p class="muted">{search ? 'No matching artefacts.' : 'No artefacts in this section yet. Follow stage progress above.'}</p>{/each}
-{/if}
+
 <style>
-  .progress { border-top: 2px solid var(--text-primary); border-bottom: 2px solid var(--text-primary); padding: .5rem 0 1rem; }
+  .standfirst { font-size: var(--fs-body-lg); color: var(--text-secondary); max-width: 60ch; }
+  .progress { border-top: 2px solid var(--text-primary); border-bottom: 2px solid var(--text-primary); padding: .75rem 0 1.25rem; margin-top: 1.5rem; }
+  progress { width: 100%; height: .65rem; accent-color: var(--accent); }
   progress::-webkit-progress-bar { background: var(--surface-sunken); }
   progress::-webkit-progress-value { background: var(--accent); }
   progress::-moz-progress-bar { background: var(--accent); }
-  progress { width: 100%; height: .65rem; accent-color: var(--accent); }
   summary { cursor: pointer; padding: .7rem 0; font-weight: 600; }
-  .stages { padding-left: 1.5rem; } .stages li { border-bottom: 1px solid var(--line); padding: .6rem 0; } .stages span { display: block; margin-top: .3rem; }
-  .tabs { display: flex; flex-wrap: wrap; margin-top: 1.5rem; border-bottom: 1px solid var(--line-strong); }
-  .tabs button { font: inherit; font-size: var(--fs-label); background: var(--surface-sunken); border: 1px solid var(--line); padding: .7rem .9rem; cursor: pointer; }
-  .tabs .current { background: var(--text-primary); color: var(--bg); }
-  .inspector { margin-top: 1.5rem; padding: 1.2rem; border: 2px solid var(--accent-ink); background: var(--surface-sunken); overflow-wrap: anywhere; }
-  .reference { font: inherit; color: var(--accent-ink); text-decoration: underline; background: none; border: 0; cursor: pointer; text-align: left; padding: .2rem 0; overflow-wrap: anywhere; }
-  h3 { font-size: var(--fs-body-lg); font-weight: 700; margin: .5rem 0; }
-  blockquote { border-left: 2px solid var(--accent); padding-left: 1rem; white-space: pre-wrap; }
+  .stages { padding-left: 1.5rem; margin: 0; }
+  .stages li { border-bottom: 1px solid var(--line); padding: .55rem 0; }
+  .stages li.done { color: var(--text-secondary); }
+  .stages li.failed strong { color: var(--accent); }
+  .stages span { display: block; margin-top: .25rem; font-size: var(--fs-label); }
+  .gaps { padding-left: 1.25rem; margin: 0; }
+  .gaps li { padding: .35rem 0; }
+
+  .rail { display: flex; flex-wrap: wrap; gap: 1px; background: var(--line-strong); border: 1px solid var(--line-strong); margin: 1.5rem 0 0; position: sticky; top: var(--site-nav-height, 0); z-index: 4; }
+  .rail a { flex: 1 1 auto; background: var(--bg); padding: .6rem .75rem; font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--text-secondary); text-decoration: none; white-space: nowrap; }
+  .rail a:hover { background: var(--surface-sunken); color: var(--text-primary); }
+  .letter { color: var(--accent); margin-right: .45rem; }
+  .anchor { scroll-margin-top: 4rem; }
+
+  .section { border-top: 2px solid var(--text-primary); margin-top: 3rem; padding-top: 1.5rem; scroll-margin-top: 4rem; }
+  .kicker { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--accent); margin: 0 0 .5rem; }
+  .kicker-sm { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--text-muted); margin: 0 0 .3rem; }
+  .strap { color: var(--text-secondary); max-width: 62ch; }
+  .sr-label { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--text-muted); margin: 0 0 .5rem; }
+
+  .filter { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin: 1.5rem 0 1rem; }
+  .filter button { font: inherit; font-family: var(--font-mono); font-size: var(--fs-label); background: var(--surface-sunken); border: 1px solid var(--line-strong); padding: .35rem .7rem; cursor: pointer; text-transform: capitalize; }
+  .filter button.on { background: var(--text-primary); color: var(--bg); }
+  .plays { display: grid; gap: 1rem; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 1px; background: var(--line-strong); border: 1px solid var(--line-strong); margin-top: 1.5rem; }
+  .card { background: var(--bg); padding: 1rem 1.1rem; min-width: 0; }
+  .card h3 { font-size: var(--fs-body); font-weight: 700; margin: 0 0 .4rem; }
+  .fragile { margin-top: 1.5rem; border-left: 3px solid var(--accent); padding-left: 1rem; }
+  .fragile ol { margin: 0; padding-left: 1.1rem; }
+  .fragile li { padding: .5rem 0; }
+  .models { margin-top: 1.5rem; }
+  .models ul { list-style: none; padding: 0; margin: 0; }
+  .models li { border-bottom: 1px solid var(--line); padding: .5rem 0; display: flex; flex-wrap: wrap; gap: .6rem; align-items: baseline; text-transform: capitalize; }
+
+  .recommendations { margin-bottom: 2rem; }
+  .rec { border: 1px solid var(--line-strong); border-left: 3px solid var(--accent-ink); padding: 1rem 1.15rem; margin-bottom: 1rem; }
+  .rec h3, .chapter h3 { font-size: var(--fs-body-lg); font-weight: 700; margin: 0 0 .4rem; }
+  .chapter { border-top: 1px solid var(--line-strong); padding: 1rem 0; }
+  .finding { padding: .5rem 0; }
+
+  .empty { border-left: 2px solid var(--line-strong); padding-left: 1rem; color: var(--text-secondary); }
+  .link { font: inherit; font-family: var(--font-mono); font-size: var(--fs-label); background: none; border: 0; padding: 0; color: var(--accent-ink); text-decoration: underline; cursor: pointer; text-align: left; overflow-wrap: anywhere; }
+
+  .inspector { position: sticky; bottom: 0; margin-top: 2rem; padding: 1.2rem; border: 2px solid var(--accent-ink); background: var(--surface-elevated, var(--bg)); overflow-wrap: anywhere; max-height: 70vh; overflow-y: auto; }
+  .refs { display: flex; flex-wrap: wrap; gap: .75rem; }
+  .danger { border: 1px solid var(--line-strong); border-left: 3px solid var(--error); padding: 1rem 1.15rem; margin: 1.5rem 0; }
+  blockquote { border-left: 2px solid var(--accent); padding-left: 1rem; white-space: pre-wrap; margin: .75rem 0; }
   pre { max-height: 32rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-code); font-size: var(--fs-label); }
 </style>

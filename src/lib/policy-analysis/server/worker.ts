@@ -8,6 +8,10 @@ import { loadArtefacts, neighbourSummaries, persistArtefacts, queueStage } from 
 import { modelCaller } from './provider';
 import { research } from './research';
 
+// A bare `[0-9a-f-]{36}` matches thirty-six hyphens, which Postgres cannot cast to
+// uuid — so a malformed id raised a 500 where it should have been a 404.
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** Interruptions are free, but not infinitely free. */
 const EXECUTION_CEILING = 12;
 
@@ -41,7 +45,7 @@ async function lockLease(tx: DbExecutor, analysisId: string, stageId: string, ru
 export async function executePolicyRun(claimed: { id: string; input: Record<string, unknown> | null }, workerId: string): Promise<void> {
   const analysisId = String(claimed.input?.analysisId ?? '');
   const stageId = String(claimed.input?.stageId ?? '');
-  if (!/^[0-9a-f-]{36}$/i.test(analysisId) || !/^[0-9a-f-]{36}$/i.test(stageId)) throw new Error('Invalid policy queue envelope');
+  if (!UUID.test(analysisId) || !UUID.test(stageId)) throw new Error('Invalid policy queue envelope');
   const started = await db.transaction(async (tx) => {
     const locked = await lockLease(tx, analysisId, stageId, claimed.id, workerId);
     if (!locked) return null;
@@ -78,8 +82,15 @@ export async function executePolicyRun(claimed: { id: string; input: Record<stri
   const signal = AbortSignal.any([abort.signal, AbortSignal.timeout(stageBudgetMs(started.stage.ordinal, all))]);
   try {
     const previousStages = await db.select({ warnings: policyStages.warnings }).from(policyStages).where(eq(policyStages.analysisId, analysisId));
-    const [document] = await db.select().from(policyDocuments).where(eq(policyDocuments.analysisId, analysisId));
-    const extracted = started.stage.ordinal === 0 ? await ingest(Buffer.from(document.content, 'base64'), document.filename, document.mimeType) : null;
+    // `content` is base64 of up to 10 MB and only stage 0 has any use for it.
+    // Selecting the whole row on all thirteen stages moved ~13 MB through the
+    // connection twelve times for nothing.
+    const extracted = started.stage.ordinal === 0
+      ? await (async () => {
+          const [document] = await db.select({ content: policyDocuments.content, filename: policyDocuments.filename, mimeType: policyDocuments.mimeType }).from(policyDocuments).where(eq(policyDocuments.analysisId, analysisId));
+          return ingest(Buffer.from(document.content, 'base64'), document.filename, document.mimeType);
+        })()
+      : null;
     const output = extracted ?? await executeStage({ stage: started.stage.ordinal, title: started.analysis.title, jurisdiction: started.analysis.jurisdiction, policyArea: started.analysis.policyArea, context: started.analysis.context, depth: started.analysis.depth as 'standard' | 'deep', priorWarnings: previousStages.flatMap((s) => s.warnings), artefacts: all }, { model: modelCaller(started.execution.id, claimed.id, signal, all), research, signal, neighbours: () => neighbourSummaries(started.analysis.owner, analysisId) });
     signal.throwIfAborted();
     await db.transaction(async (tx) => {

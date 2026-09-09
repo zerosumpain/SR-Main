@@ -225,9 +225,19 @@ else
   # The comment above this block has always claimed the guard is "bounded by
   # only recording the hash after a clean push". This is what makes that true.
   # ---------------------------------------------------------------------------
-  if grep -qiE '^Error:|Interactive prompts require a TTY|Please run|error: could not' "$DRIZZLE_LOG"; then
+  #
+  # 2026-09-09 added `^error:` to the list. drizzle-kit planned to drop a composite
+  # primary key AFTER re-adding the foreign keys that depend on it, Postgres
+  # refused with
+  #
+  #   error: cannot drop constraint policy_artefacts_analysis_id_id_pk ...
+  #
+  # and drizzle-kit **exited 0** again. `error: could not` did not match it, so a
+  # 146-statement schema push would have been recorded as applied when none of it
+  # was. The pattern is now the whole family, not one wording of it.
+  if grep -qiE '^Error:|^error:|Interactive prompts require a TTY|Please run|error: could not' "$DRIZZLE_LOG"; then
     echo "==> drizzle-kit push REPORTED AN ERROR while exiting 0 — schema was NOT applied:" >&2
-    grep -iE '^Error:|Interactive prompts require a TTY|Please run|error: could not' "$DRIZZLE_LOG" | head -5 >&2
+    grep -iE '^Error:|^error:|Interactive prompts require a TTY|Please run|error: could not' "$DRIZZLE_LOG" | head -5 >&2
     echo "==> Apply it by hand on the VPS, then stamp $STATE_DIR/schema.sha256." >&2
     echo "==> A drop + an add on ONE table reads as a rename and needs a TTY; split them across two deploys or run push interactively." >&2
     rm -f "$DRIZZLE_LOG"

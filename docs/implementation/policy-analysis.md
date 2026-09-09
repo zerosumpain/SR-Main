@@ -63,11 +63,11 @@ TZ=UTC PUBLIC_VAPID_PUBLIC_KEY='' POLICY_LOCAL_TESTS=1 \
   src/lib/policy-analysis/provider.integration.test.ts
 ```
 
-The browser integration test expects the existing LAN preview at `http://192.168.0.77:5275`, with its synthetic preview owner. Run these fixture tests while the local policy worker is disabled, so only the test owns the fixture envelopes. `POLICY_KEEP_FIXTURE=1` optionally retains the explicitly synthetic completed browser example for inspection. UTC is the repository's calendar-test baseline; the application still formats dates for the viewer.
+The browser integration test expects the existing LAN preview (set `POLICY_PREVIEW_ORIGIN`), with its synthetic preview owner. Run these fixture tests while the local policy worker is disabled, so only the test owns the fixture envelopes. `POLICY_KEEP_FIXTURE=1` optionally retains the explicitly synthetic completed browser example for inspection. UTC is the repository's calendar-test baseline; the application still formats dates for the viewer.
 
 ## Local preview and limits
 
-The local Compose overlay is `/home/john/docker/local/compose.policy-analysis.yaml`. It enables only the policy worker while the preview retains the builder service role, isolated database/credentials/data and loopback binding. The existing LAN gateway supplies preview authentication. See the local stack README for application commands. The canonical production Node entry defaults `BODY_SIZE_LIMIT` to 12 MB before loading adapter-node (preserving an explicit operator override), so 10 MB documents plus multipart metadata can reach the route. This raises the adapter’s default request ceiling sitewide; each endpoint keeps its own validation. A deployment with an explicit smaller ceiling must raise it for larger uploads. Production deployment is left to the repository's existing release workflow; no deployment script was run.
+The local Compose overlay lives with the operator’s other local stack files, outside this repository. It enables only the policy worker while the preview retains the builder service role, isolated database/credentials/data and loopback binding. The existing LAN gateway supplies preview authentication. See the local stack README for application commands. The canonical production Node entry defaults `BODY_SIZE_LIMIT` to 12 MB before loading adapter-node (preserving an explicit operator override), so 10 MB documents plus multipart metadata can reach the route. This raises the adapter’s default request ceiling sitewide; each endpoint keeps its own validation. A deployment with an explicit smaller ceiling must raise it for larger uploads. Production deployment is left to the repository's existing release workflow; no deployment script was run.
 
 - Input limits: 10 MB, 400 PDF pages, 600,000 extracted characters. DOCX expanded content is bounded at 30 MB. PDFs require readable text; there is no new OCR integration.
 - Later model calls reject context beyond 180,000 serialized characters rather than silently dropping evidence. Very large or unusually dense inventories can therefore stop with a visible budget limitation. Finished stages and validated subcalls remain saved.
@@ -85,6 +85,5 @@ The local Compose overlay is `/home/john/docker/local/compose.policy-analysis.ya
 - `npx drizzle-kit export` generated the additive schema statements. The migration was applied with `psql -v ON_ERROR_STOP=1` to the isolated `jkai-db` only.
 - `docker compose ... config --quiet`, `docker compose ... up -d jkai`, `git diff --check` and the shared font/navigation/boundary checks passed.
 
-Completed synthetic result for inspection:
-`http://192.168.0.77:5275/policy-analysis/6a87d31e-02ed-4150-b3f4-db7587a7f68e`.
+A completed synthetic result is left on the local preview for inspection.
 These tests establish implementation behaviour, not live model/research quality.

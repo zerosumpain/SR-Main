@@ -25,7 +25,7 @@ const owner = 'preview@example.test';
 const bytes = readFileSync('tests/fixtures/policy-analysis/policy.txt');
 const base = 'http://192.168.0.77:5275';
 async function create() {
-  const a = await createAnalysis(owner, { title: 'Synthetic policy persistence fixture', jurisdiction: 'Synthetic jurisdiction', policyArea: 'Service access', context: null, filename: 'policy.txt', mimeType: 'text/plain', bytes });
+  const a = await createAnalysis(owner, { title: 'Synthetic policy persistence fixture', jurisdiction: 'Synthetic jurisdiction', policyArea: 'Service access', context: null, depth: 'standard' as const, filename: 'policy.txt', mimeType: 'text/plain', bytes });
   created.push(a.id); return a;
 }
 async function claim(id: string) {

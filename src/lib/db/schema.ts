@@ -7057,4 +7057,9 @@ export const policyModelCalls = pgTable('policy_model_calls', {
   startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
   completedAt: timestamp('completed_at', { withTimezone: true }),
   error: text('error'),
-}, (t) => [index('policy_model_calls_execution_idx').on(t.executionId)]);
+}, (t) => [
+  index('policy_model_calls_execution_idx').on(t.executionId),
+  // The reuse probe filters on the hash and the prompt version; without this it
+  // is a sequential scan of every model call the site has ever made.
+  index('policy_model_calls_hash_idx').on(t.inputHash, t.promptVersion),
+]);
