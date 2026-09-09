@@ -8,7 +8,10 @@
  * bypass was verified against production.
  */
 import http from 'node:http';
-import { handler } from '../build/handler.js';
+// Policy documents allow 10 MB plus multipart metadata. Keep an operator's
+// explicit limit; adapter-node must read the default before its module loads.
+process.env.BODY_SIZE_LIMIT ??= '12M';
+const { handler } = await import('../build/handler.js');
 
 const PORT = Number(process.env.PORT ?? 4173);
 const HOST = process.env.HOST ?? '0.0.0.0';

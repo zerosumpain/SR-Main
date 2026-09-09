@@ -1,3 +1,4 @@
+import { building } from '$app/environment';
 import { startScheduler } from '$lib/health/scheduler';
 import { startForgeScheduler, stopForgeScheduler } from '$lib/jkai/forge-scheduler';
 import {
@@ -144,6 +145,12 @@ import { startIntelEngine, stopIntelEngine } from '$lib/jkai/intel/engine';
 // in a non-terminal status before this existed, the oldest for four months. CI
 // deploys on every merge, so the exposure is continuous.
 import { runResumeSweep, RESUME_SWEEP_INTERVAL_MS } from '$lib/deepdive/resume';
+import { startRunWorker, stopRunWorker } from '$lib/workflows/run-worker';
+// Policy stages use the same durable workflow queue in the web service role.
+if (!building && process.env.POLICY_ANALYSIS_ENABLED !== '0' && (runsService('background') || process.env.POLICY_ANALYSIS_WORKER === '1')) {
+  // Preserve the operator's existing full in-web worker when explicitly enabled.
+  startRunWorker({ policyOnly: !(process.env.JKAI_RUN_WORKER === '1' && process.env.JKAI_RUN_WORKER_IN_WEB === '1') });
+}
 if (runsService('background')) {
   startDatastoreReaper();
   startSelfImprovementSeeds();
@@ -191,6 +198,8 @@ async function gracefulShutdown() {
   // SIGTERM can fire more than once during a deploy; only drain/stop once.
   if (shuttingDown) return;
   shuttingDown = true;
+  // Stop claiming new policy stages; the existing shutdown deadline bounds drain.
+  void stopRunWorker();
   console.log('[hooks.server] Shutting down...');
   // #10 GRACEFUL DRAIN: let in-flight workflow runs finish (bounded) BEFORE we
   // tear down schedulers and exit, so a deploy mid-run doesn't orphan it.

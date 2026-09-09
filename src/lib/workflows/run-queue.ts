@@ -102,6 +102,8 @@ export async function enqueue(runId: string): Promise<void> {
 export async function claimNext(
   workerId: string,
   leaseMs: number = DEFAULT_LEASE_MS,
+  triggerFilter?: string,
+  runIdFilter?: string,
 ): Promise<ClaimedRun | null> {
   // CTE: pick one claimable row with SKIP LOCKED, then UPDATE it to running and
   // stamp the lease. RETURNING gives the worker what it needs to execute.
@@ -111,6 +113,9 @@ export async function claimNext(
       SELECT id
       FROM workflow_runs
       WHERE status = 'pending'
+        AND ${triggerFilter ? sql`trigger = ${triggerFilter}` : sql`true`}
+        AND ${runIdFilter ? sql`id = ${runIdFilter}` : sql`true`}
+        AND (trigger <> 'policy-analysis' OR started_at <= now())
         AND (claimed_by IS NULL OR lease_expires_at IS NULL OR lease_expires_at <= now())
       ORDER BY started_at ASC NULLS FIRST
       LIMIT 1
@@ -173,6 +178,10 @@ export async function clearLease(runId: string, workerId: string): Promise<void>
  * then never advanced. Returns the number of rows released.
  */
 export async function releaseExpiredLeases(): Promise<number> {
+  await db.execute(sql`UPDATE workflow_runs SET status = 'pending', claimed_by = NULL,
+    claimed_at = NULL, lease_expires_at = NULL
+    WHERE trigger = 'policy-analysis' AND status = 'running'
+      AND lease_expires_at <= now()`);
   const res = await db.execute(sql`
     UPDATE workflow_runs
     SET claimed_by = NULL,

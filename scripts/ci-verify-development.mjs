@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { request } from 'node:http';
 import { encode } from '@auth/core/jwt';
+import { verifyPolicyAnalysis } from './qa/production-policy-analysis.mjs';
 import { verifyGrooming } from './qa/production-development-grooming.mjs';
 const email = process.env.AUTH_ALLOWED_EMAILS?.split(',')[0]?.trim();
 assert.ok(email && process.env.AUTH_SECRET, 'Owner authentication must be configured');
@@ -71,4 +72,5 @@ for (let attempt = 0; attempt < 24; attempt++) {
 assert.ok(ready, 'Updated development builder is still pending; preserve any active build and check apply-when-idle status.');
 console.log('PASS: production builder reports persistent Pi sessions and a configured workspace broker.');
 
+await verifyPolicyAnalysis(headers);
 await verifyGrooming(headers);

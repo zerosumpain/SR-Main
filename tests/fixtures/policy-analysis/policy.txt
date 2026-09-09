@@ -1,0 +1,5 @@
+Synthetic policy fixture: local service access
+
+The Department commissions the Council to deliver a shared access programme. The objective is shorter waiting times. The Council is accountable for delivery and bears implementation costs. The Department receives the benefit of lower national spending. The Council must report monthly waiting-time measures to the Department. Providers supply data to the Council, but no data-sharing payment or enforcement power is specified.
+
+The proposal assumes that providers will cooperate and that the Council has enough staff. Funding and authority to require timely data remain unspecified. The programme will be reviewed annually.

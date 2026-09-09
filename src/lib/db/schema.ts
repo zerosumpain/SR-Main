@@ -16,6 +16,7 @@ import {
   numeric,
   customType,
   primaryKey,
+  foreignKey,
   uuid,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
@@ -6942,3 +6943,116 @@ export const codegraphAssessments = pgTable('codegraph_assessments', {
   targetId: text('target_id').notNull(), verdict: text('verdict').notNull(), evidence: text('evidence').notNull(),
   revision: text('revision'), createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+
+// Private policy analysis. Artefacts are individual typed rows, never one report blob.
+export const policyAnalyses = pgTable('policy_analyses', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  owner: text('owner').notNull(),
+  title: text('title').notNull(),
+  jurisdiction: text('jurisdiction'),
+  policyArea: text('policy_area'),
+  context: text('context'),
+  status: text('status').notNull().default('queued'),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  error: text('error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+}, (t) => [index('policy_analyses_owner_idx').on(t.owner, t.createdAt)]);
+
+export const policyDocuments = pgTable('policy_documents', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  analysisId: uuid('analysis_id').notNull().references(() => policyAnalyses.id, { onDelete: 'cascade' }),
+  filename: text('filename').notNull(),
+  mimeType: text('mime_type').notNull(),
+  size: integer('size').notNull(),
+  sha256: text('sha256').notNull(),
+  // Base64 of bounded original bytes; private, no public file-store registration.
+  content: text('content').notNull(),
+  extractedText: text('extracted_text'),
+  metadata: jsonb('metadata'),
+}, (t) => [uniqueIndex('policy_documents_analysis_idx').on(t.analysisId)]);
+
+export const policyStages = pgTable('policy_stages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  analysisId: uuid('analysis_id').notNull().references(() => policyAnalyses.id, { onDelete: 'cascade' }),
+  runId: text('run_id').references(() => workflowRuns.id),
+  ordinal: integer('ordinal').notNull(),
+  name: text('name').notNull(),
+  status: text('status').notNull().default('pending'),
+  attempts: integer('attempts').notNull().default(0),
+  startedAt: timestamp('started_at', { withTimezone: true }),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  error: text('error'),
+  warnings: jsonb('warnings').$type<string[]>().notNull().default([]),
+  output: jsonb('output'),
+}, (t) => [uniqueIndex('policy_stages_order_idx').on(t.analysisId, t.ordinal)]);
+
+export const policyExecutions = pgTable('policy_executions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  stageId: uuid('stage_id').notNull().references(() => policyStages.id, { onDelete: 'cascade' }),
+  runId: text('run_id').notNull().references(() => workflowRuns.id),
+  status: text('status').notNull().default('running'),
+  startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  error: text('error'),
+}, (t) => [index('policy_executions_stage_idx').on(t.stageId)]);
+
+export const policyArtefacts = pgTable('policy_artefacts', {
+  id: text('id').notNull(),
+  analysisId: uuid('analysis_id').notNull().references(() => policyAnalyses.id, { onDelete: 'cascade' }),
+  stage: integer('stage').notNull(),
+  kind: text('kind').notNull(),
+  label: text('label').notNull(),
+  statement: text('statement').notNull(),
+  origin: text('origin').notNull(),
+  confidence: doublePrecision('confidence'),
+  sourceId: text('source_id'),
+  sourceQuote: text('source_quote'),
+  page: integer('page'),
+  section: text('section'),
+  startOffset: integer('start_offset'),
+  endOffset: integer('end_offset'),
+  url: text('url'),
+  fromId: text('from_id'),
+  toId: text('to_id'),
+  relation: text('relation'),
+  temporal: text('temporal'),
+  data: jsonb('data').$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.analysisId, t.id] }),
+  index('policy_artefacts_kind_idx').on(t.analysisId, t.kind),
+  index('policy_artefacts_graph_idx').on(t.analysisId, t.fromId, t.toId),
+  check('policy_confidence_range', sql`${t.confidence} IS NULL OR (${t.confidence} >= 0 AND ${t.confidence} <= 1)`),
+]);
+
+export const policyProvenance = pgTable('policy_provenance', {
+  analysisId: uuid('analysis_id').notNull().references(() => policyAnalyses.id, { onDelete: 'cascade' }),
+  fromId: text('from_id').notNull(),
+  toId: text('to_id').notNull(),
+  relation: text('relation').notNull().default('derived_from'),
+}, (t) => [
+  primaryKey({ columns: [t.analysisId, t.fromId, t.toId] }),
+  foreignKey({ columns: [t.analysisId, t.fromId], foreignColumns: [policyArtefacts.analysisId, policyArtefacts.id], name: 'policy_provenance_from_fk' }).onDelete('cascade'),
+  foreignKey({ columns: [t.analysisId, t.toId], foreignColumns: [policyArtefacts.analysisId, policyArtefacts.id], name: 'policy_provenance_to_fk' }).onDelete('cascade'),
+]);
+
+export const policyModelCalls = pgTable('policy_model_calls', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  executionId: uuid('execution_id').notNull().references(() => policyExecutions.id, { onDelete: 'cascade' }),
+  callKey: text('call_key').notNull(),
+  promptVersion: text('prompt_version').notNull(),
+  inputHash: text('input_hash').notNull(),
+  input: jsonb('input').notNull(),
+  output: jsonb('output'),
+  status: text('status').notNull(),
+  provider: text('provider'),
+  model: text('model'),
+  usage: jsonb('usage'),
+  startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  error: text('error'),
+}, (t) => [index('policy_model_calls_execution_idx').on(t.executionId)]);

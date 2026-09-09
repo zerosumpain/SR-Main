@@ -122,6 +122,7 @@ export async function reapStaleRuns(): Promise<number> {
     .where(
       and(
         inArray(workflowRuns.status, ACTIVE_STATUSES as unknown as ActiveStatus[]),
+        sql`${workflowRuns.trigger} <> 'policy-analysis'`,
         or(
           lt(workflowRuns.heartbeatAt, cutoff),
           and(isNull(workflowRuns.heartbeatAt), lt(workflowRuns.startedAt, cutoff)),
