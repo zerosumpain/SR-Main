@@ -11,7 +11,7 @@ if [ ! -f "$SOURCE/node_modules/.sr-dependencies-ready" ]; then
   mkdir -p "$SOURCE"
   git archive HEAD | tar -x -C "$SOURCE"
   # No production environment or credentials reach package lifecycle commands.
-  (cd "$SOURCE" && env -i PATH="$PATH" HOME="$HOME" PUBLIC_VAPID_PUBLIC_KEY='' npm ci --no-audit --no-fund)
+  (cd "$SOURCE" && env -i PATH="$PATH" HOME="$HOME" PUBLIC_VAPID_PUBLIC_KEY='' bash scripts/install-development-dependencies.sh)
   touch "$SOURCE/node_modules/.sr-dependencies-ready"
 fi
 sudo python3 - "$ROOT" "$SOURCE" "$SHA" <<'PY'
