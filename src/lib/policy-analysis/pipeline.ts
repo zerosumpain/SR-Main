@@ -14,13 +14,6 @@ export type Neighbours = () => Promise<Neighbour[]>;
 export type PipelineDeps = { model: ModelCall; research: Research; signal: AbortSignal; neighbours?: Neighbours };
 
 /**
- * How many actors get an exploitation pass. Every resolved actor with a profile
- * is a candidate; the ones with the most connections in the policy graph go
- * first, because an actor nothing depends on has little to exploit. The rest are
- * named in a warning rather than dropped silently. A deep run takes more.
- */
-
-/**
  * Stages that fan out over a list — one call per passage, actor, pattern or
  * scenario — no longer let a single bad call end the stage.
  *
@@ -122,6 +115,10 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
   } else if (stage === 8) {
     output.artefacts = runPolicyTests(input.artefacts);
   } else if (stage === 10) {
+    // Every resolved actor with a profile is a candidate for the red team, and
+    // `limits.actors` bounds how many get one. The most connected go first —
+    // an actor nothing depends on has little to exploit — and the rest are named
+    // in a warning rather than dropped silently.
     const profiles = input.artefacts.filter((a) => a.kind === 'profile');
     const ranked = rankActors(input.artefacts, profiles);
     if (ranked.length > limits.actors) output.warnings.push(`${ranked.length - limits.actors} of ${ranked.length} profiled actors were not red-teamed in this pass: ${ranked.slice(limits.actors).map((a) => a.label).join(', ')}. They are the least connected in the policy graph, not the least important. A deep run covers more of them.`);
