@@ -180,9 +180,22 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     if (missing.length) throw new PolicyError(fault.last?.code ?? 'coverage', `The document did not yield the required claim, mechanism, assumption and actor inventory.${fault.last ? ` Last reason: ${fault.last.message}` : ''}`);
   }
   if (stage === 2) {
-    output.artefacts = preserveAmbiguity(output.artefacts, input.artefacts);
+    // A real 20-page policy yields ~50 source mentions, and asking one call to
+    // claim every last one of them is the all-or-nothing rule again: on
+    // 2026-09-09 a live run reached this stage with 224 artefacts and died here.
+    // So: name what was missed and ask for JUST those, twice, then require a
+    // strict majority and record the rest as a gap the reader can see.
     const mentions = input.artefacts.filter((a) => a.kind === 'actor');
-    if (!mentions.every((m) => output.artefacts.some((a) => a.kind === 'actor' && (a.data.mentions as string[]).includes(m.id)))) throw new PolicyError('coverage', 'Entity resolution omitted source mentions.');
+    const unclaimed = () => mentions.filter((m) => !output.artefacts.some((a) => a.kind === 'actor' && ((a.data.mentions as string[]) ?? []).includes(m.id)));
+    for (let round = 1; round <= 2; round++) {
+      const missed = unclaimed();
+      if (!missed.length) break;
+      await attempt(`unclaimed${round}`, [...input.artefacts.filter((a) => a.kind === 'actor'), ...output.artefacts.filter((a) => a.kind === 'actor')], `${missed.length} unresolved source mention${missed.length === 1 ? '' : 's'}`, { unclaimedMentions: missed.map((m) => ({ id: m.id, label: m.label })) });
+    }
+    output.artefacts = preserveAmbiguity(output.artefacts, input.artefacts);
+    const missed = unclaimed();
+    if (missed.length * 2 >= mentions.length) throw new PolicyError('coverage', `Entity resolution claimed only ${mentions.length - missed.length} of ${mentions.length} source mentions.${fault.last ? ` Last reason: ${fault.last.message}` : ''}`);
+    if (missed.length) output.warnings.push(`${missed.length} of ${mentions.length} source mentions were never resolved into a named body: ${missed.slice(0, 8).map((m) => m.label).join(', ')}${missed.length > 8 ? `, and ${missed.length - 8} more` : ''}. Those actors are absent from the graph, the profiles and the red team.`);
   }
   if (stage === 3) {
     if (kinds('node', 'edge').length) throw new PolicyError('coverage', 'The graph stage did not produce inspectable nodes and relationships.');

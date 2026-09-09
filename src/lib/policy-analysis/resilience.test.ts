@@ -427,3 +427,50 @@ describe('an identifier that names nothing costs the mention, not the artefact',
     expect(triaged.rejected).toHaveLength(1);
   });
 });
+
+describe('entity resolution asks again for what it missed', () => {
+  const source = passage('passage_0001');
+  const mention = (n: number, label: string) =>
+    artefact(`s1_000_actor_${n}`, 'actor', label, `${label} is named in the policy.`, { entityType: 'provider', aliases: [], mentions: [source.id], ambiguity: 'none', dates: [], parent: null }, { refs: [source.id], origin: 'extracted_fact', sourceId: source.id, sourceQuote: 'what landlords achieve' });
+  const mentions = ['Landlords', 'Tenants', 'The regulator', 'Government', 'Parliament', 'Stakeholders'].map((l, i) => mention(i + 1, l));
+  const input = { stage: 2, title: 'A policy', jurisdiction: null, policyArea: null, context: null, artefacts: [source, ...mentions] };
+  const research = async () => ({ artefacts: [], warnings: [] });
+  const signal = new AbortController().signal;
+
+  /** Resolve exactly the mentions named, as a real second pass would. */
+  const resolve = (prefix: string, claim: Artefact[]) => ({
+    artefacts: claim.map((m, i) => artefact(`${prefix}canonical_${i}`, 'actor', `Canonical ${m.label}`, 'A named body.', { entityType: 'provider', aliases: [], mentions: [m.id], ambiguity: 'none', dates: [], parent: null }, { refs: [m.id] })),
+    warnings: [],
+  });
+
+  it('claims every mention across a main call and a top-up', async () => {
+    const model = vi.fn(async (_stage: number, key: string, raw: unknown) => {
+      const payload = raw as { idPrefix: string; unclaimedMentions?: { id: string; label: string }[] };
+      if (payload.unclaimedMentions) {
+        expect(payload.unclaimedMentions).toHaveLength(3);
+        return resolve(payload.idPrefix, mentions.filter((m) => payload.unclaimedMentions!.some((u) => u.id === m.id)));
+      }
+      return resolve(payload.idPrefix, mentions.slice(0, 3));
+    });
+    const output = await executeStage(input, { model, research, signal });
+    expect(model).toHaveBeenCalledTimes(2);
+    expect(output.artefacts.filter((a) => a.kind === 'actor')).toHaveLength(6);
+    expect(output.warnings.filter((w) => w.includes('never resolved'))).toEqual([]);
+  });
+
+  it('records the stragglers as a gap rather than failing over them', async () => {
+    const model = async (_stage: number, _key: string, raw: unknown) => {
+      const payload = raw as { idPrefix: string; unclaimedMentions?: { id: string; label: string }[] };
+      // Never manages the last one, however many times it is asked.
+      return resolve(payload.idPrefix, mentions.slice(0, 5).filter((m) => !payload.unclaimedMentions || payload.unclaimedMentions.some((u) => u.id === m.id)));
+    };
+    const output = await executeStage(input, { model, research, signal });
+    expect(output.warnings.join(' ')).toContain('1 of 6 source mentions were never resolved');
+    expect(output.warnings.join(' ')).toContain('Stakeholders');
+  });
+
+  it('still fails when it cannot claim a majority', async () => {
+    const model = async (_stage: number, _key: string, raw: unknown) => resolve((raw as { idPrefix: string }).idPrefix, mentions.slice(0, 2));
+    await expect(executeStage(input, { model, research, signal })).rejects.toThrow('claimed only 2 of 6 source mentions');
+  });
+});
