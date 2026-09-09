@@ -35,6 +35,26 @@ export async function ownedAnalysis(owner: string, id: string, tx: DbExecutor = 
   const [analysis] = await tx.select().from(policyAnalyses).where(and(eq(policyAnalyses.id, id), eq(policyAnalyses.owner, owner))).limit(1);
   return analysis ?? null;
 }
+export type ArtefactMeta = { id: string; stage: number; updatedAt: Date };
+
+/**
+ * Artefacts and their per-row metadata from ONE pass.
+ *
+ * `loadArtefacts` reads `stage` and `updatedAt` off every row and discards them,
+ * so asking for them separately meant a second full scan and shipping every
+ * artefact id to the browser twice over.
+ */
+export async function loadWithMeta(id: string, tx: DbExecutor = db): Promise<{ artefacts: Artefact[]; meta: ArtefactMeta[] }> {
+  const rows = await tx.select().from(policyArtefacts).where(eq(policyArtefacts.analysisId, id)).orderBy(asc(policyArtefacts.stage), asc(policyArtefacts.createdAt), asc(policyArtefacts.id));
+  const links = await tx.select().from(policyProvenance).where(eq(policyProvenance.analysisId, id));
+  const byFrom = new Map<string, string[]>();
+  for (const link of links) byFrom.set(link.fromId, [...(byFrom.get(link.fromId) ?? []), link.toId]);
+  return {
+    artefacts: rows.map(({ analysisId: _a, stage: _s, createdAt: _c, updatedAt: _u, ...a }) => ({ ...a, refs: byFrom.get(a.id) ?? [] }) as Artefact),
+    meta: rows.map((r) => ({ id: r.id, stage: r.stage, updatedAt: r.updatedAt })),
+  };
+}
+
 export async function loadArtefacts(id: string, tx: DbExecutor = db): Promise<Artefact[]> {
   const rows = await tx.select().from(policyArtefacts).where(eq(policyArtefacts.analysisId, id)).orderBy(asc(policyArtefacts.stage), asc(policyArtefacts.createdAt), asc(policyArtefacts.id));
   const links = await tx.select().from(policyProvenance).where(eq(policyProvenance.analysisId, id));
@@ -55,10 +75,7 @@ export async function detail(owner: string, id: string) {
   const calls = await db.select({ id: policyModelCalls.id, executionId: policyModelCalls.executionId, callKey: policyModelCalls.callKey, promptVersion: policyModelCalls.promptVersion, inputHash: policyModelCalls.inputHash, status: policyModelCalls.status, provider: policyModelCalls.provider, model: policyModelCalls.model, usage: policyModelCalls.usage, startedAt: policyModelCalls.startedAt, completedAt: policyModelCalls.completedAt, error: policyModelCalls.error }).from(policyModelCalls).innerJoin(policyExecutions, eq(policyExecutions.id, policyModelCalls.executionId)).innerJoin(policyStages, eq(policyStages.id, policyExecutions.stageId)).where(eq(policyStages.analysisId, id));
   const queued = stages.find((s) => s.runId && s.status !== 'completed');
   const [run] = queued?.runId ? await db.select({ heartbeatAt: workflowRuns.heartbeatAt, leaseExpiresAt: workflowRuns.leaseExpiresAt }).from(workflowRuns).where(eq(workflowRuns.id, queued.runId)) : [];
-  // `loadArtefacts` already reads stage and updatedAt off every row and threw
-  // them away, so the page used to be sent every artefact id three times over.
-  const artefacts = await loadArtefacts(id);
-  const artefactMetadata = await db.select({ id: policyArtefacts.id, stage: policyArtefacts.stage, updatedAt: policyArtefacts.updatedAt }).from(policyArtefacts).where(eq(policyArtefacts.analysisId, id)).limit(4000);
+  const { artefacts, meta: artefactMetadata } = await loadWithMeta(id);
   // A cross-policy exposure is written onto the assessment that FOUND it. This
   // page belongs to the other half of that pair as much as it does to the finder,
   // so pull in the exposures that name this analysis from elsewhere.
