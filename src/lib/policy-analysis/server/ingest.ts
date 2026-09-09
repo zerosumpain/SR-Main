@@ -88,7 +88,16 @@ export async function ingest(bytes: Buffer, filename: string, mimeType: string):
       text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
       if (text.includes('\0')) throw new Error('binary');
     }
-  } catch { throw new PolicyError('extraction', 'Document extraction failed. Try a text-based PDF, DOCX or UTF-8 TXT, or paste the policy text.'); }
+  } catch (err) {
+    // `extractPdf` throws its own limit errors, wrapped, and a bare catch here
+    // told a 400-page policy that its PDF might need OCR. Read the cause.
+    const chain: string[] = [];
+    for (let e: unknown = err, depth = 0; e && depth < 4; depth++) { chain.push(String((e as Error)?.message ?? e)); e = (e as { cause?: unknown }).cause; }
+    const reason = chain.join(' | ');
+    if (reason.includes('exceeds page limit')) throw new PolicyError('extraction', `This PDF has more than ${MAX_PAGES} pages, which is the limit for one submission. Submit it in parts; the cross-policy stage will compare them against each other.`);
+    if (reason.includes('exceeds extracted text limit')) throw new PolicyError('extraction', `This PDF holds more than ${MAX_CHARACTERS / 1000},000 characters of text, which is the limit for one submission. Submit it in parts; the cross-policy stage will compare them against each other.`);
+    throw new PolicyError('extraction', 'Document extraction failed. Try a text-based PDF, DOCX or UTF-8 TXT, or paste the policy text.');
+  }
   // Two very different problems used to share one message, so a 300-page policy
   // was told its PDF might need OCR.
   if (!text.trim()) throw new PolicyError('extraction', 'No readable text was found. A scanned PDF needs OCR before submission, or paste the policy text instead.');
