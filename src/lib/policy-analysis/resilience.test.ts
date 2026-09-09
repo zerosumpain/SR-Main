@@ -377,3 +377,53 @@ describe('an artefact that names its source has cited it', () => {
     expect(triaged.rejected[0].code).toBe('provenance');
   });
 });
+
+describe('an identifier that names nothing costs the mention, not the artefact', () => {
+  const source = passage('passage_0001');
+  const cited = { origin: 'extracted_fact' as const, sourceId: source.id, sourceQuote: 'what landlords achieve', refs: [source.id] };
+
+  it('keeps an actor whose mentions hold words rather than passages', () => {
+    // Exactly what a live model returns: `mentions: ['landlords']`, the surface
+    // text, where the contract wants the ids of the passages that mention it.
+    const actor = { ...artefact('s1_000_actor', 'actor', 'Landlords', 'Registered providers.', { entityType: 'provider', aliases: ['landlords'], mentions: ['landlords', 'tenants'], ambiguity: 'Scope undefined.', dates: [], parent: null }), ...cited };
+    const triaged = triageOutput({ artefacts: [actor], warnings: [] }, 1, [source]);
+    expect(triaged.rejected).toEqual([]);
+    expect(triaged.artefacts[0].data.mentions).toEqual([]);
+    expect(triaged.warnings.join(' ')).toContain('2 unresolvable entries in mentions');
+  });
+
+  it('keeps a claim that cites a sibling it invented, as long as real support remains', () => {
+    const claim = { ...artefact('s1_000_claim', 'claim', 'Outcome focus', 'Standards are outcome focused.', { category: 'objective', notes: 'Stated.' }), ...cited, refs: [source.id, 's1_000_does_not_exist'] };
+    const triaged = triageOutput({ artefacts: [claim], warnings: [] }, 1, [source]);
+    expect(triaged.rejected).toEqual([]);
+    expect(triaged.artefacts[0].refs).toEqual([source.id]);
+    expect(triaged.warnings.join(' ')).toContain('unresolvable provenance link');
+  });
+
+  it('still refuses one whose only support was invented', () => {
+    const claim = { ...artefact('s1_000_claim', 'claim', 'Outcome focus', 'x', { category: 'objective', notes: 'n' }), origin: 'structural_inference' as const, refs: ['s1_000_nowhere'] };
+    const triaged = triageOutput({ artefacts: [claim], warnings: [] }, 1, [source]);
+    expect(triaged.artefacts).toEqual([]);
+    expect(triaged.rejected[0].code).toBe('provenance');
+  });
+
+  it('will not prune a list the kind cannot do without', async () => {
+    // `model.assumptions` is min(1): pruning it to nothing would not parse, so
+    // the artefact is refused rather than quietly reduced to a model of nothing.
+    const fixture = readFileSync('tests/fixtures/policy-analysis/policy.txt');
+    const all = (await ingest(fixture, 'policy.txt', 'text/plain')).artefacts;
+    const signal = new AbortController().signal;
+    const research = async () => ({ artefacts: [], warnings: [] });
+    for (let stage = 1; stage <= 6; stage++) {
+      const r = await executeStage({ stage, title: 'Synthetic policy', jurisdiction: null, policyArea: null, context: null, artefacts: all }, { model: async (...a) => fixtureModel(...a), research, signal });
+      all.push(...r.artefacts);
+    }
+    const good = fixtureModel(7, PATTERNS[0], { artefacts: all, idPrefix: 's7_000_', targetPattern: PATTERNS[0] } as never) as { artefacts: Artefact[] };
+    const broken = structuredClone(good.artefacts[0]);
+    broken.data.assumptions = ['s7_000_invented'];
+    broken.refs = [...broken.refs, 's7_000_invented'];
+    const triaged = triageOutput({ artefacts: [broken], warnings: [] }, 7, all);
+    expect(triaged.artefacts).toEqual([]);
+    expect(triaged.rejected).toHaveLength(1);
+  });
+});

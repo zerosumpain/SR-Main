@@ -174,6 +174,8 @@ export function triageArtefacts(output: StageOutput, stage: number, prior: Artef
   const priorIds = new Set(prior.map((a) => a.id));
   const rejected: Rejection[] = [];
   const drop = (a: Artefact, f: Fault) => { rejected.push({ id: a.id, kind: a.kind, code: f.code, reason: f.message }); };
+  const pruned: string[] = [];
+  const dropWarning = (a: Artefact) => (what: string) => pruned.push(`“${a.label}” lost ${what}.`);
 
   let kept: Artefact[] = [];
   const seen = new Set<string>();
@@ -195,6 +197,15 @@ export function triageArtefacts(output: StageOutput, stage: number, prior: Artef
   }
   kept = structural;
 
+  // Identifiers the model invented are pruned, ONCE, against everything that got
+  // this far — before the cascade, so an id dropped for cause still takes its
+  // dependants with it while an id that never existed only costs the mention.
+  // Measured on a live stage-1 sweep: fifteen of twenty-seven discarded groups
+  // were an actor whose `mentions` held the words "landlords" and "tenants"
+  // rather than the passages that mention them, or a claim citing a sibling by a
+  // name it had made up.
+  for (const a of kept) prune(a, map, dropWarning(a));
+
   // Dropping an artefact can invalidate whatever pointed at it, so settle.
   for (let pass = 0; pass < 6; pass++) {
     const all = new Map(prior.map((a) => [a.id, a]));
@@ -209,6 +220,7 @@ export function triageArtefacts(output: StageOutput, stage: number, prior: Artef
   }
 
   const warnings = [...parsed.warnings];
+  if (pruned.length) warnings.push(`${pruned.length} item${pruned.length === 1 ? '' : 's'} referred to something that is not in this assessment; the reference was dropped and the item kept. ${pruned.slice(0, 4).join(' ')}${pruned.length > 4 ? ` And ${pruned.length - 4} more.` : ''}`.slice(0, 1000));
   if (rejected.length) {
     const byCode = new Map<string, Rejection[]>();
     for (const r of rejected) byCode.set(r.code, [...(byCode.get(r.code) ?? []), r]);
@@ -235,6 +247,32 @@ export function clampWarnings(warnings: string[], limit = 60): string[] {
 // enumeration: exponential in a dense provenance graph, and now run once per
 // artefact per triage pass. Reachability does not care which path reached a node,
 // so a shared set is both correct and linear.
+const PRUNABLE = ['players', 'assumptions', 'resultIds', 'hypothesisIds', 'findingIds', 'candidates', 'mentions', 'dependencies', 'affectedOutcomes', 'targets', 'preconditions'];
+
+/**
+ * Drop identifiers that name nothing, keeping the artefact.
+ *
+ * `refs` keeps whatever resolves; the emptiness and traceability rules then
+ * decide whether what remains supports the artefact at all. A `data` array is
+ * only pruned if the kind's OWN schema still accepts the result — so a model
+ * with no players, or a finding with no results, is still refused rather than
+ * quietly reduced to nothing.
+ */
+function prune(a: Artefact, all: Map<string, Artefact>, note: (what: string) => void): void {
+  const refs = a.refs.filter((id) => id !== a.id && all.has(id));
+  if (refs.length !== a.refs.length) { note(`${a.refs.length - refs.length} unresolvable provenance link${a.refs.length - refs.length === 1 ? '' : 's'}`); a.refs = refs; }
+  for (const field of PRUNABLE) {
+    const values = a.data[field];
+    if (!Array.isArray(values)) continue;
+    const trimmed = values.filter((v) => typeof v === 'string' && all.has(v));
+    if (trimmed.length === values.length) continue;
+    const candidate = { ...a.data, [field]: trimmed };
+    if (!dataSchemas[a.kind].safeParse(candidate).success) continue;
+    note(`${values.length - trimmed.length} unresolvable entr${values.length - trimmed.length === 1 ? 'y' : 'ies'} in ${field}`);
+    a.data = candidate;
+  }
+}
+
 export function hasSource(id: string, all: Map<string, Artefact>, seen = new Set<string>()): boolean {
   if (seen.has(id)) return false;
   seen.add(id);
