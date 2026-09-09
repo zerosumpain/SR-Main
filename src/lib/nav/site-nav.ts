@@ -131,6 +131,7 @@ export const SITE_ITEMS: NavItem[] = [
   // reader was offered four destinations that each 302 back to /login.
   { label: 'News', href: '/news', ownerOnly: true },
   { label: 'Research', href: '/research', ownerOnly: true },
+  { label: 'Policy analysis', href: '/policy-analysis', ownerOnly: true },
   { label: 'Drive', href: '/drive', ownerOnly: true },
   { label: 'Live', href: '/live', ownerOnly: true },
   { label: 'jkai', href: '/jkai', ownerOnly: true },

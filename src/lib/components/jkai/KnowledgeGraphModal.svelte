@@ -14,11 +14,13 @@
     selectedId,
     onSelect,
     onClose,
+    exploreHref = '/jkai/intel',
   }: {
     graph: ThreadGraph;
     selectedId: string | null;
     onSelect: (id: string) => void;
     onClose: () => void;
+    exploreHref?: string | null;
   } = $props();
 
   let panel = $state<HTMLDivElement>();
@@ -177,7 +179,7 @@
         </span>
       </button>
       <div class="gm-hd-right">
-        <a class="gm-chip" href="/jkai/intel">intel ↗</a>
+        {#if exploreHref}<a class="gm-chip" href={exploreHref}>intel ↗</a>{/if}
         <button type="button" class="gm-chip" onclick={onClose} aria-label="Close">✕</button>
       </div>
     </header>

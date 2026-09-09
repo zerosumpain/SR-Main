@@ -279,11 +279,13 @@ sudo mkdir -p /opt/strange-rambling/static/images/blog
 sudo chown "$(id -un):$(id -gn)" /opt/strange-rambling/static/images/blog
 mkdir -p ~/.openclaw/workflow-files && chmod 700 ~/.openclaw/workflow-files
 
+# Policy envelopes retain their leases; the queue recovers them after restart.
+# Pausing them here would prevent automatic continuation.
 echo "==> Draining in-flight runs (running -> paused) before restart..."
 PG_CTR=$(docker ps --filter "name=strange-rambling-app-db" --format '{{.Names}}' | head -1 || true)
 if [ -n "$PG_CTR" ]; then
   docker exec "$PG_CTR" psql -U app -d strange_rambling \
-    -c "UPDATE workflow_runs SET status='paused' WHERE status='running';" || true
+    -c "UPDATE workflow_runs SET status='paused' WHERE status='running' AND trigger <> 'policy-analysis';" || true
 else
   echo "==> drain skipped (no app-db container)"
 fi

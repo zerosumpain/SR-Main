@@ -60,3 +60,4 @@ tests/skills/tool-names-exist.test.ts
 tests/scripts/built-extract.test.ts
 tests/scripts/development-install.test.ts
 tests/scripts/authored-runner-install.test.ts
+src/lib/policy-analysis/pipeline.test.ts

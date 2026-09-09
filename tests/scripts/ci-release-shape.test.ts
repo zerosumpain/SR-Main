@@ -31,6 +31,11 @@ function job(name: string): string {
 }
 
 describe('the prebuild/release split across two machines', () => {
+  it('leaves policy envelopes recoverable through lease expiry during deployment', () => {
+    const release = readFileSync(join(ROOT, 'scripts/ci-release.sh'), 'utf8');
+    expect(release).toContain("WHERE status='running' AND trigger <> 'policy-analysis'");
+  });
+
   it('uses the same structural gate entrypoint locally and in GitHub', () => {
     const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
     const structural = readFileSync(join(ROOT, 'scripts/gate-structural.sh'), 'utf8');

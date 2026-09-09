@@ -40,6 +40,7 @@ const RENEW_INTERVAL_MS = Math.max(2_000, Math.round(LEASE_MS / 3));
 let running = false;
 let stopping = false;
 let workerId = '';
+let policyOnly = false;
 let loopPromise: Promise<void> | null = null;
 
 /** The worker id for this process (set on start). Exported for diagnostics. */
@@ -182,6 +183,11 @@ async function executeClaimed(claimed: ClaimedRun): Promise<void> {
   }, RENEW_INTERVAL_MS);
 
   try {
+    if (claimed.trigger === 'policy-analysis') {
+      const { executePolicyRun } = await import('$lib/policy-analysis/server/worker');
+      await executePolicyRun(claimed, workerId);
+      return;
+    }
     const def = await loadDefinition(workflowId);
     if (!def) {
       await db
@@ -202,6 +208,14 @@ async function executeClaimed(claimed: ClaimedRun): Promise<void> {
     const result = await engine.execute(def, runId, claimed.input ?? {}, undefined, workflowId, { selfHealing: true });
     await persistResult(claimed, result, runStartedAt);
   } catch (err) {
+    if (claimed.trigger === 'policy-analysis') {
+      // Infrastructure errors leave the durable envelope available for recovery.
+      // Never overwrite a newer owner's result with an unfenced late failure.
+      await db.update(workflowRuns).set({ status: 'pending', claimedBy: null, leaseExpiresAt: null })
+        .where(and(eq(workflowRuns.id, runId), eq(workflowRuns.claimedBy, workerId), eq(workflowRuns.status, 'running'))).catch(() => {});
+      console.error(`[run-worker] policy envelope ${runId} interrupted; durable recovery will retry`);
+      return;
+    }
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[run-worker] run ${runId} threw:`, message);
     try {
@@ -230,7 +244,7 @@ async function loop(): Promise<void> {
         await releaseExpiredLeases().catch(() => 0);
       }
 
-      const claimed = await claimNext(workerId, LEASE_MS);
+      const claimed = await claimNext(workerId, LEASE_MS, policyOnly ? 'policy-analysis' : undefined);
       if (!claimed) {
         await sleep(POLL_INTERVAL_MS);
         continue;
@@ -253,13 +267,14 @@ function sleep(ms: number): Promise<void> {
  * JKAI_RUN_WORKER flag (and again here as belt-and-braces). Returns immediately;
  * the loop runs until stop().
  */
-export function startRunWorker(): void {
-  if (process.env.JKAI_RUN_WORKER !== '1') {
+export function startRunWorker(options: { policyOnly?: boolean } = {}): void {
+  if (process.env.JKAI_RUN_WORKER !== '1' && !options.policyOnly) {
     console.log('[run-worker] JKAI_RUN_WORKER !== "1" — not starting (in-process mode)');
     return;
   }
   if (running) return;
   running = true;
+  policyOnly = options.policyOnly === true;
   stopping = false;
   workerId = deriveWorkerId(hostname(), process.pid, Math.random().toString(36).slice(2, 10));
   console.log(`[run-worker] starting (workerId=${workerId}, poll=${POLL_INTERVAL_MS}ms, lease=${LEASE_MS}ms)`);
