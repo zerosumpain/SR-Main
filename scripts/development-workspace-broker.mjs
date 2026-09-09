@@ -4,7 +4,7 @@ import { previewPlan, readPreviewManifest } from './development-preview-check.mj
 import { previewAccessUrl } from './development-preview-access.mjs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, readFile, writeFile, stat, realpath, rename } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile, stat, realpath, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomBytes, createHash } from 'node:crypto';
@@ -187,9 +187,28 @@ async function snapshot(id) {
  * feature that has NOT been released must be accepted again.
  */
 async function resetBatch() {
+  // Every prepared candidate is a clone of the batch, and its recorded base
+  // commit lives only in that history. Rebuilding the batch from scratch makes
+  // those bases unreachable, so `snapshot` would diff against a root commit and
+  // return the whole tree. Rather than brick them silently, take the clean ones
+  // with it — they cost a `prepare` to rebuild — and refuse outright if any
+  // holds work that has not been committed.
+  const dirty = [];
+  const rebuilt = [];
+  for (const entry of await readdir(root).catch(() => [])) {
+    const path = join(root, entry, 'dev');
+    if (!(await stat(join(path, '.git')).catch(() => null))) continue;
+    if (await git(path, 'status', '--porcelain', '--untracked-files=normal')) dirty.push(entry);
+    else rebuilt.push(entry);
+  }
+  if (dirty.length) throw new Error(`These workspaces hold uncommitted work and would lose it: ${dirty.join(', ')}. Let each finish or stop its build, then try again.`);
+  for (const entry of rebuilt) {
+    await command('rm', ['-rf', join(root, entry, 'dev')]);
+    await command('rm', ['-f', join(trustedRoot, `${entry}-base`)]);
+  }
   await command('rm', ['-rf', batch, join(trustedRoot, 'source'), join(trustedRoot, 'batch-preview.json')]);
   await ensureBatch();
-  return { batch: await git(batch, 'rev-parse', 'HEAD'), reset: true };
+  return { batch: await git(batch, 'rev-parse', 'HEAD'), reset: true, rebuilt };
 }
 
 async function patch(id, revision) {
@@ -197,7 +216,13 @@ async function patch(id, revision) {
   const base = (await readFile(join(trustedRoot, `${id}-base`), 'utf8')).trim();
   if (!/^[a-f0-9]{40}$/.test(base)) throw new Error('Invalid base revision');
   const target = join(root, id, 'candidate.patch');
-  await command('bash', ['-c', `git -c core.hooksPath=/dev/null -C ${path} diff --no-ext-diff --no-textconv --binary ${base} ${revision} -- > ${target}`]);
+  // Through the `git()` helper, NOT a bare `git` in a shell string. This
+  // container runs as root against a workspace owned by uid 1000, so every
+  // invocation needs `-c safe.directory` or git refuses with "dubious
+  // ownership" — which is why that helper exists. Writing the patch with
+  // writeFile rather than a shell redirection keeps it on that path.
+  const diff = await git(path, 'diff', '--no-ext-diff', '--no-textconv', '--binary', base, revision, '--');
+  await writeFile(target, diff.endsWith('\n') ? diff : diff + '\n');
   await command('chown', ['1000:1000', target]);
   const { size } = await stat(target);
   return { revision, path: target, bytes: size };

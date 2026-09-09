@@ -145,3 +145,34 @@ describe('the pull request says who judged it', () => {
     expect(body).toContain('Saved and reloaded');
   });
 });
+
+describe('the release branch names its candidate', () => {
+  it('gives every candidate its own branch, so a plain push always works', async () => {
+    const { releaseBranchFor } = await import('./development-release.server');
+    const a = releaseBranchFor('abcd1234-0000-0000-0000-000000000000', 'a'.repeat(40));
+    const b = releaseBranchFor('abcd1234-0000-0000-0000-000000000000', 'b'.repeat(40));
+    expect(a).not.toBe(b);
+    // CI's auto-merge only ever considers a head_ref starting `agent/`.
+    expect(a.startsWith('agent/')).toBe(true);
+    expect(a).toMatch(/^agent\/dev-[a-z0-9]{8}-[a-f0-9]{8}$/);
+  });
+});
+
+describe('nothing carries the token out of a failed command', () => {
+  it('drops the base64 envelope that redacting the literal string cannot reach', async () => {
+    const { redactCommandOutput } = await import('./development-release.server');
+    const token = 'ghp_secretvalue';
+    const envelope = Buffer.from(`git clone https://x-access-token:${token}@github.com/o/r`).toString('base64');
+    const message = `Command failed: bash -c "echo '${envelope}' | base64 -d | bash"\nfatal: could not read Username`;
+    const safe = redactCommandOutput(message, token);
+    expect(safe).not.toContain(token);
+    expect(safe).not.toContain(envelope);
+    expect(safe).toContain('could not read Username');
+  });
+
+  it('still strips the literal token when it appears on its own', () => {
+    return import('./development-release.server').then(({ redactCommandOutput }) => {
+      expect(redactCommandOutput('remote: https://x-access-token:tok123@github.com', 'tok123')).not.toContain('tok123');
+    });
+  });
+});

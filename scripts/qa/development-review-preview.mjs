@@ -39,10 +39,10 @@ try {
   await page.getByRole('button', { name: 'Accepted into batch', exact: true }).waitFor();
   assert.equal(calls, 1);
   await page.getByRole('button', { name: 'Preview', exact: true }).click();
-  await page.getByText('Model assessment: passed · inferred', { exact: false }).waitFor();
+  await page.getByText('Self-review: passed · inferred', { exact: false }).waitFor();
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 1000 });
-    await page.getByText('Model assessment: passed · inferred', { exact: false }).scrollIntoViewIfNeeded();
+    await page.getByText('Self-review: passed · inferred', { exact: false }).scrollIntoViewIfNeeded();
     await page.screenshot({ path: `/tmp/development-review-${width}.png`, fullPage: true });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   }

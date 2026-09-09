@@ -210,6 +210,24 @@ export async function autopilotStep(buildId: string): Promise<AutopilotOutcome> 
  * fan-out here would queue several builds against a single worker and a broker
  * whose preview pool is eight slots wide.
  */
+/**
+ * The deploy's hold.
+ *
+ * `scripts/ci-development.sh` checks that no development operation is active,
+ * then replaces the broker container. That check is a point-in-time read, and a
+ * sweep firing in the seconds after it would start a build into a container
+ * about to be replaced — stranding its checkpoint, which is the exact thing the
+ * check exists to prevent. The deploy takes this hold for the whole window.
+ */
+const DEPLOY_HOLD = '/opt/sr-development/deploy-hold';
+async function deployInProgress(): Promise<boolean> {
+  try {
+    const { access } = await import('node:fs/promises');
+    await access(DEPLOY_HOLD);
+    return true;
+  } catch { return false; }
+}
+
 let sweeping = false;
 export async function autopilotSweep(): Promise<void> {
   // A single step can take minutes — a release clones master, applies a patch
@@ -217,6 +235,7 @@ export async function autopilotSweep(): Promise<void> {
   // sweeps drive the same build twice, and the loser of the revision race calls
   // stop() on a run that was making progress.
   if (sweeping) return;
+  if (await deployInProgress()) return;
   sweeping = true;
   try { await runSweep(); } finally { sweeping = false; }
 }

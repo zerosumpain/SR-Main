@@ -39,17 +39,40 @@ import { SR_MAIN_GIT_TARGET } from './git-targets';
 /** Big enough for a real feature, small enough that a runaway diff is refused. */
 const MAX_PATCH_BYTES = 4_000_000;
 
-function releaseBranch(buildId: string): string {
-  return `${SR_MAIN_GIT_TARGET.branchPrefix}dev-${buildId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}`;
+/**
+ * A branch per CANDIDATE, not per build.
+ *
+ * The alternative — one branch reused for every attempt — needs a force push,
+ * and `--force-with-lease` has no lease to check here: the clone is
+ * `--depth 1 --branch master`, so there is never a remote-tracking ref for this
+ * branch and the push refuses. Naming the revision means a plain push always
+ * works, a re-release after a closed pull request is a new proposal rather than
+ * a rewrite of the old one, and the branch says which candidate it carries.
+ */
+export function releaseBranchFor(buildId: string, revision: string): string {
+  return `${SR_MAIN_GIT_TARGET.branchPrefix}dev-${buildId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}-${revision.slice(0, 8)}`;
 }
 
 function tokenRemote(token: string): string {
   return `https://x-access-token:${token}@github.com/zerosumpain/SR-Main.git`;
 }
 
-/** Never let the token reach a log line, a build event or an error message. */
-function redact(text: string, token: string | undefined): string {
-  return token ? text.split(token).join('***') : text;
+/**
+ * Never let the token reach a log line, a build event or an error message.
+ *
+ * Stripping the literal string is not enough. `execInSandbox` runs
+ * `bash -c "echo '<base64 of the whole command>' | base64 -d | bash"`, and on
+ * failure returns `err.stderr || err.message` — so when a command dies without
+ * writing to stderr (a timeout, an exceeded buffer) what comes back is Node's
+ * own message, which quotes that envelope. The token is inside it, base64
+ * encoded, where a search for the literal string will never find it.
+ *
+ * So: drop the envelope, drop any long base64 run, then drop the literal.
+ */
+export function redactCommandOutput(text: string, token: string | undefined): string {
+  const withoutEnvelope = text.replace(/Command failed:[^\n]*/g, 'The command failed.');
+  const withoutBase64 = withoutEnvelope.replace(/[A-Za-z0-9+/]{80,}={0,2}/g, '[…]');
+  return token ? withoutBase64.split(token).join('***') : withoutBase64;
 }
 
 export function prBody(input: { outcome: string; criteria: Array<{ text: string; verdict: string; evidence: string }>; gateEvidence: string; buildId: string; independent: boolean }): string {
@@ -85,7 +108,7 @@ export async function releaseDevelopment(buildId: string, expectedRevision: numb
   if (blocker) throw new Error(blocker);
   const candidate = state.candidate!;
   if (state.release?.prUrl && state.release.revision === candidate) {
-    return { prUrl: state.release.prUrl, branch: state.release.branch ?? releaseBranch(buildId) };
+    return { prUrl: state.release.prUrl, branch: state.release.branch ?? releaseBranchFor(buildId, candidate) };
   }
   const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
   if (!build) throw new Error('Build not found');
@@ -94,7 +117,7 @@ export async function releaseDevelopment(buildId: string, expectedRevision: numb
   const token = process.env.FORGE_GITHUB_TOKEN;
   if (!token) throw new Error('Releasing needs FORGE_GITHUB_TOKEN on this host. The candidate and its batch are unchanged.');
 
-  const branch = releaseBranch(buildId);
+  const branch = releaseBranchFor(buildId, candidate);
   await mutateDelivery(buildId, 'release_started', s => ({ ...s, release: { revision: candidate, branch, requestedAt: new Date().toISOString(), detail: 'Replaying the candidate onto a fresh clone of master.' } }), expectedRevision);
 
   try {
@@ -120,7 +143,7 @@ export async function releaseDevelopment(buildId: string, expectedRevision: numb
         `git checkout -b ${branch} 2>&1`,
       300_000,
     );
-    if (prepared.exitCode !== 0) throw new Error(redact(`Could not prepare a master clone: ${prepared.stdout}\n${prepared.stderr}`, token).slice(0, 1200));
+    if (prepared.exitCode !== 0) throw new Error(redactCommandOutput(`Could not prepare a master clone: ${prepared.stdout}\n${prepared.stderr}`, token).slice(0, 1200));
 
     const applied = await execInSandbox(
       `cd ${root}/repo && git apply --index --whitespace=nowarn ${patchPath} 2>&1`,
@@ -129,7 +152,7 @@ export async function releaseDevelopment(buildId: string, expectedRevision: numb
     if (applied.exitCode !== 0) {
       throw new Error(
         `The candidate does not apply to current master, so it needs a rebase before release. ` +
-          `Master has moved since this feature branched. git said: ${(applied.stdout + applied.stderr).slice(0, 800)}`,
+          `Master has moved since this feature branched. git said: ${redactCommandOutput(applied.stdout + applied.stderr, token).slice(0, 800)}`,
       );
     }
 
@@ -137,10 +160,10 @@ export async function releaseDevelopment(buildId: string, expectedRevision: numb
     const titleB64 = Buffer.from(title, 'utf8').toString('base64');
     const committed = await execInSandbox(
       `cd ${root}/repo && git commit -m "$(echo '${titleB64}' | base64 -d)" 2>&1 && ` +
-        `git push ${tokenRemote(token)} ${branch} --force-with-lease 2>&1`,
+        `git push ${tokenRemote(token)} ${branch} 2>&1`,
       300_000,
     );
-    if (committed.exitCode !== 0) throw new Error(redact(`Could not push the release branch: ${committed.stdout}\n${committed.stderr}`, token).slice(0, 1200));
+    if (committed.exitCode !== 0) throw new Error(redactCommandOutput(`Could not push the release branch: ${committed.stdout}\n${committed.stderr}`, token).slice(0, 1200));
 
     const independent = state.criteria.some(c => c.assessment?.independent);
     const body = prBody({
@@ -168,7 +191,7 @@ export async function releaseDevelopment(buildId: string, expectedRevision: numb
     await emitLog(buildId, 'system', `Release proposed: ${prUrl}. Merging is CI's decision, not the builder's.`);
     return { prUrl, branch };
   } catch (error) {
-    const message = redact(error instanceof Error ? error.message : 'Release failed.', token).slice(0, 1500);
+    const message = redactCommandOutput(error instanceof Error ? error.message : 'Release failed.', token).slice(0, 1500);
     await mutateDelivery(buildId, 'release_failed', s => ({ ...s, release: { ...(s.release ?? { revision: candidate }), revision: candidate, branch, blocker: message, detail: 'The batch and the candidate are unchanged.' } }));
     await emitLog(buildId, 'error', `Release did not proceed: ${message}`);
     throw new Error(message);
