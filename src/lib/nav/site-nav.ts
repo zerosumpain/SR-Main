@@ -141,6 +141,9 @@ export const SITE_ITEMS: NavItem[] = [
  * match — so the deepest prefixes are declared first.
  */
 export const SECTIONS: NavSection[] = [
+  // Unlisted: identifies the private module shell without adding a site-nav link.
+  { id: 'policy-incentives-lab', label: 'Policy Lab', rootHref: '/policy-incentives-lab',
+    ownerOnly: true, match: (p) => under('/policy-incentives-lab', p), items: [] },
   {
     id: 'jkai-intel',
     parent: '/jkai',

@@ -112,11 +112,16 @@ export async function extractPdf(buffer: Buffer, options?: ExtractOptions): Prom
       data: new Uint8Array(buffer),
       ...(standardFontDataUrl ? { standardFontDataUrl } : {}),
     }).promise;
+    if (options?.maxPages && document.numPages > options.maxPages) throw new Error('PDF exceeds page limit');
+    let extractedCharacters = 0;
     allPages = await Promise.all(
       Array.from({ length: document.numPages }, async (_, offset) => {
         const page = await document!.getPage(offset + 1);
         const content = await page.getTextContent();
-        return { index: offset + 1, text: pageText(content.items) };
+        const text = pageText(content.items);
+        extractedCharacters += text.length;
+        if (options?.maxCharacters && extractedCharacters > options.maxCharacters) throw new Error('PDF exceeds extracted text limit');
+        return { index: offset + 1, text };
       }),
     );
   } catch (err) {

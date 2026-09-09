@@ -34,10 +34,15 @@ for (const name of ['DOMMatrix', 'ImageData', 'Path2D']) {
 }
 
 // Chunk filenames carry a content hash and change every build, so find it by
-// content. The error string is the extractor's own and is stable.
+// content. The dispatcher and PDF implementation can be separate chunks when
+// a caller imports extractPdf directly. Locate the dispatcher by its own error
+// string; retain the PDF marker for builds that co-locate both functions.
 const candidates = readdirSync(CHUNKS)
   .filter((f) => f.endsWith('.js'))
-  .filter((f) => readFileSync(join(CHUNKS, f), 'utf8').includes('PDF text extraction failed'));
+  .filter((f) => {
+    const source = readFileSync(join(CHUNKS, f), 'utf8');
+    return source.includes('cannot extract from mime') || source.includes('PDF text extraction failed');
+  });
 if (candidates.length === 0) fail('no server chunk contains the PDF extractor');
 
 // Exports are minified aliases (`export { extractText as e }`), so probe by

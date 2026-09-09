@@ -6942,3 +6942,22 @@ export const codegraphAssessments = pgTable('codegraph_assessments', {
   targetId: text('target_id').notNull(), verdict: text('verdict').notNull(), evidence: text('evidence').notNull(),
   revision: text('revision'), createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Policy Incentives Lab: private drafts and append-only model/run snapshots.
+export const policyLabProjects = pgTable('policy_lab_projects', {
+  id: uuid('id').primaryKey(), owner: text('owner').notNull(), title: text('title').notNull(),
+  revision: integer('revision').notNull().default(0), payload: jsonb('payload').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+export const policyLabVersions = pgTable('policy_lab_versions', {
+  id: uuid('id').primaryKey(), projectId: uuid('project_id').notNull().references(() => policyLabProjects.id),
+  version: integer('version').notNull(), modelHash: text('model_hash').notNull(), payload: jsonb('payload').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [uniqueIndex('policy_lab_version_unique').on(t.projectId, t.version)]);
+export const policyLabRuns = pgTable('policy_lab_runs', {
+  id: uuid('id').primaryKey(), projectId: uuid('project_id').notNull().references(() => policyLabProjects.id),
+  versionId: uuid('version_id').notNull().references(() => policyLabVersions.id),
+  engineVersion: text('engine_version').notNull(), payload: jsonb('payload').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
