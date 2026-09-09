@@ -58,6 +58,9 @@ export async function readSubmission(request: Request): Promise<Submission> {
   const file = form.get('document');
   const uploaded = file && typeof file !== 'string' && file.size > 0;
   if (uploaded && pasted) throw new PolicyError('input', 'Supply either a document or pasted text.');
+  // Without this, an empty submission fell through to the byte check and was told
+  // its document exceeded 10 MB.
+  if (!uploaded && !pasted) throw new PolicyError('input', 'Attach a policy document or paste its text.');
   const filename = uploaded ? file.name.replace(/^.*[\\/]/, '').slice(0, 200) : 'policy.txt';
   const bytes = uploaded ? Buffer.from(await file.arrayBuffer()) : Buffer.from(pasted);
   const mimeType = validateBytes(bytes, filename, uploaded ? file.type : 'text/plain');

@@ -164,6 +164,7 @@
     <strong role="status">{data.analysis.status.replaceAll('_', ' ')}</strong>
     <span>{completed} of {data.stages.length} stages complete</span>
     <button class="nm-save-btn" onclick={refresh}>Refresh</button>
+    <button class="nm-save-btn" onclick={() => window.print()}>Print or save as PDF</button>
     {#if active}<button class="nm-save-btn" disabled={busy} onclick={() => control('cancel')}>Cancel run</button>{/if}
     {#if ['failed', 'cancelled'].includes(data.analysis.status)}<button class="nm-save-btn" disabled={busy} onclick={() => control('resume')}>Resume from the last completed stage</button>{/if}
   </div>
@@ -497,6 +498,20 @@
 
   .empty { border-left: 2px solid var(--line-strong); padding-left: 1rem; color: var(--text-secondary); }
   .link { font: inherit; font-family: var(--font-mono); font-size: var(--fs-label); background: none; border: 0; padding: 0; color: var(--accent-ink); text-decoration: underline; cursor: pointer; text-align: left; overflow-wrap: anywhere; }
+
+  /* Printing is how this leaves the building. The chrome, the controls and the
+     run log go; the argument, every play and every chapter stay, and links show
+     their target so a printed copy is still traceable. */
+  @media print {
+    :global(.policy-page) { max-width: none; padding: 0; }
+    .rail, .progress, .filter, .danger, .inspector { display: none !important; }
+    #provenance { display: none; }
+    .section { break-inside: auto; page-break-inside: auto; border-top: 1px solid #000; }
+    :global(.policy-page details) { display: block; }
+    :global(.policy-page details > summary) { display: none; }
+    :global(.policy-page a[href^="http"]::after) { content: " (" attr(href) ")"; font-size: 10pt; word-break: break-all; }
+    :global(.policy-page button) { display: none; }
+  }
 
   .inspector { position: sticky; bottom: 0; margin-top: 2rem; padding: 1.2rem; border: 2px solid var(--accent-ink); background: var(--surface-elevated, var(--bg)); overflow-wrap: anywhere; max-height: 70vh; overflow-y: auto; }
   .refs { display: flex; flex-wrap: wrap; gap: .75rem; }
