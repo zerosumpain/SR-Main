@@ -5,10 +5,11 @@ The private `/policy-analysis` feature extends the existing Strange Ramblings Sv
 ## Files and integration points
 
 - `src/lib/policy-analysis/contracts.ts`, `validation.ts`, `prompts.ts`: versioned stage contracts, provenance validation and instructions.
-- `pipeline.ts`, `entities.ts`, `models.ts`, `tests.ts`: staged interpretation, conservative identity resolution, eight reusable model patterns and twelve deterministic checks.
+- `pipeline.ts`, `entities.ts`, `models.ts`, `tests.ts`: staged interpretation, conservative identity resolution, ten reusable model patterns and twelve deterministic checks.
+- `quotes.ts`, `budget.ts`, `exposure.ts`, `query-guard.ts`, `view.ts`: locating a quotation in extracted text, fitting a call to the context window, ranking an exploitation play, keeping the document out of a search query, and shaping all of it for the dashboard.
 - `server/ingest.ts`, `research.ts`, `provider.ts`: bounded extraction, public-source retrieval, routed model calls and private audit/checkpoint records.
 - `server/store.ts`, `worker.ts`, `access.ts`: durable state, atomic continuation, cancellation/resume and owner scoping.
-- `src/lib/components/policy-analysis/`: structured artefact inspector and adapter to the existing graph modal.
+- `src/lib/components/policy-analysis/`: the dashboard's sections — verdict, exposure plot, play card, check grid, actor board, evidence mix, cross-policy — plus the structured artefact inspector and the adapter to the existing graph modal.
 - `src/routes/policy-analysis/`: submission/history and progress/results pages.
 - `src/routes/api/policy-analysis/`: private submission, inspection, control and download APIs.
 - Existing `src/lib/db/schema.ts`, `src/lib/workflows/{run-queue,run-worker,engine-runtime}.ts`, `src/hooks.server.ts` and `src/lib/nav/site-nav.ts` provide storage, dispatch, lifecycle and navigation integration.
@@ -16,14 +17,15 @@ The private `/policy-analysis` feature extends the existing Strange Ramblings Sv
 
 ## Durable data
 
-Seven new tables: `policy_analyses`, `policy_documents`, `policy_stages`, `policy_executions`, `policy_artefacts`, `policy_provenance` and `policy_model_calls`.
+Seven tables: `policy_analyses` (carrying `depth`), `policy_documents`, `policy_stages`, `policy_executions`, `policy_artefacts`, `policy_provenance` and `policy_model_calls`.
 
-Artefacts are individually addressable rows with indexed analysis/kind and graph endpoints, epistemic origin, confidence, source quotes, offsets, pages/sections and timestamps. Kinds cover passages, claims, mechanisms, assumptions, actors, aliases, resolution candidates, graph nodes/edges, profiles, research questions/sources, evidence, models, tests, scenarios, findings and recommendations. Flexible fields use validated JSONB per kind. Provenance is a separate relation with composite foreign keys preventing links outside an analysis. Original document bytes are bounded, stored privately in Postgres, and downloadable only after an owner check. Submitted entities never enter the shared intelligence graph.
+Artefacts are individually addressable rows with indexed analysis/kind and graph endpoints, epistemic origin, confidence, source quotes, offsets, pages/sections and timestamps. Kinds cover passages, claims, mechanisms, assumptions, actors, aliases, resolution candidates, graph nodes/edges, profiles, research questions/sources, evidence, models, tests, scenarios, exploitation plays, cross-policy exposures, findings and recommendations. Flexible fields use validated JSONB per kind. Provenance is a separate relation with composite foreign keys preventing links outside an analysis. Original document bytes are bounded, stored privately in Postgres, and downloadable only after an owner check. Submitted entities never enter the shared intelligence graph.
 
 ## Routes and APIs
 
 - `GET /policy-analysis`: submit a document or text; list this owner's analyses.
-- `GET /policy-analysis/[id]`: progress, final assessment and all supporting artefacts.
+- `GET /policy-analysis/[id]`: the assessment as a dashboard — verdict, exploitation playbook, actors, structural checks, scenarios, evidence, cross-policy exposure, written chapters and run log — with one inspector reaching every artefact's provenance.
+- `DELETE /api/policy-analysis/[id]`: remove an analysis, its document bytes and everything under it.
 - `GET|POST /api/policy-analysis`: list or create a private durable run.
 - `GET /api/policy-analysis/[id]`: current stages, artefacts, execution log and model usage metadata.
 - `POST /api/policy-analysis/[id]/cancel`: persist cancellation and fence outstanding work.
@@ -33,21 +35,75 @@ Artefacts are individually addressable rows with indexed analysis/kind and graph
 
 All pages and APIs repeat the site's owner access check and scope queries to that owner's email, including on a site with multiple owners. Guests are not granted a new exception. Responses are private/no-store. Mutations check origin and use the existing rate limiter; transactional intake limits an owner to three active analyses.
 
+## The thirteen stages
+
+Ingestion, decomposition, entity resolution, knowledge graph, actor and incentive
+profiles, targeted research, evidence matrix, interaction models, automated policy
+tests, adversarial scenarios, **exploitation playbook**, **cross-policy exposure**,
+synthesis.
+
+The exploitation playbook is the red team. For each profiled actor, using that
+actor's own profile, it sets out the concrete plays available to it — preferring
+the ones that stay COMPLIANT, because those are the ones a drafter has not priced
+— with preconditions, payoff, cost to the objective, early warning, counter-measure
+and precedent. The model judges four factors on [0,1] (incentive, ease, impact,
+concealment) and the SERVER computes the ranking as their geometric mean, so two
+runs over the same judgements rank the same way and the arithmetic is shown on the
+page.
+
+Cross-policy exposure compares this assessment against the same owner's other
+completed ones, in bounded summary, for weaknesses that exist only because the
+policies coexist. The site's identity policy runs across the boundary and supplies
+same_body / possibly_same hints; foreign identifiers are recorded in `data`, never
+joined, because provenance rows may not cross an analysis.
+
+`depth` is `standard` or `deep`. Deep widens the research bounds and runs up to
+three rounds of enquiry, each planned from what the last round FOUND rather than
+from the document again; a round that raises no new question ends it.
+
+## Contract failure is quarantined, not fatal
+
+Every live model response goes through `triageOutput`, which applies the strict
+gate's rules per artefact: what fails is dropped and named, its dependants cascade
+out with it, and the stage's coverage rules decide whether what survived is an
+assessment. Up to two corrective round-trips carry the offending ids and the rule
+they broke back to the model, stored as their own audit rows under their own input
+hash. A fan-out unit that fails becomes a named gap rather than ending the stage,
+until three consecutive failures for the same reason.
+
+Quotations are located rather than matched: PDF line wrapping, hyphenation, smart
+punctuation and ligatures are folded for comparison only, and the stored quote is
+rewritten to the document's own wording for the span located. A quotation absent
+even after folding is still refused.
+
 ## Orchestration and restart behaviour
 
 The existing `workflow_runs` queue carries an envelope for one policy stage at a time (`trigger=policy-analysis`). The existing SKIP LOCKED worker claims and renews leases. The web background-service role starts a worker scoped to policy envelopes; a full run-worker can process them too. Each stage persists its output, execution status, timing and the next envelope in one transaction. A stage runs only when the envelope, stage pointer and live lease agree under row locks.
 
-Expired policy leases are requeued by the existing queue sweep. The generic stale-workflow reaper and deployment pause step exclude these envelopes, leaving interrupted policy runs recoverable through lease expiry. Cancellation invalidates the envelope; a delayed response cannot commit after cancellation, lease transfer or resume. Model calls that passed validation can be reused by input hash and prompt version when an interrupted stage retries. Failed calls remain inspectable. Completion requires all eleven stages; extraction/research warnings produce `completed_with_gaps`, not an unqualified completion.
+Expired policy leases are requeued by the existing queue sweep. The generic stale-workflow reaper and deployment pause step exclude these envelopes, leaving interrupted policy runs recoverable through lease expiry. Cancellation invalidates the envelope; a delayed response cannot commit after cancellation, lease transfer or resume. Model calls that passed validation can be reused by input hash and prompt version when an interrupted stage retries. Failed calls remain inspectable. Completion requires all thirteen stages; extraction, research and quarantine warnings produce `completed_with_gaps`, not an unqualified completion.
 
-There are three automatic attempts with delayed retries. A stage has a 45-minute wall-time bound, and each model request has a three-minute timeout. Manual resume grants another three attempts while preserving execution history. Completed analyses are immutable; a fresh submission starts a reassessment. No notifications or external messages are sent.
+There are three automatic attempts with delayed retries, and an attempt is consumed only where the stage FAILS — an interruption is refunded, bounded by a twelve-execution ceiling, so a deploy during a long analysis costs nothing. A stage's wall clock is sized to its fan-out (20 minutes plus 3 per unit, capped at 6 hours) because stage 1 makes one model call per passage; each model request has a three-minute timeout. Manual resume grants another three attempts while preserving execution history. Completed analyses are immutable; a fresh submission starts a reassessment. No notifications or external messages are sent.
 
 ## Providers and trust
 
-Model calls resolve the existing `research-deep` workload and use `getLLMClient`, including the site's configured OpenRouter/Codex routing and usage capture. The actual captured provider/model and token/cost records are retained; unreported cost stays null. Prompt version is `policy-analysis/1.0`. Inputs and outputs are untrusted structured data, never executable plans or tool requests. Malformed JSON, fabricated source quotes, dangling references, invalid confidence and incomplete report/model/scenario coverage fail validation.
+Model calls resolve the existing `research-deep` workload and use `getLLMClient`, including the site's configured OpenRouter/Codex routing and usage capture. The actual captured provider/model and token/cost records are retained; unreported cost stays null. Prompt version is `policy-analysis/2.0`. Inputs and outputs are untrusted structured data, never executable plans or tool requests. Malformed JSON, fabricated source quotes, dangling references, invalid confidence and incomplete report/model/scenario coverage fail validation.
 
 Research plans prioritise importance × uncertainty × consequence. At most eight questions each retrieve up to three results using the existing Tavily search/extract client, public URL guard and domain classification. Failures retain available evidence and explicit gaps. Search excerpts are labelled; retrieval time is not confused with publication time or jurisdictional validity. The evidence matrix must evaluate those limits. Sources and model output render as escaped text; URLs come from the retrieval adapter, not model-created citations.
 
 The identity stage uses the site's identity policy. Name-only ambiguity is split into separate candidates instead of silently merged. The graph visual reuses KnowledgeGraphModal; the searchable/focusable relationship list exposes all assertions, including provenance and temporal status. The visual limits itself to 30 connected nodes at a time.
+
+## What is enforced rather than asked for
+
+- Only the retrieval adapter mints a `research_source`. The kind is permitted at
+  the research stage so the server's own rows validate, which also let a model
+  return a source, and a URL, of its own; model-authored ones are discarded.
+- A research query is checked against the document before it is sent. Six
+  consecutive words in common means the query is a quotation, and an unpublished
+  policy paper does not go into a search provider's logs.
+- A call that exceeds the context window has its longest retained text clipped,
+  then whole low-value items shed, before anything is refused — and what the model
+  did not see is named in the assessment. Items the call exists to read (a
+  question's own sources, the actor being profiled) are pinned against both.
 
 ## Verification
 

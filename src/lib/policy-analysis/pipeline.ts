@@ -99,6 +99,13 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     }
   } else if (stage === 7 || stage === 9) {
     const context = input.artefacts.filter((a) => !['passage', 'research_source', 'alias', 'node'].includes(a.kind) && (a.kind !== 'actor' || a.id.startsWith('s2_')));
+    // `modelApplicability` counts the graph assertions that trigger each pattern
+    // and the result was read only as prose. A pattern with no trigger at all is
+    // a fact about the policy, worth saying in the assessment.
+    if (stage === 7) {
+      const unsupported = modelApplicability(input.artefacts).filter((p) => !p.triggerEvidence.length).map((p) => p.pattern.replaceAll('_', ' '));
+      if (unsupported.length) output.warnings.push(`${unsupported.length} of ${PATTERNS.length} interaction patterns have no supporting relationship in the policy graph and were assessed on inference alone: ${unsupported.join(', ')}.`);
+    }
     for (const key of stage === 7 ? PATTERNS : SCENARIOS) await attempt(key, context, `The ${key.replaceAll('_', ' ')} ${stage === 7 ? 'interaction model' : 'scenario'}`);
   } else if (stage === 6) {
     // One evidence pass per research question, so retrieved sources are read
@@ -210,6 +217,12 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
   // with a single policy has no cross-policy exposure, and saying so is the answer.
   if (!output.artefacts.length && stage !== 11) throw new PolicyError(fault.last?.code ?? 'coverage', `This stage produced no artefacts.${fault.last ? ` Last reason: ${fault.last.message}` : ''}`);
 
+  // Quarantining is what keeps a run alive, and it is also how a thin assessment
+  // could pass as a complete one: a stage whose graph was half discarded still
+  // satisfies its coverage rule, and the deterministic checks then read the
+  // gutted graph. So say what was lost, in the assessment, in figures.
+  const discarded = output.warnings.filter((w) => w.includes('discarded and are not part of this assessment')).length;
+  if (discarded) output.warnings.unshift(`${discarded} group${discarded === 1 ? '' : 's'} of model output were discarded in this stage. What follows is drawn from what survived; treat structural checks over this stage's relationships as a floor, not a verdict.`);
   const final = triageArtefacts(output, stage, input.artefacts);
   // A single response is bounded by its envelope; the assembled stage was not,
   // and `policy_provenance` grows with the square of a runaway fan-out.

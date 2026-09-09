@@ -103,9 +103,11 @@ export function modelCaller(executionId: string, runId: string, signal: AbortSig
         }
         lastError = new PolicyError(rejected[0]?.code ?? 'contract', rejected[0]?.reason ?? 'Output was discarded.');
         const instruction = repairPrompt(rejected, prefix, truncated);
-        // The conversation grows by the echo plus the instruction; the ceiling
-        // applies to what is SENT, not only to the first request.
-        const room = CONTEXT_LIMIT - encoded.length - instruction.length - 2_000;
+        // The ceiling applies to what is SENT. Round two carries round one's echo
+        // and instruction as well, so the whole conversation is measured — the
+        // first request's size alone stops being the right number after round one.
+        const sent = messages.reduce((n, m) => n + m.content.length, 0);
+        const room = CONTEXT_LIMIT - sent - instruction.length - 2_000;
         if (room < 4_000) { if (!accepted.length) throw lastError; return { artefacts: accepted, warnings: [...warnings, 'There was no room left in the model’s context window for a corrective attempt.'] }; }
         messages.push({ role: 'assistant', content: content.slice(0, room) }, { role: 'user', content: instruction });
       } catch (err) {

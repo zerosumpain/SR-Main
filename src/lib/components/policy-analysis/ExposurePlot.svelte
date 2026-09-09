@@ -11,7 +11,8 @@
   // The box is 360 user units, not 100, and padded on every side. SVG text scales
   // with the viewBox, so a 100-unit box would make a real 12px type token a
   // twelfth of the chart — and the site gates every font size at a 12px floor,
-  // which a hand-tuned `font-size: 3.4px` fails for good reason.
+  // which a hand-tuned sub-pixel literal fails for good reason. (The gate reads
+  // comments too, so this one does not spell one out.)
   import type { Play } from '$lib/policy-analysis/view';
   import { BAND_FILL, BAND_LABEL, PLOT_SIZE, plotPoints } from '$lib/policy-analysis/view';
 
