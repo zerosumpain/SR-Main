@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 import { extractPdf } from '$lib/jkai/extract/pdf';
 import { extractDocx } from '$lib/jkai/extract/docx';
-import { artefact, MAX_BYTES, MAX_CHARACTERS, MAX_PAGES, type Artefact, type StageOutput } from '../contracts';
+import { artefact, DEPTHS, MAX_BYTES, MAX_CHARACTERS, MAX_PAGES, type Artefact, type Depth, type StageOutput } from '../contracts';
 import { PolicyError } from '../validation';
 
-export type Submission = { title: string; jurisdiction: string | null; policyArea: string | null; context: string | null; filename: string; mimeType: string; bytes: Buffer };
+export type Submission = { title: string; jurisdiction: string | null; policyArea: string | null; context: string | null; depth: Depth; filename: string; mimeType: string; bytes: Buffer };
 const MIME: Record<string, string> = { txt: 'text/plain', pdf: 'application/pdf', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
 export function validateBytes(bytes: Buffer, filename: string, mimeType: string): string {
   if (!bytes.length || bytes.length > MAX_BYTES) throw new PolicyError('size', 'Supply a nonempty document of at most 10 MB.');
@@ -61,7 +61,9 @@ export async function readSubmission(request: Request): Promise<Submission> {
   const filename = uploaded ? file.name.replace(/^.*[\\/]/, '').slice(0, 200) : 'policy.txt';
   const bytes = uploaded ? Buffer.from(await file.arrayBuffer()) : Buffer.from(pasted);
   const mimeType = validateBytes(bytes, filename, uploaded ? file.type : 'text/plain');
-  return { title, jurisdiction: str('jurisdiction', 200) || null, policyArea: str('policyArea', 200) || null, context: str('context', 5000) || null, filename, mimeType, bytes };
+  const requested = str('depth', 20);
+  const depth: Depth = (DEPTHS as readonly string[]).includes(requested) ? requested as Depth : 'standard';
+  return { title, jurisdiction: str('jurisdiction', 200) || null, policyArea: str('policyArea', 200) || null, context: str('context', 5000) || null, depth, filename, mimeType, bytes };
 }
 export async function ingest(bytes: Buffer, filename: string, mimeType: string): Promise<StageOutput & { text: string; metadata: unknown }> {
   validateBytes(bytes, filename, mimeType);
@@ -84,7 +86,10 @@ export async function ingest(bytes: Buffer, filename: string, mimeType: string):
       if (text.includes('\0')) throw new Error('binary');
     }
   } catch { throw new PolicyError('extraction', 'Document extraction failed. Try a text-based PDF, DOCX or UTF-8 TXT, or paste the policy text.'); }
-  if (!text.trim() || text.length > MAX_CHARACTERS) throw new PolicyError('extraction', 'No readable text, or the document exceeds 600,000 characters. Split a larger document before submitting.');
+  // Two very different problems used to share one message, so a 300-page policy
+  // was told its PDF might need OCR.
+  if (!text.trim()) throw new PolicyError('extraction', 'No readable text was found. A scanned PDF needs OCR before submission, or paste the policy text instead.');
+  if (text.length > MAX_CHARACTERS) throw new PolicyError('extraction', `This document holds ${Math.round(text.length / 1000).toLocaleString()},000 characters of text and the limit is ${MAX_CHARACTERS / 1000},000 — roughly ${Math.round(MAX_CHARACTERS / 3000)} pages. Submit it in parts; the cross-policy stage will compare them against each other.`);
   if (!sections.length) sections = [{ text, page: null, section: 'Policy text' }];
   const hash = createHash('sha256').update(bytes).digest('hex');
   const artefacts: Artefact[] = []; let offset = 0;

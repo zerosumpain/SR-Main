@@ -20,7 +20,7 @@ export async function createAnalysis(owner: string, input: Submission) {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`policy:${owner}`}))`);
     const active = await tx.select({ id: policyAnalyses.id }).from(policyAnalyses).where(and(eq(policyAnalyses.owner, owner), inArray(policyAnalyses.status, ['queued', 'running'])));
     if (active.length >= 3) throw new PolicyError('capacity', 'Three analyses are already active. Cancel or finish one before starting another.');
-    const [analysis] = await tx.insert(policyAnalyses).values({ owner, title: input.title, jurisdiction: input.jurisdiction, policyArea: input.policyArea, context: input.context }).returning();
+    const [analysis] = await tx.insert(policyAnalyses).values({ owner, title: input.title, jurisdiction: input.jurisdiction, policyArea: input.policyArea, context: input.context, depth: input.depth }).returning();
     await tx.insert(policyDocuments).values({ analysisId: analysis.id, filename: input.filename, mimeType: input.mimeType, size: input.bytes.length, sha256: createHash('sha256').update(input.bytes).digest('hex'), content: input.bytes.toString('base64') });
     const stages = await tx.insert(policyStages).values(STAGES.map((name, ordinal) => ({ analysisId: analysis.id, ordinal, name }))).returning();
     await queueStage(tx, analysis.id, stages.find((s) => s.ordinal === 0)!.id);
@@ -51,7 +51,15 @@ export async function detail(owner: string, id: string) {
   const queued = stages.find((s) => s.runId && s.status !== 'completed');
   const [run] = queued?.runId ? await db.select({ heartbeatAt: workflowRuns.heartbeatAt, leaseExpiresAt: workflowRuns.leaseExpiresAt }).from(workflowRuns).where(eq(workflowRuns.id, queued.runId)) : [];
   const artefactMetadata = await db.select({ id: policyArtefacts.id, stage: policyArtefacts.stage, createdAt: policyArtefacts.createdAt, updatedAt: policyArtefacts.updatedAt }).from(policyArtefacts).where(eq(policyArtefacts.analysisId, id));
-  return { analysis, stages, documents, artefactMetadata, artefacts: await loadArtefacts(id), executions: executions.map((e) => e.execution), calls, heartbeat: run?.heartbeatAt ?? null };
+  // A cross-policy exposure is written onto the assessment that FOUND it. This
+  // page belongs to the other half of that pair as much as it does to the finder,
+  // so pull in the exposures that name this analysis from elsewhere.
+  const inbound = await db.select({ id: policyArtefacts.id, label: policyArtefacts.label, statement: policyArtefacts.statement, data: policyArtefacts.data, analysisId: policyArtefacts.analysisId, analysisTitle: policyAnalyses.title })
+    .from(policyArtefacts)
+    .innerJoin(policyAnalyses, eq(policyAnalyses.id, policyArtefacts.analysisId))
+    .where(and(eq(policyAnalyses.owner, owner), eq(policyArtefacts.kind, 'cross_policy'), sql`${policyArtefacts.data} ->> 'otherAnalysisId' = ${id}`))
+    .limit(50);
+  return { analysis, stages, documents, artefactMetadata, artefacts: await loadArtefacts(id), executions: executions.map((e) => e.execution), calls, inbound, heartbeat: run?.heartbeatAt ?? null };
 }
 export async function persistArtefacts(tx: DbExecutor, analysisId: string, stage: number, artefacts: Artefact[]) {
   if (!artefacts.length) return;
@@ -104,14 +112,20 @@ export async function neighbourSummaries(owner: string, exclude: string): Promis
     .orderBy(desc(policyAnalyses.completedAt)).limit(NEIGHBOUR_LIMIT + 1);
   const shortlist = others.filter((o) => o.id !== exclude).slice(0, NEIGHBOUR_LIMIT);
   if (!shortlist.length) return [];
-  const rows = await db.select({ analysisId: policyArtefacts.analysisId, id: policyArtefacts.id, kind: policyArtefacts.kind, label: policyArtefacts.label, statement: policyArtefacts.statement, confidence: policyArtefacts.confidence })
+  const rows = await db.select({ analysisId: policyArtefacts.analysisId, id: policyArtefacts.id, kind: policyArtefacts.kind, label: policyArtefacts.label, statement: policyArtefacts.statement, data: policyArtefacts.data })
     .from(policyArtefacts)
     .where(and(inArray(policyArtefacts.analysisId, shortlist.map((o) => o.id)), inArray(policyArtefacts.kind, NEIGHBOUR_KINDS)))
-    .orderBy(desc(policyArtefacts.confidence));
+    // `desc()` alone is NULLS FIRST in Postgres, which would fill the comparison
+    // budget with exactly the rows an assessment was least sure about. The
+    // kind/id tiebreak keeps the 60-row cut stable between runs.
+    .orderBy(sql`${policyArtefacts.confidence} DESC NULLS LAST`, asc(policyArtefacts.kind), asc(policyArtefacts.id))
+    .limit(shortlist.length * NEIGHBOUR_ARTEFACTS);
   return shortlist.map((o) => ({
     id: o.id, title: o.title, policyArea: o.policyArea, jurisdiction: o.jurisdiction,
     completedAt: o.completedAt ? o.completedAt.toISOString() : null,
     artefacts: rows.filter((r) => r.analysisId === o.id).slice(0, NEIGHBOUR_ARTEFACTS)
-      .map((r) => ({ id: r.id, kind: r.kind, label: r.label, statement: r.statement.slice(0, 600) })),
+      // Actors carry their type and aliases so identity can be judged on more
+      // than a matching label - see `crossIdentityHints`.
+      .map((r) => ({ id: r.id, kind: r.kind, label: r.label, statement: r.statement.slice(0, 600), entityType: r.kind === 'actor' ? String(r.data.entityType ?? '') : undefined, aliases: r.kind === 'actor' && Array.isArray(r.data.aliases) ? (r.data.aliases as string[]).slice(0, 12) : undefined })),
   }));
 }

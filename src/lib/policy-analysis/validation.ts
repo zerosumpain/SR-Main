@@ -46,6 +46,7 @@ function semanticFault(a: Artefact, all: Map<string, Artefact>, stage: number): 
   if (actorTargets.some((id) => typeof id === 'string' && all.get(id)?.kind === 'actor' && !id.startsWith('s2_'))) return fault('canonical', 'Graph assertions, profiles and models must use resolved actor identifiers.');
   if (a.kind === 'assumption' && !a.refs.some((id) => ['actor', 'mechanism'].includes(all.get(id)?.kind ?? ''))) return fault('hypothesis', 'An assumption must link to an affected actor or mechanism.');
   if ((a.kind === 'model' || a.kind === 'scenario') && !(a.data.assumptions as string[]).every((id) => a.refs.includes(id))) return fault('hypothesis', 'Interaction models and scenarios must link their assumptions into provenance.');
+  if (a.kind === 'exploit' && !(a.data.preconditions as string[]).every((id) => a.refs.includes(id))) return fault('hypothesis', 'An exploitation play must link the assumptions it depends on into provenance.');
   if (a.origin === 'normative_judgement' && a.kind === 'research_source') return fault('source', 'A recommendation is not an external source.');
   if (a.kind === 'recommendation' && a.origin !== 'normative_judgement') return fault('recommendation', 'Redesign options must be labelled as normative recommendations.');
   if (a.kind === 'profile') {
@@ -73,7 +74,7 @@ function relationalFault(a: Artefact, all: Map<string, Artefact>): Fault | null 
   if (a.kind === 'finding') {
     const results = a.data.resultIds as string[];
     const hypotheses = a.data.hypothesisIds as string[];
-    if (!results.every((id) => ['test', 'model', 'scenario'].includes(all.get(id)?.kind ?? '')) || !hypotheses.every((id) => all.get(id)?.kind === 'assumption')) return fault('traceability', 'A conclusion must cite a test or model and its hypotheses.');
+    if (!results.every((id) => ['test', 'model', 'scenario', 'exploit', 'cross_policy'].includes(all.get(id)?.kind ?? '')) || !hypotheses.every((id) => all.get(id)?.kind === 'assumption')) return fault('traceability', 'A conclusion must cite a test or model and its hypotheses.');
     if (!hypotheses.every((hypothesis) => results.some((result) => reaches(result, hypothesis, all)))) return fault('traceability', 'A conclusion’s hypotheses must support its cited results.');
     for (const id of [...results, ...hypotheses]) if (!a.refs.includes(id)) return fault('traceability', 'A conclusion is missing a provenance link.');
   }

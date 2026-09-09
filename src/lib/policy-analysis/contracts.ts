@@ -11,13 +11,24 @@ export const PROMPT_VERSION = 'policy-analysis/2.0';
 export const MAX_BYTES = 10 * 1024 * 1024;
 export const MAX_CHARACTERS = 600_000;
 export const MAX_PAGES = 400;
+export const DEPTHS = ['standard', 'deep'] as const;
+export type Depth = (typeof DEPTHS)[number];
+/**
+ * What "run it for longer" actually buys. `rounds` is the one that matters: a
+ * second round of research is planned FROM what the first round found, which is
+ * how a line of enquiry gets developed rather than merely widened.
+ */
+export const DEPTH_LIMITS: Record<Depth, { questions: number; results: number; rounds: number; actors: number }> = {
+  standard: { questions: 8, results: 3, rounds: 1, actors: 12 },
+  deep: { questions: 12, results: 5, rounds: 3, actors: 20 },
+};
 export const TRIGGER = 'policy-analysis';
 export const WORKFLOW_ID = 'policy-analysis-v1';
 export const ORIGINS = ['extracted_fact', 'external_evidence', 'structural_inference', 'behavioural_hypothesis', 'model_result', 'normative_judgement'] as const;
-export const RELATIONS = ['funds', 'regulates', 'commissions', 'delivers', 'reports_to', 'depends_on', 'supplies_data_to', 'has_authority_over', 'bears_cost_of', 'receives_benefit_from', 'is_accountable_for', 'can_veto', 'is_measured_by', 'is_exposed_to', 'supports', 'contradicts', 'assumes', 'provides_evidence_for', 'owns_data', 'reciprocates', 'sanctions', 'can_adapt'] as const;
+export const RELATIONS = ['funds', 'regulates', 'commissions', 'delivers', 'reports_to', 'depends_on', 'supplies_data_to', 'has_authority_over', 'bears_cost_of', 'receives_benefit_from', 'is_accountable_for', 'can_veto', 'is_measured_by', 'is_exposed_to', 'supports', 'contradicts', 'assumes', 'provides_evidence_for', 'owns_data', 'reciprocates', 'sanctions', 'can_adapt', 'lobbies', 'allies_with', 'competes_with', 'appoints'] as const;
 export const LEGALITY = ['compliant', 'grey', 'breach'] as const;
 export const CROSS_PATTERNS = ['conflicting_demand', 'cumulative_burden', 'shared_assumption', 'regime_arbitrage', 'common_actor_overload', 'contradictory_measure', 'duplicated_authority'] as const;
-export const PATTERNS = ['principal_agent', 'collective_action', 'coordination', 'metric_gaming', 'information_asymmetry', 'enforcement_credibility', 'bargaining_veto', 'repeated_interaction'] as const;
+export const PATTERNS = ['principal_agent', 'collective_action', 'coordination', 'metric_gaming', 'information_asymmetry', 'enforcement_credibility', 'bargaining_veto', 'repeated_interaction', 'regulatory_capture', 'coalition_formation'] as const;
 export const SCENARIOS = ['genuine_cooperation', 'minimum_compliance', 'strategic_gaming', 'limited_capacity', 'leadership_change', 'active_opposition', 'poor_information', 'unequal_distribution'] as const;
 const text = z.string().min(1).max(12000);
 const strings = z.array(text).max(80);
@@ -25,13 +36,13 @@ const ids = z.array(z.string().max(100)).max(10000);
 const unit = z.number().min(0).max(1);
 export const confidenceSchema = unit.nullable();
 const field = z.object({ value: text, origin: z.enum(ORIGINS), confidence: confidenceSchema, refs: ids }).strict();
-export const PROFILE_FIELDS = ['formalRole', 'statedObjectives', 'operationalObjectives', 'resources', 'constraints', 'legalPowers', 'informationPossessed', 'informationControlled', 'dependencies', 'costs', 'benefits', 'risks', 'reputationalIncentives', 'politicalIncentives', 'institutionalMotivations', 'strategies'] as const;
+export const PROFILE_FIELDS = ['formalRole', 'statedObjectives', 'operationalObjectives', 'accountableTo', 'successCriteria', 'timeHorizon', 'resources', 'constraints', 'legalPowers', 'informationPossessed', 'informationControlled', 'dependencies', 'costs', 'benefits', 'risks', 'outsideOption', 'gainFromFailure', 'reputationalIncentives', 'politicalIncentives', 'institutionalMotivations', 'strategies'] as const;
 const profileFields = Object.fromEntries(PROFILE_FIELDS.map((k) => [k, field])) as Record<(typeof PROFILE_FIELDS)[number], typeof field>;
 export const dataSchemas = {
   passage: z.object({ documentHash: text }),
   claim: z.object({ category: z.enum(['objective', 'problem', 'responsibility', 'decision_right', 'funding', 'dependency', 'data_flow', 'measure', 'constraint', 'risk', 'benefit', 'claim', 'cited_evidence']), notes: text }),
   mechanism: z.object({ intervention: text, implementation: text, notes: text }),
-  assumption: z.object({ importance: unit, uncertainty: unit, consequence: unit, notes: text }),
+  assumption: z.object({ importance: unit, uncertainty: unit, consequence: unit, priority: unit.optional(), notes: text }),
   actor: z.object({ entityType: z.enum(['person', 'department', 'agency', 'local_authority', 'provider', 'contractor', 'programme', 'dataset', 'legislation', 'committee', 'user_group', 'geography', 'concept']), aliases: strings, mentions: ids, ambiguity: text, dates: strings, parent: z.string().nullable() }),
   alias: z.object({ actorId: text }),
   resolution_candidate: z.object({ candidates: ids.min(2), reason: text, resolved: z.literal(false) }),
@@ -77,7 +88,7 @@ export const artefactSchema = z.object({
   data: z.record(z.string(), z.unknown()),
 }).strict();
 export type Artefact = z.infer<typeof artefactSchema>;
-export type StageInput = { stage: number; title: string; jurisdiction: string | null; policyArea: string | null; context: string | null; priorWarnings?: string[]; artefacts: Artefact[] };
+export type StageInput = { stage: number; title: string; depth?: Depth; jurisdiction: string | null; policyArea: string | null; context: string | null; priorWarnings?: string[]; artefacts: Artefact[] };
 export type StageOutput = { artefacts: Artefact[]; warnings: string[] };
 export const stageOutputSchema = z.object({ artefacts: z.array(artefactSchema).max(2000), warnings: z.array(z.string().max(1000)).max(100) }).strict();
 export const STAGE_KINDS: Kind[][] = [

@@ -6953,6 +6953,8 @@ export const policyAnalyses = pgTable('policy_analyses', {
   jurisdiction: text('jurisdiction'),
   policyArea: text('policy_area'),
   context: text('context'),
+  // 'standard' or 'deep' — how many rounds of enquiry the reader asked for.
+  depth: text('depth').notNull().default('standard'),
   status: text('status').notNull().default('queued'),
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
   error: text('error'),

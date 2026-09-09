@@ -175,7 +175,7 @@ describe('a fixed library reports its gaps instead of losing the run', () => {
     };
     const output = await executeStage({ stage: 7, title: 'Synthetic policy', jurisdiction: null, policyArea: null, context: null, artefacts: all }, { model, research, signal });
     expect(output.artefacts.filter((a) => a.kind === 'model')).toHaveLength(PATTERNS.length - 3);
-    expect(output.warnings.join(' ')).toContain('3 of 8 interaction models were not assessed');
+    expect(output.warnings.join(' ')).toContain(`3 of ${PATTERNS.length} interaction models were not assessed`);
     expect(output.warnings.join(' ')).toContain('collective action');
   });
 
@@ -187,7 +187,7 @@ describe('a fixed library reports its gaps instead of losing the run', () => {
       if (calls++ % 2 === 0) throw new PolicyError('contract', 'Synthetic contract failure.');
       return fixtureModel(stage, key, raw);
     };
-    await expect(executeStage({ stage: 7, title: 'Synthetic policy', jurisdiction: null, policyArea: null, context: null, artefacts: all }, { model, research, signal })).rejects.toThrow('of 8 interaction models could be assessed');
+    await expect(executeStage({ stage: 7, title: 'Synthetic policy', jurisdiction: null, policyArea: null, context: null, artefacts: all }, { model, research, signal })).rejects.toThrow(`of ${PATTERNS.length} interaction models could be assessed`);
   });
 });
 

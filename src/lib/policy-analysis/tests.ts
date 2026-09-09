@@ -32,12 +32,20 @@ export function runPolicyTests(all: Artefact[]): Artefact[] {
       if (testId === 'observability' || testId === 'enforcement' || testId === 'adaptability') return other.fromId === e.fromId;
       return other.fromId === e.fromId && other.toId === e.toId;
     }));
-    const result = !relevant.length ? 'indeterminate' : missing.length ? 'moderate_risk' : 'low_risk';
+    // 'high_risk' used to be unreachable: every shortfall, however total, read as
+    // moderate. A check where EVERY relevant assertion lacks its counterpart, over
+    // more than one assertion, is a different finding from one where some do.
+    const result = !relevant.length ? 'indeterminate'
+      : !missing.length ? 'low_risk'
+      : missing.length === relevant.length && relevant.length >= 2 ? 'high_risk'
+      : 'moderate_risk';
     const inputs = [...new Set([...relevant.map((e) => e.id), ...edges.filter((e) => e.relation === counterpart).map((e) => e.id)])];
     const related = new Set(relevant.flatMap((e) => [e.fromId, e.toId]));
     const relevantModels = models.filter((m) => m.data.pattern === patterns[testId]);
     const relevantAssumptions = assumptions.filter((a) => a.refs.some((id) => related.has(id)) || relevantModels.some((m) => (m.data.assumptions as string[]).includes(a.id)));
     const refs = [...new Set([...inputs, ...relevantAssumptions.map((a) => a.id), ...relevantModels.map((a) => a.id)])];
+    const label = (id: string | null) => all.find((a) => a.id === id)?.label ?? null;
+    const named = [...new Set(missing.map((e) => label(e.fromId)).filter((n): n is string => !!n))].slice(0, 6);
     const extra = testId === 'coordination'
       ? ` ${conflictingReportingLines(edges).length} actor(s) have multiple reporting targets; whether these conflict needs institutional interpretation.` : '';
     const reasoning = !relevant.length
@@ -48,8 +56,9 @@ export function runPolicyTests(all: Artefact[]): Artefact[] {
     return artefact(`test_${testId}`, 'test', name, reasoning + extra, {
       testId, rationale: `Check ${trigger} against ${counterpart} in the provenance graph.`, inputs,
       rule: `${trigger} requires a corresponding ${counterpart}; absent trigger = indeterminate; missing counterpart = moderate review risk; matched = low structural risk.`,
-      reasoning: reasoning + extra, result, severity: result === 'indeterminate' ? 'unknown' : result === 'moderate_risk' ? 'moderate' : 'low',
-      actors: [...new Set(relevant.map((e) => e.fromId).filter((id): id is string => !!id))], mitigation,
+      reasoning: reasoning + extra, result, severity: result === 'indeterminate' ? 'unknown' : result === 'high_risk' ? 'high' : result === 'moderate_risk' ? 'moderate' : 'low',
+      actors: [...new Set(relevant.map((e) => e.fromId).filter((id): id is string => !!id))],
+      mitigation: named.length ? `${mitigation} Here that means: ${named.join(', ')}.` : mitigation,
     }, { origin: 'structural_inference', confidence: relevant.length ? Math.min(0.6, ...relevant.map((e) => e.confidence ?? 0)) : null, refs });
   });
 }

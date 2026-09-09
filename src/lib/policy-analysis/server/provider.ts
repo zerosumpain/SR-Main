@@ -33,11 +33,11 @@ function needsRepair(kept: number, rejected: Rejection[]): boolean {
 
 export function modelCaller(executionId: string, runId: string, signal: AbortSignal, prior: Artefact[]): ModelCall {
   return async (stage, key, input) => {
-    const payload = input as { artefacts?: Artefact[] };
+    const { protect: pinned, ...payload } = input as { artefacts?: Artefact[]; protect?: string[] };
     const fitted = Array.isArray(payload.artefacts)
-      ? fitToBudget(payload.artefacts, (artefacts) => ({ ...payload, artefacts }), CONTEXT_LIMIT)
+      ? fitToBudget(payload.artefacts, (artefacts) => ({ ...payload, artefacts }), CONTEXT_LIMIT, new Set(pinned ?? []))
       : { artefacts: [], notes: [] };
-    if (Array.isArray(payload.artefacts)) input = { ...payload, artefacts: fitted.artefacts };
+    input = Array.isArray(payload.artefacts) ? { ...payload, artefacts: fitted.artefacts } : payload;
     const encoded = JSON.stringify(input);
     if (encoded.length > CONTEXT_LIMIT) throw new PolicyError('budget', 'This call exceeds the model’s context window even after trimming. Completed work is retained.');
     const inputHash = createHash('sha256').update(encoded).digest('hex');

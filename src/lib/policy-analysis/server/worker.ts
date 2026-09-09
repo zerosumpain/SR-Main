@@ -80,7 +80,7 @@ export async function executePolicyRun(claimed: { id: string; input: Record<stri
     const previousStages = await db.select({ warnings: policyStages.warnings }).from(policyStages).where(eq(policyStages.analysisId, analysisId));
     const [document] = await db.select().from(policyDocuments).where(eq(policyDocuments.analysisId, analysisId));
     const extracted = started.stage.ordinal === 0 ? await ingest(Buffer.from(document.content, 'base64'), document.filename, document.mimeType) : null;
-    const output = extracted ?? await executeStage({ stage: started.stage.ordinal, title: started.analysis.title, jurisdiction: started.analysis.jurisdiction, policyArea: started.analysis.policyArea, context: started.analysis.context, priorWarnings: previousStages.flatMap((s) => s.warnings), artefacts: all }, { model: modelCaller(started.execution.id, claimed.id, signal, all), research, signal, neighbours: () => neighbourSummaries(started.analysis.owner, analysisId) });
+    const output = extracted ?? await executeStage({ stage: started.stage.ordinal, title: started.analysis.title, jurisdiction: started.analysis.jurisdiction, policyArea: started.analysis.policyArea, context: started.analysis.context, depth: started.analysis.depth as 'standard' | 'deep', priorWarnings: previousStages.flatMap((s) => s.warnings), artefacts: all }, { model: modelCaller(started.execution.id, claimed.id, signal, all), research, signal, neighbours: () => neighbourSummaries(started.analysis.owner, analysisId) });
     signal.throwIfAborted();
     await db.transaction(async (tx) => {
       const locked = await lockLease(tx, analysisId, stageId, claimed.id, workerId);

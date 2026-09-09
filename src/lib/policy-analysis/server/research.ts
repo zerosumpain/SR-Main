@@ -3,17 +3,17 @@ import { classifyDomain } from '$lib/deepdive/credibility';
 import { assertPublicUrl } from '$lib/server/ssrf-guard';
 import { artefact, safeSourceUrl, type Artefact, type StageOutput } from '../contracts';
 
-export type Research = (questions: Artefact[], signal: AbortSignal) => Promise<StageOutput>;
-export const research: Research = async (questions, signal) => {
+export type Research = (questions: Artefact[], signal: AbortSignal, maxResults?: number) => Promise<StageOutput>;
+export const research: Research = async (questions, signal, maxResults = 3) => {
   const artefacts: Artefact[] = []; const warnings: string[] = [];
   for (const question of questions) {
     signal.throwIfAborted();
     const query = String(question.data.searchStrategy).slice(0, 350);
     try {
       if (/@|https?:|[\r\n]/.test(query)) throw new Error('unsafe query');
-      const found = await search(query, { maxResults: 3, searchDepth: 'advanced', signal });
+      const found = await search(query, { maxResults, searchDepth: 'advanced', signal });
       if (!Array.isArray(found.results) || !found.results.length) warnings.push(`No sources found for ${question.label}.`);
-      for (const result of (found.results ?? []).slice(0, 3)) {
+      for (const result of (found.results ?? []).slice(0, maxResults)) {
         if (typeof result.url !== 'string') continue;
         const url = safeSourceUrl(result.url);
         if (!url) continue;

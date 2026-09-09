@@ -16,3 +16,37 @@ export function preserveAmbiguity(output: Artefact[], prior: Artefact[]): Artefa
   }
   return result.filter((a) => !(a.kind === 'actor' && replaced.has(a.id)) && !(a.kind === 'alias' && replaced.has(String(a.data.actorId))));
 }
+
+/**
+ * Which actors in another assessment might be the SAME body as one here.
+ *
+ * Without this the cross-policy stage decides identity from label text alone,
+ * which is the conflation failure this codebase has been bitten by before. The
+ * site's own identity policy is applied across the boundary and its verdict is
+ * handed to the model as a HINT, never as a merge — two assessments of two
+ * policies are entitled to describe the same body differently, and a shared name
+ * has never been evidence of a shared identity.
+ */
+export function crossIdentityHints(
+  local: Artefact[],
+  neighbours: { id: string; artefacts: { id: string; kind: string; label: string; entityType?: string; aliases?: string[] }[] }[],
+) {
+  const entity = (id: string, name: string, type: string, aliases: string[]) => ({ id, name, typeId: type, typeName: type, degree: 0, noteCount: 1, aliases });
+  const here = local.filter((a) => a.kind === 'actor' && a.id.startsWith('s2_'));
+  const hints: { actorId: string; actorLabel: string; otherAnalysisId: string; otherArtefactId: string; otherLabel: string; verdict: 'same_body' | 'possibly_same' }[] = [];
+  for (const actor of here) {
+    const mine = entity(actor.id, actor.label, String(actor.data.entityType ?? ''), (actor.data.aliases as string[]) ?? []);
+    for (const neighbour of neighbours) {
+      for (const other of neighbour.artefacts) {
+        if (other.kind !== 'actor') continue;
+        const theirs = entity(other.id, other.label, other.entityType ?? '', other.aliases ?? []);
+        const canLink = assessIdentity(mine, theirs).canLink;
+        const sameName = mine.name.trim().toLowerCase() === theirs.name.trim().toLowerCase();
+        if (!canLink && !sameName) continue;
+        hints.push({ actorId: actor.id, actorLabel: actor.label, otherAnalysisId: neighbour.id, otherArtefactId: other.id, otherLabel: other.label, verdict: canLink ? 'same_body' : 'possibly_same' });
+        if (hints.length >= 120) return hints;
+      }
+    }
+  }
+  return hints;
+}
