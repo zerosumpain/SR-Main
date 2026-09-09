@@ -130,7 +130,11 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     }
     scoreExploits(output.artefacts);
   } else if (stage === 11) {
-    const neighbours = (await deps.neighbours?.()) ?? [];
+    // Failing to LOAD the comparison must not cost the assessment its stage; the
+    // rest of this run is unaffected by whether the other papers could be read.
+    let neighbours: Neighbour[] = [];
+    try { neighbours = (await deps.neighbours?.()) ?? []; }
+    catch { output.warnings.push('The other assessments on this account could not be read, so cross-policy exposure was not examined.'); }
     if (!neighbours.length) {
       output.warnings.push('No other completed policy assessment was available to compare, so cross-policy exposure could not be examined. Weaknesses that only appear when policies coexist are outside this assessment.');
     } else {

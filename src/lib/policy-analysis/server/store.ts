@@ -150,6 +150,9 @@ export async function neighbourSummaries(owner: string, exclude: string): Promis
     .from(policyAnalyses)
     .where(and(eq(policyAnalyses.owner, owner), inArray(policyAnalyses.status, ['completed', 'completed_with_gaps'])))
     .orderBy(desc(policyAnalyses.completedAt)).limit(NEIGHBOUR_LIMIT + 1);
+  // The first assessment on an account has no neighbours at all, and an empty
+  // `inArray` is not a shape to hand Postgres. Leave before the document queries.
+  if (!others.some((o) => o.id !== exclude)) return [];
   // A redraft of the SAME paper is not another policy. Submitting v2 after acting
   // on v1's plays is the intended way to use this, and without the hash check the
   // two drafts would be reported as conflicting with each other.
