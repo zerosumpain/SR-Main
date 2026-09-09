@@ -23,6 +23,11 @@ function structuralFault(a: Artefact, all: Map<string, Artefact>, stage: number)
  * rewritten to the document's own wording for the span it located.
  */
 function semanticFault(a: Artefact, all: Map<string, Artefact>, stage: number): Fault | null {
+  // An artefact that names its source and leaves `refs` empty is stating the same
+  // link twice and recording it once. Fold it in rather than rejecting: measured
+  // on a live run, THIRTEEN OF EIGHTEEN artefacts in one response were lost to
+  // exactly this, which is also what was driving the corrective round-trips.
+  if (a.sourceId && all.has(a.sourceId) && !a.refs.includes(a.sourceId)) a.refs = [a.sourceId, ...a.refs];
   if (a.kind !== 'passage' && !a.refs.length) return fault('provenance', 'An artefact has no supporting evidence links.');
   if (a.refs.some((id) => id === a.id || !all.has(id))) return fault('provenance', 'An artefact cites an unavailable source.');
   if (stage === 1 && ['claim', 'mechanism', 'actor'].includes(a.kind) && a.origin !== 'extracted_fact') return fault('extraction', 'The document inventory must distinguish literal extraction from assumptions.');
