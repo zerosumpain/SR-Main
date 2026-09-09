@@ -41,7 +41,7 @@
       items: [
         { code: 'CHT', label: 'Chat', href: '/jkai', desc: 'The orchestrator chat hub', keywords: 'home talk ask' },
         { code: 'CVS', label: 'Canvas', href: '/jkai/canvas', desc: 'Visual workflow builder', keywords: 'workflow nodes flow automation' },
-        { code: 'BLD', label: 'Builds', href: '/jkai/builds', desc: 'Autonomous builder', keywords: 'build autonomous app' },
+        { code: 'DEV', label: 'Develop', href: '/jkai/develop', desc: 'Commission a site feature, or the build archive', keywords: 'build builds develop autonomous app feature archive promote projects' },
         { code: 'RES', label: 'Research', href: '/research', desc: 'Deep research desk', keywords: 'deep dive gather synthesize' },
         { code: 'NWS', label: 'News', href: '/news', desc: 'Hacker News and Lobsters reading desk', keywords: 'feed articles hacker news lobsters read' },
       ],

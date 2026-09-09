@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { isProjectPublic } from '$lib/projects/visibility';
   // Projects — the index of everything built on this site.
   //
   // Wears the /health editorial system, the same way /research, /news and
@@ -26,11 +27,17 @@
   let shareModal = $state<{ key: string; href: string; title: string } | null>(null);
 
   // Per-project public/private overlay. Seeded from the server; toggles update
-  // it optimistically. A missing key means public.
+  // it optimistically.
+  //
+  // A MISSING KEY DOES NOT MEAN PUBLIC. It means public for a hand-built page
+  // and PRIVATE for an AI build's slug — `isProjectPublic` is the server's own
+  // rule and the only correct reading of an absent row. Assuming public here
+  // told the owner a freshly promoted card was live, with no Private chip and a
+  // button whose first click read as "make private" when it already was.
   let vis = $state<Record<string, boolean>>({ ...(data.visibility ?? {}) });
   let toggling = $state<string | null>(null);
 
-  const isPub = (key: string) => vis[key] ?? true;
+  const isPub = (key: string) => isProjectPublic(vis, key);
   const showCard = (key: string) => data.authenticated || isPub(key);
 
   const shownCards = $derived(PROJECT_CARDS.filter((c) => showCard(c.key)));

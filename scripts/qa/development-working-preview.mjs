@@ -60,7 +60,7 @@ try {
   scenario = 'paused';
   await page.goto(`${base}/jkai/develop/${id}`, { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Delivery', exact: true }).click();
-  assert.equal(await page.getByRole('button', { name: 'Accept into batch', exact: true }).isDisabled(), true);
+  assert.equal(await page.getByRole('button', { name: 'Continue automatically', exact: true }).isDisabled(), true);
   assert.deepEqual(errors, []);
   console.log(`PASS: real feature iframe, desktop/phone working/replacing/failed states, retained interaction and acceptance protection. Example: ${base}/jkai/develop/${id}`);
 } finally { await browser.close(); await client.end(); }

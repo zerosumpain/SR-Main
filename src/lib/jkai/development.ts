@@ -1,17 +1,51 @@
-import { PRODUCT_AREAS, type DeliveryState, type Criterion } from '$lib/constants/development';
-export { PRODUCT_AREAS };
-export type { DeliveryState, DeliveryStage, Criterion } from '$lib/constants/development';
+import { AUTOPILOT_ROUNDS, PRODUCT_AREAS, RELEASE_POLICIES, type DeliveryState, type Criterion, type ReleasePolicy } from '$lib/constants/development';
+export { PRODUCT_AREAS, RELEASE_POLICIES, AUTOPILOT_ROUNDS };
+export type { DeliveryState, DeliveryStage, Criterion, ReleasePolicy } from '$lib/constants/development';
 
-export function newDelivery(outcome: string, area = 'Platform', criteria: string[] = []): DeliveryState {
+export function newDelivery(outcome: string, area = 'Platform', criteria: string[] = [], options: { releasePolicy?: ReleasePolicy; autopilot?: boolean; maxRounds?: number; commissioned?: boolean } = {}): DeliveryState {
+  const maxRounds = Math.min(AUTOPILOT_ROUNDS.max, Math.max(1, Math.round(options.maxRounds ?? AUTOPILOT_ROUNDS.default)));
   return {
     version: 1, originalAsk: outcome, area, stage: 'brief',
+    ...(options.commissioned === false ? { commissioned: false } : {}),
     brief: { revision: 1, outcome, constraints: '', routes: [], acceptedAt: null },
     criteria: criteria.map((text, i) => ({ id: `criterion-${i + 1}`, text, verdict: 'unverified', evidence: '', revision: null })),
     decisions: [], session: { engine: 'pi', id: null, file: null, recovery: null },
     candidate: null, gate: null,
     preview: { url: null, status: 'unavailable', detail: 'A preview has not been prepared.' },
-    batch: null, acceptedAt: null, releasePolicy: 'preview_only',
+    batch: null, acceptedAt: null, releasePolicy: options.releasePolicy ?? 'preview_only',
+    ...(options.autopilot ? { autopilot: { enabled: true, rounds: 0, maxRounds, startedAt: new Date().toISOString() } } : {}),
   };
+}
+
+/**
+ * Is this build a development feature, or a build that merely acquired a
+ * delivery row so a question had somewhere to live?
+ *
+ * Absent means yes, so every delivery written before the flag existed keeps its
+ * place in the portfolio.
+ */
+export function isCommissioned(state: DeliveryState): boolean {
+  return state.commissioned !== false;
+}
+
+/** A run is under way only while it is enabled AND has rounds left. */
+export function autopilotActive(state: DeliveryState): boolean {
+  const pilot = state.autopilot;
+  return Boolean(pilot?.enabled && !pilot.stopReason && pilot.rounds < pilot.maxRounds);
+}
+
+/**
+ * Why a candidate cannot be released yet, or null when it can.
+ *
+ * Acceptance and release are separate gates on purpose: `acceptanceBlocker`
+ * answers "is this feature done", this answers "may it leave the machine".
+ */
+export function releaseBlocker(state: DeliveryState): string | null {
+  if (state.releasePolicy === 'preview_only') return 'This feature is set to preview only. Change where it stops before releasing it.';
+  if (!state.acceptedAt || !state.batch) return 'Accept the candidate into the batch first.';
+  if (!state.candidate || !state.gate?.passed || state.gate.revision !== state.candidate) return 'The accepted candidate needs a passing repository gate.';
+  if (state.release?.prUrl && state.release.revision === state.candidate) return 'This candidate already has a pull request open.';
+  return null;
 }
 /** Explicit owner verdicts win; model inference is tied to the inspected revision. */
 export function criterionResult(c: { verdict: string; revision: string | null; evidence?: string; assessment?: Criterion['assessment'] }, candidate: string | null) {
@@ -57,6 +91,10 @@ export function deliveryPrompt(state: DeliveryState): string {
 
 /** Product review stages remain distinct from worker liveness. */
 export function visibleDevelopmentStage(state: DeliveryState, workerStatus: string, outcome?: string | null): string {
+  // Release outcomes outrank worker history: a feature that reached production
+  // is deployed even if the process that wrote it was stopped by hand months ago.
+  if (state.stage === 'deployed') return 'deployed';
+  if (state.stage === 'pr_open') return 'pull request open';
   if (outcome === 'stopped_by_user') return 'stopped';
   if (workerStatus === 'completed' && !state.acceptedAt && !state.candidate) return 'ended without a candidate';
   if (state.stage === 'integrating' || state.stage === 'accepted') return state.stage;

@@ -28,6 +28,17 @@ src/lib/server/**
 # catalogue (or tool execution). Added 2026-07-25 after a change to exactly this
 # file would otherwise have classified low and auto-merged.
 src/lib/mcp/**
+# The unattended development loop's own rails. `development-release.server.ts`
+# holds the GitHub token and decides what reaches a pull request;
+# `development-autopilot.server.ts` decides when a run stops and answers the
+# owner's questions on their behalf; `development-review.server.ts` is the
+# adversary that judges whether the work is done. A develop-lane candidate can
+# edit any file in the repo, and the broker only refuses changes to the GATE —
+# so without these three rules an autonomous build could relax its own reviewer,
+# widen its own release permission, and auto-merge that change on a tier=low PR.
+src/lib/jkai/development-release.server.ts
+src/lib/jkai/development-autopilot.server.ts
+src/lib/jkai/development-review.server.ts
 
 # PUBLIC_PATHS is PREFIX-matched, so whole trees (/api/agent, /api/scraper,
 # /projects, /decks, /jkai/shared, /dav) are ALREADY past the Auth.js gate. For

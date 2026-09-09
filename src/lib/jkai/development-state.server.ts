@@ -7,10 +7,10 @@ export async function loadDelivery(buildId: string) {
   const [row] = await db.select().from(jkaiBuildDeliveries).where(eq(jkaiBuildDeliveries.buildId, buildId));
   return row ?? null;
 }
-export async function ensureDelivery(buildId: string, area = 'Platform', criteria: string[] = []) {
+export async function ensureDelivery(buildId: string, area = 'Platform', criteria: string[] = [], options: Parameters<typeof newDelivery>[3] = {}) {
   const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
   if (!build) throw new Error('Build not found');
-  await db.insert(jkaiBuildDeliveries).values({ buildId, state: newDelivery(build.prompt, area, criteria) }).onConflictDoNothing();
+  await db.insert(jkaiBuildDeliveries).values({ buildId, state: newDelivery(build.prompt, area, criteria, options) }).onConflictDoNothing();
   return (await loadDelivery(buildId))!;
 }
 /** Row lock serialises worker events with user edits; revisions reject stale forms. */

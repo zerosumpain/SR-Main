@@ -300,7 +300,7 @@
 
   <header class="page-hdr">
     <div class="hdr-left">
-      <a class="row-link" href="/jkai/builds">← all builds</a>
+      <a class="row-link" href="/jkai/develop?tab=archive">← all builds</a>
       <div class="kicker">
         JKAI build ·
         <!-- The bucket, not the raw status: `completed` is claimed by a

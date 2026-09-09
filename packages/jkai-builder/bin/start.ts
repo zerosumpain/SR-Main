@@ -8,6 +8,7 @@
 import { Client } from 'pg';
 import { startServer } from '../src/server';
 import { orchestrator } from '$lib/jkai/orchestrator';
+import { autopilotSweep } from '$lib/jkai/development-autopilot.server';
 
 // Socket path resolution, in order:
 //   1. JKAI_BUILDER_SOCKET (explicit override — set by the systemd unit)
@@ -15,6 +16,16 @@ import { orchestrator } from '$lib/jkai/orchestrator';
 //   3. /run/jkai-builder/jkai-builder.sock (system service via RuntimeDirectory)
 /** How often to sweep for builds whose liveness ping stopped. */
 const REAPER_INTERVAL_MS = 5 * 60_000;
+
+/**
+ * How often to take the next step on an unattended development run.
+ *
+ * A minute. Each step is one assessment or one worker restart against a build
+ * whose turns are already capped at five minutes, so a tighter interval would
+ * only re-read the same paused rows; a looser one adds dead time between the
+ * end of a turn and the review of what it produced.
+ */
+const AUTOPILOT_INTERVAL_MS = 60_000;
 
 /**
  * How often to reclaim node_modules from finished builds. Hourly is plenty —
@@ -74,6 +85,13 @@ async function main(): Promise<void> {
       .reclaimFinishedWorkspaces()
       .catch((err) => console.error('[jkai-builder] workspace reclaim sweep failed:', err));
   }, RECLAIM_INTERVAL_MS);
+
+  // Unattended development runs. This process owns build state and holds the
+  // controller lock, so it is the only place a loop can run without racing a
+  // second copy of itself across web workers.
+  setInterval(() => {
+    void autopilotSweep().catch((err) => console.error('[jkai-builder] autopilot sweep failed:', err));
+  }, AUTOPILOT_INTERVAL_MS);
 }
 
 main().catch((err) => {

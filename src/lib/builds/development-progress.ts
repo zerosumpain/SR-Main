@@ -55,8 +55,11 @@ export function featurePreviewUrl(base: string | null, route: string): string | 
  * two copies of this ladder is how a build ends up counted under Building and
  * displayed under Review.
  */
-export type DevelopmentLane = 'brief' | 'building' | 'input' | 'review' | 'accepted';
+export type DevelopmentLane = 'brief' | 'building' | 'input' | 'review' | 'accepted' | 'shipped';
 export function developmentLane(state: DeliveryState): DevelopmentLane {
+  // Shipped outranks accepted: both are true of a released feature, and the
+  // later fact is the one a reader is looking for.
+  if (state.stage === 'pr_open' || state.stage === 'deployed') return 'shipped';
   if (state.acceptedAt || state.stage === 'accepted' || state.stage === 'integrating') return 'accepted';
   if (state.decisions.some((d) => !d.answer)) return 'input';
   if (state.candidate || state.stage === 'review') return 'review';
@@ -77,6 +80,7 @@ export function developmentTone(visibleStage: string): Tone {
   if (stage === 'needs input') return 'action';
   if (stage === 'paused') return 'watch';
   if (stage === 'accepted' || stage === 'deployed') return 'good';
+  if (stage === 'pull request open') return 'steady';
   if (stage === 'brief') return 'quiet';
   return 'steady';
 }

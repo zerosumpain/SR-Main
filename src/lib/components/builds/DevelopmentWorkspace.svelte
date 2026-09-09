@@ -28,7 +28,8 @@
   import { featurePreviewUrl, developmentTone } from '$lib/builds/development-progress';
   import type { DevelopmentProgress } from '$lib/builds/development-progress';
   import { replaceState } from '$app/navigation';
-  import { criterionResult, PRODUCT_AREAS, visibleDevelopmentStage, type DeliveryState } from '$lib/jkai/development';
+  import { criterionResult, PRODUCT_AREAS, RELEASE_POLICIES, AUTOPILOT_ROUNDS, releaseBlocker, visibleDevelopmentStage, type DeliveryState, type ReleasePolicy } from '$lib/jkai/development';
+  import { RELEASE_POLICY_LABELS } from '$lib/constants/development';
   let { buildId }: { buildId: string } = $props();
   type Snapshot = {
     progress?: DevelopmentProgress;
@@ -50,11 +51,17 @@
   let evidence = $state<Record<string, string>>({}); let verdicts = $state<Record<string, string>>({});
   let lesson = $state(''); let lessonEvidence = $state(''); let note = $state(''); let phone = $state(false);
   let previewRoute = $state('');
+  let policyDraft = $state<ReleasePolicy>('preview_only');
+  let rounds = $state<number>(AUTOPILOT_ROUNDS.default);
   let evidenceCandidate: string | null = null; let briefRevision = 0; let loadedBrief = ''; let initialized = false; let refreshing = false;
   const deliveryState = $derived(snapshot?.delivery.state);
   const chosenRoute = $derived(deliveryState?.brief.routes.includes(previewRoute) ? previewRoute : deliveryState?.brief.routes[0] ?? '/');
   const previewHref = $derived(featurePreviewUrl(deliveryState?.preview.url ?? null, chosenRoute));
   const running = $derived(snapshot?.build.status === 'running' || snapshot?.build.status === 'queued');
+  const pilot = $derived(deliveryState?.autopilot);
+  const flying = $derived(Boolean(pilot?.enabled && !pilot.stopReason));
+  const release = $derived(deliveryState?.release);
+  const blockedFromRelease = $derived(deliveryState ? releaseBlocker(deliveryState) : 'Loading.');
   async function refresh() {
     if (refreshing) return; refreshing = true;
     try {
@@ -67,6 +74,7 @@
         scope = s.brief.scope ?? ''; dependencies = s.brief.dependencies ?? ''; assumptions = s.brief.assumptions ?? ''; questions = s.brief.questions ?? ''; validation = s.brief.validation ?? '';
         modelId = snapshot.build.modelId;
         criteria = s.criteria.map((c) => c.text).join('\n'); area = s.area;
+        policyDraft = s.releasePolicy; rounds = s.autopilot?.maxRounds ?? AUTOPILOT_ROUNDS.default;
         for (const c of s.criteria) { evidence[c.id] = c.evidence; verdicts[c.id] = c.verdict; }
         evidenceCandidate = s.candidate;
         loadedBrief = JSON.stringify(briefFields());
@@ -173,6 +181,7 @@
     { label: 'Stage', value: stage },
     { label: 'Worker', value: connection === 'Connected' ? (snapshot?.build.status ?? '—') : connection },
     { label: 'Iterations', value: String(snapshot?.build.iterationsCompleted ?? 0) },
+    { label: 'Autopilot', value: flying ? `round ${pilot?.rounds ?? 0}/${pilot?.maxRounds ?? 0}` : pilot?.stopReason ? 'stopped' : 'off' },
   ]}
   {tabs}
   active={tab}
@@ -180,7 +189,7 @@
   footer={[
     `strangeramblings.com/jkai/develop/${buildId.slice(0, 8)}`,
     snapshot ? `${snapshot.build.modelId} · ${snapshot.build.iterationsCompleted} iterations` : 'loading',
-    'preview only · no PR, no production deploy',
+    deliveryState ? RELEASE_POLICY_LABELS[deliveryState.releasePolicy].toLowerCase() + ' · merging is CI\u2019s decision' : 'preview only',
   ]}
 >
   {#snippet masthead()}
@@ -192,6 +201,13 @@
     <button class="wk-run" disabled={busy || running || deliveryState?.preview.status === 'starting' || !deliveryState?.brief.acceptedAt} onclick={() => act(deliveryState?.session.id ? 'resume' : 'start')}>{deliveryState?.session.id ? 'Continue iteration' : 'Build first working page'}</button>
     <button class="wk-ghost" disabled={busy || !running} onclick={() => act('pause')}>Pause</button>
     <button class="wk-ghost" disabled={busy || !running} onclick={() => act('stop')}>Stop</button>
+    <button
+      class="wk-ghost"
+      class:on={flying}
+      disabled={busy || !deliveryState?.brief.acceptedAt}
+      aria-pressed={flying}
+      onclick={() => act('autopilot', { enabled: !flying, maxRounds: rounds })}
+    >{flying ? 'Stop autopilot' : 'Autopilot'}</button>
   {/snippet}
 
   <div class="wk">
@@ -199,6 +215,12 @@
       <p class="wk-note">Accept the brief below to build the first working page. Remaining questions do not prevent acceptance.</p>
     {/if}
     {#if error}<p class="wk-alert wk-alert-bad" role="alert">{error}</p>{/if}
+    {#if pilot?.stopReason}
+      <div class="wk-alert wk-alert-act">
+        <div><strong>Autopilot stopped</strong><p class="wk-muted">{pilot.stopReason}</p></div>
+        <button class="wk-inline" disabled={busy} onclick={() => act('autopilot', { enabled: true, maxRounds: rounds })}>Run again →</button>
+      </div>
+    {/if}
     {#if openDecisions}
       <div class="wk-alert wk-alert-act">
         <strong>A decision is waiting</strong>
@@ -290,7 +312,7 @@
         <h2 class="wk-h2">Decisions</h2>
         {#each deliveryState.decisions as decision (decision.id)}
           <form class="wk-form" onsubmit={(e) => { e.preventDefault(); void act('answer', { decisionId: decision.id, answer: answers[decision.id] }); }}>
-            <label class="wk-field"><span class="wk-label">{decision.question}</span>{#if decision.answer}<p class="wk-answer">{decision.answer}</p>{:else}<textarea required bind:value={answers[decision.id]} rows="2"></textarea>{/if}</label>
+            <label class="wk-field"><span class="wk-label">{decision.question}</span>{#if decision.answer}<p class="wk-answer">{decision.answer}</p><span class="wk-stamp">{decision.answeredBy === 'autopilot' ? 'Answered by autopilot from the accepted brief' : 'Answered by you'}</span>{:else}<textarea required bind:value={answers[decision.id]} rows="2"></textarea>{/if}</label>
             {#if !decision.answer}<button class="wk-ghost" disabled={busy}>Save answer</button>{/if}
           </form>
         {:else}<p class="wk-muted">No pending decisions.</p>{/each}
@@ -337,7 +359,7 @@
             <form class="wk-row wk-criterion" onsubmit={(e) => { e.preventDefault(); void act('criterion', { criterionId: criterion.id, verdict: verdicts[criterion.id] ?? 'unverified', evidence: evidence[criterion.id] ?? '' }); }}>
               <p class="wk-criterion-text">{criterion.text}</p>
               {#if criterion.assessment?.revision === deliveryState.candidate}
-                <div class="wk-assessment"><strong>Model assessment: {criterion.assessment.verdict} · {criterion.assessment.basis}</strong><p>{criterion.assessment.evidence}</p><span class="wk-stamp">{criterion.assessment.model} · {new Date(criterion.assessment.at).toLocaleString()}{criterion.revision === deliveryState.candidate && criterion.verdict !== 'unverified' ? ' · your saved verdict takes precedence' : ''}</span></div>
+                <div class="wk-assessment"><strong>{criterion.assessment.independent ? 'Independent review' : 'Self-review'}: {criterion.assessment.verdict} · {criterion.assessment.basis}</strong><p>{criterion.assessment.evidence}</p><span class="wk-stamp">{criterion.assessment.model} · {new Date(criterion.assessment.at).toLocaleString()}{criterion.revision === deliveryState.candidate && criterion.verdict !== 'unverified' ? ' · your saved verdict takes precedence' : ''}</span>{#if criterion.assessment.independent === false}<p class="wk-warn">Judged by the same model that wrote the change. Pin a Development adversary in the model settings to get a second opinion.</p>{/if}</div>
               {/if}
               <div class="wk-criterion-controls">
                 <label class="wk-field wk-narrow"><span class="wk-label">Verdict</span><select aria-label="Verdict for {criterion.text}" bind:value={verdicts[criterion.id]}><option value="unverified">Not exercised</option><option value="passed">Passed</option><option value="failed">Failed</option><option value="blocked">Blocked</option></select></label>
@@ -368,6 +390,40 @@
           {#if deliveryState.batch}<span class="wk-stamp">Batch revision {deliveryState.batch.slice(0, 12)}</span>{/if}
         </div>
 
+        <h2 class="wk-h2">Release</h2>
+        <p class="wk-muted">Accepting joins the cumulative batch on this machine. Releasing replays the candidate's diff onto a fresh clone of master, pushes it as a branch and opens a pull request. Merging is CI's decision: a change touching authentication, secrets or the deploy path is classified high risk and waits for you.</p>
+        <div class="wk-actions">
+          <label class="wk-field wk-narrow"><span class="wk-label">Where it stops</span>
+            <select aria-label="Where it stops" bind:value={policyDraft} disabled={busy || running}>
+              {#each RELEASE_POLICIES as value (value)}<option {value}>{RELEASE_POLICY_LABELS[value]}</option>{/each}
+            </select>
+          </label>
+          <button class="wk-ghost" disabled={busy || running || policyDraft === deliveryState.releasePolicy} onclick={() => act('release_policy', { policy: policyDraft })}>Save</button>
+          <button class="wk-run" disabled={busy || running || !!blockedFromRelease} onclick={() => act('release')}>Release this candidate</button>
+          {#if release?.prUrl}<button class="wk-ghost" disabled={busy} onclick={() => act('release_check')}>Check the release</button>{/if}
+        </div>
+        {#if blockedFromRelease && !release?.prUrl}<p class="wk-stamp">{blockedFromRelease}</p>{/if}
+        {#if pilot?.veto}
+          <div class="wk-alert wk-alert-bad">
+            <div><strong>The reviewer vetoed this release</strong><p>{pilot.veto.reason}</p><p class="wk-muted">{pilot.veto.evidence}</p><span class="wk-stamp">{pilot.veto.model} · revision {pilot.veto.revision.slice(0, 12)}</span></div>
+          </div>
+        {/if}
+        {#if release}
+          <ol class="wk-ladder">
+            <li class:done={!!deliveryState.acceptedAt}><span>Accepted into the batch</span><em>{deliveryState.batch ? deliveryState.batch.slice(0, 12) : 'not yet'}</em></li>
+            <li class:done={!!release.prUrl}><span>Pull request</span><em>{#if release.prUrl}<a href={release.prUrl} target="_blank" rel="noopener noreferrer">#{release.prNumber} ↗</a>{:else}not opened{/if}</em></li>
+            <li class:done={release.ci === 'success'} class:bad={release.ci === 'failure'}><span>Checks and merge</span><em>{release.ci === 'success' ? (release.mergeSha ? `merged ${release.mergeSha.slice(0, 8)}` : 'merged') : release.ci === 'failure' ? 'closed without merging' : 'waiting on CI'}</em></li>
+            <li class:done={!!release.deployedAt}><span>Serving in production</span><em>{release.deployedSha ? release.deployedSha.slice(0, 8) : 'not verified'}</em></li>
+          </ol>
+          {#if release.detail}<p class="wk-stamp">{release.detail}</p>{/if}
+          {#if release.blocker}<p class="wk-alert wk-alert-bad" role="alert">{release.blocker}</p>{/if}
+        {/if}
+
+        <details class="wk-fold"><summary>The cumulative batch is stuck</summary>
+          <p class="wk-muted">The batch is a scratch integration area on the build host, not a record. Once a feature has been released, merged and deployed, the same change reaches the batch from both directions and the merge can conflict — after which every new candidate fails to prepare. Rebuilding it from the current site is the fix. Anything accepted but not yet released has to be accepted again.</p>
+          <button class="wk-ghost" disabled={busy || running} onclick={() => act('reset_batch')}>Rebuild the batch from the current site</button>
+        </details>
+
         <details class="wk-fold"><summary>Save a reusable repository lesson</summary>
           <form class="wk-form" onsubmit={(e) => { e.preventDefault(); void act('lesson', { lesson, evidence: lessonEvidence }); }}>
             <label class="wk-field"><span class="wk-label">Verified lesson</span><textarea required bind:value={lesson} rows="3"></textarea></label>
@@ -390,6 +446,7 @@
 <style>
   .wk-assessment { grid-column: 1 / -1; padding: 12px 0; border-top: 1px solid var(--line-hair); font-size: var(--fs-nav); }
   .wk-assessment p { margin: 6px 0; }
+  .wk-warn { color: var(--warn); }
   .wk {
     max-width: 1500px;
     margin: 0 auto;
@@ -684,6 +741,51 @@
   summary:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 3px;
+  }
+
+  /* ——— the release ladder ——— */
+  .wk-ladder {
+    list-style: none;
+    margin: 16px 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    background: var(--card-border);
+    border: 1px solid var(--card-border);
+  }
+  .wk-ladder li {
+    background: var(--bg);
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 13px 18px;
+    font-size: var(--fs-nav);
+    color: var(--text-ghost);
+    border-left: 3px solid transparent;
+  }
+  .wk-ladder li.done {
+    color: var(--text-primary);
+    border-left-color: var(--good);
+  }
+  .wk-ladder li.bad {
+    color: var(--error);
+    border-left-color: var(--error);
+  }
+  .wk-ladder em {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.06em;
+    font-style: normal;
+    color: var(--text-muted);
+  }
+  .wk-ladder a {
+    color: var(--accent-ink);
+  }
+  .wk-ghost.on {
+    border-color: var(--accent);
+    color: var(--accent);
   }
 
   @media (max-width: 760px) {

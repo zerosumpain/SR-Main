@@ -42,7 +42,7 @@
         rows: [
           { label: 'Chat', href: '/jkai', meta: 'THREAD' },
           { label: 'Intel', href: '/jkai/intel', meta: 'THE WORLD' },
-          { label: 'Builds', href: '/jkai/builds', meta: 'AUTONOMOUS' },
+          { label: 'Develop', href: '/jkai/develop', meta: 'AUTONOMOUS' },
         ],
       },
     ],

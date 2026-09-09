@@ -1,5 +1,5 @@
 import { db } from '$lib/db';
-import { jkaiBuilds, jkaiIterations, jkaiLogs } from '$lib/db/schema';
+import { jkaiBuilds, jkaiBuildDeliveries, jkaiIterations, jkaiLogs } from '$lib/db/schema';
 import { eq, asc, desc } from 'drizzle-orm';
 import { error } from '@sveltejs/kit';
 import { env as publicEnv } from '$env/dynamic/public';
@@ -30,5 +30,15 @@ export const load: PageServerLoad = async ({ params }) => {
   // Otherwise the lanes-based V2 view is the default.
   const v3 = publicEnv.PUBLIC_BUILDS_V3 === 'true';
 
-  return { build, iterations, logs: logs.reverse(), v3 };
+  // This page is the ARCHIVE console: the only viewer for sandbox apps, studio
+  // explainers and forge runs, and the advanced view a development feature
+  // links to for raw files and logs. When the build IS a feature, say so and
+  // offer the way back to its workspace, rather than leaving the reader in the
+  // older of the two surfaces with no signpost.
+  const [delivery] = await db
+    .select({ buildId: jkaiBuildDeliveries.buildId })
+    .from(jkaiBuildDeliveries)
+    .where(eq(jkaiBuildDeliveries.buildId, params.id));
+
+  return { build, iterations, logs: logs.reverse(), v3, workspaceHref: delivery ? `/jkai/develop/${params.id}` : null };
 };

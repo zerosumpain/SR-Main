@@ -2102,7 +2102,7 @@ class Orchestrator {
         await emitLog(
           buildId,
           'system',
-          `Studio build complete — all ${build.chapterPlan.length} chapters built and passing the gate. Publish it from the builds page to give it a /projects/<slug>/ URL.`,
+          `Studio build complete — all ${build.chapterPlan.length} chapters built and passing the gate. Promote it from the Archive tab on /jkai/develop to give it a /projects/<slug>/ URL.`,
         );
         await emitStage(buildId, { stage: 'completed', previewUrl });
         try {
@@ -2335,10 +2335,14 @@ class Orchestrator {
     });
 
     try {
+      // A development feature's home is its workspace, not the archive console:
+      // the notification is what a phone opens, and the workspace is where the
+      // brief, the preview and the retry live.
+      const isFeature = Boolean(await loadDelivery(buildId).catch(() => null));
       await notifyAllSubscribers({
         title: 'Build failed',
         body: (failure.message ?? '').slice(0, 140) || 'jkai build failed',
-        url: `/jkai/builds/${buildId}`,
+        url: isFeature ? `/jkai/develop/${buildId}` : `/jkai/builds/${buildId}`,
       });
     } catch (e) {
       console.warn('[jkai-pwa] push failed', e);

@@ -9,7 +9,8 @@ import { instructionHistory, enqueuePendingMessage } from '$lib/jkai/pending-mes
 import { listNotes, addNote, removeNote } from '$lib/jkai/build-notes';
 import { builderClient } from '$lib/jkai/builder-client';
 import { acceptDevelopment, prepareDevelopmentPreview, workspaceBroker } from '$lib/jkai/development-workspace.server';
-import { PRODUCT_AREAS, acceptanceBlocker, inspectionCandidate } from '$lib/jkai/development';
+import { AUTOPILOT_ROUNDS, PRODUCT_AREAS, RELEASE_POLICIES, acceptanceBlocker, inspectionCandidate, releaseBlocker } from '$lib/jkai/development';
+import type { ReleasePolicy } from '$lib/jkai/development';
 import { groomDevelopmentBrief, readBriefFields } from '$lib/jkai/development-grooming.server';
 import type { RequestHandler } from './$types';
 
@@ -108,7 +109,13 @@ export const POST: RequestHandler = async ({ params, request }) => {
         const decision = delivery.state.decisions.find((d) => d.id === body.decisionId);
         if (decision?.answer) throw new Error('This decision has already been answered; reload to see it.');
         if (!decision || !answer) throw new Error('Choose a pending decision and supply an answer.');
-        await mutateDelivery(id, 'decision_answered', (s) => ({ ...s, decisions: s.decisions.map((d) => d.id === decision.id ? { ...d, answer } : d) }), revision);
+        // Clearing the stage matters as much as saving the answer: `needs_input`
+        // is what the portfolio's Needs-you lane reads, and nothing else moved
+        // it, so an answered feature sat in that column until the next start.
+        await mutateDelivery(id, 'decision_answered', (s) => {
+          const decisions = s.decisions.map((d) => d.id === decision.id ? { ...d, answer, answeredBy: 'owner' as const } : d);
+          return { ...s, decisions, stage: s.stage === 'needs_input' && decisions.every((d) => d.answer) ? (s.candidate ? 'review' : 'building') : s.stage };
+        }, revision);
         await builderClient.sessionAnswer(id, decision.id).catch(() => {});
         await enqueuePendingMessage(id, `Owner decision: ${decision.question}\n${answer}`);
         break;
@@ -153,6 +160,47 @@ export const POST: RequestHandler = async ({ params, request }) => {
       case 'continue': {
         const { continueDevelopment } = await import('$lib/jkai/development-review.server');
         return json({ ok: true, next: await continueDevelopment(id, revision) });
+      }
+      case 'autopilot': {
+        // Turning it on clears a previous stop reason and its round counter:
+        // this is the owner saying "go again", not a resume of the run that
+        // already gave up.
+        const on = body.enabled === true;
+        if (on && !delivery.state.brief.acceptedAt) throw new Error('Accept the brief before starting an autonomous run.');
+        const maxRounds = Math.min(AUTOPILOT_ROUNDS.max, Math.max(1, Math.round(Number(body.maxRounds) || AUTOPILOT_ROUNDS.default)));
+        await mutateDelivery(id, on ? 'autopilot_started' : 'autopilot_paused', (s) => ({ ...s,
+          autopilot: on
+            ? { enabled: true, rounds: 0, maxRounds, startedAt: new Date().toISOString() }
+            : s.autopilot ? { ...s.autopilot, enabled: false, stopReason: 'Stopped by you.' } : undefined }), revision);
+        break;
+      }
+      case 'release_policy': {
+        const policy = body.policy as ReleasePolicy;
+        if (!RELEASE_POLICIES.includes(policy)) throw new Error('Choose where this feature should stop.');
+        if (['running', 'queued'].includes(build.status)) throw new Error('Pause the build before changing where it stops.');
+        await mutateDelivery(id, 'release_policy_set', (s) => ({ ...s, releasePolicy: policy }), revision);
+        break;
+      }
+      case 'release': {
+        if (['running', 'queued'].includes(build.status)) throw new Error('Pause the build before releasing its candidate.');
+        const blocker = releaseBlocker(delivery.state);
+        if (blocker) throw new Error(blocker);
+        const { releaseDevelopment } = await import('$lib/jkai/development-release.server');
+        return json({ ok: true, release: await releaseDevelopment(id, revision) });
+      }
+      case 'reset_batch': {
+        // The recovery for a wedged batch. Stated plainly rather than hidden
+        // behind a retry: any feature accepted but not yet released has to be
+        // accepted again afterwards.
+        if (['running', 'queued'].includes(build.status)) throw new Error('Pause the build before rebuilding the batch.');
+        await workspaceBroker('reset-batch', id);
+        await mutateDelivery(id, 'batch_reset', (s) => ({ ...s, batch: null, acceptedAt: s.release?.prUrl ? s.acceptedAt : null,
+          stage: s.stage === 'accepted' && !s.release?.prUrl ? 'review' : s.stage }), revision);
+        break;
+      }
+      case 'release_check': {
+        const { watchDevelopmentRelease } = await import('$lib/jkai/development-release.server');
+        return json({ ok: true, next: await watchDevelopmentRelease(id) });
       }
       case 'accept':
         if (['running', 'queued'].includes(build.status)) throw new Error('Pause implementation before accepting a candidate.');

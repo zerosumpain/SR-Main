@@ -4,7 +4,7 @@ import { previewPlan, readPreviewManifest } from './development-preview-check.mj
 import { previewAccessUrl } from './development-preview-access.mjs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, readFile, writeFile, stat, realpath, rename } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile, stat, realpath, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomBytes, createHash } from 'node:crypto';
@@ -162,6 +162,72 @@ async function snapshot(id) {
   if (!/^[a-f0-9]{40}$/.test(base.trim())) throw new Error('Invalid base revision');
   return { revision, changes: { files: (await git(path, 'diff', '--name-only', base.trim(), revision, '--')).split('\n').filter(Boolean), patch: (await git(path, 'diff', '--no-ext-diff', '--no-textconv', base.trim(), revision, '--')).slice(0, 20000) } };
 }
+/**
+ * Write the candidate's whole diff where the builder can read it.
+ *
+ * Returned as a path, not a body: a release patch runs to megabytes and the
+ * builder reaches this host through `execInSandbox`, whose exec buffer is 5MB
+ * and whose command is base64-enveloped. The workspace root is bind-mounted
+ * into this container at the same path the builder sees, so a file is the
+ * cheapest channel between them. `/snapshot` and `/inspect` keep their capped
+ * excerpts — those are for reading, this is for applying.
+ */
+/**
+ * Throw the cumulative batch away and let it rebuild from the current source.
+ *
+ * `ensureBatch` merges the refreshed checkout into the batch, and once a
+ * feature has been released, merged and deployed, the SAME change arrives from
+ * both directions. If the two forms differ at all the merge conflicts, and
+ * every later /prepare fails with "New checkout work conflicts with the
+ * accepted local batch" — with nothing anywhere able to resolve it.
+ *
+ * The batch is a scratch integration area, not a ledger: its content is
+ * reproducible from source plus the accepted candidates. So resetting is the
+ * honest recovery, and the cost is stated rather than hidden — any accepted
+ * feature that has NOT been released must be accepted again.
+ */
+async function resetBatch() {
+  // Every prepared candidate is a clone of the batch, and its recorded base
+  // commit lives only in that history. Rebuilding the batch from scratch makes
+  // those bases unreachable, so `snapshot` would diff against a root commit and
+  // return the whole tree. Rather than brick them silently, take the clean ones
+  // with it — they cost a `prepare` to rebuild — and refuse outright if any
+  // holds work that has not been committed.
+  const dirty = [];
+  const rebuilt = [];
+  for (const entry of await readdir(root).catch(() => [])) {
+    const path = join(root, entry, 'dev');
+    if (!(await stat(join(path, '.git')).catch(() => null))) continue;
+    if (await git(path, 'status', '--porcelain', '--untracked-files=normal')) dirty.push(entry);
+    else rebuilt.push(entry);
+  }
+  if (dirty.length) throw new Error(`These workspaces hold uncommitted work and would lose it: ${dirty.join(', ')}. Let each finish or stop its build, then try again.`);
+  for (const entry of rebuilt) {
+    await command('rm', ['-rf', join(root, entry, 'dev')]);
+    await command('rm', ['-f', join(trustedRoot, `${entry}-base`)]);
+  }
+  await command('rm', ['-rf', batch, join(trustedRoot, 'source'), join(trustedRoot, 'batch-preview.json')]);
+  await ensureBatch();
+  return { batch: await git(batch, 'rev-parse', 'HEAD'), reset: true, rebuilt };
+}
+
+async function patch(id, revision) {
+  const path = await assertCandidate(id, revision);
+  const base = (await readFile(join(trustedRoot, `${id}-base`), 'utf8')).trim();
+  if (!/^[a-f0-9]{40}$/.test(base)) throw new Error('Invalid base revision');
+  const target = join(root, id, 'candidate.patch');
+  // Through the `git()` helper, NOT a bare `git` in a shell string. This
+  // container runs as root against a workspace owned by uid 1000, so every
+  // invocation needs `-c safe.directory` or git refuses with "dubious
+  // ownership" — which is why that helper exists. Writing the patch with
+  // writeFile rather than a shell redirection keeps it on that path.
+  const diff = await git(path, 'diff', '--no-ext-diff', '--no-textconv', '--binary', base, revision, '--');
+  await writeFile(target, diff.endsWith('\n') ? diff : diff + '\n');
+  await command('chown', ['1000:1000', target]);
+  const { size } = await stat(target);
+  return { revision, path: target, bytes: size };
+}
+
 async function assertCandidate(id, revision) {
   if (typeof revision !== 'string' || !/^[a-f0-9]{40}$/.test(revision)) throw new Error('Invalid candidate revision');
   const path = await workspace(id);
@@ -386,9 +452,9 @@ http.createServer(async (req, res) => {
     for await (const chunk of req) { raw += chunk; if (raw.length > 32000) throw new Error('Request too large'); }
     const body = JSON.parse(raw);
     const id = validId(body.buildId);
-    const methods = { '/inspect': () => inspectPreview(id, body.revision), '/preflight': () => preflight(id), '/allocate': () => allocate(id), '/prepare': () => prepare(id), '/snapshot': () => snapshot(id), '/preview': () => preview(id, body.revision, { routes: body.routes, working: body.working }), '/verify': () => preview(id, body.revision, { routes: body.routes, verify: true }), '/close-preview': () => closePreview(body.batch === true ? `batch-${id}` : id), '/accept': () => accept(id, body.revision, body.routes) };
+    const methods = { '/inspect': () => inspectPreview(id, body.revision), '/patch': () => patch(id, body.revision), '/preflight': () => preflight(id), '/allocate': () => allocate(id), '/prepare': () => prepare(id), '/snapshot': () => snapshot(id), '/preview': () => preview(id, body.revision, { routes: body.routes, working: body.working }), '/verify': () => preview(id, body.revision, { routes: body.routes, verify: true }), '/close-preview': () => closePreview(body.batch === true ? `batch-${id}` : id), '/accept': () => accept(id, body.revision, body.routes), '/reset-batch': () => resetBatch() };
     if (req.method !== 'POST' || !Object.hasOwn(methods, req.url)) { respond(404, { error: 'Unknown operation' }); return; }
-    const deadline = Math.min(Number.isFinite(body.deadline) ? body.deadline : Infinity, Date.now() + (req.url === '/inspect' ? 120_000 : req.url === '/preflight' ? 110_000 : ['/accept', '/verify'].includes(req.url) ? 1_170_000 : 570_000));
+    const deadline = Math.min(Number.isFinite(body.deadline) ? body.deadline : Infinity, Date.now() + (['/inspect', '/patch'].includes(req.url) ? 120_000 : req.url === '/preflight' ? 110_000 : ['/accept', '/verify'].includes(req.url) ? 1_170_000 : 570_000));
     const timings = {};
     const requestedAt = Date.now();
     const work = lane.then(() => { timings.queue = Date.now() - requestedAt; return operation.run({ deadline, timings }, methods[req.url]); });

@@ -38,6 +38,16 @@ compose=(sudo docker compose --env-file "$ROOT/compose.env" -f "$ROOT/compose.ya
 "${compose[@]}" build broker
 # Replacing the broker while a worker is building can strand its in-flight
 # checkpoint. Check live database state immediately before changing containers.
+#
+# The check alone stopped being enough once unattended runs existed: it is a
+# point-in-time read, and autopilot's sweep can start a build in the seconds
+# between it passing and the containers being replaced. So take a hold first —
+# the sweep looks for this file and stays its hand while it is there — and drop
+# it however this script exits.
+HOLD=/opt/sr-development/deploy-hold
+sudo install -d -m 755 /opt/sr-development
+sudo touch "$HOLD"
+trap 'sudo rm -f "$HOLD"' EXIT
 sudo bash -s -- "$SOURCE" <<'IDLE'
 set -euo pipefail
 set -a

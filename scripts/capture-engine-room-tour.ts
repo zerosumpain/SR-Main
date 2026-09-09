@@ -145,10 +145,20 @@ const SURFACES: Surface[] = [
   // is doing real work on this surface rather than rubber-stamping it.
   { id: 'canvas', path: '/jkai/canvas/morning-briefing', settleMs: 3400, until: 'domcontentloaded' },
   {
+    // The builds list folded into /jkai/develop (2026-09-08). The selectors had
+    // to move with it: they matched BuildsListV2's `[class*="prompt"]` cards,
+    // and this page's vocabulary is `dv-*`. A stale selector here is not a
+    // cosmetic miss — this webp ships on a PUBLIC page, so an unmatched
+    // element publishes a real brief. Both registers are covered: `.dv-blurb`
+    // and `.dv-title` are the portfolio's own columns, and the archive rows
+    // reuse them.
     id: 'builds',
-    path: '/jkai/builds',
+    path: '/jkai/develop',
     settleMs: 1600,
-    scrub: [{ sel: '[class*="prompt"], [class*="brief"]', pool: 'line' }],
+    scrub: [
+      { sel: '[class*="dv-blurb"], [class*="dv-title"], [class*="prompt"], [class*="brief"]', pool: 'line' },
+      { sel: '[class*="dv-area-mark"]', pool: 'org' },
+    ],
   },
   {
     // The graph's own node labels are real names, and so is the cluster list beside it.

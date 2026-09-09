@@ -172,7 +172,7 @@
               : 'autonomous builder'
           : 'connecting…',
         state: b ? (b.active ? 'live' : 'static') : 'loading',
-        href: '/jkai/builds',
+        href: '/jkai/develop',
         dp: null,
       },
       {

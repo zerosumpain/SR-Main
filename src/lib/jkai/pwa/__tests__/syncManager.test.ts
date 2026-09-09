@@ -96,9 +96,13 @@ describe('syncAll', () => {
 		});
 		const report = await syncAll({ fetchImpl });
 		expect(report.refreshed.conversations).toBe(1);
-		expect(report.refreshed.builds).toBe(1);
+		expect(report.refreshed.builds).toBe(0);
 		expect((await listConversations()).length).toBeLessThanOrEqual(50);
-		expect(await listBuilds()).toHaveLength(1);
+		// The builds LIST cache is no longer refreshed: its only reader was
+		// /jkai/builds, which folded into /jkai/develop, whose archive is
+		// server-rendered. Syncing it was paying for an offline promise the
+		// surface no longer makes.
+		expect(await listBuilds()).toHaveLength(0);
 		expect(report.durationMs).toBeGreaterThanOrEqual(0);
 	});
 });

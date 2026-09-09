@@ -453,7 +453,7 @@
 <div class="bs-shell">
   <!-- Status rail — always visible, never scrolls away. -->
   <header class="bs-rail">
-    <a class="bs-back" href="/jkai/builds" title="All builds">←</a>
+    <a class="bs-back" href="/jkai/develop?tab=archive" title="All builds">←</a>
     <span class="bs-pill" data-status={buildBucket} title={outcomeNote(buildBucket) ?? ''}>{bucketLabel(buildBucket)}</span>
     <h1 class="bs-title">{build.title ?? build.prompt.slice(0, 60)}</h1>
     <span class="bs-meta bs-meta-iter">iter {iterationCount}</span>

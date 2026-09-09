@@ -435,7 +435,12 @@
      it. Wrapping is safe here and only here — the rule needs `has-actions`,
      and the twelve-room daydream rail (which this shell's comment above is
      about) passes no actions and keeps scrolling. */
-  @media (max-width: 760px) {
+  /* 900px, not 760: every rule in here is scoped to `.has-actions`, so it only
+     ever reaches a page that puts controls in the rail — the development
+     workspace — and leaves the twelve-room daydream rail scrolling as designed.
+     Measured with five controls: at 768px Stop sat 35px and Autopilot 150px
+     past the right edge, inside a horizontal scroller nobody thinks to drag. */
+  @media (max-width: 900px) {
     .ds-rail-inner.has-actions {
       flex-wrap: wrap;
       overflow-x: visible;
@@ -448,6 +453,13 @@
       margin-left: 0;
       padding: 9px 0;
       border-top: 1px solid var(--line-hair);
+      /* The group wraps too, not just the rail around it. Giving the row full
+         width moved it below the tabs but left its own children on one line —
+         four controls fitted 390px and five did not, putting the last one 79px
+         off screen where nothing can reach it. Measured, not assumed: this is
+         the same failure that once carried Stop 387px out of view. */
+      flex-wrap: wrap;
+      row-gap: 8px;
     }
   }
 

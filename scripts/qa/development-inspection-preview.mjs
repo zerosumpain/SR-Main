@@ -29,6 +29,6 @@ try {
  const preview=await browser.newPage();await preview.goto(previewHref,{waitUntil:'domcontentloaded'});
  await preview.getByRole('heading',{name:'Saved work can be inspected'}).waitFor({timeout:30000});
  await page.getByRole('button',{name:'Delivery',exact:true}).click();
- assert.equal(await page.getByRole('button',{name:'Accept into batch',exact:true}).isDisabled(),true);
+ assert.equal(await page.getByRole('button',{name:'Continue automatically',exact:true}).isDisabled(),true);
  console.log('PASS: real isolated inspection page loads; failed checks remain visible and batch acceptance remains disabled. No model called.');
 } finally { await browser.close(); }

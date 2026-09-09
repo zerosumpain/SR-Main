@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { db } from '$lib/db';
-import { jkaiBuilds, workflows, workflowRuns, projectVisibility } from '$lib/db/schema';
+import { jkaiBuilds, jkaiBuildDeliveries, workflows, workflowRuns, projectVisibility } from '$lib/db/schema';
 import { and, desc, eq, inArray, isNull, like, or, sql } from 'drizzle-orm';
 import { STATIC_PROJECT_KEYS } from '$lib/projects/visibility';
 import { listRunningJobsByConversation } from '$lib/workflows/chat/job-store';
@@ -30,7 +30,7 @@ const SUMMARY_CACHE_MS = 60_000;
 const PROJECT_SLUG_PATTERN = '^[a-z0-9][a-z0-9-]*$';
 
 // A build counts as "in flight" while in one of these statuses (and not yet
-// published). Mirrors the bucket() logic in $lib/builds/BuildsListV2.svelte.
+// published). Mirrors `bucketOf` in $lib/builds/build-status.
 const ACTIVE_BUILD = new Set([
   'running',
   'queued',
@@ -39,6 +39,19 @@ const ACTIVE_BUILD = new Set([
   'awaiting_iter_approval',
   'pending',
 ]);
+
+/**
+ * `paused` means two different things, and only one of them is activity.
+ *
+ * A development feature is paused for its whole review life — that is where it
+ * waits for a preview to be tried and evidence recorded — so reading `paused`
+ * as "building" pinned the public front page to a false state for as long as a
+ * feature sat in review, which on an unattended run is hours. A feature that is
+ * genuinely mid-turn is `running` or `queued` and still reads as active.
+ */
+function pausedInReview(build: { status: string; isFeature: boolean }): boolean {
+  return build.isFeature && build.status === 'paused';
+}
 
 interface VitalsPayload {
   jkai: { activeJobs: number };
@@ -54,7 +67,7 @@ interface VitalsPayload {
   generatedAt: string;
 }
 
-type LatestBuild = { status: string; planStatus: string; publishedSlug: string | null } | undefined;
+type LatestBuild = { status: string; planStatus: string; publishedSlug: string | null; isFeature: boolean } | undefined;
 type PublicSummary = {
   shippedCount: number;
   latestPublished: { title: string | null; publishedSlug: string | null } | undefined;
@@ -78,7 +91,7 @@ async function readWalk(): Promise<VitalsPayload['walk']> {
 }
 
 function deriveBuilder(
-  latest: { status: string; planStatus: string; publishedSlug: string | null } | undefined,
+  latest: { status: string; planStatus: string; publishedSlug: string | null; isFeature: boolean } | undefined,
   latestPublished: { title: string | null; publishedSlug: string | null } | undefined,
   shippedCount: number,
 ): VitalsPayload['builder'] {
@@ -93,7 +106,7 @@ function deriveBuilder(
     return { stage: 'idle', active: false, shippedCount, lastShippedTitle, lastShippedHref };
   }
 
-  const active = !latest.publishedSlug && ACTIVE_BUILD.has(latest.status);
+  const active = !latest.publishedSlug && ACTIVE_BUILD.has(latest.status) && !pausedInReview(latest);
   let stage: VitalsPayload['builder']['stage'];
   if (active) {
     stage = latest.status === 'running' || latest.status === 'paused' ? 'building' : 'planning';
@@ -116,12 +129,15 @@ async function latestBuild(): Promise<LatestBuild> {
       status: jkaiBuilds.status,
       planStatus: jkaiBuilds.planStatus,
       publishedSlug: jkaiBuilds.publishedSlug,
+      deliveryId: jkaiBuildDeliveries.buildId,
     })
     .from(jkaiBuilds)
+    .leftJoin(jkaiBuildDeliveries, eq(jkaiBuildDeliveries.buildId, jkaiBuilds.id))
     .orderBy(desc(jkaiBuilds.createdAt))
     .limit(1)
     .then((rows) => {
-      const data = rows[0];
+      const row = rows[0];
+      const data = row ? { ...row, isFeature: Boolean(row.deliveryId) } : undefined;
       buildCache = { at: Date.now(), data };
       return data;
     })

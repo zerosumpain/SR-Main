@@ -22,7 +22,7 @@ describe('isPublicPath', () => {
 
 describe('isGuestAllowedPath — deny-by-default', () => {
   it('denies a guest every authed page and API by default', () => {
-    for (const p of ['/jkai', '/jkai/builds', '/admin', '/admin/access', '/live', '/deepdive/abc', '/api/admin/access', '/api/jkai/chat', '/api/deepdive/x']) {
+    for (const p of ['/jkai', '/jkai/develop', '/admin', '/admin/access', '/live', '/deepdive/abc', '/api/admin/access', '/api/jkai/chat', '/api/deepdive/x']) {
       expect(isGuestAllowedPath(p)).toBe(false);
     }
   });
