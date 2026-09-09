@@ -1,49 +1,145 @@
-import { PATTERNS, SCENARIOS, type Artefact, type StageInput, type StageOutput } from './contracts';
-import { PolicyError, validateOutput } from './validation';
+import { PATTERNS, REPORT_SECTIONS, SCENARIOS, SYNTHESIS_STAGE, type Artefact, type StageInput, type StageOutput } from './contracts';
+import { scoreExploits } from './exposure';
+import { clampWarnings, PolicyError, triageArtefacts, triageOutput } from './validation';
 import { modelApplicability } from './models';
 import { preserveAmbiguity } from './entities';
 import { runPolicyTests } from './tests';
 import type { ModelCall } from './server/provider';
 import type { Research } from './server/research';
 
-export type PipelineDeps = { model: ModelCall; research: Research; signal: AbortSignal };
+/** Compact summaries of this reader's OTHER completed assessments, for stage 11. */
+export type Neighbour = { id: string; title: string; policyArea: string | null; jurisdiction: string | null; completedAt: string | null; artefacts: { id: string; kind: string; label: string; statement: string }[] };
+export type Neighbours = () => Promise<Neighbour[]>;
+export type PipelineDeps = { model: ModelCall; research: Research; signal: AbortSignal; neighbours?: Neighbours };
+
+/**
+ * How many actors get an exploitation pass. Every resolved actor with a profile
+ * is a candidate; the ones with the most connections in the policy graph go
+ * first, because an actor nothing depends on has little to exploit. The rest are
+ * named in a warning rather than dropped silently.
+ */
+const MAX_EXPLOIT_ACTORS = 12;
+
+/**
+ * Stages that fan out over a list — one call per passage, actor, pattern or
+ * scenario — no longer let a single bad call end the stage.
+ *
+ * The first production run died this way: passage 1 of 20 succeeded, passage 10
+ * failed, and the other eighteen were never attempted. A unit of fan-out that
+ * fails is now recorded as a gap and the sweep continues; the coverage rules at
+ * the bottom of `executeStage` decide whether what came back is an assessment or
+ * a failure. `CONSECUTIVE_LIMIT` stops a dead provider burning through the whole
+ * list to reach the same conclusion twenty calls later.
+ */
+const CONSECUTIVE_LIMIT = 3;
+
 export async function executeStage(input: StageInput, deps: PipelineDeps): Promise<StageOutput> {
   const { stage } = input;
   const output: StageOutput = { artefacts: [], warnings: [] };
-  const request = async (key: string, context: Artefact[]) => {
+  let consecutive = 0;
+  let lastFault: PolicyError | null = null;
+
+  // Identifiers are capped at 100 characters, and a fan-out key can be a resolved
+  // actor id that is nearly that long on its own. The prefix is therefore a short
+  // sequence number, stable because every fan-out below iterates in sorted order.
+  let seq = 0;
+  const request = async (key: string, context: Artefact[], extra: Record<string, unknown> = {}) => {
     deps.signal.throwIfAborted();
-    const raw = await deps.model(stage, key, { ...input, artefacts: context, idPrefix: `s${stage}_${key}_`, targetActorId: stage === 4 ? key : null, targetPattern: stage === 7 ? key : null, targetScenario: stage === 9 ? key : null, modelLibrary: stage === 7 ? modelApplicability(input.artefacts) : undefined });
-    const result = validateOutput(raw, stage, [...input.artefacts, ...output.artefacts]);
+    const slot = key === 'main' ? 'main' : String(seq++);
+    const raw = await deps.model(stage, key, { ...input, artefacts: context, idPrefix: `s${stage}_${slot}_`, targetActorId: stage === 4 || stage === 10 ? key : null, targetPattern: stage === 7 ? key : null, targetScenario: stage === 9 ? key : null, modelLibrary: stage === 7 ? modelApplicability(input.artefacts) : undefined, ...extra });
+    const result = triageOutput(raw, stage, [...input.artefacts, ...output.artefacts]);
     output.artefacts.push(...result.artefacts); output.warnings.push(...result.warnings);
+    return result;
   };
+
+  /** `request`, but a failure becomes a recorded gap instead of a dead stage. */
+  const attempt = async (key: string, context: Artefact[], describe: string, extra: Record<string, unknown> = {}) => {
+    try {
+      const result = await request(key, context, extra);
+      consecutive = 0;
+      return result;
+    } catch (err) {
+      deps.signal.throwIfAborted();
+      if (!(err instanceof PolicyError)) throw err;
+      lastFault = err;
+      consecutive++;
+      output.warnings.push(`${describe} could not be assessed: ${err.message} It is missing from this stage.`);
+      if (consecutive >= CONSECUTIVE_LIMIT) throw new PolicyError(err.code, `${CONSECUTIVE_LIMIT} consecutive parts of this stage failed for the same reason. ${err.message}`);
+      return null;
+    }
+  };
+
   if (stage === 1) {
-    for (const passage of input.artefacts.filter((a) => a.kind === 'passage')) await request(passage.id, [passage]);
+    const passages = input.artefacts.filter((a) => a.kind === 'passage');
+    for (const passage of passages) await attempt(passage.id, [passage], `Passage “${passage.label}”`);
   } else if (stage === 4) {
     for (const actor of input.artefacts.filter((a) => a.kind === 'actor' && a.id.startsWith('s2_'))) {
       const related = new Set([actor.id, ...actor.refs, ...input.artefacts.filter((a) => a.fromId === actor.id || a.toId === actor.id || a.refs.includes(actor.id)).flatMap((a) => [a.id, ...a.refs, a.fromId ?? '', a.toId ?? ''])]);
       const context = input.artefacts.filter((a) => related.has(a.id));
-      await request(actor.id, [...context, ...(context.includes(actor) ? [] : [actor])]);
-      const latest = output.artefacts.at(-1);
-      if (latest?.kind !== 'profile' || latest.data.actorId !== actor.id) throw new PolicyError('coverage', 'A consequential actor has no incentive profile.');
+      const result = await attempt(actor.id, [...context, ...(context.includes(actor) ? [] : [actor])], `The incentive profile for ${actor.label}`);
+      if (result && !result.artefacts.some((a) => a.kind === 'profile' && a.data.actorId === actor.id)) {
+        output.warnings.push(`${actor.label} has no incentive profile in this assessment; its motivations were not modelled.`);
+      }
     }
   } else if (stage === 7 || stage === 9) {
     const context = input.artefacts.filter((a) => !['passage', 'research_source', 'alias', 'node'].includes(a.kind) && (a.kind !== 'actor' || a.id.startsWith('s2_')));
-    for (const key of stage === 7 ? PATTERNS : SCENARIOS) await request(key, context);
+    for (const key of stage === 7 ? PATTERNS : SCENARIOS) await attempt(key, context, `The ${key.replaceAll('_', ' ')} ${stage === 7 ? 'interaction model' : 'scenario'}`);
+  } else if (stage === 6) {
+    // One evidence pass per research question, so retrieved sources are read
+    // against the question they answer rather than all at once. Both the depth
+    // and the size of a single call improve; the shipped code sent everything in
+    // one request and hit the context ceiling as soon as research succeeded.
+    const inventory = input.artefacts.filter((a) => !['passage', 'research_source', 'alias', 'node'].includes(a.kind) && (a.kind !== 'actor' || a.id.startsWith('s2_')));
+    for (const question of input.artefacts.filter((a) => a.kind === 'research_question')) {
+      const sources = input.artefacts.filter((a) => a.kind === 'research_source' && a.data.questionId === question.id);
+      if (!sources.length) continue;
+      await attempt(question.id, [...inventory, question, ...sources], `Evidence for “${question.label}”`);
+    }
+    await attempt('main', inventory, 'Evidence drawn from the policy document itself');
   } else if (stage === 8) {
     output.artefacts = runPolicyTests(input.artefacts);
+  } else if (stage === 10) {
+    const profiles = input.artefacts.filter((a) => a.kind === 'profile');
+    const ranked = rankActors(input.artefacts, profiles);
+    if (ranked.length > MAX_EXPLOIT_ACTORS) output.warnings.push(`${ranked.length - MAX_EXPLOIT_ACTORS} of ${ranked.length} profiled actors were not red-teamed in this pass: ${ranked.slice(MAX_EXPLOIT_ACTORS).map((a) => a.label).join(', ')}. They are the least connected in the policy graph, not the least important.`);
+    const base = input.artefacts.filter((a) => !['passage', 'research_source', 'alias', 'node', 'profile'].includes(a.kind) && (a.kind !== 'actor' || a.id.startsWith('s2_')));
+    for (const actor of ranked.slice(0, MAX_EXPLOIT_ACTORS)) {
+      await attempt(actor.id, [...base, ...profiles.filter((p) => p.data.actorId === actor.id)], `Exploitation plays for ${actor.label}`);
+    }
+    scoreExploits(output.artefacts);
+  } else if (stage === 11) {
+    const neighbours = (await deps.neighbours?.()) ?? [];
+    if (!neighbours.length) {
+      output.warnings.push('No other completed policy assessment was available to compare, so cross-policy exposure could not be examined. Weaknesses that only appear when policies coexist are outside this assessment.');
+    } else {
+      const context = input.artefacts.filter((a) => !['passage', 'research_source', 'alias', 'node'].includes(a.kind) && (a.kind !== 'actor' || a.id.startsWith('s2_')));
+      await attempt('main', context, `Cross-policy exposure against ${neighbours.length} other assessment${neighbours.length === 1 ? '' : 's'}`, { neighbours });
+      const known = new Set(neighbours.map((n) => n.id));
+      const invented = output.artefacts.filter((a) => a.kind === 'cross_policy' && !known.has(String(a.data.otherAnalysisId)));
+      if (invented.length) {
+        output.artefacts = output.artefacts.filter((a) => !invented.includes(a));
+        output.warnings.push(`${invented.length} cross-policy claim${invented.length === 1 ? '' : 's'} named an assessment that was not supplied and ${invented.length === 1 ? 'was' : 'were'} discarded.`);
+      }
+    }
   } else {
     // Full source text was inspected passage by passage. Later stages receive the
     // structured inventory plus source quotes, not a silently truncated paper.
     const context = input.artefacts.filter((a) => a.kind !== 'passage' && (stage !== 2 || a.kind === 'actor') && (stage < 3 || a.kind !== 'actor' || a.id.startsWith('s2_')));
     await request('main', context);
   }
-  if (stage === 1 && !['claim', 'mechanism', 'assumption', 'actor'].every((k) => output.artefacts.some((a) => a.kind === k))) throw new PolicyError('coverage', 'The document did not yield the required claim, mechanism, assumption and actor inventory.');
+
+  const kinds = (...wanted: string[]) => wanted.filter((k) => !output.artefacts.some((a) => a.kind === k));
+  if (stage === 1) {
+    const missing = kinds('claim', 'mechanism', 'assumption', 'actor');
+    if (missing.length) throw new PolicyError(lastFault?.code ?? 'coverage', `The document did not yield the required claim, mechanism, assumption and actor inventory.${lastFault ? ` Last reason: ${lastFault.message}` : ''}`);
+  }
   if (stage === 2) {
     output.artefacts = preserveAmbiguity(output.artefacts, input.artefacts);
     const mentions = input.artefacts.filter((a) => a.kind === 'actor');
     if (!mentions.every((m) => output.artefacts.some((a) => a.kind === 'actor' && (a.data.mentions as string[]).includes(m.id)))) throw new PolicyError('coverage', 'Entity resolution omitted source mentions.');
   }
-  if (stage === 3 && !['node', 'edge'].every((k) => output.artefacts.some((a) => a.kind === k))) throw new PolicyError('coverage', 'The graph stage did not produce inspectable nodes and relationships.');
+  if (stage === 3 && kinds('node', 'edge').length) throw new PolicyError('coverage', 'The graph stage did not produce inspectable nodes and relationships.');
+  if (stage === 4 && !output.artefacts.some((a) => a.kind === 'profile')) throw new PolicyError(lastFault?.code ?? 'coverage', `No actor could be profiled, so there are no incentives to reason about.${lastFault ? ` Last reason: ${lastFault.message}` : ''}`);
   if (stage === 5) {
     const questions = output.artefacts.filter((a) => a.kind === 'research_question');
     if (!questions.length || questions.length > 8 || questions.length !== output.artefacts.length) throw new PolicyError('coverage', 'Research planning must produce between one and eight targeted questions.');
@@ -52,15 +148,50 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     const researched = await deps.research(questions, deps.signal);
     output.artefacts.push(...researched.artefacts); output.warnings.push(...researched.warnings);
   }
-  if (stage === 7 && !PATTERNS.every((p) => output.artefacts.some((a) => a.data.pattern === p))) throw new PolicyError('coverage', 'The interaction stage did not assess all eight model patterns.');
-  if (stage === 9 && !SCENARIOS.every((s) => output.artefacts.some((a) => a.data.scenario === s))) throw new PolicyError('coverage', 'The scenario stage did not assess all eight conditions.');
-  if (stage === 10) {
-    const sections = ['executive_assessment', 'scope_methodology', 'objectives', 'actors', 'mechanisms', 'high_risk_assumptions', 'test_results', 'strategic_responses', 'scenarios', 'evidence_gaps', 'confidence_uncertainty', 'distribution', 'unresolved_questions'];
-    if (!sections.every((s) => output.artefacts.some((a) => a.data.section === s)) || !output.artefacts.some((a) => a.kind === 'recommendation')) throw new PolicyError('coverage', 'The final assessment omitted required report sections or redesign options.');
+  if (stage === 7) requireMajority(output, PATTERNS, (a) => String(a.data.pattern), 'interaction model', lastFault);
+  if (stage === 9) requireMajority(output, SCENARIOS, (a) => String(a.data.scenario), 'scenario', lastFault);
+  if (stage === 10 && !output.artefacts.some((a) => a.kind === 'exploit')) throw new PolicyError(lastFault?.code ?? 'coverage', `No actor could be red-teamed, so the assessment has no exploitation playbook.${lastFault ? ` Last reason: ${lastFault.message}` : ''}`);
+  if (stage === SYNTHESIS_STAGE) {
+    if (!REPORT_SECTIONS.every((section) => output.artefacts.some((a) => a.data.section === section)) || !output.artefacts.some((a) => a.kind === 'recommendation')) throw new PolicyError('coverage', 'The final assessment omitted required report sections or redesign options.');
   }
-  if (!output.artefacts.length) throw new PolicyError('coverage', 'This stage produced no artefacts.');
-  return validateOutput(output, stage, input.artefacts);
+  // Stage 11 is the one stage that may legitimately produce nothing: a reader
+  // with a single policy has no cross-policy exposure, and saying so is the answer.
+  if (!output.artefacts.length && stage !== 11) throw new PolicyError(lastFault?.code ?? 'coverage', `This stage produced no artefacts.${lastFault ? ` Last reason: ${lastFault.message}` : ''}`);
+
+  const final = triageArtefacts(output, stage, input.artefacts);
+  return { artefacts: final.artefacts, warnings: clampWarnings(final.warnings) };
 }
+
+/**
+ * A fixed library is only a guarantee if most of it actually ran. Without a strict
+ * majority the stage has not done its job; with one, the absences are named in the
+ * assessment and the run continues as `completed_with_gaps`.
+ */
+function requireMajority(output: StageOutput, library: readonly string[], of: (a: Artefact) => string, noun: string, lastFault: PolicyError | null) {
+  const covered = new Set(output.artefacts.map(of));
+  const missing = library.filter((key) => !covered.has(key));
+  const covered_ = library.length - missing.length;
+  if (covered_ * 2 <= library.length) throw new PolicyError(lastFault?.code ?? 'coverage', `Only ${covered_} of ${library.length} ${noun}s could be assessed.${lastFault ? ` Last reason: ${lastFault.message}` : ''}`);
+  if (missing.length) output.warnings.push(`${missing.length} of ${library.length} ${noun}s were not assessed: ${missing.map((m) => m.replaceAll('_', ' ')).join(', ')}. Treat the assessment as incomplete on those grounds.`);
+}
+
+/**
+ * Profiled actors, most connected first. Degree in the policy graph is a crude
+ * proxy for how much of the policy runs through an actor, and it is the only
+ * ordering available before the red team has run.
+ */
+function rankActors(all: Artefact[], profiles: Artefact[]): Artefact[] {
+  const degree = new Map<string, number>();
+  for (const edge of all) {
+    if (edge.kind !== 'edge') continue;
+    for (const end of [edge.fromId, edge.toId]) if (end) degree.set(end, (degree.get(end) ?? 0) + 1);
+  }
+  return profiles
+    .map((p) => all.find((a) => a.kind === 'actor' && a.id === p.data.actorId))
+    .filter((a): a is Artefact => !!a)
+    .sort((a, b) => (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0) || a.id.localeCompare(b.id));
+}
+
 export function priority(a: Artefact): number {
   return Number(a.data.importance) * Number(a.data.uncertainty) * Number(a.data.consequence);
 }

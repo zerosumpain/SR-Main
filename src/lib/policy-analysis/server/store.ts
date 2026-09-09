@@ -3,6 +3,7 @@ import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db, type DbExecutor } from '$lib/db';
 import { policyAnalyses, policyArtefacts, policyDocuments, policyExecutions, policyModelCalls, policyProvenance, policyStages, workflowRuns, workflows } from '$lib/db/schema';
 import { STAGES, TRIGGER, WORKFLOW_ID, type Artefact } from '../contracts';
+import type { Neighbour } from '../pipeline';
 import { PolicyError } from '../validation';
 import type { Submission } from './ingest';
 
@@ -81,4 +82,36 @@ export async function control(owner: string, id: string, action: 'cancel' | 'res
     }
     return { status: action === 'cancel' ? 'cancelled' : 'queued' };
   });
+}
+
+/**
+ * Compact summaries of this owner's OTHER completed assessments, for the
+ * cross-policy stage.
+ *
+ * Bounded on purpose. The stage needs enough to recognise that two policies land
+ * on the same actor or rest on the same assumption, not the other assessments in
+ * full — and the model context ceiling is 180,000 characters for the whole call.
+ * Statements are clipped and only the kinds that can collide are carried.
+ */
+const NEIGHBOUR_KINDS = ['actor', 'mechanism', 'assumption', 'exploit', 'finding'];
+const NEIGHBOUR_LIMIT = 6;
+const NEIGHBOUR_ARTEFACTS = 60;
+
+export async function neighbourSummaries(owner: string, exclude: string): Promise<Neighbour[]> {
+  const others = await db.select({ id: policyAnalyses.id, title: policyAnalyses.title, policyArea: policyAnalyses.policyArea, jurisdiction: policyAnalyses.jurisdiction, completedAt: policyAnalyses.completedAt })
+    .from(policyAnalyses)
+    .where(and(eq(policyAnalyses.owner, owner), inArray(policyAnalyses.status, ['completed', 'completed_with_gaps'])))
+    .orderBy(desc(policyAnalyses.completedAt)).limit(NEIGHBOUR_LIMIT + 1);
+  const shortlist = others.filter((o) => o.id !== exclude).slice(0, NEIGHBOUR_LIMIT);
+  if (!shortlist.length) return [];
+  const rows = await db.select({ analysisId: policyArtefacts.analysisId, id: policyArtefacts.id, kind: policyArtefacts.kind, label: policyArtefacts.label, statement: policyArtefacts.statement, confidence: policyArtefacts.confidence })
+    .from(policyArtefacts)
+    .where(and(inArray(policyArtefacts.analysisId, shortlist.map((o) => o.id)), inArray(policyArtefacts.kind, NEIGHBOUR_KINDS)))
+    .orderBy(desc(policyArtefacts.confidence));
+  return shortlist.map((o) => ({
+    id: o.id, title: o.title, policyArea: o.policyArea, jurisdiction: o.jurisdiction,
+    completedAt: o.completedAt ? o.completedAt.toISOString() : null,
+    artefacts: rows.filter((r) => r.analysisId === o.id).slice(0, NEIGHBOUR_ARTEFACTS)
+      .map((r) => ({ id: r.id, kind: r.kind, label: r.label, statement: r.statement.slice(0, 600) })),
+  }));
 }

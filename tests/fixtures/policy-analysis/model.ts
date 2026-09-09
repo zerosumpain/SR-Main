@@ -1,5 +1,5 @@
 // Synthetic provider responses used only by automated tests. Not a runtime fallback.
-import { artefact, PATTERNS, SCENARIOS, PROFILE_FIELDS, type Artefact, type StageInput, type StageOutput } from '../../../src/lib/policy-analysis/contracts';
+import { artefact, PATTERNS, SCENARIOS, PROFILE_FIELDS, REPORT_SECTIONS, type Artefact, type StageInput, type StageOutput } from '../../../src/lib/policy-analysis/contracts';
 export function fixtureModel(stage: number, _key: string, raw: unknown): StageOutput {
   const input = raw as StageInput & { idPrefix: string; targetActorId?: string; targetPattern?: string; targetScenario?: string };
   const prefix = input.idPrefix;
@@ -37,7 +37,12 @@ export function fixtureModel(stage: number, _key: string, raw: unknown): StageOu
   } else if (stage === 9) {
     items = SCENARIOS.filter((s) => !input.targetScenario || input.targetScenario === s).map((scenario) => make(scenario, 'scenario', { scenario, changedConditions: 'Capacity and cooperation vary.', firstActor: one('actor').id, strategy: 'Delay delivery when capacity is low.', downstreamEffects: ['Longer waits.'], affectedOutcomes: [one('claim').id], detectability: 'Monthly reports, subject to gaming.', correction: 'Review resourcing.', weaknesses: ['No assured capacity.'], assumptions: [one('assumption').id], sensitivity: ['If capacity is sufficient, cooperation is feasible; if not, minimum compliance becomes more plausible. Capacity most changes this result.'] }, [one('model').id, one('test').id, one('assumption').id]));
   } else if (stage === 10) {
-    const sections = ['executive_assessment', 'scope_methodology', 'objectives', 'actors', 'mechanisms', 'high_risk_assumptions', 'test_results', 'strategic_responses', 'scenarios', 'evidence_gaps', 'confidence_uncertainty', 'distribution', 'unresolved_questions'];
+    const a = input.artefacts.find((x) => x.id === input.targetActorId)!;
+    items = [make('exploit', 'exploit', { actorId: a.id, motivation: 'Avoids implementation cost while remaining compliant.', play: 'Report against the measure without changing the unobservable practice.', legality: 'compliant', targets: [one('mechanism').id], preconditions: [one('assumption').id], payoff: 'Retains discretion and avoids cost.', costToPolicy: 'The objective is not delivered while the measure reads well.', incentive: 0.6, ease: 0.6, impact: 0.6, concealment: 0.6, earlyWarning: 'Measure improves while complaints do not fall.', counter: 'Add an independent check of the unobservable practice.', precedent: 'None identified in this synthetic fixture.' }, [one('profile').id, one('mechanism').id, one('assumption').id])];
+  } else if (stage === 11) {
+    items = [];
+  } else if (stage === 12) {
+    const sections = [...REPORT_SECTIONS];
     items = sections.map((section) => make(section, 'finding', { section, resultIds: [one('test').id], hypothesisIds: [one('assumption').id] }, [one('test').id, one('assumption').id]));
     items.push({ ...make('redesign', 'recommendation', { findingIds: [items[0].id], change: 'Commit resources and review authority.', tradeoffs: 'Additional public expenditure.', beneficiaries: ['Service users'], burdenBearers: ['Department'], validationNeeded: 'Verify capacity and legal powers.' }, [items[0].id]), origin: 'normative_judgement' });
   }

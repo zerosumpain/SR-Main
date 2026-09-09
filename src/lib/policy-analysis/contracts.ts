@@ -3,9 +3,11 @@ import { z } from 'zod';
 export const STAGES = [
   'Document ingestion', 'Document decomposition', 'Entity resolution', 'Policy knowledge graph',
   'Actor and incentive profiles', 'Targeted research', 'Evidence matrix', 'Interaction models',
-  'Automated policy tests', 'Adversarial scenarios and sensitivity', 'Synthesis',
+  'Automated policy tests', 'Adversarial scenarios and sensitivity', 'Exploitation playbook',
+  'Cross-policy exposure', 'Synthesis',
 ] as const;
-export const PROMPT_VERSION = 'policy-analysis/1.0';
+export const SYNTHESIS_STAGE = STAGES.length - 1;
+export const PROMPT_VERSION = 'policy-analysis/2.0';
 export const MAX_BYTES = 10 * 1024 * 1024;
 export const MAX_CHARACTERS = 600_000;
 export const MAX_PAGES = 400;
@@ -13,6 +15,8 @@ export const TRIGGER = 'policy-analysis';
 export const WORKFLOW_ID = 'policy-analysis-v1';
 export const ORIGINS = ['extracted_fact', 'external_evidence', 'structural_inference', 'behavioural_hypothesis', 'model_result', 'normative_judgement'] as const;
 export const RELATIONS = ['funds', 'regulates', 'commissions', 'delivers', 'reports_to', 'depends_on', 'supplies_data_to', 'has_authority_over', 'bears_cost_of', 'receives_benefit_from', 'is_accountable_for', 'can_veto', 'is_measured_by', 'is_exposed_to', 'supports', 'contradicts', 'assumes', 'provides_evidence_for', 'owns_data', 'reciprocates', 'sanctions', 'can_adapt'] as const;
+export const LEGALITY = ['compliant', 'grey', 'breach'] as const;
+export const CROSS_PATTERNS = ['conflicting_demand', 'cumulative_burden', 'shared_assumption', 'regime_arbitrage', 'common_actor_overload', 'contradictory_measure', 'duplicated_authority'] as const;
 export const PATTERNS = ['principal_agent', 'collective_action', 'coordination', 'metric_gaming', 'information_asymmetry', 'enforcement_credibility', 'bargaining_veto', 'repeated_interaction'] as const;
 export const SCENARIOS = ['genuine_cooperation', 'minimum_compliance', 'strategic_gaming', 'limited_capacity', 'leadership_change', 'active_opposition', 'poor_information', 'unequal_distribution'] as const;
 const text = z.string().min(1).max(12000);
@@ -40,9 +44,26 @@ export const dataSchemas = {
   model: z.object({ pattern: z.enum(PATTERNS), players: ids, strategies: strings, decisionOrder: text, information: text, costs: text, benefits: text, rewards: text, sanctions: text, dependencies: ids, assumptions: ids.min(1), responses: strings, equilibria: strings, explanation: text, applicability: text }),
   test: z.object({ testId: text, rationale: text, inputs: ids, rule: text, reasoning: text, result: z.enum(['low_risk', 'moderate_risk', 'high_risk', 'indeterminate']), severity: z.enum(['low', 'moderate', 'high', 'unknown']), actors: ids, mitigation: text }),
   scenario: z.object({ scenario: z.enum(SCENARIOS), changedConditions: text, firstActor: z.string().nullable(), strategy: text, downstreamEffects: strings, affectedOutcomes: ids, detectability: text, correction: text, weaknesses: strings, assumptions: ids.min(1), sensitivity: strings.min(1) }),
-  finding: z.object({ section: z.enum(['executive_assessment', 'scope_methodology', 'objectives', 'actors', 'mechanisms', 'high_risk_assumptions', 'test_results', 'strategic_responses', 'scenarios', 'evidence_gaps', 'confidence_uncertainty', 'distribution', 'unresolved_questions']), resultIds: ids.min(1), hypothesisIds: ids.min(1) }),
+  exploit: z.object({
+    actorId: text, motivation: text, play: text, legality: z.enum(LEGALITY),
+    targets: ids.min(1), preconditions: ids.min(1), payoff: text, costToPolicy: text,
+    // Four factors a reader can name, each on [0,1]. `exposure` and `band` are
+    // computed from them by the server so the ranking is reproducible.
+    incentive: unit, ease: unit, impact: unit, concealment: unit,
+    exposure: unit.optional(), band: z.string().max(40).optional(),
+    earlyWarning: text, counter: text, precedent: text,
+  }).strict(),
+  cross_policy: z.object({
+    pattern: z.enum(CROSS_PATTERNS), otherAnalysisId: z.string().max(100), otherAnalysisTitle: text,
+    // Identifiers in ANOTHER analysis: recorded, never joined. Provenance rows may
+    // not cross an analysis boundary, so these stay plain strings in `data`.
+    otherArtefactIds: ids, actorId: z.string().nullable(),
+    interaction: text, consequence: text, severity: unit, evidenceLimits: text, action: text,
+  }).strict(),
+  finding: z.object({ section: z.enum(['executive_assessment', 'scope_methodology', 'objectives', 'actors', 'mechanisms', 'high_risk_assumptions', 'test_results', 'strategic_responses', 'scenarios', 'exploitation', 'cross_policy', 'evidence_gaps', 'confidence_uncertainty', 'distribution', 'unresolved_questions']), resultIds: ids.min(1), hypothesisIds: ids.min(1) }),
   recommendation: z.object({ findingIds: ids.min(1), change: text, tradeoffs: text, beneficiaries: strings, burdenBearers: strings, validationNeeded: text }),
 } as const;
+export const REPORT_SECTIONS = ['executive_assessment', 'scope_methodology', 'objectives', 'actors', 'mechanisms', 'high_risk_assumptions', 'test_results', 'strategic_responses', 'scenarios', 'exploitation', 'cross_policy', 'evidence_gaps', 'confidence_uncertainty', 'distribution', 'unresolved_questions'] as const;
 export type Kind = keyof typeof dataSchemas;
 export const KINDS = Object.keys(dataSchemas) as [Kind, ...Kind[]];
 export const artefactSchema = z.object({
@@ -61,7 +82,8 @@ export type StageOutput = { artefacts: Artefact[]; warnings: string[] };
 export const stageOutputSchema = z.object({ artefacts: z.array(artefactSchema).max(2000), warnings: z.array(z.string().max(1000)).max(100) }).strict();
 export const STAGE_KINDS: Kind[][] = [
   ['passage'], ['claim', 'mechanism', 'assumption', 'actor'], ['actor', 'alias', 'resolution_candidate'],
-  ['node', 'edge'], ['profile'], ['research_question', 'research_source'], ['evidence'], ['model'], ['test'], ['scenario'], ['finding', 'recommendation'],
+  ['node', 'edge'], ['profile'], ['research_question', 'research_source'], ['evidence'], ['model'], ['test'], ['scenario'],
+  ['exploit'], ['cross_policy'], ['finding', 'recommendation'],
 ];
 export function artefact(id: string, kind: Kind, label: string, statement: string, data: Record<string, unknown>, overrides: Partial<Artefact> = {}): Artefact {
   return { id, kind, label, statement, data, origin: 'structural_inference', confidence: null, refs: [], sourceId: null, sourceQuote: null, page: null, section: null, startOffset: null, endOffset: null, url: null, fromId: null, toId: null, relation: null, temporal: null, ...overrides };

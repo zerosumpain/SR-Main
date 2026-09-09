@@ -94,7 +94,9 @@ export async function ingest(bytes: Buffer, filename: string, mimeType: string):
     for (let start = 0; start < s.text.length; start += 7000) {
       const passage = s.text.slice(start, start + 7000);
       if (!passage.trim()) continue;
-      const id = `passage_${artefacts.length + 1}`;
+      // Zero-padded: artefacts load back ordered by id, so `passage_10` must not
+      // sort between `passage_1` and `passage_2` and shuffle the document.
+      const id = `passage_${String(artefacts.length + 1).padStart(4, '0')}`;
       artefacts.push(artefact(id, 'passage', `${s.section} · passage ${artefacts.length + 1}`, passage, { documentHash: hash }, { origin: 'extracted_fact', confidence: 1, page: s.page, section: s.section, startOffset: offset + start, endOffset: offset + start + passage.length }));
     }
     offset += s.text.length + 2;
