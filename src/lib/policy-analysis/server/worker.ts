@@ -55,7 +55,8 @@ const MODEL_CALL_CEILING = 1500;
 export function stageBudgetMs(ordinal: number, all: { kind: string; id: string }[]): number {
   const count = (kind: string) => all.filter((a) => a.kind === kind).length;
   const units = ordinal === 1 ? count('passage')
-    : ordinal === 4 ? Math.max(1, count('actor'))
+    // The graph now makes one call per resolved body, exactly as the profiles do.
+    : ordinal === 3 || ordinal === 4 ? Math.max(1, count('actor'))
     : ordinal === 6 ? count('research_question') + 1
     : ordinal === 7 || ordinal === 9 ? 8
     : ordinal === 10 ? Math.max(1, count('profile'))

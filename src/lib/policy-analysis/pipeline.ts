@@ -88,7 +88,7 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
    */
   const send = async (key: string, context: Artefact[], slot: string, extra: Record<string, unknown> = {}) => {
     deps.signal.throwIfAborted();
-    return deps.model(stage, key, { ...input, artefacts: context, idPrefix: `s${stage}_${slot}_`, targetActorId: stage === 4 || stage === 10 || stage === PERSONA_STAGE ? key : null, targetPattern: stage === 7 ? key : null, targetScenario: stage === 9 ? key : null, modelLibrary: stage === 7 ? modelApplicability(input.artefacts) : undefined, ...extra });
+    return deps.model(stage, key, { ...input, artefacts: context, idPrefix: `s${stage}_${slot}_`, targetActorId: stage === 3 || stage === 4 || stage === 10 || stage === PERSONA_STAGE ? key : null, targetPattern: stage === 7 ? key : null, targetScenario: stage === 9 ? key : null, modelLibrary: stage === 7 ? modelApplicability(input.artefacts) : undefined, ...extra });
   };
 
   /**
@@ -238,6 +238,49 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     if (skipped.length) output.warnings.push(skippedNote(skipped, passages.length));
     if (distrusted) output.warnings.push('Almost every page looked like front matter, which is far more likely to be a fault in the extraction than a document with no policy in it, so every page was analysed.');
     await fanOut(analyse.map((passage) => ({ key: passage.id, context: [passage], describe: `Passage “${passage.label}”`, extra: { protect: [passage.id] } })));
+  } else if (stage === 3) {
+    /**
+     * ONE CALL PER BODY, not one call for the entire policy.
+     *
+     * This stage used to make a SINGLE call carrying the whole assessment and
+     * asked it to return the complete relationship graph in one response. On the
+     * 72-page white paper of 2026-09-10 that call carried 1,120,463 characters and
+     * came back with 4,004 output tokens: **10 nodes and 8 edges for 347 resolved
+     * actors**. Every other heavy stage already fans out — 72 calls for 72 pages,
+     * one per body for the profiles — and this one did not.
+     *
+     * The input was never the constraint. Raising the context ceiling let the
+     * stage see everything and shed nothing, and it produced 18 artefacts anyway,
+     * because one response cannot carry a policy's structure however much it is
+     * shown. The output is the constraint, and a fan-out is the only thing that
+     * moves it.
+     *
+     * Grouped by canonical label for the same reason stage 4 is: the resolution
+     * stage deliberately refuses to merge rows sharing a name, and asking the same
+     * question of 42 Skills England rows separately is 42 times the cost for a
+     * worse answer than asking once with all 42 rows' evidence.
+     */
+    const resolved = input.artefacts.filter((a) => a.kind === 'actor' && a.id.startsWith('s2_'));
+    const groups = new Map<string, Artefact[]>();
+    for (const a of resolved) {
+      const key = a.label.trim().toLowerCase();
+      const bucket = groups.get(key);
+      if (bucket) bucket.push(a); else groups.set(key, [a]);
+    }
+    // Everything an edge is allowed to point AT. Shared by every call because a
+    // relationship needs both of its endpoints present to be assertable at all.
+    const endpoints = input.artefacts.filter((a) => ['mechanism', 'claim'].includes(a.kind) || (a.kind === 'actor' && a.id.startsWith('s2_')));
+    const mentionsOf = (a: Artefact) => (Array.isArray(a.data.mentions) ? a.data.mentions.length : 0);
+    await fanOut([...groups.values()].map((members) => {
+      const primary = [...members].sort((x, y) => mentionsOf(y) - mentionsOf(x) || x.id.localeCompare(y.id))[0];
+      const own = input.artefacts.filter((a) => members.some((m) => a.id === m.id || a.refs.includes(m.id)));
+      return {
+        key: primary.id,
+        context: [...new Set([...own, ...endpoints])],
+        describe: `Relationships for ${primary.label}`,
+        extra: { protect: members.map((m) => m.id) },
+      };
+    }));
   } else if (stage === 4) {
     const toProfile = input.artefacts.filter((a) => a.kind === 'actor' && a.id.startsWith('s2_'));
     /**
