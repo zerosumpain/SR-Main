@@ -1,4 +1,9 @@
-import type { Artefact } from './contracts';
+// The context budget as it was shipped before bisection: the shed loop rebuilt
+// and re-encoded the WHOLE payload once per artefact removed. Kept verbatim as
+// the reference the fast path is judged against — `budget.test.ts` asserts the
+// two agree exactly, which is the entire basis for claiming the optimisation
+// changed nothing about what a stage is shown. Not used at runtime.
+import type { Artefact } from '../../../src/lib/policy-analysis/contracts';
 
 // Fitting a stage's context into the model's window without losing the evidence.
 //
@@ -71,7 +76,7 @@ export function encodedSize(input: unknown): number {
  * long extracts live; every structured field the contracts depend on is left
  * alone, so nothing a later stage references can disappear through a clip.
  */
-export function fitToBudget(artefacts: Artefact[], build: (a: Artefact[]) => unknown, limit: number, protect: Set<string> = new Set()): Fitted {
+export function fitToBudgetReference(artefacts: Artefact[], build: (a: Artefact[]) => unknown, limit: number, protect: Set<string> = new Set()): Fitted {
   const notes: string[] = [];
   if (encodedSize(build(artefacts)) <= limit) return { artefacts, notes };
 
@@ -93,32 +98,8 @@ export function fitToBudget(artefacts: Artefact[], build: (a: Artefact[]) => unk
   // the actor being profiled. Shedding those would leave a call that reports
   // success having read nothing.
   const order = [...working].sort((a, b) => rank(a, protect) - rank(b, protect));
-  /**
-   * Bisection, not one full serialisation per item shed.
-   *
-   * This loop used to rebuild and re-encode the ENTIRE payload once for every
-   * artefact it removed. On a call carrying 2,079 artefacts that is ~1,500
-   * serialisations of a 360,000-character object, and it measured **6,407ms** —
-   * over the liveness probe's five second threshold on its own, on a machine
-   * faster than the VPS. It is the synchronous block that had the watchdog
-   * restarting the web service mid-stage on 2026-09-10, eleven times in twenty
-   * minutes, one interruption short of destroying a five-and-a-half-hour run.
-   *
-   * The payload only ever shrinks as items come off the front of `order`, so the
-   * smallest number that fits is monotone and can be found by halving: ~11 probes
-   * instead of ~1,500. Same cut point, same items, same output — `budget.test.ts`
-   * asserts it against a linear scan.
-   */
-  let lo = 0;
-  let hi = Math.max(0, order.length - 1);
-  while (lo < hi) {
-    const mid = Math.floor((lo + hi) / 2);
-    if (encodedSize(build(order.slice(mid))) <= limit) hi = mid;
-    else lo = mid + 1;
-  }
-  // `splice` returns what it removed and leaves `order` as the kept remainder,
-  // which is exactly the state the original loop left behind.
-  const dropped: Artefact[] = order.splice(0, lo);
+  const dropped: Artefact[] = [];
+  while (order.length > 1 && encodedSize(build(order)) > limit) dropped.push(order.shift()!);
   // Protected items sort last, so reaching one means everything else has already
   // gone. Refusing to shed it here used to leave the payload over the ceiling,
   // and `provider.ts` throws `budget` — a code the worker excludes from retry, so
@@ -134,10 +115,7 @@ export function fitToBudget(artefacts: Artefact[], build: (a: Artefact[]) => unk
   // scenario and profile was shed reported only the first eight claim labels.
   const gone = [...new Set(dropped.map((a) => a.kind))].filter((kind) => !order.some((a) => a.kind === kind)).sort();
   if (gone.length) notes.push(`No ${gone.join(', ')} was left in this call's context at all; reasoning that depends on ${gone.length === 1 ? 'it' : 'them'} could not be done here.`);
-  // A Set, not `dropped.includes` — that was a second quadratic, scanning up to
-  // 1,500 dropped artefacts once for each of 2,079 kept ones.
-  const droppedSet = new Set(dropped);
-  const kept = working.filter((a) => !droppedSet.has(a));
+  const kept = working.filter((a) => !dropped.includes(a));
   return { artefacts: kept, notes: [summarise(notes)] };
 }
 

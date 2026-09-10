@@ -240,13 +240,60 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     await fanOut(analyse.map((passage) => ({ key: passage.id, context: [passage], describe: `Passage “${passage.label}”`, extra: { protect: [passage.id] } })));
   } else if (stage === 4) {
     const toProfile = input.artefacts.filter((a) => a.kind === 'actor' && a.id.startsWith('s2_'));
-    await fanOut(toProfile.map((actor) => {
-      const related = new Set([actor.id, ...actor.refs, ...input.artefacts.filter((a) => a.fromId === actor.id || a.toId === actor.id || a.refs.includes(actor.id)).flatMap((a) => [a.id, ...a.refs, a.fromId ?? '', a.toId ?? ''])]);
+    /**
+     * ONE CALL PER BODY, not per row.
+     *
+     * Entity resolution refuses to merge rows that merely share a label, and it
+     * is right to — a shared name is not a shared body. But it left 352 rows for
+     * 135 labels on the 72-page white paper (Skills England 42 times, Employers
+     * 26, Government 21), and this stage asked the same question of each one,
+     * separately, each seeing only its own row's evidence. That is 2.6x the calls
+     * for WORSE profiles: a profile of Employers drawn from 26 mentions beats 26
+     * profiles drawn from one each.
+     *
+     * So the CALL is shared and the IDENTITY is not. The rows stay distinct
+     * artefacts with their own ids and provenance; the profile records which of
+     * them it was drawn for in `coversActorIds`, and nothing anywhere claims they
+     * are one entity.
+     */
+    const mentionsOf = (a: Artefact) => (Array.isArray(a.data.mentions) ? a.data.mentions.length : 0);
+    const groups = new Map<string, Artefact[]>();
+    // Insertion order follows `input.artefacts`, which loads ordered by id, so
+    // the group sequence — and therefore every `idPrefix` — stays deterministic.
+    for (const a of toProfile) {
+      const key = a.label.trim().toLowerCase();
+      const bucket = groups.get(key);
+      if (bucket) bucket.push(a); else groups.set(key, [a]);
+    }
+    const units = [...groups.values()].map((members) => {
+      // The best-evidenced row speaks for the group, so the call is pinned to an
+      // id that genuinely exists and carries the most to reason from.
+      const primary = [...members].sort((x, y) => mentionsOf(y) - mentionsOf(x) || x.id.localeCompare(y.id))[0];
+      const related = new Set(members.flatMap((m) => [m.id, ...m.refs, ...input.artefacts.filter((a) => a.fromId === m.id || a.toId === m.id || a.refs.includes(m.id)).flatMap((a) => [a.id, ...a.refs, a.fromId ?? '', a.toId ?? ''])]));
       const context = input.artefacts.filter((a) => related.has(a.id));
-      return { key: actor.id, context: [...context, ...(context.includes(actor) ? [] : [actor])], describe: `The incentive profile for ${actor.label}`, extra: { protect: [actor.id], priorPersona: priors.get(actor.id) ?? null } };
-    }), (unit, result) => {
-      if (result && !result.artefacts.some((a) => a.kind === 'profile' && a.data.actorId === unit.key)) {
-        output.warnings.push(`${toProfile.find((a) => a.id === unit.key)!.label} has no incentive profile in this assessment; its motivations were not modelled.`);
+      const missing = members.filter((m) => !context.includes(m));
+      return {
+        key: primary.id,
+        members,
+        context: [...context, ...missing],
+        describe: members.length === 1
+          ? `The incentive profile for ${primary.label}`
+          : `The incentive profile for ${primary.label} (${members.length} source rows)`,
+        extra: { protect: [primary.id], priorPersona: priors.get(primary.id) ?? null },
+      };
+    });
+    const coveredBy = new Map<string, Artefact[]>(units.map((u) => [u.key, u.members]));
+    await fanOut(units, (unit, result) => {
+      const members = coveredBy.get(unit.key) ?? [];
+      const produced = result?.artefacts.filter((a) => a.kind === 'profile') ?? [];
+      // Stamped here, by the server, from what it already knows — never asked of
+      // the model, which cannot be trusted to enumerate a grouping it did not do.
+      for (const profile of produced) profile.data.coversActorIds = members.map((m) => m.id);
+      if (result && !produced.length) {
+        const label = members[0]?.label ?? unit.key;
+        output.warnings.push(members.length === 1
+          ? `${label} has no incentive profile in this assessment; its motivations were not modelled.`
+          : `${label} has no incentive profile in this assessment, covering ${members.length} source rows; its motivations were not modelled.`);
       }
     });
   } else if (stage === 7 || stage === 9) {
@@ -279,15 +326,22 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     // it takes no sequence number and cannot be reordered by the fan-out above.
     await attempt('main', inventory, 'Evidence drawn from the policy document itself', { protect: claims });
   } else if (stage === 8) {
-    output.artefacts = runPolicyTests(input.artefacts, input.graphLoss ?? 0);
+    output.artefacts = runPolicyTests(input.artefacts, { discarded: input.graphLoss ?? 0, uncovered: graphUncovered(input.artefacts) });
   } else if (stage === 10) {
     // Every resolved actor with a profile is a candidate for the red team, and
     // `limits.actors` bounds how many get one. The most connected go first —
     // an actor nothing depends on has little to exploit — and the rest are named
     // in a warning rather than dropped silently.
     const profiles = input.artefacts.filter((a) => a.kind === 'profile');
-    const ranked = rankActors(input.artefacts, profiles);
-    if (ranked.length > limits.actors) output.warnings.push(`${ranked.length - limits.actors} of ${ranked.length} profiled actors were not red-teamed in this pass: ${ranked.slice(limits.actors).map((a) => a.label).join(', ')}. They are the least connected in the policy graph, not the least important. A deep run covers more of them.`);
+    const { actors: ranked, basis } = rankActors(input.artefacts, profiles);
+    // Which signal chose them is part of the finding, not a footnote: on a thin
+    // graph this is "who the paper talks about most", not "who the policy runs
+    // through", and those are different claims.
+    const order = basis === 'connectivity'
+      ? 'They are the least connected in the policy graph, not the least important.'
+      : 'The policy graph recorded too few relationships to rank on, so these were ordered by how often the document names them rather than by how much of the policy runs through them.';
+    if (basis === 'prominence') output.warnings.push('The policy graph held no relationships for the profiled actors, so the red team selected its actors by how prominently the document names them rather than by connectivity. Treat the choice of who was red-teamed as a reflection of the document, not of the policy structure.');
+    if (ranked.length > limits.actors) output.warnings.push(`${ranked.length - limits.actors} of ${ranked.length} profiled actors were not red-teamed in this pass: ${ranked.slice(limits.actors).map((a) => a.label).join(', ')}. ${order} A deep run covers more of them.`);
     const base = input.artefacts.filter((a) => !['passage', 'research_source', 'alias', 'node', 'profile'].includes(a.kind) && (a.kind !== 'actor' || a.id.startsWith('s2_')));
     await fanOut(ranked.slice(0, limits.actors).map((actor) => ({
       key: actor.id,
@@ -302,7 +356,7 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     // about the library, not a failed run — so every failure is caught, and the
     // stage is exempt from the "produced nothing" rule at the bottom.
     const profiles = input.artefacts.filter((a) => a.kind === 'profile');
-    const ranked = rankActors(input.artefacts, profiles).slice(0, limits.actors);
+    const ranked = rankActors(input.artefacts, profiles).actors.slice(0, limits.actors);
     for (const actor of ranked) {
       const own = profiles.filter((p) => p.data.actorId === actor.id);
       const plays = input.artefacts.filter((a) => a.kind === 'exploit' && a.data.actorId === actor.id);
@@ -474,20 +528,62 @@ function requireMajority(output: StageOutput, library: readonly string[], of: (a
 }
 
 /**
- * Profiled actors, most connected first. Degree in the policy graph is a crude
- * proxy for how much of the policy runs through an actor, and it is the only
- * ordering available before the red team has run.
+ * Profiled actors, most prominent first — and HONEST about which signal ordered
+ * them.
+ *
+ * Degree in the policy graph is the signal we want: it is a crude proxy for how
+ * much of the policy runs through an actor. The problem is what happened when it
+ * was absent. On the 72-page white paper of 2026-09-10 the knowledge graph
+ * produced FOUR edges, so degree was zero for every actor and the sort fell
+ * through to its tie-break — `id.localeCompare` — which is alphabetical order.
+ * The red team's twelve slots were filled alphabetically and the report presented
+ * them as the most connected actors in the policy.
+ *
+ * A tie-break silently becoming the entire ranking is the failure. So there is
+ * now a real second signal between them: how many source mentions the resolution
+ * stage attributed to an actor, and how many rows share its label. Both say
+ * "this body is all over the document", which is what degree was standing in for,
+ * and neither needs a graph. `basis` tells the caller which one actually did the
+ * ordering so the assessment can say so.
  */
-function rankActors(all: Artefact[], profiles: Artefact[]): Artefact[] {
+export function rankActors(all: Artefact[], profiles: Artefact[]): { actors: Artefact[]; basis: 'connectivity' | 'prominence' } {
   const degree = new Map<string, number>();
   for (const edge of all) {
     if (edge.kind !== 'edge') continue;
     for (const end of [edge.fromId, edge.toId]) if (end) degree.set(end, (degree.get(end) ?? 0) + 1);
   }
-  return profiles
+  // How many actor rows carry each label: a body the document names forty times
+  // is prominent in it, whatever the graph managed to record.
+  const byLabel = new Map<string, number>();
+  for (const a of all) {
+    if (a.kind !== 'actor') continue;
+    const key = a.label.trim().toLowerCase();
+    byLabel.set(key, (byLabel.get(key) ?? 0) + 1);
+  }
+  const mentions = (a: Artefact) => (Array.isArray(a.data.mentions) ? a.data.mentions.length : 0);
+  const rows = (a: Artefact) => byLabel.get(a.label.trim().toLowerCase()) ?? 1;
+
+  const actors = profiles
     .map((p) => all.find((a) => a.kind === 'actor' && a.id === p.data.actorId))
     .filter((a): a is Artefact => !!a)
-    .sort((a, b) => (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0) || a.id.localeCompare(b.id));
+    .sort((a, b) =>
+      (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0) ||
+      mentions(b) - mentions(a) ||
+      rows(b) - rows(a) ||
+      a.id.localeCompare(b.id));
+
+  return { actors, basis: actors.some((a) => (degree.get(a.id) ?? 0) > 0) ? 'connectivity' : 'prominence' };
+}
+
+/**
+ * The share of resolved actors the graph never gave a node. Computed here as
+ * well as in the worker so the stage is honest when run directly — a test, a
+ * replay, or any caller that did not pipe `graphLoss` in.
+ */
+function graphUncovered(all: Artefact[]): number {
+  const actors = all.filter((a) => a.kind === 'actor' && a.id.startsWith('s2_')).length;
+  const nodes = all.filter((a) => a.kind === 'node').length;
+  return actors > 0 ? 1 - Math.min(1, nodes / actors) : 0;
 }
 
 export function priority(a: Artefact): number {

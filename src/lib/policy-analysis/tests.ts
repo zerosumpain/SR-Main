@@ -27,8 +27,27 @@ export const POLICY_TESTS = [
  */
 const GRAPH_LOSS_CEILING = 0.34;
 
-export function runPolicyTests(all: Artefact[], graphLoss = 0): Artefact[] {
+/**
+ * How little of the policy the graph actually holds.
+ *
+ * `discarded` is what triage threw away. `uncovered` is the share of resolved
+ * actors the graph never gave a node at all — a different failure with the same
+ * consequence, and the one that was invisible. On the 72-page white paper of
+ * 2026-09-10 triage discarded NOTHING, so `discarded` was 0 and this machinery
+ * stayed asleep, while the graph itself held 9 nodes and 4 edges for 352 resolved
+ * actors. Seven of the eleven checks correctly returned indeterminate on their
+ * own, but four produced risk verdicts — one of them `high_risk` — from three
+ * assertions, and nothing on the page said those rested on 2.6% of the actors.
+ */
+export type GraphReach = { discarded?: number; uncovered?: number };
+
+export function runPolicyTests(all: Artefact[], reach: number | GraphReach = 0): Artefact[] {
+  const { discarded = 0, uncovered = 0 } = typeof reach === 'number' ? { discarded: reach } : reach;
+  const graphLoss = Math.max(discarded, uncovered);
   const gutted = graphLoss > GRAPH_LOSS_CEILING;
+  const guttedReason = uncovered > discarded
+    ? `the policy graph names only ${Math.round((1 - uncovered) * 100)}% of the resolved actors, so the relationships this check reads cover a fraction of the policy`
+    : `${Math.round(graphLoss * 100)}% of the relationships this check reads were discarded before it ran`;
   const edges = all.filter((a) => a.kind === 'edge');
   const assumptions = all.filter((a) => a.kind === 'assumption');
   const models = all.filter((a) => a.kind === 'model');
@@ -62,7 +81,7 @@ export function runPolicyTests(all: Artefact[], graphLoss = 0): Artefact[] {
     const extra = testId === 'coordination'
       ? ` ${conflictingReportingLines(edges).length} actor(s) have multiple reporting targets; whether these conflict needs institutional interpretation.` : '';
     const reasoning = gutted
-      ? `${Math.round(graphLoss * 100)}% of the relationships this check reads were discarded before it ran, so no verdict is available. Evidence is insufficient; this is not a pass.`
+      ? `${guttedReason}, so no verdict is available. Evidence is insufficient; this is not a pass.`
       : !relevant.length
       ? 'No applicable graph assertion was extracted. Evidence is insufficient; this is not a pass.'
       : missing.length

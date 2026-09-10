@@ -148,7 +148,16 @@ export async function executePolicyRun(claimed: { id: string; input: Record<stri
     const graph = previousStages.find((s) => s.ordinal === 3)?.output as { artefactIds?: string[]; rejected?: number } | null;
     const kept = graph?.artefactIds?.length ?? 0;
     const lost = graph?.rejected ?? 0;
-    const graphLoss = kept + lost > 0 ? lost / (kept + lost) : 0;
+    const discarded = kept + lost > 0 ? lost / (kept + lost) : 0;
+    // The second arm, and the one that was missing. Triage discarding nothing is
+    // not the same as the graph holding anything: a stage can be handed a
+    // fraction of the inventory, keep all of it, and report a discard rate of
+    // zero. Measured against the resolved actors, which is what a structural
+    // check about authority, funding or accountability is reasoning over.
+    const resolvedActors = all.filter((a) => a.kind === 'actor' && a.id.startsWith('s2_')).length;
+    const graphNodes = all.filter((a) => a.kind === 'node').length;
+    const uncovered = resolvedActors > 0 ? 1 - Math.min(1, graphNodes / resolvedActors) : 0;
+    const graphLoss = Math.max(discarded, uncovered);
     // `content` is base64 of up to 10 MB and only stage 0 has any use for it.
     // Selecting the whole row on all thirteen stages moved ~13 MB through the
     // connection twelve times for nothing.
