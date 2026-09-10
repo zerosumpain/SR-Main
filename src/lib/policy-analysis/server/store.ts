@@ -1,11 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db, type DbExecutor } from '$lib/db';
-import { policyAnalyses, policyArtefacts, policyDocuments, policyExecutions, policyModelCalls, policyProvenance, policyStages, workflowRuns, workflows } from '$lib/db/schema';
+import { policyAnalyses, policyArtefacts, policyDocuments, policyExecutions, policyModelCalls, policyPersonaObservations, policyPersonas, policyProvenance, policyStages, workflowRuns, workflows } from '$lib/db/schema';
 import { STAGES, TRIGGER, WORKFLOW_ID, type Artefact } from '../contracts';
 import type { Neighbour } from '../pipeline';
 import { PolicyError } from '../validation';
 import type { Submission } from './ingest';
+import { recountSightings } from './personas';
 
 export async function queueStage(tx: DbExecutor, analysisId: string, stageId: string, delayMs = 0) {
   const runId = randomUUID();
@@ -99,7 +100,16 @@ export async function detail(owner: string, id: string) {
     .innerJoin(policyAnalyses, eq(policyAnalyses.id, policyArtefacts.analysisId))
     .where(and(eq(policyAnalyses.owner, owner), eq(policyArtefacts.kind, 'cross_policy'), sql`${policyArtefacts.data} ->> 'otherAnalysisId' = ${id}`))
     .limit(50);
-  return { analysis, stages, documents, artefactMetadata, artefacts, executions: executions.map((e) => e.execution), calls, inbound, heartbeat: run?.heartbeatAt ?? null };
+  // Which of this assessment's actors are bodies the reader has met before. The
+  // link is read from the observation rows rather than from the persona_link
+  // artefacts: a NEW persona is minted by the server at commit, so the artefact
+  // that asked for it carries a null id and could not be followed.
+  const personas = await db.select({ actorId: policyPersonaObservations.actorId, personaId: policyPersonas.id, name: policyPersonas.name, entityType: policyPersonas.entityType, sightings: policyPersonas.sightings })
+    .from(policyPersonaObservations)
+    .innerJoin(policyPersonas, eq(policyPersonas.id, policyPersonaObservations.personaId))
+    .where(and(eq(policyPersonaObservations.analysisId, id), eq(policyPersonas.owner, owner)))
+    .limit(60);
+  return { analysis, stages, documents, artefactMetadata, artefacts, executions: executions.map((e) => e.execution), calls, inbound, personas, heartbeat: run?.heartbeatAt ?? null };
 }
 export async function persistArtefacts(tx: DbExecutor, analysisId: string, stage: number, artefacts: Artefact[]) {
   if (!artefacts.length) return;
@@ -197,8 +207,14 @@ export async function remove(owner: string, id: string): Promise<boolean> {
     const stages = await tx.select({ runId: policyStages.runId }).from(policyStages).where(eq(policyStages.analysisId, id));
     const runIds = stages.map((s) => s.runId).filter((r): r is string => !!r);
     if (runIds.length) await tx.update(workflowRuns).set({ status: 'cancelled', claimedBy: null, leaseExpiresAt: null, completedAt: new Date() }).where(inArray(workflowRuns.id, runIds));
+    // Which personas this assessment contributed to, read BEFORE the delete
+    // cascades its observations away. `sightings` is a count of assessments and
+    // must fall when one is removed; the row itself survives, because a dossier
+    // built from four papers is not wrong because one of them was withdrawn.
+    const contributed = [...new Set((await tx.select({ personaId: policyPersonaObservations.personaId }).from(policyPersonaObservations).where(eq(policyPersonaObservations.analysisId, id))).map((r) => r.personaId))];
     await tx.update(policyAnalyses).set({ cancelledAt: new Date(), status: 'cancelled' }).where(eq(policyAnalyses.id, id));
     await tx.delete(policyAnalyses).where(eq(policyAnalyses.id, id));
+    await recountSightings(tx, contributed);
     return true;
   });
 }

@@ -114,10 +114,28 @@ if [ "$(cat "$STAMPS/schema" 2>/dev/null)" != "$SCHEMA_HASH" ]; then
   # CI=1 and --force are both required: a column rename opens an interactive
   # prompt, and this runs under `ssh -n` with no TTY to answer it, so a
   # promptable push would hang until the flock timeout rather than fail.
-  if ! CI=1 FORCE_COLOR=0 npx drizzle-kit push --config=drizzle.config.ts --force; then
+  #
+  # DRIZZLE-KIT'S EXIT CODE IS NOT EVIDENCE — the same hole `ci-release.sh`
+  # closed on 2026-08-30, still open here until 2026-09-10. Measured on this
+  # box: a push died on `error: cannot drop constraint
+  # policy_artefacts_analysis_id_id_pk ...`, **exited 0**, and the stamp below
+  # recorded the schema as applied. Every later gate then reported "gate
+  # database already matches schema.ts" and never tried again, so the one class
+  # of test that would have noticed — anything touching the new tables — was
+  # running against a database that never got them, green.
+  PUSH_LOG="$(mktemp)"
+  set +e
+  CI=1 FORCE_COLOR=0 npx drizzle-kit push --config=drizzle.config.ts --force 2>&1 | tee "$PUSH_LOG"
+  PUSH_EC="${PIPESTATUS[0]}"
+  set -e
+  if [ "$PUSH_EC" -ne 0 ] || grep -qiE '^Error:|^error:|Interactive prompts require a TTY|Please run|error: could not' "$PUSH_LOG"; then
     echo "ERROR: drizzle-kit push failed — the gate database does not match schema.ts." >&2
+    grep -iE '^Error:|^error:|Interactive prompts require a TTY|Please run|error: could not' "$PUSH_LOG" | head -5 >&2
+    echo "  Apply the change by hand against \$DATABASE_URL on this box, then re-run the gate." >&2
+    rm -f "$PUSH_LOG"
     exit 1
   fi
+  rm -f "$PUSH_LOG"
   echo "$SCHEMA_HASH" > "$STAMPS/schema"
 else
   echo "==> gate database already matches schema.ts"

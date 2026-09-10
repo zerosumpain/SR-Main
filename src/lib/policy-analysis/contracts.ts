@@ -4,10 +4,20 @@ export const STAGES = [
   'Document ingestion', 'Document decomposition', 'Entity resolution', 'Policy knowledge graph',
   'Actor and incentive profiles', 'Targeted research', 'Evidence matrix', 'Interaction models',
   'Automated policy tests', 'Adversarial scenarios and sensitivity', 'Exploitation playbook',
-  'Cross-policy exposure', 'Synthesis',
+  'Cross-policy exposure', 'Synthesis', 'Actor persona library',
 ] as const;
-export const SYNTHESIS_STAGE = STAGES.length - 1;
-export const PROMPT_VERSION = 'policy-analysis/2.0';
+/**
+ * Fixed ordinals, not `STAGES.length - 1`.
+ *
+ * Synthesis stopped being the last stage when the persona library was appended
+ * after it, and every rule that pins the report — which kinds synthesis may
+ * emit, which results it must be shown — is written against ITS ordinal. Deriving
+ * one of them from the array's length silently moved the report's contract onto
+ * a stage that does not write a report. `stages.guard.test.ts` pins both names.
+ */
+export const SYNTHESIS_STAGE = 12;
+export const PERSONA_STAGE = 13;
+export const PROMPT_VERSION = 'policy-analysis/2.1';
 export const MAX_BYTES = 10 * 1024 * 1024;
 export const MAX_CHARACTERS = 600_000;
 export const MAX_PAGES = 400;
@@ -22,9 +32,41 @@ export const DEPTH_LIMITS: Record<Depth, { questions: number; results: number; r
   standard: { questions: 8, results: 3, rounds: 1, actors: 12 },
   deep: { questions: 12, results: 5, rounds: 3, actors: 20 },
 };
+/**
+ * The persona dossier vocabulary: twelve traits that survive a change of policy.
+ *
+ * Deliberately NOT the twenty-one profile fields. A profile answers "what does
+ * this body want from THIS paper", which is exactly the part that does not
+ * travel; a persona answers "what is this body, and what does its position
+ * reward", which does. The keys are fixed so two assessments a year apart can be
+ * compared line for line rather than merged into prose.
+ */
+export const PERSONA_TRAITS = [
+  ['mandate', 'What it exists to do'],
+  ['accountableTo', 'Who it answers to'],
+  ['judgedOn', 'What it is judged on'],
+  ['timeHorizon', 'How far ahead it can afford to look'],
+  ['resources', 'What it can bring to bear'],
+  ['legalPowers', 'What it can compel or block'],
+  ['informationControl', 'What it knows that others do not'],
+  ['constraints', 'What limits it'],
+  ['outsideOption', 'What it does if it declines to play'],
+  ['gainFromFailure', 'Who around it is better off if a policy fails'],
+  ['standingStrategies', 'How it typically plays'],
+  ['reputation', 'How it is regarded, and its track record'],
+] as const;
+export type TraitKey = (typeof PERSONA_TRAITS)[number][0];
+export const TRAIT_LABELS: Record<string, string> = Object.fromEntries(PERSONA_TRAITS);
+
 export const TRIGGER = 'policy-analysis';
 export const WORKFLOW_ID = 'policy-analysis-v1';
-export const ORIGINS = ['extracted_fact', 'external_evidence', 'structural_inference', 'behavioural_hypothesis', 'model_result', 'normative_judgement'] as const;
+// `prior_assessment` is what the persona library contributes: something an
+// EARLIER assessment of a DIFFERENT policy established about this body. It is
+// not evidence about the policy in hand — nothing carrying it can reach a
+// passage or a retrieved source, so `hasSource` keeps it out of the findings on
+// its own account — and the reader must be able to see which of these came from
+// somewhere else.
+export const ORIGINS = ['extracted_fact', 'external_evidence', 'structural_inference', 'behavioural_hypothesis', 'model_result', 'normative_judgement', 'prior_assessment'] as const;
 export const RELATIONS = ['funds', 'regulates', 'commissions', 'delivers', 'reports_to', 'depends_on', 'supplies_data_to', 'has_authority_over', 'bears_cost_of', 'receives_benefit_from', 'is_accountable_for', 'can_veto', 'is_measured_by', 'is_exposed_to', 'supports', 'contradicts', 'assumes', 'provides_evidence_for', 'owns_data', 'reciprocates', 'sanctions', 'can_adapt', 'lobbies', 'allies_with', 'competes_with', 'appoints'] as const;
 export const LEGALITY = ['compliant', 'grey', 'breach'] as const;
 export const CROSS_PATTERNS = ['conflicting_demand', 'cumulative_burden', 'shared_assumption', 'regime_arbitrage', 'common_actor_overload', 'contradictory_measure', 'duplicated_authority'] as const;
@@ -38,6 +80,15 @@ export const confidenceSchema = unit.nullable().default(null);
 const field = z.object({ value: text, origin: z.enum(ORIGINS), confidence: confidenceSchema, refs: ids }).strict();
 export const PROFILE_FIELDS = ['formalRole', 'statedObjectives', 'operationalObjectives', 'accountableTo', 'successCriteria', 'timeHorizon', 'resources', 'constraints', 'legalPowers', 'informationPossessed', 'informationControlled', 'dependencies', 'costs', 'benefits', 'risks', 'outsideOption', 'gainFromFailure', 'reputationalIncentives', 'politicalIncentives', 'institutionalMotivations', 'strategies'] as const;
 const profileFields = Object.fromEntries(PROFILE_FIELDS.map((k) => [k, field])) as Record<(typeof PROFILE_FIELDS)[number], typeof field>;
+/**
+ * A persona trait carries its own origin and confidence.
+ *
+ * The dossier is drawn from several assessments of several policies, so "who
+ * this body answers to" may be an extracted fact in one paper and an inference
+ * in another. Averaging that away would be the whole problem: a trait states its
+ * epistemic status, and the page shows it.
+ */
+const personaTraits = z.array(z.object({ key: z.string().max(60), label: z.string().max(120), value: text, origin: z.enum(ORIGINS), confidence: confidenceSchema }).strict()).max(30);
 export const dataSchemas = {
   passage: z.object({ documentHash: text }),
   claim: z.object({ category: z.enum(['objective', 'problem', 'responsibility', 'decision_right', 'funding', 'dependency', 'data_flow', 'measure', 'constraint', 'risk', 'benefit', 'claim', 'cited_evidence']), notes: text }),
@@ -73,6 +124,20 @@ export const dataSchemas = {
   }).strict(),
   finding: z.object({ section: z.enum(['executive_assessment', 'scope_methodology', 'objectives', 'actors', 'mechanisms', 'high_risk_assumptions', 'test_results', 'strategic_responses', 'scenarios', 'exploitation', 'cross_policy', 'evidence_gaps', 'confidence_uncertainty', 'distribution', 'unresolved_questions']), resultIds: ids.min(1), hypothesisIds: ids.min(1) }),
   recommendation: z.object({ findingIds: ids.min(1), change: text, tradeoffs: text, beneficiaries: strings, burdenBearers: strings, validationNeeded: text }),
+  persona_link: z.object({
+    // The persona this actor was matched to, echoed back from the candidates the
+    // server supplied. Null means "no existing persona fits" and a new one is
+    // opened. An id the server did not supply is treated as null rather than
+    // trusted — the model cannot mint a row in the reader's library.
+    personaId: z.string().max(100).nullable(),
+    personaName: text, entityType: text, actorId: text, aliases: strings,
+    summary: text,
+    // The standing dossier AFTER this assessment, and what this assessment on
+    // its own establishes. Kept apart on purpose: the first is cumulative and
+    // the second is the row that survives if another assessment is deleted.
+    traits: personaTraits, observed: personaTraits,
+    continuity: text, divergence: text,
+  }).strict(),
 } as const;
 /**
  * The kinds a `finding` may cite as its result.
@@ -127,7 +192,7 @@ export const stageOutputSchema = z.object({ artefacts: z.array(artefactSchema).m
 export const STAGE_KINDS: Kind[][] = [
   ['passage'], ['claim', 'mechanism', 'assumption', 'actor'], ['actor', 'alias', 'resolution_candidate'],
   ['node', 'edge'], ['profile'], ['research_question', 'research_source'], ['evidence'], ['model', 'assumption'], ['test'], ['scenario', 'assumption'],
-  ['exploit', 'assumption'], ['cross_policy'], ['finding', 'recommendation', 'assumption'],
+  ['exploit', 'assumption'], ['cross_policy'], ['finding', 'recommendation', 'assumption'], ['persona_link'],
 ];
 export function artefact(id: string, kind: Kind, label: string, statement: string, data: Record<string, unknown>, overrides: Partial<Artefact> = {}): Artefact {
   return { id, kind, label, statement, data, origin: 'structural_inference', confidence: null, refs: [], sourceId: null, sourceQuote: null, page: null, section: null, startOffset: null, endOffset: null, url: null, fromId: null, toId: null, relation: null, temporal: null, ...overrides };

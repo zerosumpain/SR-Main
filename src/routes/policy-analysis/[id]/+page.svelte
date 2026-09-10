@@ -26,6 +26,9 @@
   import EvidenceMix from '$lib/components/policy-analysis/EvidenceMix.svelte';
   import CrossPolicy from '$lib/components/policy-analysis/CrossPolicy.svelte';
   import ReportActs from '$lib/components/policy-analysis/ReportActs.svelte';
+  import StressTest from '$lib/components/policy-analysis/StressTest.svelte';
+  import InterplayMap from '$lib/components/policy-analysis/InterplayMap.svelte';
+  import ScenarioWalk from '$lib/components/policy-analysis/ScenarioWalk.svelte';
   import { formatGbp, formatTokens } from '$lib/canvas/stats/costFormat';
 
   let { data }: { data: PageData } = $props();
@@ -43,17 +46,44 @@
   // reads it, and a DOM node in reactive state is a proxy waiting to happen.
   let opener: HTMLElement | null = null;
 
-  const SECTIONS = [
-    { id: 'verdict', letter: 'A', name: 'Verdict' },
-    { id: 'playbook', letter: 'B', name: 'How it can be beaten' },
-    { id: 'actors', letter: 'C', name: 'Who is in the room' },
-    { id: 'checks', letter: 'D', name: 'Where it is thin' },
-    { id: 'scenarios', letter: 'E', name: 'What breaks it' },
-    { id: 'evidence', letter: 'F', name: 'Evidence and enquiry' },
-    { id: 'cross', letter: 'G', name: 'Across policies' },
-    { id: 'report', letter: 'H', name: 'The written assessment' },
-    { id: 'provenance', letter: 'I', name: 'Run log and provenance' },
+  /**
+   * Four workspaces, not nine stacked sections.
+   *
+   * Nine chapters end to end is an inventory of what the pipeline produced. A
+   * reader arrives with one of four questions — what does it say, who can beat
+   * it, what is it standing on, and show me the working — and each is a place to
+   * sit and do a piece of work rather than a heading to scroll past. Every
+   * section keeps its own id, heading and deep link inside its workspace; the
+   * grouping is navigation, not editing, exactly as the report's acts are.
+   *
+   * Every panel stays in the DOM. Find-in-page reaches a workspace nobody
+   * selected, and printing unhides all four.
+   */
+  const WORKSPACES = [
+    { id: 'verdict', name: 'The verdict', strap: 'What this assessment concludes.', sections: ['verdict'] },
+    { id: 'threat', name: 'The threat', strap: 'Who can beat this policy, how, and what they are aiming at.', sections: ['playbook', 'interplay', 'actors'] },
+    { id: 'ground', name: 'What it rests on', strap: 'The assumptions holding it up — and what happens if they give.', sections: ['stress', 'checks', 'scenarios', 'evidence'] },
+    { id: 'record', name: 'The assessment', strap: 'The written report, what spans other policies, and every step behind it.', sections: ['cross', 'report', 'provenance'] },
   ];
+  let workspace = $state(0);
+  const wtabId = (id: string) => `workspace-tab-${id}`;
+  const wpanelId = (id: string) => `workspace-panel-${id}`;
+
+  /** A deep link into a section inside an unselected workspace must still land. */
+  function reveal(hash: string) {
+    const index = WORKSPACES.findIndex((w) => w.sections.includes(hash));
+    if (index >= 0) workspace = index;
+    return index >= 0;
+  }
+
+  function onWorkspaceKey(event: KeyboardEvent, index: number) {
+    const moves: Record<string, number> = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: WORKSPACES.length - 1 };
+    const next = moves[event.key];
+    if (next === undefined) return;
+    event.preventDefault();
+    workspace = (next + WORKSPACES.length) % WORKSPACES.length;
+    document.getElementById(wtabId(WORKSPACES[workspace].id))?.focus();
+  }
 
   const active = $derived(['queued', 'running'].includes(data.analysis.status));
   const completed = $derived(data.stages.filter((s) => s.status === 'completed').length);
@@ -73,6 +103,7 @@
   const scenarios = $derived(view.of(artefacts, 'scenario'));
   const models = $derived(view.of(artefacts, 'model'));
   const crossFound = $derived(view.of(artefacts, 'cross_policy'));
+  const interplay = $derived(view.interplay(artefacts, plays));
   const warnings = $derived(data.stages.flatMap((s) => s.warnings.map((w) => ({ stage: s.name, text: w }))));
   const crossUnavailable = $derived(warnings.some((w) => w.text.includes('No other completed policy assessment')));
   const selected = $derived(artefacts.find((a) => a.id === selectedId) ?? null);
@@ -126,7 +157,10 @@
   }
 
   onMount(() => {
-    selectedId = decodeURIComponent(window.location.hash.slice(1)) || null;
+    // A hash is either a section — a deep link into a workspace that may not be
+    // the selected one — or an artefact to open in the inspector. Never both.
+    const hash = decodeURIComponent(window.location.hash.slice(1));
+    if (hash && !reveal(hash)) selectedId = hash;
     // Timer handles are deliberately plain `let`: nothing reactive reads them,
     // and making them $state would subscribe this effect to its own writes.
     let stopped = false;
@@ -223,15 +257,31 @@
   {/if}
 </section>
 
-<nav class="rail" aria-label="Sections">
-  {#each SECTIONS as s (s.id)}<a href={`#${s.id}`}><span class="letter">{s.letter}</span>{s.name}</a>{/each}
-</nav>
+<div class="rail" role="tablist" aria-label="Workspaces">
+  {#each WORKSPACES as w, index (w.id)}
+    <button
+      role="tab" id={wtabId(w.id)} class="wtab" class:on={index === workspace}
+      aria-selected={index === workspace} aria-controls={wpanelId(w.id)}
+      tabindex={index === workspace ? 0 : -1}
+      onclick={() => (workspace = index)}
+      onkeydown={(e) => onWorkspaceKey(e, index)}
+    >
+      <span class="letter">{index + 1}</span>
+      <span class="wtab-name">{w.name}</span>
+    </button>
+  {/each}
+</div>
+<p class="muted rail-strap">{WORKSPACES[workspace].strap}</p>
 
+<div role="tabpanel" id={wpanelId('verdict')} class="workspace" aria-labelledby={wtabId('verdict')} hidden={workspace !== 0}>
 <div id="verdict" class="anchor"></div>
-<Verdict {headline} {tiles} {bands} status={data.analysis.status} {inspect} onband={(b) => { bandFilter = bandFilter === b ? null : b; document.getElementById('playbook')?.scrollIntoView(); }} />
+<Verdict {headline} {tiles} {bands} status={data.analysis.status} {inspect} onband={(b) => { bandFilter = bandFilter === b ? null : b; workspace = 1; }} />
+</div>
+
+<div role="tabpanel" id={wpanelId('threat')} class="workspace" aria-labelledby={wtabId('threat')} hidden={workspace !== 1}>
 
 <section id="playbook" class="section">
-  <p class="kicker">B / How it can be beaten</p>
+  <p class="kicker">How it can be beaten</p>
   <h2>The exploitation playbook</h2>
   <p class="strap">
     Each play is something an actor named in the policy could do to serve itself at the policy's expense.
@@ -256,36 +306,38 @@
   {/if}
 </section>
 
+<section id="interplay" class="section">
+  <p class="kicker">Who is coming for what</p>
+  <h2>The interplay map</h2>
+  <p class="strap">
+    Every play, drawn from the actor that would run it to the part of the policy it defeats. A measure with
+    several arcs into it is a single point the policy has not defended twice over — the reading a ranked
+    list cannot give you.
+  </p>
+  <InterplayMap map={interplay} {inspect} />
+</section>
+
 <section id="actors" class="section">
-  <p class="kicker">C / Who is in the room</p>
+  <p class="kicker">Who is in the room</p>
   <h2>Actors, and what actually moves them</h2>
   <p class="strap">
     What each body says it wants, what its position rewards, who it answers to, and — the question an
     assurance review never asks — who is better off if this policy fails.
   </p>
-  <ActorBoard {actors} {inspect} />
+  <ActorBoard {actors} personas={data.personas ?? []} {inspect} />
 </section>
+</div>
 
-<section id="checks" class="section">
-  <p class="kicker">D / Where it is thin</p>
-  <h2>Twelve structural checks</h2>
+<div role="tabpanel" id={wpanelId('ground')} class="workspace" aria-labelledby={wtabId('ground')} hidden={workspace !== 2}>
+<section id="stress" class="section">
+  <p class="kicker">What if we are wrong?</p>
+  <h2>The stress test</h2>
   <p class="strap">
-    These are the only figures on this page no model produced. Each walks the relationships the policy
-    states and asks whether the counterpart it depends on is there — responsibility with authority,
-    accountability with resources, a measure with someone who owns its data. A check with nothing to look
-    at is <em>not</em> a pass.
+    Switch an assumption off and the assessment recomputes in front of you: which conclusions lose their
+    footing, which redesign options lose the findings behind them, and which plays stop being available at
+    all. It walks the citations the assessment already made — no model runs, and the same switches always
+    give the same answer.
   </p>
-  <CheckGrid {checks} {inspect} />
-</section>
-
-<section id="scenarios" class="section">
-  <p class="kicker">E / What breaks it</p>
-  <h2>Conditions, models and sensitivity</h2>
-  <p class="strap">
-    Eight standing conditions the policy has to survive, and the interaction patterns each one runs
-    through. These are semi-formal hypotheses about behaviour, not simulations, and they say so.
-  </p>
-
   {#if fragile.length}
     <div class="fragile">
       <p class="sr-label">The assumptions most likely to change the conclusion</p>
@@ -301,17 +353,31 @@
     </div>
   {/if}
 
-  <div class="cards">
-    {#each scenarios as s (s.id)}
-      <article class="card">
-        <p class="kicker-sm">{String(s.data.scenario).replaceAll('_', ' ')}</p>
-        <h3>{s.label}</h3>
-        <p>{s.statement}</p>
-        {#if s.data.detectability}<p class="muted"><strong>Would we see it?</strong> {String(s.data.detectability)}</p>{/if}
-        <button class="link" onclick={() => inspect(s.id)}>Sensitivity and evidence →</button>
-      </article>
-    {/each}
-  </div>
+  <StressTest {artefacts} {inspect} />
+</section>
+
+<section id="checks" class="section">
+  <p class="kicker">Where it is thin</p>
+  <h2>Twelve structural checks</h2>
+  <p class="strap">
+    These are the only figures on this page no model produced. Each walks the relationships the policy
+    states and asks whether the counterpart it depends on is there — responsibility with authority,
+    accountability with resources, a measure with someone who owns its data. A check with nothing to look
+    at is <em>not</em> a pass.
+  </p>
+  <CheckGrid {checks} {inspect} />
+</section>
+
+<section id="scenarios" class="section">
+  <p class="kicker">What breaks it</p>
+  <h2>Conditions, models and sensitivity</h2>
+  <p class="strap">
+    Eight standing conditions the policy has to survive, stepped through one beat at a time: what changes,
+    who moves first, what follows, and whether anyone would notice. These are semi-formal hypotheses about
+    behaviour rather than a numerical simulation, and each one says so in its own sensitivity notes.
+  </p>
+
+  <ScenarioWalk {scenarios} {artefacts} {inspect} />
 
   {#if models.length}
     <details class="models">
@@ -329,7 +395,7 @@
 </section>
 
 <section id="evidence" class="section">
-  <p class="kicker">F / Evidence and enquiry</p>
+  <p class="kicker">Evidence and enquiry</p>
   <h2>What is actually supported</h2>
   <p class="strap">
     Every claim in the paper linked to something outside it, or explicitly not. A search excerpt is weak
@@ -342,9 +408,11 @@
     {inspect}
   />
 </section>
+</div>
 
+<div role="tabpanel" id={wpanelId('record')} class="workspace" aria-labelledby={wtabId('record')} hidden={workspace !== 3}>
 <section id="cross" class="section">
-  <p class="kicker">G / Across policies</p>
+  <p class="kicker">Across policies</p>
   <h2>Weaknesses that span more than one policy</h2>
   <p class="strap">
     Some failures do not exist in any single document: one body told two incompatible things, a burden that
@@ -354,7 +422,7 @@
 </section>
 
 <section id="report" class="section">
-  <p class="kicker">H / The written assessment</p>
+  <p class="kicker">The written assessment</p>
   <h2>Chapter and verse</h2>
   {#if acts.length}
     <p class="strap">
@@ -375,7 +443,7 @@
 </section>
 
 <section id="provenance" class="section">
-  <p class="kicker">I / Run log and provenance</p>
+  <p class="kicker">Run log and provenance</p>
   <h2>Everything behind the page</h2>
   <p class="strap">
     Every completed stage has an immutable execution record; every model call keeps its prompt version,
@@ -451,6 +519,7 @@
     {/if}
   </details>
 </section>
+</div>
 
 {#if selected}
   <aside id="policy-inspector" tabindex="-1" class="inspector" aria-label="Evidence inspector">
@@ -502,9 +571,14 @@
   .gaps li { padding: .35rem 0; }
 
   .rail { display: flex; flex-wrap: wrap; gap: 1px; background: var(--line-strong); border: 1px solid var(--line-strong); margin: 1.5rem 0 0; position: sticky; top: var(--site-nav-height, 0); z-index: 4; }
-  .rail a { flex: 1 1 auto; background: var(--bg); padding: .6rem .75rem; font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--text-secondary); text-decoration: none; white-space: nowrap; }
-  .rail a:hover { background: var(--surface-sunken); color: var(--text-primary); }
-  .letter { color: var(--accent); margin-right: .45rem; }
+  .wtab { flex: 1 1 auto; display: flex; align-items: baseline; gap: .5rem; background: var(--bg); border: 0; padding: .7rem .9rem; font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--text-secondary); cursor: pointer; white-space: nowrap; text-align: left; }
+  .wtab:hover { background: var(--surface-sunken); color: var(--text-primary); }
+  .wtab.on { background: var(--accent); color: var(--bg); }
+  .wtab.on .letter { color: var(--bg); }
+  .wtab:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: -3px; }
+  .rail-strap { margin: .5rem 0 0; }
+  .workspace { min-width: 0; }
+  .letter { color: var(--accent); }
   .anchor { scroll-margin-top: 4rem; }
 
   .section { border-top: 2px solid var(--text-primary); margin-top: 3rem; padding-top: 1.5rem; scroll-margin-top: 4rem; }
@@ -518,9 +592,6 @@
   .filter button.on { background: var(--text-primary); color: var(--bg); }
   .plays { display: grid; gap: 1rem; }
 
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 1px; background: var(--line-strong); border: 1px solid var(--line-strong); margin-top: 1.5rem; }
-  .card { background: var(--bg); padding: 1rem 1.1rem; min-width: 0; }
-  .card h3 { font-size: var(--fs-body); font-weight: 700; margin: 0 0 .4rem; }
   .fragile { margin-top: 1.5rem; border-left: 3px solid var(--accent); padding-left: 1rem; }
   .fragile ol { margin: 0; padding-left: 1.1rem; }
   .fragile li { padding: .5rem 0; }
@@ -542,7 +613,9 @@
      their target so a printed copy is still traceable. */
   @media print {
     :global(.policy-page) { max-width: none; padding: 0; }
-    .rail, .progress, .filter, .danger, .inspector { display: none !important; }
+    .rail, .rail-strap, .progress, .filter, .danger, .inspector { display: none !important; }
+    /* Every workspace is already in the DOM; a printed pack wants all four. */
+    .workspace[hidden] { display: block !important; }
     #provenance { display: none; }
     .section { break-inside: auto; page-break-inside: auto; border-top: 1px solid #000; }
     :global(.policy-page details) { display: block; }

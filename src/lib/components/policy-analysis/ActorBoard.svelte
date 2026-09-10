@@ -14,10 +14,19 @@
 
   interface Props {
     actors: ActorView[];
+    /**
+     * Bodies this assessment met that the reader has met before. Read from the
+     * observation rows rather than from the run's own artefacts: a persona minted
+     * by THIS run gets its identifier at commit, so the artefact that asked for
+     * it carries a null id and could not be followed to a page.
+     */
+    personas?: { actorId: string | null; personaId: string; name: string; sightings: number }[];
     inspect: (id: string) => void;
   }
 
-  let { actors, inspect }: Props = $props();
+  let { actors, personas = [], inspect }: Props = $props();
+
+  const libraryOf = (actorId: string) => personas.find((p) => p.actorId === actorId) ?? null;
 
   const PERSONA = [
     ['accountableTo', 'Answers to'],
@@ -41,6 +50,12 @@
       <header>
         <h3>{view.actor.label}</h3>
         <p class="type">{String(view.actor.data.entityType ?? '').replaceAll('_', ' ')}</p>
+        {#if libraryOf(view.actor.id)}
+          {@const known = libraryOf(view.actor.id)}
+          <a class="persona" href={`/policy-analysis/personas/${known?.personaId}`}>
+            In your library{#if (known?.sightings ?? 0) > 1}{' · '}seen in {known?.sightings} assessments{/if} →
+          </a>
+        {/if}
       </header>
 
       {#if view.profile}
@@ -84,6 +99,7 @@
   .board { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 1px; background: var(--line-strong); border: 1px solid var(--line-strong); margin-top: 1.25rem; }
   .actor { background: var(--bg); padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: .8rem; min-width: 0; }
   h3 { font-size: var(--fs-body-lg); font-weight: 700; margin: 0; }
+  .persona { display: inline-block; margin-top: .35rem; font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--accent-ink); }
   .type { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--accent-ink); margin: .25rem 0 0; }
   dl { margin: 0; display: grid; gap: .55rem; }
   .row dt { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--text-muted); }

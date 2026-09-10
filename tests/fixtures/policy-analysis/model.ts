@@ -41,6 +41,16 @@ export function fixtureModel(stage: number, _key: string, raw: unknown): StageOu
     items = [make('exploit', 'exploit', { actorId: a.id, motivation: 'Avoids implementation cost while remaining compliant.', play: 'Report against the measure without changing the unobservable practice.', legality: 'compliant', targets: [one('mechanism').id], preconditions: [one('assumption').id], payoff: 'Retains discretion and avoids cost.', costToPolicy: 'The objective is not delivered while the measure reads well.', incentive: 0.6, ease: 0.6, impact: 0.6, concealment: 0.6, earlyWarning: 'Measure improves while complaints do not fall.', counter: 'Add an independent check of the unobservable practice.', precedent: 'None identified in this synthetic fixture.' }, [one('profile').id, one('mechanism').id, one('assumption').id])];
   } else if (stage === 11) {
     items = [];
+  } else if (stage === 13) {
+    const a = input.artefacts.find((x) => x.id === input.targetActorId)!;
+    const profile = input.artefacts.find((x) => x.kind === 'profile' && x.data.actorId === a.id);
+    const prior = (raw as { priorPersona?: { personaId?: string } | null }).priorPersona ?? null;
+    const traits = [{ key: 'accountableTo', label: 'Who it answers to', value: 'A documented reporting line in this synthetic fixture.', origin: 'structural_inference', confidence: null }];
+    items = [make('persona', 'persona_link', {
+      personaId: prior?.personaId ?? null, personaName: a.label, entityType: String(a.data.entityType ?? 'concept'),
+      actorId: a.id, aliases: [], summary: 'A synthetic body used only by automated tests.',
+      traits, observed: traits, continuity: 'First sighting in this synthetic fixture.', divergence: 'None identified.',
+    }, [a.id, ...(profile ? [profile.id] : [])])];
   } else if (stage === 12) {
     const sections = [...REPORT_SECTIONS];
     items = sections.map((section) => make(section, 'finding', { section, resultIds: [one('test').id], hypothesisIds: [one('assumption').id] }, [one('test').id, one('assumption').id]));

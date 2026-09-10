@@ -16,7 +16,6 @@ import {
   numeric,
   customType,
   primaryKey,
-  foreignKey,
   uuid,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
@@ -7038,6 +7037,36 @@ export const policyArtefacts = pgTable('policy_artefacts', {
   check('policy_confidence_range', sql`${t.confidence} IS NULL OR (${t.confidence} >= 0 AND ${t.confidence} <= 1)`),
 ]);
 
+/**
+ * Provenance links between artefacts of one analysis.
+ *
+ * THERE ARE NO COMPOSITE FOREIGN KEYS HERE, AND THAT IS DELIBERATE — see
+ * `docs/superpowers/specs/policy-analysis-personas-and-simulation.md`.
+ *
+ * `policy_provenance_from_fk` and `_to_fk` used to point (analysis_id, from_id)
+ * and (analysis_id, to_id) at `policy_artefacts`' composite primary key. On
+ * drizzle-kit 0.31.10 that combination makes EVERY push fail, permanently:
+ * drizzle unconditionally recreates both the composite FKs and the composite PK
+ * they reference, and it orders the statements
+ *
+ *   DROP the FKs … ADD the FKs … DROP the PK … ADD the PK
+ *
+ * so the PK drop runs while the FKs it re-created depend on it, and Postgres
+ * refuses with `cannot drop constraint policy_artefacts_analysis_id_id_pk`.
+ * Reproduced on 2026-09-10 against a database drizzle had itself created from
+ * this file seconds earlier, so it is not drift and no reconciliation fixes it.
+ * It cost one failed production release and a hand-applied migration, and it
+ * would have cost one on every schema change from here on.
+ *
+ * What the constraints were buying is bought elsewhere:
+ *
+ * - "a link names a real artefact" is enforced at WRITE time. Every link comes
+ *   from an artefact's `refs`, and `triageArtefacts` has already pruned or
+ *   rejected any reference that does not resolve, before the row exists.
+ * - "deleting the parent removes the links" still holds through
+ *   `analysis_id → policy_analyses.id ON DELETE CASCADE` below. Artefact rows
+ *   are never deleted individually; an analysis is the unit of deletion.
+ */
 export const policyProvenance = pgTable('policy_provenance', {
   analysisId: uuid('analysis_id').notNull().references(() => policyAnalyses.id, { onDelete: 'cascade' }),
   fromId: text('from_id').notNull(),
@@ -7045,8 +7074,6 @@ export const policyProvenance = pgTable('policy_provenance', {
   relation: text('relation').notNull().default('derived_from'),
 }, (t) => [
   primaryKey({ columns: [t.analysisId, t.fromId, t.toId] }),
-  foreignKey({ columns: [t.analysisId, t.fromId], foreignColumns: [policyArtefacts.analysisId, policyArtefacts.id], name: 'policy_provenance_from_fk' }).onDelete('cascade'),
-  foreignKey({ columns: [t.analysisId, t.toId], foreignColumns: [policyArtefacts.analysisId, policyArtefacts.id], name: 'policy_provenance_to_fk' }).onDelete('cascade'),
 ]);
 
 export const policyModelCalls = pgTable('policy_model_calls', {
@@ -7069,4 +7096,64 @@ export const policyModelCalls = pgTable('policy_model_calls', {
   // The reuse probe filters on the hash and the prompt version; without this it
   // is a sequential scan of every model call the site has ever made.
   index('policy_model_calls_hash_idx').on(t.inputHash, t.promptVersion),
+]);
+
+/**
+ * The persona library: bodies the reader keeps meeting, remembered between
+ * assessments.
+ *
+ * Owner-scoped, like every other row in this feature, and drawn only from that
+ * owner's own private assessments. `dossier` is the STANDING description — what
+ * this body is and what its position rewards — with each trait carrying its own
+ * epistemic origin, because "who it answers to" may be an extracted fact in one
+ * paper and an inference in another and averaging that away would be the whole
+ * problem.
+ *
+ * Deliberately no unique index on the name. Identity here is decided by the
+ * site's own identity policy (`assessIdentity`), not by string equality, and a
+ * unique constraint would either merge two bodies that share a name or refuse a
+ * legitimate second one. Duplicates are resolved in code, under the same
+ * per-owner advisory lock that serialises intake.
+ */
+export const policyPersonas = pgTable('policy_personas', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  owner: text('owner').notNull(),
+  name: text('name').notNull(),
+  entityType: text('entity_type').notNull().default('concept'),
+  aliases: jsonb('aliases').$type<string[]>().notNull().default([]),
+  summary: text('summary'),
+  dossier: jsonb('dossier').$type<{ key: string; label: string; value: string; origin: string; confidence: number | null }[]>().notNull().default([]),
+  jurisdiction: text('jurisdiction'),
+  // How many assessments have met this body. Recomputed from the observations,
+  // never incremented blindly: deleting an assessment must lower it.
+  sightings: integer('sightings').notNull().default(0),
+  researchedAt: timestamp('researched_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('policy_personas_owner_idx').on(t.owner, t.name)]);
+
+/**
+ * One contribution to a persona: an assessment that met it, or a research pass
+ * commissioned against it.
+ *
+ * `analysis_id` is nullable and cascades. Deleting an assessment removes what
+ * that assessment observed — those rows point at artefacts that no longer exist
+ * — while the persona itself survives with a lower sighting count and its
+ * research notes intact.
+ */
+export const policyPersonaObservations = pgTable('policy_persona_observations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  personaId: uuid('persona_id').notNull().references(() => policyPersonas.id, { onDelete: 'cascade' }),
+  analysisId: uuid('analysis_id').references(() => policyAnalyses.id, { onDelete: 'cascade' }),
+  kind: text('kind').notNull().default('assessment'),
+  analysisTitle: text('analysis_title'),
+  actorId: text('actor_id'),
+  traits: jsonb('traits').$type<{ key: string; label: string; value: string; origin: string; confidence: number | null }[]>().notNull().default([]),
+  plays: jsonb('plays').$type<{ label: string; band: string; exposure: number; legality: string }[]>().notNull().default([]),
+  sources: jsonb('sources').$type<{ url: string; title: string; quality: string }[]>().notNull().default([]),
+  note: text('note'),
+  observedAt: timestamp('observed_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('policy_persona_observations_persona_idx').on(t.personaId, t.observedAt),
+  index('policy_persona_observations_analysis_idx').on(t.analysisId),
 ]);

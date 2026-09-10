@@ -297,3 +297,102 @@ export function runCost(calls: { model?: string | null; usage?: unknown }[]): Ru
   cost.models = [...byModel.values()].sort((a, b) => b.input + b.output - (a.input + a.output));
   return cost;
 }
+
+/**
+ * The interplay map: who is coming for what.
+ *
+ * The actor board answers "who is in the room" and the playbook answers "what
+ * could they do", and between them a reader still has to hold the join in their
+ * head — that three different bodies are all attacking the same measure, or that
+ * one actor's reach covers half the machinery. That join is the whole point of a
+ * game-theoretic read, and it is already in the data: every exploitation play
+ * names the actor that runs it and the mechanisms and measures it defeats.
+ *
+ * Nothing is scored here that the assessment did not score. An arc's weight is
+ * the play's own exposure and a target's rank is the sum of what is aimed at it.
+ */
+export type InterplayActor = { actor: Artefact; plays: number; worst: number; reach: number };
+export type InterplayTarget = { id: string; label: string; kind: string; artefact: Artefact | null; incoming: number; pressure: number };
+export type InterplayLink = { actorId: string; targetId: string; playId: string; label: string; exposure: number; band: Band };
+export type Interplay = { actors: InterplayActor[]; targets: InterplayTarget[]; links: InterplayLink[]; hidden: number };
+
+/** A map with forty targets is a hairball; the tail is counted, not drawn. */
+export const INTERPLAY_TARGETS = 12;
+
+export function interplay(artefacts: Artefact[], list: Play[]): Interplay {
+  const byId = new Map(artefacts.map((a) => [a.id, a]));
+  const links: InterplayLink[] = [];
+  for (const play of list) {
+    const actorId = play.actor?.id;
+    if (!actorId) continue;
+    const targets = Array.isArray(play.artefact.data.targets) ? (play.artefact.data.targets as unknown[]).filter((t): t is string => typeof t === 'string') : [];
+    for (const targetId of new Set(targets)) {
+      links.push({ actorId, targetId, playId: play.artefact.id, label: play.artefact.label, exposure: play.exposure, band: play.band });
+    }
+  }
+
+  const targets = [...new Set(links.map((l) => l.targetId))].map((id) => {
+    const mine = links.filter((l) => l.targetId === id);
+    const artefact = byId.get(id) ?? null;
+    return {
+      id, artefact,
+      label: artefact?.label ?? 'A target no longer in the assessment',
+      kind: artefact?.kind ?? 'unknown',
+      incoming: mine.length,
+      pressure: mine.reduce((n, l) => n + l.exposure, 0),
+    };
+  }).sort((a, b) => b.pressure - a.pressure || b.incoming - a.incoming || a.label.localeCompare(b.label));
+
+  const shown = targets.slice(0, INTERPLAY_TARGETS);
+  const keep = new Set(shown.map((t) => t.id));
+  const drawn = links.filter((l) => keep.has(l.targetId));
+
+  const actors = [...new Set(drawn.map((l) => l.actorId))].map((id) => {
+    const mine = drawn.filter((l) => l.actorId === id);
+    return {
+      actor: byId.get(id) as Artefact,
+      plays: new Set(mine.map((l) => l.playId)).size,
+      worst: Math.max(...mine.map((l) => l.exposure)),
+      reach: new Set(mine.map((l) => l.targetId)).size,
+    };
+  }).filter((a) => a.actor).sort((a, b) => b.reach - a.reach || b.worst - a.worst || a.actor.label.localeCompare(b.actor.label));
+
+  return { actors, targets: shown, links: drawn, hidden: targets.length - shown.length };
+}
+
+/**
+ * A scenario, beat by beat.
+ *
+ * The contract already holds a sequence — the condition changes, one actor moves
+ * first, that produces downstream effects, those land on named outcomes, and
+ * somebody may or may not notice. Rendered as a paragraph it reads as an
+ * observation; stepped through, it reads as the thing it is, which is a story
+ * about behaviour under a condition the policy has to survive.
+ */
+export type Beat = { key: string; label: string; body: string; refs: string[] };
+
+export function scenarioBeats(scenario: Artefact, artefacts: Artefact[]): Beat[] {
+  const byId = new Map(artefacts.map((a) => [a.id, a]));
+  const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+  const named = (ids: string[]) => ids.map((id) => byId.get(id)?.label).filter((l): l is string => Boolean(l));
+  const d = scenario.data;
+  const first = typeof d.firstActor === 'string' ? byId.get(d.firstActor) : null;
+  const beats: Beat[] = [];
+  const push = (key: string, label: string, body: unknown, refs: string[] = []) => {
+    const text = String(body ?? '').trim();
+    if (text) beats.push({ key, label, body: text, refs });
+  };
+
+  push('condition', 'The condition changes', d.changedConditions);
+  push('first', first ? `${first.label} moves first` : 'The first move', d.strategy, first ? [first.id] : []);
+  for (const [i, effect] of strings(d.downstreamEffects).slice(0, 6).entries()) push(`effect-${i}`, i === 0 ? 'And then' : 'Which in turn', effect);
+  const hit = named(strings(d.affectedOutcomes));
+  if (hit.length) push('outcomes', 'What it lands on', hit.join(' · '), strings(d.affectedOutcomes));
+  push('detect', 'Would anyone see it?', d.detectability);
+  push('correct', 'What would correct it', d.correction);
+  const weak = strings(d.weaknesses);
+  if (weak.length) push('weak', 'Where the policy is weak here', weak.join(' '));
+  const sensitivity = strings(d.sensitivity);
+  if (sensitivity.length) push('sensitivity', 'What changes the answer', sensitivity.join(' '));
+  return beats;
+}
