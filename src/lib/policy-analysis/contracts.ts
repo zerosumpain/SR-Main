@@ -134,7 +134,12 @@ export const dataSchemas = {
   resolution_candidate: z.object({ candidates: ids.min(2), reason: text, resolved: z.literal(false) }),
   node: z.object({ entityId: text }),
   edge: z.object({ notes: text }),
-  profile: z.object({ actorId: text, ...profileFields }),
+  // `coversActorIds` is stamped by the SERVER after the call, never asked of the
+  // model: entity resolution deliberately refuses to merge rows that share a
+  // label, so this records which rows one profile was drawn for without
+  // asserting they are one body. Optional because a profile from before this
+  // existed, or from a single-row group, carries none.
+  profile: z.object({ actorId: text, coversActorIds: ids.optional(), ...profileFields }),
   research_question: z.object({ importance: unit, uncertainty: unit, consequence: unit, priority: unit.optional(), rationale: text, searchStrategy: text, gap: text }),
   research_source: z.object({ questionId: text, retrievedAt: text, quality: text, qualityBasis: text, freshness: text, jurisdictionalRelevance: text, retrieval: z.enum(['full_text', 'search_excerpt']), gap: text }),
   evidence: z.object({ claimId: z.string().nullable(), mechanismId: z.string().nullable(), actorId: z.string().nullable(), assumptionId: z.string().nullable(), sourceId: text, evidenceType: text, result: z.enum(['supports', 'contradicts', 'mixed', 'insufficient']), sourceQuality: text, relevance: text, freshness: text, dispute: text }),
