@@ -14,6 +14,7 @@
  */
 
 import { db } from '$lib/db';
+import { beginBatch } from './engine-runtime';
 import { workflows, workflowNodes, workflowEdges, workflowRuns, nodeExecutions } from '$lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { engine } from '$lib/workflows';
@@ -185,7 +186,19 @@ async function executeClaimed(claimed: ClaimedRun): Promise<void> {
   try {
     if (claimed.trigger === 'policy-analysis') {
       const { executePolicyRun } = await import('$lib/policy-analysis/server/worker');
-      await executePolicyRun(claimed, workerId);
+      // A policy stage assembles its context synchronously, and on a large
+      // assessment that held the event loop for 17-20 seconds a call — over the
+      // liveness probe's five second threshold, so the watchdog restarted this
+      // service mid-stage, repeatedly, and the stage could never finish. The
+      // batch is registered HERE rather than inside the policy worker because
+      // that module may not import `engine-runtime` without closing a cycle
+      // with this one; it beats through the callback instead.
+      const batch = beginBatch('policy-analysis', 'starting');
+      try {
+        await executePolicyRun(claimed, workerId, (phase) => batch.beat(phase));
+      } finally {
+        batch.end();
+      }
       return;
     }
     const def = await loadDefinition(workflowId);

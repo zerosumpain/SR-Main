@@ -23,7 +23,7 @@ import { writeMemory } from '$lib/jkai/memory/service.server';
 import { and, asc, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamPlaces, daydreamTrail, jkaiMemories } from '$lib/db/schema';
-import { clusterPoints, clusterRadiusM, median, metresBetween, segmentVisits } from './cluster';
+import { clusterPointsYielding, clusterRadiusM, median, metresBetween, segmentVisits } from './cluster';
 import {
   CLUSTER_RADIUS_M,
   LOCAL_TZ,
@@ -133,7 +133,11 @@ export async function refreshPlaces(opts: { windowDays?: number } = {}): Promise
     ts: f.ts,
   }));
 
-  const clusters = clusterPoints(points, CLUSTER_RADIUS_M);
+  // Yielding, not synchronous: this is a whole-window recompute over the entire
+  // trail and it blocked the event loop long enough for the liveness probe to
+  // declare the process wedged and restart the site, hourly. See the note on
+  // `clusterPointsYielding`.
+  const clusters = await clusterPointsYielding(points, CLUSTER_RADIUS_M);
 
   const existing = await db.select().from(daydreamPlaces);
   /** Place ids already taken by a cluster this pass, so two clusters cannot

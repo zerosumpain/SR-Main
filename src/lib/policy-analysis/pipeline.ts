@@ -25,7 +25,7 @@ export type Personas = (actors: Artefact[]) => Promise<PersonaPrior[]>;
  * How many agents a stage uses is how it is EXECUTED, never what the model is
  * asked, so it belongs beside `signal` with the other execution concerns.
  */
-export type PipelineDeps = { model: ModelCall; research: Research; signal: AbortSignal; neighbours?: Neighbours; personas?: Personas; concurrency?: Concurrency | null };
+export type PipelineDeps = { model: ModelCall; research: Research; signal: AbortSignal; neighbours?: Neighbours; personas?: Personas; concurrency?: Concurrency | null; onProgress?: (phase: string) => void };
 
 /**
  * Stages that fan out over a list — one call per passage, actor, pattern or
@@ -170,6 +170,10 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
           (raw) => ({ raw, err: null as unknown }),
           (err: unknown) => ({ raw: null as unknown, err }),
         )));
+      // Real progress, reported as each batch lands. The worker turns this into a
+      // liveness beat, so a stage that is working says so — and one that has
+      // stopped working stops saying so, which is the case the probe exists for.
+      deps.onProgress?.(`${Math.min(i + batch.length, units.length)} of ${units.length}`);
       for (let k = 0; k < batch.length; k++) {
         const { raw, err } = settled[k];
         let result: ReturnType<typeof absorb> | null;

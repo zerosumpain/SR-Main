@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, gt, sql } from 'drizzle-orm';
 import { db, type DbExecutor } from '$lib/db';
 import { policyAnalyses, policyDocuments, policyExecutions, policyModelCalls, policyStages, workflowRuns } from '$lib/db/schema';
 import { isThinkingLevel } from '$lib/models/thinking';
@@ -16,8 +16,22 @@ import { research } from './research';
 // uuid — so a malformed id raised a 500 where it should have been a 404.
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Interruptions are free, but not infinitely free. */
+/**
+ * Interruptions are free, but not infinitely free — measured as a RATE.
+ *
+ * This was a lifetime count, and on 2026-09-10 that nearly destroyed a healthy
+ * five-and-a-half-hour assessment. A liveness probe restarted the web process
+ * every two minutes for twenty minutes, and because the worker lives in that
+ * process each restart expired the lease and opened a new execution: ELEVEN of
+ * twelve spent without the work failing once. A lifetime count cannot tell a
+ * two-minute restart loop from a long run interrupted a few times an hour apart,
+ * and the second is an ordinary afternoon.
+ *
+ * Twelve inside an hour is a loop and still stops the stage. Twelve across six
+ * hours is a Thursday, and now costs nothing.
+ */
 const EXECUTION_CEILING = 12;
+const EXECUTION_WINDOW_MS = 60 * 60_000;
 
 /**
  * A runaway guard on model calls, not a budget.
@@ -60,7 +74,14 @@ async function lockLease(tx: DbExecutor, analysisId: string, stageId: string, ru
   return { analysis, stage };
 }
 /** One durable stage in the existing workflow queue. Completion and continuation commit together. */
-export async function executePolicyRun(claimed: { id: string; input: Record<string, unknown> | null }, workerId: string): Promise<void> {
+/**
+ * `beat` is injected rather than imported, and that is a layering rule not a
+ * preference: `$lib/workflows` already imports this module to dispatch a policy
+ * envelope, so importing `engine-runtime` back would close a cycle neither module
+ * could then be tested or moved out of. The caller owns the batch and ends it in
+ * its own `finally`, which also means no failure on the way in here can leak one.
+ */
+export async function executePolicyRun(claimed: { id: string; input: Record<string, unknown> | null }, workerId: string, beat?: (phase: string) => void): Promise<void> {
   const analysisId = String(claimed.input?.analysisId ?? '');
   const stageId = String(claimed.input?.stageId ?? '');
   if (!UUID.test(analysisId) || !UUID.test(stageId)) throw new Error('Invalid policy queue envelope');
@@ -71,11 +92,12 @@ export async function executePolicyRun(claimed: { id: string; input: Record<stri
     // deploy, an OOM or a lease blip used to burn one of the three, so three
     // merges to master during a long analysis killed it with nothing wrong.
     // `EXECUTION_CEILING` is the backstop against an interruption loop instead.
-    const [{ runs }] = await tx.select({ runs: sql<number>`count(*)::int` }).from(policyExecutions).where(eq(policyExecutions.stageId, stageId));
+    const [{ runs }] = await tx.select({ runs: sql<number>`count(*)::int` }).from(policyExecutions)
+      .where(and(eq(policyExecutions.stageId, stageId), gt(policyExecutions.startedAt, new Date(Date.now() - EXECUTION_WINDOW_MS))));
     if (locked.stage.attempts >= 3 || runs >= EXECUTION_CEILING) {
       const message = locked.stage.attempts >= 3
         ? 'This stage failed three times. Completed artefacts are retained; resume to try again.'
-        : 'This stage was interrupted too many times to continue automatically. Completed artefacts are retained; resume to try again.';
+        : `This stage was interrupted ${runs} times in the last hour, which is a restart loop rather than slow progress. Completed artefacts are retained; resume once the cause is fixed.`;
       await tx.update(policyStages).set({ status: 'failed', error: message }).where(eq(policyStages.id, stageId));
       await tx.update(policyAnalyses).set({ status: 'failed', error: message, updatedAt: new Date() }).where(eq(policyAnalyses.id, analysisId));
       await tx.update(workflowRuns).set({ status: 'failed', error: message, completedAt: new Date() }).where(eq(workflowRuns.id, claimed.id));
@@ -91,12 +113,27 @@ export async function executePolicyRun(claimed: { id: string; input: Record<stri
   const abort = new AbortController();
   // Cancellation and lost leases stop further model/research calls. Commit also
   // checks the lease under row locks, so a late result cannot win after resume.
+  const all = await loadArtefacts(analysisId);
+  /**
+   * Tell the liveness probe this process is BUSY, not broken.
+   *
+   * Assembling a stage's context is synchronous and, on a large assessment, slow:
+   * measured at 17-20 seconds a call on 2026-09-10 against the probe's five
+   * second threshold. Every one of those read as a wedged process, so the
+   * watchdog restarted the service mid-call, over and over, and the stage could
+   * never finish.
+   */
+  const stagePhase = `stage ${started.stage.ordinal} · ${started.stage.name}`;
   const check = setInterval(() => {
+    // The beat rides the lease check rather than a timer of its own, and that is
+    // the point: a blocked event loop cannot fire this callback, so the beat
+    // stops exactly when the process really is wedged and the restart becomes
+    // correct again. A batch that has gone stale excuses nothing.
+    beat?.(stagePhase);
     void db.select({ status: workflowRuns.status, owner: workflowRuns.claimedBy, expiry: workflowRuns.leaseExpiresAt }).from(workflowRuns).where(eq(workflowRuns.id, claimed.id)).then(([r]) => {
       if (!r || r.status !== 'running' || r.owner !== workerId || !r.expiry || r.expiry.getTime() <= Date.now()) abort.abort();
     }).catch(() => abort.abort());
   }, 2000);
-  const all = await loadArtefacts(analysisId);
   const signal = AbortSignal.any([abort.signal, AbortSignal.timeout(stageBudgetMs(started.stage.ordinal, all))]);
   try {
     const [{ made }] = await db.select({ made: sql<number>`count(*)::int` }).from(policyModelCalls)
@@ -121,7 +158,7 @@ export async function executePolicyRun(claimed: { id: string; input: Record<stri
           return ingest(Buffer.from(document.content, 'base64'), document.filename, document.mimeType);
         })()
       : null;
-    const output = extracted ?? await executeStage({ stage: started.stage.ordinal, title: started.analysis.title, jurisdiction: started.analysis.jurisdiction, policyArea: started.analysis.policyArea, context: started.analysis.context, depth: started.analysis.depth as 'standard' | 'deep', graphLoss, priorWarnings: boundWarnings(previousStages.flatMap((s) => s.warnings)), artefacts: all }, { model: modelCaller(started.execution.id, claimed.id, signal, all, { model: started.analysis.model, thinkingLevel: isThinkingLevel(started.analysis.thinkingLevel) ? started.analysis.thinkingLevel : null }), research, signal, concurrency: started.analysis.concurrency as Concurrency | null, neighbours: () => neighbourSummaries(started.analysis.owner, analysisId), personas: (actors) => priorsFor(started.analysis.owner, actors, analysisId) });
+    const output = extracted ?? await executeStage({ stage: started.stage.ordinal, title: started.analysis.title, jurisdiction: started.analysis.jurisdiction, policyArea: started.analysis.policyArea, context: started.analysis.context, depth: started.analysis.depth as 'standard' | 'deep', graphLoss, priorWarnings: boundWarnings(previousStages.flatMap((s) => s.warnings)), artefacts: all }, { model: modelCaller(started.execution.id, claimed.id, signal, all, { model: started.analysis.model, thinkingLevel: isThinkingLevel(started.analysis.thinkingLevel) ? started.analysis.thinkingLevel : null }), research, signal, concurrency: started.analysis.concurrency as Concurrency | null, onProgress: (phase) => beat?.(`${stagePhase} · ${phase}`), neighbours: () => neighbourSummaries(started.analysis.owner, analysisId), personas: (actors) => priorsFor(started.analysis.owner, actors, analysisId) });
     signal.throwIfAborted();
     await db.transaction(async (tx) => {
       const locked = await lockLease(tx, analysisId, stageId, claimed.id, workerId);
