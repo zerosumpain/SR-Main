@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   bearingDelta,
   clusterPoints,
+  clusterPointsYielding,
   clusterRadiusM,
   coverageOf,
   hasCoverage,
@@ -75,6 +76,104 @@ describe('clusterPoints', () => {
 
   it('returns nothing for no points', () => {
     expect(clusterPoints([], 200)).toEqual([]);
+  });
+});
+
+describe('clusterPoints — the latitude guard is exact', () => {
+  /**
+   * The reference: the algorithm as it was before the guard, comparing every
+   * point against every cluster. If the guard ever skips a cluster the full
+   * scan would have chosen, these two disagree.
+   */
+  function bruteForce(points: ClusterPoint[], radiusM: number) {
+    const clusters: { lat: number; lon: number; members: number[] }[] = [];
+    for (const p of points) {
+      if (!Number.isFinite(p.lat) || !Number.isFinite(p.lon)) continue;
+      let bestIdx = -1;
+      let bestDist = Infinity;
+      for (let i = 0; i < clusters.length; i++) {
+        const d = metresBetween(p.lat, p.lon, clusters[i].lat, clusters[i].lon);
+        if (d < radiusM && d < bestDist) { bestDist = d; bestIdx = i; }
+      }
+      if (bestIdx >= 0) {
+        const c = clusters[bestIdx];
+        c.members.push(p.idx);
+        const n = c.members.length;
+        c.lat += (p.lat - c.lat) / n;
+        c.lon += (p.lon - c.lon) / n;
+      } else {
+        clusters.push({ lat: p.lat, lon: p.lon, members: [p.idx] });
+      }
+    }
+    return clusters;
+  }
+
+  /** Deterministic PRNG so a failure is reproducible from the seed alone. */
+  function scatter(n: number, seed: number): ClusterPoint[] {
+    let x = seed;
+    const rand = () => { x = (x * 1103515245 + 12345) % 2147483648; return x / 2147483648; };
+    return Array.from({ length: n }, (_, i) => ({
+      idx: i,
+      // A spread of a few hundred metres in each direction: dense enough that
+      // clusters genuinely compete, wide enough that the guard actually fires.
+      lat: 51.5 + (rand() - 0.5) * 0.01,
+      lon: -0.12 + (rand() - 0.5) * 0.01,
+      ts: at(i),
+    }));
+  }
+
+  it('matches a full unguarded scan over scattered points', () => {
+    for (const seed of [1, 7, 42, 1234, 99991]) {
+      const pts = scatter(400, seed);
+      expect(clusterPoints(pts, 200)).toEqual(bruteForce(pts, 200));
+    }
+  });
+
+  it('matches at radii either side of the guard width', () => {
+    const pts = scatter(300, 2026);
+    for (const radius of [25, 200, 750, 3000]) {
+      expect(clusterPoints(pts, radius)).toEqual(bruteForce(pts, radius));
+    }
+  });
+});
+
+describe('clusterPointsYielding', () => {
+  it('returns exactly what the synchronous version returns', async () => {
+    const pts: ClusterPoint[] = Array.from({ length: 1200 }, (_, i) => ({
+      idx: i,
+      lat: 51.5 + (i % 40) * 0.0004,
+      lon: -0.12 + Math.floor(i / 40) * 0.0004,
+      ts: at(i),
+    }));
+    expect(await clusterPointsYielding(pts, 200)).toEqual(clusterPoints(pts, 200));
+  });
+
+  it('actually yields, so the event loop keeps running underneath it', async () => {
+    const pts: ClusterPoint[] = Array.from({ length: 2000 }, (_, i) => ({
+      idx: i, lat: 51.5 + i * 0.00002, lon: -0.12, ts: at(i),
+    }));
+    // A timer set before the work starts must be able to fire DURING it. Under
+    // the synchronous version nothing could run until the whole loop finished,
+    // which is precisely what tripped the liveness probe.
+    let ranDuring = false;
+    const timer = setInterval(() => { ranDuring = true; }, 1);
+    await clusterPointsYielding(pts, 200);
+    clearInterval(timer);
+    expect(ranDuring).toBe(true);
+  });
+
+  it('reports progress and always ends on the total', async () => {
+    const pts: ClusterPoint[] = Array.from({ length: 1100 }, (_, i) => ({
+      idx: i, lat: 51.5 + i * 0.00001, lon: -0.12, ts: at(i),
+    }));
+    const seen: number[] = [];
+    await clusterPointsYielding(pts, 200, (done) => seen.push(done));
+    expect(seen.at(-1)).toBe(1100);
+    expect(seen).toEqual([...seen].sort((a, b) => a - b));
+  });
+
+  it('returns nothing for no points', async () => {
+    expect(await clusterPointsYielding([], 200)).toEqual([]);
   });
 });
 

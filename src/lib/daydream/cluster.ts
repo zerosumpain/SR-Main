@@ -78,33 +78,94 @@ export function bearingDelta(a: number, b: number): number {
  * far from borderline; callers should still pass points in time order so
  * results are reproducible.
  */
-export function clusterPoints(points: ClusterPoint[], radiusM = CLUSTER_RADIUS_M): Cluster[] {
-  const clusters: Cluster[] = [];
+/**
+ * Metres per degree of latitude, deliberately UNDER-stated.
+ *
+ * `metresBetween` is haversine on a sphere, where a degree of latitude is a
+ * constant ~111,195m; the WGS84 minimum, at the equator, is ~110,574m. Dividing
+ * by a smaller number than either makes the guard below WIDER than it strictly
+ * needs to be, which is the safe direction: a guard that was too tight would
+ * skip a cluster that really was in range and silently change the clustering.
+ */
+const METRES_PER_LAT_DEGREE_FLOOR = 110_000;
 
-  for (const p of points) {
-    if (!Number.isFinite(p.lat) || !Number.isFinite(p.lon)) continue;
+/** Points assigned between yields in `clusterPointsYielding`. */
+const YIELD_EVERY = 500;
 
-    let bestIdx = -1;
-    let bestDist = Infinity;
-    for (let i = 0; i < clusters.length; i++) {
-      const d = metresBetween(p.lat, p.lon, clusters[i].lat, clusters[i].lon);
-      if (d < radiusM && d < bestDist) {
-        bestDist = d;
-        bestIdx = i;
-      }
-    }
+/**
+ * Assign one point to the nearest cluster in range, or start a new one.
+ *
+ * Extracted so the synchronous and yielding drivers below run identical logic
+ * and cannot drift apart — the whole value of the yielding variant is that it
+ * produces exactly what the original produced.
+ */
+function assignPoint(clusters: Cluster[], p: ClusterPoint, radiusM: number): void {
+  if (!Number.isFinite(p.lat) || !Number.isFinite(p.lon)) return;
 
-    if (bestIdx >= 0) {
-      const c = clusters[bestIdx];
-      c.members.push(p.idx);
-      const n = c.members.length;
-      c.lat += (p.lat - c.lat) / n;
-      c.lon += (p.lon - c.lon) / n;
-    } else {
-      clusters.push({ lat: p.lat, lon: p.lon, members: [p.idx] });
+  // The great-circle distance between two points is never less than their
+  // north-south separation, so a latitude difference alone can rule a cluster
+  // out before paying for a haversine. Exact, not an approximation: every
+  // cluster it skips is one the full distance check would also have rejected.
+  // On the live trail this is the difference between ~199 million distance
+  // calculations and a small fraction of that.
+  const latGuard = radiusM / METRES_PER_LAT_DEGREE_FLOOR;
+
+  let bestIdx = -1;
+  let bestDist = Infinity;
+  for (let i = 0; i < clusters.length; i++) {
+    const c = clusters[i];
+    if (Math.abs(p.lat - c.lat) > latGuard) continue;
+    const d = metresBetween(p.lat, p.lon, c.lat, c.lon);
+    if (d < radiusM && d < bestDist) {
+      bestDist = d;
+      bestIdx = i;
     }
   }
 
+  if (bestIdx >= 0) {
+    const c = clusters[bestIdx];
+    c.members.push(p.idx);
+    const n = c.members.length;
+    c.lat += (p.lat - c.lat) / n;
+    c.lon += (p.lon - c.lon) / n;
+  } else {
+    clusters.push({ lat: p.lat, lon: p.lon, members: [p.idx] });
+  }
+}
+
+export function clusterPoints(points: ClusterPoint[], radiusM = CLUSTER_RADIUS_M): Cluster[] {
+  const clusters: Cluster[] = [];
+  for (const p of points) assignPoint(clusters, p, radiusM);
+  return clusters;
+}
+
+/**
+ * `clusterPoints`, but yielding to the event loop as it goes.
+ *
+ * The trail is a whole-window recompute and it grows: on 2026-09-10 it was
+ * 93,218 fixes against 2,133 clusters, and the synchronous version held the
+ * loop for 8.1-15.8 seconds every hour. The liveness probe restarts the web
+ * service when the loop stalls past five seconds, so this one job restarted the
+ * entire site roughly twenty times that day, and the fix count climbs ~150 an
+ * hour - the block was lengthening on its own.
+ *
+ * Same algorithm, same order, same results: `clusterPoints` and this function
+ * are asserted equal on identical input in `cluster.test.ts`.
+ */
+export async function clusterPointsYielding(
+  points: ClusterPoint[],
+  radiusM = CLUSTER_RADIUS_M,
+  onProgress?: (done: number, total: number) => void,
+): Promise<Cluster[]> {
+  const clusters: Cluster[] = [];
+  for (let i = 0; i < points.length; i++) {
+    assignPoint(clusters, points[i], radiusM);
+    if ((i + 1) % YIELD_EVERY === 0) {
+      onProgress?.(i + 1, points.length);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+  }
+  onProgress?.(points.length, points.length);
   return clusters;
 }
 
