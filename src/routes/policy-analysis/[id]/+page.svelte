@@ -25,6 +25,8 @@
   import ActorBoard from '$lib/components/policy-analysis/ActorBoard.svelte';
   import EvidenceMix from '$lib/components/policy-analysis/EvidenceMix.svelte';
   import CrossPolicy from '$lib/components/policy-analysis/CrossPolicy.svelte';
+  import ReportActs from '$lib/components/policy-analysis/ReportActs.svelte';
+  import { formatGbp, formatTokens } from '$lib/canvas/stats/costFormat';
 
   let { data }: { data: PageData } = $props();
 
@@ -64,6 +66,8 @@
   const tiles = $derived(view.tiles(artefacts, plays));
   const headline = $derived(view.headline(artefacts));
   const sections = $derived(view.findingsBySection(artefacts));
+  const acts = $derived(view.reportActs(artefacts));
+  const unplaced = $derived(view.unplacedSections(artefacts));
   const recommendations = $derived(view.of(artefacts, 'recommendation'));
   const fragile = $derived(view.fragileAssumptions(artefacts));
   const scenarios = $derived(view.of(artefacts, 'scenario'));
@@ -76,6 +80,14 @@
   // A stage that fans out over twenty passages sat on "2 of 13" for its whole
   // life. The model-call rows already knew how far in it was.
   const runningCalls = $derived(running ? data.calls.filter((c) => data.executions.some((e) => e.id === c.executionId && e.stageId === running.id)).length : 0);
+  const cost = $derived(view.runCost(data.calls));
+  // What the reader ASKED for, which is not always what answered — a submission
+  // that named no model resolves the research-deep workload, and the run log
+  // below carries the model each call actually used.
+  const commissioned = $derived([
+    data.analysis.model ? data.analysis.model.replace(/^codex\//, '') : null,
+    data.analysis.thinkingLevel ? `thinking ${data.analysis.thinkingLevel}` : null,
+  ].filter(Boolean).join(' · '));
   const provenance = $derived(data.artefactMetadata.find((a) => a.id === selectedId) ?? null);
 
   const fmt = (v: Date | string | null) => (v ? new Date(v).toLocaleString() : 'Not yet');
@@ -173,6 +185,20 @@
     {Math.max(0, Math.floor(((data.analysis.completedAt ? new Date(data.analysis.completedAt).getTime() : now) - new Date(data.analysis.createdAt).getTime()) / 60000))} minutes elapsed · {data.calls.length} model call{data.calls.length === 1 ? '' : 's'} · last update {fmt(data.heartbeat ?? data.analysis.updatedAt)}
   </p>
   {#if running}<p class="muted">Now running <strong>{running.name}</strong>{#if runningCalls}{' — '}{runningCalls} model call{runningCalls === 1 ? '' : 's'} made so far in this stage{/if}.</p>{/if}
+  {#if cost.calls}
+    <p class="spend">
+      <span class="sr-label">{active ? 'Spent so far' : 'What it cost'}</span>
+      <strong>{formatTokens(cost.total)} tokens</strong>
+      <span class="muted">
+        {formatTokens(cost.input)} in · {formatTokens(cost.output)} out{#if cost.reasoning} · {formatTokens(cost.reasoning)} reasoning{/if}{#if cost.cached} · {formatTokens(cost.cached)} read from cache{/if}
+      </span>
+      <span class="muted">·</span>
+      <!-- Codex prices as null, never zero: it is subscription quota, not cash,
+           and "£0.00" would read as free money rather than as a bill nobody sent. -->
+      <span class="muted">{cost.cash === null ? 'on subscription quota, no cash cost' : formatGbp(cost.cash)}</span>
+      {#if commissioned}<span class="muted">· {commissioned}</span>{/if}
+    </p>
+  {/if}
   {#if active}<p>You can close this page. Every stage is saved as it finishes and the run recovers from a restart on its own.</p>{/if}
   {#if data.analysis.error}<p class="warning" role="alert">{data.analysis.error}</p>{/if}
   {#if message || refreshError}<p class="warning" role="alert">{message || refreshError}</p>{/if}
@@ -330,37 +356,21 @@
 <section id="report" class="section">
   <p class="kicker">H / The written assessment</p>
   <h2>Chapter and verse</h2>
-  {#if recommendations.length}
-    <div class="recommendations">
-      <p class="sr-label">Redesign options — normative judgements, not findings</p>
-      {#each recommendations as r (r.id)}
-        <article class="rec">
-          <h3>{r.label}</h3>
-          <p>{r.statement}</p>
-          {#if r.data.change}<p><strong>Change.</strong> {String(r.data.change)}</p>{/if}
-          {#if r.data.tradeoffs}<p><strong>Trade-off.</strong> {String(r.data.tradeoffs)}</p>{/if}
-          {#if r.data.burdenBearers}<p class="muted"><strong>Who carries it.</strong> {(r.data.burdenBearers as string[]).join(', ')}</p>{/if}
-          <button class="link" onclick={() => inspect(r.id)}>Findings behind it →</button>
-        </article>
-      {/each}
-    </div>
-  {/if}
-  {#each sections as section (section.section)}
-    <div class="chapter">
-      <h3>{section.label}</h3>
-      {#each section.items as f (f.id)}
-        <div class="finding">
-          <p class="kicker-sm">{f.origin.replaceAll('_', ' ')}</p>
-          <p>{f.statement}</p>
-          <button class="link" onclick={() => inspect(f.id)}>Trace to test, hypothesis and passage ({f.refs.length}) →</button>
-        </div>
-      {/each}
-    </div>
+  {#if acts.length}
+    <p class="strap">
+      Five movements, in the order the argument runs: what the assessment concludes, what the policy is
+      trying to do, what that rests on, where it breaks, and what to do about it. Every chapter keeps its
+      own heading; the acts are there so it can be read a movement at a time.
+    </p>
+    <ReportActs {acts} {recommendations} {inspect} />
+    {#if unplaced.length}
+      <p class="muted">{unplaced.length} chapter{unplaced.length === 1 ? '' : 's'} sit outside these acts and are listed under the run log: {unplaced.join(', ').replaceAll('_', ' ')}.</p>
+    {/if}
+    {#if sections.length < REPORT_SECTIONS.length}
+      <p class="muted">{REPORT_SECTIONS.length - sections.length} of the {REPORT_SECTIONS.length} chapters are missing from this assessment.</p>
+    {/if}
   {:else}
     <p class="empty">The written assessment is produced by the final stage and is not available yet.</p>
-  {/each}
-  {#if sections.length && sections.length < REPORT_SECTIONS.length}
-    <p class="muted">{REPORT_SECTIONS.length - sections.length} of the {REPORT_SECTIONS.length} chapters are missing from this assessment.</p>
   {/if}
 </section>
 
@@ -397,6 +407,28 @@
       <button class="link" onclick={() => (confirmDelete = true)}>Delete this assessment and its document</button>
     {/if}
   </div>
+
+  {#if cost.models.length}
+    <div class="ruled">
+      <p class="sr-label">Tokens by model</p>
+      <table class="spend-table">
+        <thead><tr><th scope="col">Model</th><th scope="col">Calls</th><th scope="col">In</th><th scope="col">Out</th></tr></thead>
+        <tbody>
+          {#each cost.models as m (m.model)}
+            <tr><td>{m.model}</td><td>{m.calls}</td><td>{formatTokens(m.input)}</td><td>{formatTokens(m.output)}</td></tr>
+          {/each}
+        </tbody>
+        <tfoot>
+          <tr><td>Total across {cost.calls} call{cost.calls === 1 ? '' : 's'}</td><td>{cost.models.reduce((n, m) => n + m.calls, 0)}</td><td>{formatTokens(cost.input)}</td><td>{formatTokens(cost.output)}</td></tr>
+        </tfoot>
+      </table>
+      <p class="muted">
+        {cost.cash === null
+          ? 'Every call was served on subscription quota, so there is no cash figure to report — that is not the same as zero.'
+          : `Reported cost ${formatGbp(cost.cash)}, converted from USD at the site rate.`}
+      </p>
+    </div>
+  {/if}
 
   <details bind:open={openLog}>
     <summary>{data.calls.length} model calls across {data.executions.length} executions</summary>
@@ -450,6 +482,12 @@
 <style>
   .standfirst { font-size: var(--fs-body-lg); color: var(--text-secondary); max-width: 60ch; }
   .progress { border-top: 2px solid var(--text-primary); border-bottom: 2px solid var(--text-primary); padding: .75rem 0 1.25rem; margin-top: 1.5rem; }
+  .spend { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem; margin: .35rem 0 0; }
+  .spend strong { font-family: var(--font-mono); }
+  .spend-table { border-collapse: collapse; margin: .5rem 0; font-size: var(--fs-body-sm); }
+  .spend-table th, .spend-table td { text-align: left; padding: .3rem .9rem .3rem 0; border-bottom: 1px solid var(--line); }
+  .spend-table td:not(:first-child), .spend-table th:not(:first-child) { font-family: var(--font-mono); text-align: right; }
+  .spend-table tfoot td { border-bottom: none; border-top: 1px solid var(--line-strong); font-weight: 600; }
   progress { width: 100%; height: .65rem; accent-color: var(--accent); }
   progress::-webkit-progress-bar { background: var(--surface-sunken); }
   progress::-webkit-progress-value { background: var(--accent); }

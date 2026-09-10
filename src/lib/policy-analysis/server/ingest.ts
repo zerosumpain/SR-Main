@@ -2,9 +2,11 @@ import { createHash } from 'node:crypto';
 import { extractPdf } from '$lib/jkai/extract/pdf';
 import { extractDocx } from '$lib/jkai/extract/docx';
 import { artefact, DEPTHS, MAX_BYTES, MAX_CHARACTERS, MAX_PAGES, type Artefact, type Depth, type StageOutput } from '../contracts';
+import { CODEX_MODELS, toCodexModelId } from '$lib/server/models/codex-catalogue';
+import { isThinkingLevel, thinkingLevelsFor, type ThinkingLevel } from '$lib/models/thinking';
 import { PolicyError } from '../validation';
 
-export type Submission = { title: string; jurisdiction: string | null; policyArea: string | null; context: string | null; depth: Depth; filename: string; mimeType: string; bytes: Buffer };
+export type Submission = { title: string; jurisdiction: string | null; policyArea: string | null; context: string | null; depth: Depth; model: string | null; thinkingLevel: ThinkingLevel | null; filename: string; mimeType: string; bytes: Buffer };
 const MIME: Record<string, string> = { txt: 'text/plain', pdf: 'application/pdf', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
 export function validateBytes(bytes: Buffer, filename: string, mimeType: string): string {
   if (!bytes.length || bytes.length > MAX_BYTES) throw new PolicyError('size', 'Supply a nonempty document of at most 10 MB.');
@@ -66,7 +68,17 @@ export async function readSubmission(request: Request): Promise<Submission> {
   const mimeType = validateBytes(bytes, filename, uploaded ? file.type : 'text/plain');
   const requested = str('depth', 20);
   const depth: Depth = (DEPTHS as readonly string[]).includes(requested) ? requested as Depth : 'standard';
-  return { title, jurisdiction: str('jurisdiction', 200) || null, policyArea: str('policyArea', 200) || null, context: str('context', 5000) || null, depth, filename, mimeType, bytes };
+  // Model and effort are a REQUEST, not a promise. An id nobody catalogues, or an
+  // effort the chosen model would answer with a 400, falls back to the workload
+  // default rather than failing a submission the reader cannot debug — and the
+  // run records what it actually called, so the page never claims a model that
+  // never answered.
+  const askedModel = str('model', 120);
+  const model = CODEX_MODELS.some((m) => toCodexModelId(m.slug) === askedModel) ? askedModel : null;
+  const askedEffort = str('thinkingLevel', 20);
+  const offered = thinkingLevelsFor('codex', model);
+  const thinkingLevel = isThinkingLevel(askedEffort) && offered.includes(askedEffort) ? askedEffort : null;
+  return { title, jurisdiction: str('jurisdiction', 200) || null, policyArea: str('policyArea', 200) || null, context: str('context', 5000) || null, depth, model, thinkingLevel, filename, mimeType, bytes };
 }
 export async function ingest(bytes: Buffer, filename: string, mimeType: string): Promise<StageOutput & { text: string; metadata: unknown }> {
   validateBytes(bytes, filename, mimeType);

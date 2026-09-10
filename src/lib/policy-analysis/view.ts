@@ -160,3 +160,140 @@ export const BAND_FILL: Record<Band, string> = {
 export const BAND_LABEL: Record<Band, string> = {
   severe: 'Severe', significant: 'Significant', moderate: 'Moderate', limited: 'Limited',
 };
+
+/**
+ * The written assessment, told as five acts rather than fifteen chapters.
+ *
+ * The report contract has fifteen sections and the page listed all of them, in
+ * contract order, one after another. That is an index, not a narrative: a reader
+ * who is not the person who built the pipeline has no way to tell that
+ * `scope_methodology` qualifies the verdict above it while `distribution` is
+ * about who pays. The acts group them the way the argument actually runs —
+ * what the assessment concludes, what the policy is trying to do, what that
+ * rests on, where it breaks, and what to do about it — so a reader can take one
+ * at a time and know where they are.
+ *
+ * Every section keeps its own heading inside its act, so nothing is hidden or
+ * renamed; the grouping is navigation, not editing.
+ */
+export const REPORT_ACTS = [
+  {
+    key: 'verdict',
+    title: 'The verdict',
+    strap: 'What this assessment concludes, and the ground it was drawn from.',
+    sections: ['executive_assessment', 'scope_methodology'],
+  },
+  {
+    key: 'intent',
+    title: 'What the policy is trying to do',
+    strap: 'Its objectives, the machinery meant to deliver them, and the actors it names.',
+    sections: ['objectives', 'mechanisms', 'actors'],
+  },
+  {
+    key: 'foundations',
+    title: 'What it rests on',
+    strap: 'The assumptions holding it up, and how much is actually established.',
+    sections: ['high_risk_assumptions', 'evidence_gaps', 'confidence_uncertainty'],
+  },
+  {
+    key: 'failure',
+    title: 'Where it breaks',
+    strap: 'The plays an actor can run, the conditions that change the answer, and the checks that fell short.',
+    sections: ['exploitation', 'scenarios', 'test_results'],
+  },
+  {
+    key: 'response',
+    title: 'What to do about it',
+    strap: 'Redesign options, who carries the burden, what spans other policies, and what is still open.',
+    sections: ['strategic_responses', 'distribution', 'cross_policy', 'unresolved_questions'],
+  },
+] as const;
+
+export type ActKey = (typeof REPORT_ACTS)[number]['key'];
+export type ReportAct = {
+  key: ActKey;
+  title: string;
+  strap: string;
+  chapters: { section: string; label: string; items: Artefact[] }[];
+  count: number;
+};
+
+/**
+ * Group the findings into acts, dropping any act the assessment did not reach.
+ *
+ * A section with no finding is not rendered, and an act with no section at all
+ * is not offered as a tab — an empty tab is a dead end the reader has to click
+ * to discover.
+ */
+export function reportActs(artefacts: Artefact[]): ReportAct[] {
+  const bySection = new Map(findingsBySection(artefacts).map((s) => [s.section, s]));
+  return REPORT_ACTS.map((act) => {
+    const chapters = act.sections.map((s) => bySection.get(s)).filter((c): c is NonNullable<typeof c> => Boolean(c));
+    return { key: act.key, title: act.title, strap: act.strap, chapters, count: chapters.reduce((n, c) => n + c.items.length, 0) };
+  }).filter((act) => act.chapters.length);
+}
+
+/** Report sections carrying a finding that no act claims — a contract change would show up here. */
+export function unplacedSections(artefacts: Artefact[]): string[] {
+  const claimed = new Set<string>(REPORT_ACTS.flatMap((a) => a.sections as readonly string[]));
+  return findingsBySection(artefacts).map((s) => s.section).filter((s) => !claimed.has(s));
+}
+
+/**
+ * What the assessment cost, in tokens and — only where there is one — in cash.
+ *
+ * `policy_model_calls.usage` is an ARRAY, not a record: a call that needed a
+ * corrective round-trip appends the second attempt rather than replacing the
+ * first, so summing the array is the only way to count what was actually spent.
+ *
+ * Codex prices as `null`, never `0` — it is subscription quota, not cash — so a
+ * run served entirely by the bridge must not report "$0.00" as though it were
+ * free money. `cash` is null when nothing reported a price, and the page says
+ * which of the two it is in words.
+ *
+ * This is not `rollupUsage` from `$lib/context/execution`, which sums the same
+ * `LLMCallRecord[]` with the same null-preserving arithmetic: that module opens
+ * with `node:async_hooks` and cannot be imported by a page. It also attributes a
+ * whole node to its last model, where an assessment wants the split across all
+ * of them. Formatting is the shared `formatTokens`/`formatGbp`.
+ */
+export type RunCost = {
+  input: number;
+  output: number;
+  reasoning: number;
+  cached: number;
+  total: number;
+  cash: number | null;
+  calls: number;
+  models: { model: string; calls: number; input: number; output: number }[];
+};
+
+type UsageRow = { model?: unknown; tokensInput?: unknown; tokensOutput?: unknown; reasoningTokens?: unknown; cacheReadTokens?: unknown; costUsd?: unknown };
+
+export function runCost(calls: { model?: string | null; usage?: unknown }[]): RunCost {
+  const cost: RunCost = { input: 0, output: 0, reasoning: 0, cached: 0, total: 0, cash: null, calls: 0, models: [] };
+  const byModel = new Map<string, { model: string; calls: number; input: number; output: number }>();
+  for (const call of calls) {
+    const rows = (Array.isArray(call.usage) ? call.usage : []) as UsageRow[];
+    if (!rows.length) continue;
+    cost.calls++;
+    for (const row of rows) {
+      const input = num(row.tokensInput);
+      const output = num(row.tokensOutput);
+      cost.input += input;
+      cost.output += output;
+      cost.reasoning += num(row.reasoningTokens);
+      cost.cached += num(row.cacheReadTokens);
+      // A reported price of null means "no cash changed hands", which is not the
+      // same as zero and must not turn `cash` from null into 0.
+      if (typeof row.costUsd === 'number' && Number.isFinite(row.costUsd)) cost.cash = (cost.cash ?? 0) + row.costUsd;
+      const name = typeof row.model === 'string' && row.model ? row.model : call.model ?? 'model not reported';
+      const seen = byModel.get(name) ?? { model: name, calls: 0, input: 0, output: 0 };
+      seen.calls++; seen.input += input; seen.output += output;
+      byModel.set(name, seen);
+    }
+  }
+  cost.total = cost.input + cost.output;
+  cost.models = [...byModel.values()].sort((a, b) => b.input + b.output - (a.input + a.output));
+  return cost;
+}
