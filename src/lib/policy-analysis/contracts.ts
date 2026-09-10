@@ -74,6 +74,15 @@ export const dataSchemas = {
   finding: z.object({ section: z.enum(['executive_assessment', 'scope_methodology', 'objectives', 'actors', 'mechanisms', 'high_risk_assumptions', 'test_results', 'strategic_responses', 'scenarios', 'exploitation', 'cross_policy', 'evidence_gaps', 'confidence_uncertainty', 'distribution', 'unresolved_questions']), resultIds: ids.min(1), hypothesisIds: ids.min(1) }),
   recommendation: z.object({ findingIds: ids.min(1), change: text, tradeoffs: text, beneficiaries: strings, burdenBearers: strings, validationNeeded: text }),
 } as const;
+/**
+ * The kinds a `finding` may cite as its result.
+ *
+ * Read in two places that must not drift: `relationalFault` rejects a conclusion
+ * citing anything else, and synthesis pins exactly these into its model call so
+ * the context budget can never shed what the rule then demands.
+ */
+export const RESULT_KINDS = ['test', 'model', 'scenario', 'exploit', 'cross_policy'] as const;
+
 export const REPORT_SECTIONS = ['executive_assessment', 'scope_methodology', 'objectives', 'actors', 'mechanisms', 'high_risk_assumptions', 'test_results', 'strategic_responses', 'scenarios', 'exploitation', 'cross_policy', 'evidence_gaps', 'confidence_uncertainty', 'distribution', 'unresolved_questions'] as const;
 export type Kind = keyof typeof dataSchemas;
 export const KINDS = Object.keys(dataSchemas) as [Kind, ...Kind[]];

@@ -1,4 +1,4 @@
-import { DEPTH_LIMITS, PATTERNS, REPORT_SECTIONS, SCENARIOS, SYNTHESIS_STAGE, type Artefact, type StageInput, type StageOutput } from './contracts';
+import { DEPTH_LIMITS, PATTERNS, REPORT_SECTIONS, RESULT_KINDS, SCENARIOS, SYNTHESIS_STAGE, type Artefact, type StageInput, type StageOutput } from './contracts';
 import { scoreExploits } from './exposure';
 import { clampWarnings, PolicyError, triageArtefacts, triageOutput } from './validation';
 import { modelApplicability } from './models';
@@ -152,7 +152,13 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     // Full source text was inspected passage by passage. Later stages receive the
     // structured inventory plus source quotes, not a silently truncated paper.
     const context = input.artefacts.filter((a) => a.kind !== 'passage' && (stage !== 2 || a.kind === 'actor') && (stage < 3 || a.kind !== 'actor' || a.id.startsWith('s2_')));
-    await request('main', context);
+    // A finding must cite a test, model, scenario, exploitation play or
+    // cross-policy exposure, so synthesis pins every one of them into the call.
+    // Without that the context budget shed the lot — they are the last things
+    // produced and carry the lowest confidence — and the model, still required
+    // to cite a result, invented identifiers for results it had never seen.
+    const protect = stage === SYNTHESIS_STAGE ? context.filter((a) => (RESULT_KINDS as readonly string[]).includes(a.kind)).map((a) => a.id) : [];
+    await request('main', context, protect.length ? { protect } : {});
   }
 
   const pursue = async (questions: Artefact[], round: number) => {
@@ -232,7 +238,12 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     // chapter and the redesign options are load-bearing.
     const missing = REPORT_SECTIONS.filter((section) => !output.artefacts.some((a) => a.data.section === section));
     const core = missing.filter((m) => (['executive_assessment', 'high_risk_assumptions', 'exploitation'] as string[]).includes(m));
-    if (core.length || !output.artefacts.some((a) => a.kind === 'recommendation')) throw new PolicyError('coverage', `The final assessment omitted ${core.length ? core.join(', ').replaceAll('_', ' ') : 'its redesign options'}.`);
+    if (core.length || !output.artefacts.some((a) => a.kind === 'recommendation')) {
+      // Naming the missing chapters describes the symptom. What a reader needs is
+      // why they are missing, which is always the reason the findings themselves
+      // were quarantined — and that reason is already recorded.
+      throw new PolicyError('coverage', `The final assessment omitted ${core.length ? core.join(', ').replaceAll('_', ' ') : 'its redesign options'}.${fault.last ? ` Last reason: ${fault.last.message}` : ''}`);
+    }
     if (missing.length) output.warnings.push(`The final assessment has no ${missing.map((m) => m.replaceAll('_', ' ')).join(', ')} section. Read it as incomplete on those grounds.`);
   }
   // Stage 11 is the one stage that may legitimately produce nothing: a reader

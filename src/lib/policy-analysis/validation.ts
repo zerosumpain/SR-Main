@@ -1,4 +1,4 @@
-import { artefactSchema, dataSchemas, looseOutputSchema, STAGE_KINDS, stageOutputSchema, type Artefact, type StageOutput } from './contracts';
+import { artefactSchema, dataSchemas, looseOutputSchema, RESULT_KINDS, STAGE_KINDS, stageOutputSchema, type Artefact, type StageOutput } from './contracts';
 import { locateQuote } from './quotes';
 
 export class PolicyError extends Error {
@@ -86,7 +86,7 @@ function relationalFault(a: Artefact, all: Map<string, Artefact>): Fault | null 
   if (a.kind === 'finding') {
     const results = a.data.resultIds as string[];
     const hypotheses = a.data.hypothesisIds as string[];
-    if (!results.every((id) => ['test', 'model', 'scenario', 'exploit', 'cross_policy'].includes(all.get(id)?.kind ?? '')) || !hypotheses.every((id) => all.get(id)?.kind === 'assumption')) return fault('traceability', 'A conclusion must cite a test or model and its hypotheses.');
+    if (!results.every((id) => (RESULT_KINDS as readonly string[]).includes(all.get(id)?.kind ?? '')) || !hypotheses.every((id) => all.get(id)?.kind === 'assumption')) return fault('traceability', 'A conclusion must cite a test or model and its hypotheses.');
     if (!hypotheses.every((hypothesis) => results.some((result) => reaches(result, hypothesis, all)))) return fault('traceability', 'A conclusion’s hypotheses must support its cited results.');
     for (const id of [...results, ...hypotheses]) if (!a.refs.includes(id)) return fault('traceability', 'A conclusion is missing a provenance link.');
   }
