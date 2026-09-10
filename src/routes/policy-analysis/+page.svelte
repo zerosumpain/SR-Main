@@ -73,6 +73,7 @@
   <li><strong>It profiles the actors.</strong> Not the org chart — who they answer to, what they are judged on, how far ahead they can afford to look, and who gains if this fails.</li>
   <li><strong>It red-teams them.</strong> Ranked plays, favouring the ones that stay inside the rules, each with what it costs the policy, the first sign of it, and the change that would close it.</li>
   <li><strong>It checks its own confidence.</strong> Targeted public research, an evidence matrix, twelve structural checks, and a plain list of what it could not establish.</li>
+  <li><strong>It remembers the actors.</strong> Every body it profiles goes into a <a href="/policy-analysis/personas">persona library</a> that the next assessment reads before it starts — as context to test against, never as evidence to import.</li>
 </ol>
 
 <form onsubmit={submit} class="submission">
@@ -158,6 +159,11 @@
   </p>
 </form>
 
+<div class="library-link">
+  <a href="/policy-analysis/personas">The persona library →</a>
+  <span class="muted">The bodies you keep meeting: what moves them, what they have been shown able to do, and what public sources say about them.</span>
+</div>
+
 <h2>Your assessments</h2>
 <p class="muted">
   Completed assessments are also what the cross-policy stage compares against, so weaknesses that only
@@ -177,6 +183,8 @@
 {/each}
 
 <style>
+  .library-link { border: 1px solid var(--line-strong); border-left: 3px solid var(--accent); padding: .9rem 1.1rem; margin: 2rem 0 1rem; display: grid; gap: .3rem; max-width: 70ch; }
+  .library-link a { font-family: var(--font-mono); font-size: var(--fs-label); }
   .standfirst { font-size: var(--fs-body-lg); color: var(--text-secondary); max-width: 62ch; }
   .how { margin: 2rem 0 0; padding-left: 1.25rem; max-width: 70ch; }
   .how li { padding: .45rem 0; color: var(--text-secondary); }

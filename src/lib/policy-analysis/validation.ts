@@ -54,7 +54,7 @@ function semanticFault(a: Artefact, all: Map<string, Artefact>, stage: number): 
   // URLs originate exclusively in trusted research adapter results, never model output.
   if (a.url && a.kind !== 'research_source') return fault('citation', 'Model-authored URLs are not accepted as evidence.');
   if (a.sourceId && !all.has(a.sourceId)) return fault('source', 'The source reference is unavailable.');
-  const actorTargets = a.kind === 'model' ? a.data.players as string[] : a.kind === 'edge' ? [a.fromId, a.toId] : a.kind === 'profile' || a.kind === 'exploit' ? [a.data.actorId] : a.kind === 'node' ? [a.data.entityId] : [];
+  const actorTargets = a.kind === 'model' ? a.data.players as string[] : a.kind === 'edge' ? [a.fromId, a.toId] : a.kind === 'profile' || a.kind === 'exploit' || a.kind === 'persona_link' ? [a.data.actorId] : a.kind === 'node' ? [a.data.entityId] : [];
   if (actorTargets.some((id) => typeof id === 'string' && all.get(id)?.kind === 'actor' && !id.startsWith('s2_'))) return fault('canonical', 'Graph assertions, profiles and models must use resolved actor identifiers.');
   if (a.kind === 'assumption' && !a.refs.some((id) => ['actor', 'mechanism'].includes(all.get(id)?.kind ?? ''))) return fault('hypothesis', 'An assumption must link to an affected actor or mechanism.');
   if ((a.kind === 'model' || a.kind === 'scenario') && !(a.data.assumptions as string[]).every((id) => a.refs.includes(id))) return fault('hypothesis', 'Interaction models and scenarios must link their assumptions into provenance.');

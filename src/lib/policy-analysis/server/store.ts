@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db, type DbExecutor } from '$lib/db';
-import { policyAnalyses, policyArtefacts, policyDocuments, policyExecutions, policyModelCalls, policyProvenance, policyStages, workflowRuns, workflows } from '$lib/db/schema';
+import { policyAnalyses, policyArtefacts, policyDocuments, policyExecutions, policyModelCalls, policyPersonaObservations, policyPersonas, policyProvenance, policyStages, workflowRuns, workflows } from '$lib/db/schema';
 import { STAGES, TRIGGER, WORKFLOW_ID, type Artefact } from '../contracts';
 import type { Neighbour } from '../pipeline';
 import { PolicyError } from '../validation';
@@ -99,7 +99,16 @@ export async function detail(owner: string, id: string) {
     .innerJoin(policyAnalyses, eq(policyAnalyses.id, policyArtefacts.analysisId))
     .where(and(eq(policyAnalyses.owner, owner), eq(policyArtefacts.kind, 'cross_policy'), sql`${policyArtefacts.data} ->> 'otherAnalysisId' = ${id}`))
     .limit(50);
-  return { analysis, stages, documents, artefactMetadata, artefacts, executions: executions.map((e) => e.execution), calls, inbound, heartbeat: run?.heartbeatAt ?? null };
+  // Which of this assessment's actors are bodies the reader has met before. The
+  // link is read from the observation rows rather than from the persona_link
+  // artefacts: a NEW persona is minted by the server at commit, so the artefact
+  // that asked for it carries a null id and could not be followed.
+  const personas = await db.select({ actorId: policyPersonaObservations.actorId, personaId: policyPersonas.id, name: policyPersonas.name, entityType: policyPersonas.entityType, sightings: policyPersonas.sightings })
+    .from(policyPersonaObservations)
+    .innerJoin(policyPersonas, eq(policyPersonas.id, policyPersonaObservations.personaId))
+    .where(and(eq(policyPersonaObservations.analysisId, id), eq(policyPersonas.owner, owner)))
+    .limit(60);
+  return { analysis, stages, documents, artefactMetadata, artefacts, executions: executions.map((e) => e.execution), calls, inbound, personas, heartbeat: run?.heartbeatAt ?? null };
 }
 export async function persistArtefacts(tx: DbExecutor, analysisId: string, stage: number, artefacts: Artefact[]) {
   if (!artefacts.length) return;

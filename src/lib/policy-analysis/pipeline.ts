@@ -1,4 +1,4 @@
-import { DEPTH_LIMITS, PATTERNS, REPORT_SECTIONS, RESULT_KINDS, SCENARIOS, SYNTHESIS_STAGE, type Artefact, type StageInput, type StageOutput } from './contracts';
+import { DEPTH_LIMITS, PATTERNS, PERSONA_STAGE, REPORT_SECTIONS, RESULT_KINDS, SCENARIOS, SYNTHESIS_STAGE, type Artefact, type StageInput, type StageOutput } from './contracts';
 import { scoreExploits } from './exposure';
 import { clampWarnings, PolicyError, triageArtefacts, triageOutput } from './validation';
 import { modelApplicability } from './models';
@@ -7,11 +7,14 @@ import { runPolicyTests } from './tests';
 import { documentShingles, quotesDocument } from './query-guard';
 import type { ModelCall } from './server/provider';
 import type { Research } from './server/research';
+import type { PersonaPrior } from './personas';
 
 /** Compact summaries of this reader's OTHER completed assessments, for stage 11. */
 export type Neighbour = { id: string; title: string; policyArea: string | null; jurisdiction: string | null; completedAt: string | null; artefacts: { id: string; kind: string; label: string; statement: string; entityType?: string; aliases?: string[] }[] };
 export type Neighbours = () => Promise<Neighbour[]>;
-export type PipelineDeps = { model: ModelCall; research: Research; signal: AbortSignal; neighbours?: Neighbours };
+/** What this reader's persona library already holds about the actors in this run. */
+export type Personas = (actors: Artefact[]) => Promise<PersonaPrior[]>;
+export type PipelineDeps = { model: ModelCall; research: Research; signal: AbortSignal; neighbours?: Neighbours; personas?: Personas };
 
 /**
  * Stages that fan out over a list — one call per passage, actor, pattern or
@@ -48,7 +51,7 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
   const request = async (key: string, context: Artefact[], extra: Record<string, unknown> = {}) => {
     deps.signal.throwIfAborted();
     const slot = key === 'main' ? 'main' : String(seq++).padStart(3, '0');
-    const raw = await deps.model(stage, key, { ...input, artefacts: context, idPrefix: `s${stage}_${slot}_`, targetActorId: stage === 4 || stage === 10 ? key : null, targetPattern: stage === 7 ? key : null, targetScenario: stage === 9 ? key : null, modelLibrary: stage === 7 ? modelApplicability(input.artefacts) : undefined, ...extra });
+    const raw = await deps.model(stage, key, { ...input, artefacts: context, idPrefix: `s${stage}_${slot}_`, targetActorId: stage === 4 || stage === 10 || stage === PERSONA_STAGE ? key : null, targetPattern: stage === 7 ? key : null, targetScenario: stage === 9 ? key : null, modelLibrary: stage === 7 ? modelApplicability(input.artefacts) : undefined, ...extra });
     const result = triageOutput(raw, stage, [...input.artefacts, ...output.artefacts]);
     // Retrieved sources are minted by the retrieval adapter and nowhere else. The
     // kind is permitted at this stage so the server's own rows validate, which
@@ -96,6 +99,29 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
    */
   const hypotheses = input.artefacts.filter((a) => a.kind === 'assumption').map((a) => a.id);
 
+  /**
+   * What the reader's persona library already holds about the bodies in this run.
+   *
+   * A prior is CONTEXT, never evidence. It was drawn from other papers about
+   * other policies, and a red team that imports last month's conclusion about a
+   * department has stopped reading this one. The provenance rules do the
+   * enforcing — a persona is neither a passage nor a retrieved source, so
+   * nothing resting on it alone can reach `hasSource` — and the prompt says so
+   * in words as well.
+   *
+   * Failing to READ the library must not cost a stage. The assessment is
+   * complete without it; it is merely less informed.
+   */
+  const priors = new Map<string, PersonaPrior>();
+  if (deps.personas && [4, 10, PERSONA_STAGE].includes(stage)) {
+    try {
+      const resolved = input.artefacts.filter((a) => a.kind === 'actor' && a.id.startsWith('s2_'));
+      for (const prior of await deps.personas(resolved)) priors.set(prior.actorId, prior);
+    } catch {
+      output.warnings.push('The persona library could not be read, so this stage ran without what earlier assessments established about these bodies.');
+    }
+  }
+
   if (stage === 1) {
     const passages = input.artefacts.filter((a) => a.kind === 'passage');
     for (const passage of passages) await attempt(passage.id, [passage], `Passage “${passage.label}”`, { protect: [passage.id] });
@@ -103,7 +129,7 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     for (const actor of input.artefacts.filter((a) => a.kind === 'actor' && a.id.startsWith('s2_'))) {
       const related = new Set([actor.id, ...actor.refs, ...input.artefacts.filter((a) => a.fromId === actor.id || a.toId === actor.id || a.refs.includes(actor.id)).flatMap((a) => [a.id, ...a.refs, a.fromId ?? '', a.toId ?? ''])]);
       const context = input.artefacts.filter((a) => related.has(a.id));
-      const result = await attempt(actor.id, [...context, ...(context.includes(actor) ? [] : [actor])], `The incentive profile for ${actor.label}`, { protect: [actor.id] });
+      const result = await attempt(actor.id, [...context, ...(context.includes(actor) ? [] : [actor])], `The incentive profile for ${actor.label}`, { protect: [actor.id], priorPersona: priors.get(actor.id) ?? null });
       if (result && !result.artefacts.some((a) => a.kind === 'profile' && a.data.actorId === actor.id)) {
         output.warnings.push(`${actor.label} has no incentive profile in this assessment; its motivations were not modelled.`);
       }
@@ -148,9 +174,29 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     if (ranked.length > limits.actors) output.warnings.push(`${ranked.length - limits.actors} of ${ranked.length} profiled actors were not red-teamed in this pass: ${ranked.slice(limits.actors).map((a) => a.label).join(', ')}. They are the least connected in the policy graph, not the least important. A deep run covers more of them.`);
     const base = input.artefacts.filter((a) => !['passage', 'research_source', 'alias', 'node', 'profile'].includes(a.kind) && (a.kind !== 'actor' || a.id.startsWith('s2_')));
     for (const actor of ranked.slice(0, limits.actors)) {
-      await attempt(actor.id, [...base, ...profiles.filter((p) => p.data.actorId === actor.id)], `Exploitation plays for ${actor.label}`, { protect: [actor.id, ...profiles.filter((p) => p.data.actorId === actor.id).map((p) => p.id), ...hypotheses] });
+      await attempt(actor.id, [...base, ...profiles.filter((p) => p.data.actorId === actor.id)], `Exploitation plays for ${actor.label}`, { protect: [actor.id, ...profiles.filter((p) => p.data.actorId === actor.id).map((p) => p.id), ...hypotheses], priorPersona: priors.get(actor.id) ?? null });
     }
     scoreExploits(output.artefacts);
+  } else if (stage === PERSONA_STAGE) {
+    // The library is a bonus, and it must never cost a completed assessment. The
+    // report was written at the previous stage; a dead provider here is a warning
+    // about the library, not a failed run — so every failure is caught, and the
+    // stage is exempt from the "produced nothing" rule at the bottom.
+    const profiles = input.artefacts.filter((a) => a.kind === 'profile');
+    const ranked = rankActors(input.artefacts, profiles).slice(0, limits.actors);
+    for (const actor of ranked) {
+      const own = profiles.filter((p) => p.data.actorId === actor.id);
+      const plays = input.artefacts.filter((a) => a.kind === 'exploit' && a.data.actorId === actor.id);
+      const context = [actor, ...own, ...plays];
+      try {
+        await request(actor.id, context, { protect: context.map((a) => a.id), priorPersona: priors.get(actor.id) ?? null });
+      } catch (err) {
+        deps.signal.throwIfAborted();
+        if (!(err instanceof PolicyError)) throw err;
+        output.warnings.push(`${actor.label} was not written to the persona library: ${err.message} The assessment itself is unaffected.`);
+      }
+    }
+    if (!output.artefacts.length && ranked.length) output.warnings.push('No actor could be written to the persona library on this run. Nothing in the assessment above depends on it.');
   } else if (stage === 11) {
     // Failing to LOAD the comparison must not cost the assessment its stage; the
     // rest of this run is unaffected by whether the other papers could be read.
@@ -268,9 +314,11 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     }
     if (missing.length) output.warnings.push(`The final assessment has no ${missing.map((m) => m.replaceAll('_', ' ')).join(', ')} section. Read it as incomplete on those grounds.`);
   }
-  // Stage 11 is the one stage that may legitimately produce nothing: a reader
-  // with a single policy has no cross-policy exposure, and saying so is the answer.
-  if (!output.artefacts.length && stage !== 11) throw new PolicyError(fault.last?.code ?? 'coverage', `This stage produced no artefacts.${fault.last ? ` Last reason: ${fault.last.message}` : ''}`);
+  // Two stages may legitimately produce nothing. A reader with a single policy
+  // has no cross-policy exposure, and saying so is the answer; and the persona
+  // library is written after the report, so an empty one costs the assessment
+  // nothing that was not already delivered.
+  if (!output.artefacts.length && stage !== 11 && stage !== PERSONA_STAGE) throw new PolicyError(fault.last?.code ?? 'coverage', `This stage produced no artefacts.${fault.last ? ` Last reason: ${fault.last.message}` : ''}`);
 
   // Quarantining is what keeps a run alive, and it is also how a thin assessment
   // could pass as a complete one: a stage whose graph was half discarded still

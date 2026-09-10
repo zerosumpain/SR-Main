@@ -3,10 +3,12 @@ import { db, type DbExecutor } from '$lib/db';
 import { policyAnalyses, policyDocuments, policyExecutions, policyModelCalls, policyStages, workflowRuns } from '$lib/db/schema';
 import { isThinkingLevel } from '$lib/models/thinking';
 import { boundWarnings } from '../budget';
+import { PERSONA_STAGE } from '../contracts';
 import { executeStage } from '../pipeline';
 import { PolicyError } from '../validation';
 import { ingest } from './ingest';
 import { loadArtefacts, neighbourSummaries, persistArtefacts, queueStage } from './store';
+import { applyPersonaLinks, priorsFor } from './personas';
 import { modelCaller } from './provider';
 import { research } from './research';
 
@@ -43,6 +45,9 @@ export function stageBudgetMs(ordinal: number, all: { kind: string; id: string }
     : ordinal === 6 ? count('research_question') + 1
     : ordinal === 7 || ordinal === 9 ? 8
     : ordinal === 10 ? Math.max(1, count('profile'))
+    // The persona library makes one merge call per profiled actor, exactly as the
+    // red team does. A flat budget here would kill the stage on a wide policy.
+    : ordinal === 13 ? Math.max(1, count('profile'))
     : 1;
   return Math.min(6 * 60 * 60_000, 20 * 60_000 + units * 3 * 60_000);
 }
@@ -116,12 +121,26 @@ export async function executePolicyRun(claimed: { id: string; input: Record<stri
           return ingest(Buffer.from(document.content, 'base64'), document.filename, document.mimeType);
         })()
       : null;
-    const output = extracted ?? await executeStage({ stage: started.stage.ordinal, title: started.analysis.title, jurisdiction: started.analysis.jurisdiction, policyArea: started.analysis.policyArea, context: started.analysis.context, depth: started.analysis.depth as 'standard' | 'deep', graphLoss, priorWarnings: boundWarnings(previousStages.flatMap((s) => s.warnings)), artefacts: all }, { model: modelCaller(started.execution.id, claimed.id, signal, all, { model: started.analysis.model, thinkingLevel: isThinkingLevel(started.analysis.thinkingLevel) ? started.analysis.thinkingLevel : null }), research, signal, neighbours: () => neighbourSummaries(started.analysis.owner, analysisId) });
+    const output = extracted ?? await executeStage({ stage: started.stage.ordinal, title: started.analysis.title, jurisdiction: started.analysis.jurisdiction, policyArea: started.analysis.policyArea, context: started.analysis.context, depth: started.analysis.depth as 'standard' | 'deep', graphLoss, priorWarnings: boundWarnings(previousStages.flatMap((s) => s.warnings)), artefacts: all }, { model: modelCaller(started.execution.id, claimed.id, signal, all, { model: started.analysis.model, thinkingLevel: isThinkingLevel(started.analysis.thinkingLevel) ? started.analysis.thinkingLevel : null }), research, signal, neighbours: () => neighbourSummaries(started.analysis.owner, analysisId), personas: (actors) => priorsFor(started.analysis.owner, actors, analysisId) });
     signal.throwIfAborted();
     await db.transaction(async (tx) => {
       const locked = await lockLease(tx, analysisId, stageId, claimed.id, workerId);
       if (!locked) return;
       await persistArtefacts(tx, analysisId, started.stage.ordinal, output.artefacts);
+      // The persona library is written here, not by the pipeline: a rolled-back
+      // stage must leave no rows behind, and a re-run must replace its own
+      // observation rather than adding a second one.
+      //
+      // Inside a SAVEPOINT, because a library write that fails must not roll back
+      // a completed assessment: the report was finished at the previous stage and
+      // the reader is owed it whatever happens to the dossier.
+      if (started.stage.ordinal === PERSONA_STAGE) {
+        try {
+          await tx.transaction(async (inner) => { await applyPersonaLinks(inner, started.analysis.owner, analysisId, started.analysis.title, output.artefacts, all); });
+        } catch {
+          output.warnings.push('This assessment could not be written into the persona library. Its own findings are unaffected; the library simply does not have this run.');
+        }
+      }
       if (extracted) await tx.update(policyDocuments).set({ extractedText: extracted.text, metadata: extracted.metadata }).where(eq(policyDocuments.analysisId, analysisId));
       await tx.update(policyExecutions).set({ status: 'completed', completedAt: new Date() }).where(eq(policyExecutions.id, started.execution.id));
       await tx.update(policyStages).set({ status: 'completed', completedAt: new Date(), warnings: output.warnings, output: { artefactIds: output.artefacts.map((a) => a.id), contractVersion: 1, rejected: 'rejected' in output ? output.rejected : 0 } }).where(eq(policyStages.id, stageId));

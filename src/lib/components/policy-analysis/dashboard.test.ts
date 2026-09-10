@@ -8,7 +8,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { render } from 'svelte/server';
-import { PATTERNS, REPORT_SECTIONS, SCENARIOS, artefact, type Artefact } from '$lib/policy-analysis/contracts';
+import { PATTERNS, PERSONA_STAGE, REPORT_SECTIONS, SCENARIOS, artefact, type Artefact } from '$lib/policy-analysis/contracts';
 import { executeStage } from '$lib/policy-analysis/pipeline';
 import { ingest } from '$lib/policy-analysis/server/ingest';
 import * as view from '$lib/policy-analysis/view';
@@ -22,6 +22,10 @@ import EvidenceMix from './EvidenceMix.svelte';
 import CrossPolicy from './CrossPolicy.svelte';
 import ArtefactValue from './ArtefactValue.svelte';
 import ReportActs from './ReportActs.svelte';
+import InterplayMap from './InterplayMap.svelte';
+import ScenarioWalk from './ScenarioWalk.svelte';
+import StressTest from './StressTest.svelte';
+import { leverage } from '$lib/policy-analysis/stress';
 
 const research = async () => ({ artefacts: [], warnings: ['Synthetic test: external research unavailable.'] });
 const inspect = () => {};
@@ -30,7 +34,7 @@ const inspect = () => {};
 async function assessment(): Promise<Artefact[]> {
   const all = (await ingest(readFileSync('tests/fixtures/policy-analysis/policy.txt'), 'policy.txt', 'text/plain')).artefacts;
   const signal = new AbortController().signal;
-  for (let stage = 1; stage <= 12; stage++) {
+  for (let stage = 1; stage <= PERSONA_STAGE; stage++) {
     const result = await executeStage({ stage, title: 'Synthetic policy', jurisdiction: null, policyArea: null, context: null, artefacts: all }, { model: async (...args) => fixtureModel(...args), research, signal });
     all.push(...result.artefacts);
   }
@@ -214,5 +218,110 @@ describe('the derivations rank what matters first', () => {
     expect(results.map((r) => rank.indexOf(r))).toEqual([...results.map((r) => rank.indexOf(r))].sort((a, b) => a - b));
     expect(view.of(all, 'model')).toHaveLength(PATTERNS.length);
     expect(view.of(all, 'scenario')).toHaveLength(SCENARIOS.length);
+  });
+});
+
+describe('the interplay map joins the actors to what they attack', () => {
+  it('draws one arc per play per target, and ranks a target by the pressure on it', async () => {
+    const all = await assessment();
+    const map = view.interplay(all, view.plays(all));
+    expect(map.links.length).toBeGreaterThan(0);
+    // Every arc is a play the assessment actually made, aimed at something it
+    // actually named — no arc is invented to fill the picture.
+    for (const link of map.links) {
+      expect(all.some((a) => a.id === link.playId && a.kind === 'exploit')).toBe(true);
+      expect(map.actors.some((actorRow) => actorRow.actor.id === link.actorId)).toBe(true);
+    }
+    const pressures = map.targets.map((t) => t.pressure);
+    expect(pressures).toEqual([...pressures].sort((a, b) => b - a));
+  });
+
+  it('counts the tail rather than drawing it', () => {
+    const actor = artefact('s2_0', 'actor', 'A body', 'x', { entityType: 'department', aliases: [], mentions: [], ambiguity: '', dates: [], parent: null }, {});
+    const targets = Array.from({ length: view.INTERPLAY_TARGETS + 4 }, (_, i) =>
+      artefact(`mech_${i}`, 'mechanism', `Mechanism ${i}`, 'x', { intervention: '', implementation: '', notes: '' }, {}));
+    const plays = targets.map((t, i) =>
+      artefact(`x_${i}`, 'exploit', `Play ${i}`, 'x', { actorId: 's2_0', targets: [t.id], preconditions: [], exposure: 0.5, band: 'moderate', legality: 'compliant', motivation: '', play: '', payoff: '', costToPolicy: '', incentive: 0.5, ease: 0.5, impact: 0.5, concealment: 0.5, earlyWarning: '', counter: '', precedent: '' }, {}));
+    const all = [actor, ...targets, ...plays];
+    const map = view.interplay(all, view.plays(all));
+    expect(map.targets).toHaveLength(view.INTERPLAY_TARGETS);
+    expect(map.hidden).toBe(4);
+  });
+
+  it('renders both columns and the table beneath them', async () => {
+    const all = await assessment();
+    const html = render(InterplayMap, { props: { map: view.interplay(all, view.plays(all)), inspect } }).body;
+    expect(html).toContain('Who moves');
+    expect(html).toContain('What it defeats');
+    expect(html).toContain('The same map as a table');
+  });
+});
+
+describe('a scenario reads as a sequence, not a paragraph', () => {
+  it('breaks it into beats in the order the behaviour happens', async () => {
+    const all = await assessment();
+    const scenario = view.of(all, 'scenario')[0];
+    const beats = view.scenarioBeats(scenario, all);
+    const keys = beats.map((b) => b.key);
+    expect(keys[0]).toBe('condition');
+    expect(keys).toContain('detect');
+    expect(keys.indexOf('condition')).toBeLessThan(keys.indexOf('detect'));
+    // The first mover is named from the resolved actor, not from an id.
+    expect(beats.find((b) => b.key === 'first')?.label).not.toContain('s2_');
+  });
+
+  it('leaves out a beat the scenario did not record', () => {
+    const bare = artefact('s9_0_x', 'scenario', 'A bare scenario', 'x', { scenario: 'minimum_compliance', changedConditions: 'Something changes.', firstActor: null, strategy: '', downstreamEffects: [], affectedOutcomes: [], detectability: '', correction: '', weaknesses: [], assumptions: [], sensitivity: [] }, {});
+    expect(view.scenarioBeats(bare, [bare]).map((b) => b.key)).toEqual(['condition']);
+  });
+
+  it('steps through one scenario at a time with the others still reachable', async () => {
+    const all = await assessment();
+    const html = render(ScenarioWalk, { props: { scenarios: view.of(all, 'scenario'), artefacts: all, inspect } }).body;
+    expect(html).toContain('Beat 1 of');
+    for (const scenario of SCENARIOS) expect(html).toContain(scenario.replaceAll('_', ' '));
+  });
+});
+
+describe('the stress test recomputes rather than re-asks', () => {
+  it('offers only cited assumptions, and reports both directions', async () => {
+    const all = await assessment();
+    const html = render(StressTest, { props: { artefacts: all, inspect } }).body;
+    expect(html).toContain('Suppose these turn out to be wrong');
+    expect(html).toContain('The assessment as written');
+    // The levers are the assumptions something rests on — never every assumption.
+    const offered = leverage(all).length;
+    expect(offered).toBeGreaterThan(0);
+    expect(offered).toBeLessThanOrEqual(view.of(all, 'assumption').length);
+  });
+});
+
+describe('an actor the reader has met before says so', () => {
+  it('links the card to the dossier and counts the sightings', async () => {
+    const all = await assessment();
+    const actors = view.actorBoard(all, view.plays(all));
+    const html = render(ActorBoard, {
+      props: { actors, personas: [{ actorId: actors[0].actor.id, personaId: '11111111-1111-4111-8111-111111111111', name: actors[0].actor.label, sightings: 4 }], inspect },
+    }).body;
+    expect(html).toContain('/policy-analysis/personas/11111111-1111-4111-8111-111111111111');
+    expect(html).toContain('seen in 4 assessments');
+  });
+
+  it('says nothing at all when the body is new to the library', async () => {
+    const all = await assessment();
+    const html = render(ActorBoard, { props: { actors: view.actorBoard(all, view.plays(all)), personas: [], inspect } }).body;
+    expect(html).not.toContain('In your library');
+  });
+});
+
+describe('the persona library is written by the last stage', () => {
+  it('produces one link per profiled actor, traceable to the actor and its profile', async () => {
+    const all = await assessment();
+    const links = view.of(all, 'persona_link');
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) {
+      expect(all.some((a) => a.id === link.data.actorId && a.kind === 'actor')).toBe(true);
+      expect(link.refs.length).toBeGreaterThan(0);
+    }
   });
 });
