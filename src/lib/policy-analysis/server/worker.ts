@@ -1,6 +1,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { db, type DbExecutor } from '$lib/db';
 import { policyAnalyses, policyDocuments, policyExecutions, policyModelCalls, policyStages, workflowRuns } from '$lib/db/schema';
+import { boundWarnings } from '../budget';
 import { executeStage } from '../pipeline';
 import { PolicyError } from '../validation';
 import { ingest } from './ingest';
@@ -114,7 +115,7 @@ export async function executePolicyRun(claimed: { id: string; input: Record<stri
           return ingest(Buffer.from(document.content, 'base64'), document.filename, document.mimeType);
         })()
       : null;
-    const output = extracted ?? await executeStage({ stage: started.stage.ordinal, title: started.analysis.title, jurisdiction: started.analysis.jurisdiction, policyArea: started.analysis.policyArea, context: started.analysis.context, depth: started.analysis.depth as 'standard' | 'deep', graphLoss, priorWarnings: previousStages.flatMap((s) => s.warnings), artefacts: all }, { model: modelCaller(started.execution.id, claimed.id, signal, all), research, signal, neighbours: () => neighbourSummaries(started.analysis.owner, analysisId) });
+    const output = extracted ?? await executeStage({ stage: started.stage.ordinal, title: started.analysis.title, jurisdiction: started.analysis.jurisdiction, policyArea: started.analysis.policyArea, context: started.analysis.context, depth: started.analysis.depth as 'standard' | 'deep', graphLoss, priorWarnings: boundWarnings(previousStages.flatMap((s) => s.warnings)), artefacts: all }, { model: modelCaller(started.execution.id, claimed.id, signal, all), research, signal, neighbours: () => neighbourSummaries(started.analysis.owner, analysisId) });
     signal.throwIfAborted();
     await db.transaction(async (tx) => {
       const locked = await lockLease(tx, analysisId, stageId, claimed.id, workerId);

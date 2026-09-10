@@ -17,6 +17,46 @@ import type { Artefact } from './contracts';
 
 const CAPS = [8000, 4000, 2000, 1000, 500, 250];
 
+/**
+ * How much of a call may be spent telling the model what earlier stages lost.
+ *
+ * `priorWarnings` carries every warning from every completed stage, and
+ * `fitToBudget` sheds ARTEFACTS only — so an unbounded warning list is spent
+ * first and the artefacts are squeezed out to pay for it. It also grows
+ * monotonically, which means it is largest at synthesis, the stage that can
+ * least afford it. Measured on 2026-09-10: the synthesis call was 182,386
+ * characters, of which 69,629 — 38% — were 272 warnings, leaving room for 28
+ * artefacts out of 482 and no assumptions at all for the findings to cite.
+ *
+ * The stage still needs to know the assessment is partial, so keep the notes
+ * that say so and count the rest.
+ */
+const WARNING_BUDGET = 12_000;
+
+/**
+ * Bound the warnings a stage carries into its model call.
+ *
+ * Duplicates go first — a fan-out over twenty passages repeats the same note
+ * twenty times — then the longest are dropped, because the aggregate ones
+ * ("N groups of model output were discarded") are short and are exactly what a
+ * reader of the final report needs to see reported as a limit.
+ */
+export function boundWarnings(warnings: string[], budget = WARNING_BUDGET): string[] {
+  const unique = [...new Set(warnings.map((w) => w.trim()).filter(Boolean))];
+  const kept: string[] = [];
+  let used = 0;
+  for (const w of [...unique].sort((a, b) => a.length - b.length)) {
+    if (used + w.length > budget) break;
+    kept.push(w);
+    used += w.length;
+  }
+  const dropped = unique.length - kept.length;
+  // Order by the original sequence so the reader still sees them stage by stage.
+  const ordered = unique.filter((w) => kept.includes(w));
+  if (dropped) ordered.push(`And ${dropped} further note${dropped === 1 ? '' : 's'} from earlier stages, not carried into this call. The assessment is partial on those grounds too.`);
+  return ordered;
+}
+
 export type Fitted = { artefacts: Artefact[]; notes: string[] };
 
 /** Serialised size of the payload this stage would send. */
