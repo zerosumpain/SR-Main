@@ -118,7 +118,7 @@ export const stageOutputSchema = z.object({ artefacts: z.array(artefactSchema).m
 export const STAGE_KINDS: Kind[][] = [
   ['passage'], ['claim', 'mechanism', 'assumption', 'actor'], ['actor', 'alias', 'resolution_candidate'],
   ['node', 'edge'], ['profile'], ['research_question', 'research_source'], ['evidence'], ['model', 'assumption'], ['test'], ['scenario', 'assumption'],
-  ['exploit', 'assumption'], ['cross_policy'], ['finding', 'recommendation'],
+  ['exploit', 'assumption'], ['cross_policy'], ['finding', 'recommendation', 'assumption'],
 ];
 export function artefact(id: string, kind: Kind, label: string, statement: string, data: Record<string, unknown>, overrides: Partial<Artefact> = {}): Artefact {
   return { id, kind, label, statement, data, origin: 'structural_inference', confidence: null, refs: [], sourceId: null, sourceQuote: null, page: null, section: null, startOffset: null, endOffset: null, url: null, fromId: null, toId: null, relation: null, temporal: null, ...overrides };
