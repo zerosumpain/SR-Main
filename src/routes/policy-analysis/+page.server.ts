@@ -18,6 +18,25 @@ import { isCodexEnabled } from '$lib/server/models/settings';
  * re-running an assessment against the same model as last time, and an option
  * that disappears without explanation is worse than one that says why to avoid it.
  */
+/**
+ * Whether a model can answer ONE page inside this feature's per-call deadline.
+ *
+ * Not a taste ranking — a measurement. Stage 1 makes one timed call per page,
+ * and on 2026-09-10 a 72-page white paper commissioned on Sol died at page 5
+ * because Sol needs longer than the deadline allows on an ordinary page of
+ * dense prose. Timed against the real stage-1 prompt and the real pages:
+ *
+ *   ministerial foreword   luna 85s · terra 111s · sol >301s · astra 502 @ 237s
+ *
+ * A model nobody has timed says nothing, rather than guessing.
+ */
+const PACE: Record<string, string> = {
+  'gpt-5.6-luna': 'comfortably inside the per-page limit',
+  'gpt-5.6-terra': 'inside the per-page limit, with less room',
+  'gpt-5.6-sol': 'too slow for a long document',
+  'gpt-6-astra': 'too slow for a long document',
+};
+
 export const load: PageServerLoad = async (event) => {
   const owner = await requirePolicyOwner(event);
   const [analyses, codexEnabled] = await Promise.all([listAnalyses(owner), isCodexEnabled()]);
@@ -33,6 +52,7 @@ export const load: PageServerLoad = async (event) => {
       description: m.description,
       proOnly: m.proOnly ?? false,
       retiresOn: m.retiresOn ?? null,
+      pace: PACE[m.slug] ?? null,
     })),
   };
 };

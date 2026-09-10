@@ -126,6 +126,30 @@ describe('a faulty artefact is quarantined, not fatal', () => {
   });
 });
 
+describe('the pages that are not policy are not sent', () => {
+  const research = async () => ({ artefacts: [], warnings: [] });
+  const signal = new AbortController().signal;
+  const body = ['passage_0005', 'passage_0006', 'passage_0007'].map((id) => passage(id));
+  const copyright = passage('passage_0003');
+  copyright.statement = '© Crown copyright 2025\nThis publication is licensed under the terms of the Open Government Licence v3.0.\nISBN 978-1-5286-5771-6\nPrinted in the UK on behalf of the Controller of His Majesty\u2019s Stationery Office.';
+
+  it('skips the copyright page, names it, and analyses the rest', async () => {
+    const sources = [copyright, ...body];
+    const model = vi.fn(async (_stage: number, key: string) => decomposition(`s1_${key}_`, sources.find((s) => s.id === key)!, 'what landlords achieve'));
+    const output = await executeStage(
+      { stage: 1, title: 'Post-16 Education and Skills', jurisdiction: null, policyArea: null, context: null, artefacts: sources },
+      { model, research, signal },
+    );
+    // The copyright page never reaches the model — that call took 170 seconds
+    // and produced 5,248 tokens of nothing on the run this fixes.
+    expect(model).toHaveBeenCalledTimes(3);
+    expect(model.mock.calls.map((c) => c[1])).not.toContain('passage_0003');
+    // And it is named, because a page skipped silently is a page nobody can argue with.
+    expect(output.warnings.join(' ')).toContain('1 of 4 pages carry no policy text');
+    expect(output.warnings.join(' ')).toContain('copyright, licence and publication notice');
+  });
+});
+
 describe('a stage survives the loss of part of its fan-out', () => {
   const sources = ['passage_0001', 'passage_0002', 'passage_0003', 'passage_0004'].map((id) => passage(id));
   const input = { stage: 1, title: 'Reshaping consumer regulation', jurisdiction: null, policyArea: null, context: null, artefacts: sources };
@@ -148,6 +172,18 @@ describe('a stage survives the loss of part of its fan-out', () => {
     const model = vi.fn(async () => { throw new PolicyError('provider', 'The configured model provider is unavailable.'); });
     await expect(executeStage(input, { model, research, signal })).rejects.toThrow('consecutive');
     expect(model).toHaveBeenCalledTimes(3);
+  });
+
+  it('gives a SLOW model more rope than a dead one, and says which it was', async () => {
+    // A provider that is down refuses in milliseconds; three of those means
+    // stop. A model that is merely too slow fails at the per-call deadline,
+    // minutes apart, about ONE page at a time — and three of those ended a
+    // 72-page white paper at page 5 while telling the reader the provider was
+    // unavailable. It was not: it was Sol.
+    const slow = vi.fn(async () => { throw new PolicyError('timeout', '“gpt-5.6-sol” did not answer within 420 seconds on this call.'); });
+    const wide = { ...input, artefacts: Array.from({ length: 9 }, (_, i) => passage(`passage_${String(i + 1).padStart(4, '0')}`)) };
+    await expect(executeStage(wide, { model: slow, research, signal })).rejects.toThrow('too slow for this document, not unavailable');
+    expect(slow).toHaveBeenCalledTimes(6);
   });
 
   it('still fails the stage when nothing usable came back at all', async () => {
