@@ -260,6 +260,20 @@ describe('fitting a stage into the model context window', () => {
     expect(fitted.artefacts.map((a) => a.id)).toContain('exploit_1');
   });
 
+  it('runs on part of what it was built around rather than refusing the stage', () => {
+    // Protected items sort last, so reaching one means everything else has gone.
+    // Refusing to shed it left the payload over the ceiling and `provider.ts`
+    // throws `budget` — a code the worker excludes from retry, so the stage died.
+    const pinned = Array.from({ length: 30 }, (_, i) =>
+      artefact(`exploit_${i}`, 'exploit', `Play ${i}`, 'z'.repeat(4000), { actorId: 's2_a', preconditions: [] }));
+    const build = (a: Artefact[]) => ({ artefacts: a });
+    const fitted = fitToBudget(pinned, build, 5_000, new Set(pinned.map((a) => a.id)));
+    expect(encodedSize(build(fitted.artefacts))).toBeLessThanOrEqual(5_000);
+    expect(fitted.artefacts.length).toBeGreaterThan(0);
+    expect(fitted.notes.join(' ')).toContain('did not fit and were withheld too');
+    expect(fitted.notes.join(' ')).toContain('Read this stage as partial');
+  });
+
   it('leaves a payload that already fits completely alone', () => {
     const small = [big('passage_0001', 200, 'passage')];
     const fitted = fitToBudget(small, (a) => ({ artefacts: a }), 180_000);

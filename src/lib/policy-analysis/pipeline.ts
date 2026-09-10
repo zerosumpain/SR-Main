@@ -1,4 +1,4 @@
-import { DEPTH_LIMITS, PATTERNS, REPORT_SECTIONS, SCENARIOS, SYNTHESIS_STAGE, type Artefact, type StageInput, type StageOutput } from './contracts';
+import { DEPTH_LIMITS, PATTERNS, REPORT_SECTIONS, RESULT_KINDS, SCENARIOS, SYNTHESIS_STAGE, type Artefact, type StageInput, type StageOutput } from './contracts';
 import { scoreExploits } from './exposure';
 import { clampWarnings, PolicyError, triageArtefacts, triageOutput } from './validation';
 import { modelApplicability } from './models';
@@ -27,9 +27,6 @@ export type PipelineDeps = { model: ModelCall; research: Research; signal: Abort
 const CONSECUTIVE_LIMIT = 3;
 
 /** Ceilings on a stage's assembled output, which no envelope bounds. */
-/** The kinds a conclusion is allowed to cite as its result — see `relationalFault`. */
-const RESULT_KINDS = ['test', 'model', 'scenario', 'exploit', 'cross_policy'];
-
 const MAX_STAGE_ARTEFACTS = 4000;
 const MAX_REFS = 200;
 
@@ -160,7 +157,7 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     // Without that the context budget shed the lot — they are the last things
     // produced and carry the lowest confidence — and the model, still required
     // to cite a result, invented identifiers for results it had never seen.
-    const protect = stage === SYNTHESIS_STAGE ? context.filter((a) => RESULT_KINDS.includes(a.kind)).map((a) => a.id) : [];
+    const protect = stage === SYNTHESIS_STAGE ? context.filter((a) => (RESULT_KINDS as readonly string[]).includes(a.kind)).map((a) => a.id) : [];
     await request('main', context, protect.length ? { protect } : {});
   }
 
