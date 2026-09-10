@@ -215,6 +215,51 @@ describe('fitting a stage into the model context window', () => {
     expect(fitted.notes.join(' ')).toContain('withheld from this call entirely');
   });
 
+  it('sheds the material a stage has finished with before the conclusions it must cite', () => {
+    // The production failure this pins, measured on the first assessment to reach
+    // the end: stages 7, 9, 10 and 12 each ran on claims and evidence with zero
+    // models, tests, scenarios or assumptions in context. The old ranking put
+    // everything except sources and passages in one tier and broke ties on
+    // confidence — and a literal extraction from the document is near-certain by
+    // construction where a judgement about an actor's incentives is not, so the
+    // derived layer went first every time.
+    const raw = Array.from({ length: 60 }, (_, i) =>
+      artefact(`claim_${i}`, 'claim', `Claim ${i}`, 'y'.repeat(4000), {}, { confidence: 0.95 }));
+    const conclusions = [
+      artefact('exploit_1', 'exploit', 'A play', 'z'.repeat(4000), { actorId: 's2_a', preconditions: [] }, { confidence: 0.2 }),
+      artefact('test_1', 'test', 'A test', 'z'.repeat(4000), {}, { confidence: 0.2 }),
+      artefact('profile_1', 'profile', 'A profile', 'z'.repeat(4000), { actorId: 's2_a' }, { confidence: 0.2 }),
+    ];
+    const build = (a: Artefact[]) => ({ stage: 12, artefacts: a });
+    const fitted = fitToBudget([...raw, ...conclusions], build, 40_000);
+    expect(encodedSize(build(fitted.artefacts))).toBeLessThanOrEqual(40_000);
+    for (const kept of ['exploit_1', 'test_1', 'profile_1']) {
+      expect(fitted.artefacts.map((a) => a.id)).toContain(kept);
+    }
+    expect(fitted.artefacts.filter((a) => a.kind === 'claim').length).toBeLessThan(60);
+  });
+
+  it('says when a kind vanished from the context altogether', () => {
+    // Losing some of a kind costs detail; losing all of one costs the reasoning.
+    // The run that motivated this reported eight claim labels while every model,
+    // test, scenario and profile had gone.
+    const conclusions = Array.from({ length: 12 }, (_, i) =>
+      artefact(`exploit_${i}`, 'exploit', `Play ${i}`, 'z'.repeat(100), { actorId: 's2_a', preconditions: [] }));
+    const sources = Array.from({ length: 40 }, (_, i) => big(`source_${i}`, 8000));
+    const build = (a: Artefact[]) => ({ artefacts: a });
+    // Just enough room for the conclusions and nothing else, so every source goes.
+    const fitted = fitToBudget([...sources, ...conclusions], build, encodedSize(build(conclusions)) + 200);
+    expect(fitted.notes.join(' ')).toContain('No research_source was left in this call');
+    expect(fitted.artefacts.some((a) => a.kind === 'exploit')).toBe(true);
+  });
+
+  it('never sheds what the call pinned, however low its confidence', () => {
+    const pinned = artefact('exploit_1', 'exploit', 'A play', 'z'.repeat(9000), { actorId: 's2_a', preconditions: [] }, { confidence: 0 });
+    const rest = Array.from({ length: 40 }, (_, i) => big(`source_${i}`, 9000));
+    const fitted = fitToBudget([pinned, ...rest], (a) => ({ artefacts: a }), 20_000, new Set(['exploit_1']));
+    expect(fitted.artefacts.map((a) => a.id)).toContain('exploit_1');
+  });
+
   it('leaves a payload that already fits completely alone', () => {
     const small = [big('passage_0001', 200, 'passage')];
     const fitted = fitToBudget(small, (a) => ({ artefacts: a }), 180_000);

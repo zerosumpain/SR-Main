@@ -1,6 +1,6 @@
 // The three places this feature could leak or be led by the nose.
 import { describe, expect, it } from 'vitest';
-import { artefact, type Artefact } from './contracts';
+import { artefact, SYNTHESIS_STAGE, type Artefact } from './contracts';
 import { documentShingles, quotesDocument } from './query-guard';
 import { executeStage } from './pipeline';
 import { safeSourceUrl } from './contracts';
@@ -68,5 +68,30 @@ describe('a citation URL must be public and plain', () => {
     for (const url of ['javascript:alert(1)', 'file:///etc/passwd', 'http://127.0.0.1/', 'http://metadata.internal/', 'https://user:pw@public.example/', 'https://strangeramblings.com/admin', 'https://localhost/'])
       expect(safeSourceUrl(url)).toBeNull();
     expect(safeSourceUrl('https://www.gov.uk/guidance')).toBe('https://www.gov.uk/guidance');
+  });
+});
+
+describe('synthesis is shown the results it is required to cite', () => {
+  it('pins every test, model, scenario, exploit and cross-policy exposure into the call', async () => {
+    // A finding must cite one of these kinds. They are the last things produced
+    // and carry the lowest confidence, so the context budget shed the lot — and
+    // the model, still required to cite a result, minted identifiers for results
+    // it had never been shown. Every finding was then quarantined for citing an
+    // unavailable source and the stage failed naming the missing chapters.
+    const results: Artefact[] = [
+      artefact('s8_test_1', 'test', 'A test', 'A structural check.', { check: 'c', result: 'fail', detail: 'd', resultIds: [] }, { refs: ['passage_0001'] }),
+      artefact('s10_exploit_1', 'exploit', 'A play', 'A play.', { actorId: 's2_a', preconditions: [] }, { refs: ['passage_0001'] }),
+      artefact('s9_scenario_1', 'scenario', 'A scenario', 'A scenario.', { scenario: 's', assumptions: [] }, { refs: ['passage_0001'] }),
+    ];
+    let pinned: string[] = [];
+    const model = async (_stage: number, _key: string, raw: unknown) => {
+      pinned = ((raw as { protect?: string[] }).protect ?? []).slice();
+      return { artefacts: [], warnings: [] };
+    };
+    await executeStage(
+      { stage: SYNTHESIS_STAGE, title: 'A policy', jurisdiction: null, policyArea: null, context: null, artefacts: [passage, ...results] },
+      { model, research: async () => ({ artefacts: [], warnings: [] }), signal: new AbortController().signal },
+    ).catch(() => null);
+    expect(pinned.sort()).toEqual(['s10_exploit_1', 's8_test_1', 's9_scenario_1']);
   });
 });
