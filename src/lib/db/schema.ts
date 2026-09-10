@@ -6955,6 +6955,13 @@ export const policyAnalyses = pgTable('policy_analyses', {
   context: text('context'),
   // 'standard' or 'deep' — how many rounds of enquiry the reader asked for.
   depth: text('depth').notNull().default('standard'),
+  // The Codex model and reasoning effort this assessment was commissioned with.
+  // NULL means "whatever the research-deep workload resolves to", which is what
+  // every assessment before 2026-09-10 ran on and what an unspecified submission
+  // still gets. Text, not an enum, for the same reason `thinking_level` is
+  // elsewhere: a new rung or a new model needs no migration.
+  model: text('model'),
+  thinkingLevel: text('thinking_level'),
   status: text('status').notNull().default('queued'),
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
   error: text('error'),

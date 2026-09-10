@@ -8,7 +8,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { render } from 'svelte/server';
-import { PATTERNS, SCENARIOS, artefact, type Artefact } from '$lib/policy-analysis/contracts';
+import { PATTERNS, REPORT_SECTIONS, SCENARIOS, artefact, type Artefact } from '$lib/policy-analysis/contracts';
 import { executeStage } from '$lib/policy-analysis/pipeline';
 import { ingest } from '$lib/policy-analysis/server/ingest';
 import * as view from '$lib/policy-analysis/view';
@@ -21,6 +21,7 @@ import ActorBoard from './ActorBoard.svelte';
 import EvidenceMix from './EvidenceMix.svelte';
 import CrossPolicy from './CrossPolicy.svelte';
 import ArtefactValue from './ArtefactValue.svelte';
+import ReportActs from './ReportActs.svelte';
 
 const research = async () => ({ artefacts: [], warnings: ['Synthetic test: external research unavailable.'] });
 const inspect = () => {};
@@ -35,6 +36,105 @@ async function assessment(): Promise<Artefact[]> {
   }
   return all;
 }
+
+describe('what the run cost', () => {
+  const call = (usage: unknown[] | null, model = 'codex/gpt-5.6-luna') => ({ model, usage });
+
+  it('sums the array on each call, because a repair round appends rather than replaces', () => {
+    const cost = view.runCost([
+      call([{ model: 'codex/gpt-5.6-luna', tokensInput: 40_000, tokensOutput: 1_500, reasoningTokens: 300, cacheReadTokens: 1_000, costUsd: null },
+            { model: 'codex/gpt-5.6-luna', tokensInput: 42_000, tokensOutput: 900, reasoningTokens: 100, cacheReadTokens: 0, costUsd: null }]),
+      call([{ model: 'codex/gpt-5.6-luna', tokensInput: 10_000, tokensOutput: 500, reasoningTokens: 0, cacheReadTokens: 0, costUsd: null }]),
+    ]);
+    expect(cost.input).toBe(92_000);
+    expect(cost.output).toBe(2_900);
+    expect(cost.reasoning).toBe(400);
+    expect(cost.cached).toBe(1_000);
+    expect(cost.total).toBe(94_900);
+    expect(cost.calls).toBe(2);
+  });
+
+  it('reports no cash rather than zero when everything ran on subscription quota', () => {
+    // Codex prices as null, never 0. "£0.00" reads as free money; the truth is
+    // that quota was spent and no bill exists.
+    const cost = view.runCost([call([{ model: 'codex/gpt-5.6-luna', tokensInput: 10, tokensOutput: 1, costUsd: null }])]);
+    expect(cost.cash).toBeNull();
+  });
+
+  it('adds up a priced run', () => {
+    const cost = view.runCost([
+      call([{ model: 'x/y', tokensInput: 10, tokensOutput: 1, costUsd: 0.25 }], 'x/y'),
+      call([{ model: 'x/y', tokensInput: 10, tokensOutput: 1, costUsd: 0.5 }], 'x/y'),
+    ]);
+    expect(cost.cash).toBeCloseTo(0.75);
+  });
+
+  it('splits by model, heaviest first, and ignores a call that reported nothing', () => {
+    const cost = view.runCost([
+      call([{ model: 'codex/gpt-5.6-luna', tokensInput: 1_000, tokensOutput: 10 }]),
+      call([{ model: 'codex/gpt-6-astra', tokensInput: 50_000, tokensOutput: 900 }], 'codex/gpt-6-astra'),
+      call(null),
+      { model: 'codex/gpt-6-astra' },
+    ]);
+    expect(cost.calls).toBe(2);
+    expect(cost.models.map((m) => m.model)).toEqual(['codex/gpt-6-astra', 'codex/gpt-5.6-luna']);
+  });
+
+  it('falls back to the call’s own model when a usage row does not name one', () => {
+    const cost = view.runCost([call([{ tokensInput: 5, tokensOutput: 1 }], 'codex/gpt-5.5')]);
+    expect(cost.models[0].model).toBe('codex/gpt-5.5');
+  });
+
+  it('is zero, not a crash, before anything has run', () => {
+    const cost = view.runCost([]);
+    expect(cost).toMatchObject({ input: 0, output: 0, total: 0, cash: null, calls: 0, models: [] });
+  });
+});
+
+describe('the written assessment reads as acts', () => {
+  it('places every report section in exactly one act', () => {
+    // A section added to the contract and not to an act would silently stop
+    // appearing on the page — the failure this whole file exists to catch.
+    const claimed = view.REPORT_ACTS.flatMap((a) => [...a.sections]);
+    expect([...claimed].sort()).toEqual([...REPORT_SECTIONS].sort());
+    expect(new Set(claimed).size).toBe(claimed.length);
+  });
+
+  it('draws every act, every chapter and the redesign options, with all panels in the DOM', async () => {
+    const all = await assessment();
+    const acts = view.reportActs(all);
+    expect(acts.length).toBeGreaterThan(1);
+    expect(view.unplacedSections(all)).toEqual([]);
+
+    const html = render(ReportActs, { props: { acts, recommendations: view.of(all, 'recommendation'), inspect } }).body;
+    // Tabs are real tabs, and the panels are all present so that find-in-page
+    // and the print stylesheet still reach the acts nobody clicked.
+    expect(html).toContain('role="tablist"');
+    for (const act of acts) {
+      expect(html).toContain(act.title);
+      expect(html).toContain(act.strap);
+      expect(html).toContain(`id="report-panel-${act.key}"`);
+      for (const chapter of act.chapters) {
+        for (const item of chapter.items) expect(html).toContain(item.statement);
+      }
+    }
+    // Exactly one panel is open on first paint.
+    expect([...html.matchAll(/role="tabpanel"/g)]).toHaveLength(acts.length);
+    expect([...html.matchAll(/hidden/g)].length).toBe(acts.length - 1);
+  });
+
+  it('puts the redesign options in the act that asks what to do', async () => {
+    const all = await assessment();
+    const recommendations = view.of(all, 'recommendation');
+    expect(recommendations.length).toBeGreaterThan(0);
+    const acts = view.reportActs(all);
+    const html = render(ReportActs, { props: { acts, recommendations, inspect } }).body;
+    const response = html.indexOf('id="report-panel-response"');
+    expect(response).toBeGreaterThan(-1);
+    // They used to sit above the verdict; they belong with the answer.
+    expect(html.indexOf('Redesign options')).toBeGreaterThan(response);
+  });
+});
 
 describe('the assessment renders', () => {
   it('draws every section of a complete run', async () => {

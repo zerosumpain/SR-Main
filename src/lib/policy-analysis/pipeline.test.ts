@@ -27,6 +27,30 @@ describe('policy ingestion and untrusted contracts', () => {
     form.set('document', new Blob([fixture], { type: 'text/plain' }), '../policy.txt');
     await expect(readSubmission(new Request('http://localhost', { method: 'POST', body: form }))).rejects.toThrow('either');
   });
+  it('takes a commissioned model and thinking level, and degrades rather than refusing', async () => {
+    const base = () => { const f = new FormData(); f.set('title', 'A policy'); f.set('text', fixture.toString()); return f; };
+    const read = (f: FormData) => readSubmission(new Request('http://localhost', { method: 'POST', body: f }));
+
+    const asked = base(); asked.set('model', 'codex/gpt-5.6-luna'); asked.set('thinkingLevel', 'high');
+    expect(await read(asked)).toMatchObject({ model: 'codex/gpt-5.6-luna', thinkingLevel: 'high' });
+
+    // Nothing chosen means the research-deep workload decides, as it always did.
+    expect(await read(base())).toMatchObject({ model: null, thinkingLevel: null });
+
+    // A model nobody catalogues is a request the run cannot honour. Falling back
+    // beats failing a submission on a field the reader cannot debug.
+    const unknown = base(); unknown.set('model', 'codex/gpt-9-nonesuch');
+    expect(await read(unknown)).toMatchObject({ model: null });
+
+    // `max` is per-model on Codex: gpt-5.5 answers it with a 400 rather than
+    // with less thinking, so it must never reach the bridge.
+    const tooDeep = base(); tooDeep.set('model', 'codex/gpt-5.5'); tooDeep.set('thinkingLevel', 'max');
+    expect(await read(tooDeep)).toMatchObject({ model: 'codex/gpt-5.5', thinkingLevel: null });
+
+    const gibberish = base(); gibberish.set('thinkingLevel', 'ludicrous');
+    expect(await read(gibberish)).toMatchObject({ thinkingLevel: null });
+  });
+
   it('rejects oversized, disguised, binary and corrupt inputs', async () => {
     expect(() => validateBytes(Buffer.alloc(MAX_BYTES + 1), 'a.txt', 'text/plain')).toThrow('10 MB');
     expect(() => validateBytes(Buffer.from('html'), 'a.pdf', 'application/pdf')).toThrow('not a PDF');

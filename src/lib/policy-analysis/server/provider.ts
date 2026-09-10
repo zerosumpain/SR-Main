@@ -5,6 +5,7 @@ import { policyModelCalls, policyExecutions } from '$lib/db/schema';
 import { getLLMClient } from '$lib/llm/client';
 import { executionContext, type LLMCallRecord } from '$lib/context/execution';
 import { resolveResearchDeepModel } from '$lib/server/models/workload-settings';
+import { thinkingRequestParams, type ThinkingLevel } from '$lib/models/thinking';
 import { coerceModelContext, DEFAULT_NODE_MAX_TOKENS } from '$lib/constants/default-models';
 import { PROMPT_VERSION, WORKFLOW_ID, type Artefact, type StageOutput } from '../contracts';
 import { fitToBudget } from '../budget';
@@ -44,7 +45,10 @@ function needsRepair(kept: number, rejected: Rejection[]): boolean {
   return kept === 0 || rejected.length >= Math.max(3, Math.ceil(kept / 2));
 }
 
-export function modelCaller(executionId: string, runId: string, signal: AbortSignal, prior: Artefact[]): ModelCall {
+/** What the reader commissioned: a Codex model id and a reasoning effort, either of which may be absent. */
+export type Commission = { model: string | null; thinkingLevel: ThinkingLevel | null };
+
+export function modelCaller(executionId: string, runId: string, signal: AbortSignal, prior: Artefact[], commission?: Commission): ModelCall {
   return async (stage, key, input) => {
     const { protect: pinned, ...payload } = input as { artefacts?: Artefact[]; protect?: string[] };
     const fitted = Array.isArray(payload.artefacts)
@@ -73,8 +77,17 @@ export function modelCaller(executionId: string, runId: string, signal: AbortSig
       return { artefacts: reused.artefacts, warnings: [...fitted.notes, ...reused.warnings] };
     }
 
-    const selected = await resolveResearchDeepModel();
-    const { client, model } = await getLLMClient(coerceModelContext({ modelId: selected.modelId }));
+    // The reader may commission a specific Codex model and reasoning effort; a
+    // submission that names neither still resolves the research-deep workload,
+    // which is what every assessment before 2026-09-10 ran on. `commission.model`
+    // was validated against the catalogue at intake, so an id that no longer
+    // exists degrades to the workload rather than failing the stage.
+    const chosen = commission?.model ?? (await resolveResearchDeepModel()).modelId;
+    const context = coerceModelContext({ modelId: chosen });
+    const { client, model } = await getLLMClient(context);
+    // `{}` when no level was chosen, so the provider keeps its own default; the
+    // helper also clamps a level the chosen model would answer with a 400.
+    const thinking = thinkingRequestParams(context.provider, commission?.thinkingLevel ?? null, context.modelId);
     const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
       { role: 'system', content: systemPrompt(stage) },
       { role: 'user', content: encoded },
@@ -95,7 +108,7 @@ export function modelCaller(executionId: string, runId: string, signal: AbortSig
       const llmCalls: LLMCallRecord[] = [];
       try {
         const result = await executionContext.run({ workflowId: WORKFLOW_ID, runId, nodeId: executionId, llmCalls }, () =>
-          client.chat.completions.create({ model, messages, response_format: { type: 'json_object' }, max_tokens: DEFAULT_NODE_MAX_TOKENS }, { signal: AbortSignal.any([signal, AbortSignal.timeout(180_000)]), maxRetries: 0 }),
+          client.chat.completions.create({ model, messages, response_format: { type: 'json_object' }, max_tokens: DEFAULT_NODE_MAX_TOKENS, ...thinking }, { signal: AbortSignal.any([signal, AbortSignal.timeout(180_000)]), maxRetries: 0 }),
         );
         const content = result.choices[0]?.message?.content ?? '';
         // A reply cut off at max_tokens is not malformed JSON, and saying so sends

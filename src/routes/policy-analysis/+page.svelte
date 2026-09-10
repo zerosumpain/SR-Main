@@ -1,10 +1,36 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { untrack } from 'svelte';
+  import { thinkingLevelsFor, type ThinkingLevel } from '$lib/models/thinking';
   import type { PageData } from './$types';
   let { data }: { data: PageData } = $props();
   let busy = $state(false);
   let message = $state('');
   let depth = $state<'standard' | 'deep'>('standard');
+
+  // Model quality decides how good the reasoning is, so the reader picks it
+  // rather than inheriting whatever the research-deep workload happens to be
+  // pinned to. Both fields are optional: submit without touching them and the
+  // run resolves the workload default, exactly as every assessment did before.
+  let modelId = $state<string>(data.defaultModelId);
+  let thinkingLevel = $state<ThinkingLevel | 'auto'>('auto');
+  const chosen = $derived(data.models.find((m) => m.id === modelId) ?? null);
+  // `max` is per-MODEL on Codex — the older line answers it with a 400 rather
+  // than with less thinking — so the ladder is re-read whenever the model changes.
+  const efforts = $derived(thinkingLevelsFor('codex', modelId));
+  $effect(() => {
+    const offered = efforts;
+    untrack(() => {
+      if (thinkingLevel !== 'auto' && !offered.includes(thinkingLevel)) thinkingLevel = 'auto';
+    });
+  });
+  const EFFORT_NOTE: Record<string, string> = {
+    low: 'Fastest, and the thinnest reasoning. Fine for a short paper.',
+    medium: 'The usual balance of depth against wall-clock.',
+    high: 'Noticeably better at spotting an incentive nobody stated.',
+    xhigh: 'Slower again. Worth it on a paper with many interacting actors.',
+    max: 'The deepest this model reasons. Expect a long run and heavier quota use.',
+  };
 
   async function submit(event: SubmitEvent) {
     event.preventDefault();
@@ -12,7 +38,12 @@
     const form = event.currentTarget as HTMLFormElement;
     busy = true; message = '';
     try {
-      const response = await fetch('/api/policy-analysis', { method: 'POST', body: new FormData(form) });
+      const body = new FormData(form);
+      // The server treats an absent or unknown level as "provider default", so
+      // send nothing rather than the word `auto`.
+      if (thinkingLevel === 'auto') body.delete('thinkingLevel');
+      if (!data.codexEnabled) body.delete('model');
+      const response = await fetch('/api/policy-analysis', { method: 'POST', body });
       const result = await response.json();
       if (!response.ok) { message = result.error ?? 'Could not submit the policy.'; return; }
       await goto(`/policy-analysis/${result.id}`);
@@ -74,6 +105,38 @@
     </label>
   </fieldset>
 
+  <fieldset class="depth engine">
+    <legend>Which model should read it?</legend>
+    <p class="muted engine-strap">
+      The reasoning is only as good as the model doing it. These run on the Codex subscription, so a
+      deeper setting costs quota and wall-clock rather than cash.
+    </p>
+    {#if !data.codexEnabled}
+      <p class="warning">Codex is switched off for this site, so the assessment will run on whatever the research model is set to. Turn it on under Admin → AI → Models to choose here.</p>
+    {/if}
+
+    <label for="model">Model</label>
+    <select class="nm-text-input" id="model" name="model" bind:value={modelId} disabled={!data.codexEnabled}>
+      {#each data.models as m (m.id)}
+        <option value={m.id}>{m.name}{m.proOnly ? ' · Pro only' : ''}{m.retiresOn ? ` · retires ${m.retiresOn}` : ''}</option>
+      {/each}
+    </select>
+    {#if chosen?.description}<span class="muted">{chosen.description}</span>{/if}
+
+    <label for="thinkingLevel">Thinking level</label>
+    <select class="nm-text-input" id="thinkingLevel" name="thinkingLevel" bind:value={thinkingLevel} disabled={!data.codexEnabled}>
+      <option value="auto">Provider default</option>
+      {#each efforts as level (level)}
+        <option value={level}>{level}</option>
+      {/each}
+    </select>
+    <span class="muted">
+      {thinkingLevel === 'auto'
+        ? 'Whatever the model does without being told. Pick a level to override it.'
+        : EFFORT_NOTE[thinkingLevel] ?? ''}
+    </span>
+  </fieldset>
+
   <details>
     <summary>Jurisdiction, policy area and context (optional, but they sharpen the research)</summary>
     <div class="optional">
@@ -125,6 +188,9 @@
   textarea { resize: vertical; }
   .depth { border: 1px solid var(--line-strong); padding: 1rem 1.1rem; margin: 1rem 0 0; display: grid; gap: .75rem; }
   .depth legend { font-weight: 600; padding: 0 .4rem; }
+  .engine { gap: .4rem; }
+  .engine-strap { margin: 0 0 .5rem; max-width: 68ch; }
+  .engine select { max-width: 34rem; }
   .choice { display: flex; gap: .7rem; align-items: start; font-weight: 400; margin: 0; cursor: pointer; padding: .6rem .7rem; border: 1px solid transparent; }
   .choice.on { border-color: var(--accent); background: var(--accent-tint-04); }
   .choice > span { display: grid; gap: .2rem; }
