@@ -35,12 +35,17 @@ Artefacts are individually addressable rows with indexed analysis/kind and graph
 
 All pages and APIs repeat the site's owner access check and scope queries to that owner's email, including on a site with multiple owners. Guests are not granted a new exception. Responses are private/no-store. Mutations check origin and use the existing rate limiter; transactional intake limits an owner to three active analyses.
 
-## The thirteen stages
+## The fourteen stages
 
 Ingestion, decomposition, entity resolution, knowledge graph, actor and incentive
 profiles, targeted research, evidence matrix, interaction models, automated policy
 tests, adversarial scenarios, **exploitation playbook**, **cross-policy exposure**,
-synthesis.
+synthesis, **actor persona library**.
+
+`SYNTHESIS_STAGE` and `PERSONA_STAGE` are fixed ordinals, not `STAGES.length - 1`.
+Every rule that pins the report is written against synthesis's ordinal, and
+deriving one of them from the array's length would move the report's contract onto
+the stage that follows it.
 
 The exploitation playbook is the red team. For each profiled actor, using that
 actor's own profile, it sets out the concrete plays available to it — preferring
@@ -56,6 +61,22 @@ completed ones, in bounded summary, for weaknesses that exist only because the
 policies coexist. The site's identity policy runs across the boundary and supplies
 same_body / possibly_same hints; foreign identifiers are recorded in `data`, never
 joined, because provenance rows may not cross an analysis.
+
+The persona library is the last stage and it runs AFTER the report, so nothing it
+does can cost an assessment that is already written. For each profiled actor it
+merges what this run established into the reader's standing dossier on that body,
+emitting `persona_link` artefacts; the worker applies them to `policy_personas`
+and `policy_persona_observations` inside the same transaction that completes the
+stage, under a savepoint, so a failure there is a warning rather than a failed
+run. Identity is decided by `assessIdentity` — the site's own policy — and two
+equally good matches open a new persona rather than merging two bodies.
+
+A persona is read back at the profile stage and at the red team as CONTEXT, never
+as evidence. It is neither a passage nor a retrieved source, so `hasSource` keeps
+anything resting on it out of the findings on its own account; where a profile
+field is shaped by one anyway it carries the `prior_assessment` origin. A
+reader-commissioned research pass over one body appends its own observation with
+its sources, through the same retrieval adapter and the same SSRF guard.
 
 `depth` is `standard` or `deep`. Deep widens the research bounds and runs up to
 three rounds of enquiry, each planned from what the last round FOUND rather than
@@ -109,7 +130,7 @@ The identity stage uses the site's identity policy. Name-only ambiguity is split
 
 Unit tests cover TXT/PDF/DOCX ingestion, upload validation, source boundaries, hostile content, malformed output, confidence, identity ambiguity, graph checks, research failures, URL safety, model/scenario coverage, cancellation, access control and final-report traceability.
 
-Opt-in local integration tests use real Postgres and workflow leases. The browser test submits an uploaded fixture through the real API, closes the browser, advances all eleven stages, then returns to inspect persisted results at desktop and phone widths. It also checks visible failures, cross-owner denial, expired leases, retries and cancellation fencing. Provider integration tests verify real audit persistence and validated-call reuse with synthetic network responses. Fixtures live only under tests; no production fake-provider mode exists.
+Opt-in local integration tests use real Postgres and workflow leases. The browser test submits an uploaded fixture through the real API, closes the browser, advances the first eleven stages, then returns to inspect persisted results at desktop and phone widths. It also checks visible failures, cross-owner denial, expired leases, retries and cancellation fencing. Provider integration tests verify real audit persistence and validated-call reuse with synthetic network responses. Fixtures live only under tests; no production fake-provider mode exists.
 
 ```sh
 TZ=UTC PUBLIC_VAPID_PUBLIC_KEY='' npm run gate
@@ -121,12 +142,33 @@ TZ=UTC PUBLIC_VAPID_PUBLIC_KEY='' POLICY_LOCAL_TESTS=1 \
 
 The browser integration test expects the existing LAN preview (set `POLICY_PREVIEW_ORIGIN`), with its synthetic preview owner. Run these fixture tests while the local policy worker is disabled, so only the test owns the fixture envelopes. `POLICY_KEEP_FIXTURE=1` optionally retains the explicitly synthetic completed browser example for inspection. UTC is the repository's calendar-test baseline; the application still formats dates for the viewer.
 
+## Reading it: four workspaces, and one thing you can run
+
+The dashboard is four workspaces — the verdict, the threat, what it rests on, the
+assessment — over the same sections, using the tab primitives the report's five
+acts introduced. Every panel stays in the DOM so find-in-page and print reach all
+four.
+
+Three of the views are derived rather than read, and none of them calls a model:
+
+- **The stress test** (`stress.ts`) fails an assumption and walks the citations
+  the assessment already made. A conclusion resting on it loses its footing; a
+  play whose PRECONDITION it was is *disarmed*, because the actor needed it to be
+  true. Those are opposite directions and are reported as opposites. The
+  deterministic checks are untouched by any of it, which is itself part of the
+  answer.
+- **The interplay map** (`view.interplay`) draws one arc per play, from the actor
+  that would run it to the mechanism or measure it defeats, weighted by that
+  play's own exposure.
+- **The scenario walk-through** (`view.scenarioBeats`) steps a scenario's recorded
+  chain one beat at a time rather than rendering it as a paragraph.
+
 ## Local preview and limits
 
 The local Compose overlay lives with the operator’s other local stack files, outside this repository. It enables only the policy worker while the preview retains the builder service role, isolated database/credentials/data and loopback binding. The existing LAN gateway supplies preview authentication. See the local stack README for application commands. The canonical production Node entry defaults `BODY_SIZE_LIMIT` to 12 MB before loading adapter-node (preserving an explicit operator override), so 10 MB documents plus multipart metadata can reach the route. This raises the adapter’s default request ceiling sitewide; each endpoint keeps its own validation. A deployment with an explicit smaller ceiling must raise it for larger uploads. Production deployment is left to the repository's existing release workflow; no deployment script was run.
 
 - Input limits: 10 MB, 400 PDF pages, 600,000 extracted characters. DOCX expanded content is bounded at 30 MB. PDFs require readable text; there is no new OCR integration.
-- Later model calls reject context beyond 180,000 serialized characters rather than silently dropping evidence. Very large or unusually dense inventories can therefore stop with a visible budget limitation. Finished stages and validated subcalls remain saved.
+- Later model calls reject context beyond 360,000 serialized characters rather than silently dropping evidence. Very large or unusually dense inventories can therefore stop with a visible budget limitation. Finished stages and validated subcalls remain saved.
 - Research is bounded, not exhaustive. Retained source text is limited to 10,000 characters per result; source quality is initially a domain heuristic, then assessed in the evidence matrix. Current law, actual powers and jurisdiction are not independently certified by this feature.
 - Models and sensitivity analyses are semi-formal and qualitative. Deterministic checks measure graph coverage, not causal proof. Missing relationships are review signals or indeterminate results, never proof that powers or resources do not exist. Confidence is not statistically calibrated.
 - The isolated preview has no live provider credentials. Synthetic tests verify behaviour and persistence, not real provider quality, research availability or policy validity. Ordinary preview submissions show a recoverable provider error until a local provider connection is configured through existing site administration.
@@ -135,7 +177,7 @@ The local Compose overlay lives with the operator’s other local stack files, o
 ## Validation record (9 September 2026)
 
 - `TZ=UTC PUBLIC_VAPID_PUBLIC_KEY='' DATABASE_URL=<isolated-local-database> npm run gate`: passed. 872 test files passed, one skipped; 10,237 tests passed, three skipped. Type checking reported zero errors; existing repository warnings remain. Production build and client budgets passed.
-- The feature's 15 unit tests and five opt-in Postgres/browser integration tests passed, including all eleven stages with synthetic provider output.
+- The feature's 15 unit tests and five opt-in Postgres/browser integration tests passed, including every stage with synthetic provider output.
 - `node scripts/qa/policy-production-preview.mjs`: passed against the actual built application, covering authenticated/guest/anonymous access, cross-owner document privacy, CSRF, no-store, a multipart upload larger than 512 KB and cancellation.
 - `node scripts/qa/policy-local-worker-preview.mjs`: passed using the real asynchronous local worker. Ingestion persisted and the run advanced to the model stage; the absent local provider produced an audited error. The synthetic run was then cancelled.
 - `npx drizzle-kit export` generated the additive schema statements. The migration was applied with `psql -v ON_ERROR_STOP=1` to the isolated `jkai-db` only.

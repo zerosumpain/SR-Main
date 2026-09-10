@@ -6,6 +6,7 @@ import { STAGES, TRIGGER, WORKFLOW_ID, type Artefact } from '../contracts';
 import type { Neighbour } from '../pipeline';
 import { PolicyError } from '../validation';
 import type { Submission } from './ingest';
+import { recountSightings } from './personas';
 
 export async function queueStage(tx: DbExecutor, analysisId: string, stageId: string, delayMs = 0) {
   const runId = randomUUID();
@@ -206,8 +207,14 @@ export async function remove(owner: string, id: string): Promise<boolean> {
     const stages = await tx.select({ runId: policyStages.runId }).from(policyStages).where(eq(policyStages.analysisId, id));
     const runIds = stages.map((s) => s.runId).filter((r): r is string => !!r);
     if (runIds.length) await tx.update(workflowRuns).set({ status: 'cancelled', claimedBy: null, leaseExpiresAt: null, completedAt: new Date() }).where(inArray(workflowRuns.id, runIds));
+    // Which personas this assessment contributed to, read BEFORE the delete
+    // cascades its observations away. `sightings` is a count of assessments and
+    // must fall when one is removed; the row itself survives, because a dossier
+    // built from four papers is not wrong because one of them was withdrawn.
+    const contributed = [...new Set((await tx.select({ personaId: policyPersonaObservations.personaId }).from(policyPersonaObservations).where(eq(policyPersonaObservations.analysisId, id))).map((r) => r.personaId))];
     await tx.update(policyAnalyses).set({ cancelledAt: new Date(), status: 'cancelled' }).where(eq(policyAnalyses.id, id));
     await tx.delete(policyAnalyses).where(eq(policyAnalyses.id, id));
+    await recountSightings(tx, contributed);
     return true;
   });
 }
