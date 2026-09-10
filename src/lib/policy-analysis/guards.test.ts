@@ -71,6 +71,31 @@ describe('a citation URL must be public and plain', () => {
   });
 });
 
+describe('a stage is shown the assumptions its output must cite', () => {
+  it('pins them into the exploitation playbook, whose preconditions name them', async () => {
+    // An exploitation play's `preconditions` are assumption records and must also
+    // appear in refs. The model can only name an identifier it was shown, and
+    // assumptions are produced early, which puts them below the conclusions in
+    // the shed order. Seen live on 2026-09-10: the playbook ran with 24 results
+    // and ZERO assumptions in context.
+    const actor = artefact('s2_actor_1', 'actor', 'A landlord', 'A registered provider.', { mentions: [], role: 'r', notes: 'n' }, { refs: ['passage_0001'] });
+    const mechanism = artefact('s1_0_mechanism', 'mechanism', 'Duty', 'A duty.', { intervention: 'Duty', implementation: 'RSH', notes: 'None.' }, { refs: ['passage_0001'], origin: 'extracted_fact', sourceId: 'passage_0001', sourceQuote: 'engage with tenants and landlords' });
+    const assumption = artefact('s1_0_assumption', 'assumption', 'Capacity', 'Capacity is assumed.', { importance: 0.9, uncertainty: 0.9, consequence: 0.9, notes: 'Untested.' }, { refs: ['passage_0001', 's1_0_mechanism'] });
+    const profile = artefact('s4_000_profile_1', 'profile', 'Landlord profile', 'What moves it.', { actorId: 's2_actor_1' }, { refs: ['passage_0001'] });
+    let pinned: string[] = [];
+    const model = async (_stage: number, _key: string, raw: unknown) => {
+      pinned = ((raw as { protect?: string[] }).protect ?? []).slice();
+      return { artefacts: [], warnings: [] };
+    };
+    await executeStage(
+      { stage: 10, title: 'A policy', jurisdiction: null, policyArea: null, context: null, artefacts: [passage, actor, mechanism, assumption, profile] },
+      { model, research: async () => ({ artefacts: [], warnings: [] }), signal: new AbortController().signal },
+    ).catch(() => null);
+    expect(pinned).toContain('s1_0_assumption');
+    expect(pinned).toContain('s4_000_profile_1');
+  });
+});
+
 describe('synthesis is shown the results it is required to cite', () => {
   it('pins every test, model, scenario, exploit and cross-policy exposure into the call', async () => {
     // A finding must cite one of these kinds. They are the last things produced
@@ -93,6 +118,7 @@ describe('synthesis is shown the results it is required to cite', () => {
       { model, research: async () => ({ artefacts: [], warnings: [] }), signal: new AbortController().signal },
     ).catch(() => null);
     expect(pinned.sort()).toEqual(['s10_exploit_1', 's8_test_1', 's9_scenario_1']);
+    // No assumptions in this fixture, so the pin is the results alone.
   });
 });
 
