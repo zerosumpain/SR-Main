@@ -95,3 +95,26 @@ describe('synthesis is shown the results it is required to cite', () => {
     expect(pinned.sort()).toEqual(['s10_exploit_1', 's8_test_1', 's9_scenario_1']);
   });
 });
+
+describe('the evidence matrix keeps the claims its output is about', () => {
+  it('pins every claim into each question\u2019s call', async () => {
+    // Evidence is evidence FOR OR AGAINST a claim, so this is the one stage whose
+    // output is about the material the shed order calls superseded. Shed the
+    // claims and the model, asked for evidence and shown none of them, emits the
+    // claims instead \u2014 three consecutive responses with nothing usable, and a
+    // dead stage. Seen live on 2026-09-10 at questions 6, 7 and 8.
+    const claim = artefact('s1_0_claim_1', 'claim', 'A claim', 'The paper claims something.', { claimType: 'objective', notes: 'None.' }, { refs: ['passage_0001'], origin: 'extracted_fact', sourceId: 'passage_0001', sourceQuote: 'we will consult on the new standards' });
+    const question = artefact('s5_main_q1', 'research_question', 'A question', 'Is it so?', { importance: 0.9, uncertainty: 0.9, consequence: 0.9, rationale: 'It gates everything.', searchStrategy: 'social housing consumer standards', gap: 'Unknown.' }, { refs: ['s1_0_claim_1'] });
+    const source = artefact('s5_main_src1', 'research_source', 'A source', 'Retrieved text.', { questionId: 's5_main_q1', retrievedAt: '', quality: '', qualityBasis: '', freshness: '', jurisdictionalRelevance: '', retrieval: 'full_text', gap: '' }, { refs: ['s5_main_q1'], url: 'https://example.org/a' });
+    let pinned: string[] = [];
+    const model = async (_stage: number, _key: string, raw: unknown) => {
+      pinned = ((raw as { protect?: string[] }).protect ?? []).slice();
+      return { artefacts: [], warnings: [] };
+    };
+    await executeStage(
+      { stage: 6, title: 'A policy', jurisdiction: null, policyArea: null, context: null, artefacts: [passage, claim, question, source] },
+      { model, research: async () => ({ artefacts: [], warnings: [] }), signal: new AbortController().signal },
+    ).catch(() => null);
+    expect(pinned).toContain('s1_0_claim_1');
+  });
+});
