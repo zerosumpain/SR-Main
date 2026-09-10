@@ -116,7 +116,11 @@ describe('the written assessment reads as acts', () => {
     const html = render(ReportActs, { props: { acts, recommendations: view.of(all, 'recommendation'), inspect } }).body;
     // Tabs are real tabs, and the panels are all present so that find-in-page
     // and the print stylesheet still reach the acts nobody clicked.
-    expect(html).toContain('role="tablist"');
+    // A CONTENTS RAIL, not a tab strip. The acts used to open a second tab
+    // system inside the report tab; now they are one continuous narrative and
+    // this only jumps between them.
+    expect(html).toContain('class="contents');
+    expect(html).not.toContain('role="tablist"');
     for (const act of acts) {
       expect(html).toContain(act.title);
       expect(html).toContain(act.strap);
@@ -126,28 +130,30 @@ describe('the written assessment reads as acts', () => {
       }
     }
     // Exactly one panel is open on first paint.
-    expect([...html.matchAll(/role="tabpanel"/g)]).toHaveLength(acts.length);
-    expect([...html.matchAll(/role="tabpanel"[^>]*class="[^"]*\boff\b/g)].length).toBe(acts.length - 1);
+    // Every act is present AND visible: the whole point of the rail is that the
+    // written assessment reads in order without anything hidden behind a control.
+    expect([...html.matchAll(/role="tabpanel"/g)]).toHaveLength(0);
+    expect([...html.matchAll(/class="panel[^"]*\boff\b/g)]).toHaveLength(0);
   });
 
-  it('hides an inactive panel with a class, never the hidden attribute', async () => {
-    // `[hidden] { display: none !important }` is a USER-AGENT declaration, and a
-    // UA !important outranks an author one at any specificity — so the print
-    // rule that was supposed to unhide the other acts could never fire, and four
-    // of the five were silently absent from every printed copy. Measured
-    // 2026-09-10 by rendering the page to PDF and counting what arrived.
+  it('hides no act at all — the report is one narrative now', async () => {
     const all = await assessment();
     const html = render(ReportActs, { props: { acts: view.reportActs(all), recommendations: view.of(all, 'recommendation'), inspect } }).body;
-    expect(html).toMatch(/role="tabpanel"[^>]*class="[^"]*\boff\b/);
-    expect(html).not.toMatch(/role="tabpanel"[^>]*\shidden/);
+    expect(html).not.toMatch(/class="panel[^"]*\boff\b/);
+    expect(html).not.toMatch(/<section[^>]*\shidden/);
   });
 
-  it('does the same for the four workspaces, which had the same bug', async () => {
+  it('hides an inactive TAB by class, never the hidden attribute', async () => {
     const all = await assessment();
     const html = render(AssessmentBody, { props: { artefacts: all, status: 'completed', inspect } }).body;
     // Scoped to the workspace panels: the report's five acts are nested inside
     // this component and carry the same class for the same reason.
-    expect([...html.matchAll(/class="workspace[^"]*\boff\b/g)].length).toBe(3);
+    // One tab visible, the rest off by CLASS — find-in-page still reaches them
+    // and `@media print` unhides all of them, which `hidden` would defeat.
+    const panels = [...html.matchAll(/class="[^"]*\bworkspace\b[^"]*"/g)].length;
+    const off = [...html.matchAll(/class="[^"]*\bworkspace\b[^"]*\boff\b/g)].length;
+    expect(panels).toBeGreaterThan(1);
+    expect(off).toBe(panels - 1);
     expect(html).not.toMatch(/role="tabpanel"[^>]*\shidden/);
     // And each one is named on paper, where the tabs are not there to name them.
     for (const name of ['The verdict', 'The threat', 'What it rests on', 'The assessment']) {
@@ -385,7 +391,9 @@ describe('the shared copy is the same report, minus what it may not carry', () =
     // Both are the same component, which is the point of extracting it: the two
     // views cannot drift into different reports. The only structural difference
     // is the cross-policy chapter, which a shared copy may not carry.
-    for (const id of ['workspace-panel-verdict', 'workspace-panel-threat', 'workspace-panel-ground', 'workspace-panel-record']) {
+    // The panels ARE the section anchors now — the workspace grouping that used
+    // to sit between a reader and a section is gone.
+    for (const id of ['id="verdict"', 'id="playbook"', 'id="actors"', 'id="personas"', 'id="stress"', 'id="report"']) {
       expect(owner).toContain(id);
       expect(shared).toContain(id);
     }
@@ -403,5 +411,62 @@ describe('the shared copy is the same report, minus what it may not carry', () =
     expect(shared).not.toContain('model calls across');
     expect(shared).not.toContain('/policy-analysis/personas/');
     expect(shared).not.toContain('Delete this assessment');
+  });
+});
+
+
+describe('one tab row, and every old deep link still lands', () => {
+  /**
+   * The report used to be four workspaces, each holding two or three sections,
+   * with the written assessment opening a SECOND tab strip inside the fourth.
+   * Two navigation systems for the same content. Flattening them is only safe if
+   * every anchor that used to be reachable still is — a deep link into a section
+   * that no tab claims lands nowhere, silently.
+   */
+  it('claims every section the report used to group into workspaces', () => {
+    for (const section of ['verdict', 'playbook', 'interplay', 'actors', 'stress', 'checks', 'scenarios', 'evidence', 'cross', 'report', 'provenance']) {
+      expect(view.isSectionHash(section), `${section} is no longer reachable`).toBe(true);
+    }
+  });
+
+  it('has unique ids and no nesting left to describe', () => {
+    const ids = view.TABS.map((t) => t.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toContain('personas');
+  });
+
+  it('does not treat an artefact id as a tab', () => {
+    expect(view.isSectionHash('s10_000_exploit_001')).toBe(false);
+  });
+});
+
+describe('a persona is one body, however many records the library holds', () => {
+  const actorOf = (id: string, label: string) => artefact(id, 'actor', label, 'x', { entityType: 'agency', aliases: [], mentions: [], ambiguity: '', dates: [], parent: null });
+
+  it('groups records that share a name, and names the split', () => {
+    const board = [
+      { actor: actorOf('s2_001', 'Education Endowment Foundation'), profile: null, plays: [], worst: 0.4 },
+      { actor: actorOf('s2_002', 'Education Endowment Foundation'), profile: null, plays: [], worst: 0.8 },
+      { actor: actorOf('s2_003', 'Ofsted'), profile: null, plays: [], worst: 0.2 },
+    ];
+    const groups = view.personaBoard(board, [
+      { actorId: 's2_001', personaId: 'p1', name: 'Education Endowment Foundation', sightings: 1 },
+      { actorId: 's2_002', personaId: 'p2', name: 'Education Endowment Foundation', sightings: 1 },
+      { actorId: 's2_003', personaId: 'p3', name: 'Ofsted', sightings: 1 },
+    ]);
+    expect(groups).toHaveLength(2);
+    const eef = groups.find((g) => g.name === 'Education Endowment Foundation')!;
+    // Two library records under one name — the split the reader needs to SEE.
+    expect(eef.records).toHaveLength(2);
+    // ...but one body, carrying both of this run's actor rows.
+    expect(eef.here).toHaveLength(2);
+    // Most exposed first: worst of the group, not of whichever row came first.
+    expect(groups[0].name).toBe('Education Endowment Foundation');
+    expect(eef.worst).toBe(0.8);
+  });
+
+  it('leaves out actors the library has never met', () => {
+    const board = [{ actor: actorOf('s2_001', 'Nobody'), profile: null, plays: [], worst: 0 }];
+    expect(view.personaBoard(board, [])).toEqual([]);
   });
 });

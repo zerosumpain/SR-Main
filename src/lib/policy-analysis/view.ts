@@ -398,27 +398,74 @@ export function scenarioBeats(scenario: Artefact, artefacts: Artefact[]): Beat[]
 }
 
 /**
- * The dashboard's four workspaces.
+ * The report's tabs — ONE row, no nesting.
  *
- * Nine anchored sections end to end was an inventory of what the pipeline
- * produced. A reader arrives with one of four questions — what does it say, who
- * can beat it, what is it standing on, and show me the working — and each
- * workspace is a place to sit and do a piece of work rather than a heading to
- * scroll past. Every section keeps its own id, heading and deep link inside its
- * workspace; the grouping is navigation, not editing, exactly as the report's
- * acts are.
+ * This was four workspaces, each holding two or three sections, and the written
+ * report inside the fourth opened a SECOND tab strip for its five acts. Two
+ * navigation systems for the same content, one buried inside the other, and a
+ * reader had to know which workspace a thing lived in before they could reach it.
  *
- * Lives here rather than in the component because BOTH the owner dashboard and
- * the shared read-only copy need to know which workspace a hash belongs to.
+ * Flat costs a longer strip and buys a reader who can see everything the
+ * assessment offers without opening anything. Every id here is the section
+ * anchor it already was, so every existing deep link keeps working.
  */
-export const WORKSPACES = [
-  { id: 'verdict', name: 'The verdict', strap: 'What this assessment concludes.', sections: ['verdict'] },
-  { id: 'threat', name: 'The threat', strap: 'Who can beat this policy, how, and what they are aiming at.', sections: ['playbook', 'interplay', 'actors'] },
-  { id: 'ground', name: 'What it rests on', strap: 'The assumptions holding it up — and what happens if they give.', sections: ['stress', 'checks', 'scenarios', 'evidence'] },
-  { id: 'record', name: 'The assessment', strap: 'The written report, what spans other policies, and every step behind it.', sections: ['cross', 'report', 'provenance'] },
+export const TABS = [
+  { id: 'verdict', name: 'Verdict', strap: 'What this assessment concludes.' },
+  { id: 'playbook', name: 'Playbook', strap: 'The plays each actor can run, ranked by exposure.' },
+  { id: 'interplay', name: 'Interplay', strap: 'Who is aiming at which mechanism.' },
+  { id: 'actors', name: 'Actors', strap: 'Every body this policy runs through, and what it wants.' },
+  { id: 'personas', name: 'Personas', strap: 'Bodies you have met before, and what this assessment adds.' },
+  { id: 'stress', name: 'Stress test', strap: 'Fail an assumption and watch what moves.' },
+  { id: 'checks', name: 'Checks', strap: 'Twelve structural tests over the policy graph.' },
+  { id: 'scenarios', name: 'Scenarios', strap: 'How this plays out when conditions change.' },
+  { id: 'evidence', name: 'Evidence', strap: 'What the conclusions are standing on.' },
+  { id: 'cross', name: 'Cross-policy', strap: 'Weaknesses that exist only because policies coexist.' },
+  { id: 'report', name: 'The report', strap: 'The written assessment, in five acts.' },
+  { id: 'provenance', name: 'Working', strap: 'Every stage, every call, every cost.' },
 ] as const;
+
+/**
+ * Bodies this assessment met that the reader has met before.
+ *
+ * Grouped by NAME rather than by record, because the library currently splits a
+ * body it should keep together — four Education Endowment Foundation personas,
+ * three Employers, two Department for Education, every one of them seen exactly
+ * once. Four blocks with the same name and the same context is what made the
+ * report unreadable; one body the library holds four records for makes the split
+ * visible as the defect it is.
+ *
+ * `here` is what THIS assessment found; `records` is what the library holds.
+ * Deliberately separate — one word covered both, with no boundary, and a reader
+ * could not tell which was which.
+ */
+export type PersonaLink = { actorId: string | null; personaId: string; name: string; sightings: number };
+export type PersonaGroup = {
+  name: string;
+  records: { personaId: string; sightings: number }[];
+  here: ActorView[];
+  plays: Play[];
+  worst: number;
+};
+
+export function personaBoard(board: ActorView[], personas: PersonaLink[]): PersonaGroup[] {
+  const byActor = new Map(personas.filter((p) => p.actorId).map((p) => [p.actorId as string, p]));
+  const groups = new Map<string, PersonaGroup>();
+  for (const view of board) {
+    const link = byActor.get(view.actor.id);
+    if (!link) continue;
+    const key = link.name.trim().toLowerCase();
+    const group = groups.get(key) ?? { name: link.name.trim(), records: [], here: [], plays: [], worst: 0 };
+    if (!group.records.some((r) => r.personaId === link.personaId)) group.records.push({ personaId: link.personaId, sightings: link.sightings });
+    group.here.push(view);
+    group.plays.push(...view.plays);
+    group.worst = Math.max(group.worst, view.worst);
+    groups.set(key, group);
+  }
+  // Most exposed first: a persona is worth reading in proportion to what it can do.
+  return [...groups.values()].sort((a, b) => b.worst - a.worst || a.name.localeCompare(b.name));
+}
 
 /** True when a hash names a section rather than an artefact. */
 export function isSectionHash(hash: string): boolean {
-  return WORKSPACES.some((w) => (w.sections as readonly string[]).includes(hash));
+  return TABS.some((t) => t.id === hash);
 }
