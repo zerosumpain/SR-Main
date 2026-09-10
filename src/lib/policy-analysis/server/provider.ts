@@ -7,7 +7,7 @@ import { executionContext, type LLMCallRecord } from '$lib/context/execution';
 import { resolveResearchDeepModel } from '$lib/server/models/workload-settings';
 import { thinkingRequestParams, type ThinkingLevel } from '$lib/models/thinking';
 import { coerceModelContext, DEFAULT_NODE_MAX_TOKENS } from '$lib/constants/default-models';
-import { PROMPT_VERSION, WORKFLOW_ID, type Artefact, type StageOutput } from '../contracts';
+import { CONTEXT_LIMIT, FIT_LIMIT, PROMPT_VERSION, WORKFLOW_ID, type Artefact, type StageOutput } from '../contracts';
 import { fitToBudget } from '../budget';
 import { PolicyError, triageOutput, type Rejection } from '../validation';
 import { repairPrompt, systemPrompt } from '../prompts';
@@ -23,44 +23,7 @@ export type ModelCall = (stage: number, key: string, input: unknown) => Promise<
  */
 const REPAIR_ROUNDS = 2;
 
-/**
- * How much of the assessment one call may carry, in characters.
- *
- * MEASURED 2026-09-10, against the bridge, with the real 2,278-artefact
- * inventory from the Post-16 white paper — never from the catalogue, because a
- * call that overruns the real window fails the stage rather than degrading.
- * gpt-5.6-luna answered every rung tried:
- *
- *   chars       artefacts     prompt tokens   wall
- *   360,000     153 of 2,278   74,014         16.8s   <- the old limit
- *   700,000     869           143,803         31.4s
- *   1,100,000   1,531         224,707         56.8s
- *   1,600,000   1,858         326,700         78.0s
- *   3,595,536   2,244         727,295         87.6s   <- the whole inventory
- *
- * NO CEILING WAS FOUND. So this is not set by the model's limit — it is set by
- * the three things that bite first:
- *
- *   COVERAGE. The old 360,000 carried 153 of 2,278 artefacts, 6.7%, which is why
- *   eight of fourteen stages logged "withheld from this call entirely" and the
- *   research stage planned its questions having seen no actor, claim or mechanism
- *   at all. 1,100,000 carries 67%. That is the whole point of the change.
- *
- *   DIMINISHING RETURNS. 360k to 1.1M buys 1,378 more artefacts. 1.1M to 1.6M
- *   buys 327 more for 45% more tokens and 37% more wall clock. The curve knees
- *   here.
- *
- *   ATTENTION AND QUOTA. A 200 is not comprehension: a model handed 727,000
- *   tokens does not attend to all of them evenly, and every token is subscription
- *   quota. The increase falls only on the calls that were actually shedding — the
- *   wide, late stages — since a stage-1 passage call carries one passage and is
- *   untouched.
- *
- * That leaves 224,707 tokens against 727,295 known to work: 3.2x of headroom for
- * a longer policy, a bigger system prompt, and the repair rounds that re-send on
- * top. Raise it again only against a fresh measurement.
- */
-const CONTEXT_LIMIT = 1_100_000;
+
 
 /**
  * How long ONE model call may take before it is abandoned.
@@ -102,7 +65,7 @@ export function modelCaller(executionId: string, runId: string, signal: AbortSig
   return async (stage, key, input) => {
     const { protect: pinned, ...payload } = input as { artefacts?: Artefact[]; protect?: string[] };
     const fitted = Array.isArray(payload.artefacts)
-      ? fitToBudget(payload.artefacts, (artefacts) => ({ ...payload, artefacts }), CONTEXT_LIMIT, new Set(pinned ?? []))
+      ? fitToBudget(payload.artefacts, (artefacts) => ({ ...payload, artefacts }), FIT_LIMIT, new Set(pinned ?? []))
       : { artefacts: [], notes: [] };
     input = Array.isArray(payload.artefacts) ? { ...payload, artefacts: fitted.artefacts } : payload;
     const encoded = JSON.stringify(input);
