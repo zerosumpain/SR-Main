@@ -114,6 +114,63 @@ describe('complete fixture policy pipeline', () => {
   });
 });
 
+describe('stage 3 — the graph fans out instead of asking for the whole policy at once', () => {
+  const QUOTE = 'The Council is accountable for delivery and bears implementation costs.';
+  const actorRow = (id: string, label: string, mentionCount: number): Artefact =>
+    artefact(id, 'actor', label, 'Synthetic actor row.', {
+      entityType: 'agency', aliases: [], mentions: Array.from({ length: mentionCount }, () => 'passage_0001'),
+      ambiguity: '', dates: [], parent: null,
+    }, { origin: 'extracted_fact', confidence: 1, sourceId: 'passage_0001', sourceQuote: QUOTE, refs: ['passage_0001'] });
+
+  const run = async (actors: Artefact[]) => {
+    const passage = artefact('passage_0001', 'passage', 'Page 1', QUOTE, {}, { origin: 'extracted_fact', confidence: 1 });
+    const mechanism = artefact('s1_000_mechanism', 'mechanism', 'A mechanism', QUOTE,
+      { intervention: 'x', implementation: 'y', notes: 'z' },
+      { origin: 'extracted_fact', confidence: 1, sourceId: 'passage_0001', sourceQuote: QUOTE, refs: ['passage_0001'] });
+    const seen: string[] = [];
+    const model = async (...args: Parameters<typeof fixtureModel>) => { seen.push(args[1]); return fixtureModel(...args); };
+    const result = await executeStage(
+      { stage: 3, title: 'Synthetic', jurisdiction: null, policyArea: null, context: null, artefacts: [passage, mechanism, ...actors] },
+      { model, research: neverResearch, signal: new AbortController().signal },
+    );
+    return { result, seen };
+  };
+
+  /**
+   * The regression this exists to prevent. One call carrying 1,120,463 characters
+   * returned 10 nodes and 8 edges for 347 actors — not because it was shown too
+   * little, but because one response cannot carry a policy's structure.
+   */
+  it('makes a call per body rather than a single call for everything', async () => {
+    const { seen } = await run([
+      actorRow('s2_001', 'Skills England', 9),
+      actorRow('s2_002', 'Skills England', 2),
+      actorRow('s2_003', 'Ofsted', 4),
+      actorRow('s2_004', 'UCAS', 1),
+    ]);
+    // Four rows, three bodies — three calls, and emphatically not one 'main'.
+    expect(seen).toHaveLength(3);
+    expect(seen).not.toContain('main');
+    // The best-evidenced row of a group speaks for it.
+    expect(seen).toContain('s2_001');
+  });
+
+  it('gives every call the endpoints an edge needs at both ends', async () => {
+    const { result } = await run([actorRow('s2_001', 'Ofsted', 3), actorRow('s2_002', 'UCAS', 1)]);
+    // A relationship is only assertable when both of its ends are present, so a
+    // per-body call still carries the other bodies and the mechanisms as context.
+    expect(result.artefacts.filter((a) => a.kind === 'edge').length).toBeGreaterThan(0);
+  });
+
+  it('is deterministic — same rows, same calls, same order', async () => {
+    const rows = [actorRow('s2_001', 'B Body', 2), actorRow('s2_002', 'A Body', 7), actorRow('s2_003', 'B Body', 5)];
+    const first = await run(rows);
+    const second = await run(rows);
+    expect(second.seen).toEqual(first.seen);
+    expect(second.result.artefacts.map((a) => a.id)).toEqual(first.result.artefacts.map((a) => a.id));
+  });
+});
+
 describe('stage 4 — one profiling call per body, not per row', () => {
   // Provenance reaching a passage is not optional: a profile whose evidence does
   // not trace back to the document is dropped by triage, which is what makes a
