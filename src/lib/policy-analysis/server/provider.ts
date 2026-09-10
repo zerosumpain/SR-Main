@@ -22,8 +22,21 @@ export type ModelCall = (stage: number, key: string, input: unknown) => Promise<
  */
 const REPAIR_ROUNDS = 2;
 
-/** Serialised characters one model call may carry. */
-const CONTEXT_LIMIT = 180_000;
+/**
+ * Serialised characters one model call may carry.
+ *
+ * MEASURED, not guessed: a 187,171-character call to gpt-5.6-luna reported
+ * 40,503 prompt tokens on 2026-09-10 — about 4.6 characters a token. The
+ * shipped 180,000 was therefore spending roughly a tenth of the model's window,
+ * and it was the binding constraint on the whole assessment: synthesis fitted 28
+ * artefacts out of 482 and could not see a single assumption for its findings to
+ * cite. 360,000 characters is about 78,000 prompt tokens, which leaves room for
+ * the 25,000-token reply inside even a 128,000-token window.
+ *
+ * Raise it further only against a fresh measurement. A call that overruns the
+ * real window fails the stage rather than degrading.
+ */
+const CONTEXT_LIMIT = 360_000;
 
 /** Repair is worth a call when the response was mostly, or entirely, unusable. */
 function needsRepair(kept: number, rejected: Rejection[]): boolean {

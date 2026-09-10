@@ -10,7 +10,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { artefact, PATTERNS, type Artefact } from './contracts';
 import { locateQuote } from './quotes';
 import { PolicyError, triageArtefacts, triageOutput, validateOutput } from './validation';
-import { encodedSize, fitToBudget } from './budget';
+import { boundWarnings, encodedSize, fitToBudget } from './budget';
 import { bandOf, exposureOf, scoreExploits } from './exposure';
 import { runPolicyTests } from './tests';
 import { repairPrompt } from './prompts';
@@ -272,6 +272,26 @@ describe('fitting a stage into the model context window', () => {
     expect(fitted.artefacts.length).toBeGreaterThan(0);
     expect(fitted.notes.join(' ')).toContain('did not fit and were withheld too');
     expect(fitted.notes.join(' ')).toContain('Read this stage as partial');
+  });
+
+  it('bounds the warnings a stage carries, so they cannot squeeze out the artefacts', () => {
+    // fitToBudget sheds ARTEFACTS only, so an unbounded warning list is spent
+    // first and the artefacts pay for it. Measured on 2026-09-10: the synthesis
+    // call was 182,386 characters of which 69,629 — 38% — were 272 warnings,
+    // leaving 28 artefacts out of 482 and no assumptions to cite.
+    const repeated = Array.from({ length: 200 }, () => 'The supplied passage contains only a cover-page title and date.');
+    const long = Array.from({ length: 60 }, (_, i) => `Long note ${i}: ` + 'y'.repeat(2000));
+    const short = ['27 groups of model output were discarded in this stage.'];
+    const bounded = boundWarnings([...repeated, ...long, ...short]);
+    expect(bounded.join('').length).toBeLessThanOrEqual(12_000 + 200);
+    expect(bounded).toContain('27 groups of model output were discarded in this stage.');
+    expect(bounded.filter((w) => w.startsWith('The supplied passage'))).toHaveLength(1);
+    expect(bounded.at(-1)).toContain('further notes from earlier stages');
+  });
+
+  it('leaves a short warning list alone', () => {
+    const warnings = ['One note.', 'Another note.'];
+    expect(boundWarnings(warnings)).toEqual(warnings);
   });
 
   it('leaves a payload that already fits completely alone', () => {
