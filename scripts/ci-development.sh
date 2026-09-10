@@ -144,3 +144,32 @@ const result = await response.json();
 assert.ok(response.ok && result.ready, result.error ?? 'Executor preflight failed');
 console.log('Production development executor preflight passed.');
 PREFLIGHT
+
+# ---------------------------------------------------------------------------
+# Prune old source checkouts. NOT optional, and this is the fourth time.
+#
+# `sources/<sha>` is a full checkout with node_modules — 1.6GB a commit — and
+# nothing has ever removed one. It filled the 150G root disk on 2026-08-15,
+# 2026-08-21, 2026-09-09 and again on 2026-09-10, when it reached 23 checkouts
+# and 35G, took the SITE down and failed a release with "No space left on
+# device". `releases/` next door has had exactly this prune since it shipped;
+# this directory never got one.
+#
+# Same shape as the release prune, plus one gate it needs and that one does not:
+# the live checkout is BIND-MOUNTED into the broker and gateway containers, so
+# what is running is asked of docker rather than inferred from a symlink.
+# ---------------------------------------------------------------------------
+KEEP_SOURCES="${KEEP_SOURCES:-3}"
+echo "==> Pruning old development sources (keeping $KEEP_SOURCES)..."
+MOUNTED="$(for cid in $(sudo docker ps -q); do sudo docker inspect "$cid" --format '{{range .Mounts}}{{.Source}}
+{{end}}'; done | grep -o "$ROOT/sources/[0-9a-f]*" | sort -u || true)"
+ls -1dt "$ROOT"/sources/*/ 2>/dev/null | tail -n +"$((KEEP_SOURCES + 1))" | while read -r d; do
+  candidate="${d%/}"
+  name="$(basename "$candidate")"
+  if [ "$name" = "$SHA" ]; then echo "    keeping $name (this release)"; continue; fi
+  if printf '%s\n' "$MOUNTED" | grep -qx "$candidate"; then echo "    keeping $name (mounted by a running container)"; continue; fi
+  if sudo readlink /proc/*/cwd 2>/dev/null | grep -qx "$candidate"; then echo "    keeping $name (a process is working in it)"; continue; fi
+  echo "    removing $name"
+  sudo rm -rf "$candidate"
+done
+df -h "$ROOT" | tail -1
