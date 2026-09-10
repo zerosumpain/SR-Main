@@ -24,20 +24,43 @@ export type ModelCall = (stage: number, key: string, input: unknown) => Promise<
 const REPAIR_ROUNDS = 2;
 
 /**
- * Serialised characters one model call may carry.
+ * How much of the assessment one call may carry, in characters.
  *
- * MEASURED, not guessed: a 187,171-character call to gpt-5.6-luna reported
- * 40,503 prompt tokens on 2026-09-10 — about 4.6 characters a token. The
- * shipped 180,000 was therefore spending roughly a tenth of the model's window,
- * and it was the binding constraint on the whole assessment: synthesis fitted 28
- * artefacts out of 482 and could not see a single assumption for its findings to
- * cite. 360,000 characters is about 78,000 prompt tokens, which leaves room for
- * the 25,000-token reply inside even a 128,000-token window.
+ * MEASURED 2026-09-10, against the bridge, with the real 2,278-artefact
+ * inventory from the Post-16 white paper — never from the catalogue, because a
+ * call that overruns the real window fails the stage rather than degrading.
+ * gpt-5.6-luna answered every rung tried:
  *
- * Raise it further only against a fresh measurement. A call that overruns the
- * real window fails the stage rather than degrading.
+ *   chars       artefacts     prompt tokens   wall
+ *   360,000     153 of 2,278   74,014         16.8s   <- the old limit
+ *   700,000     869           143,803         31.4s
+ *   1,100,000   1,531         224,707         56.8s
+ *   1,600,000   1,858         326,700         78.0s
+ *   3,595,536   2,244         727,295         87.6s   <- the whole inventory
+ *
+ * NO CEILING WAS FOUND. So this is not set by the model's limit — it is set by
+ * the three things that bite first:
+ *
+ *   COVERAGE. The old 360,000 carried 153 of 2,278 artefacts, 6.7%, which is why
+ *   eight of fourteen stages logged "withheld from this call entirely" and the
+ *   research stage planned its questions having seen no actor, claim or mechanism
+ *   at all. 1,100,000 carries 67%. That is the whole point of the change.
+ *
+ *   DIMINISHING RETURNS. 360k to 1.1M buys 1,378 more artefacts. 1.1M to 1.6M
+ *   buys 327 more for 45% more tokens and 37% more wall clock. The curve knees
+ *   here.
+ *
+ *   ATTENTION AND QUOTA. A 200 is not comprehension: a model handed 727,000
+ *   tokens does not attend to all of them evenly, and every token is subscription
+ *   quota. The increase falls only on the calls that were actually shedding — the
+ *   wide, late stages — since a stage-1 passage call carries one passage and is
+ *   untouched.
+ *
+ * That leaves 224,707 tokens against 727,295 known to work: 3.2x of headroom for
+ * a longer policy, a bigger system prompt, and the repair rounds that re-send on
+ * top. Raise it again only against a fresh measurement.
  */
-const CONTEXT_LIMIT = 360_000;
+const CONTEXT_LIMIT = 1_100_000;
 
 /**
  * How long ONE model call may take before it is abandoned.
