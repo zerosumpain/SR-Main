@@ -5,6 +5,7 @@ import { modelApplicability } from './models';
 import { crossIdentityHints, preserveAmbiguity } from './entities';
 import { runPolicyTests } from './tests';
 import { documentShingles, quotesDocument } from './query-guard';
+import { partitionFrontMatter, skippedNote } from './front-matter';
 import type { ModelCall } from './server/provider';
 import type { Research } from './server/research';
 import type { PersonaPrior } from './personas';
@@ -28,6 +29,18 @@ export type PipelineDeps = { model: ModelCall; research: Research; signal: Abort
  * list to reach the same conclusion twenty calls later.
  */
 const CONSECUTIVE_LIMIT = 3;
+
+/**
+ * A slow provider is not a dead one, and must not be reported as one.
+ *
+ * A provider that is down refuses the connection in milliseconds; three of those
+ * in a row genuinely means stop. A model that is merely too slow fails at the
+ * per-call deadline, minutes apart, and each failure is about ONE unit of work —
+ * so three of them said "the provider is unavailable" about a bridge that was
+ * healthy, and ended a 72-page assessment at page 5. Timeouts get their own,
+ * longer count and their own message.
+ */
+const CONSECUTIVE_TIMEOUT_LIMIT = 6;
 
 /** Ceilings on a stage's assembled output, which no envelope bounds. */
 const MAX_STAGE_ARTEFACTS = 4000;
@@ -78,7 +91,12 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
       fault.last = err;
       consecutive++;
       output.warnings.push(`${describe} could not be assessed: ${err.message} It is missing from this stage.`);
-      if (consecutive >= CONSECUTIVE_LIMIT) throw new PolicyError(err.code, `${CONSECUTIVE_LIMIT} consecutive parts of this stage failed for the same reason. ${err.message}`);
+      const limit = err.code === 'timeout' ? CONSECUTIVE_TIMEOUT_LIMIT : CONSECUTIVE_LIMIT;
+      if (consecutive >= limit) {
+        throw new PolicyError(err.code, err.code === 'timeout'
+          ? `${limit} parts of this stage in a row ran out of time. The model chosen for this assessment is too slow for this document, not unavailable — re-run it on a faster one. ${err.message}`
+          : `${limit} consecutive parts of this stage failed for the same reason. ${err.message}`);
+      }
       return null;
     }
   };
@@ -124,7 +142,14 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
 
   if (stage === 1) {
     const passages = input.artefacts.filter((a) => a.kind === 'passage');
-    for (const passage of passages) await attempt(passage.id, [passage], `Passage “${passage.label}”`, { protect: [passage.id] });
+    // A cover, a copyright notice and a contents list are not policy, and asking
+    // this stage's contract of them is what ended the first real white-paper
+    // assessment. They stay in the document record; they are simply not sent,
+    // and every one of them is named below.
+    const { analyse, skipped, distrusted } = partitionFrontMatter(passages);
+    if (skipped.length) output.warnings.push(skippedNote(skipped, passages.length));
+    if (distrusted) output.warnings.push('Almost every page looked like front matter, which is far more likely to be a fault in the extraction than a document with no policy in it, so every page was analysed.');
+    for (const passage of analyse) await attempt(passage.id, [passage], `Passage “${passage.label}”`, { protect: [passage.id] });
   } else if (stage === 4) {
     for (const actor of input.artefacts.filter((a) => a.kind === 'actor' && a.id.startsWith('s2_'))) {
       const related = new Set([actor.id, ...actor.refs, ...input.artefacts.filter((a) => a.fromId === actor.id || a.toId === actor.id || a.refs.includes(actor.id)).flatMap((a) => [a.id, ...a.refs, a.fromId ?? '', a.toId ?? ''])]);

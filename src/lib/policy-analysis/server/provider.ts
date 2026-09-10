@@ -39,6 +39,33 @@ const REPAIR_ROUNDS = 2;
  */
 const CONTEXT_LIMIT = 360_000;
 
+/**
+ * How long ONE model call may take before it is abandoned.
+ *
+ * 180 seconds was never measured, and it is what killed the first real
+ * assessment of a government white paper. Timed on 2026-09-10 against the real
+ * stage-1 prompt and the actual pages of that paper:
+ *
+ *   page                     luna    terra     sol      astra
+ *   near-blank imprint        30s       —     135s          —
+ *   copyright notice          44s       —     170s          —
+ *   ministerial foreword      85s     111s   >301s   502 @ 237s
+ *
+ * Two of the four models the picker offers cannot answer an ORDINARY page of a
+ * dense paper inside 180 seconds, and one of them is the site default. The
+ * Codex bridge itself allows 600 seconds (`REQUEST_TIMEOUT_MS`), so the tight
+ * deadline was ours alone and bought nothing: a genuinely dead provider refuses
+ * the connection in milliseconds, not in three minutes.
+ *
+ * The stage's own wall clock (`stageBudgetMs`) remains the bound on a run. This
+ * is only the bound on a single call.
+ */
+const CALL_TIMEOUT_MS = 180_000;
+const SLOW_PROVIDER_TIMEOUT_MS = 420_000;
+function callTimeoutMs(provider: string): number {
+  return provider === 'codex' ? SLOW_PROVIDER_TIMEOUT_MS : CALL_TIMEOUT_MS;
+}
+
 /** Repair is worth a call when the response was mostly, or entirely, unusable. */
 function needsRepair(kept: number, rejected: Rejection[]): boolean {
   if (!rejected.length) return false;
@@ -100,6 +127,10 @@ export function modelCaller(executionId: string, runId: string, signal: AbortSig
     for (let round = 0; round <= REPAIR_ROUNDS; round++) {
       signal.throwIfAborted();
       const callKey = round ? `${key}#repair${round}` : key;
+      // Its own signal, not an inline one, so the catch below can tell a call
+      // that ran out of time from a provider that was never there.
+      const deadline = AbortSignal.timeout(callTimeoutMs(context.provider));
+      const startedAt = Date.now();
       // A repair round returns ONLY the corrected subset. Storing it under the
       // original input hash would let the unordered cache lookup replay that
       // fragment as if it were the whole response.
@@ -108,7 +139,7 @@ export function modelCaller(executionId: string, runId: string, signal: AbortSig
       const llmCalls: LLMCallRecord[] = [];
       try {
         const result = await executionContext.run({ workflowId: WORKFLOW_ID, runId, nodeId: executionId, llmCalls }, () =>
-          client.chat.completions.create({ model, messages, response_format: { type: 'json_object' }, max_tokens: DEFAULT_NODE_MAX_TOKENS, ...thinking }, { signal: AbortSignal.any([signal, AbortSignal.timeout(180_000)]), maxRetries: 0 }),
+          client.chat.completions.create({ model, messages, response_format: { type: 'json_object' }, max_tokens: DEFAULT_NODE_MAX_TOKENS, ...thinking }, { signal: AbortSignal.any([signal, deadline]), maxRetries: 0 }),
         );
         const content = result.choices[0]?.message?.content ?? '';
         // A reply cut off at max_tokens is not malformed JSON, and saying so sends
@@ -148,9 +179,20 @@ export function modelCaller(executionId: string, runId: string, signal: AbortSig
         if (room >= 4_000) messages.push({ role: 'assistant', content: content.slice(0, room) });
         messages.push({ role: 'user', content: instruction });
       } catch (err) {
-        await db.update(policyModelCalls).set({ status: 'failed', usage: llmCalls, completedAt: new Date(), error: err instanceof PolicyError ? err.message : 'The configured model provider is unavailable or the call timed out.' }).where(eq(policyModelCalls.id, call.id));
+        // WHICH failure it was, in the error the reader sees. The old text said
+        // "the provider is unavailable or timed out — check site connections",
+        // which named the wrong cause and the wrong remedy: on 2026-09-10 the
+        // bridge was healthy throughout, the model was simply too slow for the
+        // deadline, and the suggested resume failed identically because a
+        // deadline is deterministic.
+        const timedOut = deadline.aborted && !signal.aborted;
+        const elapsed = Math.round((Date.now() - startedAt) / 1000);
+        const fault = err instanceof PolicyError ? err : timedOut
+          ? new PolicyError('timeout', `“${model}” did not answer within ${Math.round(callTimeoutMs(context.provider) / 1000)} seconds on this call (gave up after ${elapsed}s). This is a per-call deadline, not a provider outage — the run needs a model that answers inside it, and resuming on the same one will stop here again.`)
+          : new PolicyError('provider', `The configured model provider could not be reached for “${model}” (after ${elapsed}s). Check site connections, then resume.`);
+        await db.update(policyModelCalls).set({ status: 'failed', usage: llmCalls, completedAt: new Date(), error: fault.message }).where(eq(policyModelCalls.id, call.id));
         if (accepted.length && err instanceof PolicyError) return { artefacts: accepted, warnings: [...warnings, `A corrective attempt failed (${err.message}); the assessment keeps what was already accepted.`] };
-        throw err instanceof PolicyError ? err : new PolicyError('provider', 'The configured model provider is unavailable or timed out. Check site connections, then resume.');
+        throw fault;
       }
     }
     throw lastError ?? new PolicyError('contract', 'The model could not satisfy this stage’s contract.');

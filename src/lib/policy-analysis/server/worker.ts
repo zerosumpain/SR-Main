@@ -163,7 +163,10 @@ export async function executePolicyRun(claimed: { id: string; input: Record<stri
       if (!locked) return;
       const interrupted = !(err instanceof PolicyError) && signal.aborted;
       const attempts = interrupted ? locked.stage.attempts : locked.stage.attempts + 1;
-      const retry = attempts < 3 && !(err instanceof PolicyError && ['budget', 'extraction'].includes(err.code));
+      // A deadline is deterministic: the same model on the same page will run out
+      // of time again. Retrying it twice more cost the first white-paper run two
+      // hours and told the reader nothing new.
+      const retry = attempts < 3 && !(err instanceof PolicyError && ['budget', 'extraction', 'timeout'].includes(err.code));
       await tx.update(policyExecutions).set({ status: 'failed', error: message, completedAt: new Date() }).where(eq(policyExecutions.id, started.execution.id));
       await tx.update(workflowRuns).set({ status: 'failed', error: message, completedAt: new Date() }).where(eq(workflowRuns.id, claimed.id));
       await tx.update(policyStages).set({ status: retry ? 'pending' : 'failed', attempts, error: message }).where(eq(policyStages.id, stageId));

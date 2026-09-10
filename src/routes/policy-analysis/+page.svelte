@@ -119,10 +119,15 @@
     <label for="model">Model</label>
     <select class="nm-text-input" id="model" name="model" bind:value={modelId} disabled={!data.codexEnabled}>
       {#each data.models as m (m.id)}
-        <option value={m.id}>{m.name}{m.proOnly ? ' · Pro only' : ''}{m.retiresOn ? ` · retires ${m.retiresOn}` : ''}</option>
+        <option value={m.id}>{m.name}{m.pace ? ` · ${m.pace}` : ''}{m.proOnly ? ' · Pro only' : ''}{m.retiresOn ? ` · retires ${m.retiresOn}` : ''}</option>
       {/each}
     </select>
     {#if chosen?.description}<span class="muted">{chosen.description}</span>{/if}
+    <span class="muted">
+      The first stage makes one timed call for every page of the document, so a slow model is not
+      slow here — it stops. The notes above are measured against a real 72-page white paper, not
+      guessed, and a model nobody has timed carries no note.
+    </span>
 
     <label for="thinkingLevel">Thinking level</label>
     <select class="nm-text-input" id="thinkingLevel" name="thinkingLevel" bind:value={thinkingLevel} disabled={!data.codexEnabled}>
