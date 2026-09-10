@@ -8,6 +8,7 @@ import { recordPulse, prunePulses } from './audit';
 import { seedDefaultActions } from './seed';
 import { runTargetedAction } from './handlers/targeted';
 import { withinActiveHours, rescheduleAfterWindowSkip } from './schedule';
+import { beginBatch } from '$lib/workflows/engine-runtime';
 import type { HeartbeatAction } from '$lib/db/schema';
 
 // The engine ticks at this cadence. Per-action `cadence_seconds` floors here
@@ -92,9 +93,46 @@ async function runTick(): Promise<void> {
   }
 }
 
+/** How often a running activity tells the liveness probe it is still alive. */
+const BEAT_INTERVAL_MS = 2000;
+
+/**
+ * Run one activity, registered with the liveness probe for as long as it takes.
+ *
+ * WHY EVERY ACTIVITY, not the two that were caught. `daydream-places` held the
+ * event loop for 8-16 seconds against a five second threshold and restarted the
+ * whole site roughly twenty times on 2026-09-10; `daydream-detect` blocks 2-3
+ * seconds every ten minutes. But those are simply the two that showed up in the
+ * block log. Twelve activities run over five seconds of wall time —
+ * `geo-territory` averages 119s and has peaked at 308s, `daydream-observe` peaked
+ * at 52s on a TWO MINUTE cadence — and not one of them was protected. Wall time
+ * is not blocking time, so most of those are probably fine; the point is that
+ * none of them had any protection if they were not, and finding out costs a
+ * production outage each time.
+ *
+ * The beat is a `setInterval`, which is the liveness signal itself: a blocked
+ * event loop cannot fire a timer, so an activity that stalls the loop for 16
+ * seconds keeps its registration (well inside `BATCH_STALE_MS`) and is excused,
+ * while one that wedges the process outright stops beating and is correctly
+ * restarted two minutes later.
+ */
 async function runOne(row: HeartbeatAction, now: Date): Promise<void> {
   const startedAt = Date.now();
   const nextRunAt = new Date(now.getTime() + row.cadenceSeconds * 1000);
+  const batch = beginBatch(`heartbeat:${row.name}`, 'starting');
+  const beat = setInterval(
+    () => batch.beat(`${Math.round((Date.now() - startedAt) / 1000)}s in`),
+    BEAT_INTERVAL_MS,
+  );
+  try {
+    return await runOneInner(row, now, startedAt, nextRunAt);
+  } finally {
+    clearInterval(beat);
+    batch.end();
+  }
+}
+
+async function runOneInner(row: HeartbeatAction, now: Date, startedAt: number, nextRunAt: Date): Promise<void> {
 
   if (!withinActiveHours(row, now)) {
     // Re-schedule to when the window NEXT OPENS, not to now + cadence.
