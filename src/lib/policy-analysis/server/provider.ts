@@ -41,11 +41,17 @@ export function modelCaller(executionId: string, runId: string, signal: AbortSig
     const encoded = JSON.stringify(input);
     if (encoded.length > CONTEXT_LIMIT) throw new PolicyError('budget', 'This call exceeds the model’s context window even after trimming. Completed work is retained.');
     const inputHash = createHash('sha256').update(encoded).digest('hex');
+    // The cache key carries the PROMPT, not just its version number. Without
+    // this, editing an instruction changes nothing on a resumed run: every call
+    // hits a cached response written under the old wording and the fix appears
+    // not to work. Seen on 2026-09-10 — a corrected stage-7 instruction replayed
+    // ten cached answers in under a minute and failed identically.
+    const promptKey = `${PROMPT_VERSION}#${createHash('sha256').update(systemPrompt(stage)).digest('hex').slice(0, 12)}`;
     const prefix = (input as { idPrefix?: string }).idPrefix ?? '';
     const [execution] = await db.select().from(policyExecutions).where(eq(policyExecutions.id, executionId));
     const [cached] = await db.select({ output: policyModelCalls.output }).from(policyModelCalls)
       .innerJoin(policyExecutions, eq(policyExecutions.id, policyModelCalls.executionId))
-      .where(and(eq(policyExecutions.stageId, execution.stageId), eq(policyModelCalls.inputHash, inputHash), eq(policyModelCalls.promptVersion, PROMPT_VERSION), eq(policyModelCalls.status, 'completed')))
+      .where(and(eq(policyExecutions.stageId, execution.stageId), eq(policyModelCalls.inputHash, inputHash), eq(policyModelCalls.promptVersion, promptKey), eq(policyModelCalls.status, 'completed')))
       // Several attempts of the same stage can leave more than one match; take the
       // most recent rather than whatever the planner happens to hand back first.
       .orderBy(desc(policyModelCalls.completedAt)).limit(1);
@@ -72,7 +78,7 @@ export function modelCaller(executionId: string, runId: string, signal: AbortSig
       // original input hash would let the unordered cache lookup replay that
       // fragment as if it were the whole response.
       const roundHash = round ? createHash('sha256').update(`${inputHash}#repair${round}`).digest('hex') : inputHash;
-      const [call] = await db.insert(policyModelCalls).values({ executionId, callKey, promptVersion: PROMPT_VERSION, inputHash: roundHash, input: round ? { repairOf: key, round, instruction: messages.at(-1)?.content.slice(0, 20000) } : input, status: 'running', model }).returning();
+      const [call] = await db.insert(policyModelCalls).values({ executionId, callKey, promptVersion: promptKey, inputHash: roundHash, input: round ? { repairOf: key, round, instruction: messages.at(-1)?.content.slice(0, 20000) } : input, status: 'running', model }).returning();
       const llmCalls: LLMCallRecord[] = [];
       try {
         const result = await executionContext.run({ workflowId: WORKFLOW_ID, runId, nodeId: executionId, llmCalls }, () =>

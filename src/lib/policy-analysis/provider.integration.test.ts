@@ -36,7 +36,7 @@ describe.skipIf(!local)('persisted model audit and stage checkpoints', () => {
       mock.malformed = true;
       await expect(next(1, 'malformed', { ...input, idPrefix: 's1_bad_' })).rejects.toThrow('malformed JSON');
       const calls = await db.select().from(policyModelCalls).where(eq(policyModelCalls.executionId, execution.id));
-      expect(calls[0]).toMatchObject({ status: 'completed', provider: 'synthetic', model: 'synthetic/test-model', promptVersion: PROMPT_VERSION });
+      expect(calls[0]).toMatchObject({ status: 'completed', provider: 'synthetic', model: 'synthetic/test-model', promptVersion: expect.stringContaining(PROMPT_VERSION) });
       expect(calls[0].usage).toMatchObject([{ tokensInput: 100, tokensOutput: 200, costUsd: null }]);
       const failed = await db.select().from(policyModelCalls).where(eq(policyModelCalls.executionId, retry.id));
       expect(failed[0]).toMatchObject({ status: 'failed', output: { malformedText: '{bad' } });
