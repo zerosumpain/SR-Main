@@ -345,6 +345,9 @@ const GROUPING_SEGMENTS: (string | RegExp)[] = [
   '/blog/preview',
   '/blog/tag',
   '/jkai/shared',
+  // A shared, read-only policy assessment lives one level under a namespace with
+  // no page of its own — the same shape as /jkai/shared above it.
+  '/policy-analysis/shared',
   '/jkai/trace',
   '/jkai/settings',
   // Provider ids and the `connections` namespace have no page of their own.

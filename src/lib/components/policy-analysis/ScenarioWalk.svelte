@@ -47,6 +47,24 @@
 </script>
 
 {#if scenarios.length}
+  <!--
+    On screen the reader steps through one scenario; on paper they get all eight
+    in full. A printed report that carried beat one of one condition would be
+    hiding seven of the eight standing conditions the policy has to survive.
+  -->
+  <div class="print-all">
+    {#each scenarios as s (s.id)}
+      {@const beats = scenarioBeats(s, artefacts)}
+      <article class="print-scenario">
+        <h4>{title(s)} — {s.label}</h4>
+        <p>{s.statement}</p>
+        {#if beats.length}
+          <ol>{#each beats as b (b.key)}<li><strong>{b.label}.</strong> {b.body}</li>{/each}</ol>
+        {/if}
+      </article>
+    {/each}
+  </div>
+
   <div class="walk">
     <div class="picker" role="tablist" aria-label="Standing conditions">
       {#each scenarios as s, index (s.id)}
@@ -121,5 +139,13 @@
   .dots li.on { background: var(--accent); border-color: var(--accent); }
   .muted { color: var(--text-muted); font-size: var(--fs-label); }
   .link { font: inherit; background: none; border: 0; padding: 0; color: var(--accent-ink); text-decoration: underline; cursor: pointer; }
-  @media print { .picker, .controls { display: none; } .beat { min-height: 0; } }
+  .print-all { display: none; }
+  @media print {
+    .walk { display: none; }
+    .print-all { display: block; }
+    .print-scenario { break-inside: avoid; padding: .6rem 0; border-top: 1px solid #999; }
+    .print-scenario h4 { margin: 0 0 .2rem; font-size: var(--fs-body-lg); text-transform: capitalize; }
+    .print-scenario ol { margin: .4rem 0 0; padding-left: 1.2rem; }
+    .print-scenario li { padding: .15rem 0; }
+  }
 </style>

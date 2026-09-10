@@ -195,4 +195,17 @@
   .holds { border-top: 1px solid var(--line); margin-top: 1.25rem; padding-top: .75rem; }
   .muted { color: var(--text-muted); font-size: var(--fs-label); }
   .link { font: inherit; background: none; border: 0; padding: 0; text-align: left; color: var(--accent-ink); text-decoration: underline; cursor: pointer; }
+
+  /*
+   * On paper the switches are inert, so they are dropped and the levers read as
+   * what they are: the assumptions this assessment turns on, and how much rests
+   * on each. Whatever the reader had switched on when they pressed print stays
+   * in the outcome beside it.
+   */
+  @media print {
+    .stress { grid-template-columns: 1fr; }
+    .lever-actions, input[type='checkbox'] { display: none; }
+    .levers li { break-inside: avoid; }
+    .outcome { border-left: 2px solid #000; }
+  }
 </style>

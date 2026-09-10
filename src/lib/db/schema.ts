@@ -7157,3 +7157,32 @@ export const policyPersonaObservations = pgTable('policy_persona_observations', 
   index('policy_persona_observations_persona_idx').on(t.personaId, t.observedAt),
   index('policy_persona_observations_analysis_idx').on(t.analysisId),
 ]);
+
+/**
+ * Capability links to ONE assessment, for a reader who has no account.
+ *
+ * Mirrors `deck_share` and `project_share`: only the SHA-256 of the raw token is
+ * stored, so a database dump yields no working URLs, and unknown, revoked and
+ * expired all resolve to the same 404 so probing learns nothing.
+ *
+ * `expires_at` is NOT NULL, and that is the one difference worth stating. The
+ * drive's first capability table had it nullable and never wrote it, so every
+ * link it minted was permanent, unlisted and unkillable — one of them a GPX
+ * with home-area GPS. A policy paper under assessment is at least as sensitive,
+ * so a link here cannot be minted without a lifetime.
+ */
+export const policyShares = pgTable('policy_share', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  analysisId: uuid('analysis_id').notNull().references(() => policyAnalyses.id, { onDelete: 'cascade' }),
+  tokenHash: text('token_hash').notNull(),
+  label: text('label'),
+  createdBy: text('created_by').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+  useCount: integer('use_count').notNull().default(0),
+}, (t) => [
+  uniqueIndex('policy_share_token_hash_idx').on(t.tokenHash),
+  index('policy_share_analysis_idx').on(t.analysisId),
+]);

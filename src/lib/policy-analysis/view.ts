@@ -396,3 +396,29 @@ export function scenarioBeats(scenario: Artefact, artefacts: Artefact[]): Beat[]
   if (sensitivity.length) push('sensitivity', 'What changes the answer', sensitivity.join(' '));
   return beats;
 }
+
+/**
+ * The dashboard's four workspaces.
+ *
+ * Nine anchored sections end to end was an inventory of what the pipeline
+ * produced. A reader arrives with one of four questions — what does it say, who
+ * can beat it, what is it standing on, and show me the working — and each
+ * workspace is a place to sit and do a piece of work rather than a heading to
+ * scroll past. Every section keeps its own id, heading and deep link inside its
+ * workspace; the grouping is navigation, not editing, exactly as the report's
+ * acts are.
+ *
+ * Lives here rather than in the component because BOTH the owner dashboard and
+ * the shared read-only copy need to know which workspace a hash belongs to.
+ */
+export const WORKSPACES = [
+  { id: 'verdict', name: 'The verdict', strap: 'What this assessment concludes.', sections: ['verdict'] },
+  { id: 'threat', name: 'The threat', strap: 'Who can beat this policy, how, and what they are aiming at.', sections: ['playbook', 'interplay', 'actors'] },
+  { id: 'ground', name: 'What it rests on', strap: 'The assumptions holding it up — and what happens if they give.', sections: ['stress', 'checks', 'scenarios', 'evidence'] },
+  { id: 'record', name: 'The assessment', strap: 'The written report, what spans other policies, and every step behind it.', sections: ['cross', 'report', 'provenance'] },
+] as const;
+
+/** True when a hash names a section rather than an artefact. */
+export function isSectionHash(hash: string): boolean {
+  return WORKSPACES.some((w) => (w.sections as readonly string[]).includes(hash));
+}

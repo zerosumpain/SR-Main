@@ -65,6 +65,14 @@ const PUBLIC_PATHS = [
   // reach it. Only shared conversations are exposed — the rest of /jkai stays
   // owner-only (isPublicPath('/jkai') remains false: this prefix is /jkai/shared).
   '/jkai/shared',
+  // Read-only shared policy assessments. The /policy-analysis/shared/<token>
+  // route is a CAPABILITY: it resolves the token itself and answers unknown,
+  // revoked and expired identically, so the hook must let anonymous readers
+  // reach it. Only what `shareableReport` returns is exposed — never the
+  // uploaded paper, never the reader's other assessments, never the run log.
+  // The rest of /policy-analysis stays owner-only: isPublicPath('/policy-analysis')
+  // remains false, because this prefix is /policy-analysis/shared.
+  '/policy-analysis/shared',
   '/heart',
   // Public leaderboard for the Terminal Descent game (/projects/terminal-descent).
   // Anonymous read (GET scores) + write (POST session + score). No OAuth — the

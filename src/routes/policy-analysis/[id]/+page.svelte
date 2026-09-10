@@ -13,28 +13,16 @@
   import { onMount, tick } from 'svelte';
   import { invalidateAll } from '$app/navigation';
   import type { PageData } from './$types';
-  import { REPORT_SECTIONS } from '$lib/policy-analysis/contracts';
   import * as view from '$lib/policy-analysis/view';
-  import type { Band } from '$lib/policy-analysis/view';
-  import ArtefactValue from '$lib/components/policy-analysis/ArtefactValue.svelte';
+  import AssessmentBody from '$lib/components/policy-analysis/AssessmentBody.svelte';
+  import { printNow, wirePrint } from '$lib/policy-analysis/print';
   import PolicyGraph from '$lib/components/policy-analysis/PolicyGraph.svelte';
-  import Verdict from '$lib/components/policy-analysis/Verdict.svelte';
-  import ExposurePlot from '$lib/components/policy-analysis/ExposurePlot.svelte';
-  import PlayCard from '$lib/components/policy-analysis/PlayCard.svelte';
-  import CheckGrid from '$lib/components/policy-analysis/CheckGrid.svelte';
-  import ActorBoard from '$lib/components/policy-analysis/ActorBoard.svelte';
-  import EvidenceMix from '$lib/components/policy-analysis/EvidenceMix.svelte';
-  import CrossPolicy from '$lib/components/policy-analysis/CrossPolicy.svelte';
-  import ReportActs from '$lib/components/policy-analysis/ReportActs.svelte';
-  import StressTest from '$lib/components/policy-analysis/StressTest.svelte';
-  import InterplayMap from '$lib/components/policy-analysis/InterplayMap.svelte';
-  import ScenarioWalk from '$lib/components/policy-analysis/ScenarioWalk.svelte';
+  import ArtefactValue from '$lib/components/policy-analysis/ArtefactValue.svelte';
   import { formatGbp, formatTokens } from '$lib/canvas/stats/costFormat';
 
   let { data }: { data: PageData } = $props();
 
   let selectedId = $state<string | null>(null);
-  let bandFilter = $state<Band | null>(null);
   let busy = $state(false);
   let message = $state('');
   let refreshError = $state('');
@@ -46,64 +34,9 @@
   // reads it, and a DOM node in reactive state is a proxy waiting to happen.
   let opener: HTMLElement | null = null;
 
-  /**
-   * Four workspaces, not nine stacked sections.
-   *
-   * Nine chapters end to end is an inventory of what the pipeline produced. A
-   * reader arrives with one of four questions — what does it say, who can beat
-   * it, what is it standing on, and show me the working — and each is a place to
-   * sit and do a piece of work rather than a heading to scroll past. Every
-   * section keeps its own id, heading and deep link inside its workspace; the
-   * grouping is navigation, not editing, exactly as the report's acts are.
-   *
-   * Every panel stays in the DOM. Find-in-page reaches a workspace nobody
-   * selected, and printing unhides all four.
-   */
-  const WORKSPACES = [
-    { id: 'verdict', name: 'The verdict', strap: 'What this assessment concludes.', sections: ['verdict'] },
-    { id: 'threat', name: 'The threat', strap: 'Who can beat this policy, how, and what they are aiming at.', sections: ['playbook', 'interplay', 'actors'] },
-    { id: 'ground', name: 'What it rests on', strap: 'The assumptions holding it up — and what happens if they give.', sections: ['stress', 'checks', 'scenarios', 'evidence'] },
-    { id: 'record', name: 'The assessment', strap: 'The written report, what spans other policies, and every step behind it.', sections: ['cross', 'report', 'provenance'] },
-  ];
-  let workspace = $state(0);
-  const wtabId = (id: string) => `workspace-tab-${id}`;
-  const wpanelId = (id: string) => `workspace-panel-${id}`;
-
-  /** A deep link into a section inside an unselected workspace must still land. */
-  function reveal(hash: string) {
-    const index = WORKSPACES.findIndex((w) => w.sections.includes(hash));
-    if (index >= 0) workspace = index;
-    return index >= 0;
-  }
-
-  function onWorkspaceKey(event: KeyboardEvent, index: number) {
-    const moves: Record<string, number> = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: WORKSPACES.length - 1 };
-    const next = moves[event.key];
-    if (next === undefined) return;
-    event.preventDefault();
-    workspace = (next + WORKSPACES.length) % WORKSPACES.length;
-    document.getElementById(wtabId(WORKSPACES[workspace].id))?.focus();
-  }
-
   const active = $derived(['queued', 'running'].includes(data.analysis.status));
   const completed = $derived(data.stages.filter((s) => s.status === 'completed').length);
   const artefacts = $derived(data.artefacts);
-  const plays = $derived(view.plays(artefacts));
-  const shownPlays = $derived(bandFilter ? plays.filter((p) => p.band === bandFilter) : plays);
-  const bands = $derived(view.bandCounts(plays));
-  const actors = $derived(view.actorBoard(artefacts, plays));
-  const checks = $derived(view.checks(artefacts));
-  const tiles = $derived(view.tiles(artefacts, plays));
-  const headline = $derived(view.headline(artefacts));
-  const sections = $derived(view.findingsBySection(artefacts));
-  const acts = $derived(view.reportActs(artefacts));
-  const unplaced = $derived(view.unplacedSections(artefacts));
-  const recommendations = $derived(view.of(artefacts, 'recommendation'));
-  const fragile = $derived(view.fragileAssumptions(artefacts));
-  const scenarios = $derived(view.of(artefacts, 'scenario'));
-  const models = $derived(view.of(artefacts, 'model'));
-  const crossFound = $derived(view.of(artefacts, 'cross_policy'));
-  const interplay = $derived(view.interplay(artefacts, plays));
   const warnings = $derived(data.stages.flatMap((s) => s.warnings.map((w) => ({ stage: s.name, text: w }))));
   const crossUnavailable = $derived(warnings.some((w) => w.text.includes('No other completed policy assessment')));
   const selected = $derived(artefacts.find((a) => a.id === selectedId) ?? null);
@@ -160,7 +93,7 @@
     // A hash is either a section — a deep link into a workspace that may not be
     // the selected one — or an artefact to open in the inspector. Never both.
     const hash = decodeURIComponent(window.location.hash.slice(1));
-    if (hash && !reveal(hash)) selectedId = hash;
+    if (hash && !view.isSectionHash(hash)) selectedId = hash;
     // Timer handles are deliberately plain `let`: nothing reactive reads them,
     // and making them $state would subscribe this effect to its own writes.
     let stopped = false;
@@ -172,7 +105,9 @@
       if (!stopped) polling = setTimeout(poll, 6000);
     }
     polling = setTimeout(poll, 6000);
-    return () => { stopped = true; clearInterval(ticker); clearTimeout(polling); };
+    // Ctrl+P must get the same document the button produces.
+    const unwirePrint = wirePrint();
+    return () => { stopped = true; clearInterval(ticker); clearTimeout(polling); unwirePrint(); };
   });
 
   async function control(action: 'cancel' | 'resume') {
@@ -182,6 +117,59 @@
       if (!response.ok) { message = (await response.json()).error ?? 'Could not update this run.'; return; }
       await refresh();
     } catch { message = 'Connection interrupted. Refresh to check the saved run state.'; }
+    finally { busy = false; }
+  }
+
+  /**
+   * Share links.
+   *
+   * The RAW token exists for exactly one moment — the response to the mint —
+   * and is never stored, so `justMinted` is the only place the URL will ever
+   * appear. Say so on the page rather than letting somebody navigate away and
+   * come back looking for it.
+   */
+  let shares = $state<{ id: string; label: string | null; createdAt: string; expiresAt: string; revokedAt: string | null; lastUsedAt: string | null; useCount: number; live: boolean }[]>([]);
+  let sharesLoaded = $state(false);
+  let justMinted = $state<{ url: string; expiresAt: string } | null>(null);
+  let shareLabel = $state('');
+  let shareDays = $state(30);
+  let copied = $state(false);
+
+  async function loadShares() {
+    try {
+      const response = await fetch(`/api/policy-analysis/${data.analysis.id}/shares`);
+      if (!response.ok) return;
+      shares = (await response.json()).shares ?? [];
+      sharesLoaded = true;
+    } catch { /* the panel simply stays empty */ }
+  }
+
+  async function mintShare() {
+    busy = true; message = ''; copied = false;
+    try {
+      const response = await fetch(`/api/policy-analysis/${data.analysis.id}/shares`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ label: shareLabel.trim() || null, expiresInDays: shareDays }),
+      });
+      const body = await response.json();
+      if (!response.ok) { message = body.error ?? 'The link could not be created.'; return; }
+      justMinted = { url: body.url, expiresAt: body.expiresAt };
+      shareLabel = '';
+      await loadShares();
+    } catch { message = 'Connection interrupted. Refresh to see whether the link was created.'; }
+    finally { busy = false; }
+  }
+
+  async function revokeShare(shareId: string) {
+    busy = true; message = '';
+    try {
+      const response = await fetch(`/api/policy-analysis/${data.analysis.id}/shares`, {
+        method: 'DELETE', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ shareId }),
+      });
+      if (!response.ok) { message = 'The link could not be revoked.'; return; }
+      await loadShares();
+    } catch { message = 'Connection interrupted. Refresh to check whether the link was revoked.'; }
     finally { busy = false; }
   }
 
@@ -210,7 +198,7 @@
     <strong role="status">{data.analysis.status.replaceAll('_', ' ')}</strong>
     <span>{completed} of {data.stages.length} stages complete</span>
     <button class="nm-save-btn" onclick={refresh}>Refresh</button>
-    <button class="nm-save-btn" onclick={() => window.print()}>Print or save as PDF</button>
+    <button class="nm-save-btn" onclick={printNow}>Print or save as PDF</button>
     {#if active}<button class="nm-save-btn" disabled={busy} onclick={() => control('cancel')}>Cancel run</button>{/if}
     {#if ['failed', 'cancelled'].includes(data.analysis.status)}<button class="nm-save-btn" disabled={busy} onclick={() => control('resume')}>Resume from the last completed stage</button>{/if}
   </div>
@@ -257,269 +245,148 @@
   {/if}
 </section>
 
-<div class="rail" role="tablist" aria-label="Workspaces">
-  {#each WORKSPACES as w, index (w.id)}
-    <button
-      role="tab" id={wtabId(w.id)} class="wtab" class:on={index === workspace}
-      aria-selected={index === workspace} aria-controls={wpanelId(w.id)}
-      tabindex={index === workspace ? 0 : -1}
-      onclick={() => (workspace = index)}
-      onkeydown={(e) => onWorkspaceKey(e, index)}
-    >
-      <span class="letter">{index + 1}</span>
-      <span class="wtab-name">{w.name}</span>
-    </button>
-  {/each}
-</div>
-<p class="muted rail-strap">{WORKSPACES[workspace].strap}</p>
-
-<div role="tabpanel" id={wpanelId('verdict')} class="workspace" aria-labelledby={wtabId('verdict')} hidden={workspace !== 0}>
-<div id="verdict" class="anchor"></div>
-<Verdict {headline} {tiles} {bands} status={data.analysis.status} {inspect} onband={(b) => { bandFilter = bandFilter === b ? null : b; workspace = 1; }} />
-</div>
-
-<div role="tabpanel" id={wpanelId('threat')} class="workspace" aria-labelledby={wtabId('threat')} hidden={workspace !== 1}>
-
-<section id="playbook" class="section">
-  <p class="kicker">How it can be beaten</p>
-  <h2>The exploitation playbook</h2>
-  <p class="strap">
-    Each play is something an actor named in the policy could do to serve itself at the policy's expense.
-    They are ranked by a single figure — the even blend of how much the actor gains, how easily it can be
-    done, how much of the objective it destroys, and how poorly the policy would notice.
-  </p>
-
-  {#if plays.length}
-    <ExposurePlot {plays} {inspect} />
-    <div class="filter">
-      <span class="sr-label">Showing</span>
-      <button class:on={bandFilter === null} onclick={() => (bandFilter = null)}>All {plays.length}</button>
-      {#each bands.filter((b) => b.count) as b (b.band)}
-        <button class:on={bandFilter === b.band} onclick={() => (bandFilter = bandFilter === b.band ? null : b.band)}>{b.count} {b.band}</button>
-      {/each}
-    </div>
-    <div class="plays">
-      {#each shownPlays as play, i (play.artefact.id)}<PlayCard {play} rank={plays.indexOf(play) + 1} {inspect} />{/each}
-    </div>
-  {:else}
-    <p class="empty">No exploitation play has been produced yet. This is the tenth of thirteen stages, so it arrives late in a run.</p>
-  {/if}
-</section>
-
-<section id="interplay" class="section">
-  <p class="kicker">Who is coming for what</p>
-  <h2>The interplay map</h2>
-  <p class="strap">
-    Every play, drawn from the actor that would run it to the part of the policy it defeats. A measure with
-    several arcs into it is a single point the policy has not defended twice over — the reading a ranked
-    list cannot give you.
-  </p>
-  <InterplayMap map={interplay} {inspect} />
-</section>
-
-<section id="actors" class="section">
-  <p class="kicker">Who is in the room</p>
-  <h2>Actors, and what actually moves them</h2>
-  <p class="strap">
-    What each body says it wants, what its position rewards, who it answers to, and — the question an
-    assurance review never asks — who is better off if this policy fails.
-  </p>
-  <ActorBoard {actors} personas={data.personas ?? []} {inspect} />
-</section>
-</div>
-
-<div role="tabpanel" id={wpanelId('ground')} class="workspace" aria-labelledby={wtabId('ground')} hidden={workspace !== 2}>
-<section id="stress" class="section">
-  <p class="kicker">What if we are wrong?</p>
-  <h2>The stress test</h2>
-  <p class="strap">
-    Switch an assumption off and the assessment recomputes in front of you: which conclusions lose their
-    footing, which redesign options lose the findings behind them, and which plays stop being available at
-    all. It walks the citations the assessment already made — no model runs, and the same switches always
-    give the same answer.
-  </p>
-  {#if fragile.length}
-    <div class="fragile">
-      <p class="sr-label">The assumptions most likely to change the conclusion</p>
-      <ol>
-        {#each fragile.slice(0, 5) as a (a.id)}
-          <li>
-            <button class="link" onclick={() => inspect(a.id)}>{a.label}</button>
-            <span class="muted">importance {pct(Number(a.data.importance))} · uncertainty {pct(Number(a.data.uncertainty))} · consequence {pct(Number(a.data.consequence))}</span>
-            <p>{a.statement}</p>
-          </li>
-        {/each}
-      </ol>
-    </div>
-  {/if}
-
-  <StressTest {artefacts} {inspect} />
-</section>
-
-<section id="checks" class="section">
-  <p class="kicker">Where it is thin</p>
-  <h2>Twelve structural checks</h2>
-  <p class="strap">
-    These are the only figures on this page no model produced. Each walks the relationships the policy
-    states and asks whether the counterpart it depends on is there — responsibility with authority,
-    accountability with resources, a measure with someone who owns its data. A check with nothing to look
-    at is <em>not</em> a pass.
-  </p>
-  <CheckGrid {checks} {inspect} />
-</section>
-
-<section id="scenarios" class="section">
-  <p class="kicker">What breaks it</p>
-  <h2>Conditions, models and sensitivity</h2>
-  <p class="strap">
-    Eight standing conditions the policy has to survive, stepped through one beat at a time: what changes,
-    who moves first, what follows, and whether anyone would notice. These are semi-formal hypotheses about
-    behaviour rather than a numerical simulation, and each one says so in its own sensitivity notes.
-  </p>
-
-  <ScenarioWalk {scenarios} {artefacts} {inspect} />
-
-  {#if models.length}
-    <details class="models">
-      <summary>{models.length} interaction models assessed</summary>
-      <ul>
-        {#each models as m (m.id)}
-          <li>
-            <button class="link" onclick={() => inspect(m.id)}>{String(m.data.pattern).replaceAll('_', ' ')}</button>
-            <span class="muted">{String(m.data.applicability ?? '')}</span>
-          </li>
-        {/each}
-      </ul>
-    </details>
-  {/if}
-</section>
-
-<section id="evidence" class="section">
-  <p class="kicker">Evidence and enquiry</p>
-  <h2>What is actually supported</h2>
-  <p class="strap">
-    Every claim in the paper linked to something outside it, or explicitly not. A search excerpt is weak
-    evidence and is labelled as one; a retrieval date is not a publication date.
-  </p>
-  <EvidenceMix
-    mix={view.evidenceMix(artefacts)}
-    questions={view.of(artefacts, 'research_question')}
-    sources={view.of(artefacts, 'research_source')}
-    {inspect}
-  />
-</section>
-</div>
-
-<div role="tabpanel" id={wpanelId('record')} class="workspace" aria-labelledby={wtabId('record')} hidden={workspace !== 3}>
-<section id="cross" class="section">
-  <p class="kicker">Across policies</p>
-  <h2>Weaknesses that span more than one policy</h2>
-  <p class="strap">
-    Some failures do not exist in any single document: one body told two incompatible things, a burden that
-    is bearable once and not three times, an assumption several policies all rest on.
-  </p>
-  <CrossPolicy found={crossFound} inbound={data.inbound ?? []} unavailable={crossUnavailable} {inspect} />
-</section>
-
-<section id="report" class="section">
-  <p class="kicker">The written assessment</p>
-  <h2>Chapter and verse</h2>
-  {#if acts.length}
-    <p class="strap">
-      Five movements, in the order the argument runs: what the assessment concludes, what the policy is
-      trying to do, what that rests on, where it breaks, and what to do about it. Every chapter keeps its
-      own heading; the acts are there so it can be read a movement at a time.
+{#if ['completed', 'completed_with_gaps'].includes(data.analysis.status)}
+  <section class="share" aria-label="Share this assessment">
+    <p class="sr-label">Send it to someone</p>
+    <p class="muted">
+      A link lets a colleague read this assessment without an account. It carries the report, the playbook,
+      the actors, the checks and the stress test — never the uploaded paper, never your other assessments,
+      never the run log. Every link has an expiry date and can be revoked here.
     </p>
-    <ReportActs {acts} {recommendations} {inspect} />
-    {#if unplaced.length}
-      <p class="muted">{unplaced.length} chapter{unplaced.length === 1 ? '' : 's'} sit outside these acts and are listed under the run log: {unplaced.join(', ').replaceAll('_', ' ')}.</p>
-    {/if}
-    {#if sections.length < REPORT_SECTIONS.length}
-      <p class="muted">{REPORT_SECTIONS.length - sections.length} of the {REPORT_SECTIONS.length} chapters are missing from this assessment.</p>
-    {/if}
-  {:else}
-    <p class="empty">The written assessment is produced by the final stage and is not available yet.</p>
-  {/if}
-</section>
-
-<section id="provenance" class="section">
-  <p class="kicker">Run log and provenance</p>
-  <h2>Everything behind the page</h2>
-  <p class="strap">
-    Every completed stage has an immutable execution record; every model call keeps its prompt version,
-    input, output, provider and reported usage. Provider secrets and raw errors are excluded.
-  </p>
-
-  <details>
-    <summary>The policy as a graph</summary>
-    <PolicyGraph {artefacts} {inspect} />
-  </details>
-
-  {#each data.documents as document (document.id)}
-    <div class="ruled">
-      <a href={`/api/policy-analysis/${data.analysis.id}/document`}>Download {document.filename}</a>
-      <p class="muted">{document.mimeType} · {document.size.toLocaleString()} bytes · SHA-256 {document.sha256}</p>
-      <details><summary>Document structure and extraction metadata</summary><ArtefactValue value={document.metadata} all={artefacts} {inspect} /></details>
+    <div class="toolbar">
+      <label class="sr-label" for="share-label">Who is it for</label>
+      <input class="nm-text-input" id="share-label" bind:value={shareLabel} maxlength="80" placeholder="A note to yourself — the recipient never sees it" />
+      <label class="sr-label" for="share-days">Expires in</label>
+      <select class="nm-text-input" id="share-days" bind:value={shareDays}>
+        <option value={7}>7 days</option>
+        <option value={30}>30 days</option>
+        <option value={90}>90 days</option>
+        <option value={365}>a year</option>
+      </select>
+      <button class="nm-save-btn" disabled={busy} onclick={mintShare}>Create a link</button>
+      {#if !sharesLoaded}<button class="link" onclick={loadShares}>Show existing links</button>{/if}
     </div>
-  {/each}
 
-  <div class="danger">
-    <p class="sr-label">Remove it</p>
-    <p class="muted">Deletes the uploaded paper, every artefact, the provenance graph and the model-call audit. It cannot be undone.</p>
-    {#if confirmDelete}
-      <div class="toolbar">
-        <button class="nm-save-btn" disabled={busy} onclick={destroy}>Yes, delete “{data.analysis.title}” permanently</button>
-        <button class="link" onclick={() => (confirmDelete = false)}>Keep it</button>
+    {#if justMinted}
+      <div class="minted">
+        <p class="sr-label">Copy it now — it is not shown again</p>
+        <p class="url">{justMinted.url}</p>
+        <div class="toolbar">
+          <button class="nm-save-btn" onclick={async () => { await navigator.clipboard.writeText(justMinted!.url); copied = true; }}>{copied ? 'Copied' : 'Copy link'}</button>
+          <span class="muted">Stops working on {fmt(justMinted.expiresAt)}. Only the link is a secret; nothing else identifies the reader.</span>
+        </div>
       </div>
-    {:else}
-      <button class="link" onclick={() => (confirmDelete = true)}>Delete this assessment and its document</button>
     {/if}
-  </div>
 
-  {#if cost.models.length}
-    <div class="ruled">
-      <p class="sr-label">Tokens by model</p>
-      <table class="spend-table">
-        <thead><tr><th scope="col">Model</th><th scope="col">Calls</th><th scope="col">In</th><th scope="col">Out</th></tr></thead>
+    {#if shares.length}
+      <table class="shares">
+        <thead><tr><th scope="col">Label</th><th scope="col">Created</th><th scope="col">Expires</th><th scope="col">Opened</th><th scope="col"></th></tr></thead>
         <tbody>
-          {#each cost.models as m (m.model)}
-            <tr><td>{m.model}</td><td>{m.calls}</td><td>{formatTokens(m.input)}</td><td>{formatTokens(m.output)}</td></tr>
+          {#each shares as share (share.id)}
+            <tr class:dead={!share.live}>
+              <td>{share.label ?? 'unlabelled'}</td>
+              <td>{fmt(share.createdAt)}</td>
+              <td>{share.revokedAt ? 'revoked' : fmt(share.expiresAt)}</td>
+              <td>{share.useCount}{#if share.lastUsedAt}, last {fmt(share.lastUsedAt)}{/if}</td>
+              <td>{#if share.live}<button class="link" disabled={busy} onclick={() => revokeShare(share.id)}>Revoke</button>{/if}</td>
+            </tr>
           {/each}
         </tbody>
-        <tfoot>
-          <tr><td>Total across {cost.calls} call{cost.calls === 1 ? '' : 's'}</td><td>{cost.models.reduce((n, m) => n + m.calls, 0)}</td><td>{formatTokens(cost.input)}</td><td>{formatTokens(cost.output)}</td></tr>
-        </tfoot>
       </table>
-      <p class="muted">
-        {cost.cash === null
-          ? 'Every call was served on subscription quota, so there is no cash figure to report — that is not the same as zero.'
-          : `Reported cost ${formatGbp(cost.cash)}, converted from USD at the site rate.`}
-      </p>
-    </div>
-  {/if}
-
-  <details bind:open={openLog}>
-    <summary>{data.calls.length} model calls across {data.executions.length} executions</summary>
-    {#if openLog}
-      {#each data.executions as execution (execution.id)}
-        <div class="ruled">
-          <strong>{data.stages.find((s) => s.id === execution.stageId)?.name}</strong>
-          <p class="muted">{execution.status} · {fmt(execution.startedAt)} → {fmt(execution.completedAt)}</p>
-          {#if execution.error}<p>{execution.error}</p>{/if}
-        </div>
-      {/each}
-      {#each data.calls as call (call.id)}
-        <div class="ruled">
-          <button class="link" onclick={() => showAudit(call.id)}>{call.callKey} · {call.status}</button>
-          <p class="muted">{call.promptVersion} · {call.provider ?? 'provider not reported'} · {call.model ?? 'model not resolved'} · {fmt(call.startedAt)}</p>
-          {#if call.error}<p class="warning">{call.error}</p>{/if}
-        </div>
-      {/each}
-      {#if audit}<details open><summary>Model call audit</summary><pre>{JSON.stringify(audit, null, 2)}</pre></details>{/if}
+    {:else if sharesLoaded}
+      <p class="muted">No link has been created for this assessment.</p>
     {/if}
-  </details>
-</section>
-</div>
+  </section>
+{/if}
+
+{#snippet runLog()}
+  <section id="provenance" class="section">
+    <p class="kicker">Run log and provenance</p>
+    <h2>Everything behind the page</h2>
+    <p class="strap">
+      Every completed stage has an immutable execution record; every model call keeps its prompt version,
+      input, output, provider and reported usage. Provider secrets and raw errors are excluded.
+    </p>
+
+    <details>
+      <summary>The policy as a graph</summary>
+      <PolicyGraph {artefacts} {inspect} />
+    </details>
+
+    {#each data.documents as document (document.id)}
+      <div class="ruled">
+        <a href={`/api/policy-analysis/${data.analysis.id}/document`}>Download {document.filename}</a>
+        <p class="muted">{document.mimeType} · {document.size.toLocaleString()} bytes · SHA-256 {document.sha256}</p>
+        <details><summary>Document structure and extraction metadata</summary><ArtefactValue value={document.metadata} all={artefacts} {inspect} /></details>
+      </div>
+    {/each}
+
+    <div class="danger">
+      <p class="sr-label">Remove it</p>
+      <p class="muted">Deletes the uploaded paper, every artefact, the provenance graph and the model-call audit. It cannot be undone.</p>
+      {#if confirmDelete}
+        <div class="toolbar">
+          <button class="nm-save-btn" disabled={busy} onclick={destroy}>Yes, delete “{data.analysis.title}” permanently</button>
+          <button class="link" onclick={() => (confirmDelete = false)}>Keep it</button>
+        </div>
+      {:else}
+        <button class="link" onclick={() => (confirmDelete = true)}>Delete this assessment and its document</button>
+      {/if}
+    </div>
+
+    {#if cost.models.length}
+      <div class="ruled">
+        <p class="sr-label">Tokens by model</p>
+        <table class="spend-table">
+          <thead><tr><th scope="col">Model</th><th scope="col">Calls</th><th scope="col">In</th><th scope="col">Out</th></tr></thead>
+          <tbody>
+            {#each cost.models as m (m.model)}
+              <tr><td>{m.model}</td><td>{m.calls}</td><td>{formatTokens(m.input)}</td><td>{formatTokens(m.output)}</td></tr>
+            {/each}
+          </tbody>
+          <tfoot>
+            <tr><td>Total across {cost.calls} call{cost.calls === 1 ? '' : 's'}</td><td>{cost.models.reduce((n, m) => n + m.calls, 0)}</td><td>{formatTokens(cost.input)}</td><td>{formatTokens(cost.output)}</td></tr>
+          </tfoot>
+        </table>
+        <p class="muted">
+          {cost.cash === null
+            ? 'Every call was served on subscription quota, so there is no cash figure to report — that is not the same as zero.'
+            : `Reported cost ${formatGbp(cost.cash)}, converted from USD at the site rate.`}
+        </p>
+      </div>
+    {/if}
+
+    <details bind:open={openLog}>
+      <summary>{data.calls.length} model calls across {data.executions.length} executions</summary>
+      {#if openLog}
+        {#each data.executions as execution (execution.id)}
+          <div class="ruled">
+            <strong>{data.stages.find((s) => s.id === execution.stageId)?.name}</strong>
+            <p class="muted">{execution.status} · {fmt(execution.startedAt)} → {fmt(execution.completedAt)}</p>
+            {#if execution.error}<p>{execution.error}</p>{/if}
+          </div>
+        {/each}
+        {#each data.calls as call (call.id)}
+          <div class="ruled">
+            <button class="link" onclick={() => showAudit(call.id)}>{call.callKey} · {call.status}</button>
+            <p class="muted">{call.promptVersion} · {call.provider ?? 'provider not reported'} · {call.model ?? 'model not resolved'} · {fmt(call.startedAt)}</p>
+            {#if call.error}<p class="warning">{call.error}</p>{/if}
+          </div>
+        {/each}
+        {#if audit}<details open><summary>Model call audit</summary><pre>{JSON.stringify(audit, null, 2)}</pre></details>{/if}
+      {/if}
+    </details>
+  </section>
+{/snippet}
+
+<AssessmentBody
+  {artefacts}
+  status={data.analysis.status}
+  {inspect}
+  personas={data.personas ?? []}
+  cross={{ inbound: data.inbound ?? [], unavailable: crossUnavailable }}
+  {runLog}
+/>
 
 {#if selected}
   <aside id="policy-inspector" tabindex="-1" class="inspector" aria-label="Evidence inspector">
@@ -550,6 +417,15 @@
 
 <style>
   .standfirst { font-size: var(--fs-body-lg); color: var(--text-secondary); max-width: 60ch; }
+  .share { border-bottom: 2px solid var(--text-primary); padding: 1rem 0 1.25rem; }
+  .share .muted { max-width: 72ch; }
+  .share input, .share select { max-width: 22rem; }
+  .minted { border-left: 3px solid var(--accent); padding: .6rem 0 .6rem 1rem; margin: .75rem 0; }
+  .url { font-family: var(--font-mono); font-size: var(--fs-label); overflow-wrap: anywhere; margin: 0; }
+  .shares { border-collapse: collapse; margin-top: 1rem; font-size: var(--fs-label); width: 100%; }
+  .shares th, .shares td { text-align: left; padding: .35rem .9rem .35rem 0; border-bottom: 1px solid var(--line); }
+  .shares th { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--text-muted); }
+  .shares tr.dead { color: var(--text-muted); }
   .progress { border-top: 2px solid var(--text-primary); border-bottom: 2px solid var(--text-primary); padding: .75rem 0 1.25rem; margin-top: 1.5rem; }
   .spend { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem; margin: .35rem 0 0; }
   .spend strong { font-family: var(--font-mono); }

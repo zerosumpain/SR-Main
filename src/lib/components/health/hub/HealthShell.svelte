@@ -42,6 +42,14 @@
     path: string;
     /** Use the site's shared 48px cell navigation instead of this family's editorial masthead. */
     unifiedNav?: boolean;
+    /**
+     * Whether the unified nav offers a way one level up.
+     *
+     * True everywhere except a page whose parent the reader cannot reach — a
+     * shared, read-only copy handed to somebody with no account, where "up" is
+     * a login screen and the level above that is a 404.
+     */
+    navBack?: boolean;
     /** Small mono label beside the wordmark. */
     kicker?: string | null;
     /**
@@ -90,6 +98,7 @@
   let {
     path,
     unifiedNav = false,
+    navBack = true,
     kicker = null,
     back = undefined,
     nav = undefined,
@@ -131,7 +140,7 @@
   <div class="hs-grain" aria-hidden="true"></div>
 
   {#if unifiedNav}
-    <SiteHeader {isOwner} />
+    <SiteHeader {isOwner} showBack={navBack} />
   {:else}
     <header class="hs-head">
       <div class="hs-head-left">

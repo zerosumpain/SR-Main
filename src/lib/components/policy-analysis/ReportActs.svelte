@@ -77,7 +77,7 @@
       id={panelId(act.key)}
       class="panel"
       aria-labelledby={tabId(act.key)}
-      hidden={index !== active}
+      class:off={index !== active}
       tabindex="0"
     >
       <p class="act-strap">{act.strap}</p>
@@ -133,6 +133,14 @@
   .ordinal { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent); }
   .tab-count { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
   .panel { padding-top: 1.25rem; }
+  /*
+   * A class, not the `hidden` attribute. `[hidden] { display: none !important }`
+   * is a USER-AGENT declaration and outranks any author !important, so the
+   * `.panel[hidden] { display: block !important }` this block used to carry
+   * could never fire — four of the five acts were quietly missing from every
+   * printed copy.
+   */
+  .panel.off { display: none; }
   .panel:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 4px; }
   .act-strap { color: var(--text-secondary); max-width: 68ch; margin: 0 0 1.25rem; }
   .chapter { border-top: 1px solid var(--line); padding: 1.1rem 0 .4rem; }
@@ -149,7 +157,7 @@
      every panel is already in the DOM for exactly that reason. */
   @media print {
     .tablist, .whereami { display: none !important; }
-    .panel[hidden] { display: block !important; }
+    .panel.off { display: block; }
     .panel { break-inside: auto; }
     .act-strap::before { content: ""; display: block; border-top: 2px solid #000; margin-bottom: .5rem; }
   }

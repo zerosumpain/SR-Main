@@ -25,6 +25,9 @@ import ReportActs from './ReportActs.svelte';
 import InterplayMap from './InterplayMap.svelte';
 import ScenarioWalk from './ScenarioWalk.svelte';
 import StressTest from './StressTest.svelte';
+import AssessmentBody from './AssessmentBody.svelte';
+import { shareableReport } from '$lib/policy-analysis/share';
+import { STAGES } from '$lib/policy-analysis/contracts';
 import { leverage } from '$lib/policy-analysis/stress';
 
 const research = async () => ({ artefacts: [], warnings: ['Synthetic test: external research unavailable.'] });
@@ -124,7 +127,32 @@ describe('the written assessment reads as acts', () => {
     }
     // Exactly one panel is open on first paint.
     expect([...html.matchAll(/role="tabpanel"/g)]).toHaveLength(acts.length);
-    expect([...html.matchAll(/hidden/g)].length).toBe(acts.length - 1);
+    expect([...html.matchAll(/role="tabpanel"[^>]*class="[^"]*\boff\b/g)].length).toBe(acts.length - 1);
+  });
+
+  it('hides an inactive panel with a class, never the hidden attribute', async () => {
+    // `[hidden] { display: none !important }` is a USER-AGENT declaration, and a
+    // UA !important outranks an author one at any specificity — so the print
+    // rule that was supposed to unhide the other acts could never fire, and four
+    // of the five were silently absent from every printed copy. Measured
+    // 2026-09-10 by rendering the page to PDF and counting what arrived.
+    const all = await assessment();
+    const html = render(ReportActs, { props: { acts: view.reportActs(all), recommendations: view.of(all, 'recommendation'), inspect } }).body;
+    expect(html).toMatch(/role="tabpanel"[^>]*class="[^"]*\boff\b/);
+    expect(html).not.toMatch(/role="tabpanel"[^>]*\shidden/);
+  });
+
+  it('does the same for the four workspaces, which had the same bug', async () => {
+    const all = await assessment();
+    const html = render(AssessmentBody, { props: { artefacts: all, status: 'completed', inspect } }).body;
+    // Scoped to the workspace panels: the report's five acts are nested inside
+    // this component and carry the same class for the same reason.
+    expect([...html.matchAll(/class="workspace[^"]*\boff\b/g)].length).toBe(3);
+    expect(html).not.toMatch(/role="tabpanel"[^>]*\shidden/);
+    // And each one is named on paper, where the tabs are not there to name them.
+    for (const name of ['The verdict', 'The threat', 'What it rests on', 'The assessment']) {
+      expect(html).toMatch(new RegExp(`<h2 class="print-title[^"]*">${name}</h2>`));
+    }
   });
 
   it('puts the redesign options in the act that asks what to do', async () => {
@@ -323,5 +351,36 @@ describe('the persona library is written by the last stage', () => {
       expect(all.some((a) => a.id === link.data.actorId && a.kind === 'actor')).toBe(true);
       expect(link.refs.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('the shared copy is the same report, minus what it may not carry', () => {
+  const stages = STAGES.map((name, ordinal) => ({ ordinal, name, warnings: [] as string[] }));
+
+  it('renders every workspace and every section a signed-in reader gets', async () => {
+    const all = await assessment();
+    const owner = render(AssessmentBody, { props: { artefacts: all, status: 'completed', inspect, cross: { inbound: [], unavailable: false } } }).body;
+    const shared = render(AssessmentBody, { props: { artefacts: shareableReport({ artefacts: all, stages }).artefacts, status: 'completed', inspect } }).body;
+    // Both are the same component, which is the point of extracting it: the two
+    // views cannot drift into different reports. The only structural difference
+    // is the cross-policy chapter, which a shared copy may not carry.
+    for (const id of ['workspace-panel-verdict', 'workspace-panel-threat', 'workspace-panel-ground', 'workspace-panel-record']) {
+      expect(owner).toContain(id);
+      expect(shared).toContain(id);
+    }
+    for (const heading of ['The exploitation playbook', 'The interplay map', 'The stress test', 'Twelve structural checks', 'Chapter and verse']) {
+      expect(shared).toContain(heading);
+    }
+    expect(owner).toContain('Weaknesses that span more than one policy');
+    expect(shared).not.toContain('Weaknesses that span more than one policy');
+  });
+
+  it('carries no run log, and no persona chip pointing into a private library', async () => {
+    const all = await assessment();
+    const shared = render(AssessmentBody, { props: { artefacts: shareableReport({ artefacts: all, stages }).artefacts, status: 'completed', inspect } }).body;
+    expect(shared).not.toContain('Run log and provenance');
+    expect(shared).not.toContain('model calls across');
+    expect(shared).not.toContain('/policy-analysis/personas/');
+    expect(shared).not.toContain('Delete this assessment');
   });
 });
