@@ -80,6 +80,22 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     }
   };
 
+  /**
+   * The assumptions a stage's own output is obliged to cite.
+   *
+   * A model's `assumptions`, a scenario's `assumptions`, an exploitation play's
+   * `preconditions` and a finding's `hypothesisIds` all name assumption records,
+   * and every one of them must also appear in `refs`. The model can only name an
+   * identifier it was shown, so an assumption shed from the context is an
+   * assumption the stage cannot cite — it invents one and the artefact is
+   * quarantined, or it reaches for whatever it did see. Assumptions are the
+   * connective tissue of the whole red-team argument and they are produced early,
+   * which puts them below the conclusions in the shed order; pinning is what
+   * keeps them. Seen live on 2026-09-10: the exploitation playbook ran with 24
+   * results and ZERO assumptions in context.
+   */
+  const hypotheses = input.artefacts.filter((a) => a.kind === 'assumption').map((a) => a.id);
+
   if (stage === 1) {
     const passages = input.artefacts.filter((a) => a.kind === 'passage');
     for (const passage of passages) await attempt(passage.id, [passage], `Passage “${passage.label}”`, { protect: [passage.id] });
@@ -101,19 +117,25 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
       const unsupported = modelApplicability(input.artefacts).filter((p) => !p.triggerEvidence.length).map((p) => p.pattern.replaceAll('_', ' '));
       if (unsupported.length) output.warnings.push(`${unsupported.length} of ${PATTERNS.length} interaction patterns have no supporting relationship in the policy graph and were assessed on inference alone: ${unsupported.join(', ')}.`);
     }
-    for (const key of stage === 7 ? PATTERNS : SCENARIOS) await attempt(key, context, `The ${key.replaceAll('_', ' ')} ${stage === 7 ? 'interaction model' : 'scenario'}`);
+    for (const key of stage === 7 ? PATTERNS : SCENARIOS) await attempt(key, context, `The ${key.replaceAll('_', ' ')} ${stage === 7 ? 'interaction model' : 'scenario'}`, { protect: hypotheses });
   } else if (stage === 6) {
     // One evidence pass per research question, so retrieved sources are read
     // against the question they answer rather than all at once. Both the depth
     // and the size of a single call improve; the shipped code sent everything in
     // one request and hit the context ceiling as soon as research succeeded.
     const inventory = input.artefacts.filter((a) => !['passage', 'research_source', 'alias', 'node'].includes(a.kind) && (a.kind !== 'actor' || a.id.startsWith('s2_')));
+    // Evidence is evidence FOR OR AGAINST a claim, so this is the one stage whose
+    // output is about the material the shed order calls superseded. Shed the
+    // claims and the model, asked for evidence and shown none of them, emits the
+    // claims instead: three consecutive responses with nothing usable in them,
+    // and a dead stage. Measured live on 2026-09-10, questions 6, 7 and 8.
+    const claims = inventory.filter((a) => a.kind === 'claim').map((a) => a.id);
     for (const question of input.artefacts.filter((a) => a.kind === 'research_question')) {
       const sources = input.artefacts.filter((a) => a.kind === 'research_source' && a.data.questionId === question.id);
       if (!sources.length) continue;
-      await attempt(question.id, [...inventory, question, ...sources], `Evidence for “${question.label}”`, { protect: [question.id, ...sources.map((a) => a.id)] });
+      await attempt(question.id, [...inventory, question, ...sources], `Evidence for “${question.label}”`, { protect: [question.id, ...sources.map((a) => a.id), ...claims] });
     }
-    await attempt('main', inventory, 'Evidence drawn from the policy document itself');
+    await attempt('main', inventory, 'Evidence drawn from the policy document itself', { protect: claims });
   } else if (stage === 8) {
     output.artefacts = runPolicyTests(input.artefacts, input.graphLoss ?? 0);
   } else if (stage === 10) {
@@ -126,7 +148,7 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     if (ranked.length > limits.actors) output.warnings.push(`${ranked.length - limits.actors} of ${ranked.length} profiled actors were not red-teamed in this pass: ${ranked.slice(limits.actors).map((a) => a.label).join(', ')}. They are the least connected in the policy graph, not the least important. A deep run covers more of them.`);
     const base = input.artefacts.filter((a) => !['passage', 'research_source', 'alias', 'node', 'profile'].includes(a.kind) && (a.kind !== 'actor' || a.id.startsWith('s2_')));
     for (const actor of ranked.slice(0, limits.actors)) {
-      await attempt(actor.id, [...base, ...profiles.filter((p) => p.data.actorId === actor.id)], `Exploitation plays for ${actor.label}`, { protect: [actor.id, ...profiles.filter((p) => p.data.actorId === actor.id).map((p) => p.id)] });
+      await attempt(actor.id, [...base, ...profiles.filter((p) => p.data.actorId === actor.id)], `Exploitation plays for ${actor.label}`, { protect: [actor.id, ...profiles.filter((p) => p.data.actorId === actor.id).map((p) => p.id), ...hypotheses] });
     }
     scoreExploits(output.artefacts);
   } else if (stage === 11) {
@@ -157,7 +179,7 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     // Without that the context budget shed the lot — they are the last things
     // produced and carry the lowest confidence — and the model, still required
     // to cite a result, invented identifiers for results it had never seen.
-    const protect = stage === SYNTHESIS_STAGE ? context.filter((a) => (RESULT_KINDS as readonly string[]).includes(a.kind)).map((a) => a.id) : [];
+    const protect = stage === SYNTHESIS_STAGE ? [...context.filter((a) => (RESULT_KINDS as readonly string[]).includes(a.kind)).map((a) => a.id), ...hypotheses] : [];
     await request('main', context, protect.length ? { protect } : {});
   }
 

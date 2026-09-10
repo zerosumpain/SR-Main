@@ -120,9 +120,18 @@ const SHED_ORDER: Record<string, number> = {
   recommendation: 6,
 };
 
+/**
+ * A pin is a BONUS, not a flat score.
+ *
+ * Pinning used to return 1000 for everything protected, so a call that pins a
+ * hundred artefacts ordered them arbitrarily among themselves — and the shed
+ * loop, which now degrades rather than dying, would drop whichever happened to
+ * be first in the array. Adding to the tier instead keeps every pinned item
+ * above every unpinned one while still shedding the most expendable pinned item
+ * first.
+ */
 function rank(a: Artefact, protect: Set<string>): number {
-  if (protect.has(a.id)) return 1000;
-  return (SHED_ORDER[a.kind] ?? 3) * 10 + (a.confidence ?? 0.5) * 9;
+  return (protect.has(a.id) ? 100 : 0) + (SHED_ORDER[a.kind] ?? 3) * 10 + (a.confidence ?? 0.5) * 9;
 }
 
 function summarise(notes: string[]): string {
