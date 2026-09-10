@@ -14,5 +14,8 @@ export const load: PageServerLoad = async (event) => {
   event.setHeaders({ 'cache-control': 'private, no-store' });
   const shared = await resolveShare(event.params.token);
   if (!shared) error(404, 'This link is not valid. It may have been revoked, or it may have expired.');
-  return shared;
+  // The token travels back to the page it is already the URL of, so the export
+  // button can build its own href. It is not a new disclosure: the reader has it
+  // in the address bar, and every other door it opens 404s without it.
+  return { ...shared, token: event.params.token };
 };

@@ -48,7 +48,7 @@
   {#each actors as view (view.actor.id)}
     <article class="actor">
       <header>
-        <h3>{view.actor.label}</h3>
+        <h3 data-pa-peek={`actor:${view.actor.id}`}>{view.actor.label}</h3>
         <p class="type">{String(view.actor.data.entityType ?? '').replaceAll('_', ' ')}</p>
         {#if libraryOf(view.actor.id)}
           {@const known = libraryOf(view.actor.id)}
@@ -79,7 +79,7 @@
           {#each view.plays.slice(0, 4) as play (play.artefact.id)}
             <li>
               <span class="band" style="background: {BAND_FILL[play.band]}" class:on-dark={play.band === 'severe'}>{BAND_LABEL[play.band]}</span>
-              <button class="play-link" onclick={() => inspect(play.artefact.id)}>{play.artefact.label}</button>
+              <button class="play-link" data-pa-peek={`play:${play.artefact.id}`} onclick={() => inspect(play.artefact.id)}>{play.artefact.label}</button>
             </li>
           {/each}
           {#if view.plays.length > 4}<li class="muted">and {view.plays.length - 4} more</li>{/if}
