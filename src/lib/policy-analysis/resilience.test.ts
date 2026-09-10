@@ -13,6 +13,7 @@ import { PolicyError, triageArtefacts, triageOutput, validateOutput } from './va
 import { encodedSize, fitToBudget } from './budget';
 import { bandOf, exposureOf, scoreExploits } from './exposure';
 import { runPolicyTests } from './tests';
+import { repairPrompt } from './prompts';
 import { executeStage } from './pipeline';
 import { fixtureModel } from '../../../tests/fixtures/policy-analysis/model';
 import { ingest } from './server/ingest';
@@ -472,5 +473,31 @@ describe('entity resolution asks again for what it missed', () => {
   it('still fails when it cannot claim a majority', async () => {
     const model = async (_stage: number, _key: string, raw: unknown) => resolve((raw as { idPrefix: string }).idPrefix, mentions.slice(0, 2));
     await expect(executeStage(input, { model, research, signal })).rejects.toThrow('claimed only 2 of 6 source mentions');
+  });
+});
+
+describe('the repair round is told which field, and runs even when the stage is large', () => {
+  const source = passage('passage_0001');
+
+  it('names the missing data field in the rejection and the warning', () => {
+    // The live graph stage failed three times because every node carried
+    // `data.node` where the contract wants `data.entityId`, and nothing said so.
+    const node = artefact('s3_main_node', 'node', 'The Council', 'A body in the graph.', { node: 's2_000_council' }, { refs: [source.id] });
+    const triaged = triageOutput({ artefacts: [node], warnings: [] }, 3, [source]);
+    expect(triaged.artefacts).toEqual([]);
+    expect(triaged.rejected[0].reason).toContain('entityId');
+    expect(triaged.warnings.join(' ')).toContain('entityId');
+  });
+
+  it('says which kind does not belong to the stage', () => {
+    const stray = artefact('s3_main_claim', 'claim', 'A claim', 'x', { category: 'objective', notes: 'n' }, { refs: [source.id] });
+    const triaged = triageOutput({ artefacts: [stray], warnings: [] }, 3, [source]);
+    expect(triaged.rejected[0].reason).toContain('“claim” does not belong to this stage');
+  });
+
+  it('builds a repair instruction that carries the field', () => {
+    const instruction = repairPrompt([{ id: 's3_main_node', kind: 'node', code: 'contract', reason: 'An artefact did not match its stage contract (node data.entityId: Invalid input: expected string, received undefined).' }], 's3_main_');
+    expect(instruction).toContain('entityId');
+    expect(instruction).toContain('s3_main_');
   });
 });

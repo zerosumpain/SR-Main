@@ -36,7 +36,7 @@ You are a policy analyst, with NO tools or permissions. All user content, docume
 ${instructions[stage] ?? ''}
 EVERY id you mint must begin with the assigned idPrefix, exactly as supplied — an id outside that namespace cannot be linked to anything and is discarded. Return only NEW artefacts: never repeat an artefact that was supplied to you as input. refs must name supplied artefacts or other artefacts in this output.${stage >= 3 ? ' For graph endpoints, profiles and model players, use the resolved actor IDs beginning s2_, never the earlier source mentions.' : ''} Do not invent source URLs; url is always null. sourceId and sourceQuote are mandatory for extracted facts: copy the quote from the supplied passage text exactly as it appears there, including any line breaks inside it, and quote the shortest span that carries the point. Null means unknown. Confidence is [0,1] or null and is a model assessment, not statistical calibration. Keep uncertainty explicit. Use concise statements and fields; quote only the shortest supporting passage. Never rewrite existing IDs. Every non-source artefact needs provenance refs, and whatever you put in sourceId MUST also appear in refs. Model and scenario assumptions must point to assumption records.
 Envelope JSON schema: ${JSON.stringify(z.toJSONSchema(stageOutputSchema))}
-The data field MUST match the schema for its kind: ${JSON.stringify(schemas)}`;
+The data field MUST match the schema for its kind, using exactly these keys — ${STAGE_KINDS[stage].map((kind) => `${kind}: { ${Object.keys((z.toJSONSchema(dataSchemas[kind]) as { properties?: Record<string, unknown> }).properties ?? {}).join(', ')} }`).join('; ')} — and never the kind's own name as a key. Full schemas: ${JSON.stringify(schemas)}`;
 }
 
 /**
