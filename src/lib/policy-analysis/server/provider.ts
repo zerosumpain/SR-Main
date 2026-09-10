@@ -108,8 +108,13 @@ export function modelCaller(executionId: string, runId: string, signal: AbortSig
         // first request's size alone stops being the right number after round one.
         const sent = messages.reduce((n, m) => n + m.content.length, 0);
         const room = CONTEXT_LIMIT - sent - instruction.length - 2_000;
-        if (room < 4_000) { if (!accepted.length) throw lastError; return { artefacts: accepted, warnings: [...warnings, 'There was no room left in the model’s context window for a corrective attempt.'] }; }
-        messages.push({ role: 'assistant', content: content.slice(0, room) }, { role: 'user', content: instruction });
+        // The ECHO is a convenience; the instruction — which ids, which rule — is
+        // the whole value. A large stage leaves no room for the echo, and bailing
+        // there meant the corrective round-trip never ran at exactly the stages
+        // that needed it most. Drop the echo instead of the repair.
+        if (room < 0) { if (!accepted.length) throw lastError; return { artefacts: accepted, warnings: [...warnings, 'There was no room left in the model’s context window for a corrective attempt.'] }; }
+        if (room >= 4_000) messages.push({ role: 'assistant', content: content.slice(0, room) });
+        messages.push({ role: 'user', content: instruction });
       } catch (err) {
         await db.update(policyModelCalls).set({ status: 'failed', usage: llmCalls, completedAt: new Date(), error: err instanceof PolicyError ? err.message : 'The configured model provider is unavailable or the call timed out.' }).where(eq(policyModelCalls.id, call.id));
         if (accepted.length && err instanceof PolicyError) return { artefacts: accepted, warnings: [...warnings, `A corrective attempt failed (${err.message}); the assessment keeps what was already accepted.`] };

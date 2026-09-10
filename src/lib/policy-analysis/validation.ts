@@ -11,7 +11,14 @@ const fault = (code: string, message: string): Fault => ({ code, message });
 /** Identity and shape: is this artefact even addressable at this stage? */
 function structuralFault(a: Artefact, all: Map<string, Artefact>, stage: number): Fault | null {
   if (all.has(a.id)) return fault('duplicate', 'The model returned duplicate artefact identifiers.');
-  if (!STAGE_KINDS[stage]?.includes(a.kind) || !dataSchemas[a.kind].safeParse(a.data).success) return fault('contract', 'An artefact did not match its stage contract.');
+  if (!STAGE_KINDS[stage]?.includes(a.kind)) return fault('contract', `An artefact of kind “${a.kind}” does not belong to this stage.`);
+  // Name the field. "An artefact did not match its stage contract" told the owner
+  // nothing and, worse, told the corrective round-trip nothing: on 2026-09-09 a
+  // live graph stage failed three times because every node carried
+  // `data.node` where the contract wants `data.entityId`, and the repair had no
+  // way to know that.
+  const shape = dataSchemas[a.kind].safeParse(a.data);
+  if (!shape.success) return fault('contract', `An artefact did not match its stage contract (${a.kind} ${shape.error.issues.slice(0, 3).map((i) => `data.${i.path.join('.') || '?'}: ${i.message}`).join('; ')}).`);
   return null;
 }
 
