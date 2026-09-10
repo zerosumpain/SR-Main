@@ -23,7 +23,8 @@
   import { onMount, type Snippet } from 'svelte';
   import { REPORT_SECTIONS, type Artefact } from '$lib/policy-analysis/contracts';
   import * as view from '$lib/policy-analysis/view';
-  import { WORKSPACES } from '$lib/policy-analysis/view';
+  import { TABS } from '$lib/policy-analysis/view';
+  import PersonaPanel from './PersonaPanel.svelte';
   import type { Band } from '$lib/policy-analysis/view';
   import PolicyGraph from './PolicyGraph.svelte';
   import Verdict from './Verdict.svelte';
@@ -52,7 +53,7 @@
 
   let { artefacts, status, inspect, personas = [], cross = null, runLog }: Props = $props();
 
-  let workspace = $state(0);
+  let tab = $state(0);
   let bandFilter = $state<Band | null>(null);
 
   const plays = $derived(view.plays(artefacts));
@@ -73,52 +74,50 @@
   const interplay = $derived(view.interplay(artefacts, plays));
 
   const pct = (v: number | null) => (v === null ? 'unknown' : `${Math.round(v * 100)}%`);
-  const wtabId = (id: string) => `workspace-tab-${id}`;
-  const wpanelId = (id: string) => `workspace-panel-${id}`;
+  const tabId = (id: string) => `report-tab-${id}`;
+  /** Index of a tab by its section id — the tabs ARE the sections now. */
+  const at = (id: string) => TABS.findIndex((t) => t.id === id);
+  const personaGroups = $derived(view.personaBoard(actors, personas));
 
-  function onWorkspaceKey(event: KeyboardEvent, index: number) {
-    const moves: Record<string, number> = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: WORKSPACES.length - 1 };
+  function onTabKey(event: KeyboardEvent, index: number) {
+    const moves: Record<string, number> = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: TABS.length - 1 };
     const next = moves[event.key];
     if (next === undefined) return;
     event.preventDefault();
-    workspace = (next + WORKSPACES.length) % WORKSPACES.length;
-    document.getElementById(wtabId(WORKSPACES[workspace].id))?.focus();
+    tab = (next + TABS.length) % TABS.length;
+    document.getElementById(tabId(TABS[tab].id))?.focus();
   }
 
-  // A deep link into a section inside an unselected workspace must still land.
+  // A deep link names a tab directly now, because every tab IS a section anchor.
   onMount(() => {
-    const hash = decodeURIComponent(window.location.hash.slice(1));
-    const index = WORKSPACES.findIndex((w) => (w.sections as readonly string[]).includes(hash));
-    if (index >= 0) workspace = index;
+    const index = at(decodeURIComponent(window.location.hash.slice(1)));
+    if (index >= 0) tab = index;
   });
 </script>
 
-<div class="rail" role="tablist" aria-label="Workspaces">
-  {#each WORKSPACES as w, index (w.id)}
+<div class="rail" role="tablist" aria-label="The assessment">
+  {#each TABS as t, index (t.id)}
     <button
-      role="tab" id={wtabId(w.id)} class="wtab" class:on={index === workspace}
-      aria-selected={index === workspace} aria-controls={wpanelId(w.id)}
-      tabindex={index === workspace ? 0 : -1}
-      onclick={() => (workspace = index)}
-      onkeydown={(e) => onWorkspaceKey(e, index)}
+      role="tab" id={tabId(t.id)} class="wtab" class:on={index === tab}
+      aria-selected={index === tab} aria-controls={t.id}
+      tabindex={index === tab ? 0 : -1}
+      onclick={() => (tab = index)}
+      onkeydown={(e) => onTabKey(e, index)}
     >
-      <span class="letter">{index + 1}</span>
-      <span class="wtab-name">{w.name}</span>
+      <span class="wtab-name">{t.name}</span>
     </button>
   {/each}
 </div>
-<p class="muted rail-strap">{WORKSPACES[workspace].strap}</p>
+<p class="muted rail-strap">{TABS[tab].strap}</p>
 
-<div role="tabpanel" id={wpanelId('verdict')} class="workspace" class:off={workspace !== 0} aria-labelledby={wtabId('verdict')}>
+<div role="tabpanel" id="verdict" class="workspace" class:off={tab !== at('verdict')} aria-labelledby={tabId('verdict')}>
 <h2 class="print-title">The verdict</h2>
-<div id="verdict" class="anchor"></div>
-<Verdict {headline} {tiles} {bands} {status} {inspect} onband={(b) => { bandFilter = bandFilter === b ? null : b; workspace = 1; }} />
+<Verdict {headline} {tiles} {bands} {status} {inspect} onband={(b) => { bandFilter = bandFilter === b ? null : b; tab = at('playbook'); }} />
 </div>
 
-<div role="tabpanel" id={wpanelId('threat')} class="workspace" class:off={workspace !== 1} aria-labelledby={wtabId('threat')}>
 <h2 class="print-title">The threat</h2>
 
-<section id="playbook" class="section">
+<section id="playbook" class="section workspace" role="tabpanel" class:off={tab !== at('playbook')} aria-labelledby={tabId('playbook')}>
   <p class="kicker">How it can be beaten</p>
   <h2>The exploitation playbook</h2>
   <p class="strap">
@@ -144,7 +143,7 @@
   {/if}
 </section>
 
-<section id="interplay" class="section">
+<section id="interplay" class="section workspace" role="tabpanel" class:off={tab !== at('interplay')} aria-labelledby={tabId('interplay')}>
   <p class="kicker">Who is coming for what</p>
   <h2>The interplay map</h2>
   <p class="strap">
@@ -155,7 +154,7 @@
   <InterplayMap map={interplay} {inspect} />
 </section>
 
-<section id="actors" class="section">
+<section id="actors" class="section workspace" role="tabpanel" class:off={tab !== at('actors')} aria-labelledby={tabId('actors')}>
   <p class="kicker">Who is in the room</p>
   <h2>Actors, and what actually moves them</h2>
   <p class="strap">
@@ -164,11 +163,19 @@
   </p>
   <ActorBoard {actors} {personas} {inspect} />
 </section>
-</div>
 
-<div role="tabpanel" id={wpanelId('ground')} class="workspace" class:off={workspace !== 2} aria-labelledby={wtabId('ground')}>
+<section id="personas" class="section workspace" role="tabpanel" class:off={tab !== at('personas')} aria-labelledby={tabId('personas')}>
+  <h2>Personas</h2>
+  <p class="muted">
+    Bodies this assessment met that you have met before. What the library holds is kept
+    apart from what this run found, and a body the library has split into several records
+    is shown once, with the split named.
+  </p>
+  <PersonaPanel groups={personaGroups} {inspect} onplay={() => (tab = at('playbook'))} />
+</section>
+
 <h2 class="print-title">What it rests on</h2>
-<section id="stress" class="section">
+<section id="stress" class="section workspace" role="tabpanel" class:off={tab !== at('stress')} aria-labelledby={tabId('stress')}>
   <p class="kicker">What if we are wrong?</p>
   <h2>The stress test</h2>
   <p class="strap">
@@ -195,7 +202,7 @@
   <StressTest {artefacts} {inspect} />
 </section>
 
-<section id="checks" class="section">
+<section id="checks" class="section workspace" role="tabpanel" class:off={tab !== at('checks')} aria-labelledby={tabId('checks')}>
   <p class="kicker">Where it is thin</p>
   <h2>Twelve structural checks</h2>
   <p class="strap">
@@ -207,7 +214,7 @@
   <CheckGrid {checks} {inspect} />
 </section>
 
-<section id="scenarios" class="section">
+<section id="scenarios" class="section workspace" role="tabpanel" class:off={tab !== at('scenarios')} aria-labelledby={tabId('scenarios')}>
   <p class="kicker">What breaks it</p>
   <h2>Conditions, models and sensitivity</h2>
   <p class="strap">
@@ -233,7 +240,7 @@
   {/if}
 </section>
 
-<section id="evidence" class="section">
+<section id="evidence" class="section workspace" role="tabpanel" class:off={tab !== at('evidence')} aria-labelledby={tabId('evidence')}>
   <p class="kicker">Evidence and enquiry</p>
   <h2>What is actually supported</h2>
   <p class="strap">
@@ -247,12 +254,10 @@
     {inspect}
   />
 </section>
-</div>
 
-<div role="tabpanel" id={wpanelId('record')} class="workspace" class:off={workspace !== 3} aria-labelledby={wtabId('record')}>
 <h2 class="print-title">The assessment</h2>
 {#if cross}
-<section id="cross" class="section">
+<section id="cross" class="section workspace" role="tabpanel" class:off={tab !== at('cross')} aria-labelledby={tabId('cross')}>
   <p class="kicker">Across policies</p>
   <h2>Weaknesses that span more than one policy</h2>
   <p class="strap">
@@ -263,7 +268,7 @@
 </section>
 {/if}
 
-<section id="report" class="section">
+<section id="report" class="section workspace" role="tabpanel" class:off={tab !== at('report')} aria-labelledby={tabId('report')}>
   <p class="kicker">The written assessment</p>
   <h2>Chapter and verse</h2>
   {#if acts.length}
@@ -284,15 +289,15 @@
   {/if}
 </section>
 
-{@render runLog?.()}
+<div id="provenance" class="workspace" role="tabpanel" class:off={tab !== at('provenance')} aria-labelledby={tabId('provenance')}>
+  {@render runLog?.()}
 </div>
 
 <style>
-  .rail { display: flex; flex-wrap: wrap; gap: 1px; background: var(--line-strong); border: 1px solid var(--line-strong); margin: 1.5rem 0 0; position: sticky; top: var(--site-nav-height, 0); z-index: 4; }
+  .rail { display: flex; flex-wrap: wrap; gap: 1px; max-height: 40vh; overflow-y: auto; background: var(--line-strong); border: 1px solid var(--line-strong); margin: 1.5rem 0 0; position: sticky; top: var(--site-nav-height, 0); z-index: 4; }
   .wtab { flex: 1 1 auto; display: flex; align-items: baseline; gap: .5rem; background: var(--bg); border: 0; padding: .7rem .9rem; font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--text-secondary); cursor: pointer; white-space: nowrap; text-align: left; }
   .wtab:hover { background: var(--surface-sunken); color: var(--text-primary); }
   .wtab.on { background: var(--accent); color: var(--bg); }
-  .wtab.on .letter { color: var(--bg); }
   .wtab:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: -3px; }
   .rail-strap { margin: .5rem 0 0; color: var(--text-muted); font-size: var(--fs-label); }
   .workspace { min-width: 0; }
@@ -309,12 +314,9 @@
    */
   .off { display: none; }
   .print-title { display: none; }
-  .letter { color: var(--accent); }
-  .anchor { scroll-margin-top: 4rem; }
 
   .section { border-top: 2px solid var(--text-primary); margin-top: 3rem; padding-top: 1.5rem; scroll-margin-top: 4rem; }
   .kicker { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--accent); margin: 0 0 .5rem; }
-  .kicker-sm { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--text-muted); margin: 0 0 .3rem; }
   .strap { color: var(--text-secondary); max-width: 62ch; }
   .sr-label { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--text-muted); margin: 0 0 .5rem; }
 
@@ -337,7 +339,7 @@
 
   @media print {
     .rail, .rail-strap, .filter { display: none !important; }
-    /* Every workspace is already in the DOM; a printed pack wants all four. */
+    /* Every panel is already in the DOM; a printed pack wants all of them. */
     .off { display: block; }
     /* Nothing names the workspaces once the tabs are gone. */
     .print-title { display: block; font-family: var(--font-display); font-size: 1.6rem; margin: 2rem 0 0; padding-top: 1rem; border-top: 3px solid #000; break-before: page; }

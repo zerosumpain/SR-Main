@@ -28,58 +28,35 @@
 
   let { acts, recommendations, inspect }: Props = $props();
 
-  let active = $state(0);
   // The redesign options are an answer, so they belong with the act that asks
   // what to do — not stacked above the verdict where they used to sit.
   const RESPONSE = 'response';
-  const current = $derived(acts[Math.min(active, Math.max(acts.length - 1, 0))]);
-  const tabId = (key: string) => `report-tab-${key}`;
   const panelId = (key: string) => `report-panel-${key}`;
 
-  function onkeydown(event: KeyboardEvent, index: number) {
-    const moves: Record<string, number> = {
-      ArrowRight: index + 1, ArrowLeft: index - 1,
-      Home: 0, End: acts.length - 1,
-    };
-    const next = moves[event.key];
-    if (next === undefined) return;
-    event.preventDefault();
-    active = (next + acts.length) % acts.length;
-    // Roving tabindex: the newly selected tab takes the focus with it.
-    document.getElementById(tabId(acts[active].key))?.focus();
-  }
 </script>
 
 {#if acts.length}
-  <div class="tablist" role="tablist" aria-label="The written assessment, in five acts">
+  <!--
+    A CONTENTS RAIL, not a second tab strip.
+    The report used to open its own tabs inside the report tab: two navigation
+    systems for one document, and a reader had to work out which act a chapter
+    lived in before they could read it. The written assessment is a narrative and
+    wants reading in order, so all five acts render continuously and this rail
+    jumps rather than switches — nothing is hidden behind it.
+  -->
+  <nav class="contents" aria-label="The written assessment, in five acts">
     {#each acts as act, index (act.key)}
-      <button
-        role="tab"
-        id={tabId(act.key)}
-        class="tab"
-        class:on={index === active}
-        aria-selected={index === active}
-        aria-controls={panelId(act.key)}
-        tabindex={index === active ? 0 : -1}
-        onclick={() => (active = index)}
-        onkeydown={(e) => onkeydown(e, index)}
-      >
+      <a class="jump" href="#{panelId(act.key)}">
         <span class="ordinal">{index + 1}</span>
         <span class="tab-title">{act.title}</span>
         <span class="tab-count">{act.count}</span>
-      </button>
+      </a>
     {/each}
-  </div>
+  </nav>
 
   {#each acts as act, index (act.key)}
-    <div
-      role="tabpanel"
-      id={panelId(act.key)}
-      class="panel"
-      aria-labelledby={tabId(act.key)}
-      class:off={index !== active}
-      tabindex="0"
-    >
+    <section id={panelId(act.key)} class="panel" aria-label={act.title}>
+      <h3 class="act-title"><span class="ordinal">{index + 1}</span> {act.title}</h3>
       <p class="act-strap">{act.strap}</p>
 
       {#each act.chapters as chapter (chapter.section)}
@@ -110,26 +87,20 @@
           {/each}
         </div>
       {/if}
-    </div>
+    </section>
   {/each}
 
   <p class="muted whereami">
-    Act {Math.min(active, acts.length - 1) + 1} of {acts.length} · {current?.count ?? 0}
-    {(current?.count ?? 0) === 1 ? 'finding' : 'findings'} in this act
+    {acts.length} acts · {acts.reduce((n, a) => n + a.count, 0)} findings, all of them on this page
   </p>
 {/if}
 
 <style>
-  .tablist { display: flex; flex-wrap: wrap; gap: .35rem; margin: 1.25rem 0 0; border-bottom: 2px solid var(--line-strong); }
-  .tab {
-    display: flex; align-items: baseline; gap: .5rem;
-    background: none; border: 1px solid transparent; border-bottom: none;
-    padding: .6rem .9rem; cursor: pointer; font: inherit; color: var(--text-secondary);
-    margin-bottom: -2px;
-  }
-  .tab:hover { color: var(--text-primary); background: var(--accent-tint-04); }
-  .tab.on { color: var(--text-primary); border-color: var(--line-strong); border-bottom: 2px solid var(--bg); background: var(--bg); font-weight: 600; }
-  .tab:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: -2px; }
+  .contents { display: flex; flex-wrap: wrap; gap: .35rem; margin: 1.25rem 0 0; border-bottom: 2px solid var(--line-strong); }
+  .jump { display: flex; align-items: baseline; gap: .5rem; padding: .5rem .75rem; text-decoration: none; color: var(--text-secondary); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; }
+  .jump:hover { background: var(--surface-sunken); color: var(--text-primary); }
+  .jump:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: -2px; }
+  .act-title { display: flex; align-items: baseline; gap: .6rem; margin: 2rem 0 .25rem; scroll-margin-top: 4rem; }
   .ordinal { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent); }
   .tab-count { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
   .panel { padding-top: 1.25rem; }
@@ -140,7 +111,6 @@
    * could never fire — four of the five acts were quietly missing from every
    * printed copy.
    */
-  .panel.off { display: none; }
   .panel:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 4px; }
   .act-strap { color: var(--text-secondary); max-width: 68ch; margin: 0 0 1.25rem; }
   .chapter { border-top: 1px solid var(--line); padding: 1.1rem 0 .4rem; }
@@ -157,7 +127,6 @@
      every panel is already in the DOM for exactly that reason. */
   @media print {
     .tablist, .whereami { display: none !important; }
-    .panel.off { display: block; }
     .panel { break-inside: auto; }
     .act-strap::before { content: ""; display: block; border-top: 2px solid #000; margin-bottom: .5rem; }
   }
