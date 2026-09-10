@@ -24,6 +24,41 @@ export const MAX_PAGES = 400;
 export const DEPTHS = ['standard', 'deep'] as const;
 export type Depth = (typeof DEPTHS)[number];
 /**
+ * How many units of a stage's fan-out may be in flight at once.
+ *
+ * Safe because the calls are independent BY CONSTRUCTION: every fan-out in
+ * `executeStage` builds its context from `input.artefacts` alone and never from
+ * what another unit produced, so N calls in flight return exactly what N calls
+ * in sequence return. What is not order-free is the fold — see `fanOut`.
+ *
+ * Measured against the Codex bridge on 2026-09-10, replaying a real page of a
+ * 72-page white paper through the real contract on gpt-5.6-luna:
+ *
+ *   agents   1      4      5      6
+ *   wall     24.1s  33.6s  34.8s  33.7s
+ *   per call 24.0s  29.8s  28.8s  26.8s
+ *
+ * No 429s at any level, and the per-call cost does not climb with N — four, five
+ * and six all finish in about the same wall time, so six does half again as much
+ * work as four for nothing. Six is the top of what was measured, not a ceiling
+ * anybody found.
+ *
+ * The bridge has its own cap (`CODEX_BRIDGE_CONCURRENCY`, 3 by default) and
+ * QUEUES past it, so asking for more agents than the bridge admits is not an
+ * error and costs nothing — it simply stops going faster.
+ */
+export const CONCURRENCY_OPTIONS = [1, 2, 3, 4, 5, 6] as const;
+export type Concurrency = (typeof CONCURRENCY_OPTIONS)[number];
+/**
+ * What an assessment with no stored preference does: one at a time.
+ *
+ * Every assessment before this option existed ran serially, and a run that is
+ * mid-flight when this ships must carry on exactly as it started rather than
+ * silently widening under it. The submission form suggests a higher number; a
+ * NULL column does not.
+ */
+export const DEFAULT_CONCURRENCY: Concurrency = 1;
+/**
  * What "run it for longer" actually buys. `rounds` is the one that matters: a
  * second round of research is planned FROM what the first round found, which is
  * how a line of enquiry gets developed rather than merely widened.

@@ -6961,6 +6961,12 @@ export const policyAnalyses = pgTable('policy_analyses', {
   // elsewhere: a new rung or a new model needs no migration.
   model: text('model'),
   thinkingLevel: text('thinking_level'),
+  // How many fan-out units this assessment may have in flight at once. NULL
+  // means one, which is what every assessment before 2026-09-10 ran on — so a
+  // run already in flight when this shipped resumes serially rather than
+  // widening under itself. Nullable integer for the same reason `model` is
+  // nullable text: an unspecified submission takes the default.
+  concurrency: integer('concurrency'),
   status: text('status').notNull().default('queued'),
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
   error: text('error'),

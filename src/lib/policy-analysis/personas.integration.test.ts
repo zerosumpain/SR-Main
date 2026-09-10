@@ -42,7 +42,7 @@ const first = readFileSync('tests/fixtures/policy-analysis/policy.txt');
 const second = Buffer.concat([first, Buffer.from('\n\nThis note is a separate policy about the same Council.\n')]);
 
 async function run(title: string, bytes: Buffer) {
-  const analysis = await createAnalysis(owner, { title, jurisdiction: 'Synthetic jurisdiction', policyArea: 'Service access', context: null, depth: 'standard' as const, model: null, thinkingLevel: null, filename: 'policy.txt', mimeType: 'text/plain', bytes });
+  const analysis = await createAnalysis(owner, { title, jurisdiction: 'Synthetic jurisdiction', policyArea: 'Service access', context: null, depth: 'standard' as const, model: null, thinkingLevel: null, concurrency: null, filename: 'policy.txt', mimeType: 'text/plain', bytes });
   created.push(analysis.id);
   for (let i = 0; i < STAGES.length; i++) {
     const stages = await db.select().from(policyStages).where(eq(policyStages.analysisId, analysis.id));

@@ -1,5 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { requirePolicyOwner } from '$lib/policy-analysis/server/access';
+import { CONCURRENCY_OPTIONS } from '$lib/policy-analysis/contracts';
 import { listAnalyses } from '$lib/policy-analysis/server/store';
 import { CODEX_MODELS, DEFAULT_CODEX_MODEL_SLUG, toCodexModelId } from '$lib/server/models/codex-catalogue';
 import { isCodexEnabled } from '$lib/server/models/settings';
@@ -37,11 +38,27 @@ const PACE: Record<string, string> = {
   'gpt-6-astra': 'too slow for a long document',
 };
 
+/**
+ * What the bridge will actually run at once.
+ *
+ * `CODEX_BRIDGE_CONCURRENCY` caps real `codex` subprocesses and QUEUES past its
+ * limit rather than refusing, so asking for more agents than this is not an
+ * error — it simply stops buying anything. The picker says where that line is
+ * instead of letting the reader discover it as a run that did not speed up.
+ */
+const bridgeConcurrency = Math.max(1, Number(process.env.CODEX_BRIDGE_CONCURRENCY || 3));
+
 export const load: PageServerLoad = async (event) => {
   const owner = await requirePolicyOwner(event);
   const [analyses, codexEnabled] = await Promise.all([listAnalyses(owner), isCodexEnabled()]);
   return {
     analyses,
+    concurrencyOptions: [...CONCURRENCY_OPTIONS],
+    bridgeConcurrency,
+    // Suggest exactly what the bridge admits for free. Measured on 2026-09-10:
+    // four, five and six concurrent all finish in the same wall time, so the
+    // only reason not to suggest more is that the bridge would queue it.
+    suggestedConcurrency: CONCURRENCY_OPTIONS.filter((n) => n <= bridgeConcurrency).at(-1) ?? 1,
     enabled: process.env.POLICY_ANALYSIS_ENABLED !== '0',
     codexEnabled,
     defaultModelId: toCodexModelId(DEFAULT_CODEX_MODEL_SLUG),

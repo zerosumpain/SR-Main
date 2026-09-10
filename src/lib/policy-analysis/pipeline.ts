@@ -1,4 +1,4 @@
-import { DEPTH_LIMITS, PATTERNS, PERSONA_STAGE, REPORT_SECTIONS, RESULT_KINDS, SCENARIOS, SYNTHESIS_STAGE, type Artefact, type StageInput, type StageOutput } from './contracts';
+import { CONCURRENCY_OPTIONS, DEFAULT_CONCURRENCY, DEPTH_LIMITS, PATTERNS, PERSONA_STAGE, REPORT_SECTIONS, RESULT_KINDS, SCENARIOS, SYNTHESIS_STAGE, type Artefact, type Concurrency, type StageInput, type StageOutput } from './contracts';
 import { scoreExploits } from './exposure';
 import { clampWarnings, PolicyError, triageArtefacts, triageOutput } from './validation';
 import { modelApplicability } from './models';
@@ -15,7 +15,17 @@ export type Neighbour = { id: string; title: string; policyArea: string | null; 
 export type Neighbours = () => Promise<Neighbour[]>;
 /** What this reader's persona library already holds about the actors in this run. */
 export type Personas = (actors: Artefact[]) => Promise<PersonaPrior[]>;
-export type PipelineDeps = { model: ModelCall; research: Research; signal: AbortSignal; neighbours?: Neighbours; personas?: Personas };
+/**
+ * `concurrency` lives HERE and not on `StageInput`, and that is load-bearing.
+ *
+ * `StageInput` is spread into the model-call payload, and `provider.ts` hashes
+ * that payload verbatim to key the response cache. A new field on it changes
+ * every hash, so every completed call in an in-flight assessment would miss its
+ * cache and be paid for again — which is exactly what a resumed run must not do.
+ * How many agents a stage uses is how it is EXECUTED, never what the model is
+ * asked, so it belongs beside `signal` with the other execution concerns.
+ */
+export type PipelineDeps = { model: ModelCall; research: Research; signal: AbortSignal; neighbours?: Neighbours; personas?: Personas; concurrency?: Concurrency | null };
 
 /**
  * Stages that fan out over a list — one call per passage, actor, pattern or
@@ -49,6 +59,9 @@ const MAX_REFS = 200;
 export async function executeStage(input: StageInput, deps: PipelineDeps): Promise<StageOutput & { rejected: number }> {
   const { stage } = input;
   const limits = DEPTH_LIMITS[input.depth ?? 'standard'];
+  // A concurrency nobody offers is a request the run cannot honour; take the
+  // default rather than failing a stage over it, exactly as model and effort do.
+  const lanes: number = (CONCURRENCY_OPTIONS as readonly number[]).includes(deps.concurrency as Concurrency) ? (deps.concurrency as Concurrency) : DEFAULT_CONCURRENCY;
   const output: StageOutput = { artefacts: [], warnings: [] };
   let consecutive = 0;
   let rejected = 0;
@@ -59,12 +72,34 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
 
   // Identifiers are capped at 100 characters, and a fan-out key can be a resolved
   // actor id that is nearly that long on its own. The prefix is therefore a short
-  // sequence number, stable because every fan-out below iterates in sorted order.
+  // sequence number, stable because every fan-out below iterates in sorted order
+  // — and, when those units overlap, because `fanOut` reserves every slot in that
+  // order BEFORE it dispatches anything.
   let seq = 0;
-  const request = async (key: string, context: Artefact[], extra: Record<string, unknown> = {}) => {
+  const reserve = (key: string) => (key === 'main' ? 'main' : String(seq++).padStart(3, '0'));
+
+  /**
+   * The model call on its own.
+   *
+   * Nothing here reads `output`. That is the property the whole fan-out rests on:
+   * a unit's request is built from `input.artefacts` and its own context, never
+   * from what another unit produced, so overlapping them cannot change what any
+   * one of them is asked.
+   */
+  const send = async (key: string, context: Artefact[], slot: string, extra: Record<string, unknown> = {}) => {
     deps.signal.throwIfAborted();
-    const slot = key === 'main' ? 'main' : String(seq++).padStart(3, '0');
-    const raw = await deps.model(stage, key, { ...input, artefacts: context, idPrefix: `s${stage}_${slot}_`, targetActorId: stage === 4 || stage === 10 || stage === PERSONA_STAGE ? key : null, targetPattern: stage === 7 ? key : null, targetScenario: stage === 9 ? key : null, modelLibrary: stage === 7 ? modelApplicability(input.artefacts) : undefined, ...extra });
+    return deps.model(stage, key, { ...input, artefacts: context, idPrefix: `s${stage}_${slot}_`, targetActorId: stage === 4 || stage === 10 || stage === PERSONA_STAGE ? key : null, targetPattern: stage === 7 ? key : null, targetScenario: stage === 9 ? key : null, modelLibrary: stage === 7 ? modelApplicability(input.artefacts) : undefined, ...extra });
+  };
+
+  /**
+   * Triage one response and fold it into the stage.
+   *
+   * ORDER-DEPENDENT, deliberately: triage validates a unit against everything
+   * accumulated so far, so a reference to an earlier unit's artefact resolves and
+   * the same reference from an earlier unit does not. Callers must absorb in unit
+   * order or they change which artefacts are quarantined.
+   */
+  const absorb = (raw: unknown) => {
     const result = triageOutput(raw, stage, [...input.artefacts, ...output.artefacts]);
     // Retrieved sources are minted by the retrieval adapter and nowhere else. The
     // kind is permitted at this stage so the server's own rows validate, which
@@ -79,6 +114,25 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     return result;
   };
 
+  const request = async (key: string, context: Artefact[], extra: Record<string, unknown> = {}) =>
+    absorb(await send(key, context, reserve(key), extra));
+
+  /** A failed unit becomes a recorded gap — until too many in a row fail. */
+  const gap = (describe: string, err: unknown) => {
+    deps.signal.throwIfAborted();
+    if (!(err instanceof PolicyError)) throw err;
+    fault.last = err;
+    consecutive++;
+    output.warnings.push(`${describe} could not be assessed: ${err.message} It is missing from this stage.`);
+    const limit = err.code === 'timeout' ? CONSECUTIVE_TIMEOUT_LIMIT : CONSECUTIVE_LIMIT;
+    if (consecutive >= limit) {
+      throw new PolicyError(err.code, err.code === 'timeout'
+        ? `${limit} parts of this stage in a row ran out of time. The model chosen for this assessment is too slow for this document, not unavailable — re-run it on a faster one. ${err.message}`
+        : `${limit} consecutive parts of this stage failed for the same reason. ${err.message}`);
+    }
+    return null;
+  };
+
   /** `request`, but a failure becomes a recorded gap instead of a dead stage. */
   const attempt = async (key: string, context: Artefact[], describe: string, extra: Record<string, unknown> = {}) => {
     try {
@@ -86,18 +140,48 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
       consecutive = 0;
       return result;
     } catch (err) {
-      deps.signal.throwIfAborted();
-      if (!(err instanceof PolicyError)) throw err;
-      fault.last = err;
-      consecutive++;
-      output.warnings.push(`${describe} could not be assessed: ${err.message} It is missing from this stage.`);
-      const limit = err.code === 'timeout' ? CONSECUTIVE_TIMEOUT_LIMIT : CONSECUTIVE_LIMIT;
-      if (consecutive >= limit) {
-        throw new PolicyError(err.code, err.code === 'timeout'
-          ? `${limit} parts of this stage in a row ran out of time. The model chosen for this assessment is too slow for this document, not unavailable — re-run it on a faster one. ${err.message}`
-          : `${limit} consecutive parts of this stage failed for the same reason. ${err.message}`);
+      return gap(describe, err);
+    }
+  };
+
+  /** One unit of a fan-out: the arguments `attempt` would have been given. */
+  type Unit = { key: string; context: Artefact[]; describe: string; extra?: Record<string, unknown> };
+
+  /**
+   * Run a fan-out with `lanes` units in flight, and fold the results in order.
+   *
+   * The calls may overlap because they are independent (see `send`). Everything
+   * after the response is not: slots number the artefact ids and triage sees the
+   * running total, so slots are reserved in unit order before dispatch and the
+   * responses are absorbed in unit order afterwards. A stage run at any number of
+   * agents therefore yields the same artefacts, the same ids and the same
+   * warnings as a serial one — `pipeline.test.ts` asserts that directly.
+   *
+   * Batched rather than a rolling pool so a dead provider is still caught
+   * promptly: `CONSECUTIVE_LIMIT` is checked as each batch is folded, so at most
+   * `lanes - 1` calls can already have been spent when it trips.
+   */
+  const fanOut = async (units: Unit[], onResult?: (unit: Unit, result: ReturnType<typeof absorb> | null) => void) => {
+    for (let i = 0; i < units.length; i += lanes) {
+      const batch = units.slice(i, i + lanes);
+      const slots = batch.map((u) => reserve(u.key));
+      const settled = await Promise.all(batch.map((u, k) =>
+        send(u.key, u.context, slots[k], u.extra ?? {}).then(
+          (raw) => ({ raw, err: null as unknown }),
+          (err: unknown) => ({ raw: null as unknown, err }),
+        )));
+      for (let k = 0; k < batch.length; k++) {
+        const { raw, err } = settled[k];
+        let result: ReturnType<typeof absorb> | null;
+        try {
+          if (err) throw err;
+          result = absorb(raw);
+          consecutive = 0;
+        } catch (e) {
+          result = gap(batch[k].describe, e);
+        }
+        onResult?.(batch[k], result);
       }
-      return null;
     }
   };
 
@@ -149,16 +233,18 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     const { analyse, skipped, distrusted } = partitionFrontMatter(passages);
     if (skipped.length) output.warnings.push(skippedNote(skipped, passages.length));
     if (distrusted) output.warnings.push('Almost every page looked like front matter, which is far more likely to be a fault in the extraction than a document with no policy in it, so every page was analysed.');
-    for (const passage of analyse) await attempt(passage.id, [passage], `Passage “${passage.label}”`, { protect: [passage.id] });
+    await fanOut(analyse.map((passage) => ({ key: passage.id, context: [passage], describe: `Passage “${passage.label}”`, extra: { protect: [passage.id] } })));
   } else if (stage === 4) {
-    for (const actor of input.artefacts.filter((a) => a.kind === 'actor' && a.id.startsWith('s2_'))) {
+    const toProfile = input.artefacts.filter((a) => a.kind === 'actor' && a.id.startsWith('s2_'));
+    await fanOut(toProfile.map((actor) => {
       const related = new Set([actor.id, ...actor.refs, ...input.artefacts.filter((a) => a.fromId === actor.id || a.toId === actor.id || a.refs.includes(actor.id)).flatMap((a) => [a.id, ...a.refs, a.fromId ?? '', a.toId ?? ''])]);
       const context = input.artefacts.filter((a) => related.has(a.id));
-      const result = await attempt(actor.id, [...context, ...(context.includes(actor) ? [] : [actor])], `The incentive profile for ${actor.label}`, { protect: [actor.id], priorPersona: priors.get(actor.id) ?? null });
-      if (result && !result.artefacts.some((a) => a.kind === 'profile' && a.data.actorId === actor.id)) {
-        output.warnings.push(`${actor.label} has no incentive profile in this assessment; its motivations were not modelled.`);
+      return { key: actor.id, context: [...context, ...(context.includes(actor) ? [] : [actor])], describe: `The incentive profile for ${actor.label}`, extra: { protect: [actor.id], priorPersona: priors.get(actor.id) ?? null } };
+    }), (unit, result) => {
+      if (result && !result.artefacts.some((a) => a.kind === 'profile' && a.data.actorId === unit.key)) {
+        output.warnings.push(`${toProfile.find((a) => a.id === unit.key)!.label} has no incentive profile in this assessment; its motivations were not modelled.`);
       }
-    }
+    });
   } else if (stage === 7 || stage === 9) {
     const context = input.artefacts.filter((a) => !['passage', 'research_source', 'alias', 'node'].includes(a.kind) && (a.kind !== 'actor' || a.id.startsWith('s2_')));
     // `modelApplicability` counts the graph assertions that trigger each pattern
@@ -168,7 +254,7 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
       const unsupported = modelApplicability(input.artefacts).filter((p) => !p.triggerEvidence.length).map((p) => p.pattern.replaceAll('_', ' '));
       if (unsupported.length) output.warnings.push(`${unsupported.length} of ${PATTERNS.length} interaction patterns have no supporting relationship in the policy graph and were assessed on inference alone: ${unsupported.join(', ')}.`);
     }
-    for (const key of stage === 7 ? PATTERNS : SCENARIOS) await attempt(key, context, `The ${key.replaceAll('_', ' ')} ${stage === 7 ? 'interaction model' : 'scenario'}`, { protect: hypotheses });
+    await fanOut((stage === 7 ? PATTERNS : SCENARIOS).map((key) => ({ key, context, describe: `The ${key.replaceAll('_', ' ')} ${stage === 7 ? 'interaction model' : 'scenario'}`, extra: { protect: hypotheses } })));
   } else if (stage === 6) {
     // One evidence pass per research question, so retrieved sources are read
     // against the question they answer rather than all at once. Both the depth
@@ -181,11 +267,12 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     // claims instead: three consecutive responses with nothing usable in them,
     // and a dead stage. Measured live on 2026-09-10, questions 6, 7 and 8.
     const claims = inventory.filter((a) => a.kind === 'claim').map((a) => a.id);
-    for (const question of input.artefacts.filter((a) => a.kind === 'research_question')) {
-      const sources = input.artefacts.filter((a) => a.kind === 'research_source' && a.data.questionId === question.id);
-      if (!sources.length) continue;
-      await attempt(question.id, [...inventory, question, ...sources], `Evidence for “${question.label}”`, { protect: [question.id, ...sources.map((a) => a.id), ...claims] });
-    }
+    const answerable = input.artefacts.filter((a) => a.kind === 'research_question')
+      .map((question) => ({ question, sources: input.artefacts.filter((a) => a.kind === 'research_source' && a.data.questionId === question.id) }))
+      .filter(({ sources }) => sources.length);
+    await fanOut(answerable.map(({ question, sources }) => ({ key: question.id, context: [...inventory, question, ...sources], describe: `Evidence for “${question.label}”`, extra: { protect: [question.id, ...sources.map((a) => a.id), ...claims] } })));
+    // The document's own evidence pass runs last and alone: its key is `main`, so
+    // it takes no sequence number and cannot be reordered by the fan-out above.
     await attempt('main', inventory, 'Evidence drawn from the policy document itself', { protect: claims });
   } else if (stage === 8) {
     output.artefacts = runPolicyTests(input.artefacts, input.graphLoss ?? 0);
@@ -198,9 +285,12 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     const ranked = rankActors(input.artefacts, profiles);
     if (ranked.length > limits.actors) output.warnings.push(`${ranked.length - limits.actors} of ${ranked.length} profiled actors were not red-teamed in this pass: ${ranked.slice(limits.actors).map((a) => a.label).join(', ')}. They are the least connected in the policy graph, not the least important. A deep run covers more of them.`);
     const base = input.artefacts.filter((a) => !['passage', 'research_source', 'alias', 'node', 'profile'].includes(a.kind) && (a.kind !== 'actor' || a.id.startsWith('s2_')));
-    for (const actor of ranked.slice(0, limits.actors)) {
-      await attempt(actor.id, [...base, ...profiles.filter((p) => p.data.actorId === actor.id)], `Exploitation plays for ${actor.label}`, { protect: [actor.id, ...profiles.filter((p) => p.data.actorId === actor.id).map((p) => p.id), ...hypotheses], priorPersona: priors.get(actor.id) ?? null });
-    }
+    await fanOut(ranked.slice(0, limits.actors).map((actor) => ({
+      key: actor.id,
+      context: [...base, ...profiles.filter((p) => p.data.actorId === actor.id)],
+      describe: `Exploitation plays for ${actor.label}`,
+      extra: { protect: [actor.id, ...profiles.filter((p) => p.data.actorId === actor.id).map((p) => p.id), ...hypotheses], priorPersona: priors.get(actor.id) ?? null },
+    })));
     scoreExploits(output.artefacts);
   } else if (stage === PERSONA_STAGE) {
     // The library is a bonus, and it must never cost a completed assessment. The

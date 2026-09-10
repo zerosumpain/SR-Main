@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
 import { extractPdf } from '$lib/jkai/extract/pdf';
 import { extractDocx } from '$lib/jkai/extract/docx';
-import { artefact, DEPTHS, MAX_BYTES, MAX_CHARACTERS, MAX_PAGES, type Artefact, type Depth, type StageOutput } from '../contracts';
+import { artefact, CONCURRENCY_OPTIONS, DEPTHS, MAX_BYTES, MAX_CHARACTERS, MAX_PAGES, type Artefact, type Concurrency, type Depth, type StageOutput } from '../contracts';
 import { CODEX_MODELS, toCodexModelId } from '$lib/server/models/codex-catalogue';
 import { isThinkingLevel, thinkingLevelsFor, type ThinkingLevel } from '$lib/models/thinking';
 import { PolicyError } from '../validation';
 
-export type Submission = { title: string; jurisdiction: string | null; policyArea: string | null; context: string | null; depth: Depth; model: string | null; thinkingLevel: ThinkingLevel | null; filename: string; mimeType: string; bytes: Buffer };
+export type Submission = { title: string; jurisdiction: string | null; policyArea: string | null; context: string | null; depth: Depth; model: string | null; thinkingLevel: ThinkingLevel | null; concurrency: Concurrency | null; filename: string; mimeType: string; bytes: Buffer };
 const MIME: Record<string, string> = { txt: 'text/plain', pdf: 'application/pdf', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
 export function validateBytes(bytes: Buffer, filename: string, mimeType: string): string {
   if (!bytes.length || bytes.length > MAX_BYTES) throw new PolicyError('size', 'Supply a nonempty document of at most 10 MB.');
@@ -78,7 +78,13 @@ export async function readSubmission(request: Request): Promise<Submission> {
   const askedEffort = str('thinkingLevel', 20);
   const offered = thinkingLevelsFor('codex', model);
   const thinkingLevel = isThinkingLevel(askedEffort) && offered.includes(askedEffort) ? askedEffort : null;
-  return { title, jurisdiction: str('jurisdiction', 200) || null, policyArea: str('policyArea', 200) || null, context: str('context', 5000) || null, depth, model, thinkingLevel, filename, mimeType, bytes };
+  // How many units of a fan-out run at once. Same rule as the two above: an
+  // unoffered number is a request the run cannot honour, and taking the default
+  // beats refusing a submission over a dropdown. It never reaches the model — it
+  // is an execution setting, and `PipelineDeps` says why that matters.
+  const askedAgents = Number(str('concurrency', 4));
+  const concurrency = (CONCURRENCY_OPTIONS as readonly number[]).includes(askedAgents) ? askedAgents as Concurrency : null;
+  return { title, jurisdiction: str('jurisdiction', 200) || null, policyArea: str('policyArea', 200) || null, context: str('context', 5000) || null, depth, model, thinkingLevel, concurrency, filename, mimeType, bytes };
 }
 export async function ingest(bytes: Buffer, filename: string, mimeType: string): Promise<StageOutput & { text: string; metadata: unknown }> {
   validateBytes(bytes, filename, mimeType);
