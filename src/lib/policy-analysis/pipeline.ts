@@ -52,6 +52,19 @@ const CONSECUTIVE_LIMIT = 3;
  */
 const CONSECUTIVE_TIMEOUT_LIMIT = 6;
 
+/**
+ * How many times entity resolution may ask again for the mentions it missed.
+ *
+ * A ceiling, not a quota: the sweep stops as soon as a round claims nothing
+ * new, exactly as the research enquiry ends on a round that raises no question.
+ * The fixed two rounds this replaces were sized for a 20-page paper. MEASURED on
+ * the 72-page Post-16 white paper (2026-09-10): 387 mentions, `main` resolved
+ * the 13 named bodies it could find and each top-up added ~20 more, so two
+ * rounds could reach 127 against a majority threshold of 194. Two attempts of
+ * that stage failed on arithmetic before the model was ever the problem.
+ */
+const MOP_UP_ROUNDS = 4;
+
 /** Ceilings on a stage's assembled output, which no envelope bounds. */
 const MAX_STAGE_ARTEFACTS = 4000;
 const MAX_REFS = 200;
@@ -372,18 +385,31 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     // A real 20-page policy yields ~50 source mentions, and asking one call to
     // claim every last one of them is the all-or-nothing rule again: on
     // 2026-09-09 a live run reached this stage with 224 artefacts and died here.
-    // So: name what was missed and ask for JUST those, twice, then require a
-    // strict majority and record the rest as a gap the reader can see.
+    // So: name what was missed and ask for JUST those, then require a strict
+    // majority and record the rest as a gap the reader can see.
+    //
+    // MOST OF A POLICY PAPER'S ACTORS ARE CLASSES, NOT BODIES, and until the
+    // contract could say so this gate punished the model for being right. The
+    // prompt forbids merging on a shared name — correctly, it is the
+    // conflation rule — so a paper whose mentions are `employers` ×25 and
+    // `government` ×21 left the model nothing honest to do with them, and it
+    // said so in its own warnings on every call. `collective` gives those
+    // mentions a resolution; the threshold below is unchanged.
     const mentions = input.artefacts.filter((a) => a.kind === 'actor');
     const unclaimed = () => mentions.filter((m) => !output.artefacts.some((a) => a.kind === 'actor' && ((a.data.mentions as string[]) ?? []).includes(m.id)));
-    for (let round = 1; round <= 2; round++) {
+    for (let round = 1; round <= MOP_UP_ROUNDS; round++) {
       const missed = unclaimed();
       if (!missed.length) break;
       await attempt(`unclaimed${round}`, [...input.artefacts.filter((a) => a.kind === 'actor'), ...output.artefacts.filter((a) => a.kind === 'actor')], `${missed.length} unresolved source mention${missed.length === 1 ? '' : 's'}`, { unclaimedMentions: missed.map((m) => ({ id: m.id, label: m.label })) });
+      // A round that claimed nothing new will not claim anything next time
+      // either, and each one costs a call on the whole register.
+      if (unclaimed().length >= missed.length) break;
     }
     output.artefacts = preserveAmbiguity(output.artefacts, input.artefacts);
     const missed = unclaimed();
     if (missed.length * 2 >= mentions.length) throw new PolicyError('coverage', `Entity resolution claimed only ${mentions.length - missed.length} of ${mentions.length} source mentions.${fault.last ? ` Last reason: ${fault.last.message}` : ''}`);
+    const classes = output.artefacts.filter((a) => a.kind === 'actor' && a.data.collective === true);
+    if (classes.length) output.warnings.push(`${classes.length} of this register's ${output.artefacts.filter((a) => a.kind === 'actor').length} entries are CLASSES of body rather than named organisations: ${classes.slice(0, 8).map((a) => a.label).join(', ')}${classes.length > 8 ? `, and ${classes.length - 8} more` : ''}. The policy names them collectively, so the assessment reasons about the class. Nothing here establishes that two mentions of one class are the same organisation.`);
     if (missed.length) output.warnings.push(`${missed.length} of ${mentions.length} source mentions were never resolved into a named body: ${missed.slice(0, 8).map((m) => m.label).join(', ')}${missed.length > 8 ? `, and ${missed.length - 8} more` : ''}. Those actors are absent from the graph, the profiles and the red team.`);
   }
   if (stage === 3) {
