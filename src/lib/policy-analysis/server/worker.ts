@@ -3,7 +3,7 @@ import { db, type DbExecutor } from '$lib/db';
 import { policyAnalyses, policyDocuments, policyExecutions, policyModelCalls, policyStages, workflowRuns } from '$lib/db/schema';
 import { isThinkingLevel } from '$lib/models/thinking';
 import { boundWarnings } from '../budget';
-import { PERSONA_STAGE } from '../contracts';
+import { PERSONA_STAGE, type Concurrency } from '../contracts';
 import { executeStage } from '../pipeline';
 import { PolicyError } from '../validation';
 import { ingest } from './ingest';
@@ -121,7 +121,7 @@ export async function executePolicyRun(claimed: { id: string; input: Record<stri
           return ingest(Buffer.from(document.content, 'base64'), document.filename, document.mimeType);
         })()
       : null;
-    const output = extracted ?? await executeStage({ stage: started.stage.ordinal, title: started.analysis.title, jurisdiction: started.analysis.jurisdiction, policyArea: started.analysis.policyArea, context: started.analysis.context, depth: started.analysis.depth as 'standard' | 'deep', graphLoss, priorWarnings: boundWarnings(previousStages.flatMap((s) => s.warnings)), artefacts: all }, { model: modelCaller(started.execution.id, claimed.id, signal, all, { model: started.analysis.model, thinkingLevel: isThinkingLevel(started.analysis.thinkingLevel) ? started.analysis.thinkingLevel : null }), research, signal, neighbours: () => neighbourSummaries(started.analysis.owner, analysisId), personas: (actors) => priorsFor(started.analysis.owner, actors, analysisId) });
+    const output = extracted ?? await executeStage({ stage: started.stage.ordinal, title: started.analysis.title, jurisdiction: started.analysis.jurisdiction, policyArea: started.analysis.policyArea, context: started.analysis.context, depth: started.analysis.depth as 'standard' | 'deep', graphLoss, priorWarnings: boundWarnings(previousStages.flatMap((s) => s.warnings)), artefacts: all }, { model: modelCaller(started.execution.id, claimed.id, signal, all, { model: started.analysis.model, thinkingLevel: isThinkingLevel(started.analysis.thinkingLevel) ? started.analysis.thinkingLevel : null }), research, signal, concurrency: started.analysis.concurrency as Concurrency | null, neighbours: () => neighbourSummaries(started.analysis.owner, analysisId), personas: (actors) => priorsFor(started.analysis.owner, actors, analysisId) });
     signal.throwIfAborted();
     await db.transaction(async (tx) => {
       const locked = await lockLease(tx, analysisId, stageId, claimed.id, workerId);

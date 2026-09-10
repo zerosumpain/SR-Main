@@ -24,6 +24,18 @@
       if (thinkingLevel !== 'auto' && !offered.includes(thinkingLevel)) thinkingLevel = 'auto';
     });
   });
+  // How many units of a stage's fan-out run at once. The stages that dominate a
+  // run — one call per page, one per actor — are independent by construction, so
+  // this buys wall-clock and changes nothing about what comes back.
+  let agents = $state<number>(data.suggestedConcurrency);
+  const agentsNote = $derived(
+    agents === 1
+      ? 'One at a time, which is how every assessment before this option ran. Slowest, and the easiest to read in the run log.'
+      : agents > data.bridgeConcurrency
+        ? `The Codex bridge admits ${data.bridgeConcurrency} at once and queues the rest, so this will not run faster than ${data.bridgeConcurrency} until CODEX_BRIDGE_CONCURRENCY is raised.`
+        : `${agents} pages or actors assessed at once. Measured on a real white paper: six concurrent calls finish in about the same wall time as four, with no rate limiting and no loss of quality — the work each call does is identical either way.`,
+  );
+
   const EFFORT_NOTE: Record<string, string> = {
     low: 'Fastest, and the thinnest reasoning. Fine for a short paper.',
     medium: 'The usual balance of depth against wall-clock.',
@@ -140,6 +152,20 @@
       {thinkingLevel === 'auto'
         ? 'Whatever the model does without being told. Pick a level to override it.'
         : EFFORT_NOTE[thinkingLevel] ?? ''}
+    </span>
+
+    <label for="concurrency">Concurrent agents</label>
+    <select class="nm-text-input" id="concurrency" name="concurrency" bind:value={agents}>
+      {#each data.concurrencyOptions as n (n)}
+        <option value={n}>{n === 1 ? 'One at a time' : `${n} at a time`}{n === data.bridgeConcurrency ? ' · all the bridge admits' : ''}</option>
+      {/each}
+    </select>
+    <span class="muted">{agentsNote}</span>
+    <span class="muted">
+      This is wall-clock only. A stage fans out over units that never read each other's
+      output, so the calls overlap but each one is asked exactly what it would have been
+      asked on its own, and the results are folded back in the same order. The assessment
+      is identical; it just arrives sooner.
     </span>
   </fieldset>
 

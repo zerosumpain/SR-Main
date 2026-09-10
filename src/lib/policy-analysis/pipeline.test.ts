@@ -114,6 +114,105 @@ describe('complete fixture policy pipeline', () => {
   });
 });
 
+describe('concurrent agents', () => {
+  /**
+   * Run the whole fixture pipeline at a given number of agents, watching how many
+   * model calls are genuinely in flight at once.
+   *
+   * The delay is what makes the observation possible: `fixtureModel` is
+   * synchronous, so without a tick to yield on, six "concurrent" calls would
+   * resolve one after another and a serial implementation would pass this test.
+   */
+  const run = async (concurrency: number) => {
+    const all = (await ingest(fixture, 'policy.txt', 'text/plain')).artefacts;
+    const produced: Artefact[] = [];
+    let inFlight = 0, peak = 0, calls = 0;
+    const model = async (...args: Parameters<typeof fixtureModel>) => {
+      calls++; inFlight++; peak = Math.max(peak, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      inFlight--;
+      return fixtureModel(...args);
+    };
+    for (let stage = 1; stage <= 12; stage++) {
+      const result = await executeStage(
+        { stage, title: 'Synthetic policy', jurisdiction: null, policyArea: null, context: null, artefacts: all },
+        { model, research: neverResearch, signal: new AbortController().signal, concurrency: concurrency as 1 | 6 },
+      );
+      all.push(...result.artefacts);
+      produced.push(...result.artefacts);
+    }
+    return { all, produced, peak, calls };
+  };
+
+  it('is the same assessment at six agents as at one — same artefacts, same ids, same warnings', async () => {
+    const serial = await run(1);
+    const wide = await run(6);
+
+    // The whole claim of the feature, asserted directly: concurrency buys
+    // wall-clock and changes nothing about the assessment. Artefact ids are
+    // included because they carry a per-stage sequence number, which is exactly
+    // the thing that would drift if results were folded as they landed.
+    expect(wide.produced).toEqual(serial.produced);
+    expect(wide.all.map((a) => a.id)).toEqual(serial.all.map((a) => a.id));
+    // And it costs no extra calls in the happy path.
+    expect(wide.calls).toBe(serial.calls);
+  });
+
+  /**
+   * The regression guard for a trap this change very nearly walked into.
+   *
+   * `provider.ts` keys its response cache on `sha256(JSON.stringify(payload))`,
+   * and `executeStage` spreads `StageInput` straight into that payload. Putting
+   * the agent count there would have changed every hash in the run — so a paused
+   * assessment, resumed with concurrency switched on, would have missed its cache
+   * on every call already paid for and re-run the lot. Hence `concurrency` lives
+   * on `PipelineDeps`, and hence this test.
+   */
+  it('sends a byte-identical payload at any number of agents, so a resumed run still hits its cache', async () => {
+    const payloads = async (concurrency: number) => {
+      const all = (await ingest(fixture, 'policy.txt', 'text/plain')).artefacts;
+      const seen: string[] = [];
+      const model = async (...args: Parameters<typeof fixtureModel>) => {
+        seen.push(JSON.stringify(args[2]));
+        return fixtureModel(...args);
+      };
+      for (let stage = 1; stage <= 12; stage++) {
+        const result = await executeStage(
+          { stage, title: 'Synthetic policy', jurisdiction: null, policyArea: null, context: null, artefacts: all },
+          { model, research: neverResearch, signal: new AbortController().signal, concurrency: concurrency as 1 | 6 },
+        );
+        all.push(...result.artefacts);
+      }
+      return seen;
+    };
+    expect(await payloads(6)).toEqual(await payloads(1));
+  });
+
+  it('really does overlap the calls, and really does stay serial at one', async () => {
+    expect((await run(1)).peak).toBe(1);
+    expect((await run(6)).peak).toBeGreaterThan(1);
+  });
+
+  it('takes a commissioned number of agents, and degrades rather than refusing', async () => {
+    const base = () => { const f = new FormData(); f.set('title', 'A policy'); f.set('text', fixture.toString()); return f; };
+    const read = (f: FormData) => readSubmission(new Request('http://localhost', { method: 'POST', body: f }));
+
+    const asked = base(); asked.set('concurrency', '4');
+    expect(await read(asked)).toMatchObject({ concurrency: 4 });
+
+    // Nothing chosen means the stored default, which is one at a time — so an
+    // assessment submitted before this option existed resumes exactly as it ran.
+    expect(await read(base())).toMatchObject({ concurrency: null });
+
+    // A number nobody offers is a request the run cannot honour. Same rule as
+    // model and effort: fall back rather than fail a submission over a dropdown.
+    for (const bad of ['0', '7', '-3', '2.5', 'lots', '']) {
+      const f = base(); f.set('concurrency', bad);
+      expect(await read(f)).toMatchObject({ concurrency: null });
+    }
+  });
+});
+
 describe('identity, graph and deterministic checks', () => {
   it('retains ambiguous same-name people as separate resolution candidates', () => {
     const a = artefact('mention_a', 'actor', 'Alex Smith', 'A synthetic source mention.', { entityType: 'person', aliases: [], mentions: [], ambiguity: 'Unknown', dates: [], parent: null });
