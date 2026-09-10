@@ -80,15 +80,38 @@ function semanticFault(a: Artefact, all: Map<string, Artefact>, stage: number): 
   return null;
 }
 
-/** Checks that depend on the whole graph rather than one artefact's own fields. */
+/**
+ * Checks that depend on the whole graph rather than one artefact's own fields.
+ *
+ * Mutates a finding on the way through: a cited identifier missing from `refs`
+ * is folded in, and a hypothesis no cited result can reach is dropped. Both used
+ * to be fatal, and between them they deleted the entire report in three
+ * consecutive production runs — 14 of 15 findings and every recommendation
+ * behind them, while the findings themselves were well formed and every
+ * identifier resolved. That is the all-or-nothing failure this feature was
+ * supposed to have stopped making, wearing a different hat.
+ */
 function relationalFault(a: Artefact, all: Map<string, Artefact>): Fault | null {
   if (!hasSource(a.id, all)) return fault('traceability', 'An artefact has no traceable path to policy text or external evidence.');
   if (a.kind === 'finding') {
     const results = a.data.resultIds as string[];
-    const hypotheses = a.data.hypothesisIds as string[];
+    let hypotheses = a.data.hypothesisIds as string[];
     if (!results.every((id) => (RESULT_KINDS as readonly string[]).includes(all.get(id)?.kind ?? '')) || !hypotheses.every((id) => all.get(id)?.kind === 'assumption')) return fault('traceability', 'A conclusion must cite a test or model and its hypotheses.');
-    if (!hypotheses.every((hypothesis) => results.some((result) => reaches(result, hypothesis, all)))) return fault('traceability', 'A conclusion’s hypotheses must support its cited results.');
-    for (const id of [...results, ...hypotheses]) if (!a.refs.includes(id)) return fault('traceability', 'A conclusion is missing a provenance link.');
+    // A hypothesis none of the cited results reaches is an unsupported mention,
+    // not a false conclusion. A `test` records its inputs as claims and evidence
+    // rather than as assumptions, so ANY conclusion citing a test alongside an
+    // assumption failed this outright — which is why the executive assessment and
+    // the exploitation chapter, the two that span the most, died every time.
+    const supported = hypotheses.filter((h) => results.some((r) => reaches(r, h, all)));
+    if (!supported.length) return fault('traceability', 'No hypothesis this conclusion rests on is supported by the results it cites.');
+    if (supported.length !== hypotheses.length) {
+      a.data.hypothesisIds = supported;
+      hypotheses = supported;
+    }
+    // A cited identifier absent from `refs` is a bookkeeping slip: the artefact
+    // named it, it resolves, and provenance is exactly what the citation means.
+    // Fold it in rather than discarding the conclusion.
+    for (const id of [...results, ...hypotheses]) if (!a.refs.includes(id)) a.refs = [...a.refs, id];
   }
   return null;
 }

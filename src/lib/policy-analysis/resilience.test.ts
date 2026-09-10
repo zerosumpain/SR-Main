@@ -194,6 +194,49 @@ describe('a fixed library reports its gaps instead of losing the run', () => {
   });
 });
 
+describe('a conclusion survives an unsupported mention', () => {
+  const passage = artefact('passage_0001', 'passage', 'Page 1', 'The regulator will consult on new standards.', { documentHash: 'a'.repeat(64) }, { origin: 'extracted_fact', confidence: 1, startOffset: 0, endOffset: 44 });
+  const claim = artefact('s1_claim', 'claim', 'A claim', 'The paper claims something.', { claimType: 'objective', notes: '-' }, { refs: ['passage_0001'] });
+  const assumption = artefact('s1_assumption', 'assumption', 'Capacity', 'Capacity is assumed.', { importance: 0.9, uncertainty: 0.9, consequence: 0.9, notes: '-' }, { refs: ['passage_0001'] });
+  // A test records its INPUTS as claims and evidence, never as assumptions, so no
+  // walk from this test reaches the assumption below. Any conclusion citing both
+  // used to be discarded outright — and that deleted 14 of 15 findings, and every
+  // recommendation behind them, in three consecutive production runs.
+  const test = artefact('s8_test', 'test', 'A check', 'A structural check.', { testId: 't', rationale: '-', inputs: ['s1_claim'], rule: '-', reasoning: '-', result: 'high_risk', severity: 'high', actors: [], mitigation: '-' }, { refs: ['s1_claim'] });
+  const prior = [passage, claim, assumption, test];
+
+  const other = artefact('s1_assumption_2', 'assumption', 'Comparability', 'Measures are assumed comparable.', { importance: 0.8, uncertainty: 0.8, consequence: 0.8, notes: '-' }, { refs: ['passage_0001'] });
+  // A scenario carries its assumptions in refs, so a walk from it reaches them.
+  const scenario = artefact('s9_scenario', 'scenario', 'A scenario', 'A scenario.', { scenario: 'shock', changedConditions: '-', firstActor: null, strategy: '-', downstreamEffects: [], affectedOutcomes: [], detectability: '-', correction: '-', weaknesses: [], assumptions: ['s1_assumption'], sensitivity: ['-'] }, { refs: ['s1_assumption', 'passage_0001'] });
+
+  it('keeps the conclusion and drops only the hypothesis its results cannot reach', () => {
+    // This is the shape of a real executive assessment: it spans, citing a test
+    // and a scenario and several assumptions, and one of those assumptions is
+    // reachable only from work it did not cite.
+    const finding = artefact('s12_main_finding_1', 'finding', 'Overall', 'The regime may reward visible compliance.', { section: 'executive_assessment', resultIds: ['s8_test', 's9_scenario'], hypothesisIds: ['s1_assumption', 's1_assumption_2'] }, { refs: ['s8_test', 's9_scenario', 's1_assumption', 's1_assumption_2'] });
+    const triaged = triageArtefacts({ artefacts: [finding], warnings: [] }, 12, [...prior, other, scenario]);
+    expect(triaged.rejected).toHaveLength(0);
+    expect(triaged.artefacts[0].data.hypothesisIds).toEqual(['s1_assumption']);
+  });
+
+  it('still refuses a conclusion no cited result supports at all', () => {
+    // `hypothesisIds` is min(1), so pruning to empty would break the contract the
+    // artefact is validated against — a conclusion resting only on unsupported
+    // hypotheses is exactly what this rule is for.
+    const orphan = artefact('s12_main_finding_2', 'finding', 'Overall', 'A conclusion.', { section: 'exploitation', resultIds: ['s8_test'], hypothesisIds: ['s1_assumption'] }, { refs: ['s8_test', 's1_assumption'] });
+    const triaged = triageArtefacts({ artefacts: [orphan], warnings: [] }, 12, prior);
+    expect(triaged.artefacts).toHaveLength(0);
+    expect(triaged.rejected[0].reason).toContain('No hypothesis this conclusion rests on');
+  });
+
+  it('folds a cited identifier the model left out of refs back into provenance', () => {
+    const finding = artefact('s12_main_finding_3', 'finding', 'Overall', 'A conclusion.', { section: 'scenarios', resultIds: ['s9_scenario'], hypothesisIds: ['s1_assumption'] }, { refs: ['s9_scenario'] });
+    const triaged = triageArtefacts({ artefacts: [finding], warnings: [] }, 12, [...prior, scenario]);
+    expect(triaged.rejected).toHaveLength(0);
+    expect(triaged.artefacts[0].refs).toContain('s1_assumption');
+  });
+});
+
 describe('fitting a stage into the model context window', () => {
   const big = (id: string, chars: number, kind: Artefact['kind'] = 'research_source') =>
     artefact(id, kind, `Source ${id}`, 'x'.repeat(chars), kind === 'research_source' ? { questionId: 'q', retrievedAt: '', quality: '', qualityBasis: '', freshness: '', jurisdictionalRelevance: '', retrieval: 'full_text', gap: '' } : { documentHash: 'a'.repeat(64) });
