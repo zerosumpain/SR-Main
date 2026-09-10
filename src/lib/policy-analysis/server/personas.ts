@@ -1,12 +1,13 @@
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db, type DbExecutor } from '$lib/db';
-import { policyAnalyses, policyPersonaObservations, policyPersonas } from '$lib/db/schema';
+import { policyAnalyses, policyArtefacts, policyPersonaObservations, policyPersonas } from '$lib/db/schema';
 import { getLLMClient } from '$lib/llm/client';
 import { executionContext, type LLMCallRecord } from '$lib/context/execution';
 import { resolveResearchDeepModel } from '$lib/server/models/workload-settings';
 import { coerceModelContext, DEFAULT_NODE_MAX_TOKENS } from '$lib/constants/default-models';
 import { artefact, WORKFLOW_ID, type Artefact } from '../contracts';
-import { foldTraits, matchPersona, personaPrior, playsFor, TRAIT_LABELS, type PersonaObservation, type PersonaPrior, type PersonaRecord, type PersonaTrait } from '../personas';
+import { foldTraits, matchPersona, personaPrior, playsFor, sendableQueries, TRAIT_LABELS, type PersonaObservation, type PersonaPrior, type PersonaRecord, type PersonaTrait } from '../personas';
+import { documentShingles } from '../query-guard';
 import { PolicyError } from '../validation';
 import { research } from './research';
 
@@ -225,6 +226,17 @@ export async function researchPersona(owner: string, id: string, signal: AbortSi
   const plan = await ask(id, `You are researching a body that appears in policy assessments. Return JSON {"questions":[{"label":string,"query":string,"gap":string}]} with at most ${RESEARCH_QUESTIONS} questions.
 Each query must be a bounded PUBLIC web search query — no quotes from private documents, no personal contact details, no more than 20 words. Ask about what would change how this body behaves in a policy: its statutory powers and who it answers to, its capacity and funding, its track record on comparable programmes, and any recent reorganisation or change of remit. Do not ask about individuals.`, `Body: ${persona.name} (${persona.entityType})\nAliases: ${persona.aliases.join(', ') || 'none recorded'}\nAlready recorded:\n${known || 'nothing yet'}`, signal);
 
+  // THE DOSSIER CAN QUOTE AN UNPUBLISHED PAPER, so the same guard the in-run
+  // research uses applies here. A trait's value was written by a model reading
+  // somebody's policy document, and the query planner above was shown all of
+  // them; a prompt saying "no document quotes" is not a control. The corpus is
+  // the passages of exactly the assessments this persona was built from, which
+  // are the only documents whose wording could have reached the dossier.
+  const passages = detail.observations.map((o) => o.analysisId).filter((a): a is string => Boolean(a));
+  const corpus = passages.length
+    ? documentShingles((await db.select({ id: policyArtefacts.id, kind: policyArtefacts.kind, statement: policyArtefacts.statement }).from(policyArtefacts).where(and(inArray(policyArtefacts.analysisId, [...new Set(passages)]), eq(policyArtefacts.kind, 'passage')))).map((r) => ({ ...r, refs: [], data: {} }) as unknown as Artefact))
+    : new Set<string>();
+
   const questions = list<{ label?: unknown; query?: unknown; gap?: unknown }>((plan as { questions?: unknown }).questions)
     .slice(0, RESEARCH_QUESTIONS)
     .map((q, i) => artefact(`persona_q_${i}`, 'research_question', clip(q.label, 200) || `Enquiry ${i + 1}`, clip(q.gap, 600) || 'Unresolved.', {
@@ -232,9 +244,14 @@ Each query must be a bounded PUBLIC web search query — no quotes from private 
       searchStrategy: clip(q.query, 300), gap: clip(q.gap, 600) || 'Unresolved.',
     }, { origin: 'structural_inference', refs: [] }))
     .filter((q) => String(q.data.searchStrategy).length > 3);
-  if (!questions.length) throw new PolicyError('coverage', 'No searchable question could be planned for this body.');
+  const safe = sendableQueries(questions, corpus);
+  if (!safe.length) {
+    throw new PolicyError('coverage', questions.length
+      ? 'Every query planned for this body quoted one of the policy documents it was drawn from, so none was sent. An unpublished paper does not go into a search provider’s logs.'
+      : 'No searchable question could be planned for this body.');
+  }
 
-  const found = await research(questions, signal, 3);
+  const found = await research(safe, signal, 3);
   const sources = found.artefacts.filter((a) => a.kind === 'research_source');
   if (!sources.length) throw new PolicyError('coverage', `No public source could be retrieved for ${persona.name}. ${found.warnings[0] ?? ''}`.trim());
 

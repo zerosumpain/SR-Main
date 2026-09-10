@@ -63,7 +63,7 @@
 
 <div class="toolbar">
   <button class="nm-save-btn" disabled={busy} onclick={research}>{busy ? 'Reading public sources…' : 'Commission research'}</button>
-  <span class="muted">Last researched {fmt(data.persona.researchedAt)} · dossier updated {fmt(data.persona.updatedAt)}</span>
+  <span class="muted">{data.persona.researchedAt ? `Last researched ${fmt(data.persona.researchedAt)}` : 'Not yet researched'} · dossier updated {fmt(data.persona.updatedAt)}</span>
 </div>
 <p class="muted">
   A research pass plans a few bounded public search queries about this body — its powers, who it answers to,
@@ -215,7 +215,9 @@
   th { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--text-muted); }
   .band { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; padding: .1rem .35rem; }
   .band.on-dark { color: var(--bg); }
-  .note { border-left: 2px solid var(--accent); padding-left: .8rem; max-width: 74ch; }
+  /* Continuity and divergence are two paragraphs joined by a blank line; without
+     this they run together into one and the contradiction stops standing out. */
+  .note { border-left: 2px solid var(--accent); padding-left: .8rem; max-width: 74ch; white-space: pre-line; }
   .found, .sources, .analyses { list-style: none; padding: 0; margin: .6rem 0 0; display: grid; gap: .45rem; }
   .found li, .analyses li { max-width: 74ch; }
   .danger { border: 1px solid var(--line-strong); border-left: 3px solid var(--accent); padding: 1rem 1.2rem; margin-top: 2rem; }

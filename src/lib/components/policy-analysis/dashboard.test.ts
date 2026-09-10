@@ -248,6 +248,27 @@ describe('the interplay map joins the actors to what they attack', () => {
     expect(map.hidden).toBe(4);
   });
 
+  it('keeps a knob inside its row however far an actor reaches', () => {
+    // `5 + reach` looked right on a two-actor fixture. On a live assessment one
+    // actor reached twelve parts of the policy, which would have drawn a
+    // 34-unit knob into a 34-unit row and turned the column into a solid bar.
+    const actors = Array.from({ length: 6 }, (_, i) =>
+      artefact(`s2_${i}`, 'actor', `Body ${i}`, 'x', { entityType: 'department', aliases: [], mentions: [], ambiguity: '', dates: [], parent: null }, {}));
+    const targets = Array.from({ length: 12 }, (_, i) =>
+      artefact(`mech_${i}`, 'mechanism', `Mechanism ${i}`, 'x', { intervention: '', implementation: '', notes: '' }, {}));
+    // One actor aimed at everything, the rest at one target each.
+    const plays = [
+      ...targets.map((t, i) => artefact(`x_wide_${i}`, 'exploit', `Wide play ${i}`, 'x', { actorId: 's2_0', targets: [t.id], preconditions: [], exposure: 0.6, band: 'significant', legality: 'compliant', motivation: '', play: '', payoff: '', costToPolicy: '', incentive: 0.6, ease: 0.6, impact: 0.6, concealment: 0.6, earlyWarning: '', counter: '', precedent: '' }, {})),
+      ...actors.slice(1).map((a, i) => artefact(`x_one_${i}`, 'exploit', `Narrow play ${i}`, 'x', { actorId: a.id, targets: [targets[i].id], preconditions: [], exposure: 0.4, band: 'moderate', legality: 'compliant', motivation: '', play: '', payoff: '', costToPolicy: '', incentive: 0.4, ease: 0.4, impact: 0.4, concealment: 0.4, earlyWarning: '', counter: '', precedent: '' }, {})),
+    ];
+    const all = [...actors, ...targets, ...plays];
+    const html = render(InterplayMap, { props: { map: view.interplay(all, view.plays(all)), inspect } }).body;
+    const radii = [...html.matchAll(/<circle[^>]*\sr="([\d.]+)"/g)].map((m) => Number(m[1]));
+    expect(radii.length).toBeGreaterThan(0);
+    // Rows are 34 units apart, so a diameter of 34 is where knobs touch.
+    expect(Math.max(...radii)).toBeLessThanOrEqual(14);
+  });
+
   it('renders both columns and the table beneath them', async () => {
     const all = await assessment();
     const html = render(InterplayMap, { props: { map: view.interplay(all, view.plays(all)), inspect } }).body;

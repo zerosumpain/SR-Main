@@ -2,7 +2,8 @@
 // what may not.
 import { describe, expect, it } from 'vitest';
 import { artefact, PERSONA_STAGE, PERSONA_TRAITS, SYNTHESIS_STAGE, STAGES, type Artefact } from './contracts';
-import { foldTraits, matchPersona, observationFromProfile, personaPrior, playsFor, type PersonaObservation, type PersonaRecord } from './personas';
+import { foldTraits, matchPersona, observationFromProfile, personaPrior, playsFor, sendableQueries, type PersonaObservation, type PersonaRecord } from './personas';
+import { documentShingles } from './query-guard';
 import { executeStage } from './pipeline';
 
 const persona = (over: Partial<PersonaRecord> = {}): PersonaRecord => ({
@@ -141,5 +142,29 @@ describe('the library never costs the assessment', () => {
     );
     expect(sawPrior).toBe(false);
     expect(output.warnings.join(' ')).toContain('persona library could not be read');
+  });
+});
+
+describe('a persona query never carries the paper it was drawn from', () => {
+  // A dossier is written by a model reading an UNPUBLISHED policy document, and
+  // the query planner is shown every trait — so the wording can travel from the
+  // paper, through the dossier, into a third party's query logs. The prompt says
+  // not to; a prompt is not a control.
+  const text = 'The Council is accountable for delivery and bears the whole implementation cost of the shared access programme.';
+  const passage = artefact('passage_0001', 'passage', 'Page 1', text, { documentHash: 'a'.repeat(64) }, { origin: 'extracted_fact' });
+  const corpus = documentShingles([passage]);
+  const query = (id: string, searchStrategy: string) => artefact(id, 'research_question', id, 'x', { importance: 0.5, uncertainty: 0.5, consequence: 0.5, rationale: 'x', searchStrategy, gap: 'x' }, {});
+
+  it('drops a query that reproduces a run of the paper', () => {
+    const asked = [
+      query('q1', 'The Council is accountable for delivery and bears the whole implementation cost'),
+      query('q2', 'county council library service statutory duties England'),
+    ];
+    expect(sendableQueries(asked, corpus).map((q) => q.id)).toEqual(['q2']);
+  });
+
+  it('does nothing when the persona has no documents behind it', () => {
+    const asked = [query('q1', 'anything at all here about a named public body')];
+    expect(sendableQueries(asked, new Set())).toHaveLength(1);
   });
 });
