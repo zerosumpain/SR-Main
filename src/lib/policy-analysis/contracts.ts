@@ -21,6 +21,71 @@ export const PROMPT_VERSION = 'policy-analysis/2.1';
 export const MAX_BYTES = 10 * 1024 * 1024;
 export const MAX_CHARACTERS = 600_000;
 export const MAX_PAGES = 400;
+/**
+ * How much of the assessment one call may carry, in characters.
+ *
+ * MEASURED 2026-09-10, against the bridge, with the real 2,278-artefact
+ * inventory from the Post-16 white paper — never from the catalogue, because a
+ * call that overruns the real window fails the stage rather than degrading.
+ * gpt-5.6-luna answered every rung tried:
+ *
+ *   chars       artefacts     prompt tokens   wall
+ *   360,000     153 of 2,278   74,014         16.8s   <- the old limit
+ *   700,000     869           143,803         31.4s
+ *   1,100,000   1,531         224,707         56.8s
+ *   1,600,000   1,858         326,700         78.0s
+ *   3,595,536   2,244         727,295         87.6s   <- the whole inventory
+ *
+ * NO CEILING WAS FOUND. So this is not set by the model's limit — it is set by
+ * the three things that bite first:
+ *
+ *   COVERAGE. The old 360,000 carried 153 of 2,278 artefacts, 6.7%, which is why
+ *   eight of fourteen stages logged "withheld from this call entirely" and the
+ *   research stage planned its questions having seen no actor, claim or mechanism
+ *   at all. 1,100,000 carries 67%. That is the whole point of the change.
+ *
+ *   DIMINISHING RETURNS. 360k to 1.1M buys 1,378 more artefacts. 1.1M to 1.6M
+ *   buys 327 more for 45% more tokens and 37% more wall clock. The curve knees
+ *   here.
+ *
+ *   ATTENTION AND QUOTA. A 200 is not comprehension: a model handed 727,000
+ *   tokens does not attend to all of them evenly, and every token is subscription
+ *   quota. The increase falls only on the calls that were actually shedding — the
+ *   wide, late stages — since a stage-1 passage call carries one passage and is
+ *   untouched.
+ *
+ * That leaves 224,707 tokens against 727,295 known to work: 3.2x of headroom for
+ * a longer policy, a bigger system prompt, and the repair rounds that re-send on
+ * top. Raise it again only against a fresh measurement.
+ */
+export const CONTEXT_LIMIT = 1_100_000;
+
+/**
+ * Room held back from the fit so a corrective round always has somewhere to go.
+ *
+ * The repair loop is what makes a retry meaningful: it carries the offending ids
+ * and the broken rule back to the model, and it is how a play that failed the
+ * provenance rule gets fixed instead of dropped. It is also the first thing to
+ * die when the payload fills the window, because its room is computed as
+ * `CONTEXT_LIMIT - sent - instruction - 2_000` and `sent` is whatever the fit
+ * produced. Fit to the ceiling and that arithmetic goes negative.
+ *
+ * Measured on the verification run of 2026-09-10, immediately after the ceiling
+ * was raised to 1,100,000: the exploitation playbook logged "There was no room
+ * left in the model's context window for a corrective attempt", discarded seven
+ * groups of output, and produced **12 plays across 8 actors against the previous
+ * run's 31 across 10** — on the same document, the same model and the same twelve
+ * calls. The plays were not judged bad; they failed a provenance rule and could
+ * not be repaired.
+ *
+ * So the fit stops short of the ceiling. 60,000 characters is ~5% of the budget
+ * and leaves a working instruction plus a useful echo of what the model got
+ * wrong, which is the part that lets it correct itself.
+ */
+export const REPAIR_RESERVE = 60_000;
+/** What a call may actually be filled to, leaving the reserve intact. */
+export const FIT_LIMIT = CONTEXT_LIMIT - REPAIR_RESERVE;
+
 export const DEPTHS = ['standard', 'deep'] as const;
 export type Depth = (typeof DEPTHS)[number];
 /**

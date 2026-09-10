@@ -57,8 +57,32 @@ function semanticFault(a: Artefact, all: Map<string, Artefact>, stage: number): 
   const actorTargets = a.kind === 'model' ? a.data.players as string[] : a.kind === 'edge' ? [a.fromId, a.toId] : a.kind === 'profile' || a.kind === 'exploit' || a.kind === 'persona_link' ? [a.data.actorId] : a.kind === 'node' ? [a.data.entityId] : [];
   if (actorTargets.some((id) => typeof id === 'string' && all.get(id)?.kind === 'actor' && !id.startsWith('s2_'))) return fault('canonical', 'Graph assertions, profiles and models must use resolved actor identifiers.');
   if (a.kind === 'assumption' && !a.refs.some((id) => ['actor', 'mechanism'].includes(all.get(id)?.kind ?? ''))) return fault('hypothesis', 'An assumption must link to an affected actor or mechanism.');
-  if ((a.kind === 'model' || a.kind === 'scenario') && !(a.data.assumptions as string[]).every((id) => a.refs.includes(id))) return fault('hypothesis', 'Interaction models and scenarios must link their assumptions into provenance.');
-  if (a.kind === 'exploit' && !(a.data.preconditions as string[]).every((id) => a.refs.includes(id))) return fault('hypothesis', 'An exploitation play must link the assumptions it depends on into provenance.');
+  /**
+   * A cited assumption absent from `refs` is a bookkeeping slip, not a fabrication.
+   *
+   * `prune` has already run, so every identifier still in these arrays RESOLVES.
+   * The artefact named the assumption, the assumption exists, and provenance is
+   * exactly what a citation means — so fold it in, precisely as a finding's
+   * `hypothesisIds` already are. What still fails is naming something that is not
+   * an assumption at all, which is a contract violation rather than a slip.
+   *
+   * These were fatal. On the verification run of 2026-09-10 they discarded
+   * **21 exploitation plays and 3 scenarios**, the single largest source of lost
+   * work in that run: the playbook produced about 33 plays and kept 12. Every one
+   * of the discarded plays named assumptions that resolved. It is the same
+   * all-or-nothing failure the finding rule was fixed for in the first place,
+   * wearing the same hat one stage earlier.
+   */
+  const citedAssumptions = a.kind === 'exploit' ? a.data.preconditions as string[]
+    : a.kind === 'model' || a.kind === 'scenario' ? a.data.assumptions as string[]
+    : null;
+  if (citedAssumptions) {
+    const wrongKind = citedAssumptions.filter((id) => all.get(id)?.kind !== 'assumption');
+    if (wrongKind.length) return fault('hypothesis', a.kind === 'exploit'
+      ? 'An exploitation play must depend on assumptions, not on other kinds of artefact.'
+      : 'Interaction models and scenarios must depend on assumptions, not on other kinds of artefact.');
+    for (const id of citedAssumptions) if (!a.refs.includes(id)) a.refs = [...a.refs, id];
+  }
   if (a.origin === 'normative_judgement' && a.kind === 'research_source') return fault('source', 'A recommendation is not an external source.');
   if (a.kind === 'recommendation' && a.origin !== 'normative_judgement') return fault('recommendation', 'Redesign options must be labelled as normative recommendations.');
   if (a.kind === 'profile') {

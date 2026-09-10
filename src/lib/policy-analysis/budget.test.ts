@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { performance } from 'node:perf_hooks';
 import { fitToBudget } from './budget';
-import { artefact, type Artefact } from './contracts';
+import { artefact, CONTEXT_LIMIT, FIT_LIMIT, REPAIR_RESERVE, type Artefact } from './contracts';
 import { fitToBudgetReference } from '../../../tests/fixtures/policy-analysis/budget-reference';
 
 const build = (a: Artefact[]) => ({ stage: 9, artefacts: a, idPrefix: 's9_000_' });
@@ -68,5 +68,40 @@ describe('fitToBudget — bisection must pick the same cut as a linear scan', ()
     // It measured 6,407ms before bisection — over the probe's 5,000ms threshold
     // on its own, and the block that had the watchdog restarting the service.
     expect(ms).toBeLessThan(1500);
+  });
+});
+
+
+describe('the repair round must always have room', () => {
+  /**
+   * The exploitation playbook lost two thirds of its plays on 2026-09-10 — 12
+   * across 8 actors against 31 across 10, same document, same model, same twelve
+   * calls — because the fit filled the window to the ceiling and
+   * `CONTEXT_LIMIT - sent - instruction - 2_000` went negative. The plays were
+   * not judged bad; they failed a provenance rule and could not be repaired.
+   * These assert the arithmetic that made that possible cannot recur.
+   */
+  it('reserves headroom below the ceiling', () => {
+    expect(FIT_LIMIT).toBe(CONTEXT_LIMIT - REPAIR_RESERVE);
+    expect(FIT_LIMIT).toBeLessThan(CONTEXT_LIMIT);
+  });
+
+  it('reserves more than the repair round needs to run at all', () => {
+    // provider.ts: room = CONTEXT_LIMIT - sent - instruction - 2_000, and the
+    // echo is only attached when room >= 4_000. A reserve under that floor would
+    // leave the repair technically alive and practically blind.
+    const INSTRUCTION_ALLOWANCE = 20_000;
+    const OVERHEAD = 2_000;
+    const ECHO_FLOOR = 4_000;
+    expect(REPAIR_RESERVE).toBeGreaterThan(INSTRUCTION_ALLOWANCE + OVERHEAD + ECHO_FLOOR);
+  });
+
+  it('leaves the repair positive room even for a payload fitted right to the limit', () => {
+    const arts: Artefact[] = Array.from({ length: 4000 }, (_, i) =>
+      artefact(`a_${String(i).padStart(4, '0')}`, 'claim', `Item ${i}`, 'x'.repeat(900), {}, { confidence: 0.5 }));
+    const build = (a: Artefact[]) => ({ stage: 10, artefacts: a, idPrefix: 's10_000_' });
+    const sent = JSON.stringify(build(fitToBudget(arts, build, FIT_LIMIT).artefacts)).length;
+    const room = CONTEXT_LIMIT - sent - 20_000 - 2_000;
+    expect(room).toBeGreaterThan(0);
   });
 });
