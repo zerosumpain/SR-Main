@@ -36,6 +36,15 @@
   const RIGHT_MARK = 498;
 
   const height = $derived(TOP + Math.max(map.actors.length, map.targets.length) * ROW + 24);
+  /**
+   * A knob's radius is reach RELATIVE to the widest actor, not reach itself.
+   * `5 + reach` looked right on a two-actor fixture and collides on a real one:
+   * an actor touching twelve parts of the policy would draw a 34-unit knob into
+   * a 34-unit row, so the column becomes a solid bar and the encoding says
+   * nothing. Bounded, the largest is always legible and always the largest.
+   */
+  const widest = $derived(Math.max(1, ...map.actors.map((a) => a.reach)));
+  const knob = (reach: number) => 5 + 8 * (reach / widest);
   const actorY = $derived(new Map(map.actors.map((a, i) => [a.actor.id, TOP + i * ROW])));
   const targetY = $derived(new Map(map.targets.map((t, i) => [t.id, TOP + i * ROW])));
   const arcs = $derived(map.links.map((link) => ({
@@ -55,6 +64,13 @@
 
 {#if map.links.length}
   <figure class="map-figure">
+    <!--
+      The drawing scrolls sideways rather than shrinking. A 760-unit box squeezed
+      into a 390px phone renders a 14-unit label at under seven pixels, which is
+      not a small map — it is an unreadable one. Below the breakpoint the reader
+      scrolls the map, or reads the table under it, which carries the same thing.
+    -->
+    <div class="canvas">
     <svg viewBox="0 0 {WIDTH} {height}" role="img" aria-label="Which actors attack which parts of the policy, one arc per exploitation play">
       <text class="column" x={LEFT_MARK} y="20" text-anchor="end">Who moves</text>
       <text class="column" x={RIGHT_MARK} y="20" text-anchor="start">What it defeats</text>
@@ -73,7 +89,7 @@
         <g class="node" class:dim={!lit(row.actor.id)}>
           <text class="node-label" x={LEFT_MARK - 14} y={TOP + i * ROW + 4} text-anchor="end">{clip(row.actor.label, 30)}</text>
           <circle
-            class="knob" cx={LEFT_MARK} cy={TOP + i * ROW} r={5 + row.reach}
+            class="knob" cx={LEFT_MARK} cy={TOP + i * ROW} r={knob(row.reach)}
             role="button" tabindex="0"
             aria-label="{row.actor.label}. {row.plays} plays reaching {row.reach} parts of the policy."
             onmouseenter={() => (focused = row.actor.id)}
@@ -104,6 +120,7 @@
         </g>
       {/each}
     </svg>
+    </div>
 
     <figcaption>
       {#if focusedActor}
@@ -154,7 +171,10 @@
 <style>
   .map-figure { display: grid; grid-template-columns: minmax(0, 1fr) minmax(15rem, 22rem); gap: 1.5rem; align-items: start; margin: 1.25rem 0 0; }
   @media (max-width: 900px) { .map-figure { grid-template-columns: 1fr; } }
-  svg { width: 100%; height: auto; overflow: visible; }
+  /* Every mark and label is inside the viewBox, so this needs no overflow of its
+     own — which is what lets the scroll container below work without clipping. */
+  .canvas { overflow-x: auto; overflow-y: hidden; }
+  svg { width: 100%; min-width: 34rem; height: auto; display: block; }
   .arc { fill: none; opacity: .85; transition: opacity .12s; }
   .arc.dim { opacity: .12; }
   .node { transition: opacity .12s; }

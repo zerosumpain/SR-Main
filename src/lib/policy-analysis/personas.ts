@@ -1,5 +1,6 @@
 import { assessIdentity } from '$lib/jkai/intel/resolve/policy';
 import { PERSONA_TRAITS, TRAIT_LABELS, type Artefact, type TraitKey } from './contracts';
+import { quotesDocument } from './query-guard';
 
 export { PERSONA_TRAITS, TRAIT_LABELS, type TraitKey };
 
@@ -199,4 +200,21 @@ export function foldTraits(standing: PersonaTrait[], observed: PersonaTrait[]): 
     const ai = order.indexOf(a.key), bi = order.indexOf(b.key);
     return (ai < 0 ? order.length : ai) - (bi < 0 ? order.length : bi) || a.key.localeCompare(b.key);
   });
+}
+
+/**
+ * The persona queries that may actually be sent.
+ *
+ * A dossier is written by a model reading somebody's UNPUBLISHED policy paper,
+ * so a trait's value can carry that paper's own wording — and the query planner
+ * is shown every trait. The prompt says "no document quotes"; a prompt is not a
+ * control, and this is the same measured guard the in-run research uses. The
+ * corpus is the passages of exactly the assessments the dossier was built from,
+ * which are the only documents whose wording could have reached it.
+ *
+ * Exported, and tested, because a guard nobody can see fail is a guard that
+ * quietly stops running.
+ */
+export function sendableQueries(questions: Artefact[], corpus: Set<string>): Artefact[] {
+  return questions.filter((q) => !quotesDocument(String(q.data.searchStrategy ?? ''), corpus));
 }
