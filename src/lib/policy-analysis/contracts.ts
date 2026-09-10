@@ -110,10 +110,15 @@ export type Artefact = z.infer<typeof artefactSchema>;
 export type StageInput = { stage: number; title: string; depth?: Depth; graphLoss?: number; jurisdiction: string | null; policyArea: string | null; context: string | null; priorWarnings?: string[]; artefacts: Artefact[] };
 export type StageOutput = { artefacts: Artefact[]; warnings: string[] };
 export const stageOutputSchema = z.object({ artefacts: z.array(artefactSchema).max(2000), warnings: z.array(z.string().max(1000)).max(100) }).strict();
+// Modelling, scenarios and the red team may all surface a hypothesis the
+// document inventory did not, and they must be able to record it: a model whose
+// `assumptions` point at ids that do not exist is refused, so forbidding the kind
+// took the model down with it. Seen on a live run at stage 7, three patterns in
+// a row.
 export const STAGE_KINDS: Kind[][] = [
   ['passage'], ['claim', 'mechanism', 'assumption', 'actor'], ['actor', 'alias', 'resolution_candidate'],
-  ['node', 'edge'], ['profile'], ['research_question', 'research_source'], ['evidence'], ['model'], ['test'], ['scenario'],
-  ['exploit'], ['cross_policy'], ['finding', 'recommendation'],
+  ['node', 'edge'], ['profile'], ['research_question', 'research_source'], ['evidence'], ['model', 'assumption'], ['test'], ['scenario', 'assumption'],
+  ['exploit', 'assumption'], ['cross_policy'], ['finding', 'recommendation'],
 ];
 export function artefact(id: string, kind: Kind, label: string, statement: string, data: Record<string, unknown>, overrides: Partial<Artefact> = {}): Artefact {
   return { id, kind, label, statement, data, origin: 'structural_inference', confidence: null, refs: [], sourceId: null, sourceQuote: null, page: null, section: null, startOffset: null, endOffset: null, url: null, fromId: null, toId: null, relation: null, temporal: null, ...overrides };

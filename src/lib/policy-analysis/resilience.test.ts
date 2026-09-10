@@ -501,3 +501,41 @@ describe('the repair round is told which field, and runs even when the stage is 
     expect(instruction).toContain('s3_main_');
   });
 });
+
+describe('the later stages may record a hypothesis they surface', () => {
+  const source = passage('passage_0001');
+  const actor = artefact('s2_000_council', 'actor', 'The Council', 'The delivery body.', { entityType: 'local_authority', aliases: [], mentions: ['passage_0001'], ambiguity: 'none', dates: [], parent: null }, { refs: [source.id] });
+  const mechanism = artefact('s1_000_mechanism', 'mechanism', 'Delivery duty', 'A duty to deliver.', { intervention: 'Duty', implementation: 'Council', notes: 'Unfunded.' }, { refs: [source.id] });
+  const prior = [source, actor, mechanism];
+
+  const fresh = (prefix: string) => artefact(`${prefix}assumption`, 'assumption', 'Capacity holds', 'The council is assumed able to absorb the duty.', { importance: 0.8, uncertainty: 0.9, consequence: 0.8, notes: 'Surfaced while modelling.' }, { refs: [source.id, mechanism.id] });
+
+  it('keeps a model and the assumption it just surfaced', () => {
+    const prefix = 's7_000_';
+    const model = artefact(`${prefix}model`, 'model', 'Principal agent', 'The council can satisfy the measure without the outcome.', {
+      pattern: 'principal_agent', players: [actor.id], strategies: ['Comply', 'Minimum compliance'], decisionOrder: 'Regulator sets, council responds.',
+      information: 'Capacity is unobserved.', costs: 'Effort.', benefits: 'Avoided cost.', rewards: 'None specified.', sanctions: 'None specified.',
+      dependencies: [mechanism.id], assumptions: [`${prefix}assumption`], responses: ['Report against the measure.'], equilibria: ['Conditional compliance.'],
+      explanation: 'Monitoring is thin.', applicability: 'Direct.',
+    }, { refs: [mechanism.id, `${prefix}assumption`] });
+    const triaged = triageOutput({ artefacts: [fresh(prefix), model], warnings: [] }, 7, prior);
+    expect(triaged.rejected).toEqual([]);
+    expect(triaged.artefacts.map((a) => a.kind).sort()).toEqual(['assumption', 'model']);
+  });
+
+  it('still refuses a model citing an assumption nobody wrote', () => {
+    const prefix = 's7_000_';
+    const model = artefact(`${prefix}model`, 'model', 'Principal agent', 'x', {
+      pattern: 'principal_agent', players: [actor.id], strategies: ['a'], decisionOrder: 'a', information: 'a', costs: 'a', benefits: 'a',
+      rewards: 'a', sanctions: 'a', dependencies: [mechanism.id], assumptions: [`${prefix}nowhere`], responses: ['a'], equilibria: ['a'],
+      explanation: 'a', applicability: 'a',
+    }, { refs: [mechanism.id, `${prefix}nowhere`] });
+    const triaged = triageOutput({ artefacts: [model], warnings: [] }, 7, prior);
+    expect(triaged.artefacts).toEqual([]);
+  });
+
+  it('leaves the document inventory to stage 1', () => {
+    const triaged = triageOutput({ artefacts: [artefact('s7_000_claim', 'claim', 'A claim', 'x', { category: 'objective', notes: 'n' }, { refs: [source.id] })], warnings: [] }, 7, prior);
+    expect(triaged.rejected[0].reason).toContain('“claim” does not belong to this stage');
+  });
+});
