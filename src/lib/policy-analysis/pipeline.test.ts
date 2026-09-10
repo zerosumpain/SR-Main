@@ -222,6 +222,20 @@ describe('identity, graph and deterministic checks', () => {
     expect(result.filter((r) => r.kind === 'actor')).toHaveLength(2);
     expect(result.find((r) => r.kind === 'resolution_candidate')?.data.resolved).toBe(false);
   });
+  it('splits an ambiguous body but keeps a collective class whole', () => {
+    // One collective noun, typed differently on two pages, which is how a real
+    // paper reads it: 387 mentions of the Post-16 white paper carried 171 labels
+    // across eleven entity types. That difference is what the identity policy
+    // refuses to link, and it is why the register committed 336 candidates.
+    const a = artefact('mention_a', 'actor', 'Employers', 'A synthetic source mention.', { entityType: 'user_group', aliases: [], mentions: [], ambiguity: 'Unknown', dates: [], parent: null });
+    const b = { ...a, id: 'mention_b', data: { ...a.data, entityType: 'provider' } };
+    const merged = { ...a, id: 's2_merged', data: { ...a.data, mentions: [a.id, b.id] }, refs: [a.id, b.id] };
+    // Same two mentions, same merge — only the class flag differs.
+    expect(preserveAmbiguity([merged], [a, b]).filter((r) => r.kind === 'resolution_candidate')).toHaveLength(1);
+    const asClass = preserveAmbiguity([{ ...merged, data: { ...merged.data, collective: true } }], [a, b]);
+    expect(asClass.filter((r) => r.kind === 'actor')).toHaveLength(1);
+    expect(asClass.some((r) => r.kind === 'resolution_candidate')).toBe(false);
+  });
   it('distinguishes absent evidence, mismatch and matched authority; keeps all checks deterministic', () => {
     const e = artefact('edge', 'edge', 'Accountability', 'Council accountable for delivery.', { notes: 'Synthetic' }, { fromId: 'actor', toId: 'mechanism', relation: 'is_accountable_for', confidence: 0.8 });
     expect(runPolicyTests([]).every((t) => t.data.result === 'indeterminate' && t.confidence === null)).toBe(true);

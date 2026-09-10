@@ -129,7 +129,12 @@ export const dataSchemas = {
   claim: z.object({ category: z.enum(['objective', 'problem', 'responsibility', 'decision_right', 'funding', 'dependency', 'data_flow', 'measure', 'constraint', 'risk', 'benefit', 'claim', 'cited_evidence']), notes: text }),
   mechanism: z.object({ intervention: text, implementation: text, notes: text }),
   assumption: z.object({ importance: unit, uncertainty: unit, consequence: unit, priority: unit.optional(), notes: text }),
-  actor: z.object({ entityType: z.enum(['person', 'department', 'agency', 'local_authority', 'provider', 'contractor', 'programme', 'dataset', 'legislation', 'committee', 'user_group', 'geography', 'concept']), aliases: strings, mentions: ids, ambiguity: text, dates: strings, parent: z.string().nullable() }),
+  // `collective` marks an actor that is a CLASS of body — employers, providers,
+  // students — rather than a particular one. A policy paper names most of its
+  // actors collectively, and a class is the honest resolution of those mentions:
+  // it is neither a body to be identified nor a gap in the register. It defaults
+  // to false, so every actor written before this existed reads as a named body.
+  actor: z.object({ entityType: z.enum(['person', 'department', 'agency', 'local_authority', 'provider', 'contractor', 'programme', 'dataset', 'legislation', 'committee', 'user_group', 'geography', 'concept']), aliases: strings, mentions: ids, ambiguity: text, dates: strings, parent: z.string().nullable(), collective: z.boolean().default(false) }),
   alias: z.object({ actorId: text }),
   resolution_candidate: z.object({ candidates: ids.min(2), reason: text, resolved: z.literal(false) }),
   node: z.object({ entityId: text }),

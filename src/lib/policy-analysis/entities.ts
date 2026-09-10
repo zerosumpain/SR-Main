@@ -6,6 +6,13 @@ import { artefact, type Artefact } from './contracts';
 export function preserveAmbiguity(output: Artefact[], prior: Artefact[]): Artefact[] {
   const result = [...output]; const replaced = new Set<string>();
   for (const actor of output.filter((a) => a.kind === 'actor')) {
+    // A CLASS is not a body, so there is no identity here to be unsure about.
+    // Splitting one would assert the opposite of what it says: that twenty-five
+    // mentions of "employers" are twenty-five candidate organisations. MEASURED
+    // on the Post-16 white paper (2026-09-10) before this existed — the register
+    // committed 336 single-mention candidates against 16 named bodies, which then
+    // cost the graph stage 889 shed artefacts and left it with 9 nodes.
+    if (actor.data.collective === true) continue;
     const mentions = (actor.data.mentions as string[]).map((id) => prior.find((a) => a.id === id)).filter((a): a is Artefact => !!a);
     const entity = (a: Artefact) => ({ id: a.id, name: a.label, typeId: String(a.data.entityType), typeName: String(a.data.entityType), degree: 0, noteCount: 1, aliases: a.data.aliases as string[] });
     const ambiguous = mentions.some((a, i) => mentions.slice(i + 1).some((b) => !assessIdentity(entity(a), entity(b)).canLink || (a.data.parent && b.data.parent && a.data.parent !== b.data.parent)));

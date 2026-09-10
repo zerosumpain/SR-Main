@@ -634,6 +634,58 @@ describe('entity resolution asks again for what it missed', () => {
   });
 });
 
+// The 72-page Post-16 Education and Skills white paper, 2026-09-10. Stage 2 failed
+// twice — "claimed only 98 of 387 source mentions", then 111 — while the model was
+// right every time and said so in its own warnings: "Generic categories such as
+// government, employers, providers, students and Strategic Authorities remain
+// separate because a shared label alone does not establish identity." That is the
+// conflation rule the prompt asks for. 387 mentions carried only 171 distinct
+// labels; `main` resolved the 13 genuinely named bodies (77 mentions) and the rest
+// were collective nouns with no body to be resolved to.
+describe('a register of classes is a resolution, not a coverage failure', () => {
+  const source = passage('passage_0001');
+  const mention = (n: number, label: string) =>
+    artefact(`s1_000_actor_${n}`, 'actor', label, `${label} is named in the policy.`, { entityType: 'provider', aliases: [], mentions: [source.id], ambiguity: 'none', dates: [], parent: null }, { refs: [source.id], origin: 'extracted_fact', sourceId: source.id, sourceQuote: 'what landlords achieve' });
+  // The shape of a real white paper: a couple of named bodies and a long tail of
+  // the same collective noun.
+  const mentions = ['Skills England', 'Office for Students', ...Array.from({ length: 18 }, () => 'Employers')].map((l, i) => mention(i + 1, l));
+  const input = { stage: 2, title: 'A policy', jurisdiction: null, policyArea: null, context: null, artefacts: [source, ...mentions] };
+  const research = async () => ({ artefacts: [], warnings: [] });
+  const signal = new AbortController().signal;
+
+  const register = (prefix: string) => ({
+    artefacts: [
+      ...mentions.slice(0, 2).map((m, i) => artefact(`${prefix}body_${i}`, 'actor', m.label, 'A named body.', { entityType: 'provider', aliases: [], mentions: [m.id], ambiguity: 'none', dates: [], parent: null, collective: false }, { refs: [m.id] })),
+      artefact(`${prefix}class_employers`, 'actor', 'Employers', 'A class of body the policy names collectively.', { entityType: 'provider', aliases: [], mentions: mentions.slice(2).map((m) => m.id), ambiguity: 'none', dates: [], parent: null, collective: true }, { refs: mentions.slice(2).map((m) => m.id) }),
+    ],
+    warnings: [],
+  });
+
+  it('claims a class of mentions in one actor and never splits it back apart', async () => {
+    const model = vi.fn(async (_stage: number, _key: string, raw: unknown) => register((raw as { idPrefix: string }).idPrefix));
+    const output = await executeStage(input, { model, research, signal });
+    // One call: nothing is left unclaimed, so the top-up sweep never runs.
+    expect(model).toHaveBeenCalledTimes(1);
+    expect(output.artefacts.filter((a) => a.kind === 'actor')).toHaveLength(3);
+    expect(output.artefacts.filter((a) => a.kind === 'resolution_candidate')).toEqual([]);
+    expect(output.warnings.filter((w) => w.includes('never resolved'))).toEqual([]);
+    expect(output.warnings.join(' ')).toContain('1 of this register\'s 3 entries are CLASSES of body');
+  });
+
+  it('stops asking again once a round claims nothing new', async () => {
+    // Resolves the two named bodies and never touches the eighteen collectives,
+    // which is exactly what the live run did. The gate still fails it — the
+    // threshold is unchanged — but it stops after the first fruitless top-up
+    // instead of paying for the whole ceiling.
+    const model = vi.fn(async (_stage: number, _key: string, raw: unknown) => ({
+      artefacts: mentions.slice(0, 2).map((m, i) => artefact(`${(raw as { idPrefix: string }).idPrefix}body_${i}`, 'actor', m.label, 'A named body.', { entityType: 'provider', aliases: [], mentions: [m.id], ambiguity: 'none', dates: [], parent: null }, { refs: [m.id] })),
+      warnings: [],
+    }));
+    await expect(executeStage(input, { model, research, signal })).rejects.toThrow('claimed only 2 of 20 source mentions');
+    expect(model).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('the repair round is told which field, and runs even when the stage is large', () => {
   const source = passage('passage_0001');
 
