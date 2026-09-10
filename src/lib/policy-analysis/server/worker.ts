@@ -2,7 +2,6 @@ import { and, eq, gt, sql } from 'drizzle-orm';
 import { db, type DbExecutor } from '$lib/db';
 import { policyAnalyses, policyDocuments, policyExecutions, policyModelCalls, policyStages, workflowRuns } from '$lib/db/schema';
 import { isThinkingLevel } from '$lib/models/thinking';
-import { beginBatch } from '$lib/workflows/engine-runtime';
 import { boundWarnings } from '../budget';
 import { PERSONA_STAGE, type Concurrency } from '../contracts';
 import { executeStage } from '../pipeline';
@@ -75,7 +74,14 @@ async function lockLease(tx: DbExecutor, analysisId: string, stageId: string, ru
   return { analysis, stage };
 }
 /** One durable stage in the existing workflow queue. Completion and continuation commit together. */
-export async function executePolicyRun(claimed: { id: string; input: Record<string, unknown> | null }, workerId: string): Promise<void> {
+/**
+ * `beat` is injected rather than imported, and that is a layering rule not a
+ * preference: `$lib/workflows` already imports this module to dispatch a policy
+ * envelope, so importing `engine-runtime` back would close a cycle neither module
+ * could then be tested or moved out of. The caller owns the batch and ends it in
+ * its own `finally`, which also means no failure on the way in here can leak one.
+ */
+export async function executePolicyRun(claimed: { id: string; input: Record<string, unknown> | null }, workerId: string, beat?: (phase: string) => void): Promise<void> {
   const analysisId = String(claimed.input?.analysisId ?? '');
   const stageId = String(claimed.input?.stageId ?? '');
   if (!UUID.test(analysisId) || !UUID.test(stageId)) throw new Error('Invalid policy queue envelope');
@@ -107,10 +113,6 @@ export async function executePolicyRun(claimed: { id: string; input: Record<stri
   const abort = new AbortController();
   // Cancellation and lost leases stop further model/research calls. Commit also
   // checks the lease under row locks, so a late result cannot win after resume.
-  // Loaded BEFORE the batch is registered, deliberately: nothing between
-  // `beginBatch` and the `try` may throw. A batch leaked by an exception on the
-  // way in would keep claiming this process is busy for the life of the
-  // process, and suppress the very restart it exists to defer.
   const all = await loadArtefacts(analysisId);
   /**
    * Tell the liveness probe this process is BUSY, not broken.
@@ -119,16 +121,15 @@ export async function executePolicyRun(claimed: { id: string; input: Record<stri
    * measured at 17-20 seconds a call on 2026-09-10 against the probe's five
    * second threshold. Every one of those read as a wedged process, so the
    * watchdog restarted the service mid-call, over and over, and the stage could
-   * never finish. `beginBatch` is the mechanism that already existed for exactly
-   * this — the nightly intel sweep uses it — and the policy worker never did.
+   * never finish.
    */
-  const batch = beginBatch(`policy:${started.analysis.title.slice(0, 40)}`, `stage ${started.stage.ordinal} · ${started.stage.name}`);
+  const stagePhase = `stage ${started.stage.ordinal} · ${started.stage.name}`;
   const check = setInterval(() => {
     // The beat rides the lease check rather than a timer of its own, and that is
     // the point: a blocked event loop cannot fire this callback, so the beat
     // stops exactly when the process really is wedged and the restart becomes
     // correct again. A batch that has gone stale excuses nothing.
-    batch.beat();
+    beat?.(stagePhase);
     void db.select({ status: workflowRuns.status, owner: workflowRuns.claimedBy, expiry: workflowRuns.leaseExpiresAt }).from(workflowRuns).where(eq(workflowRuns.id, claimed.id)).then(([r]) => {
       if (!r || r.status !== 'running' || r.owner !== workerId || !r.expiry || r.expiry.getTime() <= Date.now()) abort.abort();
     }).catch(() => abort.abort());
@@ -157,7 +158,7 @@ export async function executePolicyRun(claimed: { id: string; input: Record<stri
           return ingest(Buffer.from(document.content, 'base64'), document.filename, document.mimeType);
         })()
       : null;
-    const output = extracted ?? await executeStage({ stage: started.stage.ordinal, title: started.analysis.title, jurisdiction: started.analysis.jurisdiction, policyArea: started.analysis.policyArea, context: started.analysis.context, depth: started.analysis.depth as 'standard' | 'deep', graphLoss, priorWarnings: boundWarnings(previousStages.flatMap((s) => s.warnings)), artefacts: all }, { model: modelCaller(started.execution.id, claimed.id, signal, all, { model: started.analysis.model, thinkingLevel: isThinkingLevel(started.analysis.thinkingLevel) ? started.analysis.thinkingLevel : null }), research, signal, concurrency: started.analysis.concurrency as Concurrency | null, onProgress: (phase) => batch.beat(`stage ${started.stage.ordinal} · ${started.stage.name} · ${phase}`), neighbours: () => neighbourSummaries(started.analysis.owner, analysisId), personas: (actors) => priorsFor(started.analysis.owner, actors, analysisId) });
+    const output = extracted ?? await executeStage({ stage: started.stage.ordinal, title: started.analysis.title, jurisdiction: started.analysis.jurisdiction, policyArea: started.analysis.policyArea, context: started.analysis.context, depth: started.analysis.depth as 'standard' | 'deep', graphLoss, priorWarnings: boundWarnings(previousStages.flatMap((s) => s.warnings)), artefacts: all }, { model: modelCaller(started.execution.id, claimed.id, signal, all, { model: started.analysis.model, thinkingLevel: isThinkingLevel(started.analysis.thinkingLevel) ? started.analysis.thinkingLevel : null }), research, signal, concurrency: started.analysis.concurrency as Concurrency | null, onProgress: (phase) => beat?.(`${stagePhase} · ${phase}`), neighbours: () => neighbourSummaries(started.analysis.owner, analysisId), personas: (actors) => priorsFor(started.analysis.owner, actors, analysisId) });
     signal.throwIfAborted();
     await db.transaction(async (tx) => {
       const locked = await lockLease(tx, analysisId, stageId, claimed.id, workerId);
@@ -209,5 +210,5 @@ export async function executePolicyRun(claimed: { id: string; input: Record<stri
       if (retry) await queueStage(tx, analysisId, stageId, 15_000 * Math.max(1, attempts));
       await tx.update(policyAnalyses).set({ status: retry ? 'queued' : 'failed', error: message, updatedAt: new Date() }).where(eq(policyAnalyses.id, analysisId));
     });
-  } finally { clearInterval(check); batch.end(); }
+  } finally { clearInterval(check); }
 }
