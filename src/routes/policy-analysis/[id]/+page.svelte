@@ -687,6 +687,7 @@
 {/snippet}
 
 <AssessmentBody
+  sealed={data.analysis.sealed}
   {artefacts}
   status={data.analysis.status}
   personas={data.personas ?? []}
