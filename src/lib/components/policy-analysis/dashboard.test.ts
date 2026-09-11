@@ -488,6 +488,10 @@ describe('one tab row, and every old deep link still lands', () => {
     // The key is a workspace, not a tooltip — every explainer before it was
     // pointer-only and there was no page that said what a play IS.
     expect(ids).toContain('key');
+    // Its own workspace, not a footer on the key. It shipped inside "How to read
+    // this" — last tab, last group, below the whole glossary — and the first
+    // thing that happened was that nobody could find it.
+    expect(ids).toContain('handling');
   });
 
   it('does not treat an artefact id as a tab', () => {
