@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   DECAY_TAU_DAYS,
+  ownerBefore,
   LOOP_WEIGHT,
   OUTING_ALPHA,
   TRAMPLE_WEIGHT,
@@ -371,5 +372,41 @@ describe('per-outing weighting, end to end through resolveOwnership', () => {
     // on the extra outing — which is the ranking this change exists to undo.
     const flat = rows.map((r) => ({ ...r, weight: TRAMPLE_WEIGHT }));
     expect(resolveOwnership(flat, NOW).get(tileKeyOf(cell.x, cell.y))?.owner).toBe('john');
+  });
+});
+
+describe('ownerBefore', () => {
+  const cell = { x: 3, y: 3 };
+  const key = tileKeyOf(cell.x, cell.y);
+  const visit = (subject: string, daysAgo: number) =>
+    captureEvents(subject, [cell], new Date(NOW.getTime() - daysAgo * 86_400_000), 'loop')[0];
+
+  it('names who held it before the handover', () => {
+    const events = [visit('john', 40), visit('katie', 2), visit('katie', 1)];
+    const owned = resolveOwnership(events, NOW).get(key)!;
+    expect(owned.owner).toBe('katie');
+    expect(ownerBefore(events, key, owned.ownerSince, owned.owner)).toBe('john');
+  });
+
+  it('is null where the cell never changed hands', () => {
+    const events = [visit('john', 40), visit('john', 1)];
+    const owned = resolveOwnership(events, NOW).get(key)!;
+    expect(ownerBefore(events, key, owned.ownerSince, owned.owner)).toBeNull();
+  });
+
+  it('is null on a first-ever capture, which has no prior regime', () => {
+    const events = [visit('rory', 3)];
+    const owned = resolveOwnership(events, NOW).get(key)!;
+    expect(ownerBefore(events, key, owned.ownerSince, owned.owner)).toBeNull();
+  });
+
+  it('returns null rather than guessing when handed the wrong cell key', () => {
+    // The failure that wrote `previous_owner` null across 19,479 rows: a caller
+    // built its own `${x},${y}` key while resolveOwnership maps on `${x}:${y}`,
+    // so every lookup missed and nothing errored. Callers must use tileKeyOf.
+    const events = [visit('john', 40), visit('katie', 1)];
+    const owned = resolveOwnership(events, NOW).get(key)!;
+    expect(ownerBefore(events, '3,3', owned.ownerSince, owned.owner)).toBeNull();
+    expect(ownerBefore(events, key, owned.ownerSince, owned.owner)).toBe('john');
   });
 });

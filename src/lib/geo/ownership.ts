@@ -370,3 +370,38 @@ export function resolveOwnership(
 
   return out;
 }
+
+/**
+ * Who held this cell in the instant before the current owner took it, or null
+ * if nobody did.
+ *
+ * A replay of the same cell's events with the horizon set one millisecond
+ * before the handover. `ownerSince` is the first event at which the current
+ * owner led, so everything strictly before it is the prior regime; if that
+ * regime had the same leader, the cell never changed hands and the answer is
+ * null rather than a repeat of the owner's own name.
+ *
+ * `key` MUST come from `tileKeyOf`. This looks the cell up in a map
+ * `resolveOwnership` built, and a caller that rolls its own `${x},${y}` gets a
+ * miss rather than an error — which is how a maintenance rebuild wrote
+ * `previous_owner` null across all 19,479 rows without failing.
+ *
+ * Lives here rather than beside the recompute that calls it because it is pure,
+ * and because a maintenance script has to write `previous_owner` by the SAME
+ * rule — `$lib/geo/service` cannot be imported outside vite (it reaches `$env`
+ * through `$lib/db`), and a second copy of this rule would drift from the first
+ * without anything failing.
+ */
+export function ownerBefore(
+  events: CaptureEvent[],
+  key: string,
+  ownerSince: Date,
+  owner: string,
+): string | null {
+  const priorMs = ownerSince.getTime() - 1;
+  const before = events.filter((e) => e.capturedAt.getTime() <= priorMs);
+  if (!before.length) return null;
+  const prior = resolveOwnership(before, new Date(priorMs)).get(key);
+  if (!prior || prior.owner === owner) return null;
+  return prior.owner;
+}

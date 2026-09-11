@@ -97,6 +97,7 @@ import {
   captureEvents,
   applyOutingWeights,
   dedupeEvents,
+  ownerBefore,
   resolveOwnership,
   utcDay,
   type CaptureEvent,
@@ -876,30 +877,6 @@ export async function recomputeTiles(
   }
 
   return { touched: list.length, written };
-}
-
-/**
- * Who held this cell in the instant before the current owner took it, or null
- * if nobody did.
- *
- * A replay of the same cell's events with the horizon set one millisecond
- * before the handover. `ownerSince` is the first event at which the current
- * owner led, so everything strictly before it is the prior regime; if that
- * regime had the same leader, the cell never changed hands and the answer is
- * null rather than a repeat of the owner's own name.
- */
-function ownerBefore(
-  events: CaptureEvent[],
-  key: string,
-  ownerSince: Date,
-  owner: string,
-): string | null {
-  const priorMs = ownerSince.getTime() - 1;
-  const before = events.filter((e) => e.capturedAt.getTime() <= priorMs);
-  if (!before.length) return null;
-  const prior = resolveOwnership(before, new Date(priorMs)).get(key);
-  if (!prior || prior.owner === owner) return null;
-  return prior.owner;
 }
 
 // ---------------------------------------------------------------------------
