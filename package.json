@@ -37,7 +37,7 @@
   },
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
+    "build": "npm run build:offline && vite build",
     "build:builder": "node packages/jkai-builder/build.mjs",
     "preview": "vite preview",
     "prepare": "svelte-kit sync || echo ''",
@@ -60,14 +60,15 @@
     "gate:concurrent": "./scripts/gate-concurrent.sh",
     "gate:test": "NODE_OPTIONS=--max-old-space-size=4096 vitest run --exclude '**/node_modules/**' --exclude '**/*.integration.test.ts'",
     "gate:test:full": "NODE_OPTIONS=--max-old-space-size=4096 vitest run --exclude '**/node_modules/**'",
-    "gate:build": "NODE_OPTIONS=--max-old-space-size=6144 vite build && npm run gate:client-budgets",
+    "gate:build": "npm run build:offline && NODE_OPTIONS=--max-old-space-size=6144 vite build && npm run gate:client-budgets",
     "gate:client-budgets": "node scripts/check-client-budgets.mjs",
     "build:codex-bridge": "node packages/jkai-codex-bridge/build.mjs",
     "build:release-sidecars": "./scripts/build-release-sidecars.sh",
     "gate:test:scoped": "./scripts/gate-test-scoped.sh",
     "validate:change": "./scripts/validate-change.sh",
     "deploy:status": "./scripts/deploy-status.sh",
-    "build:wa-worker": "node packages/jkai-wa-worker/build.mjs"
+    "build:wa-worker": "node packages/jkai-wa-worker/build.mjs",
+    "build:offline": "svelte-kit sync && NODE_OPTIONS=--max-old-space-size=6144 vite build --config vite.config.offline.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",

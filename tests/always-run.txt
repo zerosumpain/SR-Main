@@ -18,6 +18,7 @@ src/lib/jkai/studio.test.ts
 src/lib/llm/keys.test.ts
 src/lib/models/workloads.test.ts
 src/lib/policy-analysis/dashboard-shaping.test.ts
+src/lib/policy-analysis/offline/pack.test.ts
 src/lib/policy-analysis/pipeline.test.ts
 src/lib/policy-analysis/resilience.test.ts
 src/lib/selfimprove/board.test.ts

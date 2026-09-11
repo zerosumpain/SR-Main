@@ -70,3 +70,7 @@ corpus.json
 # Runtime crash dumps must not enter source scans or candidate snapshots.
 core
 core.*
+
+# Built by `npm run build:offline` — the offline pack shell. Regenerated on
+# every build and read off disk by the pack exporter; never committed.
+static/policy-offline/
