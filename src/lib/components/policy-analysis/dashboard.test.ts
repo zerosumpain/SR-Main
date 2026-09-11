@@ -12,7 +12,7 @@ import { PATTERNS, PERSONA_STAGE, REPORT_SECTIONS, SCENARIOS, artefact, type Art
 import { executeStage } from '$lib/policy-analysis/pipeline';
 import { ingest } from '$lib/policy-analysis/server/ingest';
 import * as view from '$lib/policy-analysis/view';
-import { adjacency, playGrid, traitGrid } from '$lib/policy-analysis/matrix';
+import { adjacency, bodyLinks, playGrid, traitGrid } from '$lib/policy-analysis/matrix';
 import { atlas as atlasRows } from '$lib/policy-analysis/actors';
 import { network } from '$lib/policy-analysis/network';
 import { fixtureModel } from '../../../../tests/fixtures/policy-analysis/model';
@@ -521,6 +521,72 @@ describe('a persona is one body, however many records the library holds', () => 
   it('leaves out actors the library has never met', () => {
     const board = [{ actor: actorOf('s2_001', 'Nobody'), profile: null, plays: [], worst: 0 }];
     expect(view.personaBoard(board, [])).toEqual([]);
+  });
+});
+
+describe('the network tab draws a grid, or says why it cannot', () => {
+  const actorOf = (id: string, label: string) =>
+    artefact(id, 'actor', label, 'x', { entityType: 'agency', aliases: [], mentions: [], ambiguity: '', dates: [], parent: null });
+  const mechOf = (id: string, label: string) => artefact(id, 'mechanism', label, 'x', { operator: null, notes: '' });
+  const edgeOf = (id: string, from: string, to: string, relation: string) =>
+    ({ ...artefact(id, 'edge', relation, 'x', { notes: '' }), fromId: from, toId: to, relation }) as Artefact;
+
+  const star: Artefact[] = [
+    actorOf('gov', 'Government'),
+    actorOf('la', 'Local authorities'),
+    actorOf('kids', 'Beneficiaries'),
+    ...Array.from({ length: 6 }, (_, i) => mechOf(`m${i}`, `Offer ${i}`)),
+    ...Array.from({ length: 6 }, (_, i) => edgeOf(`b${i}`, 'kids', `m${i}`, 'receives_benefit_from')),
+    edgeOf('x1', 'gov', 'la', 'funds'),
+  ];
+  const mesh: Artefact[] = [
+    ...star,
+    edgeOf('y1', 'la', 'gov', 'reports_to'),
+    edgeOf('y2', 'gov', 'kids', 'has_authority_over'),
+    edgeOf('y3', 'kids', 'gov', 'is_accountable_for'),
+    edgeOf('y4', 'la', 'kids', 'delivers'),
+    edgeOf('y5', 'kids', 'la', 'is_measured_by'),
+  ];
+
+  const draw = (all: Artefact[]) => {
+    const net = network(all);
+    return render(AdjacencyGrid, { props: { grid: adjacency(net), links: bodyLinks(net), onopen: inspect } }).body;
+  };
+
+  it('replaces the frame with a list when there is no mesh to draw', () => {
+    // The defect: 144 empty cells under a caption reading "0 of 452 (0%)", which
+    // a reader can only take as a broken chart. One relationship between two
+    // bodies is a finding about the paper, and it is now stated as one.
+    const html = draw(star);
+    expect(html).toContain('This policy is a star, not a mesh');
+    expect(html).not.toContain('<table');
+    expect(html).toContain('Government');
+    expect(html).toContain('Local authorities');
+  });
+
+  it('counts the denominator a reader can act on, not the whole graph', () => {
+    // 6 of the 7 relationships run from a body to a piece of machinery and were
+    // never grid material; saying "1 of 7" invites the wrong conclusion about
+    // the extraction.
+    const html = draw(star);
+    expect(html).toContain('<strong>7</strong>');
+    expect(html).toContain('<strong>1</strong>');
+    expect(html).toContain('run between two bodies');
+  });
+
+  it('draws the grid as soon as the paper wires its bodies together', () => {
+    const html = draw(mesh);
+    expect(html).toContain('<table');
+    expect(html).not.toContain('This policy is a star, not a mesh');
+  });
+
+  it('keeps the family filter and the legend in both states', () => {
+    // The filter narrows the list exactly as it narrows the grid, and the glyphs
+    // mean the same thing on a row as in a cell.
+    for (const html of [draw(star), draw(mesh)]) {
+      expect(html).toContain('pa-seg');
+      expect(html).toContain('data-pa-peek="term:family_authority"');
+    }
   });
 });
 

@@ -19,8 +19,28 @@
  * itself — and every one is computed by walking edges the paper itself asserted.
  * No model runs here, which is why the answers are stable across runs.
  */
+import { AUTO_MERGE_THRESHOLD, findDuplicateCandidates, type ResolvableEntity } from '$lib/jkai/intel/resolve/match';
 import type { Artefact } from './contracts';
 import { RELATION_FAMILIES, familyOf, type RelationFamilyKey } from './glossary';
+
+/**
+ * Which edge endpoints are BODIES, as opposed to the machinery they point at.
+ *
+ * `nodesOf` keeps every endpoint whatever its kind, because an edge list is
+ * about relationships and not about kinds. Everything downstream that says
+ * "bodies" has to narrow it again, and for a while nothing did: the network
+ * header counted 420 "Bodies" on an assessment holding 267 of them, and the
+ * reading headlined "the bodies the policy runs through" named two mechanisms
+ * among its five.
+ *
+ * `node` is admitted because the graph stage's CONTRACT allows a graph node as
+ * an endpoint — not because one has been seen. Across every assessment on the
+ * box at 2026-09-11, 754 `node` artefacts were written and not one was an edge
+ * end; the edges reference the stage-1 and stage-2 ids directly. The contract
+ * decides what an endpoint may be, so the kind stays in.
+ */
+export const BODY_KINDS = new Set(['actor', 'node']);
+export const isBody = (node: { kind: string }) => BODY_KINDS.has(node.kind);
 
 export type Edge = {
   artefact: Artefact;
@@ -155,6 +175,151 @@ function panels(artefacts: Artefact[], edges: Edge[]): FamilyPanel[] {
 const INSIGHT_CAP = 8;
 
 /**
+ * One-entry memo, because `network()` runs in a `$derived` and the dashboard
+ * replaces `data.artefacts` wholesale every six seconds while a run is active.
+ *
+ * MEASURED on the Best Start in Life inventory: `findDuplicateCandidates` over
+ * 267 bodies is 95ms of a 100ms `network()`, against ~5ms for everything else —
+ * a twentyfold regression on a hot path, for a scan whose answer only changes
+ * when a body is added or renamed. `store.ts` carries the same note about the
+ * same poll for the same reason.
+ *
+ * Keyed on the full id-and-label signature, so a hit is the same input and
+ * therefore the same output; safe to share across SSR requests.
+ */
+let duplicateMemo: { key: string; value: Insight['subjects'] } | null = null;
+
+function duplicateBodies(artefacts: Artefact[], nodes: EntityNode[]): Insight['subjects'] {
+  const byId = new Map(artefacts.map((a) => [a.id, a]));
+  const bodies = nodes.filter(isBody);
+  if (bodies.length < 2) return [];
+  const key = bodies.map((n) => `${n.id}\u001f${n.label}`).join('\u001e');
+  if (duplicateMemo?.key === key) return duplicateMemo.value;
+  const value = scanDuplicates(bodies, byId);
+  duplicateMemo = { key, value };
+  return value;
+}
+
+/**
+ * Groups of bodies the site's own matcher says are one body recorded twice.
+ *
+ * `findDuplicateCandidates` is the house function for this exact defect — its
+ * own header names the case, "IBCA" against "Infected Blood Compensation
+ * Authority (IBCA)", where degree is split and every measure taken off the graph
+ * is wrong. It blocks lexically before it scores, so this is a few hundred
+ * comparisons rather than the square of the body count.
+ *
+ * Only pairs at or above `AUTO_MERGE_THRESHOLD` are reported: that is the
+ * confidence the resolver itself calls safe to act on without review, and
+ * anything looser would put a judgement call in front of the reader dressed as a
+ * finding. They are unioned into groups so "Government", "The Government" and
+ * "Government contribution" arrive as one row rather than three pairs.
+ */
+function scanDuplicates(bodies: EntityNode[], byId: Map<string, Artefact>): Insight['subjects'] {
+  const entities: ResolvableEntity[] = bodies.map((n) => {
+    const type = String(byId.get(n.id)?.data?.entityType ?? 'unknown');
+    const aliases = byId.get(n.id)?.data?.aliases;
+    return {
+      id: n.id,
+      name: n.label,
+      typeId: type,
+      typeName: type,
+      degree: n.degree,
+      noteCount: 1,
+      aliases: Array.isArray(aliases) ? (aliases as string[]) : [],
+    };
+  });
+
+  // Union-find, keeping the highest-degree member as the group's face — it is
+  // the one the reader has already met on every other panel.
+  const parent = new Map(entities.map((e) => [e.id, e.id]));
+  const find = (id: string): string => {
+    let root = id;
+    while (parent.get(root) !== root) root = parent.get(root) as string;
+    while (parent.get(id) !== root) {
+      const next = parent.get(id) as string;
+      parent.set(id, root);
+      id = next;
+    }
+    return root;
+  };
+  const degreeOf = new Map(bodies.map((n) => [n.id, n.degree]));
+  for (const pair of findDuplicateCandidates(entities)) {
+    if (pair.confidence < AUTO_MERGE_THRESHOLD) continue;
+    const a = find(pair.aId);
+    const b = find(pair.bId);
+    if (a === b) continue;
+    const [keep, drop] = (degreeOf.get(a) ?? 0) >= (degreeOf.get(b) ?? 0) ? [a, b] : [b, a];
+    parent.set(drop, keep);
+  }
+
+  const groups = new Map<string, string[]>();
+  for (const entity of entities) {
+    const root = find(entity.id);
+    groups.set(root, [...(groups.get(root) ?? []), entity.id]);
+  }
+  const labelOf = new Map(bodies.map((n) => [n.id, n.label]));
+  return [...groups.entries()]
+    .filter(([, members]) => members.length > 1)
+    .map(([root, members]) => {
+      const combined = members.reduce((sum, id) => sum + (degreeOf.get(id) ?? 0), 0);
+      // Identical names are the commonest case here, so the note says how many
+      // copies there are rather than listing the same word back six times.
+      const others = [...new Set(members.filter((id) => id !== root).map((id) => labelOf.get(id) ?? id))];
+      const named = others.filter((name) => name !== labelOf.get(root)).slice(0, 3);
+      const asWell = named.length ? `, also as ${named.join(', ')}` : '';
+      return {
+        id: root,
+        label: labelOf.get(root) ?? root,
+        note: `${members.length} separate bodies${asWell} — ${combined} relationships between them, counted apart`,
+        combined,
+      };
+    })
+    .sort((a, b) => b.combined - a.combined || a.label.localeCompare(b.label))
+    .map(({ combined: _combined, ...subject }) => subject);
+}
+
+/**
+ * Relations that make a body answerable for something rather than merely
+ * involved in it. A body can appear all over a paper as a beneficiary without
+ * that being an attribution; these two are the ones that are.
+ */
+const DUTY_RELATIONS = ['is_accountable_for', 'has_authority_over'];
+
+/**
+ * How many duties a body must carry before nobody pointing back at it is a
+ * finding rather than a thin paper. One or two unanswered duties is the normal
+ * state of a policy document; the case this exists for carried eighteen.
+ */
+const MIN_UNWIRED_DUTIES = 3;
+
+/** Bodies the paper makes answerable for several things while nothing points back at them. */
+function unwiredDuties(edges: Edge[], byId: Map<string, Artefact>): Insight['subjects'] {
+  const inbound = new Set(edges.map((e) => e.toId));
+  const duties = new Map<string, Edge[]>();
+  for (const edge of edges) {
+    if (!DUTY_RELATIONS.includes(edge.relation)) continue;
+    if (inbound.has(edge.fromId)) continue;
+    duties.set(edge.fromId, [...(duties.get(edge.fromId) ?? []), edge]);
+  }
+  return [...duties.entries()]
+    .filter(([, held]) => held.length >= MIN_UNWIRED_DUTIES)
+    .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
+    .map(([id, held]) => {
+      // A contiguous run of pages is the strongest tell that a name was picked
+      // up from the page rather than from the sentence, so it is quoted where
+      // the extraction recorded one.
+      const pages = [...new Set(held.map((e) => e.artefact.page).filter((p): p is number => typeof p === 'number'))].sort((a, b) => a - b);
+      const span = pages.length > 1 ? `, all from pages ${pages[0]}–${pages[pages.length - 1]}` : pages.length === 1 ? `, all from page ${pages[0]}` : '';
+      return {
+        id,
+        label: byId.get(id)?.label ?? id,
+        note: `${held.length} duties attributed${span}; nothing in the paper points back at it`,
+      };
+    });
+}
+
+/**
  * The six structural readings.
  *
  * Each is a MISSING counterpart, which is the only kind of finding a graph can
@@ -172,6 +337,53 @@ function insights(artefacts: Artefact[], edges: Edge[], nodes: EntityNode[]): In
   const push = (key: string, headline: string, reading: string, subjects: Insight['subjects']) => {
     if (subjects.length) out.push({ key, headline, reading, subjects: subjects.slice(0, INSIGHT_CAP) });
   };
+
+  // The two readings below come FIRST because they are caveats on every figure
+  // under them rather than findings beside them. A degree split across six
+  // copies of one body, or a duty hung on the wrong organisation, changes how
+  // the six structural readings should be read — so a reader has to meet them
+  // before the readings and not after. Both are conditional: a clean assessment
+  // renders neither.
+
+  // 0a — the same body, recorded more than once.
+  //
+  // Measured on Best Start in Life (2026-09-11): 267 bodies held 21 groups the
+  // site's own matcher puts at or above its auto-merge threshold, six of them
+  // literally the word "Government" and seven "Local authorities". Each copy
+  // carries its own degree, so the busiest institution in the paper ranked ninth.
+  //
+  // REPORTED, NEVER MERGED, and that is the whole design. Folding them was
+  // measured too: it moves the best possible bodies-against-bodies grid from
+  // four live cells to five, while three of the eight largest groups visibly
+  // conflate distinct bodies — "Schools" swallowing "early years settings". This
+  // codebase has paid for a conflated hub before; it invents adjacency, which is
+  // worse than a duplicate. So the reader is told, and the reader decides.
+  push(
+    'duplicate-bodies',
+    'Bodies the paper appears to name more than once',
+    'Each copy carries its own share of the relationships, so every count on this page is split between them and the busiest institutions rank lower than they are. The site’s identity rules put these at or above the confidence it treats as safe to merge — which is evidence for a look, never proof of identity.',
+    duplicateBodies(artefacts, nodes),
+  );
+
+  // 0b — a duty attributed to a body the paper never wires up.
+  //
+  // Nesta, on the same assessment: eighteen `is_accountable_for` edges covering
+  // the workforce chapter — teacher-training supply, retention incentives, the
+  // qualifications checker — and an in-degree of zero. Nothing funds it, directs
+  // it, depends on it or answers to it. A charity cited in the evidence had been
+  // handed the department's commitments, and it was the second-busiest body on
+  // the page.
+  //
+  // The shape is the finding, not the diagnosis: a body carrying duties that
+  // nothing in the document points back at is either a real accountability gap
+  // or an attribution that landed on the nearest named organisation, and both
+  // are worth the reader's eye before anything downstream rests on it.
+  push(
+    'attributed-but-unconnected',
+    'Carries duties the paper never wires up',
+    'These bodies are made accountable for something, or given authority over it, and nothing in the paper runs back the other way — no money, no direction, no dependence, no reporting line. Either the document leaves the arrangement unstated, or the duty was attributed to a body that happened to be named nearby.',
+    unwiredDuties(edges, byId),
+  );
 
   // 1 — authority with nobody answering for its use.
   const wieldsAuthority = ends(['has_authority_over', 'can_veto', 'sanctions', 'appoints', 'regulates'], 'from');
@@ -221,11 +433,31 @@ function insights(artefacts: Artefact[], edges: Edge[], nodes: EntityNode[]): In
   );
 
   // 4 — the bodies everything runs through.
+  //
+  // FILTERED TO BODIES, which the headline has always claimed and the code did
+  // not do. `nodes` is every endpoint of any kind, so on the Best Start in Life
+  // assessment of 2026-09-11 two of the five "bodies the policy runs through"
+  // were mechanisms — "Tailored support after inspections", "Enhanced reception
+  // offer". Both are genuinely load-bearing and both are machinery, which is a
+  // different reading and now has its own card.
+  const bodies = nodes.filter(isBody);
+  const machinery = nodes.filter((n) => !isBody(n));
   push(
     'load-bearing',
     'The bodies the policy runs through',
     'Most relationships in the paper touch these. That makes each of them a single point of failure whether or not anyone sets out to exploit it.',
-    nodes.slice(0, 5).map((n) => ({ id: n.id, label: n.label, note: `${n.degree} relationships — ${n.out} out, ${n.in} in` })),
+    bodies.slice(0, 5).map((n) => ({ id: n.id, label: n.label, note: `${n.degree} relationships — ${n.out} out, ${n.in} in` })),
+  );
+
+  // 4b — and the machinery, which on a paper written as beneficiaries-and-
+  // delivery is the busier half by some distance. A duty or a payment that
+  // everything hangs off is a single point of failure in exactly the way a body
+  // is, and the graph can see it for the same reason.
+  push(
+    'load-bearing-machinery',
+    'The machinery the policy runs through',
+    'Not bodies but duties, payments, offers and measures. Where a paper wires far more relationships into its machinery than between its institutions, these are what a play actually aims at.',
+    machinery.slice(0, 5).map((n) => ({ id: n.id, label: n.label, note: `${n.degree} relationships — ${n.out} out, ${n.in} in` })),
   );
 
   // 5 — one-way relationships nothing answers.

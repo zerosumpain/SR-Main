@@ -24,7 +24,7 @@
  */
 import { PROFILE_FIELDS, type Artefact } from './contracts';
 import { familyOf, RELATION_FAMILIES, type RelationFamilyKey } from './glossary';
-import type { Edge, Network } from './network';
+import { isBody, type Edge, type Network } from './network';
 import type { ActorView, Play } from './view';
 
 /**
@@ -249,7 +249,7 @@ export type AdjacencyCell = {
 
 export type Adjacency = {
   /** Both axes; rows are the "from" end. */
-  bodies: { id: string; label: string; entityType: string; degree: number }[];
+  bodies: { id: string; label: string; entityType: string; degree: number; links: number }[];
   /** `rows[i][j]` is the relationship from `bodies[i]` to `bodies[j]`, or null. */
   rows: (AdjacencyCell | null)[][];
   /** Bodies not drawn, because the grid was capped. */
@@ -257,28 +257,135 @@ export type Adjacency = {
   /** Edges whose ends are both drawn — the share of the graph the grid shows. */
   shown: number;
   total: number;
+  /**
+   * Relationships with a body at BOTH ends — the most a bodies-against-bodies
+   * grid could ever place, however the cap is set.
+   *
+   * Reported because `shown` against `total` is not the reader's question and
+   * on a star-shaped policy it is actively misleading: "0 of 452 (0%)" invites
+   * the conclusion that the extraction failed, when 420 of those 452 run from a
+   * body to a piece of machinery and were never grid material.
+   */
+  placeable: number;
   /** Pairs the paper states in one direction only. */
   oneWay: number;
   /** Pairs stated in both. */
   reciprocal: number;
+  /** False when the drawn grid holds too little structure to read as a shape. */
+  legible: boolean;
 };
 
+/**
+ * How many relationships a grid must place before it is a picture rather than
+ * an empty frame.
+ *
+ * Measured on the Best Start in Life assessment of 2026-09-11: 452 stated
+ * relationships, of which 32 run body-to-body, spread thinly enough that the
+ * best possible twelve-by-twelve grid places four of them. The page drew 144
+ * empty cells under a caption reading "0 of 452 (0%)", which reads as a broken
+ * chart rather than as the finding it is — a strategy written as beneficiaries
+ * and machinery has no mesh to draw.
+ *
+ * Six is two rows' worth of structure. Below it there is nothing for the eye to
+ * run down and the ranked list carries the same content without the frame.
+ */
+export const MIN_GRID_EDGES = 6;
+
 const FAMILY_ORDER = RELATION_FAMILIES.map((f) => f.key) as RelationFamilyKey[];
+
+/** One ordered pair of bodies, with every relationship the paper states between them. */
+export type BodyLink = {
+  fromId: string;
+  fromLabel: string;
+  toId: string;
+  toLabel: string;
+  families: RelationFamilyKey[];
+  relations: string[];
+  ids: string[];
+  /** True when the paper also states the return leg. */
+  reciprocated: boolean;
+};
+
+/**
+ * Every body-to-body relationship, one row per ordered pair.
+ *
+ * What the grid degrades to when there is no mesh to draw. Same content, same
+ * ordering question — busiest pair first — without asking the reader to find
+ * five live cells in a hundred and forty-four.
+ */
+export function bodyLinks(net: Network): BodyLink[] {
+  const bodies = new Set(net.nodes.filter(isBody).map((n) => n.id));
+  const label = new Map(net.nodes.map((n) => [n.id, n.label]));
+  const pairs = new Map<string, BodyLink>();
+  for (const edge of net.edges) {
+    if (!bodies.has(edge.fromId) || !bodies.has(edge.toId) || edge.fromId === edge.toId) continue;
+    const key = `${edge.fromId}|${edge.toId}`;
+    let link = pairs.get(key);
+    if (!link) {
+      link = {
+        fromId: edge.fromId,
+        fromLabel: label.get(edge.fromId) ?? edge.fromId,
+        toId: edge.toId,
+        toLabel: label.get(edge.toId) ?? edge.toId,
+        families: [],
+        relations: [],
+        ids: [],
+        reciprocated: false,
+      };
+      pairs.set(key, link);
+    }
+    const family = edge.family ?? familyOf(edge.relation);
+    if (family && !link.families.includes(family)) link.families.push(family);
+    if (!link.relations.includes(edge.relation)) link.relations.push(edge.relation);
+    link.ids.push(edge.artefact.id);
+  }
+  for (const link of pairs.values()) {
+    link.reciprocated = pairs.has(`${link.toId}|${link.fromId}`);
+    link.families.sort((a, b) => FAMILY_ORDER.indexOf(a) - FAMILY_ORDER.indexOf(b));
+  }
+  return [...pairs.values()].sort(
+    (a, b) => b.ids.length - a.ids.length || a.fromLabel.localeCompare(b.fromLabel) || a.toLabel.localeCompare(b.toLabel),
+  );
+}
 
 export function adjacency(net: Network, limit = 12): Adjacency {
   // Only bodies, never mechanisms or measures: an adjacency grid of mixed kinds
   // reads as a matrix of everything against everything, which is not a question
   // anybody asks. `nodesOf` keeps the artefact kind for exactly this.
+  //
+  // RANKED BY THE DEGREE THE GRID CAN DRAW, not by total degree, and the
+  // difference is the whole cap. Total degree is dominated by the edges this
+  // grid throws away — on Best Start in Life, 420 of 452 relationships run from
+  // a body to a piece of machinery — so ranking on it selects the twelve bodies
+  // busiest at pointing AT machinery, which are close to the twelve least likely
+  // to point at each other. It chose "Children" (27 relationships, 26 of them
+  // benefits received) and "Nesta" over "Local authorities" and "Government",
+  // and placed none of the 32 body-to-body links: the first would have needed a
+  // cap of 20, all 32 a cap of 263.
+  const bodies = new Set(net.nodes.filter(isBody).map((n) => n.id));
+  const placeableEdges = net.edges.filter((e) => bodies.has(e.fromId) && bodies.has(e.toId) && e.fromId !== e.toId);
+  const links = new Map<string, number>();
+  for (const edge of placeableEdges) {
+    links.set(edge.fromId, (links.get(edge.fromId) ?? 0) + 1);
+    links.set(edge.toId, (links.get(edge.toId) ?? 0) + 1);
+  }
   const candidates = net.nodes
-    .filter((n) => n.kind === 'actor' || n.kind === 'node')
-    .sort((a, b) => b.degree - a.degree || a.label.localeCompare(b.label));
+    .filter(isBody)
+    .sort(
+      (a, b) =>
+        (links.get(b.id) ?? 0) - (links.get(a.id) ?? 0) || b.degree - a.degree || a.label.localeCompare(b.label),
+    );
   const drawn = candidates.slice(0, limit);
   const omitted = candidates.slice(limit).map((n) => ({ id: n.id, label: n.label, degree: n.degree }));
   const index = new Map(drawn.map((n, i) => [n.id, i]));
 
   const rows: (AdjacencyCell | null)[][] = drawn.map(() => drawn.map(() => null));
   let shown = 0;
-  for (const edge of net.edges) {
+  // Walks the PLACEABLE edges, not every edge: a body related to itself would
+  // otherwise land on the diagonal and count towards `shown`, which the caption
+  // then reports against a `placeable` that excluded it — two numbers for one
+  // quantity, in the one place the grid promises the diagonal is empty.
+  for (const edge of placeableEdges) {
     const from = index.get(edge.fromId);
     const to = index.get(edge.toId);
     if (from === undefined || to === undefined) continue;
@@ -310,13 +417,21 @@ export function adjacency(net: Network, limit = 12): Adjacency {
   }
 
   return {
-    bodies: drawn.map((n) => ({ id: n.id, label: n.label, entityType: n.entityType, degree: n.degree })),
+    bodies: drawn.map((n) => ({
+      id: n.id,
+      label: n.label,
+      entityType: n.entityType,
+      degree: n.degree,
+      links: links.get(n.id) ?? 0,
+    })),
     rows,
     omitted,
     shown,
     total: net.edges.length,
+    placeable: placeableEdges.length,
     oneWay,
     reciprocal,
+    legible: shown >= MIN_GRID_EDGES,
   };
 }
 
@@ -352,8 +467,19 @@ export function cellSentence(fromLabel: string, toLabel: string, cell: Adjacency
   return `${opening}, and ${rest.length === 1 ? 'one more relationship' : `${rest.length} more relationships`}.`;
 }
 
-/** Every edge the grid could not place, so the caller can say so honestly. */
+/**
+ * Body-to-body relationships the cap left off the grid, so the caller can say so
+ * honestly.
+ *
+ * Narrowed to the placeable ones on purpose: counting the 420 body-to-machinery
+ * relationships as "unplaced" describes the grid's subject rather than its cap,
+ * and reads as a much bigger omission than the one the reader can do anything
+ * about.
+ */
 export function unplacedEdges(net: Network, grid: Adjacency): Edge[] {
   const drawn = new Set(grid.bodies.map((b) => b.id));
-  return net.edges.filter((e) => !drawn.has(e.fromId) || !drawn.has(e.toId));
+  const bodies = new Set(net.nodes.filter(isBody).map((n) => n.id));
+  return net.edges.filter(
+    (e) => bodies.has(e.fromId) && bodies.has(e.toId) && e.fromId !== e.toId && (!drawn.has(e.fromId) || !drawn.has(e.toId)),
+  );
 }

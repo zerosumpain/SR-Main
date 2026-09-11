@@ -40,8 +40,8 @@
   import * as view from '$lib/policy-analysis/view';
   import { TABS, tabGroups } from '$lib/policy-analysis/view';
   import { atlas } from '$lib/policy-analysis/actors';
-  import { adjacency, playGrid, traitGrid } from '$lib/policy-analysis/matrix';
-  import { network } from '$lib/policy-analysis/network';
+  import { adjacency, bodyLinks, playGrid, traitGrid } from '$lib/policy-analysis/matrix';
+  import { isBody, network } from '$lib/policy-analysis/network';
   import { leverage } from '$lib/policy-analysis/stress';
   import { peekHandlers, policyPeek } from '$lib/policy-analysis/peek.svelte';
   import type { Band } from '$lib/policy-analysis/view';
@@ -152,6 +152,7 @@
   });
   const net = $derived(network(artefacts));
   const adj = $derived(adjacency(net));
+  const links = $derived(bodyLinks(net));
   const checks = $derived(view.checks(artefacts));
   const tiles = $derived(view.tiles(artefacts, plays));
   const headline = $derived(view.headline(artefacts));
@@ -484,9 +485,14 @@
       title={['What the paper', 'wires together']}
       strap="Every relationship the document states, grouped by what it does rather than by the twenty-six names the vocabulary uses. The readings that lead are the counterparts the paper leaves out."
       figures={[
-        { label: 'Bodies', value: net.nodes.length },
+        // `net.nodes` is every edge END, of every kind. Labelled "Bodies" it read
+        // 420 on an assessment holding 267 of them, the difference being the
+        // mechanisms and claims the paper points at — a figure worth having, but
+        // under its own name.
+        { label: 'Bodies', value: net.nodes.filter(isBody).length },
+        { label: 'Machinery', value: net.nodes.filter((n) => !isBody(n)).length },
         { label: 'Relationships', value: net.edges.length },
-        { label: 'Families', value: net.families.length },
+        { label: 'Between bodies', value: adj.placeable },
         { label: 'Readings', value: net.insights.length },
       ]}
     />
@@ -498,7 +504,7 @@
         across the diagonal is a link the paper states one way only. The prose
         readings and the family breakdown follow it.
       -->
-      <AdjacencyGrid grid={adj} onopen={open} />
+      <AdjacencyGrid grid={adj} {links} onopen={open} />
       <RelationshipMap {net} onopen={open} />
     {:else}
       <p class="ab-empty">
