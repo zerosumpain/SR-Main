@@ -197,7 +197,6 @@ export const dataSchemas = {
   actor: z.object({ entityType: z.enum(['person', 'department', 'agency', 'local_authority', 'provider', 'contractor', 'programme', 'dataset', 'legislation', 'committee', 'user_group', 'geography', 'concept']), aliases: strings, mentions: ids, ambiguity: text, dates: strings, parent: z.string().nullable() }),
   alias: z.object({ actorId: text }),
   resolution_candidate: z.object({ candidates: ids.min(2), reason: text, resolved: z.literal(false) }),
-  node: z.object({ entityId: text }),
   edge: z.object({ notes: text }),
   // `coversActorIds` is stamped by the SERVER after the call, never asked of the
   // model: entity resolution deliberately refuses to merge rows that share a
@@ -296,7 +295,7 @@ export const stageOutputSchema = z.object({ artefacts: z.array(artefactSchema).m
 // a row.
 export const STAGE_KINDS: Kind[][] = [
   ['passage'], ['claim', 'mechanism', 'assumption', 'actor'], ['actor', 'alias', 'resolution_candidate'],
-  ['node', 'edge'], ['profile'], ['research_question', 'research_source'], ['evidence'], ['model', 'assumption'], ['test'], ['scenario', 'assumption'],
+  ['edge'], ['profile'], ['research_question', 'research_source'], ['evidence'], ['model', 'assumption'], ['test'], ['scenario', 'assumption'],
   ['exploit', 'assumption'], ['cross_policy'], ['finding', 'recommendation', 'assumption'], ['persona_link'],
 ];
 export function artefact(id: string, kind: Kind, label: string, statement: string, data: Record<string, unknown>, overrides: Partial<Artefact> = {}): Artefact {

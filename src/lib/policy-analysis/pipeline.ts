@@ -488,7 +488,7 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     if (missed.length) output.warnings.push(`${missed.length} of ${mentions.length} source mentions were never resolved into a named body: ${missed.slice(0, 8).map((m) => m.label).join(', ')}${missed.length > 8 ? `, and ${missed.length - 8} more` : ''}. Those actors are absent from the graph, the profiles and the red team.`);
   }
   if (stage === 3) {
-    if (kinds('node', 'edge').length) throw new PolicyError('coverage', 'The graph stage did not produce inspectable nodes and relationships.');
+    if (kinds('edge').length) throw new PolicyError('coverage', 'The graph stage did not produce any inspectable relationships.');
     // "One node and one edge survived" is not a graph. Every later structural
     // check reads this stage's output, so losing the majority of it here would be
     // laundered into confident-looking verdicts drawn from almost nothing.
@@ -619,14 +619,63 @@ export function rankActors(all: Artefact[], profiles: Artefact[]): { actors: Art
 }
 
 /**
- * The share of resolved actors the graph never gave a node. Computed here as
- * well as in the worker so the stage is honest when run directly — a test, a
- * replay, or any caller that did not pipe `graphLoss` in.
+ * The share of resolved actors the graph never said anything ABOUT.
+ *
+ * MEASURED FROM EDGES, and it used to be measured from `node` artefacts —
+ * records the graph stage was asked to emit alongside its edges, one per entity
+ * it touched, which nothing in the application ever rendered. Two things were
+ * wrong with counting them:
+ *
+ *   THEY COUNTED THE WRONG POPULATION. A node was emitted for a mechanism and a
+ *   claim as readily as for an actor, and the ratio was taken against the actor
+ *   count alone, then clamped at 1. Best Start in Life held 712 nodes for 511
+ *   resolved actors, so the ratio was 1.39, the clamp made it 1, and this
+ *   returned ZERO uncovered — perfect coverage — for a graph whose edges reached
+ *   267 of those 511 bodies. The synthetic library assessment reported zero the
+ *   same way on 4 of 11.
+ *
+ *   A NODE WAS NEVER COVERAGE. The checks read EDGES. A record saying "this
+ *   entity is in the graph", with no relationship attached, tells a structural
+ *   check about authority, funding or accountability precisely nothing.
+ *
+ * So the guard written to stop a verdict being drawn from a fragment was being
+ * fed the one number that could not see the fragment, and on two of five live
+ * assessments it reported full coverage while half the policy's bodies had no
+ * stated relationship at all. Best Start's twelve checks returned four
+ * `high_risk` and six `moderate_risk` verdicts from that graph.
+ *
+ * COUNTED PER CANONICAL LABEL GROUP, not per row, because that is the unit this
+ * stage works in: it makes one call per group and hands that call every member's
+ * evidence. Entity resolution deliberately refuses to merge rows that merely
+ * share a name, so one body arrives here as several candidate rows — 479 of Best
+ * Start in Life's 511 were `_candidate_` splits — and a graph that wires the body
+ * once has covered it. Per row that same graph reads as 47.7% uncovered and
+ * would gut its own checks; per group it is 14.2%, which is what actually
+ * happened: 248 of 289 groups carry a relationship.
+ *
+ * The population that matters is unchanged for the case this guard exists for.
+ * The Post-16 white paper's graph reached three bodies out of 352 rows, and it is
+ * still far past the ceiling however they are grouped.
+ *
+ * Exported because the worker needs the same number before the stage runs, and
+ * it used to carry its own copy of the arithmetic.
  */
-function graphUncovered(all: Artefact[]): number {
-  const actors = all.filter((a) => a.kind === 'actor' && a.id.startsWith('s2_')).length;
-  const nodes = all.filter((a) => a.kind === 'node').length;
-  return actors > 0 ? 1 - Math.min(1, nodes / actors) : 0;
+export function graphUncovered(all: Artefact[]): number {
+  const actors = all.filter((a) => a.kind === 'actor' && a.id.startsWith('s2_'));
+  if (!actors.length) return 0;
+  const reached = new Set<string>();
+  for (const edge of all) {
+    if (edge.kind !== 'edge') continue;
+    for (const end of [edge.fromId, edge.toId]) if (end) reached.add(end);
+  }
+  // The same key the stage groups its fan-out by, so the two cannot drift.
+  const groups = new Map<string, boolean>();
+  for (const actor of actors) {
+    const key = actor.label.trim().toLowerCase();
+    groups.set(key, (groups.get(key) ?? false) || reached.has(actor.id));
+  }
+  const covered = [...groups.values()].filter(Boolean).length;
+  return 1 - covered / groups.size;
 }
 
 export function priority(a: Artefact): number {
