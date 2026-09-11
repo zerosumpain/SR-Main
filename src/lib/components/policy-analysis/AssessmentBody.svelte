@@ -244,10 +244,20 @@
   <nav class="ab-rail" aria-label="The assessment">
     <div class="ab-rail-inner" role="tablist" aria-label="Workspaces">
       {#each groups as group (group.group)}
+        {@const shown = group.tabs.filter((t) => visibleTabs.some((v) => v.id === t.id))}
         <div class="ab-group">
-          <!-- "The threat" → "THREAT". The article costs 4 characters of mono
-               in five places, which is a third of a rail row. -->
-          <p class="ab-group-name">{group.group.replace(/^The /, '')}</p>
+          <!--
+            A CAP ONLY WHERE THERE IS SOMETHING TO GROUP. "The verdict" holds one
+            cell, also called Verdict, and "VERDICT │ Verdict" reads as a
+            mistake. Counted over the tabs that RENDERED — the shared copy is
+            missing two of the assessment group's four.
+
+            "The threat" → "THREAT": the article costs four characters of mono in
+            five places, which is a third of a rail row.
+          -->
+          {#if shown.length > 1}
+            <p class="ab-group-name">{group.group.replace(/^The /, '')}</p>
+          {/if}
           <div class="ab-group-cells">
             {#each group.tabs as t (t.id)}
               {#if visibleTabs.some((v) => v.id === t.id)}
@@ -346,7 +356,7 @@
     >
       {#snippet controls()}
         {#if plays.length}
-          <div class="ab-filter">
+          <div class="ab-filter pa-seg">
             <span class="ab-filter-label">Showing</span>
             <button type="button" class:on={bandFilter === null && !actorFilter} onclick={() => { bandFilter = null; actorFilter = null; }}>
               All {plays.length}
@@ -768,47 +778,87 @@
     display: flex;
     flex-wrap: wrap;
     align-items: stretch;
+    /* A 1px row gap over a ruled ground is the rule BETWEEN wrapped rows. Three
+       rows of cells with nothing between them read as one block of text, and
+       flex gives no way to select a wrapped row directly. */
+    row-gap: 1px;
+    background: var(--line-strong);
+    /* CONTENT BOX. The inner also carries the measure's side padding, and a
+       ruled ground painted under that showed as two grey bars in the gutters at
+       any width above the measure. */
+    background-clip: content-box;
+  }
+  .ab-group {
+    background: var(--bg);
   }
   /*
-   * A GROUP IS A RUN, NOT A COLUMN.
+   * A GROUP IS A BLOCK, AND A BLOCK NEVER BREAKS.
    *
-   * It used to be a two-storey box — the group name over its cells — with a
-   * vertical rule between groups. Fourteen cells wrap to three rows on a
-   * laptop, and three rows of two-storey boxes put the rules in arbitrary
-   * places and cost 140px of a sticky bar. Laid out as a single wrapping strip
-   * the rail reads the same whatever it wraps to, and takes two rows.
+   * Three layouts, and the difference between them is worth recording. Stacked
+   * two-storey boxes wrapped their vertical rules into arbitrary places. A
+   * single flowing strip fixed that but put each group's label mid-row, so a
+   * section could start halfway across the rail and continue on the next line —
+   * "a little disorganised", and fairly. A label STRIP above its cells grouped
+   * them properly and cost 198px of a sticky bar, which is a fifth of a laptop
+   * viewport.
+   *
+   * So: the label is a CAP on the left of its own cells, inside a bordered
+   * block. `min-width: max-content` means a block can never split across two
+   * lines, and `flex: 1 1 auto` means every line fills the measure rather than
+   * trailing off. One cell row tall — the height the flowing strip cost — and
+   * every section visibly bounded.
    */
   .ab-group {
     display: flex;
     align-items: stretch;
-    min-width: 0;
+    flex: 1 1 auto;
+    /* Never narrower than its own label and cells: a block that wrapped
+       internally would be taller than its neighbours and the row would stop
+       tiling. */
+    min-width: max-content;
+    border-left: 1px solid var(--line-strong);
+  }
+  /* The rule belongs BETWEEN blocks; the rail's own edges are the band's. */
+  .ab-group:first-child {
+    border-left: 0;
   }
   .ab-group-name {
     display: flex;
     align-items: center;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
-    letter-spacing: 0.16em;
+    font-weight: 500;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: var(--text-ghost);
+    color: var(--text-muted);
     margin: 0;
-    padding: 0 10px 0 0;
+    padding: 0 10px;
     white-space: nowrap;
-    border-left: 1px solid var(--line-strong);
-    padding-left: 12px;
-  }
-  .ab-group:first-child .ab-group-name {
-    border-left: 0;
-    padding-left: 0;
+    /* A ground, so the cap reads as the section's name rather than as another
+       cell you could press. */
+    background: var(--surface-sunken);
   }
   .ab-group-cells {
     display: flex;
     flex: 1;
+    align-items: stretch;
   }
+  /*
+   * A CELL, not a word. Every cell used to be bare text on cream with no
+   * boundary and no ground, so the rail read as a sentence rather than as a set
+   * of controls — the "too subtle" half of the complaint. Each cell now has a
+   * hairline between it and its neighbour, a filled hover, and a selected state
+   * that is accent ink under a full-height bar.
+   */
   .ab-tab {
     display: flex;
-    align-items: baseline;
-    gap: 7px;
+    flex: 1 1 auto;
+    align-items: center;
+    /* LEFT, not `space-between`. Cells stretch so that every wrapped row fills
+       the measure, and pushing the count to the cell's far edge then opened a
+       40-character gap between "What if we are wrong" and its 5. */
+    justify-content: flex-start;
+    gap: 9px;
     font: inherit;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
@@ -817,11 +867,15 @@
     background: none;
     border: 0;
     border-radius: 0;
-    border-top: 2px solid transparent;
-    padding: 7px 9px 8px;
+    border-left: 1px solid var(--line-hair);
+    padding: 8px 11px 9px;
     color: var(--text-secondary);
     cursor: pointer;
     white-space: nowrap;
+    transition: background 0.12s ease-out, color 0.12s ease-out;
+  }
+  .ab-group-cells .ab-tab:first-child {
+    border-left: 0;
   }
   .ab-tab:hover {
     background: var(--surface-sunken);
@@ -829,19 +883,24 @@
   }
   .ab-tab.on {
     background: var(--accent);
-    border-top-color: var(--accent);
+    color: var(--bg);
+  }
+  .ab-tab.on:hover {
+    background: var(--accent-hover);
     color: var(--bg);
   }
   .ab-tab:focus-visible {
     outline: 2px solid var(--accent-ink);
     outline-offset: -3px;
   }
+  /* A count is a figure, so it sits apart from the name and keeps tabular
+     digits — and it is readable now rather than a ghost. */
   .ab-tab-count {
-    color: var(--text-ghost);
+    color: var(--text-muted);
     font-variant-numeric: tabular-nums;
   }
   .ab-tab.on .ab-tab-count {
-    color: rgba(237, 228, 212, 0.75);
+    color: rgba(237, 228, 212, 0.78);
   }
 
   .ab-strap {
@@ -883,40 +942,14 @@
     display: none;
   }
 
-  .ab-filter {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 7px;
-    align-items: center;
-  }
+  /* Layout, hover and selected states come from `.pa-seg` in the layout — one
+     definition shared with the atlas and the network. */
   .ab-filter-label {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     letter-spacing: var(--tracking-label);
     text-transform: uppercase;
     color: var(--text-muted);
-  }
-  .ab-filter button {
-    font: inherit;
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: var(--tracking-label);
-    text-transform: uppercase;
-    background: var(--surface-sunken);
-    border: 1px solid var(--line-strong);
-    border-radius: 0;
-    padding: 6px 10px;
-    color: var(--text-secondary);
-    cursor: pointer;
-  }
-  .ab-filter button:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-  .ab-filter button.on {
-    background: var(--text-primary);
-    border-color: var(--text-primary);
-    color: var(--bg);
   }
   .ab-filter-actor {
     text-transform: none;

@@ -70,6 +70,75 @@
   :global(.policy-page > .pa-band) { padding-inline: 0; }
   /* The block padding the old wrapper carried, for a page that is all prose. */
   :global(.policy-page .pa-sheet) { padding-block: clamp(1rem, 3vw, 2.75rem); }
+  /*
+   * THE SEGMENTED CONTROL, DEFINED ONCE.
+   *
+   * The playbook's band filter, the atlas's measure switcher and the network's
+   * family filter were three near-identical copies of one control — mono chips
+   * on a tint with a hairline, which on a cream page reads as a caption rather
+   * than as something you can press. A container takes `.pa-seg` and its
+   * buttons are styled here, so there is one definition to change and the three
+   * rows can no longer drift apart.
+   *
+   * The state language matches the workspace rail: HOVER is a change of ground,
+   * SELECTED is the accent fill. Nothing is signalled by colour alone — a
+   * selected chip is also the only filled one in its row.
+   */
+  :global(.policy-page .pa-seg) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    /* No column gap: the buttons share edges. The row gap is for when the run
+       wraps, and the label gets its own margin below. */
+    column-gap: 0;
+    row-gap: 8px;
+  }
+  /* Every one of these rows opens with a mono label — "Showing", "Rank by",
+     "Show" — which is not part of the control and needs the space back. */
+  :global(.policy-page .pa-seg > :not(button):first-child) {
+    margin-right: 11px;
+  }
+  :global(.policy-page .pa-seg > button) {
+    font: inherit;
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    background: var(--surface-elevated);
+    border: 1px solid var(--line-strong);
+    border-radius: 0;
+    padding: 6px 10px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.12s ease-out, border-color 0.12s ease-out, color 0.12s ease-out;
+  }
+  /* Buttons in a run share edges, so the run reads as one control rather than
+     as a handful of loose words. */
+  :global(.policy-page .pa-seg > button + button) {
+    margin-left: -1px;
+  }
+  :global(.policy-page .pa-seg > button:hover),
+  :global(.policy-page .pa-seg > button:focus-visible) {
+    z-index: 1;
+    background: var(--surface-sunken);
+    border-color: var(--text-primary);
+    color: var(--text-primary);
+  }
+  :global(.policy-page .pa-seg > button.on) {
+    z-index: 1;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg);
+  }
+  :global(.policy-page .pa-seg > button.on:hover) {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+    color: var(--bg);
+  }
   :global(.policy-page h1) { font-family: var(--font-display); font-size: clamp(2rem, 5vw, 3.8rem); line-height: 1.06; overflow-wrap: anywhere; margin: 1rem 0; }
   :global(.policy-page h2) { font-family: var(--font-display); font-size: var(--fs-display-xs); margin: 1.5rem 0 1rem; }
   :global(.policy-page p) { line-height: 1.65; max-width: 75ch; }

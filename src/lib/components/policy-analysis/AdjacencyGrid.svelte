@@ -56,7 +56,7 @@
 </script>
 
 <div class="ag">
-  <div class="ag-controls">
+  <div class="ag-controls pa-seg">
     <span class="ag-controls-label">Show</span>
     <button type="button" class:on={only === null} onclick={() => (only = null)}>Every link</button>
     {#each RELATION_FAMILIES as family (family.key)}
@@ -168,11 +168,8 @@
     margin-top: clamp(14px, 1.8vw, 20px);
   }
 
+  /* `.pa-seg` in the layout owns the layout and the states. */
   .ag-controls {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
     margin-bottom: 12px;
   }
   .ag-controls-label {
@@ -181,32 +178,6 @@
     letter-spacing: var(--tracking-label);
     text-transform: uppercase;
     color: var(--text-muted);
-    margin-right: 4px;
-  }
-  .ag-controls button {
-    font: inherit;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: var(--tracking-label);
-    text-transform: uppercase;
-    background: none;
-    border: 1px solid var(--line-strong);
-    border-radius: 0;
-    padding: 4px 8px;
-    color: var(--text-secondary);
-    cursor: pointer;
-  }
-  .ag-controls button:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-  .ag-controls button.on {
-    background: var(--text-primary);
-    border-color: var(--text-primary);
-    color: var(--bg);
   }
 
   .ag-caption {

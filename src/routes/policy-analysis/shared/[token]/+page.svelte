@@ -122,13 +122,20 @@
   </div>
 </div>
 
+<!-- One labelled cluster, the same shape as the owner page's — three buttons
+     sharing edges under the word that says what they are for. -->
 <div class="sh-bar pa-band">
   <div class="sh-bar-inner">
-  <button class="sh-btn sh-primary" disabled={exporting} onclick={() => exportDoc('docx')}>
-    {exporting ? 'Rendering…' : '↓ Word (.docx)'}
-  </button>
-  <button class="sh-btn" onclick={printNow}>Print or save as PDF</button>
-  <button class="sh-btn sh-ghost" onclick={() => exportDoc('md')}>Markdown</button>
+    <div class="sh-cluster">
+      <p class="sh-cluster-label">Take it away</p>
+      <div class="sh-btns">
+        <button class="sh-btn sh-primary" disabled={exporting} onclick={() => exportDoc('docx')}>
+          {exporting ? 'Rendering…' : '↓ Word'}
+        </button>
+        <button class="sh-btn" onclick={printNow}>Print / PDF</button>
+        <button class="sh-btn" onclick={() => exportDoc('md')}>Markdown</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -254,29 +261,59 @@
   .sh-bar-inner {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
-    gap: 9px;
+    align-items: flex-end;
+    gap: 14px clamp(20px, 3vw, 40px);
     padding-block: 12px;
   }
+  .sh-cluster {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+  .sh-cluster-label {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-weight: 500;
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  /* Shared edges: one control with three positions, not three loose words. */
+  .sh-btns {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .sh-btns > .sh-btn + .sh-btn {
+    margin-left: -1px;
+  }
+  /* A ground, not a hairline on cream — see the owner page's note. */
   .sh-btn {
     font: inherit;
+    position: relative;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     letter-spacing: var(--tracking-label);
     text-transform: uppercase;
-    background: none;
+    background: var(--surface-elevated);
     border: 1px solid var(--line-strong);
     border-radius: 0;
     padding: 8px 13px;
     color: var(--text-primary);
     cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.12s ease-out, border-color 0.12s ease-out, color 0.12s ease-out;
   }
   .sh-btn:hover:not(:disabled),
   .sh-btn:focus-visible {
-    border-color: var(--accent);
-    color: var(--accent);
+    z-index: 1;
+    background: var(--text-primary);
+    border-color: var(--text-primary);
+    color: var(--bg);
   }
   .sh-btn:disabled {
+    background: none;
     color: var(--text-ghost);
     border-color: var(--divider);
     cursor: default;
@@ -290,12 +327,6 @@
     background: var(--accent-hover);
     border-color: var(--accent-hover);
     color: var(--bg);
-  }
-  .sh-ghost {
-    border-color: transparent;
-    color: var(--accent-ink);
-    text-decoration: underline;
-    padding-inline: 4px;
   }
 
   .sh-alert {

@@ -323,35 +323,67 @@
   reaches for them: take it away, share it, then the run's own machinery. Export
   and print lead because they are what a finished assessment is FOR.
 -->
+<!--
+  THE ACTION BAR, IN LABELLED CLUSTERS.
+  It was one undifferentiated row — three export controls, two run controls and
+  a line of cost prose, all the same weight, with "Markdown" as an underlined
+  ghost that read as body copy. Each cluster now says what it is for and its
+  buttons share edges, so a cluster reads as one control with three positions
+  rather than three unrelated words. The run cluster only exists while there is
+  a run to act on.
+-->
 <div class="pa-bar pa-band">
   <div class="pa-bar-inner">
-  <div class="pa-bar-group">
-    <button class="pa-btn pa-primary" disabled={exporting} onclick={() => exportDoc('docx')}>
-      {exporting ? 'Rendering…' : '↓ Word (.docx)'}
-    </button>
-    <button class="pa-btn" onclick={printNow}>Print or save as PDF</button>
-    <button class="pa-btn pa-ghost" onclick={() => exportDoc('md')}>Markdown</button>
-  </div>
-  <div class="pa-bar-group pa-bar-right">
-    {#if active}
-      <span class="pa-live" role="status">
-        <span class="pa-dot"></span>
-        {running ? running.name : 'running'}{#if runningCalls}
-          · {runningCalls} call{runningCalls === 1 ? '' : 's'} so far{/if}
-      </span>
-      <button class="pa-btn" onclick={refresh}>Refresh</button>
-      <button class="pa-btn" disabled={busy} onclick={() => control('cancel')}>Cancel run</button>
-    {:else if ['failed', 'cancelled'].includes(data.analysis.status)}
-      <button class="pa-btn" disabled={busy} onclick={() => control('resume')}>Resume from the last completed stage</button>
+    <div class="pa-cluster">
+      <p class="pa-cluster-label">Take it away</p>
+      <div class="pa-btns">
+        <button class="pa-btn pa-primary" disabled={exporting} onclick={() => exportDoc('docx')}>
+          {exporting ? 'Rendering…' : '↓ Word'}
+        </button>
+        <button class="pa-btn" onclick={printNow}>Print / PDF</button>
+        <button class="pa-btn" onclick={() => exportDoc('md')}>Markdown</button>
+      </div>
+    </div>
+
+    {#if active || ['failed', 'cancelled'].includes(data.analysis.status)}
+      <div class="pa-cluster">
+        <p class="pa-cluster-label">This run</p>
+        <div class="pa-btns">
+          {#if active}
+            <button class="pa-btn" onclick={refresh}>Refresh</button>
+            <button class="pa-btn pa-stop" disabled={busy} onclick={() => control('cancel')}>Cancel</button>
+          {:else}
+            <button class="pa-btn" disabled={busy} onclick={() => control('resume')}>Resume from the last completed stage</button>
+          {/if}
+        </div>
+      </div>
     {/if}
-    {#if cost.calls}
-      <span class="pa-cost">
-        {formatTokens(cost.total)} tokens ·
-        {cost.cash === null ? 'on subscription quota' : formatGbp(cost.cash)}
-        {#if commissioned}· {commissioned}{/if}
-      </span>
-    {/if}
-  </div>
+
+    <div class="pa-cluster pa-cluster-meta">
+      {#if active}
+        <p class="pa-cluster-label">
+          <span class="pa-live" role="status">
+            <span class="pa-dot"></span>
+            {running ? running.name : 'running'}{#if runningCalls}
+              · {runningCalls} call{runningCalls === 1 ? '' : 's'} so far{/if}
+          </span>
+        </p>
+      {:else}
+        <p class="pa-cluster-label">What it cost</p>
+      {/if}
+      <!-- Two lines by CONTENT, not by wrapping. As one paragraph it broke
+           mid-token — "gpt-" on one line and "5.6-luna" on the next — because a
+           hyphen is a break opportunity and a model id is full of them. -->
+      {#if cost.calls}
+        <p class="pa-cost">
+          {formatTokens(cost.total)} tokens ·
+          {cost.cash === null ? 'on subscription quota' : formatGbp(cost.cash)}
+        </p>
+        {#if commissioned}<p class="pa-cost">{commissioned}</p>{/if}
+      {:else}
+        <p class="pa-cost">No model call has been billed yet.</p>
+      {/if}
+    </div>
   </div>
 </div>
 
@@ -677,39 +709,82 @@
   .pa-bar-inner {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px 20px;
+    align-items: flex-end;
+    gap: 14px clamp(20px, 3vw, 40px);
     padding-block: 12px;
   }
-  .pa-bar-group {
+  /* A cluster is a label over a run of buttons. The last one is the meta, and it
+     is pushed right so the controls stay together on the left however many
+     clusters there are. */
+  .pa-cluster {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+  /* IN FLOW, not pushed right. Right-aligned, the meta left a thousand pixels
+     of empty bar between itself and the controls on a wide monitor. Three
+     labelled clusters reading left to right is the layout that was asked for. */
+  .pa-cluster-meta {
+    justify-content: flex-end;
+    /* Two figure lines belong closer to each other than to their label. */
+    gap: 3px;
+  }
+  .pa-cluster-meta .pa-cluster-label {
+    margin-bottom: 3px;
+  }
+  .pa-cluster-label {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-weight: 500;
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  /* Buttons share edges, so a cluster reads as one control with three
+     positions. The negative margin collapses the double hairline; `z-index` on
+     hover keeps the focused border on top of its neighbour's. */
+  .pa-btns {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
-    gap: 9px;
   }
-  .pa-bar-right {
-    margin-left: auto;
+  .pa-btns > .pa-btn + .pa-btn {
+    margin-left: -1px;
   }
+  /*
+   * A BUTTON WITH A GROUND. These were transparent with a hairline, which on a
+   * cream page is about as much presence as a caption — and one of them was a
+   * borderless underlined "ghost" that read as body copy rather than a control.
+   * Secondaries now sit on `--surface-elevated`, which is opaque; the primary
+   * keeps the accent fill; and the hover state is a change of GROUND rather
+   * than only of colour.
+   */
   .pa-btn {
     font: inherit;
+    position: relative;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     letter-spacing: var(--tracking-label);
     text-transform: uppercase;
-    background: none;
+    background: var(--surface-elevated);
     border: 1px solid var(--line-strong);
     border-radius: 0;
     padding: 8px 13px;
     color: var(--text-primary);
     cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.12s ease-out, border-color 0.12s ease-out, color 0.12s ease-out;
   }
   .pa-btn:hover:not(:disabled),
   .pa-btn:focus-visible {
-    border-color: var(--accent);
-    color: var(--accent);
+    z-index: 1;
+    background: var(--text-primary);
+    border-color: var(--text-primary);
+    color: var(--bg);
   }
   .pa-btn:disabled {
+    background: none;
     color: var(--text-ghost);
     border-color: var(--divider);
     cursor: default;
@@ -725,11 +800,13 @@
     border-color: var(--accent-hover);
     color: var(--bg);
   }
-  .pa-ghost {
-    border-color: transparent;
-    color: var(--accent-ink);
-    text-decoration: underline;
-    padding-inline: 4px;
+  /* Cancelling a run is the one destructive control up here, and it says so on
+     hover rather than by sitting in red all the time. */
+  .pa-stop:hover:not(:disabled),
+  .pa-stop:focus-visible {
+    background: var(--error);
+    border-color: var(--error);
+    color: var(--bg);
   }
 
   .pa-live {
@@ -764,10 +841,15 @@
     }
   }
   .pa-cost {
+    margin: 0;
+    max-width: 44ch;
+    white-space: nowrap;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     letter-spacing: 0.05em;
-    color: var(--text-ghost);
+    /* Was `--text-ghost`, which on cream is barely there — and this line is how
+       a reader knows what the assessment cost. */
+    color: var(--text-secondary);
   }
 
   .pa-alert {
@@ -945,9 +1027,7 @@
     .pa-ledger {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
-    .pa-bar-right {
-      margin-left: 0;
-    }
+
   }
 
   /*
