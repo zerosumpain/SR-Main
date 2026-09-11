@@ -18,12 +18,18 @@
   //    `open()` opens a drawer over the page and `close()` puts focus back on
   //    whatever was clicked. A trail remembers the route, so following a play to
   //    its actor to that actor's profile is reversible.
-  //  * THE RAIL IS GROUPED FOR THE EYE ONLY. The tabs were flattened out of
-  //    nested workspaces deliberately — the defect was two navigation systems,
-  //    one buried in the other — and nothing here re-nests them. A group is a
-  //    word and a hairline above a run of cells; every cell is still one click
-  //    from anywhere, and each carries its own count so the shape of the
-  //    assessment is visible without opening anything.
+  //  * THE RAIL IS A JOURNEY, THEN AN ANNEX (2026-09-11). Fifteen cells of
+  //    identical weight in five equal groups told a reader what existed and
+  //    nothing about what order to take it in. Three numbered steps lead —
+  //    01 what it concludes, 02 how it can be beaten, 03 who would do it — with
+  //    the views that answer the same question a second way beside their step,
+  //    and everything a reader CONSULTS rather than reads through demoted to a
+  //    quieter band under the word "Annex". Still one flat tablist: the tabs
+  //    were flattened out of nested workspaces deliberately — the defect was two
+  //    navigation systems, one buried in the other — and the rank here is
+  //    typography, not structure. Every cell is one click from anywhere and
+  //    carries its own count, so the shape of the assessment is visible without
+  //    opening anything.
   //  * THE TONE ASSUMES THE READER DID NOT WRITE THE PAPER (ask 3). Every strap
   //    talks about "the paper" and "a body governed by it", never "your policy";
   //    and the standing frame below the rail says once, plainly, that this is an
@@ -38,7 +44,7 @@
   import { REPORT_SECTIONS, type Artefact } from '$lib/policy-analysis/contracts';
   import { KEY_SECTIONS, READING_CHAIN, STRUCTURE_TERMS } from '$lib/policy-analysis/glossary';
   import * as view from '$lib/policy-analysis/view';
-  import { TABS, tabGroups } from '$lib/policy-analysis/view';
+  import { TABS, annexGroups, journeySteps, type RailTab } from '$lib/policy-analysis/view';
   import { atlas } from '$lib/policy-analysis/actors';
   import { adjacency, bodyLinks, playGrid, traitGrid } from '$lib/policy-analysis/matrix';
   import { isBody, network } from '$lib/policy-analysis/network';
@@ -212,8 +218,19 @@
   const tabId = (id: string) => `report-tab-${id}`;
   /** Index of a tab by its section id — the tabs ARE the sections. */
   const at = (id: string) => TABS.findIndex((t) => t.id === id);
-  const groups = tabGroups();
+  const steps = journeySteps();
+  const annex = annexGroups();
   const visibleTabs = $derived(TABS.filter((t) => (t.id !== 'cross' || cross) && (t.id !== 'provenance' || runLog)));
+  /**
+   * Did this copy render that tab?
+   *
+   * A shared copy has no cross-policy workspace and no run log, so two annex
+   * cells are absent there. Every list the rail draws is filtered through this
+   * rather than through `TABS`, for the same reason the keyboard walk is: a cell
+   * pointing at a panel that was never rendered selects an index nothing can
+   * show, and every panel's `class:off` goes true at once.
+   */
+  const shown = (t: { id: string }) => visibleTabs.some((v) => v.id === t.id);
 
   function onTabKey(event: KeyboardEvent, index: number) {
     // Walk `visibleTabs`, never `TABS`. A panel that was not rendered is an
@@ -251,48 +268,88 @@
      inside it is covered by these four listeners rather than by four of its
      own. The drill mounts its own, because it portals above this. -->
 <div class="ab" {...peekHandlers()}>
+  <!--
+    ONE CELL, DRAWN THREE WAYS.
+
+    A step's lead, a companion under it and an annex cell differ only in size and
+    in whether they carry a numeral — but all three are `role="tab"` on the same
+    tablist with the same keyboard walk, so they are one snippet rather than
+    three near-copies that drift.
+  -->
+  {#snippet cell(t: RailTab, extra: string, step?: number)}
+    <button
+      type="button"
+      role="tab"
+      id={tabId(t.id)}
+      class="ab-tab {extra}"
+      class:on={t.index === tab}
+      aria-selected={t.index === tab}
+      aria-controls={t.id}
+      tabindex={t.index === tab ? 0 : -1}
+      onclick={() => (tab = t.index)}
+      onkeydown={(e) => onTabKey(e, t.index)}
+    >
+      {#if step}<span class="ab-step-n">{String(step).padStart(2, '0')}</span>{/if}
+      <span class="ab-tab-name">{t.name}</span>
+      {#if counts[t.id] !== null && counts[t.id] !== undefined}
+        <span class="ab-tab-count">{counts[t.id]}</span>
+      {/if}
+    </button>
+  {/snippet}
+
+  <!--
+    THE RAIL — A JOURNEY, THEN AN ANNEX.
+
+    Fifteen cells of identical weight in five equal groups told a reader what
+    existed and nothing about what to read. There is an order, and the rail now
+    draws it: three numbered steps at the top, and everything a reader consults
+    rather than reads through demoted to a second, quieter band below them.
+
+    Still ONE flat tablist. The tabs were flattened out of nested workspaces
+    deliberately and nothing here re-nests them — a companion cell under a step
+    is a sibling of every other cell, reachable with one click and with the same
+    arrow keys. The rank is typography, not structure.
+  -->
   <nav class="ab-rail" aria-label="The assessment">
     <div class="ab-rail-inner" role="tablist" aria-label="Workspaces">
-      {#each groups as group (group.group)}
-        {@const shown = group.tabs.filter((t) => visibleTabs.some((v) => v.id === t.id))}
-        <div class="ab-group">
-          <!--
-            A CAP ONLY WHERE THERE IS SOMETHING TO GROUP. "The verdict" holds one
-            cell, also called Verdict, and "VERDICT │ Verdict" reads as a
-            mistake. Counted over the tabs that RENDERED — the shared copy is
-            missing two of the assessment group's four.
-
-            "The threat" → "THREAT": the article costs four characters of mono in
-            five places, which is a third of a rail row.
-          -->
-          {#if shown.length > 1}
-            <p class="ab-group-name">{group.group.replace(/^The /, '')}</p>
-          {/if}
-          <div class="ab-group-cells">
-            {#each group.tabs as t (t.id)}
-              {#if visibleTabs.some((v) => v.id === t.id)}
-                <button
-                  type="button"
-                  role="tab"
-                  id={tabId(t.id)}
-                  class="ab-tab"
-                  class:on={t.index === tab}
-                  aria-selected={t.index === tab}
-                  aria-controls={t.id}
-                  tabindex={t.index === tab ? 0 : -1}
-                  onclick={() => (tab = t.index)}
-                  onkeydown={(e) => onTabKey(e, t.index)}
-                >
-                  <span class="ab-tab-name">{t.name}</span>
-                  {#if counts[t.id] !== null && counts[t.id] !== undefined}
-                    <span class="ab-tab-count">{counts[t.id]}</span>
-                  {/if}
-                </button>
-              {/if}
-            {/each}
+      <div class="ab-journey">
+        {#each steps as step (step.group)}
+          {@const also = step.also.filter((t) => shown(t))}
+          <div class="ab-step" class:ab-step-solo={!also.length}>
+            {@render cell(step.lead, 'ab-step-lead', step.step)}
+            <!-- The same question answered a second way. Inside its step and
+                 smaller, never a peer of it: as peers these three read as five
+                 more places to go rather than as two ways of reading two. -->
+            {#if also.length}
+              <div class="ab-step-also">
+                {#each also as t (t.id)}{@render cell(t, 'ab-tab-sub')}{/each}
+              </div>
+            {/if}
           </div>
+        {/each}
+      </div>
+
+      <!--
+        THE ANNEX. Named, because "less important" has to be said rather than
+        merely implied by size — a reader who cannot find the write-up will not
+        conclude it was demoted, they will conclude it is missing.
+      -->
+      <div class="ab-annex">
+        <p class="ab-tier-cap">Annex</p>
+        <div class="ab-annex-groups">
+          {#each annex as group (group.group)}
+            {@const cells = group.tabs.filter((t) => shown(t))}
+            {#if cells.length}
+              <div class="ab-group">
+                <p class="ab-group-name">{group.group}</p>
+                <div class="ab-group-cells">
+                  {#each cells as t (t.id)}{@render cell(t, '')}{/each}
+                </div>
+              </div>
+            {/if}
+          {/each}
         </div>
-      {/each}
+      </div>
     </div>
   </nav>
 
@@ -333,6 +390,7 @@
       {plays}
       {status}
       thin={checks.filter((c) => c.data.result !== 'low_risk')}
+      {actors}
       lever={topLever}
       options={recommendations}
       onopen={open}
@@ -352,7 +410,7 @@
     class:off={tab !== at('playbook')}
     aria-labelledby={tabId('playbook')}
   >
-    <h2 class="ab-print-title">The threat</h2>
+    <h2 class="ab-print-title">Ways to beat it</h2>
     <DashHead
       kicker="How the paper can be beaten"
       title={['The exploitation', 'playbook']}
@@ -440,7 +498,7 @@
     class:off={tab !== at('actors')}
     aria-labelledby={tabId('actors')}
   >
-    <h2 class="ab-print-title">The cast</h2>
+    <h2 class="ab-print-title">Who is involved</h2>
     <DashHead
       kicker="Who is in the room"
       title={['Actors, and what', 'actually moves them']}
@@ -547,7 +605,7 @@
     class:off={tab !== at('stress')}
     aria-labelledby={tabId('stress')}
   >
-    <h2 class="ab-print-title">The ground it stands on</h2>
+    <h2 class="ab-print-title">Annex — grounding</h2>
     <DashHead
       kicker="What if we are wrong?"
       title={['The stress', 'test']}
@@ -661,7 +719,7 @@
       class:off={tab !== at('cross')}
       aria-labelledby={tabId('cross')}
     >
-      <h2 class="ab-print-title">The assessment</h2>
+      <h2 class="ab-print-title">Annex — the assessment</h2>
       <DashHead
         kicker="Across policies"
         title={['Weaknesses that span', 'more than one policy']}
@@ -683,7 +741,7 @@
     class:off={tab !== at('report')}
     aria-labelledby={tabId('report')}
   >
-    {#if !cross}<h2 class="ab-print-title">The assessment</h2>{/if}
+    {#if !cross}<h2 class="ab-print-title">Annex — the assessment</h2>{/if}
     <DashHead
       kicker="The written assessment"
       title={['Chapter', 'and verse']}
@@ -775,9 +833,18 @@
 
 <style>
   /*
-   * THE RAIL. Grouped for the eye, flat for navigation. It scrolls sideways
-   * inside itself rather than wrapping to three rows and eating 40vh, which is
-   * what the previous strip did on a laptop.
+   * THE RAIL — TWO BANDS, ONE TABLIST.
+   *
+   * Flat for navigation, RANKED for the eye. Fifteen cells of identical weight
+   * told a reader what existed and nothing about what order to take it in, so
+   * the three questions the assessment actually answers now lead as numbered
+   * steps and everything a reader consults rather than reads through sits below
+   * them at a smaller size under the word "Annex".
+   *
+   * It is still one flat tablist. Nothing here re-nests the tabs — the defect
+   * that flattening fixed was two navigation systems, one buried in the other,
+   * and a companion cell under a step is a sibling of every other cell with the
+   * same arrow-key walk.
    */
   /*
    * THE MEASURE LIVES HERE, NOT ON THE PAGE WRAPPER.
@@ -805,22 +872,160 @@
     border-bottom: 2px solid var(--text-primary);
     margin: clamp(20px, 3vw, 34px) 0 0;
   }
+  /* The two bands, separated by a full-strength rule rather than a hairline:
+     the break between "read this" and "consult this" is the loudest thing the
+     rail has to say. */
   .ab-rail-inner {
+    display: flex;
+    flex-direction: column;
+  }
+  .ab-annex {
+    border-top: 1px solid var(--text-primary);
+  }
+
+  /* ——— the journey ————————————————————————————————————————— */
+  /*
+   * A STEP IS A BLOCK, AND A BLOCK NEVER BREAKS — the lesson the grouped rail
+   * was rebuilt on. `min-width: max-content` keeps a step from wrapping inside
+   * itself (a step taller than its neighbours stops the row tiling), and
+   * `flex: 1 1 auto` makes every line fill the measure rather than trail off.
+   */
+  .ab-journey {
     display: flex;
     flex-wrap: wrap;
     align-items: stretch;
-    /* A 1px row gap over a ruled ground is the rule BETWEEN wrapped rows. Three
-       rows of cells with nothing between them read as one block of text, and
-       flex gives no way to select a wrapped row directly. */
+    /* A 1px row gap over a ruled ground is the rule BETWEEN wrapped rows; flex
+       gives no way to select a wrapped row directly. CONTENT BOX, because the
+       inner also carries the measure's side padding and a ground painted under
+       that shows as two grey bars in the gutters above the measure. */
     row-gap: 1px;
     background: var(--line-strong);
-    /* CONTENT BOX. The inner also carries the measure's side padding, and a
-       ruled ground painted under that showed as two grey bars in the gutters at
-       any width above the measure. */
     background-clip: content-box;
   }
-  .ab-group {
+  /*
+   * A STEP IS ONE ROW, NOT TWO.
+   *
+   * Stacking the companions under their step was tried first and cost the
+   * sticky bar 160px — more than the three-row strip it replaced — because the
+   * step with nothing under it (Verdict) then had to stretch to its neighbours'
+   * height, and a selected cell two rows tall is a slab of accent. Inline, the
+   * whole journey is one 36px row: the lead is larger, darker and numbered, the
+   * companions beside it are small and muted, and the rank reads off the type
+   * rather than off the geometry.
+   */
+  .ab-step {
+    display: flex;
+    align-items: stretch;
+    flex: 1 1 auto;
+    min-width: max-content;
     background: var(--bg);
+    border-left: 1px solid var(--line-strong);
+  }
+  .ab-step:first-child {
+    border-left: 0;
+  }
+  /*
+   * A STEP WITH NOTHING BESIDE IT DOES NOT GROW.
+   *
+   * Verdict is one short cell. Left to take an equal share of the row it was
+   * 340px of solid accent at 1024 — a third of the rail — because the lead
+   * stretches to fill its step. Sized to its content, the row's spare width
+   * goes to the two steps that have companions to lay out.
+   */
+  .ab-step-solo {
+    flex: 0 0 auto;
+  }
+  /*
+   * THE STEP CELL, carrying a numeral, because the sequence is the whole point:
+   * 01 what it concludes, 02 how it can be beaten, 03 who would do it.
+   */
+  .ab-step-lead {
+    gap: 10px;
+    /*
+     * 14px against the annex's 12px floor, and taller.
+     *
+     * "Less important, leaving more room for the really key part of the
+     * journey" is a proportion, and the first cut got it backwards: the annex
+     * held two of the rail's three rows and 70 of its 111px. The rank cannot be
+     * bought by shrinking the annex — 12px is a hard floor sitewide and a gate
+     * fails anything under it — so the journey grows and the annex's rows
+     * tighten around their own type.
+     */
+    padding: 16px 16px 17px;
+    font-size: var(--fs-nav);
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    color: var(--text-primary);
+  }
+  .ab-step-n {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+    color: var(--accent);
+  }
+  .ab-step-lead.on .ab-step-n {
+    color: var(--bg);
+  }
+  /* The same question answered a second way, beside its step and visibly
+     subordinate to it. */
+  .ab-step-also {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: stretch;
+  }
+  .ab-tab-sub {
+    color: var(--text-muted);
+    padding-block: 16px 17px;
+  }
+
+  /* ——— the annex ———————————————————————————————————————————— */
+  /*
+   * DEMOTED, AND SAID SO. Size alone would read as a rendering accident; a
+   * reader who cannot find the write-up concludes it is missing rather than
+   * that it was ranked below the journey. The cap names the band once, on the
+   * left, spanning both its rows.
+   */
+  .ab-annex {
+    display: flex;
+    align-items: stretch;
+    /*
+     * AN OPAQUE SUNKEN GROUND, mixed rather than tinted.
+     *
+     * `--surface-sunken` is rgba(26, 16, 8, 0.035), so painting it on the band
+     * AND on each group inside it stacked to twice the tint and the cap read as
+     * a lighter cell than the rows beside it. It also has to be opaque: the 1px
+     * rule between wrapped rows is the container's ground showing through a
+     * `row-gap`, and 3.5% alpha does not hide it.
+     */
+    --ab-annex-ground: color-mix(in oklab, var(--text-primary) 3.5%, var(--bg));
+    background: var(--ab-annex-ground);
+  }
+  .ab-tier-cap {
+    display: flex;
+    align-items: center;
+    margin: 0;
+    padding: 0 12px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--text-muted);
+    border-right: 1px solid var(--line-strong);
+  }
+  /* Tight around its own type: 12px is the floor, so the saving is in the
+     leading, not the size. */
+  .ab-annex .ab-tab {
+    padding-block: 6px 7px;
+  }
+  .ab-annex-groups {
+    display: flex;
+    flex: 1;
+    flex-wrap: wrap;
+    align-items: stretch;
+    row-gap: 1px;
+    background: var(--line-strong);
+    background-clip: content-box;
   }
   /*
    * A GROUP IS A BLOCK, AND A BLOCK NEVER BREAKS.
@@ -836,20 +1041,17 @@
    * So: the label is a CAP on the left of its own cells, inside a bordered
    * block. `min-width: max-content` means a block can never split across two
    * lines, and `flex: 1 1 auto` means every line fills the measure rather than
-   * trailing off. One cell row tall — the height the flowing strip cost — and
-   * every section visibly bounded.
+   * trailing off.
    */
   .ab-group {
     display: flex;
     align-items: stretch;
     flex: 1 1 auto;
-    /* Never narrower than its own label and cells: a block that wrapped
-       internally would be taller than its neighbours and the row would stop
-       tiling. */
     min-width: max-content;
+    background: var(--ab-annex-ground);
     border-left: 1px solid var(--line-strong);
   }
-  /* The rule belongs BETWEEN blocks; the rail's own edges are the band's. */
+  /* The rule belongs BETWEEN blocks; the band's own edges are the rail's. */
   .ab-group:first-child {
     border-left: 0;
   }
@@ -861,19 +1063,18 @@
     font-weight: 500;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     margin: 0;
     padding: 0 10px;
     white-space: nowrap;
-    /* A ground, so the cap reads as the section's name rather than as another
-       cell you could press. */
-    background: var(--surface-sunken);
   }
   .ab-group-cells {
     display: flex;
     flex: 1;
     align-items: stretch;
   }
+
+  /* ——— the cell ————————————————————————————————————————————— */
   /*
    * A CELL, not a word. Every cell used to be bare text on cream with no
    * boundary and no ground, so the rail read as a sentence rather than as a set
@@ -905,12 +1106,23 @@
     white-space: nowrap;
     transition: background 0.12s ease-out, color 0.12s ease-out;
   }
-  .ab-group-cells .ab-tab:first-child {
+  .ab-group-cells .ab-tab:first-child,
+  .ab-step-also .ab-tab:first-child,
+  .ab-step-lead {
     border-left: 0;
   }
   .ab-tab:hover {
     background: var(--surface-sunken);
     color: var(--text-primary);
+  }
+  .ab-step-lead:hover {
+    background: var(--surface-elevated);
+  }
+  /* HOVER IS A CHANGE OF GROUND — and the annex's ground already IS
+     `--surface-sunken`, so the shared rule above changed nothing there. In a
+     sunken band the move is a lift. */
+  .ab-annex .ab-tab:hover {
+    background: var(--bg);
   }
   .ab-tab.on {
     background: var(--accent);

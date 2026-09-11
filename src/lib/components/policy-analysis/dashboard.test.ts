@@ -174,8 +174,10 @@ describe('the written assessment reads as acts', () => {
     expect(panels).toBeGreaterThan(1);
     expect(off).toBe(panels - 1);
     expect(html).not.toMatch(/role="tabpanel"[^>]*\shidden/);
-    // And each one is named on paper, where the tabs are not there to name them.
-    for (const name of ['The verdict', 'The threat', 'The cast', 'The ground it stands on', 'The assessment']) {
+    // And each one is named on paper, where the tabs are not there to name
+    // them — with the rail's OWN words, so a printed pack and the screen do not
+    // call the same chapter two different things.
+    for (const name of ['The verdict', 'Ways to beat it', 'Who is involved', 'Annex — grounding', 'Annex — the assessment']) {
       expect(html).toMatch(new RegExp(`<h2 class="ab-print-title[^"]*">${name}</h2>`));
     }
   });

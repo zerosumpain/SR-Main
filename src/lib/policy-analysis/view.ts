@@ -398,31 +398,57 @@ export function scenarioBeats(scenario: Artefact, artefacts: Artefact[]): Beat[]
 }
 
 /**
- * The report's tabs — ONE row, no nesting.
+ * The report's navigation — A JOURNEY, THEN AN ANNEX.
  *
- * This was four workspaces, each holding two or three sections, and the written
- * report inside the fourth opened a SECOND tab strip for its five acts. Two
- * navigation systems for the same content, one buried inside the other, and a
- * reader had to know which workspace a thing lived in before they could reach it.
+ * The strip was fifteen cells of identical weight in five equal groups, so a
+ * reader arriving cold had to read all fifteen names to find out what order to
+ * take them in. There IS an order, and it is three questions long:
  *
- * Flat costs a longer strip and buys a reader who can see everything the
- * assessment offers without opening anything. Every id here is the section
- * anchor it already was, so every existing deep link keeps working.
+ *     01 what does it conclude → 02 how can it be beaten → 03 who would do it
+ *
+ * Those three are the `journey` tier and they lead. Everything that answers the
+ * same question a second way — the interplay map for 02, the network and the
+ * persona library for 03 — belongs TO its step and is drawn inside it, smaller,
+ * rather than standing beside it as a peer.
+ * Everything else is the `annex` tier: the grounding a reader consults when they
+ * want to argue with a finding, and the assessment's own paperwork. Both are
+ * still exactly one click from anywhere; the rail says which of them the reader
+ * is expected to need.
+ *
+ * NOTHING HERE IS NESTED NAVIGATION. The tabs were flattened out of nested
+ * workspaces on purpose — the defect was two navigation systems, one buried in
+ * the other — and this is one flat tablist with a visual rank on it. A tier and
+ * a group are typography; every cell is a sibling of every other cell.
+ *
+ * Every id is the section anchor it already was, so every existing deep link
+ * keeps working.
  */
+export type RailTier = 'journey' | 'annex';
+
 export const TABS = [
-  { id: 'verdict', name: 'Verdict', group: 'The verdict', strap: 'What this assessment concludes, and how sure it is.' },
-  { id: 'playbook', name: 'Ways to beat it', group: 'The threat', strap: 'What a body governed by this policy could do to it, worst first.' },
-  { id: 'interplay', name: 'What they aim at', group: 'The threat', strap: 'Which part of the machinery each body is going for.' },
-  { id: 'actors', name: 'Who is involved', group: 'The cast', strap: 'Every body the policy runs through, and what would make each of them behave the way it does.' },
-  { id: 'network', name: 'How they connect', group: 'The cast', strap: 'The links the paper states between them — and the ones it needs and never states.' },
-  { id: 'personas', name: 'Met before', group: 'The cast', strap: 'Bodies you have assessed before, and what this run adds to what you knew.' },
-  { id: 'stress', name: 'What if we are wrong', group: 'The ground', strap: 'Switch off something the assessment took as given, and watch it recompute.' },
-  { id: 'checks', name: 'Gaps in the paper', group: 'The ground', strap: 'Twelve tests over the paper’s own wiring. No model is involved in any of them.' },
-  { id: 'evidence', name: 'What is backed up', group: 'The ground', strap: 'Which of the paper’s claims anything outside it supports, and which nobody could settle.' },
-  { id: 'scenarios', name: 'If things change', group: 'The ground', strap: 'How this plays out when the conditions it was drafted in stop holding.' },
-  { id: 'cross', name: 'Other policies', group: 'The assessment', strap: 'Weaknesses that only exist because several policies are in force at once.' },
-  { id: 'report', name: 'The write-up', group: 'The assessment', strap: 'The written assessment, read one movement at a time.' },
-  { id: 'provenance', name: 'Working', group: 'The assessment', strap: 'Every stage, every model call, every cost.' },
+  // ——— THE JOURNEY ——————————————————————————————————————————————————
+  //
+  // A group's FIRST tab is its step, and the group is named after it: the cell
+  // and the cap would otherwise read "WAYS TO BEAT IT │ Ways to beat it". The
+  // step cell carries the numeral, so the cap is never drawn for these.
+  { id: 'verdict', name: 'Verdict', group: 'Verdict', tier: 'journey', strap: 'What this assessment concludes, and how sure it is.' },
+  { id: 'playbook', name: 'Ways to beat it', group: 'Ways to beat it', tier: 'journey', strap: 'What a body governed by this policy could do to it, worst first.' },
+  { id: 'interplay', name: 'What they aim at', group: 'Ways to beat it', tier: 'journey', strap: 'Which part of the machinery each body is going for.' },
+  { id: 'actors', name: 'Who is involved', group: 'Who is involved', tier: 'journey', strap: 'Every body the policy runs through, and what would make each of them behave the way it does.' },
+  { id: 'network', name: 'How they connect', group: 'Who is involved', tier: 'journey', strap: 'The links the paper states between them — and the ones it needs and never states.' },
+  { id: 'personas', name: 'Met before', group: 'Who is involved', tier: 'journey', strap: 'Bodies you have assessed before, and what this run adds to what you knew.' },
+  // ——— THE ANNEX ————————————————————————————————————————————————————
+  //
+  // Consulted, not read through. "The ground" and "The assessment" lost their
+  // articles for the same reason the rail's caps did: four characters of mono in
+  // a cap is a third of a rail row.
+  { id: 'stress', name: 'What if we are wrong', group: 'Grounding', tier: 'annex', strap: 'Switch off something the assessment took as given, and watch it recompute.' },
+  { id: 'checks', name: 'Gaps in the paper', group: 'Grounding', tier: 'annex', strap: 'Twelve tests over the paper\u2019s own wiring. No model is involved in any of them.' },
+  { id: 'evidence', name: 'What is backed up', group: 'Grounding', tier: 'annex', strap: 'Which of the paper\u2019s claims anything outside it supports, and which nobody could settle.' },
+  { id: 'scenarios', name: 'If things change', group: 'Grounding', tier: 'annex', strap: 'How this plays out when the conditions it was drafted in stop holding.' },
+  { id: 'cross', name: 'Other policies', group: 'Assessment', tier: 'annex', strap: 'Weaknesses that only exist because several policies are in force at once.' },
+  { id: 'report', name: 'The write-up', group: 'Assessment', tier: 'annex', strap: 'The written assessment, read one movement at a time.' },
+  { id: 'provenance', name: 'Working', group: 'Assessment', tier: 'annex', strap: 'Every stage, every model call, every cost.' },
   // WHERE THE DOCUMENT GOES IS ITS OWN WORKSPACE, not a footer on the key.
   //
   // It shipped inside "How to read this", which is the last tab of the last
@@ -432,16 +458,22 @@ export const TABS = [
   // clicks and a thousand pixels away. It sits beside the key because both are
   // references rather than readings, and before it because a reader asks "what
   // happens to my document" before "what does concealment mean".
-  { id: 'handling', name: 'Where your paper goes', group: 'The assessment', strap: 'What this site stores, what it sends elsewhere, and what is left after you delete it.' },
+  { id: 'handling', name: 'Where your paper goes', group: 'Assessment', tier: 'annex', strap: 'What this site stores, what it sends elsewhere, and what is left after you delete it.' },
   // The key is a WORKSPACE, not a tooltip. Every explainer before this was
   // hover-only, which answers "what is this column" for a reader who already
   // suspected there was a question, and answers nothing at all for one who
   // opens the page cold and finds bodies scored on "concealment". It is last
   // because it is a reference, and it prints as the pack's appendix.
-  { id: 'key', name: 'How to read this', group: 'The assessment', strap: 'What every word on this page means, and how each figure is worked out.' },
+  { id: 'key', name: 'How to read this', group: 'Assessment', tier: 'annex', strap: 'What every word on this page means, and how each figure is worked out.' },
 ] as const;
 
 export type TabId = (typeof TABS)[number]['id'];
+
+export interface RailTab {
+  id: string;
+  name: string;
+  index: number;
+}
 
 /**
  * The rail, grouped for the eye only.
@@ -449,18 +481,42 @@ export type TabId = (typeof TABS)[number]['id'];
  * The tabs were flattened out of nested workspaces on purpose — the defect was
  * two navigation systems for one body of content, one buried inside the other —
  * and nothing here re-nests them. A group is a hairline and a word above a run
- * of cells, so the strip reads as four questions rather than thirteen buttons,
- * and every cell is still exactly one click from anywhere.
+ * of cells, so the strip reads as a handful of questions rather than fifteen
+ * buttons, and every cell is still exactly one click from anywhere.
+ *
+ * The tier travels with the group because the two rail bands are drawn from it:
+ * a group is entirely journey or entirely annex, and a group that straddled the
+ * two would be a group the rail cannot place.
  */
-export function tabGroups(): { group: string; tabs: { id: string; name: string; index: number }[] }[] {
-  const out: { group: string; tabs: { id: string; name: string; index: number }[] }[] = [];
+export function tabGroups(): { group: string; tier: RailTier; tabs: RailTab[] }[] {
+  const out: { group: string; tier: RailTier; tabs: RailTab[] }[] = [];
   TABS.forEach((tab, index) => {
     const last = out[out.length - 1];
     const entry = { id: tab.id, name: tab.name, index };
     if (last && last.group === tab.group) last.tabs.push(entry);
-    else out.push({ group: tab.group, tabs: [entry] });
+    else out.push({ group: tab.group, tier: tab.tier, tabs: [entry] });
   });
   return out;
+}
+
+/**
+ * The three steps of the journey, numbered.
+ *
+ * A step's LEAD is the first tab of its group and is the cell that carries the
+ * numeral; anything else in the group answers the same question a second way and
+ * hangs under it. The number comes from the step's place in this list rather
+ * than from the tab's index, so inserting a companion view never renumbers the
+ * journey.
+ */
+export function journeySteps(): { step: number; group: string; lead: RailTab; also: RailTab[] }[] {
+  return tabGroups()
+    .filter((g) => g.tier === 'journey')
+    .map((g, i) => ({ step: i + 1, group: g.group, lead: g.tabs[0], also: g.tabs.slice(1) }));
+}
+
+/** Everything the reader consults rather than reads through, in its own groups. */
+export function annexGroups(): { group: string; tabs: RailTab[] }[] {
+  return tabGroups().filter((g) => g.tier === 'annex');
 }
 
 /**
