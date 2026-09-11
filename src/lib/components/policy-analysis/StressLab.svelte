@@ -1,23 +1,33 @@
 <script lang="ts">
   // THE STRESS TEST — the one thing on this page you can run rather than read.
   //
-  // Ask 7: "stress test layout is awful, and the user experience is not clear."
-  // The arithmetic was never the problem and is untouched — `stress.ts` walks
-  // citations the assessment already made, so the same switches always give the
-  // same answer and no model runs. What was wrong was the reading:
+  // The arithmetic has never been the problem and is untouched: `stress.ts`
+  // walks citations the assessment already made, so the same switches always
+  // give the same answer and no model runs. Everything here is about the
+  // reading.
   //
-  //  * the consequence appeared as four stacked prose sections below the fold,
-  //    so pulling a lever showed nothing until you scrolled;
-  //  * the two OPPOSITE directions — a conclusion losing its footing, and a play
-  //    being disarmed — were three sections apart in one column, which is the
-  //    one thing `stress.ts`'s own comment says must never be blurred;
-  //  * nothing said what state you were in, so a reader who had pulled two
-  //    levers had no way to see which two.
+  // 2026-09-11, John: *"fix that 'what if we are wrong' page. the layout is not
+  // clean; needs a dashboard page, ideally close to single page view."*
   //
-  // So: a consequence strip that changes the instant a lever moves, the levers
-  // in a sticky rail beside it, and the two directions in two NAMED columns —
-  // "the assessment loses" against "the policy gains". Same numbers, same
-  // module, legible.
+  // MEASURED BEFORE TOUCHING IT, at 1440 on the nine-body seed: 785px at rest
+  // and 1,468px with three levers pulled — two and a half screens for a panel
+  // whose whole point is that you pull a lever and SEE the answer. Three causes,
+  // and none of them was the layout being two columns:
+  //
+  //  * EVERY ROW WAS THREE LINES. `.sl-why` carried `width: 100%` inside a
+  //    wrapping flex row, so the tag, the name and the reason each took a line.
+  //    Twenty-two results is sixty-six lines.
+  //  * THE REASON WAS THE SAME REASON, EIGHT TIMES. Fail one assumption and
+  //    every conclusion that falls says `rests on "<that assumption>"`. It is
+  //    the group's caption, not the row's.
+  //  * THE LEVER RAIL WAS THE TALLEST THING ON THE PAGE. Fourteen levers each
+  //    repeating "38% on how much turns on it, how arguable it is and what it
+  //    would cost" ran to ~810px, which set the height of the whole workspace
+  //    before a single result was drawn.
+  //
+  // So: one line per lever with its weight as a figure, one line per result,
+  // the shared cause said once, and a cap on what is drawn before the drill
+  // takes over. Same numbers, same module, one view.
   import type { Artefact } from '$lib/policy-analysis/contracts';
   import { leverage, stress, type StressRow } from '$lib/policy-analysis/stress';
   import ExplainLabel from './ExplainLabel.svelte';
@@ -30,11 +40,22 @@
   let { artefacts, onopen }: Props = $props();
 
   let failed = $state<string[]>([]);
-  /** How many levers the rail offers before it becomes a list to scroll. */
-  const LEVERS = 14;
-  const SHOWN = 8;
+  /** Levers drawn before the rail asks to be opened, and after. */
+  const RAIL = 9;
+  const ALL_LEVERS = 24;
+  /**
+   * Results drawn per group before the count takes over.
+   *
+   * The conclusions are what a reader actually reads; a model or scenario
+   * losing its footing is a consequence of the same failure and is worth its
+   * COUNT rather than its eighteen names, which is what made this column twice
+   * the height of the one beside it. The drill holds all of them either way.
+   */
+  const SHOWN = 5;
+  let allLevers = $state(false);
 
   const levers = $derived(leverage(artefacts));
+  const railLevers = $derived(levers.slice(0, allLevers ? ALL_LEVERS : RAIL));
   const result = $derived(stress(artefacts, failed));
 
   /**
@@ -42,11 +63,11 @@
    *
    * With nothing switched off the right-hand half used to be three paragraphs
    * explaining what would happen if you did, beside four zeroes — half a
-   * workspace spent telling the reader that they had not used it yet. It
-   * PREVIEWS instead: the same computation, run against the single most
-   * load-bearing assumption, so the panel arrives already showing what is at
-   * stake and the reader can commit to it with one button. Costs nothing — the
-   * whole module is a walk over citations that already exist.
+   * workspace spent telling the reader they had not used it yet. It PREVIEWS
+   * instead: the same computation, run against the single most load-bearing
+   * assumption, so the panel arrives already showing what is at stake and the
+   * reader can commit to it with one button. Costs nothing — the whole module
+   * is a walk over citations that already exist.
    */
   const top = $derived(levers[0] ?? null);
   const preview = $derived(top ? stress(artefacts, [top.artefact.id]) : null);
@@ -57,15 +78,59 @@
   const lostReasoning = $derived([...hurt(result.models), ...hurt(result.scenarios)]);
   const disarmed = $derived(hurt(result.plays));
 
+  /** Denominators, so a count reads as a share of something rather than alone. */
+  const totals = $derived({
+    findings: result.findings.length,
+    recommendations: result.recommendations.length,
+    reasoning: result.models.length + result.scenarios.length,
+    plays: result.plays.length,
+  });
+
   const byId = $derived(new Map(artefacts.map((a) => [a.id, a])));
   const chosen = $derived(failed.map((id) => byId.get(id)).filter((a): a is Artefact => Boolean(a)));
 
-  const pct = (v: unknown) => `${Math.round((Number(v) || 0) * 100)}%`;
+  /**
+   * The one cause every row in a group shares, or null if they differ.
+   *
+   * Fail a single assumption and all fifteen conclusions fall for the same
+   * stated reason, so printing it per row is fourteen wasted lines that also
+   * push the name of each conclusion onto a line of its own. Said once as the
+   * group's caption, the rows become one line each and the reason is more
+   * prominent rather than less.
+   */
+  const sharedCause = (rows: StressRow[]): string | null => {
+    const first = rows[0]?.because[0];
+    if (!first) return null;
+    return rows.every((r) => r.because[0] === first) ? first : null;
+  };
 
   function toggle(id: string) {
     failed = failed.includes(id) ? failed.filter((f) => f !== id) : [...failed, id];
   }
 </script>
+
+<!--
+  ONE RESULT ROW, drawn the same way in both columns.
+
+  The tag, the name and the reason on ONE line: the name is the only part that
+  may grow, so it takes the free space and clips, and the reason is dropped
+  entirely when the group's caption already carries it. `title` keeps the full
+  wording reachable without arming a popover on every row — the drill is one
+  click away and holds all of it.
+-->
+{#snippet resultRow(row: StressRow, kind: 'play' | 'artefact', tag: string, showWhy: boolean)}
+  <li>
+    <span class="sl-tag" class:gone={row.standing === 'unsupported'} class:sl-off={kind === 'play'}>{tag}</span>
+    <button
+      type="button"
+      class="sl-link"
+      data-pa-peek={`${kind}:${row.artefact.id}`}
+      onclick={() => onopen(row.artefact.id)}
+      title={row.artefact.label}
+    >{row.artefact.label}</button>
+    {#if showWhy && row.because[0]}<span class="sl-why" title={row.because[0]}>{row.because[0]}</span>{/if}
+  </li>
+{/snippet}
 
 {#if levers.length}
   <div class="sl">
@@ -81,15 +146,15 @@
         <p class="sl-figure-label">Assumptions failed</p>
       </div>
       <div class="sl-figure" class:live={lostFindings.length > 0}>
-        <p class="sl-figure-value">{lostFindings.length}</p>
+        <p class="sl-figure-value">{lostFindings.length}<span class="sl-of">/{totals.findings}</span></p>
         <p class="sl-figure-label">Conclusions lose footing</p>
       </div>
       <div class="sl-figure" class:live={lostRecommendations.length > 0}>
-        <p class="sl-figure-value">{lostRecommendations.length}</p>
+        <p class="sl-figure-value">{lostRecommendations.length}<span class="sl-of">/{totals.recommendations}</span></p>
         <p class="sl-figure-label">Redesign options fall</p>
       </div>
       <div class="sl-figure sl-good" class:live={disarmed.length > 0}>
-        <p class="sl-figure-value">{disarmed.length}</p>
+        <p class="sl-figure-value">{disarmed.length}<span class="sl-of">/{totals.plays}</span></p>
         <p class="sl-figure-label"><ExplainLabel term="disarmed" text="Plays disarmed" /></p>
       </div>
     </div>
@@ -98,47 +163,79 @@
       <!-- THE LEVERS. Sticky, so the consequence is never out of sight of the
            thing that caused it. -->
       <aside class="sl-levers" aria-label="Assumptions to fail">
-        <p class="sl-label">Suppose these turn out to be wrong</p>
-        <p class="sl-intro">
-          Only assumptions something actually cites are offered. A hypothesis nothing rests on cannot change
-          an answer, and a switch that does nothing when you pull it is a worse answer than no switch at all.
-        </p>
-        <div class="sl-lever-actions">
-          <button type="button" class="sl-link" onclick={() => (failed = levers.slice(0, 3).map((l) => l.artefact.id))}>
-            Fail the three most load-bearing
-          </button>
-          {#if failed.length}
-            <button type="button" class="sl-link" onclick={() => (failed = [])}>Reset</button>
-          {/if}
+        <!--
+          A COLUMN HEADING, not a sentence per row. The weight each lever carries
+          is the only per-row figure worth showing and it is the rail's sort
+          order, so it becomes a column with a name at the top. The priority
+          score that used to be spelled out fourteen times is what the ordering
+          IS; the card on each row still carries it.
+        -->
+        <div class="sl-lever-head">
+          <p class="sl-label">Suppose these fail</p>
+          <p class="sl-label sl-lever-head-n">Rests on it</p>
         </div>
         <ul class="sl-lever-list">
-          {#each levers.slice(0, LEVERS) as lever (lever.artefact.id)}
+          {#each railLevers as lever (lever.artefact.id)}
             {@const on = failed.includes(lever.artefact.id)}
             <li class:on>
-              <label class="sl-lever">
+              <!--
+                THE PEEK ANCHOR IS THE LABEL, NOT THE SPAN INSIDE IT.
+
+                `peekHandlers` resolves through `closest('[data-pa-peek]')`, and
+                a `<span>` cannot take focus — so on the span the explainer was
+                pointer-only and did not exist for a keyboard at all. On the
+                `<label>`, focusing the checkbox it wraps climbs to it and the
+                card opens. Same rule as the retired `field` kind: never a
+                tabindex on non-interactive content, anchor to something that
+                already takes focus.
+              -->
+              <label class="sl-lever" data-pa-peek={`assumption:${lever.artefact.id}`}>
                 <input type="checkbox" checked={on} onchange={() => toggle(lever.artefact.id)} />
-                <span class="sl-lever-body" data-pa-peek={`assumption:${lever.artefact.id}`}>
-                  <span class="sl-lever-label">{lever.artefact.label}</span>
-                  <span class="sl-lever-meta">
-                    {lever.dependants} {lever.dependants === 1 ? 'thing rests on it' : 'things rest on it'}{#if lever.priority}
-                      · {pct(lever.priority)} on how much turns on it, how arguable it is and what it would
-                      cost{/if}
-                  </span>
-                </span>
+                <span class="sl-lever-label" title={lever.artefact.label}>{lever.artefact.label}</span>
+                <span class="sl-lever-n">{lever.dependants}</span>
               </label>
             </li>
           {/each}
         </ul>
-        {#if levers.length > LEVERS}
-          <p class="sl-intro">
-            {levers.length - LEVERS} further cited assumptions are not listed here. Open one from the report
-            or from a play's preconditions to read it.
-          </p>
-        {/if}
+        <div class="sl-lever-actions">
+          <button type="button" class="sl-link" onclick={() => (failed = levers.slice(0, 3).map((l) => l.artefact.id))}>
+            Fail the top three
+          </button>
+          {#if failed.length}
+            <button type="button" class="sl-link" onclick={() => (failed = [])}>Reset</button>
+          {/if}
+          {#if levers.length > RAIL}
+            <button type="button" class="sl-link" onclick={() => (allLevers = !allLevers)}>
+              {allLevers ? 'Show fewer' : `All ${Math.min(levers.length, ALL_LEVERS)}`}
+            </button>
+          {/if}
+        </div>
+        <p class="sl-intro">
+          Ordered by how much turns on each. Only assumptions something actually cites are offered — a switch
+          that does nothing when you pull it is a worse answer than no switch at all.
+        </p>
+        <!--
+          WHAT IS NOT WIRED TO ANY OF THESE SWITCHES belongs beside the switches.
+          It sat under the outcome as a full-width footer, where it read as a
+          footnote to the results rather than as a property of the levers — and
+          it left this column empty for half a screen while the column beside it
+          ran on.
+        -->
+        <p class="sl-holds">
+          The {result.checksHeld} structural {result.checksHeld === 1 ? 'check is' : 'checks are'} untouched by
+          every switch here. They walk the relationships the paper itself states, so they are the part of the
+          assessment that does not move when a hypothesis does.
+        </p>
       </aside>
 
       <div class="sl-outcome">
         {#if !failed.length}
+          <!--
+            THE PREVIEW, laid out as the answer it is rather than as a paragraph
+            about an answer: the same three figures the strip will show, against
+            the assumption the most of the assessment rests on, and one button
+            to commit to it.
+          -->
           <div class="sl-resting">
             <p class="sl-resting-head">Nothing is switched off. This is the assessment as written.</p>
             {#if top && preview}
@@ -146,20 +243,20 @@
                 If just one thing were wrong — <strong>{top.artefact.label}</strong>, the assumption the most
                 of this assessment rests on — here is what would move.
               </p>
-              <ul class="sl-preview">
-                <li>
-                  <span class="sl-preview-fig">{hurt(preview.findings).length}</span>
-                  of {preview.findings.length} conclusions would lose their footing
-                </li>
-                <li>
-                  <span class="sl-preview-fig">{hurt(preview.recommendations).length}</span>
-                  of {preview.recommendations.length} redesign options would lose the finding behind them
-                </li>
-                <li>
-                  <span class="sl-preview-fig">{preview.plays.filter((r) => r.standing === 'disarmed').length}</span>
-                  plays would be disarmed — the actor needed this to be true
-                </li>
-              </ul>
+              <div class="sl-preview">
+                <div>
+                  <p class="sl-preview-fig">{hurt(preview.findings).length}<span class="sl-of">/{preview.findings.length}</span></p>
+                  <p class="sl-figure-label">Conclusions lose footing</p>
+                </div>
+                <div>
+                  <p class="sl-preview-fig">{hurt(preview.recommendations).length}<span class="sl-of">/{preview.recommendations.length}</span></p>
+                  <p class="sl-figure-label">Redesign options fall</p>
+                </div>
+                <div>
+                  <p class="sl-preview-fig sl-good-fig">{preview.plays.filter((r) => r.standing === 'disarmed').length}<span class="sl-of">/{preview.plays.length}</span></p>
+                  <p class="sl-figure-label">Plays disarmed</p>
+                </div>
+              </div>
               <button type="button" class="sl-preview-run" onclick={() => (failed = [top.artefact.id])}>
                 Switch it off and show me →
               </button>
@@ -195,6 +292,10 @@
             needed that to be true, so a failed assumption is good news for the
             policy here and bad news three lines above." Two columns is the only
             layout that says that without a paragraph explaining it.
+
+            `align-content: start` on each column: they hold different numbers of
+            rows and stretching the shorter one left its rule floating half a
+            screen below its last item.
           -->
           <div class="sl-columns">
             <section class="sl-column sl-loses">
@@ -204,56 +305,65 @@
               </header>
 
               {#if lostFindings.length}
+                {@const cause = sharedCause(lostFindings)}
                 <div class="sl-group">
                   <p class="sl-group-head">
-                    {lostFindings.length}
+                    <span class="sl-group-n">{lostFindings.length}<span class="sl-of">/{totals.findings}</span></span>
                     {lostFindings.length === 1 ? 'conclusion loses' : 'conclusions lose'} footing
                   </p>
                   <p class="sl-note">
-                    Not shown to be wrong — <ExplainLabel term="standing" text="no longer supported" as="inline" /> by what was cited for them.
+                    {#if cause}All {cause} — {/if}not shown to be wrong,
+                    <ExplainLabel term="standing" text="no longer supported" as="inline" /> by what was cited for them.
                   </p>
                   <ul>
                     {#each lostFindings.slice(0, SHOWN) as row (row.artefact.id)}
-                      <li>
-                        <span class="sl-tag" class:gone={row.standing === 'unsupported'}>{row.standing}</span>
-                        <button type="button" class="sl-link" data-pa-peek={`artefact:${row.artefact.id}`} onclick={() => onopen(row.artefact.id)}>{row.artefact.label}</button>
-                        <span class="sl-why">{row.because[0]}</span>
-                      </li>
+                      {@render resultRow(row, 'artefact', row.standing, !cause)}
                     {/each}
                   </ul>
-                  {#if lostFindings.length > SHOWN}<p class="sl-note">and {lostFindings.length - SHOWN} more</p>{/if}
+                  {#if lostFindings.length > SHOWN}
+                    <p class="sl-more">and {lostFindings.length - SHOWN} more — open one to read why</p>
+                  {/if}
                 </div>
               {/if}
 
               {#if lostRecommendations.length}
+                {@const cause = sharedCause(lostRecommendations)}
                 <div class="sl-group">
                   <p class="sl-group-head">
-                    {lostRecommendations.length} redesign
-                    {lostRecommendations.length === 1 ? 'option loses' : 'options lose'} the finding behind it
+                    <span class="sl-group-n">{lostRecommendations.length}<span class="sl-of">/{totals.recommendations}</span></span>
+                    redesign {lostRecommendations.length === 1 ? 'option loses' : 'options lose'} the finding behind it
                   </p>
                   <ul>
-                    {#each lostRecommendations as row (row.artefact.id)}
-                      <li>
-                        <span class="sl-tag" class:gone={row.standing === 'unsupported'}>{row.standing}</span>
-                        <button type="button" class="sl-link" data-pa-peek={`artefact:${row.artefact.id}`} onclick={() => onopen(row.artefact.id)}>{row.artefact.label}</button>
-                      </li>
+                    {#each lostRecommendations.slice(0, SHOWN) as row (row.artefact.id)}
+                      {@render resultRow(row, 'artefact', row.standing, !cause)}
                     {/each}
                   </ul>
+                  {#if lostRecommendations.length > SHOWN}
+                    <p class="sl-more">and {lostRecommendations.length - SHOWN} more</p>
+                  {/if}
                 </div>
               {/if}
 
+              <!--
+                THE REASONING IS A COUNT, NOT A LIST.
+
+                Eighteen rows reading "Synthetic model principal_agent" told a
+                reader nothing they could act on and made this column twice the
+                height of the one beside it. A model or scenario losing its
+                footing is the same failure already stated above, counted a
+                second way — so it gets the figure and a route to the rest.
+              -->
               {#if lostReasoning.length}
-                <div class="sl-group">
-                  <p class="sl-group-head">
-                    {lostReasoning.length}
-                    {lostReasoning.length === 1 ? 'model or scenario stops' : 'models and scenarios stop'} standing
-                  </p>
-                  <ul>
-                    {#each lostReasoning.slice(0, 6) as row (row.artefact.id)}
-                      <li><button type="button" class="sl-link" data-pa-peek={`artefact:${row.artefact.id}`} onclick={() => onopen(row.artefact.id)}>{row.artefact.label}</button></li>
-                    {/each}
-                  </ul>
-                </div>
+                <p class="sl-also">
+                  <span class="sl-group-n">{lostReasoning.length}<span class="sl-of">/{totals.reasoning}</span></span>
+                  {lostReasoning.length === 1 ? 'model or scenario stops' : 'models and scenarios stop'} standing —
+                  <button
+                    type="button"
+                    class="sl-link"
+                    data-pa-peek={`artefact:${lostReasoning[0].artefact.id}`}
+                    onclick={() => onopen(lostReasoning[0].artefact.id)}
+                  >open the first</button>
+                </p>
               {/if}
 
               {#if !lostFindings.length && !lostRecommendations.length && !lostReasoning.length}
@@ -268,24 +378,24 @@
               </header>
 
               {#if disarmed.length}
+                {@const cause = sharedCause(disarmed)}
                 <div class="sl-group">
                   <p class="sl-group-head">
-                    {disarmed.length} {disarmed.length === 1 ? 'play is' : 'plays are'} disarmed
+                    <span class="sl-group-n">{disarmed.length}<span class="sl-of">/{totals.plays}</span></span>
+                    {disarmed.length === 1 ? 'play is' : 'plays are'} disarmed
                   </p>
                   <p class="sl-note">
-                    The actor needed that to be true to run it. Same switch, opposite direction — which is why
-                    the two are never added into one number.
+                    {#if cause}All {cause} — the{:else}The{/if} actor needed that to be true to run it. Same switch, opposite
+                    direction, which is why the two are never added into one number.
                   </p>
                   <ul>
                     {#each disarmed.slice(0, SHOWN) as row (row.artefact.id)}
-                      <li>
-                        <span class="sl-tag sl-off">off the table</span>
-                        <button type="button" class="sl-link" data-pa-peek={`play:${row.artefact.id}`} onclick={() => onopen(row.artefact.id)}>{row.artefact.label}</button>
-                        <span class="sl-why">{row.because[0]}</span>
-                      </li>
+                      {@render resultRow(row, 'play', 'off the table', !cause)}
                     {/each}
                   </ul>
-                  {#if disarmed.length > SHOWN}<p class="sl-note">and {disarmed.length - SHOWN} more</p>{/if}
+                  {#if disarmed.length > SHOWN}
+                    <p class="sl-more">and {disarmed.length - SHOWN} more</p>
+                  {/if}
                 </div>
               {:else}
                 <p class="sl-note sl-nothing">
@@ -297,11 +407,6 @@
           </div>
         {/if}
 
-        <p class="sl-holds">
-          The {result.checksHeld} structural {result.checksHeld === 1 ? 'check is' : 'checks are'} untouched by any of
-          this. They walk the relationships the paper itself states, so they are the part of the assessment
-          that does not move when a hypothesis does.
-        </p>
       </div>
     </div>
   </div>
@@ -313,55 +418,7 @@
 {/if}
 
 <style>
-  .sl-preview-head {
-    margin: 10px 0 0;
-    line-height: 1.55;
-  }
-  .sl-preview {
-    list-style: none;
-    margin: 12px 0 0;
-    padding: 0;
-    display: grid;
-    gap: 1px;
-    background: var(--line-hair);
-  }
-  .sl-preview li {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-    background: var(--bg);
-    padding: 8px 0;
-    font-size: var(--fs-body-sm);
-    line-height: 1.4;
-    color: var(--text-secondary);
-  }
-  .sl-preview-fig {
-    font-family: var(--font-display);
-    font-size: var(--fs-num-md);
-    line-height: 1;
-    color: var(--text-primary);
-    font-variant-numeric: tabular-nums;
-    min-width: 2ch;
-  }
-  .sl-preview-run {
-    font: inherit;
-    margin-top: 14px;
-    background: none;
-    border: 1px solid var(--line-strong);
-    border-radius: 0;
-    padding: 7px 11px;
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: var(--tracking-label);
-    text-transform: uppercase;
-    color: var(--accent-ink);
-    cursor: pointer;
-  }
-  .sl-preview-run:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-
+  /* ——— the consequence strip ————————————————————————————————— */
   .sl-strip {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
@@ -392,6 +449,19 @@
   .sl-figure.sl-good.live .sl-figure-value {
     color: var(--accent-ink);
   }
+  /*
+   * A DENOMINATOR, because a bare count is not a magnitude.
+   *
+   * "15 conclusions lose footing" reads the same on an assessment with fifteen
+   * conclusions and one with ninety, and those are opposite findings. It is set
+   * small and muted so the figure it qualifies still leads.
+   */
+  .sl-of {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0;
+    color: var(--text-muted);
+  }
   .sl-figure-label {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
@@ -401,12 +471,13 @@
     margin: 7px 0 0;
   }
 
+  /* ——— the two halves ———————————————————————————————————————— */
   .sl-body {
     display: grid;
-    grid-template-columns: minmax(15rem, 21rem) minmax(0, 1fr);
-    gap: 26px;
+    grid-template-columns: minmax(14rem, 19rem) minmax(0, 1fr);
+    gap: 24px;
     align-items: start;
-    margin-top: 22px;
+    margin-top: 20px;
   }
   .sl-levers {
     position: sticky;
@@ -420,7 +491,8 @@
   .sl-label,
   .sl-column-kicker,
   .sl-group-head,
-  .sl-tag {
+  .sl-tag,
+  .sl-more {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     letter-spacing: var(--tracking-label);
@@ -429,12 +501,11 @@
   }
   .sl-label {
     color: var(--text-muted);
-    margin-bottom: 9px;
   }
   .sl-intro,
   .sl-note {
     font-size: var(--fs-label);
-    line-height: 1.55;
+    line-height: 1.5;
     color: var(--text-muted);
     margin: 8px 0 0;
     max-width: 68ch;
@@ -444,11 +515,26 @@
     padding-left: 13px;
   }
 
-  .sl-lever-actions {
+  /* ——— the lever rail ———————————————————————————————————————— */
+  /*
+   * ONE LINE PER LEVER, and the weight as a COLUMN.
+   *
+   * Each row used to carry a sentence — "3 things rest on it · 38% on how much
+   * turns on it, how arguable it is and what it would cost" — repeated verbatim
+   * fourteen times, which ran the rail to ~810px and set the height of the whole
+   * workspace before a single result was drawn. The sentence is the rail's sort
+   * order; it is stated once under the list.
+   */
+  .sl-lever-head {
     display: flex;
-    flex-wrap: wrap;
-    gap: 14px;
-    margin: 12px 0 10px;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    padding-bottom: 7px;
+  }
+  .sl-lever-head-n {
+    text-align: right;
+    flex: 0 0 auto;
   }
   .sl-lever-list {
     list-style: none;
@@ -465,32 +551,45 @@
   }
   .sl-lever {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 9px;
-    padding: 9px 10px 9px 8px;
+    padding: 7px 10px 7px 8px;
     cursor: pointer;
   }
   .sl-lever input {
-    margin-top: 3px;
     accent-color: var(--accent);
     flex: 0 0 auto;
   }
-  .sl-lever-body {
-    display: grid;
-    gap: 3px;
-    min-width: 0;
-  }
+  /* The name is the only part that may grow, so it takes the free space and
+     clips; `title` keeps the full wording without arming a popover per row. */
   .sl-lever-label {
+    flex: 1 1 auto;
+    min-width: 0;
     font-size: var(--fs-label);
-    line-height: 1.4;
-    overflow-wrap: anywhere;
+    line-height: 1.35;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    border-bottom: 1px dotted var(--line-strong);
   }
-  .sl-lever-meta {
+  .sl-lever-n {
+    flex: 0 0 auto;
+    font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
-    line-height: 1.45;
+    font-variant-numeric: tabular-nums;
     color: var(--text-muted);
   }
+  .sl-lever-list li.on .sl-lever-n {
+    color: var(--accent);
+  }
+  .sl-lever-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin: 11px 0 0;
+  }
 
+  /* ——— the resting preview ——————————————————————————————————— */
   .sl-resting-head {
     font-family: var(--font-display);
     font-size: var(--fs-display-xs);
@@ -501,14 +600,64 @@
     line-height: 1.6;
     max-width: 68ch;
   }
+  .sl-preview-head {
+    margin: 10px 0 0;
+    line-height: 1.55;
+  }
+  /* The same shape as the strip it is previewing, so the reader recognises the
+     answer when it arrives rather than reading a second format for it. */
+  .sl-preview {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+    gap: 1px;
+    background: var(--line-strong);
+    border: 1px solid var(--line-strong);
+    margin: 14px 0 0;
+  }
+  .sl-preview > div {
+    background: var(--bg);
+    padding: 11px 13px;
+    min-width: 0;
+  }
+  .sl-preview-fig {
+    font-family: var(--font-display);
+    font-size: var(--fs-num-md);
+    line-height: 1;
+    margin: 0;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .sl-good-fig {
+    color: var(--accent-ink);
+  }
+  .sl-preview-run {
+    font: inherit;
+    margin-top: 14px;
+    background: none;
+    border: 1px solid var(--line-strong);
+    border-radius: 0;
+    padding: 7px 11px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    cursor: pointer;
+  }
+  .sl-preview-run:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
 
+  /* ——— what is holding false ————————————————————————————————— */
   .sl-chosen {
-    margin-bottom: 20px;
+    margin-bottom: 16px;
   }
   .sl-chips {
     display: flex;
     flex-wrap: wrap;
     gap: 7px;
+    margin-top: 8px;
   }
   .sl-chip {
     display: inline-flex;
@@ -537,6 +686,7 @@
     color: var(--bg);
   }
 
+  /* ——— the two directions ———————————————————————————————————— */
   .sl-columns {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
@@ -546,13 +696,16 @@
   }
   .sl-column {
     background: var(--bg);
-    padding: 15px 17px 18px;
+    padding: 14px 16px 16px;
     min-width: 0;
+    /* The columns hold different numbers of rows; stretching the shorter one
+       left its content floating above half a screen of its own ground. */
+    align-content: start;
   }
   .sl-column header {
     border-bottom: 1px solid var(--divider);
-    padding-bottom: 10px;
-    margin-bottom: 13px;
+    padding-bottom: 9px;
+    margin-bottom: 12px;
   }
   .sl-column h4 {
     font-family: var(--font-display);
@@ -560,7 +713,7 @@
     line-height: 1.2;
     text-transform: uppercase;
     letter-spacing: -0.01em;
-    margin: 6px 0 0;
+    margin: 5px 0 0;
   }
   .sl-loses .sl-column-kicker {
     color: var(--accent);
@@ -569,34 +722,57 @@
     color: var(--accent-ink);
   }
 
-  .sl-group {
-    margin-bottom: 17px;
+  .sl-group + .sl-group {
+    margin-top: 15px;
+    padding-top: 13px;
+    border-top: 1px solid var(--divider);
   }
   .sl-group-head {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
     color: var(--text-primary);
-    margin-bottom: 6px;
+  }
+  .sl-group-n {
+    font-family: var(--font-display);
+    font-size: var(--fs-body-lg);
+    line-height: 1;
+    letter-spacing: -0.01em;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .sl-gains .sl-group-n {
+    color: var(--accent-ink);
   }
   .sl-group ul {
     list-style: none;
     padding: 0;
-    margin: 8px 0 0;
-    display: grid;
-    gap: 7px;
+    margin: 9px 0 0;
   }
+  /*
+   * ONE LINE PER RESULT. `.sl-why` carried `width: 100%` inside a wrapping flex
+   * row, so the tag, the name and the reason each took a line of their own and
+   * twenty-two results became sixty-six lines. The name takes the free space
+   * and clips; the reason only appears at all when it is not already the
+   * group's caption.
+   */
   .sl-group li {
     display: flex;
-    flex-wrap: wrap;
     align-items: baseline;
-    gap: 7px;
+    gap: 8px;
     font-size: var(--fs-label);
     border-top: 1px solid var(--divider);
-    padding-top: 7px;
+    padding: 6px 0;
+  }
+  .sl-group li:first-child {
+    border-top: 0;
   }
   .sl-tag {
     border: 1px solid var(--line-strong);
     padding: 2px 5px;
     color: var(--text-muted);
     flex: 0 0 auto;
+    white-space: nowrap;
   }
   .sl-tag.gone {
     border-color: var(--accent);
@@ -606,10 +782,48 @@
     border-color: var(--accent-ink);
     color: var(--accent-ink);
   }
+  /*
+   * THE NAME OUTRANKS THE REASON when the row has to give something up. Left to
+   * share the row evenly they both clipped — "Synthet…" beside "needs
+   * \u201cSynthe…" is two halves of nothing — and the name is the part a reader
+   * scans for. The reason is capped at two fifths and the name takes the rest.
+   */
   .sl-why {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 42%;
     color: var(--text-muted);
     font-size: var(--fs-label-xs);
-    width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .sl-more {
+    color: var(--text-muted);
+    margin-top: 9px;
+  }
+  /* A whole group reduced to its figure. It sits on the column's rule rather
+     than inside a bordered block, because it is a footnote to the two groups
+     above it rather than a third thing of the same kind. */
+  .sl-also {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin: 15px 0 0;
+    padding-top: 13px;
+    border-top: 1px solid var(--divider);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    color: var(--text-primary);
+  }
+  .sl-also .sl-link {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
   }
 
   .sl-link {
@@ -623,10 +837,18 @@
     text-decoration: underline;
     cursor: pointer;
     text-align: left;
-    overflow-wrap: anywhere;
   }
   .sl-link:hover {
     color: var(--accent);
+  }
+  /* In a row the name is the only thing that may grow, so it clips rather than
+     wrapping — `overflow-wrap: anywhere` would put it back on three lines. */
+  .sl-group li .sl-link {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
   .sl-lever-actions .sl-link {
     font-family: var(--font-mono);
@@ -636,13 +858,25 @@
   }
 
   .sl-holds {
-    font-size: var(--fs-label);
-    line-height: 1.55;
+    font-size: var(--fs-label-xs);
+    line-height: 1.5;
     color: var(--text-muted);
-    margin: 20px 0 0;
-    padding-top: 13px;
+    margin: 16px 0 0;
+    padding-top: 12px;
     border-top: 1px solid var(--divider);
-    max-width: 76ch;
+  }
+
+  /*
+   * Below this the two outcome columns are ~310px each and a tag, a name and a
+   * reason cannot share one line without all three becoming ellipses. The
+   * reason goes: the group's caption already states it whenever every row
+   * shares one, the row keeps it as a native `title`, and the drill holds all
+   * of it. The NAME is what a reader scans for and it keeps the width.
+   */
+  @media (max-width: 1200px) {
+    .sl-why {
+      display: none;
+    }
   }
 
   @media (max-width: 900px) {
@@ -657,7 +891,8 @@
   /*
    * On paper the reader has no switches, so the lab prints as the assessment
    * AS WRITTEN plus the list of levers — which is the useful half: "here is
-   * what this rests on, and how much rests on each".
+   * what this rests on, and how much rests on each". Nothing may CLIP on paper:
+   * an ellipsis exists for a fixed ink strip that a page does not have.
    */
   @media print {
     .sl-strip,
@@ -674,6 +909,13 @@
     }
     .sl-lever input {
       display: none;
+    }
+    .sl-lever-label,
+    .sl-why,
+    .sl-group li .sl-link {
+      overflow: visible;
+      white-space: normal;
+      text-overflow: clip;
     }
   }
 </style>

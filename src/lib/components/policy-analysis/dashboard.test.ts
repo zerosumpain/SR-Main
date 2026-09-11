@@ -376,7 +376,7 @@ describe('the stress test recomputes rather than re-asks', () => {
   it('offers only cited assumptions, and reports both directions', async () => {
     const all = await assessment();
     const html = render(StressLab, { props: { artefacts: all, onopen: inspect } }).body;
-    expect(html).toContain('Suppose these turn out to be wrong');
+    expect(html).toContain('Suppose these fail');
     // At rest it PREVIEWS the top lever rather than spending half a workspace
     // explaining what would happen if the reader used it.
     expect(html).toContain('Nothing is switched off. This is the assessment as written.');
@@ -390,6 +390,39 @@ describe('the stress test recomputes rather than re-asks', () => {
     const offered = leverage(all).length;
     expect(offered).toBeGreaterThan(0);
     expect(offered).toBeLessThanOrEqual(view.of(all, 'assumption').length);
+  });
+
+  /**
+   * EVERY FIGURE CARRIES ITS DENOMINATOR.
+   *
+   * "15 conclusions lose footing" reads the same on an assessment with fifteen
+   * conclusions and one with ninety, and those are opposite findings.
+   */
+  it('reports each count as a share of what there was', async () => {
+    const all = await assessment();
+    const html = render(StressLab, { props: { artefacts: all, onopen: inspect } }).body;
+    const totals = {
+      findings: view.of(all, 'finding').length,
+      recommendations: view.of(all, 'recommendation').length,
+      plays: view.of(all, 'exploit').length,
+    };
+    for (const n of Object.values(totals)) expect(html).toContain(`/${n}`);
+  });
+
+  /**
+   * THE LEVER RAIL IS ONE LINE PER LEVER.
+   *
+   * It used to repeat "N things rest on it · M% on how much turns on it, how
+   * arguable it is and what it would cost" on every row — fourteen times, ~810px,
+   * which set the height of the whole workspace before a result was drawn. The
+   * sentence is the rail's sort order and is stated once beneath it.
+   */
+  it('states how the levers are ordered once, not on every row', async () => {
+    const all = await assessment();
+    const html = render(StressLab, { props: { artefacts: all, onopen: inspect } }).body;
+    expect(html).toContain('Ordered by how much turns on each');
+    expect([...html.matchAll(/how arguable it is/g)]).toHaveLength(0);
+    expect([...html.matchAll(/things rest on it/g)]).toHaveLength(0);
   });
 });
 
