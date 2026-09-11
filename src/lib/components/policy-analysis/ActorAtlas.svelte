@@ -1,39 +1,48 @@
 <script lang="ts">
-  // THE ACTOR ATLAS — every body the policy runs through, on the measure the
-  // reader picks.
+  // THE CAST, AS ONE TABLE — every body the policy runs through, ranked on the
+  // measure the reader picks, against the six questions that decide how each
+  // would behave.
   //
-  // Ask 5, which named five measures: how many exposures a body is tied to, the
-  // biggest risk it poses, how significant its role in the policy is, how often
-  // it is referenced, and how many relationships it has. All five are already in
-  // the data and none of them needed a model.
+  // 2026-09-11, John: *"now do the same for the actors page"*, after the stress
+  // test. Measured first, at 1440 on the nine-body seed: **1,881px**, of which
+  // the trait table was 1,143 and the bar chart above it 456.
   //
-  // A RANKED BAR, not a scatter and not a bubble cloud. Each measure is one
-  // magnitude per body, and a scatter would force two of the five on the reader
-  // when the ask was explicitly to redraw on one. Bars also survive being
-  // printed, which a force-directed anything does not.
+  // THE DIAGNOSIS WAS DUPLICATION, NOT DENSITY. The panel rendered the same nine
+  // bodies THREE times — a ranked bar chart, a six-question grid underneath it,
+  // and a five-measure table inside a disclosure. The chart and the grid opened
+  // with the same two columns (the body, and the worst thing it could do), so a
+  // reader scrolled past a ranking to reach a table that re-stated it.
   //
-  // Colour does no work here beyond magnitude: one hue, the accent, with the
-  // length of the bar carrying the value. The exposure BAND is a separate,
-  // categorical thing and is printed as a word — never as a second hue, because
-  // the site's four validated categorical colours are spent on the evidence mix
-  // and a fifth would be invented.
+  // There is one table now. The measure switcher re-ranks it and redraws the bar
+  // in its second column, which is what the chart was for; the six questions
+  // stay where they were. Ask 5's five measures all still work, and the bodies
+  // that score nothing on the chosen one sit at the foot WITHOUT a bar rather
+  // than being dropped — this is the cast, so leaving a body out of it because
+  // it scores zero on one measure would be a different (and wrong) table.
   //
-  // The table under the chart carries the same numbers for print and for a
-  // screen reader, and it is the same rows in the same order — not a summary of
-  // them.
+  // A RANKED BAR, not a scatter and not a bubble cloud: each measure is one
+  // magnitude per body, and a scatter would force two of the five on a reader
+  // who asked to redraw on one. Colour does no work beyond magnitude — one hue,
+  // the accent, with length carrying the value. The exposure BAND stays a word,
+  // never a second hue, because the site's four validated categorical colours
+  // are spent on the evidence mix and a fifth would be invented.
   import { ACTOR_MEASURES, ceiling, formatMeasure, rank, type AtlasRow, type MeasureKey } from '$lib/policy-analysis/actors';
+  import type { TraitRow } from '$lib/policy-analysis/matrix';
   import { BAND_LABEL, type Band } from '$lib/policy-analysis/view';
   import ExplainLabel from './ExplainLabel.svelte';
+  import CastTable from './CastTable.svelte';
 
   interface Props {
     rows: AtlasRow[];
+    /** The same bodies, with the six questions. Ranked and filtered in step. */
+    traits: TraitRow[];
     /** Open the drill on an artefact. */
     onopen: (id: string) => void;
     /** Send the reader to the playbook, filtered to one body's plays. */
     onplays?: (actorId: string) => void;
   }
 
-  let { rows, onopen, onplays }: Props = $props();
+  let { rows, traits, onopen, onplays }: Props = $props();
 
   let measure = $state<MeasureKey>('worst');
   /** Narrow the chart to bodies the library already knows. */
@@ -44,17 +53,35 @@
   const filtered = $derived(
     rows.filter((r) => (!knownOnly || r.known) && (!armedOnly || r.measures.plays > 0)),
   );
-  const ranked = $derived(rank(filtered, measure));
-  const top = $derived(ceiling(ranked, measure));
+  /**
+   * SCORERS FIRST, THEN THE REST — never `rank()` alone.
+   *
+   * `rank()` drops every body scoring zero on the measure, which is right for a
+   * chart (an empty bar reads as something the assessment measured) and wrong
+   * for the cast: a body with no play still answers the six questions, and
+   * leaving it out because it scores nothing on the column you happen to be
+   * sorting by hides it. They sit at the foot with no bar, and the note says so.
+   */
+  const scoring = $derived(rank(filtered, measure));
+  const ordered = $derived([...scoring, ...filtered.filter((r) => r.measures[measure] === 0)]);
+  const top = $derived(ceiling(scoring, measure));
   const current = $derived(ACTOR_MEASURES.find((m) => m.key === measure) ?? ACTOR_MEASURES[0]);
   /** Bodies that score nothing on this measure — named, never silently dropped. */
-  const silent = $derived(filtered.length - ranked.length);
+  const silent = $derived(filtered.length - scoring.length);
 
-  /** How many bars before the chart becomes a wall. The rest stay in the table. */
-  const DRAWN = 18;
-  const drawn = $derived(ranked.slice(0, DRAWN));
+  /** The trait rows, in the order and the subset the controls just chose. */
+  const byId = $derived(new Map(traits.map((t) => [t.id, t])));
+  const shownTraits = $derived(ordered.map((r) => byId.get(r.id)).filter((t): t is TraitRow => Boolean(t)));
 
-  const width = (row: AtlasRow) => Math.max(1.5, (row.measures[measure] / top) * 100);
+  /** Each body's score on the current measure, for the bar in column two. */
+  const scores = $derived(
+    new Map(
+      ordered.map((r) => [
+        r.id,
+        { text: formatMeasure(measure, r.measures[measure]), frac: r.measures[measure] / top, band: r.band },
+      ]),
+    ),
+  );
 </script>
 
 <div class="atlas">
@@ -88,61 +115,31 @@
 
   <p class="at-note">{current.note}</p>
 
-  {#if drawn.length}
-    <!--
-      An HTML bar chart rather than an SVG one. Every bar carries a real text
-      token at the site's 12px floor, the labels wrap, and the whole thing
-      reflows at 390px — none of which an SVG viewBox gives without hand-tuning
-      type that the font-size gate then rightly fails.
-    -->
-    <div class="at-chart">
-      {#each drawn as row, index (row.id)}
-        <div class="at-row">
-          <!-- The actor card is the one peek that earns its place: what this
-               body is judged on, who it answers to, who gains if the policy
-               fails, and the worst play it can run. One per row. -->
-          <button
-            type="button"
-            class="at-name"
-            data-pa-peek={`actor:${row.id}`}
-            onclick={() => onopen(row.view.profile?.id ?? row.id)}
-          >
-            <span class="at-rank">{index + 1}</span>
-            <span class="at-name-text">{row.label}</span>
-          </button>
-          <div class="at-bar-cell">
-            <span class="at-bar" style="width: {width(row)}%"></span>
-            <span class="at-value">{formatMeasure(measure, row.measures[measure])}</span>
-          </div>
-          <div class="at-tail">
-            <span class="at-band">{row.band ? (BAND_LABEL[row.band as Band] ?? row.band) : ''}</span>
-            {#if onplays && row.measures.plays > 0}
-              <button type="button" class="at-plays" onclick={() => onplays(row.id)}>
-                {row.measures.plays} {row.measures.plays === 1 ? 'play' : 'plays'} →
-              </button>
-            {:else}
-              <span class="at-type">no play</span>
-            {/if}
-          </div>
-        </div>
-      {/each}
-    </div>
+  <!--
+    ONE TABLE. The bar chart that used to sit here drew the same nine bodies
+    the grid below it already listed, opening with the same two columns — so a
+    reader scrolled 456px past a ranking to reach a table that re-stated it.
+    The ranking lives in the grid's second column now, and the switcher above
+    re-ranks the whole thing.
+  -->
+  <CastTable
+    rows={shownTraits}
+    {onopen}
+    onplays={onplays ?? (() => {})}
+    rankBy={{ label: current.label, term: measure, values: scores }}
+  />
 
-    {#if ranked.length > DRAWN}
-      <p class="at-note">
-        The chart draws the top {DRAWN} of {ranked.length}. Every body is in the table below.
-      </p>
-    {/if}
-    {#if silent > 0}
-      <p class="at-note">
-        {silent} further {silent === 1 ? 'body scores' : 'bodies score'} nothing on this measure and {silent === 1 ? 'is' : 'are'} left
-        off the chart rather than drawn as a zero — an empty bar reads as something the assessment measured.
-      </p>
-    {/if}
-  {:else}
+  {#if silent > 0}
+    <p class="at-note">
+      {silent} further {silent === 1 ? 'body scores' : 'bodies score'} nothing on this measure and {silent === 1 ? 'sits' : 'sit'} at
+      the foot without a bar rather than being drawn as a zero — an empty bar reads as something the
+      assessment measured. {silent === 1 ? 'It answers' : 'They answer'} the six questions like any other.
+    </p>
+  {/if}
+  {#if !ordered.length}
     <p class="at-empty">
-      No body scores on this measure. That is not the same as a clean policy — try another measure, or read
-      the structural checks, which do not depend on a body having been profiled.
+      No body matches those filters. Clear them above, or read the structural checks, which do not depend on
+      a body having been profiled.
     </p>
   {/if}
 
@@ -228,118 +225,6 @@
     max-width: 66ch;
   }
 
-  .at-chart {
-    display: grid;
-    gap: 1px;
-    background: var(--divider);
-    border: 1px solid var(--divider);
-    margin-top: 18px;
-  }
-  .at-row {
-    display: grid;
-    grid-template-columns: minmax(9rem, 16rem) minmax(0, 1fr) 12.4rem;
-    align-items: center;
-    gap: 14px;
-    background: var(--bg);
-    padding: 7px 11px;
-  }
-  .at-row:hover {
-    background: var(--accent-tint-04);
-  }
-
-  .at-name {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    font: inherit;
-    font-size: var(--fs-label);
-    background: none;
-    border: 0;
-    border-radius: 0;
-    padding: 0;
-    color: var(--text-primary);
-    cursor: pointer;
-    text-align: left;
-    min-width: 0;
-  }
-  .at-name:hover .at-name-text,
-  .at-name:focus-visible .at-name-text {
-    color: var(--accent);
-    text-decoration: underline;
-  }
-  .at-rank {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    color: var(--text-ghost);
-    flex: 0 0 auto;
-    font-variant-numeric: tabular-nums;
-  }
-  .at-name-text {
-    min-width: 0;
-    overflow-wrap: anywhere;
-  }
-
-  .at-bar-cell {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 2.4rem;
-    align-items: center;
-    gap: 9px;
-    min-width: 0;
-  }
-  /* 4px rounded data-end, anchored square to the baseline at the axis. */
-  .at-bar {
-    display: block;
-    height: 13px;
-    background: var(--accent);
-    border-radius: 0 4px 4px 0;
-    min-width: 3px;
-    flex: 0 0 auto;
-  }
-  .at-value {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    color: var(--text-secondary);
-    font-variant-numeric: tabular-nums;
-    text-align: right;
-  }
-
-  .at-tail {
-    display: grid;
-    grid-template-columns: 6.4rem 5rem;
-    align-items: baseline;
-    gap: 10px;
-    justify-content: end;
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: var(--tracking-label);
-    text-transform: uppercase;
-    min-width: 0;
-  }
-  .at-band {
-    color: var(--accent);
-  }
-  .at-type {
-    color: var(--text-ghost);
-  }
-  .at-plays {
-    font: inherit;
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: var(--tracking-label);
-    text-transform: uppercase;
-    background: none;
-    border: 0;
-    border-radius: 0;
-    padding: 0;
-    color: var(--accent-ink);
-    text-decoration: underline;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-  .at-plays:hover {
-    color: var(--accent);
-  }
-
   .at-table-wrap {
     margin-top: 22px;
     border-top: 1px solid var(--line-strong);
@@ -410,30 +295,17 @@
     text-align: left;
   }
 
-  @media (max-width: 780px) {
-    .at-row {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 5px;
-      padding: 10px 11px;
-    }
-    .at-tail {
-      justify-content: start;
-    }
-  }
-
-  /* On paper the chart is the table — a bar with no hover and no filter row is
-     a decoration, and the reader needs all five measures at once anyway. */
+  /*
+   * On paper a filter row is a decoration — nothing can be pressed — and the
+   * reader wants all five measures at once rather than the one the screen
+   * happened to be sorted by, so the disclosure opens into the full table.
+   */
   @media print {
-    .at-controls,
-    .at-chart {
+    .at-controls {
       display: none !important;
     }
     .at-table-wrap summary {
       display: none;
-    }
-    .at-bar {
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
     }
   }
 </style>
