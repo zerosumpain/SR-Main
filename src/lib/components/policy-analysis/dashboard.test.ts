@@ -12,13 +12,17 @@ import { PATTERNS, PERSONA_STAGE, REPORT_SECTIONS, SCENARIOS, artefact, type Art
 import { executeStage } from '$lib/policy-analysis/pipeline';
 import { ingest } from '$lib/policy-analysis/server/ingest';
 import * as view from '$lib/policy-analysis/view';
-import { playGrid, traitGrid } from '$lib/policy-analysis/matrix';
+import { adjacency, playGrid, traitGrid } from '$lib/policy-analysis/matrix';
+import { atlas as atlasRows } from '$lib/policy-analysis/actors';
+import { network } from '$lib/policy-analysis/network';
 import { fixtureModel } from '../../../../tests/fixtures/policy-analysis/model';
 import Verdict from './Verdict.svelte';
 import ExposurePlot from './ExposurePlot.svelte';
 import PlaybookTable from './PlaybookTable.svelte';
 import CheckGrid from './CheckGrid.svelte';
 import CastTable from './CastTable.svelte';
+import AdjacencyGrid from './AdjacencyGrid.svelte';
+import ActorAtlas from './ActorAtlas.svelte';
 import EvidenceMix from './EvidenceMix.svelte';
 import CrossPolicy from './CrossPolicy.svelte';
 import ArtefactValue from './ArtefactValue.svelte';
@@ -517,5 +521,107 @@ describe('a persona is one body, however many records the library holds', () => 
   it('leaves out actors the library has never met', () => {
     const board = [{ actor: actorOf('s2_001', 'Nobody'), profile: null, plays: [], worst: 0 }];
     expect(view.personaBoard(board, [])).toEqual([]);
+  });
+});
+
+describe('hover explains a word; a click opens a thing', () => {
+  const atlasOf = (all: Artefact[]) => atlasRows(all, view.actorBoard(all, view.plays(all)), []);
+
+  /**
+   * John, 2026-09-11: *"we can remove a lot of the hover overs on dense pages —
+   * it just gets cluttered. clickthrough to modal is fine, but hover off can be
+   * reduced"*. The rule that came out of it is worth pinning, because every one
+   * of these hovers was cheap to add and the clutter is cumulative:
+   *
+   *   a GRID carries `term:` explainers on its headers and NOTHING else;
+   *   a subject peek belongs in prose and in short named lists.
+   */
+  const subjectPeeks = (html: string) =>
+    [...html.matchAll(/data-pa-peek="([^"]+)"/g)].map((m) => m[1]).filter((v) => !v.startsWith('term:'));
+
+  const termPeeks = (html: string) =>
+    [...html.matchAll(/data-pa-peek="(term:[^"]+)"/g)].map((m) => m[1]);
+
+  it('arms no subject hover in a grid that is not the cast', async () => {
+    const all = await assessment();
+    const plays = view.plays(all);
+    const grids = {
+      playbook: render(PlaybookTable, { props: { rows: playGrid(plays), total: plays.length, onopen: inspect } }).body,
+      checks: render(CheckGrid, { props: { checks: view.checks(all), inspect } }).body,
+      adjacency: render(AdjacencyGrid, { props: { grid: adjacency(network(all)), onopen: inspect } }).body,
+    };
+    for (const [name, html] of Object.entries(grids)) {
+      expect(subjectPeeks(html), `${name} arms a subject hover`).toEqual([]);
+    }
+    // The vocabulary survives on the HEADERS: a reader still cannot be expected
+    // to know what "concealment" is doing in a ranking.
+    expect(termPeeks(grids.playbook).length).toBeGreaterThan(0);
+    expect(termPeeks(grids.adjacency).length).toBeGreaterThan(0);
+  });
+
+  it('keeps the cast table to one actor and one play peek per ROW', async () => {
+    // "leave hover over for the actors page though that works really well" —
+    // the actor card is the one that earns its place. Per row, never per cell:
+    // the six profile cells beside each name used to carry one each.
+    const all = await assessment();
+    const rows = traitGrid(view.actorBoard(all, view.plays(all)));
+    const html = render(CastTable, { props: { rows, onopen: inspect, onplays: inspect } }).body;
+    const subjects = subjectPeeks(html);
+    expect(subjects.filter((v) => v.startsWith('actor:')).length).toBe(rows.length);
+    expect(subjects.filter((v) => v.startsWith('play:')).length).toBe(rows.filter((r) => r.topPlay).length);
+    expect(subjects.filter((v) => v.startsWith('field:'))).toEqual([]);
+    expect(subjects.length).toBeLessThanOrEqual(rows.length * 2);
+  });
+
+  it('arms no explainer on a filter or a segmented button', async () => {
+    // "on the table, you can remove it from the filters and buttons". A card
+    // that appears over the thing you are about to press fights the press.
+    const all = await assessment();
+    const atlas = render(ActorAtlas, {
+      props: { rows: atlasOf(all), onopen: inspect, onplays: inspect },
+    }).body;
+    const adjacencyHtml = render(AdjacencyGrid, { props: { grid: adjacency(network(all)), onopen: inspect } }).body;
+
+    // The atlas's measure switcher and the network's family filter are both
+    // `.pa-seg` runs of buttons; neither may carry a peek.
+    for (const [name, html] of [['atlas', atlas], ['network', adjacencyHtml]] as const) {
+      const seg = html.slice(html.indexOf('pa-seg'));
+      const upToNextSection = seg.slice(0, seg.indexOf('</div>'));
+      expect(upToNextSection, `${name} arms an explainer on a control`).not.toContain('data-pa-peek');
+    }
+    // The network's family definitions survive on its LEGEND instead.
+    expect(adjacencyHtml).toContain('data-pa-peek="term:family_authority"');
+  });
+
+  it('still previews a subject where one is NAMED rather than tabulated', async () => {
+    const all = await assessment();
+    const plays = view.plays(all);
+    const html = render(Verdict, {
+      props: {
+        headline: view.headline(all),
+        tiles: view.tiles(all, plays),
+        bands: view.bandCounts(plays),
+        plays,
+        status: 'completed',
+        thin: view.checks(all).filter((c) => c.data.result !== 'low_risk'),
+        lever: leverage(all)[0] ?? null,
+        options: view.of(all, 'recommendation'),
+        onopen: inspect,
+      },
+    }).body;
+    // The short version names a handful of things and each one answers "is this
+    // worth opening" before the reader commits to a drill.
+    expect(subjectPeeks(html).length).toBeGreaterThan(0);
+  });
+
+  it('keeps a clipped grid cell readable without a card', async () => {
+    const all = await assessment();
+    const rows = traitGrid(view.actorBoard(all, view.plays(all)));
+    const html = render(CastTable, { props: { rows, onopen: inspect, onplays: inspect } }).body;
+    // A clipped value with no way to reach the rest of it would be worse than a
+    // long one, so the cell carries the full wording as a native `title` — the
+    // browser's own delayed tooltip, which costs the page nothing.
+    const clipped = rows.flatMap((r) => r.cells).filter((c) => c?.clipped);
+    if (clipped.length) expect(html).toContain(`title="${clipped[0]!.full.replaceAll('"', '&quot;')}"`);
   });
 });

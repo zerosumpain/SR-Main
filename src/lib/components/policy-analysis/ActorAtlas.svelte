@@ -70,7 +70,6 @@
           aria-checked={measure === m.key}
           class="at-measure"
           class:on={measure === m.key}
-          data-pa-peek={`term:${m.key}`}
           onclick={() => (measure = m.key)}
         >{m.label}</button>
       {/each}
@@ -99,6 +98,9 @@
     <div class="at-chart">
       {#each drawn as row, index (row.id)}
         <div class="at-row">
+          <!-- The actor card is the one peek that earns its place: what this
+               body is judged on, who it answers to, who gains if the policy
+               fails, and the worst play it can run. One per row. -->
           <button
             type="button"
             class="at-name"

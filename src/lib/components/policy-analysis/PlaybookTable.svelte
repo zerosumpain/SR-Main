@@ -81,11 +81,11 @@
     {@const r = row as PlayRow}
     {#if column.key === 'play'}
       <span class="pt-rank">{String(r.rank).padStart(2, '0')}</span>
-      <button class="pt-name" data-pa-peek={`play:${r.id}`} onclick={() => onopen(r.id)}>{r.label}</button>
+      <button class="pt-name" onclick={() => onopen(r.id)}>{r.label}</button>
       <span class="pt-summary">{r.summary}</span>
     {:else if column.key === 'actor'}
       {#if r.actor}
-        <button class="pt-actor" data-pa-peek={`actor:${r.actor.id}`} onclick={() => onopen(r.actor!.id)}>{r.actor.label}</button>
+        <button class="pt-actor" onclick={() => onopen(r.actor!.id)}>{r.actor.label}</button>
       {:else}
         <span class="pt-muted">Body not resolved</span>
       {/if}
@@ -96,11 +96,12 @@
         <span class="pt-targets">aims at {r.targets} parts of the machinery</span>
       {/if}
     {:else if column.key === 'exposure'}
+      <!-- The column header already explains `exposure`; repeating the same
+           card on all eleven figures was eleven ways to be told once. -->
       <span
         class="pt-band"
         style={`background: ${BAND_FILL[r.band as Band]}`}
         class:on-dark={r.band === 'severe'}
-        data-pa-peek="term:exposure"
       >{r.exposure}</span>
       <span class="pt-band-word">{BAND_LABEL[r.band as Band]}</span>
     {:else if column.key === 'legality'}

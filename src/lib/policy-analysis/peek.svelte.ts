@@ -36,13 +36,17 @@ export const PEEK_WIDTH = 340;
 /**
  * What the card is being asked about.
  *
- * `term` is the glossary — a column header, a factor, a band. `field` names one
- * field OF an artefact (`field:profile_3:gainFromFailure`), which is what a
- * clipped grid cell needs: the full wording plus where that one line came from,
- * rather than the whole profile. Everything else names an artefact and differs
- * only in which of its fields are worth the space.
+ * `term` is the glossary — a column header, a factor, a band — and it is the
+ * kind that survives everywhere, because a word has nowhere else to be
+ * explained. The rest name an artefact and differ only in which of its fields
+ * are worth the space; they appear in PROSE and in short named lists, never in
+ * a grid, where the row is already one click from the whole artefact.
+ *
+ * A `field` kind existed briefly, for one clipped cell of a profile. Fifty-four
+ * cells each opening a popover is what made the dense views tiring, so the
+ * clipped cell carries a native `title` and the kind is gone.
  */
-export type PeekKind = 'actor' | 'play' | 'assumption' | 'term' | 'artefact' | 'check' | 'relation' | 'field';
+export type PeekKind = 'actor' | 'play' | 'assumption' | 'term' | 'artefact' | 'check' | 'relation';
 
 export interface PeekAnchor {
   kind: PeekKind;
@@ -53,7 +57,7 @@ export interface PeekAnchor {
   pinned: boolean;
 }
 
-const KINDS: PeekKind[] = ['actor', 'play', 'assumption', 'term', 'artefact', 'check', 'relation', 'field'];
+const KINDS: PeekKind[] = ['actor', 'play', 'assumption', 'term', 'artefact', 'check', 'relation'];
 
 /**
  * Split `actor:s2_dfe` into its parts.

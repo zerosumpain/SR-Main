@@ -68,16 +68,14 @@
           <ExplainLabel term={String(check.data.result)} text={m.label} />
         </span>
       {:else if column.key === 'check'}
-        <button class="ck-name" data-pa-peek={`check:${check.id}`} onclick={() => inspect(check.id)}>
-          {check.label}
-        </button>
+        <button class="ck-name" onclick={() => inspect(check.id)}>{check.label}</button>
         <span class="ck-refs">{check.refs.length} {check.refs.length === 1 ? 'relationship' : 'relationships'} read</span>
       {:else if column.key === 'found'}
         {@const found = clip(check.statement, 190)}
         <button
           class="ck-text"
           class:clipped={found.clipped}
-          data-pa-peek={`check:${check.id}`}
+          title={found.clipped ? check.statement : undefined}
           onclick={() => inspect(check.id)}
         >{found.text}</button>
       {:else}
@@ -85,7 +83,12 @@
           {@const fix = clip(String(check.data.mitigation), 150)}
           <!-- Clipped, so it has to be openable: a shortened value with no way
                to reach the rest of it is worse than a long one. -->
-          <button class="ck-fix" class:clipped={fix.clipped} onclick={() => inspect(check.id)}>{fix.text}</button>
+          <button
+            class="ck-fix"
+            class:clipped={fix.clipped}
+            title={fix.clipped ? String(check.data.mitigation) : undefined}
+            onclick={() => inspect(check.id)}
+          >{fix.text}</button>
         {:else}
           <span class="ck-silent">The assessment offers none</span>
         {/if}

@@ -63,7 +63,6 @@
       <button
         type="button"
         class:on={only === family.key}
-        data-pa-peek={`term:${familyTermKey(family.key)}`}
         onclick={() => (only = only === family.key ? null : family.key)}
       >
         <span class="ag-glyph" aria-hidden="true">{GLYPH[family.key]}</span>
@@ -95,7 +94,7 @@
           </th>
           {#each grid.bodies as body (body.id)}
             <th scope="col" class="ag-col-head">
-              <button class="ag-axis" data-pa-peek={`actor:${body.id}`} onclick={() => onopen(body.id)}>
+              <button class="ag-axis" title={body.label} onclick={() => onopen(body.id)}>
                 <span class="ag-axis-text">{axisLabel(body.label, 22)}</span>
               </button>
             </th>
@@ -106,7 +105,7 @@
         {#each grid.bodies as from, i (from.id)}
           <tr>
             <th scope="row" class="ag-row-head">
-              <button class="ag-axis" data-pa-peek={`actor:${from.id}`} onclick={() => onopen(from.id)}>
+              <button class="ag-axis" title={from.label} onclick={() => onopen(from.id)}>
                 {axisLabel(from.label, 30)}
               </button>
               <span class="ag-degree">{from.degree}</span>
@@ -115,16 +114,18 @@
               {@const cell = visible(grid.rows[i][j])}
               <td class:self={i === j} class:live={Boolean(cell)}>
                 {#if cell}
-                  <!-- A button, so the cell is reachable by keyboard: a
-                       `data-pa-peek` on a non-focusable element never fires
-                       `onfocusin` and the explainer does not exist without a
-                       pointer. -->
+                  <!--
+                    A button, so the cell is reachable by keyboard — and its own
+                    sentence is the `title`, not a styled card. A grid this size
+                    can hold 144 live cells, and a popover on each was the
+                    clutter that made the dense views tiring; the click still
+                    opens the relationship in full.
+                  -->
                   <button
                     class="ag-cell"
                     style={`--ag-weight: ${Math.min(1, cell.ids.length / 3)}`}
                     title={cellSentence(from.label, to.label, cell)}
                     aria-label={cellSentence(from.label, to.label, cell)}
-                    data-pa-peek={`artefact:${cell.ids[0]}`}
                     onclick={() => onopen(cell.ids[0])}
                   >
                     {#each cell.families as family (family)}<span class="ag-g">{GLYPH[family]}</span>{/each}
