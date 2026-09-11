@@ -410,19 +410,99 @@ export function scenarioBeats(scenario: Artefact, artefacts: Artefact[]): Beat[]
  * anchor it already was, so every existing deep link keeps working.
  */
 export const TABS = [
-  { id: 'verdict', name: 'Verdict', strap: 'What this assessment concludes.' },
-  { id: 'playbook', name: 'Playbook', strap: 'The plays each actor can run, ranked by exposure.' },
-  { id: 'interplay', name: 'Interplay', strap: 'Who is aiming at which mechanism.' },
-  { id: 'actors', name: 'Actors', strap: 'Every body this policy runs through, and what it wants.' },
-  { id: 'personas', name: 'Personas', strap: 'Bodies you have met before, and what this assessment adds.' },
-  { id: 'stress', name: 'Stress test', strap: 'Fail an assumption and watch what moves.' },
-  { id: 'checks', name: 'Checks', strap: 'Twelve structural tests over the policy graph.' },
-  { id: 'scenarios', name: 'Scenarios', strap: 'How this plays out when conditions change.' },
-  { id: 'evidence', name: 'Evidence', strap: 'What the conclusions are standing on.' },
-  { id: 'cross', name: 'Cross-policy', strap: 'Weaknesses that exist only because policies coexist.' },
-  { id: 'report', name: 'The report', strap: 'The written assessment, in five acts.' },
-  { id: 'provenance', name: 'Working', strap: 'Every stage, every call, every cost.' },
+  { id: 'verdict', name: 'Verdict', group: 'The verdict', strap: 'What this assessment concludes, and how confident it is.' },
+  { id: 'playbook', name: 'Playbook', group: 'The threat', strap: 'What a body governed by this policy could do to it, ranked by exposure.' },
+  { id: 'interplay', name: 'Interplay', group: 'The threat', strap: 'Which part of the machinery each body is aiming at.' },
+  { id: 'actors', name: 'Actors', group: 'The cast', strap: 'Every body this policy runs through — filter the chart by the measure you care about.' },
+  { id: 'network', name: 'Network', group: 'The cast', strap: 'The relationships the paper states, and the counterparts it leaves out.' },
+  { id: 'personas', name: 'Personas', group: 'The cast', strap: 'Bodies met before, and what this assessment adds to their dossier.' },
+  { id: 'stress', name: 'Stress test', group: 'The ground', strap: 'Switch an assumption off and watch the assessment recompute.' },
+  { id: 'checks', name: 'Checks', group: 'The ground', strap: 'Twelve structural tests over the relationships the paper itself states.' },
+  { id: 'evidence', name: 'Evidence', group: 'The ground', strap: 'What the conclusions are standing on, and what nobody could establish.' },
+  { id: 'scenarios', name: 'Scenarios', group: 'The ground', strap: 'How this plays out when the conditions change.' },
+  { id: 'cross', name: 'Cross-policy', group: 'The assessment', strap: 'Weaknesses that exist only because several policies coexist.' },
+  { id: 'report', name: 'The report', group: 'The assessment', strap: 'The written assessment, in five acts.' },
+  { id: 'provenance', name: 'Working', group: 'The assessment', strap: 'Every stage, every call, every cost.' },
 ] as const;
+
+export type TabId = (typeof TABS)[number]['id'];
+
+/**
+ * The rail, grouped for the eye only.
+ *
+ * The tabs were flattened out of nested workspaces on purpose — the defect was
+ * two navigation systems for one body of content, one buried inside the other —
+ * and nothing here re-nests them. A group is a hairline and a word above a run
+ * of cells, so the strip reads as four questions rather than thirteen buttons,
+ * and every cell is still exactly one click from anywhere.
+ */
+export function tabGroups(): { group: string; tabs: { id: string; name: string; index: number }[] }[] {
+  const out: { group: string; tabs: { id: string; name: string; index: number }[] }[] = [];
+  TABS.forEach((tab, index) => {
+    const last = out[out.length - 1];
+    const entry = { id: tab.id, name: tab.name, index };
+    if (last && last.group === tab.group) last.tabs.push(entry);
+    else out.push({ group: tab.group, tabs: [entry] });
+  });
+  return out;
+}
+
+/**
+ * Split a statement into its opening paragraph and the rest.
+ *
+ * Ask 1: the verdict is the headline story, but SUMMARISED — the first
+ * paragraph shows and the remainder drills. Done here rather than by adding a
+ * `summary` field to the contract, because a contract change would mean every
+ * assessment already completed rendered an empty headline until it was re-run.
+ *
+ * Synthesis writes prose, so a paragraph break is a blank line. Where there is
+ * none, a very long single paragraph is split at the first sentence boundary
+ * past a floor — a wall of text with no break in it is exactly the case the
+ * summary exists for, so falling back to "show all of it" would fail the only
+ * input that needed the feature.
+ */
+export const LEAD_FLOOR = 320;
+
+export function summarise(statement: string): { lead: string; rest: string } {
+  const text = (statement ?? '').trim();
+  const paragraph = text.split(/\n\s*\n/);
+  if (paragraph.length > 1) {
+    return { lead: paragraph[0].trim(), rest: paragraph.slice(1).join('\n\n').trim() };
+  }
+  if (text.length <= LEAD_FLOOR) return { lead: text, rest: '' };
+  // First sentence end at or after the floor. `.` followed by a space and a
+  // capital is the only boundary worth trusting in policy prose — abbreviations
+  // and decimals are common and neither is followed by a capital.
+  const boundary = text.slice(LEAD_FLOOR).search(/[.!?]\s+[A-Z“"(]/);
+  if (boundary < 0) return { lead: text, rest: '' };
+  const at = LEAD_FLOOR + boundary + 1;
+  return { lead: text.slice(0, at).trim(), rest: text.slice(at).trim() };
+}
+
+/**
+ * The four factors across the whole playbook.
+ *
+ * The verdict shows these beside the headline (ask 1) because they say WHY the
+ * policy is exposed, which no single count does: a paper whose plays are all
+ * high-incentive and low-concealment has a different problem from one whose
+ * plays are all easy and invisible, and both would print the same "12 ways to
+ * beat it".
+ *
+ * The mean is over plays, unweighted. Weighting by exposure would fold the
+ * ranking back into its own inputs and make every paper look the same shape.
+ */
+export function factorProfile(list: Play[]): { key: string; label: string; mean: number; top: Play | null }[] {
+  return FACTOR_KEYS.map((key) => {
+    const values = list.map((p) => p.factors.find((f) => f.key === key)?.value ?? 0);
+    const mean = values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : 0;
+    const top = list.length
+      ? list.reduce((best, p) =>
+          (p.factors.find((f) => f.key === key)?.value ?? 0) > (best.factors.find((f) => f.key === key)?.value ?? 0) ? p : best,
+        )
+      : null;
+    return { key, label: key.charAt(0).toUpperCase() + key.slice(1), mean, top };
+  });
+}
 
 /**
  * Bodies this assessment met that the reader has met before.

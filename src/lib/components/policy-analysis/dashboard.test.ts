@@ -23,8 +23,8 @@ import CrossPolicy from './CrossPolicy.svelte';
 import ArtefactValue from './ArtefactValue.svelte';
 import ReportActs from './ReportActs.svelte';
 import InterplayMap from './InterplayMap.svelte';
-import ScenarioWalk from './ScenarioWalk.svelte';
-import StressTest from './StressTest.svelte';
+import ScenarioFlow from './ScenarioFlow.svelte';
+import StressLab from './StressLab.svelte';
 import AssessmentBody from './AssessmentBody.svelte';
 import { shareableReport } from '$lib/policy-analysis/share';
 import { STAGES } from '$lib/policy-analysis/contracts';
@@ -145,19 +145,19 @@ describe('the written assessment reads as acts', () => {
 
   it('hides an inactive TAB by class, never the hidden attribute', async () => {
     const all = await assessment();
-    const html = render(AssessmentBody, { props: { artefacts: all, status: 'completed', inspect } }).body;
+    const html = render(AssessmentBody, { props: { artefacts: all, status: 'completed' } }).body;
     // Scoped to the workspace panels: the report's five acts are nested inside
     // this component and carry the same class for the same reason.
     // One tab visible, the rest off by CLASS — find-in-page still reaches them
     // and `@media print` unhides all of them, which `hidden` would defeat.
-    const panels = [...html.matchAll(/class="[^"]*\bworkspace\b[^"]*"/g)].length;
-    const off = [...html.matchAll(/class="[^"]*\bworkspace\b[^"]*\boff\b/g)].length;
+    const panels = [...html.matchAll(/class="[^"]*\bab-panel\b[^"]*"/g)].length;
+    const off = [...html.matchAll(/class="[^"]*\bab-panel\b[^"]*\boff\b/g)].length;
     expect(panels).toBeGreaterThan(1);
     expect(off).toBe(panels - 1);
     expect(html).not.toMatch(/role="tabpanel"[^>]*\shidden/);
     // And each one is named on paper, where the tabs are not there to name them.
-    for (const name of ['The verdict', 'The threat', 'What it rests on', 'The assessment']) {
-      expect(html).toMatch(new RegExp(`<h2 class="print-title[^"]*">${name}</h2>`));
+    for (const name of ['The verdict', 'The threat', 'The cast', 'The ground it stands on', 'The assessment']) {
+      expect(html).toMatch(new RegExp(`<h2 class="ab-print-title[^"]*">${name}</h2>`));
     }
   });
 
@@ -180,7 +180,7 @@ describe('the assessment renders', () => {
     const plays = view.plays(all);
     expect(plays.length).toBeGreaterThan(0);
 
-    const verdict = render(Verdict, { props: { headline: view.headline(all), tiles: view.tiles(all, plays), bands: view.bandCounts(plays), status: 'completed', inspect } });
+    const verdict = render(Verdict, { props: { headline: view.headline(all), tiles: view.tiles(all, plays), bands: view.bandCounts(plays), plays, status: 'completed', onopen: inspect } });
     expect(verdict.body).toContain('The verdict');
     expect(verdict.body).toContain('Ways to beat it');
     expect(verdict.body).toContain('Significant');
@@ -190,7 +190,7 @@ describe('the assessment renders', () => {
     expect(plot.body).toContain('Easier to do');
     expect(plot.body).toContain('<circle');
 
-    const card = render(PlayCard, { props: { play: plays[0], rank: 1, inspect } });
+    const card = render(PlayCard, { props: { play: plays[0], rank: 1, onopen: inspect } });
     expect(card.body).toContain('Stays within the rules as written');
     expect(card.body).toContain('What would close it');
     for (const factor of view.FACTOR_KEYS) expect(card.body).toContain(factor);
@@ -332,8 +332,12 @@ describe('a scenario reads as a sequence, not a paragraph', () => {
 
   it('steps through one scenario at a time with the others still reachable', async () => {
     const all = await assessment();
-    const html = render(ScenarioWalk, { props: { scenarios: view.of(all, 'scenario'), artefacts: all, inspect } }).body;
+    const html = render(ScenarioFlow, { props: { scenarios: view.of(all, 'scenario'), artefacts: all, onopen: inspect } }).body;
     expect(html).toContain('Beat 1 of');
+    // The flow draws every beat as a numbered stage, not just the one on screen:
+    // the shape of the sequence is the finding.
+    expect(html).toContain('The condition changes');
+    expect(html).toContain('Would anyone see it?');
     for (const scenario of SCENARIOS) expect(html).toContain(scenario.replaceAll('_', ' '));
   });
 });
@@ -341,9 +345,14 @@ describe('a scenario reads as a sequence, not a paragraph', () => {
 describe('the stress test recomputes rather than re-asks', () => {
   it('offers only cited assumptions, and reports both directions', async () => {
     const all = await assessment();
-    const html = render(StressTest, { props: { artefacts: all, inspect } }).body;
+    const html = render(StressLab, { props: { artefacts: all, onopen: inspect } }).body;
     expect(html).toContain('Suppose these turn out to be wrong');
     expect(html).toContain('The assessment as written');
+    // The consequence strip carries BOTH directions before a lever is pulled, so
+    // a reader can see they are opposites without having to discover it: the
+    // conclusions that would fall, and the plays that would come off the table.
+    expect(html).toContain('Conclusions lose footing');
+    expect(html).toContain('Plays disarmed');
     // The levers are the assumptions something rests on — never every assumption.
     const offered = leverage(all).length;
     expect(offered).toBeGreaterThan(0);
@@ -386,8 +395,8 @@ describe('the shared copy is the same report, minus what it may not carry', () =
 
   it('renders every workspace and every section a signed-in reader gets', async () => {
     const all = await assessment();
-    const owner = render(AssessmentBody, { props: { artefacts: all, status: 'completed', inspect, cross: { inbound: [], unavailable: false } } }).body;
-    const shared = render(AssessmentBody, { props: { artefacts: shareableReport({ artefacts: all, stages }).artefacts, status: 'completed', inspect } }).body;
+    const owner = render(AssessmentBody, { props: { artefacts: all, status: 'completed', cross: { inbound: [], unavailable: false } } }).body;
+    const shared = render(AssessmentBody, { props: { artefacts: shareableReport({ artefacts: all, stages }).artefacts, status: 'completed' } }).body;
     // Both are the same component, which is the point of extracting it: the two
     // views cannot drift into different reports. The only structural difference
     // is the cross-policy chapter, which a shared copy may not carry.
@@ -397,16 +406,21 @@ describe('the shared copy is the same report, minus what it may not carry', () =
       expect(owner).toContain(id);
       expect(shared).toContain(id);
     }
-    for (const heading of ['The exploitation playbook', 'The interplay map', 'The stress test', 'Twelve structural checks', 'Chapter and verse']) {
-      expect(shared).toContain(heading);
+    // Matched on the KICKER rather than the headline: a `DashHead` title is an
+    // array of lines joined by a <br>, because where a two-word display headline
+    // folds is a typographic decision. The kicker is one string and is the thing
+    // that tells a reader what the section is for.
+    for (const kicker of ['How the paper can be beaten', 'Who is coming for what', 'What if we are wrong?', 'Where the paper is thin', 'The written assessment']) {
+      expect(shared).toContain(kicker);
     }
-    expect(owner).toContain('Weaknesses that span more than one policy');
-    expect(shared).not.toContain('Weaknesses that span more than one policy');
+    // Same reason as the kickers above — the cross-policy headline is two lines.
+    expect(owner).toContain('Across policies');
+    expect(shared).not.toContain('Across policies');
   });
 
   it('carries no run log, and no persona chip pointing into a private library', async () => {
     const all = await assessment();
-    const shared = render(AssessmentBody, { props: { artefacts: shareableReport({ artefacts: all, stages }).artefacts, status: 'completed', inspect } }).body;
+    const shared = render(AssessmentBody, { props: { artefacts: shareableReport({ artefacts: all, stages }).artefacts, status: 'completed' } }).body;
     expect(shared).not.toContain('Run log and provenance');
     expect(shared).not.toContain('model calls across');
     expect(shared).not.toContain('/policy-analysis/personas/');
@@ -424,7 +438,7 @@ describe('one tab row, and every old deep link still lands', () => {
    * that no tab claims lands nowhere, silently.
    */
   it('claims every section the report used to group into workspaces', () => {
-    for (const section of ['verdict', 'playbook', 'interplay', 'actors', 'stress', 'checks', 'scenarios', 'evidence', 'cross', 'report', 'provenance']) {
+    for (const section of ['verdict', 'playbook', 'interplay', 'actors', 'network', 'stress', 'checks', 'scenarios', 'evidence', 'cross', 'report', 'provenance']) {
       expect(view.isSectionHash(section), `${section} is no longer reachable`).toBe(true);
     }
   });
