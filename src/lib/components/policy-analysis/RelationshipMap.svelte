@@ -18,6 +18,7 @@
   // validated categorical hues, and seven families would mean generating three,
   // which the chart rules forbid outright. Identity comes from the panel
   // heading; magnitude from the one accent ramp inside it.
+  import { familyTermKey } from '$lib/policy-analysis/glossary';
   import type { Network } from '$lib/policy-analysis/network';
   import ExplainLabel from './ExplainLabel.svelte';
 
@@ -80,14 +81,25 @@
   {/if}
 
   {#if net.families.length}
-    <section class="net-families">
-      <p class="net-label">The relationships, by what they do</p>
+    <!--
+      BEHIND A DISCLOSURE, because the adjacency grid above now answers the
+      question these panels were answering first — the family breakdown is the
+      detail under it, not the lead. Left open by default the network workspace
+      ran to 5,177px with three answers to one question stacked on top of each
+      other. `print.ts` opens every disclosure before printing, so the pack is
+      unaffected; the print-only label below is what names the section on paper,
+      where `summary` is hidden.
+    -->
+    <details class="net-fold">
+      <summary>The relationships broken down by what they do — {net.families.length} families</summary>
+      <section class="net-families">
+      <p class="net-label net-print-label">The relationships, by what they do</p>
       <div class="net-family-grid">
         {#each net.families as panel (panel.key)}
           {@const peak = Math.max(...panel.top.map((t) => t.count), 1)}
           <article class="net-family" class:on={family === panel.key}>
             <header>
-              <h3><ExplainLabel term={panel.key} text={panel.label} as="inline" /></h3>
+              <h3><ExplainLabel term={familyTermKey(panel.key)} text={panel.label} as="inline" /></h3>
               <p class="net-count">{panel.count}</p>
             </header>
             <p class="net-what">{panel.what}</p>
@@ -121,12 +133,15 @@
           </button>
         </p>
       {/if}
-    </section>
+      </section>
+    </details>
   {/if}
 
-  <section class="net-list">
+  <details class="net-fold">
+    <summary>Every stated relationship, one per line — {net.edges.length} in all</summary>
+    <section class="net-list">
     <div class="net-list-head">
-      <p class="net-label">Every stated relationship — {shown.length} of {net.edges.length}</p>
+      <p class="net-label net-print-label">Every stated relationship — {shown.length} of {net.edges.length}</p>
       <div class="net-list-controls">
         <label class="net-control">
           <span>Body</span>
@@ -166,10 +181,36 @@
     {:else}
       <p class="net-caveat">Nothing matches those filters.</p>
     {/if}
-  </section>
+    </section>
+  </details>
 </div>
 
 <style>
+  /* A fold, not a card: this is secondary detail under the grid, and it has to
+     look like a way in rather than like another panel competing with it. */
+  .net-fold {
+    margin-top: clamp(18px, 2.2vw, 26px);
+    border-top: 1px solid var(--line-strong);
+  }
+  .net-fold > summary {
+    padding: 10px 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    cursor: pointer;
+  }
+  .net-fold > summary:hover {
+    color: var(--accent);
+  }
+  /* `summary` is hidden on paper by the page's own print rules, so the section
+     needs a heading of its own there or the printed pack gains an unlabelled
+     table. It is redundant on screen, where the summary says the same thing. */
+  .net-print-label {
+    display: none;
+  }
+
   .net-label {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
@@ -403,6 +444,12 @@
   }
 
   @media print {
+    .net-print-label {
+      display: block;
+    }
+    .net-fold {
+      border-top: 1px solid #000;
+    }
     .net-list-controls,
     .net-filter-btn,
     .net-open {

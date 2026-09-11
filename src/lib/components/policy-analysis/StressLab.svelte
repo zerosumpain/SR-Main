@@ -36,6 +36,20 @@
 
   const levers = $derived(leverage(artefacts));
   const result = $derived(stress(artefacts, failed));
+
+  /**
+   * WHAT THE RESTING PANEL SAYS.
+   *
+   * With nothing switched off the right-hand half used to be three paragraphs
+   * explaining what would happen if you did, beside four zeroes — half a
+   * workspace spent telling the reader that they had not used it yet. It
+   * PREVIEWS instead: the same computation, run against the single most
+   * load-bearing assumption, so the panel arrives already showing what is at
+   * stake and the reader can commit to it with one button. Costs nothing — the
+   * whole module is a walk over citations that already exist.
+   */
+  const top = $derived(levers[0] ?? null);
+  const preview = $derived(top ? stress(artefacts, [top.artefact.id]) : null);
   const hurt = (rows: StressRow[]) => rows.filter((r) => r.standing !== 'holds');
 
   const lostFindings = $derived(hurt(result.findings));
@@ -107,7 +121,8 @@
                   <span class="sl-lever-label">{lever.artefact.label}</span>
                   <span class="sl-lever-meta">
                     {lever.dependants} {lever.dependants === 1 ? 'thing rests on it' : 'things rest on it'}{#if lever.priority}
-                      · rated {pct(lever.priority)} on importance × uncertainty × consequence{/if}
+                      · {pct(lever.priority)} on how much turns on it, how arguable it is and what it would
+                      cost{/if}
                   </span>
                 </span>
               </label>
@@ -125,12 +140,36 @@
       <div class="sl-outcome">
         {#if !failed.length}
           <div class="sl-resting">
-            <p class="sl-resting-head">The assessment as written.</p>
-            <p>
-              Switch an assumption off on the left and this recomputes in front of you: which conclusions
-              lose their footing, which redesign options lose the finding behind them, and which plays stop
-              being available at all.
-            </p>
+            <p class="sl-resting-head">Nothing is switched off. This is the assessment as written.</p>
+            {#if top && preview}
+              <p class="sl-preview-head">
+                If just one thing were wrong — <strong>{top.artefact.label}</strong>, the assumption the most
+                of this assessment rests on — here is what would move.
+              </p>
+              <ul class="sl-preview">
+                <li>
+                  <span class="sl-preview-fig">{hurt(preview.findings).length}</span>
+                  of {preview.findings.length} conclusions would lose their footing
+                </li>
+                <li>
+                  <span class="sl-preview-fig">{hurt(preview.recommendations).length}</span>
+                  of {preview.recommendations.length} redesign options would lose the finding behind them
+                </li>
+                <li>
+                  <span class="sl-preview-fig">{preview.plays.filter((r) => r.standing === 'disarmed').length}</span>
+                  plays would be disarmed — the actor needed this to be true
+                </li>
+              </ul>
+              <button type="button" class="sl-preview-run" onclick={() => (failed = [top.artefact.id])}>
+                Switch it off and show me →
+              </button>
+            {:else}
+              <p>
+                Switch an assumption off on the left and this recomputes in front of you: which conclusions
+                lose their footing, which redesign options lose the finding behind them, and which plays stop
+                being available at all.
+              </p>
+            {/if}
             <p class="sl-intro">
               Nothing here is a prediction and nothing calls a model. It walks the citations the assessment
               already made, so the same switches always give the same answer — which is the difference
@@ -274,6 +313,55 @@
 {/if}
 
 <style>
+  .sl-preview-head {
+    margin: 10px 0 0;
+    line-height: 1.55;
+  }
+  .sl-preview {
+    list-style: none;
+    margin: 12px 0 0;
+    padding: 0;
+    display: grid;
+    gap: 1px;
+    background: var(--line-hair);
+  }
+  .sl-preview li {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    background: var(--bg);
+    padding: 8px 0;
+    font-size: var(--fs-body-sm);
+    line-height: 1.4;
+    color: var(--text-secondary);
+  }
+  .sl-preview-fig {
+    font-family: var(--font-display);
+    font-size: var(--fs-num-md);
+    line-height: 1;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+    min-width: 2ch;
+  }
+  .sl-preview-run {
+    font: inherit;
+    margin-top: 14px;
+    background: none;
+    border: 1px solid var(--line-strong);
+    border-radius: 0;
+    padding: 7px 11px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    cursor: pointer;
+  }
+  .sl-preview-run:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
   .sl-strip {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));

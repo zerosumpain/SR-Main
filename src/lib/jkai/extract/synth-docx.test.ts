@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import JSZip from 'jszip';
 import { synthesizeDocx } from './synth-docx';
+import { assessmentMarkdown } from '$lib/policy-analysis/report-doc';
 
 /** The document body, as XML — the only place the truth is. */
 async function documentXml(markdown: string, title?: string): Promise<string> {
@@ -110,5 +111,30 @@ describe('structure survives the crossing', () => {
 
   it('carries a code block through as monospaced text', async () => {
     expect(plain(await documentXml('```\nnpm run gate\n```'))).toContain('npm run gate');
+  });
+});
+
+describe('the policy assessment exports its own key', () => {
+  it('renders the definitions appendix with no markup leaking through', async () => {
+    // The Word file is the copy that lands on somebody's desk with nobody to
+    // ask, so the vocabulary it uses has to be defined IN it. The appendix is
+    // the densest markdown this module is asked to render — a heading, a
+    // numbered chain and sixty bold-led list items with italics at the end of
+    // each — which makes it the case most likely to leak a marker.
+    const md = assessmentMarkdown([], { title: 'Appendix check', warnings: [] });
+    const xml = await documentXml(md, 'Appendix check');
+    const text = plain(xml);
+
+    expect(text).toContain('How to read this assessment');
+    expect(text).toContain('How the pieces join');
+    // A structure, its plain name leading and the technical word beside it.
+    expect(text).toContain('A way to beat the policy');
+    expect(text).toContain('(play)');
+    // The one measure whose arithmetic a reader has to be able to check.
+    expect(text).toContain('geometric mean');
+    // And nothing raw. Markers, not em dashes: the copy uses those on purpose.
+    expect(text).not.toContain('**');
+    expect(text).not.toMatch(/(^|\s)\*\S/);
+    expect(text).not.toMatch(/^#+\s/m);
   });
 });

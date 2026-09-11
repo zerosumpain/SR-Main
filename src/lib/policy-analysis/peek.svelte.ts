@@ -36,10 +36,13 @@ export const PEEK_WIDTH = 340;
 /**
  * What the card is being asked about.
  *
- * `term` is the glossary — a column header, a factor, a band. Everything else
- * names an artefact and differs only in which of its fields are worth the space.
+ * `term` is the glossary — a column header, a factor, a band. `field` names one
+ * field OF an artefact (`field:profile_3:gainFromFailure`), which is what a
+ * clipped grid cell needs: the full wording plus where that one line came from,
+ * rather than the whole profile. Everything else names an artefact and differs
+ * only in which of its fields are worth the space.
  */
-export type PeekKind = 'actor' | 'play' | 'assumption' | 'term' | 'artefact' | 'check' | 'relation';
+export type PeekKind = 'actor' | 'play' | 'assumption' | 'term' | 'artefact' | 'check' | 'relation' | 'field';
 
 export interface PeekAnchor {
   kind: PeekKind;
@@ -50,7 +53,7 @@ export interface PeekAnchor {
   pinned: boolean;
 }
 
-const KINDS: PeekKind[] = ['actor', 'play', 'assumption', 'term', 'artefact', 'check', 'relation'];
+const KINDS: PeekKind[] = ['actor', 'play', 'assumption', 'term', 'artefact', 'check', 'relation', 'field'];
 
 /**
  * Split `actor:s2_dfe` into its parts.

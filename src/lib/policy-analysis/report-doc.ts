@@ -20,6 +20,7 @@
  * playbook comes after the verdict it explains rather than in a tab beside it.
  */
 import type { Artefact } from './contracts';
+import { KEY_SECTIONS, READING_CHAIN } from './glossary';
 import { REPORT_ACTS, actorBoard, evidenceMix, fragileAssumptions, findingsBySection, headline, of, plays, BAND_LABEL, type Band } from './view';
 import { checks } from './view';
 import { network } from './network';
@@ -285,6 +286,49 @@ function limits(meta: DocMeta): string {
   ]);
 }
 
+
+/**
+ * THE KEY, AS AN APPENDIX.
+ *
+ * The exported document uses the same vocabulary as the page — plays, exposure,
+ * concealment, standing, structural checks — and until now defined none of it.
+ * A Word file lands on somebody's desk with nobody to ask, which makes the
+ * appendix more necessary in the export than it is on screen, where a hover
+ * card is one pointer away.
+ *
+ * It renders from `glossary.ts`, the same module `KeyPanel.svelte` reads, so the
+ * screen and the document cannot drift into two different definitions of
+ * "exposure".
+ */
+function key(): string {
+  const sections = KEY_SECTIONS.map((section) =>
+    block([
+      `### ${section.title}`,
+      section.blurb,
+      // ONE PARAGRAPH PER TERM, not a four-item sub-list. As nested bullets the
+      // appendix ran to about eight Word pages on its own and dwarfed the
+      // assessment it was appended to; the same words as a run-on paragraph are
+      // half the length and read better in a document than on a screen.
+      section.terms
+        .map((t) => {
+          const name = t.plain && t.plain !== t.label ? `**${t.plain}** (${t.label.toLowerCase()})` : `**${t.label}**`;
+          const parts = [`${name} — ${t.what}`, t.why, `Reading it: ${t.read}`];
+          if (t.formula) parts.push(`Worked out as: ${t.formula}`);
+          return `- ${parts.join(' ')} *(${t.provenance})*`;
+        })
+        .join('\n'),
+    ]),
+  );
+
+  return block([
+    '## How to read this assessment',
+    'This is a game-theoretic read of a policy paper, and its vocabulary says so. Everything the document uses is defined here, with the arithmetic written out wherever a figure is computed rather than judged.',
+    '### How the pieces join',
+    READING_CHAIN.map((link, i) => `${i + 1}. **${link.step}** ${link.then}`).join('\n'),
+    ...sections,
+  ]);
+}
+
 /**
  * The whole document.
  *
@@ -304,6 +348,9 @@ export function assessmentMarkdown(artefacts: Artefact[], meta: DocMeta): string
     scenarios(artefacts),
     chapters(artefacts),
     limits(meta),
+    // Last, because it is a reference rather than a reading — and present in
+    // every copy, owner or shared, because the words are the same in both.
+    key(),
   ]).replace(/\n{3,}/g, '\n\n') + '\n';
 }
 

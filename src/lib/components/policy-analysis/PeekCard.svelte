@@ -18,6 +18,7 @@
   // place to READ them, never a second opinion about them.
   import { policyPeek, peekPlacement, PEEK_WIDTH } from '$lib/policy-analysis/peek.svelte';
   import { explain } from '$lib/policy-analysis/glossary';
+  import { TRAIT_COLUMNS } from '$lib/policy-analysis/matrix';
   import { BAND_FILL, BAND_LABEL, type Band, type Play, type ActorView } from '$lib/policy-analysis/view';
   import type { Artefact } from '$lib/policy-analysis/contracts';
 
@@ -37,6 +38,9 @@
 
   const anchor = $derived(policyPeek.current);
 
+  /** The grid's own header for a profile field, so the card names it the same way. */
+  const TRAIT_HEADS: Record<string, string> = Object.fromEntries(TRAIT_COLUMNS.map((c) => [c.key, c.head]));
+
   // Measured after the card exists; until then `peekPlacement` uses its own
   // estimate. A plain `let` would not re-place the card when the height lands,
   // so this one IS state — unlike the controller's timers, which nothing
@@ -54,10 +58,36 @@
 
   const placement = $derived(anchor ? peekPlacement(anchor.rect, measured || 260) : null);
 
-  const artefact = $derived(anchor && anchor.kind !== 'term' ? (artefacts.find((a) => a.id === anchor.subject) ?? null) : null);
+  /**
+   * `field:<artefactId>:<key>` — one field OF an artefact.
+   *
+   * A grid cell clips to about six words, so the card has to carry the rest of
+   * that ONE line plus where it came from. Pointing the card at the whole
+   * profile instead would answer a question the reader did not ask: they are
+   * comparing a column, not reading a dossier.
+   */
+  const fieldRef = $derived.by(() => {
+    if (anchor?.kind !== 'field') return null;
+    const at = anchor.subject.lastIndexOf(':');
+    if (at <= 0) return null;
+    return { id: anchor.subject.slice(0, at), key: anchor.subject.slice(at + 1) };
+  });
+
+  const subjectId = $derived(anchor?.kind === 'term' ? null : (fieldRef?.id ?? anchor?.subject ?? null));
+  const artefact = $derived(subjectId ? (artefacts.find((a) => a.id === subjectId) ?? null) : null);
+  const fieldValue = $derived.by(() => {
+    const raw = fieldRef && artefact ? artefact.data?.[fieldRef.key] : null;
+    if (!raw || typeof raw !== 'object') return null;
+    const f = raw as { value?: string; origin?: string; confidence?: number | null; refs?: string[] };
+    return f.value ? { value: f.value, origin: String(f.origin ?? ''), refs: f.refs ?? [] } : null;
+  });
   const term = $derived(anchor?.kind === 'term' ? explain(anchor.subject) : null);
   const play = $derived(anchor?.kind === 'play' ? (plays.find((p) => p.artefact.id === anchor.subject) ?? null) : null);
   const actorView = $derived(anchor?.kind === 'actor' ? (actors.find((a) => a.actor.id === anchor.subject) ?? null) : null);
+  /** Whose row the field belongs to — the card names the body, not the profile id. */
+  const fieldOwner = $derived(
+    fieldRef ? (actors.find((a) => a.profile?.id === fieldRef.id || a.actor.id === fieldRef.id) ?? null) : null,
+  );
 
   const pct = (v: unknown) => `${Math.round((Number(v) || 0) * 100)}`;
   const profileField = (key: string) => {
@@ -84,7 +114,7 @@
   }
 
   function open() {
-    const id = anchor?.kind === 'term' ? null : anchor?.subject;
+    const id = subjectId;
     policyPeek.close();
     if (id) onopen(id);
   }
@@ -105,13 +135,36 @@
     onmouseenter={() => policyPeek.keepOpen()}
     onmouseleave={() => policyPeek.release()}
   >
-    {#if term}
+    {#if fieldValue}
+      <p class="pk-kind">{TRAIT_HEADS[fieldRef?.key ?? ''] ?? (fieldRef?.key ?? '').replace(/([A-Z])/g, ' $1').toLowerCase()}</p>
+      <p class="pk-name">{fieldOwner?.actor.label ?? artefact?.label}</p>
+      <p class="pk-what">{fieldValue.value}</p>
+      {#if fieldValue.origin}
+        {@const origin = explain(fieldValue.origin)}
+        <p class="pk-line">
+          <span class="pk-line-label">{origin?.plain ?? 'Where it came from'}</span>
+          {origin?.read ?? fieldValue.origin.replaceAll('_', ' ')}
+        </p>
+      {/if}
+      <div class="pk-foot">
+        <span class="pk-cite">{fieldValue.origin.replaceAll('_', ' ')}</span>
+        <button type="button" class="pk-open" onclick={open}>Open the full profile →</button>
+      </div>
+
+    {:else if term}
       <p class="pk-kind">What this column means</p>
-      <p class="pk-name">{term.label}</p>
+      <p class="pk-name">{term.plain ?? term.label}</p>
+      {#if term.plain && term.plain !== term.label}<p class="pk-formal">Called <strong>{term.label}</strong> in the working</p>{/if}
       <p class="pk-what">{term.what}</p>
       <p class="pk-line"><span class="pk-line-label">Why it is here</span> {term.why}</p>
       <p class="pk-line"><span class="pk-line-label">Reading it</span> {term.read}</p>
-      <div class="pk-foot"><span class="pk-cite">{term.provenance}</span></div>
+      {#if term.formula}
+        <p class="pk-line"><span class="pk-line-label">How it is worked out</span> {term.formula}</p>
+      {/if}
+      <div class="pk-foot">
+        <span class="pk-cite">{term.provenance}</span>
+        {#if ontab}<button type="button" class="pk-open pk-ghost" onclick={() => { policyPeek.close(); ontab?.('key'); }}>The full key →</button>{/if}
+      </div>
 
     {:else if play && artefact}
       <p class="pk-kind">Exploitation play</p>
@@ -235,6 +288,17 @@
     letter-spacing: -0.01em;
     margin: 5px 0 0;
     overflow-wrap: anywhere;
+  }
+  /* The technical word, kept visible under the plain one. A reader who meets
+     "concealment" in an exported table needs to have been told it, not shielded
+     from it. */
+  .pk-formal {
+    margin: 2px 0 8px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    color: var(--text-muted);
   }
   .pk-what {
     font-size: var(--fs-label);

@@ -16,8 +16,13 @@
   //
   // A tab is a real tab: roving tabindex, arrow keys, Home and End, and every
   // panel stays in the DOM so that find-in-page and the print stylesheet still
-  // reach the acts nobody clicked.
+  // reach the acts nobody clicked. This is not the nesting the 2026-09-10
+  // flattening removed — that defect was a second WORKSPACE rail buried inside
+  // the first. One document being read a movement at a time is the document's
+  // own structure, and it is the only way the written assessment stops being a
+  // single unbroken scroll.
   import type { Artefact } from '$lib/policy-analysis/contracts';
+  import { explain } from '$lib/policy-analysis/glossary';
   import type { ReportAct } from '$lib/policy-analysis/view';
 
   interface Props {
@@ -32,47 +37,100 @@
   // what to do — not stacked above the verdict where they used to sit.
   const RESPONSE = 'response';
   const panelId = (key: string) => `report-panel-${key}`;
+  const tabId = (key: string) => `report-act-${key}`;
 
+  /**
+   * ONE ACT ON SCREEN, all five in the DOM.
+   *
+   * The rail used to be five in-page anchors and all five acts rendered
+   * continuously — 4,668px of report, and the rail itself was the last
+   * clickthrough in the feature that scrolled the reader to somewhere else in
+   * the same document, which is the one thing the brief ruled out. Selecting an
+   * act hides the others by CLASS, never by the `hidden` attribute, so
+   * find-in-page and `@media print` still reach every one of them.
+   */
+  let act = $state(0);
+
+  function onkey(event: KeyboardEvent) {
+    const moves: Record<string, number> = {
+      ArrowRight: act + 1,
+      ArrowLeft: act - 1,
+      Home: 0,
+      End: acts.length - 1,
+    };
+    const next = moves[event.key];
+    if (next === undefined) return;
+    event.preventDefault();
+    act = (next + acts.length) % acts.length;
+    document.getElementById(tabId(acts[act].key))?.focus();
+  }
 </script>
 
 {#if acts.length}
   <!--
-    A CONTENTS RAIL, not a second tab strip.
-    The report used to open its own tabs inside the report tab: two navigation
-    systems for one document, and a reader had to work out which act a chapter
-    lived in before they could read it. The written assessment is a narrative and
-    wants reading in order, so all five acts render continuously and this rail
-    jumps rather than switches — nothing is hidden behind it.
+    THE MOVEMENTS, SELECTED — not anchored.
+    This rail was five in-page links and all five acts rendered continuously,
+    which made the report a 4,668px scroll AND made the rail the last
+    clickthrough in the feature that moved the reader to somewhere else in the
+    same document. It selects now. Nothing is lost: every act is in the DOM, so
+    find-in-page reaches the four that are not on screen and the print copy
+    carries all five.
   -->
-  <nav class="contents" aria-label="The written assessment, in five acts">
-    {#each acts as act, index (act.key)}
-      <a class="jump" href="#{panelId(act.key)}">
+  <div class="contents" role="tablist" aria-label="The written assessment, in five movements">
+    {#each acts as a, index (a.key)}
+      <button
+        type="button"
+        role="tab"
+        id={tabId(a.key)}
+        class="jump"
+        class:on={index === act}
+        aria-selected={index === act}
+        aria-controls={panelId(a.key)}
+        tabindex={index === act ? 0 : -1}
+        onclick={() => (act = index)}
+        onkeydown={onkey}
+      >
         <span class="ordinal">{index + 1}</span>
-        <span class="tab-title">{act.title}</span>
-        <span class="tab-count">{act.count}</span>
-      </a>
+        <span class="tab-title">{a.title}</span>
+        <span class="tab-count">{a.count}</span>
+      </button>
     {/each}
-  </nav>
+  </div>
 
-  {#each acts as act, index (act.key)}
-    <section id={panelId(act.key)} class="panel" aria-label={act.title}>
-      <h3 class="act-title"><span class="ordinal">{index + 1}</span> {act.title}</h3>
-      <p class="act-strap">{act.strap}</p>
+  {#each acts as a, index (a.key)}
+    <!-- A DIV, not a section: a `section` is a non-interactive landmark and
+         Svelte rightly refuses it the `tabpanel` role. The previous pass
+         cleared eleven of these warnings off this feature; this would have put
+         five back. -->
+    <div
+      id={panelId(a.key)}
+      class="panel"
+      class:off={index !== act}
+      role="tabpanel"
+      aria-labelledby={tabId(a.key)}
+    >
+      <h3 class="act-title"><span class="ordinal">{index + 1}</span> {a.title}</h3>
+      <p class="act-strap">{a.strap}</p>
 
-      {#each act.chapters as chapter (chapter.section)}
+      {#each a.chapters as chapter (chapter.section)}
         <div class="chapter">
           <h3>{chapter.label}</h3>
           {#each chapter.items as f (f.id)}
             <div class="finding">
-              <p class="kicker-sm">{f.origin.replaceAll('_', ' ')}</p>
               <p>{f.statement}</p>
-              <button class="link" onclick={() => inspect(f.id)}>Trace to test, hypothesis and passage ({f.refs.length}) →</button>
+              <p class="finding-foot">
+                <!-- One compact line, not a two-line kicker plus a sentence.
+                     Fifteen findings each carrying "structural inference" on
+                     its own line above the text buried the findings. -->
+                <span class="origin">{explain(f.origin)?.short ?? f.origin.replaceAll('_', ' ')}</span>
+                <button class="link" onclick={() => inspect(f.id)}>What it rests on ({f.refs.length}) →</button>
+              </p>
             </div>
           {/each}
         </div>
       {/each}
 
-      {#if act.key === RESPONSE && recommendations.length}
+      {#if a.key === RESPONSE && recommendations.length}
         <div class="recommendations">
           <p class="sr-label">Redesign options — normative judgements, not findings</p>
           {#each recommendations as r (r.id)}
@@ -87,19 +145,29 @@
           {/each}
         </div>
       {/if}
-    </section>
+    </div>
   {/each}
 
   <p class="muted whereami">
-    {acts.length} acts · {acts.reduce((n, a) => n + a.count, 0)} findings, all of them on this page
+    Movement {act + 1} of {acts.length} · {acts[act]?.count ?? 0} of
+    {acts.reduce((n, a) => n + a.count, 0)} findings. Every movement is in the exported document and in the
+    printed copy, whichever one is on screen.
   </p>
 {/if}
 
 <style>
   .contents { display: flex; flex-wrap: wrap; gap: .35rem; margin: 1.25rem 0 0; border-bottom: 2px solid var(--line-strong); }
-  .jump { display: flex; align-items: baseline; gap: .5rem; padding: .5rem .75rem; text-decoration: none; color: var(--text-secondary); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; }
+  .jump { font: inherit; display: flex; align-items: baseline; gap: .5rem; padding: .5rem .75rem; background: none; border: 0; border-radius: 0; cursor: pointer; text-decoration: none; color: var(--text-secondary); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; }
   .jump:hover { background: var(--surface-sunken); color: var(--text-primary); }
   .jump:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: -2px; }
+  .jump.on { background: var(--text-primary); color: var(--bg); }
+  .jump.on .ordinal, .jump.on .tab-count { color: var(--accent-on-dark); }
+  /* A CLASS, never `hidden`: `[hidden] { display: none !important }` is a
+     user-agent declaration and outranks any author rule, which is how four of
+     five acts went missing from the printed pack on 2026-09-10. */
+  .panel.off { display: none; }
+  .finding-foot { display: flex; flex-wrap: wrap; align-items: baseline; gap: .6rem; margin: 0; }
+  .origin { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--text-muted); }
   .act-title { display: flex; align-items: baseline; gap: .6rem; margin: 2rem 0 .25rem; scroll-margin-top: 4rem; }
   .ordinal { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent); }
   .tab-count { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
@@ -126,7 +194,9 @@
   /* Printing is the one case where the reader wants all five acts at once, and
      every panel is already in the DOM for exactly that reason. */
   @media print {
-    .tablist, .whereami { display: none !important; }
+    .contents, .whereami { display: none !important; }
+    /* Every movement, whichever one was on screen. */
+    .panel.off { display: block; }
     .panel { break-inside: auto; }
     .act-strap::before { content: ""; display: block; border-top: 2px solid #000; margin-bottom: .5rem; }
   }
