@@ -21,6 +21,7 @@
  */
 import type { Artefact } from './contracts';
 import { KEY_SECTIONS, READING_CHAIN } from './glossary';
+import { beyond, destroyed, headline as handlingHeadline, journey, kept, PLACE_LABEL } from './handling';
 import { REPORT_ACTS, actorBoard, evidenceMix, fragileAssumptions, findingsBySection, headline, of, plays, BAND_LABEL, type Band } from './view';
 import { checks } from './view';
 import { isBody, network } from './network';
@@ -33,6 +34,8 @@ export type DocMeta = {
   depth?: string | null;
   status?: string | null;
   completedAt?: string | Date | null;
+  /** Whether the assessment was sealed. Changes what the handling note can promise. */
+  sealed?: boolean;
   /** Named on the cover so a shared copy never claims to be the whole thing. */
   withheld?: string[];
   /** Gaps the assessment reported about itself. Printed, never quietly dropped. */
@@ -355,10 +358,45 @@ export function assessmentMarkdown(artefacts: Artefact[], meta: DocMeta): string
     scenarios(artefacts),
     chapters(artefacts),
     limits(meta),
-    // Last, because it is a reference rather than a reading — and present in
+    // Last, because they are references rather than readings — and present in
     // every copy, owner or shared, because the words are the same in both.
     key(),
+    handling(meta),
   ]).replace(/\n{3,}/g, '\n\n') + '\n';
+}
+
+/**
+ * WHERE THE DOCUMENT WENT, in the document itself.
+ *
+ * The same reason the key is in here: a Word file lands on somebody's desk with
+ * nobody to ask. A reader deciding how far to trust an assessment of a paper
+ * that is not theirs needs the handling note in the copy they are holding, not
+ * on a page they were never sent — and it comes from the module the screen
+ * draws, so the two cannot answer differently.
+ *
+ * The diagram does not survive the trip; the journey does, because the page's
+ * list and the page's picture are the same six stops.
+ */
+function handling(meta: DocMeta): string {
+  const sealed = !!meta.sealed;
+  const stops = journey(sealed).map((stop, i) =>
+    block([
+      `### ${i + 1}. ${stop.title} — ${PLACE_LABEL[stop.place].toLowerCase()}`,
+      stop.what,
+      ...(stop.emphasis ? [`**${stop.emphasis}**`] : []),
+    ]),
+  );
+  return block([
+    '## Where this document went',
+    handlingHeadline(sealed),
+    ...stops,
+    '### While it exists, the site holds',
+    kept(sealed).map((line) => `- ${line}`).join('\n'),
+    '### A purge destroys',
+    destroyed(sealed).map((line) => `- ${line}`).join('\n'),
+    '### Nobody there can reach',
+    beyond(sealed).map((line) => `- ${line}`).join('\n'),
+  ]);
 }
 
 /** `Post-16 Education and Skills` → `post-16-education-and-skills`. */

@@ -57,6 +57,7 @@
   import AdjacencyGrid from './AdjacencyGrid.svelte';
   import PlaybookTable from './PlaybookTable.svelte';
   import KeyPanel from './KeyPanel.svelte';
+  import HandlingPanel from './HandlingPanel.svelte';
   import RelationshipMap from './RelationshipMap.svelte';
   import EvidenceMix from './EvidenceMix.svelte';
   import CrossPolicy from './CrossPolicy.svelte';
@@ -69,6 +70,13 @@
   interface Props {
     artefacts: Artefact[];
     status: string;
+    /**
+     * Whether this assessment was sealed, which changes what the handling note
+     * can promise. Defaults false, and a SHARED copy always is: a sealed run
+     * cannot be shared by link, so a reader who arrives by one is looking at an
+     * ordinary assessment whatever this says.
+     */
+    sealed?: boolean;
     /** Bodies this reader has met before. Omitted on a shared copy: private. */
     personas?: { actorId: string | null; personaId: string; name: string; sightings: number }[];
     /** Cross-policy exposure, or null to leave the workspace out entirely. */
@@ -87,7 +95,7 @@
     runLog?: Snippet<[(id: string) => void]>;
   }
 
-  let { artefacts, status, personas = [], cross = null, provenance = [], runLog }: Props = $props();
+  let { artefacts, status, sealed = false, personas = [], cross = null, provenance = [], runLog }: Props = $props();
 
   let tab = $state(0);
   let bandFilter = $state<Band | null>(null);
@@ -731,6 +739,19 @@
       ]}
     />
     <KeyPanel />
+
+    <!--
+      WHERE THE DOCUMENT ITSELF GOES.
+      It sits in this workspace rather than in one of its own because it answers
+      the same shape of question the key does — "what am I actually looking at?"
+      — and because this is the workspace that already prints as the exported
+      pack's appendix. A reader who has been handed this assessment and is
+      deciding how far to trust it should not have to find a second page.
+    -->
+    <section class="ab-handling" aria-labelledby="ab-handling-h">
+      <h3 id="ab-handling-h">Where your document goes</h3>
+      <HandlingPanel {sealed} />
+    </section>
   </div>
 </div>
 
@@ -942,6 +963,12 @@
   }
   .off {
     display: none;
+  }
+  .ab-handling { margin-top: 2.25rem; padding-top: 1.5rem; border-top: 2px solid var(--text-primary); }
+  .ab-handling h3 {
+    margin: 0 0 1.1rem;
+    font-family: var(--font-display);
+    font-size: var(--fs-display-xs);
   }
   .ab-print-title {
     display: none;

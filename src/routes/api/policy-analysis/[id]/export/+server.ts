@@ -36,6 +36,7 @@ export const GET: RequestHandler = async (event) => {
     jurisdiction: result.analysis.jurisdiction,
     policyArea: result.analysis.policyArea,
     depth: result.analysis.depth,
+    sealed: result.analysis.sealed,
     status: result.analysis.status,
     completedAt: result.analysis.completedAt,
     warnings: result.stages.flatMap((s) => s.warnings.map((text) => ({ stage: s.name, text }))),
@@ -45,6 +46,7 @@ export const GET: RequestHandler = async (event) => {
     return assessmentBundle({
       payload: ownerPayload({
         title: result.analysis.title,
+        sealed: result.analysis.sealed,
         jurisdiction: result.analysis.jurisdiction,
         policyArea: result.analysis.policyArea,
         status: result.analysis.status,

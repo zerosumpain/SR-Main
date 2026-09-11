@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   import { untrack } from 'svelte';
   import { thinkingLevelsFor, type ThinkingLevel } from '$lib/models/thinking';
+  import HandlingPanel from '$lib/components/policy-analysis/HandlingPanel.svelte';
   import type { PageData } from './$types';
   let { data }: { data: PageData } = $props();
   let busy = $state(false);
@@ -160,6 +161,19 @@
       {/if}
     </fieldset>
 
+    <!--
+      THE SAME EXPLAINER THE ASSESSMENT CARRIES, at the moment the decision is
+      actually made. It is the one component, so the answer a reader gets before
+      uploading cannot drift from the answer their colleague gets after — and it
+      redraws as the box above is ticked, which is the clearest way to show what
+      sealing changes: the same six steps, a different ending.
+      Closed by default: it is reassurance on demand, not a wall in front of a form.
+    -->
+    <details class="handling">
+      <summary>Where your document goes, and what is left when you delete it</summary>
+      <div class="handling-body"><HandlingPanel {sealed} /></div>
+    </details>
+
     <fieldset class="depth engine">
       <legend>Which model should read it?</legend>
       <p class="muted engine-strap">
@@ -268,6 +282,14 @@
   .optional { display: grid; gap: .6rem; margin-top: 1rem; }
   summary { cursor: pointer; padding: .5rem 0; }
   textarea { resize: vertical; }
+  .handling { border: 1px solid var(--line-strong); margin: 1rem 0 0; }
+  .handling summary {
+    cursor: pointer;
+    padding: .85rem 1.1rem;
+    font-weight: 600;
+  }
+  .handling summary:hover { background: var(--surface-sunken); }
+  .handling-body { padding: 0 1.1rem 1.25rem; border-top: 1px solid var(--divider); padding-top: 1.25rem; }
   .depth { border: 1px solid var(--line-strong); padding: 1rem 1.1rem; margin: 1rem 0 0; display: grid; gap: .75rem; }
   /* ARMED IS A CHANGE OF GROUND, not a coloured border. The page's state language
      is hover = ground, selected = accent fill, and a run that cannot be undone

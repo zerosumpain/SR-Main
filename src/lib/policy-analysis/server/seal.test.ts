@@ -6,6 +6,7 @@
 // quietly writes that column in the clear. So the manifest is checked against the
 // schema mechanically, and a new column fails this test until somebody decides
 // which side of the line it is on.
+import { randomUUID } from 'node:crypto';
 import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -19,7 +20,16 @@ beforeAll(() => {
 });
 afterAll(() => { delete process.env.POLICY_SEAL_KEY_DIR; });
 
-const id = () => `00000000-0000-4000-8000-${String(Date.now() % 1e12).padStart(12, '0')}`;
+/**
+ * A FRESH ID PER CALL, from the same source production uses.
+ *
+ * This was built from `Date.now()`, which collides whenever two calls land in
+ * the same millisecond — and `mintKey` opens with `wx` precisely so that minting
+ * twice for one id is an error. It passed here and failed on the gate box, which
+ * is faster: a green local run meant "no two calls happened to share a
+ * millisecond", not "the ids are unique".
+ */
+const id = () => randomUUID();
 
 describe('the key', () => {
   it('is minted once, read back, and gone after a shred', async () => {

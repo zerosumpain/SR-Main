@@ -36,6 +36,8 @@ export type OfflinePayload = {
   jurisdiction: string | null;
   policyArea: string | null;
   status: string;
+  /** Whether the assessment was sealed. The handling note in the pack reads differently if it was. */
+  sealed: boolean;
   completedAt: string | null;
   /** When the pack was made — not when the assessment ran. */
   generatedAt: string;
@@ -48,6 +50,7 @@ export type OfflinePayload = {
 
 export type PayloadInput = {
   title: string;
+  sealed?: boolean;
   jurisdiction: string | null;
   policyArea: string | null;
   status: string;
@@ -71,6 +74,7 @@ export function ownerPayload(input: PayloadInput, now = new Date()): OfflinePayl
   return {
     version: PAYLOAD_VERSION,
     scope: 'owner',
+    sealed: !!input.sealed,
     title: input.title,
     jurisdiction: input.jurisdiction,
     policyArea: input.policyArea,
@@ -114,6 +118,9 @@ export function sharedPayload(
   return {
     version: PAYLOAD_VERSION,
     scope: 'shared',
+    // A sealed run cannot be shared by link at all, so a shared pack is always
+    // an ordinary assessment whatever the caller passes.
+    sealed: false,
     title: input.title,
     jurisdiction: input.jurisdiction,
     policyArea: input.policyArea,

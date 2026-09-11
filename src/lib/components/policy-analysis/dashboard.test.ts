@@ -31,6 +31,8 @@ import InterplayMap from './InterplayMap.svelte';
 import ScenarioFlow from './ScenarioFlow.svelte';
 import StressLab from './StressLab.svelte';
 import AssessmentBody from './AssessmentBody.svelte';
+import HandlingPanel from './HandlingPanel.svelte';
+import { journey } from '$lib/policy-analysis/handling';
 import { shareableReport } from '$lib/policy-analysis/share';
 import { STAGES } from '$lib/policy-analysis/contracts';
 import { leverage } from '$lib/policy-analysis/stress';
@@ -689,5 +691,43 @@ describe('hover explains a word; a click opens a thing', () => {
     // browser's own delayed tooltip, which costs the page nothing.
     const clipped = rows.flatMap((r) => r.cells).filter((c) => c?.clipped);
     if (clipped.length) expect(html).toContain(`title="${clipped[0]!.full.replaceAll('"', '&quot;')}"`);
+  });
+});
+
+/**
+ * WHERE YOUR DOCUMENT GOES — the panel, and the promise it is not allowed to
+ * make quietly.
+ *
+ * The diagram carries the argument and a screen reader cannot see it, so the
+ * list beside it is not decoration: the two must hold the same six stops. And
+ * the one step that leaves the site has to be findable in the text, because a
+ * picture that shows it and a list that does not is worse than neither.
+ */
+describe('the handling explainer', () => {
+  it('draws the journey and writes it out, in both versions', () => {
+    for (const sealed of [false, true]) {
+      const { body } = render(HandlingPanel, { props: { sealed } });
+      for (const stop of journey(sealed)) {
+        expect(body, `${sealed ? 'sealed' : 'ordinary'} is missing "${stop.title}"`).toContain(stop.title);
+      }
+      // The picture is announced, not silent — and it says what it is a picture of.
+      expect(body).toMatch(/role="img"/);
+      expect(body).toMatch(/aria-label="[^"]*cannot reach/);
+    }
+  });
+
+  it('puts the thing it cannot promise in front of the reader, not in a footnote', () => {
+    const away = journey(false).find((s) => s.place === 'away')!;
+    const { body } = render(HandlingPanel, { props: { sealed: false } });
+    expect(body).toContain(away.emphasis);
+    expect(body).toContain('Nobody here can reach');
+  });
+
+  it('tells a sealed assessment a different ending', () => {
+    const open = render(HandlingPanel, { props: { sealed: false } }).body;
+    const shut = render(HandlingPanel, { props: { sealed: true } }).body;
+    expect(open).toMatch(/readable/);
+    expect(shut).toMatch(/gibberish/);
+    expect(shut).toContain('The key');
   });
 });

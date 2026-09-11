@@ -119,7 +119,7 @@
   {/if}
 </section>
 
-<AssessmentBody artefacts={payload.artefacts} status={payload.status} />
+<AssessmentBody artefacts={payload.artefacts} status={payload.status} sealed={payload.sealed} />
 
 <style>
   /* A BAND: ink to the window edge, content held to the measure by the chrome's
