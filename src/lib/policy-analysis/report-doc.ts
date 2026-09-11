@@ -23,7 +23,8 @@ import type { Artefact } from './contracts';
 import { KEY_SECTIONS, READING_CHAIN } from './glossary';
 import { REPORT_ACTS, actorBoard, evidenceMix, fragileAssumptions, findingsBySection, headline, of, plays, BAND_LABEL, type Band } from './view';
 import { checks } from './view';
-import { network } from './network';
+import { isBody, network } from './network';
+import { adjacency } from './matrix';
 
 export type DocMeta = {
   title: string;
@@ -184,9 +185,15 @@ function structure(artefacts: Artefact[]): string {
 function relationships(artefacts: Artefact[]): string {
   const net = network(artefacts);
   if (!net.edges.length) return '';
+  const bodies = net.nodes.filter(isBody).length;
+  // How many relationships run between two BODIES is the fact the page leads
+  // with and the one a printed pack could not previously be read for: a paper
+  // where almost none do has described who benefits and what will be done
+  // without describing who answers to whom.
+  const placeable = adjacency(net).placeable;
   return block([
     '## The policy as a network',
-    `${net.nodes.length} bodies and instruments, ${net.edges.length} stated relationships between them.`,
+    `${bodies} bodies and ${net.nodes.length - bodies} pieces of machinery, ${net.edges.length} stated relationships between them — of which ${placeable} run between two bodies.`,
     ...net.insights.map((insight) =>
       block([
         `### ${insight.headline}`,

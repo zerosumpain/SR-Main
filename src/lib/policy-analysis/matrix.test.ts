@@ -11,10 +11,12 @@ import { artefact, type Artefact } from './contracts';
 import { KEY_SECTIONS, STRUCTURE_TERMS, explain, explainable, familyTermKey } from './glossary';
 import {
   CELL_CHARS,
+  MIN_GRID_EDGES,
   PLAY_FACTORS,
   TRAIT_COLUMNS,
   adjacency,
   axisLabel,
+  bodyLinks,
   cellSentence,
   clip,
   playGrid,
@@ -307,6 +309,18 @@ describe('bodies × bodies shows the shape the family panels could not', () => {
     expect(cellSentence('Providers', 'Regulator', grid.rows[1][0]!)).toBe('Providers reports to Regulator.');
   });
 
+  it('reports what a bodies-against-bodies grid could EVER hold, not the whole graph', () => {
+    // "0 of 452 (0%)" was the caption on a live assessment whose graph was fine:
+    // 420 of those 452 ran from a body to a piece of machinery and were never
+    // grid material. The denominator the reader needs is the placeable one.
+    expect(grid.placeable).toBe(4);
+    expect(grid.total).toBe(4);
+  });
+
+  it('counts a row by the links the grid draws, because that is what orders it', () => {
+    expect(grid.bodies.map((b) => b.links)).toEqual([4, 3, 1]);
+  });
+
   it('shortens an axis label without inventing an abbreviation', () => {
     // "DLUHC" is a real abbreviation; one invented for "Large registered
     // providers" would not be, so the label is truncated rather than initialled.
@@ -315,6 +329,96 @@ describe('bodies × bodies shows the shape the family panels could not', () => {
     expect(cut.length).toBeLessThanOrEqual(17);
     expect('Department for Levelling Up, Housing and Communities'.startsWith(cut.slice(0, -1))).toBe(true);
     expect(axisLabel('Tenant panels', 16)).toBe('Tenant panels');
+  });
+});
+
+describe('a policy with no mesh gets a list, not an empty frame', () => {
+  const edge = (id: string, from: string, to: string, relation: string) =>
+    ({ ...artefact(id, 'edge', relation, 'x', { notes: '' }), fromId: from, toId: to, relation }) as Artefact;
+  const mechanism = (id: string, label: string) => artefact(id, 'mechanism', label, 'x', { operator: null, notes: '' });
+
+  // The shape of the Best Start in Life assessment in miniature: two bodies
+  // pointing at a lot of machinery, one relationship between them. Total degree
+  // makes "Beneficiaries" and "Provider" the two busiest bodies in the paper;
+  // neither is connected to anything the grid can draw.
+  const all: Artefact[] = [
+    actorOf('gov', 'Government'),
+    actorOf('la', 'Local authorities'),
+    actorOf('kids', 'Beneficiaries'),
+    actorOf('prov', 'Provider'),
+    ...Array.from({ length: 6 }, (_, i) => mechanism(`m${i}`, `Offer ${i}`)),
+    ...Array.from({ length: 6 }, (_, i) => edge(`b${i}`, 'kids', `m${i}`, 'receives_benefit_from')),
+    ...Array.from({ length: 5 }, (_, i) => edge(`d${i}`, 'prov', `m${i}`, 'delivers')),
+    edge('x1', 'gov', 'la', 'funds'),
+  ];
+  const net = network(all);
+  const grid = adjacency(net);
+
+  it('ranks the axes by the degree the grid can DRAW, not by total degree', () => {
+    // Ranking on total degree put the twelve bodies busiest at pointing AT
+    // machinery on a live grid and placed none of its 32 body-to-body links.
+    // "Beneficiaries" has six relationships and none of them is placeable.
+    expect(grid.bodies.slice(0, 2).map((b) => b.id)).toEqual(['gov', 'la']);
+    expect(grid.bodies[0].links).toBe(1);
+    expect(net.nodes[0].id).toBe('kids');
+  });
+
+  it('declares itself illegible rather than drawing an empty frame', () => {
+    expect(grid.shown).toBeLessThan(MIN_GRID_EDGES);
+    expect(grid.legible).toBe(false);
+    expect(grid.placeable).toBe(1);
+    expect(grid.total).toBe(12);
+  });
+
+  it('lists every body-to-body relationship instead, one row per ordered pair', () => {
+    const links = bodyLinks(net);
+    expect(links).toHaveLength(1);
+    expect(links[0]).toMatchObject({
+      fromId: 'gov',
+      fromLabel: 'Government',
+      toId: 'la',
+      toLabel: 'Local authorities',
+      relations: ['funds'],
+      families: ['money'],
+      reciprocated: false,
+    });
+  });
+
+  it('folds the relations on one pair into one row and marks the return leg', () => {
+    const both = network([...all, edge('x2', 'la', 'gov', 'reports_to'), edge('x3', 'gov', 'la', 'commissions')]);
+    const links = bodyLinks(both);
+    const outward = links.find((l) => l.fromId === 'gov');
+    expect(outward?.relations).toEqual(['funds', 'commissions']);
+    expect(outward?.ids).toEqual(['x1', 'x3']);
+    expect(outward?.reciprocated).toBe(true);
+    expect(links.find((l) => l.fromId === 'la')?.reciprocated).toBe(true);
+  });
+
+  it('never lists or places a body against itself', () => {
+    const selfy = network([...all, edge('x4', 'gov', 'gov', 'funds')]);
+    expect(bodyLinks(selfy).some((l) => l.fromId === l.toId)).toBe(false);
+    const grid = adjacency(selfy);
+    expect(grid.placeable).toBe(1);
+    // `shown` must never exceed what the grid says it could hold, and the
+    // diagonal is the one cell the picture promises is empty.
+    expect(grid.shown).toBe(1);
+    expect(grid.rows.every((row, i) => row[i] === null)).toBe(true);
+  });
+
+  it('draws the grid as soon as there is a shape to draw', () => {
+    const mesh = network([
+      ...all,
+      ...['la|gov|reports_to', 'prov|la|delivers', 'la|prov|commissions', 'gov|prov|regulates', 'prov|gov|reports_to'].map(
+        (spec, i) => {
+          const [from, to, relation] = spec.split('|');
+          return edge(`y${i}`, from, to, relation);
+        },
+      ),
+    ]);
+    const drawn = adjacency(mesh);
+    expect(drawn.placeable).toBe(6);
+    expect(drawn.shown).toBe(6);
+    expect(drawn.legible).toBe(true);
   });
 });
 
