@@ -1,12 +1,41 @@
 <script lang="ts">
   // The one hover card for the whole assessment.
   //
-  // Ask 2: heavy use of hover cards, and where an actor is mentioned the card
-  // should show the right thing for where it is mentioned. So the card is
-  // CONTEXT-AWARE BY SUBJECT KIND rather than by identifier: the anchor says
-  // `actor:` or `play:` or `term:`, and each renders the two or three fields
-  // that answer "is this worth opening" for that kind. One component, five
-  // renderings, one mount.
+  // It is CONTEXT-AWARE BY SUBJECT KIND rather than by identifier: the anchor
+  // says `actor:` or `play:` or `term:`, and each renders the two or three
+  // fields that answer "is this worth opening" for that kind. One component,
+  // several renderings, one mount.
+  //
+  // WHERE IT APPEARS IS A RULE, and a narrower one than the brief first asked
+  // for. Ask 2 wanted heavy use of hover cards; once the dense views became
+  // grids, heavy use was the clutter. John, 2026-09-11, in three passes:
+  // *"we can remove a lot of the hover overs on dense pages — it just gets
+  // cluttered. clickthrough to modal is fine, but hover off can be reduced"*,
+  // then *"leave hover over for the actors page though that works really
+  // well"*, then *"on the table, you can remove it from the filters and
+  // buttons"*. What those three settle:
+  //
+  //   1. AN EXPLAINER SITS ON A LABEL, NEVER ON A CONTROL. `term:` stays on
+  //      column headers, origin badges and legend entries, because a word has
+  //      nowhere else to be explained and a label does nothing when clicked.
+  //      It is off every filter chip and segmented button: a card that appears
+  //      over the thing you are about to press is fighting the press. The
+  //      network's family definitions moved to its LEGEND for exactly this
+  //      reason, and everything is in the key workspace regardless.
+  //
+  //   2. A SUBJECT PEEK BELONGS WHERE A THING IS NAMED, not tabulated — the
+  //      verdict's short version, the network's structural readings, the
+  //      stress lab's levers, a scenario's references. A handful on screen, and
+  //      the card answers "is this worth opening" before you lose your place.
+  //
+  //   3. THE ACTORS PAGE IS THE EXCEPTION AND KEEPS ITS ROWS. The actor card —
+  //      what a body is judged on, who it answers to, who gains if the policy
+  //      fails, the worst play it can run — is the one peek that earns its
+  //      place. One per row, never per cell.
+  //
+  // No grid cell carries a card. A row is already one click from the whole
+  // artefact, and 54 profile cells or 144 matrix cells each armed with a
+  // popover is what made those pages tiring.
   //
   // ON PAPER, ALWAYS — the same rule the health hub's card follows. It floats
   // over a document that alternates ink and cream bands, and a layer that
@@ -18,7 +47,6 @@
   // place to READ them, never a second opinion about them.
   import { policyPeek, peekPlacement, PEEK_WIDTH } from '$lib/policy-analysis/peek.svelte';
   import { explain } from '$lib/policy-analysis/glossary';
-  import { TRAIT_COLUMNS } from '$lib/policy-analysis/matrix';
   import { BAND_FILL, BAND_LABEL, type Band, type Play, type ActorView } from '$lib/policy-analysis/view';
   import type { Artefact } from '$lib/policy-analysis/contracts';
 
@@ -38,9 +66,6 @@
 
   const anchor = $derived(policyPeek.current);
 
-  /** The grid's own header for a profile field, so the card names it the same way. */
-  const TRAIT_HEADS: Record<string, string> = Object.fromEntries(TRAIT_COLUMNS.map((c) => [c.key, c.head]));
-
   // Measured after the card exists; until then `peekPlacement` uses its own
   // estimate. A plain `let` would not re-place the card when the height lands,
   // so this one IS state — unlike the controller's timers, which nothing
@@ -58,36 +83,11 @@
 
   const placement = $derived(anchor ? peekPlacement(anchor.rect, measured || 260) : null);
 
-  /**
-   * `field:<artefactId>:<key>` — one field OF an artefact.
-   *
-   * A grid cell clips to about six words, so the card has to carry the rest of
-   * that ONE line plus where it came from. Pointing the card at the whole
-   * profile instead would answer a question the reader did not ask: they are
-   * comparing a column, not reading a dossier.
-   */
-  const fieldRef = $derived.by(() => {
-    if (anchor?.kind !== 'field') return null;
-    const at = anchor.subject.lastIndexOf(':');
-    if (at <= 0) return null;
-    return { id: anchor.subject.slice(0, at), key: anchor.subject.slice(at + 1) };
-  });
-
-  const subjectId = $derived(anchor?.kind === 'term' ? null : (fieldRef?.id ?? anchor?.subject ?? null));
+  const subjectId = $derived(anchor?.kind === 'term' ? null : (anchor?.subject ?? null));
   const artefact = $derived(subjectId ? (artefacts.find((a) => a.id === subjectId) ?? null) : null);
-  const fieldValue = $derived.by(() => {
-    const raw = fieldRef && artefact ? artefact.data?.[fieldRef.key] : null;
-    if (!raw || typeof raw !== 'object') return null;
-    const f = raw as { value?: string; origin?: string; confidence?: number | null; refs?: string[] };
-    return f.value ? { value: f.value, origin: String(f.origin ?? ''), refs: f.refs ?? [] } : null;
-  });
   const term = $derived(anchor?.kind === 'term' ? explain(anchor.subject) : null);
   const play = $derived(anchor?.kind === 'play' ? (plays.find((p) => p.artefact.id === anchor.subject) ?? null) : null);
   const actorView = $derived(anchor?.kind === 'actor' ? (actors.find((a) => a.actor.id === anchor.subject) ?? null) : null);
-  /** Whose row the field belongs to — the card names the body, not the profile id. */
-  const fieldOwner = $derived(
-    fieldRef ? (actors.find((a) => a.profile?.id === fieldRef.id || a.actor.id === fieldRef.id) ?? null) : null,
-  );
 
   const pct = (v: unknown) => `${Math.round((Number(v) || 0) * 100)}`;
   const profileField = (key: string) => {
@@ -135,23 +135,7 @@
     onmouseenter={() => policyPeek.keepOpen()}
     onmouseleave={() => policyPeek.release()}
   >
-    {#if fieldValue}
-      <p class="pk-kind">{TRAIT_HEADS[fieldRef?.key ?? ''] ?? (fieldRef?.key ?? '').replace(/([A-Z])/g, ' $1').toLowerCase()}</p>
-      <p class="pk-name">{fieldOwner?.actor.label ?? artefact?.label}</p>
-      <p class="pk-what">{fieldValue.value}</p>
-      {#if fieldValue.origin}
-        {@const origin = explain(fieldValue.origin)}
-        <p class="pk-line">
-          <span class="pk-line-label">{origin?.plain ?? 'Where it came from'}</span>
-          {origin?.read ?? fieldValue.origin.replaceAll('_', ' ')}
-        </p>
-      {/if}
-      <div class="pk-foot">
-        <span class="pk-cite">{fieldValue.origin.replaceAll('_', ' ')}</span>
-        <button type="button" class="pk-open" onclick={open}>Open the full profile →</button>
-      </div>
-
-    {:else if term}
+    {#if term}
       <p class="pk-kind">What this column means</p>
       <p class="pk-name">{term.plain ?? term.label}</p>
       {#if term.plain && term.plain !== term.label}<p class="pk-formal">Called <strong>{term.label}</strong> in the working</p>{/if}

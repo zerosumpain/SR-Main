@@ -107,7 +107,7 @@
             <div class="net-bars">
               {#each panel.top as end (end.id)}
                 <div class="net-bar-row">
-                  <button type="button" class="net-end" data-pa-peek={peekFor(end.id)} onclick={() => onopen(end.id)}>{end.label}</button>
+                  <button type="button" class="net-end" onclick={() => onopen(end.id)}>{end.label}</button>
                   <span class="net-bar" style="width: {Math.max(4, (end.count / peak) * 100)}%"></span>
                   <span class="net-bar-value">{end.count}</span>
                 </div>
@@ -162,9 +162,9 @@
       <ul class="net-edges">
         {#each shown.slice(0, EDGES) as edge (edge.artefact.id)}
           <li>
-            <button type="button" class="net-end" data-pa-peek={peekFor(edge.fromId)} onclick={() => onopen(edge.fromId)}>{label(edge.fromId)}</button>
+            <button type="button" class="net-end" onclick={() => onopen(edge.fromId)}>{label(edge.fromId)}</button>
             <span class="net-verb">{edge.relation.replaceAll('_', ' ')}</span>
-            <button type="button" class="net-end" data-pa-peek={peekFor(edge.toId)} onclick={() => onopen(edge.toId)}>{label(edge.toId)}</button>
+            <button type="button" class="net-end" onclick={() => onopen(edge.toId)}>{label(edge.toId)}</button>
             <span class="net-meta">
               {edge.temporal ?? 'unstated'}{#if edge.family}{' · '}{edge.family}{/if}
             </span>

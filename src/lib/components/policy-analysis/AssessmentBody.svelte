@@ -365,7 +365,6 @@
               <button
                 type="button"
                 class:on={bandFilter === b.band}
-                data-pa-peek={`term:${b.band}`}
                 onclick={() => (bandFilter = bandFilter === b.band ? null : b.band)}
               >{b.count} {b.band}</button>
             {/each}

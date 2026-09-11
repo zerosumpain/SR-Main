@@ -107,13 +107,19 @@
       {@const index = TRAIT_COLUMNS.findIndex((c) => c.key === column.key)}
       {@const value = r.cells[index]}
       {#if value}
-        <!-- A clipped cell is a button so a KEYBOARD reader reaches the full
-             wording: `data-pa-peek` on a div never fires `onfocusin`, which is
-             the trap this feature hit on 2026-09-11. -->
+        <!--
+          NO CARD ON A CELL. The ROW keeps its actor and play peeks — John,
+          2026-09-11: *"leave hover over for the actors page though that works
+          really well"* — but fifty-four cells each opening a styled popover is
+          the clutter, and each one only ever held the wording of a single
+          field. A clipped cell keeps its dotted rule to say there is more and
+          carries the full wording as a native `title`; the profile behind the
+          row name holds every field in full.
+        -->
         <button
           class="ct-cell"
           class:clipped={value.clipped}
-          data-pa-peek={`field:${r.profileId ?? r.id}:${column.key}`}
+          title={value.clipped ? value.full : undefined}
           onclick={() => onopen(r.profileId ?? r.id)}
         >{value.text}</button>
         <!-- Only when it DIFFERS from the caption's stated origin. Fifty-four
