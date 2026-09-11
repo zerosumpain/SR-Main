@@ -22,6 +22,7 @@
   import ArtefactValue from '$lib/components/policy-analysis/ArtefactValue.svelte';
   import { formatGbp, formatTokens } from '$lib/canvas/stats/costFormat';
   import { documentSlug } from '$lib/policy-analysis/report-doc';
+  import { receiptText, type PurgeReceipt } from '$lib/policy-analysis/receipt';
   import { filenameFromDisposition } from '$lib/policy-analysis/offline/download';
 
   let { data }: { data: PageData } = $props();
@@ -33,6 +34,7 @@
   let audit = $state<unknown>(null);
   let openLog = $state(false);
   let confirmDelete = $state(false);
+  let receipt = $state<PurgeReceipt | null>(null);
   let exporting = $state(false);
   let exportError = $state('');
 
@@ -75,21 +77,47 @@
   const fmt = (v: Date | string | null) => (v ? new Date(v).toLocaleString() : 'Not yet');
   const hhmm = (minutes: number) => (minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`);
 
+  /**
+   * Purge the assessment, and KEEP THE RECEIPT IN FRONT OF THE READER.
+   *
+   * This used to navigate straight back to the list on success, which is the
+   * right shape for a delete and the wrong one for this: the census it now runs
+   * is the only evidence that the purge reached the places a cascade does not,
+   * and the row it describes no longer exists to be looked up again. So the page
+   * stays, shows the counts, and offers the file. Leaving is a click.
+   */
   async function destroy() {
     busy = true;
     message = '';
     try {
       const response = await fetch(`/api/policy-analysis/${data.analysis.id}`, { method: 'DELETE' });
       if (!response.ok) {
-        message = 'Could not delete this assessment.';
+        message = 'Could not purge this assessment. Nothing was left half-done — try again.';
         return;
       }
-      window.location.href = '/policy-analysis';
+      const body = (await response.json()) as { receipt?: PurgeReceipt };
+      receipt = body.receipt ?? null;
+      confirmDelete = false;
+      if (!receipt) window.location.href = '/policy-analysis';
     } catch {
-      message = 'Connection interrupted. The assessment may not have been deleted.';
+      message = 'Connection interrupted. The assessment may not have been purged — reload this page to see.';
     } finally {
       busy = false;
     }
+  }
+
+  /** The receipt as a file. A blob, not a navigation: there is no page to come back to. */
+  function saveReceipt() {
+    if (!receipt) return;
+    const blob = new Blob([receiptText(receipt)], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `purge-receipt-${receipt.analysisId}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
   }
 
   async function refresh() {
@@ -391,6 +419,13 @@
       {:else}
         <p class="pa-cost">No model call has been billed yet.</p>
       {/if}
+      {#if data.analysis.sealed}
+        <p class="pa-sealed">
+          <span class="pa-sealed-mark">Sealed</span>
+          Stored encrypted under a key held outside the database. Purging this run destroys the key, which
+          makes every copy of it unreadable — including the ones in backups.
+        </p>
+      {/if}
     </div>
   </div>
 </div>
@@ -413,8 +448,16 @@
     <p class="pa-kicker">Run log and provenance</p>
     <h2>Everything behind the page</h2>
     <p class="pa-strap">
-      Every completed stage has an immutable execution record; every model call keeps its prompt version,
-      input, output, provider and reported usage. Provider secrets and raw errors are excluded.
+      {#if data.analysis.sealed}
+        Every completed stage has an immutable execution record, and every model call keeps its prompt
+        version, provider, model and reported usage. <strong>This run is sealed, so no prompt and no reply
+        was ever stored</strong> — not encrypted, absent. The cost and the models below are real; the text
+        behind them does not exist to be inspected, and a stage fault here cannot be diagnosed after the
+        fact.
+      {:else}
+        Every completed stage has an immutable execution record; every model call keeps its prompt version,
+        input, output, provider and reported usage. Provider secrets and raw errors are excluded.
+      {/if}
     </p>
 
     <ol class="pa-stages">
@@ -509,7 +552,16 @@
           </div>
         {/each}
         {#if audit}
-          <details open><summary>Model call audit</summary><pre>{JSON.stringify(audit, null, 2)}</pre></details>
+          <details open>
+            <summary>Model call audit</summary>
+            {#if data.analysis.sealed}
+              <p class="pa-muted">
+                Sealed run: the prompt and the reply were never written down, so this record is the call's
+                shape — its key, its hash, its model, its usage and its timings — and nothing else.
+              </p>
+            {/if}
+            <pre>{JSON.stringify(audit, null, 2)}</pre>
+          </details>
         {/if}
       {/if}
     </details>
@@ -581,17 +633,54 @@
 
     <div class="pa-danger">
       <p class="pa-label">Remove it</p>
-      <p class="pa-muted">
-        Deletes the uploaded paper, every artefact, the provenance graph and the model-call audit. It cannot
-        be undone.
-      </p>
-      {#if confirmDelete}
+      {#if receipt}
+        <p class="pa-muted">
+          {receipt.clean
+            ? 'Purged. Every one of the eleven places a reference can live was checked and came back empty.'
+            : 'Purged, but the census found rows still present. Run it again.'}
+        </p>
+        <ul class="pa-receipt">
+          {#each receipt.probes as probe (probe.table)}
+            <li class:left={probe.rows > 0}>
+              <span class="pa-receipt-n">{probe.rows === 0 ? 'none' : probe.rows}</span>
+              <span>{probe.what}</span>
+            </li>
+          {/each}
+        </ul>
+        {#if receipt.sealed}
+          <p class="pa-muted">
+            The key for this run {receipt.keyDestroyed ? 'was destroyed before the rows were deleted' : 'was already gone'}.
+            Any copy of its ciphertext left in a backup is now unreadable, and nothing had to go and find it.
+          </p>
+        {/if}
+        <details>
+          <summary>What a purge cannot reach</summary>
+          <ul class="pa-gaps">{#each receipt.unreachable as line, i (i)}<li>{line}</li>{/each}</ul>
+        </details>
         <div class="toolbar">
-          <button class="pa-btn" disabled={busy} onclick={destroy}>Yes, delete “{data.analysis.title}” permanently</button>
-          <button class="pa-link" onclick={() => (confirmDelete = false)}>Keep it</button>
+          <button class="pa-btn" onclick={saveReceipt}>↓ Save the receipt</button>
+          <a class="pa-link" href="/policy-analysis">Back to the list</a>
         </div>
       {:else}
-        <button class="pa-link" onclick={() => (confirmDelete = true)}>Delete this assessment and its document</button>
+        <p class="pa-muted">
+          Removes the uploaded paper, every artefact, the provenance graph, the model-call audit, the queue
+          envelopes and any cross-policy finding written about it on another assessment. It cannot be undone,
+          and you get a receipt saying what was checked.
+          {#if data.analysis.sealed}
+            This run is sealed, so its key is destroyed first — which is what makes the copies in backups
+            unreadable rather than merely deleted.
+          {/if}
+        </p>
+        {#if confirmDelete}
+          <div class="toolbar">
+            <button class="pa-btn" disabled={busy} onclick={destroy}>
+              {busy ? 'Purging…' : `Yes, purge “${data.analysis.title}” permanently`}
+            </button>
+            <button class="pa-link" onclick={() => (confirmDelete = false)}>Keep it</button>
+          </div>
+        {:else}
+          <button class="pa-link" onclick={() => (confirmDelete = true)}>Purge this assessment and its document</button>
+        {/if}
       {/if}
     </div>
   </section>
@@ -847,6 +936,26 @@
     .pa-dot {
       animation: none;
     }
+  }
+  /* Not a fourth colour: the page's state language is ground and accent fill, and
+     a mark that means "this cannot be undone later" earns ink, not hue. */
+  .pa-sealed {
+    margin: .55rem 0 0;
+    font-size: var(--fs-label);
+    line-height: 1.5;
+    color: var(--text-secondary);
+    max-width: 62ch;
+  }
+  .pa-sealed-mark {
+    display: inline-block;
+    margin-right: .45rem;
+    padding: 2px 7px;
+    background: var(--text-primary);
+    color: var(--bg);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
   }
   .pa-cost {
     margin: 0;

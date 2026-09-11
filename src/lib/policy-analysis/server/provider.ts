@@ -58,10 +58,37 @@ function needsRepair(kept: number, rejected: Rejection[]): boolean {
   return kept === 0 || rejected.length >= Math.max(3, Math.ceil(kept / 2));
 }
 
-/** What the reader commissioned: a Codex model id and a reasoning effort, either of which may be absent. */
-export type Commission = { model: string | null; thinkingLevel: ThinkingLevel | null };
+/**
+ * What the reader commissioned: a Codex model id, a reasoning effort — either of
+ * which may be absent — and whether the run is SEALED.
+ *
+ * Sealing belongs here rather than in a separate argument because it is exactly
+ * that: something the reader asked for at submission, which changes what this
+ * function is allowed to write down.
+ */
+export type Commission = { model: string | null; thinkingLevel: ThinkingLevel | null; sealed?: boolean };
 
 export function modelCaller(executionId: string, runId: string, signal: AbortSignal, prior: Artefact[], commission?: Commission): ModelCall {
+  /**
+   * A SEALED RUN STORES NO PROMPT AND NO REPLY. Not encrypted — absent.
+   *
+   * `policy_model_calls` keeps everything that is not the document: the call key,
+   * the input HASH, the status, the provider, the model, the usage array and the
+   * timings. So the run log still reads, the cost still sums, and the page still
+   * shows which model answered each call. What is gone is the text.
+   *
+   * TWO CONSEQUENCES, BOTH STATED AT SUBMISSION RATHER THAN DISCOVERED:
+   *
+   * 1. The replay diagnostic — "read the stored call back through
+   *    `triageArtefacts`", the thing that has found every stage defect in this
+   *    feature — cannot be used on a sealed run.
+   * 2. The model-call CACHE cannot hit, because it reuses a stored `output`. A
+   *    sealed run that is interrupted and resumed re-issues that stage's calls
+   *    rather than replaying them, which costs quota and time.
+   *
+   * Both are the price of the guarantee, and the form says so.
+   */
+  const sealed = commission?.sealed === true;
   return async (stage, key, input) => {
     const { protect: pinned, ...payload } = input as { artefacts?: Artefact[]; protect?: string[] };
     const fitted = Array.isArray(payload.artefacts)
@@ -79,7 +106,12 @@ export function modelCaller(executionId: string, runId: string, signal: AbortSig
     const promptKey = `${PROMPT_VERSION}#${createHash('sha256').update(systemPrompt(stage)).digest('hex').slice(0, 12)}`;
     const prefix = (input as { idPrefix?: string }).idPrefix ?? '';
     const [execution] = await db.select().from(policyExecutions).where(eq(policyExecutions.id, executionId));
-    const [cached] = await db.select({ output: policyModelCalls.output }).from(policyModelCalls)
+    // NOT PROBED ON A SEALED RUN, and this is a correctness point rather than an
+    // optimisation: a sealed run's completed calls carry `output: null`, so the
+    // row would be a truthy "hit" and `triageOutput` would be handed nothing.
+    // Skipping it is also the honest behaviour — there is no stored reply to
+    // reuse, so a resumed sealed stage re-issues its calls.
+    const [cached] = sealed ? [] : await db.select({ output: policyModelCalls.output }).from(policyModelCalls)
       .innerJoin(policyExecutions, eq(policyExecutions.id, policyModelCalls.executionId))
       .where(and(eq(policyExecutions.stageId, execution.stageId), eq(policyModelCalls.inputHash, inputHash), eq(policyModelCalls.promptVersion, promptKey), eq(policyModelCalls.status, 'completed')))
       // Several attempts of the same stage can leave more than one match; take the
@@ -121,7 +153,7 @@ export function modelCaller(executionId: string, runId: string, signal: AbortSig
       // original input hash would let the unordered cache lookup replay that
       // fragment as if it were the whole response.
       const roundHash = round ? createHash('sha256').update(`${inputHash}#repair${round}`).digest('hex') : inputHash;
-      const [call] = await db.insert(policyModelCalls).values({ executionId, callKey, promptVersion: promptKey, inputHash: roundHash, input: round ? { repairOf: key, round, instruction: messages.at(-1)?.content.slice(0, 20000) } : input, status: 'running', model }).returning();
+      const [call] = await db.insert(policyModelCalls).values({ executionId, callKey, promptVersion: promptKey, inputHash: roundHash, input: sealed ? null : (round ? { repairOf: key, round, instruction: messages.at(-1)?.content.slice(0, 20000) } : input), status: 'running', model }).returning();
       const llmCalls: LLMCallRecord[] = [];
       try {
         const result = await executionContext.run({ workflowId: WORKFLOW_ID, runId, nodeId: executionId, llmCalls }, () =>
@@ -133,18 +165,21 @@ export function modelCaller(executionId: string, runId: string, signal: AbortSig
         const truncated = result.choices[0]?.finish_reason === 'length';
         let output: unknown;
         try { output = JSON.parse(content); } catch {
-          await db.update(policyModelCalls).set({ output: { malformedText: content.slice(0, 64000), finishReason: result.choices[0]?.finish_reason ?? null } }).where(eq(policyModelCalls.id, call.id));
+          // Even the malformed text is the model's reading of the paper. A sealed
+          // run keeps the finish reason, which is the part that tells a reader
+          // whether it was truncated or genuinely broken.
+          await db.update(policyModelCalls).set({ output: sealed ? { finishReason: result.choices[0]?.finish_reason ?? null } : { malformedText: content.slice(0, 64000), finishReason: result.choices[0]?.finish_reason ?? null } }).where(eq(policyModelCalls.id, call.id));
           throw new PolicyError('contract', truncated
             ? 'The model’s reply was cut off at its output limit before the structured result was complete. Fewer items per call are needed here.'
             : 'The model returned malformed JSON. Resume to retry this stage.');
         }
         if (truncated) warnings.push('The model reached its output limit on this call, so its list may be incomplete.');
-        await db.update(policyModelCalls).set({ output }).where(eq(policyModelCalls.id, call.id));
+        if (!sealed) await db.update(policyModelCalls).set({ output }).where(eq(policyModelCalls.id, call.id));
 
         const { output: round1, rejected } = accept(triageOutput(output, stage, [...prior, ...accepted]), prefix);
         accepted.push(...round1.artefacts);
         warnings.push(...round1.warnings);
-        await db.update(policyModelCalls).set({ status: 'completed', output, usage: llmCalls, provider: llmCalls.at(-1)?.provider ?? null, model: llmCalls.at(-1)?.model ?? result.model, completedAt: new Date() }).where(eq(policyModelCalls.id, call.id));
+        await db.update(policyModelCalls).set({ status: 'completed', output: sealed ? null : output, usage: llmCalls, provider: llmCalls.at(-1)?.provider ?? null, model: llmCalls.at(-1)?.model ?? result.model, completedAt: new Date() }).where(eq(policyModelCalls.id, call.id));
 
         if (!needsRepair(round1.artefacts.length, rejected) || round === REPAIR_ROUNDS) {
           if (!accepted.length) throw lastError ?? new PolicyError(rejected[0]?.code ?? 'contract', rejected[0]?.reason ?? 'The model returned nothing this stage could use.');

@@ -7,6 +7,21 @@ import type { Neighbour } from '../pipeline';
 import { PolicyError } from '../validation';
 import type { Submission } from './ingest';
 import { recountSightings } from './personas';
+import { mintKey, openSeal, readKey, sealRow, sealWithKey, shredKey, unsealRow, type Seal } from './seal';
+
+/**
+ * The codec for one analysis, read from its `sealed` flag.
+ *
+ * Every read and write of a free-text policy column goes through this. An
+ * unsealed run — which is every run before 2026-09-11 and every run that does not
+ * ask to be sealed — gets the pass-through codec, which costs one indexed lookup
+ * and no cipher at all.
+ */
+export async function sealOf(analysisId: string, tx: DbExecutor = db): Promise<Seal> {
+  const [row] = await tx.select({ sealed: policyAnalyses.sealed }).from(policyAnalyses).where(eq(policyAnalyses.id, analysisId)).limit(1);
+  if (!row?.sealed) return openSeal();
+  return sealWithKey(await readKey(analysisId));
+}
 
 export async function queueStage(tx: DbExecutor, analysisId: string, stageId: string, delayMs = 0) {
   const runId = randomUUID();
@@ -21,20 +36,48 @@ export async function createAnalysis(owner: string, input: Submission) {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`policy:${owner}`}))`);
     const active = await tx.select({ id: policyAnalyses.id }).from(policyAnalyses).where(and(eq(policyAnalyses.owner, owner), inArray(policyAnalyses.status, ['queued', 'running'])));
     if (active.length >= 3) throw new PolicyError('capacity', 'Three analyses are already active. Cancel or finish one before starting another.');
-    const [analysis] = await tx.insert(policyAnalyses).values({ owner, title: input.title, jurisdiction: input.jurisdiction, policyArea: input.policyArea, context: input.context, depth: input.depth, model: input.model, thinkingLevel: input.thinkingLevel, concurrency: input.concurrency }).returning();
-    await tx.insert(policyDocuments).values({ analysisId: analysis.id, filename: input.filename, mimeType: input.mimeType, size: input.bytes.length, sha256: createHash('sha256').update(input.bytes).digest('hex'), content: input.bytes.toString('base64') });
-    const stages = await tx.insert(policyStages).values(STAGES.map((name, ordinal) => ({ analysisId: analysis.id, ordinal, name }))).returning();
-    await queueStage(tx, analysis.id, stages.find((s) => s.ordinal === 0)!.id);
-    return analysis;
+    // THE ID IS MINTED HERE, NOT BY THE DEFAULT, so a sealed run's key exists
+    // before its first row does. Letting the insert allocate the id would mean
+    // writing the title and context in the clear and encrypting them a statement
+    // later — and an updated row still leaves its first version in the WAL.
+    const id = randomUUID();
+    const key = input.sealed ? await mintKey(id) : null;
+    const seal = key ? sealWithKey(key) : openSeal();
+    try {
+      const [analysis] = await tx.insert(policyAnalyses).values({
+        id, owner, sealed: !!input.sealed, depth: input.depth, model: input.model, thinkingLevel: input.thinkingLevel, concurrency: input.concurrency,
+        ...sealRow(seal, 'analysis', { title: input.title, jurisdiction: input.jurisdiction, policyArea: input.policyArea, context: input.context }),
+      }).returning();
+      await tx.insert(policyDocuments).values({
+        analysisId: analysis.id, mimeType: input.mimeType, size: input.bytes.length,
+        // The digest stays in the clear: it is the run's own integrity check, it
+        // never leaves the owner's session, and the offline pack already withholds
+        // it from a shared copy for the confirmation-oracle reason.
+        sha256: createHash('sha256').update(input.bytes).digest('hex'),
+        ...sealRow(seal, 'document', { filename: input.filename, content: input.bytes.toString('base64') }),
+      });
+      const stages = await tx.insert(policyStages).values(STAGES.map((name, ordinal) => ({ analysisId: analysis.id, ordinal, name }))).returning();
+      await queueStage(tx, analysis.id, stages.find((s) => s.ordinal === 0)!.id);
+      return unsealRow(seal, 'analysis', analysis);
+    } catch (err) {
+      // A key with no run is litter, and litter in a directory whose whole job is
+      // to hold exactly the live keys is how one gets missed at purge time.
+      if (key) await shredKey(id).catch(() => {});
+      throw err;
+    }
   });
 }
 export async function listAnalyses(owner: string) {
-  return db.select().from(policyAnalyses).where(eq(policyAnalyses.owner, owner)).orderBy(desc(policyAnalyses.createdAt)).limit(50);
+  const rows = await db.select().from(policyAnalyses).where(eq(policyAnalyses.owner, owner)).orderBy(desc(policyAnalyses.createdAt)).limit(50);
+  // Only the sealed rows touch the key directory, so an account with none pays
+  // nothing for this.
+  return Promise.all(rows.map(async (r) => (r.sealed ? unsealRow(await sealOf(r.id), 'analysis', r) : r)));
 }
 export async function ownedAnalysis(owner: string, id: string, tx: DbExecutor = db) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return null;
   const [analysis] = await tx.select().from(policyAnalyses).where(and(eq(policyAnalyses.id, id), eq(policyAnalyses.owner, owner))).limit(1);
-  return analysis ?? null;
+  if (!analysis) return null;
+  return analysis.sealed ? unsealRow(sealWithKey(await readKey(analysis.id)), 'analysis', analysis) : analysis;
 }
 export type ArtefactMeta = { id: string; stage: number; updatedAt: Date };
 
@@ -46,7 +89,9 @@ export type ArtefactMeta = { id: string; stage: number; updatedAt: Date };
  * artefact id to the browser twice over.
  */
 export async function loadWithMeta(id: string, tx: DbExecutor = db): Promise<{ artefacts: Artefact[]; meta: ArtefactMeta[] }> {
-  const rows = await tx.select().from(policyArtefacts).where(eq(policyArtefacts.analysisId, id)).orderBy(asc(policyArtefacts.stage), asc(policyArtefacts.createdAt), asc(policyArtefacts.id));
+  const seal = await sealOf(id, tx);
+  const rows = (await tx.select().from(policyArtefacts).where(eq(policyArtefacts.analysisId, id)).orderBy(asc(policyArtefacts.stage), asc(policyArtefacts.createdAt), asc(policyArtefacts.id)))
+    .map((r) => unsealRow(seal, 'artefact', r));
   const links = await tx.select().from(policyProvenance).where(eq(policyProvenance.analysisId, id));
   const byFrom = new Map<string, string[]>();
   for (const link of links) byFrom.set(link.fromId, [...(byFrom.get(link.fromId) ?? []), link.toId]);
@@ -57,7 +102,12 @@ export async function loadWithMeta(id: string, tx: DbExecutor = db): Promise<{ a
 }
 
 export async function loadArtefacts(id: string, tx: DbExecutor = db): Promise<Artefact[]> {
-  const rows = await tx.select().from(policyArtefacts).where(eq(policyArtefacts.analysisId, id)).orderBy(asc(policyArtefacts.stage), asc(policyArtefacts.createdAt), asc(policyArtefacts.id));
+  // THIS AND `loadWithMeta` ARE THE ONLY PLACES AN ARTEFACT IS READ, which is why
+  // sealing needed no change anywhere above them: the pipeline, the view modules
+  // and every component see exactly the plaintext they saw before.
+  const seal = await sealOf(id, tx);
+  const rows = (await tx.select().from(policyArtefacts).where(eq(policyArtefacts.analysisId, id)).orderBy(asc(policyArtefacts.stage), asc(policyArtefacts.createdAt), asc(policyArtefacts.id)))
+    .map((r) => unsealRow(seal, 'artefact', r));
   const links = await tx.select().from(policyProvenance).where(eq(policyProvenance.analysisId, id));
   // Grouped once rather than scanned per artefact: this ran on the web process's
   // event loop for every six-second dashboard poll, and 2,000 artefacts against
@@ -80,12 +130,18 @@ function summariseExtraction(metadata: unknown): unknown {
 export async function detail(owner: string, id: string) {
   const analysis = await ownedAnalysis(owner, id);
   if (!analysis) return null;
-  const stages = await db.select().from(policyStages).where(eq(policyStages.analysisId, id)).orderBy(asc(policyStages.ordinal));
+  // One codec for the whole page. `ownedAnalysis` above has already used its own
+  // to decode this analysis's own row.
+  const seal = await sealOf(id);
+  const stages = (await db.select().from(policyStages).where(eq(policyStages.analysisId, id)).orderBy(asc(policyStages.ordinal)))
+    .map((r) => unsealRow(seal, 'stage', r));
   const rawDocuments = await db.select({ id: policyDocuments.id, filename: policyDocuments.filename, mimeType: policyDocuments.mimeType, size: policyDocuments.size, sha256: policyDocuments.sha256, metadata: policyDocuments.metadata }).from(policyDocuments).where(eq(policyDocuments.analysisId, id));
   // `metadata.pages[].text` is a SECOND full copy of the extracted document — up
   // to 600,000 characters — and it rode the response on first load and on every
   // six-second poll while a run was active. The page wants the shape, not the text.
-  const documents = rawDocuments.map((d) => ({ ...d, metadata: summariseExtraction(d.metadata) }));
+  const documents = rawDocuments
+    .map((d) => unsealRow(seal, 'document', d))
+    .map((d) => ({ ...d, metadata: summariseExtraction(d.metadata) }));
   const executions = await db.select({ execution: policyExecutions }).from(policyExecutions).innerJoin(policyStages, eq(policyStages.id, policyExecutions.stageId)).where(eq(policyStages.analysisId, id)).orderBy(asc(policyExecutions.startedAt));
   // Model prompts/output are private audit data, fetched separately on demand.
   const calls = await db.select({ id: policyModelCalls.id, executionId: policyModelCalls.executionId, callKey: policyModelCalls.callKey, promptVersion: policyModelCalls.promptVersion, inputHash: policyModelCalls.inputHash, status: policyModelCalls.status, provider: policyModelCalls.provider, model: policyModelCalls.model, usage: policyModelCalls.usage, startedAt: policyModelCalls.startedAt, completedAt: policyModelCalls.completedAt, error: policyModelCalls.error }).from(policyModelCalls).innerJoin(policyExecutions, eq(policyExecutions.id, policyModelCalls.executionId)).innerJoin(policyStages, eq(policyStages.id, policyExecutions.stageId)).where(eq(policyStages.analysisId, id));
@@ -109,12 +165,15 @@ export async function detail(owner: string, id: string) {
     .innerJoin(policyPersonas, eq(policyPersonas.id, policyPersonaObservations.personaId))
     .where(and(eq(policyPersonaObservations.analysisId, id), eq(policyPersonas.owner, owner)))
     .limit(60);
-  return { analysis, stages, documents, artefactMetadata, artefacts, executions: executions.map((e) => e.execution), calls, inbound, personas, heartbeat: run?.heartbeatAt ?? null };
+  return { analysis, stages, documents, artefactMetadata, artefacts, executions: executions.map((e) => unsealRow(seal, 'execution', e.execution)), calls, inbound, personas, heartbeat: run?.heartbeatAt ?? null };
 }
-export async function persistArtefacts(tx: DbExecutor, analysisId: string, stage: number, artefacts: Artefact[]) {
+export async function persistArtefacts(tx: DbExecutor, analysisId: string, stage: number, artefacts: Artefact[], seal?: Seal) {
   if (!artefacts.length) return;
+  // The caller passes its seal when it already has one — the worker holds one for
+  // the whole stage — and otherwise it is read here, so no call site can forget.
+  const codec = seal ?? (await sealOf(analysisId, tx));
   for (let i = 0; i < artefacts.length; i += 250) {
-    await tx.insert(policyArtefacts).values(artefacts.slice(i, i + 250).map(({ refs: _refs, ...row }) => ({ ...row, analysisId, stage })));
+    await tx.insert(policyArtefacts).values(artefacts.slice(i, i + 250).map(({ refs: _refs, ...row }) => sealRow(codec, 'artefact', { ...row, analysisId, stage })));
   }
   const links = artefacts.flatMap((a) => [...new Set(a.refs)].map((toId) => ({ analysisId, fromId: a.id, toId })));
   for (let i = 0; i < links.length; i += 1000) await tx.insert(policyProvenance).values(links.slice(i, i + 1000));
@@ -158,7 +217,14 @@ const NEIGHBOUR_ARTEFACTS = 60;
 export async function neighbourSummaries(owner: string, exclude: string): Promise<Neighbour[]> {
   const others = await db.select({ id: policyAnalyses.id, title: policyAnalyses.title, policyArea: policyAnalyses.policyArea, jurisdiction: policyAnalyses.jurisdiction, completedAt: policyAnalyses.completedAt })
     .from(policyAnalyses)
-    .where(and(eq(policyAnalyses.owner, owner), inArray(policyAnalyses.status, ['completed', 'completed_with_gaps'])))
+    // A SEALED RUN IS NEVER A NEIGHBOUR. Cross-policy comparison works by putting
+    // one assessment's artefacts into another's prompt, and that prompt is stored
+    // — so a sealed paper's prose would end up in an unsealed run's
+    // `policy_model_calls.input`, where shredding its key could never reach it.
+    // The worker also declines to ASK for neighbours on a sealed run; this is the
+    // half that protects the sealed paper from everyone else's runs, and it has
+    // to live here because it is about rows this query can see.
+    .where(and(eq(policyAnalyses.owner, owner), eq(policyAnalyses.sealed, false), inArray(policyAnalyses.status, ['completed', 'completed_with_gaps'])))
     .orderBy(desc(policyAnalyses.completedAt)).limit(NEIGHBOUR_LIMIT + 1);
   // The first assessment on an account has no neighbours at all, and an empty
   // `inArray` is not a shape to hand Postgres. Leave before the document queries.
@@ -195,12 +261,31 @@ export async function neighbourSummaries(owner: string, exclude: string): Promis
   }));
 }
 
+/** True only for a sealed analysis whose key file is still present. */
+async function keyStillLives(owner: string, id: string): Promise<boolean> {
+  const analysis = await ownedAnalysis(owner, id);
+  if (!analysis?.sealed) return false;
+  return (await readKey(id)) !== null;
+}
+
 /**
  * Delete an analysis, its document bytes, artefacts, provenance, executions and
  * model-call audit. Any queue envelope still pointing at it is cancelled first,
  * so a worker cannot resurrect rows behind the delete.
  */
 export async function remove(owner: string, id: string): Promise<boolean> {
+  // A SEALED RUN'S ROWS MAY NOT BE DELETED WHILE ITS KEY IS ALIVE, and that is
+  // enforced here rather than trusted to whoever calls this next.
+  //
+  // Deleting first and shredding second is the failure this feature cannot have:
+  // it leaves ciphertext in fourteen nightly dumps and every restic snapshot,
+  // with a live key on the same disk, and nothing left in the database to say
+  // which key belongs to it. `purge()` shreds before it calls this, so by the
+  // time control reaches here the key is already gone and the check passes. Any
+  // other caller gets told to use `purge`.
+  if (await keyStillLives(owner, id)) {
+    throw new PolicyError('state', 'This assessment is sealed and its key still exists. Purge it instead: the key must be destroyed before the rows are, or the copies in backups stay readable.');
+  }
   return db.transaction(async (tx) => {
     const analysis = await ownedAnalysis(owner, id, tx);
     if (!analysis) return false;
@@ -212,9 +297,49 @@ export async function remove(owner: string, id: string): Promise<boolean> {
     // must fall when one is removed; the row itself survives, because a dossier
     // built from four papers is not wrong because one of them was withdrawn.
     const contributed = [...new Set((await tx.select({ personaId: policyPersonaObservations.personaId }).from(policyPersonaObservations).where(eq(policyPersonaObservations.analysisId, id))).map((r) => r.personaId))];
+    // A CROSS-POLICY FINDING ON SOMEBODY ELSE'S ASSESSMENT IS PROSE ABOUT THIS
+    // ONE. `otherAnalysisTitle`, `interaction` and `consequence` describe the
+    // paper being deleted, and they live on the analysis that FOUND them, which no
+    // cascade from here reaches. `detail()` reads them back, so leaving them made
+    // a deleted assessment still legible from its neighbour's page.
+    const inbound = await tx.select({ analysisId: policyArtefacts.analysisId, id: policyArtefacts.id })
+      .from(policyArtefacts)
+      .where(and(eq(policyArtefacts.kind, 'cross_policy'), sql`${policyArtefacts.data} ->> 'otherAnalysisId' = ${id}`));
+    for (const row of inbound) {
+      await tx.delete(policyProvenance).where(and(eq(policyProvenance.analysisId, row.analysisId), eq(policyProvenance.toId, row.id)));
+      await tx.delete(policyProvenance).where(and(eq(policyProvenance.analysisId, row.analysisId), eq(policyProvenance.fromId, row.id)));
+      await tx.delete(policyArtefacts).where(and(eq(policyArtefacts.analysisId, row.analysisId), eq(policyArtefacts.id, row.id)));
+    }
     await tx.update(policyAnalyses).set({ cancelledAt: new Date(), status: 'cancelled' }).where(eq(policyAnalyses.id, id));
     await tx.delete(policyAnalyses).where(eq(policyAnalyses.id, id));
+    // The queue envelopes were only CANCELLED above so the cascade could not race
+    // a worker; with the analysis gone they are orphans naming a run that no
+    // longer exists. `policy_stages.run_id` has no cascade, which is why they
+    // survived every delete this feature has ever done.
+    if (runIds.length) await tx.delete(workflowRuns).where(inArray(workflowRuns.id, runIds));
     await recountSightings(tx, contributed);
     return true;
   });
+}
+
+/**
+ * PURGE A SEALED RUN: destroy the key, then delete the rows.
+ *
+ * THE ORDER IS THE WHOLE POINT AND IT IS NOT SYMMETRIC. Shredding first and
+ * failing to delete leaves rows nobody can read — recoverable by retrying, and
+ * the guarantee already holds. Deleting first and failing to shred leaves
+ * ciphertext in fourteen nightly dumps and every restic snapshot beside them,
+ * with a live key sitting on the same disk. One of those is an inconvenience and
+ * the other is the failure this feature exists to prevent.
+ *
+ * Returns the analysis's identity for the receipt, because after this it cannot
+ * be looked up again.
+ */
+export async function purge(owner: string, id: string): Promise<{ id: string; sealed: boolean; keyDestroyed: boolean } | null> {
+  const analysis = await ownedAnalysis(owner, id);
+  if (!analysis) return null;
+  const keyDestroyed = analysis.sealed ? await shredKey(id) : false;
+  const removed = await remove(owner, id);
+  if (!removed) return null;
+  return { id, sealed: !!analysis.sealed, keyDestroyed };
 }

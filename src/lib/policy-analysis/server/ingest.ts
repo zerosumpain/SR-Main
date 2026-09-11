@@ -6,7 +6,7 @@ import { CODEX_MODELS, toCodexModelId } from '$lib/server/models/codex-catalogue
 import { isThinkingLevel, thinkingLevelsFor, type ThinkingLevel } from '$lib/models/thinking';
 import { PolicyError } from '../validation';
 
-export type Submission = { title: string; jurisdiction: string | null; policyArea: string | null; context: string | null; depth: Depth; model: string | null; thinkingLevel: ThinkingLevel | null; concurrency: Concurrency | null; filename: string; mimeType: string; bytes: Buffer };
+export type Submission = { title: string; jurisdiction: string | null; policyArea: string | null; context: string | null; depth: Depth; model: string | null; thinkingLevel: ThinkingLevel | null; concurrency: Concurrency | null; sealed: boolean; filename: string; mimeType: string; bytes: Buffer };
 const MIME: Record<string, string> = { txt: 'text/plain', pdf: 'application/pdf', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
 export function validateBytes(bytes: Buffer, filename: string, mimeType: string): string {
   if (!bytes.length || bytes.length > MAX_BYTES) throw new PolicyError('size', 'Supply a nonempty document of at most 10 MB.');
@@ -84,7 +84,16 @@ export async function readSubmission(request: Request): Promise<Submission> {
   // is an execution setting, and `PipelineDeps` says why that matters.
   const askedAgents = Number(str('concurrency', 4));
   const concurrency = (CONCURRENCY_OPTIONS as readonly number[]).includes(askedAgents) ? askedAgents as Concurrency : null;
-  return { title, jurisdiction: str('jurisdiction', 200) || null, policyArea: str('policyArea', 200) || null, context: str('context', 5000) || null, depth, model, thinkingLevel, concurrency, filename, mimeType, bytes };
+  // SEALED IS THE ONE FIELD THAT CANNOT DEGRADE TO A DEFAULT.
+  //
+  // Model, effort and concurrency all fall back when the form asks for something
+  // the run cannot honour, because failing a submission over a dropdown is worse
+  // than running on the default. This is the opposite: a reader who ticked the box
+  // and got an unsealed run would have handed an unpublished paper to a system
+  // they were told would destroy it. Anything but the exact string is false, and
+  // false is what the form sends when the box is clear.
+  const sealed = str('sealed', 10) === 'true';
+  return { title, jurisdiction: str('jurisdiction', 200) || null, policyArea: str('policyArea', 200) || null, context: str('context', 5000) || null, depth, model, thinkingLevel, concurrency, sealed, filename, mimeType, bytes };
 }
 export async function ingest(bytes: Buffer, filename: string, mimeType: string): Promise<StageOutput & { text: string; metadata: unknown }> {
   validateBytes(bytes, filename, mimeType);

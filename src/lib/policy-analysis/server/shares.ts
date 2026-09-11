@@ -65,6 +65,14 @@ export async function createShare(owner: string, analysisId: string, input: { la
   if (!['completed', 'completed_with_gaps'].includes(analysis.status)) {
     throw new PolicyError('state', 'This assessment has not finished. A link can be created once it has produced its report.');
   }
+  // A SEALED RUN CANNOT BE SHARED. A link is a capability against rows whose whole
+  // point is that they will cease to exist, and it would hand an anonymous reader
+  // a copy of a paper the owner has undertaken to destroy. The offline pack is the
+  // way to take a sealed assessment out — it leaves with the reader rather than
+  // living at a URL.
+  if (analysis.sealed) {
+    throw new PolicyError('state', 'This is a sealed assessment and cannot be shared by link. Download the offline pack instead: it leaves with you rather than living at an address.');
+  }
   const existing = (await db.select().from(policyShares).where(eq(policyShares.analysisId, analysisId))).map(row);
   if (existing.filter((s) => s.live).length >= MAX_ACTIVE) {
     throw new PolicyError('capacity', `There are already ${MAX_ACTIVE} live links for this assessment. Revoke one before creating another.`);

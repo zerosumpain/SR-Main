@@ -6967,6 +6967,24 @@ export const policyAnalyses = pgTable('policy_analyses', {
   // widening under itself. Nullable integer for the same reason `model` is
   // nullable text: an unspecified submission takes the default.
   concurrency: integer('concurrency'),
+  /**
+   * A SEALED run writes no readable bytes.
+   *
+   * Every free-text column below — the document, the artefacts, the stage
+   * outputs, this row's own title and context — is AES-256-GCM under a key that
+   * lives outside this database, and purging the run destroys that key first.
+   * A `DELETE` could never give the guarantee on its own: anything alive at
+   * 02:30 is in up to fourteen nightly dumps and every restic snapshot beside
+   * them, and deleted tuples sit in heap pages and WAL until vacuum. Shredding
+   * the key makes every one of those copies unreadable without having to find
+   * them.
+   *
+   * Boolean and NOT NULL with a false default, so every assessment that ran
+   * before this existed is plainly an unsealed one rather than an unknown. The
+   * decoder keys off the `sealed:v1:` prefix on each value, not off this column,
+   * so a row is readable whichever it is.
+   */
+  sealed: boolean('sealed').notNull().default(false),
   status: text('status').notNull().default('queued'),
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
   error: text('error'),
