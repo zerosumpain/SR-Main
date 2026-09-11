@@ -139,7 +139,9 @@
 
   tbody th,
   tbody td {
-    padding: 9px 12px;
+    /* 7px, not 9. Nine rows of a six-column grid pay this four times over, and
+       the cells already carry their own leading. */
+    padding: 7px 12px;
     border-bottom: 1px solid var(--line-hair);
     vertical-align: top;
     text-align: left;

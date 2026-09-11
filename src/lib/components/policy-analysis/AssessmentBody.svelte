@@ -59,7 +59,6 @@
   import ExposurePlot from './ExposurePlot.svelte';
   import CheckGrid from './CheckGrid.svelte';
   import ActorAtlas from './ActorAtlas.svelte';
-  import CastTable from './CastTable.svelte';
   import AdjacencyGrid from './AdjacencyGrid.svelte';
   import PlaybookTable from './PlaybookTable.svelte';
   import KeyPanel from './KeyPanel.svelte';
@@ -509,8 +508,15 @@
         { label: 'In your library', value: atlasRows.filter((r) => r.known).length },
       ]}
     />
+    <!--
+      ONE TABLE, not a chart above a table. `ActorAtlas` owns the measure
+      switcher and the filters and renders the cast grid itself: the two used to
+      draw the same nine bodies, opening with the same two columns, so a reader
+      scrolled past a ranking to reach a table that re-stated it.
+    -->
     <ActorAtlas
       rows={atlasRows}
+      traits={castRows}
       onopen={open}
       onplays={(id) => {
         actorFilter = id;
@@ -518,25 +524,6 @@
         goto('playbook');
       }}
     />
-    <div class="ab-sub">
-      <p class="ab-sub-label">Every body against the same six questions</p>
-      <!--
-        THE ASK: "the actors page remains too long where it could be a much
-        neater x by y table." It was nine cards repeating the same six field
-        labels — 2,600px of the panel's 3,541px — so the one thing a reader
-        wants here, comparing two bodies on the same question, meant holding one
-        in their head while scrolling to the other.
-      -->
-      <CastTable
-        rows={castRows}
-        onopen={open}
-        onplays={(id) => {
-          actorFilter = id;
-          bandFilter = null;
-          goto('playbook');
-        }}
-      />
-    </div>
   </div>
 
   <!-- ————————————————————————————————————— NETWORK ————— -->

@@ -684,8 +684,15 @@ describe('hover explains a word; a click opens a thing', () => {
     // "on the table, you can remove it from the filters and buttons". A card
     // that appears over the thing you are about to press fights the press.
     const all = await assessment();
+    // The atlas renders the cast grid itself now — the bar chart it used to draw
+    // above the grid listed the same bodies, opening with the same two columns.
     const atlas = render(ActorAtlas, {
-      props: { rows: atlasOf(all), onopen: inspect, onplays: inspect },
+      props: {
+        rows: atlasOf(all),
+        traits: traitGrid(view.actorBoard(all, view.plays(all))),
+        onopen: inspect,
+        onplays: inspect,
+      },
     }).body;
     const adjacencyHtml = render(AdjacencyGrid, { props: { grid: adjacency(network(all)), onopen: inspect } }).body;
 
