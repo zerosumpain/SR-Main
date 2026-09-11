@@ -55,7 +55,11 @@ export async function assessmentDocument(
     });
   }
 
-  const rendered = await synthesize({ format: 'docx', source: 'markdown', content: markdown, title: meta.title });
+  // NO `title` — the markdown already opens with `# <title>`, and passing it
+  // here would put the name in twice, as a Word Title paragraph and again as
+  // Heading 1. The markdown has to carry it because the `.md` export is the
+  // same string.
+  const rendered = await synthesize({ format: 'docx', source: 'markdown', content: markdown });
   return new Response(new Uint8Array(rendered.buffer), {
     headers: {
       'content-type': rendered.mimeType,

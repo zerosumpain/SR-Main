@@ -247,7 +247,7 @@
     reader who was sent a link has nobody to ask what this document is, and
     every sentence below reads differently depending on the answer.
   -->
-  <p class="ab-frame">
+  <p class="ab-frame" class:off={tab !== at('verdict')}>
     This reads the paper the way a body governed by it would — looking for what can be done, within the rules
     as written, by an actor serving itself. It is not an assurance review, it assumes nobody intends any of
     this, and where it says a body <em>would</em> act, that is a hypothesis about incentives rather than a
@@ -668,17 +668,17 @@
     border-top: 2px solid var(--text-primary);
     border-bottom: 2px solid var(--text-primary);
     margin: clamp(20px, 3vw, 34px) 0 0;
-    overflow-x: auto;
   }
   .ab-rail-inner {
     display: flex;
+    flex-wrap: wrap;
     align-items: stretch;
-    min-width: min-content;
   }
   .ab-group {
     display: flex;
     flex-direction: column;
     border-right: 1px solid var(--line-strong);
+    border-top: 1px solid transparent;
     min-width: 0;
   }
   .ab-group:last-child {
@@ -938,6 +938,11 @@
     }
     .ab-panel:first-of-type .ab-print-title {
       break-before: auto;
+    }
+    /* No rail on paper, so the frame is the only thing that says what this
+       document is — and a forwarded PDF has nobody to ask. */
+    .ab-frame.off {
+      display: block;
     }
     .ab-frame {
       border-left-color: #000;

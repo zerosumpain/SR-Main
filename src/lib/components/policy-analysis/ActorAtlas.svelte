@@ -113,14 +113,13 @@
             <span class="at-value">{formatMeasure(measure, row.measures[measure])}</span>
           </div>
           <div class="at-tail">
-            {#if row.band}
-              <span class="at-band">{BAND_LABEL[row.band as Band] ?? row.band}</span>
-            {/if}
-            {#if row.entityType}<span class="at-type">{row.entityType}</span>{/if}
+            <span class="at-band">{row.band ? (BAND_LABEL[row.band as Band] ?? row.band) : ''}</span>
             {#if onplays && row.measures.plays > 0}
               <button type="button" class="at-plays" onclick={() => onplays(row.id)}>
                 {row.measures.plays} {row.measures.plays === 1 ? 'play' : 'plays'} →
               </button>
+            {:else}
+              <span class="at-type">no play</span>
             {/if}
           </div>
         </div>
@@ -263,7 +262,7 @@
   }
   .at-row {
     display: grid;
-    grid-template-columns: minmax(9rem, 15rem) minmax(0, 1fr) minmax(7rem, 13rem);
+    grid-template-columns: minmax(9rem, 16rem) minmax(0, 1fr) 12.4rem;
     align-items: center;
     gap: 14px;
     background: var(--bg);
@@ -306,7 +305,8 @@
   }
 
   .at-bar-cell {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 2.4rem;
     align-items: center;
     gap: 9px;
     min-width: 0;
@@ -325,15 +325,15 @@
     font-size: var(--fs-label-xs);
     color: var(--text-secondary);
     font-variant-numeric: tabular-nums;
-    flex: 0 0 auto;
+    text-align: right;
   }
 
   .at-tail {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: 6.4rem 5rem;
     align-items: baseline;
-    gap: 8px;
-    justify-content: flex-end;
+    gap: 10px;
+    justify-content: end;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     letter-spacing: var(--tracking-label);
@@ -442,7 +442,7 @@
       padding: 10px 11px;
     }
     .at-tail {
-      justify-content: flex-start;
+      justify-content: start;
     }
   }
 

@@ -340,7 +340,7 @@
 {/if}
 
 {#snippet runLog()}
-  <section id="provenance" class="pa-section">
+  <section id="run-log" class="pa-section">
     <p class="pa-kicker">Run log and provenance</p>
     <h2>Everything behind the page</h2>
     <p class="pa-strap">
@@ -948,6 +948,15 @@
     .pa-ledger {
       border-color: #999;
       grid-template-columns: repeat(4, minmax(0, 1fr));
+      break-inside: avoid;
+    }
+    /* No strip to fit on paper, so nothing is clipped: "completed" and
+       "9 named in the paper" print in full rather than as an ellipsis. */
+    .pa-ledger dd,
+    .pa-ledger small {
+      overflow: visible;
+      white-space: normal;
+      text-overflow: clip;
     }
     .pa-bar,
     .pa-progress-note,
@@ -955,7 +964,7 @@
     .pa-danger {
       display: none !important;
     }
-    #provenance {
+    #run-log {
       display: none !important;
     }
   }

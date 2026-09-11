@@ -371,6 +371,20 @@
     .vd-actions {
       display: none !important;
     }
+    /* A figure split from its label across a page break is a figure with no
+       label. */
+    .vd-tiles,
+    .vd-factors,
+    .vd-bands {
+      break-inside: avoid;
+    }
+    /* Cream is the site's ground, not the paper's — a tile grid that paints it
+       prints as a block of toner carrying nothing. The hairlines still separate
+       the cells. */
+    .vd-tile,
+    .vd-tiles {
+      background: #fff;
+    }
     .vd-top {
       grid-template-columns: minmax(0, 1fr);
     }
