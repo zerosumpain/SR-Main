@@ -75,7 +75,18 @@
           {contested.cells.toLocaleString('en-GB')} cells · {windowTag}
         </span>
       </header>
-      <table class="week">
+      <table class="week week--contest">
+        <!-- Four columns is one more than this table was built for, and a
+             table's `width: 100%` does not bind it below its min-content: at
+             360px the fourth column ran 13px past the viewport and was clipped
+             rather than scrolled. Fixed layout plus declared widths makes the
+             container the authority instead of the header text. -->
+        <colgroup>
+          <col style="width: 40%" />
+          <col style="width: 20%" />
+          <col style="width: 20%" />
+          <col style="width: 20%" />
+        </colgroup>
         <thead>
           <tr>
             <th scope="col" class="metric-label">Player</th>
@@ -419,6 +430,9 @@
     text-transform: uppercase;
     color: var(--text-primary);
   }
+  .week--contest {
+    table-layout: fixed;
+  }
   .num-col {
     text-align: right;
     font-family: var(--font-mono);
@@ -498,6 +512,21 @@
     .board,
     .board--wide {
       grid-column: span 1;
+    }
+  }
+  /* A four-column table on a 360px phone has 56px of horizontal padding before
+     a single figure is drawn. The 12px floor on the type is gated sitewide, so
+     the padding is what gives. */
+  @media (max-width: 430px) {
+    .week th,
+    .week td {
+      padding: 10px 8px;
+    }
+    .board-hd {
+      padding: 11px 10px;
+    }
+    .board-note {
+      padding: 10px 10px 12px;
     }
   }
 </style>
