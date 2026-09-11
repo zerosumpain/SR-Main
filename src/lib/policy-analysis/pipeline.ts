@@ -398,8 +398,16 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     // report was written at the previous stage; a dead provider here is a warning
     // about the library, not a failed run — so every failure is caught, and the
     // stage is exempt from the "produced nothing" rule at the bottom.
-    const profiles = input.artefacts.filter((a) => a.kind === 'profile');
-    const ranked = rankActors(input.artefacts, profiles).actors.slice(0, limits.actors);
+    // A SEALED RUN SKIPS THE CALLS ENTIRELY, and that is a cost fix as much as a
+    // correctness one. The worker already declines to apply this stage's
+    // `persona_link` artefacts, because the library outlives the runs that feed
+    // it — so running the fan-out anyway spends one model call per profiled body
+    // to produce artefacts whose only consumer will throw them away.
+    const profiles = input.sealed ? [] : input.artefacts.filter((a) => a.kind === 'profile');
+    const ranked = input.sealed ? [] : rankActors(input.artefacts, profiles).actors.slice(0, limits.actors);
+    if (input.sealed) {
+      output.warnings.push('This is a sealed assessment, so nothing was written to the persona library and no model call was made for it. A dossier drawn from this paper would outlive the run and survive its purge, which is the residue sealing exists to remove.');
+    }
     for (const actor of ranked) {
       const own = profiles.filter((p) => p.data.actorId === actor.id);
       const plays = input.artefacts.filter((a) => a.kind === 'exploit' && a.data.actorId === actor.id);
@@ -419,7 +427,9 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     let neighbours: Neighbour[] = [];
     try { neighbours = (await deps.neighbours?.()) ?? []; }
     catch { output.warnings.push('The other assessments on this account could not be read, so cross-policy exposure was not examined.'); }
-    if (!neighbours.length) {
+    if (input.sealed) {
+      output.warnings.push('This is a sealed assessment, so it was not compared against any other paper on this account. Comparing would put this document’s wording into another assessment’s stored prompt, which destroying this run’s key could never reach. Weaknesses that only appear when policies coexist are outside this assessment.');
+    } else if (!neighbours.length) {
       output.warnings.push('No other completed policy assessment was available to compare, so cross-policy exposure could not be examined. Weaknesses that only appear when policies coexist are outside this assessment.');
     } else {
       const context = input.artefacts.filter((a) => !['passage', 'research_source', 'alias', 'node'].includes(a.kind) && (a.kind !== 'actor' || a.id.startsWith('s2_')));
