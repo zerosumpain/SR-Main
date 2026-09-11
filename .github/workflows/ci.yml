@@ -369,6 +369,16 @@ jobs:
           psql "$DATABASE_URL" -c 'CREATE EXTENSION IF NOT EXISTS vector;'
           CI=1 FORCE_COLOR=0 npx drizzle-kit push --config=drizzle.config.ts --force
 
+      # `pack.test.ts` builds a real offline pack from the COMPILED shell, which
+      # is build output and therefore absent from a fresh checkout. Without this
+      # it skips — silently, in the one place a regression would matter — so the
+      # shell is built here rather than left to whichever job happens to have it.
+      # Every shard builds it because which shard a file lands in is an
+      # implementation detail of vitest's ordering, the same reason the database
+      # contracts below could not simply be pinned.
+      - name: Build the offline pack shell
+        run: npm run build:offline
+
       - name: Tests
         run: ./scripts/gate-test-shard.sh "${{ matrix.shard }}" "${{ strategy.job-total }}"
         env:

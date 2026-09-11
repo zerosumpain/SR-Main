@@ -1,180 +1,122 @@
 <script lang="ts">
-  // A SHARED, READ-ONLY ASSESSMENT — the same dashboard, without a login.
+  // THE ASSESSMENT, WITH NO SITE UNDER IT.
   //
-  // The reader here is the person the owner sent the link to: a colleague, a
-  // policy lead, somebody in the room where the paper is being decided. They are
-  // by definition NOT the author, which is the reader this whole redesign is
-  // pitched at — so this page needs no different tone from the owner's, only
-  // less of the machinery.
+  // This is the shared page's shell with the network taken out. It renders
+  // `AssessmentBody` — the same component the owner dashboard and the share link
+  // both render — so an offline pack cannot become a third, quietly different
+  // report. What it drops is everything that needs a server: the polling, the
+  // controls, the run log, the share management, and the two export buttons,
+  // because the Word and markdown copies are already files sitting next to this
+  // one in the pack.
   //
-  // They get the assessment and nothing around it — no upload, no run log, no
-  // spend, no other assessments, no controls — and the page says in as many
-  // words what it is and what it leaves out, because a report that quietly omits
-  // a chapter is worse than one that names the omission.
-  //
-  // It renders `AssessmentBody`, the same component the owner dashboard uses, so
-  // the two cannot drift into different reports. What differs is what is passed
-  // in: no personas, no cross-policy, no run log, no artefact provenance
-  // timestamps. The drill, the hover cards and the export come with the
-  // component and work here unchanged.
+  // Print stays. It is the one export a file:// page can still perform, and the
+  // print rules were measured rather than assumed — see the chrome block at the
+  // end of `src/app.css`.
   import { onMount } from 'svelte';
-  import type { PageData } from './$types';
   import AssessmentBody from '$lib/components/policy-analysis/AssessmentBody.svelte';
   import { printNow, wirePrint } from '$lib/policy-analysis/print';
   import { withheldNote } from '$lib/policy-analysis/share';
   import * as view from '$lib/policy-analysis/view';
-  import { documentSlug } from '$lib/policy-analysis/report-doc';
-  import { filenameFromDisposition } from '$lib/policy-analysis/offline/download';
+  import type { OfflinePayload } from './payload';
 
-  let { data }: { data: PageData } = $props();
+  let { payload }: { payload: OfflinePayload } = $props();
 
-  let exporting = $state(false);
-  let exportError = $state('');
+  const note = $derived(withheldNote(payload.withheld));
+  const plays = $derived(view.plays(payload.artefacts));
+  const severe = $derived(plays.filter((p) => p.band === 'severe' || p.band === 'significant').length);
 
-  const note = $derived(withheldNote(data.withheld));
-  const plays = $derived(view.plays(data.artefacts));
   const fmt = (v: string | null) =>
     v ? new Date(v).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'not recorded';
-  /** The ledger cell is a fixed strip at display size — "10 September 2026" was truncated to an ellipsis. */
+  /** The ledger cell is a fixed strip at display size — "10 September 2026" truncates to an ellipsis. */
   const short = (v: string | null) =>
     v ? new Date(v).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'not recorded';
 
   // Ctrl+P must get the same document the button produces.
   onMount(wirePrint);
-
-  /**
-   * Download the assessment.
-   *
-   * A `fetch` into a blob rather than a navigation, because a navigation to an
-   * endpoint that can 400, 404 or 500 replaces the page with an error document —
-   * the reader loses the tab they were on, the filters they set and the drill
-   * they had open. The button says what happened instead, and the page stays.
-   */
-  async function exportDoc(format: 'docx' | 'md' | 'bundle') {
-    exporting = true;
-    exportError = '';
-    try {
-      const response = await fetch(`/policy-analysis/shared/${data.token}/export?format=${format}`);
-      if (!response.ok) {
-        exportError = response.status === 404
-          ? 'This assessment is no longer available.'
-          : format === 'bundle'
-            ? 'The offline pack could not be built. Nothing was changed.'
-            : 'The document could not be rendered. Nothing was changed.';
-        return;
-      }
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      // The server names the file — the pack's name carries the date it was
-      // made, which the page has no way to guess.
-      a.download =
-        filenameFromDisposition(response.headers.get('content-disposition')) ??
-        `${documentSlug(data.title)}.${format === 'bundle' ? 'zip' : format}`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      // Revoked on the next tick: revoking synchronously races the download in
-      // Safari, which has not read the blob by the time click() returns.
-      setTimeout(() => URL.revokeObjectURL(url), 10_000);
-    } catch {
-      exportError = 'Connection interrupted. The document was not downloaded.';
-    } finally {
-      exporting = false;
-    }
-  }
 </script>
-
-<svelte:head>
-  <title>{data.title} — shared policy assessment</title>
-  <meta name="robots" content="noindex,nofollow" />
-</svelte:head>
 
 <div class="sh-lede pa-band" role="banner">
   <div class="sh-lede-inner">
     <div class="sh-copy">
       <p class="sh-eyebrow">
-        {data.jurisdiction ?? 'Jurisdiction not specified'} · {data.policyArea ?? 'Policy assessment'} · shared copy
+        {payload.jurisdiction ?? 'Jurisdiction not specified'} · {payload.policyArea ?? 'Policy assessment'} · offline pack
       </p>
-      <h1>{data.title}</h1>
+      <h1>{payload.title}</h1>
       <p class="sh-standfirst">
         A red-team assessment — how this paper can be beaten, by whom, and what the evidence does and does
-        not support.
+        not support. This copy runs from the file itself and asks nothing of the network.
       </p>
     </div>
 
     <dl class="sh-ledger">
       <div>
         <dt>Completed</dt>
-        <dd>{short(data.completedAt)}</dd>
-        <small>{data.status === 'completed_with_gaps' ? 'with gaps of its own' : 'in full'}</small>
+        <dd>{short(payload.completedAt)}</dd>
+        <small>{payload.status === 'completed_with_gaps' ? 'with gaps of its own' : 'in full'}</small>
       </div>
       <div>
         <dt>Ways to beat it</dt>
         <dd>{plays.length}</dd>
-        <small>{plays.filter((p) => p.band === 'severe' || p.band === 'significant').length} above moderate</small>
+        <small>{severe} above moderate</small>
       </div>
       <div>
         <dt>Bodies profiled</dt>
-        <dd>{view.of(data.artefacts, 'profile').length}</dd>
+        <dd>{view.of(payload.artefacts, 'profile').length}</dd>
         <small>named in the paper</small>
       </div>
       <div>
-        <dt>Link expires</dt>
-        <dd>{short(data.expiresAt)}</dd>
-        <small>read only</small>
+        <dt>Pack made</dt>
+        <dd>{short(payload.generatedAt)}</dd>
+        <small>offline copy</small>
       </div>
     </dl>
   </div>
 </div>
 
-<!-- One labelled cluster, the same shape as the owner page's — three buttons
-     sharing edges under the word that says what they are for. -->
 <div class="sh-bar pa-band">
   <div class="sh-bar-inner">
     <div class="sh-cluster">
       <p class="sh-cluster-label">Take it away</p>
       <div class="sh-btns">
-        <button class="sh-btn sh-primary" disabled={exporting} onclick={() => exportDoc('docx')}>
-          {exporting ? 'Rendering…' : '↓ Word'}
-        </button>
-        <button class="sh-btn" disabled={exporting} onclick={() => exportDoc('bundle')}>Offline pack</button>
-        <button class="sh-btn" onclick={printNow}>Print / PDF</button>
-        <button class="sh-btn" onclick={() => exportDoc('md')}>Markdown</button>
+        <button class="sh-btn sh-primary" onclick={printNow}>Print / PDF</button>
       </div>
     </div>
+    <p class="sh-hint">
+      <code>report.docx</code> and <code>report.md</code> are in the same folder as this file.
+    </p>
   </div>
 </div>
-
-{#if exportError}<p class="sh-alert pa-wrap" role="alert">{exportError}</p>{/if}
 
 <section class="sh-note pa-wrap" aria-label="What this is">
   <p class="sh-label">What this is</p>
   <p>
-    A read-only copy, shared by its author. Nothing on this page can be changed, and the link stops working
-    on {fmt(data.expiresAt)}.
+    A self-contained copy of a policy assessment, made on {fmt(payload.generatedAt)}. Everything it draws is
+    inside this file — there is nothing to load, and it will read the same on a train, on a locked-down
+    laptop, or in five years.
   </p>
   {#if note}<p class="sh-muted">{note}</p>{/if}
-  {#if data.warnings.length}
+  {#if payload.documentSha256}
+    <p class="sh-muted">
+      Source document SHA-256 <code>{payload.documentSha256}</code>
+    </p>
+  {/if}
+  {#if payload.warnings.length}
     <details>
       <summary>
-        {data.warnings.length} thing{data.warnings.length === 1 ? '' : 's'} this assessment could not establish
+        {payload.warnings.length} thing{payload.warnings.length === 1 ? '' : 's'} this assessment could not establish
       </summary>
       <ul class="sh-gaps">
-        {#each data.warnings as w, i (i)}<li><span class="sh-muted">{w.stage}</span> {w.text}</li>{/each}
+        {#each payload.warnings as w, i (i)}<li><span class="sh-muted">{w.stage}</span> {w.text}</li>{/each}
       </ul>
     </details>
   {/if}
 </section>
 
-<AssessmentBody artefacts={data.artefacts} status={data.status} />
+<AssessmentBody artefacts={payload.artefacts} status={payload.status} />
 
 <style>
-  /* A BAND: ink to the window edge, content held to the measure by the
-     layout's `.pa-band > *`. The negative margin it carried could only reach
-     the page wrapper, so on anything wider than 1400 the masthead was a card
-     floating in cream. */
+  /* A BAND: ink to the window edge, content held to the measure by the chrome's
+     `.pa-band > *`. Lifted from the shared page, which is this page's twin. */
   .sh-lede {
     padding-block: clamp(26px, 3.4vw, 46px);
     background: var(--text-primary);
@@ -288,13 +230,9 @@
     text-transform: uppercase;
     color: var(--text-muted);
   }
-  /* Shared edges: one control with three positions, not three loose words. */
   .sh-btns {
     display: flex;
     flex-wrap: wrap;
-  }
-  .sh-btns > .sh-btn + .sh-btn {
-    margin-left: -1px;
   }
   /* A ground, not a hairline on cream — see the owner page's note. */
   .sh-btn {
@@ -313,36 +251,28 @@
     white-space: nowrap;
     transition: background 0.12s ease-out, border-color 0.12s ease-out, color 0.12s ease-out;
   }
-  .sh-btn:hover:not(:disabled),
-  .sh-btn:focus-visible {
-    z-index: 1;
-    background: var(--text-primary);
-    border-color: var(--text-primary);
-    color: var(--bg);
-  }
-  .sh-btn:disabled {
-    background: none;
-    color: var(--text-ghost);
-    border-color: var(--divider);
-    cursor: default;
-  }
   .sh-primary {
     background: var(--accent);
     border-color: var(--accent);
     color: var(--bg);
   }
-  .sh-primary:hover:not(:disabled) {
+  .sh-primary:hover {
     background: var(--accent-hover);
     border-color: var(--accent-hover);
     color: var(--bg);
   }
-
-  .sh-alert {
-    background: var(--surface-sunken);
-    border-left: 3px solid var(--accent);
-    padding: 11px 14px;
-    margin: 14px 0 0;
+  .sh-hint {
+    margin: 0;
+    font-size: var(--fs-label);
+    color: var(--text-muted);
   }
+  .sh-hint code,
+  .sh-note code {
+    font-family: var(--font-code);
+    font-size: 0.92em;
+    overflow-wrap: anywhere;
+  }
+
   .sh-note {
     border-bottom: 2px solid var(--text-primary);
     padding: 16px 0 18px;

@@ -22,6 +22,7 @@
   import ArtefactValue from '$lib/components/policy-analysis/ArtefactValue.svelte';
   import { formatGbp, formatTokens } from '$lib/canvas/stats/costFormat';
   import { documentSlug } from '$lib/policy-analysis/report-doc';
+  import { filenameFromDisposition } from '$lib/policy-analysis/offline/download';
 
   let { data }: { data: PageData } = $props();
 
@@ -108,7 +109,7 @@
    * the reader loses the tab they were on, the filters they set and the drill
    * they had open. The button says what happened instead, and the page stays.
    */
-  async function exportDoc(format: 'docx' | 'md') {
+  async function exportDoc(format: 'docx' | 'md' | 'bundle') {
     exporting = true;
     exportError = '';
     try {
@@ -116,14 +117,20 @@
       if (!response.ok) {
         exportError = response.status === 404
           ? 'This assessment is no longer available.'
-          : 'The document could not be rendered. Nothing was changed.';
+          : format === 'bundle'
+            ? 'The offline pack could not be built. Nothing was changed.'
+            : 'The document could not be rendered. Nothing was changed.';
         return;
       }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${documentSlug(data.analysis.title)}.${format}`;
+      // The server names the file — the pack's name carries the date it was
+      // made, which the page has no way to guess.
+      a.download =
+        filenameFromDisposition(response.headers.get('content-disposition')) ??
+        `${documentSlug(data.analysis.title)}.${format === 'bundle' ? 'zip' : format}`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -340,6 +347,7 @@
         <button class="pa-btn pa-primary" disabled={exporting} onclick={() => exportDoc('docx')}>
           {exporting ? 'Rendering…' : '↓ Word'}
         </button>
+        <button class="pa-btn" onclick={() => exportDoc('bundle')} disabled={exporting || !finished}>Offline pack</button>
         <button class="pa-btn" onclick={printNow}>Print / PDF</button>
         <button class="pa-btn" onclick={() => exportDoc('md')}>Markdown</button>
       </div>

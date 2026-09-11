@@ -163,6 +163,61 @@ Three of the views are derived rather than read, and none of them calls a model:
 - **The scenario walk-through** (`view.scenarioBeats`) steps a scenario's recorded
   chain one beat at a time rather than rendering it as a paragraph.
 
+## Taking it away: the offline pack
+
+`?format=bundle` on either export route returns a zip holding `index.html`,
+`report.docx`, `report.md`, a `MANIFEST.json` of their digests and a
+`README.txt`. The HTML is the **whole dashboard as one standalone file** — the
+grids, the drill, the hover cards, the stress lab and the print rules — and it
+runs with no network of any kind.
+
+- **Why one file.** A page opened from `file://` has an opaque origin: it cannot
+  `fetch` a JSON sibling, and Chrome reports nothing a reader would see. So the
+  stylesheet, the fonts (as `data:` URIs) and the compiled script are all inlined,
+  and the assessment travels in a `<script type="application/json">` island the
+  script reads out of the DOM. `embedJson` escapes `<`, U+2028 and U+2029, so a
+  policy paper that quotes the characters of a closing script tag cannot end the
+  island mid-assessment.
+- **The shell is compiled at deploy time, not per request.** `npm run build:offline`
+  (`vite.config.offline.ts`) emits one IIFE and one stylesheet into
+  `static/policy-offline/`; the adapter copies that into `build/client/`, which
+  ci-deploy rsyncs. Building a pack is then string interpolation plus a zip —
+  no headless browser, and the same input gives the same bytes. It is wired into
+  `npm run build` and `npm run gate:build` **before** `vite build`, because the
+  adapter copies `static/` at that point.
+- **It compiles the same components.** The dashboard's dependency graph is
+  `$lib/policy-analysis` and `svelte` and nothing else — every component under
+  `$lib/components/policy-analysis` takes props and issues no request. If
+  `build:offline` starts failing on an unresolved `$app/…`, a component has
+  acquired a SvelteKit dependency and the pack is what noticed.
+- **The chrome moved for this.** `.pa-band`, `.pa-wrap`, `.pa-seg`, the element
+  defaults and the whole `@media print` block were a `:global()` block inside
+  `src/routes/policy-analysis/+layout.svelte`. They now live at the end of
+  `src/app.css`, because the offline build cannot import a route component (it
+  would pull in `HealthShell` and the site nav) and a standalone `.css` import
+  from a component breaks `npm run build` with a `swSrc` ENOENT. One definition
+  serves both.
+- **Fonts travel.** Archivo Black and the variable DM Sans and JetBrains Mono are
+  carried as `data:` URIs from `static/fonts/policy-offline/` (87 KB raw). Without
+  them `--font-display` falls through to Impact, which is exactly what shipped to
+  the live site in August when a `@import` was dropped from the built CSS. The
+  variable faces are declared once over their weight range; Google's own
+  stylesheet declares 400/500/700 against the same file, which would put the same
+  36 KB in the pack three times.
+- **Scope.** The owner's pack carries everything, the extracted document included
+  — an offline copy is what you take into a room with no network, and a report you
+  cannot check against its source is half a report. A pack built from a share link
+  is built from the artefacts `resolveShare` already redacted through
+  `shareableReport`, and carries no source digest: the hash of an unpublished
+  paper is a confirmation oracle.
+
+Measured on the synthetic fixture assessment (1440×1000, Chromium, `offline: true`,
+every non-`file://` request recorded): 638 KB for the page, **zero external
+requests, zero page errors**, all three faces resolved from their data URIs,
+workspace and tab switching live, the drill opening and closing on Escape, and
+the hover cards rendering. `pack.test.ts` asserts the same properties on the
+zip the endpoint actually returns.
+
 ## Local preview and limits
 
 The local Compose overlay lives with the operator’s other local stack files, outside this repository. It enables only the policy worker while the preview retains the builder service role, isolated database/credentials/data and loopback binding. The existing LAN gateway supplies preview authentication. See the local stack README for application commands. The canonical production Node entry defaults `BODY_SIZE_LIMIT` to 12 MB before loading adapter-node (preserving an explicit operator override), so 10 MB documents plus multipart metadata can reach the route. This raises the adapter’s default request ceiling sitewide; each endpoint keeps its own validation. A deployment with an explicit smaller ceiling must raise it for larger uploads. Production deployment is left to the repository's existing release workflow; no deployment script was run.
