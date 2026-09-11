@@ -14,6 +14,12 @@
  * upgrade. A separate entry costs one config and cannot drift, because it
  * compiles the same components from the same source.
  *
+ * WHERE THE ENTRY LIVES: with the components, not with the pack's pure modules.
+ * `$lib/policy-analysis` is a DOMAIN module and the boundary gate forbids it
+ * importing upward into ui — so `OfflineApp.svelte` and `offline-entry.ts` sit in
+ * `$lib/components/policy-analysis`, and `payload.ts` / `html.ts` / `download.ts`
+ * stay in the domain module where they belong.
+ *
  * WHAT IT MAY IMPORT: the dashboard's dependency graph is `$lib/policy-analysis`
  * and `svelte`, and nothing else — every component under
  * `$lib/components/policy-analysis` takes props and makes no request of its own.
@@ -45,7 +51,7 @@ export default defineConfig({
     cssCodeSplit: false,
     target: 'es2022',
     lib: {
-      entry: fileURLToPath(new URL('./src/lib/policy-analysis/offline/entry.ts', import.meta.url)),
+      entry: fileURLToPath(new URL('./src/lib/components/policy-analysis/offline-entry.ts', import.meta.url)),
       // IIFE, not ES: a `<script type="module">` is subject to CORS even from a
       // file:// page, and a double-clicked pack would execute nothing.
       formats: ['iife'],

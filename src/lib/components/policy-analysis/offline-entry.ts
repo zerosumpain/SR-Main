@@ -5,14 +5,18 @@
  * fetching it, because a `file://` page has an opaque origin and cannot fetch
  * its own siblings. See `html.ts` for why the whole pack is one file.
  *
+ * It sits in `$lib/components` with the component it mounts: `$lib/policy-analysis`
+ * is a domain module and may not import ui, which is the boundary gate's rule and
+ * the right one.
+ *
  * Compiled by `vite.config.offline.ts` into a single IIFE with no imports, no
  * dynamic chunks and no module graph, so it runs from a `<script>` tag with no
  * `type="module"` — which is what a double-clicked file needs.
  */
 import { mount } from 'svelte';
 import OfflineApp from './OfflineApp.svelte';
-import { PAYLOAD_ELEMENT_ID, ROOT_ELEMENT_ID } from './html';
-import type { OfflinePayload } from './payload';
+import { PAYLOAD_ELEMENT_ID, ROOT_ELEMENT_ID } from '$lib/policy-analysis/offline/html';
+import type { OfflinePayload } from '$lib/policy-analysis/offline/payload';
 import '../../../app.css';
 
 function fail(message: string): void {

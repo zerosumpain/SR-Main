@@ -1,6 +1,13 @@
 <script lang="ts">
   // THE ASSESSMENT, WITH NO SITE UNDER IT.
   //
+  // It lives in `$lib/components` rather than beside the rest of the offline
+  // pack because it is a Svelte component, and `$lib/policy-analysis` is a
+  // DOMAIN module — the boundary gate forbids one importing upward into ui, and
+  // it is right to: a feature module that reaches for a component has put the
+  // rendering in the wrong place. The pack's pure parts (payload, html,
+  // download) stay in the domain module; this and `offline-entry.ts` are its ui.
+  //
   // This is the shared page's shell with the network taken out. It renders
   // `AssessmentBody` — the same component the owner dashboard and the share link
   // both render — so an offline pack cannot become a third, quietly different
@@ -13,11 +20,11 @@
   // print rules were measured rather than assumed — see the chrome block at the
   // end of `src/app.css`.
   import { onMount } from 'svelte';
-  import AssessmentBody from '$lib/components/policy-analysis/AssessmentBody.svelte';
+  import AssessmentBody from './AssessmentBody.svelte';
   import { printNow, wirePrint } from '$lib/policy-analysis/print';
   import { withheldNote } from '$lib/policy-analysis/share';
   import * as view from '$lib/policy-analysis/view';
-  import type { OfflinePayload } from './payload';
+  import type { OfflinePayload } from '$lib/policy-analysis/offline/payload';
 
   let { payload }: { payload: OfflinePayload } = $props();
 
@@ -269,7 +276,7 @@
   .sh-hint code,
   .sh-note code {
     font-family: var(--font-code);
-    font-size: 0.92em;
+    font-size: max(0.92em, var(--fs-label-xs));
     overflow-wrap: anywhere;
   }
 
