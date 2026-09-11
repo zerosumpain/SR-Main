@@ -26,12 +26,17 @@
   // its size — and the font-size gate would rightly refuse the hand-tuned
   // sub-pixel literal that hides it.
   const W = 980;
-  const H = 320;
+  const H = 352;
   const BOX_W = 168;
-  const BOX_H = 76;
+  const BOX_H = 98;
   const GAP = (W - 32 - 5 * BOX_W) / 4;
   const x = (i: number) => 16 + i * (BOX_W + GAP);
-  const SPINE_Y = 196;
+  // MOVED DOWN WITH THE BOXES. `ELBOW_Y` hangs off the away box's bottom edge, so
+  // growing the boxes for the detail line pushed the elbow to 184 — exactly where
+  // the spine's edge labels sit at `SPINE_Y - 12`. The two would have printed on
+  // top of each other, which is the second time this diagram has taught that
+  // lesson, so the clearance is now stated rather than inferred.
+  const SPINE_Y = 230;
   const AWAY_X = x(1) + BOX_W / 2 + 20;
   const AWAY_Y = 40;
   /** Where both arrows turn, below the box and above the spine, clear of every label. */
@@ -78,6 +83,8 @@
         <text class="hp-where" x={x(i) + 12} y={SPINE_Y + 64}>
           {stop.place === 'you' ? 'with you' : 'this site'}
         </text>
+        <line class="hp-rule" x1={x(i) + 12} y1={SPINE_Y + 74} x2={x(i) + BOX_W - 12} y2={SPINE_Y + 74} />
+        <text class="hp-detail" x={x(i) + 12} y={SPINE_Y + 89}>{stop.detail}</text>
       {/each}
 
       <!-- The model. Off the spine, because it is not on this machine. -->
@@ -85,6 +92,8 @@
       <text class="hp-n hp-n-away" x={AWAY_X + 12} y={AWAY_Y + 22}>{String(away.n).padStart(2, '0')}</text>
       <text class="hp-name hp-name-away" x={AWAY_X + 12} y={AWAY_Y + 46}>{away.short}</text>
       <text class="hp-where hp-where-away" x={AWAY_X + 12} y={AWAY_Y + 64}>somebody else’s computer</text>
+      <line class="hp-rule hp-rule-away" x1={AWAY_X + 12} y1={AWAY_Y + 74} x2={AWAY_X + BOX_W + 28} y2={AWAY_Y + 74} />
+      <text class="hp-detail hp-detail-away" x={AWAY_X + 12} y={AWAY_Y + 89}>{away.detail}</text>
 
       <!--
         Up: the paper goes. Down: the assessment comes back. BOTH MEET THE BOX AT
@@ -122,7 +131,13 @@
         y2={AWAY_Y + 18}
         marker-end="url(#hp-arrow-away)"
       />
-      <text class="hp-gone" x={W - 16} y={AWAY_Y + 6} text-anchor="end">a copy stays there — we cannot delete it</text>
+      <!--
+        WAS "we cannot delete it", which went out with no source behind it and was
+        too strong. OpenAI keeps it for up to 30 days and then deletes it, and it
+        can be removed from that account sooner. What is true, and what a reader
+        needs, is that this site cannot reach it.
+      -->
+      <text class="hp-gone" x={W - 16} y={AWAY_Y + 6} text-anchor="end">a copy stays there — not ours to delete</text>
     </svg>
     <figcaption>
       Five of the six steps happen on one machine, and {sealed ? 'destroying the key ends all of them at once' : 'a purge removes all of them'}.
@@ -140,6 +155,7 @@
           <p class="hp-stop-h">
             {stop.title}
             <span class="hp-tag" class:away={stop.place === 'away'}>{PLACE_LABEL[stop.place]}</span>
+            <span class="hp-detail-chip">{stop.detail}</span>
           </p>
           <p class="hp-stop-w">{stop.what}</p>
           {#if stop.emphasis}<p class="hp-stop-w hp-stop-key"><strong>{stop.emphasis}</strong></p>{/if}
@@ -206,6 +222,17 @@
     text-transform: uppercase;
   }
   .hp-where-away { fill: var(--accent); }
+  /* A hairline, not a second border: the detail is part of the box, below a rule
+     that separates "what this step is" from "what is true here". */
+  .hp-rule { stroke: var(--divider); stroke-width: 1; }
+  .hp-rule-away { stroke: var(--accent); opacity: .35; }
+  .hp-detail {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    fill: var(--text-secondary);
+    letter-spacing: .02em;
+  }
+  .hp-detail-away { fill: var(--accent); }
   .hp-link { stroke: var(--line-strong); stroke-width: 1.5; fill: none; }
   .hp-link-away { stroke: var(--accent); }
   .hp-link-gone { stroke: var(--accent); stroke-dasharray: 5 4; }
@@ -247,6 +274,16 @@
     vertical-align: 2px;
   }
   .hp-tag.away { border-color: var(--accent); color: var(--accent); }
+  /* The diagram's own line, repeated where the words are — so a reader who never
+     looks at the picture still gets what each box was carrying. */
+  .hp-detail-chip {
+    margin-left: .4rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: .02em;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
 
   .hp-lists { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.25rem; }
   .hp-list-h {

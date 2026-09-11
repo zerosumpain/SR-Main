@@ -423,6 +423,16 @@ export const TABS = [
   { id: 'cross', name: 'Other policies', group: 'The assessment', strap: 'Weaknesses that only exist because several policies are in force at once.' },
   { id: 'report', name: 'The write-up', group: 'The assessment', strap: 'The written assessment, read one movement at a time.' },
   { id: 'provenance', name: 'Working', group: 'The assessment', strap: 'Every stage, every model call, every cost.' },
+  // WHERE THE DOCUMENT GOES IS ITS OWN WORKSPACE, not a footer on the key.
+  //
+  // It shipped inside "How to read this", which is the last tab of the last
+  // group — and then BELOW the entire glossary, the longest panel on the page.
+  // John could not find it, which is the only test that mattered: a note meant
+  // to give a reader confidence in how their paper is handled cannot be two
+  // clicks and a thousand pixels away. It sits beside the key because both are
+  // references rather than readings, and before it because a reader asks "what
+  // happens to my document" before "what does concealment mean".
+  { id: 'handling', name: 'Where your paper goes', group: 'The assessment', strap: 'What this site stores, what it sends elsewhere, and what is left after you delete it.' },
   // The key is a WORKSPACE, not a tooltip. Every explainer before this was
   // hover-only, which answers "what is this column" for a reader who already
   // suspected there was a question, and answers nothing at all for one who

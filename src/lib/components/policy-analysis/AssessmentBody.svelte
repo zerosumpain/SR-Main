@@ -58,6 +58,7 @@
   import PlaybookTable from './PlaybookTable.svelte';
   import KeyPanel from './KeyPanel.svelte';
   import HandlingPanel from './HandlingPanel.svelte';
+  import { destroyed } from '$lib/policy-analysis/handling';
   import RelationshipMap from './RelationshipMap.svelte';
   import EvidenceMix from './EvidenceMix.svelte';
   import CrossPolicy from './CrossPolicy.svelte';
@@ -740,18 +741,22 @@
     />
     <KeyPanel />
 
-    <!--
-      WHERE THE DOCUMENT ITSELF GOES.
-      It sits in this workspace rather than in one of its own because it answers
-      the same shape of question the key does — "what am I actually looking at?"
-      — and because this is the workspace that already prints as the exported
-      pack's appendix. A reader who has been handed this assessment and is
-      deciding how far to trust it should not have to find a second page.
-    -->
-    <section class="ab-handling" aria-labelledby="ab-handling-h">
-      <h3 id="ab-handling-h">Where your document goes</h3>
-      <HandlingPanel {sealed} />
-    </section>
+  </div>
+
+  <!-- ————————————————————————————— WHERE THE DOCUMENT GOES ————— -->
+  <div id="handling" class="ab-panel" role="tabpanel" class:off={tab !== at('handling')} aria-labelledby={tabId('handling')}>
+    <h2 class="ab-print-title">Where your paper goes</h2>
+    <DashHead
+      kicker="Information handling"
+      title={['What happens to', 'the paper you send']}
+      strap="One question decides whether this tool is safe to put an unpublished paper into: where does it go, and can you get it back out of every place it went? Everything below is the answer, including the part this site cannot promise."
+      figures={[
+        { label: 'Steps in its life', value: 6 },
+        { label: 'That leave this site', value: 1 },
+        { label: 'Things a purge destroys', value: destroyed(sealed).length },
+      ]}
+    />
+    <HandlingPanel {sealed} />
   </div>
 </div>
 
@@ -963,12 +968,6 @@
   }
   .off {
     display: none;
-  }
-  .ab-handling { margin-top: 2.25rem; padding-top: 1.5rem; border-top: 2px solid var(--text-primary); }
-  .ab-handling h3 {
-    margin: 0 0 1.1rem;
-    font-family: var(--font-display);
-    font-size: var(--fs-display-xs);
   }
   .ab-print-title {
     display: none;

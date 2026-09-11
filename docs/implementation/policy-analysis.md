@@ -216,6 +216,42 @@ once, wherever it has got to, without anyone having to find it.
   policy tables and a generic line goes to `workflow_runs.error` — that table is
   the whole site's queue, read by surfaces that know nothing about sealing.
 
+### The nightly backup does not copy these tables
+
+Since 2026-09-11, `~/bin/backup-vps-db.sh` passes `--exclude-table-data` for all
+**ten** policy tables, so no policy material enters a `pg_dump` at all. Measured
+before the change: 173 MB on production, 142 MB of it the stored model prompts;
+the nightly dump went 590 MB → 525 MB.
+
+**The trade is explicit and was accepted** (John: *"id be happy to exclude these
+materials from the backup completely"*): if the VPS dies, every policy assessment
+is gone. That is the right way round for a tool whose output you are meant to
+take away as an offline pack and whose input you are meant to destroy — and it is
+what lets the page say *nothing* is left rather than *unreadable ciphertext*.
+
+Two things that file gets right and a future edit must keep:
+
+- **The table list is explicit; there is no `policy_*` wildcard.**
+  `policy_indicator_snapshots` shares the first eight characters and belongs to
+  `/projects/policy-engine`, a different and public feature whose data must be
+  backed up.
+- **It proves the exclusion instead of assuming it.** `pg_dump --exclude-table-data`
+  **silently ignores a table that does not exist**, so a typo or a later rename
+  would put the papers back into every nightly copy with no error. The script
+  reads its own output back, fails if any policy `COPY` block is present, and
+  fails if `workflow_runs` is *absent* — the second check catches an exclusion
+  that went too wide, which would otherwise pass everything else while gutting the
+  backup. Do not rewrite that check with `grep -q`: it short-circuits, `zcat`
+  takes SIGPIPE, and `pipefail` turns a good dump into a failed one. That is what
+  happened on the first run.
+
+Verified independently of the script: the new dump holds **0** policy `COPY`
+blocks, **10** policy `CREATE TABLE`s (so a restore rebuilds them empty and the
+app starts), and `policy_indicator_snapshots` still present.
+
+Dumps taken before this change still contain the old data and rotate out on the
+usual 14-day cycle.
+
 ### The purge, and its receipt
 
 `purge()` shreds the key **then** deletes. The order is not symmetric: a failed
