@@ -1,5 +1,6 @@
 <script lang="ts">
   import '../app.css';
+  import UmamiTracker from '$lib/components/UmamiTracker.svelte';
   import '$lib/styles/nm-tokens.css';
   import { onMount, setContext } from 'svelte';
   import { onNavigate } from '$app/navigation';
@@ -46,6 +47,8 @@
 
   let { children } = $props();
 </script>
+
+<UmamiTracker />
 
 <div class="relative z-10 min-h-screen">
   {@render children()}
