@@ -266,6 +266,51 @@ describe('the rail is grouped for the eye and flat for navigation', () => {
   });
 });
 
+/**
+ * THE JOURNEY, AND THE ANNEX.
+ *
+ * The rail draws two bands off the tier, so a tab that belongs to neither, or
+ * to both, is a tab the rail silently does not render — and a panel nothing can
+ * select out of is how the whole page went blank the last time the tabs and the
+ * cells disagreed.
+ */
+describe('the rail ranks the journey above the annex', () => {
+  it('leaves nothing out of the two bands, and puts nothing in both', () => {
+    const drawn = [...view.journeySteps().flatMap((s) => [s.lead, ...s.also]), ...view.annexGroups().flatMap((g) => g.tabs)];
+    expect(drawn.map((t) => t.id).sort()).toEqual(view.TABS.map((t) => t.id).sort());
+    expect(new Set(drawn.map((t) => t.id)).size).toBe(view.TABS.length);
+  });
+
+  it('is the three questions John named, in order, numbered from one', () => {
+    const steps = view.journeySteps();
+    expect(steps.map((s) => s.lead.id)).toEqual(['verdict', 'playbook', 'actors']);
+    expect(steps.map((s) => s.step)).toEqual([1, 2, 3]);
+  });
+
+  it('names a step after its own lead, so the rail never draws the cap twice', () => {
+    // "WAYS TO BEAT IT │ Ways to beat it" is the mistake the old cap rule
+    // existed to avoid; naming the group after its lead makes it impossible
+    // rather than conditional.
+    for (const step of view.journeySteps()) expect(step.group).toBe(step.lead.name);
+  });
+
+  it('keeps the grounding and the assessment in the annex', () => {
+    const annex = view.annexGroups();
+    expect(annex.map((g) => g.group)).toEqual(['Grounding', 'Assessment']);
+    for (const id of ['stress', 'checks', 'evidence', 'scenarios', 'cross', 'report', 'provenance', 'handling', 'key']) {
+      expect(annex.some((g) => g.tabs.some((t) => t.id === id)), `${id} is not in the annex`).toBe(true);
+    }
+  });
+
+  it('keeps a group on one side of the line', () => {
+    for (const group of view.tabGroups()) {
+      const tiers = new Set(group.tabs.map((t) => view.TABS[t.index].tier));
+      expect(tiers.size, `${group.group} straddles the journey and the annex`).toBe(1);
+      expect([...tiers][0]).toBe(group.tier);
+    }
+  });
+});
+
 describe('a peek anchor names its kind, so the card is context-aware', () => {
   it('splits on the FIRST colon, because an identifier may carry one', () => {
     expect(parseSubject('actor:s2_001')).toEqual({ kind: 'actor', subject: 's2_001' });
