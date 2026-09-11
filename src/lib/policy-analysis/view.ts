@@ -410,19 +410,25 @@ export function scenarioBeats(scenario: Artefact, artefacts: Artefact[]): Beat[]
  * anchor it already was, so every existing deep link keeps working.
  */
 export const TABS = [
-  { id: 'verdict', name: 'Verdict', group: 'The verdict', strap: 'What this assessment concludes, and how confident it is.' },
-  { id: 'playbook', name: 'Playbook', group: 'The threat', strap: 'What a body governed by this policy could do to it, ranked by exposure.' },
-  { id: 'interplay', name: 'Interplay', group: 'The threat', strap: 'Which part of the machinery each body is aiming at.' },
-  { id: 'actors', name: 'Actors', group: 'The cast', strap: 'Every body this policy runs through — filter the chart by the measure you care about.' },
-  { id: 'network', name: 'Network', group: 'The cast', strap: 'The relationships the paper states, and the counterparts it leaves out.' },
-  { id: 'personas', name: 'Personas', group: 'The cast', strap: 'Bodies met before, and what this assessment adds to their dossier.' },
-  { id: 'stress', name: 'Stress test', group: 'The ground', strap: 'Switch an assumption off and watch the assessment recompute.' },
-  { id: 'checks', name: 'Checks', group: 'The ground', strap: 'Twelve structural tests over the relationships the paper itself states.' },
-  { id: 'evidence', name: 'Evidence', group: 'The ground', strap: 'What the conclusions are standing on, and what nobody could establish.' },
-  { id: 'scenarios', name: 'Scenarios', group: 'The ground', strap: 'How this plays out when the conditions change.' },
-  { id: 'cross', name: 'Cross-policy', group: 'The assessment', strap: 'Weaknesses that exist only because several policies coexist.' },
-  { id: 'report', name: 'The report', group: 'The assessment', strap: 'The written assessment, in five acts.' },
-  { id: 'provenance', name: 'Working', group: 'The assessment', strap: 'Every stage, every call, every cost.' },
+  { id: 'verdict', name: 'Verdict', group: 'The verdict', strap: 'What this assessment concludes, and how sure it is.' },
+  { id: 'playbook', name: 'Ways to beat it', group: 'The threat', strap: 'What a body governed by this policy could do to it, worst first.' },
+  { id: 'interplay', name: 'What they aim at', group: 'The threat', strap: 'Which part of the machinery each body is going for.' },
+  { id: 'actors', name: 'Who is involved', group: 'The cast', strap: 'Every body the policy runs through, and what would make each of them behave the way it does.' },
+  { id: 'network', name: 'How they connect', group: 'The cast', strap: 'The links the paper states between them — and the ones it needs and never states.' },
+  { id: 'personas', name: 'Met before', group: 'The cast', strap: 'Bodies you have assessed before, and what this run adds to what you knew.' },
+  { id: 'stress', name: 'What if we are wrong', group: 'The ground', strap: 'Switch off something the assessment took as given, and watch it recompute.' },
+  { id: 'checks', name: 'Gaps in the paper', group: 'The ground', strap: 'Twelve tests over the paper’s own wiring. No model is involved in any of them.' },
+  { id: 'evidence', name: 'What is backed up', group: 'The ground', strap: 'Which of the paper’s claims anything outside it supports, and which nobody could settle.' },
+  { id: 'scenarios', name: 'If things change', group: 'The ground', strap: 'How this plays out when the conditions it was drafted in stop holding.' },
+  { id: 'cross', name: 'Other policies', group: 'The assessment', strap: 'Weaknesses that only exist because several policies are in force at once.' },
+  { id: 'report', name: 'The write-up', group: 'The assessment', strap: 'The written assessment, read one movement at a time.' },
+  { id: 'provenance', name: 'Working', group: 'The assessment', strap: 'Every stage, every model call, every cost.' },
+  // The key is a WORKSPACE, not a tooltip. Every explainer before this was
+  // hover-only, which answers "what is this column" for a reader who already
+  // suspected there was a question, and answers nothing at all for one who
+  // opens the page cold and finds bodies scored on "concealment". It is last
+  // because it is a reference, and it prints as the pack's appendix.
+  { id: 'key', name: 'How to read this', group: 'The assessment', strap: 'What every word on this page means, and how each figure is worked out.' },
 ] as const;
 
 export type TabId = (typeof TABS)[number]['id'];

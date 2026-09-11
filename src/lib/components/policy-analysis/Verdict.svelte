@@ -26,12 +26,35 @@
     bands: { band: Band; note: string; count: number }[];
     plays: Play[];
     status: string;
+    /** The structural checks that did not come back covered, worst first. */
+    thin?: Artefact[];
+    /** The assumption the most of the assessment rests on, and how much. */
+    lever?: { artefact: Artefact; dependants: number } | null;
+    /** Redesign options — opinions, and labelled as such. */
+    options?: Artefact[];
     /** Open the drill on an artefact. */
     onopen: (id: string) => void;
     onband?: (band: Band) => void;
+    /** Switch workspace — the short version's four columns each lead somewhere. */
+    ontab?: (id: string) => void;
   }
 
-  let { headline, tiles, bands, plays, status, onopen, onband }: Props = $props();
+  let { headline, tiles, bands, plays, status, thin = [], lever = null, options = [], onopen, onband, ontab }: Props =
+    $props();
+
+  /**
+   * THE SHORT VERSION.
+   *
+   * The verdict page carried a headline, four factor bars, four counts and a
+   * band strip — and named not one single thing. A reader who had ninety seconds
+   * left knowing the paper had "11 ways to beat it" and no idea what any of them
+   * were, so the only way to act on this page was to leave it. These four
+   * columns name them: the worst plays, the thinnest parts of the paper, the one
+   * assumption most of the assessment rests on, and what the assessment suggests
+   * doing. Every item opens its own drill, and each column also leads to the
+   * workspace that holds the rest.
+   */
+  const worst = $derived(plays.slice(0, 3));
 
   const total = $derived(bands.reduce((sum, b) => sum + b.count, 0));
   const split = $derived(headline ? summarise(headline.statement) : { lead: '', rest: '' });
@@ -128,6 +151,94 @@
     {/each}
   </div>
 
+  <!-- ————————————————————————— THE SHORT VERSION ————— -->
+  {#if worst.length || thin.length || lever || options.length}
+    <div class="vd-short">
+      <p class="vd-label">The short version — every line here opens</p>
+      <div class="vd-short-grid">
+        {#if worst.length}
+          <section>
+            <h3>The worst ways in</h3>
+            <ul>
+              {#each worst as play (play.artefact.id)}
+                <li>
+                  <span
+                    class="vd-chip"
+                    style="background: {BAND_FILL[play.band]}"
+                    class:on-dark={play.band === 'severe'}
+                  >{Math.round(play.exposure * 100)}</span>
+                  <button type="button" data-pa-peek={`play:${play.artefact.id}`} onclick={() => onopen(play.artefact.id)}>
+                    {play.artefact.label}
+                  </button>
+                  <span class="vd-who">{play.actor?.label ?? 'body unresolved'}</span>
+                </li>
+              {/each}
+            </ul>
+            {#if plays.length > worst.length}
+              <button type="button" class="vd-all" onclick={() => ontab?.('playbook')}>
+                All {plays.length} ranked →
+              </button>
+            {/if}
+          </section>
+        {/if}
+
+        {#if thin.length}
+          <section>
+            <h3>Where the paper is thin</h3>
+            <ul>
+              {#each thin.slice(0, 3) as check (check.id)}
+                <li>
+                  <button type="button" data-pa-peek={`check:${check.id}`} onclick={() => onopen(check.id)}>
+                    {check.label}
+                  </button>
+                  <span class="vd-who">{String(check.data.result).replaceAll('_', ' ')}</span>
+                </li>
+              {/each}
+            </ul>
+            <button type="button" class="vd-all" onclick={() => ontab?.('checks')}>All twelve checks →</button>
+          </section>
+        {/if}
+
+        {#if lever}
+          <section>
+            <h3>What most of it rests on</h3>
+            <ul>
+              <li>
+                <button type="button" data-pa-peek={`assumption:${lever.artefact.id}`} onclick={() => onopen(lever.artefact.id)}>
+                  {lever.artefact.label}
+                </button>
+                <span class="vd-who">
+                  {lever.dependants}
+                  {lever.dependants === 1 ? 'part of the assessment rests' : 'parts of the assessment rest'} on it
+                </span>
+              </li>
+            </ul>
+            <button type="button" class="vd-all" onclick={() => ontab?.('stress')}>Switch it off and see →</button>
+          </section>
+        {/if}
+
+        {#if options.length}
+          <section>
+            <h3>What the assessment suggests</h3>
+            <ul>
+              {#each options.slice(0, 3) as option (option.id)}
+                <li>
+                  <button type="button" data-pa-peek={`artefact:${option.id}`} onclick={() => onopen(option.id)}>
+                    {option.label}
+                  </button>
+                </li>
+              {/each}
+            </ul>
+            <!-- Said here as well as in the report, because this is the column a
+                 reader in a hurry acts on and it is the only one that is an
+                 opinion rather than a reading. -->
+            <p class="vd-opinion">These are normative judgements, not findings.</p>
+          </section>
+        {/if}
+      </div>
+    </div>
+  {/if}
+
   {#if total}
     <div class="vd-bands">
       <p class="vd-label">How the {total} plays rank</p>
@@ -160,6 +271,116 @@
 </section>
 
 <style>
+  .vd-short {
+    margin-top: clamp(22px, 3vw, 34px);
+    border-top: 2px solid var(--text-primary);
+    padding-top: clamp(14px, 1.8vw, 20px);
+  }
+  .vd-short-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: 1px;
+    background: var(--line-strong);
+    border: 1px solid var(--line-strong);
+  }
+  .vd-short-grid section {
+    background: var(--bg);
+    padding: 12px 14px 14px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .vd-short-grid h3 {
+    margin: 0 0 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-weight: 500;
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .vd-short-grid ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 9px;
+  }
+  .vd-short-grid li {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 4px 7px;
+    align-items: baseline;
+  }
+  .vd-short-grid li > button {
+    font: inherit;
+    grid-column: 2;
+    text-align: left;
+    background: none;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    font-weight: 600;
+    font-size: var(--fs-body-sm);
+    line-height: 1.3;
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+  .vd-short-grid li > button:only-child,
+  .vd-short-grid li > button:first-child {
+    grid-column: 1 / -1;
+  }
+  .vd-short-grid li > button:hover {
+    color: var(--accent);
+  }
+  .vd-chip {
+    grid-row: 1;
+    grid-column: 1;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    padding: 2px 5px;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+  }
+  .vd-chip.on-dark {
+    color: var(--bg);
+  }
+  .vd-who {
+    grid-column: 1 / -1;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    color: var(--text-muted);
+    line-height: 1.3;
+  }
+  .vd-all {
+    font: inherit;
+    margin-top: auto;
+    padding-top: 11px;
+    align-self: start;
+    background: none;
+    border: 0;
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    cursor: pointer;
+  }
+  .vd-all:hover {
+    color: var(--accent);
+  }
+  .vd-opinion {
+    margin: 11px 0 0;
+    font-size: var(--fs-label-xs);
+    line-height: 1.4;
+    color: var(--text-muted);
+    border-left: 2px solid var(--accent);
+    padding-left: 8px;
+  }
+
   .vd-top {
     display: grid;
     grid-template-columns: minmax(0, 1.35fr) minmax(15rem, 0.65fr);
@@ -374,6 +595,13 @@
   }
 
   @media print {
+    .vd-all {
+      display: none !important;
+    }
+    .vd-chip {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
     .vd-actions {
       display: none !important;
     }

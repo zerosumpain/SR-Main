@@ -12,12 +12,13 @@ import { PATTERNS, PERSONA_STAGE, REPORT_SECTIONS, SCENARIOS, artefact, type Art
 import { executeStage } from '$lib/policy-analysis/pipeline';
 import { ingest } from '$lib/policy-analysis/server/ingest';
 import * as view from '$lib/policy-analysis/view';
+import { playGrid, traitGrid } from '$lib/policy-analysis/matrix';
 import { fixtureModel } from '../../../../tests/fixtures/policy-analysis/model';
 import Verdict from './Verdict.svelte';
 import ExposurePlot from './ExposurePlot.svelte';
-import PlayCard from './PlayCard.svelte';
+import PlaybookTable from './PlaybookTable.svelte';
 import CheckGrid from './CheckGrid.svelte';
-import ActorBoard from './ActorBoard.svelte';
+import CastTable from './CastTable.svelte';
 import EvidenceMix from './EvidenceMix.svelte';
 import CrossPolicy from './CrossPolicy.svelte';
 import ArtefactValue from './ArtefactValue.svelte';
@@ -114,13 +115,16 @@ describe('the written assessment reads as acts', () => {
     expect(view.unplacedSections(all)).toEqual([]);
 
     const html = render(ReportActs, { props: { acts, recommendations: view.of(all, 'recommendation'), inspect } }).body;
-    // Tabs are real tabs, and the panels are all present so that find-in-page
-    // and the print stylesheet still reach the acts nobody clicked.
-    // A CONTENTS RAIL, not a tab strip. The acts used to open a second tab
-    // system inside the report tab; now they are one continuous narrative and
-    // this only jumps between them.
+    // A REAL TAB STRIP over one document, and every panel present so that
+    // find-in-page and the print stylesheet reach the movements nobody clicked.
+    // This is not the nesting the 2026-09-10 flattening removed — that was a
+    // second WORKSPACE rail buried inside the first. The report has to be
+    // readable a movement at a time or it is a 4,668px scroll, and an anchor
+    // rail was also the last clickthrough in the feature that moved the reader
+    // to somewhere else in the same document.
     expect(html).toContain('class="contents');
-    expect(html).not.toContain('role="tablist"');
+    expect(html).toContain('role="tablist"');
+    expect(html).not.toContain('href="#report-panel-');
     for (const act of acts) {
       expect(html).toContain(act.title);
       expect(html).toContain(act.strap);
@@ -129,18 +133,27 @@ describe('the written assessment reads as acts', () => {
         for (const item of chapter.items) expect(html).toContain(item.statement);
       }
     }
-    // Exactly one panel is open on first paint.
-    // Every act is present AND visible: the whole point of the rail is that the
-    // written assessment reads in order without anything hidden behind a control.
-    expect([...html.matchAll(/role="tabpanel"/g)]).toHaveLength(0);
-    expect([...html.matchAll(/class="panel[^"]*\boff\b/g)]).toHaveLength(0);
+    // ONE MOVEMENT ON SCREEN, all of them in the DOM. The rail used to be five
+    // in-page anchors with every act rendered below it — 4,668px of report, and
+    // the rail was the last clickthrough in the feature that scrolled the reader
+    // somewhere else in the same document.
+    expect([...html.matchAll(/role="tabpanel"/g)]).toHaveLength(view.reportActs(all).length);
+    expect([...html.matchAll(/class="panel[^"]*\boff\b/g)]).toHaveLength(view.reportActs(all).length - 1);
   });
 
-  it('hides no act at all — the report is one narrative now', async () => {
+  it('hides the acts it is not showing by CLASS, never by the hidden attribute', async () => {
     const all = await assessment();
     const html = render(ReportActs, { props: { acts: view.reportActs(all), recommendations: view.of(all, 'recommendation'), inspect } }).body;
-    expect(html).not.toMatch(/class="panel[^"]*\boff\b/);
-    expect(html).not.toMatch(/<section[^>]*\shidden/);
+    // `[hidden] { display: none !important }` is a user-agent declaration and
+    // outranks any author rule at any specificity, which is how four of five
+    // acts went missing from every printed copy on 2026-09-10.
+    expect(html).not.toMatch(/<div[^>]*\shidden/);
+    // And every act's content is still here for find-in-page and for print.
+    for (const act of view.reportActs(all)) {
+      for (const chapter of act.chapters) {
+        for (const item of chapter.items) expect(html).toContain(item.statement);
+      }
+    }
   });
 
   it('hides an inactive TAB by class, never the hidden attribute', async () => {
@@ -190,16 +203,25 @@ describe('the assessment renders', () => {
     expect(plot.body).toContain('Easier to do');
     expect(plot.body).toContain('<circle');
 
-    const card = render(PlayCard, { props: { play: plays[0], rank: 1, onopen: inspect } });
-    expect(card.body).toContain('Stays within the rules as written');
-    expect(card.body).toContain('What would close it');
-    for (const factor of view.FACTOR_KEYS) expect(card.body).toContain(factor);
+    // The playbook is a ranked TABLE now, not eleven cards. What has to survive
+    // is the ranking being readable: every play in one grid, each factor as a
+    // number, the computed figure beside them, and the plain-English column
+    // names the reader was promised.
+    const table = render(PlaybookTable, { props: { rows: playGrid(plays), total: plays.length, onopen: inspect } });
+    expect(table.body).toContain('No — as written');
+    expect(table.body).toContain('Reason to do it');
+    expect(table.body).toContain('How hard it is to spot');
+    for (const factor of view.FACTOR_KEYS) expect(table.body).toContain(factor);
+    for (const play of plays) expect(table.body).toContain(play.artefact.label);
 
     const checks = render(CheckGrid, { props: { checks: view.checks(all), inspect } });
     expect(checks.body).toContain('No evidence either way');
 
-    const actors = render(ActorBoard, { props: { actors: view.actorBoard(all, plays), inspect } });
-    expect(actors.body).toContain('Better off if it fails');
+    const actors = render(CastTable, {
+      props: { rows: traitGrid(view.actorBoard(all, plays)), onopen: inspect, onplays: inspect },
+    });
+    expect(actors.body).toContain('Gains if it fails');
+    expect(actors.body).toContain('Who around it is better off if this policy fails?');
 
     const evidence = render(EvidenceMix, { props: { mix: view.evidenceMix(all), questions: view.of(all, 'research_question'), sources: view.of(all, 'research_source'), inspect } });
     expect(evidence.body).toContain('Lines of enquiry');
@@ -347,7 +369,10 @@ describe('the stress test recomputes rather than re-asks', () => {
     const all = await assessment();
     const html = render(StressLab, { props: { artefacts: all, onopen: inspect } }).body;
     expect(html).toContain('Suppose these turn out to be wrong');
-    expect(html).toContain('The assessment as written');
+    // At rest it PREVIEWS the top lever rather than spending half a workspace
+    // explaining what would happen if the reader used it.
+    expect(html).toContain('Nothing is switched off. This is the assessment as written.');
+    expect(html).toContain('here is what would move');
     // The consequence strip carries BOTH directions before a lever is pulled, so
     // a reader can see they are opposites without having to discover it: the
     // conclusions that would fall, and the plays that would come off the table.
@@ -364,17 +389,24 @@ describe('an actor the reader has met before says so', () => {
   it('links the card to the dossier and counts the sightings', async () => {
     const all = await assessment();
     const actors = view.actorBoard(all, view.plays(all));
-    const html = render(ActorBoard, {
-      props: { actors, personas: [{ actorId: actors[0].actor.id, personaId: '11111111-1111-4111-8111-111111111111', name: actors[0].actor.label, sightings: 4 }], inspect },
+    const personas = [
+      { actorId: actors[0].actor.id, personaId: '11111111-1111-4111-8111-111111111111', name: actors[0].actor.label, sightings: 4 },
+    ];
+    const html = render(CastTable, {
+      props: { rows: traitGrid(actors, personas), onopen: inspect, onplays: inspect },
     }).body;
-    expect(html).toContain('/policy-analysis/personas/11111111-1111-4111-8111-111111111111');
-    expect(html).toContain('seen in 4 assessments');
+    // The grid marks the row rather than carrying a link out of a cell: the
+    // dossier is reached from the persona workspace, and a link in a comparison
+    // table is a column the reader cannot compare.
+    expect(html).toContain('Met before');
   });
 
   it('says nothing at all when the body is new to the library', async () => {
     const all = await assessment();
-    const html = render(ActorBoard, { props: { actors: view.actorBoard(all, view.plays(all)), personas: [], inspect } }).body;
-    expect(html).not.toContain('In your library');
+    const html = render(CastTable, {
+      props: { rows: traitGrid(view.actorBoard(all, view.plays(all)), []), onopen: inspect, onplays: inspect },
+    }).body;
+    expect(html).not.toContain('Met before');
   });
 });
 
@@ -438,7 +470,7 @@ describe('one tab row, and every old deep link still lands', () => {
    * that no tab claims lands nowhere, silently.
    */
   it('claims every section the report used to group into workspaces', () => {
-    for (const section of ['verdict', 'playbook', 'interplay', 'actors', 'network', 'stress', 'checks', 'scenarios', 'evidence', 'cross', 'report', 'provenance']) {
+    for (const section of ['verdict', 'playbook', 'interplay', 'actors', 'network', 'stress', 'checks', 'scenarios', 'evidence', 'cross', 'report', 'provenance', 'key']) {
       expect(view.isSectionHash(section), `${section} is no longer reachable`).toBe(true);
     }
   });
@@ -447,6 +479,9 @@ describe('one tab row, and every old deep link still lands', () => {
     const ids = view.TABS.map((t) => t.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids).toContain('personas');
+    // The key is a workspace, not a tooltip — every explainer before it was
+    // pointer-only and there was no page that said what a play IS.
+    expect(ids).toContain('key');
   });
 
   it('does not treat an artefact id as a tab', () => {

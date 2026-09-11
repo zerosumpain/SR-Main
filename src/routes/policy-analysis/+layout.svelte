@@ -31,10 +31,45 @@
   <main class="policy-page">{@render children()}</main>
 </HealthShell>
 <style>
-  /* Wider than a reading page, because the workspaces are dashboards: the actor
-     atlas, the network's small multiples and the stress lab's two columns all
-     want the room. The prose inside them keeps its own measure. */
-  .policy-page { max-width: 1400px; margin: auto; padding: clamp(1rem, 3vw, 2.75rem); min-width: 0; }
+  /*
+   * THE PAGE IS FULL WIDTH; THE MEASURE LIVES ON EACH BAND.
+   *
+   * This was the wrong way round and it showed: `max-width` on the wrapper made
+   * the ink lede a 1400px card floating in cream, with the gutter growing as the
+   * window did — on a 1920 monitor a 260px band of cream each side of the
+   * masthead. Negative margins could only reach the WRAPPER's edge, never the
+   * viewport's.
+   *
+   * `/research` already had the answer: `.research-page` carries no measure at
+   * all, the ink lede is a full-bleed band, and `.lede-inner` / `.research-body`
+   * each do `width: min(1400px, 100%); margin: 0 auto`. Same here. A band
+   * (`.pa-band`) paints to the window edge and holds its content to the measure;
+   * `.pa-wrap` is the measure with no paint.
+   */
+  .policy-page { min-width: 0; }
+  /*
+   * Two classes, and a page opts in explicitly:
+   *
+   *   .pa-band   paints to the window edge; its own child takes the measure
+   *   .pa-wrap   the measure with no paint
+   *
+   * Applying the measure to every child of `.policy-page` instead was tried and
+   * reverted: the family's three simpler pages are a RUN of loose elements, and
+   * `.policy-page p { max-width: 75ch }` outranks a `width` on the element, so
+   * `margin-inline: auto` centred every paragraph that had been left-aligned —
+   * and a `width` on the inline back link did nothing at all, leaving it against
+   * the window edge. Those pages take one `.pa-wrap.pa-sheet` around the lot,
+   * which is exactly the padded container the old wrapper was.
+   */
+  :global(.policy-page .pa-wrap),
+  :global(.policy-page .pa-band > *) {
+    width: min(var(--pa-measure, 1400px), 100%);
+    margin-inline: auto;
+    padding-inline: clamp(20px, 3vw, 44px);
+  }
+  :global(.policy-page > .pa-band) { padding-inline: 0; }
+  /* The block padding the old wrapper carried, for a page that is all prose. */
+  :global(.policy-page .pa-sheet) { padding-block: clamp(1rem, 3vw, 2.75rem); }
   :global(.policy-page h1) { font-family: var(--font-display); font-size: clamp(2rem, 5vw, 3.8rem); line-height: 1.06; overflow-wrap: anywhere; margin: 1rem 0; }
   :global(.policy-page h2) { font-family: var(--font-display); font-size: var(--fs-display-xs); margin: 1.5rem 0 1rem; }
   :global(.policy-page p) { line-height: 1.65; max-width: 75ch; }
@@ -65,6 +100,8 @@
     :global(html), :global(body), :global(.hs), :global(.policy-page) { background: #fff !important; }
     :global(.hs-grain), :global(.site-nav-bar), :global(.hs-head), :global(.hs-foot), :global(header), :global(footer) { display: none !important; }
     :global(.policy-page) { max-width: none; padding: 0; }
+    :global(.policy-page .pa-wrap), :global(.policy-page .pa-band > *) { width: auto; padding-inline: 0; }
+    :global(.policy-page .pa-sheet) { padding-block: 0; }
     :global(.policy-page .nm-save-btn), :global(.policy-page button.nm-save-btn) { display: none !important; }
     /* Every other button on these pages opens the inspector, which is not there
        on paper. The ones whose label is CONTENT — a play's name on an actor

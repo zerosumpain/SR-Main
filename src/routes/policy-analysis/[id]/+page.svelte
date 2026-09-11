@@ -275,7 +275,7 @@
   eyeful. The ledger cells are counts, never machinery: "eleven of thirteen
   stages" tells a reader nothing they can act on.
 -->
-<div class="pa-lede" role="banner">
+<div class="pa-lede pa-band" role="banner">
   <div class="pa-lede-inner">
     <div class="pa-lede-copy">
       <p class="pa-eyebrow">
@@ -323,7 +323,8 @@
   reaches for them: take it away, share it, then the run's own machinery. Export
   and print lead because they are what a finished assessment is FOR.
 -->
-<div class="pa-bar">
+<div class="pa-bar pa-band">
+  <div class="pa-bar-inner">
   <div class="pa-bar-group">
     <button class="pa-btn pa-primary" disabled={exporting} onclick={() => exportDoc('docx')}>
       {exporting ? 'Rendering…' : '↓ Word (.docx)'}
@@ -351,13 +352,14 @@
       </span>
     {/if}
   </div>
+  </div>
 </div>
 
-{#if exportError}<p class="pa-alert" role="alert">{exportError}</p>{/if}
-{#if data.analysis.error}<p class="pa-alert" role="alert">{data.analysis.error}</p>{/if}
-{#if message || refreshError}<p class="pa-alert" role="alert">{message || refreshError}</p>{/if}
+{#if exportError}<p class="pa-alert pa-wrap" role="alert">{exportError}</p>{/if}
+{#if data.analysis.error}<p class="pa-alert pa-wrap" role="alert">{data.analysis.error}</p>{/if}
+{#if message || refreshError}<p class="pa-alert pa-wrap" role="alert">{message || refreshError}</p>{/if}
 {#if active}
-  <p class="pa-progress-note">
+  <p class="pa-progress-note pa-wrap">
     <progress max={data.stages.length} value={completed} aria-label="Completed stages"></progress>
     You can close this page. Every stage is saved as it finishes and the run recovers from a restart on its
     own.
@@ -567,10 +569,11 @@
 <style>
   /* ——— the ink lede band ——————————————————————————————————————— */
   .pa-lede {
-    /* Bleeds to the page edge through the wrapper's own padding, the way the
-       research report's does — a band inset by 2.75rem reads as a card. */
-    margin: calc(clamp(1rem, 3vw, 2.75rem) * -1) calc(clamp(1rem, 3vw, 2.75rem) * -1) 0;
-    padding: clamp(26px, 3.4vw, 46px) clamp(20px, 3vw, 44px);
+    /* A BAND: ink to the window edge, content held to the measure by
+       `.pa-band > *` in the layout. It used to carry a negative margin sized to
+       the wrapper's padding, which could only ever reach the wrapper — so on
+       anything wider than 1400 the masthead was a card with cream either side. */
+    padding-block: clamp(26px, 3.4vw, 46px);
     background: var(--text-primary);
     color: var(--bg);
     border-bottom: 1px solid rgba(237, 228, 212, 0.16);
@@ -666,14 +669,18 @@
   }
 
   /* ——— the action bar ——————————————————————————————————————— */
+  /* A band, so the hairline under the controls runs the full width of the
+     window like the ink above it. The flex row is the inner. */
   .pa-bar {
+    border-bottom: 1px solid var(--line-strong);
+  }
+  .pa-bar-inner {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: 12px 20px;
-    padding: 12px 0;
-    border-bottom: 1px solid var(--line-strong);
+    padding-block: 12px;
   }
   .pa-bar-group {
     display: flex;

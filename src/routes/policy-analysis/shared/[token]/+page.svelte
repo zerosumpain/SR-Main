@@ -84,7 +84,7 @@
   <meta name="robots" content="noindex,nofollow" />
 </svelte:head>
 
-<div class="sh-lede" role="banner">
+<div class="sh-lede pa-band" role="banner">
   <div class="sh-lede-inner">
     <div class="sh-copy">
       <p class="sh-eyebrow">
@@ -122,17 +122,19 @@
   </div>
 </div>
 
-<div class="sh-bar">
+<div class="sh-bar pa-band">
+  <div class="sh-bar-inner">
   <button class="sh-btn sh-primary" disabled={exporting} onclick={() => exportDoc('docx')}>
     {exporting ? 'Rendering…' : '↓ Word (.docx)'}
   </button>
   <button class="sh-btn" onclick={printNow}>Print or save as PDF</button>
   <button class="sh-btn sh-ghost" onclick={() => exportDoc('md')}>Markdown</button>
+  </div>
 </div>
 
-{#if exportError}<p class="sh-alert" role="alert">{exportError}</p>{/if}
+{#if exportError}<p class="sh-alert pa-wrap" role="alert">{exportError}</p>{/if}
 
-<section class="sh-note" aria-label="What this is">
+<section class="sh-note pa-wrap" aria-label="What this is">
   <p class="sh-label">What this is</p>
   <p>
     A read-only copy, shared by its author. Nothing on this page can be changed, and the link stops working
@@ -154,9 +156,12 @@
 <AssessmentBody artefacts={data.artefacts} status={data.status} />
 
 <style>
+  /* A BAND: ink to the window edge, content held to the measure by the
+     layout's `.pa-band > *`. The negative margin it carried could only reach
+     the page wrapper, so on anything wider than 1400 the masthead was a card
+     floating in cream. */
   .sh-lede {
-    margin: calc(clamp(1rem, 3vw, 2.75rem) * -1) calc(clamp(1rem, 3vw, 2.75rem) * -1) 0;
-    padding: clamp(26px, 3.4vw, 46px) clamp(20px, 3vw, 44px);
+    padding-block: clamp(26px, 3.4vw, 46px);
     background: var(--text-primary);
     color: var(--bg);
     border-bottom: 1px solid rgba(237, 228, 212, 0.16);
@@ -244,12 +249,14 @@
   }
 
   .sh-bar {
+    border-bottom: 1px solid var(--line-strong);
+  }
+  .sh-bar-inner {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 9px;
-    padding: 12px 0;
-    border-bottom: 1px solid var(--line-strong);
+    padding-block: 12px;
   }
   .sh-btn {
     font: inherit;
@@ -347,7 +354,6 @@
 
   @media print {
     .sh-lede {
-      margin: 0;
       padding: 0 0 12pt;
       background: #fff !important;
       color: #000;

@@ -36,9 +36,11 @@
   // four workspaces reached the printed PDF on 2026-09-10.
   import { onMount, type Snippet } from 'svelte';
   import { REPORT_SECTIONS, type Artefact } from '$lib/policy-analysis/contracts';
+  import { KEY_SECTIONS, READING_CHAIN, STRUCTURE_TERMS } from '$lib/policy-analysis/glossary';
   import * as view from '$lib/policy-analysis/view';
   import { TABS, tabGroups } from '$lib/policy-analysis/view';
   import { atlas } from '$lib/policy-analysis/actors';
+  import { adjacency, playGrid, traitGrid } from '$lib/policy-analysis/matrix';
   import { network } from '$lib/policy-analysis/network';
   import { leverage } from '$lib/policy-analysis/stress';
   import { peekHandlers, policyPeek } from '$lib/policy-analysis/peek.svelte';
@@ -49,10 +51,12 @@
   import Drill from './Drill.svelte';
   import Verdict from './Verdict.svelte';
   import ExposurePlot from './ExposurePlot.svelte';
-  import PlayCard from './PlayCard.svelte';
   import CheckGrid from './CheckGrid.svelte';
   import ActorAtlas from './ActorAtlas.svelte';
-  import ActorBoard from './ActorBoard.svelte';
+  import CastTable from './CastTable.svelte';
+  import AdjacencyGrid from './AdjacencyGrid.svelte';
+  import PlaybookTable from './PlaybookTable.svelte';
+  import KeyPanel from './KeyPanel.svelte';
   import RelationshipMap from './RelationshipMap.svelte';
   import EvidenceMix from './EvidenceMix.svelte';
   import CrossPolicy from './CrossPolicy.svelte';
@@ -131,7 +135,23 @@
   const bands = $derived(view.bandCounts(plays));
   const actors = $derived(view.actorBoard(artefacts, plays));
   const atlasRows = $derived(atlas(artefacts, actors, personas));
+  // The grids: three tables where three walls of cards stood. Each is a pure
+  // derivation over artefacts the assessment already produced.
+  const castRows = $derived(traitGrid(actors, personas));
+  /**
+   * RANKED OVER EVERY PLAY, THEN FILTERED.
+   *
+   * The rank column is the play's place in the whole playbook, so it has to be
+   * computed before any filter and not after: ranking the filtered list instead
+   * put "01, 02, 03" against the three MODERATE plays, which are ranks nine to
+   * eleven. The old card wall got this right by asking `plays.indexOf`.
+   */
+  const playRows = $derived.by(() => {
+    const shown = new Set(shownPlays.map((p) => p.artefact.id));
+    return playGrid(plays).filter((row) => shown.has(row.id));
+  });
   const net = $derived(network(artefacts));
+  const adj = $derived(adjacency(net));
   const checks = $derived(view.checks(artefacts));
   const tiles = $derived(view.tiles(artefacts, plays));
   const headline = $derived(view.headline(artefacts));
@@ -139,7 +159,6 @@
   const acts = $derived(view.reportActs(artefacts));
   const unplaced = $derived(view.unplacedSections(artefacts));
   const recommendations = $derived(view.of(artefacts, 'recommendation'));
-  const fragile = $derived(view.fragileAssumptions(artefacts));
   const scenarios = $derived(view.of(artefacts, 'scenario'));
   const models = $derived(view.of(artefacts, 'model'));
   const crossFound = $derived(view.of(artefacts, 'cross_policy'));
@@ -152,6 +171,8 @@
 
   /** How many things cite each assumption — handed to the peek card. */
   const leverageIndex = $derived(new Map(leverage(artefacts).map((l) => [l.artefact.id, l.dependants])));
+  /** The one assumption the most of the assessment rests on, for the verdict. */
+  const topLever = $derived(leverage(artefacts)[0] ?? null);
 
   /**
    * A figure per rail cell.
@@ -175,6 +196,7 @@
     cross: crossFound.length + (cross?.inbound.length ?? 0),
     report: sections.reduce((n, s) => n + s.items.length, 0),
     provenance: null,
+    key: null,
   });
 
   const tabId = (id: string) => `report-tab-${id}`;
@@ -223,7 +245,9 @@
     <div class="ab-rail-inner" role="tablist" aria-label="Workspaces">
       {#each groups as group (group.group)}
         <div class="ab-group">
-          <p class="ab-group-name">{group.group}</p>
+          <!-- "The threat" → "THREAT". The article costs 4 characters of mono
+               in five places, which is a third of a rail row. -->
+          <p class="ab-group-name">{group.group.replace(/^The /, '')}</p>
           <div class="ab-group-cells">
             {#each group.tabs as t (t.id)}
               {#if visibleTabs.some((v) => v.id === t.id)}
@@ -252,19 +276,26 @@
     </div>
   </nav>
 
-  <p class="ab-strap">{TABS[tab].strap}</p>
+  <!-- The strap and the standing frame share one wrapper, because the measure
+       has to sit on a container: both are `<p>`, both carry their own `margin`
+       shorthand, and the layout's `.policy-page p { max-width: 75ch }` beats a
+       `width` on the element itself — so at 1920 they hugged the left edge
+       while every panel beside them sat on the 1400px measure. -->
+  <div class="ab-head">
+    <p class="ab-strap">{TABS[tab].strap}</p>
 
-  <!--
-    THE STANDING FRAME (ask 3). Said once, near the top, and never repeated: a
-    reader who was sent a link has nobody to ask what this document is, and
-    every sentence below reads differently depending on the answer.
-  -->
-  <p class="ab-frame" class:off={tab !== at('verdict')}>
-    This reads the paper the way a body governed by it would — looking for what can be done, within the rules
-    as written, by an actor serving itself. It is not an assurance review, it assumes nobody intends any of
-    this, and where it says a body <em>would</em> act, that is a hypothesis about incentives rather than a
-    finding about anyone. The stress test exists so you can fail one and see what moves.
-  </p>
+    <!--
+      THE STANDING FRAME (ask 3). Said once, near the top, and never repeated: a
+      reader who was sent a link has nobody to ask what this document is, and
+      every sentence below reads differently depending on the answer.
+    -->
+    <p class="ab-frame" class:off={tab !== at('verdict')}>
+      This reads the paper the way a body governed by it would — looking for what can be done, within the
+      rules as written, by an actor serving itself. It is not an assurance review, it assumes nobody intends
+      any of this, and where it says a body <em>would</em> act, that is a hypothesis about incentives rather
+      than a finding about anyone. The stress test exists so you can fail one and see what moves.
+    </p>
+  </div>
 
   <!-- ————————————————————————————————————— VERDICT ————— -->
   <div
@@ -281,7 +312,11 @@
       {bands}
       {plays}
       {status}
+      thin={checks.filter((c) => c.data.result !== 'low_risk')}
+      lever={topLever}
+      options={recommendations}
       onopen={open}
+      ontab={goto}
       onband={(b) => {
         bandFilter = bandFilter === b ? null : b;
         goto('playbook');
@@ -336,12 +371,16 @@
 
     {#if plays.length}
       {#if shownPlays.length}
+        <!--
+          The plot first, then the ranking as a TABLE. Eleven plays used to be
+          eleven full-height cards — 5,321px, the tallest workspace here — so the
+          ranking that is the whole point of the playbook could not be read: by
+          rank 4 the top three were three screens behind the reader. Each row's
+          own sentence, payoff, cost, counter-measure and provenance are in the
+          drill, one click away.
+        -->
         <ExposurePlot plays={shownPlays} inspect={open} />
-        <div class="ab-plays">
-          {#each shownPlays as play (play.artefact.id)}
-            <PlayCard {play} rank={plays.indexOf(play) + 1} onopen={open} />
-          {/each}
-        </div>
+        <PlaybookTable rows={playRows} total={plays.length} onopen={open} />
       {:else}
         <p class="ab-empty">No play matches that filter. Clear it above to see all {plays.length}.</p>
       {/if}
@@ -403,8 +442,23 @@
       }}
     />
     <div class="ab-sub">
-      <p class="ab-sub-label">Every body, and what moves it</p>
-      <ActorBoard {actors} {personas} inspect={open} />
+      <p class="ab-sub-label">Every body against the same six questions</p>
+      <!--
+        THE ASK: "the actors page remains too long where it could be a much
+        neater x by y table." It was nine cards repeating the same six field
+        labels — 2,600px of the panel's 3,541px — so the one thing a reader
+        wants here, comparing two bodies on the same question, meant holding one
+        in their head while scrolling to the other.
+      -->
+      <CastTable
+        rows={castRows}
+        onopen={open}
+        onplays={(id) => {
+          actorFilter = id;
+          bandFilter = null;
+          goto('playbook');
+        }}
+      />
     </div>
   </div>
 
@@ -428,6 +482,14 @@
       ]}
     />
     {#if net.edges.length}
+      <!--
+        The grid leads, because it is the only thing on this page that shows the
+        SHAPE of the policy: a full row is a body everything runs through, an
+        empty column is a body nothing answers to, and a cell with no partner
+        across the diagonal is a link the paper states one way only. The prose
+        readings and the family breakdown follow it.
+      -->
+      <AdjacencyGrid grid={adj} onopen={open} />
       <RelationshipMap {net} onopen={open} />
     {:else}
       <p class="ab-empty">
@@ -466,31 +528,19 @@
       kicker="What if we are wrong?"
       title={['The stress', 'test']}
       strap="Switch an assumption off and the assessment recomputes in front of you. It walks the citations the assessment already made — no model runs, and the same switches always give the same answer."
-      figures={[
-        { label: 'Cited assumptions', value: leverageIndex.size, term: 'dependants' },
-        { label: 'Most load-bearing', value: Math.max(0, ...leverageIndex.values()), term: 'dependants' },
-      ]}
+      figures={[]}
     />
+    <!-- No figure row here: the stress lab's own consequence strip is a row of
+         four figures that MOVE, and a static pair above it read as a second,
+         broken version of the same thing. -->
 
-    {#if fragile.length}
-      <div class="ab-fragile">
-        <p class="ab-sub-label">The assumptions most likely to change the conclusion</p>
-        <ol>
-          {#each fragile.slice(0, 5) as a (a.id)}
-            <li>
-              <button type="button" class="ab-link" data-pa-peek={`assumption:${a.id}`} onclick={() => open(a.id)}>{a.label}</button>
-              <span class="ab-muted">
-                importance {Math.round(Number(a.data.importance) * 100)}% · uncertainty
-                {Math.round(Number(a.data.uncertainty) * 100)}% · consequence
-                {Math.round(Number(a.data.consequence) * 100)}%
-              </span>
-              <p>{a.statement}</p>
-            </li>
-          {/each}
-        </ol>
-      </div>
-    {/if}
-
+    <!--
+      One list of levers, not two. This panel used to print the five
+      most load-bearing assumptions in full ABOVE the stress lab, which then
+      offered the same five again as switches — so a reader met each assumption
+      twice and the panel's first screen was a list they could not act on. The
+      lab's own rail carries the figures that were here.
+    -->
     <StressLab {artefacts} onopen={open} />
   </div>
 
@@ -651,6 +701,22 @@
       {@render runLog(open)}
     </div>
   {/if}
+
+  <!-- ————————————————————————————————————— THE KEY ————— -->
+  <div id="key" class="ab-panel" role="tabpanel" class:off={tab !== at('key')} aria-labelledby={tabId('key')}>
+    <h2 class="ab-print-title">How to read this</h2>
+    <DashHead
+      kicker="Definitions"
+      title={['What every word here', 'actually means']}
+      strap="This assessment reads a policy the way game theory would, and its vocabulary says so: bodies are scored on concealment, conclusions have standing, assumptions have leverage. None of that is guessable, and renaming it would make it wrong. So everything is defined here in one place — what each thing IS, why the assessment computes it, how to read a high number, and the arithmetic where there is any."
+      figures={[
+        { label: 'Things the assessment is made of', value: STRUCTURE_TERMS.length },
+        { label: 'Measures defined', value: KEY_SECTIONS.reduce((n, s) => n + s.terms.length, 0) - STRUCTURE_TERMS.length },
+        { label: 'Steps in the chain', value: READING_CHAIN.length },
+      ]}
+    />
+    <KeyPanel />
+  </div>
 </div>
 
 <!-- ONE of each, for the whole page. -->
@@ -672,6 +738,23 @@
    * inside itself rather than wrapping to three rows and eating 40vh, which is
    * what the previous strip did on a laptop.
    */
+  /*
+   * THE MEASURE LIVES HERE, NOT ON THE PAGE WRAPPER.
+   *
+   * `.policy-page` is full-bleed (see the layout's comment); every band inside
+   * it holds its own content to `--pa-measure`. So the rail's rules run the full
+   * width of the window — it is chrome, and chrome that stops 260px short of the
+   * edge reads as a floating card — while its cells stay on the measure with
+   * everything else.
+   */
+  .ab-head,
+  .ab-panel,
+  .ab-rail-inner {
+    width: min(var(--pa-measure, 1400px), 100%);
+    margin-inline: auto;
+    padding-inline: clamp(20px, 3vw, 44px);
+  }
+
   .ab-rail {
     position: sticky;
     top: var(--site-nav-height, 0);
@@ -686,25 +769,37 @@
     flex-wrap: wrap;
     align-items: stretch;
   }
+  /*
+   * A GROUP IS A RUN, NOT A COLUMN.
+   *
+   * It used to be a two-storey box — the group name over its cells — with a
+   * vertical rule between groups. Fourteen cells wrap to three rows on a
+   * laptop, and three rows of two-storey boxes put the rules in arbitrary
+   * places and cost 140px of a sticky bar. Laid out as a single wrapping strip
+   * the rail reads the same whatever it wraps to, and takes two rows.
+   */
   .ab-group {
     display: flex;
-    flex-direction: column;
-    border-right: 1px solid var(--line-strong);
-    border-top: 1px solid transparent;
+    align-items: stretch;
     min-width: 0;
   }
-  .ab-group:last-child {
-    border-right: 0;
-  }
   .ab-group-name {
+    display: flex;
+    align-items: center;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
-    letter-spacing: 0.18em;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--text-ghost);
     margin: 0;
-    padding: 6px 11px 4px;
+    padding: 0 10px 0 0;
     white-space: nowrap;
+    border-left: 1px solid var(--line-strong);
+    padding-left: 12px;
+  }
+  .ab-group:first-child .ab-group-name {
+    border-left: 0;
+    padding-left: 0;
   }
   .ab-group-cells {
     display: flex;
@@ -723,7 +818,7 @@
     border: 0;
     border-radius: 0;
     border-top: 2px solid transparent;
-    padding: 8px 11px 10px;
+    padding: 7px 9px 8px;
     color: var(--text-secondary);
     cursor: pointer;
     white-space: nowrap;
@@ -760,7 +855,7 @@
     font-size: var(--fs-label);
     line-height: 1.6;
     color: var(--text-muted);
-    margin: 12px 0 0;
+    margin: 12px 0 clamp(18px, 2vw, 26px);
     padding-left: 14px;
     border-left: 2px solid var(--accent-ink);
     max-width: 82ch;
@@ -848,23 +943,6 @@
     margin: 0 0 10px;
   }
 
-  .ab-fragile {
-    margin-top: 22px;
-    border-left: 3px solid var(--accent);
-    padding-left: 16px;
-  }
-  .ab-fragile ol {
-    margin: 0;
-    padding-left: 18px;
-  }
-  .ab-fragile li {
-    padding: 8px 0;
-  }
-  .ab-fragile p {
-    margin: 5px 0 0;
-    line-height: 1.55;
-    max-width: 70ch;
-  }
 
   .ab-models {
     margin-top: 24px;
@@ -933,6 +1011,13 @@
     .ab-strap,
     .ab-filter {
       display: none !important;
+    }
+    /* Paper has its own margin; the screen measure would inset every panel
+       inside it. */
+    .ab-panel,
+    .ab-head {
+      width: auto;
+      padding-inline: 0;
     }
     /* Every panel is already in the DOM; a printed pack wants all of them. */
     .off {
