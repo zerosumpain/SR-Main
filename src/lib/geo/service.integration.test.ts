@@ -298,7 +298,13 @@ describe('geo ingest', () => {
     const wandererEvents = after.events.filter((e) => e.subject === WANDERER);
 
     expect(loopEvents.length).toBe(claim.tileCount);
-    expect(loopEvents.every((e) => e.weight === 3)).toBe(true);
+    // Weight is kind / outing size now (see OUTING_ALPHA): one outing makes one
+    // claim however far it went, so what a loop event is worth depends on how
+    // much ground the same journey also covered. The RATIO is the invariant —
+    // a loop still weighs 3x a trample from the same outing.
+    const looperOuting = loopEvents.length + looperTrample.length;
+    expect(loopEvents.every((e) => e.weight === 3 / looperOuting)).toBe(true);
+    expect(looperTrample.every((e) => e.weight === 1 / looperOuting)).toBe(true);
     // Ground it walked, as well as ground it enclosed. Both kinds coexist on a
     // cell because `kind` is part of the uniqueness key.
     expect(looperTrample.length).toBeGreaterThan(0);
@@ -307,7 +313,7 @@ describe('geo ingest', () => {
     // and it never claims.
     expect(wandererEvents.length).toBeGreaterThan(0);
     expect(wandererEvents.every((e) => e.kind === 'trample')).toBe(true);
-    expect(wandererEvents.every((e) => e.weight === 1)).toBe(true);
+    expect(wandererEvents.every((e) => e.weight === 1 / wandererEvents.length)).toBe(true);
 
     // Ownership was materialised for the cells that were touched, and the
     // ground is uncontested — the two fixtures are 1.3 km apart in open sea.
@@ -644,7 +650,11 @@ describe('nesting and handover', () => {
     // virgin land. It is resolved against the ledger now, at the instant before
     // the claim landed.
     const nestClaims = await db
-      .select({ subject: geoClaims.subject, tilesTaken: geoClaims.tilesTaken })
+      .select({
+        subject: geoClaims.subject,
+        tilesTaken: geoClaims.tilesTaken,
+        tileCount: geoClaims.tileCount,
+      })
       .from(geoClaims)
       .where(inArray(geoClaims.subject, NEST_SUBJECTS));
 
@@ -659,8 +669,17 @@ describe('nesting and handover', () => {
     // handover geo_tile_state recorded.
     const takenBySmall = smallClaim!.tilesTaken as Record<string, number>;
     expect(takenBySmall[BIG]).toBeGreaterThan(0);
-    expect(takenBySmall[BIG]).toBe(flipped.length);
     expect(takenBySmall.unclaimed ?? 0).toBe(0);
+    // Every cell of the block walk's ring came off BIG, by name.
+    expect(takenBySmall[BIG]).toBe(smallClaim!.tileCount);
+    // It is no longer the WHOLE handover, though, and that is the per-outing
+    // weighting working as intended rather than a discrepancy. `tiles_taken`
+    // counts what this CLAIM's ring took; since an outing's claim is divided by
+    // its size, the block walk's trample — a dozen events from a short journey —
+    // now outweighs the big loop's per-cell claim spread over hundreds, and
+    // takes ground outside its own ring too. Under the old constant weights a
+    // trample could never beat a loop, so ring and handover were the same set.
+    expect(flipped.length).toBeGreaterThanOrEqual(takenBySmall[BIG]);
 
     // And a second pass changes nothing — including `previous_owner`, which is
     // the one column a recompute could plausibly rewrite by accident.
@@ -1540,8 +1559,11 @@ describe('interior fill', () => {
     expect(filled.length).toBeGreaterThan(40);
     expect(trampled.length).toBeGreaterThan(0);
 
-    // Loop weight, because enclosure is what the game scores.
-    for (const e of filled) expect(e.weight).toBe(3);
+    // Loop weight, because enclosure is what the game scores — as a share of
+    // this outing, like every other event it produced (see OUTING_ALPHA).
+    const fillOuting = filled.length + trampled.length;
+    for (const e of filled) expect(e.weight).toBe(3 / fillOuting);
+    for (const e of trampled) expect(e.weight).toBe(1 / fillOuting);
     // No claim to hang off — that is the entire point of this shape.
     for (const e of filled) expect(e.claimId).toBeNull();
     // Reachable by the existing filters without a schema change.

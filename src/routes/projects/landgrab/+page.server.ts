@@ -8,6 +8,7 @@ import {
   CAPTURING_ACTIVITY_TYPES,
   WORKOUT_SUBJECT,
   activityTypeNotIn,
+  readVisitorSets,
   resolveFilteredOwnership,
   type TerritoryFilter,
 } from '$lib/geo/service';
@@ -15,6 +16,7 @@ import { GEO_THRESHOLDS } from '$lib/geo/loops';
 import { connectedComponents, dissolveTiles } from '$lib/geo/dissolve';
 import { tileAreaM2, tileCentre, tileKeyOf, type Tile } from '$lib/geo/tiles';
 import { assignIdentities, ACTIVITY_FILTERS, DEFAULT_WINDOW, windowOf } from './identity';
+import { resolveContest } from './contested';
 import type { DateWindowKey } from './identity';
 import type { LandgrabData, LandgrabRegion, FeedItem } from './types';
 
@@ -311,6 +313,20 @@ export const load: PageServerLoad = async (event) => {
     if (before) lost.set(before, (lost.get(before) ?? 0) + 1);
   }
 
+  // The contested board. Ranking total ground ranks how far somebody roams:
+  // 91% of the map has been visited by exactly one person, and no scoring rule
+  // can take a cell off somebody nobody else has been near. This is the half of
+  // the map that is actually a game, and it answers over the same filter and
+  // window as everything else on the page.
+  const visitors = noPlayers
+    ? new Map<string, Set<string>>()
+    : await readVisitorSets({ now, filter: filterAt(now), tileRange });
+  const contest = resolveContest({
+    visitors,
+    ownerByCell: new Map([...ownedNow].map(([key, o]) => [key, o.subject])),
+    subjects: players.map((p) => p.subject),
+  });
+
   const standings = players
     .map((p) => {
       const tiles = cellsBySubject.get(p.subject) ?? [];
@@ -535,6 +551,7 @@ export const load: PageServerLoad = async (event) => {
     players,
     territory,
     standings,
+    contested: contest,
     feed,
     dangle,
     totals: {
@@ -576,6 +593,7 @@ function emptyPayload(
       players: [],
       territory: [],
       standings: [],
+      contested: { cells: 0, board: [] },
       feed: [],
       dangle: [],
       totals: { events: 0, claims: 0, cells: 0, areaM2: 0 },

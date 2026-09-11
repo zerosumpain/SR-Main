@@ -11,11 +11,18 @@
    */
   import { km2, relativeAge, windowPhrase, windowShort } from './identity';
   import type { PlayerIdentity } from './identity';
-  import type { DangleLine, FeedItem, Standing, WindowState } from './types';
+  import type {
+    ContestedStanding,
+    DangleLine,
+    FeedItem,
+    Standing,
+    WindowState,
+  } from './types';
 
   let {
     standings,
     players,
+    contested,
     dangle,
     feed,
     now,
@@ -23,6 +30,8 @@
   }: {
     standings: Standing[];
     players: PlayerIdentity[];
+    /** Ground more than one person has stood on — the only head-to-head here. */
+    contested: { cells: number; board: ContestedStanding[] };
     dangle: DangleLine[];
     feed: FeedItem[];
     now: number;
@@ -33,6 +42,10 @@
   } = $props();
 
   const windowed = $derived(win.key !== 'all');
+  /** Nobody has contested anything yet — the board would be five zeroes. */
+  const anyContest = $derived(contested.board.some((r) => r.visited > 0));
+  const contestRows = $derived(contested.board.filter((r) => r.visited > 0));
+  const pct = (n: number) => `${Math.round(n * 100)}%`;
   const windowLine = $derived(windowPhrase(win.key));
   const windowTag = $derived(windowShort(win.key));
   /** The effort lines sum the narrower of the window and a week, so the period
@@ -54,9 +67,49 @@
 </script>
 
 <div class="boards">
+  {#if anyContest}
+    <section class="board board--wide">
+      <header class="board-hd">
+        <span class="metric-label">Contested ground</span>
+        <span class="metric-label muted">
+          {contested.cells.toLocaleString('en-GB')} cells · {windowTag}
+        </span>
+      </header>
+      <table class="week">
+        <thead>
+          <tr>
+            <th scope="col" class="metric-label">Player</th>
+            <th scope="col" class="metric-label num-col">Holds</th>
+            <th scope="col" class="metric-label num-col">Visited</th>
+            <th scope="col" class="metric-label num-col">Win rate</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each contestRows as r (r.subject)}
+            {@const p = byId.get(r.subject)}
+            <tr style="--who: {p?.colour ?? 'var(--text-primary)'}">
+              <th scope="row" class="week-who">
+                <span class="sw" data-hatch={p?.hatch} aria-hidden="true"></span>
+                {p?.name ?? r.subject}
+              </th>
+              <td class="num-col gain">{r.holds.toLocaleString('en-GB')}</td>
+              <td class="num-col">{r.visited.toLocaleString('en-GB')}</td>
+              <td class="num-col">{pct(r.winRate)}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+      <p class="board-note">
+        Cells more than one of you has ever stood on — the only ground anyone is
+        actually playing for. Everything else on this page is ranked by area, and
+        area is mostly ground nobody else has been near.
+      </p>
+    </section>
+  {/if}
+
   <section class="board board--wide">
     <header class="board-hd">
-      <span class="metric-label">Ground held</span>
+      <span class="metric-label">Ground covered</span>
       <span class="metric-label muted">km² · {windowTag}</span>
     </header>
     <ol class="board-list">
@@ -214,6 +267,16 @@
     padding: 11px 14px;
     border-bottom: 1px solid var(--line-strong);
     background: var(--surface-rail);
+  }
+  /* The one board that needs a sentence under it: "contested" is a word this
+     page invented and the number is meaningless without it. */
+  .board-note {
+    margin: 0;
+    padding: 10px 14px 12px;
+    border-top: 1px solid var(--line);
+    font-size: var(--fs-body-sm);
+    line-height: 1.45;
+    color: var(--text-secondary);
   }
   .board-list {
     list-style: none;

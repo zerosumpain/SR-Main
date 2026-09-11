@@ -6654,11 +6654,16 @@ export type NewGeoClaim = typeof geoClaims.$inferInsert;
  * BOTH the idempotency key and the anti-farming rule, and it has to be one
  * index rather than two mechanisms: at most one qualifying event per person per
  * cell per UTC day per kind means ten laps of the garden score once, and it
- * means an INSERT ... ON CONFLICT DO NOTHING re-run changes nothing. The
- * earliest write wins, which is exactly what dedupeEvents() in $lib/geo does in
- * memory — if the two disagreed a rebuild would score a multi-lap day
- * fractionally differently from the live ingest, by a few hours of decay that
- * nobody would ever trace.
+ * means an INSERT ... ON CONFLICT re-run changes nothing.
+ *
+ * The conflict keeps the STRONGER claim, not the first one written. Weight
+ * stopped being a pure function of `kind` when per-outing weighting landed (see
+ * OUTING_ALPHA in $lib/geo/ownership): a short walk claims a cell far harder
+ * than a long hike that crossed it the same afternoon, so "first wins" would
+ * make the answer depend on ingest order and a rebuild would disagree with the
+ * live ingest about the same day. dedupeEvents() resolves the identical
+ * collision in memory the identical way — the two have to agree or the ledger
+ * is not reproducible.
  *
  * No foreign key to geo_claims on purpose: a trample event has no claim, and a
  * ledger that cascades on a delete is not append-only.

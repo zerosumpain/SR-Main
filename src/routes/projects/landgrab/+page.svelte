@@ -1,5 +1,6 @@
 <script lang="ts">
-  import SiteHeader from '$lib/components/SiteHeader.svelte';
+  import HealthShell from '$lib/components/health/hub/HealthShell.svelte';
+  import SectionHead from '$lib/components/health/hub/SectionHead.svelte';
   /**
    * Landgrab — the family territory board.
    *
@@ -18,6 +19,7 @@
     relativeAge,
     windowPhrase,
     DATE_WINDOWS,
+    DEFAULT_WINDOW,
     UNTYPED_LABEL,
   } from './identity';
   import type { PageData } from './$types';
@@ -72,9 +74,12 @@
     const allActs = chips.map((c) => c.key);
     if (acts.length !== allActs.length) params.set('activity', acts.join(','));
     if (subs.length !== lg.available.subjects.length) params.set('who', subs.join(','));
-    // All time is the default and stays out of the URL, so the unfiltered page
-    // keeps the bare address it had before the window existed.
-    if (win !== 'all') params.set('window', win);
+    // The DEFAULT window stays out of the URL, so the unfiltered page keeps a
+    // bare address. It must be compared against DEFAULT_WINDOW rather than the
+    // literal 'all': while those were the same value, dropping the param for
+    // 'all' was right — now it would make "All time" unselectable, because an
+    // absent param is read back as the 30-day default.
+    if (win !== DEFAULT_WINDOW) params.set('window', win);
     const qs = params.toString();
     applying = true;
     try {
@@ -111,93 +116,128 @@
   <meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
-<SiteHeader />
+<HealthShell
+  path="/projects/landgrab"
+  unifiedNav
+  footer={[
+    'strangeramblings.com/projects/landgrab · the household board',
+    `${km2(lg.totals.areaM2)} km² in play · ${lg.totals.cells.toLocaleString('en-GB')} cells · ${windowLine} · read ${relativeAge(lg.generatedAt, now)}`,
+    'owner only · never indexed',
+  ]}
+>
+  <!-- The cover band. Ink, full-bleed, and the page hangs from it — the same
+       register /projects and /decks took, not a panel inset in a cream page. -->
+  <section class="lede">
+    <div class="lede-inner">
+      <div class="lede-copy">
+        <p class="eyebrow">Private · household territory</p>
+        <h1>WALK IT<br /><span>TO OWN IT.</span></h1>
+        <p class="standfirst">
+          Every walk, run and ride the household records paints ground. Close a
+          loop and everything inside it is yours — until somebody walks it more
+          recently, and more often, than you did.
+        </p>
+      </div>
 
-<div class="lg">
-  <header class="page-hdr">
-    <div class="hdr-l">
-      <div class="kicker">Private / household</div>
-      <h1>Landgrab</h1>
-      <p class="lede">
-        Every walk, run and ride the household records paints ground. Close a
-        loop and everything inside it is yours — until somebody walks it more
-        recently, and more often, than you did.
-      </p>
+      <dl class="cover-deck" aria-label="Board summary">
+        <div>
+          <dt>Ground in play</dt>
+          <dd>{km2(lg.totals.areaM2)}</dd>
+          <small>km² · {lg.totals.cells.toLocaleString('en-GB')} cells</small>
+        </div>
+        <div>
+          <dt>Claims scored</dt>
+          <dd>{lg.totals.events.toLocaleString('en-GB')}</dd>
+          <small>over {windowLine}</small>
+        </div>
+        <div>
+          <dt>Seats taken</dt>
+          <dd>{lg.standings.length}/5</dd>
+          <small>{missingPlayers ? `${missingPlayers} still open` : 'full house'}</small>
+        </div>
+      </dl>
     </div>
-    <div class="hdr-r">
-      <p class="hdr-stat">
-        <span class="metric-label muted">Ground in play</span>
-        <span class="hdr-num">{km2(lg.totals.areaM2)}<span class="hdr-unit">km²</span></span>
-        <span class="metric-label muted hdr-sub">
-          {lg.totals.cells.toLocaleString('en-GB')} cells · {windowLine} · read {relativeAge(
-            lg.generatedAt,
-            now,
-          )}
-        </span>
-      </p>
-    </div>
-  </header>
+  </section>
 
   {#if lg.totals.events === 0}
-    <section class="virgin">
-      <p class="virgin-kicker metric-label accent">Nothing claimed yet</p>
-      <h2 class="virgin-h">The whole map is open ground.</h2>
-      <p class="virgin-p">
-        No journey has qualified yet. The first person to close a loop — any
-        loop over about four hundred metres — takes every cell inside it, and
-        the board starts with them alone on it.
-      </p>
+    <section class="sec">
+      <div class="sec-inner virgin">
+        <p class="virgin-kicker metric-label accent">Nothing claimed yet</p>
+        <h2 class="virgin-h">The whole map is open ground.</h2>
+        <p class="virgin-p">
+          No journey has qualified yet. The first person to close a loop — any
+          loop over about four hundred metres — takes every cell inside it, and
+          the board starts with them alone on it.
+        </p>
+      </div>
     </section>
   {:else}
     <!-- Standings: the loudest voice on the page, once. Everything below is
          quieter on purpose. -->
-    <section class="standings cellgrid" aria-label="Standings">
-      {#each lg.standings as s, i (s.subject)}
-        {@const p = lg.players.find((x) => x.subject === s.subject)}
-        <article class="stand" style="--who: {p?.colour ?? 'var(--text-primary)'}">
-          <div class="stand-hd">
-            <span class="metric-label">{ordinal(i)}</span>
-            <span class="stand-badge" aria-hidden="true">{p?.initial ?? '?'}</span>
-          </div>
-          <h2 class="stand-name">{p?.name ?? s.subject}</h2>
-          <p class="stand-num">
-            {km2(s.areaM2)}<span class="stand-unit">km²</span>
-          </p>
-          <p class="stand-meta">
-            {s.tiles.toLocaleString('en-GB')} cells · {s.geos} geo{s.geos === 1 ? '' : 's'}
-          </p>
-          <p class="stand-week">
-            <span class="up">+{km2(s.gainedM2)}</span>
-            <span class="down">−{km2(s.lostM2)}</span>
-            <span class="metric-label">vs a week ago</span>
-          </p>
-        </article>
-      {/each}
-      {#each openSeats as seat (seat)}
-        <article class="stand stand--open">
-          <div class="stand-hd">
-            <span class="metric-label accent">Seat {seat}</span>
-            <span class="stand-badge stand-badge--open" aria-hidden="true">?</span>
-          </div>
-          <h2 class="stand-name">Open</h2>
-          <p class="stand-num stand-num--open" aria-label="no ground held">—</p>
-          <p class="stand-meta">No ground yet</p>
-        </article>
-      {/each}
-    </section>
+    <section class="sec">
+      <div class="sec-inner">
+        <SectionHead
+          kicker="01 / The standings"
+          title={['WHO HOLDS', 'THE GROUND']}
+          strap="Five seats, always. An empty seat is a fact rather than a rounding — most of the household only reached the ledger in July."
+        />
 
-    {#if missingPlayers > 0}
-      <p class="seatline">
-        <b>{missingPlayers} of 5 seats are still open.</b> The rest of the household
-        is phone-tracked and its history has not been walked into the ledger yet —
-        so every cell on this map is currently cheap to take.
-      </p>
-    {/if}
+        <ul class="standings cellgrid" aria-label="Standings">
+          {#each lg.standings as s, i (s.subject)}
+            {@const p = lg.players.find((x) => x.subject === s.subject)}
+            <li class="stand" style="--who: {p?.colour ?? 'var(--text-primary)'}">
+              <div class="stand-hd">
+                <span class="metric-label">{ordinal(i)}</span>
+                <span class="stand-badge" aria-hidden="true">{p?.initial ?? '?'}</span>
+              </div>
+              <h3 class="stand-name">{p?.name ?? s.subject}</h3>
+              <p class="stand-num">
+                {km2(s.areaM2)}<span class="stand-unit">km²</span>
+              </p>
+              <p class="stand-meta">
+                {s.tiles.toLocaleString('en-GB')} cells · {s.geos} geo{s.geos === 1 ? '' : 's'}
+              </p>
+              <p class="stand-week">
+                <span class="up">+{km2(s.gainedM2)}</span>
+                <span class="down">−{km2(s.lostM2)}</span>
+                <span class="metric-label">vs a week ago</span>
+              </p>
+            </li>
+          {/each}
+          {#each openSeats as seat (seat)}
+            <li class="stand stand--open">
+              <div class="stand-hd">
+                <span class="metric-label accent">Seat {seat}</span>
+                <span class="stand-badge stand-badge--open" aria-hidden="true">?</span>
+              </div>
+              <h3 class="stand-name">Open</h3>
+              <p class="stand-num stand-num--open" aria-label="no ground held">—</p>
+              <p class="stand-meta">No ground yet</p>
+            </li>
+          {/each}
+        </ul>
+
+        {#if missingPlayers > 0}
+          <p class="seatline">
+            <b>{missingPlayers} of 5 seats are still open.</b> The rest of the household
+            is phone-tracked and its history has not been walked into the ledger yet —
+            so every cell on this map is currently cheap to take.
+          </p>
+        {/if}
+      </div>
+    </section>
 
     <!-- The filter. John's requirement, and the reason the ledger carries an
          activity type at all: a bike loop encloses about ten times a run for
          the same effort, so a ride counts, and it is filterable. -->
-    <section class="tools" aria-label="What counts">
+    <section class="sec tinted">
+      <div class="sec-inner">
+        <SectionHead
+          kicker="02 / What counts"
+          title={['NARROW THE', 'EVIDENCE']}
+          strap="Ownership is replayed over whatever is left ticked, not hidden on the map — so a cell won by bike does not survive a foot-only view."
+        />
+        <div class="tools" aria-label="What counts">
       <div class="tool-group">
         <span class="metric-label">Counts as territory</span>
         <div class="chips">
@@ -261,10 +301,19 @@
           Untyped capture is the phone-tracked half of the household. Turning it
           off removes four players, not four activities.
         {/if}
-      </p>
+          </p>
+        </div>
+      </div>
     </section>
 
-    <div class="stage">
+    <section class="sec">
+      <div class="sec-inner">
+        <SectionHead
+          kicker="03 / The map"
+          title={['DISSOLVED', 'TERRITORY']}
+          strap="A hidden grid of 44 m cells, dissolved into connected ground and smoothed. The grid itself is never drawn."
+        />
+        <div class="stage">
       <div class="stage-map">
         <TerritoryMap
           territory={lg.territory}
@@ -297,27 +346,53 @@
           <ol class="rules-list">
             <li><b>×3</b><span>Close a loop and every cell inside it is yours.</span></li>
             <li><b>×1</b><span>Walk, run or ride through and you claim the line you crossed.</span></li>
+            <li>
+              <b>÷n</b><span
+                >One outing, one claim — split over every cell it touched. Going
+                further spreads the same claim thinner, so going often beats
+                going far.</span
+              >
+            </li>
             <li><b>½</b><span>A capture halves in weight every 30 days — old ground gets cheap, but never changes hands on its own.</span></li>
             <li><b>1</b><span>One capture per person, per cell, per day. Ten laps of the garden score once.</span></li>
           </ol>
         </section>
-      </aside>
-    </div>
+          </aside>
+        </div>
+      </div>
+    </section>
 
-    <LandgrabBoards
-      standings={lg.standings}
-      players={lg.players}
-      dangle={lg.dangle}
-      feed={lg.feed}
-      window={lg.window}
-      {now}
-    />
+    <section class="sec tinted">
+      <div class="sec-inner">
+        <SectionHead
+          kicker="04 / The boards"
+          title={['GROUND HELD,', 'WEEK ON WEEK']}
+          strap="The same ledger read four ways — who holds most, who moved this week, who has held longest, and the journeys that failed to close."
+        />
+        <LandgrabBoards
+          standings={lg.standings}
+          players={lg.players}
+          contested={lg.contested}
+          dangle={lg.dangle}
+          feed={lg.feed}
+          window={lg.window}
+          {now}
+        />
+      </div>
+    </section>
 
-    <p class="foot">
+    <section class="sec">
+      <div class="sec-inner">
+        <SectionHead kicker="05 / Method" title={['HOW GROUND', 'IS SCORED']} strap={null} />
+        <p class="foot">
       Territory is scored on a hidden grid of {Math.round(lg.cellSideM)} m cells; the
       map shows dissolved, smoothed ground, never the grid. A capture decays with
       a thirty-day half-life, so ground gets cheaper to steal but never changes
-      hands on its own — somebody has to actually go there.
+      hands on its own — somebody has to actually go there. Each outing's claim is
+      divided by the number of cells it took, so a long run claims each of them
+      thinly and a short walk claims a few of them hard: the board rewards going
+      out often rather than going far. Total ground is mostly ground nobody else
+      has been near, which is why the contested board is the one worth reading.
       {#if lg.window.key !== 'all'}
         The date window narrows the evidence, not the picture: the map, every
         board, the capture feed and the ground-in-play figure all answer over
@@ -326,93 +401,141 @@
           .weekBasis}, because a narrowed present held against an unnarrowed
         week ago would report movement nobody made.
       {/if}
-    </p>
+        </p>
+      </div>
+    </section>
   {/if}
-</div>
+</HealthShell>
 
 <style>
-  .lg {
-    max-width: 1440px;
-    margin: 2rem auto 4rem;
-    padding: 0 1.5rem;
-    color: var(--text-primary);
-    font-family: var(--font-body);
+  /* --- The cover band, the register /projects and /decks already wear ---
+     Ink, full-bleed, and the page hangs from it. The lesson from PR #610 is
+     that ink has to be the page's top edge: as a panel inset in a cream page
+     it floats no matter how good the panel is. Paper tokens are invisible on
+     this ground, so everything in here is lit for dark explicitly. */
+  .lede {
+    padding: clamp(28px, 3.5vw, 48px) clamp(20px, 3vw, 44px);
+    background: var(--text-primary);
+    color: var(--bg);
+    border-bottom: 1px solid rgba(237, 228, 212, 0.16);
   }
-
-  .page-hdr {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-    gap: 2rem;
-    padding-bottom: 1rem;
-    margin-bottom: 1.5rem;
-    border-bottom: 2px solid var(--line-title);
+  .lede-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(420px, 0.85fr);
+    align-items: end;
+    gap: clamp(32px, 5vw, 72px);
+    width: min(1400px, 100%);
+    margin: 0 auto;
   }
-  .hdr-l {
+  .lede-copy {
     min-width: 0;
   }
-  .kicker {
+  .eyebrow {
+    margin: 0 0 12px;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
-    letter-spacing: var(--tracking-label);
+    font-weight: 500;
+    letter-spacing: var(--tracking-label-wide);
     text-transform: uppercase;
-    color: var(--accent);
-    margin-bottom: 0.4rem;
+    color: var(--accent-on-dark);
   }
   h1 {
     margin: 0;
     font-family: var(--font-display);
-    font-size: var(--fs-display-md);
-    line-height: 0.9;
-    letter-spacing: -0.02em;
-    text-transform: uppercase;
+    font-size: clamp(2.4rem, 4.4vw, 4.1rem);
+    font-weight: 900;
+    line-height: 0.88;
+    letter-spacing: -0.04em;
+    color: var(--bg);
+    text-wrap: balance;
   }
-  .lede {
-    margin: 0.8rem 0 0;
+  h1 span {
+    color: transparent;
+    -webkit-text-stroke: 1.5px var(--bg);
+  }
+  .standfirst {
     max-width: 56ch;
-    font-size: var(--fs-body-lg);
-    line-height: 1.45;
-    color: var(--text-secondary);
+    margin: 18px 0 0;
+    font-size: var(--fs-body);
+    line-height: 1.5;
+    color: rgba(237, 228, 212, 0.7);
   }
-  .hdr-r {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 4px;
-    white-space: nowrap;
+
+  /* The count deck: three facts, cell outlines rather than gap-over-background
+     (auto-fit + gap:1px paints unfilled tracks — the handoff's own trap note). */
+  .cover-deck {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0;
+    margin: 0;
+    border-top: 1px solid rgba(237, 228, 212, 0.16);
+    border-left: 1px solid rgba(237, 228, 212, 0.16);
   }
-  .hdr-stat {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 3px;
-    margin: 0.75rem 0 0;
+  .cover-deck > div {
+    min-width: 0;
+    padding: 14px;
+    border-right: 1px solid rgba(237, 228, 212, 0.16);
+    border-bottom: 1px solid rgba(237, 228, 212, 0.16);
+    background: rgba(237, 228, 212, 0.04);
   }
-  .hdr-num {
-    font-family: var(--font-display);
-    font-size: var(--fs-display-xs);
-    line-height: 1;
-    letter-spacing: -0.02em;
-    font-variant-numeric: tabular-nums;
-    color: var(--accent);
-  }
-  /* The window's name lives on this line, so it is the one part of the header
-     that has to be allowed to wrap: `.hdr-r` is nowrap for the big numeral's
-     sake, and "1,358 cells / the last 7 days / read just now" is wider than a
-     390 px phone. It wraps rather than shrinking because the 12 px floor is
-     gated sitewide. */
-  .hdr-sub {
-    white-space: normal;
-    text-align: right;
-    max-width: 34ch;
-  }
-  .hdr-unit {
+  .cover-deck dt {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
-    letter-spacing: var(--tracking-label);
+    font-weight: 500;
+    letter-spacing: var(--tracking-label-wide);
     text-transform: uppercase;
-    color: var(--text-ghost);
-    margin-left: 5px;
+    color: rgba(237, 228, 212, 0.55);
+  }
+  .cover-deck dd {
+    margin: 8px 0 5px;
+    font-family: var(--font-display);
+    font-size: clamp(1.65rem, 2.4vw, 2.4rem);
+    font-weight: 900;
+    line-height: 0.9;
+    letter-spacing: -0.03em;
+    color: var(--bg);
+    font-variant-numeric: tabular-nums;
+  }
+  .cover-deck small {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    line-height: 1.3;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent-on-dark);
+  }
+
+  /* --- Paper sections, on /health's band rhythm --- */
+  .sec {
+    padding: clamp(36px, 4.2vw, 64px) clamp(20px, 3vw, 44px);
+    border-bottom: 2px solid rgba(26, 16, 8, 0.12);
+    font-family: var(--font-body);
+    color: var(--text-primary);
+  }
+  /* A band rule separates a section from the NEXT one. On the last it draws a
+     stray line across whatever space is left above the ink footer. */
+  section.sec:last-of-type {
+    border-bottom: none;
+  }
+  .sec.tinted {
+    background: var(--bg-section);
+  }
+  .sec-inner {
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  @media (max-width: 900px) {
+    .lede-inner {
+      grid-template-columns: minmax(0, 1fr);
+      align-items: start;
+    }
+  }
+  @media (max-width: 520px) {
+    .cover-deck {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
 
   /* ---- standings ---- */
@@ -420,7 +543,9 @@
      the roster rather than however many people happen to have scored. */
   .standings {
     grid-template-columns: repeat(5, minmax(0, 1fr));
-    margin-bottom: 1.5rem;
+    margin: 0 0 1.5rem;
+    padding: 0;
+    list-style: none;
   }
   @media (max-width: 1200px) {
     .standings {
@@ -767,31 +892,8 @@
     }
   }
   @media (max-width: 700px) {
-    .lg {
-      margin-top: 1.25rem;
-      padding: 0 1rem;
-    }
-    .page-hdr {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 1rem;
-    }
-    .hdr-r {
-      align-items: flex-start;
-    }
-    .hdr-stat {
-      align-items: flex-start;
-      margin-top: 0.5rem;
-    }
-    .hdr-sub {
-      text-align: left;
-    }
-    h1 {
-      font-size: var(--fs-display-sm);
-    }
-    .lede {
-      font-size: var(--fs-body);
-    }
+    /* The cover band carries its own clamps; what still needs a phone rule is
+       the instrument grid below it. */
     .standings {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }

@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   DECAY_TAU_DAYS,
   LOOP_WEIGHT,
+  OUTING_ALPHA,
   TRAMPLE_WEIGHT,
+  applyOutingWeights,
   captureEvents,
   decayFactor,
   dedupeEvents,
@@ -262,5 +264,112 @@ describe('resolveOwnership bounded by `now`', () => {
     const asOfNow = resolveOwnership(events, NOW).get(tileKeyOf(2, 2))!;
     expect(asOfNow.owner).toBe('john');
     expect(asOfNow.ownerSince.getTime()).toBe(day10.getTime());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Per-outing weighting
+// ---------------------------------------------------------------------------
+
+describe('applyOutingWeights', () => {
+  const at = new Date('2026-09-01T09:00:00Z');
+  const ev = (subject: string, sourceRef: string, x: number, kind: 'loop' | 'trample') => ({
+    ...captureEvents(subject, [{ x, y: 0 }], at, kind)[0],
+    sourceRef,
+  });
+
+  it('divides an outing by its own size, not by the whole run', () => {
+    const rows = [
+      ...[0, 1, 2, 3].map((x) => ev('katie', 'walk-1', x, 'trample')),
+      ...[0, 1].map((x) => ev('john', 'run-1', x, 'trample')),
+    ];
+    applyOutingWeights(rows);
+    for (const r of rows.filter((r) => r.subject === 'katie')) expect(r.weight).toBe(1 / 4);
+    for (const r of rows.filter((r) => r.subject === 'john')) expect(r.weight).toBe(1 / 2);
+  });
+
+  it('makes one outing worth one claim however far it went', () => {
+    const short = [0, 1].map((x) => ev('katie', 'walk-1', x, 'trample'));
+    const long = Array.from({ length: 200 }, (_, x) => ev('john', 'run-1', x, 'trample'));
+    applyOutingWeights(short);
+    applyOutingWeights(long);
+    const total = (rows: { weight: number }[]) => rows.reduce((a, r) => a + r.weight, 0);
+    // This is the property the whole change exists for: the runner's 200-cell
+    // outing no longer out-claims the walker's two-cell one 100 to 1.
+    expect(total(short)).toBeCloseTo(total(long), 10);
+  });
+
+  it('keeps the loop bonus — enclosing still beats crossing, within an outing', () => {
+    const rows = [ev('john', 'run-1', 0, 'loop'), ev('john', 'run-1', 1, 'trample')];
+    applyOutingWeights(rows);
+    expect(rows[0].weight / rows[1].weight).toBe(LOOP_WEIGHT / TRAMPLE_WEIGHT);
+  });
+
+  it('separates outings by subject as well as by reference', () => {
+    // Two people's journeys can carry the same source ref — a shared trail id —
+    // and pooling them would halve both.
+    const rows = [ev('katie', 'trail-9', 0, 'trample'), ev('john', 'trail-9', 1, 'trample')];
+    applyOutingWeights(rows);
+    for (const r of rows) expect(r.weight).toBe(TRAMPLE_WEIGHT);
+  });
+
+  it('mutates in place, because the ingest holds these rows in several lists', () => {
+    const rows = [0, 1].map((x) => ev('katie', 'walk-1', x, 'trample'));
+    const alias = rows[0];
+    const returned = applyOutingWeights(rows);
+    expect(returned).toBe(rows);
+    expect(alias.weight).toBe(1 / 2);
+  });
+
+  it('is a no-op at alpha 0, which is the pre-2026-09-11 scheme', () => {
+    const rows = [0, 1, 2].map((x) => ev('katie', 'walk-1', x, 'trample'));
+    applyOutingWeights(rows, 0);
+    for (const r of rows) expect(r.weight).toBe(TRAMPLE_WEIGHT);
+  });
+
+  it('ships at alpha 1 — one outing, one claim', () => {
+    expect(OUTING_ALPHA).toBe(1);
+  });
+
+  it('leaves a single-event outing alone', () => {
+    const rows = [ev('rory', 'walk-1', 0, 'loop')];
+    applyOutingWeights(rows);
+    expect(rows[0].weight).toBe(LOOP_WEIGHT);
+  });
+});
+
+describe('per-outing weighting, end to end through resolveOwnership', () => {
+  it('hands a cell to the short-circuit walker over the long-run regular', () => {
+    // The household's complaint in miniature, and deliberately stacked AGAINST
+    // the answer: John crosses the cell on FOUR separate days, Katie on three.
+    // He is there more often. But his outings paint a hundred cells each and
+    // hers paint six, so one outing's claim spread over a hundred cells is
+    // thinner on any one of them than the same claim spread over six.
+    const cell = { x: 10, y: 10 };
+    const rows: (CaptureEvent & { sourceRef: string })[] = [];
+    const outing = (
+      subject: string,
+      ref: string,
+      daysAgo: number,
+      size: number,
+      offset: number,
+    ) => {
+      const at = new Date(NOW.getTime() - daysAgo * 86_400_000);
+      const rowsOut = Array.from({ length: size }, (_, i) => ({
+        ...captureEvents(subject, [i === 0 ? cell : { x: offset + i, y: 0 }], at, 'trample')[0],
+        sourceRef: ref,
+      }));
+      applyOutingWeights(rowsOut);
+      rows.push(...rowsOut);
+    };
+    for (const d of [1, 4, 8, 12]) outing('john', `run-${d}`, d, 100, 1000 + d * 200);
+    for (const d of [2, 6, 9]) outing('katie', `walk-${d}`, d, 6, 100 + d * 20);
+
+    expect(resolveOwnership(rows, NOW).get(tileKeyOf(cell.x, cell.y))?.owner).toBe('katie');
+
+    // Under the old constant weights the same evidence gave it to John, purely
+    // on the extra outing — which is the ranking this change exists to undo.
+    const flat = rows.map((r) => ({ ...r, weight: TRAMPLE_WEIGHT }));
+    expect(resolveOwnership(flat, NOW).get(tileKeyOf(cell.x, cell.y))?.owner).toBe('john');
   });
 });
