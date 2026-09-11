@@ -109,7 +109,13 @@ ${
   report cites in short spans rather than reproducing — and any comparison with
   the author's other assessments.
 `
-    : ''
+    : `
+WHAT THIS PACK CONTAINS THAT A SHARED LINK WOULD NOT
+  This is the AUTHOR'S OWN copy. It carries the policy document in full — the
+  passages the report quotes from — and any cross-policy findings, which name
+  other papers the same author has assessed. A link shared from the site
+  withholds both. Handle this file like the paper it contains.
+`
 }
 HOW IT WAS MADE
   Pack made          ${payload.generatedAt}
