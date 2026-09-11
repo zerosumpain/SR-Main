@@ -134,6 +134,36 @@ class PolicyPeekState {
     this.clearTimers();
     this.current = null;
   }
+
+  /**
+   * The page moved under a card that is open.
+   *
+   * A HOVER card is dismissed: its anchor rect was captured in viewport
+   * coordinates when it opened, so the moment the page scrolls it is describing
+   * whatever has moved into that spot. The reader has moved on, and a card that
+   * chases its trigger is worse than one that gets out of the way.
+   *
+   * A PINNED card is RE-ANCHORED instead, and that distinction is not a nicety.
+   * Tabbing to an explainer that is below the fold makes the browser scroll it
+   * into view — so the scroll the focus itself caused was dismissing the card
+   * the focus had just opened, and every off-screen explainer was unreachable by
+   * keyboard while looking perfectly fine to a mouse. Measured 2026-09-11.
+   *
+   * The anchor is re-measured from whatever is focused, and only when it is
+   * still the same subject; anything else closes, so a card can never end up
+   * pointing at an element it is not about.
+   */
+  rescroll() {
+    if (!this.current) return;
+    if (!this.current.pinned) return this.close();
+    const active = typeof document === 'undefined' ? null : document.activeElement;
+    const host = active instanceof HTMLElement ? active.closest<HTMLElement>('[data-pa-peek]') : null;
+    const parsed = parseSubject(host?.getAttribute('data-pa-peek') ?? null);
+    if (!host || !parsed || parsed.kind !== this.current.kind || parsed.subject !== this.current.subject) {
+      return this.close();
+    }
+    this.current = { ...this.current, rect: this.rectOf(host) };
+  }
 }
 
 export const policyPeek = new PolicyPeekState();

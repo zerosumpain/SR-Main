@@ -13,6 +13,8 @@
   // markup through a prop to preserve it would mean `{@html}` on copy.
   import type { Snippet } from 'svelte';
 
+  import ExplainLabel from './ExplainLabel.svelte';
+
   interface Props {
     kicker: string;
     title: string[];
@@ -38,9 +40,15 @@
   {#if figures.length}
     <div class="dh-figures">
       {#each figures as figure (figure.label)}
-        <div class="dh-figure" data-pa-peek={figure.term ? `term:${figure.term}` : undefined}>
+        <div class="dh-figure">
           <p class="dh-figure-value">{figure.value}</p>
-          <p class="dh-figure-label">{figure.label}</p>
+          <!-- The explainer hangs off the LABEL, which is a button, so a keyboard
+               reader reaches it. On a wrapping div it was pointer-only. -->
+          {#if figure.term}
+            <p class="dh-figure-label"><ExplainLabel term={figure.term} text={figure.label} /></p>
+          {:else}
+            <p class="dh-figure-label">{figure.label}</p>
+          {/if}
         </div>
       {/each}
     </div>

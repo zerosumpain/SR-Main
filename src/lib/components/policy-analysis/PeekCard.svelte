@@ -72,15 +72,15 @@
   }
 
   /**
-   * A scroll dismisses the card.
+   * A scroll dismisses a hover card and RE-ANCHORS a pinned one.
    *
-   * The anchor rect is captured in viewport coordinates when the card opens, so
-   * the moment the page moves under it the card is describing whatever has
-   * scrolled into that spot. Dismiss rather than reposition — a card that chases
-   * its trigger up the page is worse than one that gets out of the way.
+   * The controller owns the distinction and says why: focusing an explainer that
+   * is below the fold scrolls it into view, and a blanket dismiss meant that
+   * scroll closed the card the focus had just opened — so every off-screen
+   * explainer was pointer-only while looking correct to a mouse.
    */
   function onscroll() {
-    if (policyPeek.current) policyPeek.close();
+    policyPeek.rescroll();
   }
 
   function open() {

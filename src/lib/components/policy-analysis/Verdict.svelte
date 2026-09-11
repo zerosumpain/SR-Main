@@ -114,9 +114,15 @@
 
   <div class="vd-tiles">
     {#each tiles as tile (tile.key)}
-      <div class="vd-tile" data-pa-peek={TILE_TERM[tile.key] ? `term:${TILE_TERM[tile.key]}` : undefined}>
+      <div class="vd-tile">
         <p class="vd-figure">{tile.figure}</p>
-        <p class="vd-tile-label">{tile.label}</p>
+        <!-- Same reason as DashHead: an explainer on the tile itself could only
+             be opened with a pointer. -->
+        {#if TILE_TERM[tile.key]}
+          <p class="vd-tile-label"><ExplainLabel term={TILE_TERM[tile.key]} text={tile.label} /></p>
+        {:else}
+          <p class="vd-tile-label">{tile.label}</p>
+        {/if}
         <p class="vd-note">{tile.sub}</p>
       </div>
     {/each}
@@ -144,7 +150,7 @@
         {#each bands as b (b.band)}
           <li class:none={!b.count}>
             <span class="vd-swatch" style="background: {BAND_FILL[b.band]}"></span>
-            <strong data-pa-peek={`term:${b.band}`}>{BAND_LABEL[b.band]}</strong>
+            <strong><ExplainLabel term={b.band} text={BAND_LABEL[b.band]} as="inline" /></strong>
             <span class="vd-note">{b.count} · {b.note}</span>
           </li>
         {/each}
