@@ -317,6 +317,15 @@ describe('the exported document is the assessment, linearly', () => {
     expect(md).toContain('# Nothing yet');
   });
 
+  it('omits the depth it was not told, rather than claiming the run was standard', () => {
+    // `resolveShare` does not carry `depth`, and a ternary printed "Standard
+    // enquiry" on a deep assessment — a false statement about the run, in the
+    // one document a reader cannot check against the page.
+    expect(assessmentMarkdown([], { title: 'X', jurisdiction: 'England' })).not.toContain('Standard enquiry');
+    expect(assessmentMarkdown([], { title: 'X', depth: 'deep' })).toContain('Deep enquiry');
+    expect(assessmentMarkdown([], { title: 'X', depth: 'standard' })).toContain('Standard enquiry');
+  });
+
   it('slugs a real policy title into a filename', () => {
     expect(documentSlug('Post-16 Education and Skills')).toBe('post-16-education-and-skills');
     expect(documentSlug('  ???  ')).toBe('policy-assessment');

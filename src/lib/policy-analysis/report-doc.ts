@@ -67,9 +67,12 @@ function cover(meta: DocMeta, artefacts: Artefact[]): string {
   const list = plays(artefacts);
   const severe = list.filter((p) => p.band === 'severe' || p.band === 'significant').length;
   const failing = of(artefacts, 'test').filter((t) => ['high_risk', 'moderate_risk'].includes(String(t.data.result)));
-  const context = [meta.jurisdiction, meta.policyArea, meta.depth === 'deep' ? 'Deep enquiry' : 'Standard enquiry']
-    .filter(Boolean)
-    .join(' · ');
+  // Depth is OMITTED when it is not known rather than defaulted. A shared copy
+  // is not handed `depth` — `resolveShare` does not carry it — and a ternary
+  // printed "Standard enquiry" on a deep assessment, which is a false statement
+  // about the run in the one document a reader cannot check against the page.
+  const depth = meta.depth === 'deep' ? 'Deep enquiry' : meta.depth === 'standard' ? 'Standard enquiry' : null;
+  const context = [meta.jurisdiction, meta.policyArea, depth].filter(Boolean).join(' · ');
   const done = date(meta.completedAt);
 
   return block([

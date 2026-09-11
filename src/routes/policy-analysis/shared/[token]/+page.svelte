@@ -32,6 +32,9 @@
   const plays = $derived(view.plays(data.artefacts));
   const fmt = (v: string | null) =>
     v ? new Date(v).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'not recorded';
+  /** The ledger cell is a fixed strip at display size — "10 September 2026" was truncated to an ellipsis. */
+  const short = (v: string | null) =>
+    v ? new Date(v).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'not recorded';
 
   // Ctrl+P must get the same document the button produces.
   onMount(wirePrint);
@@ -64,7 +67,7 @@
     <dl class="sh-ledger">
       <div>
         <dt>Completed</dt>
-        <dd>{fmt(data.completedAt)}</dd>
+        <dd>{short(data.completedAt)}</dd>
         <small>{data.status === 'completed_with_gaps' ? 'with gaps of its own' : 'in full'}</small>
       </div>
       <div>
@@ -79,7 +82,7 @@
       </div>
       <div>
         <dt>Link expires</dt>
-        <dd>{fmt(data.expiresAt)}</dd>
+        <dd>{short(data.expiresAt)}</dd>
         <small>read only</small>
       </div>
     </dl>
