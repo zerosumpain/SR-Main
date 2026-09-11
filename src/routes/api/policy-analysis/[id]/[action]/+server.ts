@@ -4,7 +4,8 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { policyDocuments, policyExecutions, policyModelCalls, policyStages } from '$lib/db/schema';
 import { checkMutation, failure, requirePolicyOwner } from '$lib/policy-analysis/server/access';
-import { control, ownedAnalysis } from '$lib/policy-analysis/server/store';
+import { control, ownedAnalysis, sealOf } from '$lib/policy-analysis/server/store';
+import { unsealRow } from '$lib/policy-analysis/server/seal';
 export const POST: RequestHandler = async (event) => {
   const owner = await requirePolicyOwner(event); checkMutation(event, owner);
   if (!['cancel', 'resume'].includes(event.params.action)) error(404, 'Action not found.');
@@ -17,8 +18,12 @@ export const GET: RequestHandler = async (event) => {
   const owner = await requirePolicyOwner(event);
   if (!(await ownedAnalysis(owner, event.params.id))) error(404, 'Analysis not found.');
   if (event.params.action === 'document') {
-    const [document] = await db.select().from(policyDocuments).where(eq(policyDocuments.analysisId, event.params.id));
-    if (!document) error(404, 'Document not found.');
+    const [row] = await db.select().from(policyDocuments).where(eq(policyDocuments.analysisId, event.params.id));
+    if (!row) error(404, 'Document not found.');
+    // On a sealed run the stored bytes are ciphertext and the filename with them.
+    // This is the owner, holding the key, asking for their own paper back — which
+    // is the whole point of sealing rather than simply not keeping it.
+    const document = unsealRow(await sealOf(event.params.id), 'document', row);
     return new Response(Buffer.from(document.content, 'base64'), { headers: { 'content-type': 'application/octet-stream', 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(document.filename)}`, 'x-content-type-options': 'nosniff' } });
   }
   if (event.params.action === 'audit') {

@@ -21,6 +21,8 @@ src/lib/policy-analysis/dashboard-shaping.test.ts
 src/lib/policy-analysis/offline/pack.test.ts
 src/lib/policy-analysis/pipeline.test.ts
 src/lib/policy-analysis/resilience.test.ts
+src/lib/policy-analysis/server/census.test.ts
+src/lib/policy-analysis/server/seal.test.ts
 src/lib/selfimprove/board.test.ts
 src/lib/selfimprove/narrative.probe.test.ts
 src/lib/selfimprove/seed-apis.auth.test.ts

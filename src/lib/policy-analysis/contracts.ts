@@ -285,7 +285,15 @@ export const looseOutputSchema = z.object({
   warnings: z.array(z.unknown()).max(4000).optional(),
 });
 export type Artefact = z.infer<typeof artefactSchema>;
-export type StageInput = { stage: number; title: string; depth?: Depth; graphLoss?: number; jurisdiction: string | null; policyArea: string | null; context: string | null; priorWarnings?: string[]; artefacts: Artefact[] };
+/**
+ * `sealed` is here so two stages can say the RIGHT thing rather than a true one.
+ *
+ * A sealed run is handed no neighbours and no persona priors, and from inside the
+ * pipeline that is indistinguishable from having none — so stage 11 told the
+ * reader "no other assessment was available to compare", which is not why. A
+ * chapter that is missing on purpose has to say so on purpose.
+ */
+export type StageInput = { stage: number; title: string; depth?: Depth; graphLoss?: number; sealed?: boolean; jurisdiction: string | null; policyArea: string | null; context: string | null; priorWarnings?: string[]; artefacts: Artefact[] };
 export type StageOutput = { artefacts: Artefact[]; warnings: string[] };
 export const stageOutputSchema = z.object({ artefacts: z.array(artefactSchema).max(2000), warnings: z.array(z.string().max(1000)).max(100) }).strict();
 // Modelling, scenarios and the red team may all surface a hypothesis the

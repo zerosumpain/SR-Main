@@ -10,24 +10,45 @@ function getKey(): Buffer {
   return Buffer.from(hex, 'hex');
 }
 
-/** Format: `<iv-hex>:<auth-tag-hex>:<ciphertext-hex>`. */
-export function encryptPayload(plain: string): string {
+/**
+ * The same cipher against a CALLER-SUPPLIED key.
+ *
+ * Every other function here uses the one site-wide key, which is right for
+ * credentials: they are all as secret as each other and they all live as long as
+ * the site does. Sealed policy runs want the opposite — a key PER RUN, held
+ * outside the database, destroyed on demand — so that destroying it makes one
+ * run's ciphertext permanently unreadable wherever a copy of it has got to, in
+ * fourteen nightly dumps and every restic snapshot beside them.
+ *
+ * One implementation, two key sources. A second AES-GCM in the policy feature
+ * would be a second thing to get the IV handling wrong in.
+ *
+ * Format: `<iv-hex>:<auth-tag-hex>:<ciphertext-hex>`.
+ */
+export function encryptWith(key: Buffer, plain: string): string {
   const iv = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', getKey(), iv);
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
   const ct = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return `${iv.toString('hex')}:${tag.toString('hex')}:${ct.toString('hex')}`;
+  return `${iv.toString('hex')}:${cipher.getAuthTag().toString('hex')}:${ct.toString('hex')}`;
 }
 
-export function decryptPayload(enc: string): string {
+/** Throws on a wrong key, a truncated payload or a tampered tag — never returns rubbish. */
+export function decryptWith(key: Buffer, enc: string): string {
   const parts = enc.split(':');
   if (parts.length !== 3) throw new Error('Malformed encrypted payload');
   const [ivH, tagH, ctH] = parts;
   if (!ivH || !tagH || !ctH) throw new Error('Malformed encrypted payload');
-  const decipher = createDecipheriv('aes-256-gcm', getKey(), Buffer.from(ivH, 'hex'));
+  const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(ivH, 'hex'));
   decipher.setAuthTag(Buffer.from(tagH, 'hex'));
-  const pt = Buffer.concat([decipher.update(Buffer.from(ctH, 'hex')), decipher.final()]);
-  return pt.toString('utf8');
+  return Buffer.concat([decipher.update(Buffer.from(ctH, 'hex')), decipher.final()]).toString('utf8');
+}
+
+export function encryptPayload(plain: string): string {
+  return encryptWith(getKey(), plain);
+}
+
+export function decryptPayload(enc: string): string {
+  return decryptWith(getKey(), enc);
 }
 
 /** Binary companion for private archive uploads. Format: magic | iv | tag | ciphertext. */

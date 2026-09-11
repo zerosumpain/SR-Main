@@ -7,6 +7,11 @@
   let busy = $state(false);
   let message = $state('');
   let depth = $state<'standard' | 'deep'>('standard');
+  // Unticked by default, and deliberately so. Sealing costs the run its external
+  // research, its persona memory, its cross-policy comparison and its share
+  // links; making it the default would quietly take those from every ordinary
+  // assessment to buy a guarantee most of them do not need.
+  let sealed = $state(false);
 
   // Model quality decides how good the reasoning is, so the reader picks it
   // rather than inheriting whatever the research-deep workload happens to be
@@ -122,6 +127,39 @@
       </label>
     </fieldset>
 
+    <fieldset class="depth seal" class:armed={sealed}>
+      <legend>Is this paper for public release?</legend>
+      <input type="hidden" name="sealed" value={sealed ? 'true' : 'false'} />
+      <label class="choice" class:on={sealed}>
+        <input type="checkbox" bind:checked={sealed} />
+        <span>
+          <strong>Seal this assessment</strong>
+          <span class="muted">
+            Every word it stores — the paper, the analysis, the run's own notes — is encrypted under a key
+            held outside the database and destroyed when you purge the run. That makes every copy of it
+            unreadable at once, including the ones in nightly backups that no deletion can reach.
+          </span>
+        </span>
+      </label>
+      {#if sealed}
+        <div class="seal-terms">
+          <p class="seal-head">What a sealed run gives up, so that it can be destroyed</p>
+          <ul>
+            <li><strong>No external research.</strong> A search provider's logs are not ours to erase, and a query says what a paper is about even when it quotes nothing.</li>
+            <li><strong>No cross-policy comparison</strong>, in either direction. Comparing puts one assessment's words into another's stored prompt, where shredding a key could never follow.</li>
+            <li><strong>Nothing remembered about the bodies it meets.</strong> The persona library outlives the runs that fed it, which is exactly the residue sealing removes.</li>
+            <li><strong>No share links</strong>, and <strong>no stored prompts</strong> — so the run log shows the cost and the models but not their text, an interrupted stage re-runs its calls rather than replaying them, and a stage fault cannot be diagnosed after the fact.</li>
+          </ul>
+          <p class="seal-head">What it still cannot promise</p>
+          <p class="muted">
+            The model provider reads the document in order to assess it, and nothing here can delete its
+            copy — that is a retention setting on the provider account. Sealing covers everything this site
+            writes down; it does not cover what leaves it.
+          </p>
+        </div>
+      {/if}
+    </fieldset>
+
     <fieldset class="depth engine">
       <legend>Which model should read it?</legend>
       <p class="muted engine-strap">
@@ -231,6 +269,14 @@
   summary { cursor: pointer; padding: .5rem 0; }
   textarea { resize: vertical; }
   .depth { border: 1px solid var(--line-strong); padding: 1rem 1.1rem; margin: 1rem 0 0; display: grid; gap: .75rem; }
+  /* ARMED IS A CHANGE OF GROUND, not a coloured border. The page's state language
+     is hover = ground, selected = accent fill, and a run that cannot be undone
+     should look different from one that can without shouting in a fourth colour. */
+  .seal.armed { border-color: var(--text-primary); background: var(--surface-sunken); }
+  .seal-terms { border-top: 1px solid var(--line-strong); padding-top: .85rem; display: grid; gap: .5rem; }
+  .seal-head { margin: 0; font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--text-muted); }
+  .seal-terms ul { margin: 0; padding-left: 1.15rem; display: grid; gap: .35rem; }
+  .seal-terms li { font-size: var(--fs-label); line-height: 1.55; }
   .depth legend { font-weight: 600; padding: 0 .4rem; }
   .engine { gap: .4rem; }
   .engine-strap { margin: 0 0 .5rem; max-width: 68ch; }

@@ -26,7 +26,7 @@ const bytes = readFileSync('tests/fixtures/policy-analysis/policy.txt');
 // The LAN preview, named by env rather than written into a public repo.
 const base = process.env.POLICY_PREVIEW_ORIGIN ?? 'http://localhost:5275';
 async function create() {
-  const a = await createAnalysis(owner, { title: 'Synthetic policy persistence fixture', jurisdiction: 'Synthetic jurisdiction', policyArea: 'Service access', context: null, depth: 'standard' as const, model: null, thinkingLevel: null, concurrency: null, filename: 'policy.txt', mimeType: 'text/plain', bytes });
+  const a = await createAnalysis(owner, { title: 'Synthetic policy persistence fixture', jurisdiction: 'Synthetic jurisdiction', policyArea: 'Service access', context: null, depth: 'standard' as const, model: null, thinkingLevel: null, concurrency: null, sealed: false, filename: 'policy.txt', mimeType: 'text/plain', bytes });
   created.push(a.id); return a;
 }
 async function claim(id: string) {

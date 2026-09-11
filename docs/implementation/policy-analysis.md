@@ -163,6 +163,84 @@ Three of the views are derived rather than read, and none of them calls a model:
 - **The scenario walk-through** (`view.scenarioBeats`) steps a scenario's recorded
   chain one beat at a time rather than rendering it as a paragraph.
 
+## Sealed runs, and erasure you can state as a fact
+
+A **Sealed** checkbox at submission. `policy_analyses.sealed` is `NOT NULL DEFAULT
+false`, so every assessment that ran before this is plainly an unsealed one.
+
+**A DELETE COULD NEVER HAVE GIVEN THIS GUARANTEE.** Anything alive at 02:30 is in
+up to fourteen nightly `pg_dump`s under `~/backups/vps-pg` and in the restic
+snapshots beside them; deleted tuples sit in heap pages and WAL until vacuum and
+checkpoint; and a run's prose reaches OTHER analyses through cross-policy findings
+and through the prompts those runs stored. So a sealed run never writes readable
+bytes: every free-text column is AES-256-GCM under a per-run key held outside the
+database, and purging destroys the key first. Every copy becomes unreadable at
+once, wherever it has got to, without anyone having to find it.
+
+- **The key** is 32 bytes at `<POLICY_SEAL_KEY_DIR>/<id>.key`, mode 0600,
+  defaulting to `data/policy-keys/`. **Two deployment facts hold this up, and an
+  ops change must be read against them:** `data/` is rsynced by ci-deploy
+  *without* `--delete`, so a release cannot take the keys of runs in flight; and
+  nothing backs that directory up — `backup-vps-db.sh` pulls a database dump and
+  nothing else leaves the VPS. **Never add the key directory to a backup set.**
+  Losing it makes that run unreadable, which is the intended behaviour and not a
+  disaster to recover from: a sealed run is meant to be extracted and destroyed.
+- **The id is minted in `createAnalysis`, not by the column default**, so the key
+  exists before the first row does. Letting the insert allocate it would mean
+  writing the title and context in the clear and encrypting them a statement
+  later — and an updated row still leaves its first version in the WAL.
+- **The cipher is `$lib/secrets/crypto`'s**, through new `encryptWith` /
+  `decryptWith` that take an explicit key. One implementation, two key sources.
+- **`SEALED_FIELDS` in `server/seal.ts` is the manifest**, and `seal.test.ts`
+  checks it against `schema.ts`: a new free-text column on any of the five tables
+  fails that test until it is listed or excused with a reason. A column left in
+  the clear breaks nothing and shows nothing, so it is the one thing here that
+  cannot be caught by review.
+- **Encryption happens at the store seam**, so nothing above it changed:
+  `loadArtefacts` and `loadWithMeta` are the only places an artefact is read, and
+  the pipeline, the view modules and every component still see plaintext. Values
+  carry a `sealed:v1:` prefix, so a row is readable whichever kind of run wrote it.
+- **No prompts at all.** `policy_model_calls.input`/`.output` are null on a sealed
+  run — not encrypted, absent. The call key, input hash, status, provider, model,
+  usage and timings remain, so the run log and the cost still read. Two
+  consequences, both stated on the form: the replay diagnostic is unavailable, and
+  the model-call **cache cannot hit**, so an interrupted stage re-issues its calls
+  rather than replaying them. The cache probe is skipped outright on a sealed run
+  — a row with `output: null` would otherwise be a truthy "hit".
+- **It never leaves its own blast radius.** No research (a search provider's logs
+  are nobody's to delete, and a query says what a paper is about even when it
+  quotes nothing); no cross-policy comparison in either direction, enforced both
+  in the worker and in `neighbourSummaries`; no persona writes, because the
+  library outlives the runs that feed it; no share links.
+- **A failure message can quote the paper**, so it is encrypted into the three
+  policy tables and a generic line goes to `workflow_runs.error` — that table is
+  the whole site's queue, read by surfaces that know nothing about sealing.
+
+### The purge, and its receipt
+
+`purge()` shreds the key **then** deletes. The order is not symmetric: a failed
+delete leaves unreadable rows and can be retried, whereas deleting first and
+failing to shred would leave ciphertext in fourteen backups with a live key beside
+it. `remove()` also now reaches the two things no cascade does — the orphaned
+`workflow_runs` envelopes, and any `cross_policy` artefact on another analysis
+naming this one, which is prose about the deleted paper stored somewhere else.
+
+Then it **asks**. Eleven probes (`server/census.ts`), one per place a reference can
+live, each returning a count that must be zero; `census.test.ts` checks the list
+against the schema so a new table fails until it is covered. The receipt names what
+a purge cannot reach — the model provider always, and for an unsealed run the
+backups and the WAL — and is **downloaded, never stored**: a record of the purge
+sitting in the database it emptied would be a new trace of the run. It carries the
+id and not the title, for the same reason.
+
+Verified against an isolated Postgres (`sealed.integration.test.ts`,
+`POLICY_LOCAL_TESTS=1`): a sealed run's raw rows contain neither the title, the
+context, the filename nor any of the document's base64 — while an unsealed run's
+contain all four, which is the control that makes the first assertion mean
+something — the dashboard reads it back exactly, a sealed run is never offered as
+a neighbour, and the purge returns eleven zeroes with the key gone, the queue
+envelope deleted and the neighbour's own assessment untouched.
+
 ## Taking it away: the offline pack
 
 `?format=bundle` on either export route returns a zip holding `index.html`,

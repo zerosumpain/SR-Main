@@ -7,7 +7,8 @@ import { PERSONA_STAGE, type Concurrency } from '../contracts';
 import { executeStage, graphUncovered } from '../pipeline';
 import { PolicyError } from '../validation';
 import { ingest } from './ingest';
-import { loadArtefacts, neighbourSummaries, persistArtefacts, queueStage } from './store';
+import { loadArtefacts, neighbourSummaries, persistArtefacts, queueStage, sealOf } from './store';
+import { sealRow, unsealRow } from './seal';
 import { applyPersonaLinks, priorsFor } from './personas';
 import { modelCaller } from './provider';
 import { research } from './research';
@@ -136,13 +137,20 @@ export async function executePolicyRun(claimed: { id: string; input: Record<stri
     }).catch(() => abort.abort());
   }, 2000);
   const signal = AbortSignal.any([abort.signal, AbortSignal.timeout(stageBudgetMs(started.stage.ordinal, all))]);
+  // ONE CODEC FOR THE STAGE. `lockLease` selects the analysis row raw, so on a
+  // sealed run `started.analysis.title` is ciphertext until this decodes it —
+  // and it is handed straight to the model prompt, which is exactly where an
+  // undecoded value would be least visible and most wrong.
+  const seal = await sealOf(analysisId);
+  const analysis = unsealRow(seal, 'analysis', started.analysis);
   try {
     const [{ made }] = await db.select({ made: sql<number>`count(*)::int` }).from(policyModelCalls)
       .innerJoin(policyExecutions, eq(policyExecutions.id, policyModelCalls.executionId))
       .innerJoin(policyStages, eq(policyStages.id, policyExecutions.stageId))
       .where(eq(policyStages.analysisId, analysisId));
     if (made >= MODEL_CALL_CEILING) throw new PolicyError('budget', `This assessment has made ${made.toLocaleString()} model calls, past the ${MODEL_CALL_CEILING.toLocaleString()} this implementation allows for one document. Completed stages are retained; submit a shorter document or split it.`);
-    const previousStages = await db.select({ ordinal: policyStages.ordinal, warnings: policyStages.warnings, output: policyStages.output }).from(policyStages).where(eq(policyStages.analysisId, analysisId));
+    const previousStages = (await db.select({ ordinal: policyStages.ordinal, warnings: policyStages.warnings, output: policyStages.output }).from(policyStages).where(eq(policyStages.analysisId, analysisId)))
+      .map((r) => unsealRow(seal, 'stage', r));
     // How much of the knowledge graph triage threw away. The deterministic checks
     // read that stage's output, so a verdict drawn from a fragment must say so
     // rather than reading as coverage.
@@ -166,16 +174,36 @@ export async function executePolicyRun(claimed: { id: string; input: Record<stri
     // connection twelve times for nothing.
     const extracted = started.stage.ordinal === 0
       ? await (async () => {
-          const [document] = await db.select({ content: policyDocuments.content, filename: policyDocuments.filename, mimeType: policyDocuments.mimeType }).from(policyDocuments).where(eq(policyDocuments.analysisId, analysisId));
+          const [row] = await db.select({ content: policyDocuments.content, filename: policyDocuments.filename, mimeType: policyDocuments.mimeType }).from(policyDocuments).where(eq(policyDocuments.analysisId, analysisId));
+          const document = unsealRow(seal, 'document', row);
           return ingest(Buffer.from(document.content, 'base64'), document.filename, document.mimeType);
         })()
       : null;
-    const output = extracted ?? await executeStage({ stage: started.stage.ordinal, title: started.analysis.title, jurisdiction: started.analysis.jurisdiction, policyArea: started.analysis.policyArea, context: started.analysis.context, depth: started.analysis.depth as 'standard' | 'deep', graphLoss, priorWarnings: boundWarnings(previousStages.flatMap((s) => s.warnings)), artefacts: all }, { model: modelCaller(started.execution.id, claimed.id, signal, all, { model: started.analysis.model, thinkingLevel: isThinkingLevel(started.analysis.thinkingLevel) ? started.analysis.thinkingLevel : null }), research, signal, concurrency: started.analysis.concurrency as Concurrency | null, onProgress: (phase) => beat?.(`${stagePhase} · ${phase}`), neighbours: () => neighbourSummaries(started.analysis.owner, analysisId), personas: (actors) => priorsFor(started.analysis.owner, actors, analysisId) });
+    // A SEALED RUN DOES NOT LEAVE ITS OWN BLAST RADIUS. Each of these three is a
+    // channel by which this paper's prose would reach somewhere shredding its key
+    // could never follow:
+    //
+    // - **research** sends queries derived from the document to a search provider,
+    //   whose logs are nobody's to delete. `query-guard` already stops a verbatim
+    //   quotation; it cannot stop the TOPIC of an unpublished paper.
+    // - **neighbours** would put another assessment's artefacts in this prompt and,
+    //   through the cross-policy finding it produces, this paper's prose on that
+    //   assessment's page. (`neighbourSummaries` separately refuses to offer a
+    //   sealed run to anyone else.)
+    // - **personas** are a library that outlives the run by design. A dossier
+    //   trait drawn from a sealed paper would survive its purge — the precise
+    //   residue this feature exists to remove.
+    const sealedRun = !!analysis.sealed;
+    const noResearch: typeof research = async () => ({
+      artefacts: [],
+      warnings: ['This is a sealed assessment, so no external research was carried out: a search provider\u2019s logs are not ours to erase. It rests on the policy document and explicitly labelled inferences only.'],
+    });
+    const output = extracted ?? await executeStage({ stage: started.stage.ordinal, title: analysis.title, jurisdiction: analysis.jurisdiction, policyArea: analysis.policyArea, context: analysis.context, depth: analysis.depth as 'standard' | 'deep', sealed: sealedRun, graphLoss, priorWarnings: boundWarnings(previousStages.flatMap((s) => s.warnings)), artefacts: all }, { model: modelCaller(started.execution.id, claimed.id, signal, all, { model: analysis.model, thinkingLevel: isThinkingLevel(analysis.thinkingLevel) ? analysis.thinkingLevel : null, sealed: sealedRun }), research: sealedRun ? noResearch : research, signal, concurrency: analysis.concurrency as Concurrency | null, onProgress: (phase) => beat?.(`${stagePhase} · ${phase}`), neighbours: sealedRun ? async () => [] : () => neighbourSummaries(analysis.owner, analysisId), personas: sealedRun ? async () => [] : (actors) => priorsFor(analysis.owner, actors, analysisId) });
     signal.throwIfAborted();
     await db.transaction(async (tx) => {
       const locked = await lockLease(tx, analysisId, stageId, claimed.id, workerId);
       if (!locked) return;
-      await persistArtefacts(tx, analysisId, started.stage.ordinal, output.artefacts);
+      await persistArtefacts(tx, analysisId, started.stage.ordinal, output.artefacts, seal);
       // The persona library is written here, not by the pipeline: a rolled-back
       // stage must leave no rows behind, and a re-run must replace its own
       // observation rather than adding a second one.
@@ -183,16 +211,23 @@ export async function executePolicyRun(claimed: { id: string; input: Record<stri
       // Inside a SAVEPOINT, because a library write that fails must not roll back
       // a completed assessment: the report was finished at the previous stage and
       // the reader is owed it whatever happens to the dossier.
-      if (started.stage.ordinal === PERSONA_STAGE) {
+      // A SEALED RUN CONTRIBUTES NOTHING TO THE LIBRARY. The stage still runs and
+      // its `persona_link` artefacts still belong to the assessment; what does not
+      // happen is the write into `policy_personas`, whose rows deliberately
+      // outlive the analyses that fed them.
+      if (started.stage.ordinal === PERSONA_STAGE && !sealedRun) {
         try {
-          await tx.transaction(async (inner) => { await applyPersonaLinks(inner, started.analysis.owner, analysisId, started.analysis.title, output.artefacts, all); });
+          await tx.transaction(async (inner) => { await applyPersonaLinks(inner, analysis.owner, analysisId, analysis.title, output.artefacts, all); });
         } catch {
           output.warnings.push('This assessment could not be written into the persona library. Its own findings are unaffected; the library simply does not have this run.');
         }
       }
-      if (extracted) await tx.update(policyDocuments).set({ extractedText: extracted.text, metadata: extracted.metadata }).where(eq(policyDocuments.analysisId, analysisId));
+      if (extracted) await tx.update(policyDocuments).set(sealRow(seal, 'document', { extractedText: extracted.text, metadata: extracted.metadata })).where(eq(policyDocuments.analysisId, analysisId));
       await tx.update(policyExecutions).set({ status: 'completed', completedAt: new Date() }).where(eq(policyExecutions.id, started.execution.id));
-      await tx.update(policyStages).set({ status: 'completed', completedAt: new Date(), warnings: output.warnings, output: { artefactIds: output.artefacts.map((a) => a.id), contractVersion: 1, rejected: 'rejected' in output ? output.rejected : 0 } }).where(eq(policyStages.id, stageId));
+      // `output` is identifiers the pipeline minted and stays in the clear — the
+      // structural checks read it, and it holds no words from the paper. The
+      // WARNINGS do: they quote artefact labels.
+      await tx.update(policyStages).set({ status: 'completed', completedAt: new Date(), ...sealRow(seal, 'stage', { warnings: output.warnings }), output: { artefactIds: output.artefacts.map((a) => a.id), contractVersion: 1, rejected: 'rejected' in output ? output.rejected : 0 } }).where(eq(policyStages.id, stageId));
       await tx.update(workflowRuns).set({ status: 'completed', completedAt: new Date() }).where(eq(workflowRuns.id, claimed.id));
       const [next] = await tx.select().from(policyStages).where(and(eq(policyStages.analysisId, analysisId), eq(policyStages.ordinal, started.stage.ordinal + 1)));
       if (next) {
@@ -216,11 +251,18 @@ export async function executePolicyRun(claimed: { id: string; input: Record<stri
       // of time again. Retrying it twice more cost the first white-paper run two
       // hours and told the reader nothing new.
       const retry = attempts < 3 && !(err instanceof PolicyError && ['budget', 'extraction', 'timeout'].includes(err.code));
-      await tx.update(policyExecutions).set({ status: 'failed', error: message, completedAt: new Date() }).where(eq(policyExecutions.id, started.execution.id));
-      await tx.update(workflowRuns).set({ status: 'failed', error: message, completedAt: new Date() }).where(eq(workflowRuns.id, claimed.id));
-      await tx.update(policyStages).set({ status: retry ? 'pending' : 'failed', attempts, error: message }).where(eq(policyStages.id, stageId));
+      // A FAILURE MESSAGE CAN QUOTE THE PAPER — a triage rejection names the
+      // artefact labels it discarded — so on a sealed run it is encrypted into the
+      // three policy tables and NEVER written to `workflow_runs`. That table is
+      // the whole site's queue: the canvas, the ops surfaces and the run list all
+      // read it, none of them know what sealing is, and its rows are reached only
+      // by the purge's delete rather than by the key. A generic line there keeps
+      // sealed prose out of a shared table entirely.
+      await tx.update(policyExecutions).set({ status: 'failed', ...sealRow(seal, 'execution', { error: message }), completedAt: new Date() }).where(eq(policyExecutions.id, started.execution.id));
+      await tx.update(workflowRuns).set({ status: 'failed', error: seal.sealed ? 'A sealed policy stage failed. The reason is recorded on the assessment.' : message, completedAt: new Date() }).where(eq(workflowRuns.id, claimed.id));
+      await tx.update(policyStages).set({ status: retry ? 'pending' : 'failed', attempts, ...sealRow(seal, 'stage', { error: message }) }).where(eq(policyStages.id, stageId));
       if (retry) await queueStage(tx, analysisId, stageId, 15_000 * Math.max(1, attempts));
-      await tx.update(policyAnalyses).set({ status: retry ? 'queued' : 'failed', error: message, updatedAt: new Date() }).where(eq(policyAnalyses.id, analysisId));
+      await tx.update(policyAnalyses).set({ status: retry ? 'queued' : 'failed', ...sealRow(seal, 'analysis', { error: message }), updatedAt: new Date() }).where(eq(policyAnalyses.id, analysisId));
     });
   } finally { clearInterval(check); }
 }

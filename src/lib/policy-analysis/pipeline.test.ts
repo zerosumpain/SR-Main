@@ -410,3 +410,40 @@ describe('identity, graph and deterministic checks', () => {
     expect(priority(artefact('q', 'research_question', 'Question', 'Question', { importance: .8, uncertainty: .5, consequence: .5 }))).toBe(.2);
   });
 });
+
+/**
+ * A SEALED RUN'S MISSING CHAPTERS MUST SAY WHY THEY ARE MISSING.
+ *
+ * Both stages are handed nothing — no neighbours, no persona priors — and from
+ * inside the pipeline that is indistinguishable from having none. Stage 11 said
+ * "no other completed policy assessment was available to compare", which is true
+ * of the arguments it received and not the reason. A chapter left out on purpose
+ * has to say so on purpose, and this feature's whole discipline is naming what
+ * is absent rather than letting a report look complete.
+ */
+describe('a sealed assessment says why a chapter is absent', () => {
+  const base = { title: 'Sealed', jurisdiction: null, policyArea: null, context: null } as const;
+
+  it('names sealing, not an empty account, when cross-policy exposure is skipped', async () => {
+    const artefacts = (await ingest(fixture, 'p.txt', 'text/plain')).artefacts;
+    const sealed = await executeStage({ ...base, stage: 11, sealed: true, artefacts }, { model: async (...a) => fixtureModel(...a), research: neverResearch, signal: new AbortController().signal, neighbours: async () => [] });
+    expect(sealed.warnings.join(' ')).toContain('sealed assessment');
+    expect(sealed.warnings.join(' ')).not.toContain('No other completed policy assessment was available');
+
+    const open = await executeStage({ ...base, stage: 11, artefacts }, { model: async (...a) => fixtureModel(...a), research: neverResearch, signal: new AbortController().signal, neighbours: async () => [] });
+    expect(open.warnings.join(' ')).toContain('No other completed policy assessment was available');
+  });
+
+  it('makes no model call for the persona library, and says so', async () => {
+    const artefacts = (await ingest(fixture, 'p.txt', 'text/plain')).artefacts;
+    let calls = 0;
+    const counted = async (...a: Parameters<typeof fixtureModel>) => { calls++; return fixtureModel(...a); };
+    const result = await executeStage({ ...base, stage: 13, sealed: true, artefacts }, { model: counted, research: neverResearch, signal: new AbortController().signal, personas: async () => [] });
+    // The worker discards this stage's output on a sealed run, so spending one
+    // call per profiled body to produce it is money for nothing.
+    expect(calls).toBe(0);
+    expect(result.artefacts).toEqual([]);
+    expect(result.warnings.join(' ')).toContain('persona library');
+    expect(result.warnings.join(' ')).toContain('sealed assessment');
+  });
+});
