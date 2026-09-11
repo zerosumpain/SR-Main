@@ -88,7 +88,7 @@ describe('parentHref — the common way back', () => {
 describe('owner filtering', () => {
   it('offers a signed-out visitor nothing that would bounce to /login', () => {
     const anon = visibleItems(SITE_ITEMS, false).map((i) => i.href);
-    for (const owned of ['/news', '/drive', '/live', '/jkai', '/research']) {
+    for (const owned of ['/releases', '/news', '/drive', '/live', '/jkai', '/research']) {
       expect(anon, `${owned} was offered to an anonymous visitor`).not.toContain(owned);
     }
     expect(anon).toContain('/projects');
@@ -195,7 +195,7 @@ describe('the bar is never empty', () => {
     // hub, whose nine items carry no per-item flag.
     expect(subnavFor('/jkai/shared/tok', false)).toEqual([]);
     for (const href of navCellsFor('/jkai/shared/tok', false).map((i) => i.href)) {
-      expect(['/news', '/drive', '/live', '/jkai', '/research']).not.toContain(href);
+      expect(['/releases', '/news', '/drive', '/live', '/jkai', '/research']).not.toContain(href);
     }
   });
 });
