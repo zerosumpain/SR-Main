@@ -9,7 +9,7 @@ describe('isPublicPath', () => {
   });
 
   it('does NOT treat authed surfaces as public', () => {
-    for (const p of ['/jkai', '/admin', '/admin/access', '/live', '/api/admin/access', '/api/jkai/chat', '/api/admin/blog/upload-image']) {
+    for (const p of ['/releases', '/releases/', '/releases/__data.json', '/shipped', '/jkai', '/admin', '/admin/access', '/live', '/api/admin/access', '/api/jkai/chat', '/api/admin/blog/upload-image']) {
       expect(isPublicPath(p)).toBe(false);
     }
   });

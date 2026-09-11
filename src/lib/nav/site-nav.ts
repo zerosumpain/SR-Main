@@ -126,7 +126,7 @@ export const SITE_ITEMS: NavItem[] = [
   { label: 'Writing', href: '/blog' },
   { label: 'Decks', href: '/decks' },
   { label: 'Health', href: '/health' },
-  { label: 'Shipped', href: '/releases' },
+  { label: 'Shipped', href: '/releases', ownerOnly: true },
   // Owner-only from here. These used to render for everyone, so a signed-out
   // reader was offered four destinations that each 302 back to /login.
   { label: 'News', href: '/news', ownerOnly: true },
@@ -306,6 +306,7 @@ export const SECTIONS: NavSection[] = [
     id: 'releases',
     label: 'Shipped',
     rootHref: '/releases',
+    ownerOnly: true,
     match: (p) => under('/releases', p),
     items: [],
   },
