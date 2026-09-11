@@ -18,7 +18,7 @@ const config = {
 				'object-src': ['none'],
 				'frame-ancestors': ['self'],
 				'form-action': ['self'],
-				'script-src': ['self', 'https://unpkg.com', 'https://static.cloudflareinsights.com', 'https://js-cdn.music.apple.com'],
+				'script-src': ['self', 'https://unpkg.com', 'https://static.cloudflareinsights.com', 'https://js-cdn.music.apple.com', 'https://analytics.strangeramblings.com'],
 				'style-src': ['self', 'unsafe-inline', 'https://fonts.googleapis.com', 'https://unpkg.com'],
 				'font-src': ['self', 'data:', 'https://fonts.gstatic.com'],
 				'img-src': ['self', 'data:', 'blob:', 'https:'],
