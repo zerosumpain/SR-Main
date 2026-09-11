@@ -15,26 +15,36 @@ describe('the verdict', () => {
 });
 
 describe('what it admits it cannot reach', () => {
-  it('always names the model provider, sealed or not', () => {
+  it('always names OpenAI, sealed or not, and no longer overclaims about it', () => {
     for (const sealed of [true, false]) {
-      expect(unreachable(sealed).join(' ')).toContain('model provider');
+      const said = unreachable(sealed).join(' ');
+      expect(said).toContain('OpenAI');
+      // Checked rather than assumed: kept up to 30 days for abuse monitoring,
+      // deletable from that account sooner, not deletable from here.
+      expect(said).toContain('30 days');
+      expect(said).toMatch(/not from here/i);
     }
   });
 
-  it('tells an UNSEALED purge that readable copies may remain in backups', () => {
+  it('no longer says a backup copy may remain, because none is made', () => {
+    // The nightly dump stopped including the policy tables on 2026-09-11. Both
+    // versions of this list used to talk about backups — one warning of readable
+    // copies, one explaining why its copies were unreadable — and a receipt that
+    // kept saying either would be certifying an absence against a hazard that no
+    // longer exists.
+    for (const sealed of [true, false]) {
+      expect(unreachable(sealed).join(' ')).not.toMatch(/backup/i);
+    }
+  });
+
+  it('still tells an UNSEALED purge what is left on the live machine', () => {
     const said = unreachable(false).join(' ');
-    expect(said).toContain('backups');
-    expect(said).toContain('write-ahead log');
+    expect(said).toMatch(/scratch space/i);
     expect(said).toContain('Seal a run at submission');
   });
 
-  it('tells a SEALED purge the copies are unreadable, and says where the key was', () => {
-    const said = unreachable(true, '/var/lib/example/policy-keys').join(' ');
-    expect(said).toContain('unreadable');
-    expect(said).toContain('/var/lib/example/policy-keys');
-    // The claim that carries the guarantee: it was never in a backup in the first
-    // place, so nothing had to find it.
-    expect(said).toContain('never in a backup');
+  it('tells a SEALED purge where the key was, so the claim can be checked', () => {
+    expect(unreachable(true, '/var/lib/example/policy-keys').join(' ')).toContain('/var/lib/example/policy-keys');
   });
 });
 

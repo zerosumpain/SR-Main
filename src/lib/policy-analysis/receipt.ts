@@ -44,19 +44,27 @@ export type PurgeReceipt = {
 
 /** What a purge cannot reach, stated plainly. `keyLocation` is passed in because this module may not read the filesystem. */
 export function unreachable(sealed: boolean, keyLocation = 'the application host'): string[] {
+  // Checked 2026-09-11 rather than asserted: OpenAI keeps API/Codex content for
+  // up to 30 days of abuse monitoring and then deletes it, a conversation can be
+  // deleted from that account sooner, and the order that once forced indefinite
+  // preservation was lifted in October. The true claim is "not from here".
   const always = [
-    'The model provider received the document while the assessment ran. Nothing here can delete its copy; that is an account-level retention setting on the provider.',
+    'The copy OpenAI received in order to read the paper. They keep it for up to 30 days to check for abuse and then delete it, and it can be removed from that account sooner — but not from here. Whether it was also used to train future models depends on a setting on that account.',
   ];
+  // THE BACKUP LINE THAT USED TO BE HERE IS GONE, and that is a fact about the
+  // deployment rather than about this code: since 2026-09-11 the nightly
+  // `pg_dump` excludes every policy table, and the backup script proves it by
+  // reading its own output back before keeping the file. There is no copy of
+  // this run in a backup to be reached or to stay unreadable.
   if (sealed) {
     return [
       ...always,
-      `Ciphertext of this run may remain in database backups taken while it existed. It is unreadable: its key is gone, and the key was never in a backup — it lived only in ${keyLocation}, which nothing copies off.`,
-      'No external research was carried out, so no search provider holds a query derived from this document.',
+      `Nothing else. The key lived only in ${keyLocation} and is gone, so anything that did somehow hold this run's bytes could not read them — and a sealed run does no web searching, so no search provider holds a query derived from this document.`,
     ];
   }
   return [
     ...always,
-    'This run was NOT sealed, so readable copies of its rows may remain in database backups taken while it existed, and in Postgres heap pages and write-ahead log until the next vacuum and checkpoint. Deleting the rows does not reach those. Seal a run at submission if that matters.',
+    'This run was not sealed, so until the database tidies itself up its deleted rows remain in its own scratch space, readable to anyone who can already read the database. Seal a run at submission if that matters.',
     'If external research ran, the search provider received queries derived from this document.',
   ];
 }
@@ -98,6 +106,10 @@ ${r.probes.map((p) => `  ${p.rows === 0 ? 'none' : String(p.rows).padStart(4)}  
 
 WHAT THIS CANNOT REACH
 ${r.unreachable.map((u) => `  - ${u}`).join('\n')}
+
+The nightly backup does not copy these records at all, so nothing here outlives
+the delete by sitting in a copy somewhere. The backup proves that to itself each
+night by reading its own output back before keeping the file.
 
 This receipt is not stored anywhere. It exists only as the file you are reading:
 a record of the purge, kept in the database it emptied, would be a new trace of

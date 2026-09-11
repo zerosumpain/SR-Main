@@ -35,6 +35,16 @@ export type Place =
 export type Stop = {
   /** Two or three words, for the diagram. */
   short: string;
+  /**
+   * What is true AT that stop, in under about twenty characters.
+   *
+   * The diagram had a name and a place per box and nothing else, so it showed
+   * the route and none of the substance — you had to read the list below to
+   * learn anything. This is the line that makes each box worth looking at, and
+   * the length is a real constraint: the boxes are a fixed width in the viewBox
+   * and SVG text does not wrap, it runs out over the next box. Pinned by a test.
+   */
+  detail: string;
   title: string;
   /** What happens, in ordinary words. */
   what: string;
@@ -69,6 +79,7 @@ export function journey(sealed: boolean): Stop[] {
   return [
     {
       short: 'You send it',
+      detail: sealed ? 'encrypted on arrival' : 'stored on this disk',
       title: 'You send the paper',
       place: 'site',
       what: sealed
@@ -77,6 +88,7 @@ export function journey(sealed: boolean): Stop[] {
     },
     {
       short: 'A model reads it',
+      detail: 'kept up to 30 days',
       title: 'A model reads it',
       place: 'away',
       what: 'The assessment is written by a language model, and that model runs on a company’s computers, not ours. The paper is sent there in order to be read.',
@@ -84,6 +96,7 @@ export function journey(sealed: boolean): Stop[] {
     },
     {
       short: 'Findings written',
+      detail: sealed ? 'encrypted beside it' : 'beside the paper',
       title: 'The findings are written down',
       place: 'site',
       what: sealed
@@ -92,12 +105,14 @@ export function journey(sealed: boolean): Stop[] {
     },
     {
       short: 'You take a copy',
+      detail: 'one offline file',
       title: 'You take a copy',
       place: 'you',
       what: 'Word, markdown, or the offline pack — one file that holds the whole dashboard and asks nothing of the network. Once it is on your machine it is yours, and nothing here can reach it or take it back.',
     },
     {
       short: 'You purge it',
+      detail: sealed ? 'key burned first' : 'every row deleted',
       title: 'You purge it',
       place: 'site',
       what: sealed
@@ -106,11 +121,19 @@ export function journey(sealed: boolean): Stop[] {
     },
     {
       short: 'What is left',
+      detail: 'nothing copied away',
       title: 'What is left afterwards',
       place: 'site',
+      // WAS: "copies made by the nightly backup are still readable for about a
+      // fortnight". True until 2026-09-11, when the nightly dump stopped
+      // including these tables at all — John: "id be happy to exclude these
+      // materials from the backup completely". The trade is that a dead server
+      // takes every assessment with it, which is the right way round for a tool
+      // whose output you are meant to take away and whose input you are meant to
+      // destroy.
       what: sealed
-        ? 'Copies made by the nightly backup are still on disk for a fortnight, and they always will be — that is what a backup is. They are gibberish, and they stay gibberish, because the only thing that could read them no longer exists.'
-        : 'Copies made by the nightly backup are still readable for about a fortnight, until they rotate out on their own. Deleting the records here does not reach them. If that matters for a particular paper, seal it when you submit it.',
+        ? 'Nothing is copied off this machine. The nightly backup skips these records entirely, so there is no copy to outlive the delete — and anything that somehow reached one would be unreadable, because the key is gone. Deleted rows sit in the database’s own scratch space until it tidies itself up, which it does without being asked.'
+        : 'Nothing is copied off this machine. The nightly backup skips these records entirely, so there is no copy to outlive the delete. Deleted rows sit in the database’s own scratch space until it tidies itself up, which it does without being asked; until then they are readable to anyone who can already read the database.',
     },
   ];
 }
@@ -146,7 +169,14 @@ export function destroyed(sealed: boolean): string[] {
  * that only says what it CAN do is marketing.
  */
 export function beyond(sealed: boolean): string[] {
-  const provider = 'The copy the language model’s provider received in order to read the paper. That is an account setting on their side, not something this site can delete.';
+  // "Cannot be deleted" was too strong and shipped without a source. Checked
+  // 2026-09-11: OpenAI keeps API/Codex content for up to 30 days of abuse
+  // monitoring and then deletes it, a conversation can be deleted from the
+  // account sooner, and the court order that once forced indefinite preservation
+  // was lifted in October. What is true is that it cannot be deleted FROM HERE.
+  // Training is a separate question and turns on one account setting, so this
+  // says where to look rather than asserting a value it cannot read.
+  const provider = 'The copy OpenAI received in order to read the paper. They keep it for up to 30 days to check for abuse and then delete it, and it can be removed from that account sooner — but not from here. Whether it is also used to train future models depends on a setting on that account.';
   return sealed
     ? [
         provider,
@@ -155,13 +185,12 @@ export function beyond(sealed: boolean): string[] {
     : [
         provider,
         'Anything a web search picked up while researching the paper. The search provider has the queries, and those are not ours to erase.',
-        'The nightly backups, until they rotate out on their own after about a fortnight.',
       ];
 }
 
 /** The one-line answer, for a reader who reads nothing else. */
 export function headline(sealed: boolean): string {
   return sealed
-    ? 'This is a sealed assessment. Everything it stores is scrambled under a key held outside the database, and purging it destroys that key — which makes every copy unreadable at once, including the ones in backups that deleting cannot reach.'
-    : 'Your paper is stored on this site, read once by a language model elsewhere, and removed in full whenever you say so. Backups keep a readable copy for about a fortnight; seal a run at submission if that is not acceptable for a particular paper.';
+    ? 'This is a sealed assessment. Everything it stores is scrambled under a key held outside the database, and purging it destroys that key — so it is unreadable to anyone who reaches the disk, the database or its working files, not merely deleted from them.'
+    : 'Your paper is stored on this site, read once by a language model elsewhere, and removed in full whenever you say so. It is never copied into a backup, so nothing outlives the delete. Seal a run if it should also be unreadable to anyone who can reach the database itself.';
 }
