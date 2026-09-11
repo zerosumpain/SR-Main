@@ -61,7 +61,7 @@
   <!-- Filters in ONE row above the chart, which is where a reader looks for
        them and what the site's other dashboards do. -->
   <div class="at-controls">
-    <div class="at-measures" role="radiogroup" aria-label="Redraw the chart on">
+    <div class="at-measures pa-seg" role="radiogroup" aria-label="Redraw the chart on">
       <span class="at-controls-label">Rank by</span>
       {#each ACTOR_MEASURES as m (m.key)}
         <button
@@ -187,12 +187,7 @@
     justify-content: space-between;
     gap: 12px 20px;
   }
-  .at-measures {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
-  }
+  /* `.pa-seg` in the layout owns the layout and the states. */
   .at-controls-label,
   .at-toggle {
     font-family: var(--font-mono);
@@ -200,28 +195,6 @@
     letter-spacing: var(--tracking-label);
     text-transform: uppercase;
     color: var(--text-muted);
-  }
-  .at-measure {
-    font: inherit;
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: var(--tracking-label);
-    text-transform: uppercase;
-    background: var(--surface-sunken);
-    border: 1px solid var(--line-strong);
-    border-radius: 0;
-    padding: 6px 10px;
-    color: var(--text-secondary);
-    cursor: pointer;
-  }
-  .at-measure:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-  .at-measure.on {
-    background: var(--text-primary);
-    border-color: var(--text-primary);
-    color: var(--bg);
   }
   .at-toggles {
     display: flex;
