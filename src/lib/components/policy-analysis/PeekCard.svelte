@@ -100,6 +100,7 @@
     bind:this={cardEl}
     class="pk"
     role="tooltip"
+    data-pa-peek-card="true"
     style="left: {placement.left}px; top: {placement.top}px; width: {PEEK_WIDTH}px; max-height: {placement.maxHeight}px;"
     onmouseenter={() => policyPeek.keepOpen()}
     onmouseleave={() => policyPeek.release()}

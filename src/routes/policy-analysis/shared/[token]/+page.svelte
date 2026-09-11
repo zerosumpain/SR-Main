@@ -23,10 +23,12 @@
   import { printNow, wirePrint } from '$lib/policy-analysis/print';
   import { withheldNote } from '$lib/policy-analysis/share';
   import * as view from '$lib/policy-analysis/view';
+  import { documentSlug } from '$lib/policy-analysis/report-doc';
 
   let { data }: { data: PageData } = $props();
 
   let exporting = $state(false);
+  let exportError = $state('');
 
   const note = $derived(withheldNote(data.withheld));
   const plays = $derived(view.plays(data.artefacts));
@@ -39,10 +41,41 @@
   // Ctrl+P must get the same document the button produces.
   onMount(wirePrint);
 
-  function exportDoc(format: 'docx' | 'md') {
+  /**
+   * Download the assessment.
+   *
+   * A `fetch` into a blob rather than a navigation, because a navigation to an
+   * endpoint that can 400, 404 or 500 replaces the page with an error document —
+   * the reader loses the tab they were on, the filters they set and the drill
+   * they had open. The button says what happened instead, and the page stays.
+   */
+  async function exportDoc(format: 'docx' | 'md') {
     exporting = true;
-    window.location.href = `/policy-analysis/shared/${data.token}/export?format=${format}`;
-    setTimeout(() => (exporting = false), 4000);
+    exportError = '';
+    try {
+      const response = await fetch(`/policy-analysis/shared/${data.token}/export?format=${format}`);
+      if (!response.ok) {
+        exportError = response.status === 404
+          ? 'This assessment is no longer available.'
+          : 'The document could not be rendered. Nothing was changed.';
+        return;
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${documentSlug(data.title)}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Revoked on the next tick: revoking synchronously races the download in
+      // Safari, which has not read the blob by the time click() returns.
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch {
+      exportError = 'Connection interrupted. The document was not downloaded.';
+    } finally {
+      exporting = false;
+    }
   }
 </script>
 
@@ -96,6 +129,8 @@
   <button class="sh-btn" onclick={printNow}>Print or save as PDF</button>
   <button class="sh-btn sh-ghost" onclick={() => exportDoc('md')}>Markdown</button>
 </div>
+
+{#if exportError}<p class="sh-alert" role="alert">{exportError}</p>{/if}
 
 <section class="sh-note" aria-label="What this is">
   <p class="sh-label">What this is</p>
@@ -256,6 +291,12 @@
     padding-inline: 4px;
   }
 
+  .sh-alert {
+    background: var(--surface-sunken);
+    border-left: 3px solid var(--accent);
+    padding: 11px 14px;
+    margin: 14px 0 0;
+  }
   .sh-note {
     border-bottom: 2px solid var(--text-primary);
     padding: 16px 0 18px;

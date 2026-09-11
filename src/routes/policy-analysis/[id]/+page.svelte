@@ -21,6 +21,7 @@
   import PolicyGraph from '$lib/components/policy-analysis/PolicyGraph.svelte';
   import ArtefactValue from '$lib/components/policy-analysis/ArtefactValue.svelte';
   import { formatGbp, formatTokens } from '$lib/canvas/stats/costFormat';
+  import { documentSlug } from '$lib/policy-analysis/report-doc';
 
   let { data }: { data: PageData } = $props();
 
@@ -32,6 +33,7 @@
   let openLog = $state(false);
   let confirmDelete = $state(false);
   let exporting = $state(false);
+  let exportError = $state('');
 
   const active = $derived(['queued', 'running'].includes(data.analysis.status));
   const finished = $derived(['completed', 'completed_with_gaps'].includes(data.analysis.status));
@@ -99,18 +101,40 @@
   }
 
   /**
-   * Download the Word copy.
+   * Download the assessment.
    *
-   * Rendered server-side, so this is a navigation rather than a fetch — the
-   * browser's own save dialog is a better download UI than anything built here,
-   * and `docx` is a server dependency that would blow the client budget.
-   * `exporting` exists only so the button can say something during the round
-   * trip; a 400-page assessment takes a moment to render.
+   * A `fetch` into a blob rather than a navigation, because a navigation to an
+   * endpoint that can 400, 404 or 500 replaces the page with an error document —
+   * the reader loses the tab they were on, the filters they set and the drill
+   * they had open. The button says what happened instead, and the page stays.
    */
-  function exportDoc(format: 'docx' | 'md') {
+  async function exportDoc(format: 'docx' | 'md') {
     exporting = true;
-    window.location.href = `/api/policy-analysis/${data.analysis.id}/export?format=${format}`;
-    setTimeout(() => (exporting = false), 4000);
+    exportError = '';
+    try {
+      const response = await fetch(`/api/policy-analysis/${data.analysis.id}/export?format=${format}`);
+      if (!response.ok) {
+        exportError = response.status === 404
+          ? 'This assessment is no longer available.'
+          : 'The document could not be rendered. Nothing was changed.';
+        return;
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${documentSlug(data.analysis.title)}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Revoked on the next tick: revoking synchronously races the download in
+      // Safari, which has not read the blob by the time click() returns.
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch {
+      exportError = 'Connection interrupted. The document was not downloaded.';
+    } finally {
+      exporting = false;
+    }
   }
 
   onMount(() => {
@@ -329,6 +353,7 @@
   </div>
 </div>
 
+{#if exportError}<p class="pa-alert" role="alert">{exportError}</p>{/if}
 {#if data.analysis.error}<p class="pa-alert" role="alert">{data.analysis.error}</p>{/if}
 {#if message || refreshError}<p class="pa-alert" role="alert">{message || refreshError}</p>{/if}
 {#if active}
@@ -339,7 +364,9 @@
   </p>
 {/if}
 
-{#snippet runLog()}
+<!-- `open` is the dashboard's own drill opener, handed down so the graph's
+     nodes and the metadata's references are live rather than inert. -->
+{#snippet runLog(open: (id: string) => void)}
   <section id="run-log" class="pa-section">
     <p class="pa-kicker">Run log and provenance</p>
     <h2>Everything behind the page</h2>
@@ -376,7 +403,7 @@
 
     <details>
       <summary>The policy as a graph</summary>
-      <PolicyGraph {artefacts} inspect={() => {}} />
+      <PolicyGraph {artefacts} inspect={open} />
     </details>
 
     {#each data.documents as document (document.id)}
@@ -385,7 +412,7 @@
         <p class="pa-muted">{document.mimeType} · {document.size.toLocaleString()} bytes · SHA-256 {document.sha256}</p>
         <details>
           <summary>Document structure and extraction metadata</summary>
-          <ArtefactValue value={document.metadata} all={artefacts} inspect={() => {}} />
+          <ArtefactValue value={document.metadata} all={artefacts} inspect={open} />
         </details>
       </div>
     {/each}

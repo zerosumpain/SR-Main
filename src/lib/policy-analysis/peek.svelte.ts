@@ -94,10 +94,13 @@ class PolicyPeekState {
 
   /** Pointer rested on a subject. */
   hover(kind: PeekKind, subject: string, el: HTMLElement) {
-    // A pinned card was opened deliberately; drifting the pointer across the
-    // page must not replace it. Escape, the close button or pinning another
-    // subject dismisses it.
-    if (this.current?.pinned) return;
+    // A pinned card is protected from a pointer DRIFTING across the subject it
+    // is already about — but not from one that comes to rest on a different
+    // one. `ExplainLabel` is a button with no click handler, so clicking a
+    // column header pins its card; an unconditional guard here meant that one
+    // click stopped every other explainer, actor and play on the page from
+    // opening at all until the reader found Escape.
+    if (this.current?.pinned && this.same(kind, subject)) return;
     this.clearTimers();
     if (this.same(kind, subject)) return;
     this.openTimer = setTimeout(() => {
@@ -209,6 +212,11 @@ export function peekHandlers() {
     },
     onfocusout(e: FocusEvent) {
       if (!from(e.target)) return;
+      // Focus moving INTO the card is not focus leaving the subject: a
+      // mousedown on "Open the play →" fires focusout on the anchor first, and
+      // closing here unmounted the button before its click could land.
+      const to = e.relatedTarget;
+      if (to instanceof HTMLElement && to.closest('[data-pa-peek-card]')) return;
       policyPeek.close();
     },
   };

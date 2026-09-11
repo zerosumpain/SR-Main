@@ -19,6 +19,7 @@
  */
 import type { Artefact } from './contracts';
 import type { ActorView, Play } from './view';
+import { edgesOf } from './network';
 
 export const ACTOR_MEASURES = [
   { key: 'worst', label: 'Biggest risk', unit: 'exposure', note: 'The highest-ranked play this body could run.' },
@@ -52,16 +53,16 @@ const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is
 /**
  * How many relationships touch each entity.
  *
- * Read off `edge` artefacts, which carry `fromId`/`toId` as first-class columns
- * rather than inside `data` — so this is a column scan, not a JSON walk.
+ * Counted over `edgesOf()`, the SAME derivation the network panel draws from,
+ * because the two appear on one page and must agree. Counting raw `edge`
+ * artefacts here instead gave a body sitting on an edge with a dangling
+ * counterpart "7 relationships" in the atlas and 5 in the network — one
+ * quantity, two numbers, and the `role` composite multiplied by the wrong one.
  */
 export function degrees(artefacts: Artefact[]): Map<string, number> {
   const counts = new Map<string, number>();
-  for (const a of artefacts) {
-    if (a.kind !== 'edge') continue;
-    for (const end of [a.fromId, a.toId]) {
-      if (end) counts.set(end, (counts.get(end) ?? 0) + 1);
-    }
+  for (const edge of edgesOf(artefacts)) {
+    for (const end of [edge.fromId, edge.toId]) counts.set(end, (counts.get(end) ?? 0) + 1);
   }
   return counts;
 }

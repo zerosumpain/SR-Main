@@ -99,16 +99,23 @@ export async function synthesizeDocx(markdown: string, title?: string): Promise<
         walk(((t as unknown as { tokens?: Inline[] }).tokens ?? []), depth);
       } else if (t.type === 'list') {
         for (const item of ((t as unknown as { items?: Inline[] }).items ?? [])) {
-          // A list item's own tokens are blocks; its first is the text.
+          // A list item's own tokens are blocks, and a LOOSE item has several:
+          // taking only the first dropped every paragraph after it, silently.
           const inner = (item as unknown as { tokens?: Inline[] }).tokens ?? [];
-          const first = inner.find((x) => x.type === 'text' || x.type === 'paragraph');
-          const body = runs(first?.tokens);
-          children.push(
-            new Paragraph({
-              children: body.length ? body : [new TextRun(item.text ?? '')],
-              bullet: { level: depth },
-            }),
-          );
+          const blocks = inner.filter((x) => x.type === 'text' || x.type === 'paragraph');
+          if (blocks.length) {
+            for (const block of blocks) {
+              const body = runs(block.tokens);
+              children.push(
+                new Paragraph({
+                  children: body.length ? body : [new TextRun(block.text ?? '')],
+                  bullet: { level: depth },
+                }),
+              );
+            }
+          } else {
+            children.push(new Paragraph({ children: [new TextRun(item.text ?? '')], bullet: { level: depth } }));
+          }
           // Nested lists under the same item.
           for (const nested of inner.filter((x) => x.type === 'list')) walk([nested], depth + 1);
         }

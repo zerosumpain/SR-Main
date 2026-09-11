@@ -28,15 +28,20 @@
 
   let { net, onopen }: Props = $props();
 
-  /** Narrow the edge list to one family, or to none. */
+  /**
+   * Narrow the edge list: null for everything, a family key, or NO_FAMILY for
+   * the relations no family claims — which is the only way to reach them once
+   * the list is longer than it draws.
+   */
+  const NO_FAMILY = '\u0000none';
   let family = $state<string | null>(null);
   /** Narrow to one body — the "show me everything touching X" question. */
   let focus = $state('');
 
   const shown = $derived(
-    net.edges.filter(
-      (e) => (!family || e.family === family) && (!focus || e.fromId === focus || e.toId === focus),
-    ),
+    net.edges
+      .filter((e) => (family === NO_FAMILY ? !e.family : !family || e.family === family))
+      .filter((e) => !focus || e.fromId === focus || e.toId === focus),
   );
   /** A long edge list is a scroll, not a reading. The rest are reachable by filtering. */
   const EDGES = 60;
@@ -110,8 +115,10 @@
       {#if net.unfamilied}
         <p class="net-caveat">
           {net.unfamilied} {net.unfamilied === 1 ? 'relationship uses a type' : 'relationships use types'} no family
-          claims. They are in the list below and nowhere else — worth a look, because it means the vocabulary
-          grew and this grouping did not.
+          claims — worth a look, because it means the vocabulary grew and this grouping did not.
+          <button type="button" class="net-reset" onclick={() => (family = family === NO_FAMILY ? null : NO_FAMILY)}>
+            {family === NO_FAMILY ? 'Showing them' : 'Show them →'}
+          </button>
         </p>
       {/if}
     </section>

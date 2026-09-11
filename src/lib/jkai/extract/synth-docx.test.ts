@@ -98,6 +98,16 @@ describe('structure survives the crossing', () => {
       .toContain('This is a shared copy.');
   });
 
+  it('keeps every paragraph of a LOOSE list item', async () => {
+    // A loose item (blank line between its paragraphs) has several block
+    // children; taking only the first dropped the rest silently, in this export
+    // and in the education strategy brief that shares this module.
+    const text = plain(await documentXml('- First paragraph.\n\n  Second paragraph.\n\n- Another item.'));
+    expect(text).toContain('First paragraph.');
+    expect(text).toContain('Second paragraph.');
+    expect(text).toContain('Another item.');
+  });
+
   it('carries a code block through as monospaced text', async () => {
     expect(plain(await documentXml('```\nnpm run gate\n```'))).toContain('npm run gate');
   });

@@ -137,10 +137,23 @@ describe('the actor atlas redraws on the measure the reader picks', () => {
   });
 
   it('counts a relationship at BOTH of its ends', () => {
+    const body = (id: string) => artefact(id, 'actor', id, 'x', { entityType: 'agency', aliases: [], mentions: [], ambiguity: '', dates: [], parent: null });
     const edge = artefact('e1', 'edge', 'x', 'y', { notes: '' }, { fromId: 'a', toId: 'b', relation: 'funds' });
-    const counts = degrees([edge]);
+    const counts = degrees([body('a'), body('b'), edge]);
     expect(counts.get('a')).toBe(1);
     expect(counts.get('b')).toBe(1);
+  });
+
+  it('agrees with the network panel, because the two sit on one page', () => {
+    // `degrees()` counted raw edge artefacts and `nodesOf()` counted only the
+    // ones whose ends resolve, so a body on an edge with a dangling counterpart
+    // read one number in the atlas and a smaller one in the network.
+    const body = (id: string) => artefact(id, 'actor', id, 'x', { entityType: 'agency', aliases: [], mentions: [], ambiguity: '', dates: [], parent: null });
+    const real = artefact('e1', 'edge', 'x', 'y', { notes: '' }, { fromId: 'a', toId: 'b', relation: 'funds' });
+    const dangling = artefact('e2', 'edge', 'x', 'y', { notes: '' }, { fromId: 'a', toId: 'gone', relation: 'funds' });
+    const all = [body('a'), body('b'), real, dangling];
+    const net = network(all);
+    expect(degrees(all).get('a')).toBe(net.nodes.find((n) => n.id === 'a')?.degree);
   });
 });
 

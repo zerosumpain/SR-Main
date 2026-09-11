@@ -74,8 +74,13 @@
     } | null;
     /** Stage and timestamps for the drill. A shared copy passes none. */
     provenance?: { id: string; stage: number; updatedAt: string | Date }[];
-    /** The owner's run log. A shared copy passes nothing and the workspace is absent. */
-    runLog?: Snippet;
+    /**
+     * The owner's run log. A shared copy passes nothing and the workspace is
+     * absent. It takes the drill opener as a parameter because the drill lives
+     * in here: handing the snippet a no-op made every reference and every graph
+     * node inside it a dead button.
+     */
+    runLog?: Snippet<[(id: string) => void]>;
   }
 
   let { artefacts, status, personas = [], cross = null, provenance = [], runLog }: Props = $props();
@@ -179,11 +184,16 @@
   const visibleTabs = $derived(TABS.filter((t) => (t.id !== 'cross' || cross) && (t.id !== 'provenance' || runLog)));
 
   function onTabKey(event: KeyboardEvent, index: number) {
-    const moves: Record<string, number> = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: TABS.length - 1 };
+    // Walk `visibleTabs`, never `TABS`. A panel that was not rendered is an
+    // index nothing can select out of, and selecting it hides every panel at
+    // once — the page goes blank with no cell lit and focus dropped.
+    const live = visibleTabs.map((t) => at(t.id));
+    const here = Math.max(0, live.indexOf(index));
+    const moves: Record<string, number> = { ArrowRight: here + 1, ArrowLeft: here - 1, Home: 0, End: live.length - 1 };
     const next = moves[event.key];
     if (next === undefined) return;
     event.preventDefault();
-    tab = (next + TABS.length) % TABS.length;
+    tab = live[(next + live.length) % live.length];
     document.getElementById(tabId(TABS[tab].id))?.focus();
   }
 
@@ -198,7 +208,9 @@
     const hash = decodeURIComponent(window.location.hash.slice(1));
     if (!hash) return;
     const index = at(hash);
-    if (index >= 0) tab = index;
+    // Only a tab this copy actually rendered. A shared link ending `#cross` or
+    // `#provenance` would otherwise open on a panel that is not there.
+    if (index >= 0 && visibleTabs.some((t) => t.id === hash)) tab = index;
     else if (artefacts.some((a) => a.id === hash)) trail = [hash];
   });
 </script>
@@ -278,7 +290,7 @@
   </div>
 
   <!-- ————————————————————————————————————— PLAYBOOK ————— -->
-  <section
+  <div
     id="playbook"
     class="ab-panel"
     role="tabpanel"
@@ -323,8 +335,8 @@
     </DashHead>
 
     {#if plays.length}
-      <ExposurePlot plays={shownPlays.length ? shownPlays : plays} inspect={open} />
       {#if shownPlays.length}
+        <ExposurePlot plays={shownPlays} inspect={open} />
         <div class="ab-plays">
           {#each shownPlays as play (play.artefact.id)}
             <PlayCard {play} rank={plays.indexOf(play) + 1} onopen={open} />
@@ -339,10 +351,10 @@
         arrives late in a run.
       </p>
     {/if}
-  </section>
+  </div>
 
   <!-- ————————————————————————————————————— INTERPLAY ————— -->
-  <section
+  <div
     id="interplay"
     class="ab-panel"
     role="tabpanel"
@@ -360,10 +372,10 @@
       ]}
     />
     <InterplayMap map={interplay} inspect={open} />
-  </section>
+  </div>
 
   <!-- ————————————————————————————————————— ACTORS ————— -->
-  <section
+  <div
     id="actors"
     class="ab-panel"
     role="tabpanel"
@@ -394,10 +406,10 @@
       <p class="ab-sub-label">Every body, and what moves it</p>
       <ActorBoard {actors} {personas} inspect={open} />
     </div>
-  </section>
+  </div>
 
   <!-- ————————————————————————————————————— NETWORK ————— -->
-  <section
+  <div
     id="network"
     class="ab-panel"
     role="tabpanel"
@@ -422,10 +434,10 @@
         No relationship has been established yet. The knowledge graph is the fourth of thirteen stages.
       </p>
     {/if}
-  </section>
+  </div>
 
   <!-- ————————————————————————————————————— PERSONAS ————— -->
-  <section
+  <div
     id="personas"
     class="ab-panel"
     role="tabpanel"
@@ -439,10 +451,10 @@
       figures={[{ label: 'Bodies', value: personaGroups.length }]}
     />
     <PersonaPanel groups={personaGroups} inspect={open} onplay={() => goto('playbook')} />
-  </section>
+  </div>
 
   <!-- ————————————————————————————————————— STRESS ————— -->
-  <section
+  <div
     id="stress"
     class="ab-panel"
     role="tabpanel"
@@ -480,10 +492,10 @@
     {/if}
 
     <StressLab {artefacts} onopen={open} />
-  </section>
+  </div>
 
   <!-- ————————————————————————————————————— CHECKS ————— -->
-  <section
+  <div
     id="checks"
     class="ab-panel"
     role="tabpanel"
@@ -506,10 +518,10 @@
       a check to run, it is recorded as an open question rather than coloured green.
     </p>
     <CheckGrid {checks} inspect={open} />
-  </section>
+  </div>
 
   <!-- ————————————————————————————————————— EVIDENCE ————— -->
-  <section
+  <div
     id="evidence"
     class="ab-panel"
     role="tabpanel"
@@ -528,10 +540,10 @@
       ]}
     />
     <EvidenceMix mix={view.evidenceMix(artefacts)} {questions} {sources} inspect={open} />
-  </section>
+  </div>
 
   <!-- ————————————————————————————————————— SCENARIOS ————— -->
-  <section
+  <div
     id="scenarios"
     class="ab-panel"
     role="tabpanel"
@@ -564,11 +576,11 @@
         </ul>
       </details>
     {/if}
-  </section>
+  </div>
 
   <!-- ————————————————————————————————————— CROSS-POLICY ————— -->
   {#if cross}
-    <section
+    <div
       id="cross"
       class="ab-panel"
       role="tabpanel"
@@ -586,11 +598,11 @@
         ]}
       />
       <CrossPolicy found={crossFound} inbound={cross.inbound} unavailable={cross.unavailable} inspect={open} />
-    </section>
+    </div>
   {/if}
 
   <!-- ————————————————————————————————————— THE REPORT ————— -->
-  <section
+  <div
     id="report"
     class="ab-panel"
     role="tabpanel"
@@ -625,7 +637,7 @@
     {:else}
       <p class="ab-empty">The written assessment is produced by the final stage and is not available yet.</p>
     {/if}
-  </section>
+  </div>
 
   <!-- ————————————————————————————————————— WORKING ————— -->
   {#if runLog}
@@ -636,7 +648,7 @@
       class:off={tab !== at('provenance')}
       aria-labelledby={tabId('provenance')}
     >
-      {@render runLog()}
+      {@render runLog(open)}
     </div>
   {/if}
 </div>

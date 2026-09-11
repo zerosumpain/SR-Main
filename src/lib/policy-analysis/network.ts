@@ -203,15 +203,18 @@ function insights(artefacts: Artefact[], edges: Edge[], nodes: EntityNode[]): In
     if (edge.relation !== 'is_measured_by') continue;
     measured.set(edge.fromId, [...(measured.get(edge.fromId) ?? []), edge.toId]);
   }
+  // ONLY `owns_data`. Its `toId` is the data; `supplies_data_to`'s `toId` is the
+  // body receiving it, which is a different kind of thing and cannot be compared
+  // against a measure.
   const ownsData = new Map<string, Set<string>>();
   for (const edge of edges) {
-    if (edge.relation !== 'owns_data' && edge.relation !== 'supplies_data_to') continue;
+    if (edge.relation !== 'owns_data') continue;
     ownsData.set(edge.fromId, new Set([...(ownsData.get(edge.fromId) ?? []), edge.toId]));
   }
   push(
     'marks-own-homework',
     'Measured on data it supplies itself',
-    'Where the measure and the measurement come from the same body, the metric is a statement of intent rather than a control. Worth reading beside any play that involves reporting.',
+    'Where the measure and the data behind it come from the same body, the metric is a statement of intent rather than a control. Worth reading beside any play that involves reporting.',
     [...measured.entries()]
       .filter(([id, targets]) => targets.some((t) => ownsData.get(id)?.has(t)))
       .map(([id]) => ({ id, label: name(id), note: 'is measured by data it owns or supplies' })),
