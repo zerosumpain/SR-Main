@@ -95,6 +95,7 @@ import {
 } from './loops';
 import {
   captureEvents,
+  applyOutingWeights,
   dedupeEvents,
   resolveOwnership,
   utcDay,
@@ -724,11 +725,22 @@ interface LedgerRow extends CaptureEvent {
 /**
  * Append to the ledger.
  *
- * ON CONFLICT DO NOTHING against geo_capture_events_unique_idx. Two jobs in one
+ * ON CONFLICT against geo_capture_events_unique_idx does two jobs in one
  * clause: the anti-farming rule (ten laps of the garden score once) and
- * idempotency (a re-run changes nothing). The EARLIEST row wins, matching
- * dedupeEvents() — if the database kept the latest instead, a rebuild would
- * score a multi-lap day fractionally higher than the live ingest did.
+ * idempotency (a re-run changes nothing).
+ *
+ * It KEEPS THE STRONGER CLAIM rather than the first one written, because since
+ * per-outing weighting landed (see OUTING_ALPHA) two events with the same key
+ * no longer carry the same weight: a two-cell doorstep walk claims a cell far
+ * harder than a six-hundred-cell hike that crossed it the same afternoon. Plain
+ * DO NOTHING would keep whichever the ingest reached first, so the answer would
+ * depend on processing order — and a rebuild, which replays in a different
+ * order, would disagree with the live ingest about the same day. This matches
+ * dedupeEvents(), which resolves the identical collision in memory the identical
+ * way; the two rules have to agree or the ledger is not reproducible.
+ *
+ * `where` keeps it idempotent: a re-run proposing an equal weight updates
+ * nothing, so `written` still counts only rows that actually changed.
  */
 async function writeEvents(rows: LedgerRow[]): Promise<number> {
   let written = 0;
@@ -736,7 +748,26 @@ async function writeEvents(rows: LedgerRow[]): Promise<number> {
     const inserted = await db
       .insert(geoCaptureEvents)
       .values(rows.slice(i, i + INSERT_BATCH))
-      .onConflictDoNothing()
+      .onConflictDoUpdate({
+        target: [
+          geoCaptureEvents.subject,
+          geoCaptureEvents.tileX,
+          geoCaptureEvents.tileY,
+          geoCaptureEvents.day,
+          geoCaptureEvents.kind,
+        ],
+        set: {
+          weight: sql`excluded.weight`,
+          capturedAt: sql`excluded.captured_at`,
+          claimId: sql`excluded.claim_id`,
+          sourceKind: sql`excluded.source_kind`,
+          sourceRef: sql`excluded.source_ref`,
+          activityType: sql`excluded.activity_type`,
+        },
+        // `setWhere`, not the deprecated `where` — that one is ambiguous between
+        // the index predicate and the DO UPDATE's, and this index has no predicate.
+        setWhere: sql`excluded.weight > ${geoCaptureEvents.weight}`,
+      })
       .returning({ id: geoCaptureEvents.id });
     written += inserted.length;
   }
@@ -1037,7 +1068,6 @@ export async function ingestGeoTerritory(options: IngestOptions = {}): Promise<I
       activityType: p.outing.activityType,
     }));
     loopGroups.push({ prepared: p, rows });
-    for (const e of rows) addToTile(ledger, e);
   }
 
   const trampleEvents: LedgerRow[] = [];
@@ -1051,7 +1081,6 @@ export async function ingestGeoTerritory(options: IngestOptions = {}): Promise<I
         activityType: outing.activityType,
       };
       trampleEvents.push(row);
-      addToTile(ledger, row);
     }
   }
 
@@ -1070,9 +1099,28 @@ export async function ingestGeoTerritory(options: IngestOptions = {}): Promise<I
         activityType: outing.activityType,
       };
       fillEvents.push(row);
-      addToTile(ledger, row);
     }
   }
+
+  // ── weight by outing, then index ────────────────────────────────────────
+  //
+  // Every event this run produced, in one list, because an outing's size is its
+  // loop, trample and fill events together — weighting the three lists
+  // separately would draw a journey three allowances.
+  //
+  // This has to happen before `addToTile`, not after: the ledger view is what
+  // `writeClaims` resolves `tiles_taken` against, so a view built from
+  // un-weighted rows reports a claim taking ground the recompute then hands to
+  // somebody else. `applyOutingWeights` mutates in place precisely so that
+  // these rows, the ones `loopGroups` still holds, and the ones stamped with
+  // claim ids below are all the same objects.
+  const runEvents: LedgerRow[] = [
+    ...loopGroups.flatMap((g) => g.rows),
+    ...trampleEvents,
+    ...fillEvents,
+  ];
+  applyOutingWeights(runEvents);
+  for (const e of runEvents) addToTile(ledger, e);
 
   const claims = await writeClaims(prepared, ledger);
 
@@ -1092,17 +1140,18 @@ export async function ingestGeoTerritory(options: IngestOptions = {}): Promise<I
     }
   }
 
-  // Deduplicate in memory FIRST — an INSERT whose own VALUES list contains the
-  // same conflict key twice is a "cannot affect row a second time" error on the
-  // DO UPDATE path and, even on DO NOTHING, makes the written count a lie.
-  // dedupeEvents keeps the EARLIEST, which is exactly what the unique index
-  // plus DO NOTHING does at the database; if the two rules disagreed, a rebuild
-  // would score a multi-lap day differently from the live ingest.
-  const proposed: LedgerRow[] = [
-    ...(dedupeEvents(loopEvents) as LedgerRow[]),
-    ...(dedupeEvents(trampleEvents) as LedgerRow[]),
-    ...(dedupeEvents(fillEvents) as LedgerRow[]),
-  ];
+  // Deduplicate in memory before writing — an INSERT whose own VALUES list
+  // contains the same conflict key twice is a "cannot affect row a second time"
+  // error on the DO UPDATE path, and makes the written count a lie either way.
+  // `runEvents` is already weighted, which is what makes dedupe's highest-weight
+  // rule mean something: the day's surviving claim on a cell is the strongest
+  // one rather than whichever outing was processed first. Deduplicating the
+  // union is the same operation as deduplicating each kind separately, because
+  // `kind` is part of the uniqueness key.
+  //
+  // `loopEvents` is not re-listed here: its rows ARE runEvents' rows, and the
+  // loop above stamped their claim ids in place.
+  const proposed: LedgerRow[] = dedupeEvents(runEvents) as LedgerRow[];
 
   const eventsWritten = await writeEvents(proposed);
 
@@ -1264,6 +1313,54 @@ export function territoryFilterSql(filter: TerritoryFilter = {}) {
  * can use the materialised table for the default view and this for every other
  * one without the two ever disagreeing.
  */
+/**
+ * Who has ever stood on each cell, under this filter.
+ *
+ * The boards need it because total ground answers the wrong question. 91% of
+ * the map on 2026-09-11 had been visited by exactly one person, so ranking by
+ * area ranks how far somebody roams, and no scoring rule can move a cell
+ * nobody else has been to. A cell two or more people have visited is the only
+ * ground that is actually being contested, and that is the table worth reading.
+ *
+ * Returns cell key -> the set of subjects with at least one event there. The
+ * caller decides what "contested" means; this only reports the visits.
+ */
+export async function readVisitorSets(options: {
+  now?: Date;
+  filter?: TerritoryFilter;
+  tileRange?: { minX: number; maxX: number; minY: number; maxY: number };
+}): Promise<Map<string, Set<string>>> {
+  const now = options.now ?? new Date();
+  const r = options.tileRange;
+  const where = [
+    territoryFilterSql(options.filter),
+    lte(geoCaptureEvents.capturedAt, now),
+    r ? sql`${geoCaptureEvents.tileX} between ${r.minX} and ${r.maxX}` : undefined,
+    r ? sql`${geoCaptureEvents.tileY} between ${r.minY} and ${r.maxY}` : undefined,
+  ].filter((p): p is Exclude<typeof p, undefined> => p !== undefined);
+
+  // Grouped in the database rather than read row by row: the ledger carries one
+  // row per cell per day per kind, and this only needs the distinct triples.
+  const rows = await db
+    .select({
+      tileX: geoCaptureEvents.tileX,
+      tileY: geoCaptureEvents.tileY,
+      subject: geoCaptureEvents.subject,
+    })
+    .from(geoCaptureEvents)
+    .where(where.length ? and(...where) : undefined)
+    .groupBy(geoCaptureEvents.tileX, geoCaptureEvents.tileY, geoCaptureEvents.subject);
+
+  const out = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const key = tileKeyOf(row.tileX, row.tileY);
+    const set = out.get(key);
+    if (set) set.add(row.subject);
+    else out.set(key, new Set([row.subject]));
+  }
+  return out;
+}
+
 export async function resolveFilteredOwnership(options: {
   now?: Date;
   filter?: TerritoryFilter;

@@ -35,6 +35,22 @@ export interface Standing {
   heldDays: number;
 }
 
+/**
+ * One row of the contested board.
+ *
+ * `visited` is the contested cells this person has ever stood on, `holds` the
+ * ones they hold now. The rate between them is the only head-to-head number on
+ * the page: total ground is 91% ground nobody else has been to, so it ranks
+ * reach rather than any contest.
+ */
+export interface ContestedStanding {
+  subject: string;
+  holds: number;
+  visited: number;
+  /** holds / visited, 0 when they have contested nothing. */
+  winRate: number;
+}
+
 export interface FeedVictim {
   subject: string;
   tiles: number;
@@ -92,6 +108,8 @@ export interface LandgrabData {
   players: PlayerIdentity[];
   territory: PlayerTerritory[];
   standings: Standing[];
+  /** Cells more than one person has visited, and who is winning them. */
+  contested: { cells: number; board: ContestedStanding[] };
   feed: FeedItem[];
   dangle: DangleLine[];
   totals: { events: number; claims: number; cells: number; areaM2: number };

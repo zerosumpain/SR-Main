@@ -50,6 +50,78 @@ export const TRAMPLE_WEIGHT = 1;
 export const FILL_WEIGHT = LOOP_WEIGHT;
 
 /**
+ * One outing, one claim — however far it went.
+ *
+ * Each event's weight is divided by the number of events its OUTING produced,
+ * raised to this power. At 0 the scheme is the original one, where a claim is
+ * proportional to ground covered; at 1 an outing's total claim is the same
+ * whether it painted three cells or six hundred, and it is simply spread more
+ * thinly over the longer one.
+ *
+ * Measured on the real ledger (2026-09-11), over the 2,504 cells that more than
+ * one person has ever visited — the only ground any scoring rule can move:
+ *
+ *     alpha   john    katie   jemima  rory    fintan
+ *     0       66.1%   18.3%   29.5%   33.1%   17.4%   (win rate on contested cells)
+ *     0.5     52.9%   27.8%   36.7%   43.1%   19.5%
+ *     1       45.5%   30.6%   43.3%   49.3%   23.7%
+ *
+ * The household's runner covers about 2.7x the ground of its walkers per
+ * outing (69.3 cells per person-day against 25.4), so under alpha=0 the board
+ * was ranking distance. It is 1 because the game is meant to reward going out
+ * often, not going out far — twenty walks now beat seven runs. What it does NOT
+ * touch is the 91% of the map only one person has ever set foot on: no scoring
+ * rule can redistribute uncontested ground, which is why the boards rank the
+ * contest separately (see the landgrab page).
+ *
+ * The loop bonus survives: a closed loop's events still weigh 3x a trample's,
+ * so an outing that encloses ground still out-claims one that merely crossed
+ * it. Only SIZE stops paying.
+ */
+export const OUTING_ALPHA = 1;
+
+/** What identifies one outing: a journey, or one workout. */
+export interface OutingRef {
+  subject: string;
+  sourceRef: string;
+}
+
+/**
+ * Divide each event's weight by the size of the outing it came from.
+ *
+ * Call this BEFORE anything reads a weight — before the ledger view the claim
+ * writer resolves `tiles_taken` against, and before `dedupeEvents`, so that the
+ * day's surviving claim on a cell is the STRONGEST one rather than whichever
+ * outing happened to be processed first. Dedupe already prefers the higher
+ * weight, a branch that existed for exactly this and was dead while weight was
+ * a pure function of kind.
+ *
+ * It must see the whole outing at once: loop, trample and fill events are built
+ * in three passes, and an outing's size is all three together. Splitting them
+ * would pay a journey three separate allowances.
+ */
+export function applyOutingWeights<T extends CaptureEvent & OutingRef>(
+  rows: T[],
+  alpha: number = OUTING_ALPHA,
+): T[] {
+  if (!alpha) return rows;
+  const key = (r: OutingRef) => `${r.subject}\u0000${r.sourceRef}`;
+  const size = new Map<string, number>();
+  for (const r of rows) size.set(key(r), (size.get(key(r)) ?? 0) + 1);
+  // IN PLACE, and returning the same array. The ingest holds these rows in
+  // several lists at once — the claim writer stamps ids onto the very objects
+  // the ledger view has already indexed — so handing back copies would leave
+  // half the run scoring at the un-weighted value. That is not hypothetical:
+  // it is what made a nested claim report taking 12 cells while 25 changed
+  // hands, because `tiles_taken` is resolved against that ledger view.
+  for (const r of rows) {
+    const n = size.get(key(r)) ?? 1;
+    if (n > 1) r.weight = r.weight / Math.pow(n, alpha);
+  }
+  return rows;
+}
+
+/**
  * 'loop'    — a tile centroid inside a detected ring.
  * 'trample' — a tile the cleaned path crossed.
  * 'fill'    — a tile the journey's cell set enclosed without treading.

@@ -133,12 +133,33 @@ export const DATE_WINDOWS = [
 export type DateWindow = (typeof DATE_WINDOWS)[number];
 export type DateWindowKey = DateWindow['key'];
 
-export const DEFAULT_WINDOW: DateWindowKey = 'all';
+/**
+ * 30 days, not all time.
+ *
+ * The ledgers are not the same length and the default was comparing them
+ * anyway. John's Apple corpus was backfilled to 2025-01-01 and carries 420
+ * active days; the other four arrived with Life360 on 2026-07-29 and have
+ * around 40. On the all-time board that reads as 17,959 cells against 641,
+ * which is a head start rather than a result — per ACTIVE DAY, Katie captures
+ * more ground than John does (53.5 cells against 44.7). Over 30 days the same
+ * board reads 3,012 against 557, which is the two of them playing the same
+ * game. All time is still one click away, and still means exactly what it did.
+ */
+export const DEFAULT_WINDOW: DateWindowKey = '30d';
 
-/** Unknown or absent reads as all time — a bad query string never hides ground. */
+/**
+ * Absent reads as the DEFAULT; a bad key reads as all time.
+ *
+ * Two different failure modes, deliberately given different answers. No
+ * `?window=` at all is just somebody opening the page, and they should get the
+ * default board. A key that is present but unrecognised is a broken or
+ * hand-edited link, and narrowing the board on the strength of a typo would
+ * hide ground somebody holds — so that case still opens all the way up.
+ */
 export function windowOf(key: string | null | undefined): DateWindow {
   for (const w of DATE_WINDOWS) if (w.key === key) return w;
-  for (const w of DATE_WINDOWS) if (w.ms === null) return w;
+  const fallback: DateWindowKey = key == null ? DEFAULT_WINDOW : 'all';
+  for (const w of DATE_WINDOWS) if (w.key === fallback) return w;
   return DATE_WINDOWS[0];
 }
 

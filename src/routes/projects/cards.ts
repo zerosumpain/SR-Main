@@ -29,6 +29,14 @@ export interface ProjectCard {
   blurb: string;
   /** The mono strip along the foot of the card. */
   chips: string;
+  /**
+   * Hidden from the public outright: no visibility key, no public/private
+   * toggle and no Share button, because there is no state in which this card
+   * should be seen by anyone but the owner. Cards carrying it live in
+   * `./owner-cards.server.ts` and are NOT in PROJECT_CARDS — see the note
+   * there for why the visibility toggle is the wrong instrument for them.
+   */
+  ownerOnly?: true;
 }
 
 export const PROJECT_CARDS: ProjectCard[] = [
