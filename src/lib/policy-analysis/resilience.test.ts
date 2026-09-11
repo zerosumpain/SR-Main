@@ -14,7 +14,7 @@ import { boundWarnings, encodedSize, fitToBudget } from './budget';
 import { bandOf, exposureOf, scoreExploits } from './exposure';
 import { runPolicyTests } from './tests';
 import { repairPrompt } from './prompts';
-import { executeStage } from './pipeline';
+import { executeStage, graphUncovered } from './pipeline';
 import { fixtureModel } from '../../../tests/fixtures/policy-analysis/model';
 import { ingest } from './server/ingest';
 import { readFileSync } from 'node:fs';
@@ -457,6 +457,64 @@ describe('a verdict drawn from a fragment is not a verdict', () => {
     expect(String(checks[0].statement)).toContain('this is not a pass');
   });
 
+  /**
+   * The second arm of the guard, and the one that was reporting the opposite of
+   * the truth. `uncovered` is the share of RESOLVED ACTORS the graph never said
+   * anything about, and it used to be counted from `node` artefacts — records the
+   * stage emitted per entity, which nothing rendered. Nodes were emitted for
+   * mechanisms and claims too, the ratio was taken against actors alone and then
+   * clamped at 1, so 712 nodes for 511 actors read as perfect coverage on a graph
+   * whose edges reached 267 of them.
+   */
+  const actorOf = (id: string) =>
+    artefact(id, 'actor', id, 'x', { entityType: 'agency', aliases: [], mentions: [], ambiguity: '', dates: [], parent: null });
+
+  it('counts a body as covered only when the graph gives it a relationship', () => {
+    const actors = Array.from({ length: 10 }, (_, i) => actorOf(`s2_a${i}`));
+    const mechanism = artefact('s1_m', 'mechanism', 'Duty', 'x', { intervention: 'i', implementation: 'p', notes: 'n' });
+    const wired = [0, 1, 2].map((i) => edge(`e${i}`, 'is_accountable_for', `s2_a${i}`, 's1_m'));
+    expect(graphUncovered([...actors, mechanism, ...wired])).toBeCloseTo(0.7, 5);
+    expect(graphUncovered([...actors, mechanism])).toBe(1);
+    expect(graphUncovered([mechanism, ...wired])).toBe(0);
+  });
+
+  it('counts one body once, however many candidate rows resolution left it as', () => {
+    // Entity resolution deliberately refuses to merge rows that merely share a
+    // name, so one body arrives at the graph stage as several `_candidate_` rows
+    // — 479 of Best Start in Life's 511. The stage fans out per canonical LABEL,
+    // handing one call every member's evidence, so a graph that wires the body
+    // once has covered it. Counted per ROW that same graph reads as 47.7%
+    // uncovered and guts its own checks; per group it is 14.2%.
+    const split = ['s2_gov_candidate_0', 's2_gov_candidate_1', 's2_gov_candidate_2'].map((id) =>
+      artefact(id, 'actor', 'Government', 'x', { entityType: 'agency', aliases: [], mentions: [], ambiguity: '', dates: [], parent: null }));
+    const other = actorOf('s2_ofsted');
+    const mechanism = artefact('s1_m', 'mechanism', 'Duty', 'x', { intervention: 'i', implementation: 'p', notes: 'n' });
+    // One of the three candidate rows is wired; the group is covered, Ofsted is not.
+    const wired = [edge('e0', 'funds', 's2_gov_candidate_1', 's1_m')];
+    expect(graphUncovered([...split, other, mechanism, ...wired])).toBeCloseTo(0.5, 5);
+    // Per row this would have been 3 of 4 uncovered.
+    expect(graphUncovered([...split, mechanism, ...wired])).toBe(0);
+  });
+
+  it('is not fooled by a graph that recorded entities but no relationships', () => {
+    // The live shape: Best Start in Life, 511 resolved actors, 712 node records,
+    // edges reaching 267 bodies. The old arithmetic returned 0 — full coverage —
+    // and its twelve checks published four high-risk verdicts on that basis.
+    const actors = Array.from({ length: 10 }, (_, i) => actorOf(`s2_a${i}`));
+    const mechanism = artefact('s1_m', 'mechanism', 'Duty', 'x', { intervention: 'i', implementation: 'p', notes: 'n' });
+    // More "entities in the graph" than there are actors, and one relationship.
+    // `node` is no longer a `Kind`, which is the point — these are rows an
+    // assessment written before the retirement still holds, and they must not
+    // count towards coverage now any more than they should have then.
+    const legacyNodes = Array.from({ length: 14 }, (_, i) =>
+      ({ ...artefact(`s3_n${i}`, 'edge', 'legacy node record', 'x', { notes: 'n' }), kind: 'node' }) as unknown as Artefact);
+    const covered = graphUncovered([...actors, mechanism, ...legacyNodes, edge('e0', 'is_accountable_for', 's2_a0', 's1_m')]);
+    expect(covered).toBeCloseTo(0.9, 5);
+    const checks = runPolicyTests([...actors, mechanism, edge('e0', 'is_accountable_for', 's2_a0', 's1_m')], { uncovered: covered });
+    expect(checks.every((c) => c.data.result === 'indeterminate')).toBe(true);
+    expect(String(checks[0].statement)).toContain('10% of the resolved actors');
+  });
+
   it('fails the graph stage outright when it lost the majority of its own output', async () => {
     const source = passage('passage_0001');
     const actor = artefact('s2_0_council', 'actor', 'Council', 'x', { entityType: 'local_authority', aliases: [], mentions: ['passage_0001'], ambiguity: 'n', dates: [], parent: null }, { refs: ['passage_0001'] });
@@ -465,7 +523,6 @@ describe('a verdict drawn from a fragment is not a verdict', () => {
       const prefix = (raw as { idPrefix: string }).idPrefix;
       return {
         artefacts: [
-          artefact(`${prefix}node`, 'node', 'Council', 'x', { entityId: actor.id }, { refs: [actor.id] }),
           artefact(`${prefix}edge`, 'edge', 'Accountability', 'x', { notes: 'n' }, { refs: [actor.id, mechanism.id], fromId: actor.id, toId: mechanism.id, relation: 'is_accountable_for', temporal: 'proposed' }),
           // Three that cannot stand: endpoints that are not in the analysis.
           ...['a', 'b', 'c'].map((k) => artefact(`${prefix}bad_${k}`, 'edge', 'Dangling', 'x', { notes: 'n' }, { refs: [actor.id], fromId: 'nope', toId: 'nowhere', relation: 'funds', temporal: 'proposed' })),
@@ -638,13 +695,15 @@ describe('the repair round is told which field, and runs even when the stage is 
   const source = passage('passage_0001');
 
   it('names the missing data field in the rejection and the warning', () => {
-    // The live graph stage failed three times because every node carried
-    // `data.node` where the contract wants `data.entityId`, and nothing said so.
-    const node = artefact('s3_main_node', 'node', 'The Council', 'A body in the graph.', { node: 's2_000_council' }, { refs: [source.id] });
-    const triaged = triageOutput({ artefacts: [node], warnings: [] }, 3, [source]);
+    // The live graph stage failed three times because its artefacts carried the
+    // wrong key in `data` and nothing said which. Shown here on an edge, whose
+    // contract wants `notes`; the original case was a since-retired `node` kind
+    // carrying `data.node` where the contract wanted `data.entityId`.
+    const edge = artefact('s3_main_edge', 'edge', 'Accountability', 'A relationship.', { note: 'n' }, { refs: [source.id], fromId: source.id, toId: source.id, relation: 'is_accountable_for', temporal: 'proposed' });
+    const triaged = triageOutput({ artefacts: [edge], warnings: [] }, 3, [source]);
     expect(triaged.artefacts).toEqual([]);
-    expect(triaged.rejected[0].reason).toContain('entityId');
-    expect(triaged.warnings.join(' ')).toContain('entityId');
+    expect(triaged.rejected[0].reason).toContain('notes');
+    expect(triaged.warnings.join(' ')).toContain('notes');
   });
 
   it('says which kind does not belong to the stage', () => {
@@ -654,8 +713,8 @@ describe('the repair round is told which field, and runs even when the stage is 
   });
 
   it('builds a repair instruction that carries the field', () => {
-    const instruction = repairPrompt([{ id: 's3_main_node', kind: 'node', code: 'contract', reason: 'An artefact did not match its stage contract (node data.entityId: Invalid input: expected string, received undefined).' }], 's3_main_');
-    expect(instruction).toContain('entityId');
+    const instruction = repairPrompt([{ id: 's3_main_edge', kind: 'edge', code: 'contract', reason: 'An artefact did not match its stage contract (edge data.notes: Invalid input: expected string, received undefined).' }], 's3_main_');
+    expect(instruction).toContain('notes');
     expect(instruction).toContain('s3_main_');
   });
 });

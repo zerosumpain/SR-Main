@@ -33,13 +33,13 @@ import { RELATION_FAMILIES, familyOf, type RelationFamilyKey } from './glossary'
  * reading headlined "the bodies the policy runs through" named two mechanisms
  * among its five.
  *
- * `node` is admitted because the graph stage's CONTRACT allows a graph node as
- * an endpoint — not because one has been seen. Across every assessment on the
- * box at 2026-09-11, 754 `node` artefacts were written and not one was an edge
- * end; the edges reference the stage-1 and stage-2 ids directly. The contract
- * decides what an endpoint may be, so the kind stays in.
+ * `node` was admitted here while the graph contract still had a `node` kind —
+ * a record the stage emitted per entity, which nothing rendered and no edge
+ * ever pointed at. The kind is retired, so only `actor` remains; assessments
+ * written before the retirement still hold their node rows, and they are
+ * endpoints of nothing there either.
  */
-export const BODY_KINDS = new Set(['actor', 'node']);
+export const BODY_KINDS = new Set(['actor']);
 export const isBody = (node: { kind: string }) => BODY_KINDS.has(node.kind);
 
 export type Edge = {

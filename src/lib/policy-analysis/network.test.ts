@@ -25,12 +25,12 @@ const edge = (id: string, from: string, to: string, relation: string, page: numb
 const reading = (all: Artefact[], key: string) => network(all).insights.find((i) => i.key === key);
 
 describe('a body is not a piece of machinery', () => {
-  it('admits the two kinds the graph contract allows as an endpoint', () => {
-    // `node` has never been seen as an endpoint — 754 were written across every
-    // assessment on the box at 2026-09-11 and none was an edge end — but the
-    // contract allows one, and the contract decides.
+  it('admits only the kind the graph contract allows as a body', () => {
+    // `node` was admitted while the contract still had that kind. It is retired:
+    // 754 were written across every assessment on the box at 2026-09-11 and not
+    // one was ever an edge endpoint, so it was never a body in the first place.
     expect(isBody({ kind: 'actor' })).toBe(true);
-    expect(isBody({ kind: 'node' })).toBe(true);
+    expect(isBody({ kind: 'node' })).toBe(false);
     expect(isBody({ kind: 'mechanism' })).toBe(false);
     expect(isBody({ kind: 'claim' })).toBe(false);
   });

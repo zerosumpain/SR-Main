@@ -21,8 +21,9 @@ export function fixtureModel(stage: number, _key: string, raw: unknown): StageOu
   } else if (stage === 3) {
     const a = input.artefacts.find((a) => a.kind === 'actor' && a.id.startsWith('s2_'))!;
     const m = one('mechanism');
-    items = [make('node', 'node', { entityId: a.id }, [a.id]),
-      { ...make('edge', 'edge', { notes: 'Paper assigns responsibility; authority not documented.' }, [a.id, m.id]), fromId: a.id, toId: m.id, relation: 'is_accountable_for', temporal: 'proposed' }];
+    // Edges only: the `node` kind the graph stage used to emit alongside them was
+    // rendered by nothing and is retired.
+    items = [{ ...make('edge', 'edge', { notes: 'Paper assigns responsibility; authority not documented.' }, [a.id, m.id]), fromId: a.id, toId: m.id, relation: 'is_accountable_for', temporal: 'proposed' }];
   } else if (stage === 4) {
     const a = input.artefacts.find((a) => a.id === input.targetActorId)!;
     const fields = Object.fromEntries(PROFILE_FIELDS.map((f) => [f, { value: 'Documented role or an explicit unknown in this synthetic fixture.', origin: 'structural_inference', confidence: null, refs: [a.id] }]));

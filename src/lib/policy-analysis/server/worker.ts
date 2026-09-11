@@ -4,7 +4,7 @@ import { policyAnalyses, policyDocuments, policyExecutions, policyModelCalls, po
 import { isThinkingLevel } from '$lib/models/thinking';
 import { boundWarnings } from '../budget';
 import { PERSONA_STAGE, type Concurrency } from '../contracts';
-import { executeStage } from '../pipeline';
+import { executeStage, graphUncovered } from '../pipeline';
 import { PolicyError } from '../validation';
 import { ingest } from './ingest';
 import { loadArtefacts, neighbourSummaries, persistArtefacts, queueStage } from './store';
@@ -155,10 +155,12 @@ export async function executePolicyRun(claimed: { id: string; input: Record<stri
     // fraction of the inventory, keep all of it, and report a discard rate of
     // zero. Measured against the resolved actors, which is what a structural
     // check about authority, funding or accountability is reasoning over.
-    const resolvedActors = all.filter((a) => a.kind === 'actor' && a.id.startsWith('s2_')).length;
-    const graphNodes = all.filter((a) => a.kind === 'node').length;
-    const uncovered = resolvedActors > 0 ? 1 - Math.min(1, graphNodes / resolvedActors) : 0;
-    const graphLoss = Math.max(discarded, uncovered);
+    //
+    // ONE DEFINITION, imported. This arithmetic was written out a second time
+    // here, and the copy counted `node` artefacts — which is why it returned
+    // "fully covered" for a graph reaching half the bodies. `graphUncovered`
+    // explains what it counts now and why.
+    const graphLoss = Math.max(discarded, graphUncovered(all));
     // `content` is base64 of up to 10 MB and only stage 0 has any use for it.
     // Selecting the whole row on all thirteen stages moved ~13 MB through the
     // connection twelve times for nothing.
