@@ -7,12 +7,12 @@
 // cacheable response.
 
 import { error, json } from '@sveltejs/kit';
-import { and, inArray, lte, sql } from 'drizzle-orm';
+import { and, lte, sql } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
 import { isOwnerRequest } from '$lib/server/owner';
 import { db } from '$lib/db';
 import { geoCaptureEvents } from '$lib/db/schema';
-import { activityTypeNotIn } from '$lib/geo/service';
+import { territoryFilterSql } from '$lib/geo/service';
 import { connectedComponents } from '$lib/geo/dissolve';
 import { regionHistory } from '$lib/geo/history';
 import { tileCentre, tileKeyOf, type Tile } from '$lib/geo/tiles';
@@ -24,21 +24,41 @@ import type { RegionHistory } from '../types';
 /** Coordinate precision in the payload. 5 dp is ~1.1 m; cells are 44 m. */
 const COORD_DP = 5;
 
+/** The highest legal tile index at z19, on both axes. */
+const MAX_TILE = 2 ** 19 - 1;
+
+/** Digits only, so `1e3`, `0x1f`, `1.0`, `-4` and `+7` are all refused before
+ *  they reach `Number`. The same spelling the page's `?geo=x:y` deep link
+ *  accepts — one legal form for a cell reference, not two. */
+const TILE_INDEX = /^\d+$/;
+
+/** A tile index off the query string, or null if it is not one. */
+const tileIndex = (raw: string | null): number | null => {
+  const s = raw?.trim() ?? '';
+  if (!TILE_INDEX.test(s)) return null;
+  const n = Number(s);
+  return n <= MAX_TILE ? n : null;
+};
+
+/** How long the whole request may spend on the geocoder. `suggestPlaceName`
+ *  carries a 10 s HTTP timeout of its own, and a tap on the map must not be
+ *  able to sit on one; past this the drawer prints coordinates. */
+const NAME_BUDGET_MS = 1500;
+
 export const GET: RequestHandler = async (event) => {
   if (!(await isOwnerRequest(event))) throw error(404, 'Not found');
   event.setHeaders({ 'cache-control': 'private, no-store' });
 
-  // The raw strings first: `Number(null)` and `Number('')` are both 0, so a
-  // request with no x/y at all would otherwise be answered as a tap on tile
+  // Both indices, validated as STRINGS before they are numbers. `Number(null)`
+  // and `Number('')` are both 0 and both `Number.isInteger`-true, so a check on
+  // the parsed value alone answers a request with no arguments as a tap on tile
   // (0, 0) — a real cell in the Atlantic, and a 404 that reads like "no ground
-  // here" rather than "you forgot the arguments".
-  const rawX = event.url.searchParams.get('x')?.trim() ?? '';
-  const rawY = event.url.searchParams.get('y')?.trim() ?? '';
-  const x = Number(rawX);
-  const y = Number(rawY);
-  if (!rawX || !rawY || !Number.isInteger(x) || !Number.isInteger(y)) {
-    throw error(400, 'x and y required');
-  }
+  // here" rather than "you forgot the arguments". The range bound is the other
+  // half: an index past `MAX_TILE` is not a cell on this planet, and letting it
+  // through only buys a `tileKeyOf` lookup that can never hit.
+  const x = tileIndex(event.url.searchParams.get('x'));
+  const y = tileIndex(event.url.searchParams.get('y'));
+  if (x === null || y === null) throw error(400, 'x and y required');
 
   const now = new Date();
   const filter = await parseFilter(event.url);
@@ -78,18 +98,16 @@ export const GET: RequestHandler = async (event) => {
     minY = Math.min(minY, t.y);
     maxY = Math.max(maxY, t.y);
   }
-  const where = [
+  // `territoryFilterSql` is the one legal spelling of a territory filter, so
+  // the drawer cannot drift from the map: when `parseFilter` grows a fourth
+  // dimension, both honour it. `and()` drops the undefined it returns when the
+  // filter is empty.
+  const where = and(
     sql`${geoCaptureEvents.tileX} between ${minX} and ${maxX}`,
     sql`${geoCaptureEvents.tileY} between ${minY} and ${maxY}`,
     lte(geoCaptureEvents.capturedAt, now),
-    filter.baseFilter.excludeActivityTypes?.length
-      ? activityTypeNotIn(geoCaptureEvents.activityType, filter.baseFilter.excludeActivityTypes)
-      : undefined,
-    filter.baseFilter.excludeUntyped ? sql`${geoCaptureEvents.activityType} is not null` : undefined,
-    filter.baseFilter.subjects?.length
-      ? inArray(geoCaptureEvents.subject, filter.baseFilter.subjects)
-      : undefined,
-  ].filter((p): p is Exclude<typeof p, undefined> => p !== undefined);
+    territoryFilterSql(filter.baseFilter),
+  );
   const rows = await db
     .select({
       subject: geoCaptureEvents.subject,
@@ -101,7 +119,7 @@ export const GET: RequestHandler = async (event) => {
       capturedAt: geoCaptureEvents.capturedAt,
     })
     .from(geoCaptureEvents)
-    .where(and(...where));
+    .where(where);
   const events: CaptureEvent[] = rows.map((r) => ({ ...r, kind: r.kind as CaptureKind }));
 
   const core = regionHistory(events, keys, now);
@@ -132,7 +150,7 @@ export const GET: RequestHandler = async (event) => {
     areaM2: component.length * board.cellAreaM2,
     centre,
     since: since === null ? null : new Date(since).toISOString(),
-    name: await nameFor(centre, { uncached: 1 }),
+    name: await nameFor(centre, { uncached: 1, deadline: Date.now() + NAME_BUDGET_MS }),
     ...core,
   };
   return json(out);

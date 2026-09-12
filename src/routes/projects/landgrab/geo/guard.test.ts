@@ -75,4 +75,38 @@ describe('/projects/landgrab/geo guard', () => {
       }),
     ).rejects.toMatchObject({ status: 400 });
   });
+
+  it('400s a tile index outside the z19 grid', async () => {
+    // 2 ** 19 is one past the last column at z19. `tileKeyOf` would happily
+    // build a key for it and `ownedNow` would happily miss, which reads to the
+    // caller as "no ground here" — an answer about the ledger, when the truth
+    // is that the question was not about a cell on this planet.
+    await expect(
+      callGet({
+        locals: { auth: async () => null },
+        getClientAddress: () => '127.0.0.1',
+        url: new URL('http://localhost/projects/landgrab/geo?x=524288&y=2'),
+        setHeaders: vi.fn(),
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it.each(['1e3', '0x1f', '1.0', '-4', '+7', ' '])(
+    '400s the non-digit tile index %j',
+    async (raw) => {
+      // Digits only — every one of these survives `Number.isInteger` (or, for
+      // `1.0`, reads as a whole number) and none of them is the spelling the
+      // page's `?geo=x:y` deep link produces. One legal form, not six.
+      await expect(
+        callGet({
+          locals: { auth: async () => null },
+          getClientAddress: () => '127.0.0.1',
+          url: new URL(
+            `http://localhost/projects/landgrab/geo?x=${encodeURIComponent(raw)}&y=2`,
+          ),
+          setHeaders: vi.fn(),
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+    },
+  );
 });
