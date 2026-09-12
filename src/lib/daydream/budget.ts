@@ -75,6 +75,12 @@ export const SPENDING_ACTIONS = [
   'daydream-spend',
   'daydream-ponder',
   'daydream-weekly',
+  // The landgrab Sunday letter. Not a `daydream-` action by name, but it
+  // resolves `resolveDaydreamModel()` and tags its calls `daydream`, so it
+  // draws on the same subscription window these caps exist to protect. Two
+  // small completions a week — listed on the day it shipped rather than three
+  // weeks later, because the omission is silent and has happened twice.
+  'landgrab-weekly',
   // The reviewer is xhigh reasoning with a tool loop, on every thought — the
   // most expensive thing on this list by some distance. Omitting an action here
   // has happened twice before (hypothesise and spend both ran outside the caps
