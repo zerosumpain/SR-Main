@@ -181,7 +181,7 @@ const MS_PER_DAY = 86_400_000;
  */
 const SCORE_EPSILON = 1e-12;
 
-function isTie(a: number, b: number): boolean {
+export function isTie(a: number, b: number): boolean {
   return Math.abs(a - b) <= SCORE_EPSILON * Math.max(Math.abs(a), Math.abs(b));
 }
 

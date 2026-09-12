@@ -9,6 +9,11 @@
    * The frame is `SegmentGround`'s: 2px `--card-border`, 12px of padding, a head
    * row naming the basemap, and a key underneath. The map is the one panel on
    * this page that is a picture, and it is framed like one.
+   *
+   * The picture is a BOARD as of 2026-09-12: a fixed honeycomb over everything,
+   * coloured where somebody holds it. The key still counts cells, because a
+   * cell is what the ledger, the boards and the Sunday letter all count — and a
+   * hex is one cell of ground by construction.
    */
   import TerritoryMap from './TerritoryMap.svelte';
   import Swatch from './Swatch.svelte';
@@ -48,11 +53,27 @@
   const VIEWS = [
     { key: 'changed', label: 'Changed', hint: 'Fit where the ground moved' },
     { key: 'home', label: 'Home', hint: 'Fit the Darlington box' },
-    { key: 'all', label: 'All', hint: 'Fit every territory' },
+    { key: 'all', label: 'All', hint: 'Fit every held hex' },
   ] as const;
 
   const roster = $derived(lg.players.filter((p) => lg.available.subjects.includes(p.subject)));
   const who = $derived(identityMap(lg.players));
+
+  /**
+   * Who the map can actually SHOW, which is not everyone the board counts.
+   *
+   * The hex lattice is offset from the cell grid and a hex goes wholly to one
+   * person, so a small holding surrounded by a stronger one can win no hex at
+   * all — measured at 14% for a lone cell inside a 7x7 block. Those players
+   * hold ground, and the leaderboard says so; the board has nothing to draw
+   * for them at 47 m.
+   *
+   * Keyed off `lg.hexes` rather than off `row.cells`, therefore. Keying it off
+   * the leaderboard would offer an isolate button that empties the map.
+   */
+  const drawn = $derived(
+    new Set(lg.hexes.filter((h) => h.packed.length > 0).map((h) => h.subject)),
+  );
 
   /**
    * The isolation that is actually in force.
@@ -61,15 +82,14 @@
    * The map would then hide the other four layers and draw nothing at all, and
    * the row you would click to undo it is the one row the key disables — a
    * blank map with no way out. So isolation lapses on its own when its subject
-   * holds no ground, and comes back if the filter gives the ground back.
+   * has nothing on the board, and comes back if the filter gives the ground
+   * back.
    *
    * DERIVED, never an effect that writes `isolate`: an effect reading
-   * `lg.share` to correct the state it also writes is the self-subscription the
+   * `lg.hexes` to correct the state it also writes is the self-subscription the
    * pitfalls table is about.
    */
-  const shown = $derived(
-    isolate && lg.share.some((r) => r.subject === isolate && r.cells > 0) ? isolate : null,
-  );
+  const shown = $derived(isolate && drawn.has(isolate) ? isolate : null);
 
   function toggleIsolate(subject: string) {
     isolate = isolate === subject ? null : subject;
@@ -133,16 +153,16 @@
 
   <div class="lg-frame">
     <div class="lg-frame-head">
-      <p class="lg-frame-label">Territory · light basemap</p>
+      <p class="lg-frame-label">The board · light basemap</p>
       <p class="lg-frame-meta">{lg.focus.label} · {windowShort(lg.window.key)}</p>
     </div>
 
     <div class="lg-frame-map">
       <TerritoryMap
-        territory={lg.territory}
+        hexes={lg.hexes}
         handovers={lg.handovers}
+        territoryBounds={lg.territoryBounds}
         players={lg.players}
-        cellAreaM2={lg.cellAreaM2}
         focus={lg.focus}
         {view}
         isolate={shown}
@@ -171,7 +191,7 @@
             class="lg-key-btn"
             class:on={shown === row.subject}
             aria-pressed={shown === row.subject}
-            disabled={row.cells === 0}
+            disabled={!drawn.has(row.subject)}
             onclick={() => toggleIsolate(row.subject)}
           >
             <Swatch colour={p?.colour ?? 'var(--text-primary)'} hatch={p?.hatch ?? 'diag'} />
@@ -181,6 +201,13 @@
           </button>
         </li>
       {/each}
+      <li class="lg-key-open">
+        <svg class="lg-key-hex" viewBox="0 0 14 16" aria-hidden="true">
+          <polygon points="12.93,4.5 12.93,11.5 7,15 1.07,11.5 1.07,4.5 7,1" />
+        </svg>
+        Unclaimed
+        <span class="lg-key-v">nobody has been</span>
+      </li>
       <li class="lg-key-changed">
         <span class="lg-key-dash" aria-hidden="true"></span>
         Changed hands
@@ -408,6 +435,18 @@
     border: 2px dashed var(--accent);
     border-radius: var(--radius-sharp);
     flex: 0 0 auto;
+  }
+  /* The empty board's own swatch. Without it the honeycomb reads as basemap
+     furniture rather than as ground nobody has taken — and it has to carry the
+     same weight the mesh does, which is `--line-strong` at a 1px hairline. */
+  .lg-key-hex {
+    display: block;
+    width: 14px;
+    height: 16px;
+    flex: 0 0 auto;
+    fill: none;
+    stroke: var(--line-strong);
+    stroke-width: 1.1;
   }
   .lg-key-none {
     color: var(--accent);

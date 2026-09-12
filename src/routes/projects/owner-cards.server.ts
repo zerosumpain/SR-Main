@@ -26,7 +26,7 @@ export const OWNER_ONLY_CARDS: ProjectCard[] = [
     tag: 'Private · Household',
     title: 'Landgrab — Territory From The Family’s Own Movements',
     blurb:
-      'Every walk, run and ride the household records paints ground. Close a loop and everything inside it is yours — until somebody walks it more recently, and more often, than you did. Life360 trails and Apple workouts become owned cells on a hidden 44 m grid, dissolved into smoothed territory, scored on a 30-day half-life so stale ground goes cheap.',
+      'Every walk, run and ride the household records paints ground. Close a loop and everything inside it is yours — until somebody walks it more recently, and more often, than you did. Life360 trails and Apple workouts become owned cells on a 44 m grid, drawn as a honeycomb over the whole map, scored on a 30-day half-life so stale ground goes cheap.',
     chips: 'Life360 + Apple · 44 m cells · 30-day decay',
     ownerOnly: true,
   },

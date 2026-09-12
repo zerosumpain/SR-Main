@@ -27,6 +27,10 @@
   // client bundle may have it. A map tap arrives as a lat/lon and the drill
   // asks for a cell, and this is the only conversion between the two.
   import { parseTileKey, tileAt } from '$lib/geo/tiles';
+  // The board's hex is 1.075 cells across the flats. The page says the ground
+  // width in metres, so it needs the ratio rather than a second constant that
+  // could drift from the lattice the map actually draws.
+  import { HEX_WIDTH_TILES } from '$lib/geo/hex';
   import {
     activityLabel,
     km2,
@@ -152,7 +156,9 @@
     void apply({ subjects: [...next] });
   }
 
-  /** A map tap lands on a coordinate; the drill is keyed on a cell. */
+  /** A map tap lands on a coordinate; the drill is keyed on a cell. A hex is
+   *  drawn over the cells, never instead of them, so this is unchanged by the
+   *  board: tapping a hex opens the history of the ground under it. */
   function openAt(hit: { lat: number; lon: number; subject: string | null }) {
     drill = tileAt(hit.lat, hit.lon);
   }
@@ -230,7 +236,7 @@
         <SectionHead
           kicker="01 / The map"
           title={['WHERE THE', 'GROUND MOVED']}
-          strap={`Five territories on a hidden ${Math.round(lg.cellSideM)} m grid, dissolved and smoothed. The map opens where ground changed hands; tap a territory for its history.`}
+          strap={`A fixed ${Math.round(lg.cellSideM * HEX_WIDTH_TILES)} m honeycomb over the whole map: every hex is ground, and a coloured one is taken. The map opens where ground changed hands; tap a hex for its history.`}
         />
         <MapStage
           {lg}

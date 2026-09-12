@@ -1,21 +1,30 @@
 <script lang="ts">
   /**
-   * Dissolved territory on a light basemap — ONE source per player.
+   * The board: a fixed honeycomb over the whole map, filled where somebody has
+   * been.
    *
-   * The v1 map added a source, a fill layer, a line layer and a hatch image per
-   * POLYGON, and the standings report geos in the hundreds: several hundred
-   * sources and layers, each a worker job and a draw call, plus a popup bound to
-   * every one. Mapbox GL's cost is per layer and per source, not per feature, so
-   * the whole of a player's ground now travels as a single feature collection
-   * (Task 6's `featureCollection` / `setData`): five players, five sources.
+   * v1 and v2 HID the grid and dissolved held cells into smoothed blobs,
+   * because square cells read as Minecraft. A hexagon has no staircase edge, so
+   * the grid can be the picture rather than something to be smoothed away —
+   * every hex on screen is a piece of ground, and the coloured ones are taken.
    *
-   * A filter change therefore replaces DATA rather than tearing layers down, and
-   * the hatch canvas each player's fill is painted with is registered once.
+   * The scoring atom has not moved. `geo_capture_events` is still keyed on the
+   * z19 square cell; `$lib/geo/hex-board` projects the answer the ledger gave
+   * onto the shape drawn here.
+   *
+   * ONE SOURCE PER PLAYER, still. Mapbox GL's cost is per layer and per source
+   * rather than per feature, so ~19k hexes in five collections is cheap where
+   * five hundred layers was not. The mesh of unclaimed ground is a sixth, and
+   * it is the only layer that is rebuilt on a camera move.
    */
   import { loadMapbox, type MapView, type MapLayer, type MapTools, type CollectionFeature } from '$lib/maps/loader';
   import { onMount, untrack } from 'svelte';
-  import { HOME_BOX, identityMap, km2, type PlayerIdentity } from './identity';
-  import type { Handovers, MapFocus, PlayerTerritory } from './types';
+  // Pure lattice arithmetic — no DB, no server reach, no GPS fix in a
+  // signature — so the client bundle may have it, exactly as the page next
+  // door already carries `$lib/geo/tiles` to turn a tap into a cell.
+  import { hexRings, hexWidthPx, hexesInBounds, unpackHexes, type Hex } from '$lib/geo/hex';
+  import { HOME_BOX, identityMap, type PlayerIdentity } from './identity';
+  import type { Handovers, LatLonBounds, MapFocus, PlayerHexes } from './types';
 
   /** What a tap on the map hands back: where, and whose ground it landed on.
    *  Restated (not exported) in `MapStage` — a `.svelte` file cannot export a
@@ -23,20 +32,20 @@
   type TerritoryTap = { lat: number; lon: number; subject: string | null };
 
   let {
-    territory,
+    hexes,
     handovers,
+    territoryBounds,
     players,
-    cellAreaM2,
     focus,
     view,
     isolate,
     ontap,
     height = '60vh',
   }: {
-    territory: PlayerTerritory[];
+    hexes: PlayerHexes[];
     handovers: Handovers;
+    territoryBounds: LatLonBounds | null;
     players: PlayerIdentity[];
-    cellAreaM2: number;
     focus: MapFocus;
     /** Which bounds the map is fitted to. Owned by `MapStage`. */
     view: 'changed' | 'home' | 'all';
@@ -45,6 +54,31 @@
     ontap: (hit: TerritoryTap) => void;
     height?: string;
   } = $props();
+
+  /**
+   * Below this many pixels across, a honeycomb is not a board — it is a grey
+   * wash over the basemap, and it hides the thing it is meant to frame.
+   */
+  const MESH_MIN_PX = 9;
+
+  /**
+   * And a hard ceiling, because the pixel floor alone still admits a very wide
+   * browser window. Six thousand hexes is about 3 km of Darlington.
+   */
+  const MESH_MAX_HEXES = 6000;
+
+  /**
+   * The unclaimed mesh fades in rather than appearing; the owned outlines fade
+   * the other way, so a zoomed-out board reads as solid ground.
+   *
+   * The ramp tops out at 1, NOT at a second dimming. `--line-strong` is a tint
+   * — `rgba(26, 16, 8, 0.16)` — and Mapbox multiplies `line-opacity` into the
+   * colour's own alpha, so a 0.5 ceiling here would draw the honeycomb at 8%
+   * of near-black on a near-white basemap and it would read as basemap
+   * furniture rather than as ground nobody has taken.
+   */
+  const MESH_OPACITY = ['interpolate', ['linear'], ['zoom'], 14, 0, 15.5, 1];
+  const HEX_EDGE_WIDTH = ['interpolate', ['linear'], ['zoom'], 12, 0, 14, 0.4, 16, 1.1];
 
   let container: HTMLDivElement | undefined = $state();
   let error = $state<string | null>(null);
@@ -57,6 +91,25 @@
   let M: MapTools | null = null;
   let mapRef: MapView | null = null;
   const layers = new Map<string, MapLayer>();
+  /** The packed array each layer was last built from, by identity. A filter
+   *  change that only moves the handovers must not rebuild ~19k rings a player
+   *  for five players — that is half a million short-lived arrays for a layer
+   *  whose data did not change. */
+  const builtFrom = new Map<string, number[]>();
+  let mesh: MapLayer | null = null;
+  /**
+   * What the mesh currently holds, so a pan that lands on the same hexes does
+   * not rebuild and re-upload them.
+   *
+   * The key names the count and the first hex, not the last, so it DOES repeat
+   * across pans whose hex sets differ slightly — and that is safe rather than
+   * merely tolerated: the key can only repeat while the first hex is
+   * unchanged, which bounds the pan to under one row and one column, which is
+   * exactly what `hexesInBounds`' own one-row, one-column padding already
+   * covers. Measured over a 6,000-step pan: 4,295 repeats, and not one of them
+   * left a corner of the new viewport unmeshed.
+   */
+  let meshKey = '';
   let pulse: MapLayer | null = null;
   let raf = 0;
   let styleReadyOnce = false;
@@ -65,58 +118,71 @@
   let hitSubject: string | null = null;
   let hitTimer: ReturnType<typeof setTimeout> | null = null;
 
-  function rings(region: { outer: Array<[number, number]>; holes: Array<Array<[number, number]>> }) {
-    return [region.outer, ...region.holes];
+  /** Packed axial integers -> one closed six-sided feature per hex. */
+  function features(list: readonly Hex[]): CollectionFeature[] {
+    // No per-feature properties: the layer IS the player, the tooltip is a
+    // constant, and 19k copies of `{subject: 'john'}` is payload for nothing.
+    return hexRings(list).map((ring) => ({ rings: [ring], properties: {} }));
   }
 
-  function draw() {
+  function drawTerritory() {
     if (!M || !mapRef) return;
     const byId = identityMap(players);
     const drawn = new Set<string>();
 
-    for (const t of territory) {
+    for (const t of hexes) {
       const who = byId.get(t.subject);
       if (!who) continue;
       drawn.add(t.subject);
-      const features: CollectionFeature[] = t.regions
-        .filter((region) => region.outer.length >= 3)
-        .map((region) => ({
-          rings: rings(region),
-          properties: { subject: t.subject, t: region.t, km2: km2(region.t * cellAreaM2) },
-        }));
 
       const existing = layers.get(t.subject);
       if (existing) {
-        existing.setData(features);
+        // Identity, not contents: the payload is a fresh array on every load,
+        // and the same array on every re-render of the same load.
+        if (builtFrom.get(t.subject) === t.packed) continue;
+        existing.setData(features(unpackHexes(t.packed)));
+        builtFrom.set(t.subject, t.packed);
         continue;
       }
-      const layer = M.featureCollection(features, {
+      const layer = M.featureCollection(features(unpackHexes(t.packed)), {
         color: who.colour,
-        weight: 2,
-        opacity: 0.95,
+        weight: HEX_EDGE_WIDTH,
+        opacity: 0.9,
         fillColor: who.colour,
         fillOpacity: 0.22,
         hatch: who.hatch,
         lineJoin: 'round',
       });
-      layer.bindTooltip(
-        (p) => `${who.initial} · ${who.name} — ${String(p.km2 ?? '0.00')} km²`,
-        { sticky: true, className: 'lg-tip' },
-      );
+      layer.bindTooltip(`${who.initial} · ${who.name}`, { sticky: true, className: 'lg-tip' });
       layer.on('click', () => {
         hitSubject = t.subject;
       });
       layer.addTo(mapRef);
       layers.set(t.subject, layer);
+      builtFrom.set(t.subject, t.packed);
     }
 
     // A player the filter has emptied keeps their source and loses their data —
     // cheaper than a teardown, and the layer is there when they come back.
-    for (const [subject, layer] of layers) if (!drawn.has(subject)) layer.setData([]);
+    for (const [subject, layer] of layers) {
+      if (drawn.has(subject)) continue;
+      if (builtFrom.get(subject)?.length === 0) continue;
+      layer.setData([]);
+      builtFrom.set(subject, []);
+    }
 
-    const changed: CollectionFeature[] = handovers.regions
-      .filter((region) => region.outer.length >= 3)
-      .map((region) => ({ rings: rings(region), properties: { changed: true } }));
+    applyIsolate();
+    // A player who gains ground on a later filter change is added ON TOP of the
+    // pulse, and the pulse is the one outline that must stay readable over a
+    // fill — so it goes back to the front after every draw.
+    pulse?.bringToFront();
+    countSources();
+  }
+
+  /** The ground that changed hands, over the top of whoever holds it now. */
+  function drawPulse() {
+    if (!M || !mapRef) return;
+    const changed = features(unpackHexes(handovers.packed));
     if (pulse) {
       pulse.setData(changed);
     } else if (changed.length) {
@@ -132,14 +198,46 @@
     }
     if (changed.length) startPulse();
     else stopPulse();
-
-    applyIsolate();
-    // A player who gains ground on a later filter change is added ON TOP of the
-    // pulse, and the pulse is the one outline that must stay readable over a
-    // fill — so it goes back to the front after every draw.
     pulse?.bringToFront();
-    // The QA script counts sources here rather than reaching into WebGL.
-    if (container) container.dataset.lgSources = String(layers.size + (pulse ? 1 : 0));
+    countSources();
+  }
+
+  /** The QA script counts sources here rather than reaching into WebGL. */
+  function countSources() {
+    if (!container) return;
+    container.dataset.lgSources = String(layers.size + (mesh ? 1 : 0) + (pulse ? 1 : 0));
+  }
+
+  /**
+   * The unclaimed board, for the camera's current extent.
+   *
+   * Only the browser knows where the reader has panned, so this is the one
+   * layer the server cannot precompute. `hexesInBounds` returns null rather
+   * than a truncated list when the viewport would cost more than the budget: a
+   * partial honeycomb is worse than none, because its edge reads as the edge of
+   * the board.
+   */
+  function drawMesh() {
+    if (!M || !mapRef || !ready) return;
+    // [[south, west], [north, east]] — the adapter's own order, not Mapbox's
+    // lon/lat one. Read as points rather than through `native()`, which builds
+    // an empty LngLatBounds for a map that has already gone.
+    const [sw, ne] = mapRef.getBounds().points;
+    if (!sw || !ne) return;
+    const list =
+      hexWidthPx(mapRef.getZoom()) < MESH_MIN_PX
+        ? null
+        : hexesInBounds({ south: sw[0], west: sw[1], north: ne[0], east: ne[1] }, MESH_MAX_HEXES);
+
+    const key = list?.length
+      ? `${list.length}:${list[0].q}:${list[0].r}:${list[list.length - 1].q}`
+      : '';
+    if (key === meshKey) return;
+    meshKey = key;
+    mesh?.setData(list ? features(list) : []);
+    if (container) {
+      container.dataset.lgMesh = String(list?.length ?? 0);
+    }
   }
 
   /** ≤ 20 fps, and nothing at all for a reader who has asked for stillness. */
@@ -180,13 +278,9 @@
       );
       return;
     }
-    if (view === 'all') {
-      const points: Array<[number, number]> = [];
-      for (const t of territory) for (const region of t.regions) points.push(...region.outer);
-      if (points.length) {
-        mapRef.fitBounds(points, opts);
-        return;
-      }
+    if (view === 'all' && territoryBounds) {
+      mapRef.fitBounds(territoryBounds, opts);
+      return;
     }
     // `focus.bounds` is already [[south, west], [north, east]] — the [lat, lon]
     // pair list `fitBounds` wants. Never build a LngLatBounds by hand here: it
@@ -208,6 +302,17 @@
           attributionControl: true,
         });
         mapRef = map;
+
+        // FIRST, so it is the bottom layer: Mapbox stacks in the order layers
+        // are added, and everything anybody holds is drawn over the empty board
+        // rather than under it.
+        mesh = lib.featureCollection([], {
+          color: 'var(--line-strong)',
+          weight: 1,
+          opacity: MESH_OPACITY,
+          fill: false,
+        });
+        mesh.addTo(map);
 
         // A page must not hijack the wheel: scroll zoom arrives with focus and
         // leaves with it, exactly as TrackMap does.
@@ -240,6 +345,10 @@
           }, 0);
         });
 
+        // `moveend` covers pans and zooms alike and fires once, at rest, so the
+        // mesh is rebuilt when the camera stops rather than on every frame.
+        map.on('moveend', () => drawMesh());
+
         map.on('load', () => {
           if (styleReadyOnce) return;
           styleReadyOnce = true;
@@ -248,11 +357,14 @@
           // flashing up first.
           applyIsolate();
           fitView();
+          drawMesh();
         });
 
         ready = true;
-        draw();
+        drawTerritory();
+        drawPulse();
         fitView();
+        drawMesh();
       } catch (err) {
         error = err instanceof Error ? err.message : String(err);
       }
@@ -266,6 +378,9 @@
       mapRef?.remove();
       mapRef = null;
       layers.clear();
+      builtFrom.clear();
+      mesh = null;
+      meshKey = '';
       pulse = null;
       styleReadyOnce = false;
     };
@@ -275,9 +390,13 @@
   // every one of these functions touches handles the effect must not subscribe
   // to. Ground first.
   $effect(() => {
-    void territory;
+    void hexes;
+    untrack(drawTerritory);
+  });
+
+  $effect(() => {
     void handovers;
-    untrack(draw);
+    untrack(drawPulse);
   });
 
   $effect(() => {
@@ -288,13 +407,14 @@
   $effect(() => {
     void view;
     void focus;
+    void territoryBounds;
     void ready;
     untrack(fitView);
   });
 </script>
 
 <div class="lg-map-wrap" style="--lg-map-h: {height}">
-  <div class="lg-map" data-lg-sources="0" bind:this={container}></div>
+  <div class="lg-map" data-lg-sources="0" data-lg-mesh="0" bind:this={container}></div>
   {#if error}
     <p class="lg-map-msg">Map failed to load — {error}</p>
   {:else if !ready}
