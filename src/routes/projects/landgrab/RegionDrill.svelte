@@ -41,10 +41,42 @@
   let history = $state<RegionHistory | null>(null);
   let problem = $state<string | null>(null);
 
-  // NOT `$state`. An AbortController is an internal handle: nothing reactive
-  // reads it, and a `$state` handle that a function both reads and writes from
-  // inside an effect is the `effect_update_depth_exceeded` trap.
+  // Internal handles, and NOT `$state` (bar the bound DOM ref below, which the
+  // template writes): an AbortController and the two things this drawer borrows
+  // from the document while it is open. Nothing reactive reads them, and a
+  // `$state` handle that a function both reads and writes from inside an effect
+  // is the `effect_update_depth_exceeded` trap.
   let inflight: AbortController | null = null;
+  // The one exception, and only because `bind:this` writes it from the
+  // template: Svelte 5 warns `non_reactive_update` on a bound plain `let`, and
+  // both bound refs already in this repo (`EvidencePanel`, `MetricPeek`) are
+  // declared this way. It is still never read in a tracked context — the effect
+  // below reads it inside `untrack`, and the Tab trap is an event handler — so
+  // there is no read-own-write cycle for it to feed.
+  let panelEl: HTMLDivElement | null = $state(null);
+  /** Where focus was before the drawer took it. */
+  let returnFocus: HTMLElement | null = null;
+  /** The root's own `overflow`, so the lock can put back what it found. */
+  let heldOverflow: string | null = null;
+
+  /**
+   * Local body portal. NOT `$lib/canvas/portal` — that one puts the node back
+   * where it came from on destroy, which resurrects an overlay Svelte has
+   * already detached (stuck-open modal, dead close button). Here `destroy()`
+   * only removes it, so an unmount is final.
+   *
+   * The drawer needs this because `position: fixed` is not fixed to the
+   * viewport inside an ancestor carrying `transform`, `filter` or `contain` —
+   * and the page mounts this next to a map.
+   */
+  function bodyPortal(node: HTMLElement) {
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        node.remove();
+      },
+    };
+  }
 
   async function load(at: { x: number; y: number }, query: string) {
     const ctl = new AbortController();
@@ -66,7 +98,10 @@
         problem = 'Could not load this ground — try again.';
         return;
       }
-      history = (await res.json()) as RegionHistory;
+      const payload = (await res.json()) as RegionHistory;
+      // The json body is a second await, and the next tap can land inside it.
+      if (ctl.signal.aborted) return;
+      history = payload;
     } catch {
       // An abort is the next tap arriving, not a failure — the run that
       // replaced this one owns the state now.
@@ -99,6 +134,71 @@
       inflight = null;
     };
   });
+
+  /** Put back everything the drawer borrowed. Idempotent. */
+  function release() {
+    if (heldOverflow !== null) {
+      document.documentElement.style.overflow = heldOverflow;
+      heldOverflow = null;
+    }
+    const back = returnFocus;
+    returnFocus = null;
+    back?.focus();
+  }
+
+  // Focus and the scroll lock, in one effect keyed on `open`. Both are
+  // borrowed from the document, so both are given back in the same place —
+  // splitting them is how one of them ends up leaking on an unmount.
+  //
+  // The bottom sheet is what makes these load-bearing rather than tidy: on a
+  // phone the page behind the sheet scrolls under the thumb, and a Tab that
+  // walks the map behind an `aria-modal` panel leaves a keyboard reader with no
+  // way back.
+  $effect(() => {
+    const at = open;
+    untrack(() => {
+      if (!at) {
+        release();
+        return;
+      }
+      if (heldOverflow === null) {
+        returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        heldOverflow = document.documentElement.style.overflow;
+        document.documentElement.style.overflow = 'hidden';
+      }
+      // Bound by the `{#if open}` block that this same change rendered —
+      // user effects run after the DOM is updated, so the ref is there.
+      panelEl?.focus();
+    });
+    return () => release();
+  });
+
+  /** Everything inside the panel a Tab can legally land on. */
+  const FOCUSABLE =
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+  /** A minimal trap: Tab off either end wraps to the other. */
+  function trapTab(e: KeyboardEvent) {
+    if (e.key !== 'Tab' || !panelEl) return;
+    const items = [...panelEl.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
+      (el) => el.getClientRects().length > 0,
+    );
+    if (!items.length) {
+      e.preventDefault();
+      panelEl.focus();
+      return;
+    }
+    const first = items[0];
+    const last = items[items.length - 1];
+    const active = document.activeElement;
+    if (e.shiftKey && (active === first || active === panelEl)) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
 
   function onkeydown(e: KeyboardEvent) {
     if (open && e.key === 'Escape') onclose();
@@ -152,15 +252,17 @@
 
 {#if open}
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-  <div class="lg-drill-backdrop" onclick={onclose}>
+  <div class="lg-drill-backdrop" use:bodyPortal onclick={onclose}>
     <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
     <div
+      bind:this={panelEl}
       class="lg-drill-panel"
       role="dialog"
       aria-modal="true"
       aria-label="Region history"
       tabindex="-1"
       onclick={(e) => e.stopPropagation()}
+      onkeydown={trapTab}
     >
       <div class="lg-drill-head">
         <span class="lg-drill-kicker">REGION · WHO HAS HELD THIS GROUND</span>
