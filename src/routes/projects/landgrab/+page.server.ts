@@ -3,22 +3,37 @@ import { and, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import type { PageServerLoad } from './$types';
 import { isOwnerRequest } from '$lib/server/owner';
 import { db } from '$lib/db';
-import { activities, daydreamTrail, geoCaptureEvents, geoClaims, geoTileState } from '$lib/db/schema';
+import { activities, daydreamTrail, geoClaims } from '$lib/db/schema';
 import {
   CAPTURING_ACTIVITY_TYPES,
   WORKOUT_SUBJECT,
   activityTypeNotIn,
-  readVisitorSets,
-  resolveFilteredOwnership,
-  type TerritoryFilter,
 } from '$lib/geo/service';
 import { GEO_THRESHOLDS } from '$lib/geo/loops';
-import { connectedComponents, dissolveTiles } from '$lib/geo/dissolve';
-import { tileAreaM2, tileCentre, tileKeyOf, type Tile } from '$lib/geo/tiles';
-import { assignIdentities, ACTIVITY_FILTERS, DEFAULT_WINDOW, HOME_BOX, windowOf } from './identity';
+import { connectedComponents, dissolveTiles, type DissolvedRegion } from '$lib/geo/dissolve';
+import { chooseFocus } from '$lib/geo/focus';
+import { findBattlegrounds, nextMoves } from '$lib/geo/battlegrounds';
+import { latestLandgrabWeekly } from '$lib/geo/weekly';
+import { parseTileKey, tileAreaM2, tileCentre, type Tile } from '$lib/geo/tiles';
+import {
+  DEFAULT_WINDOW,
+  HOME_BOX,
+  homeBoxAreaM2,
+  inHomeBox,
+  windowOf,
+} from './identity';
 import { resolveContest } from './contested';
-import type { DateWindowKey } from './identity';
-import type { LandgrabData, LandgrabRegion, FeedItem } from './types';
+import { parseFilter, resolveBoard } from './query.server';
+import { nameFor } from './names.server';
+import type {
+  Battleground,
+  FeedItem,
+  Handovers,
+  LandgrabData,
+  LandgrabRegion,
+  NextMove,
+  ShareRow,
+} from './types';
 
 // The guard, verbatim from /projects/family-life360-history. /projects is a
 // public PREFIX in PUBLIC_PATHS, so this load function IS the entire gate:
@@ -30,8 +45,16 @@ import type { LandgrabData, LandgrabRegion, FeedItem } from './types';
 const COORD_DP = 5;
 const round = (n: number) => Math.round(n * 10 ** COORD_DP) / 10 ** COORD_DP;
 
-const WEEK_MS = 7 * 86_400_000;
 const FEED_LIMIT = 40;
+
+/** One dissolved component in the payload's [lat, lon] shape. Shared by the
+ *  territory rings and the handover outlines, so the two cannot drift apart in
+ *  rounding or in axis order. */
+const toRegion = (r: DissolvedRegion): LandgrabRegion => ({
+  t: r.tileCount,
+  outer: r.outer.map(([lon, lat]) => [round(lat), round(lon)] as [number, number]),
+  holes: r.holes.map((h) => h.map(([lon, lat]) => [round(lat), round(lon)] as [number, number])),
+});
 
 /** The trail legs a distance sum is allowed to believe, matching the gates the
  *  capture path already applies. A drive must not appear in the dangle line
@@ -54,221 +77,39 @@ export const load: PageServerLoad = async (event) => {
   event.setHeaders({ 'cache-control': 'private, no-store' });
 
   const now = new Date();
-  const weekAgo = new Date(now.getTime() - WEEK_MS);
 
-  // -------------------------------------------------------------------------
-  // What the ledger actually contains — the filter's own vocabulary. Offering
-  // a "hike" chip on a corpus with no hikes is a lie about the data, and
-  // offering "untyped" when nothing is untyped hides that the whole Life360
-  // half has not landed yet.
-  // -------------------------------------------------------------------------
-  const dimensions = await db
-    .select({
-      subject: geoCaptureEvents.subject,
-      activityType: geoCaptureEvents.activityType,
-      sourceKind: geoCaptureEvents.sourceKind,
-      events: sql<number>`count(*)::int`,
-    })
-    .from(geoCaptureEvents)
-    .groupBy(geoCaptureEvents.subject, geoCaptureEvents.activityType, geoCaptureEvents.sourceKind);
+  // The filter and the board both live in `query.server.ts`, because the region
+  // drill beside this page answers over the SAME filter. Two copies of the
+  // window logic is how a map and the panel drilled out of it end up disagreeing
+  // about who owns a cell.
+  const filter = await parseFilter(event.url);
+  const board = await resolveBoard(filter, now);
 
-  const allSubjects = [...new Set(dimensions.map((d) => d.subject))].sort();
-  const typesPresent = new Set(dimensions.map((d) => d.activityType));
-  const availableActivities = ACTIVITY_FILTERS.filter((t) => typesPresent.has(t));
-  const hasUntyped = typesPresent.has(null);
-
-  // -------------------------------------------------------------------------
-  // The filter. The URL is the state, so the guard above is also the filter's
-  // gate — no second endpoint to add to an allow-list and forget about.
-  //
-  // The toolbar speaks in INCLUDES (tick what counts); TerritoryFilter speaks
-  // in excludes. Converting here, once, is what keeps the ugly half of the
-  // three-valued-logic trap out of the components: `excludeUntyped` is its own
-  // flag precisely because `activity_type not in ('ride')` cannot express it.
-  // -------------------------------------------------------------------------
-  const listParam = (key: string): string[] | null => {
-    const raw = event.url.searchParams.get(key);
-    if (raw === null) return null;
-    return raw.split(',').map((s) => s.trim()).filter(Boolean);
-  };
-
-  const requestedActivities = listParam('activity');
-  const includedActivities = requestedActivities
-    ? availableActivities.filter((t) => requestedActivities.includes(t))
-    : [...availableActivities];
-  const includeUntyped = requestedActivities ? requestedActivities.includes('untyped') : true;
-
-  const requestedSubjects = listParam('who');
-  const includedSubjects = requestedSubjects
-    ? allSubjects.filter((s) => requestedSubjects.includes(s))
-    : [...allSubjects];
-
-  // -------------------------------------------------------------------------
-  // The date window — John's "filter to the last 7 days capture only".
-  //
-  // It is a THIRD dimension of the same TerritoryFilter, not a second
-  // mechanism, because the question it asks is the same shape as the activity
-  // filter's: not "hide old ground" but "who would own this ground if only the
-  // last week counted". A cell John won in June and Katie trampled on Tuesday
-  // is John's on the full ledger and Katie's under a seven-day window, and no
-  // amount of hiding cells on the map turns the first answer into the second.
-  // So the window goes into the filter and ownership is replayed, exactly as a
-  // unticked activity chip already is.
-  //
-  // The window SLIDES with the instant the question is asked. That matters in
-  // exactly one place — the gained/lost board resolves ownership as at a week
-  // ago, and asking "who owned this a week ago, counting only captures from the
-  // last seven days" over an ABSOLUTE lower bound is a window of zero width: it
-  // would report every cell as freshly gained by whoever holds it. Relative to
-  // its own instant the board keeps meaning something: under a 7-day window it
-  // becomes this week's ground against last week's. Under all time the bound is
-  // absent at both instants and the board is bit-for-bit what it was before.
-  // -------------------------------------------------------------------------
-  const activeWindow = windowOf(event.url.searchParams.get('window'));
-  const windowKey: DateWindowKey = activeWindow.key;
-  const windowMs = activeWindow.ms;
-  const windowActive = windowMs !== null;
-  /** The window's lower bound as at an arbitrary instant. Undefined is all time. */
-  const windowFrom = (asOf: Date): Date | undefined =>
-    windowMs === null ? undefined : new Date(asOf.getTime() - windowMs);
+  const {
+    windowKey,
+    windowActive,
+    includedActivities,
+    includeUntyped,
+    includedSubjects,
+    subjectsFiltered,
+    noPlayers,
+    filterActive,
+    availableActivities,
+    hasUntyped,
+    allSubjects,
+    dimensions,
+  } = filter;
+  /** The toolbar's includes, back in the excludes the SQL speaks. */
+  const excludeActivityTypes = filter.baseFilter.excludeActivityTypes ?? [];
   /** The bound as at now — the one every period query on this page shares. */
-  const windowSince = windowFrom(now);
+  const windowSince = filter.windowFrom(now);
+  const activeWindow = windowOf(windowKey);
 
-  const excludeActivityTypes = availableActivities.filter((t) => !includedActivities.includes(t));
-  const subjectsFiltered = includedSubjects.length !== allSubjects.length;
-  /**
-   * Nobody ticked. This has to be handled HERE rather than left to
-   * TerritoryFilter, because `subjects: []` means "no subject restriction"
-   * there — `filter.subjects?.length ? inArray(...) : undefined` — so an empty
-   * selection silently showed everybody's ground while the claim feed
-   * (correctly) showed nothing. The map and the feed disagreeing about the
-   * same filter is the exact failure the one-legal-spelling rule exists to
-   * prevent, so the empty case short-circuits instead of round-tripping.
-   */
-  const noPlayers = subjectsFiltered && includedSubjects.length === 0;
-  const filterActive =
-    excludeActivityTypes.length > 0 ||
-    (hasUntyped && !includeUntyped) ||
-    subjectsFiltered ||
-    windowActive;
-
-  /** The filter without its window — the base every instant shares. */
-  const baseFilter: TerritoryFilter = {
-    excludeActivityTypes,
-    excludeUntyped: hasUntyped ? !includeUntyped : false,
-    subjects: subjectsFiltered ? includedSubjects : undefined,
-  };
-  /** The filter as at an instant. The window's bound moves with the question. */
-  const filterAt = (asOf: Date): TerritoryFilter => ({
-    ...baseFilter,
-    capturedFrom: windowFrom(asOf),
-  });
-
-  // -------------------------------------------------------------------------
-  // The viewport, in cell space. The ledger's own extent: the map opens fitted
-  // to every cell anyone owns, so that IS the viewport on first paint, and
-  // resolveFilteredOwnership gets a bounded range rather than the whole table.
-  // -------------------------------------------------------------------------
-  const [extentRow] = await db
-    .select({
-      minX: sql<number | null>`min(${geoCaptureEvents.tileX})`,
-      maxX: sql<number | null>`max(${geoCaptureEvents.tileX})`,
-      minY: sql<number | null>`min(${geoCaptureEvents.tileY})`,
-      maxY: sql<number | null>`max(${geoCaptureEvents.tileY})`,
-    })
-    .from(geoCaptureEvents);
-
-  const tileRange =
-    extentRow?.minX === null || extentRow?.minX === undefined
-      ? null
-      : {
-          minX: Number(extentRow.minX),
-          maxX: Number(extentRow.maxX),
-          minY: Number(extentRow.minY),
-          maxY: Number(extentRow.maxY),
-        };
-
-  // Every area on this page is cell count x this constant. One latitude for the
-  // whole board, taken at the middle of the ledger's extent: at 54.5N the cell
-  // side moves by under a metre across a county, and a per-cell constant would
-  // make two boards that add up differently.
-  const centreLat = tileRange
-    ? tileCentre(
-        Math.round((tileRange.minX + tileRange.maxX) / 2),
-        Math.round((tileRange.minY + tileRange.maxY) / 2),
-      ).lat
-    : 54.52;
-  const cellAreaM2 = tileAreaM2(centreLat);
-
-  if (!tileRange) {
+  if (!board.tileRange) {
     return emptyPayload(now, availableActivities, hasUntyped);
   }
 
-  // -------------------------------------------------------------------------
-  // Ownership now.
-  //
-  // geo_tile_state is the materialised fast path and is only correct for the
-  // UNFILTERED view; the moment a chip is unticked the question changes and
-  // resolveFilteredOwnership is the one legal way to ask it. The two agree when
-  // no filter is applied, which is what makes this branch safe.
-  // -------------------------------------------------------------------------
-  const ownedNow = new Map<string, { subject: string; tile: Tile; ownerSince: Date }>();
-  if (noPlayers) {
-    // Nothing to resolve.
-  } else if (filterActive) {
-    const resolved = await resolveFilteredOwnership({ now, filter: filterAt(now), tileRange });
-    for (const [key, o] of resolved) {
-      ownedNow.set(key, {
-        subject: o.owner,
-        tile: { x: o.tileX, y: o.tileY },
-        ownerSince: o.ownerSince,
-      });
-    }
-  } else {
-    const rows = await db
-      .select({
-        tileX: geoTileState.tileX,
-        tileY: geoTileState.tileY,
-        ownerSubject: geoTileState.ownerSubject,
-        ownerSince: geoTileState.ownerSince,
-      })
-      .from(geoTileState);
-    for (const r of rows) {
-      ownedNow.set(tileKeyOf(r.tileX, r.tileY), {
-        subject: r.ownerSubject,
-        tile: { x: r.tileX, y: r.tileY },
-        ownerSince: r.ownerSince,
-      });
-    }
-  }
-
-  // Ownership as at a week ago, resolved with `now` SET TO THEN. Never with
-  // today's clock: the score decays with age, so "who owned this last Saturday"
-  // asked today is a different question from the one last Saturday answered.
-  // This is the same technique writeDailySnapshot uses, and it is what lets the
-  // weekly board be two honest columns instead of one signed number.
-  //
-  // Under a date window the window's own lower bound moves back with `weekAgo`
-  // — see the note where windowFrom is defined. Without that, "a week ago"
-  // under a seven-day window is an empty ledger and every cell reads as gained.
-  const ownedThen = new Map<string, string>();
-  if (!noPlayers) {
-    for (const [key, o] of await resolveFilteredOwnership({
-      now: weekAgo,
-      filter: filterAt(weekAgo),
-      tileRange,
-    })) {
-      ownedThen.set(key, o.owner);
-    }
-  }
-
-  // What the window itself costs, in cells: the same filter asked without it.
-  // Only under a window, and only so the page can state the price of narrowing
-  // instead of quietly showing a smaller map.
-  const cellsAllTime =
-    windowActive && !noPlayers
-      ? (await resolveFilteredOwnership({ now, filter: baseFilter, tileRange })).size
-      : ownedNow.size;
+  const { weekAgo, cellAreaM2, ownedNow, ownedThen, visitors, players, cellsAllTime } = board;
 
   // -------------------------------------------------------------------------
   // Cells -> painted ground. The grid is never shipped: per-cell geometry is
@@ -278,37 +119,38 @@ export const load: PageServerLoad = async (event) => {
   const cellsBySubject = new Map<string, Tile[]>();
   const sinceBySubject = new Map<string, number>();
   for (const o of ownedNow.values()) {
-    const list = cellsBySubject.get(o.subject);
-    if (list) list.push(o.tile);
-    else cellsBySubject.set(o.subject, [o.tile]);
+    const tile: Tile = { x: o.tileX, y: o.tileY };
+    const list = cellsBySubject.get(o.owner);
+    if (list) list.push(tile);
+    else cellsBySubject.set(o.owner, [tile]);
     const t = o.ownerSince.getTime();
-    const oldest = sinceBySubject.get(o.subject);
-    if (oldest === undefined || t < oldest) sinceBySubject.set(o.subject, t);
+    const oldest = sinceBySubject.get(o.owner);
+    if (oldest === undefined || t < oldest) sinceBySubject.set(o.owner, t);
   }
 
-  const players = assignIdentities([...new Set([...allSubjects, ...cellsBySubject.keys()])]);
-
   const territory = [...cellsBySubject.entries()]
-    .map(([subject, tiles]) => {
-      const regions: LandgrabRegion[] = dissolveTiles(tiles).map((r) => ({
-        t: r.tileCount,
-        outer: r.outer.map(([lon, lat]) => [round(lat), round(lon)] as [number, number]),
-        holes: r.holes.map((h) => h.map(([lon, lat]) => [round(lat), round(lon)] as [number, number])),
-      }));
-      return { subject, regions };
-    })
+    .map(([subject, tiles]) => ({ subject, regions: dissolveTiles(tiles).map(toRegion) }))
     .sort((a, b) => b.regions.length - a.regions.length);
 
   // -------------------------------------------------------------------------
   // Boards.
+  //
+  // One pass over the union of the two ownership maps answers three questions
+  // at once — who gained, who lost, and WHICH cells moved. One definition of
+  // "changed hands" for all three, deliberately: a cell nobody held a week ago
+  // and somebody holds now counts, exactly as `findBattlegrounds` and the map
+  // focus count it. Three places drawing their own line between a first claim
+  // and a takeover is how they end up disagreeing.
   // -------------------------------------------------------------------------
   const gained = new Map<string, number>();
   const lost = new Map<string, number>();
+  const changedTiles: Tile[] = [];
   const keys = new Set([...ownedNow.keys(), ...ownedThen.keys()]);
   for (const key of keys) {
     const before = ownedThen.get(key) ?? null;
-    const after = ownedNow.get(key)?.subject ?? null;
+    const after = ownedNow.get(key)?.owner ?? null;
     if (before === after) continue;
+    changedTiles.push(parseTileKey(key));
     if (after) gained.set(after, (gained.get(after) ?? 0) + 1);
     if (before) lost.set(before, (lost.get(before) ?? 0) + 1);
   }
@@ -318,12 +160,10 @@ export const load: PageServerLoad = async (event) => {
   // can take a cell off somebody nobody else has been near. This is the half of
   // the map that is actually a game, and it answers over the same filter and
   // window as everything else on the page.
-  const visitors = noPlayers
-    ? new Map<string, Set<string>>()
-    : await readVisitorSets({ now, filter: filterAt(now), tileRange });
+  const ownerByCell = new Map([...ownedNow].map(([key, o]) => [key, o.owner]));
   const contest = resolveContest({
     visitors,
-    ownerByCell: new Map([...ownedNow].map(([key, o]) => [key, o.subject])),
+    ownerByCell,
     subjects: players.map((p) => p.subject),
   });
 
@@ -345,6 +185,99 @@ export const load: PageServerLoad = async (event) => {
       };
     })
     .sort((a, b) => b.areaM2 - a.areaM2);
+
+  // -------------------------------------------------------------------------
+  // Where to look, and what moved.
+  // -------------------------------------------------------------------------
+
+  // The ground that changed hands, dissolved UNSMOOTHED. Moved ground is drawn
+  // over somebody's territory and should read as a crisp edge against it, not
+  // as a second, softer blob a reader has to line up by eye.
+  const handovers: Handovers = {
+    cells: changedTiles.length,
+    regions: dissolveTiles(changedTiles, { chaikinPasses: 0 }).map(toRegion),
+  };
+
+  // The map opens on where the change was, biased home. `active` is every cell
+  // with an event inside the window — which is why ownership carries
+  // `lastEventAt` rather than the owner alone.
+  const activeTiles = [...ownedNow.values()]
+    .filter((o) => !windowSince || o.lastEventAt >= windowSince)
+    .map((o) => ({ x: o.tileX, y: o.tileY }));
+  const focus = chooseFocus({ changed: changedTiles, active: activeTiles, home: HOME_BOX });
+
+  // Share of the household's ground, and of the Darlington box. The second is
+  // measured against `homeBoxAreaM2()` rather than against the map's extent, so
+  // "n% of Darlington" means the same thing whatever else is on screen.
+  const householdCells = ownedNow.size;
+  const boxArea = homeBoxAreaM2();
+  const share: ShareRow[] = standings.map((s) => {
+    const cells = cellsBySubject.get(s.subject) ?? [];
+    const inBox = cells.filter((t) => {
+      const c = tileCentre(t.x, t.y);
+      return inHomeBox(c.lat, c.lon);
+    }).length;
+    return {
+      subject: s.subject,
+      cells: s.tiles,
+      areaM2: s.areaM2,
+      share: householdCells ? s.tiles / householdCells : 0,
+      homeShare: (inBox * cellAreaM2) / boxArea,
+      gainedM2: s.gainedM2,
+      lostM2: s.lostM2,
+    };
+  });
+
+  // The clumps that are actually a game, named within a small budget of
+  // UNCACHED geocodes — Nominatim is one request a second and a page load must
+  // not queue behind it. `keys` is the module's working set and is stripped:
+  // the browser gets a name, a centre and a scoreboard.
+  const cores = findBattlegrounds({ visitors, ownerByCell, ownerThenByCell: ownedThen }).slice(0, 12);
+  const budget = { uncached: 3 };
+  const battlegrounds: Battleground[] = [];
+  for (const core of cores) {
+    battlegrounds.push({
+      id: core.id,
+      name: await nameFor(core.centre, budget),
+      centre: core.centre,
+      cells: core.cells,
+      holders: core.holders,
+      handovers: core.handovers,
+      contenders: core.contenders,
+    });
+  }
+
+  /** Cell -> the name of the battleground it sits in, so a move can say where
+   *  it is without a second geocode. Built index-parallel with `cores`. */
+  const keyToBattleground = new Map<string, string | null>();
+  for (let i = 0; i < cores.length; i++) {
+    for (const key of cores[i].keys) keyToBattleground.set(key, battlegrounds[i].name);
+  }
+
+  // `loopCells` arrives already clamped to MAX_LOOP_CELLS — a zero gap is
+  // reachable, and `3 / 0` is Infinity, which JSON.stringify writes as null
+  // into a field typed number. Clamped in the module so every caller agrees.
+  const nextMovesOut: NextMove[] = nextMoves({
+    owned: ownedNow,
+    subjects: players.map((p) => p.subject),
+  }).map((m) => ({
+    subject: m.subject,
+    holder: m.holder,
+    cells: m.cells,
+    centre: m.centre,
+    maxGap: m.maxGap,
+    loopCells: m.loopCells,
+    near:
+      m.keys.map((k) => keyToBattleground.get(k)).find((n): n is string => typeof n === 'string') ??
+      null,
+  }));
+
+  const letter = await latestLandgrabWeekly();
+
+  // A deep link into the drill: `?geo=x:y`. Validated here, fetched by the client.
+  const geoParam = event.url.searchParams.get('geo');
+  const geoMatch = geoParam ? /^(\d{1,7}):(\d{1,7})$/.exec(geoParam) : null;
+  const geo = geoMatch ? { x: Number(geoMatch[1]), y: Number(geoMatch[2]) } : null;
 
   // -------------------------------------------------------------------------
   // The capture feed. geo_claims.tiles_taken is `{victim: count}` with
@@ -560,21 +493,13 @@ export const load: PageServerLoad = async (event) => {
       cells: ownedNow.size,
       areaM2: ownedNow.size * cellAreaM2,
     },
-    focus: {
-      bounds: [
-        [HOME_BOX.south, HOME_BOX.west],
-        [HOME_BOX.north, HOME_BOX.east],
-      ],
-      reason: 'quiet',
-      changedCells: 0,
-      label: 'Darlington · nothing has changed hands',
-    },
-    handovers: { cells: 0, regions: [] },
-    share: [],
-    battlegrounds: [],
-    nextMoves: [],
-    letter: null,
-    geo: null,
+    focus,
+    handovers,
+    share,
+    battlegrounds,
+    nextMoves: nextMovesOut,
+    letter,
+    geo,
   };
 
   return { landgrab: payload };
@@ -612,6 +537,9 @@ function emptyPayload(
       feed: [],
       dangle: [],
       totals: { events: 0, claims: 0, cells: 0, areaM2: 0 },
+      // An empty ledger has no change to focus on and nothing to name. These
+      // are the true answers here, not placeholders — the branch is reached
+      // only when geo_capture_events is empty.
       focus: {
         bounds: [
           [HOME_BOX.south, HOME_BOX.west],
