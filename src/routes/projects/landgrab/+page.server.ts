@@ -11,12 +11,12 @@ import {
 } from '$lib/geo/service';
 import { GEO_THRESHOLDS } from '$lib/geo/loops';
 import { connectedComponents } from '$lib/geo/dissolve';
-import { hexRings, packHexes, type Hex } from '$lib/geo/hex';
+import { HEX_R, hexCentreWorld, packHexes, type Hex } from '$lib/geo/hex';
 import { hexesForTiles, resolveHexBoard } from '$lib/geo/hex-board';
 import { chooseFocus } from '$lib/geo/focus';
 import { findBattlegrounds, nextMoves } from '$lib/geo/battlegrounds';
 import { latestLandgrabWeekly } from '$lib/geo/weekly';
-import { TILE_ZOOM, parseTileKey, tileAreaM2, tileCentre, type Tile } from '$lib/geo/tiles';
+import { TILE_ZOOM, parseTileKey, tileAreaM2, tileCentre, tileCorner, type Tile } from '$lib/geo/tiles';
 import {
   DEFAULT_WINDOW,
   HOME_BOX,
@@ -60,26 +60,32 @@ const MAX_TILE_INDEX = 2 ** TILE_ZOOM - 1;
  *
  * The map's "All" view is the only thing that needs it, and it is the only
  * thing `territory` was still being shipped for once the drawing became a
- * lattice: the browser has the hexes, but asking it to project 19,000 of them
- * before the camera can move is a frame it does not need to spend.
+ * lattice.
+ *
+ * Over the CENTRES, expanded by one circumradius, rather than over 19,000
+ * six-corner rings: R is the furthest any corner sits from its centre on
+ * either axis, so the box is right and it costs two inverse-Mercator calls
+ * instead of a hundred thousand.
  */
 function boardBounds(hexes: readonly Hex[]): LatLonBounds | null {
   if (!hexes.length) return null;
-  let south = Infinity;
-  let west = Infinity;
-  let north = -Infinity;
-  let east = -Infinity;
-  for (const ring of hexRings(hexes)) {
-    for (const [lat, lon] of ring) {
-      if (lat < south) south = lat;
-      if (lat > north) north = lat;
-      if (lon < west) west = lon;
-      if (lon > east) east = lon;
-    }
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const h of hexes) {
+    const [wx, wy] = hexCentreWorld(h.q, h.r);
+    if (wx < minX) minX = wx;
+    if (wx > maxX) maxX = wx;
+    if (wy < minY) minY = wy;
+    if (wy > maxY) maxY = wy;
   }
+  // Slippy y runs SOUTHWARD, so the SMALLER wy is the north-west corner.
+  const nw = tileCorner(minX - HEX_R, minY - HEX_R);
+  const se = tileCorner(maxX + HEX_R, maxY + HEX_R);
   return [
-    [round(south), round(west)],
-    [round(north), round(east)],
+    [round(se.lat), round(nw.lon)],
+    [round(nw.lat), round(se.lon)],
   ];
 }
 
