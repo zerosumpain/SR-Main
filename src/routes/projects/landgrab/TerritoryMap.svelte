@@ -134,6 +134,10 @@
     else stopPulse();
 
     applyIsolate();
+    // A player who gains ground on a later filter change is added ON TOP of the
+    // pulse, and the pulse is the one outline that must stay readable over a
+    // fill — so it goes back to the front after every draw.
+    pulse?.bringToFront();
     // The QA script counts sources here rather than reaching into WebGL.
     if (container) container.dataset.lgSources = String(layers.size + (pulse ? 1 : 0));
   }

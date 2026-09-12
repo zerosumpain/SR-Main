@@ -58,13 +58,30 @@
   const roster = $derived(lg.players.filter((p) => lg.available.subjects.includes(p.subject)));
   const who = $derived(identityMap(lg.players));
 
+  /**
+   * The isolation that is actually in force.
+   *
+   * A filter change can take every cell off the player the reader has isolated.
+   * The map would then hide the other four layers and draw nothing at all, and
+   * the row you would click to undo it is the one row the key disables — a
+   * blank map with no way out. So isolation lapses on its own when its subject
+   * holds no ground, and comes back if the filter gives the ground back.
+   *
+   * DERIVED, never an effect that writes `isolate`: an effect reading
+   * `lg.share` to correct the state it also writes is the self-subscription the
+   * pitfalls table is about.
+   */
+  const shown = $derived(
+    isolate && lg.share.some((r) => r.subject === isolate && r.cells > 0) ? isolate : null,
+  );
+
   function toggleIsolate(subject: string) {
     isolate = isolate === subject ? null : subject;
   }
 </script>
 
 <div class="lg-stage">
-  <div class="lg-tools" aria-label="What counts">
+  <div class="lg-tools" role="group" aria-label="What counts">
     <div class="lg-tool">
       <span class="metric-label">Counts as territory</span>
       <div class="lg-chips">
@@ -132,7 +149,7 @@
         cellAreaM2={lg.cellAreaM2}
         focus={lg.focus}
         {view}
-        {isolate}
+        isolate={shown}
         {ontap}
         height="100%"
       />
@@ -156,8 +173,8 @@
           <button
             type="button"
             class="lg-key-btn"
-            class:on={isolate === row.subject}
-            aria-pressed={isolate === row.subject}
+            class:on={shown === row.subject}
+            aria-pressed={shown === row.subject}
             disabled={row.cells === 0}
             onclick={() => toggleIsolate(row.subject)}
           >
