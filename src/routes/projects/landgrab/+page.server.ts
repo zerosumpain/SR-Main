@@ -14,7 +14,7 @@ import { connectedComponents, dissolveTiles, type DissolvedRegion } from '$lib/g
 import { chooseFocus } from '$lib/geo/focus';
 import { findBattlegrounds, nextMoves } from '$lib/geo/battlegrounds';
 import { latestLandgrabWeekly } from '$lib/geo/weekly';
-import { parseTileKey, tileAreaM2, tileCentre, type Tile } from '$lib/geo/tiles';
+import { TILE_ZOOM, parseTileKey, tileAreaM2, tileCentre, type Tile } from '$lib/geo/tiles';
 import {
   DEFAULT_WINDOW,
   HOME_BOX,
@@ -47,9 +47,10 @@ const round = (n: number) => Math.round(n * 10 ** COORD_DP) / 10 ** COORD_DP;
 
 const FEED_LIMIT = 40;
 
-/** The highest legal tile index at z19, on both axes — the same bound
- *  `/projects/landgrab/geo` enforces on `?x`/`?y`. */
-const MAX_TILE_INDEX = 2 ** 19 - 1;
+/** The highest legal tile index at the shared zoom, on both axes — the same
+ *  bound `/projects/landgrab/geo` enforces on `?x`/`?y`. Off `TILE_ZOOM` rather
+ *  than a literal 19, so a re-zoom of the grid cannot leave this behind. */
+const MAX_TILE_INDEX = 2 ** TILE_ZOOM - 1;
 
 /** One dissolved component in the payload's [lat, lon] shape. Shared by the
  *  territory rings and the handover outlines, so the two cannot drift apart in

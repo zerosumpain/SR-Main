@@ -218,6 +218,22 @@ describe('the letter', () => {
     expect(r.details?.quota).toEqual({ weeklyPct: 0, fiveHourPct: 0 });
   });
 
+  it('keeps the link when the letter runs past the 1200-character cap', async () => {
+    // A 900-character narrative (the verifier's own ceiling) plus a long
+    // summary overruns the cap. The prose is what may be cut, never the link.
+    draftThen('SUPPORTED', 'K'.repeat(900));
+    geo.phraseLandgrabWeek.mockReturnValue('Week to Sun 13 Sep. ' + 'S'.repeat(400));
+
+    await landgrabWeekly.run(ctx());
+
+    const message = String(
+      (vi.mocked(executeTool).mock.calls[0][1] as { message: string }).message,
+    );
+    expect(message.length).toBeLessThanOrEqual(1200);
+    expect(message.endsWith('https://strangeramblings.com/projects/landgrab')).toBe(true);
+    expect(message.startsWith('\u{1F3C1} *Landgrab')).toBe(true);
+  });
+
   it('drops an UNSUPPORTED draft whole and ships the summary', async () => {
     draftThen('UNSUPPORTED');
     const r = await landgrabWeekly.run(ctx());

@@ -248,8 +248,17 @@
     color: var(--text-primary);
     overflow-wrap: anywhere;
   }
+  /* `overflow-wrap: anywhere` above is right for a real name in a 1fr column
+     that has other columns to yield to. The open row has no such column: the
+     `auto` track holding "No ground yet" takes its max-content width first, and
+     at 390px what is left starves "SEAT 2 · OPEN" into "SEA / T 2 / · / OP /
+     EN". So the seat label never breaks — it ellipsises if it ever has to — and
+     the figure moves out of its way under 700px instead. */
   .lg-share-row--open .lg-name {
     color: var(--text-ghost);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .lg-name small {
     display: block;
@@ -346,8 +355,15 @@
       padding: 12px;
     }
     .lg-share-row--open {
-      grid-template-columns: 34px 14px 26px minmax(0, 1fr) auto;
-      grid-template-areas: 'rank sw badge name num';
+      grid-template-columns: 34px 14px 26px minmax(0, 1fr);
+      grid-template-areas:
+        'rank sw badge name'
+        'num num num num';
+    }
+    /* Second line now, so it reads left with the figures above it rather than
+       hanging off a right edge that is no longer there. */
+    .lg-num--open {
+      text-align: left;
     }
     .lg-figs {
       grid-area: figs;

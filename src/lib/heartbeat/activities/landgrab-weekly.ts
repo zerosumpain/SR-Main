@@ -180,11 +180,15 @@ export const landgrabWeekly: ActivityHandler = {
       const to = ownerPhone();
       if (to) {
         const { executeTool } = await import('$lib/workflows/site-tools/registry');
-        const message =
-          `🏁 *Landgrab — the week*\n\n${narrative ?? summary}` +
-          (narrative ? `\n\n_${summary}_` : '') +
-          `\n\nhttps://strangeramblings.com/projects/landgrab`;
-        const res = await executeTool('whatsapp_send', { to, message: message.slice(0, 1200) });
+        // The 1200-character cap is WhatsApp's, and a `slice` of the whole
+        // message took the LINK off the end first — the one part of the
+        // letter that cannot be reconstructed. So the PROSE is what gets
+        // trimmed, to whatever room the header and the link leave it.
+        const header = `🏁 *Landgrab — the week*\n\n`;
+        const body = (narrative ?? summary) + (narrative ? `\n\n_${summary}_` : '');
+        const link = `\n\nhttps://strangeramblings.com/projects/landgrab`;
+        const message = header + body.slice(0, 1200 - header.length - link.length) + link;
+        const res = await executeTool('whatsapp_send', { to, message });
         if (res?.success) channel = 'whatsapp';
       }
       if (channel === 'none') {

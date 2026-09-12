@@ -231,7 +231,7 @@
         <SectionHead
           kicker="01 / The map"
           title={['WHERE THE', 'GROUND MOVED']}
-          strap="Five territories on a hidden 44 m grid, dissolved and smoothed. The map opens where ground changed hands; tap a territory for its history."
+          strap={`Five territories on a hidden ${Math.round(lg.cellSideM)} m grid, dissolved and smoothed. The map opens where ground changed hands; tap a territory for its history.`}
         />
         <MapStage
           {lg}
@@ -296,7 +296,7 @@
         <SectionHead
           kicker="04 / The boards"
           title={['THE WEEK,', 'READ THREE WAYS']}
-          strap="The same ledger read four ways — who holds most, who moved this week, who has held longest, and the journeys that failed to close."
+          strap="The same ledger read three ways — who holds most, who moved this week, and the loops that closed — with the capture feed and the effort lines beneath."
         />
         <LandgrabBoards
           standings={lg.standings}
@@ -405,10 +405,8 @@
 
   <!--
     The drill is mounted ONCE, at the page root, as a sibling of the sections
-    and never inside one. It does not portal, and a `position: fixed` backdrop
-    inside a transformed or contained ancestor is trapped in that ancestor's
-    box. Mounting it once is also what lets an in-flight fetch for the last
-    region be aborted when the next one is tapped.
+    and never inside one. Mounting it once is what lets an in-flight fetch for
+    the last region be aborted when the next one is tapped.
   -->
   <RegionDrill
     open={drill}
