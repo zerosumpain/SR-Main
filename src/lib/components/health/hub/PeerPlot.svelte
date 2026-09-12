@@ -165,9 +165,11 @@
         onblur={() => onhover?.(null)}
       >
         <title>{title(dot.point)}</title>
-        <!-- A transparent disc twice the radius: a 4.5-unit dot is about 9
-             screen pixels and too small a target on its own. -->
-        <circle class="pp-target" cx={dot.x} cy={cy} r={radius * 2.4} />
+        <!-- Barely wider than the dot. It was 2.4×, which is kinder to a mouse
+             and covers the neighbours either side: rows are spaced 2r + 1.4
+             apart, so a 2.4r disc reaches well into the next dot's, and the
+             readout then names an outing the reader is not pointing at. -->
+        <circle class="pp-target" cx={dot.x} cy={cy} r={radius * 1.25} />
         {#if beyond}
           <path class="pp-over" d={chevron(dot.x, cy, radius, beyond)} />
         {:else}

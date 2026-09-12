@@ -12,13 +12,17 @@
   // differently-behaved one would be a worse answer than a shared shape.
   import { goto } from '$app/navigation';
   import PeerPlot from './PeerPlot.svelte';
+  import PeerScatter from './PeerScatter.svelte';
   import {
     ordinal,
+    peerMatrix,
     peerMetrics,
+    peerPartners,
     peerReading,
     typePlural,
     type PeerPoint,
     type PeerSet,
+    type ScatterPoint,
   } from '$lib/health/activity-peers';
 
   interface Props {
@@ -52,16 +56,40 @@
   });
 
   /** The outing under the pointer, named beneath the plot before it is opened. */
-  let hovered = $state<PeerPoint | null>(null);
+  let hovered = $state<PeerPoint | ScatterPoint | null>(null);
+
+  // ——— the matrix ————————————————————————————————————————————————
+  //
+  // A distribution says where the outing sits; it cannot say what that cost.
+  // The partners are the pairings a coach would draw, filtered to the ones this
+  // cohort can actually plot.
+
+  const partners = $derived(metricKey ? peerPartners(peers, metricKey, paceSport) : []);
+
+  /**
+   * Which partner is on the y axis.
+   *
+   * Deliberately NOT carried across subjects — see the `{#key}` reset below.
+   * A pairing chosen two metrics ago, still selected under a chart the reader
+   * has forgotten choosing it for, is a hypothesis wearing a reading's clothes.
+   */
+  let partnerKey = $state<string | null>(null);
+  const partner = $derived(
+    partners.find((p) => p.key === partnerKey) ?? partners[0] ?? null,
+  );
+  const matrix = $derived(metric && partner ? peerMatrix(peers, metric, partner) : null);
 
   // A new subject means the old readout described a point on a chart that is no
-  // longer on screen.
+  // longer on screen, and the old pairing belongs to a metric that has gone.
   $effect(() => {
     void metricKey;
     hovered = null;
+    partnerKey = null;
   });
 
-  function pick(point: PeerPoint) {
+  /** Both charts hand back something with an id and a subject flag; that is all
+      opening an outing needs, so one handler serves the strip and the matrix. */
+  function pick(point: { id: string; subject: boolean }) {
     if (point.subject) {
       // Already here. Closing is the honest response to "go to this one".
       onclose();
@@ -136,7 +164,11 @@
         {#if hovered}
           <span class="pd-ro-name">{hovered.name}</span>
           <span class="pd-ro-day">{fullDay(hovered.day)}</span>
-          <span class="pd-ro-value">{metric.format(hovered.value)}</span>
+          <span class="pd-ro-value">
+            {'value' in hovered
+              ? metric.format(hovered.value)
+              : `${matrix?.x.format(hovered.x)} at ${matrix?.y.format(hovered.y)}`}
+          </span>
           <span class="pd-ro-go">{hovered.subject ? 'this outing' : 'click to open ↗'}</span>
         {:else}
           <span class="pd-ro-hint">
@@ -145,6 +177,34 @@
           </span>
         {/if}
       </div>
+
+      {#if matrix && partner}
+        <section class="pd-sec">
+          <div class="pd-sec-head-row">
+            <p class="pd-sec-head">Against</p>
+            {#if partners.length > 1}
+              <div class="pd-toggle" role="group" aria-label="What to plot it against">
+                {#each partners as p (p.key)}
+                  <button
+                    type="button"
+                    class="pd-toggle-btn"
+                    class:on={p.key === partner.key}
+                    aria-pressed={p.key === partner.key}
+                    onclick={() => (partnerKey = p.key)}
+                  >
+                    {p.label}
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
+          <PeerScatter
+            {matrix}
+            onpick={pick}
+            onhover={(p) => (hovered = p)}
+          />
+        </section>
+      {/if}
 
       {#if reading.median != null}
         <p class="pd-note">
@@ -342,6 +402,45 @@
     padding-top: 14px;
     border-top: 1px solid var(--divider);
   }
+  .pd-sec-head-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  /* A segmented control, not a row of chips: these are two views of ONE chart
+     and only one can be on, which is what the shared frame says. */
+  .pd-toggle {
+    display: flex;
+    border: 1px solid var(--card-border);
+  }
+  .pd-toggle-btn {
+    background: none;
+    border: none;
+    border-radius: 0;
+    padding: 5px 11px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+  .pd-toggle-btn + .pd-toggle-btn {
+    border-left: 1px solid var(--card-border);
+  }
+  .pd-toggle-btn:hover,
+  .pd-toggle-btn:focus-visible {
+    color: var(--accent);
+  }
+  .pd-toggle-btn.on {
+    background: var(--accent-tint-08);
+    color: var(--text-primary);
+    box-shadow: inset 0 -2px 0 var(--accent);
+  }
+
   .pd-chips {
     display: flex;
     flex-wrap: wrap;

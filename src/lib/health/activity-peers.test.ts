@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   MIN_PEERS,
+  PEER_PARTNERS,
   domainFor,
   medianOf,
   ordinal,
+  peerMatrix,
   peerMetrics,
+  peerPartners,
   peerReading,
   percentileOf,
   quantile,
@@ -300,5 +303,102 @@ describe('peerMetrics', () => {
       .map((m) => m.key)
       .sort();
     expect(anchored).toEqual(['climb', 'descent', 'distance', 'energy', 'mets', 'moving', 'trimp']);
+  });
+});
+
+describe('the matrix', () => {
+  /** A cohort carrying two metrics at once. */
+  function pair(
+    xs: Array<number | null>,
+    ys: Array<number | null>,
+    subjectIndex = 0,
+    activityType = 'run',
+  ): PeerSet {
+    return {
+      activityType,
+      days: 90,
+      to: '2026-08-17',
+      activities: xs.map((_, i) => ({ id: `a${i}`, name: `Outing ${i}`, day: '2026-08-17' })),
+      values: { distance: xs, avghr: ys },
+      subjectIndex,
+    };
+  }
+
+  it('plots only the outings carrying BOTH, and says how many that left', () => {
+    const set = pair([10, 8, 6, 4, 12], [150, null, 140, 160, null]);
+    const m = peerMatrix(set, RUN.distance, RUN.avghr)!;
+    expect(m.n).toBe(3);
+    expect(m.of).toBe(5);
+    expect(m.points.map((p) => p.x)).toEqual([10, 6, 4]);
+  });
+
+  it('carries the subject through, and flags exactly one', () => {
+    const set = pair([10, 8, 6, 4], [150, 148, 140, 160], 2);
+    const m = peerMatrix(set, RUN.distance, RUN.avghr)!;
+    expect(m.subject!.x).toBe(6);
+    expect(m.points.filter((p) => p.subject)).toHaveLength(1);
+  });
+
+  it('has no subject point when the subject lacks one of the two', () => {
+    const set = pair([10, 8, 6, 4], [null, 148, 140, 160], 0);
+    const m = peerMatrix(set, RUN.distance, RUN.avghr)!;
+    expect(m.subject).toBeNull();
+    expect(m.n).toBe(3);
+  });
+
+  it('takes the same outlier cut on both axes as the strip does', () => {
+    const xs = [...Array.from({ length: 19 }, (_, i) => 4 + i * 0.2), 60];
+    const ys = xs.map(() => 150);
+    const m = peerMatrix(pair(xs, ys, 0), RUN.distance, RUN.avghr)!;
+    expect(m.xDomain.hi).toBeLessThan(20);
+    expect(m.xDomain.beyondHi).toBe(1);
+    // Nothing is dropped — the point is still in the set, pinned by the plot.
+    expect(m.n).toBe(20);
+  });
+
+  it('has nothing to draw without both columns', () => {
+    const set = pair([10, 8], [150, 148]);
+    expect(peerMatrix(set, RUN.distance, RUN.trimp)).toBeNull();
+    expect(peerMatrix(null, RUN.distance, RUN.avghr)).toBeNull();
+  });
+
+  it('offers the pairings John named, in the order he named them', () => {
+    expect(PEER_PARTNERS.pace).toEqual(['avghr', 'distance']);
+    expect(PEER_PARTNERS.avghr).toEqual(['pace', 'mets']);
+    expect(PEER_PARTNERS.ef[0]).toBe('pace');
+    expect(PEER_PARTNERS.distance[0]).toBe('pace');
+  });
+
+  it('names every partner as a real metric key', () => {
+    const metrics = peerMetrics(true);
+    for (const [key, list] of Object.entries(PEER_PARTNERS)) {
+      expect(metrics[key], `${key} is a metric`).toBeTruthy();
+      for (const p of list) expect(metrics[p], `${key} → ${p}`).toBeTruthy();
+    }
+  });
+
+  it('offers only the partners the cohort can actually plot', () => {
+    // avghr is present for three outings; trimp is in no column at all.
+    const set = pair([10, 8, 6, 4], [150, 148, 140, 160]);
+    expect(peerPartners(set, 'distance', true).map((p) => p.key)).toEqual([]);
+
+    const withPace: PeerSet = {
+      ...set,
+      values: { ...set.values, pace: [300, 310, 320, 330] },
+    };
+    expect(peerPartners(withPace, 'distance', true).map((p) => p.key)).toEqual(['pace']);
+    expect(peerPartners(null, 'distance', true)).toEqual([]);
+  });
+
+  it('will not offer a partner with fewer than two plottable outings', () => {
+    const thin: PeerSet = {
+      activityType: 'run',
+      days: 90,
+      to: '2026-08-17',
+      activities: [0, 1, 2].map((i) => ({ id: `a${i}`, name: `O${i}`, day: '2026-08-17' })),
+      values: { distance: [10, 8, 6], pace: [300, null, null] },
+      subjectIndex: 0,
+    };
+    expect(peerPartners(thin, 'distance', true)).toEqual([]);
   });
 });

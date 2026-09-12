@@ -572,6 +572,145 @@ export function domainFor(
   };
 }
 
+// ——— the matrix ————————————————————————————————————————————————
+//
+// A distribution says where an outing sits; it cannot say WHY. Pace against
+// heart rate can: two runs at 5:30 /km, one at 148 bpm and one at 171, are the
+// same dot on the pace strip and two very different runs. So every figure that
+// has something to be explained BY gets a second chart — the same cohort, the
+// card's own metric on x and a partner on y, with the subject lit in it.
+//
+// x IS ALWAYS THE CARD'S OWN METRIC, matching the strip above it. A scatter
+// that put the subject on a different axis from the distribution would make the
+// reader re-learn the mapping halfway down one panel.
+
+/**
+ * What explains what, in order — the first is the chart that opens.
+ *
+ * These are pairings a coach would actually draw, not every combination: the
+ * partner is something that MOVES the metric or is moved by it. A metric with
+ * no honest partner simply has no matrix, the same way a metric with no reading
+ * has no card.
+ */
+export const PEER_PARTNERS: Record<string, string[]> = {
+  // Was it long because it was slow, or long because it was long?
+  distance: ['pace', 'moving'],
+  moving: ['distance', 'pace'],
+  // The pairing John named: pace is only a number until you know what it cost.
+  pace: ['avghr', 'distance'],
+  climb: ['distance', 'pace'],
+  descent: ['climb', 'distance'],
+  // And its mirror: a heart rate means one thing at 5:30 /km and another at 7:00.
+  avghr: ['pace', 'mets'],
+  maxhr: ['avghr', 'mets'],
+  energy: ['moving', 'distance'],
+  trimp: ['moving', 'avghr'],
+  // Efficiency IS distance-per-beat, so pace is the axis that separates a good
+  // day from a slow one.
+  ef: ['pace', 'avghr'],
+  hrr60: ['maxhr', 'trimp'],
+  mets: ['avghr', 'pace'],
+};
+
+export interface ScatterPoint {
+  id: string;
+  name: string;
+  day: string;
+  x: number;
+  y: number;
+  subject: boolean;
+}
+
+export interface PeerMatrix {
+  x: PeerMetric;
+  y: PeerMetric;
+  xDomain: PeerDomain;
+  yDomain: PeerDomain;
+  points: ScatterPoint[];
+  /** Outings carrying BOTH metrics, out of the whole cohort. */
+  n: number;
+  of: number;
+  /** The subject's own point, when it has both. */
+  subject: ScatterPoint | null;
+}
+
+/**
+ * The partners this cohort can actually draw, in preference order.
+ *
+ * Filtered on the data, not on the table: offering a chip that opens an empty
+ * chart is the same failure as a tile printing a band round a zero struct. Two
+ * points is the floor — a scatter of one is a dot with no shape to read.
+ */
+export function peerPartners(
+  set: PeerSet | null,
+  key: string,
+  paceSport: boolean,
+): PeerMetric[] {
+  if (!set) return [];
+  const metrics = peerMetrics(paceSport);
+  const subject = metrics[key];
+  if (!subject) return [];
+  const out: PeerMetric[] = [];
+  for (const partnerKey of PEER_PARTNERS[key] ?? []) {
+    const partner = metrics[partnerKey];
+    if (!partner) continue;
+    const matrix = peerMatrix(set, subject, partner);
+    if (matrix && matrix.n >= 2) out.push(partner);
+  }
+  return out;
+}
+
+/**
+ * One cohort, plotted on two axes.
+ *
+ * Only outings carrying BOTH metrics are drawn, and `n` vs `of` says how many
+ * that left — a heart-rate axis silently dropping the half of the cohort that
+ * was recorded without a strap would be a scatter describing a set the reader
+ * thinks is the whole one. The axes take the same outlier cut the strip does,
+ * so one 60 km ride cannot flatten this chart either.
+ */
+export function peerMatrix(
+  set: PeerSet | null,
+  x: PeerMetric,
+  y: PeerMetric,
+): PeerMatrix | null {
+  if (!set) return null;
+  const xs = set.values[x.key];
+  const ys = set.values[y.key];
+  if (!xs || !ys) return null;
+
+  const points: ScatterPoint[] = [];
+  let subject: ScatterPoint | null = null;
+  for (let i = 0; i < set.activities.length; i++) {
+    const xv = xs[i];
+    const yv = ys[i];
+    if (xv == null || yv == null || !Number.isFinite(xv) || !Number.isFinite(yv)) continue;
+    const a = set.activities[i];
+    const point: ScatterPoint = {
+      id: a.id,
+      name: a.name,
+      day: a.day,
+      x: xv,
+      y: yv,
+      subject: i === set.subjectIndex,
+    };
+    if (point.subject) subject = point;
+    points.push(point);
+  }
+  if (!points.length) return null;
+
+  return {
+    x,
+    y,
+    xDomain: domainFor(x, points.map((p) => p.x), subject?.x ?? null),
+    yDomain: domainFor(y, points.map((p) => p.y), subject?.y ?? null),
+    points,
+    n: points.length,
+    of: set.activities.length,
+    subject,
+  };
+}
+
 // ——— the swarm ————————————————————————————————————————————————————
 
 export interface SwarmDot {
