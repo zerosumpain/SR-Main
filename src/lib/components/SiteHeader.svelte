@@ -138,6 +138,7 @@
       {#each cells as item (item.href + item.label)}
         <a
           href={item.href}
+          data-sveltekit-reload={item.href.startsWith('/policy-analysis') ? true : undefined}
           class="nav-cell"
           aria-current={isItemActive(item, path) ? 'page' : undefined}
         >
