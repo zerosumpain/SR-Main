@@ -133,6 +133,11 @@ export function hexCentre(q: number, r: number): LatLon {
  * sqrt(2)/2 from the cell's centre, which is at most R from the home hex's
  * centre, so at most 1.328 tile units away — and the second neighbour ring
  * starts at 3R = 1.861.
+ *
+ * Three is the structural ceiling on what comes back (two hex centres is the
+ * most a unit square can hold at this spacing: the largest equilateral
+ * triangle inside it has side 1.035, under the 1.075 the lattice keeps them
+ * apart). Over 1,600 Darlington cells the observed maximum is TWO.
  */
 export function hexesForTile(x: number, y: number): Hex[] {
   const cx = x + 0.5;
@@ -157,15 +162,22 @@ export function parseHexKey(key: string): Hex {
 }
 
 /**
- * Rendered width of a hex, in CSS pixels, at a slippy zoom.
+ * Rendered width of a hex, in CSS pixels, at a **Mapbox GL** zoom.
  *
- * A z19 tile unit is 256 * 2^(zoom - 19) pixels across, and a hex is
- * `HEX_WIDTH_TILES` of them. This is what decides whether the unclaimed mesh
- * is drawn at all: below about nine pixels a honeycomb stops being a board and
- * becomes a grey wash over the basemap.
+ * MAPBOX RENDERS 512 CSS PX PER TILE, not the 256 the slippy convention this
+ * lattice's coordinates use — its metres-per-pixel is half OSM's at the same
+ * zoom number. Writing 256 here reports exactly half the true width, which
+ * does not look like a bug: the mesh simply stays hidden for a whole zoom
+ * level past the point where it would have been perfectly legible.
+ *
+ * This is what decides whether the unclaimed mesh is drawn at all: below about
+ * nine pixels a honeycomb stops being a board and becomes a grey wash over the
+ * basemap.
  */
-export function hexWidthPx(zoom: number): number {
-  return 256 * 2 ** (zoom - TILE_ZOOM) * HEX_WIDTH_TILES;
+export const MAPBOX_TILE_PX = 512;
+
+export function hexWidthPx(zoom: number, tilePx = MAPBOX_TILE_PX): number {
+  return tilePx * 2 ** (zoom - TILE_ZOOM) * HEX_WIDTH_TILES;
 }
 
 export interface HexViewport {
@@ -221,9 +233,15 @@ export function hexesInBounds(view: HexViewport, max: number): Hex[] | null {
  *
  * A whole list at once, not one hex at a time, because the inverse Mercator is
  * the expensive part and it is a function of `wy` ALONE. Every hex in a row
- * shares the same four corner latitudes, so ~19k hexes need a few hundred
+ * shares its corner latitudes, so ~19k hexes need a few hundred
  * `atan(sinh(...))` calls instead of 114k. Longitude is linear in `wx` and
  * needs no trigonometry at all.
+ *
+ * Five keys per row, not the four distinct heights the geometry has: sin(30)
+ * and sin(150) differ by one ULP, so the two middle offsets miss each other in
+ * the cache. They produce the same latitude out of `atan(sinh(...))`, so there
+ * is no seam — it is 25% more work than the geometry needs, and collapsing it
+ * would mean rounding the key, which is the one thing that COULD open a seam.
  */
 export function hexRings(hexes: readonly Hex[]): Array<Array<[number, number]>> {
   const n = 2 ** TILE_ZOOM;

@@ -33,11 +33,17 @@ describe('the lattice', () => {
     expect(HEX_HEIGHT_TILES).toBeCloseTo(1.24081, 5);
   });
 
-  it('sizes a hex on screen from the slippy zoom', () => {
-    // 256 px per z19 tile at zoom 19, halving with every zoom level below it.
-    expect(hexWidthPx(19)).toBeCloseTo(256 * 1.07457, 2);
-    expect(hexWidthPx(15)).toBeCloseTo(16 * 1.07457, 3);
+  it('sizes a hex on screen from a MAPBOX zoom, which is 512 px a tile', () => {
+    // Mapbox GL renders 512 CSS px per tile, so a z19 tile unit is
+    // 512 * 2^(zoom - 19) px — twice what the 256-px slippy convention says.
+    expect(hexWidthPx(19)).toBeCloseTo(512 * 1.07457, 2);
+    expect(hexWidthPx(15)).toBeCloseTo(32 * 1.07457, 3);
     expect(hexWidthPx(14)).toBeCloseTo(hexWidthPx(15) / 2, 6);
+    // A hex hits the 9 px mesh floor a whole zoom level earlier than the
+    // 256-px reading would have claimed.
+    expect(hexWidthPx(13.07)).toBeGreaterThan(9);
+    expect(hexWidthPx(12.9)).toBeLessThan(9);
+    expect(hexWidthPx(15, 256)).toBeCloseTo(hexWidthPx(14), 6);
   });
 
   it('round-trips a hex through its own centre', () => {

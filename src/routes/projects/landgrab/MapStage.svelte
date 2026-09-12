@@ -60,21 +60,36 @@
   const who = $derived(identityMap(lg.players));
 
   /**
+   * Who the map can actually SHOW, which is not everyone the board counts.
+   *
+   * The hex lattice is offset from the cell grid and a hex goes wholly to one
+   * person, so a small holding surrounded by a stronger one can win no hex at
+   * all — measured at 14% for a lone cell inside a 7x7 block. Those players
+   * hold ground, and the leaderboard says so; the board has nothing to draw
+   * for them at 47 m.
+   *
+   * Keyed off `lg.hexes` rather than off `row.cells`, therefore. Keying it off
+   * the leaderboard would offer an isolate button that empties the map.
+   */
+  const drawn = $derived(
+    new Set(lg.hexes.filter((h) => h.packed.length > 0).map((h) => h.subject)),
+  );
+
+  /**
    * The isolation that is actually in force.
    *
    * A filter change can take every cell off the player the reader has isolated.
    * The map would then hide the other four layers and draw nothing at all, and
    * the row you would click to undo it is the one row the key disables — a
    * blank map with no way out. So isolation lapses on its own when its subject
-   * holds no ground, and comes back if the filter gives the ground back.
+   * has nothing on the board, and comes back if the filter gives the ground
+   * back.
    *
    * DERIVED, never an effect that writes `isolate`: an effect reading
-   * `lg.share` to correct the state it also writes is the self-subscription the
+   * `lg.hexes` to correct the state it also writes is the self-subscription the
    * pitfalls table is about.
    */
-  const shown = $derived(
-    isolate && lg.share.some((r) => r.subject === isolate && r.cells > 0) ? isolate : null,
-  );
+  const shown = $derived(isolate && drawn.has(isolate) ? isolate : null);
 
   function toggleIsolate(subject: string) {
     isolate = isolate === subject ? null : subject;
@@ -176,7 +191,7 @@
             class="lg-key-btn"
             class:on={shown === row.subject}
             aria-pressed={shown === row.subject}
-            disabled={row.cells === 0}
+            disabled={!drawn.has(row.subject)}
             onclick={() => toggleIsolate(row.subject)}
           >
             <Swatch colour={p?.colour ?? 'var(--text-primary)'} hatch={p?.hatch ?? 'diag'} />
@@ -422,7 +437,8 @@
     flex: 0 0 auto;
   }
   /* The empty board's own swatch. Without it the honeycomb reads as basemap
-     furniture rather than as ground nobody has taken. */
+     furniture rather than as ground nobody has taken — and it has to carry the
+     same weight the mesh does, which is `--line-strong` at a 1px hairline. */
   .lg-key-hex {
     display: block;
     width: 14px;
@@ -430,7 +446,7 @@
     flex: 0 0 auto;
     fill: none;
     stroke: var(--line-strong);
-    stroke-width: 1.4;
+    stroke-width: 1.1;
   }
   .lg-key-none {
     color: var(--accent);

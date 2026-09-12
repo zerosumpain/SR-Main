@@ -221,13 +221,18 @@ export class MapLayer {
     }
     map.addSource(this.id, { type: 'geojson', data: this.data() });
     // `var(--name)` and `var(--name, fallback)` both resolve the property they
-    // actually name, against the map container. This used to read `--accent`
-    // whatever was inside the parentheses, which was fine while `--accent` was
-    // the only one anybody asked for.
-    const cssVar = this.opts.color?.startsWith('var(')
-      ? getComputedStyle(map.getContainer()).getPropertyValue(this.opts.color.slice(4, -1).split(',')[0].trim()).trim()
-      : '';
-    const colour = this.opts.color?.startsWith('var(') ? cssVar || '#c4570a' : this.opts.color ?? '#c4570a';
+    // actually name, against the map container, and an undefined property
+    // falls back to what the AUTHOR wrote rather than to burnt orange. This
+    // used to read `--accent` whatever was inside the parentheses, which was
+    // fine while `--accent` was the only one anybody asked for.
+    const declared = this.opts.color?.startsWith('var(')
+      ? this.opts.color.slice(4, -1).split(',')
+      : null;
+    const colour = declared
+      ? getComputedStyle(map.getContainer()).getPropertyValue(declared[0].trim()).trim() ||
+        declared[1]?.trim() ||
+        '#c4570a'
+      : this.opts.color ?? '#c4570a';
     if ((this.kind === 'polygon' || this.kind === 'collection') && this.opts.fill !== false) {
       const paint: any = { 'fill-color': this.opts.fillColor ?? colour, 'fill-opacity': this.opts.fillOpacity ?? 0.2 };
       if (this.opts.hatch) {

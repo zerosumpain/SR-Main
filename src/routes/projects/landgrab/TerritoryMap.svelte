@@ -67,9 +67,17 @@
    */
   const MESH_MAX_HEXES = 6000;
 
-  /** The unclaimed mesh fades in rather than appearing; the owned outlines fade
-   *  the other way, so a zoomed-out board reads as solid ground. */
-  const MESH_OPACITY = ['interpolate', ['linear'], ['zoom'], 14, 0, 15.5, 0.5];
+  /**
+   * The unclaimed mesh fades in rather than appearing; the owned outlines fade
+   * the other way, so a zoomed-out board reads as solid ground.
+   *
+   * The ramp tops out at 1, NOT at a second dimming. `--line-strong` is a tint
+   * — `rgba(26, 16, 8, 0.16)` — and Mapbox multiplies `line-opacity` into the
+   * colour's own alpha, so a 0.5 ceiling here would draw the honeycomb at 8%
+   * of near-black on a near-white basemap and it would read as basemap
+   * furniture rather than as ground nobody has taken.
+   */
+  const MESH_OPACITY = ['interpolate', ['linear'], ['zoom'], 14, 0, 15.5, 1];
   const HEX_EDGE_WIDTH = ['interpolate', ['linear'], ['zoom'], 12, 0, 14, 0.4, 16, 1.1];
 
   let container: HTMLDivElement | undefined = $state();
@@ -83,6 +91,11 @@
   let M: MapTools | null = null;
   let mapRef: MapView | null = null;
   const layers = new Map<string, MapLayer>();
+  /** The packed array each layer was last built from, by identity. A filter
+   *  change that only moves the handovers must not rebuild ~19k rings a player
+   *  for five players — that is half a million short-lived arrays for a layer
+   *  whose data did not change. */
+  const builtFrom = new Map<string, number[]>();
   let mesh: MapLayer | null = null;
   /** What the mesh currently holds, so a pan that lands on the same hexes does
    *  not rebuild and re-upload them. */
@@ -102,7 +115,7 @@
     return hexRings(list).map((ring) => ({ rings: [ring], properties: {} }));
   }
 
-  function draw() {
+  function drawTerritory() {
     if (!M || !mapRef) return;
     const byId = identityMap(players);
     const drawn = new Set<string>();
@@ -111,14 +124,17 @@
       const who = byId.get(t.subject);
       if (!who) continue;
       drawn.add(t.subject);
-      const built = features(unpackHexes(t.packed));
 
       const existing = layers.get(t.subject);
       if (existing) {
-        existing.setData(built);
+        // Identity, not contents: the payload is a fresh array on every load,
+        // and the same array on every re-render of the same load.
+        if (builtFrom.get(t.subject) === t.packed) continue;
+        existing.setData(features(unpackHexes(t.packed)));
+        builtFrom.set(t.subject, t.packed);
         continue;
       }
-      const layer = M.featureCollection(built, {
+      const layer = M.featureCollection(features(unpackHexes(t.packed)), {
         color: who.colour,
         weight: HEX_EDGE_WIDTH,
         opacity: 0.9,
@@ -133,12 +149,29 @@
       });
       layer.addTo(mapRef);
       layers.set(t.subject, layer);
+      builtFrom.set(t.subject, t.packed);
     }
 
     // A player the filter has emptied keeps their source and loses their data —
     // cheaper than a teardown, and the layer is there when they come back.
-    for (const [subject, layer] of layers) if (!drawn.has(subject)) layer.setData([]);
+    for (const [subject, layer] of layers) {
+      if (drawn.has(subject)) continue;
+      if (builtFrom.get(subject)?.length === 0) continue;
+      layer.setData([]);
+      builtFrom.set(subject, []);
+    }
 
+    applyIsolate();
+    // A player who gains ground on a later filter change is added ON TOP of the
+    // pulse, and the pulse is the one outline that must stay readable over a
+    // fill — so it goes back to the front after every draw.
+    pulse?.bringToFront();
+    countSources();
+  }
+
+  /** The ground that changed hands, over the top of whoever holds it now. */
+  function drawPulse() {
+    if (!M || !mapRef) return;
     const changed = features(unpackHexes(handovers.packed));
     if (pulse) {
       pulse.setData(changed);
@@ -155,16 +188,14 @@
     }
     if (changed.length) startPulse();
     else stopPulse();
-
-    applyIsolate();
-    // A player who gains ground on a later filter change is added ON TOP of the
-    // pulse, and the pulse is the one outline that must stay readable over a
-    // fill — so it goes back to the front after every draw.
     pulse?.bringToFront();
-    // The QA script counts sources here rather than reaching into WebGL.
-    if (container) {
-      container.dataset.lgSources = String(layers.size + (mesh ? 1 : 0) + (pulse ? 1 : 0));
-    }
+    countSources();
+  }
+
+  /** The QA script counts sources here rather than reaching into WebGL. */
+  function countSources() {
+    if (!container) return;
+    container.dataset.lgSources = String(layers.size + (mesh ? 1 : 0) + (pulse ? 1 : 0));
   }
 
   /**
@@ -320,7 +351,8 @@
         });
 
         ready = true;
-        draw();
+        drawTerritory();
+        drawPulse();
         fitView();
         drawMesh();
       } catch (err) {
@@ -336,6 +368,7 @@
       mapRef?.remove();
       mapRef = null;
       layers.clear();
+      builtFrom.clear();
       mesh = null;
       meshKey = '';
       pulse = null;
@@ -348,8 +381,12 @@
   // to. Ground first.
   $effect(() => {
     void hexes;
+    untrack(drawTerritory);
+  });
+
+  $effect(() => {
     void handovers;
-    untrack(draw);
+    untrack(drawPulse);
   });
 
   $effect(() => {

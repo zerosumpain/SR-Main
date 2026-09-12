@@ -30,6 +30,18 @@ interface Claim {
  * same ladder `standingsAt` walks, so a contested hex resolves the way a
  * contested cell does rather than by whichever cell was iterated first.
  *
+ * SMALL HOLDINGS INSIDE STRONGER ONES ARE UNDER-DRAWN, and can vanish. A hex
+ * goes wholly to one subject, and the lattice is offset from the cell grid, so
+ * a cell can contribute only to hexes somebody else wins outright. Measured:
+ * a lone cell inside a 7x7 block at nine times the score draws nothing at all
+ * 14% of the time, and a 2x2 inside one draws fewer than four hexes 32% of the
+ * time. That is quantisation, not unfairness — at 47 m a single cell inside
+ * somebody else's ground is below the board's resolution — and it is why the
+ * CELL count stays the number of record everywhere else on the page. The map
+ * key keys its isolate control off the drawn board rather than off the
+ * leaderboard, so a player the board cannot show cannot be isolated into a
+ * blank map.
+ *
  * It SUMS rather than taking the strongest single cell. At the shipped size the
  * two rules agree — measured over a 12x12 block of Darlington, 138 hexes have
  * one claimant cell and 10 have two, and none has three — so summing buys
@@ -65,7 +77,8 @@ export function resolveHexBoard(owned: Iterable<TileOwnership>): HexBoard {
         best = claim;
       }
     }
-    if (!winner) continue;
+    // `=== null`, not falsy: an empty-string subject is a subject.
+    if (winner === null) continue;
     const list = board.get(winner);
     const hex = parseHexKey(key);
     if (list) list.push(hex);

@@ -80,6 +80,16 @@ Because the mapping is not one-to-one, the hex count differs slightly from the
 cell count. **The cell count stays the number of record.** Nothing on the page
 reports a hex count.
 
+**A small holding inside a stronger one is under-drawn, and can vanish.** A hex
+goes wholly to one person, so a cell can contribute only to hexes somebody else
+wins outright: a lone cell inside a 7×7 block at nine times the score draws
+nothing at all 14% of the time, and a 2×2 inside one draws fewer than four
+hexes 32% of the time. That is quantisation — at 47 m a single cell inside
+somebody else's ground is below the board's resolution — not a scoring change,
+and it is one more reason the cell count is the number of record. The map key
+keys its isolate control off the DRAWN board rather than off the leaderboard,
+so a player the board cannot show cannot be isolated into a blank map.
+
 ## The payload
 
 `territory` (dissolved, smoothed rings) and `handovers.regions` leave the
@@ -108,16 +118,22 @@ the only thing `territory` was still needed for once the drawing changed.
 
 1. **The unclaimed mesh** — one line-only collection, regenerated for the
    current viewport on `moveend`. Skipped entirely when a hex would render
-   narrower than `MESH_MIN_PX` (9 px, about zoom 14) or when the viewport would
-   need more than `MESH_MAX_HEXES` (6,000); line opacity fades in over zoom
-   14 → 15.5 so it never appears as a grey wash. Regeneration is skipped when
-   the (q, r) range has not actually moved.
+   narrower than `MESH_MIN_PX` (9 px, about Mapbox zoom 13.1 — **Mapbox GL
+   renders 512 CSS px per tile**, not the 256 the slippy convention uses) or
+   when the viewport would need more than `MESH_MAX_HEXES` (6,000); line
+   opacity fades in over zoom 14 → 15.5, to the token's own 16% tint and no
+   further, so it is neither a grey wash nor invisible. Regeneration is skipped
+   when the (q, r) range has not actually moved.
 2. **One collection per player**, hatched and filled as today, but one polygon
    per hex instead of one per dissolved component. The per-hex outline is a zoom
-   expression (`0` at z12 → `1.2` at z16): zoomed out the fills read as solid
+   expression (`0` at z12 → `1.1` at z16): zoomed out the fills read as solid
    territory, zoomed in the honeycomb appears.
 3. **The handover pulse** — the changed cells' hexes, dashed and pulsing at
    ≤20 fps, unchanged in behaviour.
+
+Territory and pulse redraw on separate effects, and a player's layer is skipped
+when the `packed` array it was built from is the same array — so moving the
+handovers does not rebuild ~19k rings for five people.
 
 Corner→lat/lon conversion memoises the row's four distinct `wy` values, which
 turns ~114k inverse-Mercator calls into a few hundred; longitude is linear in
@@ -154,7 +170,8 @@ already imports `$lib/geo/tiles` for exactly this reason
 | 9 | Resolve any `var(--name)` in the map adapter, not just `--accent` | leave it; parse the name | The mesh wants `--line-strong`. Both existing callers (`var(--accent)`, `var(--accent, #c4570a)`) resolve identically after the change | One line |
 | 10 | `MapView.getBounds()` added to the shared adapter | reach for `.native` from the component | Every other camera read on this page goes through the adapter; one component reaching past it is how the Leaflet shape rots | One method |
 | 11 | An "Unclaimed" hex swatch in the key | leave the mesh unexplained | Without it the honeycomb reads as basemap furniture rather than as ground nobody has taken, which is half the point of drawing it | Two elements |
-| 12 | A test that DRAWS the board | unit tests only | homeserv holds no Mapbox credential, so the map is unwitnessed by automation here and always has been. `board-render.test.ts` asserts the properties a reader would otherwise have to notice by eye, and writes the picture when asked | Delete one file |
+| 12 | Keep the argmax; fix the KEY instead | guarantee every owner their home hex (overlapping); re-tune `HEX_R`; document and gate the UI | Guaranteeing a home hex breaks the one invariant the board has — that a hex belongs to one person — to paper over a resolution limit that is honestly a resolution limit | Local to one `$derived` |
+| 13 | A test that DRAWS the board | unit tests only | homeserv holds no Mapbox credential, so the map is unwitnessed by automation here and always has been. `board-render.test.ts` asserts the properties a reader would otherwise have to notice by eye, and writes the picture when asked | Delete one file |
 
 ## Verification
 
