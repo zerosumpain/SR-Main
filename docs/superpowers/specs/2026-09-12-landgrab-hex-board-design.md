@@ -195,3 +195,56 @@ already imports `$lib/geo/tiles` for exactly this reason
 - The drill. A tap resolves through `tileAt()` exactly as before.
 - Any number. The leaderboard, share of Darlington, the battlegrounds, the
   next-best-move and the Sunday letter are untouched and still count cells.
+
+
+---
+
+## Follow-up, same day: colours, and /health's basemap
+
+John, after seeing it live: *"remove the user related patterns and go with
+colors instead; the patterns render strange at different levels of zoom. Also
+change the fot of the text to match in health."*
+
+**The hatch is retired everywhere.** A player was colour + a per-player hatch +
+a mono initial, and the map drew the hatch as a Mapbox `fill-pattern` — an
+18×18 canvas registered once at `pixelRatio: 2`. A raster pattern does not
+scale with the geometry it fills, so against a 47 m hex it moirés and drifts at
+every zoom but the one it was drawn for. It was tolerable on v2's few hundred
+dissolved blobs and is not on twenty thousand small hexes.
+
+What replaces it is flat colour on a zoom ramp — `fill-opacity` 0.62 at z12
+falling to 0.4 at z17, because `fill-pattern` had forced `fill-opacity: 1` and
+simply dropping it would have left the board far lighter than the thing it
+replaced. Zoomed out the fills read as territory; zoomed in the street shows
+through.
+
+Identity is now colour plus the mono initial, and **every surface still shows
+both**: the key, the filter chips, the boards, the drill and the battlegrounds
+all already printed the initial beside the swatch. The one exception was the
+share bar's segments, which were colour-and-hatch alone — they print the
+initial inside the segment now, clipped when a segment is too narrow to hold
+it, which is a better second channel than a pattern that has to be learned.
+
+`HATCHES`, the `Hatch` type and `PlayerIdentity.hatch` are gone, as is the map
+adapter's whole `hatch` branch: landgrab was its only caller, and leaving a
+`fill-pattern` primitive in the shared adapter is an invitation to reproduce
+exactly this.
+
+**The basemap is the site default.** v2 forced `theme: 'schematic'` (light-v11)
+so that five hatched territories would be the only saturated thing on screen;
+with the hatches gone that reasoning went with them, and what was left was a
+map whose place names were set in a different face from every other map on the
+site. `TrackMap` — which is every map on /health — passes no theme at all and
+so takes `MAPBOX_STYLE` (`outdoors-v12`). `TerritoryMap` now does the same, and
+carries `TrackMap`'s two `.mapboxgl-map` rules verbatim. The page's own type
+was already identical to /health's (measured: JetBrains Mono 12/500, Archivo
+Black 46, DM Sans 15 on both); the basemap's labels were the only text that
+differed.
+
+| # | Decision | Why | Reversibility |
+|---|---|---|---|
+| 14 | Retire the hatch on every surface, not only the map | A key that hatches what the map paints flat is a key that lies | Restore one prop and six CSS rules |
+| 15 | Remove the `hatch` option from the shared map adapter too | Landgrab was its only caller; leaving the primitive invites the same bug back | One branch |
+| 16 | The share bar's segments print the initial | They were the page's one colour-only surface, and five on-brand hues are not all separable by a deuteranope | Copy-only |
+| 17 | Zoom-ramped `fill-opacity`, not a flat value | `fill-pattern` was opaque; a flat 0.22 would have been a much lighter board than the one being replaced | One constant |
+| 18 | Take the site default basemap by passing no theme, exactly as `TrackMap` does | Matching /health means matching how it asks, not hard-coding what it currently gets | One option |

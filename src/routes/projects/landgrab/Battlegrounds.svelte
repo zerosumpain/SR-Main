@@ -103,7 +103,7 @@
               <td class="lg-bg-holder">
                 {#if top}
                   <span class="lg-bg-holder-who" style="--who: {colourOf(top.subject)}">
-                    <Swatch colour={colourOf(top.subject)} hatch={who.get(top.subject)?.hatch ?? 'dots'} />
+                    <Swatch colour={colourOf(top.subject)} />
                     <span class="lg-bg-holder-name">{nameOf(top.subject)}</span>
                   </span>
                   <span
@@ -150,7 +150,7 @@
       <ol class="lg-moves">
         {#each moves as m (m.subject)}
           <li class="lg-move" style="--who: {colourOf(m.subject)}">
-            <Swatch colour={colourOf(m.subject)} hatch={who.get(m.subject)?.hatch ?? 'dots'} />
+            <Swatch colour={colourOf(m.subject)} />
             <p class="lg-move-line">
               <span class="lg-move-who">{nameOf(m.subject)}</span>
               <span class="lg-move-arrow" aria-hidden="true">→</span>

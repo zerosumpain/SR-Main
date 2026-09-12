@@ -3,7 +3,7 @@
    * Who holds the ground — one 100% bar, then one row each.
    *
    * The bar is the only chart on the page that answers "how is the household
-   * split", and it answers it in the same colours and hatches the map paints
+   * split", and it answers it in the same colours the map paints
    * territory in, so the two read as one picture. The rows underneath are the
    * legend: colour never carries identity alone here either, so every row
    * shows the swatch's hue AND the mono initial AND the name.
@@ -65,12 +65,11 @@
         {@const p = who.get(s.subject)}
         <span
           class="lg-share-seg"
-          data-hatch={p?.hatch ?? 'dots'}
           style="--who: {p?.colour ?? 'var(--text-primary)'}; flex-basis: {basis(s.share)}"
           title="{p?.name ?? s.subject} — {fmtPct(s.share)} of household ground, {km2(
             s.areaM2,
-          )} km²"
-        ></span>
+          )} km²"><b>{p?.initial ?? '?'}</b></span
+        >
       {/each}
     </div>
   {:else}
@@ -84,7 +83,7 @@
       <li class="lg-share-row" style="--who: {p?.colour ?? 'var(--text-primary)'}">
         <span class="lg-rank metric-label">{ordinal(i)}</span>
         <span class="lg-sw">
-          <Swatch colour={p?.colour ?? 'var(--text-primary)'} hatch={p?.hatch ?? 'dots'} />
+          <Swatch colour={p?.colour ?? 'var(--text-primary)'} />
         </span>
         <span class="lg-badge" aria-hidden="true">{p?.initial ?? '?'}</span>
         <span class="lg-name">
@@ -143,31 +142,25 @@
     min-width: 2px;
     flex-grow: 0;
     flex-shrink: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
     background-color: color-mix(in srgb, var(--who) 28%, transparent);
   }
-  /* The same six hatch rules `Swatch` draws, at a segment's proportions. A
-     Swatch cannot be stretched — it is a fixed square by contract — so the
-     alphabet is repeated here rather than the component being bent. */
-  .lg-share-seg[data-hatch='diag'] {
-    background-image: repeating-linear-gradient(45deg, var(--who) 0 2px, transparent 2px 6px);
-  }
-  .lg-share-seg[data-hatch='back'] {
-    background-image: repeating-linear-gradient(-45deg, var(--who) 0 2px, transparent 2px 6px);
-  }
-  .lg-share-seg[data-hatch='vert'] {
-    background-image: repeating-linear-gradient(90deg, var(--who) 0 2px, transparent 2px 6px);
-  }
-  .lg-share-seg[data-hatch='horiz'] {
-    background-image: repeating-linear-gradient(0deg, var(--who) 0 2px, transparent 2px 6px);
-  }
-  .lg-share-seg[data-hatch='grid'] {
-    background-image:
-      repeating-linear-gradient(90deg, var(--who) 0 2px, transparent 2px 6px),
-      repeating-linear-gradient(0deg, var(--who) 0 2px, transparent 2px 6px);
-  }
-  .lg-share-seg[data-hatch='dots'] {
-    background-image: radial-gradient(var(--who) 1.6px, transparent 1.7px);
-    background-size: 6px 6px;
+  /* The initial, not a hatch. A segment is the one surface on the page that
+     would otherwise be colour and nothing else, and five on-brand hues cannot
+     all be told apart by a deuteranope. A narrow segment simply clips it —
+     better than a pattern that has to be learned before it means anything. */
+  .lg-share-seg b {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-weight: 700;
+    letter-spacing: 0;
+    /* Mixed toward ink rather than the bare hue: the segment's ground is 28% of
+       the SAME hue, and the palette's lighter slots (the ochres) do not clear
+       contrast against their own tint. */
+    color: color-mix(in srgb, var(--who) 70%, var(--text-primary));
   }
   .lg-share-none {
     margin: 0;
@@ -212,10 +205,10 @@
   .lg-rank {
     grid-area: rank;
   }
-  /* The bar's segments carry colour AND hatch; the rows carried colour and an
-     initial. Without the hatch here a reader who cannot separate two hues has
-     no way to map a hatched segment back to a name, which is the whole reason
-     the hatch exists. The wrapper is what takes the grid area — a child
+  /* The bar's segments carry colour AND an initial; so do the rows. Without
+     the initial here a reader who cannot separate two hues has no way to map a
+     segment back to a name, which is the whole reason it is printed in the
+     segment at all. The wrapper is what takes the grid area — a child
      component's root is out of reach of this component's scoped CSS. */
   .lg-sw {
     grid-area: sw;

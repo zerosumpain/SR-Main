@@ -235,26 +235,6 @@ export class MapLayer {
       : this.opts.color ?? '#c4570a';
     if ((this.kind === 'polygon' || this.kind === 'collection') && this.opts.fill !== false) {
       const paint: any = { 'fill-color': this.opts.fillColor ?? colour, 'fill-opacity': this.opts.fillOpacity ?? 0.2 };
-      if (this.opts.hatch) {
-        const pattern = `${this.id}-hatch`;
-        const canvas = document.createElement('canvas'); canvas.width = canvas.height = 18;
-        const ctx = canvas.getContext('2d')!;
-        ctx.fillStyle = this.opts.fillColor ?? colour; ctx.globalAlpha = 0.16; ctx.fillRect(0, 0, 18, 18);
-        ctx.globalAlpha = 0.65; ctx.strokeStyle = colour; ctx.fillStyle = colour; ctx.lineWidth = 3;
-        const line = (a: number, b: number, c: number, d: number) => { ctx.moveTo(a, b); ctx.lineTo(c, d); };
-        ctx.beginPath();
-        switch (this.opts.hatch) {
-          case 'diag': line(0, 18, 18, 0); break;
-          case 'back': line(0, 0, 18, 18); break;
-          case 'vert': line(9, 0, 9, 18); break;
-          case 'horiz': line(0, 9, 18, 9); break;
-          case 'grid': line(9, 0, 9, 18); line(0, 9, 18, 9); break;
-          default: ctx.arc(9, 9, 3, 0, Math.PI * 2); ctx.fill();
-        }
-        ctx.stroke();
-        if (!map.hasImage(pattern)) map.addImage(pattern, ctx.getImageData(0, 0, 18, 18), { pixelRatio: 2 });
-        paint['fill-pattern'] = pattern; paint['fill-opacity'] = 1;
-      }
       map.addLayer({ id: this.id, type: 'fill', source: this.id, paint });
       this.layerIds.push(this.id);
     }
@@ -361,7 +341,6 @@ export class MapLayer {
     for (const id of this.layerIds.reverse()) if (map?.getLayer(id)) map.removeLayer(id);
     this.layerIds = [];
     if (map?.getSource(this.id)) map.removeSource(this.id);
-    if (map?.hasImage(`${this.id}-hatch`)) map.removeImage(`${this.id}-hatch`);
     this.map?.layers.delete(this); this.map = null;
     this.parent?.children.delete(this); this.parent = null;
     return this;

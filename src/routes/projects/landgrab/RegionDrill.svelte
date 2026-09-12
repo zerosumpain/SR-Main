@@ -275,7 +275,7 @@
         <p class="lg-drill-msg">{problem}</p>
       {:else if history && holder}
         <div class="lg-drill-id">
-          <Swatch colour={holder.colour} hatch={holder.hatch} size={18} />
+          <Swatch colour={holder.colour} size={18} />
           <div class="lg-drill-id-t">
             <h2 class="lg-drill-name">{history.name ?? 'Territory'}</h2>
             <p class="lg-drill-holder">
@@ -344,7 +344,6 @@
                       <span class="lg-drill-who-in">
                         <Swatch
                           colour={who?.colour ?? UNCLAIMED_IDENTITY.colour}
-                          hatch={who?.hatch ?? UNCLAIMED_IDENTITY.hatch}
                           size={12}
                         />
                         <span class="lg-drill-who-n">{who?.name ?? titleCase(row.subject)}</span>
