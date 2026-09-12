@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { captureEvents, ownershipTimeline } from './ownership';
+import { captureEvents, ownershipTimeline, resolveOwnership } from './ownership';
 import { regionHistory } from './history';
 import { tileKeyOf } from './tiles';
 
@@ -37,6 +37,47 @@ describe('ownershipTimeline', () => {
       ...captureEvents('john', cells, d('2026-08-05T10:00:00Z')),
     ];
     expect(ownershipTimeline(events, d('2026-09-01T00:00:00Z'))).toHaveLength(3);
+  });
+
+  // THE LOAD-BEARING TEST. `ownershipTimeline` is a second copy of the replay
+  // `resolveOwnership` does — same grouping, same ordering, same event-by-event
+  // leader walk — kept separate only because the brief forbids touching the
+  // ingest's hot path. `ownerBefore`'s JSDoc twelve lines above it says why that
+  // is dangerous: "a second copy of this rule would drift from the first without
+  // anything failing". This is the thing that fails. If the drill's history ever
+  // stopped agreeing with the map the page draws, it dies here.
+  //
+  // The last flip on a cell IS that cell's current regime, so the two readings
+  // have to line up exactly: its `to` is the owner and its `at` is `ownerSince`.
+  it('agrees with resolveOwnership on the owner and ownerSince of EVERY cell', () => {
+    const now = d('2026-09-01T00:00:00Z');
+    // Three subjects over three dates, so the first cell changes hands twice —
+    // a single-handover fixture would pass even if the replay lost its middle.
+    const events = [
+      ...captureEvents('john', cells, d('2026-06-01T10:00:00Z')),
+      ...captureEvents('katie', cells.slice(0, 2), d('2026-07-15T10:00:00Z')),
+      ...captureEvents('rory', cells.slice(0, 1), d('2026-08-20T10:00:00Z')),
+    ];
+    const flips = ownershipTimeline(events, now);
+    const owned = resolveOwnership(events, now);
+
+    // Guard the fixture itself: cell one must really turn over twice.
+    expect(flips.filter((f) => f.key === tileKeyOf(10, 10)).map((f) => f.to)).toEqual([
+      'john',
+      'katie',
+      'rory',
+    ]);
+
+    // Flips come back in time order, so keying them by cell keeps the LAST one.
+    const latest = new Map(flips.map((f) => [f.key, f]));
+    const byKey = <T extends { key: string }>(rows: T[]) => rows.sort((a, b) => (a.key < b.key ? -1 : 1));
+
+    expect(
+      byKey([...owned].map(([key, o]) => ({ key, owner: o.owner, since: o.ownerSince.toISOString() }))),
+    ).toEqual(
+      byKey([...latest].map(([key, f]) => ({ key, owner: f.to, since: f.at.toISOString() }))),
+    );
+    expect(owned.size).toBe(cells.length);
   });
 });
 
