@@ -176,6 +176,7 @@ export async function refreshWhoopToken(refreshToken: string): Promise<WhoopToke
   });
   const res = await fetch(WHOOP_TOKEN_URL, {
     method: 'POST',
+    signal: AbortSignal.timeout(15_000),
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: body.toString(),
   });
@@ -189,9 +190,21 @@ export async function refreshWhoopToken(refreshToken: string): Promise<WhoopToke
 // Internal fetch helper
 
 async function whoopFetch<T>(endpoint: string, accessToken: string): Promise<T> {
-  const res = await fetch(`${WHOOP_API_BASE}${endpoint}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+  const request = (token: string) => fetch(`${WHOOP_API_BASE}${endpoint}`, {
+    headers: { Authorization: `Bearer ${token}` },
   });
+  let res = await request(accessToken);
+  if (res.status === 401) {
+    // A request can already be in flight when another caller rotates the token.
+    // Retry once only when the shared token has changed; a rejected current
+    // credential must still surface as an error rather than looping refreshes.
+    const { getValidToken } = await import('./tokens');
+    const latest = await getValidToken('whoop');
+    if (latest && latest !== accessToken) {
+      await res.body?.cancel();
+      res = await request(latest);
+    }
+  }
   if (!res.ok) {
     const error = await res.text().catch(() => 'unknown');
     throw new Error(`Whoop API error on ${endpoint}: ${res.status} - ${error}`);
