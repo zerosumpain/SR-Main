@@ -405,3 +405,45 @@ export function ownerBefore(
   if (!prior || prior.owner === owner) return null;
   return prior.owner;
 }
+
+/** One cell changing leader at one instant. `from` is null for open ground. */
+export interface TileFlip {
+  key: string;
+  at: Date;
+  day: string;
+  from: string | null;
+  to: string;
+}
+
+/**
+ * Every moment any cell's leader changed, in time order, up to `now`.
+ *
+ * The same walk `resolveOwnership` does — the leader as at each event is the
+ * leader until the next event, because decay preserves ratios — but it KEEPS
+ * the handovers instead of only the last one. O(events × events-per-cell).
+ * `resolveOwnership` is deliberately left alone: it is the ingest's hot path.
+ */
+export function ownershipTimeline(events: CaptureEvent[], now: Date): TileFlip[] {
+  const nowMs = now.getTime();
+  const byTile = new Map<string, CaptureEvent[]>();
+  for (const e of dedupeEvents(events)) {
+    if (e.capturedAt.getTime() > nowMs) continue;
+    const key = tileKeyOf(e.tileX, e.tileY);
+    const list = byTile.get(key);
+    if (list) list.push(e);
+    else byTile.set(key, [e]);
+  }
+  const flips: TileFlip[] = [];
+  for (const [key, list] of byTile) {
+    const ordered = [...list].sort((a, b) => a.capturedAt.getTime() - b.capturedAt.getTime());
+    let owner: string | null = null;
+    for (const e of ordered) {
+      const leader = standingsAt(ordered, e.capturedAt.getTime())[0];
+      if (leader && leader.subject !== owner) {
+        flips.push({ key, at: e.capturedAt, day: e.day, from: owner, to: leader.subject });
+        owner = leader.subject;
+      }
+    }
+  }
+  return flips.sort((a, b) => a.at.getTime() - b.at.getTime() || (a.key < b.key ? -1 : 1));
+}

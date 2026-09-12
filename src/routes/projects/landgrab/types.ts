@@ -5,7 +5,14 @@
 // SVG renderer crawls at ~12k features), areas already resolved to metres, and
 // no raw GPS fixes beyond a claim's own bounding-box centre.
 
+import type { BattleRow, FlipLine, TimelinePoint } from '$lib/geo/history';
 import type { DateWindowKey, PlayerIdentity } from './identity';
+
+// The drill's three row shapes have ONE definition, in the pure module that
+// computes them. Re-exported rather than restated so a change to the maths
+// cannot drift from the payload the page is typed against. `import type` is
+// erased at compile, so this file stays client-safe.
+export type { TimelinePoint, FlipLine, BattleRow } from '$lib/geo/history';
 
 /** One dissolved, Chaikin-smoothed component of somebody's ground.
  *  Coordinates are [lat, lon], the stored site format (converted at the Mapbox boundary). */
@@ -182,37 +189,6 @@ export interface NextMove {
   loopCells: number;
   /** The battleground the centre falls in, if any. */
   near: string | null;
-}
-
-export interface TimelinePoint {
-  /** UTC day. */
-  day: string;
-  /** Cells held over the region, by subject. */
-  cells: Record<string, number>;
-}
-
-export interface FlipLine {
-  day: string;
-  /** null — taken from open ground. */
-  from: string | null;
-  to: string;
-  cells: number;
-}
-
-export interface BattleRow {
-  subject: string;
-  events: number;
-  loops: number;
-  tramples: number;
-  fills: number;
-  activeDays: number;
-  cellsNow: number;
-  cellsPeak: number;
-  /** Cells taken off somebody (never from open ground). */
-  took: number;
-  lost: number;
-  firstAt: string | null;
-  lastAt: string | null;
 }
 
 export interface RegionHistory {
