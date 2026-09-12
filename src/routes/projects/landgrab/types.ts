@@ -5,7 +5,14 @@
 // SVG renderer crawls at ~12k features), areas already resolved to metres, and
 // no raw GPS fixes beyond a claim's own bounding-box centre.
 
+import type { BattleRow, FlipLine, TimelinePoint } from '$lib/geo/history';
 import type { DateWindowKey, PlayerIdentity } from './identity';
+
+// The drill's three row shapes have ONE definition, in the pure module that
+// computes them. Re-exported rather than restated so a change to the maths
+// cannot drift from the payload the page is typed against. `import type` is
+// erased at compile, so this file stays client-safe.
+export type { TimelinePoint, FlipLine, BattleRow } from '$lib/geo/history';
 
 /** One dissolved, Chaikin-smoothed component of somebody's ground.
  *  Coordinates are [lat, lon], the stored site format (converted at the Mapbox boundary). */
@@ -113,4 +120,97 @@ export interface LandgrabData {
   feed: FeedItem[];
   dangle: DangleLine[];
   totals: { events: number; claims: number; cells: number; areaM2: number };
+  focus: MapFocus;
+  handovers: Handovers;
+  share: ShareRow[];
+  battlegrounds: Battleground[];
+  nextMoves: NextMove[];
+  letter: WeeklyLetter | null;
+  /** A validated `?geo=x:y` deep link, opened by the client on mount. */
+  geo: { x: number; y: number } | null;
+}
+
+/** [[southLat, westLon], [northLat, eastLon]] */
+export type LatLonBounds = [[number, number], [number, number]];
+
+export interface MapFocus {
+  bounds: LatLonBounds;
+  /** 'home' — Darlington; 'away' — a heavier cluster elsewhere; 'quiet' — no change in the window. */
+  reason: 'home' | 'away' | 'quiet';
+  /** Cells that changed hands in the window, inside the focus bounds. */
+  changedCells: number;
+  /** The sentence the map head prints, e.g. "Darlington · 312 cells changed hands". */
+  label: string;
+}
+
+/** Cells whose owner differs from a week ago, dissolved unsmoothed. */
+export interface Handovers {
+  cells: number;
+  regions: LandgrabRegion[];
+}
+
+export interface ShareRow {
+  subject: string;
+  cells: number;
+  areaM2: number;
+  /** cells / every cell the household holds, 0..1. */
+  share: number;
+  /** cells inside HOME_BOX × cellAreaM2 / homeBoxAreaM2(), 0..1. */
+  homeShare: number;
+  gainedM2: number;
+  lostM2: number;
+}
+
+export interface Battleground {
+  /** The lexicographically smallest tile key ("x:y") in the component — stable across loads. */
+  id: string;
+  name: string | null;
+  /** [lat, lon] */
+  centre: [number, number];
+  cells: number;
+  /** Descending by cells. */
+  holders: Array<{ subject: string; cells: number }>;
+  /** Cells in the component whose owner differs from a week ago. */
+  handovers: number;
+  /** Everyone with at least one event in the component. */
+  contenders: string[];
+}
+
+export interface NextMove {
+  subject: string;
+  /** Majority holder of the cheap cluster. */
+  holder: string;
+  cells: number;
+  /** [lat, lon] */
+  centre: [number, number];
+  /** ownerScore − challenger's score, the largest in the cluster. */
+  maxGap: number;
+  /** floor(LOOP_WEIGHT / maxGap): a single loop spread over up to this many cells takes every one. */
+  loopCells: number;
+  /** The battleground the centre falls in, if any. */
+  near: string | null;
+}
+
+export interface RegionHistory {
+  anchor: string;
+  /** The player whose dissolved region was tapped. */
+  subject: string;
+  cells: number;
+  areaM2: number;
+  centre: [number, number];
+  /** Earliest ownerSince over the region's cells. */
+  since: string | null;
+  name: string | null;
+  timeline: TimelinePoint[];
+  flips: FlipLine[];
+  battle: BattleRow[];
+  handovers: number;
+}
+
+export interface WeeklyLetter {
+  /** Local day, YYYY-MM-DD. */
+  weekEnding: string;
+  summary: string;
+  narrative: string | null;
+  verified: boolean | null;
 }

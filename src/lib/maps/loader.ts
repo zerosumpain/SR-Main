@@ -3,4 +3,4 @@ export async function loadMapbox(options: { offline?: boolean } = {}) {
   const { createMapTools } = await import('./mapbox');
   return createMapTools(options);
 }
-export type { MapView, MapLayer, MapTools } from './mapbox';
+export type { MapView, MapLayer, MapTools, CollectionFeature } from './mapbox';

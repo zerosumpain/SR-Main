@@ -187,6 +187,7 @@
 /projects/jkai
 /projects/jkai/[slug]/[...path]
 /projects/landgrab
+/projects/landgrab/geo
 /projects/policy-engine
 /projects/policy-engine/attendance
 /projects/policy-engine/build

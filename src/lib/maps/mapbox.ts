@@ -9,9 +9,13 @@ import './maps.css';
 import { isMapboxPublicToken, MAPBOX_SETUP_MESSAGE, OFFLINE_STYLE } from './config';
 
 export type LatLng = [number, number];
+/** One polygon inside a `collection` layer: outer ring first, then holes. */
+export interface CollectionFeature { rings: LatLng[][]; properties: Record<string, unknown> }
 type Options = Record<string, any>;
 type Handler = (event: any) => void;
 const lngLat = ([lat, lng]: LatLng): [number, number] => [lng, lat];
+const styleFor = (theme: string) =>
+  `mapbox://styles/mapbox/${theme === 'schematic' ? 'light-v11' : theme === 'nautical' ? 'streets-v12' : 'outdoors-v12'}`;
 let serial = 0;
 
 export class MapBounds {
@@ -108,9 +112,8 @@ export class MapView {
   hasLayer(layer: MapLayer) { return this.layers.has(layer); }
   removeLayer(layer: MapLayer) { layer.remove(); return this; }
   setTheme(theme: string) {
-    const style = theme === 'schematic' ? 'light-v11' : theme === 'nautical' ? 'streets-v12' : 'outdoors-v12';
     this.styleReady = false;
-    this.native.setStyle(`mapbox://styles/mapbox/${style}`, { diff: false, localFontFamily: undefined, localIdeographFontFamily: undefined });
+    this.native.setStyle(styleFor(theme), { diff: false, localFontFamily: undefined, localIdeographFontFamily: undefined });
   }
   setRasterBase(style: StyleSpecification) { this.styleReady = false; this.native.setStyle(style, { diff: false, localFontFamily: undefined, localIdeographFontFamily: undefined }); }
   remove() {
@@ -131,11 +134,11 @@ export class MapLayer {
   private parent: MapLayer | null = null;
   private marker: mapboxgl.Marker | null = null;
   private popup: mapboxgl.Popup | null = null;
-  private tooltip: { text: string; options: Options } | null = null;
+  private tooltip: { text: string | ((properties: Record<string, unknown>) => string); options: Options } | null = null;
   private events: [string, Handler][] = [];
   private unbind: (() => void)[] = [];
   private layerIds: string[] = [];
-  constructor(private kind: 'group' | 'marker' | 'circleMarker' | 'line' | 'multiLine' | 'polygon' | 'raster', private coords: any = [], private opts: Options = {}) {}
+  constructor(private kind: 'group' | 'marker' | 'circleMarker' | 'line' | 'multiLine' | 'polygon' | 'collection' | 'raster', private coords: any = [], private opts: Options = {}) {}
   addTo(target: MapView | MapLayer) {
     if (target instanceof MapLayer) {
       this.parent = target;
@@ -156,6 +159,24 @@ export class MapLayer {
     let rings: LatLng[][] = typeof this.coords[0]?.[0] === 'number' ? [this.coords] : this.coords;
     rings = rings.map((ring) => ring.length && (ring[0][0] !== ring.at(-1)![0] || ring[0][1] !== ring.at(-1)![1]) ? [...ring, ring[0]] : ring);
     return { type: 'Polygon', coordinates: rings.map((ring) => ring.map(lngLat)) };
+  }
+  /** A collection is one source holding many polygons; every other kind is a single feature. */
+  private data(): GeoJSON.Feature | GeoJSON.FeatureCollection {
+    if (this.kind === 'collection') {
+      const features = (this.coords as CollectionFeature[]).map((f) => ({
+        type: 'Feature' as const,
+        properties: f.properties,
+        geometry: {
+          type: 'Polygon' as const,
+          coordinates: f.rings.map((ring) => {
+            const closed = ring.length && (ring[0][0] !== ring.at(-1)![0] || ring[0][1] !== ring.at(-1)![1]) ? [...ring, ring[0]] : ring;
+            return closed.map(lngLat);
+          }),
+        },
+      }));
+      return { type: 'FeatureCollection', features };
+    }
+    return { type: 'Feature', properties: {}, geometry: this.geometry() };
   }
   draw() {
     const map = this.map?.native;
@@ -190,9 +211,9 @@ export class MapLayer {
       this.layerIds = [this.id];
       return;
     }
-    map.addSource(this.id, { type: 'geojson', data: { type: 'Feature', properties: {}, geometry: this.geometry() } });
+    map.addSource(this.id, { type: 'geojson', data: this.data() });
     const colour = this.opts.color?.startsWith('var(') ? getComputedStyle(map.getContainer()).getPropertyValue('--accent').trim() || '#c4570a' : this.opts.color ?? '#c4570a';
-    if (this.kind === 'polygon' && this.opts.fill !== false) {
+    if ((this.kind === 'polygon' || this.kind === 'collection') && this.opts.fill !== false) {
       const paint: any = { 'fill-color': this.opts.fillColor ?? colour, 'fill-opacity': this.opts.fillOpacity ?? 0.2 };
       if (this.opts.hatch) {
         const pattern = `${this.id}-hatch`;
@@ -241,13 +262,14 @@ export class MapLayer {
         this.unbind.push(() => map.off(event as 'click', id, handler));
       }
     };
-    for (const [event, handler] of this.events) listen(event, (e) => handler({ ...e, originalEvent: e.originalEvent ?? e, latlng: e.lngLat }));
+    for (const [event, handler] of this.events) listen(event, (e) => handler({ ...e, originalEvent: e.originalEvent ?? e, latlng: e.lngLat, properties: e.features?.[0]?.properties ?? null }));
     if (!this.tooltip) return;
     const { text, options } = this.tooltip;
-    const content = document.createElement('span'); content.textContent = text;
+    const content = document.createElement('span');
     this.popup = new mapboxgl.Popup({ closeButton: !!options.popup, closeOnClick: !!options.popup,
       className: options.className, offset: options.offset ?? 12, anchor: options.direction === 'top' ? 'bottom' : undefined }).setDOMContent(content);
     const show = (e?: any) => {
+      content.textContent = typeof text === 'function' ? text(e?.features?.[0]?.properties ?? {}) : text;
       const pos = this.marker?.getLngLat() ?? e?.lngLat;
       if (pos) this.popup?.setLngLat(pos).addTo(map);
     };
@@ -258,19 +280,44 @@ export class MapLayer {
       listen('mousemove', show);
       listen('mouseleave', () => this.popup?.remove());
       if (el) {
-        el.tabIndex = 0; el.setAttribute('aria-label', text);
+        el.tabIndex = 0; el.setAttribute('aria-label', typeof text === 'string' ? text : '');
         listen('focus', show); listen('blur', () => this.popup?.remove());
       }
     }
   }
-  bindTooltip(text: string, options: Options = {}) { this.tooltip = { text, options }; this.bindInteractions(); return this; }
+  bindTooltip(text: string | ((properties: Record<string, unknown>) => string), options: Options = {}) { this.tooltip = { text, options }; this.bindInteractions(); return this; }
   bindPopup(text: string) { return this.bindTooltip(text, { popup: true }); }
   on(event: string, fn: Handler) { this.events.push([event, fn]); this.bindInteractions(); return this; }
   setLatLng(point: LatLng) { this.coords = point; this.marker?.setLngLat(lngLat(point)); if (this.tooltip?.options.permanent) this.popup?.setLngLat(lngLat(point)); return this; }
   setLatLngs(points: LatLng[] | LatLng[][]) {
     this.coords = points;
     const source = this.map?.native.getSource(this.id) as GeoJSONSource | undefined;
-    source?.setData({ type: 'Feature', properties: {}, geometry: this.geometry() });
+    source?.setData(this.data() as any);
+    return this;
+  }
+  /** Redraw a `collection` in place: one source update, no layer churn. */
+  setData(features: CollectionFeature[]) {
+    this.coords = features;
+    const source = this.map?.native.getSource(this.id) as GeoJSONSource | undefined;
+    source?.setData(this.data() as any);
+    return this;
+  }
+  setPaint(props: Record<string, unknown>) {
+    const map = this.map?.native;
+    if (!map) return this;
+    for (const id of this.layerIds) {
+      const layer = map.getLayer(id);
+      if (!layer) continue;
+      for (const [k, v] of Object.entries(props)) {
+        const isLine = k.startsWith('line-');
+        if ((layer.type === 'line') === isLine) map.setPaintProperty(id, k as any, v);
+      }
+    }
+    return this;
+  }
+  setVisible(visible: boolean) {
+    const map = this.map?.native;
+    for (const id of this.layerIds) if (map?.getLayer(id)) map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
     return this;
   }
   setOpacity(opacity: number) { this.opts.opacity = opacity; if (this.marker) this.marker.getElement().style.opacity = String(opacity); return this; }
@@ -279,7 +326,10 @@ export class MapLayer {
     if (this.marker) { this.marker.remove(); this.marker = null; this.draw(); }
     return this;
   }
-  getBounds() { return new MapBounds(this.coords); }
+  getBounds() {
+    if (this.kind === 'collection') return new MapBounds((this.coords as CollectionFeature[]).flatMap((f) => f.rings.flat()));
+    return new MapBounds(this.coords);
+  }
   bringToFront() { for (const id of this.layerIds) if (this.map?.native.getLayer(id)) this.map.native.moveLayer(id); return this; }
   clearLayers() { for (const child of [...this.children]) child.remove(); return this; }
   remove() {
@@ -327,16 +377,18 @@ export async function createMapTools(options: { offline?: boolean } = {}) {
   }
   if (!isMapboxPublicToken(config.accessToken)) throw new Error(MAPBOX_SETUP_MESSAGE);
   if (!mapboxgl.supported()) throw new Error('This browser cannot render Mapbox maps. Enable WebGL or try another browser.');
-  const style = options.offline && !navigator.onLine
-    ? OFFLINE_STYLE : config.style;
+  const offline = !!(options.offline && !navigator.onLine);
+  const style = offline ? OFFLINE_STYLE : config.style;
   return {
-    map: (el: HTMLElement, opts?: Options) => new MapView(el, config.accessToken, style, opts),
+    // Offline wins over a requested theme: the downloaded style is the only one that renders.
+    map: (el: HTMLElement, opts: Options = {}) => new MapView(el, config.accessToken, !offline && opts.theme ? styleFor(opts.theme) : style, opts),
     marker: (point: LatLng, opts?: Options) => new MapLayer('marker', point, opts),
     circleMarker: (point: LatLng, opts?: Options) => new MapLayer('circleMarker', point, opts),
     circle: (point: LatLng, opts: Options = {}) => new MapLayer('polygon', circleRing(point, opts.radius ?? 200), opts),
     polyline: (points: LatLng[], opts?: Options) => new MapLayer('line', points, opts),
     multiPolyline: (lines: LatLng[][], opts?: Options) => new MapLayer('multiLine', lines, opts),
     polygon: (rings: LatLng[] | LatLng[][], opts?: Options) => new MapLayer('polygon', rings, opts),
+    featureCollection: (features: CollectionFeature[], opts?: Options) => new MapLayer('collection', features, opts),
     rectangle: ([a, b]: LatLng[], opts?: Options) => new MapLayer('polygon', [a, [a[0], b[1]], b, [b[0], a[1]]], opts),
     layerGroup: () => new MapLayer('group'),
     divIcon: (opts: Options) => opts,

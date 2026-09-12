@@ -7,18 +7,31 @@
    * Owner-only: the whole gate is the load function next door, because
    * /projects is a public PREFIX. There is no card on the index and no data
    * endpoint; everything here arrived inside one owner-gated render.
+   *
+   * v2 is MAP FIRST. The page is five sections in the /health register — the
+   * map and its filter, the standings, the battlegrounds, the boards, and the
+   * letter with the method — and each one is a single component. What is left
+   * in this file is the state the sections share: the URL-backed filter, the
+   * shared clock, and the one tile the region drill is open on.
    */
   import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import { onMount } from 'svelte';
-  import TerritoryMap from './TerritoryMap.svelte';
-  import CaptureFeed from './CaptureFeed.svelte';
+  import MapStage from './MapStage.svelte';
+  import ShareBar from './ShareBar.svelte';
+  import Battlegrounds from './Battlegrounds.svelte';
   import LandgrabBoards from './LandgrabBoards.svelte';
+  import WeeklyLetter from './WeeklyLetter.svelte';
+  import RegionDrill from './RegionDrill.svelte';
+  // Pure slippy-tile arithmetic — no DB, no Mapbox, no server reach — so the
+  // client bundle may have it. A map tap arrives as a lat/lon and the drill
+  // asks for a cell, and this is the only conversion between the two.
+  import { parseTileKey, tileAt } from '$lib/geo/tiles';
   import {
     activityLabel,
     km2,
     relativeAge,
     windowPhrase,
-    DATE_WINDOWS,
     DEFAULT_WINDOW,
     UNTYPED_LABEL,
   } from './identity';
@@ -36,7 +49,6 @@
     return () => clearInterval(id);
   });
 
-  const roster = $derived(lg.players.filter((p) => lg.available.subjects.includes(p.subject)));
   const chips = $derived([
     ...lg.available.activities.map((a) => ({ key: a, label: activityLabel(a) })),
     ...(lg.available.untyped ? [{ key: 'untyped', label: UNTYPED_LABEL }] : []),
@@ -63,6 +75,38 @@
   const openSeats = $derived(
     Array.from({ length: missingPlayers }, (_, i) => lg.standings.length + i + 1),
   );
+
+  /**
+   * The region drill's open cell.
+   *
+   * Seeded from the loader's validated `?geo=x:y`, then owned locally — so a
+   * drill is a link you can send someone. Plain `$state`, never a `$derived`
+   * off the URL: the drill is opened by a tap as well as by a link, and
+   * something that read the URL and also wrote it is the read-own-write cycle
+   * that ends in `effect_update_depth_exceeded`.
+   *
+   * There is deliberately NO prop→state sync effect behind it. Every filter
+   * change is a `goto` and so a fresh payload whose `geo` is null; re-seeding
+   * off that would slam the drawer shut whenever the reader touched a chip.
+   *
+   * The initialiser reads `lg` and Svelte warns `state_referenced_locally`.
+   * That is correct and deliberate here — it captures the deep link at mount,
+   * which is the only moment it means anything.
+   */
+  // svelte-ignore state_referenced_locally
+  let drill = $state<{ x: number; y: number } | null>(lg.geo);
+
+  /**
+   * The filter as the drill must ask for it: the current `?activity&who&window`
+   * with `geo` REMOVED. The deep-link param is the page's own state, not a
+   * filter, and passing it through to `/projects/landgrab/geo` would be a
+   * second, contradictory cell in the same request.
+   */
+  const currentQuery = $derived.by(() => {
+    const params = new URLSearchParams(page.url.searchParams);
+    params.delete('geo');
+    return params.toString();
+  });
 
   /** Filter state lives in the URL, so the page's own guard is also the
    *  filter's gate — nothing new to add to an allow-list and forget. */
@@ -108,7 +152,10 @@
     void apply({ subjects: [...next] });
   }
 
-  const ordinal = (i: number) => ['1st', '2nd', '3rd', '4th', '5th', '6th'][i] ?? `${i + 1}th`;
+  /** A map tap lands on a coordinate; the drill is keyed on a cell. */
+  function openAt(hit: { lat: number; lon: number; subject: string | null }) {
+    drill = tileAt(hit.lat, hit.lon);
+  }
 </script>
 
 <svelte:head>
@@ -139,6 +186,10 @@
         </p>
       </div>
 
+      <!-- Three facts, and all three are now about MOVEMENT. "Claims scored"
+           and "Seats taken" answered questions nobody arrived with; what a
+           reader wants off the cover is how much ground is in play, how much
+           of it moved, and how much of it is actually being fought over. -->
       <dl class="cover-deck" aria-label="Board summary">
         <div>
           <dt>Ground in play</dt>
@@ -146,14 +197,14 @@
           <small>km² · {lg.totals.cells.toLocaleString('en-GB')} cells</small>
         </div>
         <div>
-          <dt>Claims scored</dt>
-          <dd>{lg.totals.events.toLocaleString('en-GB')}</dd>
-          <small>over {windowLine}</small>
+          <dt>Changed hands</dt>
+          <dd>{lg.handovers.cells.toLocaleString('en-GB')}</dd>
+          <small>cells · vs a week ago</small>
         </div>
         <div>
-          <dt>Seats taken</dt>
-          <dd>{lg.standings.length}/5</dd>
-          <small>{missingPlayers ? `${missingPlayers} still open` : 'full house'}</small>
+          <dt>Battlegrounds</dt>
+          <dd>{lg.battlegrounds.length.toLocaleString('en-GB')}</dd>
+          <small>contested {lg.contested.cells.toLocaleString('en-GB')} cells</small>
         </div>
       </dl>
     </div>
@@ -172,51 +223,45 @@
       </div>
     </section>
   {:else}
-    <!-- Standings: the loudest voice on the page, once. Everything below is
-         quieter on purpose. -->
+    <!-- 01. The map is the page. Everything that decides what it draws sits
+         inside the section with it, not two screens above. -->
     <section class="sec">
       <div class="sec-inner">
         <SectionHead
-          kicker="01 / The standings"
-          title={['WHO HOLDS', 'THE GROUND']}
-          strap="Five seats, always. An empty seat is a fact rather than a rounding — most of the household only reached the ledger in July."
+          kicker="01 / The map"
+          title={['WHERE THE', 'GROUND MOVED']}
+          strap={`Five territories on a hidden ${Math.round(lg.cellSideM)} m grid, dissolved and smoothed. The map opens where ground changed hands; tap a territory for its history.`}
         />
+        <MapStage
+          {lg}
+          {chips}
+          {selectedActivityKeys}
+          {selectedWindow}
+          {selectedSubjects}
+          {applying}
+          ontoggleActivity={toggleActivity}
+          onpickWindow={pickWindow}
+          ontoggleSubject={toggleSubject}
+          ontap={openAt}
+        />
+      </div>
+    </section>
 
-        <ul class="standings cellgrid" aria-label="Standings">
-          {#each lg.standings as s, i (s.subject)}
-            {@const p = lg.players.find((x) => x.subject === s.subject)}
-            <li class="stand" style="--who: {p?.colour ?? 'var(--text-primary)'}">
-              <div class="stand-hd">
-                <span class="metric-label">{ordinal(i)}</span>
-                <span class="stand-badge" aria-hidden="true">{p?.initial ?? '?'}</span>
-              </div>
-              <h3 class="stand-name">{p?.name ?? s.subject}</h3>
-              <p class="stand-num">
-                {km2(s.areaM2)}<span class="stand-unit">km²</span>
-              </p>
-              <p class="stand-meta">
-                {s.tiles.toLocaleString('en-GB')} cells · {s.geos} geo{s.geos === 1 ? '' : 's'}
-              </p>
-              <p class="stand-week">
-                <span class="up">+{km2(s.gainedM2)}</span>
-                <span class="down">−{km2(s.lostM2)}</span>
-                <span class="metric-label">vs a week ago</span>
-              </p>
-            </li>
-          {/each}
-          {#each openSeats as seat (seat)}
-            <li class="stand stand--open">
-              <div class="stand-hd">
-                <span class="metric-label accent">Seat {seat}</span>
-                <span class="stand-badge stand-badge--open" aria-hidden="true">?</span>
-              </div>
-              <h3 class="stand-name">Open</h3>
-              <p class="stand-num stand-num--open" aria-label="no ground held">—</p>
-              <p class="stand-meta">No ground yet</p>
-            </li>
-          {/each}
-        </ul>
-
+    <!-- 02. One bar, then one row each. Quieter than v1's five big numerals on
+         purpose: the map above it is the loud thing now. -->
+    <section class="sec">
+      <div class="sec-inner">
+        <SectionHead
+          kicker="02 / The standings"
+          title={['WHO HOLDS', 'THE GROUND']}
+          strap="One bar, five colours: each share of everything the household holds, and what that is against the Darlington box."
+        />
+        <ShareBar
+          share={lg.share}
+          standings={lg.standings}
+          players={lg.players}
+          {openSeats}
+        />
         {#if missingPlayers > 0}
           <p class="seatline">
             <b>{missingPlayers} of 5 seats are still open.</b> The rest of the household
@@ -227,147 +272,29 @@
       </div>
     </section>
 
-    <!-- The filter. John's requirement, and the reason the ledger carries an
-         activity type at all: a bike loop encloses about ten times a run for
-         the same effort, so a ride counts, and it is filterable. -->
     <section class="sec tinted">
       <div class="sec-inner">
         <SectionHead
-          kicker="02 / What counts"
-          title={['NARROW THE', 'EVIDENCE']}
-          strap="Ownership is replayed over whatever is left ticked, not hidden on the map — so a cell won by bike does not survive a foot-only view."
+          kicker="03 / Battlegrounds"
+          title={['WHERE IT IS', 'A FIGHT']}
+          strap="Ground two or more of you have stood on, in the clumps it comes in. Everything else is a walk nobody contested."
         />
-        <div class="tools" aria-label="What counts">
-      <div class="tool-group">
-        <span class="metric-label">Counts as territory</span>
-        <div class="chips">
-          {#each chips as c (c.key)}
-            <button
-              type="button"
-              class="chip"
-              class:on={selectedActivityKeys.has(c.key)}
-              aria-pressed={selectedActivityKeys.has(c.key)}
-              onclick={() => toggleActivity(c.key)}
-              disabled={applying}>{c.label}</button
-            >
-          {/each}
-        </div>
-      </div>
-      <div class="tool-group">
-        <span class="metric-label">Captured within</span>
-        <div class="chips" role="radiogroup" aria-label="Date window">
-          {#each DATE_WINDOWS as w (w.key)}
-            <button
-              type="button"
-              class="chip"
-              role="radio"
-              class:on={selectedWindow === w.key}
-              aria-checked={selectedWindow === w.key}
-              onclick={() => pickWindow(w.key)}
-              disabled={applying}>{w.label}</button
-            >
-          {/each}
-        </div>
-      </div>
-      <div class="tool-group">
-        <span class="metric-label">Players</span>
-        <div class="chips">
-          {#each roster as p (p.subject)}
-            <button
-              type="button"
-              class="chip chip--who"
-              class:on={selectedSubjects.has(p.subject)}
-              style="--who: {p.colour}"
-              aria-pressed={selectedSubjects.has(p.subject)}
-              onclick={() => toggleSubject(p.subject)}
-              disabled={applying}
-            >
-              <span class="chip-sw" data-hatch={p.hatch} aria-hidden="true"></span>{p.name}
-            </button>
-          {/each}
-        </div>
-      </div>
-      <p class="tool-note">
-        {#if lg.window.key !== 'all'}
-          Ownership is <b>replayed</b> over {windowLine} only, not hidden on the
-          map: a cell somebody won in June and somebody else walked on Tuesday
-          changes hands here. {#if lg.window.cellsOutsideWindow > 0}<b
-              >{lg.window.cellsOutsideWindow.toLocaleString('en-GB')} cells</b
-            > sit outside it.{:else}Every cell anyone holds falls inside it.{/if}
-        {:else if lg.filterActive}
-          Ownership is being replayed over the filtered ledger, not read off the
-          stored map — a cell won by bike does not survive a foot-only view.
-        {:else}
-          Untyped capture is the phone-tracked half of the household. Turning it
-          off removes four players, not four activities.
-        {/if}
-          </p>
-        </div>
+        <Battlegrounds
+          battlegrounds={lg.battlegrounds}
+          moves={lg.nextMoves}
+          players={lg.players}
+          window={lg.window}
+          onopen={(id) => (drill = parseTileKey(id))}
+        />
       </div>
     </section>
 
     <section class="sec">
       <div class="sec-inner">
         <SectionHead
-          kicker="03 / The map"
-          title={['DISSOLVED', 'TERRITORY']}
-          strap="A hidden grid of 44 m cells, dissolved into connected ground and smoothed. The grid itself is never drawn."
-        />
-        <div class="stage">
-      <div class="stage-map">
-        <TerritoryMap
-          territory={lg.territory}
-          players={lg.players}
-          cellAreaM2={lg.cellAreaM2}
-        />
-        <ul class="legend" aria-label="Territory legend">
-          {#each lg.standings.filter((s) => s.tiles > 0) as s (s.subject)}
-            {@const p = lg.players.find((x) => x.subject === s.subject)}
-            <li style="--who: {p?.colour ?? 'var(--text-primary)'}">
-              <span class="chip-sw" data-hatch={p?.hatch} aria-hidden="true"></span>
-              <b>{p?.initial}</b>
-              {p?.name ?? s.subject}
-              <span class="legend-v">{km2(s.areaM2)} km²</span>
-            </li>
-          {/each}
-          {#if lg.territory.length === 0}
-            <li class="legend-none">
-              {lg.window.key === 'all'
-                ? 'No ground matches this filter.'
-                : `Nobody captured anything in ${windowLine}.`}
-            </li>
-          {/if}
-        </ul>
-      </div>
-      <aside class="stage-rail">
-        <CaptureFeed feed={lg.feed} players={lg.players} window={lg.window} {now} />
-        <section class="rules" aria-label="How ground is won">
-          <header class="rules-hd"><span class="metric-label">How ground is won</span></header>
-          <ol class="rules-list">
-            <li><b>×3</b><span>Close a loop and every cell inside it is yours.</span></li>
-            <li><b>×1</b><span>Walk, run or ride through and you claim the line you crossed.</span></li>
-            <li>
-              <b>÷n</b><span
-                >One outing, one claim — split over every cell it touched. Going
-                further spreads the same claim thinner, so going often beats
-                going far.</span
-              >
-            </li>
-            <li><b>½</b><span>A capture halves in weight every 30 days — old ground gets cheap, but never changes hands on its own.</span></li>
-            <li><b>1</b><span>One capture per person, per cell, per day. Ten laps of the garden score once.</span></li>
-          </ol>
-        </section>
-          </aside>
-        </div>
-      </div>
-    </section>
-
-    <section class="sec tinted">
-      <div class="sec-inner">
-        <SectionHead
           kicker="04 / The boards"
-          title={['GROUND HELD,', 'WEEK ON WEEK']}
-          strap="The same ledger read four ways — who holds most, who moved this week, who has held longest, and the journeys that failed to close."
+          title={['THE WEEK,', 'READ THREE WAYS']}
+          strap="The same ledger read three ways — who is winning contested ground, who moved this week, and the loops that closed — with the capture feed and the effort lines beneath."
         />
         <LandgrabBoards
           standings={lg.standings}
@@ -381,30 +308,111 @@
       </div>
     </section>
 
-    <section class="sec">
+    <section class="sec tinted">
       <div class="sec-inner">
-        <SectionHead kicker="05 / Method" title={['HOW GROUND', 'IS SCORED']} strap={null} />
+        <SectionHead
+          kicker="05 / The letter & the method"
+          title={['LAST WEEK, AND', 'HOW IT IS SCORED']}
+          strap={null}
+        />
+        <WeeklyLetter letter={lg.letter} />
+
+        <!-- The five rules, off the old map rail. They are a glossary rather
+             than a running order, so they are a definition list — and two
+             columns on desktop, because a 380px rail's worth of stacked rows
+             in a 1400px band is a column of air. -->
+        <section class="rules" aria-label="How ground is won">
+          <header class="rules-hd"><span class="metric-label">How ground is won</span></header>
+          <dl class="rules-list">
+            <div class="rules-row">
+              <dt>×3</dt>
+              <dd>Close a loop and every cell inside it is yours.</dd>
+            </div>
+            <div class="rules-row">
+              <dt>×1</dt>
+              <dd>Walk, run or ride through and you claim the line you crossed.</dd>
+            </div>
+            <div class="rules-row">
+              <dt>÷n</dt>
+              <dd>
+                One outing, one claim — split over every cell it touched. Going
+                further spreads the same claim thinner, so going often beats
+                going far.
+              </dd>
+            </div>
+            <div class="rules-row">
+              <dt>½</dt>
+              <dd>
+                A capture halves in weight every 30 days — old ground gets cheap,
+                but never changes hands on its own.
+              </dd>
+            </div>
+            <div class="rules-row">
+              <dt>1</dt>
+              <dd>
+                One capture per person, per cell, per day. Ten laps of the garden
+                score once.
+              </dd>
+            </div>
+          </dl>
+        </section>
+
         <p class="foot">
-      Territory is scored on a hidden grid of {Math.round(lg.cellSideM)} m cells; the
-      map shows dissolved, smoothed ground, never the grid. A capture decays with
-      a thirty-day half-life, so ground gets cheaper to steal but never changes
-      hands on its own — somebody has to actually go there. Each outing's claim is
-      divided by the number of cells it took, so a long run claims each of them
-      thinly and a short walk claims a few of them hard: the board rewards going
-      out often rather than going far. Total ground is mostly ground nobody else
-      has been near, which is why the contested board is the one worth reading.
-      {#if lg.window.key !== 'all'}
-        The date window narrows the evidence, not the picture: the map, every
-        board, the capture feed and the ground-in-play figure all answer over
-        {windowLine}. The gained and lost columns are the one thing measured
-        against something else — they compare this window with {lg.window
-          .weekBasis}, because a narrowed present held against an unnarrowed
-        week ago would report movement nobody made.
-      {/if}
+          Territory is scored on a hidden grid of {Math.round(lg.cellSideM)} m cells; the
+          map shows dissolved, smoothed ground, never the grid. A capture decays with
+          a thirty-day half-life, so ground gets cheaper to steal but never changes
+          hands on its own — somebody has to actually go there. Each outing's claim is
+          divided by the number of cells it took, so a long run claims each of them
+          thinly and a short walk claims a few of them hard: the board rewards going
+          out often rather than going far. Total ground is mostly ground nobody else
+          has been near, which is why the contested board is the one worth reading.
+          Battlegrounds are the clumps of ground two or more people have stood on; a
+          region's history ignores the date window.
+          {#if lg.window.key !== 'all'}
+            The date window narrows the evidence, not the picture: the map, every
+            board, the capture feed and the ground-in-play figure all answer over
+            {windowLine}. The gained and lost columns are the one thing measured
+            against something else — they compare this window with {lg.window
+              .weekBasis}, because a narrowed present held against an unnarrowed
+            week ago would report movement nobody made.
+          {/if}
+        </p>
+
+        <!-- The honesty line that used to sit beside the filter chips. The
+             filter moved into the map's own toolbar, where there is no room for
+             a paragraph — but the admission is the whole reason the filter is
+             trustworthy, so it lands here rather than being lost. -->
+        <p class="foot">
+          {#if lg.window.key !== 'all'}
+            Ownership is <b>replayed</b> over {windowLine} only, not hidden on the
+            map: a cell somebody won in June and somebody else walked on Tuesday
+            changes hands here. {#if lg.window.cellsOutsideWindow > 0}<b
+                >{lg.window.cellsOutsideWindow.toLocaleString('en-GB')} cells</b
+              > sit outside it.{:else}Every cell anyone holds falls inside it.{/if}
+          {:else if lg.filterActive}
+            Ownership is being replayed over the filtered ledger, not read off the
+            stored map — a cell won by bike does not survive a foot-only view.
+          {:else}
+            Untyped capture is the phone-tracked half of the household. Turning it
+            off removes four players, not four activities.
+          {/if}
         </p>
       </div>
     </section>
   {/if}
+
+  <!--
+    The drill is mounted ONCE, at the page root, as a sibling of the sections
+    and never inside one. Mounting it once is what lets an in-flight fetch for
+    the last region be aborted when the next one is tapped.
+  -->
+  <RegionDrill
+    open={drill}
+    filterQuery={currentQuery}
+    players={lg.players}
+    cellAreaM2={lg.cellAreaM2}
+    onclose={() => (drill = null)}
+  />
 </HealthShell>
 
 <style>
@@ -538,45 +546,12 @@
     }
   }
 
-  /* ---- standings ---- */
-  /* Five seats, always. The roster is the shape of the game, so the grid is
-     the roster rather than however many people happen to have scored. */
-  .standings {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    margin: 0 0 1.5rem;
-    padding: 0;
-    list-style: none;
-  }
-  @media (max-width: 1200px) {
-    .standings {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-  }
-  .stand {
-    border-left: 4px solid var(--who);
-    background: var(--bg);
-  }
-  .stand--open {
-    border-left-color: var(--accent-tint-35);
-    background: transparent;
-  }
-  .stand--open .stand-name,
-  .stand--open .stand-num {
-    color: var(--text-ghost);
-  }
-  /* An empty seat is a fact, not a headline: it keeps the seat's shape and
-     gives the page's one big numeral back to whoever actually holds ground. */
-  .stand-num--open {
-    font-size: var(--fs-display-xs);
-    line-height: 1.6;
-  }
-  .stand-badge--open {
-    background: transparent;
-    border: 1px solid var(--accent-tint-35);
-    color: var(--accent);
-  }
+  /* ---- 02 / the open seats ----
+     Butted straight onto the share bar's bottom edge: the bar's own border is
+     this note's top rule, so the pair reads as one instrument rather than two
+     boxes with a hairline of cream between them. */
   .seatline {
-    margin: -0.5rem 0 1.5rem;
+    margin: 0;
     padding: 12px 16px;
     border: 1px solid var(--line-strong);
     border-top: 0;
@@ -593,168 +568,10 @@
     text-transform: uppercase;
     color: var(--text-primary);
   }
-  .stand-hd {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 10px;
-  }
-  .stand-badge {
-    font-family: var(--font-mono);
-    font-weight: 700;
-    font-size: var(--fs-label);
-    width: 26px;
-    height: 26px;
-    line-height: 26px;
-    text-align: center;
-    color: var(--bg);
-    background: var(--who);
-    border-radius: var(--radius-sharp);
-  }
-  .stand-name {
-    margin: 0;
-    font-family: var(--font-display);
-    font-size: var(--fs-display-xs);
-    line-height: 1;
-    text-transform: uppercase;
-    letter-spacing: -0.01em;
-    color: var(--text-primary);
-  }
-  .stand-num {
-    margin: 10px 0 0;
-    font-family: var(--font-display);
-    font-size: var(--fs-num-lg);
-    line-height: 0.88;
-    letter-spacing: -0.03em;
-    font-variant-numeric: tabular-nums;
-    color: var(--who);
-  }
-  .stand-unit {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label);
-    letter-spacing: var(--tracking-label);
-    text-transform: uppercase;
-    color: var(--text-ghost);
-    margin-left: 6px;
-  }
-  .stand-meta {
-    margin: 8px 0 0;
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-  }
-  .stand-week {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-    margin: 10px 0 0;
-    font-family: var(--font-mono);
-    font-size: var(--fs-label);
-    font-variant-numeric: tabular-nums;
-  }
-  .up {
-    color: var(--success);
-  }
-  .down {
-    color: var(--trend-down);
-  }
 
-  /* ---- filter ---- */
-  .tools {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    gap: 12px 32px;
-    padding: 14px 16px;
-    margin-bottom: 1.25rem;
-    border: 1px solid var(--line-strong);
-    background: var(--surface-rail);
-  }
-  .tool-group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    min-width: 0;
-  }
-  .chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-  .chip {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    font-weight: 500;
-    letter-spacing: var(--tracking-label);
-    text-transform: uppercase;
-    padding: 6px 11px;
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-sharp);
-    background: transparent;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition:
-      color var(--t-fast) var(--ease-out),
-      border-color var(--t-fast) var(--ease-out),
-      background var(--t-fast) var(--ease-out);
-  }
-  .chip:hover:not(:disabled) {
-    border-color: var(--text-primary);
-    color: var(--text-primary);
-  }
-  .chip.on {
-    background: var(--text-primary);
-    border-color: var(--text-primary);
-    color: var(--bg);
-  }
-  .chip:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
-  .chip--who {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-  }
-  .chip--who.on {
-    background: var(--who);
-    border-color: var(--who);
-    color: var(--bg);
-  }
-  .chip--who.on .chip-sw {
-    border-color: var(--bg);
-    --who: var(--bg);
-  }
-  .tool-note {
-    flex: 1 1 24ch;
-    margin: 0;
-    align-self: center;
-    font-size: var(--fs-body-sm);
-    line-height: 1.45;
-    color: var(--text-muted);
-    max-width: 46ch;
-  }
-
-  /* ---- stage ---- */
-  .stage {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 380px;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-  }
-  .stage-map {
-    min-width: 0;
-  }
-  .stage-rail {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
+  /* ---- 05 / the rules ---- */
   .rules {
+    margin-top: 1.5rem;
     border: 1px solid var(--line-strong);
     background: var(--bg);
   }
@@ -764,93 +581,48 @@
     background: var(--surface-rail);
   }
   .rules-list {
-    list-style: none;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0;
     margin: 0;
     padding: 0;
   }
-  .rules-list li {
+  /* `rules-row`, NOT `rule`: `.rule` is a global utility in app.css — a 2px
+     hairline at 8% ink — and Svelte's scoping does not stop a global class of
+     the same name applying. It won the `height` this rule never declares, so
+     every row collapsed to its padding and the copy spilled out at 8% opacity. */
+  .rules-row {
     display: grid;
     grid-template-columns: 34px minmax(0, 1fr);
     gap: 12px;
     align-items: baseline;
+    min-width: 0;
     padding: 11px 16px;
     border-bottom: 1px solid var(--line-hair);
-    font-size: var(--fs-body-sm);
-    line-height: 1.45;
-    color: var(--text-secondary);
   }
-  .rules-list li:last-child {
+  /* Five rules over two columns leaves the last one alone on its row; only it
+     needs the closing rule taken off. */
+  .rules-row:last-child {
     border-bottom: 0;
   }
-  .rules-list b {
+  /* Five rules over two columns: the fifth sits alone on the last row, and a
+     right-hand rule on it draws a hairline into empty space. Only the odd rows
+     that actually have a neighbour get the column rule. */
+  .rules-row:nth-child(odd):not(:last-child) {
+    border-right: 1px solid var(--line-hair);
+  }
+  .rules-row dt {
     font-family: var(--font-display);
     font-weight: 400;
     font-size: var(--fs-body-lg);
-    color: var(--accent);
     letter-spacing: -0.01em;
-  }
-  .legend {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px 18px;
-    list-style: none;
-    margin: 0;
-    padding: 10px 14px;
-    border: 1px solid var(--line-strong);
-    border-top: 0;
-    background: var(--surface-rail);
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-  }
-  .legend li {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-  }
-  .legend b {
-    color: var(--who);
-    font-weight: 700;
-  }
-  .legend-v {
-    color: var(--text-ghost);
-    font-variant-numeric: tabular-nums;
-  }
-  .legend-none {
     color: var(--accent);
   }
-
-  .chip-sw {
-    display: block;
-    width: 14px;
-    height: 14px;
-    border: 1px solid var(--who);
-    border-radius: var(--radius-sharp);
-    flex: 0 0 auto;
-  }
-  .chip-sw[data-hatch='diag'] {
-    background-image: repeating-linear-gradient(45deg, var(--who) 0 2px, transparent 2px 6px);
-  }
-  .chip-sw[data-hatch='back'] {
-    background-image: repeating-linear-gradient(-45deg, var(--who) 0 2px, transparent 2px 6px);
-  }
-  .chip-sw[data-hatch='vert'] {
-    background-image: repeating-linear-gradient(90deg, var(--who) 0 2px, transparent 2px 6px);
-  }
-  .chip-sw[data-hatch='horiz'] {
-    background-image: repeating-linear-gradient(0deg, var(--who) 0 2px, transparent 2px 6px);
-  }
-  .chip-sw[data-hatch='grid'] {
-    background-image:
-      repeating-linear-gradient(90deg, var(--who) 0 2px, transparent 2px 6px),
-      repeating-linear-gradient(0deg, var(--who) 0 2px, transparent 2px 6px);
-  }
-  .chip-sw[data-hatch='dots'] {
-    background-image: radial-gradient(var(--who) 1.6px, transparent 1.7px);
-    background-size: 6px 6px;
+  .rules-row dd {
+    margin: 0;
+    font-size: var(--fs-body-sm);
+    line-height: 1.45;
+    color: var(--text-secondary);
   }
 
   /* ---- empty ---- */
@@ -885,23 +657,21 @@
     line-height: 1.6;
     color: var(--text-muted);
   }
+  .foot b {
+    color: var(--text-secondary);
+  }
 
-  @media (max-width: 1100px) {
-    .stage {
+  @media (max-width: 700px) {
+    /* The cover band carries its own clamps, and every instrument below it is
+       now a component with its own phone rules. What is left here is the rules
+       list, which loses its second column and so its column rule with it. */
+    .rules-list {
       grid-template-columns: minmax(0, 1fr);
     }
-  }
-  @media (max-width: 700px) {
-    /* The cover band carries its own clamps; what still needs a phone rule is
-       the instrument grid below it. */
-    .standings {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    .stand-num {
-      font-size: var(--fs-num-md);
-    }
-    .stand-name {
-      font-size: var(--fs-body-lg);
+    /* Same three-class selector as above — a media query adds no specificity,
+       so the `:not()` has to be repeated here or the rule above wins. */
+    .rules-row:nth-child(odd):not(:last-child) {
+      border-right: 0;
     }
     .virgin {
       padding: 1.5rem 1.25rem;

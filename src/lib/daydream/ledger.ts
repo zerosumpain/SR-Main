@@ -34,6 +34,7 @@ import {
   type RelevanceRow,
 } from './scoring';
 import { mutedKinds, loadFeedback, loadRelevanceRows } from './thought-store';
+import { DEFAULT_SUBJECT } from './types';
 import type { Readiness, SnapshotSource } from './snapshot-types';
 import {
   FAMILIES,
@@ -560,11 +561,25 @@ export async function loadThoughtById(id: string): Promise<LedgerThought | null>
   return row ?? null;
 }
 
-/** The most recent morning card, if there is one. */
+/**
+ * The most recent morning card, if there is one.
+ *
+ * Filtered to the DAILY subject, and that is load-bearing. `daydream_digests`
+ * is a multi-subject table: the daily digest writes `DEFAULT_SUBJECT`, the
+ * Sunday letter writes 'weekly', and Landgrab's Sunday letter writes
+ * 'landgrab-weekly'. Ordered by day with no subject clause this returns
+ * whichever of them happens to win the tie on the newest date — so a Sunday
+ * would render a weekly letter, or a territory report, as the morning card.
+ *
+ * `loadDiscoveries` below deliberately does NOT filter: it lists every
+ * subject's last fourteen rows and carries the `subject` column so the page
+ * can tell them apart. Two different questions, two different queries.
+ */
 export async function loadLatestDigest() {
   const [row] = await db
     .select()
     .from(daydreamDigests)
+    .where(eq(daydreamDigests.subject, DEFAULT_SUBJECT))
     .orderBy(desc(daydreamDigests.day))
     .limit(1);
   if (!row) return null;
@@ -934,6 +949,11 @@ export async function loadMoney() {
 export async function loadDiscoveries() {
   const { loadBoard } = await import('./hypotheses/store');
   const { daydreamDigests, daydreamLeads } = await import('$lib/db/schema');
+  // Deferred like the two above rather than imported at the top: digest/weekly
+  // is a WRITER, and pulling its seven-table schema surface into the static
+  // graph of a page-load reader for the sake of one string constant is a cost
+  // every other caller of this module would pay.
+  const { WEEKLY_SUBJECT } = await import('./digest/weekly');
 
   const [board, digests, leads, sweep] = await Promise.all([
     // null = every person. The board is the one home for questions now; the
@@ -955,6 +975,14 @@ export async function loadDiscoveries() {
         stats: daydreamDigests.stats,
       })
       .from(daydreamDigests)
+      // THIS page's two subjects, named. `daydream_digests` is a shared table
+      // and Landgrab's Sunday letter writes 'landgrab-weekly' into it; without
+      // this clause a territory report would be rendered here as a daydream
+      // card, which is a different feature reporting a different engine. An
+      // allow-list rather than a "not landgrab" exclusion, so the next stream
+      // to take a subject on this table appears nowhere until somebody decides
+      // it should.
+      .where(inArray(daydreamDigests.subject, [DEFAULT_SUBJECT, WEEKLY_SUBJECT]))
       .orderBy(desc(daydreamDigests.day))
       .limit(14),
     db
