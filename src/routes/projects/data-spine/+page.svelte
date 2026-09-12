@@ -18,7 +18,7 @@
 </svelte:head>
 
 <div class="fs-route">
-  <T0FrontMatter {study} />
+  <T0FrontMatter {study} {depth} />
 
   <hr class="fs-front-rule" />
 

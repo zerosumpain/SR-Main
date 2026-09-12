@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { study } from './study';
 import { validateStudy, errors, notes } from '$lib/fieldstudy/validate';
-import { arcBeats, beatBySlug } from '$lib/fieldstudy/study';
+import { arcBeats, beatBySlug, say, hasPlain, type Dual } from '$lib/fieldstudy/study';
 
 /**
  * The Data Spine is the REFERENCE field study. If it stops obeying the system,
@@ -73,18 +73,49 @@ describe('data-spine · the reference study', () => {
     }
   });
 
-  it('surfaces the two places the fixed arc and the template rules disagree', () => {
-    // Both are in the system's own reference expression of this study, and
-    // both are real: the arc puts two WEIGHING beats side by side (05 who
-    // wins, 06 trust & safeguards), and its closing beat (07 what happens
-    // next) is shaped like a position even though T3 is "once per study".
+  it('surfaces the places the fixed arc and the template rules disagree', () => {
+    // Two of these are the arc's own tensions, and both are real: it puts two
+    // WEIGHING beats side by side (05 who wins, 06 trust & safeguards), and
+    // its closing beat (07 what happens next) is shaped like a position even
+    // though T3 is "once per study".
     //
     // Pinned rather than tolerated. If either is resolved — by the rules
     // bending or by the content changing — this test says so on the next run
     // instead of the tension quietly persisting.
-    expect(notes(findings).map((f) => `${f.rule}: ${f.message}`)).toEqual([
+    expect(notes(findings).filter((f) => f.rule !== 'no-plain').map((f) => `${f.rule}: ${f.message}`)).toEqual([
       'position-twice: T3 appears more than once. A study makes one recommendation.',
       'rhythm: Beats 05 and 06 are both T4. Only T1 may repeat consecutively.',
     ]);
+  });
+
+  it('has a real ELI5 register on every beat', () => {
+    // The shell ships a Research / ELI5 control on every page. Five of the
+    // seven beats used to have nothing to say in plain English — the ledger
+    // and position templates were never even handed the depth — so picking
+    // ELI5 on them returned the page the reader already had.
+    expect(notes(findings).filter((f) => f.rule === 'no-plain')).toEqual([]);
+  });
+
+  it('says something different at plain than at research, everywhere it matters', () => {
+    // A plain register that repeats the research one is the same failure
+    // wearing a costume, so identity is asserted against, not just presence.
+    for (const b of arcBeats(study)) {
+      const fields: [string, Dual | undefined][] = [
+        ['claim', b.claim?.text],
+        ['soWhat', b.soWhat],
+        ['openQuestion', b.openQuestion?.text],
+        ...(b.ledger ? ([['balance', b.ledger.balance]] as [string, Dual][]) : []),
+        ...(b.position
+          ? ([['statement', b.position.statement], ['sinkers', b.position.sinkers]] as [string, Dual][])
+          : []),
+      ];
+      for (const [name, v] of fields) {
+        if (v === undefined) continue;
+        expect(hasPlain(v), `beat ${b.no} ${name} has no plain register`).toBe(true);
+        expect(say(v, 'plain'), `beat ${b.no} ${name} says the same thing at both depths`).not.toBe(
+          say(v, 'research'),
+        );
+      }
+    }
   });
 });

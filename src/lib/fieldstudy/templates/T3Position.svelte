@@ -9,16 +9,16 @@
    * This is the only page where the accent runs as a filled band. Once.
    */
   import ConfidenceChip from '../ConfidenceChip.svelte';
-  import type { Beat } from '../study';
+  import { say, type Beat, type Depth } from '../study';
 
-  let { beat }: { beat: Beat } = $props();
+  let { beat, depth = 'research' }: { beat: Beat; depth?: Depth } = $props();
   const p = $derived(beat.position);
 </script>
 
 {#if p}
-  <h2 class="fs-h1 fs-h1--display fs-position">{p.statement}</h2>
+  <h2 class="fs-h1 fs-h1--display fs-position">{say(p.statement, depth)}</h2>
 
-  {#if p.elaboration}<p class="fs-body fs-elaboration">{p.elaboration}</p>{/if}
+  {#if p.elaboration}<p class="fs-body fs-elaboration">{say(p.elaboration, depth)}</p>{/if}
 
   {#if p.confidence}
     <p class="fs-confidence-note">
@@ -55,7 +55,7 @@
 
   <div class="fs-warn fs-sinkers">
     <span class="label">What would sink it</span>
-    <p>{p.sinkers}</p>
+    <p>{say(p.sinkers, depth)}</p>
   </div>
 
   {#if p.phases?.length}

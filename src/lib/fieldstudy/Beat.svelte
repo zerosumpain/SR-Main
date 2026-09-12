@@ -16,7 +16,7 @@
   import T3Position from './templates/T3Position.svelte';
   import T4Ledger from './templates/T4Ledger.svelte';
   import Sections from './templates/Sections.svelte';
-  import { arcBeats, beatHref, neighbours, type Beat, type Study } from './study';
+  import { arcBeats, beatHref, neighbours, say, type Beat, type Study } from './study';
 
   let {
     study,
@@ -44,17 +44,17 @@
          inline, which is why they are authored as notes rather than floats. -->
     <aside class="fs-margin">
       {#each beat.marginNotes ?? [] as note, ni (ni)}
-        <MarginNote label={note.label}>{note.text}</MarginNote>
+        <MarginNote label={note.label}>{say(note.text, depth)}</MarginNote>
       {/each}
     </aside>
 
     <div class="fs-beat-body">
       {#if beat.question && beat.claim}
-        <ClaimTable question={beat.question} claim={beat.claim.text} confidence={beat.claim.confidence} />
+        <ClaimTable question={beat.question} claim={beat.claim.text} confidence={beat.claim.confidence} {depth} />
       {/if}
 
       {#if beat.standfirst}
-        <p class="fs-standfirst">{beat.standfirst}</p>
+        <p class="fs-standfirst">{say(beat.standfirst, depth)}</p>
       {/if}
 
       {#if beat.template === 'T1'}
@@ -62,17 +62,18 @@
       {:else if beat.template === 'T2'}
         <T2Survey {beat} {depth} />
       {:else if beat.template === 'T3'}
-        <T3Position {beat} />
+        <T3Position {beat} {depth} />
       {:else if beat.template === 'T4'}
-        <T4Ledger {beat} />
+        <T4Ledger {beat} {depth} />
       {/if}
 
       {#if beat.sections?.length}
-        <Sections sections={beat.sections} />
+        <Sections sections={beat.sections} {depth} />
       {/if}
 
       {#if beat.soWhat && beat.openQuestion}
         <BeatClose
+          {depth}
           soWhat={beat.soWhat}
           openQuestion={beat.openQuestion.text}
           falsifier={beat.openQuestion.falsifier}
