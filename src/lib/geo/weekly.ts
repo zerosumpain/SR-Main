@@ -92,6 +92,17 @@ export interface WeekFacts {
     day: string;
     victims: string[];
   } | null;
+  /**
+   * The contested board: holds THEN and holds NOW over the cells contested
+   * NOW, and `visited` is how many of those cells this person has stood on.
+   *
+   * All three counts share one universe of cells — the cells with two or more
+   * visitors under the CURRENT window. That is what makes `holdsThen/visited`
+   * and `holdsNow/visited` two rates you may put either side of an arrow.
+   * Counting `holdsThen` over the cells that were contested a week ago instead
+   * would put cells in the numerator that are not in the denominator, because
+   * the window slides — see the fold in `gatherLandgrabWeek`.
+   */
   contested: Array<{ subject: string; holdsNow: number; holdsThen: number; visited: number }>;
   battleground: {
     name: string | null;
@@ -155,11 +166,11 @@ export async function gatherLandgrabWeek(
     now: weekAgo,
     filter: { capturedFrom: windowFrom(weekAgo) },
   });
+  // Only the NOW visitor set is read. The contest fold below reports both the
+  // then and the now holds over these same cells — see the note there — and
+  // `findBattlegrounds` takes the current contested clumps too, so a second
+  // full-ledger read as at `weekAgo` would be work nothing consumes.
   const visitors = await readVisitorSets({ now, filter: { capturedFrom: windowFrom(now) } });
-  const visitorsThen = await readVisitorSets({
-    now: weekAgo,
-    filter: { capturedFrom: windowFrom(weekAgo) },
-  });
 
   const ownerByCell = new Map<string, string>();
   for (const [key, o] of ownedNow) ownerByCell.set(key, o.owner);
@@ -190,7 +201,7 @@ export async function gatherLandgrabWeek(
     // A TAKE is a cell that changed hands between two NAMED people. Virgin
     // ground is a gain and not a take — "took 0.09 km2 off nobody" is noise.
     if (before && after) {
-      const pair = `${before} ${after}`;
+      const pair = `${before}>${after}`;
       const seen = takeCounts.get(pair);
       if (seen) seen.cells += 1;
       else takeCounts.set(pair, { from: before, to: after, cells: 1 });
@@ -289,19 +300,28 @@ export async function gatherLandgrabWeek(
   // that is actually a game: 91% of the map has one visitor and no scoring
   // rule can move it, so a board ranked on total area ranks how far somebody
   // roams. `visited` counts CONTESTED cells this person has stood on.
+  //
+  // ONE UNIVERSE OF CELLS, and it is the NOW-contested one. Both `holdsNow`
+  // and `holdsThen` are folded over the same `visitors` set and both are
+  // reported against the same `visited` denominator, so the "was 52%, now 58%"
+  // sentence compares like with like.
+  //
+  // Folding `holdsThen` over `visitorsThen` instead — the obvious spelling,
+  // and what this did first — is wrong because the 30-day window SLIDES: a
+  // cell that two people had both visited under the earlier window can have
+  // one visitor under the current one. Those cells are in the numerator and
+  // not in the denominator, so the "was" figure is inflated, and in the limit
+  // it prints a rate above 100%.
   const holdsNow = new Map<string, number>();
+  const holdsThen = new Map<string, number>();
   const visited = new Map<string, number>();
   for (const [key, set] of visitors) {
     if (set.size < 2) continue;
     const owner = ownerByCell.get(key);
     if (owner) holdsNow.set(owner, (holdsNow.get(owner) ?? 0) + 1);
+    const then = ownerThenByCell.get(key);
+    if (then) holdsThen.set(then, (holdsThen.get(then) ?? 0) + 1);
     for (const s of set) visited.set(s, (visited.get(s) ?? 0) + 1);
-  }
-  const holdsThen = new Map<string, number>();
-  for (const [key, set] of visitorsThen) {
-    if (set.size < 2) continue;
-    const owner = ownerThenByCell.get(key);
-    if (owner) holdsThen.set(owner, (holdsThen.get(owner) ?? 0) + 1);
   }
   const contested = [...new Set([...visited.keys(), ...holdsNow.keys(), ...holdsThen.keys()])]
     .map((subject) => ({

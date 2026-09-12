@@ -34,6 +34,7 @@ import {
   type RelevanceRow,
 } from './scoring';
 import { mutedKinds, loadFeedback, loadRelevanceRows } from './thought-store';
+import { DEFAULT_SUBJECT } from './types';
 import type { Readiness, SnapshotSource } from './snapshot-types';
 import {
   FAMILIES,
@@ -560,11 +561,25 @@ export async function loadThoughtById(id: string): Promise<LedgerThought | null>
   return row ?? null;
 }
 
-/** The most recent morning card, if there is one. */
+/**
+ * The most recent morning card, if there is one.
+ *
+ * Filtered to the DAILY subject, and that is load-bearing. `daydream_digests`
+ * is a multi-subject table: the daily digest writes `DEFAULT_SUBJECT`, the
+ * Sunday letter writes 'weekly', and Landgrab's Sunday letter writes
+ * 'landgrab-weekly'. Ordered by day with no subject clause this returns
+ * whichever of them happens to win the tie on the newest date — so a Sunday
+ * would render a weekly letter, or a territory report, as the morning card.
+ *
+ * `loadDiscoveries` below deliberately does NOT filter: it lists every
+ * subject's last fourteen rows and carries the `subject` column so the page
+ * can tell them apart. Two different questions, two different queries.
+ */
 export async function loadLatestDigest() {
   const [row] = await db
     .select()
     .from(daydreamDigests)
+    .where(eq(daydreamDigests.subject, DEFAULT_SUBJECT))
     .orderBy(desc(daydreamDigests.day))
     .limit(1);
   if (!row) return null;
