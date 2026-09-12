@@ -214,7 +214,7 @@ export class MapLayer {
     map.addSource(this.id, { type: 'geojson', data: this.data() });
     const colour = this.opts.color?.startsWith('var(') ? getComputedStyle(map.getContainer()).getPropertyValue('--accent').trim() || '#c4570a' : this.opts.color ?? '#c4570a';
     if ((this.kind === 'polygon' || this.kind === 'collection') && this.opts.fill !== false) {
-      const paint: any = { 'fill-color': this.opts.fillColor ?? colour, 'fill-opacity': this.opts.fillOpacity ?? 0.2, 'fill-outline-color': colour };
+      const paint: any = { 'fill-color': this.opts.fillColor ?? colour, 'fill-opacity': this.opts.fillOpacity ?? 0.2 };
       if (this.opts.hatch) {
         const pattern = `${this.id}-hatch`;
         const canvas = document.createElement('canvas'); canvas.width = canvas.height = 18;
@@ -326,7 +326,10 @@ export class MapLayer {
     if (this.marker) { this.marker.remove(); this.marker = null; this.draw(); }
     return this;
   }
-  getBounds() { return new MapBounds(this.coords); }
+  getBounds() {
+    if (this.kind === 'collection') return new MapBounds((this.coords as CollectionFeature[]).flatMap((f) => f.rings.flat()));
+    return new MapBounds(this.coords);
+  }
   bringToFront() { for (const id of this.layerIds) if (this.map?.native.getLayer(id)) this.map.native.moveLayer(id); return this; }
   clearLayers() { for (const child of [...this.children]) child.remove(); return this; }
   remove() {
