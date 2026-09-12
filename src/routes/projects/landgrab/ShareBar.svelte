@@ -89,9 +89,12 @@
         <span class="lg-badge" aria-hidden="true">{p?.initial ?? '?'}</span>
         <span class="lg-name">
           {p?.name ?? s.subject}
+          <!-- The separator is `{' · '}` rather than literal text: Svelte trims
+               the whitespace at the START of a block, so a leading space
+               written here disappears and the row reads "513 CELLS· 1 GEO". -->
           <small
-            >{(st?.tiles ?? s.cells).toLocaleString('en-GB')} cells{#if st}
-              · {st.geos} geo{st.geos === 1 ? '' : 's'}{/if}</small
+            >{(st?.tiles ?? s.cells).toLocaleString('en-GB')} cells{#if st}{' · '}{st.geos}
+              geo{st.geos === 1 ? '' : 's'}{/if}</small
           >
         </span>
         <span class="lg-num">{km2(s.areaM2)}<small>km²</small></span>
