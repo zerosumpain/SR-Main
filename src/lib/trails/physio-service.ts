@@ -692,8 +692,14 @@ function celsiusFrom(v: unknown): number | null {
   return Math.round(c * 10) / 10;
 }
 
-/** Intensity is METs only when the units actually say so (1 MET = 1 kcal/kg·hr). */
-function metsFrom(v: unknown): number | null {
+/**
+ * Intensity is METs only when the units actually say so (1 MET = 1 kcal/kg·hr).
+ *
+ * Exported because `peers-service` places this outing's METs against its
+ * cohort's: two readings of the same jsonb key parsed by two functions is how a
+ * percentile ends up drawn over units that do not match.
+ */
+export function metsFrom(v: unknown): number | null {
   const q = quantityOf(v);
   if (!q) return null;
   const u = q.units.toLowerCase();
