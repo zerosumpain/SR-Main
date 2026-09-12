@@ -17,6 +17,15 @@ export interface BattlegroundCore {
   centre: [number, number];
   cells: number;
   holders: Array<{ subject: string; cells: number }>;
+  /**
+   * Cells whose owner is not who owned them at the start of the window.
+   *
+   * Deliberately literal: a cell nobody held a week ago and somebody holds now
+   * COUNTS. It is a change of hands like any other, and one definition has to
+   * serve three readers — this ranking, the page's "changed hands" figure and
+   * the map focus's "changed" cells. Three places drawing their own line
+   * between a first claim and a takeover is how they end up disagreeing.
+   */
   handovers: number;
   contenders: string[];
   keys: string[];
@@ -66,6 +75,17 @@ export function findBattlegrounds(input: {
   }
   return out.sort((a, b) => b.handovers - a.handovers || b.cells - a.cells || (a.id < b.id ? -1 : 1));
 }
+
+/**
+ * The ceiling on `loopCells`, and the answer for ground that costs nothing.
+ *
+ * A zero gap is reachable — a neighbour where the challenger is already level
+ * as runner-up, or a cell whose score has decayed to nothing — and `3 / 0` is
+ * `Infinity`, which `JSON.stringify` writes as `null` into a field typed
+ * `number`. Clamping here rather than at the route means every caller reads the
+ * same number, and no route has to remember to do it.
+ */
+export const MAX_LOOP_CELLS = 999;
 
 export interface NextMoveCore {
   subject: string;
@@ -139,7 +159,7 @@ export function nextMoves(input: {
       cells: keys.length,
       centre: [round5(latSum / keys.length), round5(lonSum / keys.length)],
       maxGap: gapMax,
-      loopCells: gapMax > 0 ? Math.floor(LOOP_WEIGHT / gapMax) : Infinity,
+      loopCells: gapMax > 0 ? Math.min(MAX_LOOP_CELLS, Math.floor(LOOP_WEIGHT / gapMax)) : MAX_LOOP_CELLS,
       keys,
     });
   }

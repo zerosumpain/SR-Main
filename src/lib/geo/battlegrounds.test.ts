@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findBattlegrounds, nextMoves } from './battlegrounds';
+import { MAX_LOOP_CELLS, findBattlegrounds, nextMoves } from './battlegrounds';
 import { tileKeyOf } from './tiles';
 import type { TileOwnership } from './ownership';
 
@@ -39,6 +39,22 @@ describe('findBattlegrounds', () => {
     expect(b[1]).toMatchObject({ id: k(50, 50), cells: 6, handovers: 0 });
     expect(b[0].keys).toHaveLength(9);
   });
+
+  it('counts a first claim as a handover — unowned a week ago, owned now', () => {
+    const visitors = new Map<string, Set<string>>();
+    const ownerByCell = new Map<string, string>();
+    const ownerThenByCell = new Map<string, string>();
+    // 2x3 at (0,0) — six cells, the default floor. Every cell is john's now.
+    for (let x = 0; x < 2; x++) for (let y = 0; y < 3; y++) {
+      visitors.set(k(x, y), new Set(['john', 'katie']));
+      ownerByCell.set(k(x, y), 'john');
+      // (1,2) is absent from the "then" map: nobody held it at the start.
+      if (!(x === 1 && y === 2)) ownerThenByCell.set(k(x, y), 'john');
+    }
+
+    const [b] = findBattlegrounds({ visitors, ownerByCell, ownerThenByCell });
+    expect(b).toMatchObject({ cells: 6, handovers: 1 });
+  });
 });
 
 describe('nextMoves', () => {
@@ -59,5 +75,28 @@ describe('nextMoves', () => {
   });
   it('returns nothing for a player with no ground', () => {
     expect(nextMoves({ owned: new Map(), subjects: ['katie'] })).toEqual([]);
+  });
+
+  it('welds a clump across a corner — a diagonal step is a step', () => {
+    const owned = new Map<string, TileOwnership>([
+      own(10, 10, 'katie', 2),
+      own(11, 11, 'john', 0.05), // diagonal from katie's cell
+      own(12, 12, 'john', 0.06), // diagonal from (11,11), 4-adjacent to nothing
+    ]);
+    const [move] = nextMoves({ owned, subjects: ['katie'] });
+    // 4-connectivity would see two clumps of one and report cells: 1.
+    expect(move).toMatchObject({ holder: 'john', cells: 2 });
+    expect(move.maxGap).toBeCloseTo(0.06, 5);
+  });
+
+  it('clamps loopCells for ground that costs nothing', () => {
+    const owned = new Map<string, TileOwnership>([
+      own(10, 10, 'katie', 2),
+      own(11, 10, 'john', 0.02, 'katie', 0.02), // katie is already level here
+    ]);
+    const [move] = nextMoves({ owned, subjects: ['katie'] });
+    expect(move.maxGap).toBe(0);
+    expect(move.loopCells).toBe(MAX_LOOP_CELLS);
+    expect(Number.isFinite(move.loopCells)).toBe(true);
   });
 });
