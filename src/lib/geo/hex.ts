@@ -156,6 +156,18 @@ export function parseHexKey(key: string): Hex {
   return { q: Number(q), r: Number(r) };
 }
 
+/**
+ * Rendered width of a hex, in CSS pixels, at a slippy zoom.
+ *
+ * A z19 tile unit is 256 * 2^(zoom - 19) pixels across, and a hex is
+ * `HEX_WIDTH_TILES` of them. This is what decides whether the unclaimed mesh
+ * is drawn at all: below about nine pixels a honeycomb stops being a board and
+ * becomes a grey wash over the basemap.
+ */
+export function hexWidthPx(zoom: number): number {
+  return 256 * 2 ** (zoom - TILE_ZOOM) * HEX_WIDTH_TILES;
+}
+
 export interface HexViewport {
   south: number;
   west: number;

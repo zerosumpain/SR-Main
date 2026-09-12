@@ -1,9 +1,9 @@
 // The page payload's shape, in one client-safe file.
 //
 // Everything the browser is given is here, and it is deliberately a small,
-// dissolved, rounded view of the ledger: rings rather than cells (Risk 4 — the
-// SVG renderer crawls at ~12k features), areas already resolved to metres, and
-// no raw GPS fixes beyond a claim's own bounding-box centre.
+// rounded view of the ledger: the board as packed lattice integers, areas
+// already resolved to metres, and no raw GPS fixes beyond a claim's own
+// bounding-box centre. Nothing here carries a track, a ring vertex or a fix.
 
 import type { BattleRow, FlipLine, TimelinePoint } from '$lib/geo/history';
 import type { DateWindowKey, PlayerIdentity } from './identity';
@@ -14,19 +14,20 @@ import type { DateWindowKey, PlayerIdentity } from './identity';
 // erased at compile, so this file stays client-safe.
 export type { TimelinePoint, FlipLine, BattleRow } from '$lib/geo/history';
 
-/** One dissolved, Chaikin-smoothed component of somebody's ground.
- *  Coordinates are [lat, lon], the stored site format (converted at the Mapbox boundary). */
-export interface LandgrabRegion {
-  /** Cells in this component — the area model, not the ring's shoelace area. */
-  t: number;
-  outer: Array<[number, number]>;
-  /** Somebody else's block walk punched through the middle. */
-  holes: Array<Array<[number, number]>>;
-}
-
-export interface PlayerTerritory {
+/**
+ * One player's held hexes, delta-packed.
+ *
+ * `[q0, r0, dq1, dr1, ...]` in row-major order — see `$lib/geo/hex`
+ * `packHexes`. The browser unpacks it and builds the six corners itself, which
+ * is why the wire carries integers rather than rings: a held board is ~19k
+ * hexes, and absolute pairs would cost three times as much.
+ *
+ * v2 shipped dissolved, Chaikin-smoothed rings here instead. The grid was
+ * hidden on purpose then; it is the board now.
+ */
+export interface PlayerHexes {
   subject: string;
-  regions: LandgrabRegion[];
+  packed: number[];
 }
 
 export interface Standing {
@@ -113,7 +114,10 @@ export interface LandgrabData {
   window: WindowState;
   filterActive: boolean;
   players: PlayerIdentity[];
-  territory: PlayerTerritory[];
+  /** The board: who holds which hex. One entry per player with ground. */
+  hexes: PlayerHexes[];
+  /** Bbox of every held hex — the map's "All" view, and nothing else. */
+  territoryBounds: LatLonBounds | null;
   standings: Standing[];
   /** Cells more than one person has visited, and who is winning them. */
   contested: { cells: number; board: ContestedStanding[] };
@@ -143,10 +147,16 @@ export interface MapFocus {
   label: string;
 }
 
-/** Cells whose owner differs from a week ago, dissolved unsmoothed. */
+/**
+ * Ground whose owner differs from a week ago.
+ *
+ * `cells` is the count of record — the same number the boards and the Sunday
+ * letter print, because it is counted in the ledger's own unit. `packed` is
+ * the same ground as hexes, for drawing.
+ */
 export interface Handovers {
   cells: number;
-  regions: LandgrabRegion[];
+  packed: number[];
 }
 
 export interface ShareRow {

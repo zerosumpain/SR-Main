@@ -11,6 +11,7 @@ import {
   hexKey,
   hexOfWorld,
   hexRings,
+  hexWidthPx,
   packHexes,
   parseHexKey,
   unpackHexes,
@@ -30,6 +31,13 @@ describe('the lattice', () => {
   it('is 1.075 cells across the flats and 1.241 vertex to vertex', () => {
     expect(HEX_WIDTH_TILES).toBeCloseTo(1.07457, 5);
     expect(HEX_HEIGHT_TILES).toBeCloseTo(1.24081, 5);
+  });
+
+  it('sizes a hex on screen from the slippy zoom', () => {
+    // 256 px per z19 tile at zoom 19, halving with every zoom level below it.
+    expect(hexWidthPx(19)).toBeCloseTo(256 * 1.07457, 2);
+    expect(hexWidthPx(15)).toBeCloseTo(16 * 1.07457, 3);
+    expect(hexWidthPx(14)).toBeCloseTo(hexWidthPx(15) / 2, 6);
   });
 
   it('round-trips a hex through its own centre', () => {

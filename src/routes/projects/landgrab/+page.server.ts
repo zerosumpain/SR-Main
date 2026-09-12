@@ -10,7 +10,9 @@ import {
   activityTypeNotIn,
 } from '$lib/geo/service';
 import { GEO_THRESHOLDS } from '$lib/geo/loops';
-import { connectedComponents, dissolveTiles, type DissolvedRegion } from '$lib/geo/dissolve';
+import { connectedComponents } from '$lib/geo/dissolve';
+import { hexRings, packHexes, type Hex } from '$lib/geo/hex';
+import { hexesForTiles, resolveHexBoard } from '$lib/geo/hex-board';
 import { chooseFocus } from '$lib/geo/focus';
 import { findBattlegrounds, nextMoves } from '$lib/geo/battlegrounds';
 import { latestLandgrabWeekly } from '$lib/geo/weekly';
@@ -30,8 +32,9 @@ import type {
   FeedItem,
   Handovers,
   LandgrabData,
-  LandgrabRegion,
+  LatLonBounds,
   NextMove,
+  PlayerHexes,
   ShareRow,
 } from './types';
 
@@ -52,14 +55,33 @@ const FEED_LIMIT = 40;
  *  than a literal 19, so a re-zoom of the grid cannot leave this behind. */
 const MAX_TILE_INDEX = 2 ** TILE_ZOOM - 1;
 
-/** One dissolved component in the payload's [lat, lon] shape. Shared by the
- *  territory rings and the handover outlines, so the two cannot drift apart in
- *  rounding or in axis order. */
-const toRegion = (r: DissolvedRegion): LandgrabRegion => ({
-  t: r.tileCount,
-  outer: r.outer.map(([lon, lat]) => [round(lat), round(lon)] as [number, number]),
-  holes: r.holes.map((h) => h.map(([lon, lat]) => [round(lat), round(lon)] as [number, number])),
-});
+/**
+ * The bbox of a board, in the payload's [[south, west], [north, east]] shape.
+ *
+ * The map's "All" view is the only thing that needs it, and it is the only
+ * thing `territory` was still being shipped for once the drawing became a
+ * lattice: the browser has the hexes, but asking it to project 19,000 of them
+ * before the camera can move is a frame it does not need to spend.
+ */
+function boardBounds(hexes: readonly Hex[]): LatLonBounds | null {
+  if (!hexes.length) return null;
+  let south = Infinity;
+  let west = Infinity;
+  let north = -Infinity;
+  let east = -Infinity;
+  for (const ring of hexRings(hexes)) {
+    for (const [lat, lon] of ring) {
+      if (lat < south) south = lat;
+      if (lat > north) north = lat;
+      if (lon < west) west = lon;
+      if (lon > east) east = lon;
+    }
+  }
+  return [
+    [round(south), round(west)],
+    [round(north), round(east)],
+  ];
+}
 
 /** The trail legs a distance sum is allowed to believe, matching the gates the
  *  capture path already applies. A drive must not appear in the dangle line
@@ -117,9 +139,13 @@ export const load: PageServerLoad = async (event) => {
   const { weekAgo, cellAreaM2, ownedNow, ownedThen, visitors, players, cellsAllTime } = board;
 
   // -------------------------------------------------------------------------
-  // Cells -> painted ground. The grid is never shipped: per-cell geometry is
-  // ~12k SVG features and the renderer crawls, so each player's cells are
-  // dissolved into connected components and Chaikin-smoothed server-side.
+  // Cells -> the board.
+  //
+  // v1 and v2 hid the grid and dissolved held cells into smoothed blobs, which
+  // read as painted ground; the map is a honeycomb now, so the browser gets
+  // the lattice instead. What it does NOT get is per-cell geometry: the hexes
+  // travel as delta-packed axial integers (~4 bytes each against ~40 for a
+  // ring vertex) and the six corners are built on the client.
   // -------------------------------------------------------------------------
   const cellsBySubject = new Map<string, Tile[]>();
   const sinceBySubject = new Map<string, number>();
@@ -133,9 +159,11 @@ export const load: PageServerLoad = async (event) => {
     if (oldest === undefined || t < oldest) sinceBySubject.set(o.owner, t);
   }
 
-  const territory = [...cellsBySubject.entries()]
-    .map(([subject, tiles]) => ({ subject, regions: dissolveTiles(tiles).map(toRegion) }))
-    .sort((a, b) => b.regions.length - a.regions.length);
+  const hexBoard = resolveHexBoard(ownedNow.values());
+  const hexes: PlayerHexes[] = [...hexBoard.entries()]
+    .map(([subject, list]) => ({ subject, packed: packHexes(list) }))
+    .sort((a, b) => b.packed.length - a.packed.length);
+  const territoryBounds = boardBounds([...hexBoard.values()].flat());
 
   // -------------------------------------------------------------------------
   // Boards.
@@ -195,12 +223,14 @@ export const load: PageServerLoad = async (event) => {
   // Where to look, and what moved.
   // -------------------------------------------------------------------------
 
-  // The ground that changed hands, dissolved UNSMOOTHED. Moved ground is drawn
-  // over somebody's territory and should read as a crisp edge against it, not
-  // as a second, softer blob a reader has to line up by eye.
+  // The ground that changed hands, as hexes rather than as a dissolved
+  // silhouette. On a board the moved ground has to sit ON the lattice: an
+  // outline that cuts across hex edges reads as a drawing error rather than as
+  // an overlay. `cells` stays the count of record — it is the number the
+  // boards and the Sunday letter print, in the ledger's own unit.
   const handovers: Handovers = {
     cells: changedTiles.length,
-    regions: dissolveTiles(changedTiles, { chaikinPasses: 0 }).map(toRegion),
+    packed: packHexes(hexesForTiles(changedTiles)),
   };
 
   // The map opens on where the change was, biased home. `active` is ground
@@ -501,7 +531,8 @@ export const load: PageServerLoad = async (event) => {
     },
     filterActive,
     players,
-    territory,
+    hexes,
+    territoryBounds,
     standings,
     contested: contest,
     feed,
@@ -550,7 +581,8 @@ function emptyPayload(
       },
       filterActive: false,
       players: [],
-      territory: [],
+      hexes: [],
+      territoryBounds: null,
       standings: [],
       contested: { cells: 0, board: [] },
       feed: [],
@@ -568,7 +600,7 @@ function emptyPayload(
         changedCells: 0,
         label: 'Darlington · nothing has changed hands',
       },
-      handovers: { cells: 0, regions: [] },
+      handovers: { cells: 0, packed: [] },
       share: [],
       battlegrounds: [],
       nextMoves: [],

@@ -99,6 +99,14 @@ export class MapView {
   }
   setView(point: LatLng, zoom: number) { this.native.jumpTo({ center: lngLat(point), zoom }); return this; }
   getZoom() { return this.native.getZoom(); }
+  /** The camera's current extent, in the site's [lat, lon] order. A layer that
+   *  draws only what is on screen — the landgrab honeycomb — needs this, and
+   *  reaching past the adapter for it is how the Leaflet shape rots. */
+  getBounds() {
+    const b = this.native.getBounds();
+    if (!b) return new MapBounds([]);
+    return new MapBounds([[b.getSouth(), b.getWest()], [b.getNorth(), b.getEast()]]);
+  }
   panTo(point: LatLng, opts: Options = {}) { this.native.easeTo({ center: lngLat(point), duration: (opts.duration ?? 0.3) * 1000 }); return this; }
   flyTo(point: LatLng, zoom: number) { this.native.flyTo({ center: lngLat(point), zoom }); return this; }
   fitBounds(points: MapBounds | LatLng[], opts: Options = {}) {
@@ -212,7 +220,14 @@ export class MapLayer {
       return;
     }
     map.addSource(this.id, { type: 'geojson', data: this.data() });
-    const colour = this.opts.color?.startsWith('var(') ? getComputedStyle(map.getContainer()).getPropertyValue('--accent').trim() || '#c4570a' : this.opts.color ?? '#c4570a';
+    // `var(--name)` and `var(--name, fallback)` both resolve the property they
+    // actually name, against the map container. This used to read `--accent`
+    // whatever was inside the parentheses, which was fine while `--accent` was
+    // the only one anybody asked for.
+    const cssVar = this.opts.color?.startsWith('var(')
+      ? getComputedStyle(map.getContainer()).getPropertyValue(this.opts.color.slice(4, -1).split(',')[0].trim()).trim()
+      : '';
+    const colour = this.opts.color?.startsWith('var(') ? cssVar || '#c4570a' : this.opts.color ?? '#c4570a';
     if ((this.kind === 'polygon' || this.kind === 'collection') && this.opts.fill !== false) {
       const paint: any = { 'fill-color': this.opts.fillColor ?? colour, 'fill-opacity': this.opts.fillOpacity ?? 0.2 };
       if (this.opts.hatch) {

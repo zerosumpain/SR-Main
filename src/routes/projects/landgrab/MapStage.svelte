@@ -9,6 +9,11 @@
    * The frame is `SegmentGround`'s: 2px `--card-border`, 12px of padding, a head
    * row naming the basemap, and a key underneath. The map is the one panel on
    * this page that is a picture, and it is framed like one.
+   *
+   * The picture is a BOARD as of 2026-09-12: a fixed honeycomb over everything,
+   * coloured where somebody holds it. The key still counts cells, because a
+   * cell is what the ledger, the boards and the Sunday letter all count — and a
+   * hex is one cell of ground by construction.
    */
   import TerritoryMap from './TerritoryMap.svelte';
   import Swatch from './Swatch.svelte';
@@ -48,7 +53,7 @@
   const VIEWS = [
     { key: 'changed', label: 'Changed', hint: 'Fit where the ground moved' },
     { key: 'home', label: 'Home', hint: 'Fit the Darlington box' },
-    { key: 'all', label: 'All', hint: 'Fit every territory' },
+    { key: 'all', label: 'All', hint: 'Fit every held hex' },
   ] as const;
 
   const roster = $derived(lg.players.filter((p) => lg.available.subjects.includes(p.subject)));
@@ -133,16 +138,16 @@
 
   <div class="lg-frame">
     <div class="lg-frame-head">
-      <p class="lg-frame-label">Territory · light basemap</p>
+      <p class="lg-frame-label">The board · light basemap</p>
       <p class="lg-frame-meta">{lg.focus.label} · {windowShort(lg.window.key)}</p>
     </div>
 
     <div class="lg-frame-map">
       <TerritoryMap
-        territory={lg.territory}
+        hexes={lg.hexes}
         handovers={lg.handovers}
+        territoryBounds={lg.territoryBounds}
         players={lg.players}
-        cellAreaM2={lg.cellAreaM2}
         focus={lg.focus}
         {view}
         isolate={shown}
@@ -181,6 +186,13 @@
           </button>
         </li>
       {/each}
+      <li class="lg-key-open">
+        <svg class="lg-key-hex" viewBox="0 0 14 16" aria-hidden="true">
+          <polygon points="12.93,4.5 12.93,11.5 7,15 1.07,11.5 1.07,4.5 7,1" />
+        </svg>
+        Unclaimed
+        <span class="lg-key-v">nobody has been</span>
+      </li>
       <li class="lg-key-changed">
         <span class="lg-key-dash" aria-hidden="true"></span>
         Changed hands
@@ -408,6 +420,17 @@
     border: 2px dashed var(--accent);
     border-radius: var(--radius-sharp);
     flex: 0 0 auto;
+  }
+  /* The empty board's own swatch. Without it the honeycomb reads as basemap
+     furniture rather than as ground nobody has taken. */
+  .lg-key-hex {
+    display: block;
+    width: 14px;
+    height: 16px;
+    flex: 0 0 auto;
+    fill: none;
+    stroke: var(--line-strong);
+    stroke-width: 1.4;
   }
   .lg-key-none {
     color: var(--accent);

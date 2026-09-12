@@ -24,8 +24,8 @@
 //
 // THE MAP'S OWN ASSERTIONS ARE CONDITIONAL, and honestly so. `data-lg-sources`
 // is seeded "0" in the markup and only counts up once GL has added a layer per
-// player holding ground plus the pulse layer, so on a box with no Mapbox token
-// it stays "0" for the whole run. "0" therefore means "the map did not draw",
+// player holding ground, plus the unclaimed mesh and the pulse layer, so on a
+// box with no Mapbox token it stays "0" for the whole run. "0" therefore means "the map did not draw",
 // not "the map drew nothing" — it is reported as skipped at the end rather
 // than asserted, because asserting it would turn a missing credential into a
 // layout failure.
@@ -85,16 +85,28 @@ try {
       assert.equal(await page.locator('.lg-frame').count(), 1, 'the map frame');
       assert.equal(await page.locator('.lg-view button').count(), 3, 'the three view buttons');
       assert.ok((await page.locator('.lg-key li').count()) >= 1, 'the key');
+      // The board's own swatch. It is markup, not WebGL, so unlike the source
+      // count below it is asserted unconditionally.
+      assert.equal(await page.locator('.lg-key-hex').count(), 1, 'the unclaimed swatch');
       // Between one and five, never exactly five: four of the household's seats
       // are still open, so a hard 5 would fail on the real ledger.
       const seats = await page.locator('.lg-share-seg').count();
       assert.ok(seats >= 1 && seats <= 5, `share segments: ${seats}`);
-      // Sources = one layer per player HOLDING ground, plus the pulse layer.
-      // Five players and the pulse is the ceiling, so `<= 6` — never `== 6`.
+      // Sources = one layer per player HOLDING ground, plus the unclaimed mesh
+      // and the pulse. Five players, the mesh and the pulse is the ceiling, so
+      // `<= 7` — never `== 7`.
       const sources = await page.locator('.lg-map').getAttribute('data-lg-sources');
       if (sources === null) skipped.push('no .lg-map in the page at all');
       else if (sources === '0') skipped.push('map did not draw (no Mapbox token) — sources not asserted');
-      else assert.ok(Number(sources) <= 6, `map sources: ${sources}`);
+      else assert.ok(Number(sources) <= 7, `map sources: ${sources}`);
+      // The unclaimed honeycomb, generated for whatever viewport the camera
+      // settled on. Zero is a legitimate answer — the fit may have landed
+      // below the mesh's zoom floor, or wider than its budget — so this checks
+      // the ceiling the budget promises rather than that anything was drawn.
+      const meshed = await page.locator('.lg-map').getAttribute('data-lg-mesh');
+      if (meshed === null) skipped.push('no mesh attribute — the map never mounted');
+      else if (meshed === '0') skipped.push('mesh not drawn at the fitted zoom — count not asserted');
+      else assert.ok(Number(meshed) <= 6000, `unclaimed mesh hexes: ${meshed}`);
     }
 
     // The open seat's name, on the two widths it broke at. It is one line of
@@ -151,7 +163,7 @@ try {
     console.error('LAYOUT PROBLEMS:\n  ' + problems.join('\n  '));
     process.exitCode = 1;
   } else {
-    console.log(`PASS: nothing escapes the viewport at ${WIDTHS.join('/')}px; ink cover, five section heads, map frame + 3 views + key, 1–5 share segments, the open seat's name on one line at 360/390, the drill opens on ?geo=, owner-only card on /projects`);
+    console.log(`PASS: nothing escapes the viewport at ${WIDTHS.join('/')}px; ink cover, five section heads, map frame + 3 views + key + unclaimed swatch, 1–5 share segments, the open seat's name on one line at 360/390, the drill opens on ?geo=, owner-only card on /projects`);
   }
   console.log(
     skipped.length ? `SKIPPED: ${skipped.join('; ')}` : 'SKIPPED: nothing — every assertion ran',
