@@ -44,12 +44,18 @@ import {
 const MAX_PEERS = 250;
 
 /**
- * The cohort, memoised per (type, window-end).
+ * The cohort, memoised per (type, window, window-end).
  *
- * Every activity in a given day's list shares a cohort, so a reader working
- * through a week of runs pays for the heart-rate scan once. The key carries the
- * window end because two outings on different days have genuinely different
- * cohorts — a memo keyed on type alone would hand August's runs June's peers.
+ * Keyed on the outing's own start rather than on the type alone, because two
+ * outings have genuinely different cohorts — a memo keyed on type would hand
+ * August's runs June's peers. That makes it effectively per-activity, which is
+ * still worth having: a reader who opens an outing, walks its header and comes
+ * back to it pays for the heart-rate scan once, and the drill's own links go
+ * straight back to pages whose cohort is already warm.
+ *
+ * The scan itself is small. Measured on production, ninety days of walks is 85
+ * heart-rate series totalling 52 kB of JSON — they are downsampled at ingest,
+ * so this is nothing like the 90-day all-types pull the dashboard makes.
  */
 const MEMO_TTL_MS = 5 * 60 * 1000;
 const memo = new Map<string, { at: number; value: Promise<PeerSet> }>();
