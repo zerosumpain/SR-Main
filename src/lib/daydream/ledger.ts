@@ -949,6 +949,11 @@ export async function loadMoney() {
 export async function loadDiscoveries() {
   const { loadBoard } = await import('./hypotheses/store');
   const { daydreamDigests, daydreamLeads } = await import('$lib/db/schema');
+  // Deferred like the two above rather than imported at the top: digest/weekly
+  // is a WRITER, and pulling its seven-table schema surface into the static
+  // graph of a page-load reader for the sake of one string constant is a cost
+  // every other caller of this module would pay.
+  const { WEEKLY_SUBJECT } = await import('./digest/weekly');
 
   const [board, digests, leads, sweep] = await Promise.all([
     // null = every person. The board is the one home for questions now; the
@@ -970,6 +975,14 @@ export async function loadDiscoveries() {
         stats: daydreamDigests.stats,
       })
       .from(daydreamDigests)
+      // THIS page's two subjects, named. `daydream_digests` is a shared table
+      // and Landgrab's Sunday letter writes 'landgrab-weekly' into it; without
+      // this clause a territory report would be rendered here as a daydream
+      // card, which is a different feature reporting a different engine. An
+      // allow-list rather than a "not landgrab" exclusion, so the next stream
+      // to take a subject on this table appears nowhere until somebody decides
+      // it should.
+      .where(inArray(daydreamDigests.subject, [DEFAULT_SUBJECT, WEEKLY_SUBJECT]))
       .orderBy(desc(daydreamDigests.day))
       .limit(14),
     db
