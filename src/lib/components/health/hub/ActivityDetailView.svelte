@@ -1,25 +1,33 @@
 <script lang="ts">
-  // The owner's /health/activities/[id] — nine sections read top to bottom.
+  // The owner's /health/activities/[id] — eight sections read top to bottom.
   //
-  //   01  Header       what it was, when, and twelve figures
-  //   02  Excellent    every highlight this outing earned, best first
-  //   03  Route        the trace, coloured by pace
-  //   04  Traces       elevation, heart rate, cadence
-  //   05  Zones        where the effort actually sat
-  //   06  Effort       recovery, decoupling, and the same-sport medians
-  //   07  Splits       per kilometre, trailing split reported
-  //   08  Segments     the known ground it crossed, and where it placed
-  //   09  Provenance   whose numbers these are
+  //   01  Header       what it was, when, and twelve figures — each one openable
+  //                    against its ninety-day cohort
+  //   02  Excellent    every highlight this outing earned, best placing first
+  //   03  Ground       the trace and the three series under it, on ONE cursor
+  //   04  Zones        where the effort actually sat
+  //   05  Effort       recovery, decoupling, and the same-sport medians
+  //   06  Splits       per kilometre, trailing split reported
+  //   07  Segments     the known ground it crossed, and where it placed
+  //   08  Provenance   whose numbers these are
   //
   // EVERY SECTION IS CONDITIONAL and each collapses whole. A walk with no
   // heart-rate window has no zones, no recovery curve and no decoupling, so
-  // sections 05 and 06 do not render — not as empty frames with em dashes in
-  // them, which is the failure mode a fixed nine-section layout invites. The
-  // sections that always exist are the header and provenance.
+  // sections 04 and 05 do not render — not as empty frames with em dashes in
+  // them, which is the failure mode a fixed layout invites. The sections that
+  // always exist are the header and provenance.
+  //
+  // THE MAP AND THE TRACES ARE ONE SECTION, not two. They were separate bands
+  // until hovering a trace started dropping a dot on the route: the map was a
+  // screen and a half above the chart, so the answer to "where was I" was drawn
+  // somewhere the reader could not see. One band puts the route and the first
+  // trace on screen together, and the cursor is SHARED — hover the heart rate
+  // and the elevation lights at the same instant, because both are resolved
+  // through the GPS track rather than through each other's axis.
   //
   // Nothing is re-derived that the loader already decided: ranks, EF, the
-  // effective type, the highlight corpus, the splits and every physiological
-  // figure arrive computed. What happens here is layout.
+  // effective type, the highlight corpus, the splits, the cohort and every
+  // physiological figure arrive computed. What happens here is layout.
   import HealthShell from './HealthShell.svelte';
   import ActivityHero from './ActivityHero.svelte';
   import ActivityZones from './ActivityZones.svelte';
@@ -27,18 +35,25 @@
   import ActivitySplits from './ActivitySplits.svelte';
   import ActivitySegments from './ActivitySegments.svelte';
   import TraceChart from './TraceChart.svelte';
+  import PeerPeek from './PeerPeek.svelte';
+  import PeerDrill from './PeerDrill.svelte';
   import TrackMap from '$lib/components/trails/TrackMap.svelte';
   import ActivityCorrections from '$lib/components/health/ActivityCorrections.svelte';
   import MethodologyDrawer from '$lib/components/health/v2/MethodologyDrawer.svelte';
-  import { activityLabel, formatPace, isPaceSport } from '$lib/trails/format';
+  import { activityLabel, formatDuration, formatPace, isPaceSport } from '$lib/trails/format';
   import {
     distanceAxis,
+    excellenceCards,
+    interpolate,
     meanOf,
     paceRange,
     provenanceNote,
     resample,
     timeAxis,
+    trackCursorAt,
+    trackIndex,
   } from '$lib/health/activity-detail';
+  import type { PeerSet } from '$lib/health/activity-peers';
   import type { ActivityDetail } from '$lib/trails/activities-service';
   import type { ActivityPhysio } from '$lib/trails/physio-service';
   import type { ActivitySegmentRow } from '$lib/trails/segments-service';
@@ -49,9 +64,11 @@
     physio: ActivityPhysio | null;
     segments: ActivitySegmentRow[];
     highlights: Highlight[];
+    /** The ninety-day cohort behind the header. Null renders the old header. */
+    peers?: PeerSet | null;
   }
 
-  let { activity, physio, segments, highlights }: Props = $props();
+  let { activity, physio, segments, highlights, peers = null }: Props = $props();
 
   const pace = $derived(isPaceSport(activity.activityType));
 
@@ -67,16 +84,15 @@
       .toLowerCase(),
   );
 
+  // ——— 01 the cohort drill ————————————————————————————————————————
+
+  let drillKey = $state<string | null>(null);
+
   // ——— 02 excellent ————————————————————————————————————————————
 
-  const SCOPE_TONE: Record<string, string> = {
-    segment: 'seg',
-    activity: 'act',
-    environment: 'env',
-    rhythm: 'rhy',
-  };
+  const cards = $derived(excellenceCards(highlights));
 
-  // ——— 03 route ————————————————————————————————————————————————
+  // ——— 03 ground ————————————————————————————————————————————————
 
   const hasTrack = $derived(!!activity.coordinates && activity.coordinates.length > 1);
   const ramp = $derived(paceRange(activity.coordinates));
@@ -87,12 +103,9 @@
       : `${(3600 / ramp.slowSPerKm).toFixed(1)} → ${(3600 / ramp.fastSPerKm).toFixed(1)} km/h`;
   });
 
-  // ——— 04 traces ————————————————————————————————————————————————
-  //
   // A 1 Hz heart-rate series over forty minutes is ~2,400 points. Drawn whole
   // it is a solid band of ink; taking every nth sample keeps the spikes and
   // loses the shape. `resample` bucket-averages, which keeps the shape.
-
   const elevation = $derived(
     resample(
       activity.elevation.map((p) => [p.distanceM, p.elevationM] as [number, number]),
@@ -108,8 +121,61 @@
   const avgHr = $derived(meanOf(heartRate));
   const avgCadence = $derived(meanOf(cadence));
   const hasTraces = $derived(elevation.length > 1 || heartRate.length > 1 || cadence.length > 1);
+  const hasGround = $derived(hasTrack || hasTraces);
 
-  // ——— 09 provenance ————————————————————————————————————————————
+  /**
+   * The shared cursor.
+   *
+   * Two positions, not one, because the traces do not share an axis: elevation
+   * is drawn against DISTANCE and the heart-rate and cadence series against
+   * TIME, and the two are not proportional — a minute spent at a gate advances
+   * one and not the other. Both are resolved from the GPS track, which carries
+   * both for every sample it holds.
+   *
+   * Without a track there is nothing to convert through, so only the hovered
+   * chart's own axis is set and the map keeps no dot. That is honest; guessing
+   * a time from a distance at the average pace would put the dot in a place the
+   * outing never was.
+   */
+  const track = $derived(trackIndex(activity.coordinates));
+
+  let cursorDistanceM = $state<number | null>(null);
+  let cursorTimeS = $state<number | null>(null);
+  let cursorAt = $state<[number, number] | null>(null);
+
+  function moveCursor(axis: 'distance' | 'time', x: number | null) {
+    if (x == null) {
+      cursorDistanceM = null;
+      cursorTimeS = null;
+      cursorAt = null;
+      return;
+    }
+    const at = trackCursorAt(track, axis, x);
+    if (at) {
+      cursorDistanceM = at.distanceM;
+      cursorTimeS = at.timeS;
+      cursorAt = [at.lng, at.lat];
+      return;
+    }
+    cursorDistanceM = axis === 'distance' ? x : null;
+    cursorTimeS = axis === 'time' ? x : null;
+    cursorAt = null;
+  }
+
+  /** The elevation trace's own reading where the cursor crosses it. */
+  const cursorElevation = $derived(
+    cursorDistanceM == null ? null : interpolate(elevation, cursorDistanceM),
+  );
+  const cursorHr = $derived(cursorTimeS == null ? null : interpolate(heartRate, cursorTimeS));
+  const cursorCadence = $derived(
+    cursorTimeS == null ? null : interpolate(cadence, cursorTimeS),
+  );
+  const cursorKm = $derived(
+    cursorDistanceM == null ? null : `${(cursorDistanceM / 1000).toFixed(2)} km`,
+  );
+  const cursorClock = $derived(cursorTimeS == null ? null : formatDuration(cursorTimeS));
+
+  // ——— 08 provenance ————————————————————————————————————————————
 
   const provenance = $derived.by(() => {
     const cells: Array<{ key: string; label: string; value: string; sub?: string }> = [
@@ -192,126 +258,173 @@
     <ActivityCorrections activity={correctable} label="Correct" />
   {/snippet}
 
-  <ActivityHero {activity} {physio} />
+  <ActivityHero {activity} {physio} {peers} onopen={(key) => (drillKey = key)} />
 
-  {#if highlights.length}
+  {#if cards.length}
     <section class="ad-band tint ruled">
       <div class="ad-inner">
         <div class="ad-head">
           <p class="ad-kicker">What was excellent</p>
-          <p class="ad-meta">Best first · {highlights.length} of {highlights.length}</p>
+          <p class="ad-meta">Best placing first · {cards.length}</p>
         </div>
 
         <div class="ex-cards">
-          {#each highlights as highlight, i (`${highlight.kind}:${highlight.segmentId ?? ''}:${i}`)}
-            <div class="ex-card {SCOPE_TONE[highlight.scope] ?? 'act'}" class:lead={i === 0}>
-              <p class="ex-scope">{highlight.scope}</p>
-              <p class="ex-label">
-                {#if highlight.segmentId}
-                  <a href="/health/segments/{highlight.segmentId}">{highlight.label}</a>
-                {:else}{highlight.label}{/if}
-              </p>
-              {#if highlight.detail}<p class="ex-detail">{highlight.detail}</p>{/if}
-            </div>
+          {#each cards as card (card.key)}
+            {#if card.href}
+              <a
+                class="ex-card {card.medal ?? 'plain'}"
+                href={card.href}
+                title={card.segmentName ?? undefined}
+                aria-label="{card.place} · {card.label}{card.segmentName
+                  ? ` on ${card.segmentName}`
+                  : ''}"
+              >
+                <p class="ex-place">{card.place}</p>
+                <p class="ex-label">{card.label}</p>
+                <p class="ex-note">{card.note}</p>
+              </a>
+            {:else}
+              <div class="ex-card {card.medal ?? 'plain'}">
+                <p class="ex-place">{card.place}</p>
+                <p class="ex-label">{card.label}</p>
+                <p class="ex-note">{card.note}</p>
+              </div>
+            {/if}
           {/each}
         </div>
 
         <p class="ad-rule">
-          Ranks are measured over every outing on record, not the page you came from. Segment
-          placings ignore any recording taken out of segment analysis, and efficiency compares only
-          within the pace sports — a ride's sits near 4 against a run's 1.
+          Gold, silver and bronze are the placing inside each card's own comparison set, and a
+          card with a placing on known ground opens that segment. Ranks are measured over every
+          outing on record, not the page you came from. Segment placings ignore any recording
+          taken out of segment analysis, and efficiency compares only within the pace sports — a
+          ride's sits near 4 against a run's 1.
         </p>
       </div>
     </section>
   {/if}
 
-  {#if hasTrack}
+  {#if hasGround}
     <section class="ad-band ruled">
       <div class="ad-inner">
         <div class="ad-head">
-          <p class="ad-kicker">Route</p>
+          <p class="ad-kicker">Route &amp; traces</p>
           <p class="ad-meta">
-            {activity.coordinates!.length.toLocaleString('en-GB')} points · decimated at 3 m · coloured
-            by pace
+            {#if hasTrack}
+              {activity.coordinates!.length.toLocaleString('en-GB')} points · decimated at 3 m ·
+              coloured by pace
+            {:else}
+              No GPS trace · series only
+            {/if}
           </p>
         </div>
 
-        <div class="rt-card">
-          <TrackMap
-            coordinates={activity.coordinates!}
-            bounds={activity.bounds}
-            colourBy="pace"
-            height="440px"
-            legend={false}
-          />
-          <div class="rt-legend">
-            <p class="rt-legend-label">{pace ? 'Pace' : 'Speed'}</p>
-            <div class="rt-ramp" aria-hidden="true">
-              <i class="s1"></i><i class="s2"></i><i class="s3"></i><i class="s4"></i>
-            </div>
-            {#if rampLabel}<p class="rt-legend-range">{rampLabel}</p>{/if}
-          </div>
-        </div>
-      </div>
-    </section>
-  {/if}
-
-  {#if hasTraces}
-    <section class="ad-band tint ruled">
-      <div class="ad-inner">
-        <p class="ad-kicker solo">Traces</p>
-
-        <div class="tr-stack">
-          {#if elevation.length > 1}
-            <div class="tr-card">
-              <div class="tr-head">
-                <p class="tr-label">Elevation</p>
-                <p class="tr-meta">Against distance</p>
+        {#if hasTrack}
+          <div class="rt-card">
+            <TrackMap
+              coordinates={activity.coordinates!}
+              bounds={activity.bounds}
+              colourBy="pace"
+              height="420px"
+              legend={false}
+              cursor={cursorAt}
+            />
+            <div class="rt-legend">
+              <p class="rt-legend-label">{pace ? 'Pace' : 'Speed'}</p>
+              <div class="rt-ramp" aria-hidden="true">
+                <i class="s1"></i><i class="s2"></i><i class="s3"></i><i class="s4"></i>
               </div>
-              <TraceChart
-                points={elevation}
-                label="Elevation against distance"
-                fill
-                yFormat={(v) => `${Math.round(v)} m`}
-                xLabels={distanceAxis(elevation)}
-              />
-            </div>
-          {/if}
-
-          {#if heartRate.length > 1}
-            <div class="tr-card">
-              <div class="tr-head">
-                <p class="tr-label">Heart rate</p>
-                <p class="tr-meta">Against time · 1 Hz series</p>
-              </div>
-              <TraceChart
-                points={heartRate}
-                label="Heart rate against time"
-                xLabels={timeAxis(heartRate)}
-                average={avgHr}
-                averageLabel={avgHr == null ? null : `Avg ${Math.round(avgHr)}`}
-              />
-            </div>
-          {/if}
-
-          {#if cadence.length > 1}
-            <div class="tr-card">
-              <div class="tr-head">
-                <p class="tr-label">Cadence</p>
-                <p class="tr-meta">
-                  {avgCadence == null ? 'Against time' : `Avg ${Math.round(avgCadence)} spm`}
+              {#if rampLabel}<p class="rt-legend-range">{rampLabel}</p>{/if}
+              {#if hasTraces}
+                <p class="rt-legend-cursor" class:on={!!cursorAt}>
+                  {#if cursorAt}
+                    On the route at {cursorKm} · {cursorClock}
+                  {:else}
+                    Hover a trace to place it on the route
+                  {/if}
                 </p>
-              </div>
-              <TraceChart
-                points={cadence}
-                label="Cadence against time"
-                gridlines={2}
-                colour="var(--text-muted)"
-                xLabels={timeAxis(cadence).filter((_, i) => i !== 1)}
-              />
+              {/if}
             </div>
-          {/if}
-        </div>
+          </div>
+        {/if}
+
+        {#if hasTraces}
+          <div class="tr-stack" class:under={hasTrack}>
+            {#if elevation.length > 1}
+              <div class="tr-card">
+                <div class="tr-head">
+                  <p class="tr-label">Elevation</p>
+                  <p class="tr-meta" class:live={cursorElevation != null}>
+                    {#if cursorElevation != null}
+                      {cursorKm} · {Math.round(cursorElevation)} m
+                    {:else}
+                      Against distance
+                    {/if}
+                  </p>
+                </div>
+                <TraceChart
+                  points={elevation}
+                  label="Elevation against distance"
+                  fill
+                  yFormat={(v) => `${Math.round(v)} m`}
+                  xLabels={distanceAxis(elevation)}
+                  cursorX={cursorDistanceM}
+                  oncursor={(x) => moveCursor('distance', x)}
+                />
+              </div>
+            {/if}
+
+            {#if heartRate.length > 1}
+              <div class="tr-card">
+                <div class="tr-head">
+                  <p class="tr-label">Heart rate</p>
+                  <p class="tr-meta" class:live={cursorHr != null}>
+                    {#if cursorHr != null}
+                      {cursorClock} · {Math.round(cursorHr)} bpm
+                    {:else}
+                      Against time · 1 Hz series
+                    {/if}
+                  </p>
+                </div>
+                <TraceChart
+                  points={heartRate}
+                  label="Heart rate against time"
+                  xLabels={timeAxis(heartRate)}
+                  average={avgHr}
+                  averageLabel={avgHr == null ? null : `Avg ${Math.round(avgHr)}`}
+                  cursorX={cursorTimeS}
+                  oncursor={(x) => moveCursor('time', x)}
+                />
+              </div>
+            {/if}
+
+            {#if cadence.length > 1}
+              <div class="tr-card">
+                <div class="tr-head">
+                  <p class="tr-label">Cadence</p>
+                  <p class="tr-meta" class:live={cursorCadence != null}>
+                    {#if cursorCadence != null}
+                      {cursorClock} · {Math.round(cursorCadence)} spm
+                    {:else if avgCadence == null}
+                      Against time
+                    {:else}
+                      Avg {Math.round(avgCadence)} spm
+                    {/if}
+                  </p>
+                </div>
+                <TraceChart
+                  points={cadence}
+                  label="Cadence against time"
+                  gridlines={2}
+                  colour="var(--text-muted)"
+                  xLabels={timeAxis(cadence).filter((_, i) => i !== 1)}
+                  cursorX={cursorTimeS}
+                  oncursor={(x) => moveCursor('time', x)}
+                />
+              </div>
+            {/if}
+          </div>
+        {/if}
       </div>
     </section>
   {/if}
@@ -346,6 +459,17 @@
     </div>
   </section>
 </HealthShell>
+
+<!-- Mounted ONCE for the whole page: the header has twelve figures, and a card
+     per cell would be twelve idle popovers. -->
+<PeerPeek {peers} paceSport={pace} onopen={(key) => (drillKey = key)} />
+<PeerDrill
+  metricKey={drillKey}
+  {peers}
+  paceSport={pace}
+  onclose={() => (drillKey = null)}
+  onopen={(key) => (drillKey = key)}
+/>
 
 <MethodologyDrawer open={drawerOpen} focusId={drawerFocus} onclose={() => (drawerOpen = false)} />
 
@@ -402,76 +526,114 @@
     margin: 20px 0 0;
   }
 
-  /* ——— 02 excellent ——— */
-
+  /* ——— 02 excellent ———
+   *
+   * A UNIFORM GRID, not a wrapping row of self-sized boxes. The old cards were
+   * `flex-wrap` with a 380px cap and each one took the width of the sentence
+   * inside it, so a section with five highlights drew five different cards. The
+   * long thing in each was the segment's name; that has moved to the card's
+   * destination, which is what let the rest become a fixed track. */
   .ex-cards {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    gap: 10px;
   }
   .ex-card {
-    border: 1px solid color-mix(in srgb, var(--text-primary) 25%, transparent);
+    display: flex;
+    flex-direction: column;
+    min-height: 116px;
+    border: 1px solid var(--card-border);
     border-radius: 0;
-    padding: 14px 18px;
-    max-width: 380px;
+    background: var(--bg);
+    padding: 12px 14px;
     min-width: 0;
-  }
-  /* Scope decides how loud, not a colour key nobody reads: a segment placing
-     is the achievement, environment and rhythm are context. */
-  .ex-card.seg {
-    border-color: var(--accent-tint-50);
-  }
-  .ex-card.rhy {
-    border-color: var(--good-line);
-  }
-  /* Best first, and the best one says so with 2px and a tint. */
-  .ex-card.lead {
-    border: 2px solid var(--accent);
-    background: var(--accent-tint-08);
+    text-decoration: none;
+    color: inherit;
   }
 
-  .ex-scope {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--text-muted);
+  /* The podium. A fill and a border, never the only signal — the placing is
+     printed on every card that wears one. */
+  .ex-card.gold {
+    background: var(--medal-gold-bg);
+    border: 2px solid var(--medal-gold-line);
+  }
+  .ex-card.silver {
+    background: var(--medal-silver-bg);
+    border: 2px solid var(--medal-silver-line);
+  }
+  .ex-card.bronze {
+    background: var(--medal-bronze-bg);
+    border: 2px solid var(--medal-bronze-line);
+  }
+
+  .ex-place {
+    font-family: var(--font-display);
+    font-size: 21px;
+    line-height: 0.95;
+    letter-spacing: -0.02em;
+    color: var(--text-ghost);
     margin: 0 0 8px;
   }
-  .ex-card.seg .ex-scope,
-  .ex-card.lead .ex-scope {
-    color: var(--accent);
+  .ex-card.gold .ex-place {
+    color: var(--medal-gold);
   }
-  .ex-card.rhy .ex-scope {
-    color: var(--good);
+  .ex-card.silver .ex-place {
+    color: var(--medal-silver);
+  }
+  .ex-card.bronze .ex-place {
+    color: var(--medal-bronze);
   }
 
   .ex-label {
-    font-size: var(--fs-body-sm);
-    line-height: 1.4;
-    font-weight: 500;
-    margin: 0;
-    overflow-wrap: anywhere;
-  }
-  .ex-label a {
-    color: var(--accent);
-    text-decoration: none;
-    transition: color 0.2s ease-out;
-  }
-  .ex-label a:hover {
-    color: var(--accent-hover);
-  }
-  .ex-detail {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
-    line-height: 1.5;
-    color: var(--text-muted);
-    margin: 6px 0 0;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-primary);
+    line-height: 1.35;
+    margin: 0 0 6px;
     overflow-wrap: anywhere;
   }
+  .ex-note {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    line-height: 1.45;
+    color: var(--text-muted);
+    margin: 0;
+    overflow-wrap: anywhere;
+    /* Two lines, so one verbose highlight cannot set the height of the row. */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+  }
 
-  /* ——— 03 route ——— */
+  /* Only the linked cards move; a plain card is a statement, not a control. */
+  a.ex-card {
+    transition:
+      border-color 0.16s ease-out,
+      transform 0.16s ease-out;
+  }
+  a.ex-card::after {
+    content: '→';
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-ghost);
+    margin-top: auto;
+    padding-top: 8px;
+  }
+  a.ex-card:hover,
+  a.ex-card:focus-visible {
+    border-color: var(--accent);
+  }
+  a.ex-card:hover::after,
+  a.ex-card:focus-visible::after {
+    color: var(--accent);
+  }
+
+  /* ——— 03 ground ——— */
 
   .rt-card {
     border: 2px solid var(--card-border);
@@ -487,13 +649,23 @@
     padding: 14px 6px 4px;
   }
   .rt-legend-label,
-  .rt-legend-range {
+  .rt-legend-range,
+  .rt-legend-cursor {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--text-muted);
     margin: 0;
+  }
+  /* Holds its place whether or not a cursor is live, so the legend row cannot
+     reflow under the pointer. */
+  .rt-legend-cursor {
+    margin-left: auto;
+    color: var(--text-ghost);
+  }
+  .rt-legend-cursor.on {
+    color: var(--accent);
   }
   .rt-ramp {
     display: flex;
@@ -519,12 +691,13 @@
     background: var(--accent);
   }
 
-  /* ——— 04 traces ——— */
-
   .tr-stack {
     display: flex;
     flex-direction: column;
     gap: 18px;
+  }
+  .tr-stack.under {
+    margin-top: 18px;
   }
   .tr-card {
     border: 1px solid var(--card-border);
@@ -557,8 +730,13 @@
     color: var(--text-ghost);
     margin: 0;
   }
+  /* The readout under the pointer. Lit, because it is a live value and the
+     label beside it is not. */
+  .tr-meta.live {
+    color: var(--accent);
+  }
 
-  /* ——— 09 provenance ——— */
+  /* ——— 08 provenance ——— */
 
   .pv-grid {
     display: grid;

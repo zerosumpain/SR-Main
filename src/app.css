@@ -146,6 +146,26 @@
      it is referenced not hard-coded. Chrome only (dots/badges), never a CTA. */
   --wa-green: #25d366;
 
+  /* Podium — a placing of 1st, 2nd or 3rd, wherever one is shown.
+   *
+   * Warm-family and LOW CHROMA on purpose. The accent is the site's only loud
+   * colour and a grid of medals would out-shout it; these are a fill behind
+   * type, with the ink darkened until it clears 4.5:1 on its own tint (gold
+   * 4.9, silver 5.3, bronze 5.0 — measured, not eyeballed).
+   *
+   * COLOUR IS NEVER THE ONLY CHANNEL here: every card that wears one also
+   * prints "1st" / "2nd" / "3rd", which is what makes three warm browns a legal
+   * encoding rather than a colourblind trap. */
+  --medal-gold: #6b5413;
+  --medal-gold-bg: rgba(176, 137, 42, 0.18);
+  --medal-gold-line: rgba(176, 137, 42, 0.6);
+  --medal-silver: #55514a;
+  --medal-silver-bg: rgba(110, 104, 94, 0.14);
+  --medal-silver-line: rgba(110, 104, 94, 0.5);
+  --medal-bronze: #7a4820;
+  --medal-bronze-bg: rgba(150, 97, 58, 0.16);
+  --medal-bronze-line: rgba(150, 97, 58, 0.55);
+
   --font-display: 'Archivo Black', Impact, sans-serif;
   --font-brand: 'DM Mono', ui-monospace, monospace;
   --font-body: 'DM Sans', system-ui, sans-serif;
@@ -1316,6 +1336,19 @@ html[data-reading-theme='night'] {
   --success: #5eb36c;
   --warn: #d4ab4a;
   --error: #e06a6a;
+
+  /* The podium, relit. The paper inks are dark browns and vanish into the night
+     ground, so each one lifts to the lightness this ground needs — same hues,
+     same job as --accent → its own night value above. */
+  --medal-gold: #d8b256;
+  --medal-gold-bg: rgba(216, 178, 86, 0.14);
+  --medal-gold-line: rgba(216, 178, 86, 0.45);
+  --medal-silver: #b4ada1;
+  --medal-silver-bg: rgba(180, 173, 161, 0.12);
+  --medal-silver-line: rgba(180, 173, 161, 0.4);
+  --medal-bronze: #cd8d5c;
+  --medal-bronze-bg: rgba(205, 141, 92, 0.14);
+  --medal-bronze-line: rgba(205, 141, 92, 0.45);
 }
 
 /* The grain is a paper texture. On the night ground it reads as noise on a

@@ -4,6 +4,8 @@ import { getActivity } from '$lib/trails/activities-service';
 import { getActivityPhysio } from '$lib/trails/physio-service';
 import { getHighlightCorpus, type Highlight } from '$lib/trails/highlights-service';
 import { getActivitySegments } from '$lib/trails/segments-service';
+import { getActivityPeers } from '$lib/trails/peers-service';
+import type { PeerSet } from '$lib/health/activity-peers';
 
 export const load: PageServerLoad = async ({ params }) => {
   const activity = await getActivity(params.id);
@@ -23,6 +25,15 @@ export const load: PageServerLoad = async ({ params }) => {
     segments = await getActivitySegments(activity.id);
   } catch (err) {
     console.warn('[trails] segment lookup failed:', (err as Error)?.message);
+  }
+  // The ninety-day cohort every header figure is placed against. Enrichment
+  // like the rest: without it the header is the header it has always been, so a
+  // failure here costs the hover cards and nothing else.
+  let peers: PeerSet | null = null;
+  try {
+    peers = await getActivityPeers(activity);
+  } catch (err) {
+    console.warn('[trails] peer cohort failed:', (err as Error)?.message);
   }
   // The list page ships one highlight per row; a detail page gets the whole
   // ordered set, because this is the one place there is room to read it. Same
@@ -48,5 +59,8 @@ export const load: PageServerLoad = async ({ params }) => {
   //     rankedByEfficiencyOf beside them, so "3rd of 4" can never print as
   //     "3rd of 19".
   //   highlights — the whole ordered set for this outing, best first.
-  return { activity, physio, segments, highlights };
+  //   peers   — the same-sport cohort from the ninety days ENDING ON THIS
+  //     OUTING'S OWN DAY, as one row per activity plus a value per header
+  //     metric. Never the heart-rate series those values were computed from.
+  return { activity, physio, segments, highlights, peers };
 };

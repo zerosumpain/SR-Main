@@ -28,6 +28,18 @@
     average?: number | null;
     averageLabel?: string | null;
     label: string;
+    /**
+     * A crosshair at this x, in the chart's OWN x units — metres for the
+     * elevation trace, seconds for the time ones. Null draws nothing.
+     *
+     * Opt-in, and driven from outside rather than held here, because the three
+     * traces on an activity share ONE cursor: the page converts between their
+     * axes through the GPS track and hands each chart the x it should mark. A
+     * chart that owned its own cursor could only ever light itself.
+     */
+    cursorX?: number | null;
+    /** Pointer moved over the plot, reporting x in the chart's own units. */
+    oncursor?: (x: number | null) => void;
   }
 
   let {
@@ -40,6 +52,8 @@
     average = null,
     averageLabel = null,
     label,
+    cursorX = null,
+    oncursor,
   }: Props = $props();
 
   const W = 600;
@@ -97,6 +111,48 @@
 
   const avgY = $derived(average != null && Number.isFinite(average) ? y(average) : null);
 
+  // ——— the shared cursor ————————————————————————————————————————
+  //
+  // The viewBox is `-42 -10 654 BOX_H`, so the plot's x = 0 sits 42 user units
+  // in from the box's left edge. Converting a pointer position to a value means
+  // going through that offset — reading the ratio off the element's width alone
+  // puts the crosshair 42 units adrift, which at a 1,250px render is 80 pixels.
+  const VIEW_W = 654;
+  const VIEW_X = -42;
+
+  let svgEl: SVGSVGElement | null = $state(null);
+
+  const cursorPx = $derived.by(() => {
+    if (cursorX == null || !(xSpan > 0) || plotted.length < 2) return null;
+    const t = (cursorX - points[0][0]) / xSpan;
+    if (!(t >= -0.001 && t <= 1.001)) return null;
+    return Math.min(W, Math.max(0, t * W));
+  });
+
+  /** The trace's own y where the cursor crosses it, interpolated. */
+  const cursorY = $derived.by(() => {
+    const px = cursorPx;
+    if (px == null || plotted.length < 2) return null;
+    for (let i = 1; i < plotted.length; i++) {
+      const [x0, y0] = plotted[i - 1];
+      const [x1, y1] = plotted[i];
+      if (px <= x1) {
+        const span = x1 - x0;
+        return span > 0 ? y0 + ((px - x0) / span) * (y1 - y0) : y1;
+      }
+    }
+    return plotted[plotted.length - 1][1];
+  });
+
+  function report(e: PointerEvent) {
+    if (!oncursor || !svgEl || !(xSpan > 0)) return;
+    const rect = svgEl.getBoundingClientRect();
+    if (!(rect.width > 0)) return;
+    const ux = ((e.clientX - rect.left) / rect.width) * VIEW_W + VIEW_X;
+    const t = Math.min(1, Math.max(0, ux / W));
+    oncursor(points[0][0] + t * xSpan);
+  }
+
   /** Start, middle, end — a two-label axis skips the middle. */
   const xTicks = $derived.by(() => {
     if (xLabels.length === 3) {
@@ -117,7 +173,17 @@
 </script>
 
 {#if plotted.length > 1}
-  <svg class="tc" viewBox="-42 -10 654 {BOX_H}" role="img" aria-label={label}>
+  <svg
+    bind:this={svgEl}
+    class="tc"
+    class:live={!!oncursor}
+    viewBox="-42 -10 654 {BOX_H}"
+    role="img"
+    aria-label={label}
+    onpointermove={report}
+    onpointerdown={report}
+    onpointerleave={() => oncursor?.(null)}
+  >
     {#each yTicks as tick, i (i)}
       <line
         class="grid"
@@ -142,6 +208,13 @@
     {/if}
 
     <polyline class="tc-line" points={line} style="stroke: {colour}" />
+
+    {#if cursorPx != null}
+      <line class="tc-cursor" x1={cursorPx} y1={TOP - 5} x2={cursorPx} y2={FLOOR} />
+      {#if cursorY != null}
+        <circle class="tc-cursor-dot" cx={cursorPx} cy={cursorY} r="3.5" />
+      {/if}
+    {/if}
 
     {#each xTicks as tick, i (i)}
       <text class="tc-tick" x={tick.x} y={AXIS_Y} text-anchor={tick.anchor}>{tick.text}</text>
@@ -196,6 +269,28 @@
   .tc-avg-label {
     fill: var(--text-muted);
     text-transform: uppercase;
+  }
+
+  /* The crosshair. A hairline and a dot, in the accent, so it reads as a
+     POINTER over the trace rather than as another series on it. */
+  .tc-cursor {
+    stroke: var(--accent);
+    stroke-width: 1;
+    opacity: 0.65;
+    pointer-events: none;
+  }
+  .tc-cursor-dot {
+    fill: var(--accent);
+    stroke: var(--bg);
+    stroke-width: 1.4;
+    pointer-events: none;
+  }
+
+  .tc.live {
+    cursor: crosshair;
+    /* A pointer that has to hit a 2px line would never find it. The whole plot
+       is the target; the x is what is being read, not the y. */
+    touch-action: pan-y;
   }
 
   .tc-empty {

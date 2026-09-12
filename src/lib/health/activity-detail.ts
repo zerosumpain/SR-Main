@@ -640,3 +640,220 @@ export function meanOf(points: Array<[number, number]>): number | null {
   for (const p of points) sum += p[1];
   return sum / points.length;
 }
+
+// ——— what was excellent ——————————————————————————————————————————
+//
+// The corpus hands back a ranked list of prose highlights; the section draws
+// small uniform cards. Three things have to happen between the two, and all of
+// them are decisions rather than formatting, which is why they are here and not
+// in the template:
+//
+//  * THE PLACING IS THE CARD. A highlight's own label carries its ordinal —
+//    "2nd fastest", "3rd longest" — and printing that beside a medal reading
+//    "2nd" says the same thing twice in a card three lines tall. The ordinal
+//    comes off the label and becomes the card's own figure.
+//  * THE SEGMENT NAME COMES OFF THE FACE AND BECOMES THE DESTINATION. Every
+//    segment-scoped detail opens with the segment's name, which is the longest
+//    thing on the card and the reason the old ones could not be a uniform size.
+//    The card links there instead, and the name stays in the title and the
+//    accessible name so nothing is actually lost.
+//  * ORDER IS BY PLACING, BEST FIRST. The corpus orders by WEIGHT, which mixes
+//    kinds — a segment PB outranks a 2nd-fastest on a different segment, which
+//    is right for picking ONE badge for a list row and wrong for a grid that
+//    reads as a podium.
+
+export type Medal = 'gold' | 'silver' | 'bronze';
+
+export interface ExcellenceCard {
+  key: string;
+  /** 1-based placing in its own comparison set, or null for the unranked kinds. */
+  rank: number | null;
+  outOf: number | null;
+  /** Only the top three, and only where there IS a placing. */
+  medal: Medal | null;
+  /** `1st` / `2nd` / `—`. */
+  place: string;
+  /** The achievement with its ordinal removed: "Segment PB", "Fastest". */
+  label: string;
+  /** The rest of the fact, with the segment name taken out. */
+  note: string;
+  /** Where the card goes, or null when there is nowhere to go. */
+  href: string | null;
+  /** The segment's name — the card's title and accessible name, never its face. */
+  segmentName: string | null;
+  scope: string;
+}
+
+const MEDALS: Medal[] = ['gold', 'silver', 'bronze'];
+
+/** `2nd fastest` → `Fastest`. A rank-1 label is already bespoke and is kept. */
+function withoutOrdinal(label: string): string {
+  const stripped = label.replace(/^\d+(?:st|nd|rd|th)\s+/i, '');
+  return stripped === label ? label : capitalise(stripped);
+}
+
+/**
+ * `Bishops Hill in 12:34 — best of 9 efforts` → `in 12:34 — best of 9 efforts`.
+ *
+ * Matched against the highlight's OWN `segmentName` rather than by guessing at
+ * a separator, because a segment called "Up and over" would otherwise take the
+ * first two words of its own sentence with it.
+ */
+function withoutSegmentName(detail: string, segmentName: string | null | undefined): string {
+  if (!segmentName) return detail;
+  if (!detail.startsWith(segmentName)) return detail;
+  return detail.slice(segmentName.length).replace(/^[\s—–-]+/, '');
+}
+
+export function excellenceCards(
+  highlights: Array<{
+    kind: string;
+    scope: string;
+    rank: number | null;
+    outOf: number | null;
+    label: string;
+    detail: string;
+    weight: number;
+    segmentId?: number;
+    segmentName?: string;
+  }>,
+): ExcellenceCard[] {
+  const ordered = highlights
+    .map((h, i) => ({ h, i }))
+    .sort((a, b) => {
+      const ra = a.h.rank ?? Number.POSITIVE_INFINITY;
+      const rb = b.h.rank ?? Number.POSITIVE_INFINITY;
+      if (ra !== rb) return ra - rb;
+      // Same placing on two different comparison sets: the corpus already has
+      // an opinion about which matters more, and it is the weight.
+      if (b.h.weight !== a.h.weight) return b.h.weight - a.h.weight;
+      return a.i - b.i;
+    });
+
+  return ordered.map(({ h, i }) => ({
+    key: `${h.kind}:${h.segmentId ?? ''}:${i}`,
+    rank: h.rank,
+    outOf: h.outOf,
+    medal: h.rank != null && h.rank >= 1 && h.rank <= 3 ? MEDALS[h.rank - 1] : null,
+    place: h.rank == null ? '—' : ordinalOf(h.rank),
+    label: withoutOrdinal(h.label),
+    note: withoutSegmentName(h.detail, h.segmentName),
+    href: h.segmentId != null ? `/health/segments/${h.segmentId}` : null,
+    segmentName: h.segmentName ?? null,
+    scope: h.scope,
+  }));
+}
+
+/** `2` → `2nd`. Local rather than imported so this module stays free of the corpus. */
+export function ordinalOf(n: number): string {
+  const rem100 = n % 100;
+  if (rem100 >= 11 && rem100 <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1:
+      return `${n}st`;
+    case 2:
+      return `${n}nd`;
+    case 3:
+      return `${n}rd`;
+    default:
+      return `${n}th`;
+  }
+}
+
+// ——— the trace cursor ————————————————————————————————————————————
+//
+// Hovering a trace has to answer "where was I when that happened", on a map
+// drawn from a different array with a different x axis. The elevation trace is
+// against DISTANCE and the heart-rate and cadence traces are against TIME, so
+// one shared cursor needs both axes off the one track — which the track already
+// carries: a point is `[lng, lat, elevation, secondsFromStart]`, and the
+// cumulative distance is the same running sum `elevationProfile` takes.
+//
+// Built once per activity and searched by bisection, because this runs on every
+// pointer move over a 600-unit-wide chart.
+
+export interface TrackIndex {
+  points: TrackPoint[];
+  /** Cumulative metres at each point — index-aligned with `points`. */
+  distanceM: number[];
+  /** Seconds from the start at each point. */
+  timeS: number[];
+}
+
+const EARTH_RADIUS_M = 6371008.8;
+
+/** Equirectangular step, the same approximation `paceRange` and `TrackMap` use. */
+function stepM(a: TrackPoint, b: TrackPoint): number {
+  const dLat = ((b[1] - a[1]) * Math.PI) / 180;
+  const dLng = ((b[0] - a[0]) * Math.PI) / 180;
+  const lat = ((a[1] + b[1]) / 2) * (Math.PI / 180);
+  const x = dLng * Math.cos(lat);
+  return Math.sqrt(x * x + dLat * dLat) * EARTH_RADIUS_M;
+}
+
+export function trackIndex(points: TrackPoint[] | null | undefined): TrackIndex | null {
+  if (!points || points.length < 2) return null;
+  const distanceM: number[] = new Array(points.length);
+  const timeS: number[] = new Array(points.length);
+  let total = 0;
+  for (let i = 0; i < points.length; i++) {
+    if (i > 0) total += stepM(points[i - 1], points[i]);
+    distanceM[i] = total;
+    timeS[i] = points[i][3];
+  }
+  return { points, distanceM, timeS };
+}
+
+/** Index of the last entry in an ascending array at or below `x`. */
+function bisect(values: number[], x: number): number {
+  let lo = 0;
+  let hi = values.length - 1;
+  if (x <= values[lo]) return lo;
+  if (x >= values[hi]) return hi;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (values[mid] <= x) lo = mid;
+    else hi = mid;
+  }
+  return lo;
+}
+
+export interface TrackCursor {
+  lng: number;
+  lat: number;
+  distanceM: number;
+  timeS: number;
+}
+
+/**
+ * Where the outing was at `x` on the given axis.
+ *
+ * Interpolated between the two bracketing samples rather than snapped to the
+ * nearer one: a decimated trace can be forty metres between points on a road,
+ * and a dot that jumps in forty-metre steps as the pointer slides reads as a
+ * broken cursor rather than a smooth one.
+ *
+ * A SECONDS AXIS IS NOT ALWAYS MONOTONIC IN DISTANCE and vice versa — a stop at
+ * a gate advances time and not distance — so both axes are carried out, not
+ * derived from each other.
+ */
+export function trackCursorAt(
+  index: TrackIndex | null,
+  axis: 'distance' | 'time',
+  x: number,
+): TrackCursor | null {
+  if (!index || !Number.isFinite(x)) return null;
+  const along = axis === 'distance' ? index.distanceM : index.timeS;
+  const i = bisect(along, x);
+  const j = Math.min(index.points.length - 1, i + 1);
+  const span = along[j] - along[i];
+  const t = span > 0 ? Math.min(1, Math.max(0, (x - along[i]) / span)) : 0;
+  const a = index.points[i];
+  const b = index.points[j];
+  return {
+    lng: a[0] + (b[0] - a[0]) * t,
+    lat: a[1] + (b[1] - a[1]) * t,
+    distanceM: index.distanceM[i] + (index.distanceM[j] - index.distanceM[i]) * t,
+    timeS: index.timeS[i] + (index.timeS[j] - index.timeS[i]) * t,
+  };
+}
