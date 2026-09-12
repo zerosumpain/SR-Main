@@ -266,7 +266,8 @@ export async function resolveBoard(filter: ParsedFilter, now: Date = new Date())
     // The same eight fields resolveFilteredOwnership returns. The score, the
     // runner-up and `lastEventAt` are not decoration: the cheapest-neighbour
     // board is computed from the gap between the two scores, and the focus box
-    // is fitted to the cells with an event inside the window.
+    // is fitted to the cells touched in the last seven days — a fixed clock,
+    // independent of the date window, so that "all time" has a focus too.
     const rows = await db
       .select({
         tileX: geoTileState.tileX,

@@ -15,15 +15,29 @@ import { suggestPlaceName } from '$lib/daydream/geocode';
 const PLACE_RADIUS_M = 250;
 
 /**
- * `budget.uncached` is decremented per UNCACHED geocoder call; at zero the name
- * is null and the page prints coordinates. Nominatim is one request a second
- * and a page load must not queue behind it. A cache hit costs one indexed read,
- * so it is refunded — the second load of a page names everything it named the
- * first time without spending anything.
+ * Two rations, both shared across every call of one page load.
+ *
+ * `budget.uncached` is decremented per geocoder call that actually cost a
+ * REQUEST; at zero the name is null and the page prints coordinates. Nominatim
+ * is one request a second and a page load must not queue behind it.
+ *
+ * `budget.deadline` is an epoch-ms wall clock past which no geocoder call is
+ * made at all. A count alone is not a time limit: each `suggestPlaceName`
+ * carries a 10 s HTTP timeout, so three slow misses is half a minute of a load
+ * function sitting on its hands. The places lookup below still runs past the
+ * deadline — it is one small local read, not a network hop.
+ *
+ * Two answers are refunded rather than charged, because neither made a
+ * request: a `'cache'` hit, and `'unavailable'` (no geocoder configured, or
+ * both providers failed before sending anything).
+ *
+ * Note that a refunded cache hit is the NOMINATIM path only. A Mapbox
+ * suggestion is shown and forgotten — the free-tier terms forbid storing it —
+ * so a page whose names come from Mapbox pays its three every load.
  */
 export async function nameFor(
   centre: [number, number],
-  budget: { uncached: number },
+  budget: { uncached: number; deadline?: number },
 ): Promise<string | null> {
   const [lat, lon] = centre;
   try {
@@ -63,14 +77,15 @@ export async function nameFor(
   }
 
   if (budget.uncached <= 0) return null;
+  if (budget.deadline !== undefined && Date.now() > budget.deadline) return null;
   budget.uncached -= 1;
   try {
     const s = await suggestPlaceName(lat, lon);
-    // The budget exists to ration NETWORK calls. `suggestPlaceName` caches its
-    // own answers, so a hit cost nothing and the spend is refunded — otherwise
-    // a page with a dozen named battlegrounds would go quiet after three of
-    // them for ever, even once every name was already on disk.
-    if (s.source === 'cache') budget.uncached += 1;
+    // The budget rations REQUESTS, so an answer that cost none is refunded.
+    // Otherwise a page with a dozen battlegrounds goes quiet after three of
+    // them for ever — even when every name is already cached, and even when
+    // there is no geocoder configured to be rationed in the first place.
+    if (s.source === 'cache' || s.source === 'unavailable') budget.uncached += 1;
     return s.name ?? (s.address ? s.address.split(',')[0].trim() : null);
   } catch {
     return null;

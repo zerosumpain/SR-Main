@@ -198,11 +198,18 @@ export const load: PageServerLoad = async (event) => {
     regions: dissolveTiles(changedTiles, { chaikinPasses: 0 }).map(toRegion),
   };
 
-  // The map opens on where the change was, biased home. `active` is every cell
-  // with an event inside the window — which is why ownership carries
-  // `lastEventAt` rather than the owner alone.
+  // The map opens on where the change was, biased home. `active` is ground
+  // TOUCHED IN THE LAST SEVEN DAYS, deliberately independent of the date
+  // window: the window decides ownership, the week decides where the eye goes.
+  //
+  // Filtering `active` by the window instead would be a tautology and was one
+  // until 2026-09-12. A window is only set when `filterActive`, which resolves
+  // ownership with `capturedFrom` already applied, so every surviving cell has
+  // `lastEventAt` inside the window by construction — the test passed for every
+  // row and the focus was being handed the whole board at weight 1. Seven days
+  // is a second, fixed clock, so "all time" gets a focus too.
   const activeTiles = [...ownedNow.values()]
-    .filter((o) => !windowSince || o.lastEventAt >= windowSince)
+    .filter((o) => o.lastEventAt >= weekAgo)
     .map((o) => ({ x: o.tileX, y: o.tileY }));
   const focus = chooseFocus({ changed: changedTiles, active: activeTiles, home: HOME_BOX });
 
@@ -228,12 +235,14 @@ export const load: PageServerLoad = async (event) => {
     };
   });
 
-  // The clumps that are actually a game, named within a small budget of
-  // UNCACHED geocodes — Nominatim is one request a second and a page load must
-  // not queue behind it. `keys` is the module's working set and is stripped:
-  // the browser gets a name, a centre and a scoreboard.
+  // The clumps that are actually a game, named within a budget of three
+  // geocoder REQUESTS and a three-second wall clock shared by all twelve —
+  // each lookup carries a 10 s HTTP timeout of its own, and a page load must
+  // not be able to sit on three of those. Past either limit the card prints
+  // its coordinates. `keys` is the module's working set and is stripped: the
+  // browser gets a name, a centre and a scoreboard.
   const cores = findBattlegrounds({ visitors, ownerByCell, ownerThenByCell: ownedThen }).slice(0, 12);
-  const budget = { uncached: 3 };
+  const budget = { uncached: 3, deadline: Date.now() + 3000 };
   const battlegrounds: Battleground[] = [];
   for (const core of cores) {
     battlegrounds.push({
