@@ -65,10 +65,16 @@ none, and a solid block of owned ground would be drawn with speckle through it.
 The union is gap-free across any solid block and feathers by at most one hex at
 an edge.
 
+Measured over a 12×12 block of Darlington: 148 hexes for 144 cells, of which
+**138 are fed by exactly one cell, 10 by two, and none by three**. So at the
+shipped size the board is very nearly a relabelling of the ledger.
+
 A hex's owner is the **argmax of the summed `TileOwnership.score` of the cells
 that contributed to it**, ties broken by the most recent contributing
 `lastEventAt` and then by subject name — the same ladder `standingsAt` uses, so
-a contested hex resolves the way a contested cell does.
+a contested hex resolves the way a contested cell does. Summing and
+strongest-single-cell agree at the shipped size, since no hex has three
+claimants; summing is the rule that stays right if `HEX_R` is ever retuned.
 
 Because the mapping is not one-to-one, the hex count differs slightly from the
 cell count. **The cell count stays the number of record.** Nothing on the page
@@ -147,6 +153,8 @@ already imports `$lib/geo/tiles` for exactly this reason
 | 8 | Keep "cells" as the unit word in every sentence and number | rename to "hexes" | The Sunday letter, the boards and the drill all say cells, and they are computed from cells. Only the strap describes the shape | Copy-only |
 | 9 | Resolve any `var(--name)` in the map adapter, not just `--accent` | leave it; parse the name | The mesh wants `--line-strong`. Both existing callers (`var(--accent)`, `var(--accent, #c4570a)`) resolve identically after the change | One line |
 | 10 | `MapView.getBounds()` added to the shared adapter | reach for `.native` from the component | Every other camera read on this page goes through the adapter; one component reaching past it is how the Leaflet shape rots | One method |
+| 11 | An "Unclaimed" hex swatch in the key | leave the mesh unexplained | Without it the honeycomb reads as basemap furniture rather than as ground nobody has taken, which is half the point of drawing it | Two elements |
+| 12 | A test that DRAWS the board | unit tests only | homeserv holds no Mapbox credential, so the map is unwitnessed by automation here and always has been. `board-render.test.ts` asserts the properties a reader would otherwise have to notice by eye, and writes the picture when asked | Delete one file |
 
 ## Verification
 
@@ -156,5 +164,17 @@ already imports `$lib/geo/tiles` for exactly this reason
   `hexesInBounds` returns null past its budget and otherwise covers the corners.
 - `scripts/qa/landgrab-preview.mjs` gains a mesh assertion and a raised source
   cap.
+- `src/lib/geo/board-render.test.ts` asserts the drawing itself: no hex belongs
+  to two people, every held hex lies exactly on the unclaimed mesh, a block walk
+  punches a hole rather than colouring over it, and a solid block has no speckle.
+  `LANDGRAB_BOARD_SVG=<path>` writes the picture out.
 - Live: the deployed page draws the honeycomb, the owner's hexes are filled,
   and a tap still opens the region drawer.
+
+## What is deliberately NOT here
+
+- The ledger. `geo_capture_events`, `geo_tile_state`, the dedupe index and every
+  maintenance script still speak z19 squares.
+- The drill. A tap resolves through `tileAt()` exactly as before.
+- Any number. The leaderboard, share of Darlington, the battlegrounds, the
+  next-best-move and the Sunday letter are untouched and still count cells.
