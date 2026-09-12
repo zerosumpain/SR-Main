@@ -117,13 +117,21 @@ export function peekPlacement(rect: AnchorRect, height: number) {
  * on, and so they can be spread onto a Svelte element declaratively:
  *
  *   <section class="a" {...metricPeekHandlers()}>
+ *
+ * `attribute` exists because the SAME controller drives the activity header's
+ * cohort cards, whose subjects are header cells rather than hub metrics. One
+ * card is open at a time across the whole site, which is the invariant this
+ * module exists for; only the attribute a figure opts in with differs, and
+ * sharing the attribute name would have the two registries answering to each
+ * other's ids.
  */
-export function metricPeekHandlers() {
+export function metricPeekHandlers(attribute = 'data-metric') {
+  const selector = `[${attribute}]`;
   const figureFrom = (target: EventTarget | null): HTMLElement | null => {
     const el = target as HTMLElement | null;
-    return el?.closest?.('[data-metric]') ?? null;
+    return el?.closest?.(selector) ?? null;
   };
-  const idOf = (el: HTMLElement | null): string | null => el?.getAttribute('data-metric') ?? null;
+  const idOf = (el: HTMLElement | null): string | null => el?.getAttribute(attribute) ?? null;
 
   return {
     onmouseover(e: MouseEvent) {

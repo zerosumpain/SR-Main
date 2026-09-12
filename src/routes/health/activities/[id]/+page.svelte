@@ -19,4 +19,5 @@
   physio={data.physio}
   segments={data.segments}
   highlights={data.highlights}
+  peers={data.peers}
 />
