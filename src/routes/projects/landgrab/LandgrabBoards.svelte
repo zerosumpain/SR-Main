@@ -249,6 +249,13 @@
   .board--wide {
     grid-column: span 2;
   }
+  /* The contested board is conditional, so the grid holds four boards or five.
+     At five the last one lands alone on its own row beside an empty cell the
+     grid draws no hairlines into — a hole rather than a board. An odd last
+     child takes the full width instead. */
+  .board:last-child:nth-child(odd) {
+    grid-column: span 4;
+  }
   /* CaptureFeed draws its own picture frame for the rail it used to live in.
      Inside the cell grid that frame doubles every line, so the board keeps the
      border and the feed gives its own up. */
@@ -446,8 +453,11 @@
     .boards {
       grid-template-columns: minmax(0, 1fr);
     }
+    /* The full-width rule above is a three-class selector and a media query
+       adds no specificity, so it has to be named again here or it wins. */
     .board,
-    .board--wide {
+    .board--wide,
+    .board:last-child:nth-child(odd) {
       grid-column: span 1;
     }
   }

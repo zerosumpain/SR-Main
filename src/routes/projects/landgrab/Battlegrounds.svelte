@@ -63,7 +63,11 @@
     </header>
 
     {#if battlegrounds.length === 0}
-      <p class="lg-bg-empty">Nobody has contested any ground in {windowLine}.</p>
+      <p class="lg-bg-empty">
+        {win.key === 'all'
+          ? 'Nobody has contested any ground yet.'
+          : `Nobody has contested any ground in ${windowLine}.`}
+      </p>
     {:else}
       <table class="lg-bg">
         <!-- Five columns on a 360px phone is 40px a column before a figure is
@@ -215,9 +219,15 @@
     text-align: left;
     vertical-align: middle;
   }
+  /* `CONTENDERS` is ten characters with no break opportunity in them, and its
+     column is 14% — about 63px between 481 and 700px, where the column has not
+     yet been dropped. Left to itself the word crosses the table's border
+     rather than wrapping. */
   .lg-bg thead th {
     border-bottom: 1px solid var(--line-strong);
     vertical-align: bottom;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
   .lg-bg tbody tr:last-child th,
   .lg-bg tbody tr:last-child td {

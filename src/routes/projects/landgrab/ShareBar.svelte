@@ -13,6 +13,7 @@
    * empty seats would read as "John won" rather than "the game has not
    * started".
    */
+  import Swatch from './Swatch.svelte';
   import { identityMap, km2 } from './identity';
   import type { PlayerIdentity } from './identity';
   import type { ShareRow, Standing } from './types';
@@ -82,6 +83,9 @@
       {@const st = held.get(s.subject)}
       <li class="lg-share-row" style="--who: {p?.colour ?? 'var(--text-primary)'}">
         <span class="lg-rank metric-label">{ordinal(i)}</span>
+        <span class="lg-sw">
+          <Swatch colour={p?.colour ?? 'var(--text-primary)'} hatch={p?.hatch ?? 'dots'} />
+        </span>
         <span class="lg-badge" aria-hidden="true">{p?.initial ?? '?'}</span>
         <span class="lg-name">
           {p?.name ?? s.subject}
@@ -177,18 +181,24 @@
   }
   .lg-share-row {
     display: grid;
-    grid-template-columns: 40px 26px minmax(0, 1fr) auto auto auto auto;
-    grid-template-areas: 'rank badge name num pct home week';
+    grid-template-columns: 40px 14px 26px minmax(0, 1fr) auto auto auto auto;
+    grid-template-areas: 'rank sw badge name num pct home week';
     align-items: center;
     gap: 6px 16px;
     padding: 12px 16px;
     border-top: 1px solid var(--line-hair);
     border-left: 4px solid var(--who);
   }
+  /* The open row has no `--who`, so it cannot inherit the seated row's
+     `border-left: 4px solid var(--who)` — an undefined custom property makes
+     the whole shorthand invalid at computed-value time and the style falls
+     back to `none`, taking the border with it. A `border-left-color` on its own
+     then paints a border that does not exist. The full shorthand, or nothing.
+     The empty `sw` column stays so the badges line up down the list. */
   .lg-share-row--open {
-    grid-template-columns: 40px 26px minmax(0, 1fr) auto;
-    grid-template-areas: 'rank badge name num';
-    border-left-color: var(--accent-tint-35);
+    grid-template-columns: 40px 14px 26px minmax(0, 1fr) auto;
+    grid-template-areas: 'rank sw badge name num';
+    border-left: 4px solid var(--accent-tint-35);
     background: transparent;
   }
   /* A pass-through on the wide layout so the three small figures sit in their
@@ -198,6 +208,16 @@
   }
   .lg-rank {
     grid-area: rank;
+  }
+  /* The bar's segments carry colour AND hatch; the rows carried colour and an
+     initial. Without the hatch here a reader who cannot separate two hues has
+     no way to map a hatched segment back to a name, which is the whole reason
+     the hatch exists. The wrapper is what takes the grid area — a child
+     component's root is out of reach of this component's scoped CSS. */
+  .lg-sw {
+    grid-area: sw;
+    display: flex;
+    align-items: center;
   }
   .lg-badge {
     grid-area: badge;
@@ -313,20 +333,21 @@
   }
 
   /* Two lines under 700px: who and how much, then the three small figures.
-     Seven columns on a 360px phone give each figure 30px before a digit is
-     drawn, and the 12px floor is gated sitewide, so the layout is what gives. */
+     Eight columns on a 360px phone give each figure under 30px before a digit
+     is drawn, and the 12px floor is gated sitewide, so the layout is what
+     gives. */
   @media (max-width: 700px) {
     .lg-share-row {
-      grid-template-columns: 34px 26px minmax(0, 1fr) auto;
+      grid-template-columns: 34px 14px 26px minmax(0, 1fr) auto;
       grid-template-areas:
-        'rank badge name num'
-        'figs figs figs figs';
-      row-gap: 12px;
+        'rank sw badge name num'
+        'figs figs figs figs figs';
+      gap: 12px 10px;
       padding: 12px;
     }
     .lg-share-row--open {
-      grid-template-columns: 34px 26px minmax(0, 1fr) auto;
-      grid-template-areas: 'rank badge name num';
+      grid-template-columns: 34px 14px 26px minmax(0, 1fr) auto;
+      grid-template-areas: 'rank sw badge name num';
     }
     .lg-figs {
       grid-area: figs;
