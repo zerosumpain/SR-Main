@@ -232,16 +232,26 @@ export async function resolveBoard(
           maxY: Number(extentRow.maxY),
         };
 
-  // Every area on this page is cell count x this constant. One latitude for the
-  // whole board, taken at the middle of the ledger's extent: at 54.5N the cell
-  // side moves by under a metre across a county, and a per-cell constant would
-  // make two boards that add up differently.
-  const centreLat = tileRange
-    ? tileCentre(
-        Math.round((tileRange.minX + tileRange.maxX) / 2),
-        Math.round((tileRange.minY + tileRange.maxY) / 2),
-      ).lat
-    : 54.52;
+  // Every area on this page is cell count x this constant: one latitude for the
+  // whole board, because a per-cell constant would make two boards that add up
+  // differently. That latitude is the MEDIAN cell's, not the middle of the
+  // extent above. An extent midpoint is dragged by a single far-away trip: one
+  // subject's events reach ~28N, so tile_y runs 163,607 -> 219,940 and the
+  // midpoint row, 191,773, sits at ~43.5N. It put the constant at 3,073.66 m2
+  // against the ~1,970 m2 a z19 cell has at Darlington (54.5N) — every km2 on
+  // the page inflated by ~56%. The median row is unmoved by that trip, because
+  // the ledger is still overwhelmingly in the county. `gatherLandgrabWeek`
+  // (`src/lib/geo/weekly.ts`) is the other writer and reads it the same way.
+  const [medianRow] = await db
+    .select({
+      x: sql<number | null>`percentile_cont(0.5) within group (order by ${geoCaptureEvents.tileX})`,
+      y: sql<number | null>`percentile_cont(0.5) within group (order by ${geoCaptureEvents.tileY})`,
+    })
+    .from(geoCaptureEvents);
+  const centreLat =
+    medianRow?.y == null
+      ? 54.52
+      : tileCentre(Math.round(Number(medianRow.x)), Math.round(Number(medianRow.y))).lat;
   const cellAreaM2 = tileAreaM2(centreLat);
 
   if (!tileRange) {

@@ -145,27 +145,27 @@ export async function gatherLandgrabWeek(
   const windowFrom = (asOf: Date) => new Date(asOf.getTime() - WEEKLY_WINDOW_DAYS * MS_PER_DAY);
 
   // The board's one latitude, read the way `resolveBoard`
-  // (`src/routes/projects/landgrab/query.server.ts`) reads it: off the middle
-  // of the ledger's own extent. That function is the other writer of this
-  // constant, and the two must agree — a hard-coded 54.52 here against a
-  // derived centre there put the letter's km2 and the page's km2 a hundredth
-  // apart on the same week. 54.52 survives only as the empty-ledger fallback,
-  // which is the same fallback `resolveBoard` uses.
-  const [extentRow] = await db
+  // (`src/routes/projects/landgrab/query.server.ts`) reads it: off the MEDIAN
+  // cell of the ledger. That function is the other writer of this constant, and
+  // the two must agree — a hard-coded 54.52 here against a derived centre there
+  // put the letter's km2 and the page's km2 a hundredth apart on the same week.
+  // The median, and not the middle of the ledger's extent, because an extent
+  // midpoint is dragged by a single far-away trip: one subject's events reach
+  // ~28N, so tile_y runs 163,607 -> 219,940 and the midpoint row, 191,773, sits
+  // at ~43.5N — a constant of 3,073.66 m2 against the ~1,970 m2 a z19 cell has
+  // at Darlington (54.5N), inflating every km2 in the letter by ~56%. 54.52
+  // survives only as the empty-ledger fallback, which is the same fallback
+  // `resolveBoard` uses.
+  const [medianRow] = await db
     .select({
-      minX: sql<number | null>`min(${geoCaptureEvents.tileX})`,
-      maxX: sql<number | null>`max(${geoCaptureEvents.tileX})`,
-      minY: sql<number | null>`min(${geoCaptureEvents.tileY})`,
-      maxY: sql<number | null>`max(${geoCaptureEvents.tileY})`,
+      x: sql<number | null>`percentile_cont(0.5) within group (order by ${geoCaptureEvents.tileX})`,
+      y: sql<number | null>`percentile_cont(0.5) within group (order by ${geoCaptureEvents.tileY})`,
     })
     .from(geoCaptureEvents);
   const centreLat =
-    extentRow?.minX === null || extentRow?.minX === undefined
+    medianRow?.y == null
       ? 54.52
-      : tileCentre(
-          Math.round((Number(extentRow.minX) + Number(extentRow.maxX)) / 2),
-          Math.round((Number(extentRow.minY) + Number(extentRow.maxY)) / 2),
-        ).lat;
+      : tileCentre(Math.round(Number(medianRow.x)), Math.round(Number(medianRow.y))).lat;
   const cellAreaM2 = tileAreaM2(centreLat);
 
   // Ownership now, and ownership AS AT a week ago — resolved with `now` set to
