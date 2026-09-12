@@ -9,6 +9,7 @@ import {
   decouplingNote,
   distanceAxis,
   excellenceCards,
+  measureOf,
   fullLocalDate,
   heroStats,
   hrrNote,
@@ -402,10 +403,11 @@ describe('excellenceCards', () => {
   });
 
   it('orders by placing, best first, whatever the corpus weighted', () => {
+    // Three different segments, so nothing collapses and the order is the test.
     const cards = excellenceCards([
-      highlight({ rank: 3, label: '3rd fastest', weight: 90 }),
-      highlight({ rank: 1, weight: 10 }),
-      highlight({ rank: 2, label: '2nd fastest', weight: 50 }),
+      highlight({ rank: 3, label: '3rd fastest', weight: 90, segmentId: 3 }),
+      highlight({ rank: 1, weight: 10, segmentId: 1 }),
+      highlight({ rank: 2, label: '2nd fastest', weight: 50, segmentId: 2 }),
     ]);
     expect(cards.map((c) => c.rank)).toEqual([1, 2, 3]);
   });
@@ -420,7 +422,9 @@ describe('excellenceCards', () => {
   });
 
   it('awards gold, silver and bronze to the top three and nothing below', () => {
-    const cards = excellenceCards([1, 2, 3, 4].map((rank) => highlight({ rank, label: `${rank} x` })));
+    const cards = excellenceCards(
+      [1, 2, 3, 4].map((rank) => highlight({ rank, label: `${rank} x`, segmentId: rank })),
+    );
     expect(cards.map((c) => c.medal)).toEqual(['gold', 'silver', 'bronze', null]);
   });
 
@@ -441,11 +445,76 @@ describe('excellenceCards', () => {
 
   it('strips the ordinal the placing already prints, and keeps a bespoke first', () => {
     const [second, first] = excellenceCards([
-      highlight({ rank: 2, label: '2nd most efficient' }),
-      highlight({ rank: 1, label: 'Most efficient here' }),
+      highlight({ rank: 2, label: '2nd most efficient', segmentId: 2 }),
+      highlight({ rank: 1, label: 'Most efficient here', segmentId: 1 }),
     ]).reverse();
     expect(first.label).toBe('Most efficient here');
     expect(second.label).toBe('Most efficient');
+  });
+
+  it('collapses one measure’s three windows into one card', () => {
+    // The exact shape that drew four golds on a September ride: two measures,
+    // each won over the month AND over the trailing ten.
+    const cards = excellenceCards([
+      highlight({ kind: 'month_climb', scope: 'activity', rank: 1, outOf: 32, label: 'Most climb this month', detail: '200 m of climb — best of 32 rides in September 2025', weight: 66, segmentId: undefined, segmentName: undefined }),
+      highlight({ kind: 'month_distance', scope: 'activity', rank: 1, outOf: 32, label: 'Longest this month', detail: '8.9 km — best of 32 rides in September 2025', weight: 66, segmentId: undefined, segmentName: undefined }),
+      highlight({ kind: 'window_climb', scope: 'activity', rank: 1, outOf: 10, label: 'Most climb of your last 10', detail: '200 m of climb — best of your last 10 rides', weight: 62, segmentId: undefined, segmentName: undefined }),
+      highlight({ kind: 'window_distance', scope: 'activity', rank: 1, outOf: 10, label: 'Longest of your last 10', detail: '8.9 km — best of your last 10 rides', weight: 62, segmentId: undefined, segmentName: undefined }),
+    ]);
+    expect(cards).toHaveLength(2);
+    expect(cards.map((c) => c.label)).toEqual(['Most climb this month', 'Longest this month']);
+    expect(cards.map((c) => c.also)).toEqual([['1st of last 10'], ['1st of last 10']]);
+  });
+
+  it('keeps the best-placed window as the face and names the rest', () => {
+    const [card] = excellenceCards([
+      highlight({ kind: 'record_distance', scope: 'activity', rank: 2, outOf: 177, label: '2nd longest', detail: '16.3 km — 2nd longest of 177 rides', weight: 78, segmentId: undefined, segmentName: undefined }),
+      highlight({ kind: 'window_distance', scope: 'activity', rank: 1, outOf: 10, label: 'Longest of your last 10', detail: '16.3 km — best of your last 10 rides', weight: 62, segmentId: undefined, segmentName: undefined }),
+      highlight({ kind: 'month_distance', scope: 'activity', rank: 1, outOf: 4, label: 'Longest this month', detail: '16.3 km — best of 4 rides in August 2026', weight: 66, segmentId: undefined, segmentName: undefined }),
+    ]);
+    // Best placing wins the face; among equal placings the corpus's weight does.
+    expect(card.label).toBe('Longest this month');
+    expect(card.medal).toBe('gold');
+    // And the stronger all-time fact survives rather than being dropped.
+    expect(card.also).toEqual(['1st of last 10', '2nd all-time']);
+  });
+
+  it('treats two measures on the SAME segment as two achievements', () => {
+    const cards = excellenceCards([
+      highlight({ kind: 'segment_rank', rank: 1, label: 'Segment PB' }),
+      highlight({ kind: 'segment_ef', rank: 1, label: 'Most efficient here', detail: 'Bishops Hill at EF 1.18 — 1st of 9' }),
+    ]);
+    expect(cards).toHaveLength(2);
+    expect(cards.every((c) => c.also.length === 0)).toBe(true);
+  });
+
+  it('never merges the same measure across two different segments', () => {
+    const cards = excellenceCards([
+      highlight({ segmentId: 7, segmentName: 'Bishops Hill' }),
+      highlight({ segmentId: 8, segmentName: 'Mill Lane', detail: 'Mill Lane in 4:02 — best of 6 efforts' }),
+    ]);
+    expect(cards).toHaveLength(2);
+    expect(cards.map((c) => c.segmentName)).toEqual(['Bishops Hill', 'Mill Lane']);
+  });
+
+  it('leaves the unwindowed kinds one card each, even two of a kind', () => {
+    const cards = excellenceCards([
+      highlight({ kind: 'hottest', scope: 'environment', rank: 1, label: 'Hottest ride', detail: '26°C', segmentId: undefined, segmentName: undefined }),
+      highlight({ kind: 'earliest', scope: 'rhythm', rank: 2, label: '2nd earliest', detail: 'Away at 06:04', segmentId: undefined, segmentName: undefined }),
+      highlight({ kind: 'record_duration', scope: 'activity', rank: 1, label: 'Longest time out', detail: '2:16:19 — 1st of 177 rides', segmentId: undefined, segmentName: undefined }),
+    ]);
+    expect(cards).toHaveLength(3);
+  });
+
+  it('reads the measure off the kind, and only off a windowed one', () => {
+    expect(measureOf('record_distance')).toBe('distance');
+    expect(measureOf('month_distance')).toBe('distance');
+    expect(measureOf('window_distance')).toBe('distance');
+    expect(measureOf('most_efficient')).toBe('ef');
+    expect(measureOf('window_ef')).toBe('ef');
+    expect(measureOf('hardest')).toBeNull();
+    expect(measureOf('segment_rank')).toBeNull();
+    expect(measureOf('streak')).toBeNull();
   });
 
   it('gives a highlight with no segment nowhere to go', () => {

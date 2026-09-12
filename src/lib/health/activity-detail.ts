@@ -661,6 +661,14 @@ export function meanOf(points: Array<[number, number]>): number | null {
 //    kinds — a segment PB outranks a 2nd-fastest on a different segment, which
 //    is right for picking ONE badge for a list row and wrong for a grid that
 //    reads as a podium.
+//  * ONE CARD PER ACHIEVEMENT, NOT PER COMPARISON SET. The corpus ranks each
+//    MEASURE three times — all-time (`record_*`), the calendar month
+//    (`month_*`) and the trailing ten (`window_*`) — so a ride that was the
+//    longest of the month and the longest of its last ten drew two gold cards
+//    saying the same thing, and a ride that was both of those AND had a big
+//    climb drew four. The measure is the achievement; the windows are evidence
+//    for it. The best-placed one is the card's face and the rest become one
+//    line of "also", so nothing is lost and the podium is a podium again.
 
 export type Medal = 'gold' | 'silver' | 'bronze';
 
@@ -682,6 +690,11 @@ export interface ExcellenceCard {
   /** The segment's name — the card's title and accessible name, never its face. */
   segmentName: string | null;
   scope: string;
+  /**
+   * The same achievement's OTHER comparison sets, best first — "2nd all-time",
+   * "1st of last 10". Empty for everything that was only ranked once.
+   */
+  also: string[];
 }
 
 const MEDALS: Medal[] = ['gold', 'silver', 'bronze'];
@@ -705,43 +718,107 @@ function withoutSegmentName(detail: string, segmentName: string | null | undefin
   return detail.slice(segmentName.length).replace(/^[\s—–-]+/, '');
 }
 
-export function excellenceCards(
-  highlights: Array<{
-    kind: string;
-    scope: string;
-    rank: number | null;
-    outOf: number | null;
-    label: string;
-    detail: string;
-    weight: number;
-    segmentId?: number;
-    segmentName?: string;
-  }>,
-): ExcellenceCard[] {
-  const ordered = highlights
-    .map((h, i) => ({ h, i }))
-    .sort((a, b) => {
-      const ra = a.h.rank ?? Number.POSITIVE_INFINITY;
-      const rb = b.h.rank ?? Number.POSITIVE_INFINITY;
-      if (ra !== rb) return ra - rb;
-      // Same placing on two different comparison sets: the corpus already has
-      // an opinion about which matters more, and it is the weight.
-      if (b.h.weight !== a.h.weight) return b.h.weight - a.h.weight;
-      return a.i - b.i;
-    });
+export interface ExcellenceInput {
+  kind: string;
+  scope: string;
+  rank: number | null;
+  outOf: number | null;
+  label: string;
+  detail: string;
+  weight: number;
+  segmentId?: number;
+  segmentName?: string;
+}
 
-  return ordered.map(({ h, i }) => ({
-    key: `${h.kind}:${h.segmentId ?? ''}:${i}`,
-    rank: h.rank,
-    outOf: h.outOf,
-    medal: h.rank != null && h.rank >= 1 && h.rank <= 3 ? MEDALS[h.rank - 1] : null,
-    place: h.rank == null ? '—' : ordinalOf(h.rank),
-    label: withoutOrdinal(h.label),
-    note: withoutSegmentName(h.detail, h.segmentName),
-    href: h.segmentId != null ? `/health/segments/${h.segmentId}` : null,
-    segmentName: h.segmentName ?? null,
-    scope: h.scope,
-  }));
+/**
+ * The three windows the corpus ranks every measure over, read off the kind.
+ *
+ * `record_distance`, `month_distance` and `window_distance` are one achievement
+ * measured three ways; `most_efficient` is the all-time arm of `*_ef` under an
+ * older name. Anything that does not carry one of these prefixes was only ever
+ * ranked once and is its own achievement.
+ */
+const WINDOWED_KIND = /^(record|month|window)_(.+)$/;
+
+export function measureOf(kind: string): string | null {
+  if (kind === 'most_efficient') return 'ef';
+  const m = WINDOWED_KIND.exec(kind);
+  return m ? m[2] : null;
+}
+
+/** How a collapsed sibling names its own comparison set. */
+function windowName(kind: string, outOf: number | null): string {
+  if (kind.startsWith('month_')) return 'this month';
+  if (kind.startsWith('window_')) return outOf ? `of last ${outOf}` : 'of your last few';
+  return 'all-time';
+}
+
+/**
+ * What counts as ONE achievement.
+ *
+ * A measure ranked over three windows is one; the same segment's fastest and
+ * most-efficient efforts are two, because they are different things to have
+ * done rather than the same thing counted twice; and two segments never merge
+ * at all. Everything unwindowed keeps its own card, keyed on its position so
+ * two of a kind could never silently become one.
+ */
+function achievementKey(h: ExcellenceInput, index: number): string {
+  if (h.segmentId != null) return `seg:${h.segmentId}:${h.kind}`;
+  const measure = measureOf(h.kind);
+  return measure ? `measure:${measure}` : `one:${h.kind}:${index}`;
+}
+
+/** Best placing first, then the corpus's own opinion, then input order. */
+function byStanding(a: { h: ExcellenceInput; i: number }, b: { h: ExcellenceInput; i: number }) {
+  const ra = a.h.rank ?? Number.POSITIVE_INFINITY;
+  const rb = b.h.rank ?? Number.POSITIVE_INFINITY;
+  if (ra !== rb) return ra - rb;
+  // Same placing on two different comparison sets: the corpus already has an
+  // opinion about which matters more, and it is the weight.
+  if (b.h.weight !== a.h.weight) return b.h.weight - a.h.weight;
+  return a.i - b.i;
+}
+
+export function excellenceCards(highlights: ExcellenceInput[]): ExcellenceCard[] {
+  const groups = new Map<string, Array<{ h: ExcellenceInput; i: number }>>();
+  highlights.forEach((h, i) => {
+    const key = achievementKey(h, i);
+    const list = groups.get(key);
+    if (list) list.push({ h, i });
+    else groups.set(key, [{ h, i }]);
+  });
+
+  const cards: Array<{ card: ExcellenceCard; lead: { h: ExcellenceInput; i: number } }> = [];
+  for (const [key, members] of groups) {
+    members.sort(byStanding);
+    const { h, i } = members[0];
+    cards.push({
+      lead: members[0],
+      card: {
+        key: `${key}:${i}`,
+        rank: h.rank,
+        outOf: h.outOf,
+        medal: h.rank != null && h.rank >= 1 && h.rank <= 3 ? MEDALS[h.rank - 1] : null,
+        place: h.rank == null ? '—' : ordinalOf(h.rank),
+        label: withoutOrdinal(h.label),
+        note: withoutSegmentName(h.detail, h.segmentName),
+        href: h.segmentId != null ? `/health/segments/${h.segmentId}` : null,
+        segmentName: h.segmentName ?? null,
+        scope: h.scope,
+        // The windows this same measure also won, in the same order the cards
+        // themselves are in. The face already says which one it is, so these
+        // name only the set and the placing in it.
+        also: members
+          .slice(1)
+          .map((m) =>
+            `${m.h.rank == null ? '—' : ordinalOf(m.h.rank)} ${windowName(m.h.kind, m.h.outOf)}`,
+          ),
+      },
+    });
+  }
+
+  cards.sort((a, b) => byStanding(a.lead, b.lead));
+  return cards.map((c) => c.card);
 }
 
 /** `2` → `2nd`. Local rather than imported so this module stays free of the corpus. */
