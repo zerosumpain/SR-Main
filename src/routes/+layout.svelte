@@ -3,7 +3,7 @@
   import UmamiTracker from '$lib/components/UmamiTracker.svelte';
   import '$lib/styles/nm-tokens.css';
   import { onMount, setContext } from 'svelte';
-  import { onNavigate } from '$app/navigation';
+  import { beforeNavigate, onNavigate } from '$app/navigation';
   import { createVitalsStore } from '$lib/vitals/store.svelte';
   import { healStaleJkaiSW } from '$lib/jkai/pwa/register';
 

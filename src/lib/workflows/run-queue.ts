@@ -1,3 +1,4 @@
+import { policyWorkerMode } from './policy-worker-mode';
 /**
  * #19 DURABLE RUN-WORKER — DB-backed run queue / claim mechanism.
  *
@@ -113,7 +114,7 @@ export async function claimNext(
       SELECT id
       FROM workflow_runs
       WHERE status = 'pending'
-        AND ${triggerFilter ? sql`trigger = ${triggerFilter}` : sql`true`}
+        AND ${triggerFilter ? sql`trigger = ${triggerFilter}` : policyWorkerMode() === 'external' ? sql`trigger <> 'policy-analysis'` : sql`true`}
         AND ${runIdFilter ? sql`id = ${runIdFilter}` : sql`true`}
         AND (trigger <> 'policy-analysis' OR started_at <= now())
         AND (claimed_by IS NULL OR lease_expires_at IS NULL OR lease_expires_at <= now())
