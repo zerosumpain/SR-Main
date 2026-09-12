@@ -277,28 +277,36 @@
                 title={card.segmentName ?? undefined}
                 aria-label="{card.place} · {card.label}{card.segmentName
                   ? ` on ${card.segmentName}`
-                  : ''}"
+                  : ''}{card.also.length ? `, also ${card.also.join(', ')}` : ''}"
               >
                 <p class="ex-place">{card.place}</p>
                 <p class="ex-label">{card.label}</p>
                 <p class="ex-note">{card.note}</p>
+                {#if card.also.length}
+                  <p class="ex-also">Also {card.also.join(' · ')}</p>
+                {/if}
               </a>
             {:else}
               <div class="ex-card {card.medal ?? 'plain'}">
                 <p class="ex-place">{card.place}</p>
                 <p class="ex-label">{card.label}</p>
                 <p class="ex-note">{card.note}</p>
+                {#if card.also.length}
+                  <p class="ex-also">Also {card.also.join(' · ')}</p>
+                {/if}
               </div>
             {/if}
           {/each}
         </div>
 
         <p class="ad-rule">
-          Gold, silver and bronze are the placing inside each card's own comparison set, and a
-          card with a placing on known ground opens that segment. Ranks are measured over every
-          outing on record, not the page you came from. Segment placings ignore any recording
-          taken out of segment analysis, and efficiency compares only within the pace sports — a
-          ride's sits near 4 against a run's 1.
+          One card per achievement: a measure is ranked over all time, over the calendar month
+          and over the trailing ten, and the best of those is the card's face with the rest on
+          its "also" line. Gold, silver and bronze are that placing, and a card with a placing
+          on known ground opens that segment. Ranks are measured over every outing on record,
+          not the page you came from. Segment placings ignore any recording taken out of
+          segment analysis, and efficiency compares only within the pace sports — a ride's sits
+          near 4 against a run's 1.
         </p>
       </div>
     </section>
@@ -535,7 +543,7 @@
    * destination, which is what let the rest become a fixed track. */
   .ex-cards {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(186px, 1fr));
     gap: 10px;
   }
   .ex-card {
@@ -603,6 +611,25 @@
     margin: 0;
     overflow-wrap: anywhere;
     /* Two lines, so one verbose highlight cannot set the height of the row. */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+  }
+
+  /* The other windows this achievement won. Ghosted, and given two lines
+     because one truncated "Also 1st of last…" into saying nothing: it is
+     corroboration for the fact above it, and corroboration that cannot be read
+     is just noise at the bottom of a card. */
+  .ex-also {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    line-height: 1.4;
+    letter-spacing: 0.06em;
+    color: var(--text-ghost);
+    margin: 6px 0 0;
+    overflow-wrap: anywhere;
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
