@@ -10,6 +10,7 @@
     height = '420px',
     offline = false,
     legend = true,
+    cursor = null,
   }: {
     coordinates: TrackPoint[];
     bounds?: { n: number; s: number; e: number; w: number } | null;
@@ -24,6 +25,15 @@
      * two keys for one ramp is one too many.
      */
     legend?: boolean;
+    /**
+     * Where on the route to put a moving dot, as `[lng, lat]` — the position the
+     * reader is hovering on one of the traces below the map.
+     *
+     * A prop rather than an exported method because the caller already owns the
+     * cursor: three traces share one, and the page is the only thing that knows
+     * how to convert between their axes. Null takes the dot away.
+     */
+    cursor?: [number, number] | null;
   } = $props();
 
   let container: HTMLDivElement | undefined = $state();
@@ -33,7 +43,18 @@
   // both read and written by the same lifecycle function subscribes its effect
   // to itself and loops until effect_update_depth_exceeded.
   let mapRef: any = null;
+  let toolsRef: any = null;
+  let cursorMarker: any = null;
   let scrollZoomActive = false;
+  /**
+   * The one reactive thing about the map.
+   *
+   * `mapRef` is deliberately NOT state (see above), so an effect that wanted to
+   * draw on the map had no way of knowing when it existed. This flag is written
+   * once, from `onMount`, and read by the cursor effect — which writes nothing
+   * reactive itself, so there is no cycle to fall into.
+   */
+  let mapReady = $state(false);
 
   /** Metres between two [lng, lat] points — enough for a per-segment speed. */
   function stepMetres(a: TrackPoint, b: TrackPoint): number {
@@ -77,6 +98,7 @@
       try {
         const M = await loadMapbox({ offline });
         if (cancelled || !container || coordinates.length < 2) return;
+        toolsRef = M;
 
         const map = M.map(container, {
           scrollWheelZoom: false,
@@ -151,6 +173,8 @@
         } else {
           map.fitBounds(latlngs, { padding: [24, 24] });
         }
+
+        mapReady = true;
       } catch (e) {
         error = e instanceof Error ? e.message : String(e);
       }
@@ -159,9 +183,46 @@
     return () => {
       cancelled = true;
       disposeOffline();
+      cursorMarker = null;
+      mapReady = false;
       mapRef?.remove();
       mapRef = null;
+      toolsRef = null;
     };
+  });
+
+  /**
+   * The trace cursor, as a dot on the route.
+   *
+   * Created once and MOVED thereafter — a marker rebuilt on every pointer move
+   * would add and remove a DOM node sixty times a second, and Mapbox would
+   * re-anchor it each time. It is `interactive: false` so it never eats a click
+   * meant for the map beneath it.
+   */
+  $effect(() => {
+    const at = cursor;
+    if (!mapReady || !mapRef || !toolsRef) return;
+    if (!at) {
+      cursorMarker?.remove();
+      cursorMarker = null;
+      return;
+    }
+    const latlng: [number, number] = [at[1], at[0]];
+    if (cursorMarker) {
+      cursorMarker.setLatLng(latlng);
+      return;
+    }
+    cursorMarker = toolsRef
+      .circleMarker(latlng, {
+        radius: 7,
+        color: '#faf7f1',
+        weight: 3,
+        fillColor: '#c4570a',
+        fillOpacity: 1,
+        interactive: false,
+        zIndexOffset: 600,
+      })
+      .addTo(mapRef);
   });
 
 

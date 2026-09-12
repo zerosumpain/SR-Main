@@ -8,6 +8,7 @@ import {
   comparisons,
   decouplingNote,
   distanceAxis,
+  excellenceCards,
   fullLocalDate,
   heroStats,
   hrrNote,
@@ -21,6 +22,8 @@ import {
   splitRows,
   splitsNote,
   timeAxis,
+  trackCursorAt,
+  trackIndex,
   zoneRows,
   zonesNote,
 } from './activity-detail';
@@ -381,5 +384,126 @@ describe('series geometry', () => {
   it('means a series for the dashed average line', () => {
     expect(meanOf([[0, 100], [1, 200]])).toBe(150);
     expect(meanOf([])).toBeNull();
+  });
+});
+
+describe('excellenceCards', () => {
+  const highlight = (over: Partial<Parameters<typeof excellenceCards>[0][number]> = {}) => ({
+    kind: 'segment_rank',
+    scope: 'segment',
+    rank: 1 as number | null,
+    outOf: 9 as number | null,
+    label: 'Segment PB',
+    detail: 'Bishops Hill in 12:34 — best of 9 efforts',
+    weight: 100,
+    segmentId: 7,
+    segmentName: 'Bishops Hill',
+    ...over,
+  });
+
+  it('orders by placing, best first, whatever the corpus weighted', () => {
+    const cards = excellenceCards([
+      highlight({ rank: 3, label: '3rd fastest', weight: 90 }),
+      highlight({ rank: 1, weight: 10 }),
+      highlight({ rank: 2, label: '2nd fastest', weight: 50 }),
+    ]);
+    expect(cards.map((c) => c.rank)).toEqual([1, 2, 3]);
+  });
+
+  it('puts the unranked kinds after every placing', () => {
+    const cards = excellenceCards([
+      highlight({ kind: 'streak', scope: 'rhythm', rank: null, outOf: null, label: '4-day streak', detail: 'Day 4 of moving every day', segmentId: undefined, segmentName: undefined }),
+      highlight({ rank: 2, label: '2nd fastest' }),
+    ]);
+    expect(cards.map((c) => c.rank)).toEqual([2, null]);
+    expect(cards[1].place).toBe('—');
+  });
+
+  it('awards gold, silver and bronze to the top three and nothing below', () => {
+    const cards = excellenceCards([1, 2, 3, 4].map((rank) => highlight({ rank, label: `${rank} x` })));
+    expect(cards.map((c) => c.medal)).toEqual(['gold', 'silver', 'bronze', null]);
+  });
+
+  it('takes the segment name off the face and makes it the destination', () => {
+    const [card] = excellenceCards([highlight()]);
+    expect(card.note).toBe('in 12:34 — best of 9 efforts');
+    expect(card.note).not.toContain('Bishops Hill');
+    expect(card.href).toBe('/health/segments/7');
+    expect(card.segmentName).toBe('Bishops Hill');
+  });
+
+  it('leaves a detail alone when it does not open with the segment name', () => {
+    const [card] = excellenceCards([
+      highlight({ detail: 'Best of 9 efforts on Bishops Hill' }),
+    ]);
+    expect(card.note).toBe('Best of 9 efforts on Bishops Hill');
+  });
+
+  it('strips the ordinal the placing already prints, and keeps a bespoke first', () => {
+    const [second, first] = excellenceCards([
+      highlight({ rank: 2, label: '2nd most efficient' }),
+      highlight({ rank: 1, label: 'Most efficient here' }),
+    ]).reverse();
+    expect(first.label).toBe('Most efficient here');
+    expect(second.label).toBe('Most efficient');
+  });
+
+  it('gives a highlight with no segment nowhere to go', () => {
+    const [card] = excellenceCards([
+      highlight({ kind: 'hottest', scope: 'environment', label: 'Hottest ride', detail: '26.4°C — warmest of 12 outdoor rides', segmentId: undefined, segmentName: undefined }),
+    ]);
+    expect(card.href).toBeNull();
+    expect(card.medal).toBe('gold');
+  });
+});
+
+describe('the trace cursor', () => {
+  // A square-ish loop: four points, each 1 second and a few metres apart.
+  const track: TrackPoint[] = [
+    [-0.10, 51.50, 10, 0],
+    [-0.10, 51.51, 20, 60],
+    [-0.09, 51.51, 30, 120],
+    [-0.09, 51.50, 20, 180],
+  ];
+
+  it('carries both axes off the one track', () => {
+    const index = trackIndex(track)!;
+    expect(index.timeS).toEqual([0, 60, 120, 180]);
+    expect(index.distanceM[0]).toBe(0);
+    // Monotonic, and roughly a kilometre per 0.01° of latitude.
+    expect(index.distanceM[1]).toBeGreaterThan(1000);
+    expect(index.distanceM[3]).toBeGreaterThan(index.distanceM[2]);
+  });
+
+  it('has no index for a track of fewer than two points', () => {
+    expect(trackIndex([track[0]])).toBeNull();
+    expect(trackIndex(null)).toBeNull();
+  });
+
+  it('interpolates between samples rather than snapping to the nearer one', () => {
+    const index = trackIndex(track)!;
+    const at = trackCursorAt(index, 'time', 30)!;
+    expect(at.timeS).toBeCloseTo(30, 5);
+    expect(at.lat).toBeCloseTo(51.505, 5);
+    expect(at.lng).toBeCloseTo(-0.1, 5);
+  });
+
+  it('resolves a distance to a position, and reports the time it was reached', () => {
+    const index = trackIndex(track)!;
+    const half = index.distanceM[1] / 2;
+    const at = trackCursorAt(index, 'distance', half)!;
+    expect(at.distanceM).toBeCloseTo(half, 3);
+    expect(at.timeS).toBeCloseTo(30, 0);
+  });
+
+  it('clamps to the ends rather than extrapolating off the trace', () => {
+    const index = trackIndex(track)!;
+    expect(trackCursorAt(index, 'time', -50)!.lat).toBeCloseTo(51.5, 5);
+    expect(trackCursorAt(index, 'time', 9999)!.lat).toBeCloseTo(51.5, 5);
+  });
+
+  it('has no position without a track, which is what keeps the map dot honest', () => {
+    expect(trackCursorAt(null, 'time', 30)).toBeNull();
+    expect(trackCursorAt(trackIndex(track), 'time', Number.NaN)).toBeNull();
   });
 });
