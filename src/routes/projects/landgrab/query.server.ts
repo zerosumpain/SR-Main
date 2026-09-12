@@ -181,6 +181,11 @@ export async function parseFilter(url: URL): Promise<ParsedFilter> {
   };
 }
 
+/**
+ * The board. Under `thin` (the drill's read) `ownedThen` and `visitors` are
+ * empty and `cellsAllTime` is just `ownedNow.size` — three full-ledger
+ * ownership replays nothing on that route consumes.
+ */
 export interface Board {
   now: Date;
   weekAgo: Date;
@@ -195,7 +200,11 @@ export interface Board {
   cellsAllTime: number;
 }
 
-export async function resolveBoard(filter: ParsedFilter, now: Date = new Date()): Promise<Board> {
+export async function resolveBoard(
+  filter: ParsedFilter,
+  now: Date = new Date(),
+  opts: { thin?: boolean } = {},
+): Promise<Board> {
   const weekAgo = new Date(now.getTime() - WEEK_MS);
   const { noPlayers, filterActive, baseFilter, filterAt, windowActive } = filter;
 
@@ -303,8 +312,12 @@ export async function resolveBoard(filter: ParsedFilter, now: Date = new Date())
   // Under a date window the window's own lower bound moves back with `weekAgo`
   // — see the note where windowFrom is defined. Without that, "a week ago"
   // under a seven-day window is an empty ledger and every cell reads as gained.
+  //
+  // `thin` skips it outright: the drill reads `ownedNow` and `cellAreaM2` and
+  // nothing else, and this is a second full ownership replay over the whole
+  // extent for a drawer that never opens it.
   const ownedThen = new Map<string, string>();
-  if (!noPlayers) {
+  if (!noPlayers && !opts.thin) {
     for (const [key, o] of await resolveFilteredOwnership({
       now: weekAgo,
       filter: filterAt(weekAgo),
@@ -317,8 +330,9 @@ export async function resolveBoard(filter: ParsedFilter, now: Date = new Date())
   // What the window itself costs, in cells: the same filter asked without it.
   // Only under a window, and only so the page can state the price of narrowing
   // instead of quietly showing a smaller map.
-  const cellsAllTime =
-    windowActive && !noPlayers
+  const cellsAllTime = opts.thin
+    ? ownedNow.size
+    : windowActive && !noPlayers
       ? (await resolveFilteredOwnership({ now, filter: baseFilter, tileRange })).size
       : ownedNow.size;
 
@@ -327,9 +341,10 @@ export async function resolveBoard(filter: ParsedFilter, now: Date = new Date())
   // scoring rule can take a cell off somebody nobody else has been near. This
   // is the half that is actually a game, and it answers over the same filter
   // and window as everything else.
-  const visitors = noPlayers
-    ? new Map<string, Set<string>>()
-    : await readVisitorSets({ now, filter: filterAt(now), tileRange });
+  const visitors =
+    noPlayers || opts.thin
+      ? new Map<string, Set<string>>()
+      : await readVisitorSets({ now, filter: filterAt(now), tileRange });
 
   const players = assignIdentities([
     ...new Set([...filter.allSubjects, ...[...ownedNow.values()].map((o) => o.owner)]),

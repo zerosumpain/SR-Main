@@ -1,15 +1,17 @@
 <script lang="ts">
   /**
-   * The week, read four ways: contested ground, ground covered, gained against
-   * lost, and the captures themselves. The weekly board is two columns and
-   * never one signed number, because "Katie +3" hides that she took eleven
-   * cells and lost eight, which is the whole story of the week.
+   * The week, read three ways: contested ground, gained against lost, and the
+   * captures themselves. The weekly board is two columns and never one signed
+   * number, because "Katie +3" hides that she took eleven cells and lost eight,
+   * which is the whole story of the week.
    *
-   * `Geos` and `Longest held` were retired here in v2. Both ranked the same
-   * standings row a third and fourth time without answering a question anyone
-   * asked of the page, and the room they took is now the capture feed's — the
-   * one surface on the page that names somebody taking ground off somebody
-   * else, and the reason this is a game for five people.
+   * `Geos`, `Longest held` and `Ground covered` were all retired here. Each
+   * ranked the same standings row a second and third time without answering a
+   * question anyone arrived with — `Ground covered` re-ranked players by km²
+   * exactly as `ShareBar` does one section above — and the room they took is
+   * now the capture feed's: the one surface on the page that names somebody
+   * taking ground off somebody else, and the reason this is a game for five
+   * people.
    */
   import CaptureFeed from './CaptureFeed.svelte';
   import Swatch from './Swatch.svelte';
@@ -61,7 +63,6 @@
   );
 
   const byId = $derived(new Map(players.map((p) => [p.subject, p])));
-  const byArea = $derived([...standings].sort((a, b) => b.areaM2 - a.areaM2));
   const byWeek = $derived(
     [...standings].sort((a, b) => b.gainedTiles - a.gainedTiles || a.lostTiles - b.lostTiles),
   );
@@ -120,24 +121,6 @@
     </section>
   {/if}
 
-  <section class="board board--wide">
-    <header class="board-hd">
-      <span class="metric-label">Ground covered</span>
-      <span class="metric-label muted">km² · {windowTag}</span>
-    </header>
-    <ol class="board-list">
-      {#each byArea as s, i (s.subject)}
-        {@const p = byId.get(s.subject)}
-        <li class="board-row" style="--who: {p?.colour ?? 'var(--text-primary)'}">
-          <span class="rank">{i + 1}</span>
-          <Swatch colour={p?.colour ?? 'var(--text-primary)'} hatch={p?.hatch ?? 'dots'} />
-          <span class="who">{p?.name ?? s.subject}</span>
-          <span class="bar" style="width: {byArea[0].areaM2 ? (s.areaM2 / byArea[0].areaM2) * 100 : 0}%"></span>
-          <span class="val">{km2(s.areaM2)}</span>
-        </li>
-      {/each}
-    </ol>
-  </section>
   <section class="board board--wide">
     <header class="board-hd">
       <span class="metric-label">This week</span>
@@ -243,16 +226,17 @@
     min-width: 0;
     background: var(--bg);
   }
-  /* Four boards, two to a row. `--wide` no longer means wider — every board
-     here carries a table or a list that needs the full half — but the class
-     stays because the markup reads by it and the two spans may diverge again. */
+  /* Two to a row. `--wide` no longer means wider — every board here carries a
+     table or a list that needs the full half — but the class stays because the
+     markup reads by it and the two spans may diverge again. */
   .board--wide {
     grid-column: span 2;
   }
-  /* The contested board is conditional, so the grid holds four boards or five.
-     At five the last one lands alone on its own row beside an empty cell the
+  /* The contested board is conditional, so the grid holds three boards or four.
+     At three the last one lands alone on its own row beside an empty cell the
      grid draws no hairlines into — a hole rather than a board. An odd last
-     child takes the full width instead. */
+     child takes the full width instead; at four the rule does not fire and the
+     two rows are already whole. */
   .board:last-child:nth-child(odd) {
     grid-column: span 4;
   }
@@ -290,7 +274,6 @@
   .board-row {
     position: relative;
     display: grid;
-    grid-template-columns: 22px 16px minmax(0, 1fr) auto;
     align-items: center;
     gap: 10px;
     padding: 10px 14px;
@@ -298,12 +281,6 @@
   }
   .board-row:last-child {
     border-bottom: 0;
-  }
-  .rank {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    color: var(--text-ghost);
-    font-variant-numeric: tabular-nums;
   }
   .who {
     font-family: var(--font-display);
@@ -330,17 +307,6 @@
     text-transform: uppercase;
     letter-spacing: var(--tracking-label);
     color: var(--text-ghost);
-  }
-  /* The bar is the board's one piece of chart. It sits under the row rather
-     than beside it so the ranking reads as type first and quantity second. */
-  .bar {
-    position: absolute;
-    left: 0;
-    bottom: 0;
-    height: 3px;
-    background: var(--who);
-    opacity: 0.75;
-    z-index: 0;
   }
   .board-row--recent {
     grid-template-columns: 16px minmax(0, 1fr) auto;

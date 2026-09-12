@@ -28,13 +28,13 @@
 // reused or tested without the route tree. The contest fold is six lines and
 // is inlined below; `titleCase` is one.
 
-import { and, desc, eq, gte, lte } from 'drizzle-orm';
+import { and, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamDigests, geoCaptureEvents, geoClaims } from '$lib/db/schema';
 import { findBattlegrounds } from './battlegrounds';
 import { utcDay, type TileOwnership } from './ownership';
 import { readVisitorSets, resolveFilteredOwnership } from './service';
-import { tileAreaM2 } from './tiles';
+import { tileAreaM2, tileCentre } from './tiles';
 
 /** The `daydream_digests.subject` this stream writes under. A separate stream
  *  from 'weekly' and from the daily digest, both of which independently write
@@ -55,11 +55,6 @@ const MS_PER_DAY = 86_400_000;
 /** How far back the streak scan reads. Long enough that a streak is never
  *  truncated by the lookback rather than by a missed day. */
 const STREAK_LOOKBACK_DAYS = 60;
-
-/** The board's one latitude. Every area in this feature is cell count x this
- *  constant — a per-cell constant would make two boards add up differently,
- *  and the page's empty payload already uses this value. */
-const BOARD_LAT = 54.52;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -148,7 +143,30 @@ export async function gatherLandgrabWeek(
 ): Promise<WeekFacts> {
   const weekAgo = new Date(now.getTime() - 7 * MS_PER_DAY);
   const windowFrom = (asOf: Date) => new Date(asOf.getTime() - WEEKLY_WINDOW_DAYS * MS_PER_DAY);
-  const cellAreaM2 = tileAreaM2(BOARD_LAT);
+
+  // The board's one latitude, read the way `resolveBoard`
+  // (`src/routes/projects/landgrab/query.server.ts`) reads it: off the middle
+  // of the ledger's own extent. That function is the other writer of this
+  // constant, and the two must agree — a hard-coded 54.52 here against a
+  // derived centre there put the letter's km2 and the page's km2 a hundredth
+  // apart on the same week. 54.52 survives only as the empty-ledger fallback,
+  // which is the same fallback `resolveBoard` uses.
+  const [extentRow] = await db
+    .select({
+      minX: sql<number | null>`min(${geoCaptureEvents.tileX})`,
+      maxX: sql<number | null>`max(${geoCaptureEvents.tileX})`,
+      minY: sql<number | null>`min(${geoCaptureEvents.tileY})`,
+      maxY: sql<number | null>`max(${geoCaptureEvents.tileY})`,
+    })
+    .from(geoCaptureEvents);
+  const centreLat =
+    extentRow?.minX === null || extentRow?.minX === undefined
+      ? 54.52
+      : tileCentre(
+          Math.round((Number(extentRow.minX) + Number(extentRow.maxX)) / 2),
+          Math.round((Number(extentRow.minY) + Number(extentRow.maxY)) / 2),
+        ).lat;
+  const cellAreaM2 = tileAreaM2(centreLat);
 
   // Ownership now, and ownership AS AT a week ago — resolved with `now` set to
   // then, never with today's clock. The score decays with age, so "who owned

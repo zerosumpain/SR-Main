@@ -86,7 +86,7 @@
             <th scope="col" class="metric-label">Where</th>
             <th scope="col" class="metric-label num-col">Cells</th>
             <th scope="col" class="metric-label">Holder</th>
-            <th scope="col" class="metric-label num-col">Changed hands</th>
+            <th scope="col" class="metric-label num-col">Moved this week</th>
             <th scope="col" class="metric-label">Contenders</th>
           </tr>
         </thead>

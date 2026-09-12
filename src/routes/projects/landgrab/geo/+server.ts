@@ -15,7 +15,7 @@ import { geoCaptureEvents } from '$lib/db/schema';
 import { territoryFilterSql } from '$lib/geo/service';
 import { connectedComponents } from '$lib/geo/dissolve';
 import { regionHistory } from '$lib/geo/history';
-import { tileCentre, tileKeyOf, type Tile } from '$lib/geo/tiles';
+import { tileCentre, tileKeyOf, TILE_ZOOM, type Tile } from '$lib/geo/tiles';
 import type { CaptureEvent, CaptureKind } from '$lib/geo/ownership';
 import { parseFilter, resolveBoard } from '../query.server';
 import { nameFor } from '../names.server';
@@ -24,8 +24,9 @@ import type { RegionHistory } from '../types';
 /** Coordinate precision in the payload. 5 dp is ~1.1 m; cells are 44 m. */
 const COORD_DP = 5;
 
-/** The highest legal tile index at z19, on both axes. */
-const MAX_TILE = 2 ** 19 - 1;
+/** The highest legal tile index at z19, on both axes. Derived from TILE_ZOOM
+ *  rather than written out, so the grid and its bound cannot drift apart. */
+const MAX_TILE = 2 ** TILE_ZOOM - 1;
 
 /** Digits only, so `1e3`, `0x1f`, `1.0`, `-4` and `+7` are all refused before
  *  they reach `Number`. The same spelling the page's `?geo=x:y` deep link
@@ -62,7 +63,10 @@ export const GET: RequestHandler = async (event) => {
 
   const now = new Date();
   const filter = await parseFilter(event.url);
-  const board = await resolveBoard(filter, now);
+  // `thin`: this route reads `ownedNow` and `cellAreaM2` and nothing else, so
+  // the week-ago replay, the visitor sets and the unwindowed count are three
+  // full-ledger passes for a drawer that never opens them.
+  const board = await resolveBoard(filter, now, { thin: true });
 
   // The tapped cell, or one of its eight neighbours — a tap lands between
   // smoothed rings as often as on one.

@@ -32,7 +32,6 @@
     km2,
     relativeAge,
     windowPhrase,
-    windowShort,
     DEFAULT_WINDOW,
     UNTYPED_LABEL,
   } from './identity';
@@ -200,7 +199,7 @@
         <div>
           <dt>Changed hands</dt>
           <dd>{lg.handovers.cells.toLocaleString('en-GB')}</dd>
-          <small>cells · {windowShort(lg.window.key)}</small>
+          <small>cells · vs a week ago</small>
         </div>
         <div>
           <dt>Battlegrounds</dt>
@@ -235,7 +234,6 @@
         />
         <MapStage
           {lg}
-          {now}
           {chips}
           {selectedActivityKeys}
           {selectedWindow}
@@ -296,7 +294,7 @@
         <SectionHead
           kicker="04 / The boards"
           title={['THE WEEK,', 'READ THREE WAYS']}
-          strap="The same ledger read three ways — who holds most, who moved this week, and the loops that closed — with the capture feed and the effort lines beneath."
+          strap="The same ledger read three ways — who is winning contested ground, who moved this week, and the loops that closed — with the capture feed and the effort lines beneath."
         />
         <LandgrabBoards
           standings={lg.standings}
@@ -607,7 +605,10 @@
   .rules-row:last-child {
     border-bottom: 0;
   }
-  .rules-row:nth-child(odd) {
+  /* Five rules over two columns: the fifth sits alone on the last row, and a
+     right-hand rule on it draws a hairline into empty space. Only the odd rows
+     that actually have a neighbour get the column rule. */
+  .rules-row:nth-child(odd):not(:last-child) {
     border-right: 1px solid var(--line-hair);
   }
   .rules-row dt {
@@ -667,7 +668,9 @@
     .rules-list {
       grid-template-columns: minmax(0, 1fr);
     }
-    .rules-row:nth-child(odd) {
+    /* Same three-class selector as above — a media query adds no specificity,
+       so the `:not()` has to be repeated here or the rule above wins. */
+    .rules-row:nth-child(odd):not(:last-child) {
       border-right: 0;
     }
     .virgin {

@@ -30,10 +30,6 @@
     ontap,
   }: {
     lg: LandgrabData;
-    /** The page's shared clock. Nothing in this section is relative to it — the
-     *  head prints the window, not an age — but it stays in the contract so a
-     *  child that grows one does not have to be re-plumbed. */
-    now: number;
     chips: Array<{ key: string; label: string }>;
     selectedActivityKeys: Set<string>;
     selectedWindow: string;

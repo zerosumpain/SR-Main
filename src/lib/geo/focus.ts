@@ -7,7 +7,7 @@
 // Pure. Cells in, lat/lon bounds out. Weights, ratios and floors are in FOCUS
 // so the rule can be argued from numbers rather than re-read from code.
 
-import { tileAt, tileCentre, TILE_ZOOM, type LatLon, type Tile } from './tiles';
+import { tileCentre, TILE_ZOOM, type LatLon, type Tile } from './tiles';
 
 export interface HomeBoxLike {
   name: string;
@@ -174,7 +174,7 @@ export function chooseFocus(input: FocusInput): FocusResult {
     bounds,
     reason: away ? 'away' : 'home',
     changedCells: n,
-    label: `${where} · ${n.toLocaleString('en-GB')} cell${n === 1 ? '' : 's'} changed hands`,
+    label: `${where} · ${n.toLocaleString('en-GB')} cell${n === 1 ? '' : 's'} changed hands in view`,
   };
 }
 
@@ -193,5 +193,3 @@ function fit(cells: Tile[], zoom: number): FocusResult['bounds'] {
   return [[cLat - latSpan / 2, cLon - lonSpan / 2], [cLat + latSpan / 2, cLon + lonSpan / 2]];
 }
 
-// tileAt is re-exported for callers that focus from a lat/lon click.
-export { tileAt };
