@@ -29,6 +29,7 @@ import { daydreamImprove } from './activities/daydream-improve';
 import { daydreamReview } from './activities/daydream-review';
 import { daydreamWeekly } from './activities/daydream-weekly';
 import { geoTerritory } from './activities/geo-territory';
+import { landgrabWeekly } from './activities/landgrab-weekly';
 import { activitySync } from './activities/activity-sync';
 
 /**
@@ -67,6 +68,7 @@ const handlers: ActivityHandler[] = [
   daydreamReview,
   daydreamWeekly,
   geoTerritory,
+  landgrabWeekly,
   activitySync,
 ];
 
