@@ -176,7 +176,11 @@ export async function gatherLandgrabWeek(
 
   const gained = new Map<string, number>();
   const lost = new Map<string, number>();
-  const takeCounts = new Map<string, number>();
+  // Keyed on the pair but CARRYING it, rather than joining the two names into
+  // a string and splitting it back out: `subject` is free text off the trail
+  // ingest, and the day one of them contains a space a split would quietly
+  // attribute the take to the wrong pair of people.
+  const takeCounts = new Map<string, { from: string; to: string; cells: number }>();
   for (const key of new Set([...ownerByCell.keys(), ...ownerThenByCell.keys()])) {
     const before = ownerThenByCell.get(key) ?? null;
     const after = ownerByCell.get(key) ?? null;
@@ -186,16 +190,15 @@ export async function gatherLandgrabWeek(
     // A TAKE is a cell that changed hands between two NAMED people. Virgin
     // ground is a gain and not a take — "took 0.09 km2 off nobody" is noise.
     if (before && after) {
-      const pair = `${before} ${after}`;
-      takeCounts.set(pair, (takeCounts.get(pair) ?? 0) + 1);
+      const pair = `${before} ${after}`;
+      const seen = takeCounts.get(pair);
+      if (seen) seen.cells += 1;
+      else takeCounts.set(pair, { from: before, to: after, cells: 1 });
     }
   }
 
-  const takes = [...takeCounts]
-    .map(([pair, cells]) => {
-      const [from, to] = pair.split(' ');
-      return { from, to, cells, areaM2: cells * cellAreaM2 };
-    })
+  const takes = [...takeCounts.values()]
+    .map((t) => ({ ...t, areaM2: t.cells * cellAreaM2 }))
     .sort((a, b) => b.cells - a.cells || (a.to < b.to ? -1 : 1))
     .slice(0, 5);
 
