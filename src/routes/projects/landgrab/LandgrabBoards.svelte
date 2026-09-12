@@ -77,7 +77,7 @@
           {contested.cells.toLocaleString('en-GB')} cells · {windowTag}
         </span>
       </header>
-      <table class="week week--contest">
+      <table class="week">
         <!-- Four columns is one more than this table was built for, and a
              table's `width: 100%` does not bind it below its min-content: at
              360px the fourth column ran 13px past the viewport and was clipped
@@ -144,6 +144,11 @@
       <span class="metric-label muted">gained / lost vs {win.weekBasis}</span>
     </header>
     <table class="week">
+      <colgroup>
+        <col style="width: 50%" />
+        <col style="width: 25%" />
+        <col style="width: 25%" />
+      </colgroup>
       <thead>
         <tr>
           <th scope="col" class="metric-label">Player</th>
@@ -348,6 +353,7 @@
 
   .week {
     width: 100%;
+    table-layout: fixed;
     border-collapse: collapse;
   }
   .week th,
@@ -372,9 +378,6 @@
     font-weight: 400;
     text-transform: uppercase;
     color: var(--text-primary);
-  }
-  .week--contest {
-    table-layout: fixed;
   }
   .num-col {
     text-align: right;
