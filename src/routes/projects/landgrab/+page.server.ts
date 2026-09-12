@@ -47,6 +47,10 @@ const round = (n: number) => Math.round(n * 10 ** COORD_DP) / 10 ** COORD_DP;
 
 const FEED_LIMIT = 40;
 
+/** The highest legal tile index at z19, on both axes — the same bound
+ *  `/projects/landgrab/geo` enforces on `?x`/`?y`. */
+const MAX_TILE_INDEX = 2 ** 19 - 1;
+
 /** One dissolved component in the payload's [lat, lon] shape. Shared by the
  *  territory rings and the handover outlines, so the two cannot drift apart in
  *  rounding or in axis order. */
@@ -284,9 +288,14 @@ export const load: PageServerLoad = async (event) => {
   const letter = await latestLandgrabWeekly();
 
   // A deep link into the drill: `?geo=x:y`. Validated here, fetched by the client.
+  // Seven digits admits 9,999,999, but z19's highest legal index on either axis
+  // is 524,287 — so a shape-only check hands the client a cell reference the
+  // endpoint answers with a 400, and the drawer opens on an error. The bound
+  // makes an out-of-range link simply not a deep link.
   const geoParam = event.url.searchParams.get('geo');
   const geoMatch = geoParam ? /^(\d{1,7}):(\d{1,7})$/.exec(geoParam) : null;
-  const geo = geoMatch ? { x: Number(geoMatch[1]), y: Number(geoMatch[2]) } : null;
+  const geoXY = geoMatch ? { x: Number(geoMatch[1]), y: Number(geoMatch[2]) } : null;
+  const geo = geoXY && geoXY.x <= MAX_TILE_INDEX && geoXY.y <= MAX_TILE_INDEX ? geoXY : null;
 
   // -------------------------------------------------------------------------
   // The capture feed. geo_claims.tiles_taken is `{victim: count}` with
