@@ -9,7 +9,7 @@
 // font that stopped being embedded, or a shell left stale on disk — none of
 // which a type check or a pure test can see.
 import { existsSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { PERSONA_STAGE, type Artefact } from '$lib/policy-analysis/contracts';
 import { executeStage } from '$lib/policy-analysis/pipeline';
@@ -39,6 +39,12 @@ async function assessment(): Promise<Artefact[]> {
 }
 
 when(built ? 'the pack a reader receives' : 'the pack a reader receives — SKIPPED, run `npm run build:offline`', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-11T09:00:00.000Z'));
+  });
+  afterEach(() => vi.useRealTimers());
+
   it('is one file that asks nothing of the network', async () => {
     const artefacts = await assessment();
     const shell = await readOfflineShell();
