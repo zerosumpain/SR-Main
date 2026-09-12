@@ -113,4 +113,128 @@ export interface LandgrabData {
   feed: FeedItem[];
   dangle: DangleLine[];
   totals: { events: number; claims: number; cells: number; areaM2: number };
+  focus: MapFocus;
+  handovers: Handovers;
+  share: ShareRow[];
+  battlegrounds: Battleground[];
+  nextMoves: NextMove[];
+  letter: WeeklyLetter | null;
+  /** A validated `?geo=x:y` deep link, opened by the client on mount. */
+  geo: { x: number; y: number } | null;
+}
+
+/** [[southLat, westLon], [northLat, eastLon]] */
+export type LatLonBounds = [[number, number], [number, number]];
+
+export interface MapFocus {
+  bounds: LatLonBounds;
+  /** 'home' — Darlington; 'away' — a heavier cluster elsewhere; 'quiet' — no change in the window. */
+  reason: 'home' | 'away' | 'quiet';
+  /** Cells that changed hands in the window, inside the focus bounds. */
+  changedCells: number;
+  /** The sentence the map head prints, e.g. "Darlington · 312 cells changed hands". */
+  label: string;
+}
+
+/** Cells whose owner differs from a week ago, dissolved unsmoothed. */
+export interface Handovers {
+  cells: number;
+  regions: LandgrabRegion[];
+}
+
+export interface ShareRow {
+  subject: string;
+  cells: number;
+  areaM2: number;
+  /** cells / every cell the household holds, 0..1. */
+  share: number;
+  /** cells inside HOME_BOX × cellAreaM2 / homeBoxAreaM2(), 0..1. */
+  homeShare: number;
+  gainedM2: number;
+  lostM2: number;
+}
+
+export interface Battleground {
+  /** The lexicographically smallest tile key ("x:y") in the component — stable across loads. */
+  id: string;
+  name: string | null;
+  /** [lat, lon] */
+  centre: [number, number];
+  cells: number;
+  /** Descending by cells. */
+  holders: Array<{ subject: string; cells: number }>;
+  /** Cells in the component whose owner differs from a week ago. */
+  handovers: number;
+  /** Everyone with at least one event in the component. */
+  contenders: string[];
+}
+
+export interface NextMove {
+  subject: string;
+  /** Majority holder of the cheap cluster. */
+  holder: string;
+  cells: number;
+  /** [lat, lon] */
+  centre: [number, number];
+  /** ownerScore − challenger's score, the largest in the cluster. */
+  maxGap: number;
+  /** floor(LOOP_WEIGHT / maxGap): a single loop spread over up to this many cells takes every one. */
+  loopCells: number;
+  /** The battleground the centre falls in, if any. */
+  near: string | null;
+}
+
+export interface TimelinePoint {
+  /** UTC day. */
+  day: string;
+  /** Cells held over the region, by subject. */
+  cells: Record<string, number>;
+}
+
+export interface FlipLine {
+  day: string;
+  /** null — taken from open ground. */
+  from: string | null;
+  to: string;
+  cells: number;
+}
+
+export interface BattleRow {
+  subject: string;
+  events: number;
+  loops: number;
+  tramples: number;
+  fills: number;
+  activeDays: number;
+  cellsNow: number;
+  cellsPeak: number;
+  /** Cells taken off somebody (never from open ground). */
+  took: number;
+  lost: number;
+  firstAt: string | null;
+  lastAt: string | null;
+}
+
+export interface RegionHistory {
+  anchor: string;
+  /** The player whose dissolved region was tapped. */
+  subject: string;
+  cells: number;
+  areaM2: number;
+  centre: [number, number];
+  /** Earliest ownerSince over the region's cells. */
+  since: string | null;
+  name: string | null;
+  timeline: TimelinePoint[];
+  flips: FlipLine[];
+  battle: BattleRow[];
+  handovers: number;
+}
+
+export interface WeeklyLetter {
+  /** Local day, YYYY-MM-DD. */
+  weekEnding: string;
+  summary: string;
+  narrative: string | null;
+  verified: boolean | null;
 }

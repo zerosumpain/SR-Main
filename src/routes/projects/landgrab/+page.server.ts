@@ -15,7 +15,7 @@ import {
 import { GEO_THRESHOLDS } from '$lib/geo/loops';
 import { connectedComponents, dissolveTiles } from '$lib/geo/dissolve';
 import { tileAreaM2, tileCentre, tileKeyOf, type Tile } from '$lib/geo/tiles';
-import { assignIdentities, ACTIVITY_FILTERS, DEFAULT_WINDOW, windowOf } from './identity';
+import { assignIdentities, ACTIVITY_FILTERS, DEFAULT_WINDOW, HOME_BOX, windowOf } from './identity';
 import { resolveContest } from './contested';
 import type { DateWindowKey } from './identity';
 import type { LandgrabData, LandgrabRegion, FeedItem } from './types';
@@ -560,6 +560,21 @@ export const load: PageServerLoad = async (event) => {
       cells: ownedNow.size,
       areaM2: ownedNow.size * cellAreaM2,
     },
+    focus: {
+      bounds: [
+        [HOME_BOX.south, HOME_BOX.west],
+        [HOME_BOX.north, HOME_BOX.east],
+      ],
+      reason: 'quiet',
+      changedCells: 0,
+      label: 'Darlington · nothing has changed hands',
+    },
+    handovers: { cells: 0, regions: [] },
+    share: [],
+    battlegrounds: [],
+    nextMoves: [],
+    letter: null,
+    geo: null,
   };
 
   return { landgrab: payload };
@@ -597,6 +612,21 @@ function emptyPayload(
       feed: [],
       dangle: [],
       totals: { events: 0, claims: 0, cells: 0, areaM2: 0 },
+      focus: {
+        bounds: [
+          [HOME_BOX.south, HOME_BOX.west],
+          [HOME_BOX.north, HOME_BOX.east],
+        ],
+        reason: 'quiet',
+        changedCells: 0,
+        label: 'Darlington · nothing has changed hands',
+      },
+      handovers: { cells: 0, regions: [] },
+      share: [],
+      battlegrounds: [],
+      nextMoves: [],
+      letter: null,
+      geo: null,
     },
   };
 }

@@ -105,6 +105,46 @@ export type ActivityFilter = (typeof ACTIVITY_FILTERS)[number];
 export const UNTYPED_LABEL = 'untyped';
 
 // ---------------------------------------------------------------------------
+// Home. The map biases here, and "n% of Darlington" is measured against it.
+//
+// A fixed box, not a boundary: no town outline is available without a geodata
+// dependency, and a box is honest as long as every surface calls it "the
+// Darlington box". About 6.6 km by 7.5 km — the built-up area, not the borough.
+// ---------------------------------------------------------------------------
+export interface HomeBox {
+  name: string;
+  south: number;
+  north: number;
+  west: number;
+  east: number;
+  /** [lat, lon] */
+  centre: [number, number];
+}
+
+export const HOME_BOX: HomeBox = {
+  name: 'Darlington',
+  south: 54.497,
+  north: 54.556,
+  west: -1.607,
+  east: -1.49,
+  centre: [54.5253, -1.5535],
+};
+
+const EARTH_M_PER_DEG = 111_195; // mean metres per degree of latitude
+
+/** Planar area of the box in square metres, cos-corrected at its middle latitude. */
+export function homeBoxAreaM2(box: HomeBox = HOME_BOX): number {
+  const midLat = ((box.north + box.south) / 2) * (Math.PI / 180);
+  const h = (box.north - box.south) * EARTH_M_PER_DEG;
+  const w = (box.east - box.west) * EARTH_M_PER_DEG * Math.cos(midLat);
+  return h * w;
+}
+
+export function inHomeBox(lat: number, lon: number, box: HomeBox = HOME_BOX): boolean {
+  return lat >= box.south && lat <= box.north && lon >= box.west && lon <= box.east;
+}
+
+// ---------------------------------------------------------------------------
 // The date window
 // ---------------------------------------------------------------------------
 
