@@ -1,23 +1,17 @@
-// Who is who, visually — the one place a player's colour, hatch and initial are
+// Who is who, visually — the one place a player's colour and initial are
 // decided.
 //
 // CLIENT-SAFE ON PURPOSE. It is imported by the page, the map, the feed and the
 // boards, so it must never reach for `$lib/geo` (server-only) or the database.
 //
-// Decision 14 of the spec: five on-brand hues cannot be simultaneously >=3:1 on
-// cream and deuteranope-safe, so COLOUR NEVER CARRIES IDENTITY ALONE. Every
-// player is a triple — colour, hatch and a mono initial — and every surface
-// that names a player shows at least two of the three.
+// COLOUR NEVER CARRIES IDENTITY ALONE. It used to be a triple — colour, a
+// per-player hatch and a mono initial — and the hatch was retired on
+// 2026-09-12: as a Mapbox `fill-pattern` it is a RASTER registered at one pixel
+// ratio, so on a hex board it moires and drifts against the shape it fills at
+// every zoom between the one it was drawn for. What is left is colour plus the
+// initial, and every surface that names a player still shows both.
 
 import { CLUSTER_COLOURS } from '$lib/components/intel/graph-visual';
-
-/**
- * The hatch alphabet. Six, so the sixth player is still distinguishable in a
- * greyscale print of the map, and ordered so adjacent slots never share an
- * angle.
- */
-export const HATCHES = ['diag', 'back', 'vert', 'horiz', 'grid', 'dots'] as const;
-export type Hatch = (typeof HATCHES)[number];
 
 export interface PlayerIdentity {
   subject: string;
@@ -28,7 +22,6 @@ export interface PlayerIdentity {
   /** Durable palette slot. */
   slot: number;
   colour: string;
-  hatch: Hatch;
 }
 
 /** FNV-1a. Small, stable, and identical on the server and in the browser. */
@@ -69,7 +62,6 @@ export function assignIdentities(subjects: readonly string[]): PlayerIdentity[] 
       initial: (subject.charAt(0) || '?').toUpperCase(),
       slot,
       colour: CLUSTER_COLOURS[slot],
-      hatch: HATCHES[slot % HATCHES.length],
     };
   });
 }
@@ -87,7 +79,6 @@ export const UNCLAIMED_IDENTITY: PlayerIdentity = {
   initial: '·',
   slot: -1,
   colour: 'rgba(26, 16, 8, 0.45)',
-  hatch: 'dots',
 };
 
 /** Activity filter dimensions, in the order the toolbar shows them. */

@@ -103,7 +103,7 @@
             {@const p = byId.get(r.subject)}
             <tr style="--who: {p?.colour ?? 'var(--text-primary)'}">
               <th scope="row" class="week-who">
-                <Swatch colour={p?.colour ?? 'var(--text-primary)'} hatch={p?.hatch ?? 'dots'} />
+                <Swatch colour={p?.colour ?? 'var(--text-primary)'} />
                 {p?.name ?? r.subject}
               </th>
               <td class="num-col gain">{r.holds.toLocaleString('en-GB')}</td>
@@ -144,7 +144,7 @@
           {@const p = byId.get(s.subject)}
           <tr style="--who: {p?.colour ?? 'var(--text-primary)'}">
             <th scope="row" class="week-who">
-              <Swatch colour={p?.colour ?? 'var(--text-primary)'} hatch={p?.hatch ?? 'dots'} />
+              <Swatch colour={p?.colour ?? 'var(--text-primary)'} />
               {p?.name ?? s.subject}
             </th>
             <td class="num-col gain">{s.gainedTiles ? `+${km2(s.gainedM2)}` : '—'}</td>
@@ -168,7 +168,7 @@
         {#each recent as c (c.id)}
           {@const p = byId.get(c.subject)}
           <li class="board-row board-row--recent" style="--who: {p?.colour ?? 'var(--text-primary)'}">
-            <Swatch colour={p?.colour ?? 'var(--text-primary)'} hatch={p?.hatch ?? 'dots'} />
+            <Swatch colour={p?.colour ?? 'var(--text-primary)'} />
             <span class="who">{p?.name ?? c.subject}</span>
             <span class="recent-r">
               <span class="val val--sm">{km2(c.areaM2)} km²</span>

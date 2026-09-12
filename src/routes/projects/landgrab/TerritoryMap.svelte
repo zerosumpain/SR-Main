@@ -74,11 +74,30 @@
    * The ramp tops out at 1, NOT at a second dimming. `--line-strong` is a tint
    * — `rgba(26, 16, 8, 0.16)` — and Mapbox multiplies `line-opacity` into the
    * colour's own alpha, so a 0.5 ceiling here would draw the honeycomb at 8%
-   * of near-black on a near-white basemap and it would read as basemap
-   * furniture rather than as ground nobody has taken.
+   * of near-black on a pale basemap and it would read as basemap furniture
+   * rather than as ground nobody has taken.
    */
   const MESH_OPACITY = ['interpolate', ['linear'], ['zoom'], 14, 0, 15.5, 1];
   const HEX_EDGE_WIDTH = ['interpolate', ['linear'], ['zoom'], 12, 0, 14, 0.4, 16, 1.1];
+
+  /**
+   * Flat colour, ramped with the zoom — no hatch.
+   *
+   * Each player used to be colour AND a hatch, drawn as a Mapbox
+   * `fill-pattern`: an 18x18 canvas registered once at `pixelRatio: 2`. A
+   * raster pattern does not scale with the geometry it fills, so on a 47 m hex
+   * it moires and drifts against the shape at every zoom but the one it
+   * happened to be drawn for — which is exactly what it looked like on the
+   * board. Identity is colour plus the mono initial now, on every surface
+   * (see `Swatch`).
+   *
+   * The ramp exists because `fill-pattern` forced `fill-opacity: 1`, and simply
+   * dropping it would have left the board far lighter than the thing it
+   * replaced. Zoomed out the fills are near-solid and read as territory;
+   * zoomed in they let the street underneath show through, which is what makes
+   * a hex feel like ground rather than a tile.
+   */
+  const HEX_FILL_OPACITY = ['interpolate', ['linear'], ['zoom'], 12, 0.62, 15, 0.5, 17, 0.4];
 
   let container: HTMLDivElement | undefined = $state();
   let error = $state<string | null>(null);
@@ -149,8 +168,7 @@
         weight: HEX_EDGE_WIDTH,
         opacity: 0.9,
         fillColor: who.colour,
-        fillOpacity: 0.22,
-        hatch: who.hatch,
+        fillOpacity: HEX_FILL_OPACITY,
         lineJoin: 'round',
       });
       layer.bindTooltip(`${who.initial} · ${who.name}`, { sticky: true, className: 'lg-tip' });
@@ -295,8 +313,14 @@
         const lib = await loadMapbox();
         if (cancelled || !container) return;
         M = lib;
+        // NO `theme`, so this takes `MAPBOX_STYLE` — the same outdoors-v12
+        // every map on /health draws on, because `TrackMap` passes no theme
+        // either. v2 forced `theme: 'schematic'` (light-v11) to keep five
+        // hatched territories the only saturated thing on screen; with the
+        // hatches gone that reasoning went with them, and what was left was a
+        // map whose place names were set in a different face from every other
+        // map on the site.
         const map = lib.map(container, {
-          theme: 'schematic',
           scrollWheelZoom: false,
           zoomControl: true,
           attributionControl: true,
@@ -450,8 +474,7 @@
     letter-spacing: var(--tracking-label);
     color: var(--text-muted);
   }
-  /* The basemap is context, not content — `theme: 'schematic'` is light-v11, so
-     five hatched territories are the only saturated thing on screen. */
+  /* The same basemap as every /health map, so the two read as one family. */
   :global(.lg-tip) {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
@@ -467,9 +490,11 @@
   :global(.lg-tip::before) {
     display: none;
   }
+  /* `TrackMap`'s two rules, verbatim: the same cream behind an unloaded tile
+     and the same mono for the controls Mapbox builds in the DOM. */
   :global(.mapboxgl-map) {
-    background: var(--surface-sunken);
     font-family: var(--font-mono);
+    background: #e8dece;
   }
   :global(.mapboxgl-ctrl-attrib) {
     font-family: var(--font-mono);

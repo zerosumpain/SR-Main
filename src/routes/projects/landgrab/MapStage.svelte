@@ -11,13 +11,17 @@
    * this page that is a picture, and it is framed like one.
    *
    * The picture is a BOARD as of 2026-09-12: a fixed honeycomb over everything,
-   * coloured where somebody holds it. The key still counts cells, because a
-   * cell is what the ledger, the boards and the Sunday letter all count — and a
-   * hex is one cell of ground by construction.
+   * coloured where somebody holds it, on the same basemap every /health map
+   * uses. The key still counts cells, because a cell is what the ledger, the
+   * boards and the Sunday letter all count — and a hex is one cell of ground by
+   * construction.
    */
   import TerritoryMap from './TerritoryMap.svelte';
   import Swatch from './Swatch.svelte';
   import { DATE_WINDOWS, identityMap, km2, windowShort } from './identity';
+  // The ground width of one hex across the flats, from the same ratio the
+  // lattice is built on rather than a second constant that could drift from it.
+  import { HEX_WIDTH_TILES } from '$lib/geo/hex';
   import type { LandgrabData } from './types';
 
   type TerritoryTap = { lat: number; lon: number; subject: string | null };
@@ -144,7 +148,7 @@
             onclick={() => ontoggleSubject(p.subject)}
             disabled={applying}
           >
-            <Swatch colour={p.colour} hatch={p.hatch} />{p.name}
+            <Swatch colour={p.colour} />{p.name}
           </button>
         {/each}
       </div>
@@ -153,7 +157,7 @@
 
   <div class="lg-frame">
     <div class="lg-frame-head">
-      <p class="lg-frame-label">The board · light basemap</p>
+      <p class="lg-frame-label">The board · {Math.round(lg.cellSideM * HEX_WIDTH_TILES)} m hexes</p>
       <p class="lg-frame-meta">{lg.focus.label} · {windowShort(lg.window.key)}</p>
     </div>
 
@@ -194,7 +198,7 @@
             disabled={!drawn.has(row.subject)}
             onclick={() => toggleIsolate(row.subject)}
           >
-            <Swatch colour={p?.colour ?? 'var(--text-primary)'} hatch={p?.hatch ?? 'diag'} />
+            <Swatch colour={p?.colour ?? 'var(--text-primary)'} />
             <b>{p?.initial ?? '?'}</b>
             {p?.name ?? row.subject}
             <span class="lg-key-v">{km2(row.areaM2)} km²</span>
@@ -292,7 +296,7 @@
     border-color: var(--who);
     color: var(--bg);
   }
-  /* The swatch inverts inside a filled chip, or its hatch disappears into it. */
+  /* The swatch inverts inside a filled chip, or it disappears into it. */
   .lg-chip--who.on :global(.sw) {
     border-color: var(--bg);
     --who: var(--bg);
