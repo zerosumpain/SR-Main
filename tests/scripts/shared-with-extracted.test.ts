@@ -28,10 +28,30 @@ describe('modules shared with the extracted applications', () => {
 
   it('still match the hashes recorded when they were duplicated', () => {
     const drifted: string[] = [];
+    const missing: string[] = [];
     for (const [file, entry] of Object.entries(manifest.files)) {
-      const actual = createHash('sha256').update(readFileSync(file)).digest('hex');
+      // A registered module that is GONE is the likelier failure during a
+      // refactor, and readFileSync throwing ENOENT here says nothing about why
+      // a test nobody was thinking about suddenly broke. Name it instead.
+      let contents: Buffer;
+      try {
+        contents = readFileSync(file);
+      } catch {
+        missing.push(`${file} (peer: ${entry.peer})`);
+        continue;
+      }
+      const actual = createHash('sha256').update(contents).digest('hex');
       if (actual !== entry.sha256) drifted.push(`${file} (peer: ${entry.peer})`);
     }
+    expect(
+      missing,
+      `these are listed in shared-with-extracted.json but no longer exist here:\n  ${missing.join('\n  ')}\n\n` +
+        `If you MOVED one, update its path in shared-with-extracted.json and in the\n` +
+        `matching test list, move it in the peer repository too, then run:\n` +
+        `  node scripts/record-shared-modules.mjs\n` +
+        `If you DELETED one because this repository no longer needs it, remove its\n` +
+        `entry from both — it is not a shared module any more.`,
+    ).toEqual([]);
     expect(
       drifted,
       `these are duplicated in an extracted application and have changed here:\n  ${drifted.join('\n  ')}\n\n` +
