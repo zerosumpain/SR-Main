@@ -13,16 +13,13 @@ describe('author_ephemeral_tool', () => {
 
   it('runs a handler that composes a primitive via platform.call', async () => {
     const res = await executeTool('author_ephemeral_tool', {
-      name: 'rand_points_map',
-      description: 'Renders a map of a few random London points',
+      name: 'small_table',
+      description: 'Renders a small table',
       parameters: { type: 'object', properties: {} },
       handlerCode: `
-        const points = [
-          { lat: 51.5, lng: -0.1 },
-          { lat: 51.51, lng: -0.12 },
-        ];
-        return await platform.call('render_map', {
-          layers: [{ kind: 'points', points }],
+        return await platform.call('render_table', {
+          columns: [{ key: 'name', label: 'Name' }],
+          rows: [{ name: 'Example' }],
         });
       `,
       callArgs: {},
@@ -33,9 +30,9 @@ describe('author_ephemeral_tool', () => {
       summary?: string;
       __ephemeral__?: { handlerCode: string; proposedName: string };
     };
-    expect(data.artifact?.type).toBe('map');
-    expect(data.__ephemeral__?.proposedName).toBe('rand_points_map');
-    expect(data.__ephemeral__?.handlerCode).toMatch(/render_map/);
+    expect(data.artifact?.type).toBe('table');
+    expect(data.__ephemeral__?.proposedName).toBe('small_table');
+    expect(data.__ephemeral__?.handlerCode).toMatch(/render_table/);
   });
 
   it('fails cleanly on a handlerCode syntax error', async () => {

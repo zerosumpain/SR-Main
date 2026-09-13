@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { postThought } from '$lib/daydream/feed-client';
   import LoadErrorCard from '$lib/components/jkai/daydream/hub/LoadErrorCard.svelte';
   import { stamp } from '$lib/daydream/format';
   /**
@@ -13,19 +12,12 @@
    * opens on one rollup now: one even cell per head, and the day's arithmetic
    * in a single table underneath.
    *
-   * Positions are the one thing NOT in the page payload. A lat/lon leaves the
-   * server only through the on-demand `family_now` action, for one owner-gated
-   * render, held for the life of this component and never cached — the same
-   * discipline the place-naming map established. The fetch fires on mount
-   * because arriving at this route is the intent the old tab-open was.
    */
-  import { onMount } from 'svelte';
   import type { PageData } from './$types';
   import type { Tone } from '$lib/daydream/priority';
   import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
   import RollupGrid from '$lib/components/jkai/daydream/hub/RollupGrid.svelte';
   import type { RollupCell } from '$lib/components/jkai/daydream/hub/types';
-  import FamilyMap, { type FamilyPosition } from '$lib/components/jkai/daydream/FamilyMap.svelte';
   import FamilyPerson from '$lib/components/jkai/daydream/rooms/FamilyPerson.svelte';
 
   let { data }: { data: PageData } = $props();
@@ -36,29 +28,6 @@
   /** Over this many minutes without a fix and the answer is "we don't know",
    *  which is a different answer from "at home" and must not look like one. */
   const STALE_MINS = 30;
-
-  // ── Positions, on demand ─────────────────────────────────────────────────
-  let famPositions = $state<FamilyPosition[] | null>(null);
-  let famLoading = $state(false);
-  let famError = $state<string | null>(null);
-
-  async function loadFamilyMap() {
-    famLoading = true;
-    famError = null;
-    const r = await postThought<{ positions?: FamilyPosition[] }>({ action: 'family_now' });
-    if (!r.ok) {
-      famError = r.error ?? 'could not load the map';
-      famPositions = null;
-    } else {
-      famPositions = r.out.positions ?? [];
-    }
-    famLoading = false;
-  }
-
-
-  onMount(() => {
-    void loadFamilyMap();
-  });
 
   // ── Formatting ───────────────────────────────────────────────────────────
   function cap(sub: string): string {
@@ -211,43 +180,6 @@
           </tbody>
         </table>
       </div>
-    {/if}
-  </div>
-</section>
-
-<section class="band sunken">
-  <div class="inner">
-    <SectionHead
-      kicker="B / On the map"
-      title={['Everyone,', 'plotted']}
-      strap="Fetched on demand and held only for this render — positions never ride the page payload and are never cached."
-    >
-      {#snippet aside()}
-        {#if famPositions}
-          <button type="button" class="btn" onclick={loadFamilyMap} disabled={famLoading}>
-            Refresh positions
-          </button>
-        {:else}
-          <button type="button" class="cta" onclick={loadFamilyMap} disabled={famLoading}>
-            Show the map
-          </button>
-        {/if}
-      {/snippet}
-    </SectionHead>
-
-    {#if famLoading}
-      <p class="lede">Locating everyone…</p>
-    {:else if famError}
-      <div class="card t-urgent">
-        <p class="card-body">{famError}</p>
-        <div class="card-actions">
-          <button type="button" class="btn" onclick={loadFamilyMap}>Try again</button>
-        </div>
-      </div>
-    {:else if famPositions && famPositions.length}
-      <FamilyMap positions={famPositions} />
-    {:else if famPositions}
-      <p class="lede">Nobody has a recent position.</p>
     {/if}
   </div>
 </section>

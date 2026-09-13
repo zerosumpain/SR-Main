@@ -23,9 +23,9 @@ describe('activeSection', () => {
   });
 
   it('does not match a section on a merely similar prefix', () => {
-    // '/heart' must not swallow '/health', nor '/live' swallow '/livestock'.
+    // Retired routes must not swallow the nearest live section.
     expect(activeSection('/health')?.id).toBe('health');
-    expect(activeSection('/heart')?.id).toBe('heart');
+    expect(activeSection('/heart')).toBeUndefined();
     expect(activeSection('/livestock')).toBeUndefined();
   });
 });
@@ -176,7 +176,7 @@ describe('the bar is never empty', () => {
     // The regression this guards: sections without children rendered an empty
     // band, so /, /blog, /projects, /decks and /releases lost the nav the site
     // has always had. The brief opens by naming that bar as the thing to keep.
-    for (const p of ['/', '/blog', '/projects', '/decks', '/releases', '/heart']) {
+    for (const p of ['/', '/blog', '/projects', '/decks', '/releases']) {
       const cells = navCellsFor(p, true).map((i) => i.href);
       expect(cells.length, `${p} rendered an empty nav bar`).toBeGreaterThan(3);
       expect(cells).toContain('/projects');

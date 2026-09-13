@@ -25,7 +25,6 @@
   import CodeRouteCard from '$lib/components/jkai/CodeRouteCard.svelte';
   import { categorizeTool, resolveDisplayTool } from '$lib/workflows/chat/tool-summary';
   import MessageAttachments from './MessageAttachments.svelte';
-  import FileViewerModal from '$lib/components/drive/FileViewerModal.svelte';
   import ResearchSourceModal from './ResearchSourceModal.svelte';
   import EntityHoverCard from '$lib/components/intel/EntityHoverCard.svelte';
   import { fetchMentionIndex, type MentionTarget } from '$lib/jkai/intel/entity-card-store';
@@ -50,7 +49,6 @@
   import { formatGbp } from '$lib/canvas/stats/costFormat';
   import { startTtftMark } from '$lib/jkai/ttft-metrics';
   import { beginTurn, noteOutput, noteToolStart, noteToolEnd, settleTurn } from '$lib/jkai/throughput-bus.svelte';
-  import { enqueueMessage } from '$lib/jkai/pwa/outbox';
   import {
     hydrateQueuedSends,
     queuedFor,
@@ -2042,17 +2040,8 @@
   // workflow_build_from_spec / monitor_create). Rendered as a deep-link chip.
   type WorkflowChipRef = { workflowId: string; slug: string; name: string; url: string };
 
-  let refModal = $state<{
-    file: { id: string; name: string; mimeType: string };
-    highlight: { passage: string; charStart?: number; charEnd?: number; modality?: string };
-  } | null>(null);
   function openFileRef(ref: FileSearchRef) {
-    refModal = {
-      // mimeType is left empty — the viewer derives the kind from the filename
-      // extension (source carries it, e.g. "…/portrait.jpg", "…Strategy.docx").
-      file: { id: ref.fileId, name: ref.source, mimeType: '' },
-      highlight: { passage: ref.passage, charStart: ref.charStart, charEnd: ref.charEnd, modality: ref.modality },
-    };
+    window.open(`/api/files/${encodeURIComponent(ref.fileId)}/download?inline=1`, '_blank', 'noopener');
   }
 
   // @research chips → open the source's reconstructed page material in the rich
@@ -2535,26 +2524,6 @@
     // typing; they get it back the moment they touch the wheel.
     pinToTop(userMsgId);
 
-    // Offline short-circuit: if the browser reports it's offline, skip the
-    // POST entirely, enqueue via the PWA outbox, and mark the user bubble
-    // queued so the badge renders. The sync manager will flush the outbox
-    // once connectivity returns; no progress bubble / SSE stream because
-    // there's no server-side job to stream from yet.
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-      try {
-        await enqueueMessage(conversationId, text, attachmentIds.length > 0 ? attachmentIds : undefined);
-      } catch (err) {
-        console.warn('[ChatArea] offline enqueue failed:', err);
-      }
-      messages = messages.map((m) => (m.id === userMsgId ? { ...m, queued: true } : m));
-      loading = false;
-      // Nothing is coming — there is no job to stream from. Drop the synthetic
-      // ack so it can't outlive the turn it was acknowledging.
-      heartbeat = null;
-      scrollToBottom();
-      return;
-    }
-
     const progressId = crypto.randomUUID();
     // The TTFT clock starts at submit, ahead of routing. It used to start after
     // routing had already resolved, so the number it logged was never the wait
@@ -2620,33 +2589,12 @@
         chatStream = null;
       }
     } catch (err) {
-      // Network-level failure (fetch threw, e.g. lost connectivity between
-      // the onLine check above and the POST, or a transient DNS/TLS error)
-      // OR a non-2xx server response. Fall back to the outbox so the user's
-      // message isn't lost. Drop the in-flight progress bubble and mark the
-      // user bubble queued so it gets the badge.
       const errMsg = err instanceof Error ? err.message : String(err);
       turnOk = false;
       finishStreamPatch(progressId);
-      const isNetworkError = err instanceof TypeError; // `fetch` throws TypeError on network failure
-      if (isNetworkError) {
-        try {
-          await enqueueMessage(conversationId, text, attachmentIds.length > 0 ? attachmentIds : undefined);
-          messages = messages
-            .filter((m) => m.id !== progressId)
-            .map((m) => (m.id === userMsgId ? { ...m, queued: true } : m));
-          pendingTtft.delete(progressId);
-        } catch (enqErr) {
-          console.warn('[ChatArea] fallback enqueue failed:', enqErr);
-          messages = messages.map((m) =>
-            m.id === progressId ? { ...m, isProgress: false, content: `Error: ${errMsg}` } : m,
-          );
-        }
-      } else {
-        messages = messages.map((m) =>
-          m.id === progressId ? { ...m, isProgress: false, content: `Error: ${errMsg}` } : m,
-        );
-      }
+      messages = messages.map((m) =>
+        m.id === progressId ? { ...m, isProgress: false, content: `Error: ${errMsg}` } : m,
+      );
     }
 
     settleStreamPatch(progressId);
@@ -3681,10 +3629,6 @@
     <div class="fixed bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 rounded text-sm z-50" style="background: var(--error); color: white;">
       {toast}
     </div>
-  {/if}
-
-  {#if refModal}
-    <FileViewerModal file={refModal.file} highlight={refModal.highlight} onClose={() => (refModal = null)} />
   {/if}
 
   {#if researchModal}

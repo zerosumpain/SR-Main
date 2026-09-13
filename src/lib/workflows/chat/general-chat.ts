@@ -1099,7 +1099,7 @@ async function runGeneralChat(
   }
 
   // Visualise tools are always available — the LLM should be able to reach
-  // for render_chart/render_map/render_table whenever it wants to answer
+  // for render_chart/render_table/render_diagram whenever it wants to answer
   // with a multimedia response.
   if (!activatedToolsets.has('visualise')) {
     activeTools.push(...getToolsetDefinitions('visualise'));

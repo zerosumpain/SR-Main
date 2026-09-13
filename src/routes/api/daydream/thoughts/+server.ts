@@ -89,41 +89,11 @@ export const POST: RequestHandler = async ({ request }) => {
         return json({ ok: true });
       }
 
-      case 'family_now': {
-        // Positions for the Family map, fetched on demand rather than riding
-        // in the page payload — the ledger's standing rule is that a lat/lon
-        // never leaves in bulk; this is one owner-gated read for one render,
-        // the same shape the place-naming map uses.
-        const { db } = await import('$lib/db');
-        const { daydreamTrail } = await import('$lib/db/schema');
-        const { FAMILY_SUBJECTS } = await import('$lib/daydream/types');
-        const { and, desc, eq, isNotNull } = await import('drizzle-orm');
-        const positions: Array<{ subject: string; lat: number; lon: number; isHome: boolean | null; ageMins: number }> = [];
-        for (const f of FAMILY_SUBJECTS) {
-          const [row] = await db
-            .select({ ts: daydreamTrail.ts, lat: daydreamTrail.lat, lon: daydreamTrail.lon, isHome: daydreamTrail.isHome })
-            .from(daydreamTrail)
-            .where(and(eq(daydreamTrail.subject, f.subject), isNotNull(daydreamTrail.lat)))
-            .orderBy(desc(daydreamTrail.ts))
-            .limit(1);
-          if (row?.lat != null && row.lon != null) {
-            positions.push({
-              subject: f.subject,
-              lat: row.lat,
-              lon: row.lon,
-              isHome: row.isHome,
-              ageMins: Math.max(0, Math.round((Date.now() - row.ts.getTime()) / 60_000)),
-            });
-          }
-        }
-        return json({ positions });
-      }
-
       case 'thought_map': {
         // A place question without a map is a memory test. Coordinates are
         // fetched here, one owner-gated read for one render, rather than riding
         // in the ledger payload — the standing rule this feature has kept since
-        // merge 3, and the same shape `family_now` and the naming card use.
+        // merge 3, and the same shape the naming card uses.
         const thoughtId = typeof body.thoughtId === 'string' ? body.thoughtId : '';
         if (!thoughtId) return json({ error: 'thoughtId is required' }, { status: 400 });
 
@@ -432,30 +402,10 @@ export const POST: RequestHandler = async ({ request }) => {
       }
 
       case 'suggest_name': {
-        // Reverse-geocode the place's own centre. The caller passes an id, not
-        // coordinates — the client should never be the source of truth for
-        // where a place is, and passing lat/lon in would let any caller
-        // geocode arbitrary points through an owner-gated route.
         const placeId = str('placeId');
         if (!placeId) return json({ error: 'placeId is required' }, { status: 400 });
-        const { db } = await import('$lib/db');
-        const { daydreamPlaces } = await import('$lib/db/schema');
-        const { eq } = await import('drizzle-orm');
-        const [place] = await db
-          .select({ lat: daydreamPlaces.lat, lon: daydreamPlaces.lon })
-          .from(daydreamPlaces)
-          .where(eq(daydreamPlaces.id, placeId))
-          .limit(1);
-        if (!place) return json({ error: 'no such place' }, { status: 404 });
-        const { suggestPlaceName } = await import('$lib/daydream/geocode');
         const { getPlaceVisits } = await import('$lib/daydream/places');
-        // Both in one round trip: the naming form wants them together, and two
-        // requests for one panel is two chances to half-render.
-        const [suggestion, visits] = await Promise.all([
-          suggestPlaceName(place.lat, place.lon),
-          getPlaceVisits(placeId),
-        ]);
-        return json({ ok: true, suggestion, visits });
+        return json({ ok: true, suggestion: null, visits: await getPlaceVisits(placeId) });
       }
 
       case 'name_place': {

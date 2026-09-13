@@ -24,7 +24,7 @@ describe('validateBlocks', () => {
         series: [{ label: 's', points: [{ x: 0, y: 1 }] }],
       },
       { type: 'embed', embed: 'federation-sim', config: { scenario: 'x', autoplay: true } },
-      { type: 'iframe', src: '/projects/data-spine', title: 'Study' },
+      { type: 'iframe', src: '/projects/archetype', title: 'Study' },
     ]);
     expect(res.issues).toEqual([]);
     expect(res.ok).toBe(true);
@@ -64,7 +64,7 @@ describe('validateBlocks', () => {
   it('rejects protocol-relative and backslash iframe URLs', () => {
     expect(validateBlocks([{ type: 'iframe', src: '//evil.example', title: 'x' }]).ok).toBe(false);
     expect(validateBlocks([{ type: 'iframe', src: '/\\evil.example', title: 'x' }]).ok).toBe(false);
-    expect(validateBlocks([{ type: 'iframe', src: '/projects/data-spine', title: 'x' }]).ok).toBe(true);
+    expect(validateBlocks([{ type: 'iframe', src: '/projects/archetype', title: 'x' }]).ok).toBe(true);
   });
 
   it('rejects a non-array payload', () => {

@@ -222,7 +222,7 @@
         class="pm-in mono"
         bind:value={slug}
         disabled={busy || isPublished || detecting}
-        placeholder={isRepo ? 'family-life360-history' : 'graphing-calculator'}
+        placeholder={isRepo ? 'new-project' : 'graphing-calculator'}
         maxlength="60"
       />
       {#if detecting}

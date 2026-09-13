@@ -296,7 +296,7 @@ describe('a chain with nothing wrong', () => {
   it('produces no signals rather than manufacturing one', () => {
     const analysis = analyseChain(trace([
       jkai('invoke', 'apple_calendar_list', { query: 'date' }),
-      step('render_map', {}),
+      step('render_table', {}),
     ]));
     expect(analysis.signals).toEqual([]);
     expect(analysis.discoveryShare).toBe(0);

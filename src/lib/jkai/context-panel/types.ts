@@ -216,23 +216,6 @@ export const drillGraphSchema = z.object({
 });
 export type DrillGraph = z.infer<typeof drillGraphSchema>;
 
-/** Points to put on a map: a daydream place with its cluster radius, or a
- *  geocoded intel place. Lat/lon leave the server one drill at a time. */
-export const drillMapSchema = z.object({
-  points: z.array(z.object({
-    lat: z.number(),
-    lon: z.number(),
-    label: z.string(),
-    note: z.string().optional(),
-    radiusM: z.number().optional(),
-    tone: drillToneSchema.optional(),
-    drill: z.string().optional(),
-  })).min(1).max(60),
-  /** What produced the coordinates — a geocoder's own label, or "you named it". */
-  provenance: z.string().optional(),
-});
-export type DrillMap = z.infer<typeof drillMapSchema>;
-
 export const drillManifestSchema = z.object({
   target: z.string(),
   kind: z.enum([
@@ -249,7 +232,6 @@ export const drillManifestSchema = z.object({
   /** Set for `entity` manifests: the modal mounts the intel EntityCard. */
   entityId: z.string().optional(),
   graph: drillGraphSchema.optional(),
-  map: drillMapSchema.optional(),
   facts: z.array(drillFactSchema).max(8).default([]),
   sections: z.array(drillSectionSchema).max(8).default([]),
   actions: z.array(drillActionSchema).max(8).default([]),

@@ -1,12 +1,11 @@
 // src/lib/workflows/site-tools/tools/visualise.ts
 // Primitive renderer tools. Each returns an ArtifactToolData envelope so
 // ChatArea can render the output inline. Kept dependency-free on the server;
-// client components pull in vega-embed / Mapbox at render time.
+// client components pull in Vega at render time.
 
 import { register } from '../registry-internal';
 import type { ToolResult } from '../registry-internal';
 import type { Artifact, ArtifactToolData, TableColumn } from '../artifact-types';
-import { geocodePlace, geocodePlaces } from '../geocode';
 
 function ok(artifact: Artifact, summary: string): ToolResult {
   const data: ArtifactToolData = { artifact, summary };
@@ -161,181 +160,6 @@ register({
   },
 });
 
-// -------- render_map --------
-
-type MapPointArg = {
-  lat?: number;
-  lng?: number;
-  /** A place NAME, resolved server-side when lat/lng are absent. */
-  place?: string;
-  label?: string;
-  weight?: number;
-};
-
-type MapLayerArg = {
-  kind: 'points' | 'track' | 'heatmap';
-  points: MapPointArg[];
-};
-
-function summariseMap(layers: MapLayerArg[]): string {
-  const counts = { points: 0, track: 0, heatmap: 0 };
-  let total = 0;
-  for (const l of layers) {
-    counts[l.kind]++;
-    total += l.points.length;
-  }
-  const parts: string[] = [];
-  if (counts.track) parts.push(`${counts.track} track${counts.track > 1 ? 's' : ''}`);
-  if (counts.points) parts.push(`${counts.points} points layer${counts.points > 1 ? 's' : ''}`);
-  if (counts.heatmap) parts.push(`${counts.heatmap} heatmap layer${counts.heatmap > 1 ? 's' : ''}`);
-  return `Map: ${parts.join(', ')} — ${total} point${total === 1 ? '' : 's'} total`;
-}
-
-register({
-  name: 'render_map',
-  description:
-    'Render an interactive map inline in the chat. Reach for it whenever the answer is somewhere on Earth — a location, a route, a spread of points — not only when the user asks for a map. Center/zoom auto-fit from point bounds if omitted.',
-  toolset: 'visualise',
-  category: 'Visualise',
-  parameters: {
-    type: 'object',
-    properties: {
-      layers: {
-        type: 'array',
-        description: 'One or more layers. Each layer has a kind and a points array.',
-        items: {
-          type: 'object',
-          properties: {
-            kind: { type: 'string', enum: ['points', 'track', 'heatmap'] },
-            points: {
-              type: 'array',
-              items: {
-                type: 'object',
-                description:
-                  'Either coordinates (`lat` + `lng`) or a `place` name to look up. PREFER `place` — a name is looked up against Mapbox (falling back to OpenStreetMap) and plotted exactly, where a coordinate written from memory is usually wrong by a street or more.',
-                properties: {
-                  lat: { type: 'number' },
-                  lng: { type: 'number' },
-                  place: {
-                    type: 'string',
-                    description:
-                      'Place name to geocode, e.g. "Norwich Cathedral" or "Mousehold Heath, Norwich". Used when lat/lng are omitted. Include the town or county — the more specific, the better the hit.',
-                  },
-                  label: { type: 'string' },
-                  weight: { type: 'number', description: 'Only used for heatmap layers.' },
-                },
-              },
-            },
-          },
-          required: ['kind', 'points'],
-        },
-      },
-      center: {
-        type: 'array',
-        description: 'Optional [lat, lng] center. Auto-fit bounds if omitted.',
-        items: { type: 'number' },
-      },
-      zoom: { type: 'number', description: 'Optional zoom level (1–18).' },
-      near: {
-        type: 'array',
-        description:
-          'Optional [lat, lng] hint for resolving `place` names. Strongly recommended when the names are ambiguous — "Snowdon" alone resolves to Montreal, not Wales.',
-        items: { type: 'number' },
-      },
-      caption: { type: 'string' },
-    },
-    required: ['layers'],
-  },
-  handler: async (args): Promise<ToolResult> => {
-    const layers = args.layers as MapLayerArg[] | undefined;
-    const center = args.center as [number, number] | undefined;
-    const zoom = args.zoom as number | undefined;
-    const near = args.near as [number, number] | undefined;
-    const caption = args.caption as string | undefined;
-
-    if (!Array.isArray(layers) || layers.length === 0) {
-      return fail('layers must be a non-empty array');
-    }
-    for (let i = 0; i < layers.length; i++) {
-      const l = layers[i];
-      if (!l || typeof l !== 'object') return fail(`layers[${i}] must be an object`);
-      if (!['points', 'track', 'heatmap'].includes(l.kind)) {
-        return fail(`layers[${i}].kind must be 'points' | 'track' | 'heatmap'`);
-      }
-      if (!Array.isArray(l.points) || l.points.length === 0) {
-        return fail(`layers[${i}].points must be a non-empty array`);
-      }
-      for (let j = 0; j < l.points.length; j++) {
-        const p = l.points[j];
-        if (!p || typeof p !== 'object') return fail(`layers[${i}].points[${j}] must be an object`);
-        const hasCoords = typeof p.lat === 'number' && typeof p.lng === 'number';
-        const hasPlace = typeof p.place === 'string' && p.place.trim().length > 1;
-        if (!hasCoords && !hasPlace) {
-          return fail(
-            `layers[${i}].points[${j}] needs either numeric lat and lng, or a "place" name to look up`,
-          );
-        }
-      }
-    }
-
-    // Resolve every `place` in one pass. Batched deliberately: geocodePlaces
-    // de-duplicates, and on the Nominatim fallback path it paces itself against
-    // that one-per-second policy, which a per-point lookup here would not.
-    const wanted: string[] = [];
-    for (const l of layers) {
-      for (const p of l.points) {
-        if (typeof p.lat !== 'number' || typeof p.lng !== 'number') {
-          if (typeof p.place === 'string') wanted.push(p.place);
-        }
-      }
-    }
-    const resolved = new Map<string, { lat: number; lng: number; label: string } | null>();
-    if (wanted.length > 0) {
-      for (const r of await geocodePlaces(wanted, near ? { near } : {})) {
-        resolved.set(r.place.trim().toLowerCase(), r.hit);
-      }
-    }
-
-    // A place that would not resolve fails the whole call. Plotting the rest
-    // would draw a map that looks complete and is quietly missing somewhere —
-    // the exact failure this lookup exists to prevent.
-    const unresolved: string[] = [];
-    const plotted: MapLayerArg[] = layers.map((l) => ({
-      kind: l.kind,
-      points: l.points.map((p) => {
-        if (typeof p.lat === 'number' && typeof p.lng === 'number') {
-          return { lat: p.lat, lng: p.lng, label: p.label, weight: p.weight };
-        }
-        const hit = resolved.get((p.place ?? '').trim().toLowerCase());
-        if (!hit) {
-          unresolved.push(p.place ?? '(unnamed)');
-          return { lat: 0, lng: 0 };
-        }
-        // The geocoder's label is kept when the caller supplied none, so the
-        // tooltip says which "Newcastle" it actually plotted.
-        return { lat: hit.lat, lng: hit.lng, label: p.label ?? hit.label, weight: p.weight };
-      }),
-    }));
-
-    if (unresolved.length > 0) {
-      return fail(
-        `could not find ${unresolved.map((u) => JSON.stringify(u)).join(', ')} — add the town or county to the name, or pass lat/lng directly` +
-          (near ? '' : ', or set `near` to bias the lookup'),
-      );
-    }
-
-    const artifact: Artifact = {
-      type: 'map',
-      center,
-      zoom,
-      layers: plotted as Artifact extends { type: 'map'; layers: infer L } ? L : never,
-      caption,
-    };
-    const summary = summariseMap(plotted);
-    return ok(artifact, summary);
-  },
-});
-
 // -------- render_diagram --------
 
 /** The mermaid diagram headers worth advertising. A model that writes anything
@@ -357,7 +181,7 @@ const DIAGRAM_KINDS = [
 register({
   name: 'render_diagram',
   description:
-    'Render a Mermaid diagram inline in the chat — flowcharts, sequence, state, ER, class, gantt, timeline, mindmap. Use when the answer is a STRUCTURE or a PROCESS (how components relate, what order steps happen in, a state machine) rather than a quantity. For quantities use render_chart; for places use render_map.',
+    'Render a Mermaid diagram inline in the chat — flowcharts, sequence, state, ER, class, gantt, timeline, mindmap. Use when the answer is a STRUCTURE or a PROCESS (how components relate, what order steps happen in, a state machine) rather than a quantity. For quantities use render_chart.',
   toolset: 'visualise',
   category: 'Visualise',
   parameters: {
@@ -401,55 +225,5 @@ register({
     const lines = code.split('\n').length;
     const summary = `${kind ?? header.split(/\s+/)[0]} diagram: ${lines} lines`;
     return ok(artifact, summary);
-  },
-});
-
-// -------- geocode_place --------
-
-register({
-  name: 'geocode_place',
-  description:
-    'Look up the coordinates of a place by name — a landmark, a business, an address or a town — against Mapbox, falling back to OpenStreetMap. Use it whenever you need a lat/lng and do not have one from a tool: never write coordinates from memory, which are routinely wrong by a street or a country. render_map can take a `place` directly, so this is for the other cases: a distance calculation, a weather lookup, a trail start. For a JOURNEY between places, use route_directions instead — it resolves the names itself.',
-  toolset: 'visualise',
-  category: 'Visualise',
-  parameters: {
-    type: 'object',
-    properties: {
-      place: {
-        type: 'string',
-        description:
-          'The place name, as specific as you can make it — "Norwich Cathedral, Norfolk" beats "the cathedral".',
-      },
-      near: {
-        type: 'array',
-        description:
-          'Optional [lat, lng] hint. Worth passing whenever the name is ambiguous: "Snowdon" alone resolves to Montreal.',
-        items: { type: 'number' },
-      },
-    },
-    required: ['place'],
-  },
-  handler: async (args): Promise<ToolResult> => {
-    const place = args.place as string | undefined;
-    const near = args.near as [number, number] | undefined;
-    if (typeof place !== 'string' || place.trim().length < 2) {
-      return fail('place must be a non-empty name');
-    }
-    const hit = await geocodePlace(place, near ? { near } : {});
-    if (!hit) {
-      return fail(
-        `could not find ${JSON.stringify(place)} — add the town or county, or pass a \`near\` hint`,
-      );
-    }
-    return {
-      success: true,
-      data: {
-        lat: hit.lat,
-        lng: hit.lng,
-        // The matched label, so a wrong hit is caught here rather than on a map.
-        label: hit.label,
-        source: hit.source,
-      },
-    };
   },
 });

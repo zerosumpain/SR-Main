@@ -43,7 +43,6 @@ import {
   type DrillFact,
   type DrillGraph,
   type DrillManifest,
-  type DrillMap,
   type DrillRow,
   type DrillSection,
 } from './types';
@@ -59,14 +58,6 @@ export interface DrillDeps {
   resolveEvidence?: (
     refs: Array<{ kind: string; id: string; note?: string }>,
   ) => Promise<Array<{ kind: string; id: string; note: string | null; title: string; lines: string[]; at: string | null; href: string | null }>>;
-  /**
-   * Forward geocoding for an intel entity that names a place. Lives in
-   * `$lib/workflows/site-tools/geocode` (Nominatim, rate-limited, cached);
-   * injected for the same layering reason as the evidence resolver. Returns
-   * null for anything it cannot resolve — a map that plots a guess is worse
-   * than no map, so no fallback coordinate is ever invented.
-   */
-  geocodePlace?: (query: string) => Promise<{ lat: number; lng: number; label: string } | null>;
 }
 
 /** Entity types that name somewhere on the ground. Matched on the type's
@@ -76,15 +67,6 @@ const PLACE_TYPES = new Set([
   'address', 'site', 'area', 'geography', 'landmark', 'building', 'district',
   'neighbourhood', 'neighborhood', 'borough', 'station', 'road', 'street', 'postcode',
 ]);
-
-function numberIn(props: Record<string, unknown> | null | undefined, ...keys: string[]): number | null {
-  for (const k of keys) {
-    const v = props?.[k];
-    const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN;
-    if (Number.isFinite(n)) return n;
-  }
-  return null;
-}
 
 function compactStatus(status: string): string {
   return status.replaceAll('_', ' ').replace(/^phase/, 'phase ');
@@ -282,20 +264,7 @@ async function entityManifest(conversationId: string, graph: ThreadGraph, nodeId
     .limit(1);
   if (!node && !entity) return null;
 
-  // A place goes on a map. Coordinates the record carries win; otherwise the
-  // NAME is geocoded, never guessed — see DrillDeps.geocodePlace.
-  let map: DrillMap | undefined;
   const isPlace = entity ? PLACE_TYPES.has(entity.typeName.toLowerCase()) : false;
-  if (entity && isPlace) {
-    const lat = numberIn(entity.properties, 'lat', 'latitude');
-    const lon = numberIn(entity.properties, 'lon', 'lng', 'longitude');
-    if (lat !== null && lon !== null) {
-      map = { points: [{ lat, lon, label: entity.name, tone: 'accent' }], provenance: 'coordinates on the record' };
-    } else if (deps.geocodePlace) {
-      const hit = await deps.geocodePlace(entity.name).catch(() => null);
-      if (hit) map = { points: [{ lat: hit.lat, lon: hit.lng, label: entity.name, note: hit.label, tone: 'accent' }], provenance: `geocoded from the name: ${hit.label}` };
-    }
-  }
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   const relations: DrillRow[] = node
     ? graph.edges
@@ -336,7 +305,6 @@ async function entityManifest(conversationId: string, graph: ThreadGraph, nodeId
     subtitle: node ? PROVENANCE_WORD[node.provenance] : isPlace ? 'A place the graph knows; not in this thread.' : 'Not in this thread.',
     href: `/jkai/intel/entities/${entityId}`,
     entityId,
-    map,
     facts: node
       ? [
           { label: 'Mentions here', value: String(node.mentions) },
@@ -638,20 +606,6 @@ async function thoughtManifest(id: string, target: string, deps: DrillDeps): Pro
   if (!t) return null;
   const evidence = deps.resolveEvidence ? await deps.resolveEvidence(t.evidence ?? []).catch(() => []) : [];
   const api = '/api/daydream/thoughts';
-  // The places this thought rests on, on one map — a citation you can see.
-  const placeIds = [...new Set((t.evidence ?? []).filter((e) => e.kind === 'place').map((e) => e.id))].slice(0, 30);
-  const placeRows = placeIds.length
-    ? await db
-        .select({ id: daydreamPlaces.id, label: daydreamPlaces.label, suggestedLabel: daydreamPlaces.suggestedLabel, lat: daydreamPlaces.lat, lon: daydreamPlaces.lon, radiusM: daydreamPlaces.radiusM })
-        .from(daydreamPlaces)
-        .where(inArray(daydreamPlaces.id, placeIds))
-    : [];
-  const map: DrillMap | undefined = placeRows.length
-    ? {
-        points: placeRows.map((p) => ({ lat: p.lat, lon: p.lon, label: p.label ?? p.suggestedLabel ?? 'Unnamed', radiusM: p.radiusM, tone: p.label ? 'accent' : 'warn', drill: drillKey({ kind: 'place', id: p.id }) })),
-        provenance: `${placeRows.length === 1 ? 'the place' : 'the places'} this thought cites`,
-      }
-    : undefined;
   const sections: DrillSection[] = [
     { kind: 'prose', id: 'why', title: 'Why it said this', body: t.explanation },
   ];
@@ -678,7 +632,6 @@ async function thoughtManifest(id: string, target: string, deps: DrillDeps): Pro
     kind: 'thought',
     eyebrow: `Daydream · ${t.kind.replaceAll('_', ' ')}`,
     title: t.title,
-    map,
     subtitle: `${compactStatus(t.status)} · ${relativeStamp(t.createdAt.toISOString())}${t.feedback ? ` · you said ${t.feedback.replaceAll('_', ' ')}` : ''}`,
     href: `/jkai/daydreams/feed?open=${id}`,
     facts: [
@@ -703,31 +656,16 @@ async function thoughtManifest(id: string, target: string, deps: DrillDeps): Pro
 
 async function placesManifest(filter: 'all' | 'named', target: string): Promise<DrillManifest> {
   const rows = await db
-    .select({ id: daydreamPlaces.id, label: daydreamPlaces.label, suggestedLabel: daydreamPlaces.suggestedLabel, kind: daydreamPlaces.kind, source: daydreamPlaces.source, visitCount: daydreamPlaces.visitCount, distinctDays: daydreamPlaces.distinctDays, lat: daydreamPlaces.lat, lon: daydreamPlaces.lon, radiusM: daydreamPlaces.radiusM })
+    .select({ id: daydreamPlaces.id, label: daydreamPlaces.label, suggestedLabel: daydreamPlaces.suggestedLabel, kind: daydreamPlaces.kind, source: daydreamPlaces.source, visitCount: daydreamPlaces.visitCount, distinctDays: daydreamPlaces.distinctDays })
     .from(daydreamPlaces)
     .where(eq(daydreamPlaces.status, 'active'))
     .orderBy(desc(daydreamPlaces.distinctDays))
     .limit(30);
   const named = rows.filter((p) => p.label);
   const list = filter === 'named' ? named : rows;
-  // Lat/lon leave the server for one owner-gated render, as the naming map's do.
-  const map: DrillMap | undefined = list.length
-    ? {
-        points: list.slice(0, 60).map((p) => ({
-          lat: p.lat,
-          lon: p.lon,
-          label: p.label ?? p.suggestedLabel ?? 'Unnamed',
-          note: `${p.distinctDays} days`,
-          tone: p.label ? 'accent' : 'warn',
-          drill: drillKey({ kind: 'place', id: p.id }),
-        })),
-        provenance: 'clustered from the household trail',
-      }
-    : undefined;
   return finish({
     target,
     kind: 'places',
-    map,
     eyebrow: 'Daydream · places',
     title: filter === 'named' ? 'Places you have named' : 'Repeated places',
     subtitle: 'Ranked by separate days anyone stayed there, not by household visit count.',
@@ -771,8 +709,6 @@ async function placeManifest(id: string, target: string): Promise<DrillManifest 
       visitCount: daydreamPlaces.visitCount,
       distinctDays: daydreamPlaces.distinctDays,
       radiusM: daydreamPlaces.radiusM,
-      lat: daydreamPlaces.lat,
-      lon: daydreamPlaces.lon,
     })
     .from(daydreamPlaces)
     .where(eq(daydreamPlaces.id, id))
@@ -780,10 +716,6 @@ async function placeManifest(id: string, target: string): Promise<DrillManifest 
   if (!p) return null;
   const api = '/api/daydream/thoughts';
   const name = p.label ?? p.suggestedLabel ?? 'Unnamed place';
-  const map: DrillMap = {
-    points: [{ lat: p.lat, lon: p.lon, label: name, radiusM: p.radiusM, tone: p.label ? 'accent' : 'warn' }],
-    provenance: p.source === 'confirmed' ? 'you named it' : p.source === 'geocoded' ? 'a reverse lookup of the cluster centre' : 'the centre of a cluster of stays',
-  };
   const sections: DrillSection[] = [];
   if (!p.label && (p.suggestedLabel || p.suggestedAddress)) {
     sections.push({ kind: 'prose', id: 'suggestion', title: 'The geocoder thinks', body: [p.suggestedLabel, p.suggestedAddress].filter(Boolean).join(' — '), tone: 'warn' });
@@ -817,7 +749,6 @@ async function placeManifest(id: string, target: string): Promise<DrillManifest 
     kind: 'place',
     eyebrow: `Daydream · ${p.kind === 'unknown' ? 'place' : p.kind}`,
     title: name,
-    map,
     subtitle: p.source === 'confirmed' ? 'You named it — quotable as fact.' : p.source === 'geocoded' ? 'A reverse lookup, not your word.' : 'Inferred from a pattern — only ever a question.',
     href: '/jkai/daydreams/places',
     facts: [

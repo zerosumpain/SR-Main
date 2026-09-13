@@ -15,8 +15,6 @@ import { expect, test } from '@playwright/test';
  * builds artifacts from `metadata.toolSteps[].result.data.artifact`, which is
  * the same shape the orchestrator persists.
  *
- * Note the map is deliberately not asserted on tiles — those are a live fetch to
- * a third-party host and a failure there says nothing about this code.
  */
 
 const artifacts = {
@@ -42,11 +40,6 @@ const artifacts = {
     type: 'diagram',
     code: 'flowchart TD\n  A[Start here] --> B[Finish there]',
     caption: 'Flow',
-  },
-  map: {
-    type: 'map',
-    layers: [{ kind: 'track', points: [{ lat: 52.63, lng: 1.29 }, { lat: 52.66, lng: 1.34 }] }],
-    caption: 'Morning loop',
   },
   table: {
     type: 'table',
@@ -99,7 +92,6 @@ test('chart, diagram and table artifacts render inline under the site CSP', asyn
           toolSteps: [
             toolStep('render_chart', artifacts.chart),
             toolStep('render_diagram', artifacts.diagram),
-            toolStep('render_map', artifacts.map),
             toolStep('render_table', artifacts.table),
           ],
         },
@@ -133,38 +125,6 @@ test('chart, diagram and table artifacts render inline under the site CSP', asyn
   await expect(diagram.locator('svg')).toContainText('Finish there');
   // Nothing that fetches or embeds HTML survives into the rendered diagram.
   await expect(diagram.locator('img, image, foreignObject, script')).toHaveCount(0);
-
-  // --- map fullscreen: the figure must fill the VIEWPORT ---
-  //
-  // `position: fixed` is not viewport-relative under a transformed ancestor,
-  // and every message sits inside `.msg-stack`, whose arrival animation uses
-  // `both` fill-mode and so leaves a transform applied permanently. Before the
-  // portal, this measured 870x288 at (20, 89) on a 1280x800 viewport. Only a
-  // real layout measurement catches that — the class was always applied.
-  const map = page.locator('.map-artifact');
-  await expect(map).toBeVisible();
-  await map.locator('.fs-toggle').click();
-  await expect(map).toHaveClass(/fullscreen/);
-
-  const viewport = page.viewportSize()!;
-  await expect(async () => {
-    const box = (await map.boundingBox())!;
-    expect(Math.round(box.x)).toBe(0);
-    expect(Math.round(box.y)).toBe(0);
-    expect(Math.round(box.width)).toBe(viewport.width);
-    expect(Math.round(box.height)).toBe(viewport.height);
-  }).toPass({ timeout: 10_000 });
-
-  // The caption takes its own row rather than covering the top of the map.
-  const capBox = (await map.locator('figcaption').boundingBox())!;
-  const mapBox = (await map.locator('.map-container').boundingBox())!;
-  expect(Math.round(mapBox.y)).toBeGreaterThanOrEqual(Math.round(capBox.y + capBox.height) - 1);
-
-  // Escape exits, the figure returns to the thread, and the page scrolls again.
-  await page.keyboard.press('Escape');
-  await expect(map).not.toHaveClass(/fullscreen/);
-  await expect(map).toHaveJSProperty('parentElement.tagName', 'DIV');
-  expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).not.toBe('hidden');
 
   // --- table ---
   const table = page.locator('.table-artifact');

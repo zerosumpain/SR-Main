@@ -160,13 +160,9 @@
 
   const canvas = $derived(data.canvas);
   const NEW_PALETTE = publicEnv.PUBLIC_CANVAS_NEW_PALETTE !== 'false';
-  type IntelligenceNodeComponent = (typeof import('$lib/canvas/intelligence/IntelligenceNode.svelte'))['default'];
   type ResearchResultNodeComponent = (typeof import('$lib/canvas/intelligence/ResearchResultNode.svelte'))['default'];
-  let IntelligenceNode = $state<IntelligenceNodeComponent | null>(null);
   let ResearchResultNode = $state<ResearchResultNodeComponent | null>(null);
-  let intelligenceNodeLoading = false;
   let researchResultNodeLoading = false;
-  let intelligenceNodeFailed = $state(false);
   let researchResultNodeFailed = $state(false);
 
   // The research desk and D3 graph are among the canvas route's heaviest
@@ -174,18 +170,6 @@
   // each renderer only if the loaded workflow actually contains one.
   $effect(() => {
     const nodes = canvas?.nodes ?? [];
-    if (
-      nodes.some((node) => node.kind === 'intelligence' && node.type !== 'research-result')
-      && !IntelligenceNode
-      && !intelligenceNodeLoading
-      && !intelligenceNodeFailed
-    ) {
-      intelligenceNodeLoading = true;
-      void import('$lib/canvas/intelligence/IntelligenceNode.svelte')
-        .then(({ default: Node }) => { IntelligenceNode = Node; })
-        .catch(() => { intelligenceNodeFailed = true; })
-        .finally(() => { intelligenceNodeLoading = false; });
-    }
     if (
       nodes.some((node) => node.type === 'research-result')
       && !ResearchResultNode
@@ -4712,17 +4696,7 @@
               <span class="chat-node-label">{n.name}</span>
             </div>
             <div class="intelligence-node-body" onpointerdown={(e) => e.stopPropagation()}>
-              {#if IntelligenceNode}
-                <IntelligenceNode
-                  slug={data.canvas.slug}
-                  nodeId={n.id}
-                  config={n.config as { query?: string; facets?: Record<string, unknown>; size?: { w: number; h: number } }}
-                  onsave={(patch) => saveNodeConfig(n.id, patch)}
-                  onexplore={(engine) => startExplore(n.id, engine)}
-                />
-              {:else}
-                <p class="ghost">{intelligenceNodeFailed ? 'Intelligence view unavailable.' : 'Loading intelligence view…'}</p>
-              {/if}
+              <p class="ghost">This retired map-backed intelligence view is no longer available.</p>
             </div>
             <div
               class="chat-node-resize"

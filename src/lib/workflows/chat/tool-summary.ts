@@ -72,7 +72,7 @@ export function categorizeTool(tool: string): ToolCategory {
   // `intel_search` used to be listed under WEB below; it never existed as a
   // tool, and the real intel_* tools query the local entity graph.
   if (startsAny('intel_', 'knowledge_search')) return 'DATA';
-  if (startsAny('render_', 'blog_', 'policy_engine', 'live_walk', 'family_presence', 'chart', 'table', 'map_'))
+  if (startsAny('render_', 'blog_', 'chart', 'table'))
     return 'DATA';
   if (startsAny('terminal', 'exec', 'bash', 'shell', 'run_command', 'python')) return 'RUN';
   if (
@@ -387,7 +387,6 @@ export function summarizeRunningTool(tool: string, args: Record<string, unknown>
       return g.text ? `delegating: ${trim(g.text, 56)}` : 'delegating a task to a sub-agent';
     }
     case 'render_chart':
-    case 'render_map':
     case 'render_table':
       return str('caption') ? trim(str('caption')!, 50) : 'rendering';
     default: {
@@ -690,10 +689,9 @@ export function summarizeToolResult(step: ToolProgressStep): string {
     case 'save_memory':
       return 'Saved a memory';
     case 'render_chart':
-    case 'render_map':
     case 'render_table':
-      // The visualise handlers return a rich `data.summary` (e.g. "Map: 2 tracks
-      // — 340 points"). Prefer it; fall back to the caption arg.
+      // The visualise handlers return a rich `data.summary`. Prefer it; fall
+      // back to the caption arg.
       return serverSummary
         ? trim(serverSummary, 80)
         : ((args.caption as string | undefined) ? `Rendered “${trim(args.caption as string, 40)}”` : 'Rendered a view');

@@ -19,7 +19,6 @@
   import FeatureIndex from '$lib/components/landing/FeatureIndex.svelte';
   import ShippedSeam from '$lib/components/landing/ShippedSeam.svelte';
   import Ecg from '$lib/components/shared/Ecg.svelte';
-  import LiveWalkBanner from '$lib/components/LiveWalkBanner.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import { roundPulse } from '$lib/vitals/state';
   import type { VitalsStore } from '$lib/vitals/store.svelte';
@@ -135,11 +134,6 @@
         </VitalSigns>
       </aside>
     </div>
-  </div>
-
-  <!-- Live walk banner -->
-  <div class="relative z-10 text-center mt-4 hero-pad">
-    <LiveWalkBanner />
   </div>
 
   <!-- Signature bar: what the background is, and when the readings last landed. -->

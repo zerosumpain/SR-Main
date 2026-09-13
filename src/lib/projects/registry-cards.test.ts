@@ -19,7 +19,7 @@ describe('/projects card ↔ registry parity', () => {
 
   it('has the hand-built cards', () => {
     // Guards the manifest itself: if the cards are refactored away, this catches it.
-    expect(keys.length).toBeGreaterThanOrEqual(8);
+    expect(keys.length).toBeGreaterThanOrEqual(7);
   });
 
   it('gives every card a distinct key', () => {

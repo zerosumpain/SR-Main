@@ -12,7 +12,6 @@ import { daydreamPlacesRefresh } from './activities/daydream-places';
 import { daydreamSignalsRefresh } from './activities/daydream-signals';
 import { daydreamSpendExtract } from './activities/daydream-spend';
 import { daydreamSweep } from './activities/daydream-sweep';
-import { daydreamSuggest } from './activities/daydream-suggest';
 import { daydreamDetect } from './activities/daydream-detect';
 import { daydreamCompose } from './activities/daydream-compose';
 import { daydreamOffersScan } from './activities/daydream-offers';
@@ -28,8 +27,6 @@ import { daydreamMemory } from './activities/daydream-memory';
 import { daydreamImprove } from './activities/daydream-improve';
 import { daydreamReview } from './activities/daydream-review';
 import { daydreamWeekly } from './activities/daydream-weekly';
-import { geoTerritory } from './activities/geo-territory';
-import { landgrabWeekly } from './activities/landgrab-weekly';
 import { activitySync } from './activities/activity-sync';
 
 /**
@@ -51,7 +48,6 @@ const handlers: ActivityHandler[] = [
   daydreamSignalsRefresh,
   daydreamSpendExtract,
   daydreamSweep,
-  daydreamSuggest,
   daydreamDetect,
   daydreamCompose,
   daydreamOffersScan,
@@ -67,8 +63,6 @@ const handlers: ActivityHandler[] = [
   daydreamImprove,
   daydreamReview,
   daydreamWeekly,
-  geoTerritory,
-  landgrabWeekly,
   activitySync,
 ];
 

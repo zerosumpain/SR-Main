@@ -405,11 +405,5 @@ export async function hasWhatsAppOwner(): Promise<boolean> {
 
 /** Is there anywhere to push to? */
 export async function hasPushSubscriber(): Promise<boolean> {
-  try {
-    const { pushSubscriptions } = await import('$lib/db/schema');
-    const rows = await db.select({ endpoint: pushSubscriptions.endpoint }).from(pushSubscriptions).limit(1);
-    return rows.length > 0;
-  } catch {
-    return false;
-  }
+  return false;
 }

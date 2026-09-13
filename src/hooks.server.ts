@@ -352,13 +352,8 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
 
   // Browser state-changing requests must be same-origin. Requests made by
   // service clients generally carry no Origin/Sec-Fetch-Site and authenticate
-  // with their own bearer/HMAC secret. WebDAV used to be the sole ROUTE
-  // exception, because OS mount clients send non-browser Origin semantics; it
-  // was removed on 2026-09-13, so /api/live-walk is the only one left.
-  if (
-    !['GET', 'HEAD', 'OPTIONS'].includes(event.request.method) &&
-    pathname !== '/api/live-walk'
-  ) {
+  // with their own bearer/HMAC secret.
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(event.request.method)) {
     const origin = event.request.headers.get('origin');
     const fetchSite = event.request.headers.get('sec-fetch-site');
     if ((origin && origin !== event.url.origin) || fetchSite === 'cross-site') {
@@ -459,16 +454,6 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     return resolve(event);
   }
 
-  // The live map is owner-only, but its phone/PWA broadcaster has no Auth.js
-  // session. Only write/preflight verbs bypass; the handler requires the
-  // broadcast secret. GET falls through to the owner API gate below.
-  if (
-    pathname === '/api/live-walk' &&
-    ['POST', 'DELETE', 'OPTIONS'].includes(event.request.method)
-  ) {
-    return resolve(event);
-  }
-
   // /api/mcp* are service-to-service: the routing proxy and the local
   // dispatcher both authenticate via `Authorization: Bearer
   // SERVICE_BRIDGE_SECRET` inside the handlers themselves. They must
@@ -519,18 +504,6 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     return resolve(event);
   }
 
-  // Policy-engine ingest + seeding are service-to-service: the
-  // scheduled tracking workflows' http-request node has no user session. The
-  // handlers self-authenticate via `Authorization: Bearer POLICY_INGEST_SECRET`,
-  // so they must bypass the Auth.js gate (mirrors /api/mcp above). GET is the
-  // read-only tracked-indicator list, already public via the /monitor page.
-  if (
-    (pathname === '/api/policy-engine/ingest' && ['GET', 'POST'].includes(event.request.method)) ||
-    (pathname === '/api/policy-engine/seed-workflows' && event.request.method === 'POST')
-  ) {
-    return resolve(event);
-  }
-
   // /api/claude-changelog/ingest POST is service-to-service: the homeserv cron
   // scanner (scripts/claude-changelog/ingest.mjs) POSTs parsed transcripts and has
   // no user session. It self-authenticates via `Authorization: Bearer
@@ -573,28 +546,6 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   // owner session and refuses to run unauthenticated. GET is deliberately NOT
   // bypassed — it falls through to the owner gate below.
   if (pathname.startsWith('/api/releases/') && event.request.method === 'POST') {
-    return resolve(event);
-  }
-
-  // Data-standard ingest + seeding are service-to-service:
-  // the daily discovery cron's http-request node has no user session. The handlers
-  // self-authenticate via `Authorization: Bearer DSD_INGEST_SECRET` and fail
-  // closed if it is unset. GET is the public registry snapshot used by the portal.
-  if (
-    (pathname === '/api/data-standard-designer/ingest' && ['GET', 'POST'].includes(event.request.method)) ||
-    (pathname === '/api/data-standard-designer/seed-workflows' && event.request.method === 'POST')
-  ) {
-    return resolve(event);
-  }
-
-  // DfE strategy intel + seeding are service-to-service:
-  // the daily intelligence cron's http-request node has no user session. The handlers
-  // self-authenticate via `Authorization: Bearer KEYSTONE_INTEL_SECRET` and fail
-  // closed if it is unset. GET is the public radar snapshot.
-  if (
-    (pathname === '/api/dfe-data-strategy/intel' && ['GET', 'POST'].includes(event.request.method)) ||
-    (pathname === '/api/dfe-data-strategy/seed-workflows' && event.request.method === 'POST')
-  ) {
     return resolve(event);
   }
 

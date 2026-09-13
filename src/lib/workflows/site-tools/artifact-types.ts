@@ -11,31 +11,6 @@ export type ChartArtifact = {
   caption?: string;
 };
 
-export type MapPointsLayer = {
-  kind: 'points';
-  points: Array<{ lat: number; lng: number; label?: string }>;
-};
-
-export type MapTrackLayer = {
-  kind: 'track';
-  points: Array<{ lat: number; lng: number }>;
-};
-
-export type MapHeatmapLayer = {
-  kind: 'heatmap';
-  points: Array<{ lat: number; lng: number; weight?: number }>;
-};
-
-export type MapLayer = MapPointsLayer | MapTrackLayer | MapHeatmapLayer;
-
-export type MapArtifact = {
-  type: 'map';
-  center?: [number, number];
-  zoom?: number;
-  layers: MapLayer[];
-  caption?: string;
-};
-
 export type TableColumn = {
   key: string;
   label: string;
@@ -57,7 +32,7 @@ export type DiagramArtifact = {
   caption?: string;
 };
 
-export type Artifact = ChartArtifact | MapArtifact | TableArtifact | DiagramArtifact;
+export type Artifact = ChartArtifact | TableArtifact | DiagramArtifact;
 
 /** Envelope returned by any tool that produced an artifact. */
 export type ArtifactToolData = {
@@ -69,5 +44,5 @@ export type ArtifactToolData = {
 export function isArtifact(v: unknown): v is Artifact {
   if (!v || typeof v !== 'object') return false;
   const t = (v as { type?: unknown }).type;
-  return t === 'chart' || t === 'map' || t === 'table' || t === 'diagram';
+  return t === 'chart' || t === 'table' || t === 'diagram';
 }

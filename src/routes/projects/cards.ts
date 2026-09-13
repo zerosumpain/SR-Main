@@ -73,17 +73,7 @@ export const PROJECT_CARDS: ProjectCard[] = [
       'A prototype in the style of a GOV.UK service, for the planning officers now working to England\'s 30-month local plan system. The whole process as a map and a page per stage, the three gateways compared, a question flow that says where a plan is and what comes next, a planner that turns a Gateway 1 date into every statutory milestone, checklists for each gateway, and one search across the 2026 Regulations, the SEA Regulations, the NPPF and the guidance. Ask it a question and, if you like, a small model running in your own browser answers from the cited passages. Built deliberately outside this site\'s design system, to GDS standards, and downloadable in full.',
     chips: 'GOV.UK Frontend · 2026 Regulations · NPPF · in-browser model',
   },
-  {
-    key: 'bathroom',
-    href: '/projects/bathroom',
-    label: 'Open Bathroom Planner',
-    kind: 'Tool',
-    tag: 'Interactive · Home project',
-    title: 'Bathroom Planner — Refitting a Terrace Bathroom',
-    blurb:
-      'Put your own measurements in and drag a bath, a walk-in shower and a wall-hung WC around a to-scale floor plan that knows how much room you need to stand in front of each one, and how far the toilet has drifted from the soil stack. Then a two-way cost model at 2026 rates — set a budget and it picks the spec, or pick the spec and watch it climb — plus who does what, the day-by-day programme, and a 47-item snag list to hold the last 5% against.',
-    chips: 'to-scale planner · cost model · snag list',
-  },
+
   {
     key: 'scs-earnings',
     href: '/projects/scs-earnings/',
@@ -95,17 +85,7 @@ export const PROJECT_CARDS: ProjectCard[] = [
       'How many mandarins out-earn the Prime Minister? What is a digital director worth against a policy one? Plot the pay of the 46,595 most senior posts across 25 government departments, 2010–2026 — by department, profession, grade and the DDaT-vs-policy split, in real terms or nominal. Built entirely on gov.uk organogram transparency data, with a full glass-box method.',
     chips: 'gov.uk data · 46,595 posts · OGL',
   },
-  {
-    key: 'terminal-descent',
-    href: '/projects/terminal-descent/',
-    label: 'Play Terminal Descent',
-    kind: 'Field Study №5',
-    tag: 'Playable · WebGL',
-    title: 'Terminal Descent — A Newtonian Landing Problem',
-    blurb:
-      'A 3D landing game with real Newtonian physics. Gravity pulls; your single engine only pushes the way the ship points — so to move, you tilt, burn, then tilt back and burn again to kill the drift before you touch down. Manage fuel, thread a procedurally generated hazard field, and set down gently, upright and dead-centre on the pad. Scored on touchdown, fuel saved and centering, with a global leaderboard. Built autonomously from one prompt.',
-    chips: 'Three.js · inertia · leaderboard',
-  },
+
   {
     key: 'data-standard-designer',
     href: '/projects/data-standard-designer',
@@ -128,28 +108,8 @@ export const PROJECT_CARDS: ProjectCard[] = [
       'This site looks like a blog. Underneath it is a personal knowledge engine — an assistant with reach into mail, files and home, a workflow engine with 88 node types, retrieval over documents, a knowledge graph that resolves entities overnight, and a system that rewrites itself while nobody is watching. Four parts, twenty-one pages, and twenty instruments you can operate rather than read: follow one message through six stages and six layers with a live clock and a running bill, pick a model seller and watch what it costs you, try to get machine-written code past the safety scan, or push a change down the deploy pipeline and watch it stop. Mechanisms and mistakes, no secrets.',
     chips: 'models · caching · RAG · entity resolution · self-improvement · measured',
   },
-  {
-    key: 'data-spine',
-    href: '/projects/data-spine',
-    label: 'Open The Data Spine',
-    kind: 'Field study',
-    tag: 'Interactive · Data infrastructure',
-    title: 'The Data Spine — Anatomy of a Promise',
-    blurb:
-      'In one paragraph of a 2026 white paper, the government committed to build a "data spine" for English education. This study takes the paragraph seriously: a five-layer anatomy, the international precedents (NHS Spine, X-Road, ContactPoint), eight stakeholder lenses on its value, a deep information-governance treatment — and a live 3D simulation of the federated design: 24,000 schools, 15 MIS suppliers, thirteen runnable scenarios from census day to breach day. Companion to Keystone and the Policy Engine.',
-    chips: 'precedents · personas · privacy · 3D federation sim · cited',
-  },
-  {
-    key: 'spine-in-practice',
-    href: '/projects/spine-in-practice',
-    label: 'Open The Spine in Practice',
-    kind: 'Field study',
-    tag: 'Appraisal · Data infrastructure',
-    title: 'The Spine in Practice',
-    blurb:
-      'While the department\'s data spine was still one paragraph of a white paper, somebody else built one. Open Education AI\'s federated node access layer went live in July 2026, with a deck and a self-contained clickthrough demo to prove it. This study reads both artefacts against my own — the technical structure, how the argument is drawn, what it buys, and what it cannot yet do.',
-    chips: 'node contract · consent gate · SDC · built vs designed · cited',
-  },
+
+
   {
     key: 'dfe-data-strategy',
     href: '/projects/dfe-data-strategy',

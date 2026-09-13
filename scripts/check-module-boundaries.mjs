@@ -48,6 +48,25 @@ const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
 const FIXTURE = process.env.SR_BOUNDARIES_ROOT;
 const ROOT = FIXTURE ? resolve(FIXTURE) : REPO;
 
+// Main is closed to new authored project applications. Existing directories
+// are an explicit legacy allow-list; every future project starts in its own
+// repository and is registered/routed by SR-Infra.
+if (!FIXTURE) {
+  const projectsRoot = join(REPO, 'src', 'routes', 'projects');
+  const allowed = new Set(['[slug]', 'archetype', 'engine-room', 'jkai']);
+  const unexpected = readdirSync(projectsRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && !allowed.has(entry.name))
+    .map((entry) => entry.name)
+    .sort();
+  if (unexpected.length) {
+    console.error(
+      'check-module-boundaries: authored projects belong in their own repository. ' +
+      `Register the new app in SR-Infra instead of adding to SR-Main: ${unexpected.join(', ')}`,
+    );
+    process.exit(2);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // The layers. A module may import its OWN layer and any layer BELOW it, never
 // above. Unlisted modules default to `domain`, which is the safe default: a new

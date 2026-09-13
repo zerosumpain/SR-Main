@@ -47,7 +47,7 @@ export const DECK = {
           type: 'bigNumber',
           value: 24000,
           label: 'synthetic schools in the simulator, a few slides from here',
-          sub: 'Numbers count up as the slide enters. This one is real — it is the working model from the data-spine study.',
+          sub: 'Numbers count up as the slide enters, using a real synthetic dataset.',
         },
       ],
     },
@@ -493,7 +493,7 @@ export const DECK = {
         {
           type: 'prose',
           style: 'aside',
-          body: 'SET IN DM SANS · FRAUNCES · JETBRAINS MONO — THE SAME REGISTERS AS THE FIELD STUDIES. SEE [THE DATA-SPINE DECK](/decks/data-spine-federation).',
+          body: 'SET IN DM SANS · FRAUNCES · JETBRAINS MONO — THE SAME REGISTERS AS THE FIELD STUDIES.',
         },
       ],
       children: [

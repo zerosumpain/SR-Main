@@ -566,10 +566,8 @@ export async function loadThoughtById(id: string): Promise<LedgerThought | null>
  *
  * Filtered to the DAILY subject, and that is load-bearing. `daydream_digests`
  * is a multi-subject table: the daily digest writes `DEFAULT_SUBJECT`, the
- * Sunday letter writes 'weekly', and Landgrab's Sunday letter writes
- * 'landgrab-weekly'. Ordered by day with no subject clause this returns
- * whichever of them happens to win the tie on the newest date — so a Sunday
- * would render a weekly letter, or a territory report, as the morning card.
+ * Sunday letter writes 'weekly'. Ordered by day with no subject clause this
+ * could return the weekly letter instead of the morning card.
  *
  * `loadDiscoveries` below deliberately does NOT filter: it lists every
  * subject's last fourteen rows and carries the `subject` column so the page
@@ -975,13 +973,8 @@ export async function loadDiscoveries() {
         stats: daydreamDigests.stats,
       })
       .from(daydreamDigests)
-      // THIS page's two subjects, named. `daydream_digests` is a shared table
-      // and Landgrab's Sunday letter writes 'landgrab-weekly' into it; without
-      // this clause a territory report would be rendered here as a daydream
-      // card, which is a different feature reporting a different engine. An
-      // allow-list rather than a "not landgrab" exclusion, so the next stream
-      // to take a subject on this table appears nowhere until somebody decides
-      // it should.
+      // This page's two subjects, named. Future digest streams remain hidden
+      // until somebody explicitly decides they belong here.
       .where(inArray(daydreamDigests.subject, [DEFAULT_SUBJECT, WEEKLY_SUBJECT]))
       .orderBy(desc(daydreamDigests.day))
       .limit(14),
@@ -1131,4 +1124,3 @@ export async function loadDelivery() {
     hasWhatsApp: await hasWhatsAppOwner(),
   };
 }
-

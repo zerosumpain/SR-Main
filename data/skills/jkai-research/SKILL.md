@@ -128,7 +128,7 @@ Reply: "Stopped session `rs_abc`. Its status is now `cancelled` — the row stay
 
 Yield back to `jkai-general` (which will route, or answer directly) when the user:
 
-- Asks to **visualise** findings (chart, map, table, image) → `jkai-utility` (`render_chart`, `render_map`, `render_table`, `generate_image`). Hand off the extracted content from `research_extract({ format: "summary" })` first if needed.
+- Asks to **visualise** findings (chart, table, diagram, image) → `jkai-utility` (`render_chart`, `render_table`, `render_diagram`, `generate_image`). Hand off the extracted content from `research_extract({ format: "summary" })` first if needed.
 - Asks to **send findings to WhatsApp** → `jkai-utility` (`whatsapp_send`).
 - Asks to **save a finding as a memory** → `jkai-utility` (`save_memory`).
 - Asks to **publish a research-derived post** → call `research_extract({ format: "blog_draft" })` yourself, then yield with the markdown so general chat routes to `jkai-blog`.

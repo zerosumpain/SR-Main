@@ -12,7 +12,6 @@ import {
 // project PRIVATE, so absence means public.
 const VIS: Record<string, boolean> = {
   'policy-engine': false,
-  'data-spine': false,
   'dfe-data-strategy': false,
   'archetype': true,
   'terminal-descent': true,
@@ -59,7 +58,6 @@ describe('isSurfacePublic', () => {
   it('blocks projects marked private, and only those', () => {
     expect(isSurfacePublic('/projects/policy-engine', VIS)).toBe(false);
     expect(isSurfacePublic('/projects/policy-engine/neet', VIS)).toBe(false);
-    expect(isSurfacePublic('/projects/data-spine', VIS)).toBe(false);
     // Unknown key: absent from the map means public, matching isProjectPublic.
     expect(isSurfacePublic('/projects/engine-room', VIS)).toBe(true);
   });

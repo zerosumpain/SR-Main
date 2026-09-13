@@ -13,7 +13,6 @@ import { createShare } from '$lib/decks/shares';
 import { fitIssues } from '$lib/presentation/fit';
 import { isLayout, layoutDocsForLLM } from '$lib/presentation/layouts';
 import { BLOCK_DOCS, validateBlocks } from '$lib/presentation/registry';
-import { scenarioById } from '$lib/sim/federation/scenarios';
 import type { Block } from '$lib/presentation/types';
 
 interface SlideSpec {
@@ -83,11 +82,6 @@ function validateSlide(slide: SlideSpec, path: string, depth: number): string[] 
     if (res.ok) {
       // The page is a fixed 1280×720 canvas — overfull slides are spec errors.
       issues.push(...fitIssues(slide.layout ?? 'default', slide.blocks as Block[]).map((m) => `${path}: ${m}`));
-    }
-    for (const b of slide.blocks as { type?: string; embed?: string; config?: { scenario?: string } }[]) {
-      if (b?.type === 'embed' && b.embed === 'federation-sim' && b.config?.scenario && !scenarioById(b.config.scenario)) {
-        issues.push(`${path}: federation-sim scenario "${b.config.scenario}" does not exist`);
-      }
     }
   }
   if (!validGeometry(slide.geometry)) {
@@ -221,7 +215,7 @@ register({
     'CALL presentation_describe_vocabulary FIRST for the layout and block catalogue — it is not repeated here. ' +
     'Any content block may carry step: N (1-12) — a build step: it stays hidden until the presenter\'s Nth ' +
     'forward press within the slide. Use sparingly to stage an argument on a single slide. ' +
-    'Draw content from real site material (research_search, file_search, the data-spine study) — decks are ' +
+    'Draw content from real site material (research_search and file_search) — decks are ' +
     'editorial, factual, and cite what they claim. ' +
     'Decks are PRIVATE by default; the tool mints a share link and returns it. ' +
     'CRITICAL: paste `data.summaryMarkdown` VERBATIM as your reply when the tool returns. Do NOT rewrite it ' +

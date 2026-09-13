@@ -2,8 +2,6 @@
 // validation gate the jkai tools apply to LLM-authored decks.
 import { describe, expect, it } from 'vitest';
 // eslint-disable-next-line import/no-relative-packages
-import { DECK } from '../../../scripts/seed-deck-data-spine.mjs';
-// eslint-disable-next-line import/no-relative-packages
 import { DECK as SHOWCASE } from '../../../scripts/seed-deck-showcase.mjs';
 import { EFFECT_IDS } from './effects';
 import { isLayout } from './layouts';
@@ -24,42 +22,13 @@ function collect(slides: SpecSlide[], path = 'slides'): { path: string; blocks: 
   ]);
 }
 
-describe('seed deck', () => {
-  it('every slide validates against the block registry', () => {
-    const all = collect((DECK as { slides: SpecSlide[] }).slides);
-    expect(all.length).toBeGreaterThan(5);
-    for (const { path, blocks } of all) {
-      const res = validateBlocks(blocks);
-      expect(res.issues, path).toEqual([]);
-    }
-  });
-
-  it('uses real federation scenario ids', async () => {
-    const { scenarioById } = await import('$lib/sim/federation/scenarios');
-    const all = collect((DECK as { slides: SpecSlide[] }).slides);
-    for (const { blocks } of all) {
-      for (const b of blocks as { type: string; embed?: string; config?: { scenario?: string } }[]) {
-        if (b.type === 'embed' && b.config?.scenario) {
-          expect(scenarioById(b.config.scenario), b.config.scenario).toBeTruthy();
-        }
-      }
-    }
-  });
-});
-
 describe('showcase deck', () => {
   const all = collect((SHOWCASE as { slides: SpecSlide[] }).slides);
 
-  it('every slide validates (blocks + layout + scenario ids)', async () => {
-    const { scenarioById } = await import('$lib/sim/federation/scenarios');
+  it('every slide validates (blocks + layout)', async () => {
     for (const { path, blocks } of all) {
       const res = validateBlocks(blocks);
       expect(res.issues, path).toEqual([]);
-      for (const b of blocks as { type: string; embed?: string; config?: { scenario?: string } }[]) {
-        if (b.type === 'embed' && b.config?.scenario) {
-          expect(scenarioById(b.config.scenario), b.config.scenario).toBeTruthy();
-        }
-      }
     }
     for (const s of (SHOWCASE as { slides: SpecSlide[] }).slides) {
       expect(isLayout(s.layout ?? 'default'), String(s.layout)).toBe(true);

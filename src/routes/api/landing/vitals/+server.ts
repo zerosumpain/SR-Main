@@ -1,14 +1,11 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { readFile } from 'fs/promises';
-import { existsSync } from 'fs';
 import { db } from '$lib/db';
 import { jkaiBuilds, jkaiBuildDeliveries, workflows, workflowRuns, projectVisibility } from '$lib/db/schema';
 import { and, desc, eq, inArray, isNull, like, or, sql } from 'drizzle-orm';
 import { STATIC_PROJECT_KEYS } from '$lib/projects/visibility';
 import { listRunningJobsByConversation } from '$lib/workflows/chat/job-store';
 import { publishedLink } from '$lib/builds/published-link';
-import { publicWalkState } from '$lib/landing/public-walk';
 
 /**
  * Public, read-only aggregator for the landing-page "Vital Signs" tiles.
@@ -24,7 +21,6 @@ import { publicWalkState } from '$lib/landing/public-walk';
  * (already public via /api/vitals/state) client-side, with its 5s lerp.
  */
 
-const LIVE_STATE_PATH = '/tmp/live-walk-state.json';
 const BUILD_CACHE_MS = 10_000;
 const SUMMARY_CACHE_MS = 60_000;
 const PROJECT_SLUG_PATTERN = '^[a-z0-9][a-z0-9-]*$';
@@ -63,7 +59,6 @@ interface VitalsPayload {
     lastShippedHref: string | null;
   };
   canvas: { count: number; lastRunAt: string | null };
-  walk: { active: boolean };
   generatedAt: string;
 }
 
@@ -79,16 +74,6 @@ let buildCache: { at: number; data: LatestBuild } | null = null;
 let buildPending: Promise<LatestBuild> | null = null;
 let summaryCache: { at: number; data: PublicSummary } | null = null;
 let summaryPending: Promise<PublicSummary> | null = null;
-
-async function readWalk(): Promise<VitalsPayload['walk']> {
-  const idle: VitalsPayload['walk'] = { active: false };
-  try {
-    if (!existsSync(LIVE_STATE_PATH)) return idle;
-    return publicWalkState(JSON.parse(await readFile(LIVE_STATE_PATH, 'utf-8')));
-  } catch {
-    return idle;
-  }
-}
 
 function deriveBuilder(
   latest: { status: string; planStatus: string; publishedSlug: string | null; isFeature: boolean } | undefined,
@@ -204,10 +189,9 @@ async function publicSummary(): Promise<PublicSummary> {
 }
 
 async function compute(): Promise<VitalsPayload> {
-  const [latest, summary, walk] = await Promise.all([
+  const [latest, summary] = await Promise.all([
     latestBuild(),
     publicSummary(),
-    readWalk(),
   ]);
 
   const builder = deriveBuilder(latest, summary.latestPublished, summary.shippedCount);
@@ -221,7 +205,6 @@ async function compute(): Promise<VitalsPayload> {
         ? new Date(summary.canvasLastRunAt).toISOString()
         : null,
     },
-    walk,
     generatedAt: new Date().toISOString(),
   };
 }
@@ -237,7 +220,6 @@ export const GET: RequestHandler = async () => {
       jkai: { activeJobs: 0 },
       builder: { stage: 'idle', active: false, shippedCount: 0, lastShippedTitle: null, lastShippedHref: null },
       canvas: { count: 0, lastRunAt: null },
-      walk: { active: false },
       generatedAt: new Date().toISOString(),
     };
   }

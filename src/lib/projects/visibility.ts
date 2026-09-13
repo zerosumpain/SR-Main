@@ -35,14 +35,10 @@ export const STATIC_PROJECT_KEYS = [
   'local-plan-navigator',
   'engine-room',
   'scs-earnings',
-  'terminal-descent',
   'data-standard-designer',
-  'data-spine',
-  'spine-in-practice',
   'dfe-data-strategy',
   'policy-engine',
   'archetype',
-  'bathroom',
   'pulse',
 ] as const;
 

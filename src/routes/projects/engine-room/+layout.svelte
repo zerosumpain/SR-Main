@@ -59,7 +59,7 @@
       <b>Deliberately incomplete:</b> credentials, keys, personal data, addresses and anything else that would be unsafe to publish are
       omitted by design. What is here is the <i>how</i> and the <i>why</i> — the mechanisms, the trade-offs, and the reasoning that put each one where it is.
       Every figure was counted from the source — most on 5 August 2026, the newest pages on 17 August 2026. Companion studies:
-      <a href="/projects/data-spine">The Data Spine</a> · <a href="/projects/policy-engine">The Policy Engine</a> · <a href="/projects/dfe-data-strategy">Keystone</a>.
+      <a href="/projects/policy-engine">The Policy Engine</a> · <a href="/projects/dfe-data-strategy">Keystone</a>.
       Built with Claude Code.</p>
   </footer>
 

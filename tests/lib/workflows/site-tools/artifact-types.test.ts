@@ -11,14 +11,6 @@ describe('isArtifact', () => {
     expect(isArtifact(a)).toBe(true);
   });
 
-  it('accepts a map artifact with a single points layer', () => {
-    const a: Artifact = {
-      type: 'map',
-      layers: [{ kind: 'points', points: [{ lat: 51.5, lng: -0.1 }] }],
-    };
-    expect(isArtifact(a)).toBe(true);
-  });
-
   it('accepts a table artifact', () => {
     const a: Artifact = {
       type: 'table',

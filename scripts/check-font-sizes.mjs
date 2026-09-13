@@ -47,7 +47,6 @@ const SCOPE = [
   ['src/routes/admin', true],
   ['src/routes/blog', true],
   ['src/routes/decks', true],
-  ['src/routes/heart', true],
   ['src/routes/releases', true],
   ['src/routes/capture', true],
   ['src/routes/research', true],
@@ -59,7 +58,6 @@ const SCOPE = [
   ['src/lib/builds', true],
   ['src/app.css', false],
   ['src/lib/styles/nm-tokens.css', false],
-  ['src/lib/components/drive/FileViewerModal.svelte', false],
   // SiteNav.svelte was retired when the site moved to one shared bar; these two
   // are what render chrome now, and the floor follows the markup.
   ['src/lib/components/SiteHeader.svelte', false],

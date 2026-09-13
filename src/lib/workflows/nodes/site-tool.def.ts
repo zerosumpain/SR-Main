@@ -13,7 +13,7 @@ export const siteToolDef: NodeDefinition = {
   label: 'Site Tool',
   category: 'integration',
   description:
-    'Invoke any registered site capability (a "site tool") by name — presentations/decks, publish page, media generation, personal memory, site-signals, diagnostics, RAG search, and more. Args are JSON with {{input.*}} templates. Destructive tools require an upstream approval node.',
+    'Invoke any registered site capability (a "site tool") by name — presentations/decks, publish page, media generation, personal memory, diagnostics, RAG search, and more. Args are JSON with {{input.*}} templates. Destructive tools require an upstream approval node.',
   configSchema: {
     type: 'object',
     properties: {
@@ -43,7 +43,6 @@ export const siteToolDef: NodeDefinition = {
 - publishing a page (publish_page)
 - media generation (generate_image, generate_audio_tts, write_document)
 - personal memory (save_memory, recall_memories, forget_memory)
-- live site-signals (live_walk_status, family_presence_current, policy_engine_indicators)
 - diagnostics (scheduler_status, system_logs, scheduler_run_history)
 - RAG over /drive files (file_search) or cross-session research (research_search)
 - home assistant, gmail read, health data, etc.
