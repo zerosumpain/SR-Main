@@ -80,7 +80,6 @@ const specialized: Record<string, string> = {
   'deep-research': './DeepResearchPanel.svelte',
   'deep-dive': './DeepDivePanel.svelte',
   'whoop': './WhoopPanel.svelte',
-  'strava': './StravaPanel.svelte',
   'health-query': './HealthQueryPanel.svelte',
   'quick-answer': './QuickAnswerPanel.svelte',
   'research-result': './ResearchResultPanel.svelte',

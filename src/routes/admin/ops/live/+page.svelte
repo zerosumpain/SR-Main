@@ -424,7 +424,7 @@
     {
       name: 'Health sync',
       cadence: 'every SYNC_INTERVAL_MS (default 1h), first run +30s after boot',
-      desc: 'Pulls Strava activities and Whoop workouts/sleep/recovery/cycles. Updates health_sync_state on each tick.',
+      desc: 'Pulls Whoop workouts/sleep/recovery/cycles. Updates health_sync_state on each tick.',
       file: 'src/lib/health/scheduler.ts:4',
     },
     {

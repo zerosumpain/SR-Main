@@ -4,7 +4,7 @@ export const healthQueryDef: NodeDefinition = {
   type: 'health-query',
   label: 'Health Query',
   category: 'integration',
-  description: 'Query health data from Strava, Apple Watch, and other fitness sources.',
+  description: 'Query health data from Apple Watch, Whoop and other fitness sources.',
   configSchema: {
     type: 'object',
     properties: {
@@ -40,7 +40,7 @@ export const healthQueryDef: NodeDefinition = {
       visibleWhen: { key: 'operation', equals: 'timeline' },
     },
   ],
-  llmDescription: `Query health data from Strava and Apple Watch including fitness stats, readiness scores, sleep analysis, training load, and activity timeline.
+  llmDescription: `Query health data from Apple Watch and Whoop including fitness stats, readiness scores, sleep analysis, training load, and activity timeline.
 
 1. **stats** — Get current fitness stats summary (HR, steps, active calories, etc.)
 2. **readiness** — Get readiness/recovery score based on HRV, sleep, and training load

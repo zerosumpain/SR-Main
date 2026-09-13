@@ -60,7 +60,7 @@ function buildPlatform(callerName: string): ToolPlatform {
  *   - fetch: global fetch for HTTP calls
  *   - platform: { call(toolName, args) } to invoke other registered tools
  *       (this is how custom tools reach authenticated services like HA,
- *        Whoop, Strava, etc. — without managing credentials themselves)
+ *        Whoop, etc. — without managing credentials themselves)
  * Must return { success: boolean, data?: unknown, error?: string }.
  */
 function buildHandler(name: string, code: string): (args: Record<string, unknown>) => Promise<ToolResult> {

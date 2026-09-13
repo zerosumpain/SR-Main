@@ -1,7 +1,7 @@
 /**
  * Health Dashboard Sync Service
  *
- * Orchestrates fetching data from Strava and Whoop APIs and upserting into the database.
+ * Orchestrates fetching data from the Whoop API and upserting into the database.
  * Supports incremental sync (default) and full backfill for historical data.
  */
 
@@ -10,7 +10,6 @@ import { db } from '$lib/db';
 // whole node registry into health's closure (308 files -> 1,007).
 import { emit } from '$lib/events/platform-bus';
 import {
-  stravaActivities,
   whoopWorkouts,
   whoopSleep,
   whoopRecovery,
@@ -19,7 +18,6 @@ import {
 } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getValidToken } from './tokens';
-import { getStravaActivities } from './strava';
 import { getWhoopWorkouts, getWhoopSleeps, getWhoopRecoveries, getWhoopCycles } from './whoop';
 import type { SyncOptions, SyncResult, SyncResponse } from './types';
 
@@ -86,148 +84,6 @@ function getSportName(sportId: number | undefined | null): string {
     71: 'Yoga',
   };
   return sportNames[sportId] || 'Other';
-}
-
-// ==========================================
-// Strava Sync
-// ==========================================
-
-export async function syncStravaActivities(options: SyncOptions = {}): Promise<SyncResult> {
-  const startTime = Date.now();
-  const errors: string[] = [];
-  let recordsSynced = 0;
-
-  try {
-    const accessToken = await getValidToken('strava');
-    if (!accessToken) {
-      return {
-        success: false,
-        recordsSynced: 0,
-        errors: ['No Strava access token available'],
-        duration: Date.now() - startTime,
-      };
-    }
-
-    await updateSyncState('strava', 'syncing');
-
-    const maxPages = options.fullBackfill ? (options.maxPages ?? 200) : 1;
-    const perPage = 50;
-    const after = options.start ? Math.floor(new Date(options.start).getTime() / 1000) : undefined;
-    const before = options.end ? Math.floor(new Date(options.end).getTime() / 1000) : undefined;
-
-    for (let page = 1; page <= maxPages; page++) {
-      if (options.signal?.aborted) {
-        errors.push('Cancelled');
-        break;
-      }
-      try {
-        const activities = await getStravaActivities(accessToken, page, perPage, { after, before });
-
-        if (activities.length === 0) break;
-
-        for (const activity of activities) {
-          try {
-            const mapped = {
-              id: activity.id,
-              name: activity.name,
-              type: activity.type,
-              sportType: activity.sport_type,
-              startDate: Math.floor(new Date(activity.start_date).getTime() / 1000),
-              startDateLocal: activity.start_date_local,
-              timezone: activity.timezone,
-              distance: Math.round(activity.distance),
-              movingTime: activity.moving_time,
-              elapsedTime: activity.elapsed_time,
-              totalElevationGain: Math.round(activity.total_elevation_gain),
-              averageSpeed: Math.round(activity.average_speed * 100),
-              maxSpeed: Math.round(activity.max_speed * 100),
-              averageHeartrate: activity.average_heartrate
-                ? Math.round(activity.average_heartrate)
-                : null,
-              maxHeartrate: activity.max_heartrate ? Math.round(activity.max_heartrate) : null,
-              calories: activity.calories ?? null,
-              sufferScore: activity.suffer_score ?? null,
-              mapData: activity.map ? JSON.stringify(activity.map) : null,
-              startLatLng: activity.start_latlng ? JSON.stringify(activity.start_latlng) : null,
-              endLatLng: activity.end_latlng ? JSON.stringify(activity.end_latlng) : null,
-              syncedAt: Math.floor(Date.now() / 1000),
-            };
-
-            await db
-              .insert(stravaActivities)
-              .values(mapped)
-              .onConflictDoUpdate({
-                target: stravaActivities.id,
-                set: {
-                  name: mapped.name,
-                  type: mapped.type,
-                  sportType: mapped.sportType,
-                  startDate: mapped.startDate,
-                  startDateLocal: mapped.startDateLocal,
-                  timezone: mapped.timezone,
-                  distance: mapped.distance,
-                  movingTime: mapped.movingTime,
-                  elapsedTime: mapped.elapsedTime,
-                  totalElevationGain: mapped.totalElevationGain,
-                  averageSpeed: mapped.averageSpeed,
-                  maxSpeed: mapped.maxSpeed,
-                  averageHeartrate: mapped.averageHeartrate,
-                  maxHeartrate: mapped.maxHeartrate,
-                  calories: mapped.calories,
-                  sufferScore: mapped.sufferScore,
-                  mapData: mapped.mapData,
-                  startLatLng: mapped.startLatLng,
-                  endLatLng: mapped.endLatLng,
-                  syncedAt: mapped.syncedAt,
-                },
-              });
-
-            recordsSynced++;
-          } catch (error) {
-            const msg = error instanceof Error ? error.message : String(error);
-            errors.push(`Failed to sync activity ${activity.id}: ${msg}`);
-          }
-        }
-
-        options.onProgress?.({ step: `strava:page-${page}`, recordsSynced, pagesDone: page });
-
-        if (activities.length < perPage) break;
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        errors.push(`Failed to fetch page ${page}: ${msg}`);
-        break;
-      }
-    }
-
-    const success = errors.length === 0;
-    await updateSyncState('strava', success ? 'success' : 'error', recordsSynced, errors.join('; '));
-
-    if (success) {
-      try {
-        emit('strava_activity_synced', { recordsSynced, syncedAt: new Date().toISOString() });
-      } catch {
-        // event-bus not critical path
-      }
-    }
-
-    return {
-      success,
-      recordsSynced,
-      errors,
-      duration: Date.now() - startTime,
-    };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    errors.push(errorMessage);
-    await updateSyncState('strava', 'error', 0, errorMessage);
-
-    return {
-      success: false,
-      recordsSynced: 0,
-      errors,
-      duration: Date.now() - startTime,
-    };
-  }
 }
 
 // ==========================================
@@ -687,12 +543,10 @@ export async function syncWhoopAll(options: SyncOptions = {}): Promise<SyncResul
 export async function syncAll(options: SyncOptions = {}): Promise<SyncResponse> {
   const results: SyncResponse = { timestamp: new Date().toISOString() };
 
-  const [stravaResult, whoopResult] = await Promise.allSettled([
-    syncStravaActivities(options),
-    syncWhoopAll(options),
-  ]);
+  // Strava was removed on 2026-09-13. Its 671 historical activities and the
+  // strava_activities table stay — this is the ingest lane going, not the data.
+  const [whoopResult] = await Promise.allSettled([syncWhoopAll(options)]);
 
-  if (stravaResult.status === 'fulfilled') results.strava = stravaResult.value;
   if (whoopResult.status === 'fulfilled') results.whoop = whoopResult.value;
 
   return results;

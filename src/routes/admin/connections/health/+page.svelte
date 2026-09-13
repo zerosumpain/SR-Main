@@ -37,8 +37,6 @@
     }
   }
 
-  let stravaStart = $state('');
-  let stravaEnd = $state('');
   let whoopStart = $state('');
   let whoopEnd = $state('');
 
@@ -82,7 +80,7 @@
 
   let backfillError = $state<string | null>(null);
 
-  async function startBackfill(service: 'strava' | 'whoop', start: string, end: string) {
+  async function startBackfill(service: 'whoop', start: string, end: string) {
     backfillError = null;
     try {
       const res = await fetch(`/api/health/sync/backfill?service=${service}`, {
@@ -108,7 +106,6 @@
     pollTimer ??= setTimeout(pollJobs, 400);
   }
 
-  const stravaState = $derived(data.syncStates.find((s) => s.service === 'strava'));
   const whoopState = $derived(data.syncStates.find((s) => s.service === 'whoop'));
 
   type ActivityRow = (typeof data.recentActivities)[number];
@@ -262,12 +259,6 @@
     await reloadActivities();
   }
 
-  const activeStravaJob = $derived(
-    recentJobs.find(
-      (j) => (j.service === 'strava' || j.service === 'all') &&
-             (j.status === 'running' || j.status === 'queued'),
-    ),
-  );
   const activeWhoopJob = $derived(
     recentJobs.find(
       (j) => (j.service === 'whoop' || j.service === 'all') &&
@@ -280,7 +271,7 @@
   <PageHeader
     kicker="Health"
     title="Connections & Sync"
-    sub="Manage Strava, Whoop, and Apple Health pipelines. Backfill ranges or trigger an on-demand sync."
+    sub="Manage Whoop and Apple Health pipelines. Backfill ranges or trigger an on-demand sync."
   >
     {#snippet actions()}
       <button class="nm-save-btn" onclick={syncNow} disabled={syncing}>
@@ -301,61 +292,6 @@
   {#if backfillError}
     <div class="banner banner-error">{backfillError}</div>
   {/if}
-
-  <!-- Strava -->
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">Strava</span>
-      <span
-        class="nm-pill"
-        data-state={data.strava.connected ? 'connected' : 'disconnected'}
-      >{data.strava.connected ? 'Connected' : 'Disconnected'}</span>
-      <span class="nm-sec-meta">
-        {#if stravaState}
-          last sync {fmtDate(stravaState.lastSyncAt)}
-          {#if stravaState.recordsSynced != null} · {stravaState.recordsSynced} records{/if}
-        {/if}
-      </span>
-    </div>
-
-    {#if stravaState?.errorMessage && stravaState.status === 'error'}
-      <div class="banner banner-error">{stravaState.errorMessage.slice(0, 280)}{stravaState.errorMessage.length > 280 ? '…' : ''}</div>
-    {/if}
-
-    {#if !data.strava.connected}
-      <a class="nm-save-btn" href="/api/health/strava/connect">Connect Strava</a>
-    {:else}
-      <div class="backfill-row">
-        <label class="nm-field">
-          <span class="sr-label-tight">From</span>
-          <input class="nm-text-input" type="datetime-local" bind:value={stravaStart} disabled={!!activeStravaJob} />
-        </label>
-        <label class="nm-field">
-          <span class="sr-label-tight">To</span>
-          <input class="nm-text-input" type="datetime-local" bind:value={stravaEnd} disabled={!!activeStravaJob} />
-        </label>
-        <button
-          class="nm-save-btn"
-          onclick={() => startBackfill('strava', stravaStart, stravaEnd)}
-          disabled={!!activeStravaJob}
-        >
-          {activeStravaJob ? 'Running…' : 'Backfill'}
-        </button>
-        {#if !stravaStart && !stravaEnd}
-          <span class="hint">empty range = all-time</span>
-        {/if}
-      </div>
-      {#if activeStravaJob}
-        <div class="active-line">
-          <span class="live-dot"></span>
-          <span>{activeStravaJob.currentStep ?? activeStravaJob.status}</span>
-          <span>· {activeStravaJob.recordsSynced} records</span>
-          {#if activeStravaJob.pagesDone > 0}<span>· {activeStravaJob.pagesDone} pages</span>{/if}
-          <button class="nm-link-btn" onclick={() => cancelJob(activeStravaJob!.id)}>Cancel</button>
-        </div>
-      {/if}
-    {/if}
-  </section>
 
   <!-- Whoop -->
   <section class="nm-sec">
@@ -427,7 +363,7 @@
       <span class="sr-label-tight">Epic Activities · /health</span>
       <span class="nm-sec-meta">{featured.length} featured</span>
     </div>
-    <p class="muted">Mark Strava activities as featured to surface them in the "Epic Activities" rail on the public /health page. Add an optional caption, reorder with the arrows.</p>
+    <p class="muted">Mark activities as featured to surface them in the "Epic Activities" rail on the public /health page. Add an optional caption, reorder with the arrows. The Strava integration was removed on 2026-09-13; these are the activities it left behind, and SR-Health still renders the featured ones.</p>
 
     {#if featureError}
       <div class="banner banner-error">{featureError}</div>
@@ -480,12 +416,12 @@
   <!-- Pick from recent -->
   <section class="nm-sec">
     <div class="nm-sec-hd">
-      <span class="sr-label-tight">Strava Activities · Picker</span>
+      <span class="sr-label-tight">Activities · Picker</span>
       <span class="nm-sec-meta">{filteredRecent.length} / {recent.length}</span>
     </div>
 
     {#if recent.length === 0}
-      <div class="nm-empty">No Strava activities synced yet. Connect Strava and run a backfill above.</div>
+      <div class="nm-empty">No activities. The Strava integration that wrote these was removed; nothing adds to this list now.</div>
     {:else}
       <div class="ep-filters">
         <div class="ep-filter-row">

@@ -46,11 +46,6 @@ const SITE_NODE_FAMILIES: Array<{ family: string; description: string; types: st
     types: ['home-assistant'],
   },
   {
-    family: 'Strava',
-    description: 'Strava activities.',
-    types: ['strava'],
-  },
-  {
     family: 'Whoop',
     description: 'Whoop wearable data.',
     types: ['whoop'],

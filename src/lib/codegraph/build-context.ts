@@ -230,7 +230,7 @@ export function planBuildQuery(
    * like "add a Notion connector" satisfies neither, and until this lane existed
    * it produced no query at all: the graph held five notes on exactly that
    * subject (which service the credential binds to, why a credential in node
-   * config spreads to nine tables, that Strava is parked by design) and served
+   * config spreads to nine tables) and served
    * none of them, because none of those notes' subject matter is expressible as
    * a path the prompt happens to contain.
    *

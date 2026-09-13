@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events';
  * Observability event bus.
  *
  * Distinct from `./event-bus.ts`, which carries cross-workflow trigger
- * events ('strava_activity_synced' etc.) and dispatches matching event-
+ * events ('whoop_recovery_updated' etc.) and dispatches matching event-
  * triggered schedules. Keeping the two emitters separate avoids a node
  * completion accidentally triggering an unrelated workflow.
  *

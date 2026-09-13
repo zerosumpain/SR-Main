@@ -5,7 +5,6 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 const mocks = vi.hoisted(() => ({ db: null as any, refresh: vi.fn() }));
 vi.mock('$lib/db', () => ({ db: mocks.db }));
 vi.mock('$lib/health-sync/whoop', () => ({ refreshWhoopToken: mocks.refresh }));
-vi.mock('$lib/health-sync/strava', () => ({ refreshStravaToken: mocks.refresh }));
 
 // Explicit opt-in: synthetic credentials, private schema, local PostgreSQL only.
 const enabled = process.env.HEALTH_TOKEN_LOCAL_TESTS === '1';
@@ -66,13 +65,18 @@ describe.skipIf(!enabled)('health token refresh concurrency', () => {
     expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
-  it('preserves Strava absolute expiry semantics in the shared token helper', async () => {
-    await pool.query("UPDATE oauth_tokens SET service = 'strava'");
-    const expiry = Math.floor(Date.now() / 1000) + 21600;
-    mocks.refresh.mockResolvedValue({ access_token: 'strava-new', refresh_token: 'strava-refresh', expires_at: expiry });
+  // The Strava case this replaced asserted the ABSOLUTE-expiry branch, because
+  // Strava returned expires_at where WHOOP returns expires_in. Strava was removed
+  // on 2026-09-13 and so was that branch; what is left worth pinning is that a
+  // relative expiry becomes an absolute one before it is stored.
+  it('stores a relative expiry as an absolute one', async () => {
+    const before = Math.floor(Date.now() / 1000);
+    mocks.refresh.mockResolvedValue({ access_token: 'whoop-new', refresh_token: 'whoop-refresh', expires_in: 21600 });
     const { getValidToken } = await import('$lib/health-sync/tokens');
-    expect(await getValidToken('strava')).toBe('strava-new');
-    expect((await pool.query('SELECT expires_at FROM oauth_tokens')).rows[0].expires_at).toBe(expiry);
+    expect(await getValidToken('whoop')).toBe('whoop-new');
+    const stored = (await pool.query('SELECT expires_at FROM oauth_tokens')).rows[0].expires_at;
+    expect(stored).toBeGreaterThanOrEqual(before + 21600);
+    expect(stored).toBeLessThanOrEqual(before + 21600 + 5);
   });
 
   it('serializes independent workers and re-reads after waiting for the lock', async () => {

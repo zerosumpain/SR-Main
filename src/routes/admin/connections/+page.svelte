@@ -89,7 +89,7 @@
   /** Hidden fields an action needs to know which account it is acting on. */
   function actionFields(r: ConnectorReport, a: ConnectorAction): Record<string, string> {
     const parts = r.key.split(':');
-    // Strava and Whoop use the bare service name as their connector key.
+    // Whoop uses the bare service name as its connector key.
     if (a.target === 'resync') return { service: parts[0] };
     if (a.target === 'testOauthSecret') return { provider: parts[1] ?? '' };
     if (a.target === 'testIntegration') {

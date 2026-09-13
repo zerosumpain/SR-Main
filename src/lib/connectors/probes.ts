@@ -218,47 +218,20 @@ async function probeHaSensors(): Promise<ConnectorReport> {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Connectors that are parked on purpose. Strava moved its API behind a paid
-// subscription, which this account does not have, so no token and no amount of
-// reconnecting will ever make it work again. The integration stays wired up —
-// the activities already stored still render on /health, and un-parking it is
-// deleting one line — but it must not present as a fault anywhere: not on the
-// dashboard, not in the 06:45 alert, and not on the landing banner.
-//
-// Probing a dormant connector is pointless, so we do not: the row is built
-// from this constant alone, without a token refresh or a network call.
-// ---------------------------------------------------------------------------
-const DORMANT: Partial<Record<string, string>> = {
-  strava: 'parked — Strava restricted its API to paid subscribers',
-};
 
 // ---------------------------------------------------------------------------
-// Strava / Whoop — getValidToken performs a real refresh when expired.
+// Whoop — getValidToken performs a real refresh when expired.
 //
 // A valid token is NOT the same as a working sync, and conflating the two is
 // how Strava sat broken for five weeks while this page said "ok": the refresh
-// kept succeeding and every fetch came back 403. So the token check is only the
-// first half — the second half asks the sync-state row whether the last run
-// actually landed, and how long ago the last one that did was.
+// kept succeeding and every fetch came back 403. Strava has since been removed
+// entirely, but the lesson is Whoop's now — so the token check is only the first
+// half, and the second asks the sync-state row whether the last run actually
+// landed, and how long ago the last one that did was.
 // ---------------------------------------------------------------------------
-async function probeOAuthHealth(service: 'strava' | 'whoop'): Promise<ConnectorReport> {
-  const label = service === 'strava' ? 'Strava' : 'Whoop';
-  const impact =
-    service === 'strava'
-      ? 'No new activities on /health, and training-load figures drift out of date'
-      : 'No new sleep, recovery or strain — readiness and sleep balance go stale';
-
-  const parked = DORMANT[service];
-  if (parked) {
-    return guard(service, label, 'Health', 'account', async () => ({
-      status: 'dormant' as ConnectorStatus,
-      detail: parked,
-      live: false,
-      fixUrl: '/health',
-      fixHint: 'Activities synced before it closed are still on /health',
-    }));
-  }
+async function probeOAuthHealth(service: 'whoop'): Promise<ConnectorReport> {
+  const label = 'Whoop';
+  const impact = 'No new sleep, recovery or strain — readiness and sleep balance go stale';
 
   return guard(service, label, 'Health', 'account', async () => {
     const { getValidToken } = await import('$lib/health-sync/tokens');
@@ -310,19 +283,17 @@ async function probeOAuthHealth(service: 'strava' | 'whoop'): Promise<ConnectorR
     if (state?.status === 'error') {
       const why = state.errorMessage ?? 'the last sync failed';
 
-      // Strava 403s every endpoint with
+      // A provider can 403 every endpoint with
       //   {"resource":"Application","field":"Status","code":"Inactive"}
       // when the API *application* has been deactivated, which is a different
-      // fault from a bad grant: /athlete fails too, the refresh endpoint keeps
-      // handing out fresh tokens, and reconnecting can never fix it because
-      // there is nothing wrong with the athlete's consent. Sending someone to
-      // "Reconnect" here is a loop they cannot win, so it gets its own branch.
+      // fault from a bad grant: the refresh endpoint keeps handing out fresh
+      // tokens, and reconnecting can never fix it because there is nothing
+      // wrong with the user's consent. Sending someone to "Reconnect" here is a
+      // loop they cannot win, so it gets its own branch. Strava did exactly
+      // this before it was removed; Whoop could.
       const appInactive = /\bapplication\b/i.test(why) && /\binactive\b/i.test(why);
       if (appInactive) {
-        const devSettings =
-          service === 'strava'
-            ? 'https://www.strava.com/settings/api'
-            : 'https://developer.whoop.com/';
+        const devSettings = 'https://developer.whoop.com/';
         return {
           status: 'broken' as ConnectorStatus,
           detail: `${label} has marked the API application inactive · ${since}`,
@@ -769,7 +740,6 @@ export async function probeAll(): Promise<ConnectorReport[]> {
     probeOAuthSecrets(),
     probeHomeAssistant(),
     probeHaSensors(),
-    probeOAuthHealth('strava'),
     probeOAuthHealth('whoop'),
     probeAppleHealth(),
     probeOpenRouter(),

@@ -109,7 +109,12 @@
     "        security bug that no test anywhere would catch.",
     "      server/access, access-util, owner, config/owner — the owner check.",
     "      server/rate-limit, ssrf-guard — a guard that is stricter in one",
-    "        application than another is a guard with a door in it."
+    "        application than another is a guard with a door in it.",
+    "",
+    "  health-sync/strava.ts left both repositories on 2026-09-13. The INTEGRATION",
+    "    was removed, not the data: strava_activities keeps its 671 rows and stays",
+    "    declared (operations.json lists it as required), and types.ts still",
+    "    describes them, so it is deliberately unchanged."
   ],
   "files": {
     "src/lib/health/polyline.ts": {
@@ -198,15 +203,11 @@
     },
     "src/lib/health-sync/sync-service.ts": {
       "peer": "zerosumpain/SR-Health",
-      "sha256": "a69d9b1fbf08d729732181117a86809dc4e416678e5e51e65572ba3efecb90e8"
+      "sha256": "4deaa072fd071591912d246c4d3599d326d59a291b5c81709f8b40f3ca5d19dc"
     },
     "src/lib/health-sync/tokens.ts": {
       "peer": "zerosumpain/SR-Health",
-      "sha256": "8ac101e4c3b6836201a7c4c90a2aabf4f549390056ef1237c13c500dd384dde9"
-    },
-    "src/lib/health-sync/strava.ts": {
-      "peer": "zerosumpain/SR-Health",
-      "sha256": "214c890ea0e60c1ecbb787d92606165e1c9efb709b54fe4fa227909b4bcc157a"
+      "sha256": "b934040169513b5365f554c90e4ac32ae0b0f385bf6059075c2f2606a3dbe0e1"
     },
     "src/lib/health-sync/whoop.ts": {
       "peer": "zerosumpain/SR-Health",

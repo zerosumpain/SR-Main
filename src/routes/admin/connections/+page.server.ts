@@ -32,20 +32,17 @@ function done(key: string, message: string) {
 }
 
 export const actions: Actions = {
-  /** Pull from Strava or Whoop right now. Incremental — one page, not a backfill. */
+  /** Pull from Whoop right now. Incremental — one page, not a backfill. */
   resync: async ({ request }) => {
     const f = await request.formData();
     const key = String(f.get('key') ?? '');
     const service = String(f.get('service') ?? '');
-    if (service !== 'strava' && service !== 'whoop') {
+    if (service !== 'whoop') {
       return fail(400, { ok: false, key, error: 'unknown service' });
     }
 
-    const { syncStravaActivities, syncWhoopAll } = await import('$lib/health-sync/sync-service');
-    const result =
-      service === 'strava'
-        ? await syncStravaActivities({ maxPages: 1 })
-        : await syncWhoopAll({ maxPages: 1 });
+    const { syncWhoopAll } = await import('$lib/health-sync/sync-service');
+    const result = await syncWhoopAll({ maxPages: 1 });
 
     if (!result.success) {
       return fail(400, {

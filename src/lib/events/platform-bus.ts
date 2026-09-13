@@ -30,7 +30,6 @@ import { EventEmitter } from 'events';
  * list cannot catch it, because it is looping over the half that is wrong.
  */
 export const PLATFORM_EVENT_TYPES = [
-	'strava_activity_synced',
 	'whoop_recovery_updated',
 	'workflow_completed'
 ] as const;

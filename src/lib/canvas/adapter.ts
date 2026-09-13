@@ -822,23 +822,11 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     },
   },
   {
-    type: 'strava',
-    label: 'Strava',
-    kind: 'output',
-    group: 'Integrations',
-    description: 'Fetch Strava activities / stats / athlete profile.',
-    defaultConfig: { kind: 'activities', limit: 10 },
-    handles: {
-      inputs: [{ id: 'in', kinds: ['text'] }],
-      outputs: [{ id: 'out', kinds: ['json'] }],
-    },
-  },
-  {
     type: 'health-query',
     label: 'Health query',
     kind: 'output',
     group: 'Integrations',
-    description: 'Natural-language query across Apple Health / Whoop / Strava.',
+    description: 'Natural-language query across Apple Health and Whoop.',
     defaultConfig: { query: '' },
     handles: {
       inputs: [{ id: 'in', kinds: ['text'] }],
