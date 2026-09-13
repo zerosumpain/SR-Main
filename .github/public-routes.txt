@@ -89,8 +89,6 @@
 /heart/2
 /jkai/shared/[token]
 /login
-/policy-analysis/shared/[token]
-/policy-analysis/shared/[token]/export
 /projects
 /projects/[slug]/[...path]
 /projects/archetype/llm

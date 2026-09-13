@@ -71,6 +71,5 @@ corpus.json
 core
 core.*
 
-# Built by `npm run build:offline` — the offline pack shell. Regenerated on
-# every build and read off disk by the pack exporter; never committed.
+# Historical Policy build output; keep stale local assets out of source control.
 static/policy-offline/

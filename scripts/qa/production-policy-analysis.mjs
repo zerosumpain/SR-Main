@@ -2,14 +2,15 @@
 import assert from 'node:assert/strict';
 import pg from 'pg';
 export async function verifyPolicyAnalysis(headers) {
-  const base = 'http://127.0.0.1:4173';
+  // Policy has its own origin; Main releases must verify through its gateway.
+  const base = 'http://127.0.0.1:5290';
   const page = await fetch(`${base}/policy-analysis`, { headers, redirect: 'manual' });
   assert.equal(page.status, 200, 'Owner policy analysis page must load');
   assert.ok((await page.text()).includes('the policy meets its actors?'));
   const list = await fetch(`${base}/api/policy-analysis`, { headers, redirect: 'manual' });
   assert.equal(list.status, 200, 'Owner policy analysis API must query its schema');
   assert.match(list.headers.get('cache-control') ?? '', /private.*no-store/);
-  const anonymous = await fetch(`${base}/api/policy-analysis`, { redirect: 'manual' });
+  const anonymous = await fetch(`${base}/api/policy-analysis`, { headers: { host: 'strangeramblings.com' }, redirect: 'manual' });
   assert.ok([401, 403].includes(anonymous.status), 'Policy analyses remain private');
   const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
   try {

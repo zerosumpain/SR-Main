@@ -149,7 +149,7 @@ import { startRunWorker, stopRunWorker } from '$lib/workflows/run-worker';
 import { webWorkerOptions } from '$lib/workflows/policy-worker-mode';
 if (!building) {
   const options = webWorkerOptions(runsService('background'));
-  if (options) startRunWorker(options);
+  if (options) startRunWorker();
 }
 if (runsService('background')) {
   startDatastoreReaper();

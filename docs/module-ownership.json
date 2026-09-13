@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "modules": [
+    {
+      "id": "policy-analysis",
+      "repository": "zerosumpain/SR-Policy-Analysis",
+      "checkout": "/home/john/sr-policy-analysis",
+      "pagePrefix": "/policy-analysis",
+      "apiPrefix": "/api/policy-analysis",
+      "assetPrefix": "/_policy/",
+      "productionGateway": "http://127.0.0.1:5290",
+      "localPreview": "http://192.168.0.77:5275/policy-analysis",
+      "queueTrigger": "policy-analysis",
+      "workerOwner": "sr-policy-worker",
+      "policyMigrationOwner": "zerosumpain/SR-Policy-Analysis",
+      "sharedQueueAndSettingsOwner": "zerosumpain/SR-Main"
+    }
+  ]
+}

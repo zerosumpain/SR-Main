@@ -5,7 +5,6 @@
 # not a module they import. An import graph cannot see that coupling, so
 # these run at EVERY gate level regardless of what changed.
 # this list from the source and fails if it has drifted, so a new filesystem-
-src/lib/components/policy-analysis/dashboard.test.ts
 src/lib/estate/estate.test.ts
 src/lib/jkai/explainer-kit.test.ts
 src/lib/jkai/intel/chat-extract.wiring.test.ts
@@ -17,12 +16,6 @@ src/lib/jkai/studio-gate.test.ts
 src/lib/jkai/studio.test.ts
 src/lib/llm/keys.test.ts
 src/lib/models/workloads.test.ts
-src/lib/policy-analysis/dashboard-shaping.test.ts
-src/lib/policy-analysis/offline/pack.test.ts
-src/lib/policy-analysis/pipeline.test.ts
-src/lib/policy-analysis/resilience.test.ts
-src/lib/policy-analysis/server/census.test.ts
-src/lib/policy-analysis/server/seal.test.ts
 src/lib/selfimprove/board.test.ts
 src/lib/selfimprove/narrative.probe.test.ts
 src/lib/selfimprove/seed-apis.auth.test.ts
