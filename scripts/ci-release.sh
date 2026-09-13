@@ -23,6 +23,9 @@
 # Expects: cwd = repo root, scripts/ci-prebuild.sh already staged this sha.
 set -euo pipefail
 
+# Extracted applications still depend on declarations reconciled by Main.
+node scripts/check-extracted-schema.mjs
+
 VPS_DIR="${VPS_DIR:-/opt/strange-rambling-svelte}"
 SERVICE="${SERVICE:-strange-rambling-svelte}"
 PUBLIC_URL="${PUBLIC_URL:-https://strangeramblings.com}"

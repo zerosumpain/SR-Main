@@ -1,19 +1,181 @@
 {
-  "version": 1,
+  "version": 2,
+  "generatedFrom": "zerosumpain/SR-Infra registry/apps.json + registry/operations.json",
   "modules": [
     {
       "id": "policy-analysis",
       "repository": "zerosumpain/SR-Policy-Analysis",
-      "checkout": "/home/john/sr-policy-analysis",
-      "pagePrefix": "/policy-analysis",
-      "apiPrefix": "/api/policy-analysis",
-      "assetPrefix": "/_policy/",
-      "productionGateway": "http://127.0.0.1:5290",
-      "localPreview": "http://192.168.0.77:5275/policy-analysis",
-      "queueTrigger": "policy-analysis",
-      "workerOwner": "sr-policy-worker",
-      "policyMigrationOwner": "zerosumpain/SR-Policy-Analysis",
-      "sharedQueueAndSettingsOwner": "zerosumpain/SR-Main"
+      "paths": [
+        "/policy-analysis",
+        "/api/policy-analysis"
+      ],
+      "excludedPaths": [],
+      "stagedPaths": [],
+      "assetPrefix": "/_policy",
+      "ports": {
+        "gateway": 5290,
+        "primary": 5292,
+        "candidate": 5293,
+        "worker": 5294
+      },
+      "workflows": [
+        ".github/workflows/check.yml"
+      ],
+      "executionOwner": "dedicated policy worker",
+      "migrationAuthor": "zerosumpain/SR-Policy-Analysis",
+      "schemaExecutor": "zerosumpain/SR-Main",
+      "requiredTables": [
+        "allowed_user",
+        "api_secrets",
+        "app_settings",
+        "datastore_audit_log",
+        "datastore_collections",
+        "datastore_records",
+        "integration_credentials",
+        "integration_oauth_configs",
+        "openrouter_models",
+        "policy_analyses",
+        "policy_artefacts",
+        "policy_documents",
+        "policy_executions",
+        "policy_model_calls",
+        "policy_persona_observations",
+        "policy_personas",
+        "policy_provenance",
+        "policy_share",
+        "policy_stages",
+        "workflow_runs",
+        "workflows"
+      ]
+    },
+    {
+      "id": "drive",
+      "repository": "zerosumpain/SR-Drive",
+      "paths": [
+        "/drive",
+        "/api/files",
+        "/api/file-shares",
+        "/api/admin/webdav-credentials"
+      ],
+      "excludedPaths": [],
+      "stagedPaths": [
+        "/dav"
+      ],
+      "assetPrefix": "/_drive",
+      "ports": {
+        "gateway": 5300,
+        "primary": 5302,
+        "candidate": 5303,
+        "worker": 5304
+      },
+      "workflows": [
+        ".github/workflows/check.yml",
+        ".github/workflows/release.yml",
+        ".github/workflows/gateway.yml"
+      ],
+      "executionOwner": "Drive HTTP requests; Intelligence outbox consumer and WebDAV remain Main-owned",
+      "migrationAuthor": "zerosumpain/SR-Main",
+      "schemaExecutor": "zerosumpain/SR-Main",
+      "requiredTables": [
+        "agent_actions",
+        "agent_tasks",
+        "allowed_user",
+        "app_settings",
+        "drive_folder_settings",
+        "drive_intel_outbox",
+        "entity",
+        "fact",
+        "file_embeddings",
+        "file_share_token",
+        "intel_categories",
+        "jkai_conversations",
+        "openrouter_models",
+        "rag_collections",
+        "rag_messages",
+        "relationship",
+        "research_session",
+        "source",
+        "webdav_credentials",
+        "workflow_files"
+      ]
+    },
+    {
+      "id": "health",
+      "repository": "zerosumpain/SR-Health",
+      "paths": [
+        "/health",
+        "/live",
+        "/api/health",
+        "/api/trails",
+        "/api/live-walk"
+      ],
+      "excludedPaths": [
+        "/api/health/workflow-engine"
+      ],
+      "stagedPaths": [],
+      "assetPrefix": "/_health",
+      "ports": {
+        "gateway": 5320,
+        "primary": 5322,
+        "candidate": 5323,
+        "worker": 5324
+      },
+      "workflows": [
+        ".github/workflows/check.yml",
+        ".github/workflows/release.yml",
+        ".github/workflows/gateway.yml"
+      ],
+      "executionOwner": "Health HTTP requests; hourly Strava/WHOOP scheduler remains Main-owned",
+      "migrationAuthor": "zerosumpain/SR-Main",
+      "schemaExecutor": "zerosumpain/SR-Main",
+      "requiredTables": [
+        "activities",
+        "activity_segment_efforts",
+        "activity_segments",
+        "activity_series",
+        "activity_tracks",
+        "agent_actions",
+        "agent_tasks",
+        "allowed_user",
+        "api_secrets",
+        "app_settings",
+        "apple_health_metrics",
+        "fact",
+        "health_sync_jobs",
+        "health_sync_state",
+        "home_assistant_config",
+        "oauth_tokens",
+        "openrouter_models",
+        "planned_routes",
+        "research_session",
+        "route_waypoints",
+        "source",
+        "strava_activities",
+        "whoop_cycles",
+        "whoop_recovery",
+        "whoop_sleep",
+        "whoop_workouts"
+      ]
+    },
+    {
+      "id": "main",
+      "repository": "zerosumpain/SR-Main",
+      "paths": [
+        "/"
+      ],
+      "excludedPaths": [],
+      "stagedPaths": [],
+      "assetPrefix": "/_app",
+      "ports": {
+        "web": 4173
+      },
+      "workflows": [
+        ".github/workflows/ci.yml"
+      ],
+      "executionOwner": "Main web and existing Main sidecars",
+      "migrationAuthor": "zerosumpain/SR-Main",
+      "schemaExecutor": "zerosumpain/SR-Main",
+      "requiredTables": []
     }
   ]
 }
