@@ -1,7 +1,9 @@
 import { db } from '$lib/db';
 import { orchestratorChats, conversations, jkaiAttachments } from '$lib/db/schema';
 import { eq, desc, inArray } from 'drizzle-orm';
-import { getChatHistory } from '$lib/workflows/orchestrator';
+// From the leaf module, not the orchestrator barrel: that barrel imports the
+// node registry, and this file is on the chat endpoint's hot import path.
+import { getChatHistory } from '$lib/workflows/orchestrator/chat-history';
 import type { JkaiAttachment } from '$lib/db/schema';
 
 export interface HistoryMessage {
