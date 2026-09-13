@@ -5,11 +5,8 @@ import { json, error } from '@sveltejs/kit';
 import { db } from '$lib/db';
 import { jkaiBuilds } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
-import {
-  verifyBridgeToken,
-  manifestForBuild,
-  definitionsForBuild,
-} from '$lib/jkai/tool-bridge';
+import { verifyBridgeToken } from '$lib/jkai/bridge-token';
+import { manifestForBuild, definitionsForBuild } from '$lib/jkai/tool-bridge';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ request, url }) => {
@@ -20,9 +17,9 @@ export const GET: RequestHandler = async ({ request, url }) => {
   const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
   if (!build) throw error(404, 'build not found');
   const enabled = (build.enabledToolsets ?? ['all']) as string[];
-  const manifest = manifestForBuild(enabled);
+  const manifest = await manifestForBuild(enabled);
   const policy = await getActivePolicy();
-  const definitions = applyCapabilityPolicy(definitionsForBuild(enabled), policy);
+  const definitions = applyCapabilityPolicy(await definitionsForBuild(enabled), policy);
   const integrations = definitions.some(d => d.function.name === 'api_integration_call')
     ? await discoverIntegrations(url?.searchParams.get('query') ?? '', 20).then(rows => ({ status: 'ok', operations: rows.filter(i => !i.writes) })).catch(() => ({ status: 'unavailable', operations: [] }))
     : { status: 'not_enabled', operations: [] };

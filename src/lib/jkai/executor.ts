@@ -15,7 +15,7 @@ import {
   syncDesignAssets,
   syncJkaiExtension,
 } from './sandbox';
-import { signBridgeToken } from './tool-bridge';
+import { signBridgeToken } from './bridge-token';
 import { emitLog } from './log-emitter';
 import type { ActionRecord, FailureEnvelope } from './types';
 import type { JkaiBuild, JkaiIteration } from '$lib/db/schema';

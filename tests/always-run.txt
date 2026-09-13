@@ -19,6 +19,7 @@ src/lib/models/workloads.test.ts
 src/lib/selfimprove/board.test.ts
 src/lib/selfimprove/narrative.probe.test.ts
 src/lib/selfimprove/verify.test.ts
+src/lib/workflows/site-tools/registry-closure.test.ts
 src/lib/workflows/site-tools/tools/publish-page.test.ts
 tests/extract/docx.test.ts
 tests/extract/pdf.test.ts

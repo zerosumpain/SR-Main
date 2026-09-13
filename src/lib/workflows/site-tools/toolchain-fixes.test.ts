@@ -54,7 +54,7 @@ describe('destructive flag (single source of truth)', () => {
     expect(tool?.toolset).toBe('builds');
     expect(tool?.destructive).toBeFalsy();
     expect(await isDestructive('studio_build')).toBe(false);
-    expect(isBridgeable('studio_build')).toBe(true);
+    expect(await isBridgeable('studio_build')).toBe(true);
     expect(getToolsByToolset('builds').some((t) => t.name === 'studio_build')).toBe(true);
   });
 

@@ -29,7 +29,7 @@ const runPi = vi.fn(async (_opts: { systemPrompt: string }) => ({
 vi.mock('./pi-runner', () => ({ runPi }));
 vi.mock('$lib/db', () => ({ db: {} }));
 vi.mock('./log-emitter', () => ({ emitLog: vi.fn(async () => {}), emitLive: vi.fn(() => {}) }));
-vi.mock('./tool-bridge', () => ({ signBridgeToken: () => 'tok' }));
+vi.mock('./bridge-token', () => ({ signBridgeToken: () => 'tok' }));
 vi.mock('./workflow-deliveries', () => ({ consumePendingDeliveries: async () => [] }));
 vi.mock('./workflow-grounding', () => ({
   buildAttachedWorkflowGrounding: async () => '',

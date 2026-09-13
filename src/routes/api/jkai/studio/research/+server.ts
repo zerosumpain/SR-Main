@@ -1,5 +1,5 @@
 import { json, error } from '@sveltejs/kit';
-import { verifyBridgeToken } from '$lib/jkai/tool-bridge';
+import { verifyBridgeToken } from '$lib/jkai/bridge-token';
 import { searchResearch } from '$lib/deepdive/research-search';
 import type { RequestHandler } from './$types';
 
