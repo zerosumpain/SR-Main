@@ -4,7 +4,7 @@ import { db } from '$lib/db';
 import { workflowSchedules } from '$lib/db/schema';
 import { and, asc, eq, gt, inArray } from 'drizzle-orm';
 import { getCollectionBySlug, queryRecords } from '$lib/datastore';
-import { listJobs } from '$lib/workflows/chat/job-store';
+import { listChatJobs } from '$lib/workflows/chat/activity';
 import { MONITORS_COLLECTION } from '$lib/monitors/monitors.server';
 import { BRIEFINGS_COLLECTION, briefingDateLabel } from '$lib/briefing/types';
 
@@ -32,7 +32,7 @@ export const GET: RequestHandler = async () => {
     nextRun,
   };
   try {
-    const running = listJobs().filter((j) => j.status === 'running');
+    const running = (await listChatJobs()).filter((j) => j.status === 'running');
     activity.runningJobs = running.length;
     activity.currentStep = running[0]?.currentStep ?? running[0]?.phase ?? null;
   } catch {

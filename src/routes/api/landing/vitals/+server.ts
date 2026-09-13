@@ -4,7 +4,7 @@ import { db } from '$lib/db';
 import { jkaiBuilds, jkaiBuildDeliveries, workflows, workflowRuns, projectVisibility } from '$lib/db/schema';
 import { and, desc, eq, inArray, isNull, like, or, sql } from 'drizzle-orm';
 import { STATIC_PROJECT_KEYS } from '$lib/projects/visibility';
-import { listRunningJobsByConversation } from '$lib/workflows/chat/job-store';
+import { runningJobsByConversation } from '$lib/workflows/chat/activity';
 import { publishedLink } from '$lib/builds/published-link';
 
 /**
@@ -197,7 +197,7 @@ async function compute(): Promise<VitalsPayload> {
   const builder = deriveBuilder(latest, summary.latestPublished, summary.shippedCount);
 
   return {
-    jkai: { activeJobs: listRunningJobsByConversation().size },
+    jkai: { activeJobs: (await runningJobsByConversation()).size },
     builder,
     canvas: {
       count: summary.canvasCount,

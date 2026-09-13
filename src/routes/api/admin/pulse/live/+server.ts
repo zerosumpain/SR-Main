@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { listJobs, getRecentPulses } from '$lib/workflows/chat/job-store';
+import { listChatJobs, recentChatPulses } from '$lib/workflows/chat/activity';
 import { getQueueStatus } from '$lib/workflows/chat/followup-queue';
 import { getRuntimeStats, readEventLoopMaxMs } from '$lib/workflows/engine-runtime';
 import { getActiveJobs } from '$lib/workflows/scheduler';
@@ -29,7 +29,7 @@ export const GET: RequestHandler = async () => {
   const HEARTBEAT_INTERVAL_MS = 5_000;
 
   const nowMs = Date.now();
-  const orchestratorJobs = listJobs().map((j) => {
+  const orchestratorJobs = (await listChatJobs()).map((j) => {
     const idleMs = nowMs - j.lastEventAt;
     const elapsedMs = j.elapsed;
     const idleKillInMs = Math.max(0, IDLE_TIMEOUT_MS - idleMs);
@@ -63,7 +63,7 @@ export const GET: RequestHandler = async () => {
     return { ...f, dueInMs, projectedNextBackoffMs };
   });
 
-  const recentPulses = getRecentPulses().slice(0, 100);
+  const recentPulses = (await recentChatPulses()).slice(0, 100);
 
   const activeRunRows = await db
     .select()

@@ -1,7 +1,7 @@
 import { db } from '$lib/db';
 import { orchestratorChats, heartbeatPulses } from '$lib/db/schema';
 import { and, eq, gt, isNotNull } from 'drizzle-orm';
-import { listJobs } from '$lib/workflows/chat/job-store';
+import { listChatJobs } from '$lib/workflows/chat/activity';
 import { postHeartbeatNote } from '../llm';
 import type { ActivityHandler } from '../types';
 
@@ -46,7 +46,7 @@ export const conversationCheckin: ActivityHandler = {
     const cooldownMs = cfg.perConversationCooldownMinutes * 60_000;
     const now = ctx.now;
 
-    const jobs = listJobs().filter(
+    const jobs = (await listChatJobs()).filter(
       (j) => j.status === 'running' && j.conversationId && j.elapsed >= ageThresholdMs,
     );
     if (jobs.length === 0) {
