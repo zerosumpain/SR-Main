@@ -1,5 +1,5 @@
 import { getHeroActivity } from '$lib/server/hero-activity';
-import { HEALTH_TIMEZONE } from '$lib/health/day';
+import { HEALTH_TIMEZONE } from '$lib/constants/health-day';
 import { snapHeroTitle } from '$lib/landing/hero-titles-service';
 import { getReleaseShowcase } from '$lib/releases/public';
 import { isOwnerRequest } from '$lib/server/owner';

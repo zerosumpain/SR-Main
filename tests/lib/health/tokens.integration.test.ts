@@ -4,8 +4,8 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 
 const mocks = vi.hoisted(() => ({ db: null as any, refresh: vi.fn() }));
 vi.mock('$lib/db', () => ({ db: mocks.db }));
-vi.mock('$lib/health/whoop', () => ({ refreshWhoopToken: mocks.refresh }));
-vi.mock('$lib/health/strava', () => ({ refreshStravaToken: mocks.refresh }));
+vi.mock('$lib/health-sync/whoop', () => ({ refreshWhoopToken: mocks.refresh }));
+vi.mock('$lib/health-sync/strava', () => ({ refreshStravaToken: mocks.refresh }));
 
 // Explicit opt-in: synthetic credentials, private schema, local PostgreSQL only.
 const enabled = process.env.HEALTH_TOKEN_LOCAL_TESTS === '1';
@@ -44,7 +44,7 @@ describe.skipIf(!enabled)('health token refresh concurrency', () => {
 
   it('coalesces concurrent callers and persists the rotated credentials', async () => {
     mocks.refresh.mockResolvedValue({ access_token: 'new-access', refresh_token: 'new-refresh', expires_in: 3600 });
-    const { getValidToken } = await import('$lib/health/tokens');
+    const { getValidToken } = await import('$lib/health-sync/tokens');
     expect(await Promise.all(Array.from({ length: 12 }, () => getValidToken('whoop'))))
       .toEqual(Array(12).fill('new-access'));
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
@@ -54,14 +54,14 @@ describe.skipIf(!enabled)('health token refresh concurrency', () => {
 
   it('returns a valid token without exchanging it', async () => {
     await pool.query('UPDATE oauth_tokens SET expires_at = $1', [Math.floor(Date.now() / 1000) + 3600]);
-    const { getValidToken } = await import('$lib/health/tokens');
+    const { getValidToken } = await import('$lib/health-sync/tokens');
     expect(await getValidToken('whoop')).toBe('old-access');
     expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
   it('leaves an unconnected account unconnected', async () => {
     await pool.query('TRUNCATE oauth_tokens');
-    const { getValidToken } = await import('$lib/health/tokens');
+    const { getValidToken } = await import('$lib/health-sync/tokens');
     expect(await getValidToken('whoop')).toBeNull();
     expect(mocks.refresh).not.toHaveBeenCalled();
   });
@@ -70,7 +70,7 @@ describe.skipIf(!enabled)('health token refresh concurrency', () => {
     await pool.query("UPDATE oauth_tokens SET service = 'strava'");
     const expiry = Math.floor(Date.now() / 1000) + 21600;
     mocks.refresh.mockResolvedValue({ access_token: 'strava-new', refresh_token: 'strava-refresh', expires_at: expiry });
-    const { getValidToken } = await import('$lib/health/tokens');
+    const { getValidToken } = await import('$lib/health-sync/tokens');
     expect(await getValidToken('strava')).toBe('strava-new');
     expect((await pool.query('SELECT expires_at FROM oauth_tokens')).rows[0].expires_at).toBe(expiry);
   });
@@ -85,9 +85,9 @@ describe.skipIf(!enabled)('health token refresh concurrency', () => {
       await barrier;
       return { access_token: 'winner-access', refresh_token: 'winner-refresh', expires_in: 3600 };
     });
-    const firstWorker = await import('$lib/health/tokens');
+    const firstWorker = await import('$lib/health-sync/tokens');
     vi.resetModules();
-    const secondWorker = await import('$lib/health/tokens');
+    const secondWorker = await import('$lib/health-sync/tokens');
     const first = firstWorker.getValidToken('whoop');
     await entered;
     const second = secondWorker.getValidToken('whoop');
@@ -110,7 +110,7 @@ describe.skipIf(!enabled)('health token refresh concurrency', () => {
     try {
       mocks.refresh.mockRejectedValueOnce(new Error('temporary provider failure'))
         .mockResolvedValueOnce({ access_token: 'recovered', expires_in: 3600 });
-      const { getValidToken } = await import('$lib/health/tokens');
+      const { getValidToken } = await import('$lib/health-sync/tokens');
       expect(await getValidToken('whoop')).toBeNull();
       expect(await getValidToken('whoop')).toBe('recovered');
       expect(mocks.refresh).toHaveBeenCalledTimes(2);

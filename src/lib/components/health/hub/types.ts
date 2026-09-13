@@ -19,7 +19,7 @@ import type { RecoveryDebtResult } from '$lib/health/analytics/recovery-debt';
 import type { VO2Result } from '$lib/health/analytics/vo2max-percentile';
 import type { ForecastResult } from '$lib/health/analytics/forecast';
 import type { HealthDay } from '$lib/health/series-30d-service';
-import type { ReadinessResponse } from '$lib/health/types';
+import type { ReadinessResponse } from '$lib/health-sync/types';
 import type { TrailsDashboard } from '$lib/trails/physio-service';
 import type { SegmentChain } from '$lib/trails/highlights-service';
 import type { DailyPlan } from '$lib/trails/coach-service';

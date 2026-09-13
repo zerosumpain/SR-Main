@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 
-vi.mock('$lib/health/tokens', () => ({
+vi.mock('$lib/health-sync/tokens', () => ({
   getValidToken: vi.fn().mockResolvedValue('mock-whoop-token'),
 }));
 
-vi.mock('$lib/health/whoop', () => ({
+vi.mock('$lib/health-sync/whoop', () => ({
   getWhoopCycles: vi.fn().mockResolvedValue([{ id: 1, score: { strain: 12.5 } }]),
   getWhoopRecoveries: vi.fn().mockResolvedValue([{ cycle_id: 1, score: { recovery_score: 78 } }]),
   getWhoopSleeps: vi.fn().mockResolvedValue([{ id: 1, score: { sleep_performance_percentage: 85 } }]),
@@ -39,7 +39,7 @@ describe('whoopExecutor', () => {
   });
 
   it('throws on missing token', async () => {
-    const { getValidToken } = await import('$lib/health/tokens');
+    const { getValidToken } = await import('$lib/health-sync/tokens');
     vi.mocked(getValidToken).mockResolvedValueOnce(null);
     await expect(
       whoopExecutor.execute({}, { operation: 'get_cycles' }, mockContext)
@@ -47,7 +47,7 @@ describe('whoopExecutor', () => {
   });
 
   it('passes limit, start, end options', async () => {
-    const { getWhoopCycles } = await import('$lib/health/whoop');
+    const { getWhoopCycles } = await import('$lib/health-sync/whoop');
     await whoopExecutor.execute(
       {},
       { operation: 'get_cycles', limit: 5, start: '2026-01-01', end: '2026-04-01' },

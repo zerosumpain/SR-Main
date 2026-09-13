@@ -261,7 +261,7 @@ async function probeOAuthHealth(service: 'strava' | 'whoop'): Promise<ConnectorR
   }
 
   return guard(service, label, 'Health', 'account', async () => {
-    const { getValidToken } = await import('$lib/health/tokens');
+    const { getValidToken } = await import('$lib/health-sync/tokens');
     const token = await getValidToken(service);
     if (!token) {
       return {

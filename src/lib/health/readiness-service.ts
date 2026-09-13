@@ -10,7 +10,7 @@
 import { db } from '$lib/db';
 import { appleHealthMetrics, whoopRecovery, whoopSleep } from '$lib/db/schema';
 import { and, desc, eq, gte, inArray } from 'drizzle-orm';
-import type { ReadinessResponse } from './types';
+import type { ReadinessResponse } from '$lib/health-sync/types';
 import { getTrainingLoad } from './training-load-service';
 
 const APPLE_SCALE = 100;

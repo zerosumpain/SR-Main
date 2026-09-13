@@ -1,5 +1,5 @@
 import { db } from '$lib/db';
-import { realStrain } from '$lib/health/whoop';
+import { realStrain } from '$lib/health-sync/whoop';
 import {
   whoopRecovery,
   whoopSleep,

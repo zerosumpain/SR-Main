@@ -1,5 +1,5 @@
 import { redirect } from '@sveltejs/kit';
-import { getStravaAuthUrl } from '$lib/health/strava';
+import { getStravaAuthUrl } from '$lib/health-sync/strava';
 import crypto from 'crypto';
 import type { RequestHandler } from './$types';
 

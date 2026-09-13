@@ -1,11 +1,11 @@
 import type { NodeExecutor, NodeResult, ExecutionContext, JsonSchema } from '../types';
-import { getValidToken } from '$lib/health/tokens';
+import { getValidToken } from '$lib/health-sync/tokens';
 import {
   getWhoopCycles,
   getWhoopRecoveries,
   getWhoopSleeps,
   getWhoopWorkouts,
-} from '$lib/health/whoop';
+} from '$lib/health-sync/whoop';
 import { db } from '$lib/db';
 import { whoopRecovery, whoopSleep, whoopCycles, whoopWorkouts } from '$lib/db/schema';
 import { and, gte, lte, desc } from 'drizzle-orm';

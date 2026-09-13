@@ -14,7 +14,7 @@ import { and, gte, isNotNull, sql, type SQL } from 'drizzle-orm';
 import { EFFECTIVE_TYPE } from '$lib/trails/activities-service';
 import { localDay } from '$lib/trails/activity-meta';
 import { formatPace } from '$lib/trails/format';
-import type { StatsResponse } from './types';
+import type { StatsResponse } from '$lib/health-sync/types';
 
 /** Moving time where the recording has one, elapsed time where it does not. */
 const MOVING_S = sql<number>`coalesce(${activities.activeDurationS}, ${activities.durationS}, 0)`;

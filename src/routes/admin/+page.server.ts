@@ -1,4 +1,4 @@
-import { hasToken } from '$lib/health/tokens';
+import { hasToken } from '$lib/health-sync/tokens';
 import { db } from '$lib/db';
 import {
   healthSyncState,

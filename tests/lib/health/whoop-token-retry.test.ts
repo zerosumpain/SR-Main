@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ token: vi.fn() }));
-vi.mock('$lib/health/tokens', () => ({ getValidToken: mocks.token }));
-import { getWhoopUser } from '$lib/health/whoop';
+vi.mock('$lib/health-sync/tokens', () => ({ getValidToken: mocks.token }));
+import { getWhoopUser } from '$lib/health-sync/whoop';
 
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
 describe('WHOOP requests during token rotation', () => {

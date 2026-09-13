@@ -1,7 +1,7 @@
 import { db } from '$lib/db';
 import { whoopSleep } from '$lib/db/schema';
 import { desc, eq } from 'drizzle-orm';
-import type { SleepAnalysis } from './types';
+import type { SleepAnalysis } from '$lib/health-sync/types';
 
 export async function getSleepAnalysis(): Promise<SleepAnalysis> {
   // Query last 14 non-nap sleep records, ordered by startDate desc

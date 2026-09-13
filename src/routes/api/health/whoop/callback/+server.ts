@@ -1,6 +1,6 @@
 import { redirect, error } from '@sveltejs/kit';
-import { exchangeWhoopCode } from '$lib/health/whoop';
-import { storeTokens } from '$lib/health/tokens';
+import { exchangeWhoopCode } from '$lib/health-sync/whoop';
+import { storeTokens } from '$lib/health-sync/tokens';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ url, cookies }) => {

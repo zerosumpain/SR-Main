@@ -53,7 +53,20 @@
     "    /api/jkai/attachments all need it here. If the copies diverge, the same file",
     "    indexed by one application is found differently by the other.",
     "    store.ts is deliberately NOT here: Drive's copy hands Intelligence a row",
-    "    instead of importing its engine, which is the whole point of that boundary."
+    "    instead of importing its engine, which is the whole point of that boundary.",
+    "",
+    "  health-sync/* — the Strava and WHOOP INGEST lane, which is ours and stays.",
+    "    It moved out of $lib/health so that tree can be deleted wholesale once the",
+    "    dashboard half is gone. SR-Health holds the same five, because /api/health/",
+    "    sync and the two OAuth callbacks are routed to it, so BOTH applications",
+    "    refresh the same tokens and write the same tables.",
+    "    Concurrency is already handled — readOrRefreshToken takes",
+    "    pg_advisory_xact_lock and re-reads inside the transaction. Divergence is",
+    "    not: `refreshToken: newTokens.refresh_token || token.refreshToken` is",
+    "    WHOOP's rotation, and if one repo changes that line both connectors die",
+    "    with nothing red anywhere.",
+    "    scheduler.ts is NOT here. It is ours alone — the timer must run exactly",
+    "    once — and SR-Health's copy is dead code being deleted rather than guarded."
   ],
   "files": {
     "src/lib/health/polyline.ts": {
@@ -143,6 +156,26 @@
     "src/lib/file-index/search.ts": {
       "peer": "zerosumpain/SR-Drive",
       "sha256": "8fe57aeab1ccaa8320fc4ebf72f9f616ed10581b9e9ba451f280a3c7372ded5f"
+    },
+    "src/lib/health-sync/sync-service.ts": {
+      "peer": "zerosumpain/SR-Health",
+      "sha256": "a69d9b1fbf08d729732181117a86809dc4e416678e5e51e65572ba3efecb90e8"
+    },
+    "src/lib/health-sync/tokens.ts": {
+      "peer": "zerosumpain/SR-Health",
+      "sha256": "8ac101e4c3b6836201a7c4c90a2aabf4f549390056ef1237c13c500dd384dde9"
+    },
+    "src/lib/health-sync/strava.ts": {
+      "peer": "zerosumpain/SR-Health",
+      "sha256": "214c890ea0e60c1ecbb787d92606165e1c9efb709b54fe4fa227909b4bcc157a"
+    },
+    "src/lib/health-sync/whoop.ts": {
+      "peer": "zerosumpain/SR-Health",
+      "sha256": "78058ff868dec8818a71a89f3df529df2c1a6ce723fc308869af2b90080ec43b"
+    },
+    "src/lib/health-sync/types.ts": {
+      "peer": "zerosumpain/SR-Health",
+      "sha256": "1feede049ab05608dba807129bc370e25389c416bf9fe9e562baef031bb9140e"
     }
   }
 }

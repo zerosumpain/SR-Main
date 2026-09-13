@@ -1,6 +1,6 @@
 import { redirect, error } from '@sveltejs/kit';
-import { exchangeStravaCode } from '$lib/health/strava';
-import { storeTokens } from '$lib/health/tokens';
+import { exchangeStravaCode } from '$lib/health-sync/strava';
+import { storeTokens } from '$lib/health-sync/tokens';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ url, cookies }) => {

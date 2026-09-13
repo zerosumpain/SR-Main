@@ -1,5 +1,5 @@
 import { building } from '$app/environment';
-import { startScheduler } from '$lib/health/scheduler';
+import { startScheduler } from '$lib/health-sync/scheduler';
 import { startForgeScheduler, stopForgeScheduler } from '$lib/jkai/forge-scheduler';
 import {
   startHeroTitlesScheduler,
@@ -194,7 +194,7 @@ if (runsService('background')) {
 }
 
 // Graceful shutdown — stop schedulers so process can exit on SIGTERM
-import { stopScheduler as stopHealthScheduler } from '$lib/health/scheduler';
+import { stopScheduler as stopHealthScheduler } from '$lib/health-sync/scheduler';
 import { stopScheduler as stopWorkflowScheduler } from '$lib/workflows/scheduler';
 import { engine as workflowEngine } from '$lib/workflows';
 

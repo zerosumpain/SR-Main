@@ -9,8 +9,8 @@
 import { db } from '$lib/db';
 import { whoopCycles, stravaActivities } from '$lib/db/schema';
 import { and, gte, lte, desc } from 'drizzle-orm';
-import { realStrain } from './whoop';
-import type { TrainingLoadResponse } from './types';
+import { realStrain } from '$lib/health-sync/whoop';
+import type { TrainingLoadResponse } from '$lib/health-sync/types';
 
 // ==========================================
 // Pure Functions
