@@ -1,4 +1,3 @@
-import { policyWorkerMode } from './policy-worker-mode';
 /**
  * #19 DURABLE RUN-WORKER — DB-backed run queue / claim mechanism.
  *
@@ -114,9 +113,9 @@ export async function claimNext(
       SELECT id
       FROM workflow_runs
       WHERE status = 'pending'
-        AND ${triggerFilter ? sql`trigger = ${triggerFilter}` : policyWorkerMode() === 'external' ? sql`trigger <> 'policy-analysis'` : sql`true`}
+        AND trigger IS DISTINCT FROM 'policy-analysis'
+        AND ${triggerFilter ? sql`trigger = ${triggerFilter}` : sql`true`}
         AND ${runIdFilter ? sql`id = ${runIdFilter}` : sql`true`}
-        AND (trigger <> 'policy-analysis' OR started_at <= now())
         AND (claimed_by IS NULL OR lease_expires_at IS NULL OR lease_expires_at <= now())
       ORDER BY started_at ASC NULLS FIRST
       LIMIT 1
@@ -179,16 +178,13 @@ export async function clearLease(runId: string, workerId: string): Promise<void>
  * then never advanced. Returns the number of rows released.
  */
 export async function releaseExpiredLeases(): Promise<number> {
-  await db.execute(sql`UPDATE workflow_runs SET status = 'pending', claimed_by = NULL,
-    claimed_at = NULL, lease_expires_at = NULL
-    WHERE trigger = 'policy-analysis' AND status = 'running'
-      AND lease_expires_at <= now()`);
   const res = await db.execute(sql`
     UPDATE workflow_runs
     SET claimed_by = NULL,
         claimed_at = NULL,
         lease_expires_at = NULL
     WHERE status = 'pending'
+      AND trigger IS DISTINCT FROM 'policy-analysis'
       AND claimed_by IS NOT NULL
       AND lease_expires_at IS NOT NULL
       AND lease_expires_at <= now()
