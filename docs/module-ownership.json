@@ -6,6 +6,7 @@
       "id": "policy-analysis",
       "repository": "zerosumpain/SR-Policy-Analysis",
       "paths": [
+        "/projects/policy-analysis",
         "/policy-analysis",
         "/api/policy-analysis"
       ],
@@ -54,13 +55,10 @@
       "paths": [
         "/drive",
         "/api/files",
-        "/api/file-shares",
-        "/api/admin/webdav-credentials"
+        "/api/file-shares"
       ],
       "excludedPaths": [],
-      "stagedPaths": [
-        "/dav"
-      ],
+      "stagedPaths": [],
       "assetPrefix": "/_drive",
       "ports": {
         "gateway": 5300,
