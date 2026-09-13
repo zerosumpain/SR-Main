@@ -39,7 +39,8 @@ export const HOOK_BYPASSES: string[] = [
   '/api/claude-changelog', // POST only, ingest secret
   '/api/releases', // POST only, RELEASE_LOG_SECRET (summarise also accepts an owner session)
   '/api/whatsapp/inbound', // POST only, WHATSAPP_INBOUND_SECRET
-  '/api/health/workflow-engine', // watchdog probe
+  '/api/platform/workflow-engine', // watchdog probe
+  '/api/health/workflow-engine', // watchdog probe (historical path, being retired)
   '/api/deepdive/index-sources',
   '/api/deepdive/reindex-facts',
   '/api/jkai/intel/backfill', // loopback + MAINTENANCE_SECRET, re-checked in the handler
@@ -154,7 +155,8 @@ export const BYPASS_GUARDS: Record<string, string> = {
   '/api/live-walk': 'write/preflight only · LIVE_WALK_BROADCAST_SECRET (GET stays owner-only)',
   '/api/releases': 'POST only · RELEASE_LOG_SECRET',
   '/api/whatsapp/inbound': 'POST only · Bearer WHATSAPP_INBOUND_SECRET',
-  '/api/health/workflow-engine': 'loopback only · watchdog probe',
+  '/api/platform/workflow-engine': 'loopback only · watchdog probe',
+  '/api/health/workflow-engine': 'loopback only · watchdog probe (historical path, being retired)',
   '/api/deepdive/index-sources': 'loopback + MAINTENANCE_SECRET',
   '/api/deepdive/reindex-facts': 'loopback + MAINTENANCE_SECRET',
   '/api/jkai/intel/backfill': 'loopback + MAINTENANCE_SECRET',

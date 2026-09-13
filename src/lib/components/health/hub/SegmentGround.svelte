@@ -13,7 +13,7 @@
   // designer's PROPOSED badge was a note to engineering, and the note itself
   // said the elevation is already in the stored coordinates. It is, so the
   // strip is data rather than a proposal.
-  import SectionHead from './SectionHead.svelte';
+  import SectionHead from '$lib/components/shell/SectionHead.svelte';
   import TrackMap from '$lib/components/trails/TrackMap.svelte';
   import { groundNote, profileGeometry, PROFILE } from '$lib/health/segment-detail';
   import type { SegmentDetail } from '$lib/trails/segments-service';

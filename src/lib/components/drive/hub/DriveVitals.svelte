@@ -10,7 +10,7 @@
   // The figures cover the WHOLE store, not the folder you are stood in. The
   // shelf below follows `currentPath`; this deliberately does not.
   import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
-  import { fmtAgo } from '$lib/components/health/v2/utils';
+  import { fmtAgo } from '$lib/components/shell/format';
   import { computeVitals, splitSize, type DriveStatFile } from '$lib/drive/stats';
 
   interface Props {

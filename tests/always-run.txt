@@ -24,7 +24,9 @@ src/lib/workflows/site-tools/tools/publish-page.test.ts
 tests/extract/docx.test.ts
 tests/extract/pdf.test.ts
 tests/extract/scanned-pdf.test.ts
+tests/lib/components/shell-ownership.test.ts
 tests/lib/config/owner.test.ts
+tests/lib/events/platform-bus.test.ts
 tests/lib/jkai/media/storage.test.ts
 tests/lib/nav/nav-coverage.test.ts
 tests/lib/nav/nav-parents.test.ts
@@ -43,6 +45,7 @@ tests/lib/workflows/delegation-rule.test.ts
 tests/lib/workflows/orchestrator/dynamic-nodes.test.ts
 tests/lib/workflows/registry-parity.test.ts
 tests/lib/workflows/site-tools/node-builder.test.ts
+tests/lib/workflows/trigger-ownership.test.ts
 tests/pwa/service-worker-navigation.test.ts
 tests/routes/admin-stale-stamps.test.ts
 tests/routes/chat-trace-link.test.ts

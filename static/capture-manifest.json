@@ -3,6 +3,7 @@
   "short_name": "Intel",
   "description": "Quick capture for JKAI Intel knowledge graph",
   "start_url": "/capture",
+  "scope": "/capture",
   "display": "standalone",
   "background_color": "#030712",
   "theme_color": "#030712",

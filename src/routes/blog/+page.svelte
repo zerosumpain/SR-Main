@@ -16,8 +16,8 @@
   // why the counts on the cover sit inside `{#await}` rather than at the top
   // level, and why the deck reserves its space with an em dash rather than
   // collapsing and reflowing the band when the numbers land.
-  import HealthShell from '$lib/components/health/hub/HealthShell.svelte';
-  import SectionHead from '$lib/components/health/hub/SectionHead.svelte';
+  import HealthShell from '$lib/components/shell/HealthShell.svelte';
+  import SectionHead from '$lib/components/shell/SectionHead.svelte';
   import { fade } from 'svelte/transition';
   import { dur } from '$lib/motion';
 

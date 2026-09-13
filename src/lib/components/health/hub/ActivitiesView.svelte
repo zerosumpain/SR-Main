@@ -15,7 +15,7 @@
   // effective type and the highlight corpus all arrive computed. What happens
   // here is filtering, sorting and summing — passes over a list.
   import { replaceState } from '$app/navigation';
-  import HealthShell from './HealthShell.svelte';
+  import HealthShell from '$lib/components/shell/HealthShell.svelte';
   import ActivityTotals from './ActivityTotals.svelte';
   import TrainingStrip from './TrainingStrip.svelte';
   import ActivityLedger, { type CorrectedRow } from './ActivityLedger.svelte';

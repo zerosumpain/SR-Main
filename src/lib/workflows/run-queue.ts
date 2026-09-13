@@ -19,6 +19,7 @@
 
 import { db } from '$lib/db';
 import { sql } from 'drizzle-orm';
+import { claimableTriggerSql } from './trigger-ownership';
 
 /** Default lease duration in ms. A claimed run's lease_expires_at is set to
  *  now()+LEASE_MS; the worker renews it via heartbeat well before expiry. */
@@ -113,7 +114,7 @@ export async function claimNext(
       SELECT id
       FROM workflow_runs
       WHERE status = 'pending'
-        AND trigger IS DISTINCT FROM 'policy-analysis'
+        AND ${claimableTriggerSql()}
         AND ${triggerFilter ? sql`trigger = ${triggerFilter}` : sql`true`}
         AND ${runIdFilter ? sql`id = ${runIdFilter}` : sql`true`}
         AND (claimed_by IS NULL OR lease_expires_at IS NULL OR lease_expires_at <= now())
@@ -184,7 +185,7 @@ export async function releaseExpiredLeases(): Promise<number> {
         claimed_at = NULL,
         lease_expires_at = NULL
     WHERE status = 'pending'
-      AND trigger IS DISTINCT FROM 'policy-analysis'
+      AND ${claimableTriggerSql()}
       AND claimed_by IS NOT NULL
       AND lease_expires_at IS NOT NULL
       AND lease_expires_at <= now()

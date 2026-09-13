@@ -11,7 +11,7 @@
   // because a scored route needs live device location and belongs at
   // /health/plan; what belongs here is the argument for each kind of day.
   import type { DailyPlan } from '$lib/trails/coach-service';
-  import SectionHead from './SectionHead.svelte';
+  import SectionHead from '$lib/components/shell/SectionHead.svelte';
   import { fixed, whole } from './format';
   import {
     asPlannerSport,

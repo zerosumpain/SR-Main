@@ -8,7 +8,7 @@
 // It stays separate from the renderer so the signal can be reasoned about and
 // tested without a canvas.
 
-import { clamp } from '$lib/components/health/v2/utils';
+import { clamp } from '$lib/components/shell/format';
 
 // Fixed "paper speed": seconds for the scan cursor to cross the full width.
 export const SWEEP_SEC = 7;

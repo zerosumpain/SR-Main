@@ -1,6 +1,6 @@
 <script lang="ts">
-  import HealthShell from '$lib/components/health/hub/HealthShell.svelte';
-  import SectionHead from '$lib/components/health/hub/SectionHead.svelte';
+  import HealthShell from '$lib/components/shell/HealthShell.svelte';
+  import SectionHead from '$lib/components/shell/SectionHead.svelte';
   /**
    * Landgrab — the family territory board.
    *

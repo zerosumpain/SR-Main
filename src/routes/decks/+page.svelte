@@ -12,8 +12,8 @@
   // shadowless, hairline-framed objects — but the page now opens with a
   // masthead rather than a heading, and the counts are stated rather than
   // left to be inferred from the length of the grid.
-  import HealthShell from '$lib/components/health/hub/HealthShell.svelte';
-  import SectionHead from '$lib/components/health/hub/SectionHead.svelte';
+  import HealthShell from '$lib/components/shell/HealthShell.svelte';
+  import SectionHead from '$lib/components/shell/SectionHead.svelte';
 
   import { enhance } from '$app/forms';
 

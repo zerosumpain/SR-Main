@@ -11,7 +11,7 @@
   // The ops row lives in the page body and not in `HealthShell`'s `actions`
   // snippet: with `unifiedNav` the shell renders `SiteHeader` and drops
   // `actions` entirely, so anything interactive has to be below the bar.
-  import SectionHead from '$lib/components/health/hub/SectionHead.svelte';
+  import SectionHead from '$lib/components/shell/SectionHead.svelte';
   import { shortDate } from '$lib/releases/seam';
   import type { SOURCE_FOOTPRINT } from 'virtual:sr-source-footprint';
   import type { Tile } from './types';

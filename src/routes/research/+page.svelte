@@ -2,7 +2,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import type { PageData } from './$types';
-  import HealthShell from '$lib/components/health/hub/HealthShell.svelte';
+  import HealthShell from '$lib/components/shell/HealthShell.svelte';
   import ScopeEditor from '$lib/components/research/ScopeEditor.svelte';
   import type { ScopeDraft } from '$lib/components/research/ScopeEditor.svelte';
   import { GROUNDING_OPTIONS, groundingOption, type Grounding } from '$lib/deepdive/grounding';

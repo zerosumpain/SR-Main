@@ -11,7 +11,7 @@
   // than half the effort. Nothing is claimed for it on any HR-derived metric
   // and the row says why, rather than quietly printing the mean of whatever
   // survived.
-  import SectionHead from './SectionHead.svelte';
+  import SectionHead from '$lib/components/shell/SectionHead.svelte';
   import { boardNotes, boardRows } from '$lib/health/segment-detail';
   import { isPaceSport } from '$lib/trails/format';
   import type { SegmentDetail } from '$lib/trails/segments-service';

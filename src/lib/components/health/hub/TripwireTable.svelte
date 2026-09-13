@@ -14,7 +14,7 @@
   // them is good news.
   import { TRIPWIRE_METRIC, type Tripwire } from '$lib/health/tripwires';
   import { gettableHref } from '$lib/health/deep-links';
-  import SectionHead from './SectionHead.svelte';
+  import SectionHead from '$lib/components/shell/SectionHead.svelte';
   import { countWord } from './format';
 
   interface Props {

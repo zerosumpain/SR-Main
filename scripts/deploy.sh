@@ -218,12 +218,20 @@ echo "==> Draining in-flight runs (running -> paused) before restart..."
 # interrupted assessment resumable across a restart.
 # doesn't ship psql, so we run via docker exec on the strange-rambling
 # pgvector container. Best-effort — failure is logged but does not block.
-ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" bash -s <<'REMOTE' || echo "==> drain skipped (db container missing)"
+source "$(dirname "$0")/lib/queue-triggers.sh"
+queue_triggers_clause "$(dirname "$0")/external-queue-triggers.txt"
+# printf %q, and an env assignment rather than a positional argument: ssh joins
+# its remaining argv with spaces into ONE string for the remote login shell, so
+# `bash -s -- "$CLAUSE"` arrives unquoted and the shell chokes on the clause's
+# parentheses. The `|| echo` below then swallows it and blames a missing
+# container, leaving the drain silently never run.
+ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
+  "MINE_SQL=$(printf %q "$QUEUE_MINE_SQL") bash -s" <<'REMOTE' || echo "==> drain skipped (db container missing)"
 set -e
 PG_CTR=$(docker ps --filter "name=strange-rambling-app-db" --format '{{.Names}}' | head -1)
 if [ -z "$PG_CTR" ]; then echo "==> drain: no app-db container found"; exit 0; fi
 docker exec "$PG_CTR" psql -U app -d strange_rambling -v ON_ERROR_STOP=1 \
-  -c "UPDATE workflow_runs SET status='paused' WHERE status='running' AND trigger <> 'policy-analysis' RETURNING id;" || true
+  -c "UPDATE workflow_runs SET status='paused' WHERE status='running' $MINE_SQL RETURNING id;" || true
 REMOTE
 
 # Phase 3 invariant: this deploy script restarts ONLY strange-rambling-svelte.

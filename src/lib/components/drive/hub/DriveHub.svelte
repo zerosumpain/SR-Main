@@ -18,7 +18,7 @@
   // this page gains the grain and the ink footer. /health's own `hs-head`
   // masthead is that family's exception, not a pattern to spread.
   import { invalidateAll } from '$app/navigation';
-  import HealthShell from '$lib/components/health/hub/HealthShell.svelte';
+  import HealthShell from '$lib/components/shell/HealthShell.svelte';
   import DriveVitals from './DriveVitals.svelte';
   import DriveShelf from './DriveShelf.svelte';
   import DriveKnowledge from './DriveKnowledge.svelte';

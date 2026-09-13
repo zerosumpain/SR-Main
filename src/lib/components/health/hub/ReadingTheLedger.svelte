@@ -13,7 +13,7 @@
   // ±2% band and the six-effort floor are `segmentForm`'s, the 3% is the
   // coach's `gapScore` inflection, and if any of them move this copy moves
   // with them.
-  import SectionHead from './SectionHead.svelte';
+  import SectionHead from '$lib/components/shell/SectionHead.svelte';
   import {
     GETTABLE_GAP_PCT,
     HOLDING_BAND_PCT,

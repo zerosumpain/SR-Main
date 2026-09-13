@@ -34,7 +34,7 @@
   } from '$lib/health/analytics/recovery-debt';
   import type { TrendSeries } from '$lib/trails/physio-service';
   import { usable } from '$lib/health/ledes';
-  import SectionHead from './SectionHead.svelte';
+  import SectionHead from '$lib/components/shell/SectionHead.svelte';
   import { fixed, whole, signed, clockFromMinutes, hoursAndMinutes } from './format';
   import { sparkPoints, barHeights, extent, yOf, sample } from './chart';
   import { metricPeekHandlers } from '$lib/health/metric-peek.svelte';

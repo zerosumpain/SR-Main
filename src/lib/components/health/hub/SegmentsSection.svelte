@@ -12,7 +12,7 @@
   import type { SegmentChain } from '$lib/trails/highlights-service';
   import type { FormDirection } from '$lib/trails/segments/form';
   import { gettableHref, taxonomyHref } from '$lib/health/deep-links';
-  import SectionHead from './SectionHead.svelte';
+  import SectionHead from '$lib/components/shell/SectionHead.svelte';
   import type { HealthAudience, SegmentForms } from './types';
   import { duration, shortDate } from './format';
 

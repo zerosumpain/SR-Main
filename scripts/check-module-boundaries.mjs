@@ -79,6 +79,9 @@ const MODULE_LAYER = {
   secrets: 'platform',
   storage: 'platform',
   'file-store': 'platform',
+  // Publishing a platform event must not cost the publisher the subscriber's
+  // dependencies; that is the whole reason this module exists separately.
+  events: 'platform',
   datastore: 'platform',
   llm: 'platform',
   routing: 'platform',
@@ -143,7 +146,6 @@ const BASELINE_CYCLES = [
   'deepdive <-> workflows',
   'file-index <-> jkai',
   'health <-> trails',
-  'health <-> workflows',
   'heartbeat <-> workflows',
   'jkai <-> workflows',
   // Was 'jkai <-> server' before the gateway moved down — the same knot, now
