@@ -1,13 +1,10 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
-import { generateWorkflow, modifyWorkflow, saveWorkflowFromGenerated } from '$lib/workflows/orchestrator';
 import { generalChat } from '$lib/workflows/chat/general-chat';
-import type { WorkflowNodeDef, WorkflowEdgeDef } from '$lib/workflows/types';
 import { db } from '$lib/db';
-import { workflows, workflowNodes, workflowEdges, orchestratorChats, conversations, jkaiAttachments, jkaiToolTraces } from '$lib/db/schema';
+import { workflowNodes, orchestratorChats, conversations, jkaiAttachments, jkaiToolTraces } from '$lib/db/schema';
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import { allocateCanvasName } from '$lib/canvas/adapter.server';
 import { createJob, getJob, cancelJob, cancelAllRunning, cancelForScope, cleanOldJobs, deleteJob, listJobs, publishJobEvent, respondToWaiter, getRunningJobIdForConversation, markJobQueued, clearJobQueued, whenJobSettles } from '$lib/workflows/chat/job-store';
 import type { OrchestratorJob, JobEvent } from '$lib/workflows/chat/job-store';
 import { loadConversationHistory } from '$lib/workflows/chat/conversation-history';
@@ -44,17 +41,14 @@ export const POST: RequestHandler = async (event) => handleWithLoop(event);
 
 async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promise<Response> {
   const body = await request.json();
-  const { message, workflowId, mode, currentNodes, currentEdges, conversationId: rawConversationId, attachmentIds, useIntelContext, chatNodeId, intelEntityIds, silent } = body as {
+  const { message, workflowId, conversationId: rawConversationId, attachmentIds, useIntelContext, chatNodeId, intelEntityIds, silent } = body as {
     message: string;
     workflowId?: string;
-    mode?: string;
     /** Do not persist a user bubble for this turn — it is machinery, not
      *  conversation. This was once unread, so a silent `/model` push showed up
      *  in the thread as if the user had typed it. Nothing sends one now; this
      *  is the second lock on that door. */
     silent?: boolean;
-    currentNodes?: any;
-    currentEdges?: any;
     conversationId?: string;
     attachmentIds?: string[];
     useIntelContext?: boolean;
@@ -106,9 +100,10 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
     return json({ error: `message too long (max ${MAX_MESSAGE_LEN} chars)` }, { status: 400 });
   }
 
-  // Workflow-context chats (workflowId present, or explicit generate/modify mode)
+  // Workflow-context chats: a chat node on a canvas. Used to also mean an
+  // explicit generate/modify mode, which no client ever sent.
   // use the builder model set in /admin/ai/models. General /jkai chats use the chat model.
-  const isWorkflowContext = !!workflowId || mode === 'generate' || mode === 'modify';
+  const isWorkflowContext = !!workflowId;
   // Labels the job in the logs (workflow-context vs general chat). It no
   // longer selects a model — one default drives every task.
   const contextKind: 'chat' | 'builder' = isWorkflowContext ? 'builder' : 'chat';
@@ -224,106 +219,21 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
     try {
       if (abortController.signal.aborted) throw new Error('Job cancelled');
 
-      if (mode === 'modify' && currentNodes && currentEdges && workflowId) {
-        // Explicit workflow modification
-        const result = await modifyWorkflow(
-          message,
-          workflowId,
-          currentNodes as WorkflowNodeDef[],
-          currentEdges as WorkflowEdgeDef[],
-          onProgress,
-        );
-
-        if (abortController.signal.aborted) throw new Error('Job cancelled');
-
-        if (result.followUp) {
-          job.result = { success: true, workflow: null, message: result.followUp };
-        } else if (result.workflow && result.workflow.nodes.length > 0) {
-          await saveWorkflowFromGenerated(workflowId, result.workflow);
-          job.result = {
-            success: true,
-            workflow: result.workflow,
-            message: result.workflow?.explanation || 'Workflow updated.',
-            thinking: result.thinking,
-          };
-        } else {
-          job.result = { success: true, workflow: null, message: 'No changes made.' };
-        }
-      } else if (mode === 'generate') {
-        // Explicit workflow generation
-        const { workflow, followUp, thinking } = await generateWorkflow(message, workflowId ?? null, onProgress);
-
-        if (abortController.signal.aborted) throw new Error('Job cancelled');
-
-        if (followUp) {
-          let resolvedWorkflowId = workflowId;
-          if (!resolvedWorkflowId) {
-            const { name: canvasName } = await allocateCanvasName('new workflow');
-            const [created] = await db.insert(workflows).values({
-              name: canvasName,
-              description: 'New Workflow (in progress)',
-            }).returning();
-            resolvedWorkflowId = created.id;
-          }
-
-          await db.insert(orchestratorChats).values({ workflowId: resolvedWorkflowId, role: 'user', content: message });
-          await db.insert(orchestratorChats).values({ workflowId: resolvedWorkflowId, role: 'assistant', content: followUp });
-
-          job.result = {
-            success: true,
-            workflow: null,
-            workflowId: resolvedWorkflowId,
-            redirectTo: !workflowId ? `/jkai/canvas/${resolvedWorkflowId}` : undefined,
-            message: followUp,
-          };
-        } else if (workflow && workflow.nodes.length > 0) {
-          if (workflowId) {
-            await saveWorkflowFromGenerated(workflowId, workflow);
-            job.result = { success: true, workflow, workflowId, thinking, message: workflow.explanation || 'Workflow updated.' };
-          } else {
-            // Build the whole canvas atomically: a partial failure rolls back,
-            // so we never leave an orphaned workflow row that needs a naked
-            // delete (which would cascade-wipe any chat history attached to it).
-            const { name: canvasName, slug: canvasSlug } = await allocateCanvasName(
-              workflow.name || 'generated workflow',
-            );
-            let createdId: string;
-            try {
-              createdId = await db.transaction(async (tx) => {
-                const [createdRow] = await tx.insert(workflows).values({
-                  name: canvasName,
-                  description: workflow.description || workflow.name || null,
-                }).returning();
-
-                await tx.insert(workflowNodes).values(
-                  workflow.nodes.map((n) => ({ id: n.id, workflowId: createdRow.id, type: n.type, position: n.position, config: n.config, label: n.label })),
-                );
-                if (workflow.edges.length > 0) {
-                  await tx.insert(workflowEdges).values(
-                    workflow.edges.map((e) => ({ id: e.id, workflowId: createdRow.id, sourceNodeId: e.sourceNodeId, targetNodeId: e.targetNodeId, sourceHandle: e.sourceHandle || null, targetHandle: e.targetHandle || null })),
-                  );
-                }
-
-                await tx.insert(orchestratorChats).values({ workflowId: createdRow.id, role: 'user', content: message });
-                await tx.insert(orchestratorChats).values({ workflowId: createdRow.id, role: 'assistant', content: workflow.explanation || 'Workflow created.', metadata: { workflowGenerated: true } });
-
-                return createdRow.id;
-              });
-            } catch (dbErr: unknown) {
-              const dbMsg = dbErr instanceof Error ? dbErr.message : 'Unknown DB error';
-              job.result = { success: false, workflow: null, message: `Failed to save workflow nodes: ${dbMsg}` };
-              job.status = 'done';
-              publishJobEvent(jobId, { type: 'done', result: job.result as Record<string, unknown> });
-              return;
-            }
-
-            job.result = { success: true, workflow, workflowId: createdId, redirectTo: `/jkai/canvas/${canvasSlug}`, thinking, message: workflow.explanation || 'Workflow created.' };
-          }
-        } else {
-          job.result = { success: true, workflow: null, message: 'Could not generate a valid workflow. Try being more specific.' };
-        }
-      } else {
-        // Default: general-purpose chat
+      // General-purpose chat, and now the only thing this endpoint does.
+      //
+      // It used to branch on `mode`: 'modify' called modifyWorkflow, and
+      // 'generate' opened a transaction that inserted a `workflows` row, its
+      // nodes, its edges and two `orchestrator_chats` rows. No client has sent
+      // either value — `mode: 'generate'` appears nowhere in this repository's
+      // history, the PWA outbox payload is {conversationId, body, attachments},
+      // and nothing anywhere sends currentNodes/currentEdges. Canvas building
+      // moved to the `workflow_create` agent tool, which calls the same
+      // generateWorkflow and saveWorkflowFromGenerated.
+      //
+      // So the dead half is gone, and with it this endpoint's ability to write
+      // the workflow graph at all. That is the point: chat is on its way to
+      // being its own application, and the writer of `workflows`,
+      // `workflow_nodes` and `workflow_edges` must not travel with it.
         const conversationHistory = await loadConversationHistory(conversationId, workflowId);
 
         // Persist the user message FIRST so any mid-flight status updates
@@ -675,7 +585,6 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
           // after a refresh.
           ...(turnStamp ? { usage: turnStamp } : {}),
         };
-      }
 
       job.status = 'done';
       // Notify SSE subscribers that the job is finished. job.result is the
