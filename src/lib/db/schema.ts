@@ -673,6 +673,58 @@ export const activities = pgTable(
 export type ActivityRecord = typeof activities.$inferSelect;
 export type NewActivity = typeof activities.$inferInsert;
 
+/**
+ * Capability links for one activity's /health page.
+ *
+ * Same shape as `file_share_token` and for the same reasons: the raw token is
+ * returned once at mint time and never persisted — only its SHA-256 — so a
+ * database dump yields no working URLs, and every link is listed and killable.
+ * SR-HEALTH owns the reading and writing of this table; Main owns the
+ * declaration, because Main owns `drizzle-kit push`.
+ *
+ * Two deliberate differences from the drive's version:
+ *
+ *  - `expires_at` IS NULLABLE, and null means forever. The drive made it NOT
+ *    NULL because the GPX links that preceded it had a nullable column that was
+ *    never written, so every link it ever minted was permanent, unlisted and
+ *    UNKILLABLE. The lesson there was the last two words: a link sent to family
+ *    should not die on a timer, and this one is listed and revocable, which is
+ *    what the incident was actually about.
+ *
+ *  - `trim_m` is the privacy zone. A GPS trace starts at the front door, so the
+ *    shared copy drops this many metres off each end of the drawn line. The
+ *    FIGURES are untouched — distance, climb and pace are the outing's real
+ *    ones — because trimming a picture is a privacy decision and trimming a
+ *    number would be a lie.
+ */
+export const activityShareTokens = pgTable(
+  'activity_share_token',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    activityId: text('activity_id')
+      .notNull()
+      .references(() => activities.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    /** Free text shown in the owner's share list, e.g. "WhatsApp to Dad". */
+    label: text('label'),
+    createdBy: text('created_by').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    /** Null is forever. See the note above. */
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    useCount: integer('use_count').notNull().default(0),
+    /** Metres trimmed off each end of the drawn trace. 0 shares it whole. */
+    trimM: integer('trim_m').notNull().default(200),
+  },
+  (t) => [
+    uniqueIndex('activity_share_token_hash_idx').on(t.tokenHash),
+    index('activity_share_token_activity_idx').on(t.activityId),
+  ],
+);
+
+export type ActivityShareToken = typeof activityShareTokens.$inferSelect;
+
 // The GPS trace. One row per activity; coordinates are decimated on write.
 export const activityTracks = pgTable(
   'activity_tracks',
