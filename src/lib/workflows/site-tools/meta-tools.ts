@@ -1,17 +1,40 @@
 // src/lib/workflows/site-tools/meta-tools.ts
 
-import { getToolsetManifest, getAvailableToolsets } from './registry';
 import { db } from '$lib/db';
 import { customTools } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { register, unregister, isRegisteredTool } from './registry-internal';
 import { buildHandler } from './custom-tool-loader';
+import { loadToolRegistry } from './load-registry';
 
-// Built at module load. Safe because every importer of META_TOOL_DEFINITIONS
-// pulls `./registry` first, so all register() calls have completed.
-const LIVE_TOOLSET_LIST = getAvailableToolsets().slice().sort().join(', ');
+// Built on first use rather than at module load.
+//
+// It used to be a top-level const, with the comment "safe because every importer
+// of META_TOOL_DEFINITIONS pulls ./registry first, so all register() calls have
+// completed". That was true and it was the problem: it made importing the meta
+// tools mean importing all 52 tool modules, and through a cycle back via
+// general-chat, the workflow engine with them.
+//
+// The list still has to be live — a toolset the model is not told about is a
+// toolset it does not know it has — so it is read once, on demand, and cached.
+let cachedDefinitions: MetaToolDefinition[] | null = null;
 
-export const META_TOOL_DEFINITIONS = [
+/**
+ * The meta tools, with the toolset list in `activate_toolset`'s description
+ * filled in from the registry. Async because reading the registry now loads it.
+ */
+export async function getMetaToolDefinitions(): Promise<MetaToolDefinition[]> {
+  if (cachedDefinitions) return cachedDefinitions;
+  const { getAvailableToolsets } = await loadToolRegistry();
+  const LIVE_TOOLSET_LIST = getAvailableToolsets().slice().sort().join(', ');
+  cachedDefinitions = buildDefinitions(LIVE_TOOLSET_LIST);
+  return cachedDefinitions;
+}
+
+type MetaToolDefinition = ReturnType<typeof buildDefinitions>[number];
+
+function buildDefinitions(LIVE_TOOLSET_LIST: string) {
+  return [
   {
     type: 'function' as const,
     function: {
@@ -111,12 +134,14 @@ export const META_TOOL_DEFINITIONS = [
       },
     },
   },
-];
+  ];
+}
 
-export function handleJkaiHelp(args: Record<string, unknown>): {
+export async function handleJkaiHelp(args: Record<string, unknown>): Promise<{
   success: boolean;
   data: unknown;
-} {
+}> {
+  const { getToolsetManifest, getAvailableToolsets } = await loadToolRegistry();
   const toolset = args.toolset as string | undefined;
   const manifest = getToolsetManifest();
 

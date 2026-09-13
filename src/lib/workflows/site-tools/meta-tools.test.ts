@@ -16,13 +16,13 @@ import { getToolsetManifest } from './registry';
 const LOOP_RESULT_CLIP = 32000; // general-chat.ts truncates tool results here
 
 describe('handleJkaiHelp', () => {
-  it('fits the unfiltered catalogue inside the loop result clip', () => {
-    const bytes = JSON.stringify(handleJkaiHelp({})).length;
+  it('fits the unfiltered catalogue inside the loop result clip', async () => {
+    const bytes = JSON.stringify(await handleJkaiHelp({})).length;
     expect(bytes).toBeLessThan(LOOP_RESULT_CLIP);
   });
 
-  it('lists every toolset, decks included', () => {
-    const data = handleJkaiHelp({}).data as { toolsets: Array<{ toolset: string }> };
+  it('lists every toolset, decks included', async () => {
+    const data = (await handleJkaiHelp({})).data as { toolsets: Array<{ toolset: string }> };
     const listed = data.toolsets.map((t) => t.toolset);
     expect(listed).toEqual(getToolsetManifest().map((m) => m.toolset));
     expect(listed).toContain('decks');
@@ -30,21 +30,21 @@ describe('handleJkaiHelp', () => {
 
   // The specific tool the failed turn was looking for, reachable without a
   // second round-trip: names are in the index, so one filtered call is enough.
-  it('names the deck builder in the index', () => {
-    const raw = JSON.stringify(handleJkaiHelp({}));
+  it('names the deck builder in the index', async () => {
+    const raw = JSON.stringify(await handleJkaiHelp({}));
     expect(raw.slice(0, LOOP_RESULT_CLIP)).toContain('presentation_build_from_spec');
   });
 
-  it('still returns full descriptions for a named toolset', () => {
-    const res = handleJkaiHelp({ toolset: 'decks' });
+  it('still returns full descriptions for a named toolset', async () => {
+    const res = await handleJkaiHelp({ toolset: 'decks' });
     const entry = res.data as { tools: Array<{ name: string; description: string }> };
     expect(res.success).toBe(true);
     const build = entry.tools.find((t) => t.name === 'presentation_build_from_spec');
     expect(build?.description.length).toBeGreaterThan(100);
   });
 
-  it('reports an unknown toolset rather than guessing', () => {
-    const res = handleJkaiHelp({ toolset: 'google-slides' });
+  it('reports an unknown toolset rather than guessing', async () => {
+    const res = await handleJkaiHelp({ toolset: 'google-slides' });
     expect(res.success).toBe(false);
   });
 });

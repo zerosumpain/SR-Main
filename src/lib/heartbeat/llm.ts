@@ -121,15 +121,15 @@ async function heartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<HeartbeatTurnR
   if (opts.toolsEnabled) {
     const { getToolsetDefinitions } = await import('$lib/workflows/site-tools/llm-tools');
     toolDefs = [
-      ...getToolsetDefinitions('followups'),
-      ...getToolsetDefinitions('heartbeat'),
-      ...getToolsetDefinitions('schedule'),
+      ...(await getToolsetDefinitions('followups')),
+      ...(await getToolsetDefinitions('heartbeat')),
+      ...(await getToolsetDefinitions('schedule')),
     ];
     // Add 'home' if the conversation context already references it. The
     // heartbeat shouldn't auto-load arbitrary toolsets, but home + system
     // covers the bulk of "do X at time Y" cases (lights, scenes, etc.).
     try {
-      const homeDefs = getToolsetDefinitions('home');
+      const homeDefs = await getToolsetDefinitions('home');
       toolDefs = [...toolDefs, ...homeDefs];
     } catch { /* home toolset may not exist in dev */ }
   }
@@ -169,7 +169,7 @@ async function heartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<HeartbeatTurnR
         let parsed: Record<string, unknown> = {};
         try { parsed = JSON.parse(tc.function?.arguments ?? '{}'); } catch { /* keep empty */ }
         let result: unknown = { error: 'tool not registered' };
-        if (isRegisteredTool(fnName)) {
+        if (await isRegisteredTool(fnName)) {
           result = await executeSiteTool(fnName, parsed, { emit: () => {}, conversationId: conversationId });
         }
         messages.push({

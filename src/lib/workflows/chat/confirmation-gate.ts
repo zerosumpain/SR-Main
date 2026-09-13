@@ -1,6 +1,6 @@
 import { publishJobEvent, createWaiter, getJob } from './job-store';
+import { loadToolRegistry } from '$lib/workflows/site-tools/load-registry';
 import { notifyAllSubscribers } from '$lib/server/push';
-import { getTool } from '$lib/workflows/site-tools/registry';
 
 /**
  * Whether a tool must ask the user before running. Single source of truth is
@@ -8,7 +8,10 @@ import { getTool } from '$lib/workflows/site-tools/registry';
  * it on the tool, not in a list here. The MCP layer surfaces the same flag to
  * a client as `annotations.destructiveHint`.
  */
-export function isDestructive(toolName: string): boolean {
+export async function isDestructive(toolName: string): Promise<boolean> {
+  // Dynamic: the tool registry imports all 52 tool modules for their register()
+  // side effects, and this gate is on the chat endpoint's static import path.
+  const { getTool } = await loadToolRegistry();
   return getTool(toolName)?.destructive === true;
 }
 

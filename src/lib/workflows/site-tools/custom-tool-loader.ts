@@ -8,6 +8,7 @@ import { eq, sql } from 'drizzle-orm';
 import { register } from './registry-internal';
 import type { ToolResult } from './registry-internal';
 import { refuseDestructiveCall } from './platform-guard';
+import { loadToolRegistry } from './load-registry';
 
 // Module-level guard against custom-tool recursion. Depth reflects how deeply
 // nested custom-tool → platform.call → custom-tool chains can go before we
@@ -42,7 +43,7 @@ function buildPlatform(callerName: string): ToolPlatform {
       const refusal = await refuseDestructiveCall(name, callerName);
       if (refusal) return refusal;
       // Lazy import to avoid circular init between registry.ts and this module.
-      const { executeTool } = await import('./registry');
+      const { executeTool } = await loadToolRegistry();
 
       try {
         return await executeTool(name, args, { emit: () => {}, ...currentExecution(), depth: (currentExecution()?.depth ?? 0) + 1 });

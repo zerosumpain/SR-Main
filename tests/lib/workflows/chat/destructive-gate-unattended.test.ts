@@ -16,6 +16,11 @@ import { resolve } from 'node:path';
  * WhatsApp bridge, the follow-up queue, agent delegation) and the fix must hold
  * for the fourth. So assert on the source: the destructive branch must be
  * entered on `isDestructive` ALONE, and the no-job case must refuse.
+ *
+ * `isDestructive` became async on 2026-09-13 when the tool registry was loaded
+ * dynamically, so the patterns allow an optional `await`. That is the only thing
+ * that changed: a guard written `if (jobId && await isDestructive(...))` is the
+ * same defect and is still rejected.
  */
 
 const SRC = resolve(__dirname, '../../../../src/lib/workflows/chat/general-chat.ts');
@@ -25,17 +30,17 @@ describe('destructive tools are never reached without a confirmer', () => {
   it('does not gate the destructive branch behind the presence of a jobId', () => {
     // The exact regression. `jobId &&` in front of isDestructive means "if
     // nobody can confirm, just do it".
-    expect(src).not.toMatch(/if\s*\(\s*jobId\s*&&\s*isDestructive\s*\(/);
+    expect(src).not.toMatch(/if\s*\(\s*jobId\s*&&\s*(?:await\s+)?isDestructive\s*\(/);
   });
 
   it('enters the destructive branch on isDestructive alone', () => {
-    expect(src).toMatch(/if\s*\(\s*isDestructive\s*\(\s*fnName\s*\)\s*\)/);
+    expect(src).toMatch(/if\s*\(\s*(?:await\s+)?isDestructive\s*\(\s*fnName\s*\)\s*\)/);
   });
 
   it('refuses rather than executing when there is no job to confirm against', () => {
     // Narrow the search to the destructive branch so an executeSiteTool call
     // elsewhere in the file cannot satisfy this by accident.
-    const start = src.search(/if\s*\(\s*isDestructive\s*\(\s*fnName\s*\)\s*\)/);
+    const start = src.search(/if\s*\(\s*(?:await\s+)?isDestructive\s*\(\s*fnName\s*\)\s*\)/);
     expect(start).toBeGreaterThan(-1);
     const branch = src.slice(start, start + 2000);
 

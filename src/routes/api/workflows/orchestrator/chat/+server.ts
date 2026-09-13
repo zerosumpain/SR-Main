@@ -26,7 +26,6 @@ import { priceFor, computeCost } from '$lib/llm/pricing';
 import type { TurnStamp } from '$lib/jkai/turn-stamp';
 import { recordDurableLLMCall } from '$lib/llm/usage-log';
 import { maybeExtractThreadConcepts } from '$lib/jkai/intel/chat-extract';
-import { isRegisteredTool } from '$lib/workflows/site-tools/registry';
 import { JKAI_EXTENDED_TOOL } from '$lib/mcp/meta-tool';
 import { createTraceRecorder, compactStepsForMessage, type CompactToolStep } from '$lib/jkai/tool-trace';
 import { resolveChatTurnModel } from '$lib/server/models/workload-settings';
