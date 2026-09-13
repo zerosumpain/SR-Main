@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { verifyBridgeToken } from '$lib/jkai/tool-bridge';
+import { verifyBridgeToken } from '$lib/jkai/bridge-token';
 import { generateExplainerImage } from '$lib/jkai/studio-image.server';
 import type { RequestHandler } from './$types';
 

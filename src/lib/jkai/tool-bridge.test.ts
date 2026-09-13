@@ -4,9 +4,8 @@ import { describe, it, expect, beforeAll } from 'vitest';
 // before anything imports through to `secret()`.
 process.env.JKAI_BRIDGE_SECRET = 'bridge-test-secret-at-least-32-characters-long';
 
+import { signBridgeToken, verifyBridgeToken } from './bridge-token';
 import {
-  signBridgeToken,
-  verifyBridgeToken,
   isBridgeable,
   definitionsForBuild,
   manifestForBuild,
@@ -42,42 +41,44 @@ describe('bridge tokens', () => {
 describe('destructive tools are not on the bridge', () => {
   // A build is headless: the confirmation gate that guards these everywhere
   // else has nobody to ask, so the bridge must not offer them at all.
-  it('classifies destructive tools as un-bridgeable', () => {
-    if (getTool('publish_page')) expect(isBridgeable('publish_page')).toBe(false);
-    if (getTool('gmail_send')) expect(isBridgeable('gmail_send')).toBe(false);
+  it('classifies destructive tools as un-bridgeable', async () => {
+    if (getTool('publish_page')) expect(await isBridgeable('publish_page')).toBe(false);
+    if (getTool('gmail_send')) expect(await isBridgeable('gmail_send')).toBe(false);
   });
 
-  it('allows read-only tools', () => {
-    if (getTool('workflow_list')) expect(isBridgeable('workflow_list')).toBe(true);
+  it('allows read-only tools', async () => {
+    if (getTool('workflow_list')) expect(await isBridgeable('workflow_list')).toBe(true);
   });
 
-  it('omits them from the manifest and the definitions', () => {
-    const names = definitionsForBuild(['all']).map((d) => d.function.name);
+  it('omits them from the manifest and the definitions', async () => {
+    const names = (await definitionsForBuild(['all'])).map((d) => d.function.name);
     for (const n of names) expect(getTool(n)?.destructive).not.toBe(true);
 
-    const manifestNames = manifestForBuild(['all']).flatMap((t) => t.tools.map((x) => x.name));
+    const manifestNames = (await manifestForBuild(['all'])).flatMap((t) =>
+      t.tools.map((x) => x.name),
+    );
     for (const n of manifestNames) expect(getTool(n)?.destructive).not.toBe(true);
   });
 
-  it('an empty toolset list grants no tools, not every tool', () => {
+  it('an empty toolset list grants no tools, not every tool', async () => {
     // The filter used to fail OPEN: a list that matched no toolset fell through
     // to the full definition set, so "allow nothing" and "allow everything"
     // were the same request. The Controls panel can now write this list, so the
     // difference is reachable from the UI.
-    expect(definitionsForBuild([])).toHaveLength(0);
+    expect(await definitionsForBuild([])).toHaveLength(0);
   });
 
-  it('an unrecognised toolset name grants no tools either', () => {
-    expect(definitionsForBuild(['nope-not-a-toolset'])).toHaveLength(0);
+  it('an unrecognised toolset name grants no tools either', async () => {
+    expect(await definitionsForBuild(['nope-not-a-toolset'])).toHaveLength(0);
   });
 
-  it('a named toolset grants only its own tools', () => {
-    const withBuilds = definitionsForBuild(['builds']).map((d) => d.function.name);
-    const everything = definitionsForBuild(['all']).map((d) => d.function.name);
+  it('a named toolset grants only its own tools', async () => {
+    const withBuilds = (await definitionsForBuild(['builds'])).map((d) => d.function.name);
+    const everything = (await definitionsForBuild(['all'])).map((d) => d.function.name);
     expect(withBuilds.length).toBeGreaterThan(0);
     expect(withBuilds.length).toBeLessThan(everything.length);
     const allowed = new Set(
-      manifestForBuild(['builds']).flatMap((t) => t.tools.map((x) => x.name)),
+      (await manifestForBuild(['builds'])).flatMap((t) => t.tools.map((x) => x.name)),
     );
     for (const n of withBuilds) expect(allowed.has(n)).toBe(true);
   });

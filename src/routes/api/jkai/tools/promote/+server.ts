@@ -1,6 +1,6 @@
 // src/routes/api/jkai/tools/promote/+server.ts
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { executeTool } from '$lib/workflows/site-tools/registry';
+import { executeSiteTool } from '$lib/workflows/site-tools/executor';
 
 type PromoteBody = {
   messageId?: string;
@@ -20,7 +20,7 @@ export const POST: RequestHandler = async ({ request }) => {
   if (!body.messageId) return json({ error: 'messageId is required' }, { status: 400 });
   if (!body.toolCallId) return json({ error: 'toolCallId is required' }, { status: 400 });
 
-  const res = await executeTool('promote_ephemeral_tool', {
+  const res = await executeSiteTool('promote_ephemeral_tool', {
     messageId: body.messageId,
     toolCallId: body.toolCallId,
     name: body.name,
