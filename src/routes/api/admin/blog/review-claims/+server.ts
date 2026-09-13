@@ -2,12 +2,11 @@ import type { RequestHandler } from './$types';
 import { getLLMClient } from '$lib/llm/client';
 import { resolveBlogModel } from '$lib/server/models/workload-settings';
 import { withActivity } from '$lib/context/activity';
-import { search as tavilySearch } from '$lib/deepdive/tavily';
+import { groundedSourceSearch } from '$lib/blog/grounded-search.server';
 import { rankSources, type RankedSource } from '$lib/blog/reputable-domains';
 import { plainTextFromHtml } from '$lib/blog/readability';
 
 const MAX_CLAIMS = 12;
-const TAVILY_RESULTS_PER_CLAIM = 8;
 const MAX_CANDIDATES_RETURNED = 4;
 const SEARCH_CONCURRENCY = 3;
 
@@ -181,15 +180,12 @@ export const POST: RequestHandler = async ({ request }) => {
             const seed = seeds[idx];
             send({ type: 'claim-start', index: idx, query: seed.searchQuery });
             try {
-              const search = await tavilySearch(seed.searchQuery, {
-                maxResults: TAVILY_RESULTS_PER_CLAIM,
-                searchDepth: 'advanced',
-              });
-              const candidates = pickCandidates(search.results, seed.claim);
+              const results = await groundedSourceSearch(seed.searchQuery, seed.claim);
+              const candidates = pickCandidates(results, seed.claim);
               send({
                 type: 'claim-done',
                 index: idx,
-                resultsCount: search.results.length,
+                resultsCount: results.length,
                 candidates,
               });
             } catch (e) {

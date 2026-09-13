@@ -2,11 +2,11 @@
  * The grounded lane: pull the checkable assertions out of a draft and put each
  * one in front of the web before it publishes.
  *
- * Server-only — it spends money (one extraction call, then a search and a
- * verdict call per claim) and holds the Tavily key's blast radius.
+ * Server-only — it spends one extraction call, then a provider-grounded web
+ * lookup and verdict call per claim.
  *
  * This is the DESK's half of the job. `/api/admin/blog/review-claims` already
- * does claim extraction plus a Tavily lookup and streams candidate sources for
+ * does claim extraction plus a grounded lookup and streams candidate sources for
  * the author to cite; that endpoint stops at "here are some links". This one
  * carries on to a verdict and turns it into a `Finding`, so the answer lands in
  * the checklist and survives a page reload. The extraction prompt and the
@@ -16,8 +16,8 @@
  */
 
 import { getLLMClient } from '$lib/llm/client';
-import { search as tavilySearch } from '$lib/deepdive/tavily';
 import { hostnameOf, rankSources } from '$lib/blog/reputable-domains';
+import { groundedSourceSearch } from '$lib/blog/grounded-search.server';
 import { anchorHash } from './anchor';
 import type { Evidence, Finding } from './types';
 import { resolveBlogModel } from '$lib/server/models/workload-settings';
@@ -37,13 +37,12 @@ export type ClaimVerdict = {
 };
 
 /** Eight is the cap and it is a budget, not a limit of the extractor: each
- *  claim costs one Tavily search plus one verdict call, so a chatty post could
+ *  claim costs one grounded lookup plus one verdict call, so a chatty post could
  *  otherwise turn a save into twenty round trips. The most load-bearing claims
  *  are what is wanted, not all of them. */
 const MAX_CLAIMS = 8;
 /** Enough to have something worth ranking; the top 4 are what the verdict call
  *  actually reads. */
-const TAVILY_RESULTS_PER_CLAIM = 8;
 const CANDIDATES_PER_CLAIM = 4;
 /** A long post past this is truncated rather than sent whole. The extractor's
  *  job is the load-bearing claims and those cluster in the argument, not the
@@ -208,7 +207,7 @@ export async function extractClaims(plainText: string, max: number = MAX_CLAIMS)
     .slice(0, cap);
 }
 
-/** Tavily relevance plus the shared source bonus — reputation, UK provenance,
+/** Grounded-provider relevance plus the shared source bonus — reputation, UK provenance,
  *  academic status, less a penalty for a source with an interest in the claim.
  *  Literally the same function the sources panel uses; see
  *  $lib/blog/reputable-domains for the arithmetic and why it is worth ~1 point. */
@@ -230,11 +229,7 @@ function rank(results: { url: string; title: string; content: string; score: num
  * back as confirmation.
  */
 export async function groundClaim(claim: GroundedClaim): Promise<ClaimVerdict> {
-  const found = await tavilySearch(claim.searchQuery, {
-    maxResults: TAVILY_RESULTS_PER_CLAIM,
-    searchDepth: 'advanced',
-  });
-  const candidates = rank(found.results ?? [], claim.claim);
+  const candidates = rank(await groundedSourceSearch(claim.searchQuery, claim.claim), claim.claim);
 
   // No sources, no verdict call. "Nothing came back" is already the honest
   // answer and paying a model to phrase it would only invite it to answer from

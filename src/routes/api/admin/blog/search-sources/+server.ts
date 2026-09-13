@@ -9,7 +9,7 @@
  * call, rewrites every other claim's candidates, and returns the same four
  * sources for this one anyway.
  *
- * So: no extraction, no model call, no stream. One Tavily search against a
+ * So: no extraction and no stream. One Instant-style grounded lookup against a
  * query the author may have edited, ranked by the shared arithmetic, minus
  * whatever they have already seen. It is a plain JSON response because it is a
  * single fast operation — a stream here would be ceremony around one round trip.
@@ -19,7 +19,7 @@
  */
 
 import { json } from '@sveltejs/kit';
-import { search as tavilySearch } from '$lib/deepdive/tavily';
+import { groundedSourceSearch } from '$lib/blog/grounded-search.server';
 import { rankSources } from '$lib/blog/reputable-domains';
 import { withActivity } from '$lib/context/activity';
 import type { RequestHandler } from './$types';
@@ -27,7 +27,6 @@ import type { RequestHandler } from './$types';
 /** Wider than the streamed pass fetches. A second look is asked for precisely
  *  because the obvious results were wrong, and the answer is usually further
  *  down the page rather than in a different query. */
-const TAVILY_RESULTS = 15;
 const RETURNED = 6;
 const MAX_QUERY_CHARS = 300;
 const MAX_EXCLUDE = 50;
@@ -55,16 +54,16 @@ const handle: RequestHandler = async ({ request }) => {
     : [];
 
   try {
-    const found = await tavilySearch(query, { maxResults: TAVILY_RESULTS, searchDepth: 'advanced' });
-    const ranked = rankSources(found.results ?? [], { subject: claim, exclude, limit: RETURNED });
+    const found = await groundedSourceSearch(query, claim);
+    const ranked = rankSources(found, { subject: claim, exclude, limit: RETURNED });
 
     return json({
       query,
-      resultsCount: (found.results ?? []).length,
+      resultsCount: found.length,
       // Reported so the panel can say "nothing new" rather than showing an
       // empty list that looks like a failure. Exhausting the results for a
       // query is a real answer: it means the query needs changing, not repeating.
-      exhausted: ranked.length === 0 && (found.results ?? []).length > 0,
+      exhausted: ranked.length === 0 && found.length > 0,
       candidates: ranked.map((r) => ({
         url: r.url,
         title: r.title,
