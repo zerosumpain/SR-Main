@@ -1,5 +1,5 @@
 import { redirect } from '@sveltejs/kit';
-import { getWhoopAuthUrl } from '$lib/health/whoop';
+import { getWhoopAuthUrl } from '$lib/health-sync/whoop';
 import crypto from 'crypto';
 import type { RequestHandler } from './$types';
 

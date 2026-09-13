@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('$lib/health/tokens', () => ({
+vi.mock('$lib/health-sync/tokens', () => ({
   getValidToken: vi.fn().mockResolvedValue('mock-strava-token'),
 }));
 
-vi.mock('$lib/health/strava', () => ({
+vi.mock('$lib/health-sync/strava', () => ({
   getStravaActivities: vi.fn().mockResolvedValue([
     { id: 1, name: 'Morning Run', type: 'Run', distance: 5000, moving_time: 1800, start_date: '2026-04-12T07:00:00Z' },
   ]),
@@ -42,13 +42,13 @@ describe('stravaExecutor', () => {
     });
 
     it('passes page and perPage config', async () => {
-      const { getStravaActivities } = await import('$lib/health/strava');
+      const { getStravaActivities } = await import('$lib/health-sync/strava');
       await stravaExecutor.execute({}, { operation: 'list_activities', page: 2, perPage: 10 }, mockContext);
       expect(getStravaActivities).toHaveBeenCalledWith('mock-strava-token', 2, 10);
     });
 
     it('uses default page 1 and perPage 30 when not specified', async () => {
-      const { getStravaActivities } = await import('$lib/health/strava');
+      const { getStravaActivities } = await import('$lib/health-sync/strava');
       vi.mocked(getStravaActivities).mockClear();
       await stravaExecutor.execute({}, { operation: 'list_activities' }, mockContext);
       expect(getStravaActivities).toHaveBeenCalledWith('mock-strava-token', 1, 30);
@@ -107,7 +107,7 @@ describe('stravaExecutor', () => {
 
   describe('no token', () => {
     beforeEach(async () => {
-      const { getValidToken } = await import('$lib/health/tokens');
+      const { getValidToken } = await import('$lib/health-sync/tokens');
       vi.mocked(getValidToken).mockResolvedValueOnce(null);
     });
 

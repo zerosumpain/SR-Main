@@ -10,8 +10,8 @@ import { randomUUID } from 'node:crypto';
 import { db } from '$lib/db';
 import { healthSyncJobs, type HealthSyncJob } from '$lib/db/schema';
 import { eq, desc } from 'drizzle-orm';
-import { syncStravaActivities, syncWhoopAll } from './sync-service';
-import type { SyncOptions } from './types';
+import { syncStravaActivities, syncWhoopAll } from '$lib/health-sync/sync-service';
+import type { SyncOptions } from '$lib/health-sync/types';
 
 export type BackfillService = 'strava' | 'whoop' | 'all';
 

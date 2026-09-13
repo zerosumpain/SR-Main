@@ -10,7 +10,7 @@ import type {
   SleepAnalysis,
   BodySignal,
   StatsResponse,
-} from '$lib/health/types';
+} from '$lib/health-sync/types';
 
 describe('health types', () => {
   it('SyncOptions accepts optional fields', () => {

@@ -13,7 +13,7 @@
   // its missing sentinel — so a zero reads as "nothing synced" and prints an em
   // dash, never as a resting heart rate of nought.
   import type { HealthDay } from '$lib/health/series-30d-service';
-  import type { ReadinessResponse } from '$lib/health/types';
+  import type { ReadinessResponse } from '$lib/health-sync/types';
   import type { DashboardRead } from './types';
   import type { MetricResult } from '$lib/health/analytics/types';
   import type { ACWRResult } from '$lib/health/analytics/acwr';

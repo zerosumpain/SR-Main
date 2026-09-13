@@ -1,7 +1,7 @@
 import { db } from '$lib/db';
 import { whoopSleep, whoopCycles, whoopRecovery } from '$lib/db/schema';
 import { gte, eq, and, asc } from 'drizzle-orm';
-import { realStrain } from '$lib/health/whoop';
+import { realStrain } from '$lib/health-sync/whoop';
 import { computeRecoveryDebt, type RecoverySample } from '$lib/health/analytics/recovery-debt';
 
 export async function getRecoveryDebt() {

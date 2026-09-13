@@ -1,7 +1,7 @@
 import { db } from '$lib/db';
 import { whoopCycles } from '$lib/db/schema';
 import { gte, asc } from 'drizzle-orm';
-import { realStrain } from '$lib/health/whoop';
+import { realStrain } from '$lib/health-sync/whoop';
 import { computeMonotony } from '$lib/health/analytics/monotony';
 
 export async function getMonotony() {

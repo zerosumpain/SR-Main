@@ -2,7 +2,7 @@ import { db } from '$lib/db';
 import { whoopCycles } from '$lib/db/schema';
 import { gte, asc } from 'drizzle-orm';
 import { computeACWR, type LoadDay } from '$lib/health/analytics/acwr';
-import { realStrain } from '$lib/health/whoop';
+import { realStrain } from '$lib/health-sync/whoop';
 
 export async function getACWR() {
   const since = Math.floor(Date.now() / 1000) - 28 * 86400;

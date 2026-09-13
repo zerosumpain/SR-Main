@@ -1,6 +1,6 @@
 // tests/lib/health/whoop-scale.test.ts
 import { describe, it, expect } from 'vitest';
-import { realStrain } from '$lib/health/whoop';
+import { realStrain } from '$lib/health-sync/whoop';
 
 describe('realStrain', () => {
   it('passes genuine 0–21 strains through untouched', () => {

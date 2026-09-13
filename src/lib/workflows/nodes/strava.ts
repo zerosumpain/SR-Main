@@ -1,6 +1,6 @@
 import type { NodeExecutor, NodeResult, ExecutionContext, JsonSchema } from '../types';
-import { getValidToken } from '$lib/health/tokens';
-import { getStravaActivities } from '$lib/health/strava';
+import { getValidToken } from '$lib/health-sync/tokens';
+import { getStravaActivities } from '$lib/health-sync/strava';
 import { db } from '$lib/db';
 import { stravaActivities } from '$lib/db/schema';
 import { and, eq, gte, lte, desc } from 'drizzle-orm';

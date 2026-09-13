@@ -1,7 +1,7 @@
 import { db } from '$lib/db';
 import { stravaActivities, whoopWorkouts, whoopSleep, whoopRecovery } from '$lib/db/schema';
 import { desc } from 'drizzle-orm';
-import type { TimelineEvent } from './types';
+import type { TimelineEvent } from '$lib/health-sync/types';
 
 export async function getTimeline(page = 1, limit = 20): Promise<{ events: TimelineEvent[]; hasMore: boolean }> {
   // Fetch recent records from each source

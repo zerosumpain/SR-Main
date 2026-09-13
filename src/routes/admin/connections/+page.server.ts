@@ -41,7 +41,7 @@ export const actions: Actions = {
       return fail(400, { ok: false, key, error: 'unknown service' });
     }
 
-    const { syncStravaActivities, syncWhoopAll } = await import('$lib/health/sync-service');
+    const { syncStravaActivities, syncWhoopAll } = await import('$lib/health-sync/sync-service');
     const result =
       service === 'strava'
         ? await syncStravaActivities({ maxPages: 1 })
