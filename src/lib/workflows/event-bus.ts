@@ -1,33 +1,20 @@
-import { EventEmitter } from 'events';
 import { db } from '$lib/db';
 import { workflowSchedules, workflows, workflowRuns, workflowNodes, workflowEdges } from '$lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { engine } from '$lib/workflows';
+import { onAll, type PlatformEvent } from '$lib/events/platform-bus';
 
-export type PlatformEventType =
-  | 'strava_activity_synced'
-  | 'whoop_recovery_updated'
-  | 'workflow_completed';
-
-export interface PlatformEvent {
-  type: PlatformEventType;
-  payload?: Record<string, unknown>;
-}
-
-const emitter = new EventEmitter();
-emitter.setMaxListeners(50);
-
-export function emit(type: PlatformEventType, payload?: Record<string, unknown>): void {
-  emitter.emit(type, { type, payload });
-}
-
-export function on(
-  type: PlatformEventType,
-  handler: (event: PlatformEvent) => void
-): () => void {
-  emitter.on(type, handler);
-  return () => emitter.off(type, handler);
-}
+/**
+ * The dispatch half of the platform event channel: turn an event into a workflow
+ * run. The emitter itself moved to `$lib/events/platform-bus`, because importing
+ * `engine` from the workflows barrel to PUBLISH an event dragged the whole node
+ * registry into every publisher's import closure.
+ *
+ * emit/on are re-exported so existing callers keep working; new publishers should
+ * import from `$lib/events/platform-bus` directly and stay cheap.
+ */
+export type { PlatformEvent, PlatformEventType } from '$lib/events/platform-bus';
+export { emit, on } from '$lib/events/platform-bus';
 
 // Internal: start any event-triggered workflows matching this event type
 async function handlePlatformEvent(event: PlatformEvent): Promise<void> {
@@ -101,6 +88,7 @@ async function handlePlatformEvent(event: PlatformEvent): Promise<void> {
   }
 }
 
-// Register global listeners
-(['strava_activity_synced', 'whoop_recovery_updated', 'workflow_completed'] as PlatformEventType[])
-  .forEach((type) => emitter.on(type, handlePlatformEvent));
+// Register global listeners. This is a module side effect: importing this file is
+// what makes event-triggered workflows fire at all. hooks.server.ts reaches it via
+// $lib/jkai/workflow-deliveries, which imports `on` from here.
+onAll(handlePlatformEvent);

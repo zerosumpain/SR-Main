@@ -6,6 +6,9 @@
  */
 
 import { db } from '$lib/db';
+// The publish half only: importing $lib/workflows/event-bus here would pull the
+// whole node registry into health's closure (308 files -> 1,007).
+import { emit } from '$lib/events/platform-bus';
 import {
   stravaActivities,
   whoopWorkouts,
@@ -201,7 +204,6 @@ export async function syncStravaActivities(options: SyncOptions = {}): Promise<S
 
     if (success) {
       try {
-        const { emit } = await import('$lib/workflows/event-bus');
         emit('strava_activity_synced', { recordsSynced, syncedAt: new Date().toISOString() });
       } catch {
         // event-bus not critical path
@@ -669,7 +671,6 @@ export async function syncWhoopAll(options: SyncOptions = {}): Promise<SyncResul
 
   if (combined.success) {
     try {
-      const { emit } = await import('$lib/workflows/event-bus');
       emit('whoop_recovery_updated', { recordsSynced: combined.recordsSynced, syncedAt: new Date().toISOString() });
     } catch {
       // event-bus not critical path
