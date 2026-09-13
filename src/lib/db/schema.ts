@@ -3188,6 +3188,46 @@ export const driveFolderSettings = pgTable(
 );
 
 export type DriveFolderSetting = typeof driveFolderSettings.$inferSelect;
+
+/**
+ * Work Drive hands to Intelligence.
+ *
+ * Drive stores files; Intelligence decides which of them feed the knowledge
+ * graph. While both lived in one process that was a function call — Drive wrote
+ * a file and called `queueIntelExtraction` or `syncSourcePolicy` directly. Once
+ * Drive is its own application those are two processes, and a direct call would
+ * mean Drive carrying Intelligence's extraction engine: 40 files, the resolution
+ * engine, the taxonomy, and through `intel/notify` the WhatsApp service.
+ *
+ * So Drive writes a row and Intelligence drains it. The three operations that
+ * travel this way are the three whose RESULT Drive never uses — a new or changed
+ * file, a deleted one, and a folder whose policy needs re-applying. The one that
+ * does use its result, `/api/drive/folders`, stays with Intelligence in Main.
+ *
+ * Deliberately not a queue table: `workflow_runs` is for workflow executions and
+ * its claim path is tuned for them. This is small, append-only, and drained in
+ * order.
+ */
+export const driveIntelOutbox = pgTable(
+  'drive_intel_outbox',
+  {
+    id: serial('id').primaryKey(),
+    /** 'file-changed' | 'file-deleted' | 'policy-resync' */
+    kind: text('kind').notNull(),
+    /** A workflow_files id for the file kinds, a folder path for policy-resync. */
+    ref: text('ref').notNull(),
+    /** Extra arguments the consumer needs, e.g. the ids a resync should cover. */
+    payload: jsonb('payload'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    /** Null until drained. Rows are kept briefly after, so a double drain is visible. */
+    processedAt: timestamp('processed_at', { withTimezone: true }),
+    attempts: integer('attempts').notNull().default(0),
+    lastError: text('last_error'),
+  },
+  (t) => [index('drive_intel_outbox_pending_idx').on(t.processedAt, t.id)],
+);
+
+export type DriveIntelOutboxRow = typeof driveIntelOutbox.$inferSelect;
 export type NewDriveFolderSetting = typeof driveFolderSettings.$inferInsert;
 
 // ---- Gmail channel ----

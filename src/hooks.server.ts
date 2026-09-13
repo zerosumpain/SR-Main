@@ -124,6 +124,7 @@ if (runsService('background')) startScheduledEngine().catch((err) => {
 // one idle-cycle scheduler instead of two. Neither belongs in the jkai-builder
 // sidecar process.
 import { startDatastoreReaper, stopDatastoreReaper } from '$lib/datastore';
+import { startDriveIntelOutbox, stopDriveIntelOutbox } from '$lib/jkai/intel/drive-outbox';
 import { startSelfImprovementSeeds } from '$lib/selfimprove/engine';
 import { startVoiceDrift } from '$lib/voice/drift-engine';
 // Nightly workflow doctor — triages node_executions failures, quarantines
@@ -153,6 +154,10 @@ if (!building) {
 }
 if (runsService('background')) {
   startDatastoreReaper();
+  // Drains what Drive hands Intelligence. A no-op until Drive is its own
+  // application — while both live here, Drive still calls these functions
+  // directly and the table stays empty.
+  startDriveIntelOutbox();
   startSelfImprovementSeeds();
   // Monthly, advisory only — it writes a note and never touches the card.
   startVoiceDrift();
@@ -219,6 +224,7 @@ async function gracefulShutdown() {
   stopGmailWatcher();
   unregisterGmailBridge();
   stopDatastoreReaper();
+    stopDriveIntelOutbox();
   stopWorkflowDoctor();
   stopBriefingEngine();
   stopConnectorMonitor();
