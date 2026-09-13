@@ -1,0 +1,70 @@
+{
+  "$comment": [
+    "Modules an extracted application also holds, byte for byte.",
+    "",
+    "Each was duplicated rather than moved, and each for a reason recorded in the",
+    "extraction that did it:",
+    "",
+    "  polyline / activity-meta / track / tile-math \u2014 $lib/geo (Landgrab) imports",
+    "    all four at five sites and Landgrab is deferred, so Main needs them and",
+    "    Health took them. geo/tiles.ts matches track's haversine 'so distances",
+    "    agree': if the copies diverge, Landgrab's scoring atom moves and nothing",
+    "    anywhere fails.",
+    "",
+    "  file-store/storage \u2014 the boundary linter classifies it PLATFORM and",
+    "    thirteen non-Drive modules import it, including the public hero video.",
+    "    Both copies point at one WORKFLOW_FILES_ROOT.",
+    "",
+    "  file-shares / file-serving \u2014 the share capability is minted by one process",
+    "    and may be resolved by the other. Divergence is a valid link rejected.",
+    "",
+    "  intel/source-policy \u2014 the pure half of the folder policy; its DB-aware half",
+    "    stayed here.",
+    "",
+    "  webdav/auth \u2014 verifies the Basic credential for a MOUNTED filesystem. Two",
+    "    live credentials depend on both hooks agreeing, and /dav is still served",
+    "    from here while Drive holds an identical copy ready.",
+    "",
+    "None of these drifting breaks a build or fails a test. That is exactly why",
+    "the hashes are recorded. Change one, change it in the peer repo too, then:",
+    "  node scripts/record-shared-modules.mjs"
+  ],
+  "files": {
+    "src/lib/health/polyline.ts": {
+      "peer": "zerosumpain/SR-Health",
+      "sha256": "6eba23563bd5a4930e17bfd43b7ba62c83f420abcea3a544c784c7bef4ef0d3a"
+    },
+    "src/lib/trails/activity-meta.ts": {
+      "peer": "zerosumpain/SR-Health",
+      "sha256": "fdbabe248a443423156ae679e736a5b617d24d17a31ba721de472ca64b12f6eb"
+    },
+    "src/lib/trails/track.ts": {
+      "peer": "zerosumpain/SR-Health",
+      "sha256": "f141e4e61651b8d81c7a402de211f702b553f3450ebd2e8dc39fc441f6fc6511"
+    },
+    "src/lib/trails/field/tile-math.ts": {
+      "peer": "zerosumpain/SR-Health",
+      "sha256": "32c32a35e119aadd66eddc3990bfdf9ccd4348d87f3169aed6ef560377abd0fb"
+    },
+    "src/lib/file-store/storage.ts": {
+      "peer": "zerosumpain/SR-Drive",
+      "sha256": "70dc7b4253b38e3cae90b54dac9afd2e701691d5615c6000677ac42f100aa020"
+    },
+    "src/lib/file-shares.ts": {
+      "peer": "zerosumpain/SR-Drive",
+      "sha256": "69e6e6d865e308cea7c830c26fb44d0139ba62ca5aa50be8eaced4e6512c2d41"
+    },
+    "src/lib/file-serving.ts": {
+      "peer": "zerosumpain/SR-Drive",
+      "sha256": "a849615e5e96eab3a20a9c562b79756042911142516d771d5dcb59a404f295b5"
+    },
+    "src/lib/jkai/intel/source-policy.ts": {
+      "peer": "zerosumpain/SR-Drive",
+      "sha256": "45cc2038dce4518471b10ab5b92e0d91c798e8015a63b002d47e575bd3a489ce"
+    },
+    "src/lib/webdav/auth.ts": {
+      "peer": "zerosumpain/SR-Drive",
+      "sha256": "d2cc5a34df884de24f1def86c9a24558cb828b234a1150d3ec5f6dda33fcd48c"
+    }
+  }
+}
