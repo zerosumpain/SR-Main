@@ -33,7 +33,6 @@
  * These are PREFIXES: an entry opens the path and everything beneath it.
  */
 export const HOOK_BYPASSES: string[] = [
-  '/dav', // Basic-Auth against webdav_credentials
   '/api/scraper/script', // SCRAPER_SERVICE_TOKEN
   '/api/mcp', // bridge token (tools/list + tools/call)
   '/api/claude-changelog', // POST only, ingest secret
@@ -140,7 +139,6 @@ export const HOOK_NON_BYPASSES: string[] = [
  * HOOK_BYPASSES.
  */
 export const BYPASS_GUARDS: Record<string, string> = {
-  '/dav': 'HTTP Basic · webdav_credentials',
   '/api/scraper/script': 'homeserv-only + SCRAPER_SERVICE_TOKEN',
   '/api/mcp': 'Bearer SERVICE_BRIDGE_SECRET',
   '/api/policy-engine/ingest': 'GET public · POST Bearer POLICY_INGEST_SECRET (fails closed)',

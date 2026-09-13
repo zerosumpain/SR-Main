@@ -266,11 +266,10 @@ export const SURFACES: Surface[] = [
     route: '/drive',
     kicker: 'Owner only',
     open: false,
-    line: 'Drop a file in and it becomes something the assistant can answer questions about. It also mounts as an ordinary network drive, because the fastest way into a clever system is a boring door.',
+    line: 'Drop a file in and it becomes something the assistant can answer questions about.',
     features: [
       { label: 'Six kinds of file, six routes', what: 'A photograph has further to travel than a text file before it is searchable. The page shows the journey.', section: 'reach/drive' },
       { label: 'Grounded answers with citations', what: 'Chat over a selection of documents, with the answer pointing back at the page it came from.', section: 'memory/retrieval' },
-      { label: 'Mounted over WebDAV', what: 'The same store appears as a network drive on the desktop.', section: 'reach/drive' },
       { label: 'Per-folder permissions', what: 'Who may read what is a property of the folder, checked on every call.', section: 'memory/store' },
     ],
     leads: ['jkai', 'intel', 'blog'],

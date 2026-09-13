@@ -99,7 +99,7 @@ export async function fileSize(absPath: string): Promise<number> {
   return s.size;
 }
 
-// ── streaming interface (used by the WebDAV handler for large files) ─────────
+// ── streaming interface (was the WebDAV handler's path for large files) ─────
 
 export async function saveStream(absPath: string, readable: Readable): Promise<number> {
   if (!isAbsolute(absPath)) throw new Error('absolute path required');

@@ -352,12 +352,11 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
 
   // Browser state-changing requests must be same-origin. Requests made by
   // service clients generally carry no Origin/Sec-Fetch-Site and authenticate
-  // with their own bearer/HMAC secret. WebDAV is the sole route exception: OS
-  // mount clients use Basic auth and may send non-browser Origin semantics.
+  // with their own bearer/HMAC secret. WebDAV used to be the sole ROUTE
+  // exception, because OS mount clients send non-browser Origin semantics; it
+  // was removed on 2026-09-13, so /api/live-walk is the only one left.
   if (
     !['GET', 'HEAD', 'OPTIONS'].includes(event.request.method) &&
-    pathname !== '/dav' &&
-    !pathname.startsWith('/dav/') &&
     pathname !== '/api/live-walk'
   ) {
     const origin = event.request.headers.get('origin');
@@ -438,27 +437,6 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   }
 
   if (isPublicPath(pathname)) {
-    return resolve(event);
-  }
-
-  // WebDAV mount endpoint. Auth is HTTP Basic against webdav_credentials,
-  // not Google OAuth — Finder/Explorer/davfs can't do federated auth. The
-  // credential row is recorded in event.locals.davAuth and verb handlers
-  // attribute writes to its ownerEmail.
-  if (pathname === '/dav' || pathname.startsWith('/dav/')) {
-    const { parseBasicAuth, verifySecret } = await import('$lib/webdav/auth');
-    const creds = parseBasicAuth(event.request.headers.get('authorization'));
-    const ctx = creds ? await verifySecret(creds.pass) : null;
-    if (!ctx) {
-      return new Response('Unauthorized', {
-        status: 401,
-        headers: {
-          'WWW-Authenticate': 'Basic realm="strangeramblings.com webdav"',
-          'content-type': 'text/plain',
-        },
-      });
-    }
-    event.locals.davAuth = ctx;
     return resolve(event);
   }
 

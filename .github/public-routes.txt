@@ -74,7 +74,6 @@
 /blog/[slug]/track
 /blog/preview/[token]
 /blog/tag/[tag]
-/dav/[...path]
 /decks
 /decks/[slug]
 /decks/[slug]/edit

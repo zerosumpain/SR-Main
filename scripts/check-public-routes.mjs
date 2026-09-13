@@ -4,7 +4,7 @@
 // The gap this closes: `isPublicPath` matches by PREFIX
 // (`pathname === p || pathname.startsWith(p + '/')`), and hooks.server.ts adds
 // ~10 more `startsWith` bypasses. So whole trees — /api/agent, /api/scraper,
-// /projects, /decks, /jkai/shared, /dav, /api/mcp — are already past the
+// /projects, /decks, /jkai/shared, /api/mcp — are already past the
 // Auth.js gate. A NEW route file under one of those prefixes is anonymously
 // reachable THE MOMENT IT IS CREATED, with no allowlist edit anywhere. Nothing
 // in .github/protected-paths.txt can catch that, because no protected file
