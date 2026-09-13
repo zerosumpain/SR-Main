@@ -25,6 +25,7 @@ tests/extract/docx.test.ts
 tests/extract/pdf.test.ts
 tests/extract/scanned-pdf.test.ts
 tests/lib/config/owner.test.ts
+tests/lib/events/platform-bus.test.ts
 tests/lib/jkai/media/storage.test.ts
 tests/lib/nav/nav-coverage.test.ts
 tests/lib/nav/nav-parents.test.ts
