@@ -2,10 +2,7 @@ import type { PageServerLoad } from './$types';
 import { errMsg } from '$lib/daydream/types';
 import { loadFamily } from '$lib/daydream/ledger';
 
-// The household room loads ONE thing: the family ledger. Positions are not in
-// it and never will be — a lat/lon leaves the server only through the
-// on-demand `family_now` action, for one owner-gated render, which is why the
-// map on this page fetches after mount rather than arriving in the payload.
+// The household room loads one thing: the family ledger.
 type Family = Awaited<ReturnType<typeof loadFamily>>;
 
 // The same keys on the failure path, so `PageData` is one shape rather than a

@@ -236,9 +236,8 @@
   /** A 3D graph wants the room an entity does. */
   const isWide = $derived(isEntity || Boolean(manifest?.graph));
 
-  // Three.js and Mapbox are loaded only by the drills that draw with them.
+  // Three.js is loaded only by the drills that draw with it.
   const graphView = () => import('./DrillGraph3D.svelte');
-  const mapView = () => import('./DrillMap.svelte');
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -310,15 +309,6 @@
           <p class="dm-note dm-err">The 3D view could not load: {err instanceof Error ? err.message : String(err)}</p>
         {/await}
       {/if}
-      {#if manifest.map && !isEntity}
-        {#await mapView() then Map}
-          {#key manifest.target}
-            <Map.default map={manifest.map} onOpen={navigate} />
-          {/key}
-        {:catch err}
-          <p class="dm-note dm-err">The map could not load: {err instanceof Error ? err.message : String(err)}</p>
-        {/await}
-      {/if}
 
       <div class="dm-body" class:split={isEntity}>
         {#if isEntity && manifest.entityId}
@@ -332,15 +322,6 @@
         {/if}
 
         <div class="dm-sections" class:dimmed={loading}>
-          {#if manifest.map && isEntity}
-            <!-- An entity that names a place: the map sits at the head of its
-                 column, beside the card rather than above both. -->
-            {#await mapView() then Map}
-              {#key manifest.target}
-                <Map.default map={manifest.map} height="240px" onOpen={navigate} />
-              {/key}
-            {/await}
-          {/if}
           {#each manifest.sections as s (s.id)}
             <section class="dm-sec">
               <div class="dm-sec-hd">

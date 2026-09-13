@@ -136,7 +136,7 @@ Yield. If the user wants this as a chart instead of prose, **don't render it you
 Yield back to `jkai-general` (which will route) when the user:
 
 - Wants a **chart / visualisation** of the data → `render_chart` or `render_table` (always available; no bridge lookup needed, and there are no `visualise_*` aliases). Pull the raw data with the relevant `health_*` tool first, then hand the series to the renderer. Draw it whenever the answer is three or more numbers — waiting to be asked for a chart is how a week of readings ends up as a paragraph.
-- Wants a **GPS map of a route** → `jkai-utility`'s `render_map`. The health tools don't return per-activity geojson; the activity's route lives in the activities table and is exposed via the `file_*` or `activity_*` tools (different domain).
+- Wants a **GPS route visualisation** → direct them to the activity view in SR-Health.
 - Asks about **blog posts, email, scrapers, scheduled jobs, home assistant, files** → wrong skill; yield.
 - Asks for **a custom date range** these tools don't support ("sleep over the last 60 days"). Say so plainly; if they want it badly, it's a workflow on `/jkai/canvas/<id>` against the raw vitals tables.
 - Wants to **save a memory** ("remember I felt great after the long run on Tuesday") → `jkai-utility`'s `save_memory`.
@@ -152,7 +152,7 @@ Yield to the user — stop calling tools, reply with what you have — when any 
 2. **A tool returned an error or suspiciously-empty data.** Surface it plainly ("`health_sleep` returned no record for last night — the Apple webhook may not have synced yet"). Don't fabricate a reading. Don't retry in a loop.
 3. **The user signals acceptance:** "thanks", "ok", "got it", "perfect". Acknowledge briefly and stop.
 4. **The user asks a clarifying question.** Answer it. Don't pre-emptively call tools to "show" the answer.
-5. **The user asks for a chart / map / image of the data.** Pull the underlying data once, then yield to `jkai-utility` rather than narrating numbers and then also visualising them.
+5. **The user asks for a chart or image of the data.** Pull the underlying data once, then yield to `jkai-utility` rather than narrating numbers and then also visualising them.
 6. **The user asks for medical advice.** You don't have a tool for that and you shouldn't invent one. Surface the data, decline the advice ("I can show you the readiness score and the tool's recommendation, but I'm not a coach or a clinician").
 
 When you reply at a termination point, keep it short — one paragraph of numbers, maybe a follow-up offer. Long dumps of every field are an anti-pattern; the `/health` and `/live` pages already render the full picture.

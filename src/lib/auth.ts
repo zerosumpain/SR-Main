@@ -17,7 +17,7 @@ const PUBLIC_PATHS = [
   '/api/jkai/cors',
   // The daydream trail's push ingest — a Home Assistant automation posts GPS
   // changes here with a shared secret (DAYDREAM_INGEST_SECRET), exactly as
-  // /api/live-walk works. Listed as the EXACT path, never as '/api/daydream':
+  // Listed as exact paths, never as '/api/daydream':
   // the match here is a prefix, and the thoughts and feedback endpoints that
   // live under that tree are owner-only.
   '/api/daydream/observe',
@@ -54,15 +54,6 @@ const PUBLIC_PATHS = [
   // reach it. Only shared conversations are exposed — the rest of /jkai stays
   // owner-only (isPublicPath('/jkai') remains false: this prefix is /jkai/shared).
   '/jkai/shared',
-  '/heart',
-  // Public leaderboard for the Terminal Descent game (/projects/terminal-descent).
-  // Anonymous read (GET scores) + write (POST session + score). No OAuth — the
-  // POST surface is bounded by single-use nonces, rate limiting and server-side
-  // score recomputation (see src/lib/space-lander/score.ts), not a cookie gate.
-  '/api/space-lander',
-  // Read-only public Mapbox browser token, validated as pk. only. Maps on public
-  // projects and shared chats need it; no credential metadata is returned.
-  '/api/maps/config',
   // Service-to-service endpoints for the stealth-scrape + interactive-VNC
   // proxy. Auth is enforced by each handler via SCRAPER_SERVICE_TOKEN
   // (Bearer header) — not Google OAuth, because the caller is the VPS

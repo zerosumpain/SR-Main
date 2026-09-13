@@ -17,7 +17,6 @@
     { name: 'Research', hook: 'Pick a depth: model knowledge, a scan, a brief, or the full investigation', href: '/research', ownerOnly: true },
     { name: 'News', hook: 'Read the technical wire, then decide what deserves to last', href: '/news', ownerOnly: true },
     { name: 'Data Standard Designer', hook: 'Design & publish an adoptable data standard', href: '/projects/data-standard-designer' },
-    { name: 'Heart', hook: '9,000 particles pumped through an SDF heart, valves per beat', href: '/heart' },
     { name: 'Writing', hook: 'Essays on code, design, and building things', href: '/blog' },
   ];
 

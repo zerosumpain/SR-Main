@@ -39,7 +39,6 @@ import './tools/file-share';
 import './tools/files';
 import './tools/route-export';
 import './tools/route-plan';
-import './tools/travel';
 import './tools/knowledge';
 import './tools/intel-graph';
 import './tools/mail';
@@ -55,7 +54,6 @@ import './tools/node-call';
 import './tools/custom-tool-admin';
 import './tools/web';
 import './tools/node-builder';
-import './tools/site-signals';
 import './tools/news';
 import './tools/presentations';
 import './tools/datastore';
@@ -139,8 +137,7 @@ export function getToolsetManifest(): Array<{
     heartbeat: 'Heartbeat actions — register periodic agent check-ins on a long-running task and mark them complete',
     schedule: 'Scheduled callbacks — one-shot time-based fires (a fixed reply, a direct tool call, or a re-engagement) at a specific time',
     memory: 'Persistent memory — save, recall, and forget facts about the user',
-    visualise: 'Inline visual responses — render charts (Vega-Lite), maps (Mapbox), diagrams (Mermaid), and tables directly in the chat, plus place-name geocoding (Mapbox, falling back to OpenStreetMap) so map points land where they are meant to',
-    travel: 'Travel and navigation (Mapbox) — a real route between named places with live-traffic journey times and turn-by-turn steps (route_directions), travel time from every origin to every destination in one call (travel_time_matrix), and the area reachable in N minutes (reachable_area). All take place NAMES, not coordinates. For a circular training run or ride scored on terrain, the health toolset\'s route_plan is the one that does that.',
+    visualise: 'Inline visual responses — render charts (Vega-Lite), diagrams (Mermaid), and tables directly in chat',
     media: 'Media generation — create downloadable files (markdown, code, CSV, JSON, text) as conversation attachments',
     scraper: 'Scraper intelligence — look up target domain knowledge (CAPTCHA requirements, CSS selectors, interactive hints) before planning scraper workflows',
     files: 'Workflow file store — list, read, and semantically SEARCH files uploaded via /drive (file_search finds files by their content, including image visuals/OCR and audio transcripts). PDFs, DOCX, audio, and video are auto-extracted to text on read.',
@@ -149,7 +146,6 @@ export function getToolsetManifest(): Array<{
     web: 'Web — fetch the readable contents of a public HTTP/HTTPS URL (HTML or plain text). Use when the user shares a link or you need to look up the page behind a URL.',
     'node-builder': 'Workflow node codegen — scaffold, validate, and commit/deploy new canvas node types (repo-modifying; deploy ships to production and is confirmation-gated)',
     'custom-tools': 'Custom/ephemeral tools — author a throwaway tool for the current turn and promote a useful one into a persistent tool',
-    'site-signals': 'Live site signals (read-only) — current GPS walk/ride status, family presence (who is home), and DfE policy-engine tracking indicators',
     news: 'Live technical news — search the current Hacker News and Lobsters wires and return source links',
     decks: 'sr. decks presentations — list, build from a spec, inspect, and manage block-based slide decks',
     datastore: 'Permanent sitewide datastore — full CRUD over collections of JSON records with filters/aggregates and row-level permissions (structured/queryable data that persists across chats and workflows)',

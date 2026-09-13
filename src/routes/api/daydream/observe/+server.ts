@@ -1,7 +1,7 @@
 // POST /api/daydream/observe — the push half of the daydream trail.
 //
 // A Home Assistant automation fires on `person.john` GPS change and posts here.
-// Shared-secret header, same shape as /api/live-walk, which is why this path is
+// Shared-secret header, matching the other ingestion endpoints, so this path is
 // listed in PUBLIC_PATHS: it must be reachable without a session, and the
 // secret is what stands in for one.
 //

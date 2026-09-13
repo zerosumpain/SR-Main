@@ -9,7 +9,7 @@ beforeEach(() => clearSkillCache());
 describe('skill index', () => {
   it('finds the whole library that was ported', () => {
     const all = loadSkillIndex();
-    expect(all.length).toBeGreaterThanOrEqual(120);
+    expect(all.length).toBeGreaterThanOrEqual(115);
   });
 
   it('gives every skill a non-empty id', () => {

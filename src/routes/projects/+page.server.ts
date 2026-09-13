@@ -3,8 +3,6 @@ import { jkaiBuilds, projectVisibility } from '$lib/db/schema';
 import { isNotNull, or, desc } from 'drizzle-orm';
 import { resolveVisibilityMap, isProjectPublic, isProjectSlug } from '$lib/projects/visibility';
 import { isOwnerEmail } from '$lib/server/access';
-import { isOwnerRequest } from '$lib/server/owner';
-import { OWNER_ONLY_CARDS } from './owner-cards.server';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async (event) => {
@@ -12,14 +10,6 @@ export const load: PageServerLoad = async (event) => {
   // Only the owner sees private projects + the visibility/remove controls; a
   // signed-in guest (non-owner) sees the same public listing as the public.
   const authenticated = isOwnerEmail(session?.user?.email);
-
-  // Owner-only cards are gated on the SAME predicate as the page each one
-  // points at — `isOwnerRequest`, which /projects/landgrab's own load calls —
-  // rather than on `authenticated` above. One definition, so a card can never
-  // advertise a page that 404s the person clicking it. It is the broader of the
-  // two: in DEV it also admits a LAN address, which is how the card is visible
-  // on homeserv, where no Google session can exist.
-  const ownerCards = (await isOwnerRequest(event)) ? OWNER_ONLY_CARDS : [];
 
   const [published, visRows] = await Promise.all([
     db
@@ -84,5 +74,5 @@ export const load: PageServerLoad = async (event) => {
   }));
   const projects = authenticated ? withVis : withVis.filter((p) => p.isPublic);
 
-  return { projects, authenticated, visibility, ownerCards };
+  return { projects, authenticated, visibility };
 };

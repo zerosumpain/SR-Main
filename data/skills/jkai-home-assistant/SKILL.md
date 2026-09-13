@@ -29,10 +29,7 @@ Trigger this skill when John's request touches Home Assistant:
 - **Fire an event / run an automation** — "fire `garage.opened`", "trigger the bedtime automation", "kick off the morning routine".
 - **Render a template** — "render `{{ states('sensor.outside_temperature') }}`", "what does this Jinja evaluate to", "give me the current sun state via template".
 - **Look at history** — "what was the lounge temperature this morning", "when was the front door last opened", "history for `light.kitchen_ceiling` over the last 6 hours".
-- **Family presence system** — "improve the family presence monitor", "fix the presence alerts", "the family presence dashboard is showing X". The automated presence workflow, its API endpoint, and its dashboard are covered in [references/family-presence-system.md](references/family-presence-system.md).
 - **Where is everyone right now** — quick ad-hoc presence lookup. See [references/family-presence-quick-lookup.md](references/family-presence-quick-lookup.md) for the one-shot flow (token retrieval → person states → reverse geocode → venue research → propose reason → flag deviations).
-- **Life360 speed / units questions** — "why did the speed workflow ignore my journey", anything that filters on a Life360 `speed` attribute. It is **km/h, not m/s** — see [references/life360-attributes.md](references/life360-attributes.md) before writing or debugging speed-based logic.
-- **Single-person location history analysis** — "where have I been this week", "review my locations over the past N days", "rank where I spent time by duration" — see [references/single-person-location-history.md](references/single-person-location-history.md) for the full pipeline: pull HA history → filter stationary states → cluster by geography → calculate per-segment duration → reverse-geocode → render map.
 - **Location-dependent queries** — "what's the weather", "how far to X" — anywhere John's current location is needed. Pull lat/lng from `person.john` (see Getting John's Location pattern) rather than asking him where he is.
 
 If the user wants something *outside* the Home Assistant instance (e.g. "schedule the lights to come on every morning"), that's a workflow on `/jkai/canvas/<id>` — tell them so. This skill doesn't author schedules; it executes one-shot calls.
@@ -132,18 +129,6 @@ Tool calls:
 
 Reply with min / max / mean and a one-line summary: "Lounge was 18.2°C at 06:00, peaked at 21.7°C around 11:15, currently 21.1°C. Want a chart?" If they say yes, hand off to `jkai-utility` for `render_chart`.
 
-### Example 6 — Multi-person movement analysis
-
-**John:** What can you tell me about the family's movements this week?
-
-This is an analytical task — discover person entities, pull parallel history, collapse Life360 state churn, compute per-person metrics. See [references/family-movement-analysis.md](references/family-movement-analysis.md) for the full technique.
-
-### Example 7 — Family presence monitor system
-
-**John:** How can we improve the family presence monitor? / Something's wrong with the presence notifications.
-
-The family presence monitor is an automated VPS workflow that runs every 5 min, pulls HA history, computes trend statistics, and sends WhatsApp alerts on movement changes. It has a live dashboard at `/projects/family-presence-dashboard/` backed by `/api/family-presence/stats` — **that endpoint is owner-only since 2026-08-29 and the dashboard page does not exist in this repo**; an anonymous fetch returns 401. See [references/family-presence-system.md](references/family-presence-system.md) for the full architecture, data structures, known issues, and improvement roadmap.
-
 ### Example 8 — Refuse to author a schedule
 
 **John:** Make the lights come on every weekday at 7am.
@@ -228,7 +213,7 @@ The Life360 device_tracker `speed` attribute reports **km/h** (verified empirica
 
 ### Location-history dashboards
 
-A dashboard that presents person-history data needs a **read-only site API endpoint plus a dashboard page**; a standalone static page cannot safely retrieve Home Assistant history itself. Match the existing family-presence dashboard for the SR map/dashboard treatment and use `single-person-location-history.md` for the calculation pipeline.
+A dashboard that presents Home Assistant history needs an authenticated API endpoint plus a dashboard page; a standalone static page cannot safely retrieve Home Assistant history itself.
 
 The API contract should return precomputed location clusters and visits rather than raw Life360 events. Default to a short explicit date range (such as five days), and include the range, `updatedAt`, cluster name/centroid, total duration, visit count, dates seen, last arrival, and individual visit segments. Keep the endpoint read-only; do not add a database schema or a recurring workflow merely to serve an on-demand view.
 

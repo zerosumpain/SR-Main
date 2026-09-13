@@ -20,7 +20,6 @@
       lastShippedHref: string | null;
     };
     canvas: { count: number; lastRunAt: string | null };
-    walk: { active: boolean };
     generatedAt: string;
   }
 
@@ -56,7 +55,7 @@
     let stopped = false;
     let pollTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const hasLiveWork = () => !!(v?.jkai.activeJobs || v?.builder.active || v?.walk.active);
+    const hasLiveWork = () => !!(v?.jkai.activeJobs || v?.builder.active);
     const schedule = () => {
       if (stopped || document.hidden) return;
       if (pollTimer) clearTimeout(pollTimer);
@@ -147,7 +146,6 @@
     const j = v?.jkai;
     const b = v?.builder;
     const c = v?.canvas;
-    const w = v?.walk;
     return [
       {
         label: 'JKAI',
@@ -174,16 +172,6 @@
         state: b ? (b.active ? 'live' : 'static') : 'loading',
         href: '/jkai/develop',
         dp: null,
-      },
-      {
-        label: 'LIVE WALK',
-        num: null,
-        fallback: w && w.active ? 'LIVE' : '—',
-        unit: 'GPS',
-        dp: null,
-        sub: w ? (w.active ? 'activity in progress' : 'idle — no activity') : 'connecting…',
-        state: w ? (w.active ? 'live' : 'idle') : 'loading',
-        href: '/live',
       },
       {
         label: 'CANVAS',
@@ -271,8 +259,7 @@
   {/if}
 
   <div class="v-foot">
-    <a class="v-btn primary" href="/live">Live tracker →</a>
-    <a class="v-btn" href="/health">Health data</a>
+    <a class="v-btn primary" href="/health">Health data →</a>
   </div>
 </aside>
 

@@ -5,19 +5,12 @@
   import { onMount, setContext } from 'svelte';
   import { beforeNavigate, onNavigate } from '$app/navigation';
   import { createVitalsStore } from '$lib/vitals/store.svelte';
-  import { healStaleJkaiSW } from '$lib/jkai/pwa/register';
 
   const store = createVitalsStore();
   setContext('vitals', store);
 
   onMount(() => {
     store.startPolling();
-
-    // Statically imported, and deliberately not behind a dynamic import: the
-    // client this rescues is one already serving stale chunks, so the recovery
-    // must ride in the bundle the page just loaded rather than fetch a new one.
-    // A no-op for anyone without a jkai worker registered.
-    void healStaleJkaiSW();
 
     return () => {
       store.stopPolling();
@@ -58,7 +51,7 @@
   /* The bar's height, and the ONE declaration of it. `src/app.css` used to
      carry a second `--site-nav-height: 56px` at the same specificity, decided
      purely by stylesheet order, while twelve places did arithmetic on the token
-     — the landing hero, all three /heart heroes, the admin sub-nav's sticky
+     — the landing hero and the admin sub-nav's sticky
      offset, ProseContent's scroll-margin. Two values for one measurement is a
      bug waiting for a stylesheet to be reordered. */
   :global(:root) {

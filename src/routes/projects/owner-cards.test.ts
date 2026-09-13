@@ -18,10 +18,6 @@ import { STATIC_PROJECT_KEYS } from '$lib/projects/registry';
 // about this page reaches a non-owner", and these assertions are what keeps it
 // true after the next refactor.
 describe('/projects owner-only cards', () => {
-  it('has at least one', () => {
-    expect(OWNER_ONLY_CARDS.length).toBeGreaterThan(0);
-  });
-
   it.each(OWNER_ONLY_CARDS.map((c) => c.key))('keeps "%s" out of STATIC_PROJECT_KEYS', (key) => {
     expect(STATIC_PROJECT_KEYS).not.toContain(key);
   });

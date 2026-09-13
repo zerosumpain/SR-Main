@@ -1,32 +1,18 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { registerJkaiSW, shortBuildId } from '$lib/jkai/pwa/register';
-  import { startAutoSync } from '$lib/jkai/pwa/syncManager';
-  import OfflineBanner from '$lib/components/jkai/OfflineBanner.svelte';
-  import AppUpdateNotice from '$lib/components/jkai/AppUpdateNotice.svelte';
-  import PushOptInCard from '$lib/components/jkai/PushOptInCard.svelte';
   import JkaiLauncher from '$lib/components/jkai/JkaiLauncher.svelte';
   import ActivityStrip from '$lib/components/jkai/ActivityStrip.svelte';
   import HubHeader from '$lib/components/jkai/HubHeader.svelte';
   import JkaiTabBar from '$lib/components/jkai/JkaiTabBar.svelte';
   import { launcher, closeLauncher, toggleLauncher } from '$lib/jkai/launcher-bus.svelte';
-  import { PUBLIC_VAPID_PUBLIC_KEY } from '$env/static/public';
 
   let { children, data } = $props();
-  const clientBuildId = __JKAI_BUILD_ID__;
 
   // Global JKAI hub navigation — a command-palette launcher reachable from every
   // /jkai page via ⌘/Ctrl-K or the header's ⌘K chip. The floating fallback
   // button is gone: the header carries the trigger on every surface now.
 
   onMount(() => {
-    let disposePwa: (() => void) | undefined;
-    let unmounted = false;
-    void registerJkaiSW(clientBuildId).then((dispose) => {
-      if (unmounted) dispose();
-      else disposePwa = dispose;
-    });
-    const dispose = startAutoSync();
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
         e.preventDefault();
@@ -35,9 +21,6 @@
     };
     window.addEventListener('keydown', onKey);
     return () => {
-      unmounted = true;
-      disposePwa?.();
-      dispose();
       window.removeEventListener('keydown', onKey);
     };
   });
@@ -57,25 +40,10 @@
     href="/fonts/selawik/selawik-regular.woff2"
     crossorigin="anonymous"
   />
-  <link rel="manifest" href="/manifest.webmanifest" />
-  <!-- Ink, not cream: the installed PWA's status bar has to continue the page,
-       and the page now opens on the masthead band (#1a1008) rather than on the
-       cream it used to. -->
   <meta name="theme-color" content="#1a1008" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <!-- `black` rather than `default`: the bar sits directly above the ink
-       masthead now, and a white bar with dark glyphs reads as a strip of a
-       different page. `black` does not overlay the content the way
-       `black-translucent` would, so the layout is unchanged. -->
-  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
-  <meta name="apple-mobile-web-app-title" content="jkai" />
-  <link rel="apple-touch-icon" href="/jkai-pwa/icon-192.png" />
 </svelte:head>
 
 <div class="jkai-root">
-  <OfflineBanner />
-  <AppUpdateNotice currentVersion={shortBuildId(clientBuildId)} />
-  <PushOptInCard vapidPublicKey={PUBLIC_VAPID_PUBLIC_KEY} />
   <ActivityStrip />
 
   <HubHeader

@@ -27,7 +27,6 @@ const TOOLSET_PATTERNS: Array<{ toolset: string; pattern: RegExp }> = [
   { toolset: 'files', pattern: /\bfiles?\b|file\s*store|uploaded|attachment|\bpdf\b|\bdocx?\b|\bxlsx?\b|spreadsheet|transcribe|extract\s+(?:text|content)|read\s+(?:the\s+)?(?:file|pdf|doc|attachment|upload)/i },
   { toolset: 'web', pattern: /\bhttps?:\/\/\S+|\b(?:fetch|read|open|browse|visit|scrape|grab)\s+(?:this|that|the)?\s*(?:url|link|page|website|site)\b/i },
   { toolset: 'scraper', pattern: /\bscrap(?:e|er|ing)\b|\bstealth\b|\bplaywright\b|\bjob\s*board|\blistings?\b|\bprices?\s+from\b|\bschedules?\s+from\b|\bcookie\s*wall|civilservicejobs/i },
-  { toolset: 'site-signals', pattern: /who(?:'?s| is)\s+home|family\s+presence|are\s+we\s+home|is\s+(?:anyone|any\s?one|katie|fintan|jemima|rory)\s+home|live\s+walk|on\s+a\s+(?:walk|ride)|policy[-\s]?engine|tracking\s+indicators?|dfe\s+(?:indicators?|tracking)|on[-\s]?track|off[-\s]?track/i },
   {
     toolset: 'news',
     pattern:
@@ -74,21 +73,6 @@ const TOOLSET_PATTERNS: Array<{ toolset: string; pattern: RegExp }> = [
   },
   { toolset: 'decks', pattern: DECK_PATTERN },
   { toolset: 'presentations', pattern: DECK_PATTERN },
-  // Getting somewhere. Without a row here the toolset is unreachable unless the
-  // model calls activate_toolset('travel') off its own bat — the same hole
-  // intel-graph and codegraph each had.
-  //
-  // Deliberately keyed on JOURNEY language rather than on the bare words
-  // "route" or "map". `health` already owns `\brun\b`, `cycling` and
-  // `train(?:ing)?`, and a training run must keep loading the planner that
-  // scores terrain; matching both is fine — a turn may carry several toolsets —
-  // but "how long is the drive" should not be pulling in readiness data, so the
-  // sport words are left alone and the movement verbs do the work.
-  {
-    toolset: 'travel',
-    pattern:
-      /\bdirections?\s+(?:to|from|between)\b|\bhow\s+(?:do|would|can)\s+(?:i|we|you)\s+get\s+(?:to|there|from)\b|\bhow\s+(?:long|far)\b[^.?]{0,40}\b(?:to\s+(?:get|drive|walk|cycle|travel)|drive|journey|commute|away)\b|\bhow\s+far\s+is\b|\b(?:drive|driving|walk(?:ing)?|cycl(?:e|ing))\s+(?:time|distance|route)\b|\btravel\s+(?:time|to\b)|\bjourney\s+time\b|\bcommut(?:e|ing)\b|\betas?\b|\broute\s+(?:to|from|between)\b|\b(?:nearest|closest)\b[^.?]{0,40}\b(?:to\s+(?:me|us|home|work|here)|from\s+(?:me|us|home|work|here))\b|\bwithin\s+(?:a\s+)?\d+[-\s]?(?:minute|min|hour)s?(?:'?s)?\s+(?:drive|walk|cycle|ride|journey|of)\b|\bisochrone\b|\breachable\b|\btraffic\s+(?:jams?|conditions?)\b|\b(?:road|motorway|rush[-\s]?hour)\s+traffic\b|\btraffic\s+on\s+the\s+[AM]\d/i,
-  },
   { toolset: 'capabilities', pattern: /what\s+can\s+you\s+do|what\s+are\s+you\s+(?:able|capable)|your\s+capabilit|\bcapabilit(?:y|ies)\b/i },
 ];
 

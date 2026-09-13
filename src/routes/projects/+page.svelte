@@ -41,11 +41,7 @@
   const showCard = (key: string) => data.authenticated || isPub(key);
 
   const shownCards = $derived(PROJECT_CARDS.filter((c) => showCard(c.key)));
-  // Pages that are on the index for the owner and for nobody else. The server
-  // sends an empty array to everyone else, so there is nothing to filter here
-  // and nothing about them in the client bundle.
-  const ownerCards = $derived(data.ownerCards ?? []);
-  const benchCount = $derived(shownCards.length + ownerCards.length + projects.length);
+  const benchCount = $derived(shownCards.length + projects.length);
   const studyCount = $derived(shownCards.filter((c) => /^field study/i.test(c.kind)).length);
 
   async function toggleVisibility(key: string) {
@@ -231,14 +227,11 @@
         strap="Long-form arguments you can operate rather than read, and a few tools that had a job to do."
       />
 
-      {#if shownCards.length === 0 && ownerCards.length === 0}
+      {#if shownCards.length === 0}
         <p class="empty">Nothing published yet.</p>
       {:else}
         <ul class="grid">
           {#each shownCards as c (c.key)}
-            {@render card(c)}
-          {/each}
-          {#each ownerCards as c (c.key)}
             {@render card(c)}
           {/each}
         </ul>

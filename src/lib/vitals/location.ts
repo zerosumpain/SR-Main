@@ -61,12 +61,8 @@ async function queryHaCoords(): Promise<{ lat: number; lon: number } | null> {
 /**
  * Town name for a coordinate.
  *
- * Deliberately still Nominatim, where `$lib/daydream/geocode` and
- * `$lib/workflows/site-tools/geocode` were moved to Mapbox. Two reasons, both
- * specific to this caller: it wants a TOWN at zoom 12, which Nominatim answers
- * as well as anything; and Mapbox's free tier forbids caching a result, so
- * switching would trade one lookup every six hours for one every ten minutes —
- * the cadence of the location cache above — and buy nothing for it.
+ * Nominatim is used for this caller because it returns a town at zoom 12 and
+ * permits the long-lived cache used below.
  */
 async function reverseGeocode(lat: number, lon: number): Promise<string | null> {
   // Round to ~1 km so the cache is effective and Nominatim's usage policy

@@ -96,7 +96,7 @@ describe('families added after measuring the gap', () => {
   it('names a project page\'s own helper modules', () => {
     expect(familyOf('src/routes/projects/policy-engine/lib/format.ts')).toBe('project-lib');
     expect(familyOf('src/routes/projects/broads-pilot/lib/logbook.svelte.ts')).toBe('project-lib');
-    expect(familyOf('src/routes/projects/data-spine/lib/governance.ts')).toBe('project-lib');
+    expect(familyOf('src/routes/projects/archetype/lib/governance.ts')).toBe('project-lib');
   });
 
   it('does not let a project lib swallow a test that lives in one', () => {

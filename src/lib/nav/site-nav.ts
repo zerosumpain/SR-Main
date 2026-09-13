@@ -133,7 +133,6 @@ export const SITE_ITEMS: NavItem[] = [
   { label: 'Research', href: '/research', ownerOnly: true },
   { label: 'Policy analysis', href: '/projects/policy-analysis', ownerOnly: true },
   { label: 'Drive', href: '/drive', ownerOnly: true },
-  { label: 'Live', href: '/live', ownerOnly: true },
   { label: 'jkai', href: '/jkai', ownerOnly: true },
 ];
 
@@ -296,26 +295,11 @@ export const SECTIONS: NavSection[] = [
     items: [],
   },
   {
-    id: 'heart',
-    label: 'Heart',
-    rootHref: '/heart',
-    match: (p) => under('/heart', p),
-    items: [],
-  },
-  {
     id: 'releases',
     label: 'Shipped',
     rootHref: '/releases',
     ownerOnly: true,
     match: (p) => under('/releases', p),
-    items: [],
-  },
-  {
-    id: 'live',
-    label: 'Live',
-    rootHref: '/live',
-    ownerOnly: true,
-    match: (p) => under('/live', p),
     items: [],
   },
   {

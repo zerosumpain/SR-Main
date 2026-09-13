@@ -63,15 +63,11 @@ function scanStaticImages(): MediaImage[] {
 }
 
 export async function buildMediaCatalogue(): Promise<MediaCatalogue> {
-  const { SCENARIOS } = await import('$lib/sim/federation/scenarios');
   const interactives: MediaInteractive[] = Object.entries(EMBEDS).map(([embed, def]) => ({
     embed,
     label: def.label,
     doc: def.doc,
-    scenarios:
-      embed === 'federation-sim'
-        ? SCENARIOS.map((s) => ({ id: s.id, title: s.title, group: s.group }))
-        : [],
+    scenarios: [],
   }));
   return { interactives, pages: CURATED_PAGES, images: scanStaticImages() };
 }

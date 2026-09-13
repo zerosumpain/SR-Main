@@ -4,11 +4,8 @@
  * Server-only by name. The pure half — validation and spam triage — is in
  * `./comments` and is shared with the browser; nothing here is.
  *
- * The guards are imported from `$lib/space-lander/guard` rather than
- * reimplemented. They are generic HTTP guards that happen to have been written
- * first for the Terminal Descent leaderboard, and this codebase has already
- * paid for the alternative: the sensitive-data detector existed in three copies
- * and they drifted. `clientIp` in particular is not optional — behind
+ * The generic HTTP guards are shared with other public request handlers.
+ * `clientIp` in particular is not optional — behind
  * cloudflared every request to the VPS appears to come from 127.0.0.1, so
  * `getClientAddress()` on its own is not an identity at all.
  *
@@ -20,7 +17,7 @@
 import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { blogComments, blogPosts } from '$lib/db/schema';
-import { hashIp, clientIp, rateLimit, maybeSweep } from '$lib/space-lander/guard';
+import { hashIp, clientIp, rateLimit, maybeSweep } from '$lib/server/public-request-rate-limit';
 import type { PublicComment, ValidComment } from './comments';
 
 export type CommentStatus = 'held' | 'published' | 'spam' | 'deleted';

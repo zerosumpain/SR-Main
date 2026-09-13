@@ -7,9 +7,7 @@ const config = {
 		// If your environment is not supported, or you settled on a specific environment, switch out the adapter.
 		// See https://svelte.dev/docs/kit/adapters for more information about adapters.
 		adapter: adapter({ out: 'build' }),
-		// Keep SvelteKit's default same-origin form protection enabled. WebDAV
-		// carries Basic auth and is handled explicitly in hooks.server.ts; it is
-		// not a reason to turn browser CSRF protection off for every route.
+		// Keep SvelteKit's default same-origin form protection enabled.
 		csp: {
 			mode: 'auto',
 			directives: {
@@ -23,7 +21,7 @@ const config = {
 				'font-src': ['self', 'data:', 'https://fonts.gstatic.com'],
 				'img-src': ['self', 'data:', 'blob:', 'https:'],
 				'media-src': ['self', 'data:', 'blob:', 'https:'],
-				// Mapbox fetches the offline tile blobs held in this browser’s IndexedDB.
+				// Browser workers may fetch cached assets held in IndexedDB.
 				'connect-src': ['self', 'blob:', 'https:', 'wss:'],
 				'worker-src': ['self', 'blob:'],
 				'manifest-src': ['self'],

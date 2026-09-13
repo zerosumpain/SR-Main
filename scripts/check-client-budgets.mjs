@@ -1,8 +1,6 @@
 #!/usr/bin/env node
-// Post-build guards for the three routes reduced in the 2026-09 efficiency
-// pass, plus the deliberately small JKAI service-worker precache.
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { setTimeout as delay } from 'node:timers/promises';
+// Post-build guards for the three routes reduced in the 2026-09 efficiency pass.
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 
 const CLIENT = '.svelte-kit/output/client';
@@ -62,38 +60,6 @@ for (const budget of budgets) {
   console.log(`client budget: ${budget.route} ${kib.toFixed(1)} / ${budget.gzipKiB} KiB gzip`);
   if (kib > budget.gzipKiB) {
     console.error(`client budget exceeded: ${budget.route}`);
-    failed = true;
-  }
-}
-
-// adapter-node copies the PWA output into the client directory at the very end
-// of its close hook. On slower disks that copy can become visible just after
-// Vite resolves, so give the single expected artefact a short bounded grace
-// period rather than making an otherwise-good build flaky.
-async function waitForWorkers() {
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    const workers = readdirSync(CLIENT).filter((file) => /^jkai-sw-.*\.js$/.test(file));
-    if (workers.length > 0) return workers;
-    await delay(100);
-  }
-  return [];
-}
-
-const workers = await waitForWorkers();
-if (workers.length !== 1) {
-  console.error(`client budget: expected one JKAI worker, found ${workers.length}`);
-  failed = true;
-} else {
-  const workerPath = `${CLIENT}/${workers[0]}`;
-  const worker = readFileSync(workerPath, 'utf8');
-  const urls = [...worker.matchAll(/\burl:(["'])(.*?)\1/g)].map((match) => match[2]);
-  const unexpected = urls.filter((url) => {
-    return url !== 'manifest.webmanifest' && !url.startsWith('/jkai-pwa/');
-  });
-  const workerKiB = statSync(workerPath).size / 1024;
-  console.log(`client budget: JKAI precache ${urls.length} entries; worker ${workerKiB.toFixed(1)} / 20 KiB`);
-  if (urls.length === 0 || urls.length > 8 || unexpected.length > 0 || workerKiB > 20) {
-    if (unexpected.length) console.error(`client budget: unexpected precache URLs: ${unexpected.join(', ')}`);
     failed = true;
   }
 }

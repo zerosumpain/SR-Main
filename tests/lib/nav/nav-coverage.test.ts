@@ -126,7 +126,7 @@ describe('every page wears the shared top nav', () => {
   const pages = walk(ROUTES);
 
   it('finds the route tree', () => {
-    expect(pages.length).toBeGreaterThan(150);
+    expect(pages.length).toBeGreaterThan(140);
   });
 
   it('leaves no page without chrome and without a documented reason', () => {

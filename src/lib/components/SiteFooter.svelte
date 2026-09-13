@@ -14,7 +14,6 @@
       <a href="/projects" class="site-footer-link">Projects</a>
       <a href="/blog" class="site-footer-link">Writing</a>
       <a href="/health" class="site-footer-link">Health</a>
-      <a href="/live" class="site-footer-link">Live</a>
       <a href="https://library.strangeramblings.com" class="site-footer-link">Library</a>
       <a href="https://github.com/jkrup" target="_blank" rel="noopener" class="site-footer-link">GitHub</a>
     {:else}

@@ -18,7 +18,6 @@ src/lib/llm/keys.test.ts
 src/lib/models/workloads.test.ts
 src/lib/selfimprove/board.test.ts
 src/lib/selfimprove/narrative.probe.test.ts
-src/lib/selfimprove/seed-apis.auth.test.ts
 src/lib/selfimprove/verify.test.ts
 src/lib/workflows/site-tools/tools/publish-page.test.ts
 tests/extract/docx.test.ts
@@ -46,7 +45,6 @@ tests/lib/workflows/orchestrator/dynamic-nodes.test.ts
 tests/lib/workflows/registry-parity.test.ts
 tests/lib/workflows/site-tools/node-builder.test.ts
 tests/lib/workflows/trigger-ownership.test.ts
-tests/pwa/service-worker-navigation.test.ts
 tests/routes/admin-stale-stamps.test.ts
 tests/routes/chat-trace-link.test.ts
 tests/routes/model-picker-gating.test.ts

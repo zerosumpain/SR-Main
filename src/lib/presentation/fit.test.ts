@@ -4,8 +4,6 @@
 // failure mode it exists to catch (walls of text the page cannot hold).
 import { describe, expect, it } from 'vitest';
 // eslint-disable-next-line import/no-relative-packages
-import { DECK } from '../../../scripts/seed-deck-data-spine.mjs';
-// eslint-disable-next-line import/no-relative-packages
 import { DECK as SHOWCASE } from '../../../scripts/seed-deck-showcase.mjs';
 import { estimateFit, fitIssues } from './fit';
 import type { Block } from './types';
@@ -28,11 +26,8 @@ const para = (words: number) => Array.from({ length: words }, (_, i) => `word${i
 
 describe('fit estimator', () => {
   it('every curated seed slide fits (no false positives)', () => {
-    const all = [
-      ...collect((DECK as { slides: SpecSlide[] }).slides),
-      ...collect((SHOWCASE as { slides: SpecSlide[] }).slides),
-    ];
-    expect(all.length).toBeGreaterThan(40);
+    const all = collect((SHOWCASE as { slides: SpecSlide[] }).slides);
+    expect(all.length).toBeGreaterThan(20);
     for (const { path, layout, blocks } of all) {
       const { estimate, budget } = estimateFit(layout, blocks);
       expect(fitIssues(layout, blocks), `${path}: est ${estimate} vs ${budget}`).toEqual([]);

@@ -95,19 +95,7 @@ export async function gatherBriefingSignals(): Promise<BriefingSignals> {
     console.error('[briefing] questions gather failed:', err instanceof Error ? err.message : err);
   }
 
-  // Live site signals (best-effort — walk/presence live on homeserv only).
-  let siteSignals: Record<string, unknown> = {};
-  try {
-    const { executeTool } = await import('$lib/workflows/site-tools/registry');
-    const [walk, presence] = await Promise.all([
-      executeTool('live_walk_status', {}).catch(() => null),
-      executeTool('family_presence_current', {}).catch(() => null),
-    ]);
-    siteSignals = { walk: walk?.data ?? null, presence: presence?.data ?? null };
-    if (walk?.data || presence?.data) gathered.push('site-signals');
-  } catch {
-    /* signals are optional */
-  }
+  const siteSignals: Record<string, unknown> = {};
 
   const dailyAlerts = profile.sources.alerts.enabled ? await loadDailyAlerts() : undefined;
   if (dailyAlerts?.status === 'ok') gathered.push('alerts');

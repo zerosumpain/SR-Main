@@ -10,12 +10,8 @@ import { readFileSync } from 'node:fs';
  * None of them drifting breaks a build or fails another test. That is the whole
  * point of this one. The failure modes are quiet and expensive:
  *
- *   - geo/tiles.ts matches $lib/trails/track's haversine "so distances agree".
- *     If the copies diverge, Landgrab's scoring atom moves and nothing fails.
  *   - A share capability minted by one process and rejected by the other is a
  *     link that simply stops working.
- *   - webdav/auth verifies the credential for a mounted filesystem. Divergence
- *     is a drive that will not mount.
  *   - apple-health-scale holds the x100 that apple_health_metrics.value is
  *     stored in. The writer is in SR-Health now and the two readers that matter
  *     are here and PUBLIC. Divergence renders a hundred times the right step

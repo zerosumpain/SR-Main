@@ -16,7 +16,6 @@ HA zones are circles with a configurable radius (default 100m, often set to 20â€
 
 - The family-presence-monitor cron workflow handles this by computing trend statistics over multiple readings before firing an alert.
 - For quick ad-hoc checks, the template in the SKILL.md "Bulk Status Check" pattern already returns coordinates â€” use distance judgment rather than raw `home`/`not_home` state.
-- See `references/family-presence-system.md` for the full workflow architecture.
 
 ## Entity IDs in This House
 

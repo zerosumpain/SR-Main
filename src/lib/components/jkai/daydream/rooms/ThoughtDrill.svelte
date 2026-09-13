@@ -8,7 +8,6 @@
   // changes through `onchanged` and about a filing through `onarchive`, which
   // is optimistic on the page's side so the row leaves at once.
   import { invalidateAll } from '$app/navigation';
-  import PlaceMap from '$lib/components/jkai/PlaceMap.svelte';
   import EvidenceList from '$lib/components/jkai/daydream/EvidenceList.svelte';
   import DrillPanel from '$lib/components/jkai/daydream/hub/DrillPanel.svelte';
   import FactList from '$lib/components/jkai/daydream/hub/FactList.svelte';
@@ -295,7 +294,6 @@
         </button>
         {#if place}
           <div class="map">
-            <PlaceMap lat={place.lat} lon={place.lon} radiusM={place.radiusM} height="220px" />
             {#if place.suggestedAddress}<p class="note">{place.suggestedAddress}</p>{/if}
           </div>
         {/if}

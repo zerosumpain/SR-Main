@@ -37,8 +37,6 @@ const REPO = join(fileURLToPath(import.meta.url), '..', '..');
 
 const ROOTS = [
   'src/lib/fieldstudy',
-  'src/routes/projects/data-spine',
-  'src/routes/projects/spine-in-practice',
 ];
 
 /** `max-width: 72ch`, `max-inline-size: 60ch`, `width: 44ch` — any of them cap text. */

@@ -15,13 +15,11 @@ export interface EmbedDef {
 
 export const EMBEDS: Record<string, EmbedDef> = {
   'federation-sim': {
-    label: 'Federation simulator',
-    doc: "The data-spine 3D federation network (24k schools). config: { scenario?: string (scenario id to auto-run when the slide opens), autoplay?: boolean }",
-    configSchema: z
-      .object({
-        scenario: z.string().optional(),
-        autoplay: z.boolean().optional(),
-      })
-      .strict(),
+    label: 'Retired federation simulator',
+    doc: 'A retired interactive retained only so existing decks remain readable.',
+    configSchema: z.object({
+      scenario: z.string().optional(),
+      autoplay: z.boolean().optional(),
+    }).strict(),
   },
 };

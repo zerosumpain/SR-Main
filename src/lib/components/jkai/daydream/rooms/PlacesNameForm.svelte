@@ -14,7 +14,6 @@
    */
   import { onMount } from 'svelte';
   import { invalidateAll } from '$app/navigation';
-  import PlaceMap from '$lib/components/jkai/PlaceMap.svelte';
   import { PLACE_KINDS, cap } from './places-shared';
 
   interface Visit {
@@ -108,7 +107,6 @@
 </script>
 
 <div class="detail wide">
-  <PlaceMap {lat} {lon} {radiusM} />
   <p class="note">
     {#if suggesting}
       Looking up what is there…
@@ -116,7 +114,7 @@
       {suggestion.address}
       {#if suggestion.name}<span class="dim"> · suggested, check it</span>{/if}
     {:else}
-      No address found for this spot — the map is the better guide.
+      No saved address for this spot — use the visit history below to name it.
     {/if}
   </p>
 

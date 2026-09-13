@@ -23,7 +23,7 @@ describe('destructive flag (single source of truth)', () => {
   });
 
   it('leaves read-only tools ungated', () => {
-    for (const name of ['health_stats', 'blog_list', 'file_read', 'live_walk_status', 'policy_engine_indicators']) {
+    for (const name of ['health_stats', 'blog_list', 'file_read']) {
       expect(getTool(name)?.destructive).toBeFalsy();
       expect(isDestructive(name)).toBe(false);
     }
@@ -98,12 +98,5 @@ describe('long-running auto-heartbeat is universal across spawner tools', () => 
       expect(p?.kind).toBe(kind);
       expect(p?.idPath).toBeTruthy();
     }
-  });
-});
-
-describe('site-signals coverage toolset', () => {
-  it('registers the three read-only signal tools', () => {
-    const names = getToolsByToolset('site-signals').map((t) => t.name).sort();
-    expect(names).toEqual(['family_presence_current', 'live_walk_status', 'policy_engine_indicators']);
   });
 });

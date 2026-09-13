@@ -11,10 +11,10 @@ import {
 describe('resolveVisibilityMap', () => {
   it('builds a key -> isPublic map from rows', () => {
     const map = resolveVisibilityMap([
-      { projectKey: 'terminal-descent', isPublic: false },
+      { projectKey: 'engine-room', isPublic: false },
       { projectKey: 'policy-engine', isPublic: true },
     ]);
-    expect(map).toEqual({ 'terminal-descent': false, 'policy-engine': true });
+    expect(map).toEqual({ 'engine-room': false, 'policy-engine': true });
   });
 
   it('returns an empty map for no rows', () => {
@@ -65,7 +65,7 @@ describe('defaultsPublic', () => {
 
 describe('isProjectPublic', () => {
   it('defaults a static card to public when there is no row for the key', () => {
-    expect(isProjectPublic({}, 'terminal-descent')).toBe(true);
+    expect(isProjectPublic({}, 'engine-room')).toBe(true);
   });
 
   it('defaults a build slug to PRIVATE when there is no row for the key', () => {
@@ -75,11 +75,11 @@ describe('isProjectPublic', () => {
   });
 
   it('honours an explicit private row', () => {
-    expect(isProjectPublic({ 'terminal-descent': false }, 'terminal-descent')).toBe(false);
+    expect(isProjectPublic({ 'engine-room': false }, 'engine-room')).toBe(false);
   });
 
   it('honours an explicit public row', () => {
-    expect(isProjectPublic({ 'terminal-descent': true }, 'terminal-descent')).toBe(true);
+    expect(isProjectPublic({ 'engine-room': true }, 'engine-room')).toBe(true);
     expect(isProjectPublic({ stopwatch: true }, 'stopwatch')).toBe(true);
   });
 });
@@ -88,10 +88,10 @@ describe('filterForViewer', () => {
   // Static keys, so the pre-existing "no row means public" rule applies.
   const items = [
     { key: 'policy-engine' },
-    { key: 'terminal-descent' },
+    { key: 'engine-room' },
     { key: 'archetype' },
   ];
-  const map = { 'terminal-descent': false }; // terminal-descent is private, the others default public
+  const map = { 'engine-room': false };
 
   it('returns every item for an authed viewer', () => {
     expect(filterForViewer(items, map, true)).toEqual(items);
