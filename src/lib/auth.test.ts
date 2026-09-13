@@ -14,6 +14,15 @@ describe('isPublicPath', () => {
     }
   });
 
+  it('keeps the Mapbox token endpoint public, which is not a Main feature', () => {
+    // SR-Health's shared activity pages draw a route for somebody with no
+    // account, and their browser fetches `/api/maps/config` by absolute path —
+    // which cloudflared sends HERE. #871 pruned it as part of Main's own map
+    // code and every map on /health went dark. Nothing in either repository's
+    // build could see the dependency, so it is pinned here instead.
+    expect(isPublicPath('/api/maps/config')).toBe(true);
+  });
+
   it("the '/' entry matches only the root, not every path", () => {
     expect(isPublicPath('/')).toBe(true);
     expect(isPublicPath('/jkai')).toBe(false);

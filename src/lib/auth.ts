@@ -68,6 +68,18 @@ const PUBLIC_PATHS = [
   // so this does not make posture public. The one mutating action (unban) is
   // owner-session ONLY and rejects the bearer outright.
   '/api/admin/security',
+  // The browser's Mapbox token, validated as a `pk.` public token only.
+  //
+  // Anonymous readers need it and no Main page does: SR-Health's shared
+  // activity pages draw a route for somebody with no account, and their browser
+  // fetches `/api/maps/config` by absolute path — which cloudflared sends HERE,
+  // because `/api/maps` is not a path that application owns.
+  //
+  // Removed by #871 along with Main's own map code, which took every map on
+  // /health down until it was noticed. The dependency is an HTTP one, so
+  // neither repository's build could see it. Pinned by a test in auth.test.ts
+  // and by the public-routes lockfile, so the next prune has to argue with both.
+  '/api/maps/config',
 ];
 
 export function isPublicPath(pathname: string): boolean {

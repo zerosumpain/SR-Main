@@ -44,6 +44,7 @@
 /api/jkai/tools/manifest
 /api/landing/hero-media
 /api/landing/vitals
+/api/maps/config
 /api/mcp
 /api/mcp/local
 /api/platform/workflow-engine
