@@ -160,7 +160,7 @@
 <!-- One card, both kinds. `extra` is the AI-built card's remove button; the
      hand-built cards pass nothing. -->
 {#snippet card(c: ProjectCard, extra?: Snippet)}
-  <li class="pc">
+  <li class="pc" class:product={c.product}>
     <a class="pc-hit" href={c.href} aria-label={c.label}></a>
     <div class="pc-eyebrow">
       <span class="pc-kind">{c.kind}</span>
@@ -436,6 +436,29 @@
   }
   .pc:hover {
     border-color: var(--text-primary);
+  }
+
+  /* A product, not a study or a toy. The whole difference is the hue: ink
+     instead of accent, on the same cream card, with the same hairline and the
+     same geometry. `--accent-ink` is the repo's designated partner to
+     `--accent` and is already checked for colour-vision safety against it, so
+     this reads as a second voice in the existing palette rather than a colour
+     someone reached for — see the note on `--accent-ink` in app.css.
+
+     The left edge does the work at a glance. It is 3px because 2px reads as a
+     rendering artefact at the top of a grid of hairline boxes, and because the
+     card's own 1px border stays visible underneath it. */
+  .pc.product {
+    border-left: 3px solid var(--accent-ink);
+  }
+  .pc.product:hover {
+    border-color: var(--accent-ink);
+  }
+  .pc.product .pc-kind {
+    color: var(--accent-ink);
+  }
+  .pc.product:hover .pc-title {
+    color: var(--accent-ink);
   }
   /* Full-bleed hit area UNDER the controls, so the owner's buttons still get
      their own clicks — everything interactive in the foot sits above it. */

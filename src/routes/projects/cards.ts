@@ -30,6 +30,12 @@ export interface ProjectCard {
   /** The mono strip along the foot of the card. */
   chips: string;
   /**
+   * A finished product rather than a study or a toy — the card is marked in ink
+   * instead of accent so it reads as a different KIND of thing at a glance, not
+   * as a more important one. See `.pc.product` in `+page.svelte`.
+   */
+  product?: true;
+  /**
    * Hidden from the public outright: no visibility key, no public/private
    * toggle and no Share button, because there is no state in which this card
    * should be seen by anyone but the owner. Cards carrying it live in
@@ -40,6 +46,22 @@ export interface ProjectCard {
 }
 
 export const PROJECT_CARDS: ProjectCard[] = [
+  {
+    key: 'policy-analysis',
+    // Another application answers this path — cloudflared routes
+    // /projects/policy-analysis to SR-Policy-Analysis, never to Main. The card
+    // is public and the page behind it is not, so a visitor who clicks it meets
+    // the login wall; `tag` says so before they do.
+    href: '/projects/policy-analysis',
+    label: 'Open Policy Analysis',
+    kind: 'Product',
+    tag: 'Owner only · Policy',
+    title: 'Policy Analysis — Reading a Paper the Way Somebody Who Means to Beat It Would',
+    blurb:
+      'Give it a policy paper and it spends eighteen stages working out who the paper actually hands power to, and what each of them can do about it — which is a different question from whether the drafting is sound, and it is the one nobody asks. It profiles every body the policy touches and then writes the plays each one can run to serve itself at the policy\'s expense, preferring the ones that stay entirely within the rules, because those are the plays nobody has priced. It remembers the actors between assessments, so the next paper starts with what the last one learned, and it reads each new policy against the ones already done for the holes that only exist because both are in force at once. Shareable without a login, and it prints.',
+    chips: '18 stages · exploitation playbook · cross-policy · shareable',
+    product: true,
+  },
   {
     key: 'local-plan-navigator',
     href: '/projects/local-plan-navigator/',

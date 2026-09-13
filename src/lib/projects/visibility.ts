@@ -27,6 +27,11 @@
 // `pulse` is reachable by URL only and is not a build, so without an entry the
 // build default would 404 it.
 export const STATIC_PROJECT_KEYS = [
+  // Not a page in this repo: cloudflared routes /projects/policy-analysis to
+  // SR-Policy-Analysis. The key is here so the card's own toggle works — it is
+  // the only thing it controls, since the application does its own owner check
+  // and never consults this table.
+  'policy-analysis',
   'local-plan-navigator',
   'engine-room',
   'scs-earnings',
