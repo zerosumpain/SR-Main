@@ -634,10 +634,15 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     return resolve(event);
   }
 
-  // /api/health/workflow-engine is consumed by the systemd watchdog timer
-  // (curl from 127.0.0.1) — no user session, no service token. Restrict to
-  // loopback to prevent it being scraped externally for run counts.
-  if (pathname === '/api/health/workflow-engine') {
+  // The workflow-engine probe is consumed by the systemd watchdog timer (curl
+  // from 127.0.0.1) — no user session, no service token. Restrict to loopback to
+  // prevent it being scraped externally for run counts. Both paths are listed
+  // while the watchdog unit is repointed off the /api/health prefix, which the
+  // health application is due to take over.
+  if (
+    pathname === '/api/platform/workflow-engine' ||
+    pathname === '/api/health/workflow-engine'
+  ) {
     let clientAddr = '';
     try { clientAddr = event.getClientAddress?.() ?? ''; } catch { clientAddr = ''; }
     if (isLoopbackAddress(clientAddr)) {
