@@ -14,6 +14,12 @@ import { saveDynamicNode, validateExecutorSyntax, DYNAMIC_NODES_DIR } from './dy
 import { verifyWorkflow, formatIssues } from './verify';
 import { nodeDefinitions } from '../registry-client';
 import { registry, engine } from '../index';
+// Moved to its own module: this file's first import is the node-registry barrel,
+// so anything importing `getChatHistory` from here paid 449 files for a SELECT.
+// Re-exported so existing callers are unaffected — but new ones should take it
+// from ./chat-history directly.
+import { getChatHistory } from './chat-history';
+export { getChatHistory } from './chat-history';
 import { randomUUID } from 'crypto';
 import type { GeneratedWorkflow, ChatMessage, WorkflowDraft, OrchestratorThinking, CritiqueIssue, RevisionDelta } from './types';
 import { serializeDraft, deserializeDraft } from './draft-serde';
@@ -920,21 +926,6 @@ export async function modifyWorkflow(
   return { workflow, thinking };
 }
 
-export async function getChatHistory(workflowId: string): Promise<ChatMessage[]> {
-  const rows = await db
-    .select()
-    .from(orchestratorChats)
-    .where(eq(orchestratorChats.workflowId, workflowId))
-    .orderBy(asc(orchestratorChats.createdAt));
-
-  return rows.map((r) => ({
-    id: r.id,
-    role: r.role as ChatMessage['role'],
-    content: r.content,
-    metadata: r.metadata as ChatMessage['metadata'],
-    createdAt: r.createdAt.toISOString(),
-  }));
-}
 
 export async function saveWorkflowFromGenerated(
   workflowId: string,
