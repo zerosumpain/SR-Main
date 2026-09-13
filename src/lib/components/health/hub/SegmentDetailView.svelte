@@ -17,8 +17,8 @@
   // Nothing here re-derives what the loader decided: `form`, `bests`,
   // `conditions`, the similar-segment lists and the gradient bands all arrive
   // computed. What happens in this file is layout.
-  import HealthShell from './HealthShell.svelte';
-  import SectionHead from './SectionHead.svelte';
+  import HealthShell from '$lib/components/shell/HealthShell.svelte';
+  import SectionHead from '$lib/components/shell/SectionHead.svelte';
   import SegmentIdentity from './SegmentIdentity.svelte';
   import SegmentGround from './SegmentGround.svelte';
   import SegmentFormSection from './SegmentFormSection.svelte';

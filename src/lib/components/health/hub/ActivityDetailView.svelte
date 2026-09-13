@@ -28,7 +28,7 @@
   // Nothing is re-derived that the loader already decided: ranks, EF, the
   // effective type, the highlight corpus, the splits, the cohort and every
   // physiological figure arrive computed. What happens here is layout.
-  import HealthShell from './HealthShell.svelte';
+  import HealthShell from '$lib/components/shell/HealthShell.svelte';
   import ActivityHero from './ActivityHero.svelte';
   import ActivityZones from './ActivityZones.svelte';
   import ActivityEffort from './ActivityEffort.svelte';

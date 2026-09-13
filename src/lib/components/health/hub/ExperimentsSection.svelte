@@ -7,7 +7,7 @@
   // last block says what would let them start rather than when to stop.
   import type { Experiment } from '$lib/health/experiments';
   import type { HealthAudience } from './types';
-  import SectionHead from './SectionHead.svelte';
+  import SectionHead from '$lib/components/shell/SectionHead.svelte';
   import { metricDescriptor } from '$lib/health/metric-registry';
   import { metricPeekHandlers } from '$lib/health/metric-peek.svelte';
   import { countWord } from './format';

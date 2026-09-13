@@ -16,7 +16,7 @@
   //
   // The kind mix beside it is a magnitude comparison inside ONE dimension, so
   // it takes one hue and direct labels, not six categorical ones.
-  import SectionHead from '$lib/components/health/hub/SectionHead.svelte';
+  import SectionHead from '$lib/components/shell/SectionHead.svelte';
   import { KIND_LABEL, type ReleaseItemKind } from '$lib/releases/types';
   import type { CadenceWeek } from '$lib/releases/console';
 

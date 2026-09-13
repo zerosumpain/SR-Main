@@ -4,7 +4,7 @@
 </svelte:head>
 
 <script lang="ts">
-  import HealthShell from '$lib/components/health/hub/HealthShell.svelte';
+  import HealthShell from '$lib/components/shell/HealthShell.svelte';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();

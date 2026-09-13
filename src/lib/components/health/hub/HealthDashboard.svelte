@@ -33,7 +33,7 @@
   // The loader has already stripped the data behind all three — `{#if owner}`
   // in a template still ships the bytes — so this is the second belt, and it is
   // the one that covers the copy the components carry themselves.
-  import HealthShell from './HealthShell.svelte';
+  import HealthShell from '$lib/components/shell/HealthShell.svelte';
   import StateOfPlay from './StateOfPlay.svelte';
   import InstrumentDeck from './InstrumentDeck.svelte';
   import ForecastSection from './ForecastSection.svelte';

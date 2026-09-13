@@ -1,6 +1,10 @@
-export function clamp(v: number, a: number, b: number): number {
-  return Math.max(a, Math.min(b, v));
-}
+// clamp, fmtAgo and prefersReducedMotion are not health-specific and are used by
+// the ECG animation, its signal generator and Drive's vitals tile. They live in
+// $lib/components/shell/format.ts so those three do not have to import from a
+// directory that leaves with the health application; re-exported here so health
+// code reads the same as it did.
+export { clamp, fmtAgo, prefersReducedMotion } from '$lib/components/shell/format';
+import { clamp } from '$lib/components/shell/format';
 
 export function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
@@ -253,12 +257,6 @@ export function pulseTone(position: number | null, direction: PulseDirection): s
 
 /* ── Misc ────────────────────────────────────────────────────────────────── */
 
-export function fmtAgo(seconds: number): string {
-  if (seconds < 60) return `${Math.round(seconds)}s`;
-  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
-  if (seconds < 86400) return `${Math.round(seconds / 3600)}h`;
-  return `${Math.round(seconds / 86400)}d`;
-}
 
 export function dayLabel(iso: string): { dom: number; mon: string; dow: string; dowIndex: number } {
   const d = new Date(iso + 'T00:00:00Z');
@@ -272,10 +270,6 @@ export function dayLabel(iso: string): { dom: number; mon: string; dow: string; 
   };
 }
 
-export function prefersReducedMotion(): boolean {
-  if (typeof window === 'undefined') return false;
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
 
 export type PulseRowKey = 'rec' | 'hrv' | 'rhr' | 'slept' | 'strain' | 'steps' | 'weight';
 

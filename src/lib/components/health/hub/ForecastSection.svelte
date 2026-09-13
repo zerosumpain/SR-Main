@@ -20,7 +20,7 @@
   } from '$lib/health/analytics/forecast';
   import { ACWR_BANDS } from '$lib/health/analytics/acwr';
   import { usable } from '$lib/health/ledes';
-  import SectionHead from './SectionHead.svelte';
+  import SectionHead from '$lib/components/shell/SectionHead.svelte';
   import type { ForecastSet } from './types';
   import { signed } from './format';
   import { extent, include, yOf, type Extent } from './chart';

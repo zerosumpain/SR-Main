@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getContext, onMount } from 'svelte';
-  import { prefersReducedMotion } from '$lib/components/health/v2/utils';
+  import { prefersReducedMotion } from '$lib/components/shell/format';
   import type { VitalsStore } from '$lib/vitals/store.svelte';
   import {
     SWEEP_SEC,

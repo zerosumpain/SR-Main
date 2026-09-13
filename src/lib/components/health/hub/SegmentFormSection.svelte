@@ -11,7 +11,7 @@
   // covered less than half the distance has no average claimed for it, so it is
   // unranked on every HR-derived metric. The scatter draws those as squares so
   // a reader can see which dots the efficiency story is not built from.
-  import SectionHead from './SectionHead.svelte';
+  import SectionHead from '$lib/components/shell/SectionHead.svelte';
   import {
     formCards,
     formKicker,

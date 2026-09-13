@@ -9,7 +9,7 @@
   // The EF card carries a PROPOSED REFINEMENT, marked as one. It is page copy
   // and nothing more — sorting by EF still sorts the single mixed column, and
   // this build deliberately does not change that (spec decision 4).
-  import SectionHead from './SectionHead.svelte';
+  import SectionHead from '$lib/components/shell/SectionHead.svelte';
 
   interface Props {
     /** The corpus the ranks were computed over — all of it, never the page. */

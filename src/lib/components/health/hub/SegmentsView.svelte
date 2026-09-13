@@ -17,7 +17,7 @@
   // `listSegments`, off two memoised corpus scans. What happens here is
   // filtering, sorting and counting — passes over a list.
   import { replaceState } from '$app/navigation';
-  import HealthShell from './HealthShell.svelte';
+  import HealthShell from '$lib/components/shell/HealthShell.svelte';
   import SegmentTotals from './SegmentTotals.svelte';
   import SegmentLedger from './SegmentLedger.svelte';
   import SegmentChains from './SegmentChains.svelte';

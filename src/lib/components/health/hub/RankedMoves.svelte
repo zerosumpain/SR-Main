@@ -8,7 +8,7 @@
   // measuring, because "4 of 5" on its own is a number without a unit.
   import type { Move } from '$lib/health/moves';
   import type { HealthAudience } from './types';
-  import SectionHead from './SectionHead.svelte';
+  import SectionHead from '$lib/components/shell/SectionHead.svelte';
   import { countWord } from './format';
 
   interface Props {

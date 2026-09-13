@@ -14,7 +14,7 @@
   // outing. There is no weather history in this schema and open-meteo is
   // fetched live keyed to now, so it cannot answer "what was it like that day".
   // This is the only honest answer available, and it is three efforts a side.
-  import SectionHead from './SectionHead.svelte';
+  import SectionHead from '$lib/components/shell/SectionHead.svelte';
   import {
     conditionsCells,
     conditionsVerdict,

@@ -13,8 +13,8 @@
   // which is exactly how a page drifts out of the design system one card at a
   // time. Both kinds now render through ONE snippet, so they cannot diverge.
   import type { PageData } from './$types';
-  import HealthShell from '$lib/components/health/hub/HealthShell.svelte';
-  import SectionHead from '$lib/components/health/hub/SectionHead.svelte';
+  import HealthShell from '$lib/components/shell/HealthShell.svelte';
+  import SectionHead from '$lib/components/shell/SectionHead.svelte';
   import ShareModal from './ShareModal.svelte';
   import { PROJECT_CARDS, type ProjectCard } from './cards';
   import { resolveProjectCard } from '$lib/jkai/project-card';

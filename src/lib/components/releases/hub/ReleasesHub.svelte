@@ -21,8 +21,8 @@
   // stays on paper because its mark uses petrol (`--accent-ink`), which is a
   // PAPER counter-accent with no role on an ink ground.
   import { invalidateAll } from '$app/navigation';
-  import HealthShell from '$lib/components/health/hub/HealthShell.svelte';
-  import SectionHead from '$lib/components/health/hub/SectionHead.svelte';
+  import HealthShell from '$lib/components/shell/HealthShell.svelte';
+  import SectionHead from '$lib/components/shell/SectionHead.svelte';
   import ReleaseMasthead from './ReleaseMasthead.svelte';
   import ReleaseCadence from './ReleaseCadence.svelte';
   import ReleaseFilters from './ReleaseFilters.svelte';

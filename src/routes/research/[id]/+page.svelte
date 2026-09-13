@@ -13,7 +13,7 @@
   import AskJkaiPanel from '$lib/components/research/AskJkaiPanel.svelte';
   import RunControls from '$lib/components/research/RunControls.svelte';
   import RunSpend from '$lib/components/research/RunSpend.svelte';
-  import HealthShell from '$lib/components/health/hub/HealthShell.svelte';
+  import HealthShell from '$lib/components/shell/HealthShell.svelte';
   import { goto, invalidateAll } from '$app/navigation';
 
   let { data }: { data: PageData } = $props();
