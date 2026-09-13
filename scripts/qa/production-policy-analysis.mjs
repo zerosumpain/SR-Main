@@ -29,9 +29,17 @@ export function getPolicyResponse(url, headers = {}) {
 export async function verifyPolicyAnalysis(headers) {
   // Policy has its own origin; Main releases must verify through its gateway.
   const base = 'http://127.0.0.1:5290';
-  const page = await getPolicyResponse(`${base}/policy-analysis`, headers);
+  const page = await getPolicyResponse(`${base}/projects/policy-analysis`, headers);
   assert.equal(page.status, 200, 'Owner policy analysis page must load');
   assert.ok((await page.text()).includes('the policy meets its actors?'));
+  // The pages moved under /projects on 2026-09-13 and the old prefix still
+  // answers, because share tokens handed out before the move are URLs other
+  // people hold and cannot be reissued. Checking it HERE and not only in
+  // Policy's own probe is deliberate: this is the repo that renders the link,
+  // and a redirect nobody verifies is a redirect that quietly stops existing.
+  const moved = await getPolicyResponse(`${base}/policy-analysis`, headers);
+  assert.equal(moved.status, 308, 'The old policy analysis prefix must still redirect');
+  assert.equal(moved.headers.get('location'), '/projects/policy-analysis');
   const list = await getPolicyResponse(`${base}/api/policy-analysis`, headers);
   assert.equal(list.status, 200, 'Owner policy analysis API must query its schema');
   assert.match(list.headers.get('cache-control') ?? '', /private.*no-store/);
