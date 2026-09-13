@@ -6,6 +6,7 @@
 import { db } from '$lib/db';
 import { workflowRuns } from '$lib/db/schema';
 import { and, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
+import { claimableTriggerSql } from './trigger-ownership';
 
 const HEARTBEAT_INTERVAL_MS = 10_000;
 const STALE_HEARTBEAT_MS = 5 * 60 * 1000;
@@ -122,7 +123,7 @@ export async function reapStaleRuns(): Promise<number> {
     .where(
       and(
         inArray(workflowRuns.status, ACTIVE_STATUSES as unknown as ActiveStatus[]),
-        sql`${workflowRuns.trigger} <> 'policy-analysis'`,
+        claimableTriggerSql(),
         or(
           lt(workflowRuns.heartbeatAt, cutoff),
           and(isNull(workflowRuns.heartbeatAt), lt(workflowRuns.startedAt, cutoff)),
