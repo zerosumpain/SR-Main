@@ -73,7 +73,13 @@
     "    distance wording from them when the tool registry LOADS, which cannot wait",
     "    on another process. Drift offers the model a sport Health rejects, and a",
     "    400 inside a tool call reads to a model as a broken route service rather",
-    "    than a bad argument."
+    "    than a bad argument.",
+    "",
+    "  health-signals-contract — the derived health figures and the segment",
+    "    taxonomy the daydream sampler records each day. Both endpoints exist only",
+    "    for this caller and annotate their responses with these types, so a rename",
+    "    there fails the check there. The sampler indexes the field names to build",
+    "    its readings; a rename is a signal that silently stops being recorded."
   ],
   "files": {
     "src/lib/health/polyline.ts": {
@@ -187,6 +193,10 @@
     "src/lib/constants/planner-sports.ts": {
       "peer": "zerosumpain/SR-Health",
       "sha256": "dd75d25be72692e374d221c2d11a6977971f7f87580e8850a61ab5ecb71a4fb4"
+    },
+    "src/lib/server/health-signals-contract.ts": {
+      "peer": "zerosumpain/SR-Health",
+      "sha256": "78309efeb0b4e67cb6513dfa51448d74470f3b94cf87d3abdc1d870f7fe94fc1"
     }
   }
 }

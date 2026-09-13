@@ -195,9 +195,9 @@ export async function buildSnapshot(
    *  source list below, so the fault is visible rather than merely absent. */
   let sleepProblem: string | null = null;
   try {
-    const { getSleepAnalysis } = await import('$lib/health/sleep-analysis-service');
+    const { remoteSleep } = await import('./health-remote');
     const { checkReading, msToMinutes } = await import('./health-quality');
-    const sleep = await getSleepAnalysis();
+    const sleep = await remoteSleep();
 
     // ── Units, then plausibility, in that order ────────────────────────────
     //
@@ -266,8 +266,8 @@ export async function buildSnapshot(
   }
 
   try {
-    const { getTrainingLoad } = await import('$lib/health/training-load-service');
-    const load = await getTrainingLoad();
+    const { remoteTrainingLoad } = await import('./health-remote');
+    const load = await remoteTrainingLoad();
     if (load) {
       health.trainingLoad = { ratio: load.ratio, zone: load.zone };
       // Last day with any load at all is the last workout.
@@ -294,8 +294,8 @@ export async function buildSnapshot(
   }
 
   try {
-    const { getReadiness } = await import('$lib/health/readiness-service');
-    const r = await getReadiness();
+    const { remoteReadiness } = await import('./health-remote');
+    const r = await remoteReadiness();
     // getReadiness() defaults every missing factor to 50 and always returns a
     // score, so a score alone is not evidence of data. The HRV factor carries
     // its raw inputs only when a real recovery row existed — that is the gate

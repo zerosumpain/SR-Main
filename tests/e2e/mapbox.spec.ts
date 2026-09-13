@@ -78,25 +78,6 @@ for (const width of [1280, 390]) {
   });
 }
 
-test('downloaded OSM imagery renders in Mapbox when the connection drops', async ({ page, context }) => {
-  test.setTimeout(120_000);
-  await harness(page);
-  await page.evaluate(async () => {
-    const { mountOffline } = await import(/* @vite-ignore */ String('/src/lib/components/maps/__tests__/mapbox.browser-fixture.ts'));
-    (window as any).offlineTest = await mountOffline(document.getElementById('map-test')!);
-  });
-  await expect(page.locator('#map-test .mapboxgl-canvas')).toBeVisible();
-  await context.setOffline(true);
-  await expect(page.getByText('Offline · downloaded © OpenStreetMap contributors')).toBeVisible();
-  await expect.poll(() => page.evaluate(() => Object.keys((window as any).offlineTest.view.native.getStyle().sources).filter((id) => id.startsWith('offline-tile')).length)).toBe(1);
-  await expect.poll(() => page.evaluate(() => {
-    const map = (window as any).offlineTest.view.native;
-    const id = Object.keys(map.getStyle().sources).find((id) => id.startsWith('offline-tile'));
-    return id ? map.getSource(id).image?.width : 0;
-  })).toBe(256);
-  await context.setOffline(false);
-  await expect(page.getByText('Offline · downloaded © OpenStreetMap contributors')).toBeHidden();
-  await page.evaluate(() => (window as any).offlineTest.remove());
-  await expect(page.locator('#map-test .mapboxgl-canvas')).toHaveCount(0);
-});
-
+// The offline-imagery test moved to SR-Health with $lib/trails/field. It needs
+// the tile store and the offline layer, which are that application's, and it
+// exercised a behaviour only reachable from a route page it now owns.

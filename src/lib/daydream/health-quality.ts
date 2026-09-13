@@ -126,8 +126,8 @@ export interface HealthFaultIdea {
 export async function collectHealthFaults(): Promise<HealthFaultIdea[]> {
   const faults: HealthFaultIdea[] = [];
   try {
-    const { getSleepAnalysis } = await import('$lib/health/sleep-analysis-service');
-    const sleep = await getSleepAnalysis();
+    const { remoteSleep } = await import('./health-remote');
+    const sleep = await remoteSleep();
     if (sleep?.latest) {
       for (const [key, raw] of [
         ['sleepMinutes', msToMinutes(sleep.latest.totalDuration)],
