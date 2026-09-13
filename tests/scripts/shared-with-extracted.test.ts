@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 /**
- * Nine modules in this repository are also held, byte for byte, by an extracted
+ * Ten modules in this repository are also held, byte for byte, by an extracted
  * application. Each was duplicated rather than moved, for a reason recorded in
  * shared-with-extracted.json.
  *
@@ -16,6 +16,10 @@ import { readFileSync } from 'node:fs';
  *     link that simply stops working.
  *   - webdav/auth verifies the credential for a mounted filesystem. Divergence
  *     is a drive that will not mount.
+ *   - apple-health-scale holds the x100 that apple_health_metrics.value is
+ *     stored in. The writer is in SR-Health now and the two readers that matter
+ *     are here and PUBLIC. Divergence renders a hundred times the right step
+ *     count on the front page.
  */
 describe('modules shared with the extracted applications', () => {
   const manifest = JSON.parse(readFileSync('shared-with-extracted.json', 'utf8')) as {
@@ -39,6 +43,7 @@ describe('modules shared with the extracted applications', () => {
     // Adding a duplicate without listing it here is how the two copies start
     // disagreeing with nothing to notice.
     expect(Object.keys(manifest.files).sort()).toEqual([
+      'src/lib/constants/apple-health-scale.ts',
       'src/lib/file-serving.ts',
       'src/lib/file-shares.ts',
       'src/lib/file-store/storage.ts',

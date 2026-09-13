@@ -27,7 +27,14 @@
     "",
     "None of these drifting breaks a build or fails a test. That is exactly why",
     "the hashes are recorded. Change one, change it in the peer repo too, then:",
-    "  node scripts/record-shared-modules.mjs"
+    "  node scripts/record-shared-modules.mjs",
+    "",
+    "  apple-health-scale \u2014 the x100 that apple_health_metrics.value is stored in.",
+    "    The ingest that multiplies now lives in SR-Health; the two readers that",
+    "    divide are here, and both are public: the homepage's step count and the",
+    "    vitals poll's pulse. A factor that disagreed across the boundary would not",
+    "    fail a build or log anything, it would just be wrong by a hundred \u2014 which",
+    "    this repo has already shipped once."
   ],
   "files": {
     "src/lib/health/polyline.ts": {
@@ -65,6 +72,10 @@
     "src/lib/webdav/auth.ts": {
       "peer": "zerosumpain/SR-Drive",
       "sha256": "d2cc5a34df884de24f1def86c9a24558cb828b234a1150d3ec5f6dda33fcd48c"
+    },
+    "src/lib/constants/apple-health-scale.ts": {
+      "peer": "zerosumpain/SR-Health",
+      "sha256": "af63a8ba495f5537458a0003317c65cedbd509c839caea0c016cb21e5bca1669"
     }
   }
 }
