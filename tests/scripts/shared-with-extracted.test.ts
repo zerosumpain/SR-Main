@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 /**
- * 28 modules in this repository are also held, byte for byte, by an extracted
+ * 43 modules in this repository are also held, byte for byte, by an extracted
  * application. Each was duplicated rather than moved, for a reason recorded in
  * shared-with-extracted.json.
  *
@@ -23,7 +23,7 @@ import { readFileSync } from 'node:fs';
  */
 describe('modules shared with the extracted applications', () => {
   const manifest = JSON.parse(readFileSync('shared-with-extracted.json', 'utf8')) as {
-    files: Record<string, { peer: string; sha256: string }>;
+    files: Record<string, { peer: string | string[]; sha256: string }>;
   };
 
   it('still match the hashes recorded when they were duplicated', () => {
@@ -43,8 +43,11 @@ describe('modules shared with the extracted applications', () => {
     // Adding a duplicate without listing it here is how the two copies start
     // disagreeing with nothing to notice.
     expect(Object.keys(manifest.files).sort()).toEqual([
+      'src/lib/config/owner.ts',
       'src/lib/constants/apple-health-scale.ts',
       'src/lib/constants/planner-sports.ts',
+      'src/lib/datastore/audit.ts',
+      'src/lib/datastore/permissions.ts',
       'src/lib/file-index/content.ts',
       'src/lib/file-index/describe.ts',
       'src/lib/file-index/embed.ts',
@@ -62,8 +65,20 @@ describe('modules shared with the extracted applications', () => {
       'src/lib/health-sync/whoop.ts',
       'src/lib/health/polyline.ts',
       'src/lib/jkai/intel/source-policy.ts',
+      'src/lib/llm/client.ts',
+      'src/lib/llm/keys.ts',
+      'src/lib/llm/pricing.ts',
+      'src/lib/llm/usage-capture.ts',
+      'src/lib/llm/usage-log.ts',
+      'src/lib/llm/usage-meter.ts',
+      'src/lib/secrets/crypto.ts',
+      'src/lib/server/access-util.ts',
+      'src/lib/server/access.ts',
       'src/lib/server/health-context-contract.ts',
       'src/lib/server/health-signals-contract.ts',
+      'src/lib/server/owner.ts',
+      'src/lib/server/rate-limit.ts',
+      'src/lib/server/ssrf-guard.ts',
       'src/lib/trails/activity-meta.ts',
       'src/lib/trails/field/tile-math.ts',
       'src/lib/trails/track.ts',
@@ -75,8 +90,13 @@ describe('modules shared with the extracted applications', () => {
   });
 
   it('names the peer for each, so a change has somewhere to go', () => {
+    // A list, because the platform set — llm, secrets, datastore, the owner
+    // check — is carried by BOTH extracted applications. A change there has two
+    // places to go, and naming only one of them is how the other drifts.
     for (const [file, entry] of Object.entries(manifest.files)) {
-      expect(entry.peer, file).toMatch(/^zerosumpain\/SR-/);
+      const peers = Array.isArray(entry.peer) ? entry.peer : [entry.peer];
+      expect(peers.length, file).toBeGreaterThan(0);
+      for (const peer of peers) expect(peer, file).toMatch(/^zerosumpain\/SR-/);
     }
   });
 });

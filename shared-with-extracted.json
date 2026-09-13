@@ -5,23 +5,23 @@
     "Each was duplicated rather than moved, and each for a reason recorded in the",
     "extraction that did it:",
     "",
-    "  polyline / activity-meta / track / tile-math \u2014 $lib/geo (Landgrab) imports",
+    "  polyline / activity-meta / track / tile-math — $lib/geo (Landgrab) imports",
     "    all four at five sites and Landgrab is deferred, so Main needs them and",
     "    Health took them. geo/tiles.ts matches track's haversine 'so distances",
     "    agree': if the copies diverge, Landgrab's scoring atom moves and nothing",
     "    anywhere fails.",
     "",
-    "  file-store/storage \u2014 the boundary linter classifies it PLATFORM and",
+    "  file-store/storage — the boundary linter classifies it PLATFORM and",
     "    thirteen non-Drive modules import it, including the public hero video.",
     "    Both copies point at one WORKFLOW_FILES_ROOT.",
     "",
-    "  file-shares / file-serving \u2014 the share capability is minted by one process",
+    "  file-shares / file-serving — the share capability is minted by one process",
     "    and may be resolved by the other. Divergence is a valid link rejected.",
     "",
-    "  intel/source-policy \u2014 the pure half of the folder policy; its DB-aware half",
+    "  intel/source-policy — the pure half of the folder policy; its DB-aware half",
     "    stayed here.",
     "",
-    "  webdav/auth \u2014 verifies the Basic credential for a MOUNTED filesystem. Two",
+    "  webdav/auth — verifies the Basic credential for a MOUNTED filesystem. Two",
     "    live credentials depend on both hooks agreeing, and /dav is still served",
     "    from here while Drive holds an identical copy ready.",
     "",
@@ -29,25 +29,25 @@
     "the hashes are recorded. Change one, change it in the peer repo too, then:",
     "  node scripts/record-shared-modules.mjs",
     "",
-    "  apple-health-scale \u2014 the x100 that apple_health_metrics.value is stored in.",
+    "  apple-health-scale — the x100 that apple_health_metrics.value is stored in.",
     "    The ingest that multiplies now lives in SR-Health; the two readers that",
     "    divide are here, and both are public: the homepage's step count and the",
     "    vitals poll's pulse. A factor that disagreed across the boundary would not",
-    "    fail a build or log anything, it would just be wrong by a hundred \u2014 which",
+    "    fail a build or log anything, it would just be wrong by a hundred — which",
     "    this repo has already shipped once.",
     "",
-    "  health-context-contract \u2014 the shape SR-Health's /api/health/context returns",
+    "  health-context-contract — the shape SR-Health's /api/health/context returns",
     "    and the chat context panel renders. Types only, so both repos hold it byte",
     "    for byte. Redeclaring it instead is how a field starts arriving undefined",
     "    with nothing red anywhere.",
     "",
-    "  webdav/paths + propfind + filters \u2014 auth.ts was registered and these three",
+    "  webdav/paths + propfind + filters — auth.ts was registered and these three",
     "    were not, though all four are byte-identical and /dav is still served from",
     "    here while SR-Drive holds a copy ready. A path or a PROPFIND response that",
     "    disagreed between them is a drive that mounts and then behaves wrongly,",
     "    which is worse than one that will not mount at all.",
     "",
-    "  file-index/* \u2014 this is a MAIN module that Drive borrowed, not the reverse.",
+    "  file-index/* — this is a MAIN module that Drive borrowed, not the reverse.",
     "    /dav, deepdive/to-drive, intel/mail-admit, knowledge/search, the file-search",
     "    workflow node, the file_* agent tools, jkai/media/preanalyse and",
     "    /api/jkai/attachments all need it here. If the copies diverge, the same file",
@@ -55,27 +55,27 @@
     "    store.ts is deliberately NOT here: Drive's copy hands Intelligence a row",
     "    instead of importing its engine, which is the whole point of that boundary.",
     "",
-    "  health-sync/* \u2014 the Strava and WHOOP INGEST lane, which is ours and stays.",
+    "  health-sync/* — the Strava and WHOOP INGEST lane, which is ours and stays.",
     "    It moved out of $lib/health so that tree can be deleted wholesale once the",
     "    dashboard half is gone. SR-Health holds the same five, because /api/health/",
     "    sync and the two OAuth callbacks are routed to it, so BOTH applications",
     "    refresh the same tokens and write the same tables.",
-    "    Concurrency is already handled \u2014 readOrRefreshToken takes",
+    "    Concurrency is already handled — readOrRefreshToken takes",
     "    pg_advisory_xact_lock and re-reads inside the transaction. Divergence is",
     "    not: `refreshToken: newTokens.refresh_token || token.refreshToken` is",
     "    WHOOP's rotation, and if one repo changes that line both connectors die",
     "    with nothing red anywhere.",
-    "    scheduler.ts is NOT here. It is ours alone \u2014 the timer must run exactly",
-    "    once \u2014 and SR-Health's copy is dead code being deleted rather than guarded.",
+    "    scheduler.ts is NOT here. It is ours alone — the timer must run exactly",
+    "    once — and SR-Health's copy is dead code being deleted rather than guarded.",
     "",
-    "  planner-sports \u2014 the sports SR-Health's planner accepts and the cap ORS puts",
+    "  planner-sports — the sports SR-Health's planner accepts and the cap ORS puts",
     "    on a round trip. The route_plan tool builds its `sport` enum and its",
     "    distance wording from them when the tool registry LOADS, which cannot wait",
     "    on another process. Drift offers the model a sport Health rejects, and a",
     "    400 inside a tool call reads to a model as a broken route service rather",
     "    than a bad argument.",
     "",
-    "  health-signals-contract \u2014 the derived health figures and the segment",
+    "  health-signals-contract — the derived health figures and the segment",
     "    taxonomy the daydream sampler records each day. Both endpoints exist only",
     "    for this caller and annotate their responses with these types, so a rename",
     "    there fails the check there. The sampler indexes the field names to build",
@@ -83,7 +83,33 @@
     "",
     "    list.ts was registered here by mistake and removed when the drive tree was",
     "    deleted: it is the one file-index module that is Drive-only, so there is no",
-    "    copy on this side to keep in step."
+    "    copy on this side to keep in step.",
+    "",
+    "  THE PLATFORM SET — money, credentials, permissions.",
+    "",
+    "    Every extracted application builds standalone, so it carries its own copy",
+    "    of the platform layer. A sweep on 2026-09-13 found 318 byte-identical",
+    "    files across the three repositories and nine registered. Registering all",
+    "    318 would be wrong: most are the strangler fig, and a guard that fires on",
+    "    every ordinary change gets routed around.",
+    "",
+    "    These fifteen are the ones where divergence is SILENT AND EXPENSIVE, and",
+    "    they were chosen on evidence rather than taste — each changed between 0",
+    "    and 4 times in ninety days, so the guard is cheap insurance rather than",
+    "    noise.",
+    "",
+    "      llm/* — pricing, the usage log, the usage meter, key selection and the",
+    "        client itself. All three applications make LLM calls and write to the",
+    "        same spend tables. Diverge and the cost of a call depends on which",
+    "        application made it, and nothing says so.",
+    "      secrets/crypto — a credential encrypted by one process and unreadable by",
+    "        another.",
+    "      datastore/permissions + audit — who may read what, in a datastore all",
+    "        three share. A permission decision that differs by application is a",
+    "        security bug that no test anywhere would catch.",
+    "      server/access, access-util, owner, config/owner — the owner check.",
+    "      server/rate-limit, ssrf-guard — a guard that is stricter in one",
+    "        application than another is a guard with a door in it."
   ],
   "files": {
     "src/lib/health/polyline.ts": {
@@ -197,6 +223,99 @@
     "src/lib/server/health-signals-contract.ts": {
       "peer": "zerosumpain/SR-Health",
       "sha256": "78309efeb0b4e67cb6513dfa51448d74470f3b94cf87d3abdc1d870f7fe94fc1"
+    },
+    "src/lib/llm/pricing.ts": {
+      "peer": [
+        "zerosumpain/SR-Health",
+        "zerosumpain/SR-Drive"
+      ],
+      "sha256": "c1311b2d9c66a1ad15ebfc49b29245decc0edde8f8205ceee531277d63ceb555"
+    },
+    "src/lib/llm/usage-log.ts": {
+      "peer": [
+        "zerosumpain/SR-Health",
+        "zerosumpain/SR-Drive"
+      ],
+      "sha256": "e2a930de8fcfe53f67f5cc4592d0946db37771a4088158a4b2a70baefad6b540"
+    },
+    "src/lib/llm/usage-capture.ts": {
+      "peer": [
+        "zerosumpain/SR-Health",
+        "zerosumpain/SR-Drive"
+      ],
+      "sha256": "dc1bf86af6bf82f6c16726a0d465e2a339b399be3855d171f028b87a125bb4c7"
+    },
+    "src/lib/llm/usage-meter.ts": {
+      "peer": [
+        "zerosumpain/SR-Health",
+        "zerosumpain/SR-Drive"
+      ],
+      "sha256": "d07c3871e7955bdadc717afd09c3a066a3041213bf89fde9ae9dec761ab908e8"
+    },
+    "src/lib/llm/keys.ts": {
+      "peer": [
+        "zerosumpain/SR-Health",
+        "zerosumpain/SR-Drive"
+      ],
+      "sha256": "453630c914d4a57b45f12c767f7abf947d1d1cc434bdac6c68d0eb16e45ada21"
+    },
+    "src/lib/llm/client.ts": {
+      "peer": [
+        "zerosumpain/SR-Health",
+        "zerosumpain/SR-Drive"
+      ],
+      "sha256": "8b34dee5cd4518f933615e06385f8c7a470007df0da00125c42580f5745e3551"
+    },
+    "src/lib/datastore/permissions.ts": {
+      "peer": [
+        "zerosumpain/SR-Health",
+        "zerosumpain/SR-Drive"
+      ],
+      "sha256": "498e8c7f28f5001b8c4f24c2883a9d1fb7161c8ddee7d9dee6b5cda2084eb601"
+    },
+    "src/lib/datastore/audit.ts": {
+      "peer": [
+        "zerosumpain/SR-Health",
+        "zerosumpain/SR-Drive"
+      ],
+      "sha256": "c8bb23e94f12b7aa7f7402eae2ea5e84de06fb18c7d286a8f740e2b41d5a95bf"
+    },
+    "src/lib/server/access.ts": {
+      "peer": [
+        "zerosumpain/SR-Health",
+        "zerosumpain/SR-Drive"
+      ],
+      "sha256": "1637e7a99119771b9977234e6df1e5a7a9e3cd23ed19d751058ca54256eb8baf"
+    },
+    "src/lib/server/access-util.ts": {
+      "peer": [
+        "zerosumpain/SR-Health",
+        "zerosumpain/SR-Drive"
+      ],
+      "sha256": "9e919ac2a05937ff1922d83e6e1255b00d2f68f650742230934d8c12a8acd8a5"
+    },
+    "src/lib/config/owner.ts": {
+      "peer": [
+        "zerosumpain/SR-Health",
+        "zerosumpain/SR-Drive"
+      ],
+      "sha256": "9de5568069f57699c151e60bb44d5f7062bcf250de81e640e879b7690b97c2d1"
+    },
+    "src/lib/secrets/crypto.ts": {
+      "peer": "zerosumpain/SR-Health",
+      "sha256": "5002bc99ff6ba6764ecce5ae9b3c47140f6e8ae823325a05e35246caef1bfb47"
+    },
+    "src/lib/server/owner.ts": {
+      "peer": "zerosumpain/SR-Health",
+      "sha256": "ec127d7ed198228925e4a2dc8697d1174fb33b16dda6e694e9a6fc55c8273084"
+    },
+    "src/lib/server/rate-limit.ts": {
+      "peer": "zerosumpain/SR-Health",
+      "sha256": "fd6b13a43e242a0b088366fb34dfd5aec2a630408d9b7a277a408491a22ef72b"
+    },
+    "src/lib/server/ssrf-guard.ts": {
+      "peer": "zerosumpain/SR-Health",
+      "sha256": "a02188790f878b7fbe62ad2514bd1536f37db3d6ae7496ae83a545b2f6d65aeb"
     }
   }
 }
