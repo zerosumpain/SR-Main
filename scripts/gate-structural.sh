@@ -13,6 +13,9 @@
 # exactly where the drift it looks for accumulates.
 set -euo pipefail
 
+node --test scripts/check-extracted-schema.test.mjs
+node scripts/check-extracted-schema.mjs
+
 npm run gate:public-routes
 npm run gate:font-sizes
 npm run gate:measure
