@@ -26,8 +26,9 @@ vi.mock('$lib/db/schema', () => ({ driveIntelOutbox: { attempts: 'attempts', pro
 
 const queueIntelExtraction = vi.fn();
 const queueDerivedIntelDelete = vi.fn();
+const deleteDerivedIntel = vi.fn(async () => ({ notesDeleted: 0, entitiesRemoved: 0, relationshipsRemoved: 0 }));
 const syncSourcePolicy = vi.fn(async () => ({ scanned: 0 }));
-vi.mock('../../../../src/lib/jkai/intel/auto-extract', () => ({ queueIntelExtraction, queueDerivedIntelDelete }));
+vi.mock('../../../../src/lib/jkai/intel/auto-extract', () => ({ queueIntelExtraction, queueDerivedIntelDelete, deleteDerivedIntel }));
 vi.mock('../../../../src/lib/jkai/intel/source-policy.server', () => ({ syncSourcePolicy }));
 
 const mod = () => import('../../../../src/lib/jkai/intel/drive-outbox');
@@ -56,7 +57,7 @@ describe('drive → intel outbox', () => {
 
     const result = await drainDriveIntelOutbox();
 
-    expect(queueDerivedIntelDelete).toHaveBeenCalledWith('file', 'file-1');
+    expect(deleteDerivedIntel).toHaveBeenCalledWith('file', 'file-1');
     expect(syncSourcePolicy).toHaveBeenCalledWith('Notes/', ['a']);
     expect(queueIntelExtraction).toHaveBeenCalledWith({ kind: 'file', refId: 'file-2' });
     expect(result).toEqual({ processed: 3, failed: 0 });
@@ -71,7 +72,7 @@ describe('drive → intel outbox', () => {
     const result = await drainDriveIntelOutbox();
 
     // The good row still went through — one poisonous row must not stop the rest.
-    expect(queueDerivedIntelDelete).toHaveBeenCalledWith('file', 'file-9');
+    expect(deleteDerivedIntel).toHaveBeenCalledWith('file', 'file-9');
     expect(result.processed).toBe(1);
     expect(result.failed).toBe(1);
     expect(updates.some((u) => typeof u.lastError === 'string' && u.lastError.includes('boom'))).toBe(true);
@@ -83,5 +84,34 @@ describe('drive → intel outbox', () => {
     const result = await drainDriveIntelOutbox();
     expect(result).toEqual({ processed: 0, failed: 1 });
     expect(updates.some((u) => String(u.lastError).includes('unknown drive-intel kind'))).toBe(true);
+  });
+});
+
+describe('the counts a deletion reports', () => {
+  it('records what the cleanup did, so Drive can read it back', async () => {
+    // Deleting a file used to say what went with it, because the call was
+    // awaited in the same process. Drive cannot recompute the numbers — the
+    // planner protects owner-kept entities — so the consumer keeps them.
+    const { enqueueDriveIntel, drainDriveIntelOutbox } = await mod();
+    deleteDerivedIntel.mockResolvedValueOnce({
+      notesDeleted: 1,
+      entitiesRemoved: 4,
+      relationshipsRemoved: 7,
+    });
+    await enqueueDriveIntel('file-deleted', 'file-42');
+
+    await drainDriveIntelOutbox();
+
+    expect(deleteDerivedIntel).toHaveBeenCalledWith('file', 'file-42');
+    const stored = updates.find((u) => u.result);
+    expect(stored?.result).toEqual({ notesDeleted: 1, entitiesRemoved: 4, relationshipsRemoved: 7 });
+  });
+
+  it('leaves no result for a kind that has nothing to report', async () => {
+    const { enqueueDriveIntel, drainDriveIntelOutbox } = await mod();
+    await enqueueDriveIntel('file-changed', 'file-7', { kind: 'file', refId: 'file-7' });
+    await drainDriveIntelOutbox();
+    const stored = updates.find((u) => 'result' in u);
+    expect(stored?.result).toBeNull();
   });
 });

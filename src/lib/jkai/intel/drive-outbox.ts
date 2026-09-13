@@ -16,10 +16,16 @@ import { driveIntelOutbox } from '$lib/db/schema';
  * applications already share needs neither, and it survives either process
  * restarting mid-handover, which an HTTP call does not.
  *
- * The three kinds are exactly the operations whose RESULT Drive never used:
+ * Two of the three kinds are operations whose result Drive never used. The third,
+ * file-deleted, DID use its result — /drive reports how much of the graph went
+ * with the file — so the consumer writes what it did back onto the row and Drive
+ * reads it from there. Eventually consistent rather than synchronous, which is
+ * what keeps a delete from depending on this process being up.
+ *
+ * The kinds:
  *
  *   file-changed   a file was created, renamed or re-indexed  -> queueIntelExtraction
- *   file-deleted   a file went away                           -> queueDerivedIntelDelete
+ *   file-deleted   a file went away                           -> deleteDerivedIntel
  *   policy-resync  a folder's files need their policy applied -> syncSourcePolicy
  *
  * `/api/drive/folders` is NOT here: it returns its sync result to the browser,
@@ -29,7 +35,10 @@ import { driveIntelOutbox } from '$lib/db/schema';
 const BATCH = 50;
 /** Rows stay briefly after draining, so a double drain is visible rather than silent. */
 const KEEP_PROCESSED_MS = 24 * 60 * 60 * 1000;
-const TICK_MS = 30_000;
+// Short: a file deletion's confirmation reads its result off one of these rows,
+// and half a minute is not a confirmation. The query is an indexed lookup on a
+// table that is almost always empty.
+const TICK_MS = 3_000;
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let started = false;
@@ -46,25 +55,26 @@ export async function enqueueDriveIntel(
   await db.insert(driveIntelOutbox).values({ kind, ref, payload: payload ?? null });
 }
 
-async function handle(row: { kind: string; ref: string; payload: unknown }): Promise<void> {
+async function handle(row: { kind: string; ref: string; payload: unknown }): Promise<unknown> {
   const payload = (row.payload ?? {}) as Record<string, unknown>;
   if (row.kind === 'file-deleted') {
-    const { queueDerivedIntelDelete } = await import('./auto-extract');
-    queueDerivedIntelDelete('file', row.ref);
-    return;
+    // AWAITED, not queued, and the counts are kept: /drive shows what went with
+    // the file, and reads them back off this row. deleteDerivedIntel is the same
+    // function the route used to call in-process.
+    const { deleteDerivedIntel } = await import('./auto-extract');
+    return await deleteDerivedIntel('file', row.ref);
   }
   if (row.kind === 'policy-resync') {
     const { syncSourcePolicy } = await import('./source-policy.server');
     const ids = Array.isArray(payload.ids) ? (payload.ids as string[]) : undefined;
-    await syncSourcePolicy(row.ref, ids);
-    return;
+    return await syncSourcePolicy(row.ref, ids);
   }
   if (row.kind === 'file-changed') {
     const { queueIntelExtraction } = await import('./auto-extract');
     // The payload carries what queueIntelExtraction needs; Drive built it from
     // the same row it just wrote, so it does not have to be re-derived here.
     queueIntelExtraction(payload as never);
-    return;
+    return null;
   }
   throw new Error(`unknown drive-intel kind: ${row.kind}`);
 }
@@ -89,10 +99,10 @@ export async function drainDriveIntelOutbox(): Promise<{ processed: number; fail
 
     for (const row of rows) {
       try {
-        await handle(row);
+        const result = await handle(row);
         await db
           .update(driveIntelOutbox)
-          .set({ processedAt: new Date() })
+          .set({ processedAt: new Date(), result: (result ?? null) as never })
           .where(eq(driveIntelOutbox.id, row.id));
         processed += 1;
       } catch (err) {

@@ -3221,6 +3221,21 @@ export const driveIntelOutbox = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     /** Null until drained. Rows are kept briefly after, so a double drain is visible. */
     processedAt: timestamp('processed_at', { withTimezone: true }),
+    /**
+     * What the operation did, for the one caller that needs to report it.
+     *
+     * Deleting a file used to say what went with it — the counts of notes,
+     * entities and relationships removed — because the call was awaited in the
+     * same process. Across a boundary it cannot be, and the counts cannot be
+     * recomputed on Drive's side either: `cleanupIntelligence` protects
+     * owner-kept entities and refreshes shared-source evidence, so a naive count
+     * would claim entities that actually survive.
+     *
+     * So the consumer writes its result here and Drive reads its own row back.
+     * That keeps the number without giving Drive a synchronous dependency on
+     * this process being up, which is what a delete path least wants.
+     */
+    result: jsonb('result'),
     attempts: integer('attempts').notNull().default(0),
     lastError: text('last_error'),
   },
