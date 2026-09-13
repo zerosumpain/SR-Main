@@ -131,7 +131,7 @@ export const SITE_ITEMS: NavItem[] = [
   // reader was offered four destinations that each 302 back to /login.
   { label: 'News', href: '/news', ownerOnly: true },
   { label: 'Research', href: '/research', ownerOnly: true },
-  { label: 'Policy analysis', href: '/policy-analysis', ownerOnly: true },
+  { label: 'Policy analysis', href: '/projects/policy-analysis', ownerOnly: true },
   { label: 'Drive', href: '/drive', ownerOnly: true },
   { label: 'Live', href: '/live', ownerOnly: true },
   { label: 'jkai', href: '/jkai', ownerOnly: true },
@@ -348,7 +348,7 @@ const GROUPING_SEGMENTS: (string | RegExp)[] = [
   '/jkai/shared',
   // A shared, read-only policy assessment lives one level under a namespace with
   // no page of its own — the same shape as /jkai/shared above it.
-  '/policy-analysis/shared',
+  '/projects/policy-analysis/shared',
   '/jkai/trace',
   '/jkai/settings',
   // Provider ids and the `connections` namespace have no page of their own.
