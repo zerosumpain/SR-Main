@@ -9,17 +9,23 @@ import http from 'node:http';
 export function getPolicyResponse(url, headers = {}) {
   return new Promise((resolve, reject) => {
     const req = http.get(url, { headers: { ...headers, host: 'strangeramblings.com' }, timeout: 15000 }, response => {
+      /** @type {Buffer[]} */
       const chunks = [];
+      const replyHeaders = new Headers();
+      for (let i = 0; i < response.rawHeaders.length; i += 2) {
+        replyHeaders.append(response.rawHeaders[i], response.rawHeaders[i + 1]);
+      }
       response.on('data', chunk => chunks.push(chunk));
       response.on('error', reject);
       response.on('end', () => resolve(new Response(Buffer.concat(chunks), {
-        status: response.statusCode, headers: response.headers,
+        status: response.statusCode, headers: replyHeaders,
       })));
     });
     req.on('error', reject);
     req.on('timeout', () => req.destroy(new Error('Policy gateway verification timed out')));
   });
 }
+/** @param {Record<string, string>} headers */
 export async function verifyPolicyAnalysis(headers) {
   // Policy has its own origin; Main releases must verify through its gateway.
   const base = 'http://127.0.0.1:5290';
