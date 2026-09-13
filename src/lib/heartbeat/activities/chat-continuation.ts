@@ -1,7 +1,7 @@
 import { db } from '$lib/db';
 import { orchestratorChats, heartbeatPulses } from '$lib/db/schema';
 import { and, desc, eq, gt, isNotNull, sql } from 'drizzle-orm';
-import { listJobs } from '$lib/workflows/chat/job-store';
+import { listChatJobs } from '$lib/workflows/chat/activity';
 import { runHeartbeatTurn, postHeartbeatNote } from '../llm';
 import type { ActivityHandler } from '../types';
 
@@ -181,7 +181,7 @@ export const chatContinuation: ActivityHandler = {
     // SvelteKit-side job while still iterating on a subagent internally, and
     // a flurry of tool-step events through the bus updates `lastEventAt`
     // even after the formal `status === 'running'` window ends.
-    const allJobs = listJobs();
+    const allJobs = await listChatJobs();
     const activeJobConvIds = new Set<string>();
     for (const j of allJobs) {
       if (!j.conversationId) continue;

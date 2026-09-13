@@ -15,7 +15,7 @@
 
 import { getSetting } from '$lib/server/models/settings';
 import { isUserActive } from '$lib/selfimprove/run';
-import { listJobs } from '$lib/workflows/chat/job-store';
+import { listChatJobs } from '$lib/workflows/chat/activity';
 import { attributeSpend, budgetStatus, readQuotaMark, ZERO_SPEND } from '$lib/daydream/budget';
 import { pendingReview, recordReview, reviewThought } from '$lib/daydream/adjudicate';
 import { resolveDaydreamReviewModel } from '$lib/server/models/workload-settings';
@@ -91,7 +91,7 @@ export const daydreamReview: ActivityHandler = {
     const enabled = await getSetting<boolean>(SETTINGS_ENABLED_KEY);
     if (enabled === false) return { outcome: 'skipped', summary: 'daydreaming disabled' };
 
-    const running = listJobs().filter((j) => j.status === 'running');
+    const running = (await listChatJobs()).filter((j) => j.status === 'running');
     if (running.length > 0) {
       return { outcome: 'skipped', summary: `${running.length} job(s) in flight — not spare` };
     }

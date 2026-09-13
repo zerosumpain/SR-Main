@@ -1,6 +1,6 @@
 import { getSetting } from '$lib/server/models/settings';
 import { isUserActive } from '$lib/selfimprove/run';
-import { listJobs } from '$lib/workflows/chat/job-store';
+import { listChatJobs } from '$lib/workflows/chat/activity';
 import {
   attributeSpend,
   budgetStatus,
@@ -55,7 +55,7 @@ export const daydreamPonder: ActivityHandler = {
     }
 
     // Spare cycles means spare — same two gates as the composer.
-    const running = listJobs().filter((j) => j.status === 'running');
+    const running = (await listChatJobs()).filter((j) => j.status === 'running');
     if (running.length > 0) {
       return { outcome: 'skipped', summary: `${running.length} job(s) in flight — not spare` };
     }

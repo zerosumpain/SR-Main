@@ -2,7 +2,7 @@ import type { LayoutServerLoad } from './$types';
 import { db } from '$lib/db';
 import { activityConnections, agentActions, workflows, workflowRuns, workflowSchedules } from '$lib/db/schema';
 import { and, eq, gte, sql } from 'drizzle-orm';
-import { listRunningJobsByConversation } from '$lib/workflows/chat/job-store';
+import { runningJobsByConversation } from '$lib/workflows/chat/activity';
 import { getSetting, resolveDefaultModel } from '$lib/server/models/settings';
 import { getOpenRouterCredits } from '$lib/server/models/openrouter-credits';
 import { getCodexUsage } from '$lib/server/models/codex-usage';
@@ -122,7 +122,7 @@ export const load: LayoutServerLoad = async () => {
       codex,
       /** The model that answers when a thread hasn't pinned one. */
       defaultModelId: defaultModel.modelId,
-      activeRuns: listRunningJobsByConversation().size + (runningWorkflowRuns?.count ?? 0),
+      activeRuns: (await runningJobsByConversation()).size + (runningWorkflowRuns?.count ?? 0),
       workflowCount: workflowCount?.count ?? 0,
       workflowLiveCount: liveCount?.count ?? 0,
       workflowFailedToday: failedWorkflowRunsToday?.count ?? 0,
