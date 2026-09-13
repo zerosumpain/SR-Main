@@ -39,7 +39,21 @@
     "  health-context-contract — the shape SR-Health's /api/health/context returns",
     "    and the chat context panel renders. Types only, so both repos hold it byte",
     "    for byte. Redeclaring it instead is how a field starts arriving undefined",
-    "    with nothing red anywhere."
+    "    with nothing red anywhere.",
+    "",
+    "  webdav/paths + propfind + filters — auth.ts was registered and these three",
+    "    were not, though all four are byte-identical and /dav is still served from",
+    "    here while SR-Drive holds a copy ready. A path or a PROPFIND response that",
+    "    disagreed between them is a drive that mounts and then behaves wrongly,",
+    "    which is worse than one that will not mount at all.",
+    "",
+    "  file-index/* — this is a MAIN module that Drive borrowed, not the reverse.",
+    "    /dav, deepdive/to-drive, intel/mail-admit, knowledge/search, the file-search",
+    "    workflow node, the file_* agent tools, jkai/media/preanalyse and",
+    "    /api/jkai/attachments all need it here. If the copies diverge, the same file",
+    "    indexed by one application is found differently by the other.",
+    "    store.ts is deliberately NOT here: Drive's copy hands Intelligence a row",
+    "    instead of importing its engine, which is the whole point of that boundary."
   ],
   "files": {
     "src/lib/health/polyline.ts": {
@@ -85,6 +99,50 @@
     "src/lib/server/health-context-contract.ts": {
       "peer": "zerosumpain/SR-Health",
       "sha256": "e345cab90fb7f2183287a2903c62cd9a492b25c2e3ae515ab2ce5dacb6b8bf79"
+    },
+    "src/lib/webdav/paths.ts": {
+      "peer": "zerosumpain/SR-Drive",
+      "sha256": "08056fe46b12a82f5cdfc9a65f09c04882643968c5d3fd0292c0d76424899631"
+    },
+    "src/lib/webdav/propfind.ts": {
+      "peer": "zerosumpain/SR-Drive",
+      "sha256": "7848cf783026dc1c68f3ce82a371a37bf76a44b510213e4a3e2036ebee04adcc"
+    },
+    "src/lib/webdav/filters.ts": {
+      "peer": "zerosumpain/SR-Drive",
+      "sha256": "74262ddd28296fd312142345c54f2a8162ca7dd8f1cfc52b64027ffb17bb44cf"
+    },
+    "src/lib/file-index/content.ts": {
+      "peer": "zerosumpain/SR-Drive",
+      "sha256": "a350ef4287bcf04dac628b46c31949fd81d43ef896fcb11dc484ac89c517eb25"
+    },
+    "src/lib/file-index/describe.ts": {
+      "peer": "zerosumpain/SR-Drive",
+      "sha256": "429bfdfcfc6012c1720b389eb410b595775236e46933312cc586cae5ece4e337"
+    },
+    "src/lib/file-index/embed.ts": {
+      "peer": "zerosumpain/SR-Drive",
+      "sha256": "7a2de07046f9a68d6ffd034b4c940d9a43af3686276e648cbb8878023dbfe585"
+    },
+    "src/lib/file-index/hash.ts": {
+      "peer": "zerosumpain/SR-Drive",
+      "sha256": "1d244d37cedac5425d1af7e9290c6e5b691d677af303d9ad875cfd018e4dd1d2"
+    },
+    "src/lib/file-index/index-status.ts": {
+      "peer": "zerosumpain/SR-Drive",
+      "sha256": "dfd93ebb55be2e9c409cda2c4c29aa51eeccc760cf833417e0fae8b1cf349ab8"
+    },
+    "src/lib/file-index/jkai-mirror.ts": {
+      "peer": "zerosumpain/SR-Drive",
+      "sha256": "60eccfd63fc79f7a052a465b40b73dc74930e257102b629b595afbbe55dd7ca5"
+    },
+    "src/lib/file-index/list.ts": {
+      "peer": "zerosumpain/SR-Drive",
+      "sha256": "7d1b479b249dd3b7901b55313790a389fc867544b496ac4b497026639270621f"
+    },
+    "src/lib/file-index/search.ts": {
+      "peer": "zerosumpain/SR-Drive",
+      "sha256": "8fe57aeab1ccaa8320fc4ebf72f9f616ed10581b9e9ba451f280a3c7372ded5f"
     }
   }
 }
