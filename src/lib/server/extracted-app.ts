@@ -36,10 +36,12 @@ export type ExtractedApp = keyof typeof APPS;
 
 export class ExtractedAppError extends Error {}
 
-export async function getFromExtracted<T>(
+async function call<T>(
 	app: ExtractedApp,
+	method: 'GET' | 'POST',
 	path: string,
-	{ timeoutMs = 4000, port = APPS[app].port }: { timeoutMs?: number; port?: number } = {},
+	payload: unknown,
+	{ timeoutMs = 4000, port = APPS[app].port }: { timeoutMs?: number; port?: number },
 ): Promise<T> {
 	const token = process.env[APPS[app].tokenEnv];
 	if (!token) {
@@ -47,6 +49,7 @@ export async function getFromExtracted<T>(
 			`${APPS[app].tokenEnv} is not set, so the ${app} service lane is closed`,
 		);
 	}
+	const encoded = payload === undefined ? undefined : Buffer.from(JSON.stringify(payload));
 
 	const body = await new Promise<string>((resolve, reject) => {
 		const request = http.request(
@@ -54,9 +57,16 @@ export async function getFromExtracted<T>(
 				host: '127.0.0.1',
 				port,
 				path,
-				method: 'GET',
-				// Set explicitly, and this is the reason node:http is used at all.
-				headers: { Host: CANONICAL_HOST, Authorization: `Bearer ${token}` },
+				method,
+				// Host is set explicitly, and it is the reason node:http is used at
+				// all — see the note at the top of this file.
+				headers: {
+					Host: CANONICAL_HOST,
+					Authorization: `Bearer ${token}`,
+					...(encoded
+						? { 'content-type': 'application/json', 'content-length': encoded.length }
+						: {}),
+				},
 				timeout: timeoutMs,
 			},
 			(response) => {
@@ -76,6 +86,7 @@ export async function getFromExtracted<T>(
 		request.on('error', (error) =>
 			reject(error instanceof ExtractedAppError ? error : new ExtractedAppError(String(error))),
 		);
+		if (encoded) request.write(encoded);
 		request.end();
 	});
 
@@ -84,4 +95,21 @@ export async function getFromExtracted<T>(
 	} catch {
 		throw new ExtractedAppError(`${app}${path} did not return JSON`);
 	}
+}
+
+export function getFromExtracted<T>(
+	app: ExtractedApp,
+	path: string,
+	options: { timeoutMs?: number; port?: number } = {},
+): Promise<T> {
+	return call<T>(app, 'GET', path, undefined, options);
+}
+
+export function postToExtracted<T>(
+	app: ExtractedApp,
+	path: string,
+	payload: unknown,
+	options: { timeoutMs?: number; port?: number } = {},
+): Promise<T> {
+	return call<T>(app, 'POST', path, payload, options);
 }

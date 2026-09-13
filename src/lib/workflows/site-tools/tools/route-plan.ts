@@ -1,10 +1,19 @@
 import { register } from '../registry-internal';
-import { ORS_PROFILES, ORS_ROUND_TRIP_MAX_M } from '$lib/trails/ors';
+import { getFromExtracted, postToExtracted } from '$lib/server/extracted-app';
+import { ORS_PROFILES, ORS_ROUND_TRIP_MAX_M } from '$lib/constants/planner-sports';
 
-// The planner pulls in the database and the health analytics. Registration
-// happens on every import of the tool registry — including paths that only
-// want to enumerate tool schemas — so it is loaded inside the handlers
-// instead, the same way route-export defers its WhatsApp import.
+// The planner is SR-Health's now, and these two tools call it over the service
+// lane. What they cannot do is call it to build their own SCHEMA: the `sport`
+// enum and the distance-cap wording below are read when the tool registry
+// loads, which must not depend on another process being up. So the sport list
+// and the cap live in $lib/constants/planner-sports, a file SR-Health holds
+// byte for byte and both drift manifests guard.
+//
+// That split is the point of this file. Take the constants from here and leave
+// the planner call as a local import and the build stays green while every call
+// fails — a tool the model can see, whose every invocation returns an error it
+// cannot act on. The audit named this pair for exactly that reason: fixing one
+// half is worse than fixing neither.
 
 // Why this exists: `route_export` used to be the whole route builder, and its
 // description told the model to "generate snapped OSM geometry" itself. A
@@ -17,6 +26,49 @@ import { ORS_PROFILES, ORS_ROUND_TRIP_MAX_M } from '$lib/trails/ors';
 // the shape of the climbing. Plan here, then hand the GPX to `route_export`.
 
 const SPORTS = Object.keys(ORS_PROFILES);
+
+/**
+ * The subset of SR-Health's planner result this tool actually reads.
+ *
+ * Not a shared contract file, deliberately: the full result is that
+ * application's internal shape, large, and mostly geometry this tool discards.
+ * The cost of declaring only a subset is that a rename on the far side arrives
+ * as `undefined` and `Math.round(undefined)` is NaN — a route summary full of
+ * NaN, reported as a success, is exactly the silent failure this whole exercise
+ * is about. So every number goes through `num`, which throws instead.
+ */
+type PlannedRoute = {
+  rank: number;
+  score: number;
+  distanceM: number;
+  durationS: number;
+  ascentM: number | null;
+  coordinates?: unknown;
+  breakdown: {
+    profile: { gainPerKm: number };
+    overlap: { ratio: number };
+    spurs: { spurs: unknown[]; longestM: number };
+    terrain: { offRoadShare: number };
+    notes: unknown;
+  };
+};
+
+type PlanResponse = {
+  routes: PlannedRoute[];
+  targetDistanceM: number;
+  targetSource: unknown;
+  rationale: unknown;
+  attempted: unknown;
+  failures: unknown[];
+  gpx?: string;
+};
+
+function num(value: unknown, field: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`route planner returned no usable ${field} — the response shape has changed`);
+  }
+  return value;
+}
 
 register({
   name: 'route_plan',
@@ -80,18 +132,34 @@ register({
 
     const hasFinish = Number.isFinite(Number(args.finishLat)) && Number.isFinite(Number(args.finishLng));
 
+    const includeGpx = args.includeGpx !== false;
+
     try {
-      const { planRoutes, routeToGpx } = await import('$lib/trails/planner');
-      const result = await planRoutes({
-        start: [startLng, startLat],
-        finish: hasFinish ? [Number(args.finishLng), Number(args.finishLat)] : undefined,
-        sport,
-        targetDistanceM: args.targetDistanceKm ? Number(args.targetDistanceKm) * 1000 : undefined,
-        targetGainPerKm: args.targetClimbPerKm ? Number(args.targetClimbPerKm) : undefined,
-        prefer: (args.prefer as 'steady' | 'spiky' | 'any') ?? 'any',
-        allowOutAndBack: args.allowOutAndBack === true,
-        candidates: args.candidates ? Number(args.candidates) : undefined,
-      });
+      // 60s, not the client's 4s default: this fans out to openrouteservice for
+      // several candidates and then scores them. It was unbounded in-process.
+      const result = await postToExtracted<PlanResponse>(
+        'health',
+        '/api/trails/plan',
+        {
+          startLat,
+          startLng,
+          ...(hasFinish ? { finishLat: Number(args.finishLat), finishLng: Number(args.finishLng) } : {}),
+          sport,
+          targetDistanceM: args.targetDistanceKm ? Number(args.targetDistanceKm) * 1000 : undefined,
+          targetGainPerKm: args.targetClimbPerKm ? Number(args.targetClimbPerKm) : undefined,
+          prefer: (args.prefer as 'steady' | 'spiky' | 'any') ?? 'any',
+          allowOutAndBack: args.allowOutAndBack === true,
+          candidates: args.candidates ? Number(args.candidates) : undefined,
+          // Generated on the far side, where the coordinates are. This tool
+          // never puts geometry in a chat transcript.
+          includeGpx,
+        },
+        { timeoutMs: 60_000 },
+      );
+
+      if (!result.routes?.length) {
+        return { success: false, error: 'the planner returned no routes for that request' };
+      }
 
       // The full coordinate array is tens of thousands of numbers — useless in
       // a chat transcript and expensive in context. The model gets the verdict
@@ -99,20 +167,19 @@ register({
       const routes = result.routes.map((r) => ({
         rank: r.rank,
         score: r.score,
-        distanceKm: Number((r.distanceM / 1000).toFixed(2)),
-        durationMin: Math.round(r.durationS / 60),
+        distanceKm: Number((num(r.distanceM, 'distanceM') / 1000).toFixed(2)),
+        durationMin: Math.round(num(r.durationS, 'durationS') / 60),
         ascentM: r.ascentM == null ? null : Math.round(r.ascentM),
-        climbPerKm: Math.round(r.breakdown.profile.gainPerKm),
-        retracedPercent: Math.round(r.breakdown.overlap.ratio * 100),
-        outAndBackSections: r.breakdown.spurs.spurs.length,
-        longestSpurM: Math.round(r.breakdown.spurs.longestM),
-        offRoadPercent: Math.round(r.breakdown.terrain.offRoadShare * 100),
-        notes: r.breakdown.notes,
+        climbPerKm: Math.round(num(r.breakdown?.profile?.gainPerKm, 'breakdown.profile.gainPerKm')),
+        retracedPercent: Math.round(num(r.breakdown?.overlap?.ratio, 'breakdown.overlap.ratio') * 100),
+        outAndBackSections: r.breakdown?.spurs?.spurs?.length ?? 0,
+        longestSpurM: Math.round(num(r.breakdown?.spurs?.longestM, 'breakdown.spurs.longestM')),
+        offRoadPercent: Math.round(num(r.breakdown?.terrain?.offRoadShare, 'breakdown.terrain.offRoadShare') * 100),
+        notes: r.breakdown?.notes,
       }));
 
       const top = result.routes[0];
-      const includeGpx = args.includeGpx !== false;
-      const distanceLabel = `${(top.distanceM / 1000).toFixed(1)}km`;
+      const distanceLabel = `${(num(top.distanceM, 'distanceM') / 1000).toFixed(1)}km`;
 
       return {
         success: true,
@@ -122,10 +189,8 @@ register({
           targetSource: result.targetSource,
           rationale: result.rationale,
           attempted: result.attempted,
-          failures: result.failures.length ? result.failures : undefined,
-          gpx: includeGpx
-            ? routeToGpx(top.coordinates, `${sport} ${distanceLabel}`)
-            : undefined,
+          failures: result.failures?.length ? result.failures : undefined,
+          gpx: result.gpx,
           suggestedBasename: `${new Date().toISOString().slice(0, 10)}-${sport}-${distanceLabel}.gpx`,
         },
       };
@@ -154,12 +219,15 @@ register({
     if (!SPORTS.includes(sport)) {
       return { success: false, error: `sport must be one of: ${SPORTS.join(', ')}` };
     }
-    const { suggestTarget } = await import('$lib/trails/planner');
-    const suggested = await suggestTarget(sport);
+    const suggested = await getFromExtracted<{
+      distanceM: number;
+      source: unknown;
+      rationale: unknown;
+    }>('health', `/api/trails/plan?sport=${encodeURIComponent(sport)}`, { timeoutMs: 15_000 });
     return {
       success: true,
       data: {
-        distanceKm: Number((suggested.distanceM / 1000).toFixed(2)),
+        distanceKm: Number((num(suggested.distanceM, 'distanceM') / 1000).toFixed(2)),
         source: suggested.source,
         rationale: suggested.rationale,
       },

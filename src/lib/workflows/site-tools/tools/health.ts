@@ -1,4 +1,29 @@
 import { register } from '../registry-internal';
+import { getFromExtracted } from '$lib/server/extracted-app';
+
+// These five used to `await import('$lib/health/<x>-service')` and call the
+// service in this process. Health is its own application now, so each is a
+// service-lane call to the endpoint that wraps the same function.
+//
+// The dynamic import was already deliberate — registration happens on every
+// import of the tool registry, including paths that only enumerate tool
+// schemas, so the analytics were loaded inside the handler rather than at the
+// top. A call has that property for free.
+//
+// Payloads are passed through unexamined, and the `data` type is deliberately
+// `unknown`. The consumer is a language model handed the JSON as text; this
+// file never indexes a field, so pinning a shape here would be a contract
+// nobody reads and everybody has to update. That is the opposite of the chat
+// context panel, which renders named fields and therefore shares a typed
+// payload file with SR-Health.
+//
+// A failure throws, exactly as a failing service call did before. What is new
+// is that "Health is not answering" is now a reachable state at all.
+
+const read = async (path: string) => ({
+	success: true as const,
+	data: await getFromExtracted<unknown>('health', path),
+});
 
 register({
   name: 'health_stats',
@@ -6,10 +31,7 @@ register({
   parameters: { type: 'object', properties: {}, required: [] },
   category: 'Health Data',
   toolset: 'health',
-  handler: async () => {
-    const { getStats } = await import('$lib/health/stats-service');
-    return { success: true, data: await getStats() };
-  },
+  handler: async () => read('/api/health/stats'),
 });
 
 register({
@@ -18,10 +40,7 @@ register({
   parameters: { type: 'object', properties: {}, required: [] },
   category: 'Health Data',
   toolset: 'health',
-  handler: async () => {
-    const { getReadiness } = await import('$lib/health/readiness-service');
-    return { success: true, data: await getReadiness() };
-  },
+  handler: async () => read('/api/health/readiness'),
 });
 
 register({
@@ -30,10 +49,7 @@ register({
   parameters: { type: 'object', properties: {}, required: [] },
   category: 'Health Data',
   toolset: 'health',
-  handler: async () => {
-    const { getSleepAnalysis } = await import('$lib/health/sleep-analysis-service');
-    return { success: true, data: await getSleepAnalysis() };
-  },
+  handler: async () => read('/api/health/sleep'),
 });
 
 register({
@@ -42,10 +58,7 @@ register({
   parameters: { type: 'object', properties: {}, required: [] },
   category: 'Health Data',
   toolset: 'health',
-  handler: async () => {
-    const { getTrainingLoad } = await import('$lib/health/training-load-service');
-    return { success: true, data: await getTrainingLoad() };
-  },
+  handler: async () => read('/api/health/training-load'),
 });
 
 register({
@@ -61,9 +74,11 @@ register({
   category: 'Health Data',
   toolset: 'health',
   handler: async (args) => {
-    const { getTimeline } = await import('$lib/health/timeline-service');
+    // Sent as written; the endpoint clamps them. These arguments are chosen by
+    // a language model, so `limit` is whatever it typed, and the bound belongs
+    // on the side that would otherwise read the whole table.
     const page = (args.page as number) || 1;
     const limit = (args.limit as number) || 20;
-    return { success: true, data: await getTimeline(page, limit) };
+    return read(`/api/health/timeline?page=${encodeURIComponent(page)}&limit=${encodeURIComponent(limit)}`);
   },
 });
