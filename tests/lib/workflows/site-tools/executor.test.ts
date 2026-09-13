@@ -1,20 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Mock health services
-vi.mock('$lib/health/stats-service', () => ({
-  getStats: vi.fn(),
-}));
-vi.mock('$lib/health/readiness-service', () => ({
-  getReadiness: vi.fn(),
-}));
-vi.mock('$lib/health/sleep-analysis-service', () => ({
-  getSleepAnalysis: vi.fn(),
-}));
-vi.mock('$lib/health/training-load-service', () => ({
-  getTrainingLoad: vi.fn(),
-}));
-vi.mock('$lib/health/timeline-service', () => ({
-  getTimeline: vi.fn(),
+// The health tools no longer call a service in this process — Health is its own
+// application, and they go over the gateway's service lane. So the mock moved
+// down a layer, and what these tests now pin is the thing that can actually
+// break: WHICH endpoint each tool asks for. A tool quietly pointed at the wrong
+// path would return somebody else's JSON and the model would read it as fact.
+vi.mock('$lib/server/extracted-app', () => ({
+  getFromExtracted: vi.fn(),
+  postToExtracted: vi.fn(),
+  ExtractedAppError: class ExtractedAppError extends Error {},
 }));
 
 // Mock DB. The real $lib/db/schema is left unmocked so every table export
@@ -26,19 +20,11 @@ vi.mock('$lib/db', () => ({
 }));
 
 // We need to mock drizzle query builder pattern: db.select().from(table).where(...)
-import { getStats } from '$lib/health/stats-service';
-import { getReadiness } from '$lib/health/readiness-service';
-import { getSleepAnalysis } from '$lib/health/sleep-analysis-service';
-import { getTrainingLoad } from '$lib/health/training-load-service';
-import { getTimeline } from '$lib/health/timeline-service';
+import { getFromExtracted } from '$lib/server/extracted-app';
 import { db } from '$lib/db';
 import { executeSiteTool } from '$lib/workflows/site-tools/executor';
 
-const mockedGetStats = vi.mocked(getStats);
-const mockedGetReadiness = vi.mocked(getReadiness);
-const mockedGetSleepAnalysis = vi.mocked(getSleepAnalysis);
-const mockedGetTrainingLoad = vi.mocked(getTrainingLoad);
-const mockedGetTimeline = vi.mocked(getTimeline);
+const mockedGet = vi.mocked(getFromExtracted);
 const mockedDb = vi.mocked(db, true);
 
 function mockDbChain(result: unknown[]) {
@@ -64,72 +50,43 @@ beforeEach(() => {
 });
 
 describe('executeSiteTool', () => {
-  describe('health_stats', () => {
-    it('calls getStats and returns data', async () => {
-      const statsData = { weeklyDistance: 42, activities: 5 };
-      mockedGetStats.mockResolvedValue(statsData as any);
+  describe.each([
+    ['health_stats', '/api/health/stats', { weeklyDistance: 42, activities: 5 }],
+    ['health_readiness', '/api/health/readiness', { score: 85, label: 'Good' }],
+    ['health_sleep', '/api/health/sleep', { duration: 7.5, score: 88 }],
+    ['health_training_load', '/api/health/training-load', { acwr: 1.1, zone: 'optimal' }],
+  ])('%s', (tool, path, payload) => {
+    it(`asks Health for ${'$'}{path} and passes the body straight back`, async () => {
+      mockedGet.mockResolvedValue(payload as never);
 
-      const result = await executeSiteTool('health_stats', {});
+      const result = await executeSiteTool(tool, {});
 
-      expect(mockedGetStats).toHaveBeenCalledOnce();
-      expect(result).toEqual({ success: true, data: statsData });
-    });
-  });
-
-  describe('health_readiness', () => {
-    it('calls getReadiness and returns data', async () => {
-      const readinessData = { score: 85, label: 'Good' };
-      mockedGetReadiness.mockResolvedValue(readinessData as any);
-
-      const result = await executeSiteTool('health_readiness', {});
-
-      expect(mockedGetReadiness).toHaveBeenCalledOnce();
-      expect(result).toEqual({ success: true, data: readinessData });
-    });
-  });
-
-  describe('health_sleep', () => {
-    it('calls getSleepAnalysis and returns data', async () => {
-      const sleepData = { duration: 7.5, score: 88 };
-      mockedGetSleepAnalysis.mockResolvedValue(sleepData as any);
-
-      const result = await executeSiteTool('health_sleep', {});
-
-      expect(mockedGetSleepAnalysis).toHaveBeenCalledOnce();
-      expect(result).toEqual({ success: true, data: sleepData });
-    });
-  });
-
-  describe('health_training_load', () => {
-    it('calls getTrainingLoad and returns data', async () => {
-      const loadData = { acwr: 1.1, zone: 'optimal' };
-      mockedGetTrainingLoad.mockResolvedValue(loadData as any);
-
-      const result = await executeSiteTool('health_training_load', {});
-
-      expect(mockedGetTrainingLoad).toHaveBeenCalledOnce();
-      expect(result).toEqual({ success: true, data: loadData });
+      expect(mockedGet).toHaveBeenCalledOnce();
+      expect(mockedGet).toHaveBeenCalledWith('health', path);
+      // Unprojected on purpose: the consumer is a language model reading JSON,
+      // so this tool never indexes a field and has no shape to pin.
+      expect(result).toEqual({ success: true, data: payload });
     });
   });
 
   describe('health_timeline', () => {
-    it('calls getTimeline with page and limit args', async () => {
+    it('passes page and limit through as query parameters', async () => {
       const timelineData = { events: [], hasMore: false };
-      mockedGetTimeline.mockResolvedValue(timelineData as any);
+      mockedGet.mockResolvedValue(timelineData as never);
 
       const result = await executeSiteTool('health_timeline', { page: 2, limit: 10 });
 
-      expect(mockedGetTimeline).toHaveBeenCalledWith(2, 10);
+      expect(mockedGet).toHaveBeenCalledWith('health', '/api/health/timeline?page=2&limit=10');
       expect(result).toEqual({ success: true, data: timelineData });
     });
 
     it('uses defaults when args omitted', async () => {
       const timelineData = { events: [], hasMore: true };
-      mockedGetTimeline.mockResolvedValue(timelineData as any);
+      mockedGet.mockResolvedValue(timelineData as never);
 
       const result = await executeSiteTool('health_timeline', {});
 
-      expect(mockedGetTimeline).toHaveBeenCalledWith(1, 20);
+      expect(mockedGet).toHaveBeenCalledWith('health', '/api/health/timeline?page=1&limit=20');
       expect(result).toEqual({ success: true, data: timelineData });
     });
   });
@@ -182,8 +139,12 @@ describe('executeSiteTool', () => {
   });
 
   describe('error handling', () => {
-    it('catches and returns service errors gracefully', async () => {
-      mockedGetStats.mockRejectedValue(new Error('DB connection failed'));
+    it('turns an unreachable Health into a tool error, not a crash', async () => {
+      // This is the state the extraction created: before, the service was in
+      // this process and could only fail by throwing. Now the other application
+      // can simply be down. executeSiteTool catching it is what keeps that a
+      // sentence the model can act on.
+      mockedGet.mockRejectedValue(new Error('DB connection failed'));
 
       const result = await executeSiteTool('health_stats', {});
 
@@ -194,7 +155,7 @@ describe('executeSiteTool', () => {
     });
 
     it('handles non-Error thrown values', async () => {
-      mockedGetReadiness.mockRejectedValue('unexpected string error');
+      mockedGet.mockRejectedValue('unexpected string error');
 
       const result = await executeSiteTool('health_readiness', {});
 

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import http from 'node:http';
-import { ExtractedAppError, getFromExtracted } from './extracted-app';
+import { ExtractedAppError, getFromExtracted, postToExtracted } from './extracted-app';
 
 const servers: http.Server[] = [];
 afterEach(() => {
@@ -80,5 +80,40 @@ describe('calling an extracted application', () => {
       res.end('<!doctype html><title>Sign in</title>');
     });
     await expect(getFromExtracted('health', '/x', { port })).rejects.toThrow(/did not return JSON/);
+  });
+});
+
+describe('posting to an extracted application', () => {
+  it('sends the body as JSON with a content-length, and the same Host', async () => {
+    process.env.HEALTH_SERVICE_TOKEN = 'x'.repeat(64);
+    let seen: { headers?: http.IncomingHttpHeaders; body?: string; method?: string } = {};
+    const port = await stub((req, res) => {
+      let b = '';
+      req.on('data', (c) => (b += c));
+      req.on('end', () => {
+        seen = { headers: req.headers, body: b, method: req.method };
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end('{"routes":[]}');
+      });
+    });
+
+    await postToExtracted('health', '/api/trails/plan', { sport: 'run', startLat: 1 }, { port });
+    expect(seen.method).toBe('POST');
+    expect(seen.headers?.host).toBe('strangeramblings.com');
+    expect(seen.headers?.['content-type']).toBe('application/json');
+    // Without content-length the server waits for an end the agent never sends.
+    expect(seen.headers?.['content-length']).toBe(String(Buffer.byteLength(seen.body ?? '')));
+    expect(JSON.parse(seen.body ?? '{}')).toEqual({ sport: 'run', startLat: 1 });
+  });
+
+  it('surfaces a 400 from the far side rather than returning its error body', async () => {
+    // Health 400s an unknown sport. If that came back as data, the tool would
+    // report success and hand the model an object with no routes in it.
+    process.env.HEALTH_SERVICE_TOKEN = 'x'.repeat(64);
+    const port = await stub((_req, res) => {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end('{"error":"unknown sport"}');
+    });
+    await expect(postToExtracted('health', '/x', {}, { port })).rejects.toThrow(/returned 400/);
   });
 });

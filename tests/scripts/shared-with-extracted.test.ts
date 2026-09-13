@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 /**
- * 27 modules in this repository are also held, byte for byte, by an extracted
+ * 28 modules in this repository are also held, byte for byte, by an extracted
  * application. Each was duplicated rather than moved, for a reason recorded in
  * shared-with-extracted.json.
  *
@@ -44,6 +44,7 @@ describe('modules shared with the extracted applications', () => {
     // disagreeing with nothing to notice.
     expect(Object.keys(manifest.files).sort()).toEqual([
       'src/lib/constants/apple-health-scale.ts',
+      'src/lib/constants/planner-sports.ts',
       'src/lib/file-index/content.ts',
       'src/lib/file-index/describe.ts',
       'src/lib/file-index/embed.ts',
