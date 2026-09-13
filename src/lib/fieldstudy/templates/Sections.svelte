@@ -11,9 +11,9 @@
    * may use them, and nothing here may use them on a claim.
    */
   import ConfidenceChip from '../ConfidenceChip.svelte';
-  import type { Section } from '../study';
+  import { say, type Section, type Depth } from '../study';
 
-  let { sections }: { sections: Section[] } = $props();
+  let { sections, depth = 'research' }: { sections: Section[]; depth?: Depth } = $props();
 
   const HUE: Record<string, string> = {
     identifier: 'var(--fs-cat-identifier)',
@@ -31,7 +31,7 @@
   <section class="fs-section" data-template={s.template}>
     {#if s.title}<h2 class="fs-section-title">{s.title}</h2>{/if}
     {#if s.claim}
-      <p class="fs-section-claim">{s.claim.text} <ConfidenceChip level={s.claim.confidence} /></p>
+      <p class="fs-section-claim">{say(s.claim.text, depth)} <ConfidenceChip level={s.claim.confidence} /></p>
     {/if}
 
     {#if s.template === 'T6'}

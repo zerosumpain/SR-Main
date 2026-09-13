@@ -7,9 +7,9 @@
    * its conclusions to build suspense reads as a tour of the author's notes.
    */
   import ConfidenceChip from '../ConfidenceChip.svelte';
-  import { arcBeats, beatHref, type Study } from '../study';
+  import { arcBeats, beatHref, say, type Study, type Depth } from '../study';
 
-  let { study }: { study: Study } = $props();
+  let { study, depth = 'research' }: { study: Study; depth?: Depth } = $props();
   const arc = $derived(arcBeats(study));
   const first = $derived(arc[0]);
 </script>
@@ -36,7 +36,7 @@
     {#each study.findings as f, i (i)}
       <div class="fs-finding">
         <span class="fs-finding-n">{String(i + 1).padStart(2, '0')}</span>
-        <p class="fs-finding-t">{@html f.text}</p>
+        <p class="fs-finding-t">{@html say(f.text, depth)}</p>
         <ConfidenceChip level={f.confidence} />
       </div>
     {/each}

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { study } from './study';
 import { validateStudy, errors, notes } from '$lib/fieldstudy/validate';
-import { arcBeats, beatBySlug } from '$lib/fieldstudy/study';
+import { arcBeats, beatBySlug, say, hasPlain, type Dual } from '$lib/fieldstudy/study';
 
 /**
  * The Spine in Practice runs the same mechanical ship gate as the reference
@@ -85,12 +85,51 @@ describe('spine-in-practice · the appraisal', () => {
       ]),
     ].filter((c) => c.confidence === 'fact');
 
+    // BOTH registers, resolved. `c.text` is a Dual now, so a regex run against
+    // the raw value tests the string "[object Object]" and passes vacuously —
+    // and the ELI5 rewrite is exactly where an overclaim would slip in, since
+    // plain English drops the hedges first.
     for (const c of factClaims) {
-      if (!UNBUILT.test(c.text)) continue;
-      expect(
-        /\b(not|never|no|designed|unbuilt|next build|remain|absent|without)\b/i.test(c.text),
-        `a "fact" claim naming an unbuilt component must say it is unbuilt: "${c.text}"`,
-      ).toBe(true);
+      for (const d of ['research', 'plain'] as const) {
+        const text = say(c.text, d);
+        if (!UNBUILT.test(text)) continue;
+        expect(
+          /\b(not|never|no|designed|unbuilt|next build|remain|absent|without)\b/i.test(text),
+          `a "fact" claim naming an unbuilt component must say it is unbuilt (${d}): "${text}"`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it('has a real ELI5 register on every beat, not just the prose ones', () => {
+    // The shell ships a Research / ELI5 control on every page. Before this was
+    // asserted, three of seven beats had no plain register at all — the ledger
+    // and position templates were never even handed the depth — so a reader
+    // who picked ELI5 on Benefits, Limitations or What I would do next got
+    // back the page they already had.
+    expect(notes(findings).filter((f) => f.rule === 'no-plain')).toEqual([]);
+  });
+
+  it('says something different at plain than at research, everywhere it matters', () => {
+    // A plain register that merely repeats the research one is the same
+    // failure wearing a costume. Every field a reader actually reads must
+    // resolve to DIFFERENT text at the two depths.
+    for (const b of arcBeats(study)) {
+      const fields: [string, Dual | undefined][] = [
+        ['claim', b.claim?.text],
+        ['standfirst', b.standfirst],
+        ['soWhat', b.soWhat],
+        ['openQuestion', b.openQuestion?.text],
+        ...(b.ledger ? ([['balance', b.ledger.balance]] as [string, Dual][]) : []),
+        ...(b.position ? ([['statement', b.position.statement], ['sinkers', b.position.sinkers]] as [string, Dual][]) : []),
+      ];
+      for (const [name, v] of fields) {
+        if (v === undefined) continue;
+        expect(hasPlain(v), `beat ${b.no} ${name} has no plain register`).toBe(true);
+        expect(say(v, 'plain'), `beat ${b.no} ${name} says the same thing at both depths`).not.toBe(
+          say(v, 'research'),
+        );
+      }
     }
   });
 

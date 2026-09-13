@@ -27,7 +27,7 @@
 
 {#each beat.figures ?? [] as fig (fig.no)}
   {@const Chart = chartFor(fig.chart)}
-  <Figure no={fig.no} caption={fig.caption}>
+  <Figure no={fig.no} caption={fig.caption} {depth}>
     {#snippet children()}
       <!-- A registered chart draws itself; an unregistered id keeps the
            reserved slot, so a figure whose chart has not been built yet leaves

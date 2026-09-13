@@ -16,6 +16,38 @@
 
 export type Confidence = 'fact' | 'hypothesis' | 'contested';
 
+/** The depth control's three registers. Technical falls back to research. */
+export type Depth = 'plain' | 'research' | 'technical';
+
+/**
+ * A string that may carry more than one register.
+ *
+ * The shell ships a Research / ELI5 control, but only `prose` ever honoured it,
+ * and only T1 and T2 were handed the depth at all — so on a ledger or a
+ * position beat the control moved nothing, and even on an argument beat the
+ * claim, the standfirst, the so-what and every caption stayed in research
+ * register. A reader who asked for plain English got the same page back.
+ *
+ * A bare string is research-only and falls back at every depth, so existing
+ * content keeps working untouched. Anything a reader actually reads should
+ * grow the object form.
+ */
+export type Dual = string | { research: string; plain?: string; technical?: string };
+
+/** Resolve a Dual at a depth. Technical → research → plain, never empty. */
+export function say(v: Dual | undefined, depth: Depth = 'research'): string {
+  if (v === undefined) return '';
+  if (typeof v === 'string') return v;
+  if (depth === 'plain') return v.plain ?? v.research;
+  if (depth === 'technical') return v.technical ?? v.research;
+  return v.research;
+}
+
+/** Does this carry a plain register of its own? Used by the coverage tests. */
+export function hasPlain(v: Dual | undefined): boolean {
+  return typeof v === 'object' && v !== null && typeof v.plain === 'string' && v.plain.length > 0;
+}
+
 export type TemplateId = 'T0' | 'T1' | 'T2' | 'T3' | 'T4' | 'T5' | 'T6' | 'T7' | 'T8';
 
 /** The categorical hues, licensed inside a legend and the marks it labels —
@@ -28,7 +60,7 @@ export type SourceRef = number;
 
 export interface Claim {
   /** Inline <b> permitted on the load-bearing noun only. */
-  text: string;
+  text: Dual;
   confidence: Confidence;
   cites?: SourceRef[];
   /**
@@ -53,14 +85,14 @@ export interface Prose {
 
 export interface MarginNote {
   label?: string;
-  text: string;
+  text: Dual;
 }
 
 export interface Figure {
   /** `n.m` — beat number, then figure number within the beat. */
   no: string;
   /** Italic serif. Where the author admits what the chart leaves out. */
-  caption: string;
+  caption: Dual;
   chart: string;
   /** What the numbers are counted in, printed on the axis. */
   unit?: string;
@@ -69,7 +101,7 @@ export interface Figure {
 }
 
 export interface OpenQuestion {
-  text: string;
+  text: Dual;
   /** What would change the author's mind. Mandatory — this is the point. */
   falsifier: string;
 }
@@ -111,8 +143,8 @@ export interface Survey {
 
 export interface Position {
   /** The call itself, in 90 characters or fewer. */
-  statement: string;
-  elaboration?: string;
+  statement: Dual;
+  elaboration?: Dual;
   confidence?: Confidence;
   /** Exactly three. */
   because: { headline: string; detail: string }[];
@@ -120,7 +152,7 @@ export interface Position {
   rejected: { name: string; why: string }[];
   conditions?: string[];
   /** One paragraph. What would end this recommendation, stated plainly. */
-  sinkers: string;
+  sinkers: Dual;
   /** What to build first. Five at most. */
   phases?: { label: string; name: string; detail: string }[];
 }
@@ -131,7 +163,7 @@ export interface Ledger {
   benefits: Claim[];
   /** At least as long as benefits — if it is not, the study has not looked hard enough. */
   risks: Claim[];
-  balance: string;
+  balance: Dual;
   byActor?: {
     actor: string;
     gains: number;
@@ -208,7 +240,7 @@ export interface Beat {
   /** Exactly one. If two are needed, this is two beats. */
   question?: string;
   claim?: Claim;
-  standfirst?: string;
+  standfirst?: Dual;
   marginNotes?: MarginNote[];
   prose?: Prose[];
   figures?: Figure[];
@@ -218,7 +250,7 @@ export interface Beat {
   position?: Position;
   ledger?: Ledger;
   /** In the author's voice. Never end on a chart. */
-  soWhat?: string;
+  soWhat?: Dual;
   openQuestion?: OpenQuestion;
 }
 
