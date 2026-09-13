@@ -114,7 +114,12 @@
     "  health-sync/strava.ts left both repositories on 2026-09-13. The INTEGRATION",
     "    was removed, not the data: strava_activities keeps its 671 rows and stays",
     "    declared (operations.json lists it as required), and types.ts still",
-    "    describes them, so it is deliberately unchanged."
+    "    describes them, so it is deliberately unchanged.",
+    "",
+    "  The four webdav/* modules left both repositories on 2026-09-13 with the",
+    "    WebDAV mount itself. webdav_credentials keeps its declaration — the two",
+    "    rows were created and last used on 9 May, a connection test and nothing",
+    "    since — because an undeclared table is a DROPPED table."
   ],
   "files": {
     "src/lib/health/polyline.ts": {
@@ -135,11 +140,11 @@
     },
     "src/lib/file-store/storage.ts": {
       "peer": "zerosumpain/SR-Drive",
-      "sha256": "70dc7b4253b38e3cae90b54dac9afd2e701691d5615c6000677ac42f100aa020"
+      "sha256": "2b7fd0bc4394e0cb56e8fccd043c3488e85e807f296c680e7539358aafb8f02b"
     },
     "src/lib/file-shares.ts": {
       "peer": "zerosumpain/SR-Drive",
-      "sha256": "69e6e6d865e308cea7c830c26fb44d0139ba62ca5aa50be8eaced4e6512c2d41"
+      "sha256": "63c4b52b9f35464623bb5f091e2c4fdf65e0896244f36d468c05d1ae0f319b45"
     },
     "src/lib/file-serving.ts": {
       "peer": "zerosumpain/SR-Drive",
@@ -149,10 +154,6 @@
       "peer": "zerosumpain/SR-Drive",
       "sha256": "45cc2038dce4518471b10ab5b92e0d91c798e8015a63b002d47e575bd3a489ce"
     },
-    "src/lib/webdav/auth.ts": {
-      "peer": "zerosumpain/SR-Drive",
-      "sha256": "d2cc5a34df884de24f1def86c9a24558cb828b234a1150d3ec5f6dda33fcd48c"
-    },
     "src/lib/constants/apple-health-scale.ts": {
       "peer": "zerosumpain/SR-Health",
       "sha256": "af63a8ba495f5537458a0003317c65cedbd509c839caea0c016cb21e5bca1669"
@@ -160,18 +161,6 @@
     "src/lib/server/health-context-contract.ts": {
       "peer": "zerosumpain/SR-Health",
       "sha256": "e345cab90fb7f2183287a2903c62cd9a492b25c2e3ae515ab2ce5dacb6b8bf79"
-    },
-    "src/lib/webdav/paths.ts": {
-      "peer": "zerosumpain/SR-Drive",
-      "sha256": "08056fe46b12a82f5cdfc9a65f09c04882643968c5d3fd0292c0d76424899631"
-    },
-    "src/lib/webdav/propfind.ts": {
-      "peer": "zerosumpain/SR-Drive",
-      "sha256": "7848cf783026dc1c68f3ce82a371a37bf76a44b510213e4a3e2036ebee04adcc"
-    },
-    "src/lib/webdav/filters.ts": {
-      "peer": "zerosumpain/SR-Drive",
-      "sha256": "74262ddd28296fd312142345c54f2a8162ca7dd8f1cfc52b64027ffb17bb44cf"
     },
     "src/lib/file-index/content.ts": {
       "peer": "zerosumpain/SR-Drive",

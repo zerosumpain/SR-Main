@@ -484,7 +484,7 @@ const GROUPS: string[][] = [
   ['whatsapp', 'phone', 'mobile', 'message', 'messaging', 'capture', 'note', 'notes', 'dictate'],
   ['trust', 'trusted', 'believe', 'belief', 'confidence', 'confident', 'credible', 'credibility', 'reliability', 'reliable', 'grade', 'graded', 'grading', 'admiralty', 'ratify', 'ratified', 'verify', 'verified', 'unverified', 'corroboration', 'corroborated', 'score', 'scoring'],
   ['stale', 'staleness', 'decay', 'decays', 'age', 'ageing', 'aging', 'old', 'older', 'recent', 'recency', 'freshness', 'fresh', 'halflife'],
-  ['drive', 'file', 'files', 'document', 'documents', 'upload', 'uploads', 'folder', 'folders', 'attachment', 'attachments', 'webdav', 'store'],
+  ['drive', 'file', 'files', 'document', 'documents', 'upload', 'uploads', 'folder', 'folders', 'attachment', 'attachments', 'store'],
   ['photo', 'photograph', 'image', 'images', 'picture', 'pictures', 'audio', 'voice', 'transcript', 'transcription', 'caption', 'ocr', 'multimodal', 'modality', 'video'],
   ['deck', 'decks', 'slide', 'slides', 'presentation', 'presentations', 'talk', 'layout', 'layouts', 'block', 'blocks', 'compose', 'composer'],
   ['share', 'shared', 'sharing', 'link', 'links', 'token', 'tokens', 'public', 'private', 'revoke', 'expire'],

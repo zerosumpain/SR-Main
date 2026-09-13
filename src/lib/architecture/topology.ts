@@ -54,7 +54,7 @@ export const GROUPS: ArchGroup[] = [
 ];
 
 export const NODES: ArchNode[] = [
-  { id: 'users', label: 'Visitors / You', kind: 'client', group: 'client', note: 'browser · WebDAV' },
+  { id: 'users', label: 'Visitors / You', kind: 'client', group: 'client', note: 'browser' },
 
   { id: 'cf', label: 'Cloudflare', kind: 'edge', group: 'cloudflare', note: 'DNS · Tunnel · CDN', healthId: 'site' },
 

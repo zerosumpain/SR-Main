@@ -137,16 +137,6 @@ export const ENDPOINTS: EstateEndpoint[] = [
     configuredIn: 'sr-library.service on the VPS',
     probeId: 'library',
   },
-  {
-    id: 'dav',
-    label: 'WebDAV mount',
-    url: 'https://strangeramblings.com/dav/',
-    host: 'cloudflare',
-    exposure: 'public',
-    auth: 'basic',
-    note: 'Drive over WebDAV for Finder/Explorer. HTTP Basic against webdav_credentials — federated auth is not an option for OS mounts.',
-    configuredIn: 'src/hooks.server.ts + $lib/webdav/auth',
-  },
 
   // ------------------------------------------------------------------- VPS
   {

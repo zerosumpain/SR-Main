@@ -21,7 +21,6 @@ export const REFERENCES: Reference[] = [
   { name: 'Docker', url: 'https://docs.docker.com/', what: 'the sandbox that AI-authored build code executes inside' },
   { name: 'Playwright', url: 'https://playwright.dev/', what: 'browser automation behind the scraping nodes and the visual checks' },
   { name: 'Cloudflare Tunnel', url: 'https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/', what: 'how the origin is reachable without an exposed inbound port' },
-  { name: 'WebDAV (RFC 4918)', url: 'https://datatracker.ietf.org/doc/html/rfc4918', what: 'the protocol that mounts the document store as a network drive' },
   { name: 'restic', url: 'https://restic.readthedocs.io/', what: 'encrypted, deduplicated off-site backup' },
   { name: 'd3-force', url: 'https://d3js.org/d3-force', what: 'the force simulation that lays out the knowledge graph in 2-D and 3-D' },
   { name: 'OWASP SSRF guidance', url: 'https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html', what: 'the class of attack the outbound-fetch guard defends against' },

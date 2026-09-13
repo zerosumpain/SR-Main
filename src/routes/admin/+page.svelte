@@ -112,7 +112,7 @@
         <a class="nm-tile" href="/drive">
           <div class="nm-tile-eyebrow">Drive ↗</div>
           <div class="nm-tile-title">File Store</div>
-          <div class="nm-tile-sub">Drag-and-drop file store — drop in, download or drag out, WebDAV mount. Lives on the site nav.</div>
+          <div class="nm-tile-sub">Drag-and-drop file store — drop in, download or drag out. Lives on the site nav.</div>
           <div class="nm-tile-foot">
             <span>{data.files} {data.files === 1 ? 'file' : 'files'}</span>
             <span>→</span>

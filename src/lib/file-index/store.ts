@@ -4,7 +4,7 @@
 // The unit of work is indexFile(fileId): it reads the CURRENT bytes, hashes them,
 // and only re-embeds when the hash differs from workflow_files.content_hash — so
 // it is idempotent and safe to fire-and-forget from every byte-write site
-// (upload, WebDAV PUT/COPY, convert). A metadata-only PATCH bumps updatedAt but
+// (upload, convert). A metadata-only PATCH bumps updatedAt but
 // not the bytes, so its hash is unchanged and no work happens.
 //
 // Concurrency: two writes to the same file can each fire a reindex. The final
@@ -24,7 +24,7 @@ import { embedChunks, FILE_INDEX_EMBEDDING_MODEL } from './embed';
 import { queueIntelExtraction } from '$lib/jkai/intel/auto-extract';
 import { policyForFileName } from '$lib/jkai/intel/source-policy.server';
 
-// Cap the bytes we ever read into RAM to embed. The WebDAV write site allows
+// Cap the bytes we ever read into RAM to embed. The WebDAV write site allowed
 // multi-GB files; loading one whole into a single Buffer on the memory-constrained
 // homeserv box would OOM the always-on service. Text extraction / captioning of
 // anything this large is also not what @files search is for.

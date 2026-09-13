@@ -32,7 +32,8 @@ export const SHARE_TTL_DAYS = 7;
  *
  * An explicit allow-list, not a `!includes('@')` test on the email format:
  * this fails closed for anything unrecognised, including a null uploader from
- * the WebDAV mount (src/routes/dav writes `uploadedBy: null` on some paths).
+ * the WebDAV mount, which wrote `uploadedBy: null` on some paths before it was
+ * removed on 2026-09-13. Rows it created still carry that null.
  */
 // `route-export` is the only tag any drive file carries today (the other 56
 // rows are the owner's two email addresses). `jkai` is listed ahead of need so

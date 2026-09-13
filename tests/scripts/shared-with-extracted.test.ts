@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 /**
- * 42 modules in this repository are also held, byte for byte, by an extracted
+ * 38 modules in this repository are also held, byte for byte, by an extracted
  * application. Each was duplicated rather than moved, for a reason recorded in
  * shared-with-extracted.json.
  *
@@ -101,10 +101,6 @@ describe('modules shared with the extracted applications', () => {
       'src/lib/trails/activity-meta.ts',
       'src/lib/trails/field/tile-math.ts',
       'src/lib/trails/track.ts',
-      'src/lib/webdav/auth.ts',
-      'src/lib/webdav/filters.ts',
-      'src/lib/webdav/paths.ts',
-      'src/lib/webdav/propfind.ts',
     ]);
   });
 
