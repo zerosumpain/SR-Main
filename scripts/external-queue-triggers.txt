@@ -1,0 +1,12 @@
+# GENERATED — do not hand-edit. The source of truth is EXTRACTED_TRIGGERS in
+# src/lib/workflows/trigger-ownership.ts, and tests/lib/workflows/trigger-ownership.test.ts
+# fails if the two disagree.
+#
+# Queue triggers whose runs are executed by an independently deployed
+# application. Main's deploy drain must not pause them: their worker is a
+# different process that keeps its leases across a Main restart, and pausing a
+# run it is holding is how two owners end up disagreeing about one row.
+#
+# This file exists because the deploy drain is bash and cannot import the
+# TypeScript registry. Read it with scripts/lib/queue-triggers.sh.
+policy-analysis

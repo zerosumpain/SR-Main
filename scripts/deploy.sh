@@ -218,12 +218,15 @@ echo "==> Draining in-flight runs (running -> paused) before restart..."
 # interrupted assessment resumable across a restart.
 # doesn't ship psql, so we run via docker exec on the strange-rambling
 # pgvector container. Best-effort — failure is logged but does not block.
-ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" bash -s <<'REMOTE' || echo "==> drain skipped (db container missing)"
+source "$(dirname "$0")/lib/queue-triggers.sh"
+queue_triggers_clause "$(dirname "$0")/external-queue-triggers.txt"
+ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" bash -s -- "$QUEUE_MINE_SQL" <<'REMOTE' || echo "==> drain skipped (db container missing)"
 set -e
+MINE_SQL="$1"
 PG_CTR=$(docker ps --filter "name=strange-rambling-app-db" --format '{{.Names}}' | head -1)
 if [ -z "$PG_CTR" ]; then echo "==> drain: no app-db container found"; exit 0; fi
 docker exec "$PG_CTR" psql -U app -d strange_rambling -v ON_ERROR_STOP=1 \
-  -c "UPDATE workflow_runs SET status='paused' WHERE status='running' AND trigger <> 'policy-analysis' RETURNING id;" || true
+  -c "UPDATE workflow_runs SET status='paused' WHERE status='running' $MINE_SQL RETURNING id;" || true
 REMOTE
 
 # Phase 3 invariant: this deploy script restarts ONLY strange-rambling-svelte.

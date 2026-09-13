@@ -289,13 +289,19 @@ sudo mkdir -p /opt/strange-rambling/static/images/blog
 sudo chown "$(id -un):$(id -gn)" /opt/strange-rambling/static/images/blog
 mkdir -p ~/.openclaw/workflow-files && chmod 700 ~/.openclaw/workflow-files
 
-# Policy envelopes retain their leases; the queue recovers them after restart.
-# Pausing them here would prevent automatic continuation.
+# An extracted application's envelopes retain their leases; its own worker keeps
+# running across this restart and recovers them. Pausing one here would prevent
+# that continuation, and would have Main writing to a row another process owns.
 echo "==> Draining in-flight runs (running -> paused) before restart..."
+# The excluded lanes come from scripts/external-queue-triggers.txt rather than a
+# literal, so an extraction adds its lane in one place instead of here, in
+# deploy.sh, and in the TypeScript queue separately.
+source ./scripts/lib/queue-triggers.sh
+queue_triggers_clause ./scripts/external-queue-triggers.txt
 PG_CTR=$(docker ps --filter "name=strange-rambling-app-db" --format '{{.Names}}' | head -1 || true)
 if [ -n "$PG_CTR" ]; then
   docker exec "$PG_CTR" psql -U app -d strange_rambling \
-    -c "UPDATE workflow_runs SET status='paused' WHERE status='running' AND trigger <> 'policy-analysis';" || true
+    -c "UPDATE workflow_runs SET status='paused' WHERE status='running' $QUEUE_MINE_SQL;" || true
 else
   echo "==> drain skipped (no app-db container)"
 fi

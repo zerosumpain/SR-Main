@@ -62,3 +62,47 @@ describe('queue trigger ownership', () => {
     expect(externalTriggers({})).toEqual([...EXTRACTED_TRIGGERS]);
   });
 });
+
+describe('the bash copy of the lane list', () => {
+  // The deploy drain is bash and cannot import this module, so the list is
+  // duplicated into a generated file. A duplicate nobody checks is how the
+  // third extraction pauses the second one's in-flight runs.
+  const listPath = 'scripts/external-queue-triggers.txt';
+
+  it('matches the TypeScript source of truth exactly', async () => {
+    const { readFileSync } = await import('node:fs');
+    const listed = readFileSync(listPath, 'utf8')
+      .split('\n')
+      .map((line) => line.replace(/#.*$/, '').trim())
+      .filter(Boolean);
+    expect(listed).toEqual([...EXTRACTED_TRIGGERS]);
+  });
+
+  it('is read into a null-safe predicate, not a bare inequality', async () => {
+    const { execFileSync } = await import('node:child_process');
+    const clause = execFileSync(
+      'bash',
+      ['-c', `source scripts/lib/queue-triggers.sh; queue_triggers_clause ${listPath}; printf '%s' "$QUEUE_MINE_SQL"`],
+      { encoding: 'utf8' },
+    );
+    // `trigger <> 'x'` is NULL — not true — for a run with no trigger, so the
+    // old drain silently left every untriggered run running.
+    expect(clause).toBe("AND (trigger IS NULL OR trigger NOT IN ('policy-analysis'))");
+    expect(clause).not.toContain('<>');
+  });
+
+  it('pauses everything when no lane is externally owned', async () => {
+    const { execFileSync } = await import('node:child_process');
+    const { mkdtempSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const empty = join(mkdtempSync(join(tmpdir(), 'triggers-')), 'list.txt');
+    writeFileSync(empty, '# nothing extracted yet\n\n');
+    const clause = execFileSync(
+      'bash',
+      ['-c', `source scripts/lib/queue-triggers.sh; queue_triggers_clause ${empty}; printf '%s' "$QUEUE_MINE_SQL"`],
+      { encoding: 'utf8' },
+    );
+    expect(clause).toBe('');
+  });
+});
