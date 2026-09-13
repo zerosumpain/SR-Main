@@ -19,21 +19,28 @@ import { EventEmitter } from 'events';
  * one emitter instance, so an event emitted here still reaches it.
  */
 
-export type PlatformEventType =
-	| 'strava_activity_synced'
-	| 'whoop_recovery_updated'
-	| 'workflow_completed';
+/**
+ * The array is the declaration and the union is derived from it, rather than the
+ * two being written out separately and kept in step by hand.
+ *
+ * That pairing is what the dispatcher's bug was: event-bus.ts listed the three
+ * names in the union and then listed them again at the bottom of the file to
+ * subscribe. A fourth member added to the union and not to that list would be
+ * publishable and silently never dispatched — and a test that loops over the
+ * list cannot catch it, because it is looping over the half that is wrong.
+ */
+export const PLATFORM_EVENT_TYPES = [
+	'strava_activity_synced',
+	'whoop_recovery_updated',
+	'workflow_completed'
+] as const;
+
+export type PlatformEventType = (typeof PLATFORM_EVENT_TYPES)[number];
 
 export interface PlatformEvent {
 	type: PlatformEventType;
 	payload?: Record<string, unknown>;
 }
-
-export const PLATFORM_EVENT_TYPES: readonly PlatformEventType[] = [
-	'strava_activity_synced',
-	'whoop_recovery_updated',
-	'workflow_completed'
-];
 
 const emitter = new EventEmitter();
 emitter.setMaxListeners(50);

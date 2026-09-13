@@ -17,15 +17,21 @@ describe('platform event bus', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it('onAll covers every declared type, so the dispatcher cannot miss one', () => {
-    // The dispatcher used to list the three type names a second time at the
-    // bottom of event-bus.ts. A fourth event type added to the union but not to
-    // that list would have been publishable and never dispatched.
+  it('onAll subscribes to every declared type', () => {
     const handler = vi.fn();
     const off = onAll(handler);
     for (const type of PLATFORM_EVENT_TYPES) emit(type);
     off();
     expect(handler).toHaveBeenCalledTimes(PLATFORM_EVENT_TYPES.length);
+  });
+
+  it('derives the type union from the list, so a fourth event cannot be half-declared', async () => {
+    // Looping over PLATFORM_EVENT_TYPES cannot prove the dispatcher covers the
+    // union — it is looping over the half that would be wrong. The guarantee has
+    // to be structural, so the union is `(typeof PLATFORM_EVENT_TYPES)[number]`.
+    const { readFileSync } = await import('node:fs');
+    const source = readFileSync('src/lib/events/platform-bus.ts', 'utf8');
+    expect(source).toContain('export type PlatformEventType = (typeof PLATFORM_EVENT_TYPES)[number]');
   });
 
   it('publishing costs the publisher nothing but this module', async () => {

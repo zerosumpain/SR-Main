@@ -14,8 +14,9 @@ describe('queue trigger ownership', () => {
   });
 
   it('treats a run with no trigger as this process’s own work', () => {
-    // `trigger <> 'policy-analysis'` evaluated to NULL for these rows, so they fell
-    // out of every reap. They belong to Main and must stay claimable.
+    // workflow_runs.trigger is NOT NULL today, so this is defensive rather than a
+    // bug being fixed — but the predicate and this function have to agree about
+    // it, and the SQL spells the NULL case out.
     expect(isExternallyOwned(null, {})).toBe(false);
     expect(isExternallyOwned(undefined, {})).toBe(false);
     expect(isExternallyOwned('', {})).toBe(false);
@@ -78,17 +79,41 @@ describe('the bash copy of the lane list', () => {
     expect(listed).toEqual([...EXTRACTED_TRIGGERS]);
   });
 
-  it('is read into a null-safe predicate, not a bare inequality', async () => {
+  it('is read into the same predicate the TypeScript builds', async () => {
     const { execFileSync } = await import('node:child_process');
     const clause = execFileSync(
       'bash',
-      ['-c', `source scripts/lib/queue-triggers.sh; queue_triggers_clause ${listPath}; printf '%s' "$QUEUE_MINE_SQL"`],
+      ['-c', `set -euo pipefail; source scripts/lib/queue-triggers.sh; queue_triggers_clause ${listPath}; printf '%s' "$QUEUE_MINE_SQL"`],
       { encoding: 'utf8' },
     );
-    // `trigger <> 'x'` is NULL — not true — for a run with no trigger, so the
-    // old drain silently left every untriggered run running.
+    // One spelling of the rule across TypeScript and both bash drains. The three
+    // used to be `IS DISTINCT FROM`, `<>` and `<>`, which is how they drift.
     expect(clause).toBe("AND (trigger IS NULL OR trigger NOT IN ('policy-analysis'))");
     expect(clause).not.toContain('<>');
+  });
+
+  it('honours EXTERNAL_QUEUE_TRIGGERS too, so the override moves both halves', async () => {
+    // If the env var moved only the TypeScript queue, the documented rollback
+    // (EXTERNAL_QUEUE_TRIGGERS='') would return a lane to Main's worker while
+    // this drain still refused to pause it — Main's own in-flight runs would
+    // survive the restart stuck in 'running'. The mirror case is worse: handing a
+    // lane out by env var while the drain still pauses its rows is Main writing
+    // to a row another process owns.
+    const { execFileSync } = await import('node:child_process');
+    const clause = (value: string) =>
+      execFileSync(
+        'bash',
+        ['-c', `set -euo pipefail; source scripts/lib/queue-triggers.sh; queue_triggers_clause ${listPath}; printf '%s' "$QUEUE_MINE_SQL"`],
+        { encoding: 'utf8', env: { ...process.env, EXTERNAL_QUEUE_TRIGGERS: value } },
+      );
+
+    expect(clause('')).toBe('');
+    expect(clause('policy-analysis,health-sync')).toBe(
+      "AND (trigger IS NULL OR trigger NOT IN ('policy-analysis', 'health-sync'))",
+    );
+    // And it rejects the same names the TypeScript rejects — under the drains'
+    // own `set -e`, where a bad name aborts the deploy rather than being ignored.
+    expect(() => clause('policy analysis')).toThrow();
   });
 
   it('pauses everything when no lane is externally owned', async () => {
@@ -100,7 +125,7 @@ describe('the bash copy of the lane list', () => {
     writeFileSync(empty, '# nothing extracted yet\n\n');
     const clause = execFileSync(
       'bash',
-      ['-c', `source scripts/lib/queue-triggers.sh; queue_triggers_clause ${empty}; printf '%s' "$QUEUE_MINE_SQL"`],
+      ['-c', `set -euo pipefail; source scripts/lib/queue-triggers.sh; queue_triggers_clause ${empty}; printf '%s' "$QUEUE_MINE_SQL"`],
       { encoding: 'utf8' },
     );
     expect(clause).toBe('');

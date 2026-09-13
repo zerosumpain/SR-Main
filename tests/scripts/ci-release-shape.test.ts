@@ -33,10 +33,10 @@ function job(name: string): string {
 describe('the prebuild/release split across two machines', () => {
   it('leaves an extracted application’s envelopes recoverable through lease expiry during deployment', () => {
     const release = readFileSync(join(ROOT, 'scripts/ci-release.sh'), 'utf8');
-    // The excluded lanes used to be the literal `trigger <> 'policy-analysis'`.
-    // Two more extractions makes that a string three scripts have to agree on,
-    // and `<>` is NULL for a run with no trigger — so untriggered runs were
-    // never paused at all. Both now come from the generated lane list.
+    // The excluded lanes used to be the literal `trigger <> 'policy-analysis'`,
+    // here and in deploy.sh and twice more in TypeScript. Two more extractions
+    // makes that a string four places have to agree on. All of them now come
+    // from the generated lane list.
     expect(release).toContain('queue_triggers_clause ./scripts/external-queue-triggers.txt');
     expect(release).toContain("WHERE status='running' $QUEUE_MINE_SQL");
     expect(release).not.toContain("trigger <> 'policy-analysis'");

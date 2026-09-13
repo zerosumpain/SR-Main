@@ -1,27 +1,23 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+const source = () => readFileSync(join(process.cwd(), 'src/service-worker.ts'), 'utf8');
 const viteSource = () => readFileSync(join(process.cwd(), 'vite.config.ts'), 'utf8');
 
 describe('JKAI service-worker navigation policy', () => {
 	it('does not cache authenticated JKAI navigation responses', () => {
-		expect(viteSource()).toContain('navigateFallback: null');
+		const sw = source();
+		const vite = viteSource();
+		expect(sw).not.toContain("cacheName: 'jkai-navigation'");
+		expect(sw).not.toMatch(/url\.pathname\.startsWith\(['"]\/jkai['"]\)/);
+		expect(vite).toContain('navigateFallback: null');
 	});
 
-	it('has no root-scoped service worker at all', () => {
-		// These two cases used to assert that src/service-worker.ts did not cache
-		// /jkai navigations and purged its legacy cache on activate. That file was
-		// the pre-vite-plugin-pwa worker; nothing registered it, SvelteKit built it
-		// anyway, and it shipped 25 KB of root-scoped worker referencing a
-		// __WB_MANIFEST nothing injects. Deleting it is the stronger version of
-		// what those cases were protecting — a worker that does not exist cannot
-		// serve a stale authenticated page — so the assertion is now its absence.
-		//
-		// A root-scoped worker is also no longer just a jkai concern: the site is
-		// being split across several applications on one origin, and anything
-		// registered at "/" controls all of them.
-		expect(existsSync(join(process.cwd(), 'src/service-worker.ts'))).toBe(false);
+	it('purges the legacy navigation cache and claims open clients on activation', () => {
+		const sw = source();
+		expect(sw).toContain("self.caches.delete('jkai-navigation')");
+		expect(sw).toContain('clientsClaim()');
 	});
 
 	it('scopes the capture worker to /capture, in the registration and the manifest', () => {
@@ -40,7 +36,7 @@ describe('JKAI service-worker navigation policy', () => {
 		const sw = readFileSync(join(process.cwd(), 'static/capture-sw.js'), 'utf8');
 		// It used to delete every cache in the origin on activate, including the
 		// jkai PWA's immutable assets.
-		expect(sw).toContain("k.startsWith(CACHE_PREFIX)");
+		expect(sw).toContain('k.startsWith(CACHE_PREFIX)');
 		expect(sw).not.toMatch(/keys\.filter\(\(k\) => k !== CACHE_NAME\)/);
 	});
 
