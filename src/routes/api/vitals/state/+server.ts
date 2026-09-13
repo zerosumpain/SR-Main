@@ -12,6 +12,7 @@ import {
   type WeatherCondition,
 } from '$lib/vitals/state';
 import { getVitalsLocation } from '$lib/vitals/location';
+import { fromStoredMetric } from '$lib/constants/apple-health-scale';
 import type { RequestHandler } from './$types';
 
 const WEATHER_CODES: Record<number, WeatherCondition> = {
@@ -58,7 +59,7 @@ async function computeVitalsState(): Promise<VitalsState> {
       .limit(1);
 
     if (latestHR?.value) {
-      state.pulse = roundPulse(latestHR.value / 100);
+      state.pulse = roundPulse(fromStoredMetric(latestHR.value));
       latestDataTime = latestHR.date;
       state.sources.heartRate = true;
     }

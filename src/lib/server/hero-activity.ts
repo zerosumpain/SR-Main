@@ -3,6 +3,7 @@ import { appleHealthMetrics } from '$lib/db/schema';
 import { and, eq, gte, lt } from 'drizzle-orm';
 import { getSetting, setSetting } from '$lib/server/models/settings';
 import { HERO_ACTIVITY_DEFAULTS } from '$lib/constants/hero-slots';
+import { fromStoredMetric } from '$lib/constants/apple-health-scale';
 import { activitySlot, heroActivitySchema, heroDayBounds } from './hero-slot-policy';
 
 const KEY = 'landing.hero.activity';
@@ -26,7 +27,7 @@ export async function getHeroActivity(now = new Date()) {
   let steps: number | null = null;
   for (const row of rows) {
     if (typeof row.value === 'number' && Number.isFinite(row.value) && row.value >= 0) {
-      steps = (steps ?? 0) + Math.round(row.value / 100);
+      steps = (steps ?? 0) + Math.round(fromStoredMetric(row.value));
     }
   }
   return { steps, slot: activitySlot(steps, rules, now) };
