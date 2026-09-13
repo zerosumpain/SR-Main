@@ -4,10 +4,10 @@ import { emit, on, onAll, PLATFORM_EVENT_TYPES } from '../../../src/lib/events/p
 describe('platform event bus', () => {
   it('delivers an emitted event to a subscriber, with its payload', () => {
     const seen: unknown[] = [];
-    const off = on('strava_activity_synced', (event) => seen.push(event));
-    emit('strava_activity_synced', { recordsSynced: 3 });
+    const off = on('whoop_recovery_updated', (event) => seen.push(event));
+    emit('whoop_recovery_updated', { recordsSynced: 3 });
     off();
-    expect(seen).toEqual([{ type: 'strava_activity_synced', payload: { recordsSynced: 3 } }]);
+    expect(seen).toEqual([{ type: 'whoop_recovery_updated', payload: { recordsSynced: 3 } }]);
   });
 
   it('stops delivering once unsubscribed', () => {

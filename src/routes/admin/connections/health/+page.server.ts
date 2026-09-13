@@ -5,11 +5,12 @@ import { desc, asc, eq, sql } from 'drizzle-orm';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ url }) => {
-  const [stravaConnected, whoopConnected] = await Promise.all([
-    hasToken('strava'),
-    hasToken('whoop'),
-  ]);
+  const whoopConnected = await hasToken('whoop');
 
+  // These columns are what the Strava integration left behind when it was
+  // removed on 2026-09-13. The table and its 671 rows stay, SR-Health renders
+  // the featured ones on /health, and this page is where they are curated —
+  // so the picker below outlives the connector that filled it.
   const baseFields = {
     id: stravaActivities.id,
     name: stravaActivities.name,
@@ -40,7 +41,6 @@ export const load: PageServerLoad = async ({ url }) => {
   const connected = url.searchParams.get('connected');
 
   return {
-    strava: { connected: stravaConnected },
     whoop: { connected: whoopConnected },
     syncStates: syncStates.map((s) => ({
       service: s.service,

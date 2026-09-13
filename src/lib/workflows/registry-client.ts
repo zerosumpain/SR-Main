@@ -22,7 +22,6 @@ import { databaseDef } from './nodes/database.def';
 import { dedupeDef } from './nodes/dedupe.def';
 import { emailDef } from './nodes/email.def';
 import { loopDef } from './nodes/loop.def';
-import { stravaDef } from './nodes/strava.def';
 import { whoopDef } from './nodes/whoop.def';
 import { errorHandlerDef } from './nodes/error-handler.def';
 import { openrouterDef } from './nodes/openrouter.def';
@@ -104,7 +103,6 @@ const builtInDefinitions: NodeDefinition[] = [
   switchDef,
   approvalDef,
   whoopDef,
-  stravaDef,
   openrouterDef,
   errorHandlerDef,
   textParserDef,

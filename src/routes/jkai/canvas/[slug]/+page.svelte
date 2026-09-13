@@ -93,7 +93,6 @@
     'deep-research',
     'deep-dive',
     'whoop',
-    'strava',
     'health-query',
     'quick-answer',
     'research-result',
@@ -5654,7 +5653,6 @@
                     >
                       <option value="">— pick an event —</option>
                       <option value="workflow_completed">workflow_completed</option>
-                      <option value="strava_activity_synced">strava_activity_synced</option>
                       <option value="whoop_recovery_updated">whoop_recovery_updated</option>
                     </select>
                   </section>

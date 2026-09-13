@@ -1,10 +1,13 @@
 import { db } from '$lib/db';
 import { oauthTokens } from '$lib/db/schema';
 import { eq, sql } from 'drizzle-orm';
-import { refreshStravaToken } from './strava';
 import { refreshWhoopToken } from './whoop';
 
-type HealthService = 'strava' | 'whoop';
+// Strava was removed on 2026-09-13. Its oauth_tokens rows and its 671
+// strava_activities stay in the database; nothing refreshes them any more, and
+// narrowing the type is what makes asking for one impossible rather than merely
+// unwise.
+type HealthService = 'whoop';
 const pendingTokens = new Map<HealthService, Promise<string | null>>();
 
 /** Coalesce callers in this process; the transaction lock also covers other workers. */
@@ -38,14 +41,14 @@ async function readOrRefreshToken(service: HealthService): Promise<string | null
       if (!needsRefresh(token.expiresAt)) return token.accessToken ?? null;
       if (!token.refreshToken) return null;
 
-      const newTokens = service === 'strava'
-        ? await refreshStravaToken(token.refreshToken)
-        : await refreshWhoopToken(token.refreshToken);
+      const newTokens = await refreshWhoopToken(token.refreshToken);
       const now = Math.floor(Date.now() / 1000);
       await tx.update(oauthTokens).set({
         accessToken: newTokens.access_token,
         refreshToken: newTokens.refresh_token || token.refreshToken,
-        expiresAt: 'expires_at' in newTokens ? newTokens.expires_at : now + newTokens.expires_in,
+        // WHOOP returns expires_in; the `'expires_at' in newTokens` branch this
+        // replaced existed only because Strava returned an absolute expiry.
+        expiresAt: now + newTokens.expires_in,
         updatedAt: now,
       }).where(eq(oauthTokens.id, token.id));
       return newTokens.access_token;
@@ -57,7 +60,7 @@ async function readOrRefreshToken(service: HealthService): Promise<string | null
 }
 
 export async function storeTokens(
-  service: 'strava' | 'whoop',
+  service: HealthService,
   data: {
     accessToken: string;
     refreshToken?: string;
@@ -77,7 +80,7 @@ export async function storeTokens(
   });
 }
 
-export async function hasToken(service: 'strava' | 'whoop'): Promise<boolean> {
+export async function hasToken(service: HealthService): Promise<boolean> {
   const [token] = await db
     .select({ id: oauthTokens.id })
     .from(oauthTokens)

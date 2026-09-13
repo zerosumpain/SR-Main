@@ -65,7 +65,7 @@ interface StandaloneNode {
  * insert `scraper_target_knowledge` two modules down, and to drive the
  * homeserv-only browser sandbox — which from the VPS would scrape production
  * traffic off a Hetzner IP. It is not here. Where a node refreshes an OAuth
- * token or reads an encrypted credential as part of reading (strava, whoop,
+ * token or reads an encrypted credential as part of reading (whoop,
  * apple-calendar), that is bookkeeping and is fine.
  *
  * Growing this list means tracing a candidate's imports, not glancing at it.
@@ -83,7 +83,6 @@ export const ALLOWED: Record<string, StandaloneNode> = {
   },
   'weather-brief': { why: 'Fetches a forecast. No store, no chat tool covers it.' },
   'location-context': { why: 'Reads recent location history. No chat tool covers it.' },
-  strava: { why: 'Reads activities. Refreshes its own OAuth token, writes nothing else.' },
   whoop: { why: 'Reads recovery and sleep. Refreshes its own OAuth token, writes nothing else.' },
   'tavily-search': { why: 'Web search against a different backend from the research tools.' },
 };

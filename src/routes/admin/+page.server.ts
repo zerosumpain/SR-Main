@@ -19,7 +19,6 @@ export const load: PageServerLoad = async () => {
   todayStart.setHours(0, 0, 0, 0);
 
   const [
-    stravaConnected,
     whoopConnected,
     syncStates,
     activeJobs,
@@ -31,7 +30,6 @@ export const load: PageServerLoad = async () => {
     activeAgentTasks,
     todayCost,
   ] = await Promise.all([
-    hasToken('strava').catch(() => false),
     hasToken('whoop').catch(() => false),
     db.select().from(healthSyncState).catch(() => []),
     db
@@ -89,12 +87,10 @@ export const load: PageServerLoad = async () => {
     if (row.status === 'published') blogCounts.published = Number(row.n) || 0;
   }
 
-  const stravaState = syncStates.find((s) => s.service === 'strava');
   const whoopState = syncStates.find((s) => s.service === 'whoop');
 
   return {
     health: {
-      strava: { connected: stravaConnected, state: stravaState ?? null },
       whoop: { connected: whoopConnected, state: whoopState ?? null },
       activeJobs: activeJobs.length,
     },

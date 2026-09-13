@@ -99,13 +99,12 @@
       <div class="tile-row">
         <a class="nm-tile" href={`/admin/connections/health${t}`}>
           <div class="nm-tile-eyebrow">Health</div>
-          <div class="nm-tile-title">Strava · Whoop · Apple</div>
+          <div class="nm-tile-title">Whoop · Apple</div>
           <div class="nm-tile-sub">Sync state, range backfills, on-demand pulls.</div>
           <div class="nm-tile-foot">
             <span class="status-line">
-              <span class="nm-pill" data-state={data.health.strava.connected ? 'connected' : 'disconnected'}>Strava</span>
               <span class="nm-pill" data-state={data.health.whoop.connected ? 'connected' : 'disconnected'}>Whoop</span>
-              <span class="muted">last sync {fmtDate(data.health.strava.state?.lastSyncAt ?? data.health.whoop.state?.lastSyncAt)}</span>
+              <span class="muted">last sync {fmtDate(data.health.whoop.state?.lastSyncAt)}</span>
             </span>
             <span>→</span>
           </div>

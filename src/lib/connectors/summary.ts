@@ -47,10 +47,12 @@ export async function syncAttentionSummary(): Promise<SyncAttentionSummary> {
     // `apple_health` is permanently months stale — it is written by a pull-sync
     // job that no longer runs, while the webhook keeps delivering.
     //
-    // `strava` is dormant: Strava restricted its API to paid subscribers, so its
-    // sync fails every hour and always will. It is not a fault to be fixed, and
-    // a banner naming it every day is exactly how a banner stops being read.
-    // See DORMANT in ./probes.ts — that is the switch to flip if it comes back.
+    // `strava` was removed entirely on 2026-09-13 — it had been dormant since
+    // Strava put its API behind a paid subscription. Its health_sync_state row
+    // is left in the database rather than deleted, so this filter still has to
+    // exclude it: nothing updates that row any more, and it would otherwise
+    // name a dead connector in the banner every day, which is exactly how a
+    // banner stops being read.
     db
       .select({
         service: healthSyncState.service,
@@ -76,7 +78,7 @@ export async function syncAttentionSummary(): Promise<SyncAttentionSummary> {
   for (const row of healthRows) {
     const stalled = row.lastOk !== null && now - row.lastOk * 1000 > STALE_MS;
     if (row.status === 'error' || stalled) {
-      names.push(row.service === 'strava' ? 'Strava' : row.service === 'whoop' ? 'Whoop' : row.service);
+      names.push(row.service === 'whoop' ? 'Whoop' : row.service);
     }
   }
 
