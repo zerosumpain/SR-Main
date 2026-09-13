@@ -131,6 +131,7 @@
         "activity_segment_efforts",
         "activity_segments",
         "activity_series",
+        "activity_share_token",
         "activity_tracks",
         "agent_actions",
         "agent_tasks",
