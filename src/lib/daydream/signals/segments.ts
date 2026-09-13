@@ -12,7 +12,6 @@ import { daydreamObservations } from '$lib/db/schema';
 import { registerSignals, setObservations, signalKey, type Reading, type SignalSpec } from './registry';
 
 export const SOURCE = 'segment';
-const SEGMENT_LIMIT = 200;
 
 const FIELDS = [
   { id: 'improving', label: 'Segments improving' },
@@ -41,12 +40,13 @@ export async function segmentsSampledToday(day: string): Promise<boolean> {
 
 export async function buildSegmentSignals(day: string): Promise<{ sampled: boolean; readings: number; error: string | null }> {
   try {
-    const [{ listSegments }, { formTaxonomy }] = await Promise.all([
-      import('$lib/trails/segments-service'),
-      import('$lib/health/segment-list'),
-    ]);
-    const res = await listSegments({ limit: SEGMENT_LIMIT });
-    const t = formTaxonomy(res.rows);
+    // Was listSegments + formTaxonomy in this process — about 1,880 lines of
+    // segment derivation to arrive at these five integers. SR-Health does the
+    // derivation and returns the counts. The 200-segment limit moved with it,
+    // because the taxonomy is a census and the population decides what the
+    // counts mean — so it must not be a parameter a caller can change.
+    const { remoteSegmentTaxonomy } = await import('../health-remote');
+    const t = await remoteSegmentTaxonomy();
     await registerSignals(SEGMENT_SPECS);
     const readings: Reading[] = [
       { key: signalKey(SOURCE, 'improving'), subject: 'john', value: t.improving },

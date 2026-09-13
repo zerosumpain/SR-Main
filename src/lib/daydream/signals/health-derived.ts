@@ -41,8 +41,8 @@ export async function healthSampledToday(day: string): Promise<boolean> {
 
 export async function buildHealthDerivedSignals(day: string): Promise<{ sampled: boolean; readings: number; error: string | null }> {
   try {
-    const { computeHealthDerived } = await import('$lib/health/derived.server');
-    const d = await computeHealthDerived();
+    const { remoteHealthDerived } = await import('../health-remote');
+    const d = await remoteHealthDerived();
     await registerSignals(HEALTH_DERIVED_SPECS);
     const readings: Reading[] = [
       { key: signalKey(SOURCE, 'tripwires_tripped'), subject: 'john', value: d.tripwiresTripped },
