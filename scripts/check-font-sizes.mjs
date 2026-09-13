@@ -33,9 +33,12 @@ const FLOOR_REM = 0.75;
 // legacy literals; widening this list is how that debt gets paid down.
 const SCOPE = [
   ['src/routes/jkai', true],
-  // Added 2026-08-15 with the Instrument pass: /drive's 42 px literals were
-  // mapped onto the type scale, so it can hold the floor from here.
-  ['src/routes/drive', true],
+  // /drive, /health and /live left with their applications on 2026-09-13. Their
+  // type-scale floors moved to SR-Drive and SR-Health with the routes. Note that
+  // walk() readdirSyncs each entry with no existsSync guard, and this is the
+  // SECOND gate in a `set -euo pipefail` chain — so a path that no longer exists
+  // aborts the whole structural run with an uncaught ENOENT before any other
+  // gate reports. Remove the entry in the same commit as the directory.
   // Widened in the sitewide sweep — every route below was mapped onto the type
   // scale in the same pass, so the floor holds there now. /projects joined when
   // the Field Study System landed and made those pages a governed family
@@ -44,9 +47,7 @@ const SCOPE = [
   ['src/routes/admin', true],
   ['src/routes/blog', true],
   ['src/routes/decks', true],
-  ['src/routes/health', true],
   ['src/routes/heart', true],
-  ['src/routes/live', true],
   ['src/routes/releases', true],
   ['src/routes/capture', true],
   ['src/routes/research', true],

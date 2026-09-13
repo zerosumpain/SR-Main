@@ -32,10 +32,7 @@
 /api/deepdive/reindex-facts
 /api/dfe-data-strategy/intel
 /api/dfe-data-strategy/seed-workflows
-/api/file-shares/[token]/download
-/api/health/apple/ingest
 /api/health/workflow-engine
-/api/platform/workflow-engine
 /api/jkai/codegraph/ingest
 /api/jkai/codegraph/query
 /api/jkai/cors/[...url]
@@ -51,10 +48,10 @@
 /api/jkai/tools/manifest
 /api/landing/hero-media
 /api/landing/vitals
-/api/live-walk
 /api/maps/config
 /api/mcp
 /api/mcp/local
+/api/platform/workflow-engine
 /api/policy-engine/ingest
 /api/policy-engine/seed-workflows
 /api/projects/local-plan-navigator/ask
@@ -67,7 +64,6 @@
 /api/scraper/script
 /api/space-lander/scores
 /api/space-lander/session
-/api/trails/segments
 /api/version
 /api/vitals/state
 /api/whatsapp/inbound
@@ -84,7 +80,6 @@
 /decks/[slug]/edit
 /decks/[slug]/print
 /decks/[slug]/track
-/health
 /heart
 /heart/1
 /heart/2

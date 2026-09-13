@@ -145,7 +145,6 @@ const BASELINE_CYCLES = [
   'deepdive <-> jkai',
   'deepdive <-> workflows',
   'file-index <-> jkai',
-  'health <-> trails',
   'heartbeat <-> workflows',
   'jkai <-> workflows',
   // Was 'jkai <-> server' before the gateway moved down — the same knot, now
