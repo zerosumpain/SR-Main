@@ -5,23 +5,23 @@
     "Each was duplicated rather than moved, and each for a reason recorded in the",
     "extraction that did it:",
     "",
-    "  polyline / activity-meta / track / tile-math \u2014 $lib/geo (Landgrab) imports",
+    "  polyline / activity-meta / track / tile-math — $lib/geo (Landgrab) imports",
     "    all four at five sites and Landgrab is deferred, so Main needs them and",
     "    Health took them. geo/tiles.ts matches track's haversine 'so distances",
     "    agree': if the copies diverge, Landgrab's scoring atom moves and nothing",
     "    anywhere fails.",
     "",
-    "  file-store/storage \u2014 the boundary linter classifies it PLATFORM and",
+    "  file-store/storage — the boundary linter classifies it PLATFORM and",
     "    thirteen non-Drive modules import it, including the public hero video.",
     "    Both copies point at one WORKFLOW_FILES_ROOT.",
     "",
-    "  file-shares / file-serving \u2014 the share capability is minted by one process",
+    "  file-shares / file-serving — the share capability is minted by one process",
     "    and may be resolved by the other. Divergence is a valid link rejected.",
     "",
-    "  intel/source-policy \u2014 the pure half of the folder policy; its DB-aware half",
+    "  intel/source-policy — the pure half of the folder policy; its DB-aware half",
     "    stayed here.",
     "",
-    "  webdav/auth \u2014 verifies the Basic credential for a MOUNTED filesystem. Two",
+    "  webdav/auth — verifies the Basic credential for a MOUNTED filesystem. Two",
     "    live credentials depend on both hooks agreeing, and /dav is still served",
     "    from here while Drive holds an identical copy ready.",
     "",
@@ -29,12 +29,17 @@
     "the hashes are recorded. Change one, change it in the peer repo too, then:",
     "  node scripts/record-shared-modules.mjs",
     "",
-    "  apple-health-scale \u2014 the x100 that apple_health_metrics.value is stored in.",
+    "  apple-health-scale — the x100 that apple_health_metrics.value is stored in.",
     "    The ingest that multiplies now lives in SR-Health; the two readers that",
     "    divide are here, and both are public: the homepage's step count and the",
     "    vitals poll's pulse. A factor that disagreed across the boundary would not",
-    "    fail a build or log anything, it would just be wrong by a hundred \u2014 which",
-    "    this repo has already shipped once."
+    "    fail a build or log anything, it would just be wrong by a hundred — which",
+    "    this repo has already shipped once.",
+    "",
+    "  health-context-contract — the shape SR-Health's /api/health/context returns",
+    "    and the chat context panel renders. Types only, so both repos hold it byte",
+    "    for byte. Redeclaring it instead is how a field starts arriving undefined",
+    "    with nothing red anywhere."
   ],
   "files": {
     "src/lib/health/polyline.ts": {
@@ -76,6 +81,10 @@
     "src/lib/constants/apple-health-scale.ts": {
       "peer": "zerosumpain/SR-Health",
       "sha256": "af63a8ba495f5537458a0003317c65cedbd509c839caea0c016cb21e5bca1669"
+    },
+    "src/lib/server/health-context-contract.ts": {
+      "peer": "zerosumpain/SR-Health",
+      "sha256": "e345cab90fb7f2183287a2903c62cd9a492b25c2e3ae515ab2ce5dacb6b8bf79"
     }
   }
 }

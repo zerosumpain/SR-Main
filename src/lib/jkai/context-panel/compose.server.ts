@@ -7,8 +7,8 @@ import {
   orchestratorChats,
   researchSessions,
 } from '$lib/db/schema';
-import { getHealthSeries30d } from '$lib/health/series-30d-service';
-import { getReadiness } from '$lib/health/readiness-service';
+import { getFromExtracted } from '$lib/server/extracted-app';
+import type { HealthContext } from '$lib/server/health-context-contract';
 import { buildThreadGraph } from '$lib/jkai/thread-graph.server';
 import { classifyContext } from './classify';
 import { drillKey, entityDrillKey } from './drill';
@@ -117,20 +117,28 @@ async function researchCards(threadText: string): Promise<ContextCard[]> {
   ];
 }
 
+// Health is its own application now, so this rail is a call rather than an
+// import. It used to be `getHealthSeries30d()` and `getReadiness()` straight out
+// of $lib/health — ten modules deep, two of which import $lib/llm/client, which
+// meant this panel made an LLM call through a health module and kept the whole
+// health tree pinned into this repo's build.
+//
+// The failure mode is unchanged and was already designed for: this was wrapped
+// in Promise.allSettled with an "unavailable" card, so a call that 503s or times
+// out lands exactly where a rejected import did.
 async function healthCards(): Promise<ContextCard[]> {
-  const [seriesResult, readinessResult] = await Promise.allSettled([
-    getHealthSeries30d(),
-    getReadiness(),
-  ]);
-  if (seriesResult.status === 'rejected') {
+  let data: HealthContext;
+  try {
+    data = await getFromExtracted<HealthContext>('health', '/api/health/context');
+  } catch {
     return [{ id: 'health-unavailable', type: 'note', title: 'Health data unavailable', body: 'The health services could not be read. Open Health for sync status.', tone: 'warn', href: '/health' }];
   }
-  const data = seriesResult.value;
-  if (data.provenance.seriesIsMock) {
+  if (data.seriesIsMock) {
     return [{ id: 'health-cold-start', type: 'note', title: 'No measured health window', body: 'The Health page is currently using its cold-start demonstration series, so this rail will not present those values as measurements.', tone: 'warn', href: '/health' }];
   }
-  const readiness = readinessResult.status === 'fulfilled' ? readinessResult.value : null;
-  const days = data.series.filter((d) => d.rec || d.hrv || d.rhr || d.slept);
+  const readiness = data.readiness;
+  // Already filtered to days carrying a measurement, server-side.
+  const days = data.days;
   return [
     {
       id: 'health-today',
