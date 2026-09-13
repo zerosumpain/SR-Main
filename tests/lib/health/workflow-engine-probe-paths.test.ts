@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GET as platformGet } from '../../../src/routes/api/platform/workflow-engine/+server';
 import { GET as healthGet } from '../../../src/routes/api/health/workflow-engine/+server';
-import { GET as sharedGet } from '../../../src/lib/server/workflow-engine-probe';
+import { GET as sharedGet } from '../../../src/lib/workflows/engine-probe';
 import { HOOK_BYPASSES } from '../../../src/lib/server/gate-bypasses';
 
 describe('workflow-engine probe paths', () => {

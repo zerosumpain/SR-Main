@@ -22,4 +22,4 @@
  * The handler is shared rather than copied, so the two cannot drift while both
  * are live.
  */
-export { GET } from '$lib/server/workflow-engine-probe';
+export { GET } from '$lib/workflows/engine-probe';

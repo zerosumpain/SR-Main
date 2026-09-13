@@ -20,7 +20,7 @@
  * the watchdog is being repointed. See the platform route for the ordering.
  */
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { getRuntimeStats, readEventLoopMaxMs, activeBatches } from '$lib/workflows/engine-runtime';
+import { getRuntimeStats, readEventLoopMaxMs, activeBatches } from './engine-runtime';
 
 const MAX_LOOP_DELAY_MS = 5000;
 

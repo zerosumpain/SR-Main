@@ -1,20 +1,32 @@
+// Offline shell for /capture only.
+//
+// Scope matters here more than it looks. This file sits at the origin root, so
+// its DEFAULT scope is the whole site — and the site now serves four
+// applications from one hostname. A worker registered at "/" controls every
+// navigation on the origin, which is why the registration in
+// src/routes/capture/+layout.svelte narrows it to /capture explicitly.
 const CACHE_NAME = 'intel-capture-v1';
-const PRECACHE_URLS = [
-  '/capture',
-];
+const CACHE_PREFIX = 'intel-capture-';
+const PRECACHE_URLS = ['/capture'];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS))
-  );
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS)));
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
+    // Only this worker's OWN older caches. The previous version deleted every
+    // cache in the origin, so opening /capture once wiped the jkai PWA's
+    // immutable-asset cache — and would do the same to any other application's
+    // on a site that now hosts several.
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys.filter((k) => k.startsWith(CACHE_PREFIX) && k !== CACHE_NAME).map((k) => caches.delete(k))
+        )
+      )
   );
   self.clients.claim();
 });
