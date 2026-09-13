@@ -6,33 +6,33 @@ import type { JobEvent } from './job-store';
 afterEach(() => cleanOldJobs(0));
 
 describe('isDestructive', () => {
-  it('flags known write tools', () => {
-    expect(isDestructive('workflow_delete')).toBe(true);
-    expect(isDestructive('gmail_send')).toBe(true);
-    expect(isDestructive('whatsapp_send')).toBe(true);
+  it('flags known write tools', async () => {
+    expect(await isDestructive('workflow_delete')).toBe(true);
+    expect(await isDestructive('gmail_send')).toBe(true);
+    expect(await isDestructive('whatsapp_send')).toBe(true);
   });
-  it('does not flag read-only tools', () => {
-    expect(isDestructive('web_search')).toBe(false);
-    expect(isDestructive('intel_search')).toBe(false);
-    expect(isDestructive('unknown_tool')).toBe(false);
+  it('does not flag read-only tools', async () => {
+    expect(await isDestructive('web_search')).toBe(false);
+    expect(await isDestructive('intel_search')).toBe(false);
+    expect(await isDestructive('unknown_tool')).toBe(false);
   });
 });
 
 describe('describeDestructiveAction', () => {
-  it('produces tool-specific prompts', () => {
+  it('produces tool-specific prompts', async () => {
     expect(describeDestructiveAction('workflow_delete', { name: 'canvas-x' })).toContain('canvas-x');
     expect(describeDestructiveAction('gmail_send', { to: 'a@b.com' })).toContain('a@b.com');
   });
-  it('describes Apple Calendar edits and irreversible deletes', () => {
+  it('describes Apple Calendar edits and irreversible deletes', async () => {
     expect(describeDestructiveAction('apple_calendar_update', { eventId: '/family/event.ics', calendar: 'Family' })).toContain('/family/event.ics');
     expect(describeDestructiveAction('apple_calendar_delete', { eventId: '/family/event.ics', calendar: 'Family' })).toMatch(/cannot be undone/i);
   });
 
-  it('has a default for unknown tools', () => {
+  it('has a default for unknown tools', async () => {
     expect(describeDestructiveAction('mystery_tool', {})).toContain('mystery_tool');
   });
 
-  it('names what a change request will actually do', () => {
+  it('names what a change request will actually do', async () => {
     const prompt = describeDestructiveAction('request_change', {
       title: 'Add a /projects/tide-times page',
       request: 'the long body',
@@ -41,7 +41,7 @@ describe('describeDestructiveAction', () => {
     expect(prompt).toContain('GitHub issue');
   });
 
-  it('falls back to the arguments rather than an empty question', () => {
+  it('falls back to the arguments rather than an empty question', async () => {
     // A destructive tool with no hand-written case must still tell the user
     // what it is about to act on — a bare "Proceed with X?" is not consent.
     const prompt = describeDestructiveAction('mystery_tool', { target: 'production-db' });
@@ -49,11 +49,11 @@ describe('describeDestructiveAction', () => {
     expect(prompt).toContain('target: production-db');
   });
 
-  it('says so explicitly when there is nothing to show', () => {
+  it('says so explicitly when there is nothing to show', async () => {
     expect(describeDestructiveAction('mystery_tool', {})).toContain('no arguments');
   });
 
-  it('drops routing args and truncates long values', () => {
+  it('drops routing args and truncates long values', async () => {
     const prompt = describeDestructiveAction('mystery_tool', {
       workflow_id: 'chat_123',
       body: 'x'.repeat(500),

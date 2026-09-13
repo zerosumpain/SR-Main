@@ -26,7 +26,8 @@ import { resolveThinkingModel } from '$lib/server/models/settings';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 import { thinkingRequestParams, type ThinkingLevel } from '$lib/models/thinking';
 import { coerceModelContext } from '$lib/constants/default-models';
-import { META_TOOL_DEFINITIONS, getToolsetDefinitions, getToolDefinitionsByName, buildSiteSystemPromptSection } from '$lib/workflows/site-tools/llm-tools';
+import { loadToolRegistry } from '$lib/workflows/site-tools/load-registry';
+import { getMetaToolDefinitions, getToolsetDefinitions, getToolDefinitionsByName, buildSiteSystemPromptSection } from '$lib/workflows/site-tools/llm-tools';
 import { executeSiteTool, isRegisteredTool } from '$lib/workflows/site-tools/executor';
 import { setJobPhase } from '$lib/workflows/chat/job-store';
 import { handleJkaiHelp, handleCreateTool, handleListCustomTools, handleDeleteTool } from '$lib/workflows/site-tools/meta-tools';
@@ -370,7 +371,7 @@ async function runSingleToolCall(
       toolResult = { success: true, data: { toolset, status: 'already_active', message: `${toolset} tools are already loaded.` } };
     } else if (toolset === 'home') {
       if (haEntityCount > 0) {
-        const defs = getToolsetDefinitions('home');
+        const defs = await getToolsetDefinitions('home');
         activeTools.push(...defs);
         activatedToolsets.add('home');
         const { buildHASystemPromptSection } = await import('$lib/workflows/homeassistant/llm-tools');
@@ -392,7 +393,7 @@ async function runSingleToolCall(
         toolResult = { success: false, error: 'Home Assistant is not configured — no entities available.' };
       }
     } else {
-      const defs = getToolsetDefinitions(toolset);
+      const defs = await getToolsetDefinitions(toolset);
       if (defs.length === 0) {
         toolResult = { success: false, error: `Unknown toolset: ${toolset}` };
       } else {
@@ -409,13 +410,13 @@ async function runSingleToolCall(
       }
     }
   } else if (fnName === 'jkai_help') {
-    toolResult = handleJkaiHelp(fnArgs);
+    toolResult = await handleJkaiHelp(fnArgs);
   } else if (fnName === 'create_tool') {
     toolResult = await handleCreateTool(fnArgs);
     if (toolResult.success) {
       const newToolName = fnArgs.name as string;
       const newToolset = fnArgs.toolset as string;
-      const newDefs = getToolsetDefinitions(newToolset).filter((d) => d.function.name === newToolName);
+      const newDefs = (await getToolsetDefinitions(newToolset)).filter((d) => d.function.name === newToolName);
       activeTools.push(...newDefs);
       activatedToolsets.add(newToolset);
     }
@@ -453,7 +454,7 @@ async function runSingleToolCall(
         toolResult = { success: false, error: msg };
       }
     }
-  } else if (isRegisteredTool(fnName)) {
+  } else if (await isRegisteredTool(fnName)) {
     const { isDestructive, describeDestructiveAction, requireConfirmation } = await import('./confirmation-gate');
     // Build a tool-execution context so long-running tools can emit
     // user-visible progress (e.g. "Generating workflow nodes…"). The emit
@@ -491,7 +492,7 @@ async function runSingleToolCall(
           : undefined);
     if (toolCtx && ctx.toolWhitelist) Object.assign(toolCtx, { allowedTools: ctx.toolWhitelist });
     if (jobId) setJobPhase(jobId, 'tool_running', runningSummary || fnName);
-    if (isDestructive(fnName)) {
+    if (await isDestructive(fnName)) {
       if (!jobId) {
         // No job means no SSE stream, so there is nobody who *could* be shown a
         // confirmation card. This used to fall through to the plain `else` and
@@ -539,7 +540,7 @@ async function runSingleToolCall(
   // on the tool and adding a state-provider entry, not editing here.
   if (conversationId && toolResult?.success) {
     try {
-      const { getTool } = await import('$lib/workflows/site-tools/registry');
+      const { getTool } = await loadToolRegistry();
       const def = getTool(fnName);
       if (def?.producesLongRunningTask) {
         const { autoRegisterFromToolResult } = await import('$lib/heartbeat/auto-register');
@@ -849,7 +850,7 @@ async function runGeneralChat(
 
   // Build system prompt — fetched in parallel to cut cold-start latency.
   // siteSection is synchronous, so no Promise.all entry for it.
-  const siteSection = buildSiteSystemPromptSection();
+  const siteSection = await buildSiteSystemPromptSection();
   const graphSectionPromise =
     options.intelContextOverride != null
       ? Promise.resolve(options.intelContextOverride)
@@ -1002,13 +1003,13 @@ async function runGeneralChat(
   // Seeded from the registry rather than hand-copied into META_TOOL_DEFINITIONS
   // so the schemas cannot drift from the `register()` calls that define them.
   const activeTools: Array<any> = [
-    ...META_TOOL_DEFINITIONS,
-    ...getToolsetDefinitions('discovery'),
+    ...(await getMetaToolDefinitions()),
+    ...(await getToolsetDefinitions('discovery')),
   ];
-  const { getTools: getRegisteredCapabilities } = await import('$lib/workflows/site-tools/registry');
+  const { getTools: getRegisteredCapabilities } = await loadToolRegistry();
   const routedCapabilities = resolveCapabilities(getRegisteredCapabilities(), userMessage, 3);
-  activeTools.push(...getToolDefinitionsByName(routedCapabilities.map(t => t.name)));
-  if (integrationContext.integrations.length) { activeTools.push(...getToolDefinitionsByName(['api_integration_call'])); contract.needsReview = true; }
+  activeTools.push(...(await getToolDefinitionsByName(routedCapabilities.map(t => t.name))));
+  if (integrationContext.integrations.length) { activeTools.push(...(await getToolDefinitionsByName(['api_integration_call']))); contract.needsReview = true; }
   const activatedToolsets = new Set<string>();
 
   // Always-on background-task toolsets: follow-up queue, heartbeat actions,
@@ -1017,7 +1018,7 @@ async function runGeneralChat(
   // action without forcing the model to call activate_toolset first.
   // (Formerly a single 'system' toolset — split into three for clarity.)
   for (const ts of ['followups', 'heartbeat', 'schedule']) {
-    activeTools.push(...getToolsetDefinitions(ts));
+    activeTools.push(...(await getToolsetDefinitions(ts)));
     activatedToolsets.add(ts);
   }
 
@@ -1049,7 +1050,7 @@ async function runGeneralChat(
     'fetch_url',
     'evidence_read',
   ] as const;
-  activeTools.push(...getToolDefinitionsByName(ALWAYS_ON_TOOL_NAMES));
+  activeTools.push(...(await getToolDefinitionsByName(ALWAYS_ON_TOOL_NAMES)));
 
   // Include agent_spawn as a meta-tool available in all chats — but ONLY
   // when this IS a top-level orchestrator call (not itself a sub-agent).
@@ -1062,7 +1063,7 @@ async function runGeneralChat(
   // Auto-activate the toolsets the classifier matched earlier in this turn.
   for (const ts of inferred) {
     if (ts === 'home' && haEntityCount === 0) continue;
-    activeTools.push(...getToolsetDefinitions(ts));
+    activeTools.push(...(await getToolsetDefinitions(ts)));
     activatedToolsets.add(ts);
   }
 
@@ -1070,7 +1071,7 @@ async function runGeneralChat(
   // can build/modify THIS canvas without needing the user to say a magic
   // keyword first.
   if (options.workflowId && !activatedToolsets.has('workflows')) {
-    activeTools.push(...getToolsetDefinitions('workflows'));
+    activeTools.push(...(await getToolsetDefinitions('workflows')));
     activatedToolsets.add('workflows');
   }
 
@@ -1102,7 +1103,7 @@ async function runGeneralChat(
   // for render_chart/render_table/render_diagram whenever it wants to answer
   // with a multimedia response.
   if (!activatedToolsets.has('visualise')) {
-    activeTools.push(...getToolsetDefinitions('visualise'));
+    activeTools.push(...(await getToolsetDefinitions('visualise')));
     activatedToolsets.add('visualise');
   }
 
@@ -1110,7 +1111,7 @@ async function runGeneralChat(
   // available — these were previously reachable via the 'visualise' toolset
   // before being moved to their own 'custom-tools' toolset.
   if (!activatedToolsets.has('custom-tools')) {
-    activeTools.push(...getToolsetDefinitions('custom-tools'));
+    activeTools.push(...(await getToolsetDefinitions('custom-tools')));
     activatedToolsets.add('custom-tools');
   }
 

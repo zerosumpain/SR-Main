@@ -17,19 +17,19 @@ describe('destructive flag (single source of truth)', () => {
     'whatsapp_send',
   ];
 
-  it.each(shouldBeDestructive)('flags %s as destructive', (name) => {
+  it.each(shouldBeDestructive)('flags %s as destructive', async (name) => {
     expect(getTool(name)?.destructive).toBe(true);
-    expect(isDestructive(name)).toBe(true);
+    expect(await isDestructive(name)).toBe(true);
   });
 
-  it('leaves read-only tools ungated', () => {
+  it('leaves read-only tools ungated', async () => {
     for (const name of ['health_stats', 'blog_list', 'file_read']) {
       expect(getTool(name)?.destructive).toBeFalsy();
-      expect(isDestructive(name)).toBe(false);
+      expect(await isDestructive(name)).toBe(false);
     }
   });
 
-  it('leaves build_control ungated, and build_delete gated', () => {
+  it('leaves build_control ungated, and build_delete gated', async () => {
     // Publishing a build is reversible and was gated until 2026-08-08, when two
     // publishes of the same app died at the prompt — one timing out against a
     // confirmer whose turn had already ended, one denied because it came from a
@@ -38,11 +38,11 @@ describe('destructive flag (single source of truth)', () => {
     // rule in builds.ts: a publish can create a page, but it cannot silently
     // overwrite one belonging to another build unless the slug is named.
     expect(getTool('build_control')?.destructive).toBeFalsy();
-    expect(isDestructive('build_control')).toBe(false);
-    expect(isDestructive('build_delete')).toBe(true);
+    expect(await isDestructive('build_control')).toBe(false);
+    expect(await isDestructive('build_delete')).toBe(true);
   });
 
-  it('registers studio_build in the builds toolset, ungated and bridgeable', () => {
+  it('registers studio_build in the builds toolset, ungated and bridgeable', async () => {
     // Verifies registration the way the app actually resolves it — via
     // registry.ts's explicit `import './tools/studio'` — rather than a
     // one-off script, and pins the destructive=false decision recorded in
@@ -53,22 +53,22 @@ describe('destructive flag (single source of truth)', () => {
     expect(tool).toBeDefined();
     expect(tool?.toolset).toBe('builds');
     expect(tool?.destructive).toBeFalsy();
-    expect(isDestructive('studio_build')).toBe(false);
+    expect(await isDestructive('studio_build')).toBe(false);
     expect(isBridgeable('studio_build')).toBe(true);
     expect(getToolsByToolset('builds').some((t) => t.name === 'studio_build')).toBe(true);
   });
 
-  it('has no phantom gate entries', () => {
+  it('has no phantom gate entries', async () => {
     // These names were in the old hardcoded DESTRUCTIVE_TOOLS set but map to
     // no registered tool — they must not resurface.
     expect(getTool('web_app_publish')).toBeUndefined();
     expect(getTool('intel_note_delete')).toBeUndefined();
-    expect(isDestructive('web_app_publish')).toBe(false);
+    expect(await isDestructive('web_app_publish')).toBe(false);
   });
 });
 
 describe('toolset restructure', () => {
-  it('split the system toolset into three', () => {
+  it('split the system toolset into three', async () => {
     expect(getToolsByToolset('system')).toHaveLength(0);
     expect(getToolsByToolset('followups').length).toBeGreaterThan(0);
     expect(getToolsByToolset('heartbeat').length).toBeGreaterThan(0);
@@ -76,7 +76,7 @@ describe('toolset restructure', () => {
     expect(getAvailableToolsets()).not.toContain('system');
   });
 
-  it('re-filed publish_page into builds and ephemeral tools into custom-tools', () => {
+  it('re-filed publish_page into builds and ephemeral tools into custom-tools', async () => {
     expect(getTool('publish_page')?.toolset).toBe('builds');
     expect(getTool('author_ephemeral_tool')?.toolset).toBe('custom-tools');
     expect(getTool('promote_ephemeral_tool')?.toolset).toBe('custom-tools');
@@ -84,7 +84,7 @@ describe('toolset restructure', () => {
 });
 
 describe('long-running auto-heartbeat is universal across spawner tools', () => {
-  it('every long-job spawner declares producesLongRunningTask with a known kind', () => {
+  it('every long-job spawner declares producesLongRunningTask with a known kind', async () => {
     const expected: Record<string, string> = {
       build_create: 'build',
       build_tweak: 'build',

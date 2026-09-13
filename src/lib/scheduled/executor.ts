@@ -112,7 +112,7 @@ async function fireTool(row: ScheduledCallback): Promise<FireResult> {
   if (!payload.toolName) return { ok: false, summary: 'tool requires payload.toolName', error: 'no toolName' };
 
   const { executeSiteTool, isRegisteredTool } = await import('$lib/workflows/site-tools/executor');
-  if (!isRegisteredTool(payload.toolName)) {
+  if (!(await isRegisteredTool(payload.toolName))) {
     return { ok: false, summary: `unknown tool ${payload.toolName}`, error: `tool not registered` };
   }
 

@@ -11,9 +11,14 @@ import { resolveCapabilities } from '$lib/jkai/grounding/capabilities';
 // every agent prompt before the user message is even seen. Phase 3 of the
 // prefill-reduction plan (docs/plans/2026-05-27-jkai-prefill-reduction.md).
 
-import { executeTool, getTools } from '$lib/workflows/site-tools/registry';
+import type { getTools as GetToolsFn } from '$lib/workflows/site-tools/registry';
+// Loaded on demand: importing the registry statically pulls all 52 tool
+// modules, and JKAI_EXTENDED_TOOL below is a plain definition that the chat
+// endpoint imports for its schema alone.
+const registry = loadToolRegistry;
 import type { ToolExecContext } from '$lib/workflows/site-tools/registry-internal';
 import { isEssentialUnderPolicy } from './essentials';
+import { loadToolRegistry } from '$lib/workflows/site-tools/load-registry';
 import { describeWithPolicy, getActivePolicy, type ToolPolicyVersion } from '$lib/toolpolicy/policy';
 import type { McpTool } from './server';
 
@@ -196,7 +201,8 @@ function truncateDescription(desc: string): string {
     : desc;
 }
 
-function getExtendedTools(policy: ToolPolicyVersion): ReturnType<typeof getTools> {
+async function getExtendedTools(policy: ToolPolicyVersion): Promise<ReturnType<typeof GetToolsFn>> {
+  const { getTools } = await registry();
   const all = getTools();
   // A tool promoted into the visible set must leave the extended catalogue, or
   // the model sees it twice and can reach it by two different call shapes.
@@ -236,7 +242,7 @@ export async function dispatchMetaTool(
   // published call-efficiency hint reaches the model whether it discovers the
   // tool directly or through this dispatcher.
   const policy = await getActivePolicy();
-  const extended = getExtendedTools(policy);
+  const extended = await getExtendedTools(policy);
 
   if (operation === 'list') {
     const filtered = query ? searchTools(extended, query) : extended;
@@ -289,7 +295,7 @@ export async function dispatchMetaTool(
     const schemas: ExtendedToolSchemaEntry[] = [];
     const unknown: string[] = [];
     for (const n of requested) {
-      const tool = getTools().find((t) => t.name === n);
+      const tool = (await registry()).getTools().find((t) => t.name === n);
       if (!tool) {
         unknown.push(n);
         continue;
@@ -318,13 +324,13 @@ export async function dispatchMetaTool(
 
   if (operation === 'invoke') {
     if (!name) return { error: 'jkai_extended: operation="invoke" requires "name"' };
-    const tool = getTools().find((t) => t.name === name);
+    const tool = (await registry()).getTools().find((t) => t.name === name);
     if (!tool) return { error: `jkai_extended: unknown tool "${name}" (not in extended catalogue)` };
     // Reuse the registry's executeTool so we get the same handler error
     // envelope as a direct tools/call. ctx is forwarded so progress emits
     // and conversationId-aware tools (e.g. workflow_build_from_spec) work
     // identically through the dispatcher and through the direct path.
-    return await executeTool(name, args ?? {}, ctx);
+    return await (await registry()).executeTool(name, args ?? {}, ctx);
   }
 
   return { error: `jkai_extended: unknown operation "${String(operation)}" (expected: list, schema, invoke)` };

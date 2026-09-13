@@ -302,7 +302,7 @@ export async function dispatchJsonRpc(
         // `disp.tool` is deliberate — the real tool, resolved out of the
         // `jkai_extended` meta-dispatcher. Gating the outer name would wave
         // every destructive call straight through.
-        if (isDestructive(disp.tool)) {
+        if (await isDestructive(disp.tool)) {
           const decision = await requestToolConfirmation(busKey, {
             tool: disp.tool,
             prompt: describeDestructiveAction(disp.tool, disp.args),

@@ -30,6 +30,7 @@
 // production, 18 use `platform.call` and NONE calls a destructive tool.
 
 import type { ToolResult } from './registry-internal';
+import { loadToolRegistry } from './load-registry';
 
 /**
  * Refuse a destructive tool reached from inside an authored handler.
@@ -43,7 +44,7 @@ export async function refuseDestructiveCall(
   toolName: string,
   callerName: string,
 ): Promise<ToolResult | null> {
-  const { getTools } = await import('./registry');
+  const { getTools } = await loadToolRegistry();
   const def = getTools().find((t) => t.name === toolName);
   if (!def?.destructive) return null;
 
