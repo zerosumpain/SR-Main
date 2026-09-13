@@ -10,7 +10,8 @@ vi.mock('$lib/integrations/credentials', () => ({
   getCredential: async () => store.credential,
 }));
 
-const { GET, isMapboxPublicToken, mapboxConfig } = await import('./+server');
+const { GET } = await import('./+server');
+const { isMapboxPublicToken, mapboxConfig } = await import('./token.server');
 
 const cred = (key: string, over: Record<string, unknown> = {}) => ({
   id: 'c1',
@@ -82,7 +83,7 @@ describe('GET /api/maps/config', () => {
         return cred('pk.eyJ1IjoieCJ9.aaaaaaaa');
       },
     }));
-    const fresh = await import('./+server');
+    const fresh = await import('./token.server');
     await fresh.mapboxConfig();
     expect(seen).toEqual(['new']);
   });
