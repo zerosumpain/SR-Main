@@ -90,7 +90,7 @@ rsync -a --delete --info=stats1 \
   --exclude='keys.json' \
   --exclude='node_modules' \
   --exclude='.svelte-kit' \
-  --exclude='build' \
+  --exclude='/build' \
   --exclude='.worktrees' \
   --exclude='.claude/worktrees' \
   ./ "${REMOTE}:${STAGE}/"
@@ -115,12 +115,23 @@ fi
 # are preserved across it — they are the expensive state the shared workspace
 # exists to keep, and the stamps in gate-remote-run.sh decide when to refresh
 # them. The staging copy is removed either way, including when the gate fails.
+#
+# `build` is ANCHORED (`/build`), and so is its twin in the rsync above. Without
+# the slash rsync matches a directory of that name at ANY depth, which is not
+# what either exclude means. It cost a day: `src/routes/projects/policy-engine/
+# build/` — a ROUTE called build — was never shipped to the gate while it
+# existed, and then could not be deleted once the rest of policy-engine was
+# extracted, because --delete skips excluded paths. One stale +page.svelte
+# survived every rsync and failed svelte-check with "Cannot find module
+# '../lib/appState.svelte'" against a lib directory that had gone. The rsync
+# says so out loud — `cannot delete non-empty directory` — and that line is easy
+# to read as noise.
 ssh -n "$REMOTE" \
   "GATE_WITH_BUILD=${WITH_BUILD} flock -w 3600 '${REMOTE_ROOT}/.lock' bash -c '
      set -e
      mkdir -p \"${REMOTE_WORK}\"
      rsync -a --delete \
-       --exclude=node_modules --exclude=.svelte-kit --exclude=build \
+       --exclude=node_modules --exclude=.svelte-kit --exclude=/build \
        \"${STAGE}/\" \"${REMOTE_WORK}/\"
      rm -rf \"${STAGE}\"
      exec \"${REMOTE_WORK}/scripts/gate-remote-run.sh\"
