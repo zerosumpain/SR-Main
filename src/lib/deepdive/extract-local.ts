@@ -1,5 +1,5 @@
 import { Readability } from '@mozilla/readability';
-import { JSDOM } from 'jsdom';
+import { loadJsdom } from '$lib/server/jsdom';
 
 const USER_AGENT =
 	'Mozilla/5.0 (compatible; DeepDiveBot/1.0; +https://strangeramblings.com)';
@@ -49,7 +49,7 @@ export async function extractLocal(
 		}
 
 		const html = await res.text();
-		return readableFromHtml(html, url);
+		return await readableFromHtml(html, url);
 	} catch (err: any) {
 		if (err?.name === 'AbortError') throw err;
 		return null;
@@ -68,9 +68,10 @@ export async function extractLocal(
  * Returns null rather than throwing on anything unparseable, so a caller can
  * fall back to the paid routes only when it genuinely needs them.
  */
-export function readableFromHtml(html: string, url: string): LocalExtractResult | null {
+export async function readableFromHtml(html: string, url: string): Promise<LocalExtractResult | null> {
 	if (!html || html.length < 100) return null;
 	try {
+		const { JSDOM } = await loadJsdom();
 		const dom = new JSDOM(html, { url });
 		const reader = new Readability(dom.window.document);
 		const article = reader.parse();

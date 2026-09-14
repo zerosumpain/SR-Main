@@ -12,19 +12,19 @@ function feed(slug = 'a-science-story', date = new Date().toUTCString(), link = 
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe('Ars RSS', () => {
-  it('normalizes entities, CDATA, tags and real comments without inventing votes', () => {
-    expect(parseArsFeed(feed())[0]).toMatchObject({
+  it('normalizes entities, CDATA, tags and real comments without inventing votes', async () => {
+    expect((await parseArsFeed(feed()))[0]).toMatchObject({
       source: 'ars-technica', id: 'a-science-story', key: 'ars-technica:a-science-story',
       title: 'Science & technology', author: 'A Writer', summary: 'A new discovery.',
       score: 0, commentCount: 12, tags: ['Science'],
       discussionUrl: 'https://arstechnica.com/science/2026/09/a-science-story/#comments',
     });
   });
-  it('rejects malformed documents, unsafe links, invalid dates and traversal ids', () => {
-    expect(() => parseArsFeed('<html/>')).toThrow();
-    expect(() => parseArsFeed('<!DOCTYPE rss><rss/>')).toThrow();
-    expect(parseArsFeed(feed('story', 'invalid'))).toEqual([]);
-    expect(parseArsFeed(feed('story', new Date().toUTCString(), 'https://evil.example/story/'))).toEqual([]);
+  it('rejects malformed documents, unsafe links, invalid dates and traversal ids', async () => {
+    await expect(parseArsFeed('<html/>')).rejects.toThrow();
+    await expect(parseArsFeed('<!DOCTYPE rss><rss/>')).rejects.toThrow();
+    expect(await parseArsFeed(feed('story', 'invalid'))).toEqual([]);
+    expect(await parseArsFeed(feed('story', new Date().toUTCString(), 'https://evil.example/story/'))).toEqual([]);
     for (const id of ['../secret', 'https://evil.example', 'story?x=1', 'a'.repeat(241)]) expect(isArsStoryId(id)).toBe(false);
   });
   it('keeps Best inside 24 hours and uses an exact article lookup for saved links', async () => {
