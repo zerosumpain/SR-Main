@@ -30,7 +30,7 @@ import {
 } from './responses-input';
 import type { ChatMessage } from './messages';
 import type { StreamChunk, CapturedToolCall } from './codex-runner';
-import type { CapturedSearch } from './web-search';
+import { responsesSearches, type CapturedSearch } from './web-search';
 import { randomUUID } from 'node:crypto';
 
 const RESPONSES_URL = 'https://chatgpt.com/backend-api/codex/responses';
@@ -189,6 +189,9 @@ export async function* runStreamedViaResponses(
 
   const calls = new Map<string, PendingCall>();
   const searches = new Map<string, CapturedSearch>();
+  const capture = (item: unknown) => {
+    for (const search of responsesSearches(item)) searches.set(`${search.kind}:${search.value}`, search);
+  };
   let usage: ReturnType<typeof toUsage> = null;
   let failure: string | null = null;
 
@@ -226,23 +229,13 @@ export async function* runStreamedViaResponses(
           });
         }
       }
-      if (item?.type === 'web_search_call') {
-        const q = item.action?.query ?? item.query;
-        if (typeof q === 'string' && q.trim()) {
-          const value = q.trim();
-          // Same rule as web-search.ts: decided on the VALUE, so a page fetch
-          // is a citation and a query is not, however the model reached it.
-          searches.set(String(item.id ?? value), {
-            kind: /^https?:\/\//i.test(value) ? 'fetch' : 'search',
-            value,
-          });
-        }
-      }
+      if (type === 'response.output_item.done') capture(item);
       continue;
     }
 
     if (type === 'response.completed') {
       usage = toUsage(ev.response?.usage);
+      for (const item of ev.response?.output ?? []) capture(item);
       continue;
     }
 

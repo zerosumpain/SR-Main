@@ -25,6 +25,33 @@ export interface CapturedSearch {
   value: string;
 }
 
+/** Native Responses metadata only: never mine answer text for source URLs. */
+export function responsesSearches(item: any): CapturedSearch[] {
+  const found: CapturedSearch[] = [];
+  const page = (url: unknown) => {
+    if (typeof url === 'string' && /^https?:\/\//i.test(url.trim())) found.push({ kind: 'fetch', value: url.trim() });
+  };
+  if (item?.type === 'web_search_call' && item.status === 'completed') {
+    const action = item.action;
+    if (action?.type === 'open_page' || action?.type === 'find_in_page') page(action.url);
+    const queries = Array.isArray(action?.queries) ? action.queries : [action?.query ?? item.query];
+    for (const query of queries) {
+      if (typeof query !== 'string' || !query.trim()) continue;
+      const value = query.trim();
+      // A URL-shaped search query is still a query, not a retrieved source.
+      found.push({ kind: 'search', value });
+    }
+  }
+  if (item?.type === 'message' && item.role === 'assistant') {
+    for (const part of Array.isArray(item.content) ? item.content : []) {
+      for (const annotation of Array.isArray(part.annotations) ? part.annotations : []) {
+        if (annotation?.type === 'url_citation') page(annotation.url);
+      }
+    }
+  }
+  return found;
+}
+
 /** Read a `web_search` item off the event stream, or null if it is not one. */
 export function toCapturedSearch(item: unknown): CapturedSearch | null {
   const it = item as { type?: string; query?: unknown } | null;
