@@ -265,7 +265,7 @@ export async function saveSourceToDrive(
        * Tavily and the residential scraper are for. It just should not be the
        * FIRST thing tried against a page that came back fine.
        */
-      const local = got ? readableFromHtml(got.buf.toString('utf8'), source.url) : null;
+      const local = got ? await readableFromHtml(got.buf.toString('utf8'), source.url) : null;
       let text = local?.content ?? '';
       // Readability also recovers the real page title, which beats the slug the
       // file name is built from.

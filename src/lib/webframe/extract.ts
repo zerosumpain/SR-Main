@@ -1,5 +1,5 @@
-import { JSDOM } from 'jsdom';
 import { Readability } from '@mozilla/readability';
+import { loadJsdom } from '$lib/server/jsdom';
 
 export type Extracted = {
   text: string;
@@ -7,8 +7,9 @@ export type Extracted = {
   byline: string | null;
 };
 
-export function extractArticle(html: string, url: string): Extracted {
+export async function extractArticle(html: string, url: string): Promise<Extracted> {
   try {
+    const { JSDOM } = await loadJsdom();
     const dom = new JSDOM(html, { url });
     const reader = new Readability(dom.window.document);
     const article = reader.parse();

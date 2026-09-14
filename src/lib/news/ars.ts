@@ -1,4 +1,4 @@
-import { JSDOM } from 'jsdom';
+import { loadJsdom } from '$lib/server/jsdom';
 import type { NewsStory, NewsWireView } from './types';
 
 const FEED = 'https://arstechnica.com/feed/';
@@ -9,8 +9,9 @@ export function isArsStoryId(id: string): boolean {
 }
 
 /** Read only publisher metadata; RSS article HTML is never rendered directly. */
-export function parseArsFeed(xml: string): NewsStory[] {
+export async function parseArsFeed(xml: string): Promise<NewsStory[]> {
   if (xml.length > 2_000_000 || /<!DOCTYPE/i.test(xml)) throw new Error('Invalid Ars feed');
+  const { JSDOM } = await loadJsdom();
   const dom = new JSDOM(xml, { contentType: 'text/xml' });
   try {
     const doc = dom.window.document;
@@ -52,7 +53,7 @@ async function readFeed(url: string): Promise<NewsStory[]> {
     signal: AbortSignal.timeout(8_000),
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return parseArsFeed(await response.text());
+  return await parseArsFeed(await response.text());
 }
 
 export async function fetchArs(view: NewsWireView, limit: number): Promise<NewsStory[]> {

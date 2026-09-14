@@ -1,5 +1,5 @@
 import { Readability } from '@mozilla/readability';
-import { JSDOM } from 'jsdom';
+import { loadJsdom } from '$lib/server/jsdom';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
@@ -85,8 +85,9 @@ export function normalizeExtractedText(text: string): string {
  * `textContent` alone joins adjacent block elements ("2026Model cards"),
  * which made otherwise successful Readability extractions hard to read.
  */
-export function readableTextFromHtml(html: string, url = 'https://example.invalid/'): string {
+export async function readableTextFromHtml(html: string, url = 'https://example.invalid/'): Promise<string> {
 	if (!html) return '';
+	const { JSDOM } = await loadJsdom();
 	const dom = new JSDOM(`<body>${html}</body>`, { url });
 	const doc = dom.window.document;
 	doc
@@ -315,6 +316,7 @@ export async function fetchUrlContent(rawUrl: string): Promise<UrlFetchResult> {
 	let excerpt: string | null = null;
 	let text = '';
 	try {
+		const { JSDOM } = await loadJsdom();
 		const dom = new JSDOM(body, { url: finalUrl });
 		const doc = dom.window.document;
 		title = doc.querySelector('title')?.textContent?.trim() ?? null;
@@ -325,14 +327,14 @@ export async function fetchUrlContent(rawUrl: string): Promise<UrlFetchResult> {
 		const reader = new Readability(doc);
 		const article = reader.parse();
 		if (article?.textContent && article.textContent.trim().length >= 50) {
-			text = readableTextFromHtml(article.content ?? '', finalUrl);
+			text = await readableTextFromHtml(article.content ?? '', finalUrl);
 			if (!text) text = normalizeExtractedText(article.textContent);
 			if (article.title) title = article.title;
 			if (article.excerpt?.trim()) excerpt = article.excerpt.trim();
 		} else {
 			// Fallback: strip scripts/styles, take body text
 			doc.querySelectorAll('script, style, nav, footer, header, noscript').forEach((el) => el.remove());
-			text = readableTextFromHtml(doc.body?.innerHTML ?? '', finalUrl);
+			text = await readableTextFromHtml(doc.body?.innerHTML ?? '', finalUrl);
 		}
 	} catch (err: any) {
 		throw {

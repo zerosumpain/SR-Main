@@ -23,5 +23,5 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
     html = await res.text();
   }
   if (!html) throw error(400, 'html or session required');
-  return json(extractArticle(html, body.url));
+  return json(await extractArticle(html, body.url));
 };
