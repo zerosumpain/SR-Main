@@ -41,7 +41,7 @@ export async function parseArsFeed(xml: string): Promise<NewsStory[]> {
         commentCount: Number.isSafeInteger(comments) && comments >= 0 ? comments : 0,
         tags: Array.from(item.getElementsByTagName('category')).map((tag) => tag.textContent?.trim() ?? '').filter(Boolean).slice(0, 8),
         summary: JSDOM.fragment(text('description')).textContent?.trim() ?? '',
-        rank: stories.length + 1, alsoOn: [],
+        rank: stories.length + 1, heat: 0, alsoOn: [],
       });
     }
     return stories;

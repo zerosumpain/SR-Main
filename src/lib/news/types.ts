@@ -7,7 +7,7 @@ export { NEWS_SOURCES } from '$lib/constants/news-sources';
 export type { NewsSource };
 export type NewsView = 'top' | 'new' | 'best' | 'favourites';
 export type NewsWireView = Exclude<NewsView, 'favourites'>;
-export type NewsSort = 'time' | 'points';
+export type NewsSort = 'time' | 'points' | 'heat';
 
 /**
  * The same article, carried by another wire.
@@ -42,6 +42,12 @@ export interface NewsStory {
   tags: string[];
   summary: string;
   rank: number;
+  /**
+   * 0-1 standing within this story's OWN wire, blended with recency. Raw scores
+   * are not comparable across wires and one wire has none at all, so this is
+   * what the desk ranks on. Set by `withHeat`; 0 until then.
+   */
+  heat: number;
   /** Other wires carrying this same article. Empty for all but duplicates. */
   alsoOn: NewsAlso[];
 }

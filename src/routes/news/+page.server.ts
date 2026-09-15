@@ -6,7 +6,7 @@ import {
 } from '$lib/news/sources';
 import { getNewsStats } from '$lib/news/stats';
 import { listNewsFavourites, newsOwnerKey } from '$lib/news/favourites';
-import { readKeysFor } from '$lib/news/store';
+import { newSinceLastVisit, readKeysFor } from '$lib/news/store';
 import { correlateStories } from '$lib/news/correlate';
 import { loadAnchors } from '$lib/news/correlate.server';
 import { NEWS_SOURCES, NEWS_SOURCE_LABELS } from '$lib/constants/news-sources';
@@ -27,10 +27,13 @@ export const load: PageServerLoad = async ({ url, locals }) => {
       : 'top';
   const requestedSort = url.searchParams.get('sort');
   const sort: NewsSort =
-    requestedSort === 'points' || requestedSort === 'time'
+    requestedSort === 'points' || requestedSort === 'time' || requestedSort === 'heat'
       ? requestedSort
       : view === 'best'
-        ? 'points'
+        // Heat, not points. Raw scores are not comparable across wires and one
+        // wire reports none at all, so a points default made "best" mean "best
+        // on the two wires that vote".
+        ? 'heat'
         : 'time';
   const force = url.searchParams.has('fresh');
   const limit = normalizeNewsLimit(url.searchParams.get('limit'));
@@ -56,14 +59,20 @@ export const load: PageServerLoad = async ({ url, locals }) => {
       : getNewsFeed(view as NewsWireView, { force, limit });
   const [feed, stats] = await Promise.all([feedPromise, getNewsStats(ownerKey)]);
 
-  // Both are best-effort decoration on a desk that must render without them.
-  const [correlations, readKeys] = await Promise.all([
+  // All best-effort decoration on a desk that must render without any of it.
+  const [correlations, readKeys, newSince] = await Promise.all([
     correlationsFor(feed),
     readKeysFor(ownerKey, feed.stories.map((story) => story.key)),
+    // A saved list has no arrival time of its own — every row got there because
+    // the owner put it there, so "new since you looked" is not a question about it.
+    view === 'favourites'
+      ? Promise.resolve({ count: 0, since: null })
+      : newSinceLastVisit(ownerKey, feed.stories),
   ]);
 
   return {
-    feed,
+    feed: { ...feed, newSinceLast: newSince.count },
+    newSince,
     stats,
     sort,
     limit,

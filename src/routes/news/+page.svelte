@@ -26,19 +26,23 @@
           .toLowerCase()
           .includes(q);
       })
-      .toSorted((a, b) =>
-        data.sort === 'points'
-          ? b.score - a.score || Date.parse(b.publishedAt) - Date.parse(a.publishedAt)
-          : Date.parse(b.publishedAt) - Date.parse(a.publishedAt) || b.score - a.score,
-      );
+      .toSorted((a, b) => {
+        if (data.sort === 'heat') {
+          return b.heat - a.heat || Date.parse(b.publishedAt) - Date.parse(a.publishedAt);
+        }
+        if (data.sort === 'points') {
+          return b.score - a.score || Date.parse(b.publishedAt) - Date.parse(a.publishedAt);
+        }
+        return Date.parse(b.publishedAt) - Date.parse(a.publishedAt) || b.score - a.score;
+      });
   });
 
   function feedHref(view: 'top' | 'new' | 'best'): string {
-    const sort = view === 'best' ? 'points' : view === 'new' ? 'time' : data.sort;
+    const sort = view === 'best' ? 'heat' : view === 'new' ? 'time' : data.sort;
     return `/news?view=${view}&sort=${sort}&limit=${data.limit}`;
   }
 
-  function sortHref(sort: 'time' | 'points'): string {
+  function sortHref(sort: 'time' | 'points' | 'heat'): string {
     return `/news?view=${data.feed.view}&sort=${sort}&limit=${data.limit}`;
   }
 
@@ -122,9 +126,15 @@
           </small>
         </div>
         <div>
-          <dt>New since last</dt>
+          <dt>New since last visit</dt>
           <dd>{String(data.feed.newSinceLast).padStart(2, '0')}</dd>
-          <small>Compared with the previous gather</small>
+          <small>
+            {data.feed.view === 'favourites'
+              ? 'Not counted for a saved list'
+              : data.newSince.since
+                ? `You last looked ${gatheredTime(data.newSince.since)} ${gatheredDate(data.newSince.since)}`
+                : 'First visit on this desk'}
+          </small>
         </div>
         <div>
           <dt>Kept in graph</dt>
@@ -174,7 +184,8 @@
       <nav class="sort-tabs" aria-label="Order stories">
         <span>Order</span>
         <a href={sortHref('time')} aria-current={data.sort === 'time' ? 'page' : undefined}>Time</a>
-        <a href={sortHref('points')} aria-current={data.sort === 'points' ? 'page' : undefined}>Points</a>
+        <a href={sortHref('heat')} aria-current={data.sort === 'heat' ? 'page' : undefined} title="Standing within each wire, blended with recency — comparable across sources">Heat</a>
+        <a href={sortHref('points')} aria-current={data.sort === 'points' ? 'page' : undefined} title="Raw votes. Ars Technica reports none.">Points</a>
       </nav>
       <label class="search">
         <span>Find</span>

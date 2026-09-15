@@ -8,6 +8,7 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { newsReads, newsStories } from '$lib/db/schema';
+import { getSetting, setSetting } from '$lib/server/models/settings';
 import type { NewsSource, NewsStory } from './types';
 
 /**
@@ -76,6 +77,71 @@ export async function recordRead(
       });
   } catch (err) {
     console.error('[news] could not record the read:', err instanceof Error ? err.message : err);
+  }
+}
+
+/**
+ * A visit closer together than this does not count as a new visit.
+ *
+ * Without it the tile is honest and useless: refresh twice in a minute and the
+ * second load truthfully reports zero new stories, because you did in fact just
+ * look. Holding the mark still for half an hour means the number stays stable
+ * while you are actually reading, and resets when you come back later.
+ */
+const VISIT_GAP_MS = 30 * 60 * 1000;
+
+/** One scalar per owner. `app_settings`, like the watchlist snapshot — a table
+ *  for a single timestamp per person would be a table for nothing. */
+function visitKey(ownerKey: string): string {
+  return `news.lastVisit.${ownerKey}`;
+}
+
+export interface NewSinceVisit {
+  count: number;
+  /** When the owner previously looked. Null on a first-ever visit. */
+  since: string | null;
+}
+
+/**
+ * How many of the stories currently on the desk arrived since the owner last
+ * looked — the thing the page has always claimed to show.
+ *
+ * **A story with no stored row counts as new.** That is not a fallback, it is
+ * the correct answer twice over: a story the desk has never recorded has never
+ * been seen, and it also makes this immune to the race with `recordStories`,
+ * which is deliberately not awaited. Without that rule the first view of a
+ * fresh gather would undercount to nearly zero.
+ */
+export async function newSinceLastVisit(
+  ownerKey: string,
+  stories: readonly NewsStory[],
+): Promise<NewSinceVisit> {
+  if (stories.length === 0) return { count: 0, since: null };
+  try {
+    const stored = await getSetting<string>(visitKey(ownerKey));
+    const since = stored ? new Date(stored) : null;
+    const sinceValid = since && Number.isFinite(since.getTime()) ? since : null;
+
+    const rows = await db
+      .select({ newsKey: newsStories.newsKey, firstSeenAt: newsStories.firstSeenAt })
+      .from(newsStories)
+      .where(inArray(newsStories.newsKey, stories.map((story) => story.key)));
+    const firstSeen = new Map(rows.map((row) => [row.newsKey, row.firstSeenAt]));
+
+    const count = stories.reduce((total, story) => {
+      const seen = firstSeen.get(story.key);
+      if (!seen) return total + 1;
+      if (!sinceValid) return total + 1;
+      return total + (seen > sinceValid ? 1 : 0);
+    }, 0);
+
+    if (!sinceValid || Date.now() - sinceValid.getTime() > VISIT_GAP_MS) {
+      await setSetting(visitKey(ownerKey), new Date().toISOString());
+    }
+    return { count, since: sinceValid ? sinceValid.toISOString() : null };
+  } catch (err) {
+    console.error('[news] could not count new stories:', err instanceof Error ? err.message : err);
+    return { count: 0, since: null };
   }
 }
 

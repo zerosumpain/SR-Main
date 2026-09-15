@@ -27,6 +27,7 @@ function story(overrides: Partial<NewsStory> = {}): NewsStory {
     summary: 'The compiler team describes a new optimisation.',
     rank: 1,
     canonicalUrl: 'example.com/rust-compiler',
+    heat: 0,
     alsoOn: [],
     ...overrides,
   };

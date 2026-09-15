@@ -9,6 +9,7 @@ import type {
 import { fetchArs, getArsStory, isArsStoryId } from './ars';
 import { canonicalUrl } from './canonical';
 import { dedupeStories } from './dedupe';
+import { withHeat } from './heat';
 import { recordStories } from './store';
 const HN_API = 'https://hacker-news.firebaseio.com/v0';
 const LOBSTERS = 'https://lobste.rs';
@@ -152,6 +153,7 @@ export function normalizeHackerNews(item: HackerNewsItem, rank = 0): NewsStory |
     tags: [],
     summary: plainText(item.text),
     rank,
+    heat: 0,
     alsoOn: [],
   };
 }
@@ -179,6 +181,7 @@ export function normalizeLobsters(item: LobstersItem, rank = 0): NewsStory | nul
     tags: Array.isArray(item.tags) ? item.tags.filter((tag): tag is string => typeof tag === 'string').slice(0, 8) : [],
     summary: item.description_plain?.trim() ?? '',
     rank,
+    heat: 0,
     alsoOn: [],
   };
 }
@@ -296,11 +299,7 @@ function message(err: unknown): string {
   return String(err).slice(0, 160);
 }
 
-async function loadFeed(
-  view: NewsWireView,
-  previous: NewsFeed | null,
-  storyLimit: number,
-): Promise<NewsFeed> {
+async function loadFeed(view: NewsWireView, storyLimit: number): Promise<NewsFeed> {
   const [hn, lobsters, ars] = await Promise.allSettled([
     fetchHackerNews(view, storyLimit),
     fetchLobsters(view, storyLimit),
@@ -329,28 +328,46 @@ async function loadFeed(
       error: lobsters.status === 'rejected' ? message(lobsters.reason) : null,
     },
   ];
+  // Heat FIRST, because the `best` view ranks on it. It is computed per source
+  // over that source's whole pull, so it has to see every story before any are
+  // dropped or merged.
+  const scored = withHeat([...hnStories, ...lobsterStories, ...arsStories]);
+  const heatOf = new Map(scored.map((story) => [story.key, story.heat]));
+  const withHeatOf = (group: NewsStory[]) =>
+    group.map((story) => ({ ...story, heat: heatOf.get(story.key) ?? 0 }));
+
   // Dedupe AFTER ranking, never before: `dedupeStories` keeps the first
   // occurrence, so the order it is handed decides which wire's listing survives.
   const stories = dedupeStories(
     view === 'best'
-      ? [...hnStories, ...lobsterStories, ...arsStories].sort(
-          (a, b) => b.score - a.score || Date.parse(b.publishedAt) - Date.parse(a.publishedAt),
+      ? // Ranked on heat, not raw score. Ars reports no votes at all, so a raw
+        // score sort could never place it above any HN or Lobsters story — the
+        // wire was structurally excluded from its own "best of" view.
+        [...scored].sort(
+          (a, b) => b.heat - a.heat || Date.parse(b.publishedAt) - Date.parse(a.publishedAt),
         )
-      : interleave([hnStories, lobsterStories, arsStories]),
+      : interleave([
+          withHeatOf(hnStories),
+          withHeatOf(lobsterStories),
+          withHeatOf(arsStories),
+        ]),
   );
   // Fire and forget. Nothing on this request path reads the history back, and a
   // reading desk that 500s because a logging insert failed is a worse desk than
   // one with a gap in its history.
   void recordStories(stories);
-  const previousKeys = previous ? new Set(previous.stories.map((story) => story.key)) : null;
   return {
     view,
     stories,
     sources: states,
     updatedAt: new Date().toISOString(),
-    newSinceLast: previousKeys
-      ? stories.reduce((count, story) => count + (previousKeys.has(story.key) ? 0 : 1), 0)
-      : 0,
+    // Deliberately 0 here. This used to diff against the PREVIOUS CACHED FETCH
+    // — about three minutes old, same process, same view+limit key — and the
+    // page presented it as "new since you last looked". It reset on every
+    // deploy, changed meaning when the limit changed, and was never once about
+    // the reader. The honest per-owner count needs a persisted firstSeenAt and
+    // a stored visit time, so it is computed in the page load instead.
+    newSinceLast: 0,
     cached: false,
   };
 }
@@ -368,7 +385,7 @@ export async function getNewsFeed(
   }
   if (!opts.force && existing?.pending) return existing.pending;
 
-  const pending = loadFeed(view, existing?.value ?? null, storyLimit).then((value) => {
+  const pending = loadFeed(view, storyLimit).then((value) => {
     cache.set(cacheKey, { value, expiresAt: Date.now() + CACHE_TTL_MS, pending: null });
     return value;
   });
