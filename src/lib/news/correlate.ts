@@ -288,6 +288,93 @@ export interface CorrelateOptions {
 }
 
 /**
+ * An anchor matching more than this share of the desk identifies nothing on it.
+ *
+ * **Deliberately looser than the mail module's 5%, because the corpora are not
+ * comparable.** Mail measures over 3,776 threads, where 5% is 189 messages and
+ * leaves plenty of slack. A news desk holds ~122 stories, where 5% is SIX — so
+ * the same share would block an entity that legitimately appeared in seven, and
+ * the first draft of this rule duly blocked "Department for Education" for
+ * matching two stories out of thirty.
+ *
+ * The live numbers the threshold has to separate are not close: "United
+ * Kingdom" matched roughly 40 of 122, "Department for Education" matched 2.
+ * Anything from ~10% to ~25% splits them, so 15% sits in the middle rather than
+ * on either edge.
+ */
+export const MAX_CORPUS_SHARE = 0.15;
+
+/**
+ * ...and it must match this many in absolute terms as well.
+ *
+ * The share alone misfires on a small desk: at 25 stories, 15% is under four,
+ * so a single extra match starts to look like ubiquity. Both conditions have to
+ * hold, which is the same belt-and-braces shape `DEGREE_JUMP_RATIO` and
+ * `DEGREE_JUMP_MIN` use in the watchlist.
+ */
+export const MIN_CORPUS_HITS_TO_BLOCK = 4;
+
+/**
+ * Below this many stories there is no distribution to measure, so the rule is
+ * skipped entirely. The tool answers eight-story requests, and blocking an
+ * anchor for appearing in two of eight would be noise, not frequency.
+ */
+export const MIN_CORPUS_FOR_FREQUENCY = 20;
+
+/**
+ * Anchors that match too much of the desk to mean anything on it.
+ *
+ * ── Why a stop-list cannot do this job ──────────────────────────────────────
+ *
+ * Measured on the live desk, 2026-09-15. The first brief written on production
+ * named six stories, and three were noise:
+ *
+ *   "Houthis bear full responsibility ... UK statement at the UN Security
+ *    Council"        → tracks United Kingdom, Security
+ *   "Earnings and employment from PAYE RTI"
+ *                    → tracks United Kingdom, September, September. The
+ *
+ * `United Kingdom` is in nearly every GOV.UK and ONS item; `September. The` is
+ * a malformed entity the extractor minted. Neither is reachable by the
+ * capitalisation rule — multi-word names are exempt from it by design, and
+ * these publishers use title case regardless — and no hand-written list would
+ * have predicted either.
+ *
+ * This is the same finding the mail work reached over 3,776 threads: the graph
+ * holds the vocabulary of the corpus, so relevance has to be measured against
+ * how much of the corpus an entity actually discriminates. An anchor naming
+ * half the desk tells you nothing about any one story on it.
+ *
+ * Computed as a SEPARATE first pass, for the reason `matchedEntities` is
+ * separate from `matchEntities` in the mail module: the block list is derived
+ * FROM the raw counts, so it cannot also be an input to them.
+ */
+export function overFrequentAnchors(
+  stories: readonly NewsStory[],
+  prepared: readonly PreparedAnchor[],
+  floorFor: (strength: MatchStrength) => number,
+): Set<string> {
+  const blocked = new Set<string>();
+  if (stories.length < MIN_CORPUS_FOR_FREQUENCY) return blocked;
+
+  const ceiling = stories.length * MAX_CORPUS_SHARE;
+  const hits = new Map<string, number>();
+  for (const story of stories) {
+    const hay = haystack(story);
+    for (const entry of prepared) {
+      const m = matchPrepared(story, hay, entry);
+      if (m && m.score >= floorFor(m.strength)) {
+        hits.set(entry.anchor.id, (hits.get(entry.anchor.id) ?? 0) + 1);
+      }
+    }
+  }
+  for (const [id, count] of hits) {
+    if (count > ceiling && count >= MIN_CORPUS_HITS_TO_BLOCK) blocked.add(id);
+  }
+  return blocked;
+}
+
+/**
  * Rank today's wire against what the knowledge base says matters.
  *
  * Stories with no match are dropped entirely rather than returned with a zero:
@@ -304,12 +391,14 @@ export function correlateStories(
   const floorFor = (strength: MatchStrength) => opts.floor ?? STRENGTH_FLOOR[strength];
 
   const prepared = anchors.map(prepareAnchor);
+  const blocked = overFrequentAnchors(stories, prepared, floorFor);
 
   const out: CorrelatedStory[] = [];
   for (const story of stories) {
     const hay = haystack(story);
     const matches: StoryMatch[] = [];
     for (const entry of prepared) {
+      if (blocked.has(entry.anchor.id)) continue;
       const m = matchPrepared(story, hay, entry);
       if (m && m.score >= floorFor(m.strength)) matches.push(m);
     }
