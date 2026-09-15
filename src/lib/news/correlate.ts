@@ -44,6 +44,15 @@ export interface Anchor {
   importance: number;
   /** Human phrase for the citation line — "watched entity", "you researched". */
   why: string;
+  /**
+   * How much the knowledge base already holds on this element — notes naming
+   * it, and when one last did.
+   *
+   * The desk's question is not only "is this relevant" but "do I already know
+   * about this". A story about something with twelve notes behind it is a
+   * different read from the first thing you have ever seen on the subject.
+   */
+  evidence?: { notes: number; lastSeen: string | null };
 }
 
 export type MatchStrength = 'name' | 'phrase' | 'acronym';

@@ -4,25 +4,30 @@ import {
   MAX_NEWS_STORIES_PER_SOURCE,
   normalizeNewsLimit,
 } from '$lib/news/sources';
-import { getNewsStats } from '$lib/news/stats';
+import { getNewsStats, keptKeysFor } from '$lib/news/stats';
 import { listNewsFavourites, newsOwnerKey } from '$lib/news/favourites';
 import { newSinceLastVisit, readKeysFor } from '$lib/news/store';
 import { correlateStories } from '$lib/news/correlate';
 import { loadAnchors } from '$lib/news/correlate.server';
 import { NEWS_SOURCES, NEWS_SOURCE_LABELS } from '$lib/constants/news-sources';
-import type { NewsFeed, NewsSort, NewsView, NewsWireView } from '$lib/news/types';
+import type { NewsFeed, NewsSort, NewsStory, NewsView, NewsWireView } from '$lib/news/types';
 
 /** What a row needs to say why it surfaced, and nothing more. */
 export interface StoryCorrelation {
   score: number;
   names: string[];
   why: string;
+  /** What the knowledge base already holds on the strongest match. */
+  evidence: { notes: number; lastSeen: string | null } | null;
 }
 
 export const load: PageServerLoad = async ({ url, locals }) => {
   const requestedView = url.searchParams.get('view');
   const view: NewsView =
-    requestedView === 'new' || requestedView === 'best' || requestedView === 'favourites'
+    requestedView === 'new' ||
+    requestedView === 'best' ||
+    requestedView === 'for-you' ||
+    requestedView === 'favourites'
       ? requestedView
       : 'top';
   const requestedSort = url.searchParams.get('sort');
@@ -56,51 +61,84 @@ export const load: PageServerLoad = async ({ url, locals }) => {
           newSinceLast: 0,
           cached: true,
         }))
-      : getNewsFeed(view as NewsWireView, { force, limit });
+      // `for-you` reorders the top wire rather than fetching its own.
+      : getNewsFeed(view === 'for-you' ? 'top' : (view as NewsWireView), { force, limit });
   const [feed, stats] = await Promise.all([feedPromise, getNewsStats(ownerKey)]);
 
   // All best-effort decoration on a desk that must render without any of it.
-  const [correlations, readKeys, newSince] = await Promise.all([
+  const keys = feed.stories.map((story) => story.key);
+  const [correlated, readKeys, keptKeys, newSince] = await Promise.all([
     correlationsFor(feed),
-    readKeysFor(ownerKey, feed.stories.map((story) => story.key)),
+    readKeysFor(ownerKey, keys),
+    keptKeysFor(keys),
     // A saved list has no arrival time of its own — every row got there because
     // the owner put it there, so "new since you looked" is not a question about it.
     view === 'favourites'
       ? Promise.resolve({ count: 0, since: null })
       : newSinceLastVisit(ownerKey, feed.stories),
   ]);
+  const { correlations, anchorCount } = correlated;
+
+  const stories =
+    view === 'for-you' ? rankForYou(feed.stories, correlations) : feed.stories;
 
   return {
-    feed: { ...feed, newSinceLast: newSince.count },
+    feed: { ...feed, view, stories, newSinceLast: newSince.count },
     newSince,
     stats,
     sort,
     limit,
     maxLimit: MAX_NEWS_STORIES_PER_SOURCE,
     correlations,
+    anchorCount,
     readKeys: [...readKeys],
+    keptKeys: [...keptKeys],
   };
 };
 
-async function correlationsFor(feed: NewsFeed): Promise<Record<string, StoryCorrelation>> {
+/**
+ * Correlated stories first, everything else in the order it already had.
+ *
+ * RANKS, never filters. A desk that hides what did not correlate loses the
+ * serendipity that makes a wire worth reading at all, and gives you no way to
+ * notice what it dropped — so the uncorrelated stories stay, below the fold.
+ */
+function rankForYou(
+  stories: readonly NewsStory[],
+  correlations: Record<string, StoryCorrelation>,
+): NewsStory[] {
+  return [...stories].sort((a, b) => {
+    const scoreA = correlations[a.key]?.score ?? 0;
+    const scoreB = correlations[b.key]?.score ?? 0;
+    return scoreB - scoreA || b.heat - a.heat;
+  });
+}
+
+async function correlationsFor(
+  feed: NewsFeed,
+): Promise<{ correlations: Record<string, StoryCorrelation>; anchorCount: number }> {
   try {
     const { anchors } = await loadAnchors();
-    if (anchors.length === 0) return {};
+    if (anchors.length === 0) return { correlations: {}, anchorCount: 0 };
     // No limit: the page wants to know about every row it is going to draw,
     // not the top eight the tool answer wants.
     const correlated = correlateStories(feed.stories, anchors, { limit: feed.stories.length });
-    return Object.fromEntries(
-      correlated.map((entry) => [
-        entry.story.key,
-        {
-          score: entry.score,
-          names: entry.matches.map((match) => match.anchor.name),
-          why: entry.matches[0].anchor.why,
-        },
-      ]),
-    );
+    return {
+      anchorCount: anchors.length,
+      correlations: Object.fromEntries(
+        correlated.map((entry) => [
+          entry.story.key,
+          {
+            score: entry.score,
+            names: entry.matches.map((match) => match.anchor.name),
+            why: entry.matches[0].anchor.why,
+            evidence: entry.matches[0].anchor.evidence ?? null,
+          },
+        ]),
+      ),
+    };
   } catch (err) {
     console.error('[news] correlation failed:', err instanceof Error ? err.message : err);
-    return {};
+    return { correlations: {}, anchorCount: 0 };
   }
 }

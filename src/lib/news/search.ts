@@ -106,6 +106,20 @@ function termScore(term: string, story: NewsStory): number {
   return score;
 }
 
+/**
+ * Does this story match every term of a query?
+ *
+ * Exported so the DESK and the LLM tool share one definition of "matches". The
+ * page used to run its own `.includes()` over a concatenated string, so the two
+ * disagreed: the page matched "ai" inside "chain" and "said", which the tool
+ * deliberately does not, and the page could not find a term that appears only in
+ * a story's summary, which the tool can.
+ */
+export function matchesNewsQuery(story: NewsStory, terms: readonly string[]): boolean {
+  if (terms.length === 0) return true;
+  return terms.every((term) => termScore(term, story) > 0);
+}
+
 /** Rank a fetched news wire without changing its order for a generic request. */
 export function searchNewsStories(
   stories: NewsStory[],

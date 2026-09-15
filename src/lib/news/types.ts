@@ -5,8 +5,15 @@
 import type { NewsSource } from '$lib/constants/news-sources';
 export { NEWS_SOURCES } from '$lib/constants/news-sources';
 export type { NewsSource };
-export type NewsView = 'top' | 'new' | 'best' | 'favourites';
-export type NewsWireView = Exclude<NewsView, 'favourites'>;
+export type NewsView = 'top' | 'new' | 'best' | 'for-you' | 'favourites';
+/**
+ * The views that correspond to an actual fetch.
+ *
+ * `for-you` is not one: it is the top wire REORDERED by what the knowledge
+ * graph cares about, not a different request. Letting it reach a fetcher would
+ * mean inventing a fourth upstream feed that does not exist.
+ */
+export type NewsWireView = Exclude<NewsView, 'favourites' | 'for-you'>;
 export type NewsSort = 'time' | 'points' | 'heat';
 
 /**

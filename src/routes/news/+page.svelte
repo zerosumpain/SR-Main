@@ -8,6 +8,7 @@
   import type { PageData } from './$types';
   import type { NewsSource } from '$lib/news/types';
   import { NEWS_SOURCE_DEFS, NEWS_SOURCE_CODES, type NewsLane } from '$lib/constants/news-sources';
+  import { matchesNewsQuery, newsQueryTerms } from '$lib/news/search';
   import { navigating } from '$app/state';
 
   let { data }: { data: PageData } = $props();
@@ -24,19 +25,24 @@
   );
 
   const readKeys = $derived(new Set(data.readKeys));
+  const keptKeys = $derived(new Set(data.keptKeys));
+  const correlatedCount = $derived(Object.keys(data.correlations).length);
 
   const stories = $derived.by(() => {
-    const q = query.trim().toLowerCase();
+    // The SAME matcher the `news_search` tool uses. The page used to run its own
+    // `.includes()` over a concatenated string, so the two disagreed about what
+    // a search means — and only one of them could see a story's summary.
+    const terms = newsQueryTerms(query);
     return data.feed.stories
       .filter((story) => {
         if (source !== 'all' && story.source !== source) return false;
         if (lane !== 'all' && laneOf.get(story.source) !== lane) return false;
-        if (!q) return true;
-        return `${story.title} ${story.domain} ${story.sourceLabel} ${story.author ?? ''} ${story.tags.join(' ')}`
-          .toLowerCase()
-          .includes(q);
+        return matchesNewsQuery(story, terms);
       })
       .toSorted((a, b) => {
+        // For You is ranked on the server by correlation; re-sorting here would
+        // throw that away and leave a tab that does nothing.
+        if (data.feed.view === 'for-you') return 0;
         if (data.sort === 'heat') {
           return b.heat - a.heat || Date.parse(b.publishedAt) - Date.parse(a.publishedAt);
         }
@@ -47,7 +53,7 @@
       });
   });
 
-  function feedHref(view: 'top' | 'new' | 'best'): string {
+  function feedHref(view: 'top' | 'new' | 'best' | 'for-you'): string {
     const sort = view === 'best' ? 'heat' : view === 'new' ? 'time' : data.sort;
     return `/news?view=${view}&sort=${sort}&limit=${data.limit}`;
   }
@@ -178,13 +184,16 @@
               ? 'JUST IN'
               : data.feed.view === 'best'
                 ? 'BEST OF 24H'
-                : 'FAVOURITES'}
+                : data.feed.view === 'for-you'
+                  ? 'AGAINST YOUR GRAPH'
+                  : 'FAVOURITES'}
         </h2>
       </div>
       <nav class="view-tabs" aria-label="Feed order" data-sveltekit-noscroll>
         <a href={feedHref('top')} aria-current={data.feed.view === 'top' ? 'page' : undefined}>Top</a>
         <a href={feedHref('new')} aria-current={data.feed.view === 'new' ? 'page' : undefined}>New</a>
         <a href={feedHref('best')} aria-current={data.feed.view === 'best' ? 'page' : undefined}>Best</a>
+        <a href={feedHref('for-you')} aria-current={data.feed.view === 'for-you' ? 'page' : undefined}>For you</a>
         <a href="/news?view=favourites&sort=time" aria-current={data.feed.view === 'favourites' ? 'page' : undefined}>Saved {data.stats.favouriteCount}</a>
       </nav>
     </header>
@@ -224,6 +233,22 @@
       <a class="refresh" data-sveltekit-preload-data="off" href="/news?view={data.feed.view}&sort={data.sort}&limit={data.limit}&fresh=1" aria-label="Refresh news sources">Refresh ↻</a>
     </div>
 
+    {#if data.feed.view === 'for-you'}
+      <p class="foryou-note">
+        {#if data.anchorCount === 0}
+          <strong>Nothing to rank against.</strong> The knowledge graph has no entities,
+          research topics or memories to match headlines on, so this order is the wire's own.
+        {:else if correlatedCount === 0}
+          <strong>No story on the desk matches your graph right now.</strong>
+          Ranked against {data.anchorCount} elements; the wire's own order stands below.
+        {:else}
+          <strong>{correlatedCount} of {data.feed.stories.length}</strong> match something
+          your knowledge base holds, ranked against {data.anchorCount} elements. Everything
+          else follows in the wire's own order — nothing is hidden.
+        {/if}
+      </p>
+    {/if}
+
     <p class="desk-status" role="status">{updating ? 'Updating stories…' : `${stories.length} stories shown`}{#if source !== 'all' && !votes(source)} · Latest articles{data.feed.view === 'best' ? ' from 24h' : ''}; no voting scores{/if}{#if !updating && !sourcesLive} · Some sources are unavailable{/if}</p>
 
     {#if stories.length === 0}
@@ -256,11 +281,19 @@
                   {#if readKeys.has(story.key)}
                     <span class="story-read">Read</span>
                   {/if}
+                  {#if keptKeys.has(story.key)}
+                    <span class="story-kept">In graph</span>
+                  {/if}
                 </span>
                 {#if data.correlations[story.key]}
                   <span class="story-why" title={data.correlations[story.key].why}>
                     <span class="why-label">Tracks</span>
                     {data.correlations[story.key].names.join(' · ')}
+                    {#if data.correlations[story.key].evidence?.notes}
+                      <span class="why-evidence"
+                        >{data.correlations[story.key].evidence?.notes} note{data.correlations[story.key].evidence?.notes === 1 ? '' : 's'} already</span
+                      >
+                    {/if}
                   </span>
                 {/if}
               </span>
@@ -363,6 +396,12 @@
   .story-also::before { content: '· '; color: var(--text-ghost); }
   .story-read { color: var(--text-ghost); text-transform: uppercase; letter-spacing: 0.06em; }
   .story-read::before { content: '· '; }
+  .story-kept { color: var(--success); text-transform: uppercase; letter-spacing: 0.06em; }
+  .story-kept::before { content: '· '; color: var(--text-ghost); }
+  .why-evidence { color: var(--text-muted); }
+  .why-evidence::before { content: '· '; color: var(--text-ghost); }
+  .foryou-note { margin: 0; padding: 12px 8px; border-bottom: 1px solid var(--line-hair); font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.5; color: var(--text-muted); }
+  .foryou-note strong { color: var(--accent-ink); font-weight: 600; }
   /* The correlation line is the one thing on the row that is OURS rather than
      the wire's, so it gets the counter-accent and its own line — a reader
      scanning for it should not have to find it inside the byline. */

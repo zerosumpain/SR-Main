@@ -28,6 +28,7 @@ import { daydreamImprove } from './activities/daydream-improve';
 import { daydreamReview } from './activities/daydream-review';
 import { daydreamWeekly } from './activities/daydream-weekly';
 import { activitySync } from './activities/activity-sync';
+import { newsBrief } from './activities/news-brief';
 
 /**
  * The full set of available heartbeat activity handlers. The engine looks
@@ -35,6 +36,7 @@ import { activitySync } from './activities/activity-sync';
  * appear here are skipped with a 'skipped' outcome ("no handler").
  */
 const handlers: ActivityHandler[] = [
+  newsBrief,
   chatContinuation,
   conversationCheckin,
   buildProgressCheck,
