@@ -128,6 +128,38 @@ function containsPhrase(hay: string, needle: string): boolean {
   return hay.includes(` ${n} `);
 }
 
+/** Regex-safe form of a surface that may contain `+`, `.`, `#` — C++, .NET. */
+function escapeRe(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * A single word only counts when the HEADLINE capitalised it.
+ *
+ * Found in production on 2026-09-15: "SpaceX declares Starship ready for orbit"
+ * matched a graph entity called **READY** — a concept node with 10 connections,
+ * scoring 0.41 against a 0.3 floor. The graph is full of entities that are
+ * ordinary English words, and the mail relevance work already established the
+ * rule this breaks: a hand-written stop-list cannot anticipate which of
+ * thousands of entities are junk, so it cannot be the only guard.
+ *
+ * Capitalisation is the cheap discriminator that does generalise. `ready` in a
+ * sentence is a word; `Rust` in a headline is a thing. It costs recall on a
+ * lower-cased proper noun, and that is the right trade for a badge whose entire
+ * value is that it can be believed — a false "Tracks" is worse than a missing one.
+ *
+ * Multi-word phrases skip this: "Data Spine" is specific enough on its own, and
+ * is still matched anywhere in the haystack.
+ */
+function appearsCapitalised(rawTitle: string, word: string): boolean {
+  const re = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(word)}(?![\\p{L}\\p{N}])`, 'giu');
+  for (const match of rawTitle.matchAll(re)) {
+    const first = match[0][0];
+    if (first !== first.toLowerCase()) return true;
+  }
+  return false;
+}
+
 /**
  * An acronym only counts when the HEADLINE capitalised it. Lower-cased, `ons`
  * and `dfe` collide with ordinary words and with each other; capitalised in a
@@ -198,7 +230,11 @@ function matchPrepared(
 
     const single = tokens[0];
     if (TOO_GENERIC.has(single) || single.length < 3) continue;
-    if (containsPhrase(hay, single) && (!best || best.strength === 'acronym')) {
+    if (
+      containsPhrase(hay, single) &&
+      appearsCapitalised(story.title, single) &&
+      (!best || best.strength === 'acronym')
+    ) {
       best = { matched: form, strength: 'name' };
     }
   }

@@ -26,6 +26,7 @@ function story(partial: Partial<NewsStory> & { title: string }): NewsStory {
     summary: partial.summary ?? '',
     rank: partial.rank ?? 1,
     canonicalUrl: partial.canonicalUrl ?? 'example.com/a',
+    heat: partial.heat ?? 0,
     alsoOn: partial.alsoOn ?? [],
   };
 }
@@ -60,6 +61,34 @@ describe('matchAnchor', () => {
   it('will not match a name inside a longer word', () => {
     expect(matchAnchor(story({ title: 'A trusted approach to memory' }), anchor({ name: 'Rust' }))).toBeNull();
     expect(matchAnchor(story({ title: 'Rust 2.0 released' }), anchor({ name: 'Rust' }))?.strength).toBe('name');
+  });
+
+  // Found live on 2026-09-15: "SpaceX declares Starship ready for orbit"
+  // matched a graph entity called READY, a concept node with 10 connections.
+  // The stop-list could never have anticipated it — the graph is full of these.
+  it('will not match a single word the headline did not capitalise', () => {
+    const m = matchAnchor(
+      story({ title: 'SpaceX declares Starship ready for orbit, sets launch date next week' }),
+      anchor({ name: 'READY', importance: 0.67 }),
+    );
+    expect(m).toBeNull();
+  });
+
+  it('still matches a single word the headline does capitalise', () => {
+    expect(
+      matchAnchor(story({ title: 'Why Rust keeps winning' }), anchor({ name: 'rust' }))?.strength,
+    ).toBe('name');
+  });
+
+  // A multi-word name is specific enough to stand on its own, so it is still
+  // matched anywhere in the haystack regardless of case.
+  it('does not require capitalisation for a multi-word phrase', () => {
+    expect(
+      matchAnchor(
+        story({ title: 'the data spine is finally shipping' }),
+        anchor({ name: 'Data Spine' }),
+      )?.strength,
+    ).toBe('phrase');
   });
 
   it('ignores single words that are ordinary English', () => {

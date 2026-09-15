@@ -40,6 +40,7 @@ function storedStory(row: typeof newsFavourites.$inferSelect, rank: number): New
     tags: Array.isArray(row.tags) ? row.tags.filter((tag): tag is string => typeof tag === 'string') : [],
     summary: row.summary,
     rank,
+    heat: 0,
     alsoOn: [],
   };
 }

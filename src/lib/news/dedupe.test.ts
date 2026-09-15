@@ -20,6 +20,7 @@ function story(partial: Partial<NewsStory> & { source: NewsSource; canonicalUrl:
     tags: partial.tags ?? [],
     summary: partial.summary ?? '',
     rank: partial.rank ?? 1,
+    heat: partial.heat ?? 0,
     alsoOn: partial.alsoOn ?? [],
   };
 }

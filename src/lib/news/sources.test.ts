@@ -132,7 +132,13 @@ describe('news sources', () => {
     expect(feed.newSinceLast).toBe(0);
   });
 
-  it('counts stories added since the previous successful gather', async () => {
+  // This used to assert that a second gather reported one new story. It no
+  // longer does, deliberately: the wire cache cannot answer "new since YOU last
+  // looked" — it diffed two fetches three minutes apart, in one process, and
+  // the page presented that as a fact about the reader. The honest count needs
+  // a persisted first-seen time and a stored visit, so it moved to the page
+  // load. `loadFeed` now declines to guess.
+  it('does not claim to know what is new — that is a per-owner question', async () => {
     let gather = 0;
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
@@ -159,7 +165,8 @@ describe('news sources', () => {
     const first = await getNewsFeed('top', { force: true });
     const second = await getNewsFeed('top', { force: true });
     expect(first.newSinceLast).toBe(0);
-    expect(second.newSinceLast).toBe(1);
+    expect(second.newSinceLast).toBe(0);
+    expect(second.stories).toHaveLength(2);
   });
 
   it('builds Best from the highest-scoring stories in the rolling 24-hour window', async () => {
@@ -220,12 +227,23 @@ describe('news sources', () => {
     const feed = await getNewsFeed('best', { force: true });
 
     expect(feed.view).toBe('best');
-    expect(feed.stories.map((story) => [story.key, story.score])).toEqual([
-      ['hacker-news:102', 80],
-      ['lobsters:new001', 60],
-      ['lobsters:hot001', 40],
-      ['hacker-news:101', 10],
+    // The 24-hour window is what Best means: the 999-point stories on both
+    // wires are older than that and must not appear however strong they are.
+    expect(feed.stories.map((story) => story.key).sort()).toEqual([
+      'hacker-news:101',
+      'hacker-news:102',
+      'lobsters:hot001',
+      'lobsters:new001',
     ]);
+    // Ordered by HEAT, not raw score. Scores from different wires are not
+    // comparable and one wire reports none at all, so ranking the merged list
+    // on the raw number ranked the wires against each other.
+    const heats = feed.stories.map((story) => story.heat);
+    expect(heats).toEqual([...heats].sort((a, b) => b - a));
+    // Each wire's own leader still beats its own laggard.
+    const at = (key: string) => feed.stories.findIndex((story) => story.key === key);
+    expect(at('hacker-news:102')).toBeLessThan(at('hacker-news:101'));
+    expect(at('lobsters:new001')).toBeLessThan(at('lobsters:hot001'));
   });
 
   it('rejects malformed ids before making an upstream request', async () => {
