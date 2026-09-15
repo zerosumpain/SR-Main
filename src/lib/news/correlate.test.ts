@@ -4,6 +4,7 @@ import {
   matchAnchor,
   summariseByAnchor,
   STRENGTH_FLOOR,
+  MIN_CORPUS_FOR_FREQUENCY,
   type Anchor,
 } from './correlate';
 import type { NewsStory } from './types';
@@ -238,5 +239,49 @@ describe('summariseByAnchor — the shape the daydream pack is allowed to see', 
     expect(out[0].sources.sort()).toEqual(['hacker-news', 'lobsters']);
     // The guarantee: nothing a stranger typed is in this object.
     expect(JSON.stringify(out)).not.toContain('explained');
+  });
+});
+
+// Measured on the live desk, 2026-09-15: the first production brief named six
+// stories and three were noise, all on entities that match most of the feed
+// they came from. A stop-list could not have predicted "United Kingdom" or the
+// malformed "September. The"; frequency catches both without naming either.
+describe('an anchor matching most of the desk identifies nothing on it', () => {
+  const desk = (n: number, title: (i: number) => string) =>
+    Array.from({ length: n }, (_, i) => story({ title: title(i), key: `k${i}`, id: `${i}`, rank: i + 1 }));
+
+  it('blocks an anchor that names half the wire', () => {
+    // 30 government items, all mentioning the United Kingdom; two of them also
+    // mention the thing actually being tracked.
+    const stories = desk(30, (i) =>
+      i < 2
+        ? `United Kingdom: Department for Education updates guidance ${i}`
+        : `United Kingdom announces something unrelated ${i}`,
+    );
+    const anchors = [
+      anchor({ name: 'United Kingdom', importance: 0.9 }),
+      anchor({ name: 'Department for Education', importance: 0.9 }),
+    ];
+
+    const out = correlateStories(stories, anchors, { limit: 30 });
+    const named = new Set(out.flatMap((c) => c.matches.map((m) => m.anchor.name)));
+    expect(named.has('United Kingdom')).toBe(false);
+    expect(named.has('Department for Education')).toBe(true);
+    // The two genuinely specific stories survive; the other 28 drop out.
+    expect(out).toHaveLength(2);
+  });
+
+  it('keeps an anchor that is merely popular, not ubiquitous', () => {
+    const stories = desk(40, (i) => (i < 2 ? 'Data Spine ships' : `Unrelated story ${i}`));
+    const out = correlateStories(stories, [anchor({ name: 'Data Spine' })], { limit: 40 });
+    expect(out).toHaveLength(2);
+  });
+
+  it('does not measure frequency on a corpus too small to have any', () => {
+    // The tool answers eight-story requests; blocking an anchor for appearing
+    // in two of eight would be noise rather than frequency.
+    const stories = desk(MIN_CORPUS_FOR_FREQUENCY - 1, () => 'Kubernetes everywhere');
+    const out = correlateStories(stories, [anchor({ name: 'Kubernetes' })], { limit: 50 });
+    expect(out.length).toBe(MIN_CORPUS_FOR_FREQUENCY - 1);
   });
 });
