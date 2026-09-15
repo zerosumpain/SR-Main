@@ -84,10 +84,26 @@ async function entityAnchors(): Promise<Anchor[]> {
       .groupBy(sql`x.entity_id`),
   );
 
+  // Note counts come back with the entities rather than per-row later: the desk
+  // draws up to 75 rows and a count query per row is the shape this repo has
+  // had to index its way out of before.
+  const evidence = db.$with('evidence').as(
+    db
+      .select({
+        entityId: sql<string>`ne.entity_id`.as('ev_entity_id'),
+        notes: sql<number>`count(distinct ne.note_id)::int`.as('ev_notes'),
+        lastSeen: sql<string | null>`max(n.created_at)`.as('ev_last_seen'),
+      })
+      .from(sql`intel_note_entities ne JOIN intel_notes n ON n.id = ne.note_id`)
+      .groupBy(sql`ne.entity_id`),
+  );
+
   const rows = await db
-    .with(degrees)
+    .with(degrees, evidence)
     .select({
       id: intelEntities.id,
+      notes: sql<number>`coalesce(${evidence.notes}, 0)`,
+      lastSeen: sql<string | null>`${evidence.lastSeen}`,
       name: intelEntities.name,
       aliases: intelEntities.aliases,
       canonicalName: intelEntities.canonicalName,
@@ -98,6 +114,7 @@ async function entityAnchors(): Promise<Anchor[]> {
     })
     .from(intelEntities)
     .leftJoin(degrees, eq(degrees.entityId, intelEntities.id))
+    .leftJoin(evidence, eq(evidence.entityId, intelEntities.id))
     .leftJoin(intelEntityTypes, eq(intelEntityTypes.id, intelEntities.typeId))
     .where(
       and(
@@ -147,6 +164,10 @@ async function entityAnchors(): Promise<Anchor[]> {
       why: r.watched
         ? 'a watched entity in your knowledge graph'
         : `${r.type ?? 'entity'} in your knowledge graph, ${Number(r.degree ?? 0)} connection(s)`,
+      evidence: {
+        notes: Number(r.notes ?? 0),
+        lastSeen: r.lastSeen ? new Date(r.lastSeen).toISOString() : null,
+      },
     };
   });
 }
