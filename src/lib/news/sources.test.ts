@@ -1,3 +1,4 @@
+import { NEWS_SOURCES } from '$lib/constants/news-sources';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearNewsCache,
@@ -98,8 +99,14 @@ describe('news sources', () => {
     const initial = await getNewsFeed('top');
     const expanded = await getNewsFeed('top', { limit: 50 });
 
-    expect(initial.sources.map((source) => source.count)).toEqual([0, 25, 25]);
-    expect(expanded.sources.map((source) => source.count)).toEqual([0, 50, 50]);
+    // Keyed by source, not by position: the order of `sources` follows the
+    // registry and is not what this test is about.
+    const counts = (feed: { sources: { source: string; count: number }[] }) =>
+      Object.fromEntries(feed.sources.map((source) => [source.source, source.count]));
+    // Only the sources this test mocks are asserted; the rest are unmocked,
+    // fail their fetch and report zero, which is the graceful behaviour wanted.
+    expect(counts(initial)).toMatchObject({ 'hacker-news': 25, lobsters: 25 });
+    expect(counts(expanded)).toMatchObject({ 'hacker-news': 50, lobsters: 50 });
     expect(expanded.stories).toHaveLength(100);
     expect(fetchMock).toHaveBeenCalledWith(
       'https://lobste.rs/page/2.json',
@@ -124,11 +131,16 @@ describe('news sources', () => {
 
     const feed = await getNewsFeed('top', { force: true });
     expect(feed.stories.map((story) => story.id)).toEqual(['101', '102']);
-    expect(feed.sources).toEqual([
-      expect.objectContaining({ source: 'ars-technica', ok: true, count: 0 }),
-      expect.objectContaining({ source: 'hacker-news', ok: true, count: 2 }),
-      expect.objectContaining({ source: 'lobsters', ok: false, count: 0, error: 'HTTP 503' }),
-    ]);
+    expect(feed.sources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source: 'ars-technica', ok: true, count: 0 }),
+        expect.objectContaining({ source: 'hacker-news', ok: true, count: 2 }),
+        expect.objectContaining({ source: 'lobsters', ok: false, count: 0, error: 'HTTP 503' }),
+      ]),
+    );
+    // Every registered source reports a state, healthy or not — that is what
+    // lets the desk say "Lobsters down" instead of quietly showing less.
+    expect(feed.sources).toHaveLength(NEWS_SOURCES.length);
     expect(feed.newSinceLast).toBe(0);
   });
 

@@ -3,7 +3,7 @@ import { db } from '$lib/db';
 import { newsFavourites } from '$lib/db/schema';
 import type { NewsStory } from './types';
 import { canonicalUrl } from './canonical';
-import { NEWS_SOURCE_LABELS } from '$lib/constants/news-sources';
+import { isNewsSource, NEWS_SOURCES, NEWS_SOURCE_LABELS } from '$lib/constants/news-sources';
 
 const LOCAL_OWNER_KEY = 'local-owner';
 
@@ -23,8 +23,10 @@ export async function newsOwnerKey(locals: App.Locals): Promise<string> {
 function storedStory(row: typeof newsFavourites.$inferSelect, rank: number): NewsStory {
   return {
     key: row.newsKey,
-    source: row.source === 'ars-technica' ? 'ars-technica' : row.source === 'lobsters' ? 'lobsters' : 'hacker-news',
-    sourceLabel: NEWS_SOURCE_LABELS[row.source as keyof typeof NEWS_SOURCE_LABELS] ?? 'Hacker News',
+    // A saved row predates nothing, but a source can be retired from the
+    // registry — fall back rather than crash the whole saved list for one row.
+    source: isNewsSource(row.source) ? row.source : NEWS_SOURCES[0],
+    sourceLabel: isNewsSource(row.source) ? NEWS_SOURCE_LABELS[row.source] : row.source,
     id: row.storyId,
     title: row.title,
     url: row.url,
