@@ -6,7 +6,12 @@ import type {
   NewsWireView,
 } from './types';
 
-import { fetchArs, getArsStory, isArsStoryId } from './ars';
+import { fetchFeedSource, getFeedStory, isFeedStoryId } from './feed';
+import {
+  NEWS_SOURCE_DEFS,
+  isNewsSource as isRegisteredSource,
+  newsSourceDef,
+} from '$lib/constants/news-sources';
 import { canonicalUrl } from './canonical';
 import { dedupeStories } from './dedupe';
 import { withHeat } from './heat';
@@ -300,38 +305,33 @@ function message(err: unknown): string {
 }
 
 async function loadFeed(view: NewsWireView, storyLimit: number): Promise<NewsFeed> {
-  const [hn, lobsters, ars] = await Promise.allSettled([
-    fetchHackerNews(view, storyLimit),
-    fetchLobsters(view, storyLimit),
-    fetchArs(view, storyLimit),
-  ]);
-  const hnStories = hn.status === 'fulfilled' ? hn.value : [];
-  const lobsterStories = lobsters.status === 'fulfilled' ? lobsters.value : [];
-  const arsStories = ars.status === 'fulfilled' ? ars.value : [];
-  const states: NewsSourceState[] = [
-    {
-      source: 'ars-technica', label: 'Ars Technica', count: arsStories.length,
-      ok: ars.status === 'fulfilled', error: ars.status === 'rejected' ? message(ars.reason) : null,
-    },
-    {
-      source: 'hacker-news',
-      label: 'Hacker News',
-      count: hnStories.length,
-      ok: hn.status === 'fulfilled',
-      error: hn.status === 'rejected' ? message(hn.reason) : null,
-    },
-    {
-      source: 'lobsters',
-      label: 'Lobsters',
-      count: lobsterStories.length,
-      ok: lobsters.status === 'fulfilled',
-      error: lobsters.status === 'rejected' ? message(lobsters.reason) : null,
-    },
-  ];
+  // Every registered source, fetched together. This used to be three named
+  // promises destructured into three named arrays and three hand-written state
+  // objects, which is why a fourth source was a change in four places.
+  const settled = await Promise.allSettled(
+    NEWS_SOURCE_DEFS.map((def) => {
+      if (def.kind === 'hacker-news') return fetchHackerNews(view, storyLimit);
+      if (def.kind === 'lobsters') return fetchLobsters(view, storyLimit);
+      return fetchFeedSource(def.id, view, storyLimit);
+    }),
+  );
+
+  const groups = settled.map((result) => (result.status === 'fulfilled' ? result.value : []));
+  const states: NewsSourceState[] = NEWS_SOURCE_DEFS.map((def, index) => ({
+    source: def.id,
+    label: def.label,
+    count: groups[index].length,
+    ok: settled[index].status === 'fulfilled',
+    error:
+      settled[index].status === 'rejected'
+        ? message((settled[index] as PromiseRejectedResult).reason)
+        : null,
+  }));
+
   // Heat FIRST, because the `best` view ranks on it. It is computed per source
   // over that source's whole pull, so it has to see every story before any are
   // dropped or merged.
-  const scored = withHeat([...hnStories, ...lobsterStories, ...arsStories]);
+  const scored = withHeat(groups.flat());
   const heatOf = new Map(scored.map((story) => [story.key, story.heat]));
   const withHeatOf = (group: NewsStory[]) =>
     group.map((story) => ({ ...story, heat: heatOf.get(story.key) ?? 0 }));
@@ -340,17 +340,13 @@ async function loadFeed(view: NewsWireView, storyLimit: number): Promise<NewsFee
   // occurrence, so the order it is handed decides which wire's listing survives.
   const stories = dedupeStories(
     view === 'best'
-      ? // Ranked on heat, not raw score. Ars reports no votes at all, so a raw
-        // score sort could never place it above any HN or Lobsters story — the
-        // wire was structurally excluded from its own "best of" view.
+      ? // Ranked on heat, not raw score. A syndicated feed reports no votes at
+        // all, so a raw score sort could never place it above any HN or Lobsters
+        // story — those wires were structurally excluded from their own "best of".
         [...scored].sort(
           (a, b) => b.heat - a.heat || Date.parse(b.publishedAt) - Date.parse(a.publishedAt),
         )
-      : interleave([
-          withHeatOf(hnStories),
-          withHeatOf(lobsterStories),
-          withHeatOf(arsStories),
-        ]),
+      : interleave(groups.map(withHeatOf)),
   );
   // Fire and forget. Nothing on this request path reads the history back, and a
   // reading desk that 500s because a logging insert failed is a worse desk than
@@ -402,19 +398,20 @@ export async function getNewsFeed(
   }
 }
 
-export function isNewsSource(value: string): value is NewsSource {
-  return value === 'hacker-news' || value === 'lobsters' || value === 'ars-technica';
-}
+export { isRegisteredSource as isNewsSource };
 
 export function isNewsStoryId(source: NewsSource, value: string): boolean {
-  if (source === 'ars-technica') return isArsStoryId(value);
-  return source === 'hacker-news' ? /^\d{1,12}$/.test(value) : /^[a-z0-9]{6}$/i.test(value);
+  const kind = newsSourceDef(source).kind;
+  if (kind === 'hacker-news') return /^\d{1,12}$/.test(value);
+  if (kind === 'lobsters') return /^[a-z0-9]{6}$/i.test(value);
+  return isFeedStoryId(value);
 }
 
 export async function getNewsStory(source: NewsSource, id: string): Promise<NewsStory> {
   if (!isNewsStoryId(source, id)) throw new Error('Invalid news story id');
-  if (source === 'ars-technica') return getArsStory(id);
-  if (source === 'hacker-news') {
+  const kind = newsSourceDef(source).kind;
+  if (kind === 'feed') return getFeedStory(source, id);
+  if (kind === 'hacker-news') {
     const story = normalizeHackerNews(
       await fetchJson<HackerNewsItem>(`${HN_API}/item/${id}.json`),
     );

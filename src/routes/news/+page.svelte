@@ -1,18 +1,27 @@
 <svelte:head>
   <title>News — Strange Ramblings</title>
-  <meta name="description" content="A live reading desk for Hacker News, Lobsters, and Ars Technica." />
+  <meta name="description" content="A live reading desk for the technical web and UK public-sector announcements." />
 </svelte:head>
 
 <script lang="ts">
   import HealthShell from '$lib/components/shell/HealthShell.svelte';
   import type { PageData } from './$types';
   import type { NewsSource } from '$lib/news/types';
+  import { NEWS_SOURCE_DEFS, NEWS_SOURCE_CODES, type NewsLane } from '$lib/constants/news-sources';
   import { navigating } from '$app/state';
 
   let { data }: { data: PageData } = $props();
 
   let source = $state<'all' | NewsSource>('all');
+  let lane = $state<'all' | NewsLane>('all');
   let query = $state('');
+
+  // The desk carries two halves now. Filtering by lane is what stops twenty
+  // government announcements burying the technical wire, or the reverse.
+  const laneOf = new Map(NEWS_SOURCE_DEFS.map((def) => [def.id as NewsSource, def.lane]));
+  const visibleSources = $derived(
+    NEWS_SOURCE_DEFS.filter((def) => lane === 'all' || def.lane === lane),
+  );
 
   const readKeys = $derived(new Set(data.readKeys));
 
@@ -21,6 +30,7 @@
     return data.feed.stories
       .filter((story) => {
         if (source !== 'all' && story.source !== source) return false;
+        if (lane !== 'all' && laneOf.get(story.source) !== lane) return false;
         if (!q) return true;
         return `${story.title} ${story.domain} ${story.sourceLabel} ${story.author ?? ''} ${story.tags.join(' ')}`
           .toLowerCase()
@@ -66,8 +76,13 @@
     return `${Math.floor(hours / 24)}d`;
   }
 
+  /** Does this source have votes at all? A syndicated feed does not. */
+  function votes(value: NewsSource): boolean {
+    return laneOf.has(value) && NEWS_SOURCE_DEFS.find((def) => def.id === value)?.kind !== 'feed';
+  }
+
   function sourceCode(value: NewsSource): string {
-    return value === 'ars-technica' ? 'ARS' : value === 'hacker-news' ? 'HN' : 'L';
+    return NEWS_SOURCE_CODES[value] ?? '?';
   }
 
   function gatheredTime(iso: string): string {
@@ -93,13 +108,13 @@
 <div class="news-frame" data-sveltekit-preload-data="hover">
 <HealthShell
   path="/news"
-  kicker={data.feed.view === 'favourites' ? 'Saved reading list' : 'Live wire · three sources'}
+  kicker={data.feed.view === 'favourites' ? 'Saved reading list' : `Live wire · ${NEWS_SOURCE_DEFS.length} sources`}
   nav={[]}
-  live={sourcesLive ? 'Hacker News · Lobsters · Ars Technica' : null}
+  live={sourcesLive ? NEWS_SOURCE_DEFS.map((def) => def.label).join(' · ') : null}
   meta={shellMeta}
   footer={[
     'strangeramblings.com/news · live reading desk',
-    'Hacker News · Lobsters · Ars Technica',
+    NEWS_SOURCE_DEFS.map((def) => def.label).join(' · '),
     `${data.stats.retainedCount} stories retained`,
     `Desk updated ${gatheredDate(data.feed.updatedAt)} ${gatheredTime(data.feed.updatedAt)}`,
   ]}
@@ -108,7 +123,7 @@
   <section class="news-lede">
     <div class="lede-inner">
       <div class="lede-copy">
-        <p class="eyebrow">Live desk · three sources</p>
+        <p class="eyebrow">Live desk · technical and public sector</p>
         <h1>READ FIRST.<br /><span>DECIDE WHAT LASTS.</span></h1>
         <p class="standfirst">
           The technical web, gathered in one place. Read a story, then keep what earns a place in your notes.
@@ -175,11 +190,26 @@
     </header>
 
     <div class="desk-tools" data-sveltekit-noscroll>
+      <div class="lanes" role="group" aria-label="Filter lane">
+        {#each [['all', 'Everything'], ['tech', 'Technical'], ['public', 'Public sector']] as const as [value, label] (value)}
+          <button
+            type="button"
+            aria-pressed={lane === value}
+            class:active={lane === value}
+            onclick={() => { lane = value; source = 'all'; }}
+          >{label}</button>
+        {/each}
+      </div>
       <div class="filters" role="group" aria-label="Filter source">
         <button type="button" aria-pressed={source === 'all'} class:active={source === 'all'} onclick={() => (source = 'all')}>All</button>
-        <button type="button" aria-pressed={source === 'hacker-news'} class:active={source === 'hacker-news'} onclick={() => (source = 'hacker-news')}>Hacker News</button>
-        <button type="button" aria-pressed={source === 'lobsters'} class:active={source === 'lobsters'} onclick={() => (source = 'lobsters')}>Lobsters</button>
-        <button type="button" aria-pressed={source === 'ars-technica'} class:active={source === 'ars-technica'} onclick={() => (source = 'ars-technica')}>Ars Technica</button>
+        {#each visibleSources as def (def.id)}
+          <button
+            type="button"
+            aria-pressed={source === def.id}
+            class:active={source === def.id}
+            onclick={() => (source = def.id)}
+          >{def.label}</button>
+        {/each}
       </div>
       <nav class="sort-tabs" aria-label="Order stories">
         <span>Order</span>
@@ -194,7 +224,7 @@
       <a class="refresh" data-sveltekit-preload-data="off" href="/news?view={data.feed.view}&sort={data.sort}&limit={data.limit}&fresh=1" aria-label="Refresh news sources">Refresh ↻</a>
     </div>
 
-    <p class="desk-status" role="status">{updating ? 'Updating stories…' : `${stories.length} stories shown`}{#if source === 'ars-technica'} · Latest articles{data.feed.view === 'best' ? ' from 24h' : ''}; no voting scores{/if}{#if !updating && !sourcesLive} · Some sources are unavailable{/if}</p>
+    <p class="desk-status" role="status">{updating ? 'Updating stories…' : `${stories.length} stories shown`}{#if source !== 'all' && !votes(source)} · Latest articles{data.feed.view === 'best' ? ' from 24h' : ''}; no voting scores{/if}{#if !updating && !sourcesLive} · Some sources are unavailable{/if}</p>
 
     {#if stories.length === 0}
       <div class="empty">
@@ -235,7 +265,7 @@
                 {/if}
               </span>
               <span class="story-signal">
-                <span>{#if story.source === 'ars-technica'}Unscored{:else}<b>{story.score}</b> points{/if}</span>
+                <span>{#if !votes(story.source)}Unscored{:else}<b>{story.score}</b> points{/if}</span>
                 <span><b>{story.commentCount}</b> replies</span>
               </span>
             </a>
@@ -302,8 +332,12 @@
   .view-tabs a { padding: 9px 16px; border-right: 1px solid var(--line-strong); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--text-muted); text-decoration: none; }
   .view-tabs a:last-child { border-right: 0; }
   .view-tabs a[aria-current='page'] { background: var(--accent); color: var(--bg); }
-  .desk-tools { display: grid; grid-template-columns: max-content auto minmax(180px, 1fr) auto; align-items: stretch; border-bottom: 1px solid var(--line-strong); }
-  .filters { display: grid; grid-template-columns: repeat(4, max-content); align-items: stretch; min-width: 0; }
+  .desk-tools { display: grid; grid-template-columns: max-content max-content auto minmax(180px, 1fr) auto; align-items: stretch; border-bottom: 1px solid var(--line-strong); }
+  .filters { display: flex; flex-wrap: wrap; align-items: stretch; min-width: 0; }
+  .lanes { display: flex; align-items: stretch; border-right: 1px solid var(--line-strong); }
+  .lanes button { padding: 13px 15px; border: 0; border-right: 1px solid var(--line-strong); background: transparent; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; cursor: pointer; }
+  .lanes button:last-child { border-right: 0; }
+  .lanes button:hover, .lanes button.active { color: var(--accent-ink); background: var(--accent-tint-04); }
   .filters button, .refresh, .sort-tabs a, .sort-tabs > span { padding: 13px 15px; border: 0; border-right: 1px solid var(--line-strong); background: transparent; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; cursor: pointer; text-decoration: none; }
   .filters button:hover, .filters button.active, .refresh:hover, .sort-tabs a:hover, .sort-tabs a[aria-current='page'] { color: var(--accent); background: var(--accent-tint-04); }
   .sort-tabs { display: flex; align-items: stretch; border-left: 1px solid var(--line-strong); }
@@ -355,7 +389,8 @@
   @media (max-width: 1200px) {
     .desk-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .desk-tools { grid-template-columns: auto minmax(180px, 1fr) auto; }
-    .filters { grid-column: 1 / -1; border-bottom: 1px solid var(--line-strong); }
+    .lanes, .filters { grid-column: 1 / -1; border-bottom: 1px solid var(--line-strong); }
+    .lanes { border-right: 0; }
     .sort-tabs { border-left: 0; }
   }
   @media (max-width: 780px) {
@@ -369,11 +404,9 @@
   }
   @media (max-width: 560px) {
     .desk-tools { grid-template-columns: minmax(0, 1fr) auto; }
-    .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .filters button { padding-inline: 8px; }
-    .filters > :nth-child(-n + 2) { border-bottom: 1px solid var(--line-strong); }
-    .filters > :nth-child(2n) { border-right: 0; }
     .filters > :last-child { border-right: 0; }
+    .lanes button { flex: 1; padding-inline: 8px; }
     .sort-tabs { grid-column: 1 / -1; border-bottom: 1px solid var(--line-strong); }
     .search { border-right: 1px solid var(--line-strong); }
   }

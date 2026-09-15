@@ -6,8 +6,14 @@
 <script lang="ts">
   import HealthShell from '$lib/components/shell/HealthShell.svelte';
   import type { PageData } from './$types';
+  import { NEWS_SOURCE_DEFS } from '$lib/constants/news-sources';
 
   let { data }: { data: PageData } = $props();
+
+  // Which badge and whether the source votes both come from the registry, so a
+  // new feed does not need this page edited to render correctly.
+  const def = $derived(NEWS_SOURCE_DEFS.find((d) => d.id === data.article.story.source));
+  const votes = $derived(def?.kind !== 'feed');
 
   let busy = $state<string | null>(null);
   let favourite = $state(data.isFavourite);
@@ -92,7 +98,7 @@
     { href: '/news?view=best', label: 'Best' },
   ]}
   live={story.sourceLabel}
-  meta={[story.source === 'ars-technica' ? 'Unscored' : `${story.score} points`, `${story.commentCount} comments`]}
+  meta={[votes ? `${story.score} points` : 'Unscored', `${story.commentCount} comments`]}
   footer={[
     'strangeramblings.com/news · reading copy',
     `${story.sourceLabel} · ${story.domain}`,
@@ -103,14 +109,14 @@
 
   <header class="article-head">
     <div class="source-lockup">
-      <span class="source-code">{story.source === 'ars-technica' ? 'ARS' : story.source === 'hacker-news' ? 'HN' : 'L'}</span>
+      <span class="source-code">{def?.code ?? '?'}</span>
       <span>{story.sourceLabel} · {story.domain}</span>
     </div>
     <h1>{story.title}</h1>
     <p class="article-meta">
       <time datetime={story.publishedAt}>{calendarDate(story.publishedAt)}</time>
       {#if story.author}<span>Submitted by {story.author}</span>{/if}
-      <span>{story.source === 'ars-technica' ? 'Unscored' : `${story.score} points`}</span>
+      <span>{votes ? `${story.score} points` : 'Unscored'}</span>
       <a href={story.discussionUrl} target="_blank" rel="noopener">{story.commentCount} comments ↗</a>
     </p>
   </header>

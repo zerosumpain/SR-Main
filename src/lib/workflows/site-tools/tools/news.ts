@@ -1,6 +1,7 @@
 import { getNewsFeed } from '$lib/news/sources';
 import { searchNewsStories } from '$lib/news/search';
 import type { NewsSource, NewsWireView } from '$lib/news/types';
+import { NEWS_SOURCES, NEWS_SOURCE_DEFS, isNewsSource } from '$lib/constants/news-sources';
 import { register } from '../registry-internal';
 
 function requestedView(value: unknown, query: string): NewsWireView {
@@ -13,7 +14,7 @@ function requestedView(value: unknown, query: string): NewsWireView {
 function requestedSource(value: unknown, query: string): NewsSource | 'all' {
   if (value === 'all') return 'all';
   if (value == null && /\bars(?:\s+technica)?\b/i.test(query) && !/\bhacker\s+news\b|\blobsters\b/i.test(query)) return 'ars-technica';
-  if (value === 'hacker-news' || value === 'lobsters' || value === 'ars-technica') return value;
+  if (typeof value === 'string' && isNewsSource(value)) return value;
   if (/\bhacker\s+news\b/i.test(query) && !/\blobsters\b/i.test(query)) return 'hacker-news';
   if (/\blobsters\b/i.test(query) && !/\bhacker\s+news\b/i.test(query)) return 'lobsters';
   return 'all';
@@ -71,7 +72,7 @@ export async function searchNews(args: Record<string, unknown>) {
       message:
         matches.length > 0
           ? 'Use the returned original or discussion URLs as inline sources in the answer.'
-          : 'No matching story is on the currently fetched Hacker News, Lobsters, or Ars Technica wire.',
+          : 'No matching story is on the currently fetched wire.',
     },
   };
 }
@@ -79,7 +80,7 @@ export async function searchNews(args: Record<string, unknown>) {
 register({
   name: 'news_search',
   description:
-    'Search the live news desk backed by Hacker News, Lobsters, and Ars Technica. Use when the user specifically asks for news, headlines, recent stories, or what these sources is discussing. Returns relevant story metadata plus original, discussion, and internal reader links so the answer can cite its sources. Omit query for the current headlines; use view="new" for newest stories and view="best" for the strongest stories from the last 24 hours.',
+    'Search the live news desk backed by technical wires (Hacker News, Lobsters, Ars Technica) and UK public-sector feeds (GOV.UK, DfE, ONS). Use when the user specifically asks for news, headlines, recent stories, or what these sources is discussing. Returns relevant story metadata plus original, discussion, and internal reader links so the answer can cite its sources. Omit query for the current headlines; use view="new" for newest stories and view="best" for the strongest stories from the last 24 hours.',
   parameters: {
     type: 'object',
     properties: {
@@ -94,8 +95,10 @@ register({
       },
       source: {
         type: 'string',
-        enum: ['all', 'hacker-news', 'lobsters', 'ars-technica'],
-        description: 'Limit results to one source. Defaults to all three.',
+        // Generated, not listed: a hand-written enum here is how a newly added
+        // source stays invisible to the model that is meant to search it.
+        enum: ['all', ...NEWS_SOURCES],
+        description: `Limit results to one source. Defaults to every source. Available: ${NEWS_SOURCE_DEFS.map((d) => `${d.id} (${d.label}, ${d.lane})`).join(', ')}.`,
       },
       limit: {
         type: 'number',
