@@ -2,6 +2,7 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { newsFavourites } from '$lib/db/schema';
 import type { NewsStory } from './types';
+import { canonicalUrl } from './canonical';
 import { NEWS_SOURCE_LABELS } from '$lib/constants/news-sources';
 
 const LOCAL_OWNER_KEY = 'local-owner';
@@ -27,6 +28,9 @@ function storedStory(row: typeof newsFavourites.$inferSelect, rank: number): New
     id: row.storyId,
     title: row.title,
     url: row.url,
+    // Recomputed rather than stored: `news_favourites` predates the canonical
+    // key, and a saved row is never a dedupe candidate anyway.
+    canonicalUrl: canonicalUrl(row.url),
     discussionUrl: row.discussionUrl,
     domain: row.domain,
     author: row.author,
@@ -36,6 +40,7 @@ function storedStory(row: typeof newsFavourites.$inferSelect, rank: number): New
     tags: Array.isArray(row.tags) ? row.tags.filter((tag): tag is string => typeof tag === 'string') : [],
     summary: row.summary,
     rank,
+    alsoOn: [],
   };
 }
 

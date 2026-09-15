@@ -110,6 +110,68 @@ export const newsFavourites = pgTable(
   ],
 );
 
+// The wire itself, kept. `news_favourites` above records an owner's opinion of
+// a story; this records that the story was ever on the desk at all.
+//
+// Without it the desk has no yesterday, and everything that needs one is
+// impossible: "new since you last looked" (which the page claimed to show while
+// actually diffing two cache fetches three minutes apart), whether a story is
+// climbing, and any measurement of whether a ranking change helped.
+//
+// `firstSeenAt` never moves. `score` and `commentCount` are HIGH-WATER MARKS,
+// not last-observed values: a story polled after it falls off the front page
+// reports fewer comments than it had at its peak, so storing the latest number
+// answers nothing about how big it got.
+export const newsStories = pgTable(
+  'news_stories',
+  {
+    newsKey: text('news_key').primaryKey(),
+    source: text('source').notNull(),
+    storyId: text('story_id').notNull(),
+    title: text('title').notNull(),
+    url: text('url').notNull(),
+    /** `canonicalUrl(url)` — tracking parameters and fragment stripped. The
+     *  group key for cross-wire deduplication, which is why it is indexed. */
+    canonicalUrl: text('canonical_url').notNull(),
+    discussionUrl: text('discussion_url').notNull(),
+    domain: text('domain').notNull(),
+    author: text('author'),
+    publishedAt: timestamp('published_at', { withTimezone: true }).notNull(),
+    score: integer('score').notNull().default(0),
+    commentCount: integer('comment_count').notNull().default(0),
+    tags: jsonb('tags').$type<string[]>().notNull().default([]),
+    summary: text('summary').notNull().default(''),
+    firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('news_stories_first_seen_idx').on(t.firstSeenAt),
+    index('news_stories_canonical_idx').on(t.canonicalUrl),
+    index('news_stories_source_published_idx').on(t.source, t.publishedAt),
+  ],
+);
+
+// Which stories an owner actually opened in the reader. Deliberately NOT a
+// foreign key onto `news_stories`: a story can be deep-linked and read before
+// any gather has recorded it, and a read that fails because the wire had not
+// been polled yet would be a silent hole in exactly the signal this table
+// exists to collect.
+export const newsReads = pgTable(
+  'news_reads',
+  {
+    ownerKey: text('owner_key').notNull(),
+    newsKey: text('news_key').notNull(),
+    source: text('source').notNull(),
+    readCount: integer('read_count').notNull().default(1),
+    firstReadAt: timestamp('first_read_at', { withTimezone: true }).notNull().defaultNow(),
+    readAt: timestamp('read_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.ownerKey, t.newsKey] }),
+    index('news_reads_owner_read_idx').on(t.ownerKey, t.readAt),
+  ],
+);
+
 export const blogAssistantMessages = pgTable('blog_assistant_messages', {
   id: serial('id').primaryKey(),
   postId: integer('post_id')

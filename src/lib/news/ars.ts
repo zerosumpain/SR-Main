@@ -1,4 +1,5 @@
 import { loadJsdom } from '$lib/server/jsdom';
+import { canonicalUrl } from './canonical';
 import type { NewsStory, NewsWireView } from './types';
 
 const FEED = 'https://arstechnica.com/feed/';
@@ -34,11 +35,13 @@ export async function parseArsFeed(xml: string): Promise<NewsStory[]> {
       const comments = Number(text('slash:comments'));
       stories.push({
         key: `ars-technica:${id}`, source: 'ars-technica', sourceLabel: 'Ars Technica', id,
-        title, url: url.href, discussionUrl: `${url.href}#comments`, domain: url.hostname,
+        title, url: url.href, canonicalUrl: canonicalUrl(url.href),
+        discussionUrl: `${url.href}#comments`, domain: url.hostname,
         author: text('dc:creator') || null, publishedAt: published.toISOString(), score: 0,
         commentCount: Number.isSafeInteger(comments) && comments >= 0 ? comments : 0,
         tags: Array.from(item.getElementsByTagName('category')).map((tag) => tag.textContent?.trim() ?? '').filter(Boolean).slice(0, 8),
-        summary: JSDOM.fragment(text('description')).textContent?.trim() ?? '', rank: stories.length + 1,
+        summary: JSDOM.fragment(text('description')).textContent?.trim() ?? '',
+        rank: stories.length + 1, alsoOn: [],
       });
     }
     return stories;

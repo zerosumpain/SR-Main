@@ -9,6 +9,21 @@ export type NewsView = 'top' | 'new' | 'best' | 'favourites';
 export type NewsWireView = Exclude<NewsView, 'favourites'>;
 export type NewsSort = 'time' | 'points';
 
+/**
+ * The same article, carried by another wire.
+ *
+ * A story on two front pages is a STRONGER signal than a story on one — so the
+ * desk keeps the second sighting as evidence on the surviving row rather than
+ * dropping it, and the row can link both discussions.
+ */
+export interface NewsAlso {
+  source: NewsSource;
+  sourceLabel: string;
+  discussionUrl: string;
+  score: number;
+  commentCount: number;
+}
+
 export interface NewsStory {
   key: string;
   source: NewsSource;
@@ -16,6 +31,8 @@ export interface NewsStory {
   id: string;
   title: string;
   url: string;
+  /** `canonicalUrl(url)` — the cross-wire grouping key, not a link. */
+  canonicalUrl: string;
   discussionUrl: string;
   domain: string;
   author: string | null;
@@ -25,6 +42,8 @@ export interface NewsStory {
   tags: string[];
   summary: string;
   rank: number;
+  /** Other wires carrying this same article. Empty for all but duplicates. */
+  alsoOn: NewsAlso[];
 }
 
 export interface NewsSourceState {
