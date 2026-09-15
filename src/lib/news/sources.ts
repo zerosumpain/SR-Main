@@ -7,6 +7,9 @@ import type {
 } from './types';
 
 import { fetchArs, getArsStory, isArsStoryId } from './ars';
+import { canonicalUrl } from './canonical';
+import { dedupeStories } from './dedupe';
+import { recordStories } from './store';
 const HN_API = 'https://hacker-news.firebaseio.com/v0';
 const LOBSTERS = 'https://lobste.rs';
 export const NEWS_PAGE_SIZE = 25;
@@ -139,6 +142,7 @@ export function normalizeHackerNews(item: HackerNewsItem, rank = 0): NewsStory |
     id,
     title: decodeHtml(item.title.trim()),
     url,
+    canonicalUrl: canonicalUrl(url),
     discussionUrl,
     domain: domainFor(url),
     author: item.by?.trim() || null,
@@ -148,6 +152,7 @@ export function normalizeHackerNews(item: HackerNewsItem, rank = 0): NewsStory |
     tags: [],
     summary: plainText(item.text),
     rank,
+    alsoOn: [],
   };
 }
 
@@ -164,6 +169,7 @@ export function normalizeLobsters(item: LobstersItem, rank = 0): NewsStory | nul
     id,
     title: decodeHtml(item.title.trim()),
     url,
+    canonicalUrl: canonicalUrl(url),
     discussionUrl,
     domain: domainFor(url),
     author: item.submitter_user?.trim() || null,
@@ -173,6 +179,7 @@ export function normalizeLobsters(item: LobstersItem, rank = 0): NewsStory | nul
     tags: Array.isArray(item.tags) ? item.tags.filter((tag): tag is string => typeof tag === 'string').slice(0, 8) : [],
     summary: item.description_plain?.trim() ?? '',
     rank,
+    alsoOn: [],
   };
 }
 
@@ -322,12 +329,19 @@ async function loadFeed(
       error: lobsters.status === 'rejected' ? message(lobsters.reason) : null,
     },
   ];
-  const stories =
+  // Dedupe AFTER ranking, never before: `dedupeStories` keeps the first
+  // occurrence, so the order it is handed decides which wire's listing survives.
+  const stories = dedupeStories(
     view === 'best'
       ? [...hnStories, ...lobsterStories, ...arsStories].sort(
           (a, b) => b.score - a.score || Date.parse(b.publishedAt) - Date.parse(a.publishedAt),
         )
-      : interleave([hnStories, lobsterStories, arsStories]);
+      : interleave([hnStories, lobsterStories, arsStories]),
+  );
+  // Fire and forget. Nothing on this request path reads the history back, and a
+  // reading desk that 500s because a logging insert failed is a worse desk than
+  // one with a gap in its history.
+  void recordStories(stories);
   const previousKeys = previous ? new Set(previous.stories.map((story) => story.key)) : null;
   return {
     view,

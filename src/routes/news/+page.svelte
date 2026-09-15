@@ -14,6 +14,8 @@
   let source = $state<'all' | NewsSource>('all');
   let query = $state('');
 
+  const readKeys = $derived(new Set(data.readKeys));
+
   const stories = $derived.by(() => {
     const q = query.trim().toLowerCase();
     return data.feed.stories
@@ -207,7 +209,19 @@
                   {#if story.tags[0]}
                     <span class="story-category">{story.tags[0]}</span>
                   {/if}
+                  {#if story.alsoOn.length > 0}
+                    <span class="story-also">Also on {story.alsoOn.map((a) => a.sourceLabel).join(' · ')}</span>
+                  {/if}
+                  {#if readKeys.has(story.key)}
+                    <span class="story-read">Read</span>
+                  {/if}
                 </span>
+                {#if data.correlations[story.key]}
+                  <span class="story-why" title={data.correlations[story.key].why}>
+                    <span class="why-label">Tracks</span>
+                    {data.correlations[story.key].names.join(' · ')}
+                  </span>
+                {/if}
               </span>
               <span class="story-signal">
                 <span>{#if story.source === 'ars-technica'}Unscored{:else}<b>{story.score}</b> points{/if}</span>
@@ -300,6 +314,22 @@
   .story-byline { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.35; color: var(--text-muted); }
   .story-category { color: var(--accent-ink); text-transform: uppercase; letter-spacing: 0.06em; }
   .story-category::before { content: '· '; color: var(--text-ghost); }
+  .story-also { color: var(--text-secondary); }
+  .story-also::before { content: '· '; color: var(--text-ghost); }
+  .story-read { color: var(--text-ghost); text-transform: uppercase; letter-spacing: 0.06em; }
+  .story-read::before { content: '· '; }
+  /* The correlation line is the one thing on the row that is OURS rather than
+     the wire's, so it gets the counter-accent and its own line — a reader
+     scanning for it should not have to find it inside the byline. */
+  .story-why {
+    display: flex; align-items: baseline; gap: 7px; min-width: 0;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.35;
+    color: var(--accent-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .why-label {
+    flex: none; padding: 1px 5px; border: 1px solid currentColor;
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
   .story-signal { display: grid; grid-template-columns: 1fr; gap: 4px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
   .story-signal b { color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
   .story-actions { display: grid; grid-template-columns: 1fr; align-content: center; gap: 4px; padding: 8px 0 8px 8px; }

@@ -26,6 +26,8 @@ function story(overrides: Partial<NewsStory> = {}): NewsStory {
     tags: ['rust', 'compilers'],
     summary: 'The compiler team describes a new optimisation.',
     rank: 1,
+    canonicalUrl: 'example.com/rust-compiler',
+    alsoOn: [],
     ...overrides,
   };
 }
