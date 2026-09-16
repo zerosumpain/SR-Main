@@ -365,17 +365,38 @@
   .view-tabs a { padding: 9px 16px; border-right: 1px solid var(--line-strong); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--text-muted); text-decoration: none; }
   .view-tabs a:last-child { border-right: 0; }
   .view-tabs a[aria-current='page'] { background: var(--accent); color: var(--bg); }
-  .desk-tools { display: grid; grid-template-columns: max-content max-content auto minmax(180px, 1fr) auto; align-items: stretch; border-bottom: 1px solid var(--line-strong); }
-  .filters { display: flex; flex-wrap: wrap; align-items: stretch; min-width: 0; }
-  .lanes { display: flex; align-items: stretch; border-right: 1px solid var(--line-strong); }
+  /* TWO rows at every width, and the single desktop row is not coming back.
+     The toolbar's cells are what the desk filters ON — three lanes, then one
+     button per registered source — followed by how it is ORDERED. With six
+     sources that row's own minimum is ~1490px against a `.desk` capped at
+     1368, so the five-track version overflowed at EVERY desktop width and
+     `.hs`'s `overflow-x: hidden` clipped the search box and Refresh off the
+     right-hand edge rather than scrolling to them. Below 1200 it reflowed and
+     looked fine, which is why this only ever reported as a desktop bug.
+     `max-content` is what made it unfixable by shrinking: a wrappable
+     `.filters` still reports its UNWRAPPED width to a max-content track, so
+     the cells could never fold. A source is a row in `NEWS_SOURCE_DEFS` and
+     that list is meant to grow, so the layout must not encode its length.
+
+     Column 1 holds `.lanes` over `.sort-tabs`, so its `max-content` is the
+     wider of the two and one hairline runs down both rows; `.filters` spans
+     the rest of row one and wraps inside its own cell as sources are added. */
+  .desk-tools { display: grid; grid-template-columns: max-content minmax(180px, 1fr) max-content; align-items: stretch; border-bottom: 1px solid var(--line-strong); }
+  .filters { display: flex; flex-wrap: wrap; align-items: stretch; min-width: 0; grid-column: 2 / -1; border-bottom: 1px solid var(--line-strong); }
+  .lanes { display: flex; align-items: stretch; border-right: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong); }
   .lanes button { padding: 13px 15px; border: 0; border-right: 1px solid var(--line-strong); background: transparent; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; cursor: pointer; }
   .lanes button:last-child { border-right: 0; }
   .lanes button:hover, .lanes button.active { color: var(--accent-ink); background: var(--accent-tint-04); }
   .filters button, .refresh, .sort-tabs a, .sort-tabs > span { padding: 13px 15px; border: 0; border-right: 1px solid var(--line-strong); background: transparent; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; cursor: pointer; text-decoration: none; }
   .filters button:hover, .filters button.active, .refresh:hover, .sort-tabs a:hover, .sort-tabs a[aria-current='page'] { color: var(--accent); background: var(--accent-tint-04); }
-  .sort-tabs { display: flex; align-items: stretch; border-left: 1px solid var(--line-strong); }
+  /* The seam between column one and the search cell is drawn ONCE, here, so it
+     lands on the column edge directly under `.lanes`' own right border. Left to
+     `.search` it would have sat at the end of `Points` instead, leaving two
+     hairlines a cell-width apart on a row that is meant to read as one band. */
+  .sort-tabs { display: flex; align-items: stretch; border-right: 1px solid var(--line-strong); }
+  .sort-tabs a:last-child { border-right: 0; }
   .sort-tabs > span { display: flex; align-items: center; color: var(--text-ghost); cursor: default; }
-  .search { display: flex; align-items: center; gap: 9px; padding: 0 12px; border-left: 1px solid var(--line-strong); border-right: 1px solid var(--line-strong); }
+  .search { display: flex; align-items: center; gap: 9px; padding: 0 12px; border-right: 1px solid var(--line-strong); }
   .search span { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-ghost); }
   .search input { width: 100%; min-width: 0; padding: 11px 0; border: 0; outline: 0; background: transparent; color: var(--text-primary); font-family: var(--font-body); font-size: var(--fs-body); }
   .refresh { display: flex; align-items: center; border-right: 0; }
@@ -428,13 +449,19 @@
   @media (max-width: 1200px) {
     .desk-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .desk-tools { grid-template-columns: auto minmax(180px, 1fr) auto; }
-    .lanes, .filters { grid-column: 1 / -1; border-bottom: 1px solid var(--line-strong); }
+    .lanes, .filters { grid-column: 1 / -1; }
     .lanes { border-right: 0; }
-    .sort-tabs { border-left: 0; }
   }
   @media (max-width: 780px) {
+    /* The search cell is the only elastic one on this row, so its FLOOR decides
+       whether the row fits at all: `Order Time Heat Points` is 280 fixed pixels
+       and Refresh another 104, which against a 180px floor needs 564 in a band
+       that is only 560 wide at a 600px window. Those four pixels were clipped,
+       never scrolled — the same `overflow-x: hidden` that hid the desktop
+       toolbar. 110 is under the 137 the narrowest window using this row can
+       spare, so the floor never binds and the cell simply flexes. */
+    .desk-tools { grid-template-columns: auto minmax(110px, 1fr) auto; }
     .lede-inner { grid-template-columns: 1fr; gap: 24px; }
-    .search { border-left: 0; }
     .story { grid-template-columns: 1fr; }
     .story-reader { grid-template-columns: 32px 34px minmax(0, 1fr); gap: 10px; padding: 11px 4px 7px; }
     .story-signal { grid-column: 3; display: flex; gap: 14px; }
@@ -446,8 +473,21 @@
     .filters button { padding-inline: 8px; }
     .filters > :last-child { border-right: 0; }
     .lanes button { flex: 1; padding-inline: 8px; }
-    .sort-tabs { grid-column: 1 / -1; border-bottom: 1px solid var(--line-strong); }
+    /* Full-bleed here, so the column seam it draws above would be a stray tick
+       against the right-hand edge of the band — the same reason `.lanes` drops
+       its own right border at 1200. */
+    .sort-tabs { grid-column: 1 / -1; border-right: 0; border-bottom: 1px solid var(--line-strong); }
     .search { border-right: 1px solid var(--line-strong); }
+  }
+  /* The title and the five feed tabs stop sharing a line at 620, not 520, and
+     the deciding word is FAVOURITES. Every other heading here is two or three
+     words and wraps, so its min-content is one short word — but FAVOURITES is a
+     single unbreakable 225px token at the 2rem floor, and beside a 322px tab
+     strip that needs 571px of band. Between 521 and 603 it did not have it, so
+     the tabs hung up to 71px off the right of a page that clips. */
+  @media (max-width: 620px) {
+    .desk-head { align-items: stretch; flex-direction: column; gap: 16px; }
+    .view-tabs a { flex: 1; padding-inline: 10px; text-align: center; }
   }
   @media (max-width: 520px) {
     .news-frame :global(.hs-kicker), .news-frame :global(.hs-head-right) { display: none; }
@@ -456,8 +496,6 @@
     .desk-summary small { display: none; }
     .desk-summary dd { margin-top: 6px; }
     .desk { padding-top: 24px; }
-    .desk-head { align-items: stretch; flex-direction: column; gap: 16px; }
-    .view-tabs a { flex: 1; padding-inline: 10px; text-align: center; }
     .story-reader { grid-template-columns: 30px minmax(0, 1fr); }
     .story-index { display: none; }
     .story-main { grid-column: 2; }

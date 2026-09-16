@@ -44,16 +44,26 @@ test('news controls preserve the desk, filters and scroll without a page transit
   await page.screenshot({ path: '/tmp/news-desktop.png' });
 });
 
-test('news desk fits a narrow mobile viewport', async ({ page }) => {
-  test.setTimeout(120_000);
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/news');
-  await expect(page.locator('.story').first()).toBeVisible();
-  for (const selector of ['.desk', '.desk-tools', '.desk-summary', '.view-tabs']) {
-    expect(await page.locator(selector).evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
-  }
-  await page.screenshot({ path: '/tmp/news-mobile.png' });
-});
+// BOTH widths, because only the phone was ever checked. The toolbar's desktop
+// row was five fixed tracks wide, so adding the lane filter and three more
+// sources pushed its minimum past `.desk` at every desktop size — and `.hs`
+// clips rather than scrolls, so the search box and Refresh simply were not
+// there. The phone case stayed green throughout: below 1200 the row reflows.
+for (const viewport of [
+  { name: 'a narrow mobile viewport', width: 390, height: 844, shot: '/tmp/news-mobile.png' },
+  { name: 'a desktop viewport', width: 1440, height: 900, shot: '/tmp/news-desktop-fit.png' },
+]) {
+  test(`news desk fits ${viewport.name}`, async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.goto('/news');
+    await expect(page.locator('.story').first()).toBeVisible();
+    for (const selector of ['.desk', '.desk-tools', '.desk-summary', '.view-tabs']) {
+      expect(await page.locator(selector).evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    }
+    await page.screenshot({ path: viewport.shot });
+  });
+}
 
 test('Ars stories open in the reader and retain their source when saved', async ({ page }) => {
   test.setTimeout(120_000);
