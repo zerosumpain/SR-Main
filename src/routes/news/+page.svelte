@@ -479,6 +479,16 @@
     .sort-tabs { grid-column: 1 / -1; border-right: 0; border-bottom: 1px solid var(--line-strong); }
     .search { border-right: 1px solid var(--line-strong); }
   }
+  /* The title and the five feed tabs stop sharing a line at 620, not 520, and
+     the deciding word is FAVOURITES. Every other heading here is two or three
+     words and wraps, so its min-content is one short word — but FAVOURITES is a
+     single unbreakable 225px token at the 2rem floor, and beside a 322px tab
+     strip that needs 571px of band. Between 521 and 603 it did not have it, so
+     the tabs hung up to 71px off the right of a page that clips. */
+  @media (max-width: 620px) {
+    .desk-head { align-items: stretch; flex-direction: column; gap: 16px; }
+    .view-tabs a { flex: 1; padding-inline: 10px; text-align: center; }
+  }
   @media (max-width: 520px) {
     .news-frame :global(.hs-kicker), .news-frame :global(.hs-head-right) { display: none; }
     h1 { font-size: clamp(2.5rem, 10vw, 3.25rem); }
@@ -486,8 +496,6 @@
     .desk-summary small { display: none; }
     .desk-summary dd { margin-top: 6px; }
     .desk { padding-top: 24px; }
-    .desk-head { align-items: stretch; flex-direction: column; gap: 16px; }
-    .view-tabs a { flex: 1; padding-inline: 10px; text-align: center; }
     .story-reader { grid-template-columns: 30px minmax(0, 1fr); }
     .story-index { display: none; }
     .story-main { grid-column: 2; }
