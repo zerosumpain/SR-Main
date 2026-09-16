@@ -40,6 +40,41 @@ RELEASE_DIR="$VPS_DIR/releases/$SHA"
 STATE_DIR="$VPS_DIR/.deploy-state"
 mkdir -p "$STATE_DIR"
 
+# A RELEASE IN FLIGHT, stated as a fact rather than guessed from a process list.
+#
+# scripts/rollback.sh must refuse while this is running: two processes moving the
+# symlink at once serves a release nobody chose, and this job would overwrite the
+# rollback seconds later while reporting success. That check used to be
+# `pgrep -f ci-release.sh`, which matches any command line that MENTIONS the
+# script — a grep, an editor, a log tail, a shell that happens to have the name
+# in its history. A PID file says what is actually true.
+RELEASE_PID_FILE="$STATE_DIR/release.pid"
+echo $$ > "$RELEASE_PID_FILE"
+trap 'rm -f "$RELEASE_PID_FILE"' EXIT
+
+# Declared here, not where it is first assigned: under `set -u` the final report
+# below reads it on every path, including the one where production never moved.
+FAILED_POSTLIVE=""
+
+# A CANCELLED RELEASE ABANDONS PRODUCTION MID-MUTATION.
+#
+# The job has a timeout and a human can press cancel; either sends a signal, the
+# shell dies wherever it happens to be, and nothing says whether the symlink had
+# already moved. Print the state and the exact way back, to the log that
+# operator is already looking at.
+on_interrupt() {
+  echo "" >&2
+  echo "==> INTERRUPTED. Production may be mid-release." >&2
+  echo "    build/ currently points at: $(readlink "$VPS_DIR/build" 2>/dev/null || echo '<unknown>')" >&2
+  echo "    intended release:           $SHA" >&2
+  echo "    previous release:           ${PREV_SHA:-<unknown>}" >&2
+  echo "" >&2
+  echo "    To restore the previous release:" >&2
+  echo "      $VPS_DIR/scripts/rollback.sh ${PREV_SHA:-<sha>}" >&2
+  exit 130
+}
+trap on_interrupt INT TERM
+
 public_sha() {
   local body
   body="$(curl -fsS -H 'Cache-Control: no-cache' "$PUBLIC_BASE/api/version?expected=$1" 2>/dev/null)" || return 1
@@ -65,8 +100,24 @@ wait_for_public_release() {
 }
 
 rollback_web_release() {
+  # REFUSE TO "ROLL BACK" TO THE COMMIT THAT IS FAILING.
+  #
+  # PREV_SHA is read from build/.deploy-sha, i.e. whatever the symlink points at
+  # when this script starts. On a RE-RUN of a failed release that is already the
+  # new commit — the previous attempt moved the symlink before failing. So this
+  # function would point the symlink at the failing release, restart, watch
+  # /api/version report the sha it was asked for, and print "Rollback verified".
+  # A green rollback message while production serves the broken commit is worse
+  # than no rollback at all, because it ends the investigation.
+  if [ "$PREV_SHA" = "$SHA" ]; then
+    echo "==> Automatic rollback unavailable: the previously-deployed sha IS this one ($SHA)." >&2
+    echo "    This is a re-run; an earlier attempt already moved the symlink." >&2
+    echo "    Roll back deliberately:  $VPS_DIR/scripts/rollback.sh --list" >&2
+    return 1
+  fi
   if [ -z "$PREV_SHA" ] || [ ! -d "$VPS_DIR/releases/$PREV_SHA" ]; then
     echo "==> Automatic rollback unavailable: previous release ${PREV_SHA:-<none>} is not present." >&2
+    echo "    Available:  $VPS_DIR/scripts/rollback.sh --list" >&2
     return 1
   fi
 
@@ -95,6 +146,20 @@ fi
 # Read what is serving now BEFORE the swap. This is the release log's "what did
 # this replace" boundary. Empty on the first run of this script.
 PREV_SHA="$(sed -n 's/^sha=//p' "$VPS_DIR/build/.deploy-sha" 2>/dev/null | head -1 || true)"
+
+# ...unless the symlink already points at THIS commit, which means a previous
+# attempt at this same release got as far as the flip and then failed. In that
+# case build/.deploy-sha is not evidence of what to go back to, and
+# $STATE_DIR/previous.sha — written just before the flip below, and by
+# rollback.sh — is. Without this, a re-run has no true previous release and the
+# rollback path silently becomes a no-op that reports success.
+if [ -n "$PREV_SHA" ] && [ "$PREV_SHA" = "$SHA" ]; then
+  RECORDED_PREV="$(cat "$STATE_DIR/previous.sha" 2>/dev/null || true)"
+  if [ -n "$RECORDED_PREV" ] && [ "$RECORDED_PREV" != "$SHA" ]; then
+    echo "==> build/ already points at $SHA (this is a re-run); taking the previous sha from the deploy state instead."
+    PREV_SHA="$RECORDED_PREV"
+  fi
+fi
 echo "==> Previously deployed sha: ${PREV_SHA:-<none>}"
 
 echo "==> Placing package manifests..."
@@ -153,6 +218,13 @@ rsync -a scripts/studio-research.mjs "$VPS_DIR/scripts/"
 # every invocation fails, and the agent falls back to rediscovering by hand —
 # the 10.5-discovery-actions-per-iteration behaviour this change set exists to
 # reduce. Nothing else would report the absence.
+# The rollback path. It is only useful if it is ON THE BOX before it is needed,
+# and this rsync line is the only thing that puts it there — a script without
+# one silently does not exist in production, which has caught this repo before.
+# It ships every release so that the copy sitting next to a bad deploy is the
+# one written to roll that deploy back.
+rsync -a scripts/rollback.sh "$VPS_DIR/scripts/"
+
 rsync -a scripts/codegraph-query.mjs "$VPS_DIR/scripts/"
 rsync -a scripts/codegraph-tree-pass.mjs "$VPS_DIR/scripts/"
 mkdir -p "$VPS_DIR/scripts/lib"
@@ -163,16 +235,47 @@ rsync -a scripts/lib/codegraph-snapshot.mjs scripts/lib/codegraph-scip.mjs "$VPS
 # node_modules — npm's own installed-tree metadata is not in a shape that can be
 # compared against a lockfile, and a guard that silently never matches is worse
 # than no guard. Recorded only AFTER a clean install, so a failure retries.
+#
+# INSTALLED BESIDE THE LIVE TREE, NOT THROUGH IT.
+#
+# `npm ci` begins by DELETING node_modules. This runs before the symlink flip,
+# so for the ~17s it takes, the PREVIOUS release — still live, still serving the
+# public — has no module tree underneath it. Node resolves a chunk's imports by
+# walking up from its realpath to $VPS_DIR/node_modules, and the server manifest
+# holds 545 lazily-imported route chunks, so any cold route in that window can
+# 500. It is the same class of fault the releases/ symlink was introduced to
+# fix, left behind in the dependency tree.
+#
+# So the install goes to a staging directory and is swapped in right after the
+# flip, two renames apart rather than seventeen seconds. The old tree is kept as
+# node_modules.old until the prune, which makes the swap trivially reversible.
 echo "==> Production deps..."
 LOCK_HASH="$(sha256sum package-lock.json | cut -d' ' -f1)"
+NPM_STAGED=""
 if [ "$(cat "$STATE_DIR/lockfile.sha256" 2>/dev/null || true)" = "$LOCK_HASH" ]; then
   echo "    lockfile unchanged — skipping install"
 else
-  # Keep resolver diagnostics visible. A production-only peer conflict used to
-  # collapse into a bare exit code here, after every earlier gate was green.
-  ( cd "$VPS_DIR" && npm ci --omit=dev --no-audit --no-fund )
-  echo "$LOCK_HASH" > "$STATE_DIR/lockfile.sha256"
-  echo "    installed"
+  # A staged tree costs a second copy of node_modules (~1.4G). The box has run
+  # out of disk four times and that crash-loops Postgres, so check rather than
+  # assume, and fall back to the old in-place install rather than failing the
+  # deploy over it.
+  AVAIL_GB="$(df -BG --output=avail "$VPS_DIR" | tail -1 | tr -dc '0-9')"
+  if [ "${AVAIL_GB:-0}" -ge 6 ]; then
+    echo "    staging into .npm-next (${AVAIL_GB}G free)"
+    rm -rf "$VPS_DIR/.npm-next"
+    mkdir -p "$VPS_DIR/.npm-next"
+    cp package.json package-lock.json .npmrc "$VPS_DIR/.npm-next/"
+    # Keep resolver diagnostics visible. A production-only peer conflict used to
+    # collapse into a bare exit code here, after every earlier gate was green.
+    ( cd "$VPS_DIR/.npm-next" && npm ci --omit=dev --no-audit --no-fund )
+    NPM_STAGED=1
+    echo "    staged"
+  else
+    echo "::warning::only ${AVAIL_GB:-?}G free — installing in place, which leaves the live release without node_modules for ~17s"
+    ( cd "$VPS_DIR" && npm ci --omit=dev --no-audit --no-fund )
+    echo "$LOCK_HASH" > "$STATE_DIR/lockfile.sha256"
+    echo "    installed in place"
+  fi
 fi
 
 # Same shape for the schema. Measured: 7 of 140 master commits touch schema.ts.
@@ -250,8 +353,12 @@ else
   echo "$SCHEMA_HASH" > "$STATE_DIR/schema.sha256"
 fi
 
-# Prepare the full development runtime before the web candidate becomes live.
-./scripts/ci-development.sh
+# Only the part the restarting web app reads — the broker URL and token, via a
+# systemd drop-in. A second or two. The expensive half (source install, container
+# lifecycle, tunnel reconciliation, executor preflight, prune) is ~50s and runs
+# after the flip, because production does not depend on the sandbox being ready
+# and should not wait for it.
+./scripts/ci-development.sh pre
 
 # Preserve legacy conclusions before the new investigation lifecycle starts.
 # Stamp only committed data; a failed migration leaves the current app running.
@@ -321,10 +428,33 @@ if [ ! -L "$VPS_DIR/build" ]; then
   mv "$VPS_DIR/build" "$LEGACY"
 fi
 
+# Written BEFORE the flip, because after it build/.deploy-sha no longer knows
+# what came before. This is what a re-run and scripts/rollback.sh read.
+[ -n "$PREV_SHA" ] && echo "$PREV_SHA" > "$STATE_DIR/previous.sha"
+
 echo "==> Pointing build/ at releases/$SHA..."
 ln -sfn "releases/$SHA" "$VPS_DIR/build.tmp"
 mv -Tf "$VPS_DIR/build.tmp" "$VPS_DIR/build"
 echo "    build -> $(readlink "$VPS_DIR/build")"
+
+# The moment production changed. Everything after this point is happening while
+# the new code is already serving the public, which is what makes a failure
+# below categorically different from a failure above it.
+echo "$SHA" > "$STATE_DIR/live.sha"
+
+# The dependency half of the swap, here rather than earlier so the previous
+# release never ran without a module tree. Two renames: the gap is microseconds,
+# and the restart immediately below means the new process reads the new tree.
+if [ -n "$NPM_STAGED" ]; then
+  echo "==> Swapping in the staged node_modules..."
+  rm -rf "$VPS_DIR/node_modules.old"
+  [ -d "$VPS_DIR/node_modules" ] && mv -T "$VPS_DIR/node_modules" "$VPS_DIR/node_modules.old"
+  mv -T "$VPS_DIR/.npm-next/node_modules" "$VPS_DIR/node_modules"
+  rm -rf "$VPS_DIR/.npm-next"
+  # Recorded only now, so an interrupted deploy reinstalls rather than believing
+  # a tree it never swapped in.
+  echo "$LOCK_HASH" > "$STATE_DIR/lockfile.sha256"
+fi
 
 # Restarts ONLY the web app. The jkai-builder sidecar owns build-orchestrator
 # state and must survive web restarts — only scripts/deploy-builder.sh touches it.
@@ -338,26 +468,72 @@ if wait_for_public_release "$SHA" 90; then
   echo "==> Deployed exact commit successfully to $PUBLIC_URL"
   echo "    $(curl -fsS -o /dev/null -w 'HTTP %{http_code} in %{time_total}s' "$PUBLIC_URL")"
 
+  # ── EVERYTHING BELOW HAPPENS WITH THE NEW CODE ALREADY SERVING ─────────
+  #
+  # That makes a failure here categorically different from a failure above,
+  # and until 2026-09-16 the script could not tell you which you had. `set -e`
+  # killed it on the first post-live failure: production had moved, no rollback
+  # ran, /releases had no record of the commit that was live, and the red badge
+  # in the Actions tab looked exactly like a release that never touched the box
+  # at all. Observed in run 34773827353.
+  #
+  # So these steps record a marker and carry on, and the script exits at the end
+  # with a message that says production DID move. Rolling back automatically
+  # would be wrong: the site is serving the new commit and passing its own
+  # health check, and the operator, not this script, decides whether a sidecar
+  # that failed to apply is worth reverting the whole release for.
+  # FAILED_POSTLIVE is declared at the top of the script, not here: the final
+  # report reads it on every path, including the one where production never
+  # moved and this block never ran.
+  postlive() {
+    local label="$1"; shift
+    if "$@"; then return 0; fi
+    echo "::warning::post-live step failed: $label"
+    echo "==> WARN: $label failed, and production is ALREADY LIVE on $SHA." >&2
+    FAILED_POSTLIVE="${FAILED_POSTLIVE}${label}, "
+    return 0
+  }
+
   # Apply sidecars only after the web candidate proves that its own commit is
   # publicly visible. A failed web candidate is rolled back without touching
   # the running systemd sidecars; their staged directories are inert.
+  # The expensive half of the sandbox provisioning, moved here from before the
+  # flip. It is ~50s that production used to wait on for no reason: the live
+  # site does not read any of it, and a sandbox that fails to provision used to
+  # block a perfectly good web release.
+  echo "==> Provisioning the development sandbox..."
+  postlive "development sandbox provisioning" ./scripts/ci-development.sh post
+
   echo "==> Applying staged sidecars..."
-  ./scripts/ci-apply-sidecars.sh
+  postlive "sidecar apply" ./scripts/ci-apply-sidecars.sh
 
   # The builder's staged directory has deliberately been inert until now. Its
   # watchdog must never apply a candidate merely because staging succeeded:
   # schema application, web restart or the public SHA proof may still fail.
   BUILDER_STAGE="$VPS_DIR/builder-releases/$SHA"
   if [ ! -d "$BUILDER_STAGE" ]; then
-    echo "==> ERROR: matching jkai-builder candidate was not staged at $BUILDER_STAGE" >&2
-    exit 1
+    # Post-live, so this is no longer an `exit 1`. The web release is serving
+    # and healthy; a missing builder candidate is a broken builder, not a
+    # broken site, and conflating the two is what made the badge unreadable.
+    echo "::warning::matching jkai-builder candidate was not staged at $BUILDER_STAGE"
+    FAILED_POSTLIVE="${FAILED_POSTLIVE}builder candidate missing, "
+  else
+    echo "==> Activating jkai-builder candidate for apply-when-idle..."
+    # Through postlive as well. These are two filesystem calls that have never
+    # failed, but they sit between the flip and the release-log ingest, and
+    # under `set -e` a failure here would skip the record of a commit that is
+    # already serving the public — the exact state this whole block exists to
+    # stop being possible.
+    postlive "builder candidate activation" bash -c '
+      ln -sfn "$1" "$2/builder-releases/pending.tmp" &&
+      mv -Tf "$2/builder-releases/pending.tmp" "$2/builder-releases/pending"
+    ' _ "$SHA" "$VPS_DIR"
+    # Use the existing service so this invocation serialises with its timer.
+    postlive "builder watchdog" sudo systemctl start jkai-builder-watchdog.service
   fi
-  echo "==> Activating jkai-builder candidate for apply-when-idle..."
-  ln -sfn "$SHA" "$VPS_DIR/builder-releases/pending.tmp"
-  mv -Tf "$VPS_DIR/builder-releases/pending.tmp" "$VPS_DIR/builder-releases/pending"
-  # Use the existing service so this invocation serialises with its timer.
-  sudo systemctl start jkai-builder-watchdog.service
-  sudo bash -s -- "/opt/sr-development/sources/$SHA" <<'VERIFY'
+
+  postlive "development sandbox verification" \
+    sudo bash -s -- "/opt/sr-development/sources/$SHA" <<'VERIFY'
 set -euo pipefail
 set -a
 . /opt/strange-rambling-svelte/.env
@@ -411,6 +587,10 @@ fi
 
 # Prune. The box runs at ~93% disk and each release is ~92MB, so this is not
 # optional. Never prune the live one, whatever the count says.
+# The previous dependency tree, kept across the restart so the swap above stays
+# reversible until the new process has proved itself.
+rm -rf "$VPS_DIR/node_modules.old"
+
 echo "==> Pruning old releases (keeping $KEEP_RELEASES)..."
 LIVE="$(readlink -f "$VPS_DIR/build")"
 ls -1dt "$VPS_DIR"/releases/*/ 2>/dev/null | tail -n +"$((KEEP_RELEASES + 1))" | while read -r d; do
@@ -422,3 +602,22 @@ ls -1dt "$VPS_DIR"/releases/*/ 2>/dev/null | tail -n +"$((KEEP_RELEASES + 1))" |
   rm -rf "$d"
 done
 df -h "$VPS_DIR" | tail -1
+
+# ── the verdict ──────────────────────────────────────────────────────────────
+#
+# Reached only when the site is serving $SHA and passing its own health check.
+# If a post-live step failed, that is still a red job — but a DIFFERENT red from
+# the one above, and it has to say so, because the difference is whether
+# production moved. A badge that cannot distinguish "never deployed" from
+# "deployed, and something after it failed" sends you looking in the wrong place.
+if [ -n "$FAILED_POSTLIVE" ]; then
+  echo ""
+  echo "==> LIVE on $SHA, but post-live checks failed: ${FAILED_POSTLIVE%, }" >&2
+  echo "    PRODUCTION HAS MOVED and was NOT rolled back — the site is serving" >&2
+  echo "    this commit and answering /api/version with it." >&2
+  echo "    Decide deliberately whether that is worth reverting:" >&2
+  echo "      $VPS_DIR/scripts/rollback.sh --list" >&2
+  exit 1
+fi
+
+echo "==> Release complete: $SHA is live and every post-live step passed."

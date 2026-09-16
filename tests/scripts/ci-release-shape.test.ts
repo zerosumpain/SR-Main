@@ -295,3 +295,86 @@ describe('candidate promotion', () => {
     }
   });
 });
+
+describe('release ordering around the symlink flip', () => {
+  const release = () => readFileSync(join(ROOT, 'scripts/ci-release.sh'), 'utf8');
+  const at = (needle: string) => {
+    const i = release().indexOf(needle);
+    expect(i, `not found in ci-release.sh: ${needle}`).toBeGreaterThan(-1);
+    return i;
+  };
+
+  const FLIP = 'mv -Tf "$VPS_DIR/build.tmp" "$VPS_DIR/build"';
+
+  // The sandbox is ~50s of work the live site does not read. It used to run
+  // before the flip, so production waited for it AND a sandbox that failed to
+  // provision blocked a perfectly good web release.
+  it('provisions only what the restarting app reads before the flip', () => {
+    expect(at('./scripts/ci-development.sh pre')).toBeLessThan(at(FLIP));
+    expect(at('./scripts/ci-development.sh post')).toBeGreaterThan(at(FLIP));
+  });
+
+  // npm ci DELETES node_modules first. Before this, that happened while the
+  // PREVIOUS release was still serving, leaving 545 lazily-imported chunks
+  // without a module tree for ~17s.
+  it('stages node_modules rather than installing through the live tree', () => {
+    expect(at('.npm-next')).toBeLessThan(at(FLIP));
+    expect(at('Swapping in the staged node_modules')).toBeGreaterThan(at(FLIP));
+    // Recorded only after the swap, so an interrupted deploy reinstalls rather
+    // than trusting a tree it never swapped in. There are two writes of this
+    // hash on purpose — the low-disk fallback installs in place and records
+    // immediately — so it is the LAST one that has to be after the flip.
+    expect(release().lastIndexOf('echo "$LOCK_HASH" > "$STATE_DIR/lockfile.sha256"')).toBeGreaterThan(at(FLIP));
+  });
+
+  // build/.deploy-sha stops being evidence of what came before the moment the
+  // symlink moves, so the true previous sha has to be recorded first.
+  it('records the previous sha before the flip, and the live sha after', () => {
+    expect(at('"$STATE_DIR/previous.sha"')).toBeLessThan(at(FLIP));
+    expect(at('echo "$SHA" > "$STATE_DIR/live.sha"')).toBeGreaterThan(at(FLIP));
+  });
+
+  it('reports a post-live failure as distinct from never deploying', () => {
+    const s = release();
+    expect(s).toContain('FAILED_POSTLIVE');
+    expect(s).toContain('PRODUCTION HAS MOVED');
+    // set -e used to kill the script on the first post-live failure, leaving
+    // production moved, /releases with no record, and a red badge identical to
+    // a release that never touched the box. Observed in run 34773827353.
+    expect(s).toContain('postlive "sidecar apply"');
+    expect(s).toContain('postlive "development sandbox provisioning"');
+  });
+
+  it('refuses to "roll back" to the commit that is failing', () => {
+    // On a re-run, build/ already points at the new sha, so the old code
+    // pointed the symlink at the failing release and printed "Rollback
+    // verified" — a green message while production served the broken commit.
+    expect(release()).toContain('if [ "$PREV_SHA" = "$SHA" ]; then');
+  });
+
+  // A script with no rsync line silently does not exist in production, which is
+  // the worst possible property for the rollback path.
+  it('ships rollback.sh to the VPS', () => {
+    expect(release()).toContain('rsync -a scripts/rollback.sh "$VPS_DIR/scripts/"');
+  });
+});
+
+// rollback.sh must be able to tell "a release is running" from "something
+// mentioned the script". The two halves of that live in different files, so
+// they are asserted together.
+describe('the release lock', () => {
+  it('is a pid file written by the release and read by the rollback', () => {
+    const release = readFileSync(join(ROOT, 'scripts/ci-release.sh'), 'utf8');
+    const rollback = readFileSync(join(ROOT, 'scripts/rollback.sh'), 'utf8');
+    expect(release).toContain('release.pid');
+    expect(release).toContain(`trap 'rm -f "$RELEASE_PID_FILE"' EXIT`);
+    expect(rollback).toContain('release.pid');
+    expect(rollback).toContain('kill -0');
+    // Neither should go back to matching a process list by name. Comments in
+    // both explain what the old check was, so test the executable lines.
+    const code = (src: string) =>
+      src.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+    expect(code(release)).not.toContain('pgrep -f');
+    expect(code(rollback)).not.toContain('pgrep -f');
+  });
+});

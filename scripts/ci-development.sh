@@ -1,20 +1,48 @@
 #!/usr/bin/env bash
 # Provision only the trusted workspace service. Production .env and data stay intact.
+#
+# TWO PHASES, because only a sliver of this has to happen before production
+# changes.
+#
+#   pre   what the WEB APP reads when it restarts — the broker URL and token,
+#         via a systemd drop-in. A second or two.
+#   post  everything else: the source checkout and its install, the container
+#         lifecycle, the tunnel reconciliation, the executor preflight and the
+#         prune. Roughly 50 of the ~54 seconds this script costs.
+#   all   both, in order. The default, so running it by hand is unchanged.
+#
+# WHY. All of it used to run before the symlink flip, so every deploy held
+# production back by ~54s provisioning a SANDBOX that the live site does not
+# depend on — and a failure provisioning that sandbox blocked a perfectly good
+# web release. That is the wrong coupling in both directions.
+#
+# This is only safe because ci-release.sh now distinguishes a post-live failure
+# from a pre-live one and says production has already moved. Without that,
+# anything moved after the flip fails into a red badge indistinguishable from
+# "never deployed".
+#
+# THE ORDER WITHIN `pre` IS LOAD-BEARING: the drop-ins name the env file the
+# python block writes, so that block runs first. Do not reorder them.
 set -euo pipefail
+
+PHASE="${1:-all}"
+case "$PHASE" in
+  pre|post|all) ;;
+  *) echo "usage: ci-development.sh [pre|post|all]" >&2; exit 2 ;;
+esac
+
 ROOT=/opt/sr-development
 SHA="$(git rev-parse HEAD)"
 SOURCE="$ROOT/sources/$SHA"
 [ "$(id -u johnk)" = 1000 ] || { echo 'Preview workspace ownership requires the configured johnk uid 1000'; exit 1; }
 sudo install -d -m 755 "$ROOT" /etc/strange-ramblings
 sudo install -d -m 755 -o johnk -g johnk "$ROOT/sources"
-if [ ! -f "$SOURCE/node_modules/.sr-dependencies-ready" ]; then
-  mkdir -p "$SOURCE"
-  git archive HEAD | tar -x -C "$SOURCE"
-  # No production environment or credentials reach package lifecycle commands.
-  (cd "$SOURCE" && env -i PATH="$PATH" HOME="$HOME" PUBLIC_VAPID_PUBLIC_KEY='' bash scripts/install-development-dependencies.sh)
-  touch "$SOURCE/node_modules/.sr-dependencies-ready"
-fi
-sudo python3 - "$ROOT" "$SOURCE" "$SHA" <<'PY'
+
+# ── pre ──────────────────────────────────────────────────────────────────────
+# The two things the restarting web app actually reads. Cheap, and they must be
+# on disk before systemd starts the new process.
+if [ "$PHASE" != post ]; then
+  sudo python3 - "$ROOT" "$SOURCE" "$SHA" <<'PY'
 from pathlib import Path
 import os, secrets, sys
 root, source, sha = sys.argv[1:]
@@ -32,6 +60,33 @@ for path, text in [(config, ''.join(f'{k}={v}\n' for k,v in values.items())),
     os.chmod(temp, 0o600)
     temp.replace(path)
 PY
+
+  for service in strange-rambling-svelte jkai-builder; do
+    sudo install -d -m 755 "/etc/systemd/system/$service.service.d"
+    sudo tee "/etc/systemd/system/$service.service.d/30-development.conf" >/dev/null <<'UNIT'
+[Service]
+EnvironmentFile=/etc/strange-ramblings/development.env
+InaccessiblePaths=-/etc/strange-ramblings/development.env -/opt/sr-development/compose.env
+UNIT
+  done
+  sudo systemctl daemon-reload
+  echo "Development env file and systemd drop-ins in place."
+fi
+
+if [ "$PHASE" = pre ]; then
+  exit 0
+fi
+
+# ── post ─────────────────────────────────────────────────────────────────────
+# Everything from here runs with the new release already serving the public.
+if [ ! -f "$SOURCE/node_modules/.sr-dependencies-ready" ]; then
+  mkdir -p "$SOURCE"
+  git archive HEAD | tar -x -C "$SOURCE"
+  # No production environment or credentials reach package lifecycle commands.
+  (cd "$SOURCE" && env -i PATH="$PATH" HOME="$HOME" PUBLIC_VAPID_PUBLIC_KEY='' bash scripts/install-development-dependencies.sh)
+  touch "$SOURCE/node_modules/.sr-dependencies-ready"
+fi
+
 sudo install -m 644 deploy/development/compose.yaml "$ROOT/compose.yaml"
 compose=(sudo docker compose --env-file "$ROOT/compose.env" -f "$ROOT/compose.yaml")
 "${compose[@]}" config --quiet
@@ -63,15 +118,6 @@ done
 curl -fsS http://127.0.0.1:5280/health >/dev/null
 # Prime images while the trusted daemon has network access; candidates never do.
 "${compose[@]}" exec -T broker docker pull pgvector/pgvector:pg16 >/dev/null
-for service in strange-rambling-svelte jkai-builder; do
-  sudo install -d -m 755 "/etc/systemd/system/$service.service.d"
-  sudo tee "/etc/systemd/system/$service.service.d/30-development.conf" >/dev/null <<'UNIT'
-[Service]
-EnvironmentFile=/etc/strange-ramblings/development.env
-InaccessiblePaths=-/etc/strange-ramblings/development.env -/opt/sr-development/compose.env
-UNIT
-done
-sudo systemctl daemon-reload
 
 # Add only the dedicated preview hostnames to the existing locally-managed tunnel.
 if ! python3 -c 'import yaml' 2>/dev/null; then
