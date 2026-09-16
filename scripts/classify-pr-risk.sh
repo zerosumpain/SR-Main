@@ -22,7 +22,14 @@ RULES="$HERE/.github/protected-paths.txt"
 # Merge-base diff, so we classify what the PR ADDS rather than everything that
 # has landed on master since it branched.
 MB="$(git merge-base "$BASE_REF" HEAD)"
-if ! CHANGED=$(git diff --name-only "$MB" -- 2>/dev/null); then
+# --no-renames is load-bearing. With rename detection on, `git diff --name-only`
+# prints ONLY a rename's destination, so `git mv src/lib/auth.ts
+# src/lib/identity.ts` showed this script nothing but an unremarkable new path
+# and classified low. That is worse than a single miss: the rule in
+# protected-paths.txt then names a file that no longer exists, so the protection
+# is gone for every future PR as well. Off, a rename is a delete plus an add and
+# the delete still carries the protected path.
+if ! CHANGED=$(git diff --name-only --no-renames "$MB" -- 2>/dev/null); then
   echo "could not diff against $BASE_REF" >&2
   exit 2
 fi

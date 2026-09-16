@@ -1,0 +1,126 @@
+# CI/CD pipeline hardening — safety and speed
+
+**Date:** 2026-09-16
+**Kick-off:** "Perform a review of the site … safe and efficient ci/cd pipeline … perfect balance
+of safety and speed to deploy", then "crack on with the order you have proposed".
+**Grade:** Full autonomous. Zero human contact until the final report.
+**Audit:** https://claude.ai/code/artifact/bfa47327-fdb1-4309-88fc-6705524052c7
+
+## Problem
+
+A nine-dimension audit of `ci.yml`, `nightly.yml` and the release scripts found 40 findings
+that survived adversarial verification. Four are open holes today:
+
+1. Both self-hosted runners — including the production VPS — are registered on a **public**
+   repo, and the master-only guard that keeps strangers off them lives inside the file a pull
+   request proposes.
+2. The gate-certified release candidate is accepted on an artifact *name* plus a job *name*,
+   then unpacked with `path: .` over the checkout root, immediately before the runner executes
+   `./scripts/ci-promote-candidate.sh` — a file the archive may have just replaced.
+3. `select-tests.mjs` cannot see bare side-effect imports, so a change to any of 33
+   `site-tools/tools/*.ts` modules selects exactly the always-run baseline and nothing else.
+   The `destructive: true` invariant that `protected-paths.txt:139` relies on never runs.
+4. The nightly has been red for 22 consecutive runs because `check-authored-runner.sh` was
+   wired into `ci.yml` and `ci-release.sh` but not `nightly.yml`.
+
+Separately, 241 seconds of every master deploy — 61% of the run — is porkserv downloading an
+artifact the pull request already built and uploading it again so the VPS can download the
+same bytes.
+
+## Goals
+
+- Close the four open holes.
+- Take merge→live from ~391s to ~115s without giving up any verification.
+- Give production a rollback before locking the branch ruleset.
+- Leave the PR gate's ~4 minute wall clock alone.
+
+## Non-goals
+
+- Re-running the type check and tests on master. See Decision 4.
+- Widening `is_known_code` in `gate-level.sh`. The deny-by-default classification is correct;
+  the *selector* is what is broken.
+- Protecting `site-tools/tools/**`. `protected-paths.txt` is right that this is ordinary
+  feature work and protecting it would end the agent lane.
+
+## Shape
+
+All expensive verification happens once, on the pull request, on GitHub-hosted runners. Master
+does not repeat it, because the artifact that ships is bound to the run that gated it. The
+machine that deploys fetches that artifact directly. No self-hosted runner is reachable from a
+workflow definition a pull request can write. The merge decision is computed from the base ref,
+never from the branch under judgement. Production has a one-command rollback and an alarm that
+reaches a phone.
+
+## Waves
+
+Delivered as four PRs, each gated and merged on its own so a regression is attributable and
+revertible. Every merge auto-deploys, so each wave is live before the next starts.
+
+| Wave | Items | Theme |
+|---|---|---|
+| 1 | 1–12 | Blind spots and dead alarms. No deploy-time cost. |
+| 2 | 13–18 | The speed restructure. ~4½ minutes off every deploy. |
+| 3 | 19–24 | Recovery first, then lock the branch. **19 before 22.** |
+| 4 | 25–32 | Provenance, runner exposure, sudo, loose ends. |
+
+Item-by-item detail lives in the audit artifact; it is the specification for this work and is
+not restated here.
+
+## Verification
+
+Per item, stated before the code is written:
+
+- **5** — `SELECT_TESTS_FILES='src/lib/workflows/site-tools/tools/whatsapp.ts' node
+  scripts/select-tests.mjs` selects >60 files and includes `toolchain-fixes.test.ts`.
+- **6** — a tracked path containing a space classifies L3, driven through the real git path,
+  not `GATE_LEVEL_FILES`.
+- **7** — `git mv` of a protected file classifies `tier=high`.
+- **1–3, 11** — a `workflow_dispatch` nightly run goes green.
+- **13** — `gh run view` on the first certified master deploy shows no `Prebuild` job and a
+  merge→live under 150s.
+- **19** — `rollback.sh` run against a real previous release restores it and `/api/version`
+  reports the rolled-back SHA.
+- Every wave — the `Gate (check + test)` check is green before merge, and
+  `https://strangeramblings.com/api/version` reports the merged SHA afterwards.
+
+## Decision Log
+
+**1. Fix the selector, not the always-run list.** Options: (a) add the two invariant tests to
+`tests/always-run.txt`; (b) teach `select-tests.mjs` about bare imports. Chose (b).
+`tests/scripts/select-tests.test.ts:101` asserts the always-run list equals a specific grep, so
+(a) fails that drift test on the next run and would need a second parallel list to be made
+honest. (b) is one regex, is monotone — a bare-import edge can only add tests — and fixes all
+33 modules rather than two. Reversible: one line.
+
+**2. One PR per wave, not one per item.** 32 PRs would each pay a ~4 minute gate and a ~6.5
+minute deploy. Four PRs keep each change attributable while landing the work in a day.
+Reversible: each wave is a single squash commit to revert.
+
+**3. Interim fork-approval change lands in Wave 1, not Wave 4.** Item 27's full fix — moving
+both runners to a private ops repo — is a multi-step infrastructure change with a real chance
+of breaking deploys. The interim, setting fork-PR approval to `all_external_contributors`, is
+one API call, takes effect immediately, is reversible, and closes the entire outsider path. It
+is wrong to leave that open for three waves while building the better fix. Reversible: one API
+call back.
+
+**4. Reject re-running the type check and tests on master.** One auditor proposed dropping the
+`candidate_certified` clause at `ci.yml:199`/`:282`. It reads as free only because porkserv's
+241s relay currently hides it; after Wave 2 it costs ~150s on every deploy and buys close to
+nothing, since on L2/L3 the tree is identical by construction to what the PR gated and on L1
+the jobs skip anyway. The exposure is in the *level* decision the certificate inherits, which
+items 5 and 6 fix directly. Reversible: it is a deletion of two `if:` clauses if ever wanted.
+
+**5. Wave 3 is ordered, not a set.** Item 22 (`pull_request` + `non_fast_forward` + `deletion`
+rules) removes direct-push-to-master, which is today's fastest rollback. Item 19 builds the
+replacement. Landing 22 first would leave a window with neither. Not reversible in the sense
+that matters — an outage during that window would be felt — so the order is a hard constraint.
+
+**6. `deploy.sh` is gutted, not deleted.** Deleting it would break any muscle memory or stale
+doc that still invokes it, and would do so silently. A file that exists and refuses loudly,
+naming the supported path, is the safer artefact. Reversible: it is in git history.
+
+---
+
+*Written and self-reviewed under the autonomous-build grade. The audit artifact is the design
+document; this spec records scope, ordering and the forks that would otherwise have been
+questions.*

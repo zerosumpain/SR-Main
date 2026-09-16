@@ -56,6 +56,8 @@ tests/scripts/check-module-boundaries.test.ts
 tests/scripts/check-schema-drift.test.ts
 tests/scripts/ci-release-shape.test.ts
 tests/scripts/ci-sidecars.test.ts
+tests/scripts/classify-pr-risk.test.ts
+tests/scripts/deploy-refuses.test.ts
 tests/scripts/development-install.test.ts
 tests/scripts/drizzle-orphan-tables.test.ts
 tests/scripts/gate-level.test.ts

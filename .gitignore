@@ -73,3 +73,7 @@ core.*
 
 # Historical Policy build output; keep stale local assets out of source control.
 static/policy-offline/
+
+# The gate-certified release candidate is unpacked here before its contents
+# are checked. Never part of the source tree.
+.candidate/

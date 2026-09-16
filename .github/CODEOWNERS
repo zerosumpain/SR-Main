@@ -4,9 +4,14 @@
 # separate because they do different jobs and cannot share a format:
 #   - protected-paths.txt drives scripts/classify-pr-risk.sh, which is the
 #     enforcement (a high-tier PR is never auto-merged).
-#   - this file is advisory. Required code-owner review needs GitHub Pro on a
-#     private repo, so on the current plan CODEOWNERS requests a review but
-#     cannot block a merge. See scripts/enable-branch-protection.sh.
+#   - this file is advisory: it requests a review but does not block a merge.
+#
+# The reason given here used to be "required code-owner review needs GitHub Pro
+# on a private repo". That is stale twice over: SR-Main is PUBLIC, and a branch
+# ruleset requiring the gate has been active on master since 2026-08-09. What
+# actually stops code-owner review being enforced now is that this is a solo
+# repo — GitHub will not let you approve your own pull request, so requiring an
+# approving review would make every PR unmergeable.
 
 # Auth and access control
 /src/hooks.server.ts        @zerosumpain
@@ -66,3 +71,9 @@
 # Tests pinned as invariants, so a dropped destructive flag fails CI
 /src/lib/workflows/site-tools/toolchain-fixes.test.ts       @zerosumpain
 /tests/lib/workflows/nodes/llm-agent-site-tools.test.ts     @zerosumpain
+
+# Instruction surfaces — the text that steers every agent, and the prompt stack
+# that is read at runtime in production
+/CLAUDE.md                  @zerosumpain
+/.claude/                   @zerosumpain
+/data/prompts/              @zerosumpain
