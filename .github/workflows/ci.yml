@@ -753,7 +753,13 @@ jobs:
       github.ref == 'refs/heads/master' &&
       (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
     runs-on: [self-hosted, srmain]
-    timeout-minutes: 25
+    # 10, not 25. Measured releases run 1.5-4.5 minutes, and this job holds the
+    # ref's concurrency lane while it runs — so a wedged release used to sit on
+    # production's only deploy lane for twenty-five minutes before anything
+    # noticed. A timeout also SIGTERMs ci-release.sh, which now traps that and
+    # prints where the symlink got to, so the shorter deadline is legible rather
+    # than just faster.
+    timeout-minutes: 10
     steps:
       # Full history: scripts/ci-release.sh records the release log by diffing
       # the previously-deployed sha against HEAD, and the default depth-1
