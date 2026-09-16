@@ -77,3 +77,4 @@ static/policy-offline/
 # The gate-certified release candidate is unpacked here before its contents
 # are checked. Never part of the source tree.
 .candidate/
+.build-env

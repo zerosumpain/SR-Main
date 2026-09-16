@@ -22,6 +22,17 @@ cd "$ROOT"
 # thrown away.
 STAGING="${CANDIDATE_DIR:-$ROOT/.candidate}"
 
+# The file whose sha256 is compared against the candidate's build_env_sha256
+# stamp. It is the CONTENT that is fingerprinted, never the name, so a caller
+# may point this anywhere as long as the bytes match what ci-prebuild.sh hashed.
+#
+# The release job on the VPS uses .build-env rather than .env, deliberately.
+# Creating a file literally called .env in a workspace ON THE PRODUCTION BOX is
+# how the 33-hour outage started — a later rsync of a repo root picked one up and
+# replaced production's. Nothing here copies it today, but the name is a loaded
+# gun lying next to $VPS_DIR and there is no reason to leave it there.
+ENV_FILE="${CANDIDATE_ENV_FILE:-$ROOT/.env}"
+
 # Exactly the non-build entries of the `Upload release candidate` step in
 # ci.yml. Keep the two in step: a path added there and not here rejects every
 # candidate, which fails closed to a fresh build rather than shipping something
@@ -71,11 +82,11 @@ done < <(cd "$STAGING" && find . -type f | sed 's|^\./||')
 
 [ -f "$STAGING/build/.deploy-sha" ] || reject 'build/.deploy-sha is missing'
 [ -f "$STAGING/build/handler.js" ] || reject 'build/handler.js is missing'
-[ -f .env ] || reject '.env is missing'
+[ -f "$ENV_FILE" ] || reject "build-time public env file is missing at $ENV_FILE"
 
 CURRENT_SHA="$(git rev-parse HEAD)"
 CURRENT_TREE="$(git rev-parse 'HEAD^{tree}')"
-CURRENT_ENV="$(sha256sum .env | cut -d' ' -f1)"
+CURRENT_ENV="$(sha256sum "$ENV_FILE" | cut -d' ' -f1)"
 STAMPED_TREE="$(sed -n 's/^tree=//p' "$STAGING/build/.deploy-sha" | head -1)"
 STAMPED_ENV="$(sed -n 's/^build_env_sha256=//p' "$STAGING/build/.deploy-sha" | head -1)"
 
