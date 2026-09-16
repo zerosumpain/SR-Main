@@ -147,6 +147,42 @@ a pre-live one and says so. That is item 20. Doing 15 first would add a new way 
 production has already moved, with the old indistinguishable-red-badge reporting still in
 place. Same shape of constraint as 19-before-22.
 
+**9. Item 25 ships its load-bearing half, not the attestation.** The forged-candidate path has
+two locks. The first is cheap and needs no new permissions: require the producing run to belong
+to this repository (`head_repository.id`) and its head commit to be the head of a pull request
+that actually produced the commit being deployed
+(`listPullRequestsAssociatedWithCommit`). That is implemented. The second,
+`actions/attest-build-provenance` plus `gh attestation verify --signer-workflow`, needs
+`id-token: write` and `attestations: write`, a `gh` on the VPS authenticated for attestation
+verification, and turns every deploy into a hard dependency on that verification succeeding. It
+is the stronger lock and it should follow — but shipping it blind, in the same run that
+restructured the release path, would put an untested failure mode directly in front of
+production. Recommended as the next piece of work, on its own, with a deliberate first deploy.
+
+**10. Item 27's interim is done; the move is not, and it is the top recommendation.**
+Fork-PR approval is now `all_external_contributors`, which closes the outside-contributor path
+outright. What remains is that the master-only guards on both self-hosted runners live inside
+the `ci.yml` a pull request proposes, and one of those runners is the production box. Fixing it
+properly means a private ops repository, re-registering two runners, and a
+`repository_dispatch` bridge — a change that breaks every deploy if it is wrong, cannot be
+rehearsed, and involves a repository that does not exist yet. That is a decision about
+infrastructure layout rather than a defect to patch, so it is written up rather than guessed at.
+
+**11. Item 28 (narrow the sudo) is not attempted.** `sudo bash -s --` at `ci-release.sh:360` is
+equivalent to NOPASSWD ALL and should become a fixed root helper installed out of band. But
+editing `/etc/sudoers.d/` on the production box, blind, risks locking the deploy out of the
+operations it needs, and the failure would land on the box serving the site. It needs a
+prepared helper, a `visudo -c` check, and a rehearsed rollback — worth doing, not worth
+improvising.
+
+**12. Item 30 splits.** The `gate:schema-drift` half of the finding does not hold:
+`gate-structural.sh:8-13` already documents that it returns before importing `pg` when there is
+no `DATABASE_URL`, and earns its place because `npm run gate` on a dev box does have one, which
+is where the drift accumulates. Deliberate and stated, not advertised coverage. The Playwright
+half does hold — `tests/e2e/` has two specs and `package.json` has `test:e2e`, and no workflow
+invokes either. Wiring it needs a served app on 5273 and seeded rows, which is real work; it is
+now asserted as unwired by `coverage-census.test.ts` so it cannot keep reading as coverage.
+
 ---
 
 *Written and self-reviewed under the autonomous-build grade. The audit artifact is the design

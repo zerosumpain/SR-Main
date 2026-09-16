@@ -57,6 +57,7 @@ tests/scripts/check-schema-drift.test.ts
 tests/scripts/ci-release-shape.test.ts
 tests/scripts/ci-sidecars.test.ts
 tests/scripts/classify-pr-risk.test.ts
+tests/scripts/coverage-census.test.ts
 tests/scripts/deploy-refuses.test.ts
 tests/scripts/development-install.test.ts
 tests/scripts/drizzle-orphan-tables.test.ts
@@ -66,5 +67,6 @@ tests/scripts/rollback.test.ts
 tests/scripts/select-tests.test.ts
 tests/scripts/shared-with-extracted.test.ts
 tests/scripts/source-footprint.test.ts
+tests/scripts/workflow-injection.test.ts
 tests/security/permissions-policy.test.ts
 tests/skills/tool-names-exist.test.ts

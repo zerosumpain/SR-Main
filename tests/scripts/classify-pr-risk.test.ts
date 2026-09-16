@@ -11,7 +11,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, copyFileSync, rmSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, mkdirSync, writeFileSync, copyFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -120,6 +120,42 @@ describe('PR risk classifier', () => {
 		const out = classify(['tests/lib/existing.test.ts'], (git) =>
 			git('mv', 'tests/lib/existing.test.ts', 'tests/lib/moved.test.ts')
 		);
+		expect(tierOf(out)).toBe('high');
+	});
+});
+
+// The rules cannot defend themselves by listing themselves: the listing is what
+// a hostile PR deletes. These paths are a literal in the script, checked before
+// any rule file is read.
+describe('the floor', () => {
+	const floorCases: Array<[string, string]> = [
+		['the rules file itself', '.github/protected-paths.txt'],
+		['this classifier', 'scripts/classify-pr-risk.sh'],
+		['the gate level classifier', 'scripts/gate-level.sh'],
+		['the test selector', 'scripts/select-tests.mjs'],
+		['the always-run list', 'tests/always-run.txt'],
+		['the workflow definitions', '.github/workflows/ci.yml'],
+		['CODEOWNERS', '.github/CODEOWNERS'],
+	];
+
+	// APPEND rather than overwrite: two of these paths are the script under test
+	// and the rules it reads, and clobbering them would mean the case ran a
+	// garbage classifier rather than proving anything about the real one.
+	it.each(floorCases)('editing %s is high', (_label, file) => {
+		const out = classify(['src/lib/ordinary.ts'], (_g, dir) => {
+			const target = path.join(dir, file);
+			mkdirSync(path.dirname(target), { recursive: true });
+			appendFileSync(target, '\n# touched by a pull request\n');
+		});
+		expect(tierOf(out)).toBe('high');
+	});
+
+	// The specific attack: empty the rules and declare yourself safe.
+	it('emptying the rules file does not make the PR low risk', () => {
+		const out = classify(['src/lib/auth.ts'], (_g, dir) => {
+			writeFileSync(path.join(dir, '.github/protected-paths.txt'), '');
+			writeFileSync(path.join(dir, 'src/lib/auth.ts'), 'changed\n');
+		});
 		expect(tierOf(out)).toBe('high');
 	});
 });

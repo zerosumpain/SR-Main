@@ -10,7 +10,7 @@ name: Nightly full suite
 # dependency graph entirely), and modules loaded by a computed string at
 # runtime. Nothing catches those at PR time. This does, within twelve hours.
 #
-# It also runs the eight *.integration.test.ts files the merge gate has never
+# It also runs the 46 *.integration.test.ts files the merge gate has never
 # once executed. They are excluded there because they need a database; they get
 # one here, and each already skips itself when its dependency is absent.
 #
@@ -76,7 +76,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 22.22.3
+          node-version-file: .nvmrc
           cache: npm
 
       # Same step ci.yml runs before `npm ci`, and it was missing here for the
@@ -237,7 +237,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 22.22.3
+          node-version-file: .nvmrc
           cache: npm
 
       # Same three attempts as the gate. The advisory service is a live
