@@ -45,6 +45,33 @@ echo "$CHANGED" | sed 's/^/  /'
 echo
 
 matched=""
+
+# ── the floor ────────────────────────────────────────────────────────────────
+#
+# THIS SCRIPT AND ITS RULES ARE READ FROM THE BRANCH BEING JUDGED. A pull
+# request that empties .github/protected-paths.txt, or edits the matching below,
+# is classified by its own edited copy — so it can declare itself low risk and,
+# on an agent/ branch, merge itself.
+#
+# The rules file cannot defend itself by listing itself, because the listing is
+# what the PR deletes. So this is a literal, checked before any rule is read:
+# touch the machinery that decides what is safe, and you are high, whatever the
+# rules happen to say by the time they are consulted.
+#
+# HONEST LIMITATION: this does not close the hole. The pull request still
+# supplies the ci.yml that decides what to do with the tier, so a PR editing
+# .github/workflows/ can still route around the answer. That is why
+# .github/workflows is in the list below AND why the real fix is taking the
+# self-hosted runners off a repository whose workflows a pull request can write.
+# This is the cheap half; it costs nothing and closes the easy version.
+FLOOR_PATHS='^(\.github/workflows/|\.github/protected-paths\.txt$|\.github/CODEOWNERS$|scripts/classify-pr-risk\.sh$|scripts/gate-level\.sh$|scripts/gate-structural\.sh$|scripts/select-tests\.mjs$|tests/always-run\.txt$)'
+if FLOOR_HITS=$(echo "$CHANGED" | grep -E "$FLOOR_PATHS" || true); then
+  if [ -n "$FLOOR_HITS" ]; then
+    while IFS= read -r h; do
+      [ -n "$h" ] && matched+="$h (rule: changes the machinery that decides what is safe)"$'\n'
+    done <<< "$FLOOR_HITS"
+  fi
+fi
 while IFS= read -r rule; do
   # strip comments / blanks
   rule="${rule%%#*}"

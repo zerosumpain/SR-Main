@@ -73,6 +73,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       level: ${{ steps.level.outputs.level }}
+      base: ${{ steps.base.outputs.base }}
       shards: ${{ steps.level.outputs.shards }}
       candidate_certified: ${{ steps.candidate.outputs.certified }}
       candidate_run_id: ${{ steps.candidate.outputs.run_id }}
@@ -84,12 +85,45 @@ jobs:
       #
       # A small depth is sufficient because both classifiers only ever need the
       # immediate base. On a pull_request the checked-out ref is the merge
-      # commit, whose FIRST PARENT is the base branch tip; on a push it is the
-      # new master tip, whose first parent is the previous one. `HEAD^` is the
-      # base in both cases, so neither classifier needs origin/master at all.
+      # commit, whose FIRST PARENT is the base branch tip, so `HEAD^` is exact.
+      #
+      # On a PUSH it is not always. `HEAD^` is the previous master tip for a
+      # squash merge — which is every merge this repo makes — but a rebase merge
+      # of a multi-commit pull request pushes several commits at once, and then
+      # `HEAD^` is the pull request's own second-to-last commit. The classifier
+      # would see one commit's diff and call the push smaller than it is.
+      # `github.event.before` is what master actually moved from, so use that
+      # where it exists and is reachable. Never observed here, but it is the
+      # master-side re-check, so a silent under-classification is the wrong
+      # failure to leave lying around.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          fetch-depth: 5
+          fetch-depth: 20
+
+      # Resolve it ONCE, here, so the level classifier, the shard decision and
+      # the audit step below cannot disagree about what this change is against.
+      - name: Resolve the base commit
+        id: base
+        env:
+          # Both through env rather than inlined. github.event.before is a SHA
+          # GitHub controls, but "it happens to be safe today" is not the reason
+          # to inline a `${{ }}` into a shell body, and a rule with exceptions
+          # is not a rule anyone can check.
+          PUSH_BEFORE: ${{ github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          BASE=HEAD^
+          # All-zeros is a branch's first push; a commit we cannot reach is one
+          # that fell outside the fetch depth. Both fall back to HEAD^, which is
+          # what this always used and is correct for every squash merge.
+          if [ "$EVENT_NAME" != "pull_request" ] \
+             && [ -n "${PUSH_BEFORE:-}" ] \
+             && [ "$PUSH_BEFORE" != "0000000000000000000000000000000000000000" ] \
+             && git cat-file -e "${PUSH_BEFORE}^{commit}" 2>/dev/null; then
+            BASE="$PUSH_BEFORE"
+          fi
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
+          echo "base=$BASE"
 
       # The blast-radius axis. See scripts/gate-level.sh for why this is a
       # second axis rather than a third value on the risk tier.
@@ -102,8 +136,13 @@ jobs:
       # run still reported success.
       - name: Classify gate level
         id: level
+        env:
+          # Through env, never inlined into the script body: a `${{ }}` in a
+          # run: block is substituted before bash sees it, which is the shape
+          # every Actions script-injection has.
+          GATE_BASE: ${{ steps.base.outputs.base }}
         run: |
-          ./scripts/gate-level.sh HEAD^ | tee /tmp/level.txt
+          ./scripts/gate-level.sh "$GATE_BASE" | tee /tmp/level.txt
           LEVEL="$(sed -n 's/^level=//p' /tmp/level.txt)"
 
           # Same polarity as the skips. Shard the suite four ways unless the
@@ -128,7 +167,7 @@ jobs:
           # builtins, so it runs in this job's dependency-free environment — the
           # same constraint the Lint gates step below is under.
           SHARDS='[1,2,3,4]'
-          if [ "$LEVEL" = "L2" ] && node scripts/select-tests.mjs HEAD^ 2>/dev/null | head -1 | grep -q '^mode=selected$'; then
+          if [ "$LEVEL" = "L2" ] && node scripts/select-tests.mjs "$GATE_BASE" 2>/dev/null | head -1 | grep -q '^mode=selected$'; then
             SHARDS='[1]'
           fi
           echo "shards=$SHARDS" >> "$GITHUB_OUTPUT"
@@ -196,6 +235,45 @@ jobs:
               return;
             }
             const name = `candidate-${tree}`;
+
+            // PROVENANCE, not just content.
+            //
+            // The tree hash proves the candidate contains THIS content. It does
+            // not prove where it came from, and the rest of the check was an
+            // artifact NAME plus a job NAME — both of which any pull_request run
+            // in a PUBLIC repo can arrange. Publish `candidate-<tree>` from a run
+            // containing a no-op job called `Gate (check + test)` and master
+            // accepts it with the type check, the tests and the build all
+            // skipped.
+            //
+            // So: the producing run must belong to this repository (not a fork),
+            // and its head commit must be the head of a pull request that
+            // actually produced the commit being deployed. A fork's run has a
+            // different head_repository_id; an unrelated same-repo branch has a
+            // head_sha that is not this merge's parent PR.
+            let allowedHeads;
+            try {
+              const prs = await github.paginate(
+                github.rest.repos.listPullRequestsAssociatedWithCommit,
+                { owner: context.repo.owner, repo: context.repo.repo, commit_sha: context.sha, per_page: 100 }
+              );
+              allowedHeads = new Set(prs.map((pr) => pr.head?.sha).filter(Boolean));
+            } catch (err) {
+              core.setOutput('certified', 'false');
+              core.warning(`Could not resolve the pull request behind ${context.sha} (${err.message}); running the full fallback path.`);
+              return;
+            }
+            if (allowedHeads.size === 0) {
+              // A direct push, or a dispatch on a commit with no associated PR.
+              // There is no gated pull request to inherit a verdict from, so
+              // there is nothing to reuse. Build it properly.
+              core.setOutput('certified', 'false');
+              core.notice(`No pull request is associated with ${context.sha}; master will build and verify it itself.`);
+              return;
+            }
+
+            const repositoryId = context.payload.repository.id;
+
             try {
               const artifacts = await github.paginate(
                 github.rest.actions.listArtifactsForRepo,
@@ -211,6 +289,16 @@ jobs:
                     owner: context.repo.owner, repo: context.repo.repo, run_id: runId
                   });
                   if (run.data.event !== 'pull_request') continue;
+                  // Same repository, not a fork that opened a pull request.
+                  if (run.data.head_repository?.id !== repositoryId) {
+                    core.warning(`Ignoring candidate from run ${runId}: built in a different repository.`);
+                    continue;
+                  }
+                  // ...and from the branch that actually became this commit.
+                  if (!allowedHeads.has(run.data.head_sha)) {
+                    core.warning(`Ignoring candidate from run ${runId}: head ${run.data.head_sha} is not the head of a pull request behind ${context.sha}.`);
+                    continue;
+                  }
                   const jobs = await github.paginate(
                     github.rest.actions.listJobsForWorkflowRun,
                     { owner: context.repo.owner, repo: context.repo.repo, run_id: runId, per_page: 100 }
@@ -273,12 +361,14 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 22.22.3
+          node-version-file: .nvmrc
           cache: npm
 
       - run: npm ci
 
       - name: Audit production dependencies
+        env:
+          GATE_BASE: ${{ needs.level.outputs.base }}
         # Dependency changes must pass the live advisory service. An unchanged
         # manifest/lockfile has the same production graph as the already-gated
         # base, so do not let an npm advisory-service outage block unrelated
@@ -288,7 +378,7 @@ jobs:
         # this comment has been here it was describing a backstop that was not
         # running: one `npm audit` in the repository, and it was this one.
         run: |
-          if git diff --quiet HEAD^ -- package.json package-lock.json; then
+          if git diff --quiet "$GATE_BASE" -- package.json package-lock.json; then
             echo "Production dependency graph unchanged; retaining the base audit result."
             exit 0
           fi
@@ -386,7 +476,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 22.22.3
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Install isolated handler runner
@@ -425,11 +515,17 @@ jobs:
           psql "$DATABASE_URL" -c 'CREATE EXTENSION IF NOT EXISTS vector;'
           CI=1 FORCE_COLOR=0 npx drizzle-kit push --config=drizzle.config.ts --force
 
+      # Through env like everything else. These two are matrix integers and are
+      # not attacker-controlled, but "no ${{ }} inside a run body" is only a rule
+      # anyone can check if it has no exceptions — and it is asserted by
+      # tests/scripts/workflow-injection.test.ts.
       - name: Tests
-        run: ./scripts/gate-test-shard.sh "${{ matrix.shard }}" "${{ strategy.job-total }}"
+        run: ./scripts/gate-test-shard.sh "$SHARD" "$SHARD_TOTAL"
         env:
+          SHARD: ${{ matrix.shard }}
+          SHARD_TOTAL: ${{ strategy.job-total }}
           GATE_LEVEL: ${{ needs.level.outputs.level }}
-          GATE_BASE: HEAD^
+          GATE_BASE: ${{ needs.level.outputs.base }}
 
       - name: Memory and evidence database contracts
         if: matrix.shard == 1
@@ -454,7 +550,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 22.22.3
+          node-version-file: .nvmrc
           cache: npm
 
       - run: npm ci
@@ -629,8 +725,20 @@ jobs:
         with:
           fetch-depth: 0
 
+      # ASSERTED, not just printed. This runner is self-hosted, so its Node is
+      # whatever was installed on the box — measured at 22.23.2 while every
+      # hosted job pinned 22.22.3. That only ever affects the fallback build,
+      # and the difference has never broken anything, but "the build that runs
+      # when the fast path failed is the one no gate has tested" is a bad
+      # property to leave implicit. .nvmrc is now the single pin.
       - name: Runtime versions
-        run: node --version && npm --version
+        run: |
+          node --version && npm --version
+          WANT="v$(tr -d ' \n' < .nvmrc)"
+          GOT="$(node --version)"
+          if [ "$GOT" != "$WANT" ]; then
+            echo "::warning::porkserv is on $GOT but .nvmrc pins $WANT — the fallback build runs on an untested runtime."
+          fi
 
       # `$env/static/public` values are INLINED INTO THE BUNDLE at build time,
       # and the runner's checkout has no .env — so without this the production
@@ -894,8 +1002,42 @@ jobs:
         with:
           fetch-depth: 0
 
+      # JUDGED BY THE BASE BRANCH'S RULES, NOT ITS OWN.
+      #
+      # Both the classifier and .github/protected-paths.txt were read out of the
+      # branch being judged, so a pull request that emptied the rules file was
+      # classified by the empty file — it could declare itself low risk and, on
+      # an agent/ branch, merge itself. Take both from the base ref instead; the
+      # DIFF still comes from the checkout, so what is judged is unchanged.
+      #
+      # The classifier also carries a hard floor (see the script) for the case
+      # this cannot cover on its own — a pull request that deletes the floor is
+      # judged by the base's copy, which still has it.
+      #
+      # HONEST LIMITATION, and it is the reason item 27 in the audit matters:
+      # this does not close the hole. The pull request still supplies the ci.yml
+      # that decides what to do with the tier. Only taking the self-hosted
+      # runners off a repository whose workflows a pull request can write does
+      # that.
       - id: classify
-        run: ./scripts/classify-pr-risk.sh origin/${{ github.base_ref }}
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          BASE="origin/$BASE_REF"
+          RULES_DIR="$RUNNER_TEMP/base-rules"
+          mkdir -p "$RULES_DIR/scripts" "$RULES_DIR/.github"
+          if git show "$BASE:scripts/classify-pr-risk.sh" > "$RULES_DIR/scripts/classify-pr-risk.sh" 2>/dev/null \
+             && git show "$BASE:.github/protected-paths.txt" > "$RULES_DIR/.github/protected-paths.txt" 2>/dev/null \
+             && [ -s "$RULES_DIR/scripts/classify-pr-risk.sh" ]; then
+            echo "Classifying with the rules from $BASE."
+            bash "$RULES_DIR/scripts/classify-pr-risk.sh" "$BASE"
+          else
+            # The file does not exist on the base — a first introduction, or a
+            # rename. Fall back to the in-tree copy rather than failing the job,
+            # and say so loudly, because this is the weaker of the two paths.
+            echo "::warning::could not read the classifier from $BASE; using this branch's copy."
+            ./scripts/classify-pr-risk.sh "$BASE"
+          fi
 
       # Deliberately never fails. A high tier is a normal, expected outcome
       # (any change to auth or schema is high) — it means "a human looks at
@@ -941,13 +1083,27 @@ jobs:
     # plain `needs` this job would quietly stop merging documentation-only agent
     # branches. risk-tier needs no such assertion — if it fails or is skipped its
     # `tier` output is empty, which is already not 'low'.
+    #
+    # THE HEAD REPOSITORY CHECK IS NOT DECORATION. `agent/` is a BRANCH NAME, and
+    # on a fork pull request the branch name is chosen by the person opening it —
+    # so `startsWith(github.head_ref, 'agent/')` says nothing about who wrote the
+    # code. A stranger could open `agent/anything` from their own fork and, if it
+    # gated green at tier=low, have AUTOMERGE_TOKEN merge it to master, which
+    # auto-deploys.
+    #
+    # Fork-PR approval is set to `all_external_contributors`, so such a run does
+    # not start unattended — but "approve the run so I can read the diff" is an
+    # ordinary thing to do, and it should not also arm an automatic merge. The
+    # head repository is the fact that actually distinguishes the owner's own
+    # agents from everyone else.
     if: >-
       !cancelled() &&
       needs.gate.result == 'success' &&
       github.event_name == 'pull_request' &&
       github.event.pull_request.draft == false &&
       needs.risk-tier.outputs.tier == 'low' &&
-      startsWith(github.head_ref, 'agent/')
+      startsWith(github.head_ref, 'agent/') &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

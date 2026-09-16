@@ -109,6 +109,19 @@ describe('the prebuild/release split across two machines', () => {
     expect(job('prebuild')).not.toContain('ci-promote-candidate.sh');
   });
 
+  // The tree hash proves the candidate holds THIS content. It does not prove
+  // where it came from, and the rest of the check was an artifact name plus a
+  // job name — both of which any pull_request run in a public repo can arrange.
+  it('accepts a candidate only from this repo and the PR that produced the commit', () => {
+    const level = job('level');
+    expect(level).toContain('listPullRequestsAssociatedWithCommit');
+    expect(level).toContain('head_repository?.id !== repositoryId');
+    expect(level).toContain('allowedHeads.has(run.data.head_sha)');
+    // No associated pull request means no gated verdict to inherit, so there is
+    // nothing to reuse — build it properly rather than trusting the name.
+    expect(level).toContain("core.setOutput('certified', 'false')");
+  });
+
   // Each of these is a way the fast path could ship the wrong bytes or leave
   // production half-deployed, so each is pinned rather than trusted to review.
   it('keeps the two release paths mutually exclusive and fail-closed', () => {
@@ -376,5 +389,30 @@ describe('the release lock', () => {
       src.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
     expect(code(release)).not.toContain('pgrep -f');
     expect(code(rollback)).not.toContain('pgrep -f');
+  });
+});
+
+// AUTOMERGE_TOKEN merges to master, and master auto-deploys. Everything that
+// decides whether it fires is worth pinning.
+describe('unattended merge', () => {
+  const autoMerge = () => {
+    const w = ci();
+    const i = w.indexOf('  auto-merge:');
+    expect(i).toBeGreaterThan(-1);
+    return w.slice(i);
+  };
+
+  // `agent/` is a BRANCH NAME, and on a fork pull request the person opening it
+  // chooses the branch name. Without this, a stranger's `agent/anything` that
+  // gated green at tier=low would be merged automatically.
+  it('merges only pull requests opened from this repository', () => {
+    expect(autoMerge()).toContain('github.event.pull_request.head.repo.full_name == github.repository');
+  });
+
+  it('still requires a green gate, a low tier and a non-draft', () => {
+    const s = autoMerge();
+    expect(s).toContain("needs.gate.result == 'success'");
+    expect(s).toContain("needs.risk-tier.outputs.tier == 'low'");
+    expect(s).toContain('github.event.pull_request.draft == false');
   });
 });

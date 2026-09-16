@@ -149,18 +149,23 @@ if [ -n "$PARTIAL" ]; then
 fi
 echo ""
 
-# Record where we came from, so a second rollback has somewhere to go and so
-# the next release's own bookkeeping is not confused by a symlink it did not
-# move.
-mkdir -p "$STATE_DIR"
-[ -n "$CURRENT" ] && echo "$CURRENT" > "$STATE_DIR/previous.sha"
-
+# BEFORE any state is written, because --dry-run promises it changed nothing and
+# that has to be true. An earlier version recorded previous.sha above this check
+# and a dry-run against production overwrote it with the CURRENTLY live sha —
+# which is exactly the value that makes ci-release.sh's re-run detection think
+# there is nothing to go back to.
 if [ -n "$DRY_RUN" ]; then
   echo "==> --dry-run: stopping here. Nothing has been changed."
   echo "    Without it, this would point build/ at releases/$TARGET,"
   echo "    restart $SERVICE, and wait for $PUBLIC_BASE to report $TARGET."
   exit 0
 fi
+
+# Record where we came from, so a second rollback has somewhere to go and so
+# the next release's own bookkeeping is not confused by a symlink it did not
+# move.
+mkdir -p "$STATE_DIR"
+[ -n "$CURRENT" ] && echo "$CURRENT" > "$STATE_DIR/previous.sha"
 
 ln -sfn "releases/$TARGET" "$VPS_DIR/build.rollback"
 mv -Tf "$VPS_DIR/build.rollback" "$VPS_DIR/build"

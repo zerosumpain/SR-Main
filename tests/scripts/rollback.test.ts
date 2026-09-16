@@ -10,7 +10,15 @@
  */
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readlinkSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -125,6 +133,12 @@ describe('scripts/rollback.sh', () => {
 	});
 
 	// An operator wants to see what would happen before moving production.
+	//
+	// "Nothing has been changed" has to be literally true. An earlier version
+	// recorded previous.sha ABOVE the dry-run check, and a dry-run against
+	// production overwrote it with the currently-live sha — which is exactly the
+	// value that makes ci-release.sh's re-run detection believe there is nothing
+	// to go back to. Caught by running it against the real box.
 	it('--dry-run changes nothing and says so', () => {
 		const dir = fixture([A, B]);
 		try {
@@ -132,6 +146,9 @@ describe('scripts/rollback.sh', () => {
 			expect(r.code).toBe(0);
 			expect(r.out).toContain('Nothing has been changed');
 			expect(readlinkSync(path.join(dir, 'build'))).toContain(A);
+			// Not one byte of deploy state.
+			expect(existsSync(path.join(dir, '.deploy-state/previous.sha'))).toBe(false);
+			expect(existsSync(path.join(dir, '.deploy-state/live.sha'))).toBe(false);
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
