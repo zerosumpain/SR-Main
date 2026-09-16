@@ -119,6 +119,34 @@ that matters — an outage during that window would be felt — so the order is 
 doc that still invokes it, and would do so silently. A file that exists and refuses loudly,
 naming the supported path, is the safer artefact. Reversible: it is in git history.
 
+**7. Items 16 and 17 are dropped — their premises do not survive reading the code.**
+
+*16 (tag the dev containers on content, not the SHA).* The saving was supposed to be ~21s of
+container recreation for byte-identical cached layers. But `compose.yaml:36` bind-mounts
+`${DEVELOPMENT_SOURCE_ROOT}` at `/source`, and `ci-development.sh:25` sets that to
+`sources/$SHA` — a different path every deploy. Compose recreates a container whose mount
+source changed regardless of its image tag, so stabilising the tag alone saves nothing. The
+recreate is caused by the moving mount, not the tag. Making the mount stable would need a
+`sources/current` symlink, which would break the prune at `ci-development.sh:164` — it asks
+docker what is mounted rather than inferring it, deliberately.
+
+*17 (key the dev-deps marker on the lockfile).* The claim was that
+`$SOURCE/node_modules/.sr-dependencies-ready` lives inside the per-commit directory it guards
+and so can never exist. It cannot exist for a NEW commit — correctly, because a new commit
+genuinely needs its own install — but it does exist on a re-run of the same SHA, which is what
+it is for. The proposed fix, a lockfile-keyed store hardlinked in with `cp -al`, would be a
+security regression here rather than an optimisation: these checkouts are bind-mounted into
+containers that run untrusted candidate code, and hardlinks would let a write from one
+candidate's `node_modules` reach every other checkout and the store behind them.
+
+**8. Item 15 moves to Wave 3, after item 20.** Moving the sandbox provisioning to after the
+symlink flip is real — it is the largest remaining pre-flip cost, and today a failure
+provisioning the *sandbox* blocks a perfectly good *web* release, which is the wrong coupling.
+But putting work after the flip is only safe once a post-live failure is distinguishable from
+a pre-live one and says so. That is item 20. Doing 15 first would add a new way to fail after
+production has already moved, with the old indistinguishable-red-badge reporting still in
+place. Same shape of constraint as 19-before-22.
+
 ---
 
 *Written and self-reviewed under the autonomous-build grade. The audit artifact is the design

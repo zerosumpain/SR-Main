@@ -110,7 +110,27 @@ jobs:
           # level is EXACTLY L2, where the run is already scoped to a few dozen
           # files and splitting it four ways would pay four job set-ups to save
           # nothing. Empty or unrecognised takes the expensive path.
-          if [ "$LEVEL" = "L2" ]; then SHARDS='[1]'; else SHARDS='[1,2,3,4]'; fi
+          #
+          # ...but L2 does not GUARANTEE a scoped run. The selector independently
+          # decides it cannot narrow — an unresolvable specifier, a computed
+          # import, a path it does not model — and falls back to `mode=full`. On
+          # an L2 level that put the ENTIRE suite into a single shard: measured
+          # at 246s against roughly 90s when the same work is split four ways.
+          # Rare (about one L2 run in thirteen) and invisible, because the run is
+          # green either way.
+          #
+          # POLARITY MATTERS. Grep for `selected` to OPEN the single shard, never
+          # for `full` to close it: if this command fails, prints nothing, or
+          # prints something unrecognised, the test is false and the run shards
+          # four ways. Slow is the safe direction.
+          #
+          # Affordable here because select-tests.mjs imports nothing but node:
+          # builtins, so it runs in this job's dependency-free environment — the
+          # same constraint the Lint gates step below is under.
+          SHARDS='[1,2,3,4]'
+          if [ "$LEVEL" = "L2" ] && node scripts/select-tests.mjs HEAD^ 2>/dev/null | head -1 | grep -q '^mode=selected$'; then
+            SHARDS='[1]'
+          fi
           echo "shards=$SHARDS" >> "$GITHUB_OUTPUT"
           echo "shards=$SHARDS"
 
@@ -570,9 +590,27 @@ jobs:
   # the only thing that ever executes here. That guard, not the gate, is what
   # keeps PR code off the production box — `npm ci` runs arbitrary lifecycle
   # scripts and the gate never inspected them anyway.
+  # SKIPPED ENTIRELY WHEN A CANDIDATE IS CERTIFIED, which is the common case.
+  #
+  # When the pull request has already built the exact tree, this job did nothing
+  # but relay: download a 33MB artifact from GitHub, rewrite nine lines of
+  # build/.deploy-sha, and upload the same bytes back so the VPS could download
+  # them again. Measured over recent master runs, porkserv's download alone ran
+  # at a median of 241 seconds (range 6-320); the VPS's download of the same blob
+  # takes 6.8. That relay was 61% of the wall clock of every deploy and verified
+  # nothing — the promotion check it performed is a tree comparison that runs
+  # just as well on the release job.
+  #
+  # So the release job now fetches and promotes the candidate itself, and this
+  # job runs only on the fallback path: no candidate, or one that failed its
+  # checks, where a real `npm ci` and a 6GB-heap build are needed and must not
+  # happen on the box serving the site.
   prebuild:
     name: Prebuild (porkserv)
-    if: github.ref == 'refs/heads/master' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
+    if: >-
+      github.ref == 'refs/heads/master' &&
+      (github.event_name == 'workflow_dispatch' || github.event_name == 'push') &&
+      needs.level.outputs.candidate_certified != 'true'
     # porkserv, not the VPS. This job used to run `npm ci` and a 6GB-heap build
     # on the box that serves strangeramblings.com, so every deploy was a memory
     # and disk spike on production — which is how a full VPS disk took CI down
@@ -623,35 +661,15 @@ jobs:
           } > .env
           echo "public vars provided: $(grep -c '^PUBLIC_' .env)"
 
-      - name: Download the gate-certified candidate
-        id: candidate_download
-        if: needs.level.outputs.candidate_certified == 'true'
-        continue-on-error: true
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: ${{ needs.level.outputs.candidate_name }}
-          run-id: ${{ needs.level.outputs.candidate_run_id }}
-          github-token: ${{ github.token }}
-          # A STAGING DIRECTORY, never the checkout root. This was `path: .`,
-          # which unpacked an artifact accepted on nothing but its name over the
-          # working tree — including, potentially, the promotion script that runs
-          # in the very next step. See ci-promote-candidate.sh for the full
-          # reasoning and the allow-list that moves files out of here.
-          path: .candidate
-
-      - name: Verify and promote the candidate
-        id: promote
-        if: needs.level.outputs.candidate_certified == 'true'
-        run: ./scripts/ci-promote-candidate.sh
-
+      # No candidate download or promotion here any more. This job now runs ONLY
+      # when there is no certified candidate, so those steps were gated on a
+      # condition that could never be true — dead code that read like a live
+      # path. Promotion happens in `release`, on the box that needs the result.
       - name: Install dependencies for a fresh build
-        if: steps.promote.outputs.promoted != 'true'
         run: npm ci
 
-      # The real adapter. A candidate promotion skips this; every fallback build
-      # still produces the complete runnable server bundle.
+      # The real adapter — the complete runnable server bundle.
       - name: Build
-        if: steps.promote.outputs.promoted != 'true'
         run: npm run gate:build
         env:
           NODE_OPTIONS: --max-old-space-size=6144
@@ -662,17 +680,15 @@ jobs:
       # that job has no node_modules by design. It also stamps
       # build/.deploy-sha, so this must precede the upload.
       - name: Verify and stamp the build
-        if: steps.promote.outputs.promoted != 'true'
         run: ./scripts/ci-prebuild.sh
 
-      # Every bundle is built HERE, because this is now the only job with
+      # Every bundle is built HERE, because this is the only job with
       # node_modules. The staging scripts on the VPS consume these instead of
       # building their own.
       #
       # A release candidate is one coherent set. Retaining an older sidecar
       # here would make the artifact a combination that no gate ever tested.
       - name: Build the sidecar bundles
-        if: steps.promote.outputs.promoted != 'true'
         run: npm run build:release-sidecars
 
       # One artifact carries everything the VPS needs. Deliberately routed
@@ -715,7 +731,14 @@ jobs:
     # too, which would turn cancel into a no-op on the one job that touches
     # production — that was the original reason for avoiding it and it still
     # holds. This keeps the property while dropping the accidental one.
-    needs: [gate, prebuild]
+    #
+    # `prebuild` is now SKIPPED on the common path — see its own comment — so
+    # `skipped` has to be an accepted result rather than the stop signal it was.
+    # It is accepted only in the one state that explains it: a certified
+    # candidate, which this job then fetches and promotes itself. Any other skip
+    # still stops the deploy, which is the property the paragraph above exists to
+    # protect.
+    needs: [gate, prebuild, level]
     # The ref guard is on BOTH arms, deliberately. It used to sit only on the push arm, which
     # meant `gh workflow run CI --ref <any-branch>` deployed that branch straight to
     # production — the same class of unsanctioned deploy path that once replaced production
@@ -724,7 +747,9 @@ jobs:
     if: >-
       !cancelled() &&
       needs.gate.result == 'success' &&
-      needs.prebuild.result == 'success' &&
+      needs.level.result == 'success' &&
+      (needs.prebuild.result == 'success' ||
+       (needs.prebuild.result == 'skipped' && needs.level.outputs.candidate_certified == 'true')) &&
       github.ref == 'refs/heads/master' &&
       (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
     runs-on: [self-hosted, srmain]
@@ -738,10 +763,71 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Where the build lands now that it happens on porkserv. Extracts to the
-      # workspace root, restoring build/ and the sidecar bundles exactly where
-      # the staging scripts already expect to find them.
+      # ── the fast path: fetch and promote the candidate here ──────────────
+      #
+      # The pull request already built this exact tree. Everything below is a
+      # tree comparison and a nine-line restamp, which is why routing it through
+      # porkserv first cost 241 seconds of pure relay and proved nothing.
+      #
+      # These three steps are lifted verbatim from prebuild, with one deliberate
+      # change: the build-time public env is written to .build-env rather than
+      # .env. This workspace lives ON THE PRODUCTION BOX, a few directories from
+      # $VPS_DIR, and a file called .env sitting there is the first half of the
+      # 2026-07-24 outage. Only the CONTENT is fingerprinted, so the name is
+      # free and the hash still matches what the PR stamped.
+      - name: Provide build-time public env
+        if: needs.level.outputs.candidate_certified == 'true'
+        env:
+          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL }}
+          PUBLIC_VAPID_PUBLIC_KEY: ${{ vars.PUBLIC_VAPID_PUBLIC_KEY }}
+        run: |
+          # Byte-for-byte the same content prebuild writes, or the sha256
+          # comparison in ci-promote-candidate.sh cannot match and every deploy
+          # falls back. Fail loudly rather than ship dead web push.
+          if [ -z "$PUBLIC_VAPID_PUBLIC_KEY" ]; then
+            echo "::error::repository variable PUBLIC_VAPID_PUBLIC_KEY is unset — refusing to promote a release with web push broken"
+            exit 1
+          fi
+          {
+            echo "PUBLIC_SITE_URL=${PUBLIC_SITE_URL:-https://strangeramblings.com}"
+            echo "PUBLIC_VAPID_PUBLIC_KEY=$PUBLIC_VAPID_PUBLIC_KEY"
+          } > .build-env
+          echo "public vars provided: $(grep -c '^PUBLIC_' .build-env)"
+
+      - name: Download the gate-certified candidate
+        if: needs.level.outputs.candidate_certified == 'true'
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ needs.level.outputs.candidate_name }}
+          run-id: ${{ needs.level.outputs.candidate_run_id }}
+          github-token: ${{ github.token }}
+          path: .candidate
+
+      - name: Verify and promote the candidate
+        id: promote
+        if: needs.level.outputs.candidate_certified == 'true'
+        env:
+          CANDIDATE_ENV_FILE: .build-env
+        run: ./scripts/ci-promote-candidate.sh
+
+      # A rejection means something DIFFERENT here than on porkserv, and the
+      # script cannot know which caller it has. There, `promoted=false` means
+      # "build it fresh instead" and the job carries on. Here there is no
+      # node_modules and no build step to fall back to, so carrying on would
+      # stage whatever build/ happens to be lying in the workspace — quite
+      # possibly the previous release. Stop, and say what to do.
+      - name: Refuse to deploy a rejected candidate
+        if: needs.level.outputs.candidate_certified == 'true' && steps.promote.outputs.promoted != 'true'
+        run: |
+          echo "::error::The gate-certified candidate was rejected on the VPS, and this job cannot build a replacement."
+          echo "Re-run with the fallback path: gh workflow run CI --ref master after deleting the candidate artifact,"
+          echo "or push an empty commit so the tree hash changes and prebuild rebuilds on porkserv."
+          exit 1
+
+      # ── the fallback path: porkserv built it, collect the payload ─────────
       - name: Download the release payload
+        if: needs.prebuild.result == 'success'
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: release-${{ github.sha }}

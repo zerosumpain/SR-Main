@@ -99,8 +99,43 @@ describe('the prebuild/release split across two machines', () => {
     expect(job('build')).not.toContain('SR_GATE_STUB_ADAPTER');
     expect(job('level')).toContain("gate?.conclusion !== 'success'");
     expect(job('level')).toContain('candidate-${tree}');
-    expect(job('prebuild')).toContain('ci-promote-candidate.sh');
     expect(workflow).toContain("candidate_certified != 'true'");
+
+    // Promotion moved OUT of prebuild and INTO release. Routing a certified
+    // candidate through porkserv was a 241s relay that verified nothing: it
+    // downloaded the artifact the PR built, restamped nine lines, and uploaded
+    // the same bytes for the VPS to download again.
+    expect(job('release')).toContain('ci-promote-candidate.sh');
+    expect(job('prebuild')).not.toContain('ci-promote-candidate.sh');
+  });
+
+  // Each of these is a way the fast path could ship the wrong bytes or leave
+  // production half-deployed, so each is pinned rather than trusted to review.
+  it('keeps the two release paths mutually exclusive and fail-closed', () => {
+    const release = job('release');
+
+    // prebuild is skipped on the fast path, so `skipped` had to become an
+    // accepted result. It is accepted in exactly one state.
+    expect(release).toContain("needs.prebuild.result == 'skipped' && needs.level.outputs.candidate_certified == 'true'");
+    expect(release).toContain("needs.gate.result == 'success'");
+    // always() would make cancelling a no-op on the one job that touches
+    // production.
+    expect(release).toContain('!cancelled()');
+
+    // The fallback payload is collected only when porkserv actually produced
+    // one; otherwise a stale build/ in the reused workspace could be staged.
+    expect(release).toMatch(/name: Download the release payload[\s\S]*?if: needs\.prebuild\.result == 'success'/);
+
+    // A rejected candidate cannot be rebuilt here — no node_modules, no build
+    // step — so the job must stop rather than stage whatever is lying around.
+    expect(release).toContain('Refuse to deploy a rejected candidate');
+    expect(release).toContain("steps.promote.outputs.promoted != 'true'");
+
+    // NEVER a file called .env in a workspace on the production box. That name,
+    // a few directories from $VPS_DIR, is the first half of the 2026-07-24
+    // outage. Only the content is fingerprinted, so the name is free.
+    expect(release).toContain('.build-env');
+    expect(release).not.toMatch(/}\s*>\s*\.env\b/);
   });
 
   it('verifies both the commit and tree before staging on the VPS', () => {
