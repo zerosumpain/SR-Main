@@ -73,7 +73,13 @@ else
   # and unstaged edits (and validate-change uses a temporary index for untracked
   # files) instead of declaring active work "no files changed".
   STATUSES="$(git -C "$HERE" diff --name-status "$MB" -- 2>/dev/null)" || { REASON="cannot diff against $BASE_REF"; emit; }
-  CHANGED="$(printf '%s\n' "$STATUSES" | awk 'NF{print $NF}')"
+  # -F'\t' matters. --name-status emits `M<TAB>path` and `R100<TAB>old<TAB>new`,
+  # and a path may legally contain spaces. Splitting on default whitespace made
+  # `data/prompts/99 override.md` arrive as `override.md` — root-level markdown,
+  # i.e. L1, for a file that is read at runtime and rsynced to the VPS. On a tab
+  # the last field is the whole path, and stays the destination for a rename
+  # (which forces L3 just below regardless).
+  CHANGED="$(printf '%s\n' "$STATUSES" | awk -F'\t' 'NF{print $NF}')"
 fi
 
 if [ -z "$(printf '%s' "$CHANGED" | tr -d '[:space:]')" ]; then

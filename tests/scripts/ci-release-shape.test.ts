@@ -1,9 +1,18 @@
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'path';
+import { dirname, join } from 'path';
 
 /**
  * The build moved to porkserv and the release job stayed on the VPS, so the two
@@ -149,15 +158,25 @@ describe('the local fast path', () => {
 });
 
 describe('candidate promotion', () => {
-  function fixture(stampedEnv?: string) {
+  // The artifact is UNTRUSTED input. It is named by a tree hash and produced by
+  // a pull_request run, and until 2026-09-16 it was unpacked with `path: .`
+  // straight over the checkout root — immediately before the runner executed
+  // ./scripts/ci-promote-candidate.sh, a file the archive itself could replace.
+  // It now lands in .candidate/ and only an allow-listed set of paths is ever
+  // moved out of it.
+  function fixture(opts: { stampedEnv?: string; smuggle?: Record<string, string> } = {}) {
     const root = mkdtempSync(join(tmpdir(), 'candidate-promotion-'));
     mkdirSync(join(root, 'scripts'));
-    mkdirSync(join(root, 'build'));
+    mkdirSync(join(root, '.candidate/build'), { recursive: true });
     cpSync(join(ROOT, 'scripts/ci-promote-candidate.sh'), join(root, 'scripts/ci-promote-candidate.sh'));
-    writeFileSync(join(root, '.gitignore'), '.env\nbuild\npackages/*/dist\n');
+    writeFileSync(join(root, '.gitignore'), '.env\nbuild\npackages/*/dist\n.candidate\n');
     writeFileSync(join(root, 'source.txt'), 'gated source\n');
     writeFileSync(join(root, '.env'), 'PUBLIC_VALUE=production\n');
-    writeFileSync(join(root, 'build/handler.js'), 'export {};\n');
+    writeFileSync(join(root, '.candidate/build/handler.js'), 'export {};\n');
+    for (const [rel, body] of Object.entries(opts.smuggle ?? {})) {
+      mkdirSync(dirname(join(root, '.candidate', rel)), { recursive: true });
+      writeFileSync(join(root, '.candidate', rel), body);
+    }
     execFileSync('git', ['init', '-q'], { cwd: root });
     execFileSync('git', ['config', 'user.email', 'ci@example.invalid'], { cwd: root });
     execFileSync('git', ['config', 'user.name', 'CI'], { cwd: root });
@@ -166,39 +185,76 @@ describe('candidate promotion', () => {
     const tree = execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { cwd: root, encoding: 'utf8' }).trim();
     const envHash = createHash('sha256').update('PUBLIC_VALUE=production\n').digest('hex');
     writeFileSync(
-      join(root, 'build/.deploy-sha'),
-      `sha=old\nshort=old\ntree=${tree}\nbuild_env_sha256=${stampedEnv ?? envHash}\nbuilt_at=2026-09-01T20:00:00Z\n`,
+      join(root, '.candidate/build/.deploy-sha'),
+      `sha=old\nshort=old\ntree=${tree}\nbuild_env_sha256=${opts.stampedEnv ?? envHash}\nbuilt_at=2026-09-01T20:00:00Z\n`,
     );
     return root;
   }
+
+  const promote = (root: string, output: string) =>
+    execFileSync('bash', ['scripts/ci-promote-candidate.sh'], {
+      cwd: root,
+      env: { ...process.env, GITHUB_OUTPUT: output },
+      encoding: 'utf8',
+    });
 
   it('restamps an exact tree and environment for the merge commit', () => {
     const root = fixture();
     try {
       const output = join(root, 'output');
-      execFileSync('bash', ['scripts/ci-promote-candidate.sh'], {
-        cwd: root,
-        env: { ...process.env, GITHUB_OUTPUT: output },
-      });
+      promote(root, output);
       const stamp = readFileSync(join(root, 'build/.deploy-sha'), 'utf8');
       expect(stamp).toContain(`sha=${execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim()}`);
       expect(stamp).toContain('via=github-actions-promoted');
       expect(readFileSync(output, 'utf8')).toContain('promoted=true');
+      // Moved out of staging, not copied: nothing should be left behind to be
+      // picked up by a later step.
+      expect(existsSync(join(root, '.candidate'))).toBe(false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
   });
 
   it('falls back to a fresh build when the environment differs', () => {
-    const root = fixture('wrong-environment-hash');
+    const root = fixture({ stampedEnv: 'wrong-environment-hash' });
     try {
       const output = join(root, 'output');
-      execFileSync('bash', ['scripts/ci-promote-candidate.sh'], {
-        cwd: root,
-        env: { ...process.env, GITHUB_OUTPUT: output },
-      });
+      promote(root, output);
       expect(readFileSync(output, 'utf8')).toContain('promoted=false');
-      expect(() => readFileSync(join(root, 'build/handler.js'))).toThrow();
+      expect(existsSync(join(root, 'build/handler.js'))).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // The attack this shape exists to stop. An artifact carrying its own copy of
+  // the promotion script used to overwrite the real one before it ran.
+  it('refuses a candidate carrying anything outside the allow-list', () => {
+    const root = fixture({
+      smuggle: { 'scripts/ci-promote-candidate.sh': '#!/bin/bash\necho pwned\n' },
+    });
+    try {
+      const output = join(root, 'output');
+      promote(root, output);
+      expect(readFileSync(output, 'utf8')).toContain('promoted=false');
+      expect(existsSync(join(root, 'build/handler.js'))).toBe(false);
+      // The real script is untouched.
+      expect(readFileSync(join(root, 'scripts/ci-promote-candidate.sh'), 'utf8')).not.toContain('pwned');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // A symlink inside build/ would satisfy a path allow-list while still
+  // pointing anywhere on the runner. The artifact is only ever regular files.
+  it('refuses a candidate containing a symlink', () => {
+    const root = fixture();
+    try {
+      symlinkSync('/etc/passwd', join(root, '.candidate/build/sneaky.js'));
+      const output = join(root, 'output');
+      promote(root, output);
+      expect(readFileSync(output, 'utf8')).toContain('promoted=false');
+      expect(existsSync(join(root, 'build/handler.js'))).toBe(false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

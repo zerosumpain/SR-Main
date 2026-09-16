@@ -79,6 +79,18 @@ jobs:
           node-version: 22.22.3
           cache: npm
 
+      # Same step ci.yml runs before `npm ci`, and it was missing here for the
+      # whole life of this workflow. Three suites need a working bubblewrap —
+      # jkai/grounding/authored, workflows/site-tools/author-ephemeral-tool and
+      # site-tools/tools/ephemeral-tools — and the hosted image does not ship
+      # one, so every scheduled run died on "Isolated handler runner unavailable
+      # (bubblewrap required)". 22 consecutive red runs, 2026-09-06 to 09-16,
+      # during which the unscoped suite and the real-adapter build produced no
+      # signal at all. The whole point of this workflow is to be the thing that
+      # catches what the scoped gate cannot see.
+      - name: Install isolated handler runner
+        run: ./scripts/check-authored-runner.sh
+
       - run: npm ci
 
       # See ci.yml for why this polls a query rather than pg_isready: the image
@@ -124,7 +136,14 @@ jobs:
       - name: Full test suite
         run: npm run gate:test:full
 
+      # `!cancelled()`, not the default. These two are independent questions —
+      # "does the whole suite pass" and "does the real adapter still build" —
+      # and chaining them meant one red answer suppressed the other. The build
+      # did not run for eleven days because of a bubblewrap failure three steps
+      # earlier that had nothing to do with it. Same polarity as the gate job in
+      # ci.yml: run unless the whole run is being torn down.
       - name: Build with the real adapter
+        if: ${{ !cancelled() }}
         run: npm run gate:build
 
       # A red run in the Actions tab is easy to miss for something nobody is
@@ -156,6 +175,130 @@ jobs:
               "This is the backstop for coupling the scoped merge gate cannot see — tests coupled by filesystem reads, by module mocks, or by runtime string imports — plus the integration tests the gate never runs." \
               "A failure here means something reached master that PR-time selection did not cover. Worth understanding rather than just re-running.")"
             echo "opened a new issue"
+          fi
+
+      # An alarm that never clears is not an alarm, it is furniture.
+      #
+      # The failure step above dedupes on the issue TITLE, which is fixed. So the
+      # issue opened for one breakage stays open after that breakage is fixed,
+      # and the NEXT unrelated failure silently attaches itself to it. That is
+      # exactly what happened: a green run on 2026-09-05 left #708 open, and the
+      # bubblewrap breakage the following day inherited it — so the open issue
+      # described the wrong problem for eleven days while 52 "still failing"
+      # comments accumulated underneath it.
+      #
+      # Closing on green makes the issue's existence mean "the nightly is red
+      # RIGHT NOW", which is the only thing worth paging on.
+      - name: Close the failure issue once it is green again
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          TITLE="Nightly full suite is failing"
+          # Same client-side match as the opener, and for the same reason: the
+          # issue search index lags by minutes and cannot be trusted to find an
+          # issue this workflow itself opened hours ago.
+          EXISTING=$(gh issue list --state open --limit 200 \
+            --json number,title --jq "[.[] | select(.title == \"$TITLE\")][0].number")
+          if [ -n "$EXISTING" ] && [ "$EXISTING" != "null" ]; then
+            gh issue comment "$EXISTING" --body "Green again: $RUN_URL"
+            gh issue close "$EXISTING"
+            echo "closed #$EXISTING"
+          else
+            echo "nothing open to close"
+          fi
+
+  # The audit ci.yml already promises.
+  #
+  # ci.yml's "Audit production dependencies" step skips itself when the manifest
+  # and lockfile are unchanged, on the reasoning that the graph is the same as
+  # the already-gated base. That reasoning is sound for a PR and the skip should
+  # stay — but its comment justifies it with "The nightly workflow still audits
+  # the graph for advisories disclosed after it entered master", and that was
+  # not true: this was the only `npm audit` in the repository and it lived
+  # there. So an advisory published against a pinned version was invisible until
+  # somebody happened to touch the lockfile for an unrelated reason.
+  #
+  # Its own job: it needs no database, no build and no 45-minute timeout, and a
+  # red suite must not hide a new advisory (nor the reverse).
+  #
+  # --omit=dev deliberately, matching the gate. A required check pointed at the
+  # dev graph reds on every routine esbuild or vite advisory in something that
+  # never ships, and a check that cries wolf gets ignored — which is the failure
+  # mode this whole workflow exists to correct.
+  audit:
+    name: Production dependencies have no known advisories
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.22.3
+          cache: npm
+
+      # Same three attempts as the gate. The advisory service is a live
+      # dependency and a transient outage must not open an issue.
+      - name: Audit production dependencies
+        id: audit
+        run: |
+          set +e
+          for attempt in 1 2 3; do
+            echo "Audit attempt $attempt/3"
+            if timeout 60 npm audit --omit=dev --audit-level=high > /tmp/audit.txt 2>&1; then
+              cat /tmp/audit.txt
+              echo "clean=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            last=$?
+          done
+          cat /tmp/audit.txt
+          # Distinguish "found advisories" from "could not reach the service".
+          # npm exits 1 for findings; a timeout exits 124.
+          if [ "$last" = "124" ]; then
+            echo "::warning::npm audit could not complete in three attempts; not reporting."
+            echo "clean=unknown" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "clean=false" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      # Same one-issue-at-a-time handling as the suite above.
+      - name: Report advisories
+        if: steps.audit.outputs.clean == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          TITLE="Production dependencies have a high-severity advisory"
+          BODY=$(printf '%s\n\n```\n%s\n```\n\n%s' \
+            "The nightly audit found advisories in the production graph: $RUN_URL" \
+            "$(head -c 40000 /tmp/audit.txt)" \
+            "These are advisories disclosed AFTER the lockfile last changed, so the merge gate has never seen them — it skips the audit when the lockfile is unchanged.")
+          EXISTING=$(gh issue list --state open --limit 200 \
+            --json number,title --jq "[.[] | select(.title == \"$TITLE\")][0].number")
+          if [ -n "$EXISTING" ] && [ "$EXISTING" != "null" ]; then
+            gh issue comment "$EXISTING" --body "Still present: $RUN_URL"
+          else
+            gh issue create --title "$TITLE" --body "$BODY"
+          fi
+
+      - name: Close the advisory issue once it is clean
+        if: steps.audit.outputs.clean == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          TITLE="Production dependencies have a high-severity advisory"
+          EXISTING=$(gh issue list --state open --limit 200 \
+            --json number,title --jq "[.[] | select(.title == \"$TITLE\")][0].number")
+          if [ -n "$EXISTING" ] && [ "$EXISTING" != "null" ]; then
+            gh issue comment "$EXISTING" --body "Clean again: $RUN_URL"
+            gh issue close "$EXISTING"
+            echo "closed #$EXISTING"
           fi
 
   # A pin that cannot go stale is a pin nobody checks. This is the check.

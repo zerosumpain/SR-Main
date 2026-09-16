@@ -50,6 +50,19 @@ describe('test selector', () => {
 		expect(r.files.length).toBeGreaterThan(100);
 	});
 
+	// A registry that loads its modules for their side effects reaches them with
+	// `import './x';` and nothing else — there is no `from` edge anywhere in the
+	// repo. The selector was blind to that form, so changing any of the 33 tool
+	// modules only reachable this way selected exactly the always-run baseline.
+	// What that hid: toolchain-fixes.test.ts pins every `destructive: true` flag,
+	// and protected-paths.txt leans on it to stop a dropped confirmation gate
+	// auto-merging. It never ran.
+	it('follows a bare side-effect import as an edge', () => {
+		const r = select(['src/lib/workflows/site-tools/tools/whatsapp.ts']);
+		expect(r.mode).toBe('selected');
+		expect(r.files).toContain('src/lib/workflows/site-tools/toolchain-fixes.test.ts');
+	});
+
 	it('includes a changed test file itself', () => {
 		const r = select(['src/lib/jkai/tool-trace.test.ts']);
 		expect(r.files).toContain('src/lib/jkai/tool-trace.test.ts');

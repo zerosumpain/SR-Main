@@ -4,12 +4,16 @@
  * checks while still reporting success. So these tests are weighted almost
  * entirely toward "does it refuse to lower the level when it should".
  *
- * The script is deliberately driven through GATE_LEVEL_FILES here rather than
- * real git history, so the cases stay readable and do not drift as the repo
- * changes.
+ * Most cases drive the script through GATE_LEVEL_FILES rather than real git
+ * history, so they stay readable and do not drift as the repo changes. The
+ * "reads the change set out of a real diff" block is the deliberate exception:
+ * the injected path skips the script's own diff parsing, which is exactly where
+ * the one real classification bug lived.
  */
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, writeFileSync, copyFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -84,6 +88,53 @@ describe('gate-level classifier', () => {
 
 	it('ordinary source reaches L2', () => {
 		expect(level(['src/lib/jkai/tool-trace.ts', 'tests/lib/foo.test.ts'])).toBe('L2');
+	});
+
+	// Every case above injects GATE_LEVEL_FILES, which skips the script's own
+	// diff parsing entirely. That is where the one real bug lived: the change set
+	// was extracted from `git diff --name-status` with `awk 'NF{print $NF}'`,
+	// which splits on whitespace, so `data/prompts/99 override.md` arrived as
+	// `override.md` — root-level markdown, i.e. L1, for a file that is read at
+	// runtime and rsynced to the VPS. These drive the real git path.
+	describe('reads the change set out of a real diff', () => {
+		function levelFromGit(paths: string[]): string {
+			const tmp = mkdtempSync(path.join(tmpdir(), 'gate-level-'));
+			const git = (...args: string[]) =>
+				execFileSync('git', args, { cwd: tmp, encoding: 'utf8', stdio: 'pipe' });
+			try {
+				git('init', '-q', '-b', 'main');
+				git('config', 'user.email', 't@t');
+				git('config', 'user.name', 'T');
+				mkdirSync(path.join(tmp, 'scripts'), { recursive: true });
+				copyFileSync(SCRIPT, path.join(tmp, 'scripts/gate-level.sh'));
+				git('add', '-A');
+				git('commit', '-qm', 'base');
+				for (const p of paths) {
+					mkdirSync(path.dirname(path.join(tmp, p)), { recursive: true });
+					writeFileSync(path.join(tmp, p), 'x\n');
+				}
+				git('add', '-A');
+				git('commit', '-qm', 'change');
+				const out = execFileSync('bash', [path.join(tmp, 'scripts/gate-level.sh'), 'HEAD^'], {
+					cwd: tmp,
+					encoding: 'utf8',
+					env: { ...process.env, GATE_LEVEL_FILES: '', GATE_LEVEL_TIER: 'low' },
+				});
+				return /^level=(\S+)/m.exec(out)?.[1] ?? '';
+			} finally {
+				rmSync(tmp, { recursive: true, force: true });
+			}
+		}
+
+		it('a plain documentation change still reaches L1', () => {
+			expect(levelFromGit(['docs/note.md'])).toBe('L1');
+		});
+
+		// The regression. A space in the path must not truncate it to its last
+		// word, because the last word can look like something far safer.
+		it('a path containing a space is not truncated to its last word', () => {
+			expect(levelFromGit(['data/prompts/99 override.md'])).not.toBe('L1');
+		});
 	});
 
 	describe('fails closed', () => {

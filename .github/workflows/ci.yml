@@ -152,32 +152,65 @@ jobs:
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
-            const tree = require('child_process')
-              .execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { encoding: 'utf8' })
-              .trim();
+            // FAILS OPEN, and that is the whole point of the try/catch.
+            //
+            // This is an OPTIMISATION: finding a candidate lets master skip work
+            // it has already done. Not finding one costs four minutes. But an
+            // unhandled throw here fails the `level` job, and GitHub propagates
+            // `skipped` down the needs graph — so typecheck, test and build are
+            // skipped, `gate` reports on a set of skips, and the required check
+            // goes red. Master merged, nothing deployed, and the cause is an
+            // Actions API blip rather than anything wrong with the code.
+            //
+            // Every failure path below therefore lands on certified=false, which
+            // is the expensive-but-correct path the comment above already
+            // promises.
+            let tree;
+            try {
+              tree = require('child_process')
+                .execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { encoding: 'utf8' })
+                .trim();
+            } catch (err) {
+              core.setOutput('certified', 'false');
+              core.warning(`Could not resolve the tree hash (${err.message}); running the full fallback path.`);
+              return;
+            }
             const name = `candidate-${tree}`;
-            const artifacts = await github.paginate(
-              github.rest.actions.listArtifactsForRepo,
-              { owner: context.repo.owner, repo: context.repo.repo, name, per_page: 100 }
-            );
-            for (const artifact of artifacts.sort((a, b) => b.id - a.id)) {
-              if (artifact.expired || !artifact.workflow_run?.id) continue;
-              const runId = artifact.workflow_run.id;
-              const run = await github.rest.actions.getWorkflowRun({
-                owner: context.repo.owner, repo: context.repo.repo, run_id: runId
-              });
-              if (run.data.event !== 'pull_request') continue;
-              const jobs = await github.paginate(
-                github.rest.actions.listJobsForWorkflowRun,
-                { owner: context.repo.owner, repo: context.repo.repo, run_id: runId, per_page: 100 }
+            try {
+              const artifacts = await github.paginate(
+                github.rest.actions.listArtifactsForRepo,
+                { owner: context.repo.owner, repo: context.repo.repo, name, per_page: 100 }
               );
-              const gate = jobs.find((job) => job.name === 'Gate (check + test)');
-              if (gate?.conclusion !== 'success') continue;
-              core.setOutput('certified', 'true');
-              core.setOutput('run_id', String(runId));
-              core.setOutput('name', name);
-              core.summary.addRaw(`Reusing gate-certified candidate \`${name}\` from run ${runId}.`);
-              await core.summary.write();
+              for (const artifact of artifacts.sort((a, b) => b.id - a.id)) {
+                if (artifact.expired || !artifact.workflow_run?.id) continue;
+                const runId = artifact.workflow_run.id;
+                // Per-artifact, so one unreadable run does not abandon the
+                // search while a valid candidate sits further down the list.
+                try {
+                  const run = await github.rest.actions.getWorkflowRun({
+                    owner: context.repo.owner, repo: context.repo.repo, run_id: runId
+                  });
+                  if (run.data.event !== 'pull_request') continue;
+                  const jobs = await github.paginate(
+                    github.rest.actions.listJobsForWorkflowRun,
+                    { owner: context.repo.owner, repo: context.repo.repo, run_id: runId, per_page: 100 }
+                  );
+                  const gate = jobs.find((job) => job.name === 'Gate (check + test)');
+                  if (gate?.conclusion !== 'success') continue;
+                  core.setOutput('certified', 'true');
+                  core.setOutput('run_id', String(runId));
+                  core.setOutput('name', name);
+                  core.summary.addRaw(`Reusing gate-certified candidate \`${name}\` from run ${runId}.`);
+                  await core.summary.write();
+                  return;
+                } catch (err) {
+                  core.warning(`Could not inspect run ${runId} (${err.message}); trying the next candidate.`);
+                  continue;
+                }
+              }
+            } catch (err) {
+              core.setOutput('certified', 'false');
+              core.warning(`Could not list candidates (${err.message}); running the full fallback path.`);
               return;
             }
             core.setOutput('certified', 'false');
@@ -229,8 +262,11 @@ jobs:
         # Dependency changes must pass the live advisory service. An unchanged
         # manifest/lockfile has the same production graph as the already-gated
         # base, so do not let an npm advisory-service outage block unrelated
-        # application or deployment fixes. The nightly workflow still audits
-        # the graph for advisories disclosed after it entered master.
+        # application or deployment fixes. The `audit` job in nightly.yml covers
+        # what this skip gives up — advisories disclosed AFTER the lockfile last
+        # changed. That job did not exist until 2026-09-16, so for as long as
+        # this comment has been here it was describing a backstop that was not
+        # running: one `npm audit` in the repository, and it was this one.
         run: |
           if git diff --quiet HEAD^ -- package.json package-lock.json; then
             echo "Production dependency graph unchanged; retaining the base audit result."
@@ -596,7 +632,12 @@ jobs:
           name: ${{ needs.level.outputs.candidate_name }}
           run-id: ${{ needs.level.outputs.candidate_run_id }}
           github-token: ${{ github.token }}
-          path: .
+          # A STAGING DIRECTORY, never the checkout root. This was `path: .`,
+          # which unpacked an artifact accepted on nothing but its name over the
+          # working tree — including, potentially, the promotion script that runs
+          # in the very next step. See ci-promote-candidate.sh for the full
+          # reasoning and the allow-list that moves files out of here.
+          path: .candidate
 
       - name: Verify and promote the candidate
         id: promote

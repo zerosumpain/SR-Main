@@ -182,6 +182,13 @@ try {
 	// silently under-select.
 	const SPEC_RE = /(?:from\s*|import\s*\(\s*|require\s*\(\s*)['"]([^'"]+)['"]/g;
 	const MOCK_RE = /vi\.mock\(\s*['"]([^'"]+)['"]/g;
+	// `import './x';` — imported purely for a side effect, so there is no `from`
+	// and SPEC_RE cannot see it. site-tools/registry.ts reaches all 53 tool
+	// modules this way and nothing else in the repo imports them by name, so
+	// without this arm 33 of them had NO importer: changing one selected the
+	// always-run baseline and stopped. Anchored to the start of a line so it
+	// cannot match the `from`-bearing form's tail.
+	const BARE_RE = /(?:^|\n)\s*import\s+['"]([^'"]+)['"]/g;
 
 	const deps = new Map();
 	for (const f of files) {
@@ -192,7 +199,7 @@ try {
 			continue;
 		}
 		const set = new Set();
-		for (const re of [SPEC_RE, MOCK_RE]) {
+		for (const re of [SPEC_RE, MOCK_RE, BARE_RE]) {
 			re.lastIndex = 0;
 			let m;
 			while ((m = re.exec(text))) {
