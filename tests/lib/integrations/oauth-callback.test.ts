@@ -1,9 +1,15 @@
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
+import { clearIntegrationFixtures } from './fixture-cleanup';
 
 const TEST_KEY = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
 
-beforeAll(() => {
+beforeAll(async () => {
   process.env.INTEGRATION_CREDENTIALS_KEY = TEST_KEY;
+  await clearIntegrationFixtures();
+});
+
+afterAll(async () => {
+  await clearIntegrationFixtures();
 });
 
 beforeEach(async () => {
