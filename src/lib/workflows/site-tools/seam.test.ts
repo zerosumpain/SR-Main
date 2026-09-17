@@ -29,15 +29,21 @@ import { resetRemoteCatalogue } from './remote';
  * branch is covered by the rest of the suite; what is being asserted here is
  * which side of the seam answers, and a two-entry fake says that precisely.
  */
+const LOCAL = [
+  { name: 'site_blog_list', description: 'list posts', parameters: { type: 'object', properties: {} }, toolset: 'blog', category: 'content', destructive: false },
+  { name: 'gmail_send', description: 'send mail', parameters: { type: 'object', properties: {} }, toolset: 'gmail', category: 'comms', destructive: true },
+];
+
 vi.mock('./load-registry', () => ({
   loadToolRegistry: async () => ({
-    isRegisteredTool: (name: string) => name === 'site_blog_list' || name === 'gmail_send',
-    getTool: (name: string) =>
-      name === 'gmail_send'
-        ? { name, destructive: true }
-        : name === 'site_blog_list'
-          ? { name, destructive: false }
-          : undefined,
+    isRegisteredTool: (name: string) => LOCAL.some((t) => t.name === name),
+    getTool: (name: string) => LOCAL.find((t) => t.name === name),
+    getTools: () => LOCAL,
+    getAvailableToolsets: () => ['blog', 'gmail'],
+    getToolsetManifest: () => [],
+    getToolsetDefinitions: () => [],
+    getToolDefinitionsByName: () => [],
+    buildSystemPromptSection: () => 'local prompt section',
     executeTool: async () => ({ success: true, data: 'in process' }),
   }),
 }));
@@ -52,11 +58,49 @@ const original = {
 /** Set per test: how the fake Main behaves. */
 let catalogueStatus = 200;
 let catalogueBody: unknown = {
-  tools: [
-    { name: 'site_blog_list', destructive: false },
-    { name: 'gmail_send', destructive: true },
+  "tools": [
+    {
+      "name": "site_blog_list",
+      "description": "list posts",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      },
+      "toolset": "blog",
+      "category": "content",
+      "destructive": false
+    },
+    {
+      "name": "gmail_send",
+      "description": "send mail",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      },
+      "toolset": "gmail",
+      "category": "comms",
+      "destructive": true
+    }
   ],
+  "toolsets": [
+    "blog",
+    "gmail"
+  ],
+  "manifest": [
+    {
+      "toolset": "blog",
+      "description": "Blog",
+      "tools": [
+        {
+          "name": "site_blog_list",
+          "description": "list posts"
+        }
+      ]
+    }
+  ],
+  "promptSection": "TOOLSETS: blog, gmail"
 };
+
 let invokeHandler: (res: http.ServerResponse) => void = (res) => {
   res.writeHead(200, { 'content-type': 'application/x-ndjson' });
   res.end('{"result":{"success":true,"data":"from the wire"}}\n');
@@ -89,11 +133,48 @@ beforeEach(() => {
   requests = [];
   catalogueStatus = 200;
   catalogueBody = {
-    tools: [
-      { name: 'site_blog_list', destructive: false },
-      { name: 'gmail_send', destructive: true },
-    ],
-  };
+  "tools": [
+    {
+      "name": "site_blog_list",
+      "description": "list posts",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      },
+      "toolset": "blog",
+      "category": "content",
+      "destructive": false
+    },
+    {
+      "name": "gmail_send",
+      "description": "send mail",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      },
+      "toolset": "gmail",
+      "category": "comms",
+      "destructive": true
+    }
+  ],
+  "toolsets": [
+    "blog",
+    "gmail"
+  ],
+  "manifest": [
+    {
+      "toolset": "blog",
+      "description": "Blog",
+      "tools": [
+        {
+          "name": "site_blog_list",
+          "description": "list posts"
+        }
+      ]
+    }
+  ],
+  "promptSection": "TOOLSETS: blog, gmail"
+};
   resetRemoteCatalogue();
   const { port } = server.address() as AddressInfo;
   mutableEnv.JKAI_TOOL_INVOKE_URL = `http://127.0.0.1:${port}/api/platform/tools/invoke`;

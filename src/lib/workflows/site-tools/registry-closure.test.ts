@@ -180,3 +180,45 @@ describe('the tool registry stays off JKAI\'s static import graph', () => {
     expect(proof).not.toBeNull();
   });
 });
+
+/**
+ * The catalogue has ONE chokepoint, and that is what makes chat extractable.
+ *
+ * The rule above — "keep the registry off the static graph" — was written when
+ * the goal was bundle weight, and its comment says a dynamic `import()` is
+ * "deliberately fine ... nothing on the static graph". For weight that is true.
+ * For EXTRACTION it is not: a dynamic import is a file that must exist in the
+ * other repository, and measured against SR-Infra's owned path set the chat
+ * surface's runtime closure was 812 files with `workflows/site-tools` (66) and,
+ * through `tools/workflows.ts`, `workflows/nodes` (139) inside it.
+ *
+ * Seven modules on chat's path read the catalogue directly: the prompt builder,
+ * the meta-tools, the platform guard, the custom-tool loader, the chat loop, the
+ * trace analyser and `orchestrator/grounding`. Every one of them is now behind
+ * `catalogue.ts`, so `load-registry` has exactly two importers and replacing it
+ * is a one-file change in the extracted app.
+ */
+describe('the catalogue seam', () => {
+  const SEAM = ['executor.ts', 'catalogue.ts'];
+
+  it('is the only thing that imports load-registry', () => {
+    const src = (n: string) => /\.(ts|svelte)$/.test(n) && !/\.test\.ts$/.test(n);
+    const offenders: string[] = [];
+    for (const file of walk(SRC, src)) {
+      if (SEAM.includes(path.basename(file)) && file.startsWith(HERE)) continue;
+      // The build bridge is Main's forge and stays on this side of the boundary;
+      // `/api/jkai/tools` is in the registry's excludePaths for that reason.
+      if (file.endsWith('jkai/tool-bridge.ts')) continue;
+      // The two platform endpoints are Main SERVING its own catalogue across the
+      // boundary. They are the owning side by definition, so reading the local
+      // registry is the whole of their job.
+      if (/routes\/api\/platform\/tools\/(invoke|catalogue)\/\+server\.ts$/.test(file)) continue;
+      const text = strip(fs.readFileSync(file, 'utf8').replace(/\0/g, ''));
+      if (/from\s*['"][^'"]*\/load-registry['"]|import\s*\(\s*['"][^'"]*\/load-registry['"]/.test(text)) {
+        offenders.push(path.relative(SRC, file));
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+});

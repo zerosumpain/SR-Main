@@ -9,24 +9,21 @@
 // prompt. Loading it on demand costs the same once and takes the catalogue off
 // the static graph.
 
-import { loadToolRegistry } from './load-registry';
+import { toolsetDefinitions, toolDefinitionsByName, systemPromptSection } from './catalogue';
 
 export { getMetaToolDefinitions } from './meta-tools';
 
 /** OpenAI-format definitions for one toolset — general chat's dynamic activation. */
 export async function getToolsetDefinitions(toolset: string) {
-	const { getToolsetDefinitions: read } = await loadToolRegistry();
-	return read(toolset);
+	return toolsetDefinitions(toolset);
 }
 
 /** OpenAI-format definitions for specific tools, by name. */
 export async function getToolDefinitionsByName(names: readonly string[]) {
-	const { getToolDefinitionsByName: read } = await loadToolRegistry();
-	return read(names);
+	return toolDefinitionsByName(names);
 }
 
 /** The site-tools section of the system prompt. */
 export async function buildSiteSystemPromptSection() {
-	const { buildSystemPromptSection } = await loadToolRegistry();
-	return buildSystemPromptSection();
+	return systemPromptSection();
 }

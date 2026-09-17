@@ -187,3 +187,79 @@ export function createNdjsonReader(handlers: {
 		},
 	};
 }
+
+// ── The catalogue ────────────────────────────────────────────────────────────
+
+/**
+ * Everything a chat process needs to KNOW about the tools, as opposed to run.
+ *
+ * The first cut of this contract served `{name, destructive}` and said a chat
+ * process composing a prompt "gets the full definitions from the same place it
+ * always did". That was wrong: the place it always did is `site-tools/registry`,
+ * which is the 175-module barrel the boundary exists to leave behind. Six
+ * modules on chat's path read it — the prompt builder, the meta-tools, the
+ * platform guard, the custom-tool loader, the executor and the chat loop itself
+ * — and converting only the executor left the other five holding the catalogue.
+ *
+ * So the payload is the catalogue. One document, fetched once and cached, rather
+ * than an endpoint per question: the questions are all views of the same list,
+ * and five endpoints would be five things to keep in step.
+ */
+export interface CatalogueTool {
+	name: string;
+	description: string;
+	parameters: { type: 'object'; properties: Record<string, unknown>; required?: string[] };
+	toolset: string;
+	category: string;
+	destructive: boolean;
+}
+
+export interface CataloguePayload {
+	tools: CatalogueTool[];
+	toolsets: string[];
+	manifest: Array<{
+		toolset: string;
+		description: string;
+		tools: Array<{ name: string; description: string }>;
+	}>;
+	/** The prose block the system prompt carries, built by the owning process. */
+	promptSection: string;
+}
+
+export function coerceCataloguePayload(body: unknown): CataloguePayload {
+	if (!isPlainObject(body)) throw new InvokeContractError('catalogue must be an object');
+	const tools = Array.isArray(body.tools) ? body.tools : null;
+	if (!tools) throw new InvokeContractError('catalogue has no tools');
+	return {
+		tools: tools.filter(isPlainObject).flatMap((t) =>
+			typeof t.name === 'string' && t.name
+				? [
+						{
+							name: t.name,
+							description: typeof t.description === 'string' ? t.description : '',
+							parameters: isPlainObject(t.parameters)
+								? (t.parameters as CatalogueTool['parameters'])
+								: { type: 'object', properties: {} },
+							toolset: typeof t.toolset === 'string' ? t.toolset : '',
+							category: typeof t.category === 'string' ? t.category : '',
+							destructive: t.destructive === true
+						}
+					]
+				: []
+		),
+		toolsets: Array.isArray(body.toolsets) ? body.toolsets.filter((t): t is string => typeof t === 'string') : [],
+		manifest: Array.isArray(body.manifest)
+			? body.manifest.filter(isPlainObject).map((m) => ({
+					toolset: typeof m.toolset === 'string' ? m.toolset : '',
+					description: typeof m.description === 'string' ? m.description : '',
+					tools: Array.isArray(m.tools)
+						? m.tools.filter(isPlainObject).map((t) => ({
+								name: typeof t.name === 'string' ? t.name : '',
+								description: typeof t.description === 'string' ? t.description : ''
+							}))
+						: []
+				}))
+			: [],
+		promptSection: typeof body.promptSection === 'string' ? body.promptSection : ''
+	};
+}

@@ -4,7 +4,12 @@ const state = vi.hoisted(() => ({
   tools: [] as Array<{ name: string; destructive?: boolean }>,
 }));
 
-vi.mock('./registry', () => ({ getTools: () => state.tools }));
+// The guard reads the catalogue through the seam now, not the registry barrel,
+// so the mock moves with it — `getTool` is the question it actually asks.
+vi.mock('./registry', () => ({
+  getTools: () => state.tools,
+  getTool: (name: string) => state.tools.find((t: { name: string }) => t.name === name),
+}));
 
 import { refuseDestructiveCall } from './platform-guard';
 

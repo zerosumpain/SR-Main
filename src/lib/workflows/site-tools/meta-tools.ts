@@ -5,7 +5,7 @@ import { customTools } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { register, unregister, isRegisteredTool } from './registry-internal';
 import { buildHandler } from './custom-tool-loader';
-import { loadToolRegistry } from './load-registry';
+import { availableToolsets, toolsetManifest } from './catalogue';
 
 // Built on first use rather than at module load.
 //
@@ -25,8 +25,7 @@ let cachedDefinitions: MetaToolDefinition[] | null = null;
  */
 export async function getMetaToolDefinitions(): Promise<MetaToolDefinition[]> {
   if (cachedDefinitions) return cachedDefinitions;
-  const { getAvailableToolsets } = await loadToolRegistry();
-  const LIVE_TOOLSET_LIST = getAvailableToolsets().slice().sort().join(', ');
+  const LIVE_TOOLSET_LIST = (await availableToolsets()).slice().sort().join(', ');
   cachedDefinitions = buildDefinitions(LIVE_TOOLSET_LIST);
   return cachedDefinitions;
 }
@@ -141,9 +140,8 @@ export async function handleJkaiHelp(args: Record<string, unknown>): Promise<{
   success: boolean;
   data: unknown;
 }> {
-  const { getToolsetManifest, getAvailableToolsets } = await loadToolRegistry();
   const toolset = args.toolset as string | undefined;
-  const manifest = getToolsetManifest();
+  const manifest = await toolsetManifest();
 
   if (toolset) {
     const entry = manifest.find((m) => m.toolset === toolset);
@@ -152,7 +150,7 @@ export async function handleJkaiHelp(args: Record<string, unknown>): Promise<{
         success: false,
         data: {
           error: `Unknown toolset: ${toolset}`,
-          available: getAvailableToolsets(),
+          available: await availableToolsets(),
         },
       };
     }

@@ -1,6 +1,6 @@
 import type { ToolExecContext, ToolResult } from './registry-internal';
 import { loadToolRegistry } from './load-registry';
-import { invokeRemoteTool, remoteCatalogue, remoteInvokeTarget } from './remote';
+import { invokeRemoteTool, remoteInvokeTarget } from './remote';
 
 /**
  * The seam between chat and the tool catalogue.
@@ -76,35 +76,10 @@ export async function executeSiteTool(
 	}
 }
 
-export async function isRegisteredTool(name: string): Promise<boolean> {
-	const target = remoteInvokeTarget();
-	if (target) return (await remoteCatalogue(target)).has(name);
-	const { isRegisteredTool: check } = await loadToolRegistry();
-	return check(name);
-}
-
 /**
- * Whether a tool must ask the user before it runs.
- *
- * Lives on the seam rather than in `chat/confirmation-gate.ts`, which is where
- * it used to read the registry directly. It is the same question
- * `isRegisteredTool` asks — what does the catalogue say about this name — and a
- * second reader of the catalogue is a second thing to remember to move.
- *
- * **Across the wire it fails CLOSED.** A name the catalogue does not carry, or
- * a catalogue that could not be read at all, is treated as destructive: the
- * direction of a wrong answer is not symmetric here, because a needless
- * confirmation is an annoyance and a skipped one sends the email.
+ * The catalogue predicates live in `./catalogue` with the other reads, and are
+ * re-exported here because this file is where four call sites already look for
+ * them. Splitting execution from knowledge is the point of the two files; making
+ * every caller learn which is which is not.
  */
-export async function isDestructiveTool(name: string): Promise<boolean> {
-	const target = remoteInvokeTarget();
-	if (!target) {
-		const { getTool } = await loadToolRegistry();
-		return getTool(name)?.destructive === true;
-	}
-	try {
-		return (await remoteCatalogue(target)).get(name) ?? true;
-	} catch {
-		return true;
-	}
-}
+export { isRegisteredTool, isDestructiveTool } from './catalogue';

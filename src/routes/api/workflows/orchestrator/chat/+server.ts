@@ -26,7 +26,10 @@ import { priceFor, computeCost } from '$lib/llm/pricing';
 import type { TurnStamp } from '$lib/jkai/turn-stamp';
 import { recordDurableLLMCall } from '$lib/llm/usage-log';
 import { maybeExtractThreadConcepts } from '$lib/jkai/intel/chat-extract';
-import { JKAI_EXTENDED_TOOL } from '$lib/mcp/meta-tool';
+// The leaf, not `meta-tool`: that module implements the operations and so
+// reads the tool catalogue, which would put all 175 tool modules back on this
+// endpoint's runtime graph for the sake of one schema.
+import { JKAI_EXTENDED_TOOL } from '$lib/mcp/extended-tool';
 import { createTraceRecorder, compactStepsForMessage, type CompactToolStep } from '$lib/jkai/tool-trace';
 import { resolveChatTurnModel } from '$lib/server/models/workload-settings';
 
