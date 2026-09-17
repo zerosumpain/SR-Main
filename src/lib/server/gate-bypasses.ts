@@ -57,6 +57,13 @@ export const HOOK_BYPASSES: string[] = [
   // makes every VPS request look like 127.0.0.1, so loopback proves nothing
   // here. The action is reversible and cannot publish.
   '/api/jkai/studio', // POST only, STUDIO_SERVICE_TOKEN
+  // The tool-invoke lane: Main serving its catalogue to a chat process outside
+  // it. POST only, Bearer, constant-time compared, refused when unset or under
+  // 32 chars — and there are TWO credentials, the second of which opens the 25
+  // destructive tools and is unset by default. See $lib/server/invoke-auth.
+  // Not loopback-gated, for the reason /api/jkai/studio is not: cloudflared
+  // makes every VPS request look like 127.0.0.1.
+  '/api/platform/tools/invoke', // POST only, JKAI_INVOKE_TOKEN[_DESTRUCTIVE]
   // Autonomous-builder tool bridge. HMAC-over-build-id bearer token, verified
   // in $lib/jkai/tool-bridge. Named one path at a time on purpose: the sibling
   // /api/jkai/tools/promote has NO auth of its own and must stay owner-gated.

@@ -25,6 +25,7 @@ import { rateLimit } from '$lib/server/rate-limit';
 import { hasMaintenanceSecret } from '$lib/server/maintenance-auth';
 import { isPublicApiPath } from '$lib/server/public-api-paths';
 import { hasStudioServiceToken } from '$lib/server/studio-auth';
+import { invokeLaneFor } from '$lib/server/invoke-auth';
 import { isLoopbackAddress, isPrivateAddress } from '$lib/server/client-address';
 import { SvelteKitAuth } from '@auth/sveltekit';
 import Google from '@auth/sveltekit/providers/google';
@@ -618,6 +619,22 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   // itself (defence in depth), and the RATE_LIMITS entry below does not apply
   // to a tokened call, so the route enforces its own ceiling.
   if (pathname === '/api/jkai/studio' && event.request.method === 'POST' && hasStudioServiceToken(event.request)) {
+    return resolve(event);
+  }
+
+  // The tool-invoke lane: Main serving its catalogue to a chat process that
+  // does not live inside it. Service-to-service by construction — SR-JKAI has
+  // no user session to present, and its gateway deliberately refuses a
+  // client-supplied identity — so it self-authenticates on a bearer credential
+  // (see $lib/server/invoke-auth for the two lanes and why the destructive one
+  // is shut by default). Scoped to exactly this path and to POST; the route
+  // re-checks the credential itself, defence in depth, and an unrecognised one
+  // falls through to the owner gate below and 401s there.
+  if (
+    pathname === '/api/platform/tools/invoke' &&
+    event.request.method === 'POST' &&
+    invokeLaneFor(event.request) !== 'none'
+  ) {
     return resolve(event);
   }
 

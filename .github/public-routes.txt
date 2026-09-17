@@ -39,6 +39,7 @@
 /api/maps/config
 /api/mcp
 /api/mcp/local
+/api/platform/tools/invoke
 /api/platform/workflow-engine
 /api/projects/local-plan-navigator/ask
 /api/releases/ingest
