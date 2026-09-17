@@ -14,7 +14,7 @@
  *  - Runs on the VPS (LLM keys live there), never in the ingest script — hence
  *    the /api/releases/summarise endpoint rather than doing this in CI.
  */
-import { asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { asc, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { releases, releaseItems, type Release } from '$lib/db/schema';
 import { jsonCompletion } from '$lib/deepdive/ai';
@@ -392,13 +392,38 @@ export async function summariseRelease(id: number, opts: { force?: boolean } = {
   return 'failed';
 }
 
+/**
+ * Releases written `ok` that nonetheless carry no items, despite having commits
+ * to describe.
+ *
+ * This is the shape the queue cannot see. `countPending` and `summarisePending`
+ * both select on `summary_status`, and `summariseRelease` returns early on
+ * `ok` — so a row that reaches `ok` with an empty item list is stranded for
+ * good: never counted, never retried, and indistinguishable on the dashboard
+ * from a release that genuinely had nothing to say.
+ *
+ * Zero rows match on production today (verified 2026-09-17: all 1,130 releases
+ * carry items, 1,897 of them). It is here so that if one ever does, it appears
+ * in the pending count rather than vanishing — a queue that cannot represent a
+ * stuck item reports "0 remaining" while it is stuck.
+ *
+ * The commits test matters: a re-deploy of the same tree is legitimately
+ * item-less, and `summariseRelease` writes exactly that with an empty range.
+ * Only a release with evidence and no output is wrong.
+ */
+const STRANDED_OK = sql`(
+  ${releases.summaryStatus} = 'ok'
+  and jsonb_array_length(coalesce(${releases.commits}, '[]'::jsonb)) > 0
+  and not exists (select 1 from release_items ri where ri.release_id = ${releases.id})
+)`;
+
 /** How many releases are still waiting for (or failed) a summary. */
 export async function countPending(includeFailed = false): Promise<number> {
   const statuses = includeFailed ? ['pending', 'failed'] : ['pending'];
   const [row] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(releases)
-    .where(inArray(releases.summaryStatus, statuses));
+    .where(or(inArray(releases.summaryStatus, statuses), STRANDED_OK));
   return row?.n ?? 0;
 }
 
@@ -414,14 +439,18 @@ export async function summarisePending(
 ): Promise<{ processed: number; ok: number; failed: number; remaining: number }> {
   const statuses = opts.includeFailed ? ['pending', 'failed'] : ['pending'];
   const rows = await db
-    .select({ id: releases.id })
+    .select({ id: releases.id, stranded: sql<boolean>`${STRANDED_OK}` })
     .from(releases)
-    .where(inArray(releases.summaryStatus, statuses))
+    .where(or(inArray(releases.summaryStatus, statuses), STRANDED_OK))
     .orderBy(asc(releases.deployedAt))
     .limit(limit);
 
   const run = pLimit(3);
-  const results = await Promise.all(rows.map((r) => run(() => summariseRelease(r.id, { force: opts.includeFailed }))));
+  // A stranded row is already `ok`, so it needs force or summariseRelease returns
+  // early and the queue spins on it forever without the count ever falling.
+  const results = await Promise.all(
+    rows.map((r) => run(() => summariseRelease(r.id, { force: opts.includeFailed || r.stranded }))),
+  );
 
   return {
     processed: results.length,
