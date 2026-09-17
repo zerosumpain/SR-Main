@@ -28,6 +28,7 @@
   import ReleaseFilters from './ReleaseFilters.svelte';
   import CapabilityRecord from './CapabilityRecord.svelte';
   import VersionLog from './VersionLog.svelte';
+  import WorkBehind from './WorkBehind.svelte';
   import type { ReleasesData, Tile } from './types';
 
   let { data }: { data: ReleasesData } = $props();
@@ -216,6 +217,20 @@
       {/if}
     </div>
   </section>
+
+  {#if data.mode === 'owner'}
+    <!-- Band D. Outside the {:else} above so it reads as its own band rather
+         than an owner variant of the record, and so the public tree has no
+         branch here at all. -->
+    <section class="c">
+      <div class="inner">
+        <WorkBehind
+          band={data.sessions}
+          versionById={new Map(data.items.map((i) => [i.id, i.version]))}
+        />
+      </div>
+    </section>
+  {/if}
 </HealthShell>
 
 <style>

@@ -87,7 +87,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       { label: 'Tool usage', href: '/admin/ops/tool-usage' },
       { label: 'Live', href: '/admin/ops/live' },
       { label: 'Architecture', href: '/admin/ops/architecture' },
-      { label: 'Changelog', href: '/admin/ops/claude-changelog' },
     ],
   },
   {
@@ -169,6 +168,18 @@ export const ADMIN_ROUTE_REDIRECTS: Record<string, string> = {
   // log and an anonymous reader the public record, rather than two pages two
   // redesigns apart at different addresses.
   '/admin/ops/releases': '/releases',
+  // The changelog followed the release console into /releases (2026-09-17), the
+  // fourth page to make this move after /health, /drive and the console itself.
+  // Its session timeline and its grouping of related changes are band D there,
+  // joined to releases on PULL-REQUEST NUMBER — the only key that survives the
+  // data (branch is latched at session start so every session says 'master';
+  // transcript SHAs are pre-squash and matched master 0 times in 105; the
+  // Claude-Session trailer spans up to 107 commits).
+  //
+  // The ingest pipeline is untouched: the homeserv cron and the SessionEnd hook
+  // still POST to /api/claude-changelog/ingest, which now also stores the PR
+  // numbers the parser extracts.
+  '/admin/ops/claude-changelog': '/releases',
   '/admin/deepdive': '/admin/ai/keys',
   '/admin/login': '/login?callbackUrl=/admin',
 };

@@ -4518,6 +4518,19 @@ export const claudeSessions = pgTable(
     contentHash: text('content_hash'), // sha256 of transcript — skip re-ingest if unchanged
     fileMtime: timestamp('file_mtime', { withTimezone: true }),
     fileSize: bigint('file_size', { mode: 'number' }),
+    /**
+     * Pull-request numbers this session touched — the key that joins it to the
+     * releases it produced.
+     *
+     * The three obvious candidates all fail, measured rather than assumed:
+     * `git_branch` is latched at session start so every dev session says
+     * 'master'; transcript commit SHAs are pre-squash and matched master 0 times
+     * out of 105; the `Claude-Session:` trailer is account-level and spans up to
+     * 107 commits over 8 days. PR numbers are exact and present on both sides —
+     * every release deployed since 2026-08-01 carries them (704 of 704), and 139
+     * of 180 transcripts on disk carry at least one.
+     */
+    pullRequests: jsonb('pull_requests').notNull().default(sql`'[]'::jsonb`),
     schemaVersion: integer('schema_version').notNull().default(1),
     ingestedAt: timestamp('ingested_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -4525,6 +4538,9 @@ export const claudeSessions = pgTable(
     index('claude_sessions_project_started_idx').on(t.project, t.startedAt),
     index('claude_sessions_started_idx').on(t.startedAt),
     index('claude_sessions_hash_idx').on(t.contentHash),
+    // GIN, because the join asks "which sessions contain this PR number", which
+    // is a containment test over the array rather than a lookup on a scalar.
+    index('claude_sessions_prs_idx').using('gin', t.pullRequests),
   ],
 );
 export type ClaudeSession = typeof claudeSessions.$inferSelect;
@@ -4603,12 +4619,27 @@ export const releases = pgTable(
     summarisedAt: timestamp('summarised_at', { withTimezone: true }),
     contentHash: text('content_hash'), // sha256 of the git facts — re-ingest is a no-op when unchanged
     schemaVersion: integer('schema_version').notNull().default(1),
+    /**
+     * Which repository shipped this.
+     *
+     * `scripts/ci-release.sh` is the only caller of the release-log ingest, so
+     * every row here is SR-Main's — and /releases has been the whole site's
+     * shipping record wearing one repository's name. The seven extracted apps
+     * (Health, Drive, Policy Analysis, Policy Engine, DfE Data Strategy, Data
+     * Standard Designer, JKAI) deploy independently and appear nowhere.
+     *
+     * The default makes every existing row correct rather than unknown. Until an
+     * extracted repo's release.yml posts here, the estate honestly reports it as
+     * having no releases recorded, which is true.
+     */
+    repo: text('repo').notNull().default('zerosumpain/SR-Main'),
     ingestedAt: timestamp('ingested_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex('releases_sha_idx').on(t.sha),
     index('releases_deployed_idx').on(t.deployedAt),
     index('releases_summary_status_idx').on(t.summaryStatus),
+    index('releases_repo_deployed_idx').on(t.repo, t.deployedAt),
   ],
 );
 export type Release = typeof releases.$inferSelect;

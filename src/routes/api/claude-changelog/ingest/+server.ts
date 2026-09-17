@@ -70,7 +70,7 @@ type SessionIn = {
   messageCount?: number; userMsgCount?: number; assistantMsgCount?: number; toolCallCount?: number;
   models?: unknown; tokens?: unknown; estCostUsd?: number; costKnown?: boolean;
   featureTypes?: unknown; termFreq?: unknown; toolHistogram?: unknown; touchedPaths?: unknown;
-  skills?: unknown; costBreakdown?: unknown; fullTranscript?: string;
+  skills?: unknown; costBreakdown?: unknown; fullTranscript?: string; pullRequests?: unknown;
   summary?: string; transcriptPath?: string; contentHash?: string;
   fileMtime?: string | null; fileSize?: number; schemaVersion?: number;
 };
@@ -124,6 +124,12 @@ export const POST: RequestHandler = async ({ request, url }) => {
     termFreq: s.termFreq ?? [],
     toolHistogram: s.toolHistogram ?? {},
     touchedPaths: s.touchedPaths ?? [],
+    // The join key to the release log. Coerced to a plain number array here
+    // rather than trusted: this is the one field a later reader indexes on, and
+    // a string in the array makes the GIN containment test silently miss.
+    pullRequests: Array.isArray(s.pullRequests)
+      ? [...new Set(s.pullRequests.map(Number).filter((n) => Number.isInteger(n) && n > 0))]
+      : [],
     skills: s.skills ?? {},
     costBreakdown: s.costBreakdown ?? [],
     fullTranscript: s.fullTranscript ?? null,
