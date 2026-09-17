@@ -163,12 +163,17 @@ export const ENDPOINTS: EstateEndpoint[] = [
   },
   {
     id: 'vps-caddy',
-    label: 'Caddy',
-    address: '127.0.0.1:3000',
+    label: 'Caddy · VNC proxy',
+    address: '127.0.0.1:4174',
     host: 'vps',
     exposure: 'loopback',
-    auth: 'none',
-    note: 'Reverse proxy in front of the container services.',
+    auth: 'owner-session',
+    // It was listed on :3000 as a "reverse proxy in front of the container
+    // services". That block proxied the deprecated Next.js container and went
+    // with it on 2026-09-17; :4174 is the only thing Caddy still serves, and it
+    // is the reason Caddy must not be retired along with the rest of that
+    // compose project.
+    note: 'Proxies the sandbox VNC ports over Tailscale. Every request is forward_auth-ed against /api/auth/session-check, which exists for this and nothing else.',
     configuredIn: 'docker compose · strange-rambling-caddy-1',
   },
   {
@@ -180,16 +185,6 @@ export const ENDPOINTS: EstateEndpoint[] = [
     auth: 'app-login',
     note: 'Self-hosted analytics. Instrumented on /blog only — it is not sitewide.',
     configuredIn: 'docker compose · strange-rambling-umami-1',
-  },
-  {
-    id: 'vps-preview',
-    label: 'Dev preview',
-    address: '127.0.0.1:3001',
-    host: 'vps',
-    exposure: 'loopback',
-    auth: 'owner-session',
-    note: 'Preview build served alongside production.',
-    configuredIn: 'docker compose · strange-rambling-dev-preview-1',
   },
   {
     id: 'vps-wa',
