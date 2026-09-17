@@ -11,9 +11,26 @@ export type ExtractKind =
   | 'video'
   | 'spreadsheet';
 
+/**
+ * One structural unit of a Word document, in reading order.
+ *
+ * Present so a consumer can cut BETWEEN units rather than at a character count —
+ * a chunker that cuts at a character count lands mid-table-row and leaves half a
+ * grid on each side. `text` is already the serialised form — a table is its
+ * caption, header line and tab-separated rows — so
+ * `blocks.map((b) => b.text).join('\n\n')` reproduces the extraction's `text`
+ * exactly, and offsets into one are offsets into the other.
+ */
+export type DocxBlock = {
+  kind: 'heading' | 'paragraph' | 'list' | 'table' | 'footnotes';
+  /** 1-6, on headings only. */
+  level?: number;
+  text: string;
+};
+
 export type ExtractMeta =
   | { kind: 'pdf'; pageCount: number; pages: Array<{ index: number; text: string; error?: string }> }
-  | { kind: 'docx'; headings: Array<{ level: number; text: string }>; warnings: string[] }
+  | { kind: 'docx'; headings: Array<{ level: number; text: string }>; warnings: string[]; blocks?: DocxBlock[] }
   | { kind: 'pptx'; slideCount: number; slides: Array<{ index: number; text: string }> }
   | { kind: 'markdown'; headings: Array<{ level: number; text: string }> }
   | { kind: 'text'; encoding: 'utf-8' | 'latin-1' }
