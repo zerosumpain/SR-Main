@@ -12,6 +12,7 @@ import { readBuffer } from '$lib/jkai/media/storage';
 import type { JkaiAttachment } from '$lib/db/schema';
 import { whatsappBridgeUrl } from '$lib/config/whatsapp-bridge';
 import { ownsWhatsAppSession } from '../service-role';
+import { postToBridge } from './bridge-send';
 import type {
 	WhatsAppServiceStatus,
 	WhatsAppServiceState,
@@ -340,23 +341,9 @@ export class WhatsAppService {
 		const jid = to.includes('@') ? to : this.toJid(to);
 
 		if (this.delegated) {
-			try {
-				const res = await fetch(`${this.bridgeUrl}/send`, {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ chatId: jid, message: text }),
-					signal: AbortSignal.timeout(15_000),
-				});
-				if (!res.ok) {
-					const body = await res.text().catch(() => '');
-					return { sent: false, error: `WhatsApp bridge /send returned ${res.status}: ${body.slice(0, 200)}` };
-				}
-				const json = (await res.json().catch(() => ({}))) as { messageId?: string; id?: string };
-				return { sent: true, messageId: json.messageId ?? json.id };
-			} catch (err: unknown) {
-				const msg = err instanceof Error ? err.message : 'Unknown error';
-				return { sent: false, error: `WhatsApp bridge unreachable: ${msg}` };
-			}
+			// One definition of the bridge's wire format — `send.ts` posts the same
+			// thing, and two copies of it is how the two halves start disagreeing.
+			return postToBridge(this.bridgeUrl!, jid, text);
 		}
 
 		if (!this.sock || this.status !== 'connected') {
