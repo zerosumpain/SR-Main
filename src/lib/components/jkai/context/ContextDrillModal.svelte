@@ -16,7 +16,7 @@
    */
   import { onMount, untrack } from 'svelte';
   import { goto } from '$app/navigation';
-  import { dragPanel } from '$lib/actions/drag-panel';
+  import { dragPanel } from '$lib/utils/drag-panel';
   import { constrainPanel } from '$lib/components/intel/entity-hover.svelte';
   import EntityCard from '$lib/components/intel/EntityCard.svelte';
   import { commission } from '$lib/jkai/intel/entity-card-store';

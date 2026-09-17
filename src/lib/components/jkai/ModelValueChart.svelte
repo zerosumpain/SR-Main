@@ -15,7 +15,7 @@
   //
   // Bespoke SVG with the house chartkit helpers, same as the policy-engine
   // exhibits — no chart library anywhere in this codebase.
-  import { linScale, niceTicks } from '$lib/presentation/chartkit';
+  import { linScale, niceTicks } from '$lib/utils/chartkit';
 
   interface ChartRow {
     id: string;

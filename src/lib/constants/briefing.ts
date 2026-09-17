@@ -104,3 +104,20 @@ export function normaliseBriefingProfile(value: unknown): BriefingProfile {
     memoryLimit: boundedInt(raw.memoryLimit, DEFAULT_BRIEFING_PROFILE.memoryLimit, 1, 20),
   };
 }
+
+// ── Moved from `$lib/briefing/types` ─────────────────────────────────────────
+//
+// Two chat routes wanted exactly these — a datastore collection name and a date
+// formatter — and importing them from the briefing domain's type module put
+// that domain on chat's graph for a string and one `toLocaleDateString`. Same
+// shape as MONITORS_COLLECTION and the daily-alerts contract: a value that NAMES
+// something does not need the code that operates on it.
+
+/** The datastore collection briefings live in. */
+export const BRIEFINGS_COLLECTION = 'briefings';
+export const FEEDBACK_COLLECTION = 'briefing-feedback';
+
+/** "Mon 8 Sep" — the label a briefing is filed under. */
+export function briefingDateLabel(d: Date): string {
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+}

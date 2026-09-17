@@ -11,8 +11,8 @@ export {
   type BriefingMemoryRow,
 } from '$lib/constants/briefing';
 
-export const BRIEFINGS_COLLECTION = 'briefings';
-export const FEEDBACK_COLLECTION = 'briefing-feedback';
+// Re-exported so nothing that already imported them from here had to change.
+export { BRIEFINGS_COLLECTION, FEEDBACK_COLLECTION, briefingDateLabel } from '$lib/constants/briefing';
 
 export const CRON_EXPR = '30 6 * * *'; // 06:30 daily
 export const CRON_TZ = 'Europe/London';
@@ -114,6 +114,3 @@ export function asData<T>(value: T): Record<string, unknown> {
 }
 
 /** e.g. "Fri 19 Jul" for a briefing title. */
-export function briefingDateLabel(d: Date): string {
-  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-}

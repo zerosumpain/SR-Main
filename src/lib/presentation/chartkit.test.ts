@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { donutSegments, sankeyDepths, sankeyLayout } from './chartkit';
+import { donutSegments, sankeyDepths, sankeyLayout } from '$lib/utils/chartkit';
 
 describe('sankeyDepths', () => {
   it('layers an acyclic flow left to right, sinks pushed last', () => {

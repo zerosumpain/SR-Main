@@ -9,7 +9,7 @@
   import EntityCard from './EntityCard.svelte';
   import RelationshipModal from './RelationshipModal.svelte';
   import { portal } from '$lib/canvas/portal';
-  import { dragPanel } from '$lib/actions/drag-panel';
+  import { dragPanel } from '$lib/utils/drag-panel';
   import { entityHover, computeHoverLayout, constrainPanel, CARD_W, type HoverAnchor } from './entity-hover.svelte';
   import { commission } from '$lib/jkai/intel/entity-card-store';
   import { goto } from '$app/navigation';

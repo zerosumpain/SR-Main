@@ -26,7 +26,7 @@
   // feeds it, petrol is what takes work out of it. Position carries it too —
   // added above the baseline, settled below — so identity never rests on
   // colour alone.
-  import { niceTicks } from '$lib/presentation/chartkit';
+  import { niceTicks } from '$lib/utils/chartkit';
   import { BURNDOWN_RANGES, type BurndownView } from '$lib/selfimprove/board';
 
   interface Props {

@@ -5,7 +5,7 @@
 // validation all agree on.
 
 import { z } from 'zod';
-import { sankeyDepths } from './chartkit';
+import { sankeyDepths } from '$lib/utils/chartkit';
 import { EFFECTS } from './effects';
 import { EMBEDS } from './embeds';
 import { PROSE_STYLES, PROSE_STYLE_IDS, QUOTE_STYLES, QUOTE_STYLE_IDS, styleDocsForLLM } from './styles';

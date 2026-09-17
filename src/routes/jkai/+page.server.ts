@@ -6,7 +6,8 @@ import type { PageServerLoad } from './$types';
 import { getConversationList } from '$lib/jkai/queries';
 import { resolveDefaultModel, resolveChatAltOpenRouterModel, getApprovalUiSettings } from '$lib/server/models/settings';
 import { getCollectionBySlug, queryRecords } from '$lib/datastore';
-import { BRIEFINGS_COLLECTION, type BriefingData } from '$lib/briefing/types';
+import { BRIEFINGS_COLLECTION } from '$lib/constants/briefing';
+import type { BriefingData } from '$lib/briefing/types';
 
 /** How long a briefing counts as "today's" and is worth surfacing on the chat page. */
 const BRIEFING_FRESH_MS = 20 * 60 * 60 * 1000;
