@@ -7,7 +7,7 @@
 // failure is a STATE, never a thrown page load.
 import { HOST_TILES, hostState, vitalsConcerns, type HostCard, type HostVitals } from './hosts';
 import { ENDPOINTS } from './endpoints';
-import type { HealthStatus } from '$lib/architecture/topology';
+import type { HealthStatus } from './model/project';
 
 // Shorter than the estate probe's 2500ms. This runs on the admin landing page,
 // and the agents are two hops away on a LAN — if one has not answered in a

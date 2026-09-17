@@ -216,7 +216,7 @@ const SURFACES: Surface[] = [
   // ---- the machine room ----------------------------------------------------
   { id: 'admin', path: '/admin', settleMs: 1400 },
   { id: 'improvement', path: '/admin/ai/improvement', settleMs: 2000 },
-  { id: 'architecture', path: '/admin/ops/architecture', settleMs: 2200 },
+  { id: 'architecture', path: '/admin/estate', settleMs: 2600 },
   { id: 'health', path: '/admin/connections/health', settleMs: 1800 },
   { id: 'costs', path: '/admin/ops/costs', settleMs: 2000 },
   { id: 'models', path: '/admin/ai/model-routing', settleMs: 1600 },

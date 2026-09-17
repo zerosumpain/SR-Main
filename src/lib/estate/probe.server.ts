@@ -18,7 +18,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { isAzureStorageEnabled, azExists } from '$lib/storage/azure-blob';
 import { TAILNET } from './endpoints';
-import type { HealthStatus } from '$lib/architecture/topology';
+import type { HealthStatus } from './model/project';
 
 const TIMEOUT = 2500;
 

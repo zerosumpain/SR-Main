@@ -3,6 +3,7 @@
   import { onMount } from 'svelte';
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
+  import ArchitectureMap from '$lib/components/admin/ArchitectureMap.svelte';
   import type { PageData } from './$types';
   import type { EstateEndpoint, EstateHost } from '$lib/estate/endpoints';
   import type { GateClass, RouteEntry } from '$lib/estate/api-surface.server';
@@ -238,6 +239,28 @@
   </div>
 
   {#if tab === 'model'}
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">The map</span>
+        <span class="nm-pill">{data.map.nodes.length} nodes</span>
+      </div>
+      <!--
+        ArchitectureMap survived the retirement of topology.ts: it is a pure
+        function of (groups, nodes, edges, health) that knows nothing about what
+        a node means, so only its data changed. The projection aggregates to the
+        APPLICATION rather than the container — 30 container nodes is spaghetti,
+        and an unreadable map still looks authoritative — and orders them by
+        cloudflared's first-match routeOrder, so the picture reads in the order a
+        request is actually matched, with Main last as the fallback.
+      -->
+      <ArchitectureMap
+        groups={data.map.groups}
+        nodes={data.map.nodes}
+        edges={data.map.edges}
+        health={data.map.health}
+      />
+    </section>
+
     <!--
       The model tab. Everything here is assembled from a feed that regenerates
       itself; the ledger below says which, and what it could not read. The two

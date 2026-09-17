@@ -86,12 +86,18 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       { label: 'Costs', href: '/admin/ops/costs' },
       { label: 'Tool usage', href: '/admin/ops/tool-usage' },
       { label: 'Live', href: '/admin/ops/live' },
-      { label: 'Architecture', href: '/admin/ops/architecture' },
     ],
   },
   {
     id: 'estate',
-    label: 'Estate',
+    // Renamed from "Estate" when /admin/ops/architecture folded in (2026-09-17).
+    // The URL does NOT move: both of the repo's completed folds went INTO the
+    // address that already had the history and the inbound links (/admin/files →
+    // /drive, /admin/ops/releases → /releases), HostStatusStrip already points
+    // here, and estate.test.ts asserts this path appears in its own inventory.
+    // Minting /admin/architecture instead would have cost a second redirect and
+    // left every in-repo link resolving through a 308.
+    label: 'Architecture',
     href: '/admin/estate',
     match: (p) => p.startsWith('/admin/estate'),
     items: [],
@@ -180,6 +186,11 @@ export const ADMIN_ROUTE_REDIRECTS: Record<string, string> = {
   // still POST to /api/claude-changelog/ingest, which now also stores the PR
   // numbers the parser extracts.
   '/admin/ops/claude-changelog': '/releases',
+  // The architecture map folded into /admin/estate, which is now labelled
+  // Architecture. topology.ts — 107 hand-written lines describing 16 nodes, none
+  // of them an extracted app, against a VPS running 30 containers — is gone; the
+  // map draws the generated model instead.
+  '/admin/ops/architecture': '/admin/estate',
   '/admin/deepdive': '/admin/ai/keys',
   '/admin/login': '/login?callbackUrl=/admin',
 };

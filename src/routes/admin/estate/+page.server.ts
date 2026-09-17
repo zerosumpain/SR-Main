@@ -3,6 +3,7 @@ import { ENDPOINTS, byHost, publicUnauthenticated, unmonitored, HOST_LABELS } fr
 import { probeEstate } from '$lib/estate/probe.server';
 import { readApiSurface } from '$lib/estate/api-surface.server';
 import { assembleEstateModel } from '$lib/estate/model/assemble.server';
+import { projectMap } from '$lib/estate/model/project';
 
 export const load: PageServerLoad = async () => {
   // The probe reaches across the tailnet, so it is the slow half. The surface
@@ -21,6 +22,7 @@ export const load: PageServerLoad = async () => {
     health,
     surface,
     model,
+    map: projectMap(model),
     findings: {
       publicUnauthenticated: publicUnauthenticated().map((e) => e.id),
       unmonitored: unmonitored().map((e) => e.id),

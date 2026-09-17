@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { ArchGroup, ArchNode, ArchEdge, HealthStatus } from '$lib/architecture/topology';
+  import type { ArchGroup, ArchNode, ArchEdge, HealthStatus } from '$lib/estate/model/project';
 
   let {
     groups,
