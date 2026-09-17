@@ -68,6 +68,20 @@ export interface RunLog {
   hasMore: boolean;
 }
 
+/**
+ * `db.execute()` returns the driver's QueryResult — `{ rows, rowCount, … }` —
+ * NOT an array of rows. Casting it straight to a row array type compiles
+ * perfectly and then throws `rows.map is not a function` at runtime, which is
+ * how /releases went 500 for the owner on 2026-09-17.
+ *
+ * So the unwrap lives in one place and every reader goes through it. The house
+ * pattern is `result.rows` (see $lib/jkai/grounding/quality.server.ts).
+ */
+function rowsOf(result: unknown): Record<string, unknown>[] {
+  const rows = (result as { rows?: unknown })?.rows;
+  return Array.isArray(rows) ? (rows as Record<string, unknown>[]) : [];
+}
+
 const PAGE = 40;
 const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 
@@ -104,7 +118,7 @@ export async function getRunLog(page = 0): Promise<RunLog> {
     limit ${PAGE + 1} offset ${offset}
   `);
 
-  const rows = runRows as unknown as Record<string, unknown>[];
+  const rows = rowsOf(runRows);
   const hasMore = rows.length > PAGE;
   const runs: RunRow[] = rows.slice(0, PAGE).map((r) => {
     const kind = String(r.kind) as RunKind;
@@ -134,7 +148,7 @@ export async function getRunLog(page = 0): Promise<RunLog> {
 
   // Everything with no run to hang on, rolled up by where it came from. The
   // point is that this is a SHORT list — five sources — rather than 24,000 rows.
-  const unRows = (await db.execute(sql`
+  const unRows = rowsOf(await db.execute(sql`
     select
       coalesce(a.input->>'source', 'untagged')                      as source,
       coalesce(a.input->>'activity', a.input->>'origin')            as attribution,
@@ -145,7 +159,7 @@ export async function getRunLog(page = 0): Promise<RunLog> {
     group by 1, 2
     order by 4 desc, 3 desc
     limit 40
-  `)) as unknown as Record<string, unknown>[];
+  `));
 
   const unattached: UnattachedRow[] = unRows.map((r) => ({
     source: String(r.source),
@@ -154,7 +168,7 @@ export async function getRunLog(page = 0): Promise<RunLog> {
     costUsd: num(r.cost_usd),
   }));
 
-  const [t] = (await db.execute(sql`
+  const [t] = rowsOf(await db.execute(sql`
     select
       count(*)::int                                                          as calls,
       coalesce(sum(cost_usd), 0)                                             as cost_usd,
@@ -168,7 +182,7 @@ export async function getRunLog(page = 0): Promise<RunLog> {
           and not jsonb_exists(input, 'origin')), 0)                                  as anonymous_cost
     from agent_actions
     where action_type = 'llm_call'
-  `)) as unknown as Record<string, unknown>[];
+  `));
 
   return {
     runs,
