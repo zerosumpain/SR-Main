@@ -7,7 +7,7 @@
   // what did not report; and the message itself, verbatim, so the summary and
   // its evidence can be read against each other.
   import type { PageData } from './$types';
-  import ChatMarkdown from '$lib/components/markdown/ChatMarkdown.svelte';
+  import ChatMarkdown from '$lib/markdown/ChatMarkdown.svelte';
   import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
   import RollupGrid from '$lib/components/jkai/daydream/hub/RollupGrid.svelte';
   import FactList from '$lib/components/jkai/daydream/hub/FactList.svelte';

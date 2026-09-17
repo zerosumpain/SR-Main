@@ -3,7 +3,7 @@
   import type { DailyAlertsSummary as DailyAlertsData } from '$lib/jkai/intel/daily-alerts';
   import ChatMessage from '$lib/components/jkai/ChatMessage.svelte';
   import HeartbeatMarker, { type HeartbeatEntry } from '$lib/components/jkai/HeartbeatMarker.svelte';
-  import { renderMarkdown } from '$lib/components/markdown/ChatMarkdown.svelte';
+  import { renderMarkdown } from '$lib/markdown/ChatMarkdown.svelte';
   import Artifact from '$lib/components/jkai/artifacts/Artifact.svelte';
   import type { Artifact as ArtifactT } from '$lib/workflows/site-tools/artifact-types';
   import { isArtifact } from '$lib/workflows/site-tools/artifact-types';

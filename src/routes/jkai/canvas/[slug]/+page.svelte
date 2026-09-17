@@ -3,7 +3,7 @@
   import { invalidateAll, goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { env as publicEnv } from '$env/dynamic/public';
-  import ChatMarkdown from '$lib/components/markdown/ChatMarkdown.svelte';
+  import ChatMarkdown from '$lib/markdown/ChatMarkdown.svelte';
   import ScheduleBuilder from '$lib/canvas/trigger/ScheduleBuilder.svelte';
   import InspectorBody from '$lib/canvas/InspectorBody.svelte';
   import { useIsMobile } from '$lib/canvas/use-mobile.svelte';

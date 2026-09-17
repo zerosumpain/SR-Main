@@ -104,6 +104,13 @@ const MODULE_LAYER = {
   datastore: 'platform',
   llm: 'platform',
   routing: 'platform',
+  // A markdown renderer with no domain knowledge — it imports `marked` and the
+  // chat sanitiser and nothing else. It is a `.svelte` file, which usually means
+  // `ui`, but the layer is about what a module KNOWS, not what it renders: five
+  // domains render with this one (chat, canvas, builds, intel dossiers, the
+  // daydream briefing), and while it lived inside one of them the other four
+  // were importing that domain to get at it.
+  markdown: 'platform',
   // The ambient AsyncLocalStorage stores — which workflow run, chat round,
   // activity or research session this code is executing inside. Platform, not
   // domain, precisely so the LLM gateway can read them without importing the

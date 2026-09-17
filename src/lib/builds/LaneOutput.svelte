@@ -1,5 +1,5 @@
 <script lang="ts">
-  import ChatMarkdown from '$lib/components/markdown/ChatMarkdown.svelte';
+  import ChatMarkdown from '$lib/markdown/ChatMarkdown.svelte';
 
   let { content }: { content: string } = $props();
 </script>
