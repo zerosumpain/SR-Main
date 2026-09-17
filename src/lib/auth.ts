@@ -12,7 +12,6 @@ const PUBLIC_PATHS = [
   '/auth',
   '/api/vitals/state',
   '/api/health/apple',
-  '/api/agent',
   '/api/jkai/proxy',
   '/api/jkai/cors',
   // The daydream trail's push ingest — a Home Assistant automation posts GPS

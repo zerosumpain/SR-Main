@@ -91,7 +91,13 @@ export class WhatsAppService {
 		if (this.delegated) {
 			try {
 				const res = await fetch(`${this.bridgeUrl}/health`, { signal: AbortSignal.timeout(3000) });
-				this.status = res.ok ? 'connected' : 'disconnected';
+				// The worker answers 200 while LOGGED OUT, so res.ok alone reported a
+				// dead session as connected and the send path believed it could send
+				// while /admin/connections correctly said "scan a QR". The session
+				// state is in the body, not the status line — same read as
+				// $lib/connectors/probes.ts, which found this first.
+				const health = (await res.json().catch(() => null)) as { status?: string } | null;
+				this.status = res.ok && health?.status === 'connected' ? 'connected' : 'disconnected';
 			} catch {
 				// Bridge unreachable at boot is fine — it may still be coming up.
 				// Sends will fail per-call with a clear error until it is live.

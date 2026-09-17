@@ -28,7 +28,7 @@ const SNAPSHOT = join(REPO, '.github', 'public-routes.txt');
 // Prefixes we must always find. If the extraction below silently stops working
 // (a refactor, a reformat), the inventory would shrink and the diff would go
 // green for the wrong reason. Failing loudly here is the point.
-const CANARIES = ['/api/agent', '/projects', '/api/scraper/run', '/decks'];
+const CANARIES = ['/projects', '/api/scraper/run', '/decks'];
 
 function read(p) {
   return existsSync(p) ? readFileSync(p, 'utf8') : '';

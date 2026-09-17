@@ -40,7 +40,7 @@ src/lib/jkai/development-release.server.ts
 src/lib/jkai/development-autopilot.server.ts
 src/lib/jkai/development-review.server.ts
 
-# PUBLIC_PATHS is PREFIX-matched, so whole trees (/api/agent, /api/scraper,
+# PUBLIC_PATHS is PREFIX-matched, so whole trees (/api/scraper,
 # /projects, /decks, /jkai/shared, /dav) are ALREADY past the Auth.js gate. For
 # those the only thing between an anonymous request and the data is a small
 # self-gating helper — and hooks.server.ts DELEGATES to these, so protecting the

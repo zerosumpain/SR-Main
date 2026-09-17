@@ -42,11 +42,6 @@
   <!-- Top stat strip -->
   <div class="stat-grid">
     <div class="stat-card">
-      <div class="stat-card-label">Active Agent Tasks</div>
-      <div class="stat-card-value">{data.agent.active}</div>
-      <div class="stat-card-meta">{data.agent.todayActions} actions today</div>
-    </div>
-    <div class="stat-card">
       <div class="stat-card-label">Today's Spend</div>
       <div class="stat-card-value">${data.agent.todayCost.toFixed(4)}</div>
       <div class="stat-card-meta">across {data.agent.todayActions} calls</div>
@@ -186,21 +181,6 @@
     <div class="tile-group">
       <div class="tile-group-label">Ops</div>
       <div class="tile-row">
-        <a class="nm-tile" href={`/admin/ops/agent${t}`}>
-          <div class="nm-tile-eyebrow">Agent</div>
-          <div class="nm-tile-title">JKAI Activity</div>
-          <div class="nm-tile-sub">Live event feed, active tasks, daily cost.</div>
-          <div class="nm-tile-foot">
-            <span>{data.agent.active} active · ${data.agent.todayCost.toFixed(2)} today</span>
-            <span>→</span>
-          </div>
-        </a>
-        <a class="nm-tile" href={`/admin/ops/tasks${t}`}>
-          <div class="nm-tile-eyebrow">Tasks</div>
-          <div class="nm-tile-title">Queue</div>
-          <div class="nm-tile-sub">Pending, planning, active, completed.</div>
-          <div class="nm-tile-foot"><span>open</span><span>→</span></div>
-        </a>
         <a class="nm-tile" href={`/admin/ops/costs${t}`}>
           <div class="nm-tile-eyebrow">Costs</div>
           <div class="nm-tile-title">Spend</div>

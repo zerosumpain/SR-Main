@@ -32,13 +32,28 @@ const args = process.argv.slice(2);
 const DRY = args.includes('--dry');
 const ALL = args.includes('--all');
 const explicitFile = args.find((a) => a.endsWith('.jsonl'));
+// Cap the POSTs one invocation makes. Bumping SCHEMA_VERSION invalidates EVERY
+// transcript at once — 180 files and ~1 GB of JSONL as of 2026-09 — and this
+// runs on a 15-minute cron on a box with an OOM history. --limit lets a version
+// bump drain over hours instead of in one tick that outlives its own schedule.
+const LIMIT = (() => {
+  const i = args.indexOf('--limit');
+  const n = i >= 0 ? Number(args[i + 1]) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : Infinity;
+})();
 
 function loadState() {
   try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch { return {}; }
 }
+// Atomic: a kill mid-write used to be able to leave a truncated JSON file, which
+// loadState() then swallowed as {} — silently restarting the whole backfill.
 function saveState(s) {
-  try { fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true }); fs.writeFileSync(STATE_FILE, JSON.stringify(s)); }
-  catch (e) { console.error('warn: could not write state:', e.message); }
+  try {
+    fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true });
+    const tmp = `${STATE_FILE}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(s));
+    fs.renameSync(tmp, STATE_FILE);
+  } catch (e) { console.error('warn: could not write state:', e.message); }
 }
 
 // Top-level session transcripts only (exclude subagent/*.jsonl and workflow dirs).
@@ -100,8 +115,14 @@ async function main() {
       await postPayload(payload);
       state[id] = { size: stat.size, mtime: stat.mtimeMs, schemaVersion: SCHEMA_VERSION, hash: payload.session.contentHash };
       ingested++;
+      // Persist after EVERY success, not once at the end. The old placement meant
+      // a run killed part-way through (OOM, the next cron tick, a reboot) wrote
+      // nothing at all, so the following run re-POSTed every file it had already
+      // done — the whole 1 GB, forever, if the run never fit in its window.
+      if (!DRY && !explicitFile) saveState(state);
       console.log(`ok ${id} (${payload.session.project}, ${payload.stages.length} stages)`);
     } catch (e) { console.error(`post ${id}: ${e.message}`); failed++; }
+    if (ingested >= LIMIT) { console.log(`limit ${LIMIT} reached — stopping`); break; }
   }
   if (!DRY && !explicitFile) saveState(state);
   else if (!DRY && explicitFile) { // merge single-file state
