@@ -1,6 +1,6 @@
 <script lang="ts">
   import { formatDurationMs, formatRelative } from './format';
-  import { formatGbp } from './costFormat';
+  import { formatGbp } from '$lib/utils/cost-format';
 
   interface RecentRun {
     id: string;

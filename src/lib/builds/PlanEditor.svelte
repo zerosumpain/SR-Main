@@ -1,5 +1,5 @@
 <script lang="ts">
-  import ChatMarkdown from '$lib/canvas/ChatMarkdown.svelte';
+  import ChatMarkdown from '$lib/components/markdown/ChatMarkdown.svelte';
 
   let {
     plan,

@@ -14,7 +14,7 @@
 -->
 <script lang="ts">
   import { onDestroy } from 'svelte';
-  import ChatMarkdown from '$lib/canvas/ChatMarkdown.svelte';
+  import ChatMarkdown from '$lib/components/markdown/ChatMarkdown.svelte';
   import { parseSseFrames, applyFrame, type ChatMessage, type ChatSource } from './chatStream';
 
   let {

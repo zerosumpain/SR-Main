@@ -2,7 +2,7 @@
   import { untrack } from 'svelte';
   import { Chart, Svg, Spline, Area, Highlight, Axis, Grid, Points } from 'layerchart';
   import { scaleTime, scaleLinear } from 'd3-scale';
-  import { formatGbp, formatTokens } from './costFormat';
+  import { formatGbp, formatTokens } from '$lib/utils/cost-format';
   import { formatDurationMs, formatPercent } from './format';
 
   const fmtTime = (d: unknown) => {

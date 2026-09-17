@@ -38,7 +38,7 @@
   import { untrack } from 'svelte';
   import { contextPanelSchema, type ContextLens, type ContextPanel } from '$lib/jkai/context-panel/types';
   import { hub } from '$lib/jkai/hub-bus.svelte';
-  import { formatGbp } from '$lib/canvas/stats/costFormat';
+  import { formatGbp } from '$lib/utils/cost-format';
   import { shortModelLabel } from '$lib/jkai/model-label';
   import type { TraceStep } from '$lib/jkai/tool-trace';
   import ContextCard from './context/ContextCard.svelte';

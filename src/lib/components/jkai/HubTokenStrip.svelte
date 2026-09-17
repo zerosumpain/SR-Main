@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatGbp } from '$lib/canvas/stats/costFormat';
+  import { formatGbp } from '$lib/utils/cost-format';
   import type { CodexMeter } from '$lib/llm/usage-meter';
   import { usageWindows, ensureUsageWindows } from '$lib/jkai/usage-windows.svelte';
 
@@ -38,7 +38,7 @@
   } = $props();
 
   /** Header-local token formatter: `128.4K`, `34.2K`, `1.2M`. Deliberately not
-   *  $lib/canvas/stats/costFormat's formatTokens — that renders a lowercase
+   *  $lib/utils/cost-format's formatTokens — that renders a lowercase
    *  `128k` for the stats tables, and this strip is set in uppercase mono where
    *  the tenth matters (it is the number that moves during a turn). */
   function compactTokens(v: number): string {

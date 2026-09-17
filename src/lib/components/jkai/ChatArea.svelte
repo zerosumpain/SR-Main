@@ -3,7 +3,7 @@
   import type { DailyAlertsSummary as DailyAlertsData } from '$lib/jkai/intel/daily-alerts';
   import ChatMessage from '$lib/components/jkai/ChatMessage.svelte';
   import HeartbeatMarker, { type HeartbeatEntry } from '$lib/components/jkai/HeartbeatMarker.svelte';
-  import { renderMarkdown } from '$lib/canvas/ChatMarkdown.svelte';
+  import { renderMarkdown } from '$lib/components/markdown/ChatMarkdown.svelte';
   import Artifact from '$lib/components/jkai/artifacts/Artifact.svelte';
   import type { Artifact as ArtifactT } from '$lib/workflows/site-tools/artifact-types';
   import { isArtifact } from '$lib/workflows/site-tools/artifact-types';
@@ -46,7 +46,7 @@
   import { shortModelLabel } from '$lib/jkai/model-label';
   import { setThreadLedger, clearThreadLedger, setThreadActivity, setLiveRuns, bumpGraphRevision } from '$lib/jkai/hub-bus.svelte';
   import type { ThreadActivity } from '$lib/jkai/hub-bus.svelte';
-  import { formatGbp } from '$lib/canvas/stats/costFormat';
+  import { formatGbp } from '$lib/utils/cost-format';
   import { startTtftMark } from '$lib/jkai/ttft-metrics';
   import { beginTurn, noteOutput, noteToolStart, noteToolEnd, settleTurn } from '$lib/jkai/throughput-bus.svelte';
   import {

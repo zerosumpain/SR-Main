@@ -4,7 +4,7 @@
   import { curveMonotoneX } from 'd3-shape';
   import { useStats } from './useStats.svelte';
   import { formatDurationMs, formatPercent, formatRelative } from './format';
-  import { formatGbp } from './costFormat';
+  import { formatGbp } from '$lib/utils/cost-format';
 
   interface RecentRun {
     id: string;

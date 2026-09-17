@@ -14,7 +14,7 @@
 </script>
 
 <script lang="ts">
-  import { formatGbp } from './stats/costFormat';
+  import { formatGbp } from '$lib/utils/cost-format';
 
   interface Props {
     executions: Execution[];

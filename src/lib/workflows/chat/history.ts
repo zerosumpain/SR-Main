@@ -1,7 +1,12 @@
 import { db } from '$lib/db';
 import { orchestratorChats } from '$lib/db/schema';
 import { asc, eq } from 'drizzle-orm';
-import type { ChatMessage } from './types';
+// Explicitly the orchestrator's, not a local `./types`. This file moved here
+// because both its importers are chat's, but the ROW it reads is
+// `orchestratorChats` and `ChatMessage` is that row's shape — owned by the
+// generator's data model, used by chat. Ambiguous enough not to re-home on a
+// hunch; it stays one of the edges the surface report counts.
+import type { ChatMessage } from '$lib/workflows/orchestrator/types';
 
 /**
  * Read a canvas workflow's chat history.

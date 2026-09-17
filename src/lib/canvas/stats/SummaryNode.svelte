@@ -3,7 +3,7 @@
   import { scaleTime, scaleLinear } from 'd3-scale';
   import { useStats } from './useStats.svelte';
   import { formatDurationMs, formatPercent, formatRelative } from './format';
-  import { formatGbp, formatTokens } from './costFormat';
+  import { formatGbp, formatTokens } from '$lib/utils/cost-format';
 
   const fmtTime = (d: unknown) => {
     const dt = d instanceof Date ? d : new Date(d as string);

@@ -18,8 +18,8 @@ import { registry, engine } from '../index';
 // so anything importing `getChatHistory` from here paid 449 files for a SELECT.
 // Re-exported so existing callers are unaffected — but new ones should take it
 // from ./chat-history directly.
-import { getChatHistory } from './chat-history';
-export { getChatHistory } from './chat-history';
+import { getChatHistory } from '$lib/workflows/chat/history';
+export { getChatHistory } from '$lib/workflows/chat/history';
 import { randomUUID } from 'crypto';
 import type { GeneratedWorkflow, ChatMessage, WorkflowDraft, OrchestratorThinking, CritiqueIssue, RevisionDelta } from './types';
 import { serializeDraft, deserializeDraft } from './draft-serde';

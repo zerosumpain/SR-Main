@@ -1,5 +1,5 @@
 <script lang="ts">
-  import ChatMarkdown from '$lib/canvas/ChatMarkdown.svelte';
+  import ChatMarkdown from '$lib/components/markdown/ChatMarkdown.svelte';
   import { onMount } from 'svelte';
 
   // Today's digest, surfaced where the day starts. The briefing engine has run

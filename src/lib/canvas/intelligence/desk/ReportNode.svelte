@@ -5,7 +5,7 @@
   import { type DeskStatus } from './deskControls';
   import type { ResearchReport } from '$lib/deepdive/types';
   import { parseSseFrames, applyFrame, type ChatMessage, type ChatSource } from './chatStream';
-  import ChatMarkdown from '$lib/canvas/ChatMarkdown.svelte';
+  import ChatMarkdown from '$lib/components/markdown/ChatMarkdown.svelte';
 
   let {
     sessionId,
