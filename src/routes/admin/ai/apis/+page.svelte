@@ -1,6 +1,6 @@
 <svelte:head><title>API Registry — Admin</title></svelte:head>
 <script lang="ts">
-  import { getContext } from 'svelte';
+
   import { page } from '$app/state';
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
@@ -64,7 +64,6 @@
   };
 
   let { data } = $props();
-  const adminToken = getContext<string>('adminToken');
 
   let integrations = $state<Integration[]>(data.integrations as Integration[]);
   let apis = $state<ApiRow[]>(data.apis as ApiRow[]);
@@ -79,9 +78,7 @@
   let testResult = $state<Record<string, string>>({});
 
   function qs(path: string, extra = ''): string {
-    const t = adminToken ? `token=${adminToken}` : '';
-    const parts = [t, extra].filter(Boolean).join('&');
-    return parts ? `${path}?${parts}` : path;
+    return extra ? `${path}?${extra}` : path;
   }
 
   function say(text: string, bad = false) {

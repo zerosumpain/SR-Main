@@ -1,11 +1,10 @@
 <script lang="ts">
-  import { getContext, untrack } from 'svelte';
+  import { untrack } from 'svelte';
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
-  const adminToken = getContext<string>('adminToken');
 
   type Row = PageData['comments'][number];
   type Status = Row['status'];
@@ -68,7 +67,7 @@
     error = null;
     try {
       const res = await fetch(
-        `/api/admin/blog/comments?status=${status}&token=${adminToken}`,
+        `/api/admin/blog/comments?status=${status}`,
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const payload = await res.json();
@@ -114,7 +113,7 @@
     };
 
     try {
-      const res = await fetch(`/api/admin/blog/comments?token=${adminToken}`, {
+      const res = await fetch(`/api/admin/blog/comments`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: row.id, status: next }),

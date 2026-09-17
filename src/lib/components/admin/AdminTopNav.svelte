@@ -1,15 +1,7 @@
 <script lang="ts">
   import { page } from '$app/state';
-  import { getContext } from 'svelte';
+
   import { ADMIN_SECTIONS, activeSection, isSectionActive } from './admin-nav';
-
-  const adminToken = getContext<string>('adminToken');
-
-  function tokenHref(href: string): string {
-    if (!adminToken) return href;
-    const sep = href.includes('?') ? '&' : '?';
-    return `${href}${sep}token=${adminToken}`;
-  }
 
   const path = $derived(page.url.pathname);
 
@@ -77,14 +69,14 @@
   </a>
 
   {#if back}
-    <a class="admin-back" href={tokenHref(back.href)} title="Back to {back.label}">
+    <a class="admin-back" href={back.href} title="Back to {back.label}">
       <span class="back-arrow" aria-hidden="true">←</span>
       <span class="back-word">{back.label}</span>
     </a>
   {/if}
 
   <a
-    href={tokenHref('/admin')}
+    href={'/admin'}
     class="brand admin-wordmark"
     aria-label="Strange Ramblings admin — dashboard"
   >
@@ -94,7 +86,7 @@
   <nav class="admin-sections" aria-label="Admin sections">
     {#each ADMIN_SECTIONS as s, i (s.id)}
       <a
-        href={tokenHref(s.href)}
+        href={s.href}
         class="nav-link"
         data-index={String(i + 1).padStart(2, '0')}
         aria-current={isSectionActive(s, page.url.pathname) ? 'page' : undefined}

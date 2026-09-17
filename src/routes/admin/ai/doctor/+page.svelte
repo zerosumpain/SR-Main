@@ -1,6 +1,6 @@
 <svelte:head><title>Workflow Doctor — Admin</title></svelte:head>
 <script lang="ts">
-  import { getContext } from 'svelte';
+
   import { invalidateAll } from '$app/navigation';
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
@@ -34,8 +34,6 @@
   type Switch = 'enabled' | 'autoApply' | 'breaker';
 
   let { data }: { data: PageData } = $props();
-  const adminToken = getContext<string>('adminToken');
-  const tokenQs = adminToken ? `?token=${adminToken}` : '';
 
   const schedule = $derived(data.schedule);
   const caps = $derived(data.caps);
@@ -107,7 +105,7 @@
     toggling = field;
     toggleError = '';
     try {
-      const res = await fetch(`/api/admin/doctor/toggle${tokenQs}`, {
+      const res = await fetch(`/api/admin/doctor/toggle`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [field]: next }),
@@ -126,7 +124,7 @@
     starting = true;
     runError = '';
     try {
-      const res = await fetch(`/api/admin/doctor/run${tokenQs}`, { method: 'POST' });
+      const res = await fetch(`/api/admin/doctor/run`, { method: 'POST' });
       const body = await res.json().catch(() => ({}));
       if (res.ok) {
         startedHere = true; // starts the poll effect
@@ -154,7 +152,7 @@
     findingNote = '';
     noteScope = action === 'revert' ? 'applied' : 'open';
     try {
-      const res = await fetch(`/api/admin/doctor/finding${tokenQs}`, {
+      const res = await fetch(`/api/admin/doctor/finding`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: f.key, action }),

@@ -1,12 +1,11 @@
 <svelte:head><title>API Keys — Admin</title></svelte:head>
 <script lang="ts">
-  import { getContext } from 'svelte';
+
   import type { PageData } from './$types';
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
 
   let { data }: { data: PageData } = $props();
-  const adminToken = getContext<string>('adminToken');
 
   let tavilyApiKey = $state('');
   let openrouterApiKey = $state('');
@@ -28,14 +27,14 @@
       const fileBody: Record<string, string> = { embeddingModel };
       if (tavilyApiKey) fileBody.tavilyApiKey = tavilyApiKey;
       if (elevenlabsApiKey) fileBody.elevenlabsApiKey = elevenlabsApiKey;
-      pending.push(fetch(`/api/admin/deepdive/keys?token=${adminToken}`, {
+      pending.push(fetch(`/api/admin/deepdive/keys`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(fileBody),
       }));
 
       if (openrouterApiKey) {
-        pending.push(fetch(`/api/admin/models/settings?token=${adminToken}`, {
+        pending.push(fetch(`/api/admin/models/settings`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ openrouterApiKey }),
@@ -63,7 +62,7 @@
     tavilyTest = 'testing';
     tavilyTestError = '';
     try {
-      const res = await fetch(`/api/admin/deepdive/test-tavily?token=${adminToken}`, { method: 'POST' });
+      const res = await fetch(`/api/admin/deepdive/test-tavily`, { method: 'POST' });
       const result = await res.json();
       if (result.success) tavilyTest = 'pass';
       else { tavilyTest = 'fail'; tavilyTestError = result.error ?? 'Unknown error'; }
@@ -94,7 +93,7 @@
         {data.keys.openrouterConfigured ? `Configured · ${(data.keys as any).openrouterSource}` : 'Not set'}
       </span>
     </div>
-    <p class="muted">Primary LLM provider — powers the /jkai orchestrator, deep-dive research, and all chat models (GLM via <code>z-ai/*</code> slugs). Also embeddings (pgvector fact dedup) and image generation (FLUX). Pick models + browse catalogue at <a class="link" href={`/admin/ai/models?token=${adminToken}`}>/admin/ai/models</a>.</p>
+    <p class="muted">Primary LLM provider — powers the /jkai orchestrator, deep-dive research, and all chat models (GLM via <code>z-ai/*</code> slugs). Also embeddings (pgvector fact dedup) and image generation (FLUX). Pick models + browse catalogue at <a class="link" href={`/admin/ai/models`}>/admin/ai/models</a>.</p>
 
     <div class="nm-form-row">
       <label class="nm-field">

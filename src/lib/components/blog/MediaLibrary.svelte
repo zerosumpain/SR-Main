@@ -16,7 +16,7 @@
    * the cheapest way to raise a number is to put it in front of the person who
    * can move it, next to the field that moves it.
    */
-  import { getContext } from 'svelte';
+
   import type { MediaItem } from '$lib/blog/media';
 
   let {
@@ -40,9 +40,7 @@
    * visit with no token in the URL) it is simply omitted and the session
    * carries the request.
    */
-  const adminToken = getContext<string>('adminToken') ?? '';
-  const tokenParam = adminToken ? `token=${encodeURIComponent(adminToken)}` : '';
-  const writeUrl = tokenParam ? `${ENDPOINT}?${tokenParam}` : ENDPOINT;
+  const writeUrl = ENDPOINT;
 
   let items = $state<MediaItem[]>([]);
   let loading = $state(false);
@@ -79,7 +77,7 @@
     loading = true;
     error = null;
     try {
-      const res = await fetch(`${ENDPOINT}?postId=${postId}${tokenParam ? `&${tokenParam}` : ''}`);
+      const res = await fetch(`${ENDPOINT}?postId=${postId}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       items = Array.isArray(data?.media) ? (data.media as MediaItem[]) : [];

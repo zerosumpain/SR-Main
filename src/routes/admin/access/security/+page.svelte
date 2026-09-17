@@ -1,6 +1,6 @@
 <svelte:head><title>Security — Admin</title></svelte:head>
 <script lang="ts">
-  import { getContext } from 'svelte';
+
   import type { PageData } from './$types';
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
@@ -32,7 +32,6 @@
   };
 
   let { data }: { data: PageData } = $props();
-  const adminToken = getContext<string>('adminToken');
 
   // Only the ban lists mutate (unban), so only they are $state. Everything else
   // renders straight from `data` — no prop→state sync effect, nothing to loop.
@@ -41,7 +40,7 @@
   let errorMsg = $state('');
 
   function apiUrl(): string {
-    return adminToken ? `/api/admin/security?token=${adminToken}` : '/api/admin/security';
+    return '/api/admin/security';
   }
 
   /** Only the host actually serving this page can lift its own bans. */

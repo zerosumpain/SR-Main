@@ -31,21 +31,23 @@ Full review: https://claude.ai/code/artifact/5bab1b51-82d7-4df0-8d36-834e5bea1fc
 
 ## Measured facts this spec rests on
 
-Queried live against the production database, 2026-09-17:
+Queried live against the production database, 2026-09-17. **By `count(*)`.** The first pass
+read `pg_stat_user_tables.n_live_tup`, which is an estimate maintained by autovacuum and
+not a count, and it was wrong twice — badly enough to invent a workstream that did not
+exist and to mis-scope another. Ask `count(*)` when the answer decides something.
 
-| Table | Rows |
-|---|---|
-| `agent_actions` | 33,647 (100% `action_type='llm_call'`) |
-| `claude_session_stages` | 5,399 |
-| `releases` | 1,130 |
-| `claude_sessions` | 295 |
-| `release_items` | **90** |
-| `heartbeat_actions` | 69 |
-| `api_secrets` | 8 |
-| `daydream_capabilities` | 3 |
-| `integration_credentials` | **0** |
-| `agent_activity` | **0** |
-| `agent_tasks` | **0** |
+| Table | `n_live_tup` said | Actual | Consequence |
+|---|---|---|---|
+| `agent_actions` | 33,647 | 33,649 | — |
+| `claude_session_stages` | 5,399 | 5,404 | — |
+| `release_items` | **90** | **1,897** | No summariser regression. All 1,130 releases carry items. Step 2 as planned was chasing a phantom. |
+| `releases` | 1,130 | 1,130 | — |
+| `claude_sessions` | 295 | 296 | — |
+| `integration_credentials` | **0** | **145** | Not an empty table. 143 were test fixtures; 2 are real. D4 revised. |
+| `heartbeat_actions` | 69 | 69 | — |
+| `api_secrets` | 8 | 8 | — |
+| `agent_activity` | 0 | **0** | Correct, and independently confirmed by grepping for a writer. |
+| `agent_tasks` | 0 | **0** | Correct, same confirmation. Step 1 shipped on it. |
 
 ## The seven steps
 
@@ -101,12 +103,15 @@ Options: (a) `static/probe-targets.json`; (b) `.github/monitored-urls.txt`.
 tailnet address list, internal ports and container names at a public URL with no gate.
 Irreversible once indexed, so it is not being taken at all.
 
-### D4 — `integration_credentials` is dropped, not kept empty
-Options: (a) drop the table; (b) keep it empty as a migration target. **Chosen: (a).** 0
-production rows; its 585-line page manages nothing; its one genuine consumer (the Mapbox
-public token) is better served by a row in `api_secrets` with a public-value flag. Keeping
-an empty table keeps its page, its probe branch and its canvas picker alive as things to
-maintain. Reversible: the table is empty, so recreating it costs nothing.
+### D4 — `integration_credentials` is emptied and retired, not dropped as unused
+REVISED 2026-09-17 after `count(*)`. The table held **145 rows, not 0**: 143 test fixtures
+(71 `test-e2e`, 71 `test-callback`, 1 `test-creds-wrong-kind`) and **2 genuine credentials**
+— apple-calendar and mapbox. The fixtures are deleted (backed up first; 0
+`activity_connections` referenced them) and the tests that wrote them now clean up.
+
+So the conclusion survives but the reasoning does not: the two real rows migrate to
+`api_secrets` in step 4 before the page goes, rather than the table being dropped on the
+grounds that nothing uses it. Deliberate retirement, not dead-code removal.
 
 ### D5 — Schema changes are split across deploys, never paired
 `drizzle-kit push` reads an added column plus a dropped column on the same table as a
@@ -154,6 +159,24 @@ neither of which 404s — so a move there fails silently, with the public page n
 path and the next capture shooting the wrong page under the old caption. Both files ship in
 the same commit as the move, plus a test that every tour route resolves after
 `resolveAdminRedirect`.
+
+### D12 — A shared module is not edited for a comment
+`src/lib/llm/usage-log.ts` is duplicated verbatim in SR-Health and SR-Drive, and
+`tests/scripts/shared-with-extracted.test.ts` hashes it. A stale comment there naming the
+deleted `/api/agent/costs` was worth fixing but not worth three repos and a re-record in
+step 1, so the edit was reverted and the module left byte-identical. It travels in step 4,
+where the spend registry touches that module for real reasons.
+
+### D13 — `agent_settings` keeps its schema declaration after its page goes
+`/admin/ai/config` wrote `agent_settings` keys `system_prompt` and `memory`, and nothing in
+the codebase read either — verified by grep; the live jkai prompt stack is assembled in
+`$lib/jkai/prompt.ts`. Production holds a 504-char system prompt written 2026-03-22 and an
+empty memory, both backed up off-box before the page was deleted.
+
+The table stays declared in `schema.ts`. Removing the declaration makes `drizzle-kit push`
+want to DROP it, and a drop paired with any future CREATE is read as a rename, which needs a
+TTY CI does not have (see D5). A two-row orphan table costs nothing; a hung release costs a
+deploy.
 
 ### D11 — `$lib/server/models/usage.ts` is not deleted
 The first draft deleted it for a fabricated-zero `computeCost` and a double-counting

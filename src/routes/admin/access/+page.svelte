@@ -1,6 +1,6 @@
 <svelte:head><title>Access — Admin</title></svelte:head>
 <script lang="ts">
-  import { getContext } from 'svelte';
+
   import type { PageData } from './$types';
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
@@ -13,7 +13,6 @@
   };
 
   let { data }: { data: PageData } = $props();
-  const adminToken = getContext<string>('adminToken');
 
   let owners = $state<string[]>(data.owners);
   let guests = $state<Guest[]>(data.guests as Guest[]);
@@ -25,7 +24,7 @@
   let busyEmail = $state<string | null>(null);
 
   function apiUrl(): string {
-    return adminToken ? `/api/admin/access?token=${adminToken}` : '/api/admin/access';
+    return '/api/admin/access';
   }
 
   async function addGuest() {

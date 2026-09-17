@@ -1,6 +1,6 @@
 <svelte:head><title>Edit: {data.post.title} — Admin</title></svelte:head>
 <script lang="ts">
-  import { getContext } from 'svelte';
+
   import { BODY_FONT_OPTIONS, DEFAULT_BODY_FONT, bodyFontVar } from '$lib/blog/fonts';
   import { AUTOPILOT_MODES } from '$lib/blog/assistant/autopilot';
   import WritingDesk from '$lib/components/blog/WritingDesk.svelte';
@@ -19,7 +19,6 @@
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
 
   let { data } = $props();
-  const adminToken = getContext<string>('adminToken');
 
   let title = $state(data.post.title);
   let slug = $state(data.post.slug);
@@ -118,7 +117,7 @@
     reason?: string;
   }) {
     try {
-      await fetch(`/api/admin/blog/${data.post.id}/resolve-proposal?token=${adminToken}`, {
+      await fetch(`/api/admin/blog/${data.post.id}/resolve-proposal`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -180,7 +179,7 @@
     lastScanLen = content.length;
     try {
       const pendingHints = pendingNow.map((p) => (p.kind === 'prose' ? p.original : `${p.field}`));
-      const r = await fetch(`/api/admin/blog/${data.post.id}/assistant/auto-review?token=${adminToken}`, {
+      const r = await fetch(`/api/admin/blog/${data.post.id}/assistant/auto-review`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pending: pendingHints }),
@@ -228,7 +227,7 @@
         }
       }
 
-      const res = await fetch(`/api/admin/blog/${data.post.id}/autopilot?token=${adminToken}`, {
+      const res = await fetch(`/api/admin/blog/${data.post.id}/autopilot`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode }),
@@ -320,7 +319,7 @@
     proposalStore.resolve(p.id, 'accepted');
     proposalTick++;
     // apply-proposal records its own resolution, so no recordResolution here.
-    const res = await fetch(`/api/admin/blog/${data.post.id}/apply-proposal?token=${adminToken}`, {
+    const res = await fetch(`/api/admin/blog/${data.post.id}/apply-proposal`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -451,7 +450,7 @@
     try {
       const tagList = tags.split(',').map((t) => t.trim()).filter(Boolean);
       const payload = { title, slug, excerpt, content, tags: tagList, coverImageUrl, coverImageAlt, bodyFont, ...overrides };
-      const res = await fetch(`/api/admin/blog/${data.post.id}?token=${adminToken}`, {
+      const res = await fetch(`/api/admin/blog/${data.post.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -499,7 +498,7 @@
     const formData = new FormData();
     formData.append('file', file);
     formData.append('postId', String(data.post.id));
-    const res = await fetch(`/api/admin/blog/upload-image?token=${adminToken}`, { method: 'POST', body: formData });
+    const res = await fetch(`/api/admin/blog/upload-image`, { method: 'POST', body: formData });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new Error(body.error ?? `Upload failed (${res.status})`);
@@ -561,7 +560,7 @@
     try {
       const marked = new Marked({ gfm: true, breaks: false });
       const html = (await marked.parse(content || '')).toString();
-      const res = await fetch(`/api/admin/blog/${data.post.id}?token=${adminToken}`, {
+      const res = await fetch(`/api/admin/blog/${data.post.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: html, contentFormat: 'html' }),
@@ -614,7 +613,7 @@
     saving = true;
     errorMsg = null;
     try {
-      const res = await fetch(`/api/admin/blog/${data.post.id}?token=${adminToken}`, {
+      const res = await fetch(`/api/admin/blog/${data.post.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
@@ -635,8 +634,8 @@
     if (!confirm('Delete this post?')) return;
     deleting = true;
     try {
-      await fetch(`/api/admin/blog/${data.post.id}?token=${adminToken}`, { method: 'DELETE' });
-      goto(`/admin/content/blog?token=${adminToken}`);
+      await fetch(`/api/admin/blog/${data.post.id}`, { method: 'DELETE' });
+      goto(`/admin/content/blog`);
     } finally {
       deleting = false;
     }
@@ -662,7 +661,7 @@
   <PageHeader
     kicker="Blog"
     title={title || 'Untitled draft'}
-    crumbs={[{ label: 'Blog', href: `/admin/content/blog?token=${adminToken}` }, { label: 'Edit' }]}
+    crumbs={[{ label: 'Blog', href: `/admin/content/blog` }, { label: 'Edit' }]}
   >
     {#snippet actions()}
       <span class="nm-pill" data-state={status}>{status}</span>
@@ -768,13 +767,11 @@
 
   <WritingDesk
     postId={data.post.id}
-    {adminToken}
     onBlockersChanged={(n) => (openBlockers = n)}
   />
 
   <ImageStudio
     postId={data.post.id}
-    {adminToken}
     onUseAsCover={async (url) => {
       coverImageUrl = url;
       // Same path as a cover upload: suppress content and tags so an unsaved
@@ -873,7 +870,7 @@
               reason: p?.reason,
             });
             // Capture a revision so the author can roll this change back.
-            void fetch(`/api/admin/blog/${data.post.id}/revisions?token=${adminToken}`, {
+            void fetch(`/api/admin/blog/${data.post.id}/revisions`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -914,8 +911,7 @@
 
   {#if !isMarkdown && richApi}
     <ClaimReviewPanel
-      {adminToken}
-      getHTML={() => richApi!.getHTML()}
+        getHTML={() => richApi!.getHTML()}
       insertInlineLink={(snippet, url, title) => richApi!.linkSnippet(snippet, url, title)}
       insertReference={(snippet, url, title) => {
         const n = richApi!.addReference(snippet, url, title);
@@ -1008,7 +1004,6 @@
 
   <BlogAssistantWidget
     postId={data.post.id}
-    {adminToken}
     history={data.history ?? []}
     {proposalStore}
     {autoReviewEnabled}

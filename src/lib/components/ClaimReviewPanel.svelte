@@ -43,10 +43,9 @@
     /** Adds a marker in the prose and an entry in the post's references block,
      *  which the reading surface renders in the article footer. */
     insertReference: (snippet: string, url: string, title?: string) => number;
-    adminToken: string;
   }
 
-  let { getHTML, insertInlineLink, insertReference, adminToken }: Props = $props();
+  let { getHTML, insertInlineLink, insertReference }: Props = $props();
 
   type Phase = 'idle' | 'extracting' | 'searching' | 'done' | 'error';
 
@@ -84,7 +83,7 @@
     phaseMsg = 'Connecting…';
 
     try {
-      const res = await fetch(`/api/admin/blog/review-claims?token=${adminToken}`, {
+      const res = await fetch(`/api/admin/blog/review-claims`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ html, format: 'html' }),
@@ -212,7 +211,7 @@
     claims[claimIdx] = { ...c, researching: true, exhausted: false };
     error = null;
     try {
-      const res = await fetch(`/api/admin/blog/search-sources?token=${adminToken}`, {
+      const res = await fetch(`/api/admin/blog/search-sources`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, claim: c.claim, exclude: c.seen ?? c.candidates.map((x) => x.url) }),
