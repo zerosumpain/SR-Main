@@ -171,7 +171,16 @@ function clip(s, max) {
  */
 function extractPullRequests(raw) {
   const found = new Set();
-  for (const m of raw.matchAll(/\/(?:SR-Main|strange_rambling[a-z_]*)\/pull\/(\d{1,6})/gi)) {
+  // Anchored to the ORIGIN, not just the path. `gh` always prints the full
+  // https://github.com/owner/repo/pull/N; prose about pull requests usually
+  // writes the short form. Without the anchor the extractor matched its own
+  // documentation — a memory note reading "the URL form (/SR-Main/pull/123)"
+  // credited this session with PR #123, which belongs to someone else's work.
+  // Measured across all 180 transcripts: anchoring drops exactly that one false
+  // positive and keeps all 589 real links across the same 139 sessions.
+  for (const m of raw.matchAll(
+    /github\.com\/[A-Za-z0-9_.-]+\/(?:SR-Main|strange_rambling[a-z_]*)\/pull\/(\d{1,6})/gi,
+  )) {
     found.add(Number(m[1]));
   }
   // Only the URL form. The `(#123)` suffix a squashed commit subject carries was

@@ -65,6 +65,7 @@ tests/scripts/development-install.test.ts
 tests/scripts/drizzle-orphan-tables.test.ts
 tests/scripts/gate-level.test.ts
 tests/scripts/jkai-builder-unit.test.ts
+tests/scripts/pr-extraction.test.ts
 tests/scripts/rollback.test.ts
 tests/scripts/select-tests.test.ts
 tests/scripts/shared-with-extracted.test.ts
