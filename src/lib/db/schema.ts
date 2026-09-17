@@ -469,6 +469,20 @@ export const whoopWorkouts = pgTable('whoop_workouts', {
   sportName: text('sport_name'),
 
   // Core metrics
+  /**
+   * WHOOP's 0-21 workout strain. Guarded exactly as `whoop_cycles.strain` is,
+   * and for the same reason — see the long note there.
+   *
+   * This column is the half that note got wrong. Cycles were protected on
+   * 2026-08-26; workouts were not, and the writer never stopped. On 2026-09-17
+   * cycles held zero scaled rows while **84 of 343 workouts** held
+   * `round(strain x 100)`, up to 1906 on a scale that ends at 21 — still
+   * arriving hourly. The cycles constraint did not prevent the bug, it only
+   * made the bug visible on the one table that had it, as an hourly "Whoop
+   * needs resyncing" banner. The silent table was where the damage went.
+   *
+   * A guard on one of two tables written by the same mapper is not a guard.
+   */
   strain: doublePrecision('strain').notNull(),
   averageHeartrate: integer('average_heartrate').notNull(),
   maxHeartrate: integer('max_heartrate').notNull(),
@@ -486,7 +500,11 @@ export const whoopWorkouts = pgTable('whoop_workouts', {
 
   // Sync metadata
   syncedAt: integer('synced_at').default(sql`extract(epoch from now())::integer`),
-});
+}, (t) => [
+  // Declared here so `drizzle-kit push` cannot quietly drop it again. Added to
+  // the database by hand on 2026-09-17, after the 84 rows were repaired.
+  check('whoop_workouts_strain_scale', sql`${t.strain} >= 0 and ${t.strain} <= 21`),
+]);
 
 export type WhoopWorkoutRecord = typeof whoopWorkouts.$inferSelect;
 
@@ -573,10 +591,26 @@ export const whoopCycles = pgTable('whoop_cycles', {
    * strain x 100 and nothing noticed. 51 rows held values from 145 to 2033 on a
    * scale that stops at 21, written between 2026-04-27 and 2026-08-24,
    * interleaved with correct rows from the sync in this repo — so no date
-   * separates them and no flag on the row says which is which. The writer was
-   * never in this repository's history and is no longer present on either
-   * machine; it stopped of its own accord, which is the worst way for a bug to
-   * end because nothing was learned and nothing prevents its return.
+   * separates them and no flag on the row says which is which.
+   *
+   * **Identified on 2026-09-17.** This note used to say the writer "was never
+   * in this repository's history and is no longer present on either machine;
+   * it stopped of its own accord". Half right. It was never in *this*
+   * repository because it is in the other one: `~/strange_rambling`, the
+   * deprecated Next.js site, at `src/lib/health/sync-service.ts:159` —
+   * `Math.round((input.score?.strain ?? 0) * 100)`. Its container was still
+   * running on the VPS against this same database, running `syncAll()` every
+   * hour from `src/lib/health/auto-refresh.ts`, serving no traffic and routed
+   * from nowhere. It never stopped of its own accord; it stopped whenever that
+   * container was last restarted, and resumed when it came back.
+   *
+   * Two hourly schedulers therefore wrote this row about 38 minutes apart —
+   * SvelteKit's correctly, Next.js's scaled — so `health_sync_state.whoop`
+   * flipped between success and error every hour, and the landing page asked
+   * to resync a connector that was never broken. The container was stopped and
+   * its `auto_refresh` row set to 'disabled' on 2026-09-17. Deleting that row
+   * would re-enable it: `doInit()` turns itself on by default when the row is
+   * absent and OAuth tokens exist.
    *
    * The constraint is the prevention. A scaled write now fails loudly at the
    * database, naming itself, instead of silently poisoning every average that
