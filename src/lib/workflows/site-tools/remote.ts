@@ -92,9 +92,22 @@ export async function invokeRemoteTool(
 	const body = Buffer.from(
 		JSON.stringify({ name, args, context: contextForWire(ctx) }),
 	);
-	// The deadline becomes the transport timeout — it does not serialise, and
-	// there is nothing for the callee to do with it that this does not do.
-	const timeoutMs = ctx?.deadline
+	/**
+	 * An INACTIVITY window, bounded by the deadline when one is set — not a hard
+	 * cut-off, and the distinction matters for the three tools that stream.
+	 *
+	 * `setTimeout` on a request arms the socket's idle timer, so every status
+	 * frame resets it. That is the behaviour wanted: bytes flowing mean the work
+	 * is alive, which is the real objection to holding a plain JSON response
+	 * open for the length of a scraper run. A tool that keeps emitting past its
+	 * deadline is therefore not cut off — and that matches what it gets
+	 * in-process, where `executeTool` checks `deadline` once on entry and never
+	 * again.
+	 *
+	 * With no frames at all, this behaves exactly like a deadline, which is the
+	 * case the other 137 tools are in.
+	 */
+	const idleMs = ctx?.deadline
 		? Math.max(1, ctx.deadline - Date.now())
 		: (target.timeoutMs ?? DEFAULT_TIMEOUT_MS);
 
@@ -176,9 +189,9 @@ export async function invokeRemoteTool(
 				});
 			},
 		);
-		request.setTimeout(timeoutMs, () => {
+		request.setTimeout(idleMs, () => {
 			request.destroy();
-			reject(new RemoteInvokeError(`tool invoke timed out after ${timeoutMs}ms: ${name}`));
+			reject(new RemoteInvokeError(`tool invoke timed out after ${idleMs}ms with no data: ${name}`));
 		});
 		request.on('error', (e) => reject(new RemoteInvokeError(e.message)));
 		request.end(body);
