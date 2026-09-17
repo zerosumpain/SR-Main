@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatGbp, formatTokens } from '$lib/canvas/stats/costFormat';
+import { formatGbp, formatTokens } from '$lib/utils/cost-format';
 
 describe('formatGbp', () => {
   it('renders zero as £0.00', () => {

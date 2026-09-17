@@ -1,6 +1,6 @@
 <svelte:head><title>Workflow Doctor — JKAI</title></svelte:head>
 <script lang="ts">
-  import { formatGbp } from '$lib/canvas/stats/costFormat';
+  import { formatGbp } from '$lib/utils/cost-format';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();

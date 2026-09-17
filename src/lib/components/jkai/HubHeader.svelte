@@ -4,7 +4,7 @@
   import HubTokenStrip from './HubTokenStrip.svelte';
   import { hub, setBpm, closeHubMenu, toggleHubMenu } from '$lib/jkai/hub-bus.svelte';
   import { openLauncher } from '$lib/jkai/launcher-bus.svelte';
-  import { formatGbp } from '$lib/canvas/stats/costFormat';
+  import { formatGbp } from '$lib/utils/cost-format';
   import { codexMeters, type CodexUsageView } from '$lib/llm/usage-meter';
   import { SECTIONS, activeSection, parentHref, parentLabel } from '$lib/nav/site-nav';
   import type { VitalsStore } from '$lib/vitals/store.svelte';

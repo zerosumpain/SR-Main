@@ -11,7 +11,7 @@
   // replaces the accordion — the WhatsApp message links there too.
   import { invalidateAll } from '$app/navigation';
   import { untrack } from 'svelte';
-  import ChatMarkdown from '$lib/canvas/ChatMarkdown.svelte';
+  import ChatMarkdown from '$lib/markdown/ChatMarkdown.svelte';
   import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
   import SectionHead from './hub/SectionHead.svelte';
   import StatDeck from './hub/StatDeck.svelte';

@@ -11,7 +11,7 @@
   // guess what the server did.
 
   import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
-  import ChatMarkdown from '$lib/canvas/ChatMarkdown.svelte';
+  import ChatMarkdown from '$lib/markdown/ChatMarkdown.svelte';
   import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import type { PageData } from './$types';

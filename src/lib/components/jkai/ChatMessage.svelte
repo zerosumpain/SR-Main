@@ -17,7 +17,7 @@
   import type { ApprovalUiSettings } from '$lib/server/models/settings';
   import { readTurnStamp, type TurnStamp } from '$lib/jkai/turn-stamp';
   import { shortModelLabel } from '$lib/jkai/model-label';
-  import { formatGbp } from '$lib/canvas/stats/costFormat';
+  import { formatGbp } from '$lib/utils/cost-format';
 
   // @files / @research references cited by this reply. Their in-prose mentions
   // are linkified into clickable citations (see citation-linkify); any source the

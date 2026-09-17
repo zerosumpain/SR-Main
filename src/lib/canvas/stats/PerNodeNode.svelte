@@ -1,7 +1,7 @@
 <script lang="ts">
   import { useStats } from './useStats.svelte';
   import { formatDurationMs, formatPercent, formatRelative } from './format';
-  import { formatGbp, formatTokens } from './costFormat';
+  import { formatGbp, formatTokens } from '$lib/utils/cost-format';
   import PerNodeDrilldown from './PerNodeDrilldown.svelte';
 
   interface PerNodeRow {

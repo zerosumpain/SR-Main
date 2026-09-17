@@ -5,7 +5,7 @@
   import type { AgentDef } from '$lib/agents/types';
   import { invalidateAll } from '$app/navigation';
   import SubAgentBubble from '$lib/components/jkai/SubAgentBubble.svelte';
-  import ChatMarkdown from '$lib/canvas/ChatMarkdown.svelte';
+  import ChatMarkdown from '$lib/markdown/ChatMarkdown.svelte';
   import DaydreamShell from '$lib/components/jkai/daydream/hub/DaydreamShell.svelte';
   import type { ShellTab } from '$lib/components/jkai/daydream/hub/types';
   import PromptsPanel from '$lib/components/jkai/PromptWorkbench.svelte';

@@ -2,7 +2,7 @@
   import { Chart, Svg, Bars, Axis, Grid } from 'layerchart';
   import { groupStackData } from 'layerchart/utils/stack';
   import { scaleTime, scaleLinear } from 'd3-scale';
-  import { formatGbp } from './costFormat';
+  import { formatGbp } from '$lib/utils/cost-format';
   import { formatPercent } from './format';
 
   type GroupBy = 'model' | 'node-type' | 'node-label';
