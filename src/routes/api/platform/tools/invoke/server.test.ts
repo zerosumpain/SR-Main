@@ -9,6 +9,13 @@ import type { ToolExecContext, ToolResult } from '$lib/workflows/site-tools/regi
  * The contract end to end: the real POST handler, on a real socket, driven by
  * the real client.
  *
+ * Deliberately NOT named `*.integration.test.ts`. That suffix means "needs a
+ * database", and the merge gate excludes the whole lane — 46 files a pull
+ * request never executes, which `tests/scripts/coverage-census.test.ts` exists
+ * to make you notice. This needs nothing but a loopback socket, and it is the
+ * test that caught the destructive refusal answering the wrong content type, so
+ * it belongs where every PR runs it.
+ *
  * The catalogue is the one thing faked. `site-tools/registry` imports 75 tool
  * modules for their `register()` side effects and reaches the database through
  * most of them, which is what `load-registry.ts` exists to keep off everybody's
@@ -160,13 +167,53 @@ describe('POST /api/platform/tools/invoke', () => {
     expect(ctx.conversationId).toBe('c1');
     expect(ctx.workflowId).toBeNull();
     expect(ctx.jobId).toBe('j1');
-    expect(ctx.modelContext).toEqual({ modelId: 'claude-opus-5' });
+    expect(ctx.modelContext).toEqual({ provider: 'openrouter', modelId: 'claude-opus-5' });
     expect(ctx.thinkingLevel).toBe('high');
     expect(ctx.allowedTools).toEqual(['site_blog_list']);
     expect(ctx.buildId).toBeUndefined();
     expect(ctx.iterationId).toBeUndefined();
     expect(ctx.depth).toBeUndefined();
     expect(ctx.busKey).toBeUndefined();
+  });
+
+  /**
+   * `coerceModelContext` is this codebase's single decider of provider, and it
+   * reads the id PREFIX rather than the field. Running it on arrival means a
+   * caller cannot hand Main a mismatched pair — which matters because the tools
+   * that read this write it onto a row a sidecar picks up hours later, with no
+   * ambient context left to correct it.
+   */
+  it('derives the provider from the model id, not from what the caller claimed', async () => {
+    await invokeRemoteTool(
+      'site_blog_list',
+      {},
+      { emit: () => {}, modelContext: { provider: 'openrouter', modelId: 'codex/gpt-5.6-terra' } as never },
+      target(),
+    );
+    expect(calls[0].ctx!.modelContext).toEqual({
+      provider: 'codex',
+      modelId: 'codex/gpt-5.6-terra',
+    });
+  });
+
+  it('drops a model context with no id rather than passing a half one on', async () => {
+    await invokeRemoteTool(
+      'site_blog_list',
+      {},
+      { emit: () => {}, modelContext: { provider: 'codex' } as never },
+      target(),
+    );
+    expect(calls[0].ctx!.modelContext).toBeUndefined();
+  });
+
+  it('refuses a thinking level that is not on the ladder', async () => {
+    await invokeRemoteTool(
+      'site_blog_list',
+      {},
+      { emit: () => {}, thinkingLevel: 'ultra-mega' as never },
+      target(),
+    );
+    expect(calls[0].ctx!.thinkingLevel).toBeNull();
   });
 
   it('streams every emit before the result, in order', async () => {

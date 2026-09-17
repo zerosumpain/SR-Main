@@ -9,7 +9,10 @@ import {
 	wantsNdjson,
 } from '$lib/workflows/site-tools/invoke-contract';
 import { loadToolRegistry } from '$lib/workflows/site-tools/load-registry';
-import type { ToolResult } from '$lib/workflows/site-tools/registry-internal';
+import type { InvokeContext } from '$lib/workflows/site-tools/invoke-contract';
+import type { ToolExecContext, ToolResult } from '$lib/workflows/site-tools/registry-internal';
+import { coerceModelContext } from '$lib/constants/default-models';
+import { isThinkingLevel } from '$lib/models/thinking';
 import type { RequestHandler } from './$types';
 
 /**
@@ -105,7 +108,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	 * reshapes errors is a seam that has to be debugged twice.
 	 */
 	if (!streaming) {
-		return single(await registry.executeTool(name, args, { ...context, emit: () => {} }));
+		return single(await registry.executeTool(name, args, execContextFrom(context, () => {})));
 	}
 
 	const encoder = new TextEncoder();
@@ -125,10 +128,11 @@ export const POST: RequestHandler = async ({ request }) => {
 			};
 			let result: ToolResult;
 			try {
-				result = await registry.executeTool(name, args, {
-					...context,
-					emit: (text: string) => write(statusLine(text)),
-				});
+				result = await registry.executeTool(
+					name,
+					args,
+					execContextFrom(context, (text) => write(statusLine(text))),
+				);
 			} catch (e) {
 				result = { success: false, error: e instanceof Error ? e.message : 'Unknown error' };
 			}
@@ -141,3 +145,41 @@ export const POST: RequestHandler = async ({ request }) => {
 		headers: { 'content-type': NDJSON_CONTENT_TYPE, 'cache-control': 'no-store' },
 	});
 };
+
+/**
+ * The wire's context, made into the one the registry takes.
+ *
+ * Two fields cannot simply be cast across, and both are better for it.
+ *
+ * `modelContext` arrives as plain JSON and goes through `coerceModelContext`,
+ * which this codebase already states is the single decider of provider — it
+ * recovers `codex` from the id PREFIX rather than trusting a stored field,
+ * because persisted state all over the site carries a bare model string with no
+ * provider at all. Running it here means a caller cannot smuggle a mismatched
+ * pair across the boundary: send `provider: 'openrouter'` with a `codex/` id and
+ * it comes out as Codex regardless, which is what every other reader of a
+ * stored model setting already gets.
+ *
+ * `thinkingLevel` is checked against the ladder rather than accepted as a
+ * string. An unrecognised rung is dropped, not passed on — the tools that read
+ * it write it onto a row that a sidecar picks up hours later, so a bad value
+ * would surface a long way from here.
+ */
+function execContextFrom(context: InvokeContext, emit: (text: string) => void): ToolExecContext {
+	const raw = context.modelContext;
+	const modelId = typeof raw?.modelId === 'string' ? raw.modelId : '';
+	return {
+		conversationId: context.conversationId,
+		workflowId: context.workflowId,
+		jobId: context.jobId,
+		allowedTools: context.allowedTools,
+		modelContext: modelId
+			? coerceModelContext({
+					provider: typeof raw?.provider === 'string' ? raw.provider : undefined,
+					modelId,
+				})
+			: undefined,
+		thinkingLevel: isThinkingLevel(context.thinkingLevel) ? context.thinkingLevel : null,
+		emit,
+	};
+}

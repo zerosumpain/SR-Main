@@ -156,6 +156,8 @@ export const BYPASS_GUARDS: Record<string, string> = {
   '/api/jkai/intel/entities/split': 'loopback + MAINTENANCE_SECRET',
   '/api/trails/segments': 'POST only · loopback + MAINTENANCE_SECRET (GET stays gated)',
   '/api/jkai/studio': 'POST only · STUDIO_SERVICE_TOKEN',
+  '/api/platform/tools/invoke':
+    'POST only · JKAI_INVOKE_TOKEN; destructive tools need a second token, unset by default',
   '/api/jkai/tools/manifest': 'JKAI_BRIDGE_TOKEN',
   '/api/jkai/tools/invoke': 'JKAI_BRIDGE_TOKEN',
   '/api/jkai/studio/image': 'JKAI_BRIDGE_TOKEN',

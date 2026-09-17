@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import http from 'node:http';
-import { AddressInfo } from 'node:net';
+import type { AddressInfo } from 'node:net';
 import { contextForWire, invokeRemoteTool, RemoteInvokeError } from './remote';
 import { coerceInvokeRequest } from './invoke-contract';
 

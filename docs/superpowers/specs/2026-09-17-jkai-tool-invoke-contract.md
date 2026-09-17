@@ -239,16 +239,32 @@ the header is on the wire, so tidying it into `fetch` fails loudly.
 
 **Reversibility:** local to one file.
 
-## Decision 6 — `modelContext` and `thinkingLevel` cross as shape-checked JSON
+## Decision 6 — `modelContext` and `thinkingLevel` are re-derived on arrival
 
-Both are read by tools whose work outlives the turn (a build, a studio build, a
-change request run later in a sidecar with no ambient context) and write them
-onto their own row. They cross the wire as JSON and are checked for shape, not
-validated against the model registry. A caller holding a valid token already has
-the catalogue; deep validation here buys nothing and would drift from the
-registry the moment a model is added.
+Both are read by tools whose work outlives the turn — a build, a studio build, a
+change request all run later in a sidecar with no ambient context — and both get
+written onto a row there. So a bad value surfaces hours later and a long way from
+here, which is the argument for checking them at the door rather than passing
+them through.
 
-**Reversibility:** one function.
+The first draft of this spec said "shape-checked, not validated". The type
+checker disagreed and it was right to: `ToolExecContext.modelContext` is a
+`ModelContext`, and casting a `Record<string, unknown>` onto it would have been
+the only way to keep the pass-through.
+
+- **`modelContext` goes through `coerceModelContext`.** That function is already
+  stated in this repo to be the single decider of provider, and it reads the id
+  PREFIX rather than the stored field — because persisted state all over the
+  site carries a bare model string with no provider at all. Running it on
+  arrival is not extra validation, it is the same treatment every other reader
+  of a stored model setting gets, and it means a caller cannot hand Main a
+  mismatched pair: `provider: 'openrouter'` with a `codex/` id comes out as
+  Codex regardless. A context with no `modelId` is dropped rather than
+  half-built.
+- **`thinkingLevel` is checked against `isThinkingLevel`.** An unrecognised rung
+  becomes `null`, never a guess.
+
+**Reversibility:** one function, `execContextFrom` in the route.
 
 ## Not in scope
 
