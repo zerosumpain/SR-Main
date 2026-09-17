@@ -1,7 +1,7 @@
 // The estate endpoint catalogue: every URL across the estate that a human or a
 // service can actually call, and what stands in front of it.
 //
-// Shaped after $lib/architecture/topology.ts — this is *data*, and the page is
+// This is *data*, and the page is
 // generated from it. Adding a service means adding one entry here; there is no
 // layout or probe code to touch. The architecture map answers "how does this
 // connect"; this answers "what can I open, and who else can".

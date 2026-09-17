@@ -79,7 +79,7 @@ export const THRESHOLDS = {
   tempC: 80,
 } as const;
 
-/** Narrower than architecture/topology's HealthStatus on purpose: that union
+/** Narrower than the map projection's HealthStatus on purpose: that union
  *  carries 'static' for catalogue entries nothing probes, which cannot apply to
  *  a machine. A host is up, struggling, gone, or unobserved. */
 export type HostState = 'up' | 'degraded' | 'down' | 'unknown';
