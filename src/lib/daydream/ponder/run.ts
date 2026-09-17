@@ -29,8 +29,12 @@ import { persistCandidates, type PersistResult } from '../thought-store';
 import { DEFAULT_SUBJECT, errMsg } from '../types';
 import { assemblePack, renderPack, type PackInputs } from './pack';
 import { runLookups, MAX_LOOKUPS_PER_CYCLE } from './lookups';
+import { briefFor, lensAt, limitsFor, signalPreferenceFor, type Lens } from './lens';
+import { adversaryPrompt, applyAdversary, renderForAdversary, validateAdversary } from './adversary';
 import {
   chooseSignals,
+  outlierText,
+  rankOutliers,
   roundFigure,
   signalShape,
   PACK_SIGNAL_LIMIT,
@@ -54,6 +58,9 @@ import { withActivity } from '$lib/context/activity';
 
 export interface PonderResult {
   cards: number;
+  /** Which angle this cycle took. On the pulse so the rotation is visible and
+   *  a lens that never produces anything is measurable rather than suspected. */
+  lens: Lens;
   musings: PersistResult & { proposed: number };
   leadsCreated: number;
   leadsDuplicate: number;
@@ -66,12 +73,16 @@ export interface PonderResult {
   /** What the lookup stage did. On the pulse so a probe that never pays for
    *  itself is visible rather than quietly costing a round trip a cycle. */
   lookups: { asked: number; cards: number; failed: number };
+  /** The second pass, when the budget paid for one. `ran: false` means there
+   *  was no headroom, not that nothing was challenged. */
+  adversary: { ran: boolean; dropped: string[]; sharpened: number };
   tokens: { prompt: number; completion: number };
   error: string | null;
 }
 
 const EMPTY: PonderResult = {
   cards: 0,
+  lens: 'household',
   musings: { created: 0, updated: 0, suppressed: 0, muted: 0, alreadyRefuted: 0, protectedSkipped: 0, merged: 0, createdKeys: [], proposed: 0 },
   leadsCreated: 0,
   leadsDuplicate: 0,
@@ -80,6 +91,7 @@ const EMPTY: PonderResult = {
   rejected: [],
   coerced: [],
   lookups: { asked: 0, cards: 0, failed: 0 },
+  adversary: { ran: false, dropped: [], sharpened: 0 },
   tokens: { prompt: 0, completion: 0 },
   error: null,
 };
@@ -128,7 +140,7 @@ async function featureAggregates(now: Date): Promise<PackInputs['aggregates']> {
  * unusual. See `chooseSignals` for who gets a seat and `signalShape` for what
  * each card says beyond its mean.
  */
-async function signalAggregates(now: Date): Promise<PackInputs['aggregates']> {
+async function signalAggregates(now: Date, prefer: string[] = []): Promise<PackInputs['aggregates']> {
   const out: PackInputs['aggregates'] = [];
   try {
     const day = (back: number) => new Date(now.getTime() - back * 86_400_000).toISOString().slice(0, 10);
@@ -156,7 +168,17 @@ async function signalAggregates(now: Date): Promise<PackInputs['aggregates']> {
       .groupBy(daydreamObservations.signalKey, daydreamSignals.label, daydreamSignals.unit);
 
     const cursor = Math.floor(now.getTime() / SIGNAL_ROTATION_STEP_MS) * SIGNAL_ROTATION_SEATS;
-    for (const r of chooseSignals(rows as SignalRow[], cursor)) {
+    const seated = chooseSignals(rows as SignalRow[], cursor, PACK_SIGNAL_LIMIT, prefer);
+
+    // The outlier block, ranked across the WHOLE registry rather than the
+    // seated cards — the sensor worth naming is by definition the one that did
+    // not win a movement seat. See `rankOutliers` for why this shape of
+    // question exists at all.
+    for (const r of rankOutliers(rows as SignalRow[], new Set(seated.map((x) => x.key)))) {
+      out.push({ key: `outlier:${r.key}`, text: outlierText(r) });
+    }
+
+    for (const r of seated) {
       const unit = r.unit ? ` ${r.unit}` : '';
       const range =
         r.lo != null && r.hi != null && r.hi !== r.lo
@@ -173,6 +195,151 @@ async function signalAggregates(now: Date): Promise<PackInputs['aggregates']> {
   } catch {
     // Garnish, like the feature aggregates. The pack stands without them.
   }
+  return out;
+}
+
+/** The long look: how far back each comparison reaches. */
+const LONG_RECENT_DAYS = 30;
+const LONG_PRIOR_DAYS = 90;
+/** A place is DORMANT when it was a habit and has not happened since. Three
+ *  weeks is long enough that a holiday or a run of bad weather has passed. */
+const DORMANT_AFTER_DAYS = 21;
+const DORMANT_MIN_VISITS = 4;
+/** How far the recent mean must move, as a share of the prior mean, before a
+ *  drift card is worth a seat. Ten per cent over a month is a real change in
+ *  every series here and small enough not to need a test to be worth noticing. */
+const DRIFT_MIN_SHARE = 0.1;
+
+/**
+ * Months, not days.
+ *
+ * ── Why ────────────────────────────────────────────────────────────────────
+ *
+ * Everything else in the pack looks at now, next week, and the last seven days.
+ * There are 267 recorded days for John and 113 for each of the other four, and
+ * nothing had ever asked what the far end of them says. The most surprising
+ * thing available to this engine is an ABSENCE — something that used to happen
+ * reliably and has quietly stopped — and an absence is invisible to every other
+ * card in the pack, because every other card is built from rows that exist.
+ *
+ * ── What it deliberately does NOT do ───────────────────────────────────────
+ *
+ * No year-on-year comparison. The record begins 2025-12-25, so "this week last
+ * year" has no rows behind it and would be an empty card at best and an
+ * invented one at worst. The span card below states where the record starts
+ * precisely so the model cannot reason past it — a fact pack that does not say
+ * how much history it has is one that gets asked about a decade.
+ *
+ * Nothing here is a test. A drift is reported as a movement, never as a trend
+ * or a cause; the sweep and the hypothesis machinery are what make claims, and
+ * they do it under FDR control.
+ */
+async function longViewCards(now: Date, subject: string): Promise<PackInputs['aggregates']> {
+  const out: PackInputs['aggregates'] = [];
+  const day = (back: number) => new Date(now.getTime() - back * 86_400_000).toISOString().slice(0, 10);
+
+  // How much history there is, so nothing reasons beyond it.
+  try {
+    const [span] = await db
+      .select({
+        first: sql<string | null>`min(${daydreamDayFeatures.day})`,
+        days: sql<number>`count(*)::int`,
+      })
+      .from(daydreamDayFeatures)
+      .where(eq(daydreamDayFeatures.subject, subject));
+    if (span?.first && span.days > 0) {
+      out.push({
+        key: 'record:span',
+        text: `The recorded history starts ${span.first} and covers ${span.days} days. There is nothing before that date — do not compare to a year ago.`,
+      });
+    }
+  } catch {
+    // The span is a guard, not a finding; its absence costs a caution.
+  }
+
+  // Drift: the last month against the two before it.
+  try {
+    const recentFrom = day(LONG_RECENT_DAYS);
+    const priorFrom = day(LONG_PRIOR_DAYS);
+    const avg = (col: typeof daydreamDayFeatures.sleepMinutes, from: string, to?: string) =>
+      to
+        ? sql<number | null>`avg(${col}) filter (where ${daydreamDayFeatures.day} >= ${from} and ${daydreamDayFeatures.day} < ${to})`
+        : sql<number | null>`avg(${col}) filter (where ${daydreamDayFeatures.day} >= ${from})`;
+    const [d] = await db
+      .select({
+        sleepNow: avg(daydreamDayFeatures.sleepMinutes, recentFrom),
+        sleepWas: avg(daydreamDayFeatures.sleepMinutes, priorFrom, recentFrom),
+        stepsNow: avg(daydreamDayFeatures.steps, recentFrom),
+        stepsWas: avg(daydreamDayFeatures.steps, priorFrom, recentFrom),
+        outNow: avg(daydreamDayFeatures.minutesOut, recentFrom),
+        outWas: avg(daydreamDayFeatures.minutesOut, priorFrom, recentFrom),
+        busyNow: avg(daydreamDayFeatures.calendarBusyMinutes, recentFrom),
+        busyWas: avg(daydreamDayFeatures.calendarBusyMinutes, priorFrom, recentFrom),
+      })
+      .from(daydreamDayFeatures)
+      .where(and(eq(daydreamDayFeatures.subject, subject), gte(daydreamDayFeatures.day, priorFrom)));
+
+    const drift = (
+      key: string,
+      label: string,
+      nowV: number | null | undefined,
+      wasV: number | null | undefined,
+      fmt: (n: number) => string,
+    ) => {
+      if (nowV == null || wasV == null || Math.abs(wasV) < 1e-9) return;
+      const share = (nowV - wasV) / Math.abs(wasV);
+      if (Math.abs(share) < DRIFT_MIN_SHARE) return;
+      out.push({
+        key: `drift:${key}`,
+        text:
+          `Over the last ${LONG_RECENT_DAYS} days ${label} averaged ${fmt(nowV)}, against ${fmt(wasV)} in the ${LONG_PRIOR_DAYS - LONG_RECENT_DAYS} days before — ` +
+          `${share > 0 ? 'up' : 'down'} ${Math.round(Math.abs(share) * 100)}%.`,
+      });
+    };
+    if (d) {
+      drift('sleep', 'sleep', d.sleepNow, d.sleepWas, (n) => `${Math.round(n / 6) / 10}h a night`);
+      drift('steps', 'steps', d.stepsNow, d.stepsWas, (n) => `${Math.round(n)} a day`);
+      drift('out', 'time out of the house', d.outNow, d.outWas, (n) => `${Math.round(n)} min a day`);
+      drift('busy', 'timed diary commitments', d.busyNow, d.busyWas, (n) => `${Math.round(n)} min a day`);
+    }
+  } catch (err) {
+    console.warn(`[daydream] could not read the drift: ${errMsg(err)}`);
+  }
+
+  // What has stopped. Named places only: an unnamed cluster going quiet is
+  // noise, and a named one is somewhere John decided was worth a name.
+  try {
+    const { daydreamPlaces } = await import('$lib/db/schema');
+    const since = new Date(now.getTime() - DORMANT_AFTER_DAYS * 86_400_000);
+    const rows = await db
+      .select({
+        id: daydreamPlaces.id,
+        label: daydreamPlaces.label,
+        visits: daydreamPlaces.visitCount,
+        last: daydreamPlaces.lastSeenAt,
+      })
+      .from(daydreamPlaces)
+      .where(
+        and(
+          eq(daydreamPlaces.status, 'active'),
+          sql`${daydreamPlaces.label} is not null`,
+          sql`${daydreamPlaces.visitCount} >= ${DORMANT_MIN_VISITS}`,
+          sql`${daydreamPlaces.lastSeenAt} < ${since}`,
+        ),
+      )
+      .orderBy(desc(daydreamPlaces.visitCount))
+      .limit(6);
+    for (const r of rows) {
+      const gap = Math.round((now.getTime() - new Date(r.last as unknown as string).getTime()) / 86_400_000);
+      out.push({
+        key: `dormant:${r.id}`,
+        text: `${r.label} was visited ${r.visits} times and has not been since ${String(r.last).slice(0, 10)} — ${gap} days ago.`,
+      });
+    }
+  } catch (err) {
+    console.warn(`[daydream] could not read dormant places: ${errMsg(err)}`);
+  }
+
   return out;
 }
 
@@ -498,6 +665,7 @@ async function leadContext(
 }
 
 function systemPrompt(
+  brief: string[],
   profileLines: string[],
   ctx: { open: string[]; menu: string[] },
   refuted: string[],
@@ -506,6 +674,11 @@ function systemPrompt(
 ): string {
   return [
     "You are the pondering half of John's second brain. On spare cycles you look across everything it knows — family, diary, money, health, email facts, its own past discoveries — and notice crossings worth surfacing: something happening now that connects to a pattern, something coming up that the past says needs acting on early, a question worth investigating.",
+    '',
+    // The cycle's brief. Near the top on purpose: it is the one line that
+    // decides which half of the pack gets read carefully, and a pack read the
+    // same way eight times a day is what produced 35 diary musings in 41.
+    ...brief,
     '',
     'WHO HE IS, FROM HIS OWN TRACES:',
     ...profileLines,
@@ -528,13 +701,23 @@ function systemPrompt(
     '1. Reply with ONE JSON object only: {"musings": [], "leads": [], "actionRules": []}. No prose outside it. Empty arrays are a good answer — most cycles find nothing worth saying.',
     `2. A musing = {"slug","theme","title","text","salience","cites",["actions"]}. theme must be one of ${JSON.stringify(MUSING_THEMES)}. text ≤ 280 chars, plain, no greeting, no emoji. salience 0..1 = how much this deserves his attention.`,
     '3. CITE OR DIE: every musing must list the fact-card ids ("F12") it is built from. Any number, date, name or amount you mention must appear in a cited card. An uncited or wrongly-cited musing is deleted by the audit, not fixed.',
-    '4. Do not restate a single card back as a musing — the value is the CROSSING between cards (now × pattern, upcoming × history, money × diary).',
+    // The crossing list used to name three shapes, all of which have a diary
+    // on one side. Three more, from the card blocks added 2026-09-17, none of
+    // which need the calendar at all — which is the point.
+    '4. Do not restate a single card back as a musing — the value is the CROSSING between cards. Shapes worth hunting: now × pattern; upcoming × history; money × diary; a signal that is unlike itself × something in his week that would explain it; something that has STOPPED × whether that was a decision; a drift over months × a habit he has not noticed changing.',
     // The repetition rule. Not "never repeat": a claim worth making twice
     // exists, and silence about a live subject is worse than the repetition.
     // What it must do is say what MOVED, and cite it — which turns a repeat
     // into something the citation audit can check like any other claim.
     '4b. If a musing covers anything under ALREADY SAID, it is only worth sending when a cited card has CHANGED since — a date that moved, a figure that crossed, a thing that has now happened. Say what changed in the first clause and cite the card that shows it. If nothing changed, drop it and look somewhere else in the pack; an empty answer is better than a rewording.',
-    `5. Optional actions on a musing: [{"kind":"remind","label":"...","params":{"inHours":N,"text":"..."}}] — the only kind available. Propose one only when acting later is clearly better than reading now.`,
+    // Four verbs since 2026-09-17, up from one. The engine could notice
+    // anything and the only thing it could DO was set a reminder.
+    `5. Optional actions on a musing, at most two: [{"kind","label","params"}]. Four kinds:`,
+    `   remind {"inHours":N,"text":"..."} — when acting later beats reading now.`,
+    `   watch  {"description":"...","cron":"m h dom mon dow"} — a recurring check that tells him when something CHANGES. Propose this when the musing is really about something that needs following, not something that needs saying once. Cron optional.`,
+    `   draft  {"title":"...","text":"..."} — write it up in his notebook, for a musing worth more than 280 characters.`,
+    `   ask    {"question":"..."} — put ONE question to him. Use it when a single answer would settle something the pack cannot: a fact nothing here records, or which of two readings is the right one. His answer comes back to you next cycle.`,
+    `   Nothing fires on its own: every action waits for him to tap it. Propose none at all if none of the four is clearly better than the musing on its own.`,
     // The metric vocabulary, spelled out.
     //
     // This line used to read "metrics chosen from the feature store only" and
@@ -578,20 +761,36 @@ function systemPrompt(
 }
 
 export async function runPonder(
-  opts: { now?: Date; verify?: boolean; subject?: string; lookupBudget?: number; caps?: Partial<PonderCaps> } = {},
+  opts: {
+    now?: Date;
+    verify?: boolean;
+    subject?: string;
+    lookupBudget?: number;
+    caps?: Partial<PonderCaps>;
+    /** Run the adversarial second pass. Set by the activity only when the
+     *  quota meter says there is genuinely room — see `adversary.ts`. */
+    adversary?: boolean;
+  } = {},
 ): Promise<PonderResult> {
   const now = opts.now ?? new Date();
   const subject = opts.subject ?? DEFAULT_SUBJECT;
   const caps: PonderCaps = { ...DEFAULT_PONDER_CAPS, ...(opts.caps ?? {}) };
-  const result: PonderResult = { ...EMPTY, musings: { ...EMPTY.musings, createdKeys: [] }, rejected: [], coerced: [], lookups: { asked: 0, cards: 0, failed: 0 }, tokens: { prompt: 0, completion: 0 } };
+  const result: PonderResult = { ...EMPTY, musings: { ...EMPTY.musings, createdKeys: [] }, rejected: [], coerced: [], lookups: { asked: 0, cards: 0, failed: 0 }, adversary: { ran: false, dropped: [], sharpened: 0 }, tokens: { prompt: 0, completion: 0 } };
 
   try {
+    // This cycle's angle. Chosen from the clock so the six lenses walk in step
+    // across restarts, and reported on the result so the pulse says which one
+    // ran.
+    const lens = lensAt(now);
+    result.lens = lens;
+    const limits = limitsFor(lens);
+
     const snapshot = await buildSnapshot({ now, subject });
-    const [verdicts, aggregates, signals, week, profileLines, diaryNotes, rulings, notebook, sweep, newSources, said] =
+    const [verdicts, aggregates, signals, week, profileLines, diaryNotes, rulings, notebook, sweep, newSources, said, longView] =
       await Promise.all([
         recentVerdicts(),
         featureAggregates(now),
-        signalAggregates(now),
+        signalAggregates(now, signalPreferenceFor(lens)),
         weekAhead(),
         buildProfileLines(now),
         diaryNoteCards(),
@@ -600,6 +799,7 @@ export async function runPonder(
         sweepCards(),
         newSourceCards(),
         alreadySaidLines(now),
+        longViewCards(now, subject),
       ]);
     const leadCtx = await leadContext(subject);
     // The lookup stage. Code names a gap in what it has just assembled, calls a
@@ -615,6 +815,7 @@ export async function runPonder(
     const pack = assemblePack({
       snapshot,
       verdicts,
+      limits,
       lookups: lookups.cards,
       // Hand-written aggregates first, then whatever the registry discovered —
       // the second list is the one that grows without anyone editing this file.
@@ -622,7 +823,7 @@ export async function runPonder(
       // reviewer has already SETTLED. Those two go nearest the instruction
       // because they are the two that override: a correction he typed, and a
       // claim that has been checked against the sources and found wanting.
-      aggregates: [...aggregates, ...signals, ...sweep, ...newSources, ...notebook, ...diaryNotes, ...rulings.cards],
+      aggregates: [...aggregates, ...longView, ...signals, ...sweep, ...newSources, ...notebook, ...diaryNotes, ...rulings.cards],
       weekAhead: week,
       feedbackLines: [],
       profileLines,
@@ -641,7 +842,7 @@ export async function runPonder(
         temperature: 0.7,
         max_tokens: 1800,
         messages: [
-          { role: 'system', content: systemPrompt(profileLines, leadCtx, rulings.refutedLines, said, caps) },
+          { role: 'system', content: systemPrompt(briefFor(lens), profileLines, leadCtx, rulings.refutedLines, said, caps) },
           { role: 'user', content: renderPack(pack) },
         ],
       }),
@@ -662,7 +863,7 @@ export async function runPonder(
       return result;
     }
 
-    const audit = validatePonderOutput(parsed, pack, caps, leadCtx.signalKeys);
+    const audit: ReturnType<typeof validatePonderOutput> = validatePonderOutput(parsed, pack, caps, leadCtx.signalKeys);
     // Faults, soft: a lead naming a metric nothing writes wants a source; a
     // musing dropped for a citation is the audit doing its job and only
     // counted.
@@ -692,6 +893,72 @@ export async function runPonder(
     }
     result.rejected = audit.rejected;
     result.coerced = audit.coerced;
+
+    // ── The adversarial second pass ──
+    //
+    // Only when the budget paid for it, and only ever a FILTER plus a rewrite
+    // over what the first audit already admitted. A failure here keeps the
+    // first pass whole: the cycle must never be worth less for having tried to
+    // improve itself.
+    if (opts.adversary && audit.musings.length) {
+      result.adversary.ran = true;
+      try {
+        const slugs = new Set(audit.musings.map((m) => m.slug));
+        const res = await client.chat.completions.create({
+          model: modelId,
+          temperature: 0.4,
+          max_tokens: 2000,
+          messages: [
+            { role: 'system', content: adversaryPrompt() },
+            { role: 'user', content: renderPack(pack) },
+            {
+              role: 'user',
+              content: renderForAdversary(
+                audit.musings.map((m) => ({
+                  slug: m.slug,
+                  title: m.candidate.title,
+                  text: m.narrative,
+                  cites: m.citedCardIds,
+                })),
+              ),
+            },
+          ],
+        });
+        result.tokens.prompt += res.usage?.prompt_tokens ?? 0;
+        result.tokens.completion += res.usage?.completion_tokens ?? 0;
+        const body = (res.choices[0]?.message?.content ?? '')
+          .trim()
+          .replace(/^```(?:json)?/i, '')
+          .replace(/```$/, '')
+          .trim();
+        const ruled = validateAdversary(JSON.parse(body), pack, slugs);
+        result.rejected.push(...ruled.rejected);
+        const applied = applyAdversary(audit.musings, ruled.rulings);
+        result.adversary.dropped = applied.dropped;
+        result.adversary.sharpened = applied.sharpened.length;
+        // A sharpened line has passed the same citation audit as the original,
+        // so it replaces the narrative and the evidence trail together.
+        audit.musings = applied.kept.map((m) => {
+          if (!m.sharpenedText || !m.sharpenedCites?.length) return m;
+          const cards = m.sharpenedCites.map((c) => pack.byId.get(c)).filter((c): c is NonNullable<typeof c> => !!c);
+          return {
+            ...m,
+            narrative: m.sharpenedText,
+            citedCardIds: m.sharpenedCites,
+            candidate: {
+              ...m.candidate,
+              explanation:
+                `Drawn from ${cards.length} cited fact${cards.length === 1 ? '' : 's'}, sharpened on a second pass: ` +
+                cards.map((c) => c.text).join(' · ').slice(0, 600),
+              evidence: cards.map((c) => ({ kind: c.ref.kind, id: c.ref.id, note: c.text })),
+            },
+          };
+        });
+      } catch (err) {
+        // Soft. The first pass stands exactly as it was audited.
+        result.rejected.push(`adversary pass failed: ${errMsg(err)}`);
+      }
+    }
 
     // ── Musings → the thought ledger ──
     if (audit.musings.length) {

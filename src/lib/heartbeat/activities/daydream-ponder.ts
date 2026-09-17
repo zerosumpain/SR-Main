@@ -79,6 +79,16 @@ export const daydreamPonder: ActivityHandler = {
         verify: budget.plan.verify && effort.compose.verify,
         lookupBudget: effort.ponder.lookupBudget,
         caps: { maxMusings: effort.ponder.maxMusings, maxLeads: effort.ponder.maxLeads },
+        // Spare budget buys THINKING, never talking — the standing rule for
+        // this quota. So headroom does not raise the musing cap (which would
+        // mostly buy more of the echoes the first pass already produces); it
+        // buys a second, adversarial reading of the same cards.
+        //
+        // Gated on a READABLE meter with room on it. On a non-Codex model the
+        // caps stop applying because the spend becomes cash, and an extra call
+        // a cycle is then a bill rather than a use of slack — so `applies`
+        // must be true, not merely unblocked.
+        adversary: budget.applies && budget.reachable && budget.plan.depth === 'deep',
       });
     } catch (err) {
       return { outcome: 'error', summary: errMsg(err) };
@@ -88,8 +98,15 @@ export const daydreamPonder: ActivityHandler = {
 
     const m = result.musings;
     const bits = [
+      // The lens leads the summary: reading a week of pulses should show the
+      // rotation turning, which is the only cheap way to catch it stuck.
+      `${result.lens} lens`,
       `${result.cards} cards`,
-      `${m.proposed} musings (${m.created} new, ${m.updated} refreshed, ${m.suppressed} held, ${m.muted} muted)`,
+      // `merged` was missing here, and its absence is why the repetition went
+      // unseen for a month: a cycle reading "2 musings (0 new, 0 refreshed, 0
+      // held, 0 muted)" looks like a quiet night, and what actually happened is
+      // that both were absorbed into claims already live.
+      `${m.proposed} musings (${m.created} new, ${m.merged} merged, ${m.updated} refreshed, ${m.suppressed} held, ${m.muted} muted)`,
       `${result.leadsCreated} leads opened${result.leadsDuplicate ? ` (${result.leadsDuplicate} already open)` : ''}`,
       ...(result.rulesAdmitted || result.rulesRefused
         ? [`rules: ${result.rulesAdmitted} proposed, ${result.rulesRefused} refused`]
@@ -107,6 +124,11 @@ export const daydreamPonder: ActivityHandler = {
       bits.push(
         `looked up ${result.lookups.asked} → ${result.lookups.cards} card(s)` +
           (result.lookups.failed ? `, ${result.lookups.failed} failed` : ''),
+      );
+    }
+    if (result.adversary.ran) {
+      bits.push(
+        `second pass: ${result.adversary.dropped.length} dropped, ${result.adversary.sharpened} sharpened`,
       );
     }
     if (result.error) bits.push(`error: ${result.error}`);

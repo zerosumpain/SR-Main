@@ -5,6 +5,9 @@ import {
   PACK_SIGNAL_LIMIT,
   SIGNAL_MOVER_SEATS,
   SIGNAL_ROTATION_SEATS,
+  OUTLIER_SEATS,
+  outlierText,
+  rankOutliers,
   type SignalRow,
 } from './signals';
 
@@ -132,5 +135,76 @@ describe('signalShape', () => {
 
   it('says nothing about a signal with no recent readings', () => {
     expect(signalShape(row('a', { mean: null }), today)).toBe('');
+  });
+});
+
+describe('rankOutliers', () => {
+  const base = (key: string, over: Partial<SignalRow> = {}): SignalRow => ({
+    key,
+    label: key,
+    unit: null,
+    mean: 10,
+    lo: 9,
+    hi: 11,
+    days: 7,
+    priorMean: 10,
+    priorSd: 1,
+    priorDays: 21,
+    lastDay: '2026-09-17',
+    ...over,
+  });
+
+  it('finds the signal furthest from its own history', () => {
+    const rows = [base('quiet'), base('loud', { mean: 14 }), base('louder', { mean: 20 })];
+    expect(rankOutliers(rows).map((r) => r.key)).toEqual(['louder', 'loud']);
+  });
+
+  it('ranks by distance regardless of direction', () => {
+    const rows = [base('up', { mean: 13 }), base('down', { mean: 4 })];
+    expect(rankOutliers(rows)[0].key).toBe('down');
+  });
+
+  it('ignores signals with too little prior history to have a norm', () => {
+    expect(rankOutliers([base('new', { mean: 30, priorDays: 4 })])).toEqual([]);
+  });
+
+  it('ignores a series with no variance — everything is infinitely unusual otherwise', () => {
+    expect(rankOutliers([base('flat', { mean: 30, priorSd: 0 })])).toEqual([]);
+  });
+
+  it('skips signals already carded, so the block adds rather than repeats', () => {
+    const rows = [base('a', { mean: 20 }), base('b', { mean: 19 })];
+    expect(rankOutliers(rows, new Set(['a'])).map((r) => r.key)).toEqual(['b']);
+  });
+
+  it('stays quiet in an ordinary week', () => {
+    expect(rankOutliers([base('a', { mean: 10.5 }), base('b', { mean: 9.7 })])).toEqual([]);
+  });
+
+  it('never exceeds its seats', () => {
+    const rows = Array.from({ length: 50 }, (_, i) => base(`s${i}`, { mean: 20 + i }));
+    expect(rankOutliers(rows).length).toBe(OUTLIER_SEATS);
+  });
+});
+
+describe('outlierText', () => {
+  it('reports a distance and says so', () => {
+    const t = outlierText({
+      key: 'ha:x',
+      label: 'Hallway temperature',
+      unit: '°C',
+      mean: 16,
+      lo: 15,
+      hi: 17,
+      days: 7,
+      priorMean: 21,
+      priorSd: 1,
+      priorDays: 21,
+      lastDay: '2026-09-17',
+      sds: -5,
+    });
+    expect(t).toContain('Hallway temperature');
+    expect(t).toContain('standard deviations below');
+    expect(t).toContain('A distance, not a finding.');
   });
 });

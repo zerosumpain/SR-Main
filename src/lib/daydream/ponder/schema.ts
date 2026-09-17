@@ -36,6 +36,10 @@ export const DEFAULT_PONDER_CAPS: PonderCaps = { maxMusings: MAX_MUSINGS, maxLea
 export const MAX_MUSING_CHARS = 300;
 
 export interface ValidMusing {
+  /** The model's own slug for this musing. Carried explicitly so the adversary
+   *  pass can rule on it by name rather than parsing it back out of the
+   *  dedupe key. */
+  slug: string;
   candidate: Candidate;
   /** The model's own sentence — becomes the thought's narrative directly,
    *  because it has passed the citation audit that compose's verify pass
@@ -172,6 +176,7 @@ export function validatePonderOutput(
     }
 
     out.musings.push({
+      slug,
       narrative: text,
       citedCardIds: cites,
       candidate: {

@@ -104,6 +104,79 @@ export function signalShape(r: SignalRow, today: string): string {
   return '';
 }
 
+/** How far from its own history a signal has to sit before it is worth naming
+ *  as an outlier, in prior standard deviations. Higher than `SIGNAL_SHIFT_SDS`
+ *  because this block RANKS the whole registry rather than annotating a card
+ *  that already earned a seat — a loose bar here would fill it with noise. */
+export const OUTLIER_MIN_SDS = 2.5;
+/** Seats in the outlier block. Small on purpose: this is the answer to "what
+ *  behaved least like itself this week", and a list of twenty is not an
+ *  answer to that question. */
+export const OUTLIER_SEATS = 5;
+/** Prior days needed before a signal may be called an outlier. */
+export const OUTLIER_MIN_PRIOR_DAYS = 10;
+
+/**
+ * Which signals behaved least like their own recent history.
+ *
+ * ── The question this answers ──────────────────────────────────────────────
+ *
+ * The testing arm of this engine asks one shape of question — "on days X is
+ * higher, is Y lower?" — over 22 daily metrics. Measured on production
+ * 2026-09-17: 337 hypotheses proposed over two months, 202 inconclusive, 135
+ * underpowered, ZERO supported and ZERO refuted. Pairwise correlation over a
+ * few months of daily aggregates, under FDR control, almost never clears. The
+ * frontier was not short of data; it was short of question shapes.
+ *
+ * This is a different shape, and one the data can actually answer: a single
+ * series against ITSELF. No pair, so no pairwise power problem, and no
+ * multiple-comparison blow-up from 315 signals squared.
+ *
+ * ── What it is not ─────────────────────────────────────────────────────────
+ *
+ * Not a test and not a finding. It is a standardised distance, reported as a
+ * distance, so the model can notice something and say what it noticed. Claims
+ * still belong to the sweep and the hypothesis machinery, which are corrected
+ * for multiplicity; nothing here is allowed to say a shift MEANS anything.
+ *
+ * Ranks across the WHOLE registry, not just the seated cards — the point is to
+ * surface the sensor nobody was looking at, which by definition did not win a
+ * movement seat.
+ */
+export function rankOutliers(
+  rows: SignalRow[],
+  exclude: ReadonlySet<string> = new Set(),
+  seats = OUTLIER_SEATS,
+): Array<SignalRow & { sds: number }> {
+  return rows
+    .filter(
+      (r) =>
+        !exclude.has(r.key) &&
+        r.mean != null &&
+        r.days >= 2 &&
+        r.priorMean != null &&
+        r.priorSd != null &&
+        r.priorSd > 1e-9 &&
+        r.priorDays >= OUTLIER_MIN_PRIOR_DAYS,
+    )
+    .map((r) => ({ ...r, sds: ((r.mean as number) - (r.priorMean as number)) / (r.priorSd as number) }))
+    .filter((r) => Math.abs(r.sds) >= OUTLIER_MIN_SDS)
+    .sort((a, b) => Math.abs(b.sds) - Math.abs(a.sds))
+    .slice(0, seats);
+}
+
+/** One outlier, as a card sentence. Deliberately observational — "sits N
+ *  standard deviations from", never "has risen because". */
+export function outlierText(r: SignalRow & { sds: number }): string {
+  const unit = r.unit ? ` ${r.unit}` : '';
+  const dir = r.sds > 0 ? 'above' : 'below';
+  return (
+    `${r.label} has been unlike itself this week: ${roundFigure(r.mean as number)}${unit} against a ${r.priorDays}-day norm of ` +
+    `${roundFigure(r.priorMean as number)}${unit} — ${Math.abs(Math.round(r.sds * 10) / 10)} standard deviations ${dir} it. ` +
+    `A distance, not a finding.`
+  );
+}
+
 /**
  * Choose which signals get a seat: movers first, then a rotation over the rest.
  *
@@ -114,6 +187,11 @@ export function chooseSignals(
   rows: SignalRow[],
   cursor: number,
   limit = PACK_SIGNAL_LIMIT,
+  /** Key prefixes this cycle's lens would rather hear from. The rotation
+   *  serves these first and then falls through to everything else, so a
+   *  preference narrows the order and never the reach — a house cycle with no
+   *  `ha:` readings still gets a full set of seats. */
+  prefer: string[] = [],
 ): SignalRow[] {
   const eligible = rows.filter((r) => r.mean != null && r.days >= 2);
   if (eligible.length <= limit) return eligible;
@@ -130,12 +208,18 @@ export function chooseSignals(
   // Stable order, so the cursor walks the same ring every cycle and a signal
   // cannot be skipped forever by an unrelated one being added.
   const rest = eligible.filter((r) => !taken.has(r.key)).sort((a, b) => a.key.localeCompare(b.key));
-  const seats = Math.min(SIGNAL_ROTATION_SEATS, limit - movers.length, rest.length);
+  const wanted = prefer.length ? rest.filter((r) => prefer.some((p) => r.key.startsWith(p))) : [];
+  const spare = wanted.length ? rest.filter((r) => !wanted.includes(r)) : rest;
+
+  const seats = Math.min(SIGNAL_ROTATION_SEATS, limit - movers.length);
   const rotation: SignalRow[] = [];
-  if (rest.length && seats > 0) {
-    const start = ((cursor % rest.length) + rest.length) % rest.length;
-    for (let i = 0; i < seats; i++) rotation.push(rest[(start + i) % rest.length]);
-  }
+  const ring = (pool: SignalRow[], want: number) => {
+    if (!pool.length || want <= 0) return;
+    const start = ((cursor % pool.length) + pool.length) % pool.length;
+    for (let i = 0; i < Math.min(want, pool.length); i++) rotation.push(pool[(start + i) % pool.length]);
+  };
+  ring(wanted, seats);
+  ring(spare, seats - rotation.length);
   return [...movers, ...rotation];
 }
 
