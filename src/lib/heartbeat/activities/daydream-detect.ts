@@ -110,7 +110,11 @@ export const daydreamDetect: ActivityHandler = {
         if (!persisted.createdKeys.includes(candidate.dedupeKey)) continue;
         const rule = activeRules.find((r) => r.spec.kind === candidate.kind && r.spec.action);
         if (!rule) continue;
-        const v = validateAction(rule.spec.action);
+        // 'rule' — this is the automatic path, so the narrower vocabulary
+        // applies here too. Re-validating under the SAME context the rule was
+        // proposed under is what stops a kind that later became tap-only from
+        // continuing to fire from an old approved row.
+        const v = validateAction(rule.spec.action, 'rule');
         if ('error' in v) {
           errors.push(`${candidate.kind}: stored action invalid — ${v.error}`);
           continue;

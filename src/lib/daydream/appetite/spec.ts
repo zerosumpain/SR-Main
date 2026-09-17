@@ -25,6 +25,8 @@
 // and nowhere else, so it is one table to read and one table to change — not a
 // sentiment distributed across four prompts.
 
+import { resolveCites } from '../cites';
+
 export const CAPABILITY_KINDS = ['data_source', 'news_source', 'watch', 'tool', 'feature'] as const;
 export type CapabilityKind = (typeof CAPABILITY_KINDS)[number];
 
@@ -178,12 +180,16 @@ export function validateProposals(
       continue;
     }
 
-    const citesRaw = Array.isArray(o.cites) ? o.cites.map((c) => str(c)) : [];
-    const cites = [...new Set(citesRaw.filter((c) => packKeys.has(c)))].slice(0, 6);
+    // `resolveCites` strips the brackets the pack renders keys inside before
+    // testing membership. It has to: the pack prints `[intent:0] …` and the
+    // prompt asks for the key verbatim, so an exact test rejected every
+    // correctly-formed citation for thirteen nights. See `cites.ts`.
+    const { hits, misses } = resolveCites(o.cites, packKeys);
+    const cites = hits.slice(0, 6);
     if (cites.length === 0) {
       // The fabrication meter. A capability nothing in the pack supports is an
       // idea the model had about the world, not about this site.
-      dropped.push(`${title}: cites nothing in the pack (${citesRaw.slice(0, 3).join(', ') || 'no citations'})`);
+      dropped.push(`${title}: cites nothing in the pack (${misses.slice(0, 3).join(', ') || 'no citations'})`);
       continue;
     }
 

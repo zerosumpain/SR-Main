@@ -18,6 +18,7 @@
 // what the model can and cannot see — is unit-testable with no database.
 
 import type { DaydreamSnapshot } from '../snapshot-types';
+import { BASE_LIMITS, type PackLimits } from './lens';
 import { parseInvestigationPlan } from '../hypotheses/plan';
 
 export interface FactCard {
@@ -54,22 +55,22 @@ export interface PackInputs {
    * not run, which is what a thin or budgetless cycle looks like.
    */
   lookups?: Array<{ ref: { kind: string; id: string }; text: string }>;
+  /** This cycle's card budget, from `limitsFor(lens)`. Absent means the base
+   *  allocation, so a fixture written before lenses still describes the pack
+   *  it was written against. */
+  limits?: PackLimits;
 }
 
-/** Card budget. A pack over ~90 cards stops being context and starts being a
- *  haystack; the caps below decide who loses seats, not the model. */
-export const PACK_LIMITS = {
-  places: 10,
-  memoryThemes: 20,
-  upcomingEmail: 12,
-  recentEmail: 6,
-  spendRows: 10,
-  offers: 6,
-  verdicts: 8,
-  weekAhead: 12,
-  interests: 8,
-  lookups: 12,
-} as const;
+/**
+ * Card budget. A pack over ~90 cards stops being context and starts being a
+ * haystack; the caps below decide who loses seats, not the model.
+ *
+ * These are now the BASE allocation, reweighted per cycle by the lens
+ * (`lens.ts`). With every lens weight at 1 the pack is exactly what it was
+ * before lenses existed, which is why the base numbers live there unchanged
+ * and this stays the name the rest of the codebase already imports.
+ */
+export const PACK_LIMITS: PackLimits = BASE_LIMITS;
 
 function pounds(minor: number): string {
   return `£${(minor / 100).toFixed(2)}`;
@@ -82,6 +83,9 @@ function pounds(minor: number): string {
  */
 export function assemblePack(inputs: PackInputs): FactPack {
   const { snapshot: s } = inputs;
+  // The lens's allocation for this cycle, or the shipped one when no lens was
+  // passed — every existing caller and fixture keeps its old pack exactly.
+  const limits: PackLimits = inputs.limits ?? PACK_LIMITS;
   const cards: FactCard[] = [];
   const add = (tense: string, ref: { kind: string; id: string }, text: string, maxLength = 220) => {
     const trimmed = text.replace(/\s+/g, ' ').trim().slice(0, maxLength);
@@ -139,17 +143,17 @@ export function assemblePack(inputs: PackInputs): FactPack {
   }
 
   // ── Upcoming ──
-  for (const e of inputs.weekAhead.slice(0, PACK_LIMITS.weekAhead)) {
+  for (const e of inputs.weekAhead.slice(0, limits.weekAhead)) {
     add('upcoming', { kind: 'calendar', id: 'week' },
       `Coming up: ${e.title} ${e.whenText}${e.location ? `, ${e.location}` : ''}.`);
   }
   if (s.emailFacts.available) {
-    for (const f of s.emailFacts.upcoming.slice(0, PACK_LIMITS.upcomingEmail)) {
+    for (const f of s.emailFacts.upcoming.slice(0, limits.upcomingEmail)) {
       add('upcoming', { kind: 'email', id: f.noteId }, `From email: ${f.type} — ${f.title} on ${f.date}.`);
     }
   }
   if (s.offers.available) {
-    for (const o of s.offers.items.slice(0, PACK_LIMITS.offers)) {
+    for (const o of s.offers.items.slice(0, limits.offers)) {
       add('upcoming', { kind: 'email', id: o.emailId },
         `Offer: ${o.merchant} — ${o.summary}${o.expiresAt ? `, expires ${o.expiresAt.toISOString().slice(0, 10)}` : ''}.`);
     }
@@ -159,24 +163,24 @@ export function assemblePack(inputs: PackInputs): FactPack {
   if (s.spend.available) {
     add('past', { kind: 'spend', id: 'total' },
       `Evidenced spend last 30 days: ${pounds(s.spend.totalMinor30d)} (receipts/bank only — understates cash).`);
-    for (const r of s.spend.recent.slice(0, PACK_LIMITS.spendRows)) {
+    for (const r of s.spend.recent.slice(0, limits.spendRows)) {
       add('past', { kind: 'spend', id: r.id }, `Paid ${pounds(r.amountMinor)} to ${r.merchant} on ${r.day}.`);
     }
   }
   if (s.emailFacts.available) {
-    for (const f of s.emailFacts.recent.slice(0, PACK_LIMITS.recentEmail)) {
+    for (const f of s.emailFacts.recent.slice(0, limits.recentEmail)) {
       add('past', { kind: 'email', id: f.noteId }, `Recently from email: ${f.type} — ${f.title} on ${f.date}.`);
     }
   }
   const namedPlaces = s.places
     .filter((p) => p.label && p.status === 'active')
     .sort((a, b) => b.visitCount - a.visitCount)
-    .slice(0, PACK_LIMITS.places);
+    .slice(0, limits.places);
   for (const p of namedPlaces) {
     add('past', { kind: 'place', id: p.id },
       `${p.label} (${p.kind}): ${p.visitCount} household visits, median stay ${p.medianDwellMins} min.`);
   }
-  for (const v of inputs.verdicts.slice(0, PACK_LIMITS.verdicts)) {
+  for (const v of inputs.verdicts.slice(0, limits.verdicts)) {
     const plan = parseInvestigationPlan(v.investigationPlan);
     if (plan) {
       add('past', { kind: 'hypothesis', id: v.id },
@@ -192,7 +196,7 @@ export function assemblePack(inputs: PackInputs): FactPack {
     add('past', { kind: 'memory', id: memory.id },
       `Memory context, not independent corroboration: ${memory.content}`, 360);
   }
-  for (const theme of s.memoryThemes.slice(0, PACK_LIMITS.memoryThemes)) {
+  for (const theme of s.memoryThemes.slice(0, limits.memoryThemes)) {
     add(
       'past',
       { kind: 'memory-theme', id: theme.id },
@@ -203,14 +207,14 @@ export function assemblePack(inputs: PackInputs): FactPack {
       360,
     );
   }
-  for (const t of s.interests.slice(0, PACK_LIMITS.interests)) {
+  for (const t of s.interests.slice(0, limits.interests)) {
     add('past', { kind: 'interest', id: t.refId }, `Recent interest (${t.source}): ${t.term}`);
   }
   // Looked-up facts last: they are context for what is already on the table,
   // and a card's position is the only ordering signal the model gets. Their
   // refs are ordinary evidence kinds, so a musing citing one drills through
   // exactly like a musing citing a memory the snapshot supplied.
-  for (const l of (inputs.lookups ?? []).slice(0, PACK_LIMITS.lookups)) {
+  for (const l of (inputs.lookups ?? []).slice(0, limits.lookups)) {
     add('past', l.ref, l.text);
   }
 

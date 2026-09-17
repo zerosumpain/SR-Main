@@ -31,6 +31,23 @@ export const FAULT_KINDS = [
   // one: its findings arrive by the same door as every other gap.
   'workflow_dead_node',
   'workflow_failing',
+  /**
+   * A stage that had something to say and was allowed to say NONE of it.
+   *
+   * Added 2026-09-17, after the appetite lane spent thirteen consecutive
+   * nights proposing three capabilities and admitting zero — a citation-format
+   * mismatch that no counter, pulse or alarm reported, because "0 admitted" is
+   * a legitimate answer on any single night and nothing was looking at the
+   * run of them. The lane read as a quiet site.
+   *
+   * The condition is deliberately narrow: proposed > 0 AND admitted === 0.
+   * A stage that proposed nothing is not silent, it is content; a stage that
+   * admitted some of what it proposed is working. Only the total rejection of
+   * a non-empty answer is evidence that the gate, not the model, is the
+   * problem. `raiseFault` upserts, so the row's `count` IS the run of nights
+   * and the shape of the failure is visible without a second table.
+   */
+  'lane_silent',
 ] as const;
 export type FaultKind = (typeof FAULT_KINDS)[number];
 
@@ -71,6 +88,9 @@ export function wantsFor(kind: FaultKind): Wants {
       return 'decline';
     case 'workflow_dead_node':
     case 'workflow_failing':
+    // A gate rejecting everything put in front of it is a defect in the gate,
+    // and a gate lives in the repo. No runtime tool can reach it.
+    case 'lane_silent':
       return 'code_change';
     case 'lead_barren':
     case 'audit_drop':
@@ -131,6 +151,51 @@ export async function raiseFault(input: RaiseInput): Promise<void> {
       });
   } catch (err) {
     console.warn(`[daydream] fault not recorded (${input.kind}:${identifier}): ${errMsg(err)}`);
+  }
+}
+
+/**
+ * Report a stage's admission rate, and raise `lane_silent` when a non-empty
+ * answer was rejected in full.
+ *
+ * Every lane in this engine is a model proposing and code admitting, and each
+ * one reports its counters to a pulse that nobody reads nightly. This is the
+ * one line that turns "0 admitted" from a number in a summary into a row on
+ * the ledger self-improve reads first.
+ *
+ * Closes the fault the moment the lane admits anything again, so a repaired
+ * gate clears itself without anyone tidying up — the same earn-it-back rule
+ * the tool signals use.
+ *
+ * Soft in both directions: a ledger write must never cost the cycle that tried.
+ */
+export async function noteLaneOutcome(input: {
+  /** The stage, as it appears on the heartbeat — 'daydream-appetite'. */
+  lane: string;
+  proposed: number;
+  admitted: number;
+  /** Why each drop happened, for the fault's detail line. */
+  dropped?: string[];
+}): Promise<void> {
+  const identifier = input.lane.trim().slice(0, 200);
+  if (!identifier) return;
+  if (input.proposed > 0 && input.admitted === 0) {
+    await raiseFault({
+      kind: 'lane_silent',
+      identifier,
+      site: input.lane,
+      detail:
+        `${input.proposed} proposed, 0 admitted. ` +
+        (input.dropped?.length ? `Reasons: ${input.dropped.slice(0, 3).join(' | ')}` : 'No reasons recorded.'),
+    });
+    return;
+  }
+  if (input.admitted > 0) {
+    try {
+      await closeFault('lane_silent', identifier, 'admitted again');
+    } catch (err) {
+      console.warn(`[daydream] lane_silent not cleared for ${identifier}: ${errMsg(err)}`);
+    }
   }
 }
 

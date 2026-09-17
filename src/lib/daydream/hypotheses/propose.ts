@@ -241,22 +241,18 @@ Rules:
 
 No prose, no code fence. If nothing is worth asking, output [].`;
 
-export const MAX_SIGNALS_IN_MENU = 40;
+// The menu moved to `signals/registry.ts` (2026-09-17) so the LEAD proposer
+// reads the same list. Two copies were how a signal stayed sweepable-but-never-
+// askable: leads validated against the 22 hard-coded metrics while hypotheses
+// could name any registered signal. Re-exported because callers and tests
+// already import the cap from here.
+export { MAX_SIGNALS_IN_MENU } from '../signals/registry';
 
 /** The signals a hypothesis may name: sweepable, best attested first. */
 async function sweepableSignalMenu(): Promise<Array<{ key: string; label: string; observedDays: number }>> {
-  try {
-    const { listSweepableSignals } = await import('../signals/registry');
-    const { MIN_PAIRS } = await import('../stats/tests');
-    const rows = await listSweepableSignals(MIN_PAIRS);
-    return rows
-      .filter((r) => !r.key.startsWith('feature:'))
-      .sort((a, b) => b.observedDays - a.observedDays || a.key.localeCompare(b.key))
-      .slice(0, MAX_SIGNALS_IN_MENU)
-      .map((r) => ({ key: r.key, label: r.label, observedDays: r.observedDays }));
-  } catch {
-    return [];
-  }
+  const { sweepableSignalMenu: menu } = await import('../signals/registry');
+  const { MIN_PAIRS } = await import('../stats/tests');
+  return menu(MIN_PAIRS);
 }
 
 /** Ask for a batch of questions. Validation happens here; testing does not. */
