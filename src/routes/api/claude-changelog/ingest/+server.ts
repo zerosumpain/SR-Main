@@ -17,6 +17,7 @@ import { eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { claudeSessions, claudeSessionStages } from '$lib/db/schema';
 import type { RequestHandler } from './$types';
+import { updateSet } from '$lib/changelog/ingest-guard';
 
 /**
  * Bearer check. Fails CLOSED in production.
@@ -58,6 +59,7 @@ function timingSafeEqualStr(a: string, b: string): boolean {
 }
 
 const STAGES = new Set(['request', 'design', 'plan', 'result', 'fixes']);
+
 
 type StageIn = {
   stage: string; ordinal: number; title?: string; summary?: string; rawText?: string;
@@ -124,12 +126,14 @@ export const POST: RequestHandler = async ({ request, url }) => {
     termFreq: s.termFreq ?? [],
     toolHistogram: s.toolHistogram ?? {},
     touchedPaths: s.touchedPaths ?? [],
-    // The join key to the release log. Coerced to a plain number array here
-    // rather than trusted: this is the one field a later reader indexes on, and
-    // a string in the array makes the GIN containment test silently miss.
+    // The join key to the release log. Coerced to a plain number array rather
+    // than trusted: this is the one field a later reader indexes on, and a
+    // string in the array makes the GIN containment test silently miss.
+    //
+    // `undefined`, NOT `[]`, when the payload omits it — see $lib/changelog/ingest-guard.
     pullRequests: Array.isArray(s.pullRequests)
       ? [...new Set(s.pullRequests.map(Number).filter((n) => Number.isInteger(n) && n > 0))]
-      : [],
+      : undefined,
     skills: s.skills ?? {},
     costBreakdown: s.costBreakdown ?? [],
     fullTranscript: s.fullTranscript ?? null,
@@ -168,7 +172,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
     await tx
       .insert(claudeSessions)
       .values(row)
-      .onConflictDoUpdate({ target: claudeSessions.id, set: { ...row, id: sql`${claudeSessions.id}` } });
+      .onConflictDoUpdate({ target: claudeSessions.id, set: updateSet(row) });
     await tx.delete(claudeSessionStages).where(eq(claudeSessionStages.sessionId, s.id));
     if (stageRows.length) await tx.insert(claudeSessionStages).values(stageRows);
   });
