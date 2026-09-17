@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invalidateAll } from '$app/navigation';
   import { tick } from 'svelte';
-  import { dailyAlertsText, DAILY_ALERTS_HREF, type DailyAlertsSummary } from '$lib/jkai/intel/daily-alerts';
+  import { dailyAlertsText, DAILY_ALERTS_HREF, type DailyAlertsSummary } from '$lib/constants/daily-alerts';
   let { summary }: { summary: DailyAlertsSummary } = $props();
   let editing = $state<string | null>(null);
   let reason = $state('');

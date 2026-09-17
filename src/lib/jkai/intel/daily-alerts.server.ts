@@ -1,7 +1,7 @@
 import { db } from '$lib/db';
 import { intelAlerts } from '$lib/db/schema';
 import { and, desc, eq, gte, lte, sql } from 'drizzle-orm';
-import type { DailyAlertsSummary } from './daily-alerts';
+import type { DailyAlertsSummary } from '$lib/constants/daily-alerts';
 
 /** Shared rolling daily window; delivery does not dismiss an alert. */
 export async function loadDailyAlerts(now = new Date()): Promise<DailyAlertsSummary> {

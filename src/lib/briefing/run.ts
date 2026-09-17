@@ -1,7 +1,7 @@
 // Briefing pipeline: gather → synthesise (LLM) → store → deliver. Simpler than
 // the self-improve run loop (one synthesis, no budget phases) but shares the
 // gates/dogfooding pattern. Single-flight guard prevents overlap.
-import { dailyAlertsText, DAILY_ALERTS_HREF } from '$lib/jkai/intel/daily-alerts';
+import { dailyAlertsText, DAILY_ALERTS_HREF } from '$lib/constants/daily-alerts';
 import { ownerPhone } from '$lib/config/owner';
 import { randomUUID } from 'crypto';
 import { ensureCollection, updateCollection, upsertRecord } from '$lib/datastore';
