@@ -35,7 +35,22 @@ export interface RemoteInvokeTarget {
 	timeoutMs?: number;
 }
 
-const DEFAULT_TIMEOUT_MS = 120_000;
+/**
+ * The default idle window, and why it is not two minutes.
+ *
+ * In-process a tool has no timeout at all, and some legitimately run for a very
+ * long time: `workflow_run` takes an `awaitMs` up to 600000, and only three
+ * tools in the catalogue emit anything while they work, so the other 137 are
+ * silent for their whole duration. A 120s idle cap would have destroyed the
+ * socket under a ten-minute wait and surfaced it as a transport error, where
+ * the same call in-process simply finishes.
+ *
+ * So the floor is above the longest wait a tool can legitimately ask for, and
+ * `JKAI_TOOL_INVOKE_IDLE_MS` moves it. This is a guard against a dead peer, not
+ * a policy about how long work may take.
+ */
+const DEFAULT_TIMEOUT_MS = 900_000;
+const CATALOGUE_TIMEOUT_MS = 10_000;
 
 /**
  * The target, or `null` when the lane is not configured — which is what Main
@@ -47,7 +62,63 @@ export function remoteInvokeTarget(): RemoteInvokeTarget | null {
 	const url = env.JKAI_TOOL_INVOKE_URL;
 	const token = env.JKAI_TOOL_INVOKE_TOKEN;
 	if (!url || !token) return null;
-	return { url, token, host: env.JKAI_TOOL_INVOKE_HOST || undefined };
+	const configured = Number(env.JKAI_TOOL_INVOKE_IDLE_MS);
+	return {
+		url,
+		token,
+		host: env.JKAI_TOOL_INVOKE_HOST || undefined,
+		timeoutMs: Number.isFinite(configured) && configured > 0 ? configured : undefined,
+	};
+}
+
+/**
+ * The catalogue, cached, with the last good answer kept.
+ *
+ * A GET per tool call would be absurd, and a permanent cache would be wrong the
+ * other way: the self-improvement engine registers tools live, with no restart.
+ * So it is refreshed on a short TTL.
+ *
+ * The failure mode is what shapes the rest. If a refresh fails and the last
+ * answer is served instead, chat carries on with a catalogue that is at most a
+ * minute stale — which is the same staleness it tolerates anyway. If there has
+ * NEVER been an answer, this throws rather than returning an empty catalogue:
+ * empty would report every tool unknown, and the chat would tell the owner his
+ * tools do not exist rather than that it could not reach them.
+ */
+let catalogueCache: { at: number; tools: Map<string, boolean> } | null = null;
+let cataloguePending: Promise<Map<string, boolean>> | null = null;
+const CATALOGUE_TTL_MS = 60_000;
+
+export function resetRemoteCatalogue(): void {
+	catalogueCache = null;
+	cataloguePending = null;
+}
+
+export async function remoteCatalogue(target: RemoteInvokeTarget): Promise<Map<string, boolean>> {
+	if (catalogueCache && Date.now() - catalogueCache.at < CATALOGUE_TTL_MS) {
+		return catalogueCache.tools;
+	}
+	// Cache the PROMISE, not the result, so concurrent callers in the same tick
+	// share one request — the same reason `load-registry.ts` does it.
+	cataloguePending ??= (async () => {
+		try {
+			const body = await getJson(target, '/api/platform/tools/catalogue');
+			const rows = (body as { tools?: Array<{ name?: unknown; destructive?: unknown }> }).tools;
+			if (!Array.isArray(rows)) throw new RemoteInvokeError('catalogue response had no tools');
+			const tools = new Map<string, boolean>();
+			for (const row of rows) {
+				if (typeof row?.name === 'string') tools.set(row.name, row.destructive === true);
+			}
+			catalogueCache = { at: Date.now(), tools };
+			return tools;
+		} catch (e) {
+			if (catalogueCache) return catalogueCache.tools;
+			throw e instanceof Error ? e : new RemoteInvokeError(String(e));
+		} finally {
+			cataloguePending = null;
+		}
+	})();
+	return cataloguePending;
 }
 
 /**
@@ -195,5 +266,56 @@ export async function invokeRemoteTool(
 		});
 		request.on('error', (e) => reject(new RemoteInvokeError(e.message)));
 		request.end(body);
+	});
+}
+
+/** A small GET for the catalogue, sharing this module's transport decisions. */
+function getJson(target: RemoteInvokeTarget, path: string): Promise<unknown> {
+	const url = new URL(target.url);
+	const transport = url.protocol === 'https:' ? https : http;
+	return new Promise((resolve, reject) => {
+		const request = transport.request(
+			{
+				host: url.hostname,
+				port: url.port || (url.protocol === 'https:' ? 443 : 80),
+				path,
+				method: 'GET',
+				headers: {
+					authorization: `Bearer ${target.token}`,
+					accept: 'application/json',
+					// Same reason as the POST: node:http sends what it is given and
+					// undici would not.
+					host: target.host ?? url.host,
+				},
+			},
+			(response) => {
+				let whole = '';
+				response.setEncoding('utf8');
+				response.on('data', (chunk: string) => {
+					whole += chunk;
+				});
+				response.on('end', () => {
+					if (response.statusCode !== 200) {
+						reject(
+							new RemoteInvokeError(
+								`tool catalogue failed: ${response.statusCode} ${whole.slice(0, 500)}`,
+							),
+						);
+						return;
+					}
+					try {
+						resolve(JSON.parse(whole));
+					} catch {
+						reject(new RemoteInvokeError(`tool catalogue was unreadable: ${whole.slice(0, 500)}`));
+					}
+				});
+			},
+		);
+		request.setTimeout(CATALOGUE_TIMEOUT_MS, () => {
+			request.destroy();
+			reject(new RemoteInvokeError(`tool catalogue timed out after ${CATALOGUE_TIMEOUT_MS}ms`));
+		});
+		request.on('error', (e) => reject(new RemoteInvokeError(e.message)));
+		request.end();
 	});
 }

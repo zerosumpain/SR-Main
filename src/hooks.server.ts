@@ -630,9 +630,11 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   // is shut by default). Scoped to exactly this path and to POST; the route
   // re-checks the credential itself, defence in depth, and an unrecognised one
   // falls through to the owner gate below and 401s there.
+  // Named one path and verb at a time, like the bridge above it: neither is a
+  // tree, so nothing new under /api/platform/tools is reachable by existing.
   if (
-    pathname === '/api/platform/tools/invoke' &&
-    event.request.method === 'POST' &&
+    ((pathname === '/api/platform/tools/invoke' && event.request.method === 'POST') ||
+      (pathname === '/api/platform/tools/catalogue' && event.request.method === 'GET')) &&
     invokeLaneFor(event.request) !== 'none'
   ) {
     return resolve(event);

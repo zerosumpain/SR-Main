@@ -322,4 +322,43 @@ describe('POST /api/platform/tools/invoke', () => {
       expect(JSON.parse(res.body)).toEqual({ success: true, data: 'scraped' });
     });
   });
+  describe('guards the bypass leaves to it', () => {
+    /**
+     * `depth` is deliberately not on the wire, so `executeTool`'s recursion
+     * guard cannot span a hop — and the workflow-engine nodes DO re-enter the
+     * seam (`nodes/jkai.ts`, `deep-research`, `deep-dive`). A self-pointing
+     * configuration would therefore go round again with the depth reset each
+     * pass. One refusal at the door ends that structurally.
+     */
+    it('refuses to serve when this process delegates its own tools', async () => {
+      mutableEnv.JKAI_TOOL_INVOKE_URL = 'http://127.0.0.1:9/api/platform/tools/invoke';
+      mutableEnv.JKAI_TOOL_INVOKE_TOKEN = 'o'.repeat(48);
+      try {
+        expect((await raw({ name: 'site_blog_list' }, { token: STANDARD })).status).toBe(409);
+        expect(calls).toHaveLength(0);
+      } finally {
+        delete mutableEnv.JKAI_TOOL_INVOKE_URL;
+        delete mutableEnv.JKAI_TOOL_INVOKE_TOKEN;
+      }
+    });
+
+    /**
+     * The hook bypass returns before the RATE_LIMITS pass, so a bypassed route
+     * has to bring its own ceiling — `/api/jkai/studio` says the same thing
+     * fifteen lines away in hooks.server.ts. This is a runaway guard, not a
+     * security control: a leaked token already has the catalogue. It is set
+     * well above what a chat turn does and only bites a retry loop.
+     *
+     * LAST in the file on purpose — the bucket is module-global and keyed by
+     * route, so exhausting it here would rate-limit anything that ran after.
+     */
+    it('has a ceiling, because the bypass skips the limiter', async () => {
+      let limited = 0;
+      for (let i = 0; i < 700; i++) {
+        const res = await raw({ name: 'site_blog_list' }, { token: STANDARD });
+        if (res.status === 429) limited++;
+      }
+      expect(limited).toBeGreaterThan(0);
+    });
+  });
 });

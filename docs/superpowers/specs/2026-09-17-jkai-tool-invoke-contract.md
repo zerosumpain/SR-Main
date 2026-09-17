@@ -29,11 +29,42 @@ runs today: the lane is closed unless configured, and with it unconfigured every
 tool call takes exactly the path it takes now.
 
 1. `POST /api/platform/tools/invoke` — the callee.
-2. A two-lane service credential, the destructive lane closed by default.
-3. `$lib/workflows/site-tools/remote.ts` — the caller, which is the code that
+2. `GET /api/platform/tools/catalogue` — what tools exist and which need a
+   human. See "all three predicates" below; without it the seam is half done.
+3. A two-lane service credential, the destructive lane closed by default.
+4. `$lib/workflows/site-tools/remote.ts` — the caller, which is the code that
    moves to SR-JKAI verbatim.
-4. `executor.ts` delegates to it when configured. That file is the seam the
+5. `executor.ts` delegates to both when configured. That file is the seam the
    extraction note names; this is the change to its body.
+
+## All three predicates cross, not just execution
+
+The first draft converted `executeSiteTool` and stopped, and that would have
+failed in production twice over.
+
+`executeSiteTool` is not the only thing that asks the catalogue a question.
+`isRegisteredTool` decides whether chat calls a tool at all — `general-chat.ts`
+gates on it — and `isDestructive` decides whether a confirmation card is raised
+first. Both read the local registry.
+
+- With only execution converted, every Main tool answers **"Unknown function"**
+  and the invoke endpoint is never reached at all. Loud, and would have been
+  found on the first turn.
+- Fix that alone and the second one bites: `isDestructive` returns `false` for
+  every tool, and **the confirmation card silently stops appearing**. Nothing
+  fails, nothing logs, and `gmail_send` runs unasked.
+
+The second is why there is a catalogue endpoint rather than a note saying to
+remember this later. `isDestructive` now goes through the seam as
+`isDestructiveTool`, and over the wire it **fails closed**: a name the catalogue
+does not carry, or a catalogue that could not be read, is treated as
+destructive. The direction of a wrong answer is not symmetric — a needless
+confirmation is an annoyance, a skipped one sends the email.
+
+In-process the same function does *not* fail closed, and that is deliberate: a
+local catalogue that lacks the name means the tool does not exist, and
+`general-chat` has already refused it at `isRegisteredTool`. Only across a wire
+can silence also mean "could not ask".
 
 ## The route does not go under `/api/jkai`
 
@@ -271,6 +302,44 @@ the only way to keep the pass-through.
 Moving chat, creating SR-JKAI, generating ingress for it, or the
 `chat/activity.ts` body (it becomes a call to the chat application, which does
 not exist yet). `jkai-core` stays `status: planned`.
+
+## What the review changed
+
+A `/code-review high` pass over the finished branch raised seven findings. Five
+were acted on; all five made the thing better rather than merely safer.
+
+- **`executeSiteTool` must never reject.** In-process it cannot:
+  `registry.executeTool` catches a handler's throw and returns
+  `{success:false,error}`. The remote path introduced rejections, and no caller
+  was written for them — `general-chat` calls it bare inside a `Promise.all`
+  over a turn's tool calls, so one transport blip would have taken the whole
+  batch down and killed the turn instead of handing the model one failed result.
+  Moving the catalogue must not change the contract of the seam in front of it.
+- **The seam was half converted** — the section above.
+- **A ceiling on the invoke route.** The hook bypass returns before the
+  `RATE_LIMITS` pass, which is exactly what `/api/jkai/studio` documents fifteen
+  lines away in `hooks.server.ts`. 600 burst, 10/s sustained: well above what a
+  chat turn legitimately does, and it only bites a retry loop. A runaway guard,
+  not a security control — a leaked token already has the catalogue.
+- **The idle window was 120s, and `workflow_run` takes an `awaitMs` up to
+  600000.** Only three tools emit anything, so the other 137 are silent for
+  their whole duration; a ten-minute wait would have had its socket destroyed
+  and surfaced as a transport error where the same call in-process simply
+  finishes. The floor is now above the longest wait a tool can ask for, with
+  `JKAI_TOOL_INVOKE_IDLE_MS` to move it.
+- **Both endpoints now refuse to serve when this process is itself
+  delegating** (409). `depth` is deliberately not on the wire, so
+  `executeTool`'s recursion guard cannot span a hop — and the workflow-engine
+  nodes *do* re-enter the seam (`nodes/jkai.ts`, `deep-research`, `deep-dive`),
+  so a self-pointing configuration would have gone round again with the depth
+  reset every pass. The original comment claimed the worst case was "one wasted
+  loopback hop", which was wrong. One refusal at the door is the structural
+  answer.
+
+Two were cosmetic and fixed in place: the non-streaming branch now turns a
+throw into a failed result the way the streamed one already did, and
+`gate-bypasses.ts` named a variable that does not exist — which matters because
+that file is what an operator reads on `/admin/estate` when opening the lane.
 
 ## Verification
 

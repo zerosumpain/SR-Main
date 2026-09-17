@@ -63,7 +63,10 @@ export const HOOK_BYPASSES: string[] = [
   // destructive tools and is unset by default. See $lib/server/invoke-auth.
   // Not loopback-gated, for the reason /api/jkai/studio is not: cloudflared
   // makes every VPS request look like 127.0.0.1.
-  '/api/platform/tools/invoke', // POST only, JKAI_INVOKE_TOKEN[_DESTRUCTIVE]
+  '/api/platform/tools/invoke', // POST only, JKAI_INVOKE_TOKEN / JKAI_INVOKE_DESTRUCTIVE_TOKEN
+  // What tools exist and which need a human — the other half of the same seam,
+  // on the same credential. GET only, and it carries no descriptions or schemas.
+  '/api/platform/tools/catalogue', // GET only, same credential
   // Autonomous-builder tool bridge. HMAC-over-build-id bearer token, verified
   // in $lib/jkai/tool-bridge. Named one path at a time on purpose: the sibling
   // /api/jkai/tools/promote has NO auth of its own and must stay owner-gated.
@@ -157,7 +160,8 @@ export const BYPASS_GUARDS: Record<string, string> = {
   '/api/trails/segments': 'POST only · loopback + MAINTENANCE_SECRET (GET stays gated)',
   '/api/jkai/studio': 'POST only · STUDIO_SERVICE_TOKEN',
   '/api/platform/tools/invoke':
-    'POST only · JKAI_INVOKE_TOKEN; destructive tools need a second token, unset by default',
+    'POST only · JKAI_INVOKE_TOKEN; destructive tools need JKAI_INVOKE_DESTRUCTIVE_TOKEN, unset by default',
+  '/api/platform/tools/catalogue': 'GET only · JKAI_INVOKE_TOKEN; tool names and their destructive flag',
   '/api/jkai/tools/manifest': 'JKAI_BRIDGE_TOKEN',
   '/api/jkai/tools/invoke': 'JKAI_BRIDGE_TOKEN',
   '/api/jkai/studio/image': 'JKAI_BRIDGE_TOKEN',
