@@ -13,14 +13,6 @@
 # is MEANT to be anonymous — and if it self-gates, that the gate is actually
 # called — then run `npm run gate:public-routes -- --write` and commit.
 /api/admin/security
-/api/agent/actions
-/api/agent/activity
-/api/agent/activity/stream
-/api/agent/costs
-/api/agent/sandbox/exec
-/api/agent/settings
-/api/agent/tasks
-/api/agent/tasks/[id]
 /api/blog/images/[postId]/[filename]
 /api/claude-changelog/ingest
 /api/claude-changelog/session/[id]

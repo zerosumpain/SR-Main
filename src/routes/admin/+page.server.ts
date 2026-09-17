@@ -4,7 +4,6 @@ import {
   healthSyncState,
   healthSyncJobs,
   blogPosts,
-  agentTasks,
   agentActions,
   customTools,
   scraperCredentials,
@@ -27,7 +26,6 @@ export const load: PageServerLoad = async () => {
     gmailAcctCount,
     scraperCredCount,
     customToolStats,
-    activeAgentTasks,
     todayCost,
   ] = await Promise.all([
     hasToken('whoop').catch(() => false),
@@ -64,11 +62,6 @@ export const load: PageServerLoad = async () => {
       .from(customTools)
       .catch(() => [{ total: 0, enabled: 0 }]),
     db
-      .select({ n: sql<number>`count(*)` })
-      .from(agentTasks)
-      .where(sql`status in ('active', 'planning')`)
-      .catch(() => [{ n: 0 }]),
-    db
       .select({
         cost: sql<number>`coalesce(sum(${agentActions.costUsd}), 0)`,
         count: sql<number>`count(*)`,
@@ -103,7 +96,6 @@ export const load: PageServerLoad = async () => {
       enabled: Number(customToolStats[0]?.enabled ?? 0),
     },
     agent: {
-      active: Number(activeAgentTasks[0]?.n ?? 0),
       todayCost: Number(todayCost[0]?.cost ?? 0),
       todayActions: Number(todayCost[0]?.count ?? 0),
     },

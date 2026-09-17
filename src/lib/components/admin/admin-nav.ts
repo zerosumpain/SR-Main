@@ -76,11 +76,13 @@ export const ADMIN_SECTIONS: AdminSection[] = [
   {
     id: 'ops',
     label: 'Ops',
-    href: '/admin/ops/agent',
+    // Landing moved off /admin/ops/agent when that page went: it read
+    // agent_activity and agent_tasks, both of which have never held a row, so
+    // every Ops click landed on three empty panels and a live pill over a
+    // stream that had never delivered an event.
+    href: '/admin/ops/live',
     match: (p) => p.startsWith('/admin/ops'),
     items: [
-      { label: 'Agent', href: '/admin/ops/agent', match: (p) => p === '/admin/ops/agent' },
-      { label: 'Tasks', href: '/admin/ops/tasks' },
       { label: 'Actions', href: '/admin/ops/actions' },
       { label: 'Costs', href: '/admin/ops/costs' },
       { label: 'Tool usage', href: '/admin/ops/tool-usage' },
@@ -141,10 +143,18 @@ export const ADMIN_ROUTE_REDIRECTS: Record<string, string> = {
   '/admin/tools': '/admin/ai/tools',
   '/admin/jkai-approvals': '/admin/ai/approvals',
   '/admin/agent/config': '/admin/ai/config',
-  '/admin/agent/tasks': '/admin/ops/tasks',
   '/admin/agent/actions': '/admin/ops/actions',
   '/admin/agent/costs': '/admin/ops/costs',
-  '/admin/agent': '/admin/ops/agent',
+  // The agent console and its task board are gone (2026-09-17). They read
+  // agent_tasks and agent_activity, and after the external-agent API under
+  // /api/agent was deleted neither table had a writer left anywhere in the
+  // codebase — both have held zero rows in production for their whole life.
+  // These four keys point straight at Live rather than through the dead URLs,
+  // so an old bookmark costs one 308 and not two.
+  '/admin/agent/tasks': '/admin/ops/live',
+  '/admin/agent': '/admin/ops/live',
+  '/admin/ops/agent': '/admin/ops/live',
+  '/admin/ops/tasks': '/admin/ops/live',
   '/admin/pulse': '/admin/ops/live',
   // The release console folded into /releases (2026-09-07), the same way the
   // admin files page folded into /drive: one page serving the owner the full
