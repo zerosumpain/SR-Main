@@ -9,8 +9,8 @@ import { eq, desc, inArray } from 'drizzle-orm';
 import { ensureCollection, upsertRecord, queryRecords, deleteRecord, DatastoreError } from '$lib/datastore';
 
 // Re-exported so nothing that already imported it from here had to change.
-export { MONITORS_COLLECTION } from './collection';
-import { MONITORS_COLLECTION } from './collection';
+export { MONITORS_COLLECTION } from '$lib/constants/monitors';
+import { MONITORS_COLLECTION } from '$lib/constants/monitors';
 const ACTOR = 'jkai';
 const DEFAULT_CRON = '0 */6 * * *'; // every 6 hours when the description gives no cadence
 

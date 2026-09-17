@@ -3,7 +3,7 @@
   import { MODAL_RADIAL, placeNodes, drawEdges, visibleEdges, entityIdOf } from '$lib/jkai/graph-layout';
   import { nodeStyle, edgeStyle, legendFor } from '$lib/jkai/graph-colors';
   import { onMount } from 'svelte';
-  import { dragPanel } from '$lib/actions/drag-panel';
+  import { dragPanel } from '$lib/utils/drag-panel';
   import { constrainPanel } from '$lib/components/intel/entity-hover.svelte';
   import EntityCard from '$lib/components/intel/EntityCard.svelte';
   import { commission } from '$lib/jkai/intel/entity-card-store';

@@ -7,8 +7,8 @@ import { getCollectionBySlug, queryRecords } from '$lib/datastore';
 import { listChatJobs } from '$lib/workflows/chat/activity';
 // The leaf, not `monitors.server`: that module edits monitors and so reaches
 // the workflow orchestrator, the engine and all 139 node modules — for a string.
-import { MONITORS_COLLECTION } from '$lib/monitors/collection';
-import { BRIEFINGS_COLLECTION, briefingDateLabel } from '$lib/briefing/types';
+import { MONITORS_COLLECTION } from '$lib/constants/monitors';
+import { BRIEFINGS_COLLECTION, briefingDateLabel } from '$lib/constants/briefing';
 
 /**
  * Lightweight live status for the JKAI launcher badges + the activity strip.

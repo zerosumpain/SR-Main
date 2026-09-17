@@ -1,9 +1,9 @@
 <script lang="ts">
   // Bespoke SVG chart (line | bar | area | scatter | slope | donut | sankey) on
-  // $lib/presentation/chartkit — the house hand-rolled style (policy-engine),
+  // $lib/utils/chartkit — the house hand-rolled style (policy-engine),
   // no chart library. Series colors walk the editorial palette: petrol
   // accent-ink first, burnt orange second.
-  import { donutSegments, extent, fmt, linScale, niceTicks, polyline, sankeyLayout } from '$lib/presentation/chartkit';
+  import { donutSegments, extent, fmt, linScale, niceTicks, polyline, sankeyLayout } from '$lib/utils/chartkit';
   import type { ChartBlock } from '$lib/presentation/types';
 
   let { block }: { block: ChartBlock } = $props();
