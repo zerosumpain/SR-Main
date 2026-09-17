@@ -7,7 +7,6 @@
   import Artifact from '$lib/components/jkai/artifacts/Artifact.svelte';
   import type { Artifact as ArtifactT } from '$lib/workflows/site-tools/artifact-types';
   import { isArtifact } from '$lib/workflows/site-tools/artifact-types';
-  import type { OrchestratorThinking } from '$lib/workflows/orchestrator/types';
   import PromoteToolBanner from '$lib/components/jkai/PromoteToolBanner.svelte';
   import PlanCard from '$lib/components/jkai/PlanCard.svelte';
   import ConfirmBanner from '$lib/components/jkai/ConfirmBanner.svelte';
@@ -219,7 +218,6 @@
     role: 'user' | 'assistant' | 'system';
     content: string;
     metadata?: { workflowGenerated?: boolean; usage?: TurnStamp };
-    thinking?: OrchestratorThinking;
     isProgress?: boolean;
     progressSteps?: string[];
     toolSteps?: ToolStep[];
@@ -1713,7 +1711,6 @@
           message?: string;
           error?: string;
           workflow?: unknown;
-          thinking?: OrchestratorThinking;
           attachments?: Message['attachments'];
           fileRefs?: FileSearchRef[];
           researchRefs?: ResearchSearchRef[];
@@ -1734,7 +1731,6 @@
           // The priced per-turn stamp travels on `done` so the cost line appears
           // under the reply immediately, not only after a reload.
           metadata: { workflowGenerated: !!result.workflow, usage: result.usage?.stamp },
-          thinking: result.thinking || undefined,
           isProgress: false,
           source: 'web',
           toolSteps: prior?.toolSteps,
@@ -3295,7 +3291,6 @@
                 role={msg.role}
                 content={msg.role === 'assistant' ? stripCodeRouteMarkers(stripPromoteMarkers(msg.content)) : msg.content}
                 metadata={msg.metadata}
-                thinking={msg.thinking}
                 {conversationId}
                 {approvalUi}
                 onSilentSend={msg.role === 'assistant' ? silentSend : undefined}

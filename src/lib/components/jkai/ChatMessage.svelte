@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { Marked } from 'marked';
-  import ThinkingTimeline from './ThinkingTimeline.svelte';
   import SlashCommandButtonBar from './SlashCommandButtonBar.svelte';
   import FileReferenceChips from './FileReferenceChips.svelte';
   import ResearchReferenceChips from './ResearchReferenceChips.svelte';
@@ -13,7 +12,6 @@
   import { openRunnerWindow } from '$lib/jkai/run-window';
   import type { MentionTarget } from '$lib/jkai/intel/entity-card-store';
   import { entityMentionHandlers } from '$lib/components/intel/entity-hover.svelte';
-  import type { OrchestratorThinking } from '$lib/workflows/orchestrator/types';
   import type { ApprovalUiSettings } from '$lib/server/models/settings';
   import { readTurnStamp, type TurnStamp } from '$lib/jkai/turn-stamp';
   import { shortModelLabel } from '$lib/jkai/model-label';
@@ -36,7 +34,6 @@
     role,
     content,
     metadata,
-    thinking,
     conversationId = null,
     onSilentSend,
     approvalUi,
@@ -65,7 +62,6 @@
         tokens?: { prompt: number; completion: number };
       };
     };
-    thinking?: OrchestratorThinking;
     conversationId?: string | null;
     onSilentSend?: (command: string) => void | Promise<void>;
     approvalUi?: ApprovalUiSettings;
@@ -327,8 +323,6 @@
   }
 
   let isUser = $derived(role === 'user');
-  let thinkingOpen = $state(true);
-  let hasThinking = $derived(thinking && thinking.steps && thinking.steps.length > 0);
   let heartbeat = $derived(metadata?.heartbeat ?? null);
   let isHeartbeatTrigger = $derived(heartbeat?.kind === 'user-trigger');
 
@@ -381,7 +375,7 @@
   // nothing but log lines in `content`, and that must draw no bubble at all
   // rather than an empty one.
   const hasBody = $derived(
-    answerText.trim().length > 0 || !!heartbeat || hasThinking || !!metadata?.workflowGenerated,
+    answerText.trim().length > 0 || !!heartbeat || !!metadata?.workflowGenerated,
   );
   let heartbeatLabel = $derived.by(() => {
     if (!heartbeat) return '';
@@ -421,21 +415,6 @@
         <span class="hb-label">{heartbeatLabel}</span>
       </div>
     {/if}
-    {#if hasThinking}
-      <!-- One mono row above the body: what the model did before it answered is
-           machinery, and machinery reads above the answer, not under it. -->
-      <button class="thinking-toggle" onclick={() => { thinkingOpen = !thinkingOpen; }}>
-        <span class="tt-glyph" aria-hidden="true">{thinkingOpen ? '\u25BE' : '\u25B8'}</span>
-        <span class="tt-word">thinking</span>
-        <span class="tt-sep" aria-hidden="true">/</span>
-        <span>{thinking!.steps.length} steps</span>
-      </button>
-
-      {#if thinkingOpen}
-        <ThinkingTimeline thinking={thinking!} />
-      {/if}
-    {/if}
-
     {#if isUser}
       <p class="user-text">{content}</p>
     {:else}
@@ -654,36 +633,6 @@
 
   /* The machinery row: petrol glyph and word (the "system is fine" colour),
      ghost metadata after it, `/` between chunks like every other ledger line. */
-  .thinking-toggle {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin: 0 0 8px;
-    background: none;
-    border: none;
-    padding: 0;
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--text-ghost);
-    cursor: pointer;
-    transition: color 0.2s ease-out;
-  }
-  .thinking-toggle .tt-glyph,
-  .thinking-toggle .tt-word {
-    color: var(--accent-ink);
-  }
-  .thinking-toggle .tt-sep {
-    opacity: 0.4;
-  }
-  .thinking-toggle:hover {
-    color: var(--text-muted);
-  }
-  .thinking-toggle:hover .tt-glyph,
-  .thinking-toggle:hover .tt-word {
-    color: var(--accent);
-  }
   .wf-generated {
     margin-top: 8px;
     padding-top: 8px;
