@@ -5,7 +5,9 @@ import { workflowSchedules } from '$lib/db/schema';
 import { and, asc, eq, gt, inArray } from 'drizzle-orm';
 import { getCollectionBySlug, queryRecords } from '$lib/datastore';
 import { listChatJobs } from '$lib/workflows/chat/activity';
-import { MONITORS_COLLECTION } from '$lib/monitors/monitors.server';
+// The leaf, not `monitors.server`: that module edits monitors and so reaches
+// the workflow orchestrator, the engine and all 139 node modules — for a string.
+import { MONITORS_COLLECTION } from '$lib/monitors/collection';
 import { BRIEFINGS_COLLECTION, briefingDateLabel } from '$lib/briefing/types';
 
 /**

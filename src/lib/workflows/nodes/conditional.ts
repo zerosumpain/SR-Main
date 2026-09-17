@@ -1,5 +1,5 @@
 import type { NodeExecutor, NodeDefinition, NodeResult, ExecutionContext } from '../types';
-import { safeFunction, UnsafeExpressionError } from './safe-eval';
+import { safeFunction, UnsafeExpressionError } from '$lib/utils/safe-eval';
 
 export const conditionalExecutor: NodeExecutor = {
   type: 'conditional',

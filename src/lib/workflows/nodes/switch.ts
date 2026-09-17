@@ -1,5 +1,5 @@
 import type { NodeExecutor, NodeResult, ExecutionContext } from '../types';
-import { safeFunction } from './safe-eval';
+import { safeFunction } from '$lib/utils/safe-eval';
 import type { SwitchCase } from './switch.def';
 
 export { switchDef } from './switch.def';

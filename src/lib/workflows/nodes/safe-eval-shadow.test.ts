@@ -10,7 +10,7 @@
 // shadowed to `undefined` inside the evaluated body.
 
 import { describe, it, expect } from 'vitest';
-import { safeFunction, UnsafeExpressionError } from './safe-eval';
+import { safeFunction, UnsafeExpressionError } from '$lib/utils/safe-eval';
 
 describe('safeFunction — legitimate expressions still work', () => {
   it('evaluates arithmetic over the declared args (the openrouter "remaining" case)', () => {

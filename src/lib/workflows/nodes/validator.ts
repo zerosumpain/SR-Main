@@ -1,5 +1,5 @@
 import type { NodeExecutor, NodeDefinition, NodeResult, ExecutionContext, JsonSchema } from '../types';
-import { safeFunction, UnsafeExpressionError } from './safe-eval';
+import { safeFunction, UnsafeExpressionError } from '$lib/utils/safe-eval';
 
 function checkType(value: unknown, expectedType: string): boolean {
   if (expectedType === 'any') return true;
