@@ -1,15 +1,7 @@
 <script lang="ts">
   import { page } from '$app/state';
-  import { getContext } from 'svelte';
+
   import { activeSection, isItemActive } from './admin-nav';
-
-  const adminToken = getContext<string>('adminToken');
-
-  function tokenHref(href: string): string {
-    if (!adminToken) return href;
-    const sep = href.includes('?') ? '&' : '?';
-    return `${href}${sep}token=${adminToken}`;
-  }
 
   const section = $derived(activeSection(page.url.pathname));
 </script>
@@ -19,7 +11,7 @@
     <div class="admin-subnav-inner">
       {#each section.items as item (item.href)}
         <a
-          href={tokenHref(item.href)}
+          href={item.href}
           class="section-tab"
           aria-current={isItemActive(item, page.url.pathname) ? 'page' : undefined}
         >

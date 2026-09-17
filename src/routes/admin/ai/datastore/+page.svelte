@@ -1,6 +1,6 @@
 <svelte:head><title>Datastore — Admin</title></svelte:head>
 <script lang="ts">
-  import { getContext } from 'svelte';
+
   import { goto } from '$app/navigation';
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
@@ -16,7 +16,6 @@
   };
 
   let { data } = $props();
-  const adminToken = getContext<string>('adminToken');
 
   let collections = $state<CollectionRow[]>(data.collections as CollectionRow[]);
 
@@ -27,9 +26,7 @@
   let errorMsg = $state('');
 
   function apiBase(): string {
-    return adminToken
-      ? `/api/admin/datastore/collections?token=${adminToken}`
-      : '/api/admin/datastore/collections';
+    return '/api/admin/datastore/collections';
   }
 
   function slugify(str: string): string {
@@ -59,7 +56,7 @@
       });
       const body = await res.json().catch(() => ({}));
       if (res.ok) {
-        goto(`/admin/ai/datastore/${slug}?token=${adminToken}`);
+        goto(`/admin/ai/datastore/${slug}`);
       } else {
         errorMsg = body.error ?? 'Could not create the collection';
       }
@@ -130,7 +127,7 @@
     {:else}
       <div class="coll-list">
         {#each collections as c (c.id)}
-          <a class="coll-row" href={`/admin/ai/datastore/${c.slug}?token=${adminToken}`}>
+          <a class="coll-row" href={`/admin/ai/datastore/${c.slug}`}>
             <div class="coll-main">
               <span class="coll-name">{c.name || c.slug}</span>
               {#if c.description}<span class="coll-desc">{c.description}</span>{/if}

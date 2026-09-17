@@ -26,12 +26,10 @@
 
   let {
     postId,
-    adminToken,
     onUseAsCover,
     onInsert,
   }: {
     postId: number;
-    adminToken: string;
     onUseAsCover: (url: string) => void;
     onInsert: (item: { url: string; mimeType: string; altText?: string | null }) => void;
   } = $props();
@@ -50,7 +48,6 @@
   /** Every image made this session, newest first, so two themes can be compared. */
   let results = $state<Generated[]>([]);
 
-  const tokenQs = $derived(adminToken ? `token=${encodeURIComponent(adminToken)}` : '');
   const base = $derived(`/api/admin/blog/${postId}/generate-image`);
   const prompt = $derived(composePrompt(subject, style));
   const canGenerate = $derived(subject.trim().length > 0 && !generating && !drafting);
@@ -61,7 +58,7 @@
     error = null;
     note = null;
     try {
-      const qs = ['step=brief', tokenQs].filter(Boolean).join('&');
+      const qs = 'step=brief';
       const res = await fetch(`${base}?${qs}`, { method: 'POST' });
       const body = (await res.json().catch(() => ({}))) as { subject?: string; reason?: string; error?: string };
       if (!res.ok) {
@@ -89,7 +86,7 @@
     error = null;
     note = null;
     try {
-      const qs = tokenQs ? `?${tokenQs}` : '';
+      const qs = '';
       const res = await fetch(`${base}${qs}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

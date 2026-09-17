@@ -70,7 +70,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       { label: 'Improvement', href: '/admin/ai/improvement' },
       { label: 'Doctor', href: '/admin/ai/doctor' },
       { label: 'Approvals', href: '/admin/ai/approvals' },
-      { label: 'Config', href: '/admin/ai/config' },
     ],
   },
   {
@@ -142,7 +141,16 @@ export const ADMIN_ROUTE_REDIRECTS: Record<string, string> = {
   '/admin/models': '/admin/ai/models',
   '/admin/tools': '/admin/ai/tools',
   '/admin/jkai-approvals': '/admin/ai/approvals',
-  '/admin/agent/config': '/admin/ai/config',
+  // The assistant config page is gone (2026-09-17). It wrote agent_settings
+  // 'system_prompt' and 'memory', and NOTHING in the codebase ever read either
+  // key — a settings page for a setting that did not exist. The live jkai prompt
+  // stack is assembled in $lib/jkai/prompt.ts and never consulted this table.
+  // The two rows are left in place, and the table stays declared in schema.ts:
+  // removing a declaration makes drizzle-kit want to DROP the table, and a drop
+  // paired with any future CREATE is read as a rename, which needs a TTY that CI
+  // does not have.
+  '/admin/agent/config': '/admin/ai/keys',
+  '/admin/ai/config': '/admin/ai/keys',
   '/admin/agent/actions': '/admin/ops/actions',
   '/admin/agent/costs': '/admin/ops/costs',
   // The agent console and its task board are gone (2026-09-17). They read

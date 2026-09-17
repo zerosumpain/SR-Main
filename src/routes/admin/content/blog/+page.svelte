@@ -1,6 +1,6 @@
 <svelte:head><title>Blog — Admin</title></svelte:head>
 <script lang="ts">
-  import { getContext } from 'svelte';
+
   import { goto, invalidateAll } from '$app/navigation';
   import {
     BLOG_AUTHORSHIP,
@@ -16,7 +16,6 @@
   import { dur } from '$lib/motion';
 
   let { data } = $props();
-  const adminToken = getContext<string>('adminToken');
 
   let creating = $state(false);
   let newTitle = $state('');
@@ -44,7 +43,7 @@
     authorshipOverride[id] = value;
     savingAuthorship[id] = true;
     try {
-      const res = await fetch(`/api/admin/blog/${id}?token=${adminToken}`, {
+      const res = await fetch(`/api/admin/blog/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ authorship: value }),
@@ -101,14 +100,14 @@
     if (!newTitle.trim()) return;
     creating = true;
     try {
-      const res = await fetch(`/api/admin/blog?token=${adminToken}`, {
+      const res = await fetch(`/api/admin/blog`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: newTitle.trim(), slug: slugify(newTitle.trim()) }),
       });
       if (res.ok) {
         const post = await res.json();
-        goto(`/admin/content/blog/${post.id}?token=${adminToken}`);
+        goto(`/admin/content/blog/${post.id}`);
       }
     } finally {
       creating = false;
@@ -200,7 +199,7 @@
           >
             <a
               class="post-row"
-              href={`/admin/content/blog/${post.id}?token=${adminToken}`}
+              href={`/admin/content/blog/${post.id}`}
             >
               {#if post.coverImageUrl}
                 <img class="cover" src={post.coverImageUrl} alt="" />

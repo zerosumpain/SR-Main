@@ -1,6 +1,6 @@
 <svelte:head><title>{data.collection.name || data.collection.slug} — Datastore</title></svelte:head>
 <script lang="ts">
-  import { getContext, untrack } from 'svelte';
+  import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
@@ -45,8 +45,6 @@
   type FilterRow = { path: string; op: Op; value: string };
 
   let { data } = $props();
-  const adminToken = getContext<string>('adminToken');
-  const tokenQs = adminToken ? `?token=${adminToken}` : '';
 
   // Derived, not init-captured consts: navigating between two collection
   // slugs REUSES this component (SvelteKit param-only navigation), so a
@@ -131,7 +129,7 @@
     running = true;
     queryError = '';
     try {
-      const res = await fetch(`${collBase}/query${tokenQs}`, {
+      const res = await fetch(`${collBase}/query`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(buildQueryBody()),
@@ -184,7 +182,7 @@
   async function loadAudit(recordId: string) {
     auditLoading = true;
     try {
-      const res = await fetch(`${collBase}/audit${tokenQs ? tokenQs + '&' : '?'}recordId=${recordId}`);
+      const res = await fetch(`${collBase}/audit?recordId=${recordId}`);
       const body = await res.json().catch(() => ({}));
       auditEntries = res.ok ? (body.entries ?? []) : [];
     } catch {
@@ -223,7 +221,7 @@
 
     savingRecord = true;
     try {
-      const res = await fetch(`${collBase}/records/${selected.id}${tokenQs}`, {
+      const res = await fetch(`${collBase}/records/${selected.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -258,7 +256,7 @@
     if (!confirm('Delete this record? This cannot be undone.')) return;
     deletingRecord = true;
     try {
-      const res = await fetch(`${collBase}/records/${selected.id}${tokenQs}`, { method: 'DELETE' });
+      const res = await fetch(`${collBase}/records/${selected.id}`, { method: 'DELETE' });
       if (res.ok) {
         records = records.filter((r) => r.id !== selected!.id);
         total = Math.max(0, total - 1);
@@ -304,7 +302,7 @@
     }
     inserting = true;
     try {
-      const res = await fetch(`${collBase}/records${tokenQs}`, {
+      const res = await fetch(`${collBase}/records`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: newKey.trim() || undefined, data: parsed }),
@@ -363,7 +361,7 @@
     }
     savingSettings = true;
     try {
-      const res = await fetch(`${collBase}${tokenQs}`, {
+      const res = await fetch(`${collBase}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),
@@ -388,9 +386,9 @@
     if (!confirm(`Delete the entire "${slug}" collection and all its records?`)) return;
     deletingCollection = true;
     try {
-      const res = await fetch(`${collBase}${tokenQs}`, { method: 'DELETE' });
+      const res = await fetch(`${collBase}`, { method: 'DELETE' });
       if (res.ok) {
-        goto(`/admin/ai/datastore${tokenQs}`);
+        goto(`/admin/ai/datastore`);
       } else {
         const body = await res.json().catch(() => ({}));
         settingsError = body.error ?? `Error ${res.status}`;
@@ -422,12 +420,12 @@
   <PageHeader
     kicker="Datastore"
     title={collection.name || collection.slug}
-    crumbs={[{ label: 'Datastore', href: `/admin/ai/datastore${tokenQs}` }, { label: collection.slug }]}
+    crumbs={[{ label: 'Datastore', href: `/admin/ai/datastore` }, { label: collection.slug }]}
   >
     {#snippet actions()}
       {#if collection.isSystem}<span class="nm-pill" data-state="info">system</span>{/if}
       <span class="nm-pill">{total} {total === 1 ? 'record' : 'records'}</span>
-      <a class="nm-btn-ghost" href={`${collBase}/export${tokenQs}`}>Export JSON</a>
+      <a class="nm-btn-ghost" href={`${collBase}/export`}>Export JSON</a>
     {/snippet}
   </PageHeader>
 

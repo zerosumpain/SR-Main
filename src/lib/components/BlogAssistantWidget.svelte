@@ -8,7 +8,6 @@
 
   type Props = {
     postId: number;
-    adminToken: string;
     history: { role: string; content: string }[];
     proposalStore: import('$lib/blog/assistant/proposal-store').ProposalStore;
     autoReviewEnabled: boolean;
@@ -22,7 +21,7 @@
   };
 
   let {
-    postId, adminToken, history, proposalStore,
+    postId, history, proposalStore,
     autoReviewEnabled, onSetAutoReview,
     onProposalArrived, onAcceptMeta, onRejectMeta, onRegenerate,
     onClear,
@@ -56,7 +55,7 @@
   async function loadRevisions() {
     loadingRevisions = true;
     try {
-      const r = await fetch(`/api/admin/blog/${postId}/revisions?token=${adminToken}`);
+      const r = await fetch(`/api/admin/blog/${postId}/revisions`);
       if (r.ok) {
         const body = await r.json();
         revisions = body.revisions ?? [];
@@ -74,7 +73,7 @@
 
   async function rollback(rev: Revision) {
     if (!confirm(`Roll back this ${rev.field} change?`)) return;
-    const r = await fetch(`/api/admin/blog/${postId}/revisions/${rev.id}/rollback?token=${adminToken}`, { method: 'POST' });
+    const r = await fetch(`/api/admin/blog/${postId}/revisions/${rev.id}/rollback`, { method: 'POST' });
     if (!r.ok) { appendStatus('✗ Rollback failed.'); return; }
     appendStatus(`↶ Rolled back ${rev.field}.`);
     // Notify the page so it refreshes its state from the returned post.
@@ -167,7 +166,7 @@
 
     abortCtl = new AbortController();
     try {
-      const res = await fetch(`/api/admin/blog/${postId}/assistant?token=${adminToken}`, {
+      const res = await fetch(`/api/admin/blog/${postId}/assistant`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message }),
@@ -246,7 +245,7 @@
   async function clearChat() {
     if (!confirm('Clear the chat history and all pending proposals for this post?')) return;
     try {
-      await fetch(`/api/admin/blog/${postId}/assistant/clear?token=${adminToken}`, { method: 'POST' });
+      await fetch(`/api/admin/blog/${postId}/assistant/clear`, { method: 'POST' });
     } catch { /* still clear locally */ }
     chatRows = [];
     proposalStore.clear();

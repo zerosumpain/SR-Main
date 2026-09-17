@@ -1,6 +1,6 @@
 <svelte:head><title>Self-Improvement — Admin</title></svelte:head>
 <script lang="ts">
-  import { getContext } from 'svelte';
+
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
 
@@ -71,8 +71,6 @@
   };
 
   let { data } = $props();
-  const adminToken = getContext<string>('adminToken');
-  const tokenQs = adminToken ? `?token=${adminToken}` : '';
 
   const insights = $derived((data.insights ?? null) as Insights | null);
   const schedule = $derived(data.schedule);
@@ -113,7 +111,7 @@
 
   async function refreshRuns() {
     try {
-      const res = await fetch(`/api/admin/improvement/runs${tokenQs}`);
+      const res = await fetch(`/api/admin/improvement/runs`);
       if (!res.ok) return;
       const body = await res.json();
       if (Array.isArray(body.runs)) runs = body.runs as RunView[];
@@ -127,7 +125,7 @@
     starting = true;
     runError = '';
     try {
-      const res = await fetch(`/api/admin/improvement/run${tokenQs}`, { method: 'POST' });
+      const res = await fetch(`/api/admin/improvement/run`, { method: 'POST' });
       const body = await res.json().catch(() => ({}));
       if (res.ok) {
         running = true; // starts the poll effect
@@ -146,7 +144,7 @@
     const next = !enabled;
     toggling = true;
     try {
-      const res = await fetch(`/api/admin/improvement/toggle${tokenQs}`, {
+      const res = await fetch(`/api/admin/improvement/toggle`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled: next }),
@@ -163,7 +161,7 @@
     if (!key) return;
     verifyingKey = key;
     try {
-      const res = await fetch(`/api/admin/improvement/verify-api${tokenQs}`, {
+      const res = await fetch(`/api/admin/improvement/verify-api`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key }),
@@ -186,7 +184,7 @@
   async function setToolEnabled(name: string, next: boolean) {
     busyTool = name;
     try {
-      const res = await fetch(`/api/admin/tools/${encodeURIComponent(name)}${tokenQs}`, {
+      const res = await fetch(`/api/admin/tools/${encodeURIComponent(name)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled: next }),
@@ -203,7 +201,7 @@
     if (!confirm(`Delete the self-built tool "${name}"? This cannot be undone.`)) return;
     busyTool = name;
     try {
-      const res = await fetch(`/api/admin/tools/${encodeURIComponent(name)}${tokenQs}`, { method: 'DELETE' });
+      const res = await fetch(`/api/admin/tools/${encodeURIComponent(name)}`, { method: 'DELETE' });
       if (res.ok) tools = tools.filter((t) => t.name !== name);
     } catch {
       /* ignore */

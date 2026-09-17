@@ -21,12 +21,10 @@
 
   let {
     postId,
-    adminToken,
     canPublish = true,
     onBlockersChanged,
   }: {
     postId: number;
-    adminToken: string;
     canPublish?: boolean;
     onBlockersChanged?: (blockers: number) => void;
   } = $props();
@@ -56,7 +54,7 @@
   async function load() {
     loading = true;
     try {
-      const res = await fetch(`/api/admin/blog/${postId}/desk?status=all&token=${adminToken}`);
+      const res = await fetch(`/api/admin/blog/${postId}/desk?status=all`);
       if (!res.ok) return;
       const body = (await res.json()) as { items: ChecklistItem[]; blockers: number };
       items = body.items ?? [];
@@ -76,7 +74,7 @@
     summary = null;
     phase = 'Starting…';
     try {
-      const res = await fetch(`/api/admin/blog/${postId}/desk?token=${adminToken}`, { method: 'POST' });
+      const res = await fetch(`/api/admin/blog/${postId}/desk`, { method: 'POST' });
       if (!res.ok || !res.body) {
         summary = `The run failed (${res.status}).`;
         return;
@@ -130,7 +128,7 @@
       onBlockersChanged?.(blockers);
     }
     try {
-      const res = await fetch(`/api/admin/blog/${postId}/desk?token=${adminToken}`, {
+      const res = await fetch(`/api/admin/blog/${postId}/desk`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: item.id, status }),
