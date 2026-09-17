@@ -6,7 +6,7 @@ import {
   isAcronymAnchor,
   findAnchor,
   type EntityMentionTarget,
-} from './entity-linkify';
+} from '$lib/components/jkai/entity-linkify';
 
 function target(id: string, name: string, over: Partial<EntityMentionTarget> = {}): EntityMentionTarget {
   return { id, name, typeName: 'organisation', ...over };

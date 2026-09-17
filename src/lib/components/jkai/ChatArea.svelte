@@ -1,6 +1,6 @@
 <script lang="ts">
   import DailyAlertsSummary from '$lib/components/jkai/DailyAlertsSummary.svelte';
-  import type { DailyAlertsSummary as DailyAlertsData } from '$lib/jkai/intel/daily-alerts';
+  import type { DailyAlertsSummary as DailyAlertsData } from '$lib/constants/daily-alerts';
   import ChatMessage from '$lib/components/jkai/ChatMessage.svelte';
   import HeartbeatMarker, { type HeartbeatEntry } from '$lib/components/jkai/HeartbeatMarker.svelte';
   import { renderMarkdown } from '$lib/markdown/ChatMarkdown.svelte';

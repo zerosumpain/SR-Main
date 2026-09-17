@@ -2,7 +2,7 @@
 // personalisation core), recent research, what you've been asking, and live
 // site signals. All best-effort — a missing source contributes nothing.
 import { loadDailyAlerts } from '$lib/jkai/intel/daily-alerts.server';
-import type { DailyAlertsSummary } from '$lib/jkai/intel/daily-alerts';
+import type { DailyAlertsSummary } from '$lib/constants/daily-alerts';
 import { db } from '$lib/db';
 import { and, desc, eq, gte, isNull, sql } from 'drizzle-orm';
 import { researchSessions, orchestratorChats, jkaiMemories } from '$lib/db/schema';

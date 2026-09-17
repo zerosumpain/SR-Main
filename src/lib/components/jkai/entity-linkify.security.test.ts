@@ -12,7 +12,7 @@
 // attributes the way a browser does (a quoted value runs to the next RAW quote).
 import { describe, it, expect } from 'vitest';
 import { sanitizeChatHtml } from '$lib/security/sanitize-chat';
-import { linkifyEntities } from '$lib/jkai/intel/entity-linkify';
+import { linkifyEntities } from './entity-linkify';
 
 describe('entity linkify — adversarial', () => {
   it('sanitiser encodes > inside attribute values, so the tokenizer cannot be split', () => {

@@ -1,5 +1,5 @@
 import { loadDailyAlerts } from '$lib/jkai/intel/daily-alerts.server';
-import { dailyAlertsText, DAILY_ALERTS_HREF } from '$lib/jkai/intel/daily-alerts';
+import { dailyAlertsText, DAILY_ALERTS_HREF } from '$lib/constants/daily-alerts';
 import type { NodeExecutor, NodeResult, ExecutionContext } from '../types';
 import {
   SETTINGS_TOPICS_KEY,

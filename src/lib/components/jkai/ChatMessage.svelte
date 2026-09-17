@@ -7,7 +7,7 @@
   import { sanitizeChatHtml } from '$lib/security/sanitize-chat';
   import { stripLegacyToolLog } from '$lib/workflows/chat/legacy-tool-log';
   import { linkifyCitations, fileAnchors, researchAnchors, type CiteTarget } from '$lib/jkai/citation-linkify';
-  import { linkifyEntities } from '$lib/jkai/intel/entity-linkify';
+  import { linkifyEntities } from '$lib/components/jkai/entity-linkify';
   import { codeRenderer, enhanceCodeBlocks, runLaneFor } from '$lib/jkai/code-blocks';
   import { openRunnerWindow } from '$lib/jkai/run-window';
   import type { MentionTarget } from '$lib/jkai/intel/entity-card-store';
