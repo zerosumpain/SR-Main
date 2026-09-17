@@ -25,8 +25,11 @@
 /api/jkai/codegraph/query
 /api/jkai/cors/[...url]
 /api/jkai/intel/backfill
+/api/jkai/intel/chat-context
 /api/jkai/intel/clusters/recalculate
+/api/jkai/intel/daily-alerts
 /api/jkai/intel/entities/split
+/api/jkai/intel/extract-thread
 /api/jkai/intel/source-facets
 /api/jkai/proxy/[id]/[...path]
 /api/jkai/studio
