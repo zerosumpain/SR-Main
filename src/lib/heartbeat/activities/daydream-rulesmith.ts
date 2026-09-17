@@ -7,6 +7,7 @@ import { resolveDaydreamModel } from '$lib/daydream/compose';
 import { proposeRules } from '$lib/daydream/rules/propose';
 import { admitProposal, refreshRuleOutcomes, retirementCandidates } from '$lib/daydream/rules/store';
 import { SETTINGS_ENABLED_KEY, errMsg } from '$lib/daydream/types';
+import { noteLaneOutcome } from '$lib/daydream/faults';
 import type { ActivityHandler } from '../types';
 
 const NAME = 'daydream-rulesmith';
@@ -121,6 +122,18 @@ export const daydreamRulesmith: ActivityHandler = {
         outcomes.push({ proposalKind: proposal.proposalKind, error: errMsg(err) });
       }
     }
+
+    // A whole batch refused is a claim about the gates, not about the week.
+    // The detail carries each refusal reason, so a legitimate run of "too
+    // noisy" backtests reads as exactly that rather than as a defect.
+    await noteLaneOutcome({
+      lane: 'daydream-rulesmith',
+      proposed: batch.proposals.length,
+      admitted,
+      dropped: outcomes
+        .filter((o) => !o.admitted)
+        .map((o) => `${String(o.proposalKind)}: ${String(o.reason ?? o.error ?? 'refused')}`),
+    });
 
     return {
       outcome: batch.error && admitted === 0 ? 'error' : 'ok',

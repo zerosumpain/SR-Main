@@ -4,6 +4,7 @@ import { listChatJobs } from '$lib/workflows/chat/activity';
 import {
   attributeSpend,
   budgetStatus,
+  hasThinkingHeadroom,
   readQuotaMark,
   ZERO_SPEND,
 } from '$lib/daydream/budget';
@@ -84,11 +85,13 @@ export const daydreamPonder: ActivityHandler = {
         // mostly buy more of the echoes the first pass already produces); it
         // buys a second, adversarial reading of the same cards.
         //
-        // Gated on a READABLE meter with room on it. On a non-Codex model the
-        // caps stop applying because the spend becomes cash, and an extra call
-        // a cycle is then a bill rather than a use of slack — so `applies`
-        // must be true, not merely unblocked.
-        adversary: budget.applies && budget.reachable && budget.plan.depth === 'deep',
+        // Gated on HEADROOM, not on pace. `plan.depth` answers "are we behind
+        // where the day's burn should be?", and because pacing starts at 07:00
+        // while the overnight jobs spend from 02:30, the day was always ahead
+        // of pace by breakfast — so the second pass only ever ran in the
+        // evening. `hasThinkingHeadroom` asks whether a real slice of both
+        // caps is still unspent, which is the actual question.
+        adversary: hasThinkingHeadroom(budget),
       });
     } catch (err) {
       return { outcome: 'error', summary: errMsg(err) };
