@@ -277,7 +277,11 @@ export function validateRuleSpec(spec: unknown): ValidationResult {
   validateCondition(s.when, 1, errors, { n: 0 });
 
   if (s.action !== undefined) {
-    const v = validateAction(s.action);
+    // 'rule' context: a standing rule fires on its own once approved, so it
+    // may not carry a kind that arms something which goes on notifying —
+    // `TAP_ONLY_KINDS` in actions.ts. The owner approved a shape here, not
+    // each firing.
+    const v = validateAction(s.action, 'rule');
     if ('error' in v) errors.push(`action: ${v.error}`);
   }
 

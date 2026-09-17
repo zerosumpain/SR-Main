@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateAction, fromProposedAction, toProposedAction } from '../actions';
+import { validateAction, fromProposedAction, toProposedAction, type RemindParams } from '../actions';
 import { assemblePack, renderPack, type PackInputs } from './pack';
 import { validatePonderOutput, MAX_MUSINGS } from './schema';
 import { ENTANGLED_PAIRS, isEntangled } from '../stats/sweep';
@@ -238,7 +238,11 @@ describe('action vocabulary', () => {
     if ('action' in v) {
       const stored = toProposedAction(v.action);
       const back = fromProposedAction(stored);
-      expect('action' in back && back.action.params.text).toBe('Chase the insurance quote');
+      // `params` is a union across the four action kinds now, so the test
+      // narrows on the kind the way the executor does.
+      expect('action' in back && back.action.kind === 'remind' && (back.action.params as RemindParams).text).toBe(
+        'Chase the insurance quote',
+      );
     }
   });
 

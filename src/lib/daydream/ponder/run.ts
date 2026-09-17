@@ -13,6 +13,7 @@
 // caps all still stand between anything here and the owner's attention.
 
 import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { db } from '$lib/db';
 import {
   daydreamDayFeatures,
@@ -261,7 +262,10 @@ async function longViewCards(now: Date, subject: string): Promise<PackInputs['ag
   try {
     const recentFrom = day(LONG_RECENT_DAYS);
     const priorFrom = day(LONG_PRIOR_DAYS);
-    const avg = (col: typeof daydreamDayFeatures.sleepMinutes, from: string, to?: string) =>
+    // `AnyPgColumn`, not `typeof table.sleepMinutes` — a helper typed against
+    // one column accepts only that column, and every other metric here is a
+    // different Pg type. This trap has been paid for once already.
+    const avg = (col: AnyPgColumn, from: string, to?: string) =>
       to
         ? sql<number | null>`avg(${col}) filter (where ${daydreamDayFeatures.day} >= ${from} and ${daydreamDayFeatures.day} < ${to})`
         : sql<number | null>`avg(${col}) filter (where ${daydreamDayFeatures.day} >= ${from})`;
