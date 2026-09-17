@@ -1,5 +1,6 @@
 import type { LayoutServerLoad } from './$types';
 import { db } from '$lib/db';
+import { spendToday, DAY_START } from '$lib/costs/ledger.server';
 import { activityConnections, agentActions, workflows, workflowRuns, workflowSchedules } from '$lib/db/schema';
 import { and, eq, gte, sql } from 'drizzle-orm';
 import { runningJobsByConversation } from '$lib/workflows/chat/activity';
@@ -23,7 +24,10 @@ const DAILY_BUDGET_SETTING_KEY = 'jkai.dailyBudgetUsd';
  *  is client state and arrives via $lib/jkai/hub-bus. */
 export const load: LayoutServerLoad = async () => {
   // Auth is handled centrally by hooks.server.ts
-  const dayStart = new Date(Date.now() - 86_400_000);
+  // Midnight in the database's timezone, the same boundary the spend ledger
+  // uses — this was a rolling 24 hours while everything beside it in the header
+  // said "today", so two figures under one word measured different windows.
+  const dayStart = DAY_START;
 
   // "Live" workflows are the ones with an enabled schedule — `workflows` itself
   // carries no enabled flag, the schedule row is what makes one fire.
@@ -39,13 +43,10 @@ export const load: LayoutServerLoad = async () => {
     codex,
     defaultModel,
   ] = await Promise.all([
-      db
-        .select({
-          tokens: sql<number>`COALESCE(SUM(COALESCE(tokens_input, 0) + COALESCE(tokens_output, 0)), 0)::int`,
-          spendUsd: sql<number>`COALESCE(SUM(cost_usd), 0)::double precision`,
-        })
-        .from(agentActions)
-        .where(and(eq(agentActions.actionType, 'llm_call'), gte(agentActions.createdAt, dayStart))),
+      // One ledger, one midnight. This was a ROLLING 24 HOURS while the two
+      // /admin surfaces used a day boundary, so the hub's "today" could differ
+      // from the console's by most of a day's spend and neither said why.
+      spendToday().then((s) => [{ tokens: s.tokensIn + s.tokensOut, spendUsd: s.costUsd }]),
       db.select({ count: sql<number>`count(*)::int` }).from(workflows),
       db
         .select({ count: sql<number>`count(*)::int` })
