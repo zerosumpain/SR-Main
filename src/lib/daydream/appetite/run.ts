@@ -28,6 +28,7 @@ import { persistCandidates, type PersistResult } from '../thought-store';
 import { errMsg } from '../types';
 import { assembleAppetitePack, renderAppetitePack } from './pack';
 import { capabilityToCandidate } from './bridge';
+import { noteLaneOutcome } from '../faults';
 import { listCapabilities, upsertCapability } from './store';
 import { CAPABILITY_KINDS, type CapabilityProposal, validateProposals } from './spec';
 
@@ -72,8 +73,13 @@ function systemPrompt(maxLeads: number): string {
     '',
     'Rules:',
     `- Propose at most ${maxLeads}. Fewer good ones beats a full list.`,
-    `- Every proposal MUST cite at least one [key] from the pack, verbatim, in "cites". A proposal citing nothing`,
-    '  in the pack is discarded unread — do not invent keys.',
+    // Spell out what a key IS. "cite the [key] verbatim" was read, correctly,
+    // as "include the brackets" — and the audit compared against a set holding
+    // the bare key, so every proposal died. The audit is bracket-tolerant now
+    // (`cites.ts`); this sentence stops the ambiguity existing at all.
+    '- Every proposal MUST cite at least one key from the pack in "cites". A key is the text INSIDE the square',
+    '  brackets at the start of a pack line: a line reading "[intent:0] …" is cited as "intent:0". A proposal',
+    '  citing nothing in the pack is discarded unread — do not invent keys.',
     '- NEVER propose anything the pack says already exists. A duplicate of an existing source, tool, watch or feed',
     '  is the single most expensive mistake you can make here.',
     '- PREFER capabilities that bring NEW DATA into the building — a data source, a feed, or a watch that observes',
@@ -161,6 +167,16 @@ export async function runAppetite(opts: { maxLeads?: number } = {}): Promise<App
   const audit = validateProposals(parsed, pack.keys, { max: maxLeads });
   result.dropped = audit.dropped;
   result.admitted = audit.admitted.length;
+
+  // A whole answer rejected is a claim about the GATE, not about the model.
+  // This lane is why the fault kind exists — thirteen nights of 3 → 0 with
+  // nothing to show for it anywhere but a pulse summary.
+  await noteLaneOutcome({
+    lane: 'daydream-appetite',
+    proposed: result.proposed,
+    admitted: result.admitted,
+    dropped: audit.dropped,
+  });
 
   const written: Array<{ p: CapabilityProposal; slug: string }> = [];
   for (const p of audit.admitted) {

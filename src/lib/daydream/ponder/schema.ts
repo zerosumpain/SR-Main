@@ -10,6 +10,7 @@
 // all. PURE — no db, no clock, no model.
 
 import { validateAction, toProposedAction } from '../actions';
+import { resolveCites } from '../cites';
 import type { Candidate } from '../snapshot-types';
 import { SWEEP_METRICS } from '../stats/sweep';
 import type { FactPack } from './pack';
@@ -92,13 +93,31 @@ const METRIC_BY_NORMALISED = new Map<string, string>(
   (SWEEP_METRICS as readonly string[]).map((m) => [m.toLowerCase().replace(/[^a-z0-9]/g, ''), m]),
 );
 
-export function resolveMetric(raw: string): string | null {
+export function resolveMetric(raw: string, allowedSignals?: ReadonlySet<string>): string | null {
   const trimmed = raw.trim();
   if ((SWEEP_METRICS as readonly string[]).includes(trimmed)) return trimmed;
+  // A registered signal key, if the caller offered the menu. Exact only: a
+  // signal key is `source:identifier` and there is no alias table for 315 of
+  // them, so a near miss must stay a miss rather than resolve to a neighbour.
+  if (allowedSignals?.has(trimmed)) return trimmed;
   return METRIC_BY_NORMALISED.get(trimmed.toLowerCase().replace(/[^a-z0-9]/g, '')) ?? null;
 }
 
-export function validatePonderOutput(parsed: unknown, pack: FactPack, caps: PonderCaps = DEFAULT_PONDER_CAPS): PonderValidation {
+export function validatePonderOutput(
+  parsed: unknown,
+  pack: FactPack,
+  caps: PonderCaps = DEFAULT_PONDER_CAPS,
+  /**
+   * Registered signal keys a lead may name, beyond the 22 day-feature metrics.
+   *
+   * Empty by default, which is the shipped behaviour: a caller that does not
+   * offer the menu gets exactly the old vocabulary. The hypothesis proposer has
+   * accepted signal keys since P4; leads could not, so a sensor the registry
+   * discovered — or a tool the improvement loop wrote — was sweepable in the
+   * background and unaskable in the foreground.
+   */
+  allowedSignals: ReadonlySet<string> = new Set(),
+): PonderValidation {
   const out: PonderValidation = { musings: [], leads: [], actionRules: [], rejected: [], coerced: [] };
   if (parsed == null || typeof parsed !== 'object') {
     out.rejected.push('output is not an object');
@@ -119,7 +138,11 @@ export function validatePonderOutput(parsed: unknown, pack: FactPack, caps: Pond
     const title = typeof m.title === 'string' ? m.title.trim() : '';
     const text = typeof m.text === 'string' ? m.text.trim() : '';
     const salience = typeof m.salience === 'number' ? m.salience : NaN;
-    const cites = Array.isArray(m.cites) ? m.cites.filter((c): c is string => typeof c === 'string') : [];
+    // Bracket-tolerant, for the same reason the appetite audit is: a card
+    // renders as "F12." and a model that writes "[F12]" has cited it. The
+    // identity of the card is still exact. See `cites.ts`.
+    const resolved = resolveCites(m.cites, pack.byId);
+    const cites = resolved.hits;
 
     if (!SLUG_RE.test(slug)) { out.rejected.push(`musing: bad slug "${slug.slice(0, 30)}"`); continue; }
     if (!(MUSING_THEMES as readonly string[]).includes(theme)) {
@@ -132,14 +155,13 @@ export function validatePonderOutput(parsed: unknown, pack: FactPack, caps: Pond
     if (!Number.isFinite(salience) || salience < 0 || salience > 1) {
       out.rejected.push(`musing ${slug}: salience out of range`); continue;
     }
-    if (cites.length === 0) { out.rejected.push(`musing ${slug}: no citations — dropped`); continue; }
-    const missing = cites.filter((c) => !pack.byId.has(c));
-    if (missing.length) {
+    if (resolved.misses.length) {
       // The audit. A citation of a card that does not exist is the model
       // telling us it made something up; the musing dies whole.
-      out.rejected.push(`musing ${slug}: cites unknown cards ${missing.join(',')} — dropped`);
+      out.rejected.push(`musing ${slug}: cites unknown cards ${resolved.misses.join(',')} — dropped`);
       continue;
     }
+    if (cites.length === 0) { out.rejected.push(`musing ${slug}: no citations — dropped`); continue; }
 
     const cards = cites.map((c) => pack.byId.get(c)!);
     const actions: Candidate['proposedActions'] = [];
@@ -185,7 +207,7 @@ export function validatePonderOutput(parsed: unknown, pack: FactPack, caps: Pond
     const resolved: string[] = [];
     const unknown: string[] = [];
     for (const mtr of metrics) {
-      const hit = resolveMetric(mtr);
+      const hit = resolveMetric(mtr, allowedSignals);
       if (!hit) { unknown.push(mtr); continue; }
       if (hit !== mtr) out.coerced.push(`lead ${leadKey}: "${mtr}" → ${hit}`);
       resolved.push(hit);
@@ -195,7 +217,8 @@ export function validatePonderOutput(parsed: unknown, pack: FactPack, caps: Pond
       // nothing downstream ever read it back to the model — so the same guess
       // came round every two hours, fourteen times, for nothing.
       out.rejected.push(
-        `lead ${leadKey}: unknown metrics ${unknown.join(',')} — the vocabulary is ${SWEEP_METRICS.join(', ')}`,
+        `lead ${leadKey}: unknown metrics ${unknown.join(',')} — the vocabulary is ${SWEEP_METRICS.join(', ')}` +
+          (allowedSignals.size ? `, plus ${allowedSignals.size} registered signal keys` : ''),
       );
       continue;
     }

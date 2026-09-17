@@ -29,9 +29,21 @@ import { persistCandidates, type PersistResult } from '../thought-store';
 import { DEFAULT_SUBJECT, errMsg } from '../types';
 import { assemblePack, renderPack, type PackInputs } from './pack';
 import { runLookups, MAX_LOOKUPS_PER_CYCLE } from './lookups';
+import {
+  chooseSignals,
+  roundFigure,
+  signalShape,
+  PACK_SIGNAL_LIMIT,
+  SIGNAL_PRIOR_DAYS,
+  SIGNAL_RECENT_DAYS,
+  SIGNAL_ROTATION_SEATS,
+  SIGNAL_ROTATION_STEP_MS,
+  type SignalRow,
+} from './signals';
 import { buildProfileLines } from './profile';
 import { SWEEP_METRICS, ENTANGLED_PAIRS } from '../stats/sweep';
 import { MIN_PAIRS } from '../stats/tests';
+import { TITLE_ECHO_WINDOW_DAYS } from '../refutations';
 import {
   DEFAULT_PONDER_CAPS,
   type PonderCaps,
@@ -102,10 +114,6 @@ async function featureAggregates(now: Date): Promise<PackInputs['aggregates']> {
   return out;
 }
 
-/** How many discovered signals may reach one pack. A limit on the pack, not
- *  a claim that nothing else exists — the sweep still sees all of them. */
-const PACK_SIGNAL_LIMIT = 15;
-
 /**
  * The signal registry, summarised for the pack.
  *
@@ -115,53 +123,51 @@ const PACK_SIGNAL_LIMIT = 15;
  * actually was, how long the school run took — none of which needed a line of
  * code here to become sayable.
  *
- * Ranked by how much each MOVED over the week, because a signal that sat still
- * is not worth a card. A thermostat pinned at 21 °C for seven days tells the
- * model nothing it can say anything about, and it would crowd out the one that
- * swung ten degrees. Capped, and the cap is a limit on the pack, not a claim
- * that nothing else exists.
+ * Two windows in one query: the last week, which is what the card quotes, and
+ * the three before it, which is the only thing that can say whether the week is
+ * unusual. See `chooseSignals` for who gets a seat and `signalShape` for what
+ * each card says beyond its mean.
  */
 async function signalAggregates(now: Date): Promise<PackInputs['aggregates']> {
   const out: PackInputs['aggregates'] = [];
   try {
-    const from = new Date(now.getTime() - 7 * 86_400_000).toISOString().slice(0, 10);
+    const day = (back: number) => new Date(now.getTime() - back * 86_400_000).toISOString().slice(0, 10);
+    const recentFrom = day(SIGNAL_RECENT_DAYS);
+    const priorFrom = day(SIGNAL_PRIOR_DAYS);
+    const today = day(0);
+
     const rows = await db
       .select({
         key: daydreamObservations.signalKey,
         label: daydreamSignals.label,
         unit: daydreamSignals.unit,
-        source: daydreamSignals.source,
-        mean: sql<number | null>`avg(${daydreamObservations.valueMean})`,
-        lo: sql<number | null>`min(${daydreamObservations.valueMin})`,
-        hi: sql<number | null>`max(${daydreamObservations.valueMax})`,
-        days: sql<number>`count(distinct ${daydreamObservations.day})::int`,
+        mean: sql<number | null>`avg(${daydreamObservations.valueMean}) filter (where ${daydreamObservations.day} >= ${recentFrom})`,
+        lo: sql<number | null>`min(${daydreamObservations.valueMin}) filter (where ${daydreamObservations.day} >= ${recentFrom})`,
+        hi: sql<number | null>`max(${daydreamObservations.valueMax}) filter (where ${daydreamObservations.day} >= ${recentFrom})`,
+        days: sql<number>`(count(distinct ${daydreamObservations.day}) filter (where ${daydreamObservations.day} >= ${recentFrom}))::int`,
+        priorMean: sql<number | null>`avg(${daydreamObservations.valueMean}) filter (where ${daydreamObservations.day} < ${recentFrom})`,
+        priorSd: sql<number | null>`stddev_samp(${daydreamObservations.valueMean}) filter (where ${daydreamObservations.day} < ${recentFrom})`,
+        priorDays: sql<number>`(count(distinct ${daydreamObservations.day}) filter (where ${daydreamObservations.day} < ${recentFrom}))::int`,
+        lastDay: sql<string | null>`max(${daydreamObservations.day})`,
       })
       .from(daydreamObservations)
       .innerJoin(daydreamSignals, eq(daydreamSignals.key, daydreamObservations.signalKey))
-      .where(and(gte(daydreamObservations.day, from), eq(daydreamSignals.status, 'active')))
-      .groupBy(daydreamObservations.signalKey, daydreamSignals.label, daydreamSignals.unit, daydreamSignals.source);
+      .where(and(gte(daydreamObservations.day, priorFrom), eq(daydreamSignals.status, 'active')))
+      .groupBy(daydreamObservations.signalKey, daydreamSignals.label, daydreamSignals.unit);
 
-    const scored = rows
-      .filter((r) => r.mean != null && r.days >= 2 && r.hi != null && r.lo != null)
-      .map((r) => ({
-        ...r,
-        // Relative spread, so a temperature in °C and a step count are ranked
-        // on the same scale rather than by whichever happens to be bigger.
-        spread: Math.abs(r.mean as number) > 1e-9 ? ((r.hi as number) - (r.lo as number)) / Math.abs(r.mean as number) : 0,
-      }))
-      .filter((r) => r.spread > 0)
-      .sort((a, b) => b.spread - a.spread)
-      .slice(0, PACK_SIGNAL_LIMIT);
-
-    const round = (n: number) => (Math.abs(n) >= 100 ? Math.round(n) : Math.round(n * 10) / 10);
-    for (const r of scored) {
+    const cursor = Math.floor(now.getTime() / SIGNAL_ROTATION_STEP_MS) * SIGNAL_ROTATION_SEATS;
+    for (const r of chooseSignals(rows as SignalRow[], cursor)) {
       const unit = r.unit ? ` ${r.unit}` : '';
+      const range =
+        r.lo != null && r.hi != null && r.hi !== r.lo
+          ? `, range ${roundFigure(r.lo)}–${roundFigure(r.hi)}${unit}`
+          : '';
       out.push({
         key: `signal:${r.key}`,
         text:
           `${r.label} over the last ${r.days} day${r.days === 1 ? '' : 's'}: ` +
-          `mean ${round(r.mean as number)}${unit}, ` +
-          `range ${round(r.lo as number)}–${round(r.hi as number)}${unit}.`,
+          `mean ${roundFigure(r.mean as number)}${unit}${range}.` +
+          signalShape(r, today),
       });
     }
   } catch {
@@ -227,6 +233,61 @@ async function rulingCardsFor(): Promise<{
     // Garnish. The pack stands without it, and a ruling table that cannot be
     // read must not cost the cycle.
     return { cards: [], refutedLines: [] };
+  }
+}
+
+/** How far back the "already said" block looks. The same window the live-echo
+ *  guard merges on, so the prompt and the guard cannot disagree about what
+ *  counts as a repeat. */
+const ALREADY_SAID_DAYS = TITLE_ECHO_WINDOW_DAYS;
+/** Lines in the block. Enough to cover a week at four musings a cycle without
+ *  the block becoming the largest thing in the prompt. */
+const ALREADY_SAID_LIMIT = 24;
+
+/**
+ * What this engine has already said, out loud, in the last week.
+ *
+ * ── Why this is a prompt rule and not a card ────────────────────────────────
+ *
+ * Measured on production 2026-09-17: across 30 days the model proposed 184
+ * musings and 41 were new. The other 137 were absorbed by the live-echo guard
+ * in `refutations.ts` — the same crossing, re-derived every two hours, silently
+ * merged into the row it already had. The model was not being repetitive out of
+ * poverty; the pack it sees each cycle is nearly identical and it had no way to
+ * know it had said any of this before.
+ *
+ * The fix is the one that already worked twice in this file. `ALREADY OPEN`
+ * fixed the leads frontier and the refuted block fixed re-proposed claims, both
+ * by moving the list out of the cards and INTO the rule that needed it. A card
+ * is material to reason over, sitting among two hundred others; a rule is a
+ * constraint. Repetition is a constraint problem.
+ *
+ * What it deliberately does NOT do is forbid the subject. A claim worth making
+ * twice exists — a deadline that moved, a pattern that broke again — so the
+ * rule beside this block asks for the CHANGE to be cited, which the audit can
+ * then check like any other citation. Silence about a live subject would be
+ * worse than the repetition it replaces.
+ */
+async function alreadySaidLines(now: Date): Promise<string[]> {
+  try {
+    const { loadLiveClaims } = await import('../refutations');
+    const floor = now.getTime() - ALREADY_SAID_DAYS * 86_400_000;
+    const rows = (await loadLiveClaims(200))
+      .filter((r) => r.createdAt.getTime() >= floor)
+      .slice(0, ALREADY_SAID_LIMIT);
+    if (!rows.length) return [];
+    const dayOf = (d: Date) => {
+      const days = Math.floor((now.getTime() - d.getTime()) / 86_400_000);
+      return days <= 0 ? 'today' : days === 1 ? 'yesterday' : `${days}d ago`;
+    };
+    return [
+      `ALREADY SAID — these claims are live from the last ${ALREADY_SAID_DAYS} days. Saying one again in different words creates nothing; the row is merged and the cycle is wasted.`,
+      ...rows.map((r) => `  - [${dayOf(r.createdAt)}] ${r.title}`),
+    ];
+  } catch {
+    // Soft, like every other context loader here: a list that cannot be read
+    // costs sharpness, never the cycle.
+    return [];
   }
 }
 
@@ -372,8 +433,14 @@ async function weekAhead(): Promise<PackInputs['weekAhead']> {
  *    proposed blind. `onConflictDoNothing` catches an identical `leadKey` and
  *    nothing catches the same question asked under a new one.
  */
-async function leadContext(subject: string): Promise<{ open: string[]; menu: string[] }> {
-  const out: { open: string[]; menu: string[] } = { open: [], menu: [] };
+async function leadContext(
+  subject: string,
+): Promise<{ open: string[]; menu: string[]; signalKeys: Set<string> }> {
+  const out: { open: string[]; menu: string[]; signalKeys: Set<string> } = {
+    open: [],
+    menu: [],
+    signalKeys: new Set(),
+  };
   try {
     const rows = await db
       .select({ leadKey: daydreamLeads.leadKey, title: daydreamLeads.title })
@@ -412,6 +479,21 @@ async function leadContext(subject: string): Promise<{ open: string[]; menu: str
   } catch (err) {
     console.warn(`[daydream] could not count metric coverage: ${errMsg(err)}`);
   }
+
+  // The registered signals a lead may now name, from the SAME menu the
+  // hypothesis proposer reads. Until 2026-09-17 leads were confined to the 22
+  // day-feature metrics, so a signal the registry discovered could be swept in
+  // the background and never asked about — 315 registered, 22 askable.
+  try {
+    const { sweepableSignalMenu } = await import('../signals/registry');
+    const rows = await sweepableSignalMenu(MIN_PAIRS);
+    for (const r of rows) {
+      out.signalKeys.add(r.key);
+      out.menu.push(`${r.key} (${r.observedDays} days — ${r.label})`);
+    }
+  } catch (err) {
+    console.warn(`[daydream] could not read the signal menu: ${errMsg(err)}`);
+  }
   return out;
 }
 
@@ -419,6 +501,7 @@ function systemPrompt(
   profileLines: string[],
   ctx: { open: string[]; menu: string[] },
   refuted: string[],
+  said: string[],
   caps: PonderCaps = DEFAULT_PONDER_CAPS,
 ): string {
   return [
@@ -435,6 +518,10 @@ function systemPrompt(
     // the rule that needed it. `ALREADY OPEN` is what fixed leads; this is the
     // same block for claims, and it sits above the rules for the same reason.
     ...(refuted.length ? ['', ...refuted] : []),
+    // What it has already said this week. Sits with the refuted block and above
+    // the rules for the same reason both of those do: the model cannot act on
+    // a constraint it has to infer from two hundred cards.
+    ...(said.length ? ['', ...said] : []),
     '',
     'HARD RULES:',
     'Treat supported hypotheses as provisional associations, not causal proof. Question competing explanations and practical benefit. Inconclusive means not established, never disproved. A source-verified sentence is not a validated behavioural prediction.',
@@ -442,6 +529,11 @@ function systemPrompt(
     `2. A musing = {"slug","theme","title","text","salience","cites",["actions"]}. theme must be one of ${JSON.stringify(MUSING_THEMES)}. text ≤ 280 chars, plain, no greeting, no emoji. salience 0..1 = how much this deserves his attention.`,
     '3. CITE OR DIE: every musing must list the fact-card ids ("F12") it is built from. Any number, date, name or amount you mention must appear in a cited card. An uncited or wrongly-cited musing is deleted by the audit, not fixed.',
     '4. Do not restate a single card back as a musing — the value is the CROSSING between cards (now × pattern, upcoming × history, money × diary).',
+    // The repetition rule. Not "never repeat": a claim worth making twice
+    // exists, and silence about a live subject is worse than the repetition.
+    // What it must do is say what MOVED, and cite it — which turns a repeat
+    // into something the citation audit can check like any other claim.
+    '4b. If a musing covers anything under ALREADY SAID, it is only worth sending when a cited card has CHANGED since — a date that moved, a figure that crossed, a thing that has now happened. Say what changed in the first clause and cite the card that shows it. If nothing changed, drop it and look somewhere else in the pack; an empty answer is better than a rewording.',
     `5. Optional actions on a musing: [{"kind":"remind","label":"...","params":{"inHours":N,"text":"..."}}] — the only kind available. Propose one only when acting later is clearly better than reading now.`,
     // The metric vocabulary, spelled out.
     //
@@ -459,6 +551,12 @@ function systemPrompt(
     `6. A lead = {"leadKey","title","rationale","metrics"} — a line of statistical enquiry worth pursuing over weeks. At most ${caps.maxLeads}.`,
     `   "metrics" MUST be 2 to 6 of these EXACT keys, copied character for character. Nothing else is a metric, and a label you read off a card above is not one.`,
     `   The number beside each is how many days it has recorded — the MOST any pair using it could overlap. A pair needs ${MIN_PAIRS} shared days to be testable at all, so prefer metrics with plenty and never pair two thin ones.`,
+    // Two kinds of name in one list. The plain ones are the day-feature store;
+    // the `source:identifier` ones are the open registry — a room sensor, the
+    // weather where he actually was, a route's door-to-door time, a series a
+    // tool the improvement loop wrote is now recording. Naming them is the
+    // whole point of the registry, and leads could not do it until 2026-09-17.
+    '   Two kinds of key appear below. A plain name (sleepMinutes) is a daily figure the engine has always kept. A name containing a colon (ha:…, journey:…, weather:…) is a registered signal — a sensor, a route, a reading a tool produces. Both are equally askable, and a question that crosses the two is usually the more interesting one.',
     // The menu carries each metric's day count, so a pair that cannot be
     // tested is visibly not worth proposing. Falls back to the bare vocabulary
     // if the count query failed — a list without numbers still beats no list.
@@ -489,18 +587,20 @@ export async function runPonder(
 
   try {
     const snapshot = await buildSnapshot({ now, subject });
-    const [verdicts, aggregates, signals, week, profileLines, diaryNotes, rulings, notebook, sweep, newSources] = await Promise.all([
-      recentVerdicts(),
-      featureAggregates(now),
-      signalAggregates(now),
-      weekAhead(),
-      buildProfileLines(now),
-      diaryNoteCards(),
-      rulingCardsFor(),
-      notebookCards(),
-      sweepCards(),
-      newSourceCards(),
-    ]);
+    const [verdicts, aggregates, signals, week, profileLines, diaryNotes, rulings, notebook, sweep, newSources, said] =
+      await Promise.all([
+        recentVerdicts(),
+        featureAggregates(now),
+        signalAggregates(now),
+        weekAhead(),
+        buildProfileLines(now),
+        diaryNoteCards(),
+        rulingCardsFor(),
+        notebookCards(),
+        sweepCards(),
+        newSourceCards(),
+        alreadySaidLines(now),
+      ]);
     const leadCtx = await leadContext(subject);
     // The lookup stage. Code names a gap in what it has just assembled, calls a
     // read-only first-party tool and cards the answer — see lookups.ts for why
@@ -541,7 +641,7 @@ export async function runPonder(
         temperature: 0.7,
         max_tokens: 1800,
         messages: [
-          { role: 'system', content: systemPrompt(profileLines, leadCtx, rulings.refutedLines, caps) },
+          { role: 'system', content: systemPrompt(profileLines, leadCtx, rulings.refutedLines, said, caps) },
           { role: 'user', content: renderPack(pack) },
         ],
       }),
@@ -562,7 +662,7 @@ export async function runPonder(
       return result;
     }
 
-    const audit = validatePonderOutput(parsed, pack, caps);
+    const audit = validatePonderOutput(parsed, pack, caps, leadCtx.signalKeys);
     // Faults, soft: a lead naming a metric nothing writes wants a source; a
     // musing dropped for a citation is the audit doing its job and only
     // counted.
@@ -575,6 +675,18 @@ export async function runPonder(
       }
       const drops = audit.rejected.filter((x) => /cite|citation|card|unknown card/i.test(x)).length;
       if (drops) void raiseFault({ kind: 'audit_drop', identifier: 'ponder', site: 'ponder/audit', detail: `${drops} musing(s) dropped this pass for citing a card they were not given`, subject });
+      // The whole answer refused, repeatedly, is a gate defect rather than a
+      // quiet week — the condition that hid the appetite lane's breakage.
+      const { noteLaneOutcome } = await import('../faults');
+      const proposedHere =
+        (Array.isArray((parsed as { musings?: unknown[] })?.musings) ? (parsed as { musings: unknown[] }).musings.length : 0) +
+        (Array.isArray((parsed as { leads?: unknown[] })?.leads) ? (parsed as { leads: unknown[] }).leads.length : 0);
+      await noteLaneOutcome({
+        lane: 'daydream-ponder',
+        proposed: proposedHere,
+        admitted: audit.musings.length + audit.leads.length,
+        dropped: audit.rejected,
+      });
     } catch {
       // never the tick
     }

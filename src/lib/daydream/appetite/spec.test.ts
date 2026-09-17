@@ -34,6 +34,16 @@ describe('validateProposals', () => {
     expect(r.dropped[0]).toContain('q:99');
   });
 
+  it('admits a proposal that cites keys with the brackets the pack rendered them in', () => {
+    // The thirteen-night production failure, pinned. The pack prints
+    // `[intent:1] …`; the model copied the key verbatim, brackets included,
+    // and an exact set test rejected every proposal the lane ever made.
+    const r = validateProposals({ capabilities: [{ ...ok, cites: ['[intent:1]', '[q:0]'] }] }, KEYS, { max: 3 });
+    expect(r.dropped).toEqual([]);
+    expect(r.admitted).toHaveLength(1);
+    expect(r.admitted[0].cites).toEqual(['intent:1', 'q:0']);
+  });
+
   it('drops a proposal with no citations at all', () => {
     const r = validateProposals({ capabilities: [{ ...ok, cites: [] }] }, KEYS, { max: 3 });
     expect(r.admitted).toHaveLength(0);

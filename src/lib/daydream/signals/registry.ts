@@ -207,6 +207,44 @@ export async function listSweepableSignals(minDays: number) {
     .orderBy(daydreamSignals.key);
 }
 
+/** How many signals may join a prompt's vocabulary. A ceiling on the prompt,
+ *  not on the registry — the sweep still tests every eligible signal. */
+export const MAX_SIGNALS_IN_MENU = 40;
+
+/**
+ * The signals a question may NAME, with how many days each has recorded.
+ *
+ * One menu, read by both askers. It used to live inside the hypothesis
+ * proposer, which meant a lead could only ever name one of the 22 hard-coded
+ * `SWEEP_METRICS` while a hypothesis could name any registered signal — so a
+ * sensor discovery found, or a tool the improvement loop built, could be swept
+ * in the background and never be the subject of a question. That is the return
+ * edge going missing at the last step, and two copies of this list is how it
+ * happened.
+ *
+ * `feature:*` keys are excluded because the day-feature store is mirrored in
+ * under its own names, which are the ones the menus already carry — including
+ * both would offer the same series twice under two spellings.
+ *
+ * REGISTERING IS STILL NOT TRUSTING: `minDays` keeps a signal discovered this
+ * morning out of the vocabulary until it has the history to answer anything.
+ */
+export async function sweepableSignalMenu(
+  minDays: number,
+  limit = MAX_SIGNALS_IN_MENU,
+): Promise<Array<{ key: string; label: string; observedDays: number }>> {
+  try {
+    const rows = await listSweepableSignals(minDays);
+    return rows
+      .filter((r) => !r.key.startsWith('feature:'))
+      .sort((a, b) => b.observedDays - a.observedDays || a.key.localeCompare(b.key))
+      .slice(0, limit)
+      .map((r) => ({ key: r.key, label: r.label, observedDays: r.observedDays }));
+  } catch {
+    return [];
+  }
+}
+
 /** "Stop pondering this one." Survives re-discovery, which dismissing a finding
  *  would not — the same distinction places draw between `ignored` and the
  *  engine's own judgement. */
