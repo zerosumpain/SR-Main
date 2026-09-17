@@ -23,3 +23,11 @@ npm run gate:source-footprint
 npm run gate:schema-imports
 npm run gate:schema-drift
 npm run gate:boundaries
+
+# The vendored SR-Infra application registry. On a host WITHOUT an SR-Infra
+# checkout (CI, the VPS) this passes with a note — the committed generated file
+# is the input there, and the estate model renders its own age. On homeserv,
+# where the source lives, it fails when the two have drifted. That asymmetry is
+# deliberate: the gate can only compare where both halves exist, and a gate that
+# cannot fail is worse than no gate, so the page carries the staleness alarm too.
+npm run gate:app-registry

@@ -17,7 +17,7 @@
   // Plain let — never $state (svelte5-pitfalls rule 1: internal handle).
   let pollTimer: ReturnType<typeof setInterval> | null = null;
 
-  let tab = $state<'estate' | 'surface'>('estate');
+  let tab = $state<'model' | 'estate' | 'surface'>('model');
   let query = $state('');
   let gateFilter = $state<'all' | GateClass>('all');
 
@@ -26,6 +26,30 @@
   // client-side navigation back to it) — reporting an exposure picture that is
   // no longer true, which is the one thing this page must not do.
   const surface = $derived(data.surface);
+  const model = $derived(data.model);
+  const byLayer = $derived.by(() => {
+    const m = new Map<string, typeof model.nodes>();
+    for (const n of model.nodes) {
+      const list = m.get(n.layer);
+      if (list) list.push(n);
+      else m.set(n.layer, [n]);
+    }
+    return m;
+  });
+  /** Which repository builds each app, so the app rows can name it inline. */
+  const appRepo = $derived(
+    new Map(model.edges.filter((e) => e.kind === 'builds').map((e) => [e.to, e.from.slice('repo:'.length)])),
+  );
+  /** The queue lanes an app's own worker claims — the activity to repository link. */
+  const appLanes = $derived.by(() => {
+    const m = new Map<string, string[]>();
+    for (const e of model.edges.filter((x) => x.kind === 'owns-worker')) {
+      const list = m.get(e.from);
+      if (list) list.push(e.to.slice('activity:'.length));
+      else m.set(e.from, [e.to.slice('activity:'.length)]);
+    }
+    return m;
+  });
   const endpoints = $derived(data.endpoints as EstateEndpoint[]);
   const publicUnauth = $derived(new Set(data.findings.publicUnauthenticated));
 
@@ -193,6 +217,12 @@
   <!-- -------------------------------------------------------------- tabs -->
   <div class="nm-tabs" role="tablist">
     <button
+      class="nm-tab" class:active={tab === 'model'} role="tab"
+      aria-selected={tab === 'model'} onclick={() => (tab = 'model')}
+    >
+      Model <span class="nm-tab-count">{model.nodes.length}</span>
+    </button>
+    <button
       class="nm-tab" class:active={tab === 'estate'} role="tab"
       aria-selected={tab === 'estate'} onclick={() => (tab = 'estate')}
     >
@@ -207,7 +237,125 @@
     </button>
   </div>
 
-  {#if tab === 'estate'}
+  {#if tab === 'model'}
+    <!--
+      The model tab. Everything here is assembled from a feed that regenerates
+      itself; the ledger below says which, and what it could not read. The two
+      hand-written catalogues in the other tabs are what this replaces.
+    -->
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Where this comes from</span>
+        <span class="nm-pill">{model.ledger.length} feeds</span>
+      </div>
+      <div class="nm-table-scroll">
+        <table class="nm-table">
+          <thead>
+            <tr><th>Feed</th><th>Describes</th><th>Refreshes</th><th class="num">Nodes</th><th>Kind</th></tr>
+          </thead>
+          <tbody>
+            {#each model.ledger as l (l.feed)}
+              <tr>
+                <td class="mono">{l.feed}</td>
+                <td>{l.describes}{#if l.asOf}<span class="asof"> · as of {l.asOf}</span>{/if}</td>
+                <td class="dim">{l.refresh}</td>
+                <td class="num">
+                  {#if l.count === null}<span class="blind">not read</span>{:else}{l.count}{/if}
+                </td>
+                <td><span class="prov" data-p={l.provenance}>{l.provenance}</span></td>
+              </tr>
+              {#if l.error}
+                <tr class="why"><td></td><td colspan="4">{l.error}</td></tr>
+              {/if}
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    {#if model.findings.length}
+      <section class="nm-sec">
+        <div class="nm-sec-hd">
+          <span class="sr-label-tight">What does not line up</span>
+          <span class="nm-pill" data-state="failed">{model.findings.length}</span>
+        </div>
+        <ul class="findings">
+          {#each model.findings as f (f.title)}
+            <li data-sev={f.severity}>
+              <div class="f-t">{f.title}</div>
+              <div class="f-d">{f.detail}</div>
+            </li>
+          {/each}
+        </ul>
+      </section>
+    {/if}
+
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Applications · repositories · the lanes they own</span>
+        <span class="nm-pill">{(byLayer.get('app') ?? []).length}</span>
+      </div>
+      <div class="nm-table-scroll">
+        <table class="nm-table">
+          <thead>
+            <tr><th>App</th><th>Repository</th><th>Status</th><th>Paths</th><th>Owns lane</th><th>Ports</th></tr>
+          </thead>
+          <tbody>
+            {#each byLayer.get('app') ?? [] as n (n.id)}
+              <tr>
+                <td class="mono">{n.label}</td>
+                <td class="mono dim">{appRepo.get(n.id) ?? '—'}</td>
+                <td>
+                  <span class="prov" data-p={n.warning ? 'declared' : 'generated'}>{n.facts?.status}</span>
+                </td>
+                <td class="mono dim">{n.facts?.paths || '—'}</td>
+                <td class="mono">{(appLanes.get(n.id) ?? []).join(' ') || '—'}</td>
+                <td class="mono dim">{n.facts?.['release dir'] ?? '—'}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+      <p class="note">
+        cloudflared is first-match, so the ingress order is behaviour rather than presentation:
+        <span class="mono">{model.nodes.find((n) => n.id === 'edge:cloudflared')?.facts?.['match order']}</span>.
+        Main is last, deliberately — it is the fallback that keeps a half-finished extraction safe.
+      </p>
+    </section>
+
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Runtime</span>
+        <span class="nm-pill">{(byLayer.get('container') ?? []).length}</span>
+      </div>
+      {#if (byLayer.get('container') ?? []).length === 0}
+        <div class="nm-empty">
+          Nothing probed from here. These ports bind 127.0.0.1 on the release host, so a reading
+          taken anywhere else could only say "closed" — which would read as "down" rather than
+          "not here".
+        </div>
+      {:else}
+        <div class="nm-table-scroll">
+          <table class="nm-table">
+            <thead><tr><th>Process</th><th class="num">Port</th><th>Serving</th></tr></thead>
+            <tbody>
+              {#each byLayer.get('container') ?? [] as n (n.id)}
+                <tr>
+                  <td class="mono">{n.label}</td>
+                  <td class="num">{n.facts?.port}</td>
+                  <td>
+                    <span class="prov" data-p={n.facts?.serving ? 'generated' : 'declared'}>
+                      {n.facts?.serving ? 'yes' : n.warning}
+                    </span>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
+    </section>
+  {:else if tab === 'estate'}
     {#each data.groups as [host, items] (host)}
       <section class="nm-sec">
         <div class="nm-sec-hd">
@@ -380,6 +528,43 @@
   .sub.cfg { font-family: var(--font-mono); color: var(--text-ghost); }
   .cfg-k { text-transform: uppercase; letter-spacing: 0.08em; font-size: var(--fs-label-xs); }
   .mono { font-family: var(--font-mono); font-size: max(0.82em, var(--fs-label-xs)); }
+
+  /* ── the model tab ─────────────────────────────────────────────────────
+     Provenance is the one thing this tab must encode in form as well as
+     words: a reader scanning it should be able to see, without reading, how
+     much of the page regenerates itself and how much is somebody's memory. */
+  .prov {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 0.1rem 0.4rem;
+    white-space: nowrap;
+  }
+  .prov[data-p='generated'] { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success); }
+  .prov[data-p='observed']  { background: color-mix(in srgb, var(--accent-ink) 14%, transparent); color: var(--accent-ink); }
+  .prov[data-p='declared']  { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+  .blind { color: var(--warn); font-style: italic; }
+  .asof { color: var(--text-ghost); }
+  .dim { color: var(--text-muted); }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .why td {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    line-height: 1.5;
+    padding-top: 0;
+    border-top: 0;
+  }
+  .findings { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+  .findings li {
+    padding: 0.6rem 0.75rem;
+    border-left: 3px solid var(--warn);
+    background: var(--surface-2, transparent);
+  }
+  .findings li[data-sev='high'] { border-left-color: var(--error); }
+  .findings li[data-sev='low'] { border-left-color: var(--text-ghost); }
+  .f-t { font-weight: 600; font-size: 0.86rem; }
+  .f-d { font-size: 0.78rem; line-height: 1.5; color: var(--text-muted); margin-top: 0.25rem; }
   .small { font-size: 0.78rem; }
   .nowrap { white-space: nowrap; }
   /* The guard sentence is the longest cell on the row; let it wrap rather than
