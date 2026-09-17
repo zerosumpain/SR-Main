@@ -16,7 +16,7 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 // ── Pricing per MTok (USD). cache_read ~0.1x input; cache_write_5m ~1.25x; 1h ~2x.
 // Keyed by normalised model id prefix. Unknown Claude ids fall back to opus.
@@ -145,6 +145,43 @@ function firstSentence(s, max = 140) {
 function clip(s, max) {
   s = sanitize(s);
   return s.length > max ? s.slice(0, max) + '\n…[truncated]' : s;
+}
+
+/**
+ * Pull-request numbers this session touched, from the raw transcript.
+ *
+ * This is the key that joins a session to the releases it produced, and it is
+ * the ONLY candidate that survives contact with the data:
+ *
+ *  - `gitBranch` is useless: the parser latches the first gitBranch event, which
+ *    is the branch at session start, before any worktree branch is cut. Every
+ *    development session reports `master`, so it would put every session on
+ *    every release.
+ *  - Commit SHAs are pre-squash. A transcript's SHAs are the branch's; master
+ *    carries the squashed one. Measured: 0 matches out of 105.
+ *  - The `Claude-Session:` trailer is account-level and spans up to 107 commits
+ *    over 8 days — far too coarse to attribute one release.
+ *
+ * PR numbers are exact, appear on both sides, and every release deployed since
+ * 1 August 2026 carries them (704 of 704, measured). Sessions that opened no PR
+ * return [] and honestly link to nothing.
+ *
+ * Both spellings are matched because both appear: the URL `gh pr create` prints,
+ * and the `(#123)` suffix a squashed commit subject carries.
+ */
+function extractPullRequests(raw) {
+  const found = new Set();
+  for (const m of raw.matchAll(/\/(?:SR-Main|strange_rambling[a-z_]*)\/pull\/(\d{1,6})/gi)) {
+    found.add(Number(m[1]));
+  }
+  // Only the URL form. The `(#123)` suffix a squashed commit subject carries was
+  // tried and dropped: it matches every commit subject the session merely READ
+  // in a `git log`, so a session that ran one `git log -20` was credited with
+  // twenty releases it had nothing to do with. Measured on this codebase, the
+  // suffix form attributed 8 PRs to a session that opened 4, and 31 to a session
+  // that opened 2. The URL only appears when `gh` prints it, which happens when
+  // the session creates, views or checks that PR.
+  return [...found].filter((n) => n > 0 && n < 100_000).sort((a, b) => a - b);
 }
 
 // ── main ─────────────────────────────────────────────────────────────────────
@@ -441,6 +478,7 @@ export function parseTranscript(file, opts = {}) {
   costBreakdown.sort((a, b) => b.costUsd - a.costUsd);
 
   const fullTranscript = renderTranscript(timeline);
+  const pullRequests = extractPullRequests(raw);
 
   // ── status: active if the transcript was modified very recently ──
   const status = (now - stat.mtimeMs) < 30 * 60 * 1000 ? 'active' : 'completed';
@@ -465,6 +503,7 @@ export function parseTranscript(file, opts = {}) {
       termFreq,
       toolHistogram,
       touchedPaths,
+      pullRequests,
       skills: skillsUsed,
       costBreakdown,
       fullTranscript,

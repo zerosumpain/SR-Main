@@ -1,6 +1,7 @@
 import type { SOURCE_FOOTPRINT } from 'virtual:sr-source-footprint';
 import type { CadenceWeek, ConsolePayload } from '$lib/releases/console';
 import type { KindSlice, ShowcaseItem, ShowcaseTotals } from '$lib/releases/public';
+import type { ReleaseSessionsBand } from '$lib/releases/sessions.server';
 
 export type ReleasesAudience = 'owner' | 'public';
 
@@ -22,6 +23,13 @@ export interface PublicReleasesData {
 export interface OwnerReleasesData extends ConsolePayload {
   mode: 'owner';
   sourceFootprint: typeof SOURCE_FOOTPRINT;
+  /**
+   * The Claude Code sessions that produced the releases on this page, joined on
+   * pull-request number. Owner-only by construction: the public branch of the
+   * loader never fetches it, so `PublicReleasesData` has no such member and an
+   * anonymous render cannot carry the bytes even by accident.
+   */
+  sessions: ReleaseSessionsBand;
 }
 
 export type ReleasesData = OwnerReleasesData | PublicReleasesData;

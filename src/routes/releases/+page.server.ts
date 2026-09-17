@@ -2,6 +2,7 @@ import { SOURCE_FOOTPRINT } from 'virtual:sr-source-footprint';
 import { getReleaseShowcase } from '$lib/releases/public';
 import { getReleaseConsole, parseConsoleFilters, weeklyCadence } from '$lib/releases/console';
 import { isOwnerRequest } from '$lib/server/owner';
+import { getReleaseSessions } from '$lib/releases/sessions.server';
 import type { PageServerLoad } from './$types';
 
 /**
@@ -27,7 +28,17 @@ export const load: PageServerLoad = async (event) => {
   const filters = parseConsoleFilters(event.url);
 
   if (await isOwnerRequest(event)) {
-    return { sourceFootprint: SOURCE_FOOTPRINT, mode: 'owner' as const, ...(await getReleaseConsole(filters)) };
+    const console_ = await getReleaseConsole(filters);
+    // Band D — the work behind these releases, joined on PR number. Scoped to
+    // the releases on THIS page: a second pager over 296 sessions would compete
+    // with the console's own, and the join is the organising principle.
+    //
+    // Fetched inside the owner branch, never outside it. The public payload must
+    // not carry session prose, prompts or per-stage costs at all — shipping the
+    // bytes and hiding them behind {#if owner} is the disclosure this page's
+    // whole design exists to prevent.
+    const sessions = await getReleaseSessions(console_.items.map((i) => i.id));
+    return { sourceFootprint: SOURCE_FOOTPRINT, mode: 'owner' as const, ...console_, sessions };
   }
 
   const data = await getReleaseShowcase();

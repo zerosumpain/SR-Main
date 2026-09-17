@@ -119,6 +119,30 @@ function ownerData(over: Partial<OwnerReleasesData> = {}): OwnerReleasesData {
       },
     ],
     hasMore: true,
+    sessions: {
+      sessions: [
+        {
+          id: 'sess-1',
+          title: 'Fold the changelog into the release log',
+          project: 'strange-rambling-svelte',
+          startedAt: new Date('2026-07-29T09:00:00Z'),
+          endedAt: new Date('2026-07-29T15:00:00Z'),
+          messageCount: 214,
+          toolCallCount: 96,
+          estCostUsd: 18.42,
+          costKnown: true,
+          pullRequests: [761],
+          stages: [
+            { stage: 'request', ordinal: 0, title: 'The ask', costUsd: 2.1 },
+            { stage: 'result', ordinal: 1, title: 'Band D', costUsd: 12.3 },
+          ],
+          releaseIds: [1],
+        },
+      ],
+      byRelease: { 1: ['sess-1'] },
+      unlinkedInWindow: 3,
+      sessionsWithoutPrs: 41,
+    },
     ...over,
   };
 }
@@ -164,6 +188,18 @@ describe('the public document', () => {
     ]) {
       expect(body).not.toContain(control);
     }
+  });
+
+  it('carries no session, prompt or per-stage cost', () => {
+    // Band D is owner-only STRUCTURALLY: the loader fetches it inside the owner
+    // branch, so PublicReleasesData has no `sessions` member at all and the
+    // anonymous render cannot ship the bytes even by mistake. This asserts the
+    // rendered output too, because the type is only half the guarantee.
+    const body = html(publicData());
+    expect(body).not.toContain('The work behind it');
+    expect(body).not.toContain('sess-1');
+    expect(body).not.toMatch(/pull\/\d+/);
+    expect(body.toLowerCase()).not.toContain('pull request');
   });
 
   it('leaks no sha, file path or commit prose', () => {
