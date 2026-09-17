@@ -15,6 +15,7 @@ import { loadRoutes } from '$lib/daydream/routes.server';
 import { loadRelevanceRows } from '$lib/daydream/thought-store';
 import { meanRelevance } from '$lib/daydream/scoring';
 import { SETTINGS_ENABLED_KEY, errMsg } from '$lib/daydream/types';
+import { noteLaneOutcome } from '$lib/daydream/faults';
 import type { ActivityHandler } from '../types';
 import { loadResolvedEffort } from '$lib/daydream/effort.server';
 
@@ -238,6 +239,18 @@ export const daydreamCompose: ActivityHandler = {
 
     const after = isCodexModel ? await readQuotaMark() : null;
     const quota = isCodexModel ? attributeSpend(before, after) : { ...ZERO_SPEND };
+
+    // Phrased vs kept, NOT phrased vs delivered. Delivery is throttled on
+    // purpose — thresholds, cooldowns and a 4/day cap — so a low delivered
+    // count is the design working. `dropped` is the verify pass refusing a
+    // narrative it could not support, and every narrative refused is a claim
+    // about that pass.
+    await noteLaneOutcome({
+      lane: 'daydream-compose',
+      proposed: composed,
+      admitted: Math.max(0, composed - dropped),
+      dropped: outcomes.filter((o) => o.reason).map((o) => `${String(o.kind)}: ${String(o.reason)}`),
+    });
 
     return {
       outcome: 'ok',

@@ -252,6 +252,46 @@ export function planDepth(
 }
 
 /**
+ * How much of each cap has to be LEFT before an optional extra model call —
+ * thinking rather than talking — is affordable. A share of the cap, not an
+ * absolute percentage, so it still means the same thing if the caps move.
+ */
+export const THINKING_HEADROOM_SHARE = 0.25;
+
+/**
+ * Is there genuinely room to spend an extra call on thinking harder?
+ *
+ * ── Why this is not `plan.depth === 'deep'` ────────────────────────────────
+ *
+ * That was the first gate on the ponder adversary pass, and it was wrong.
+ * `pickDepth` asks a PACING question — "are we behind where the day's burn
+ * should be by now?" — and pacing runs against waking hours, 07:00 to 23:00.
+ * The overnight jobs (improve at 02:30, rulesmith at 04:00, doctor at 05:00,
+ * bank at 05:00) all spend BEFORE that window opens, against a paced target of
+ * approximately zero. So at 07:00 the day is always "ahead of pace", every
+ * morning cycle resolved to `minimal`, and the second pass only ever ran in
+ * the evening. Measured 2026-09-17: ponder `deep` at 20:01, `minimal` at 06:00
+ * and 06:39.
+ *
+ * Headroom is a different question from pace, and it is the right one here. An
+ * extra call is affordable when a real slice of both caps is still unspent,
+ * whatever time of day it is and whatever the overnight jobs did.
+ *
+ * Conservative in all three of the ways this file is conservative elsewhere:
+ * a non-Codex model means the spend is cash rather than slack, so the answer
+ * is no; an unreadable meter means minimum, never a guess; and a blocked
+ * budget is obviously no.
+ */
+export function hasThinkingHeadroom(s: BudgetStatus): boolean {
+  if (!s.applies || !s.reachable || s.blocked) return false;
+  if (s.dailyCapPct <= 0 || s.fiveHourCapPct <= 0) return false;
+  return (
+    s.remainingTodayPct >= s.dailyCapPct * THINKING_HEADROOM_SHARE &&
+    s.remainingWindowPct >= s.fiveHourCapPct * THINKING_HEADROOM_SHARE
+  );
+}
+
+/**
  * The whole picture, ready for the composer and for the ledger page.
  *
  * `applies: false` when the daydream workload resolves to a non-Codex model —

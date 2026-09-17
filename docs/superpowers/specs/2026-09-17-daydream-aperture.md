@@ -180,3 +180,60 @@ On the pulses, within a week of deploy:
 - `musing_patterns` or `musing_general` fires for the first time.
 - `openFaults` carries no `lane_silent` row.
 - Thoughts appear carrying a `watch`, `draft` or `ask` action.
+
+---
+
+## Follow-up, same day: the gate that only opened in the evening
+
+Found while verifying the deploy. The adversary pass recorded
+`adversary: {"ran": false}` on the first live cycle, with `depth: "minimal"`.
+
+**Cause.** The gate was `budget.plan.depth === 'deep'`, and `pickDepth` answers
+a **pacing** question — "are we behind where the day's burn should be by now?"
+— paced against waking hours, 07:00–23:00. The overnight jobs (`improve` 02:30,
+`rulesmith` 04:00, `doctor` 05:00, `bank` 05:00) all spend *before* that window
+opens, against a paced target of approximately zero. So by breakfast the day is
+always "ahead of pace", every morning cycle resolved to `minimal`, and the
+second pass could only ever run in the evening. Measured on prod 2026-09-17:
+ponder `deep` at 20:01, `minimal` at 06:00 and 06:39.
+
+**Fix.** `hasThinkingHeadroom(status)` in `budget.ts` — headroom is a different
+question from pace, and it is the right one. An extra call is affordable when
+at least `THINKING_HEADROOM_SHARE` (25%) of *both* caps is still unspent,
+whatever the hour and whatever the overnight jobs did. Conservative in the
+three ways this file is conservative elsewhere: a non-Codex model means cash
+rather than slack (no), an unreadable meter means minimum never a guess (no),
+and blocked is obviously no.
+
+## `lane_silent`, generalised
+
+Shipped into two lanes; there are eleven that spend model quota. Now wired into
+the four with a genuine **propose → admit** audit, where admitting none of a
+non-empty answer says something about the gate rather than about the world:
+
+| lane | proposed | admitted |
+|---|---|---|
+| `daydream-appetite` | model's capability list | passed the citation audit |
+| `daydream-ponder` | musings + leads | passed the citation audit |
+| `daydream-hypothesise` | questions proposed | `proposed - rejected` (a duplicate is the gate working, so it counts as admitted) |
+| `daydream-rulesmith` | rule proposals | admitted past validate + backtest |
+| `daydream-spend` | receipts shortlisted | rows whose amount was found in the source |
+| `daydream-compose` | narratives phrased | `composed - dropped` by the verify pass |
+
+**Deliberately NOT wired, and why** — a false alarm here is worse than no alarm,
+because `lane_silent` wants a `code_change` and would put a healthy lane in
+front of the builder:
+
+- `daydream-offers` — "this is not an offer" is a correct classification, not a
+  rejection. It would fire on every quiet week.
+- `daydream-memory`, `daydream-notebook`, `daydream-review` — queue processors.
+  There is no propose→admit pair to measure.
+- `daydream-weekly` — a narrative dropped as UNSUPPORTED still ships the letter
+  with its deterministic counts. The lane is not silent.
+- Everything else (`observe`, `detect`, `signals`, `places`, `mail`, `intel`,
+  `explore`, `suggest`, `features`, `bank`, `doctor`, `improve`, `digest`) is
+  rule-based or reports its own health already.
+
+**Compose measures phrased-vs-kept, never phrased-vs-delivered.** Delivery is
+throttled on purpose — thresholds, cooldowns, 4/day — so a low delivered count
+is the design working, and a fault on it would fire permanently.

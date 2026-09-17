@@ -12,6 +12,7 @@ import { resolveDaydreamModel } from '$lib/daydream/compose';
 import { EMPTY_EXTRACT, extractSpend } from '$lib/daydream/spend/read';
 import { spendDensity } from '$lib/daydream/spend/extract';
 import { SETTINGS_ENABLED_KEY } from '$lib/daydream/types';
+import { noteLaneOutcome } from '$lib/daydream/faults';
 import type { ActivityHandler } from '../types';
 
 const NAME = 'daydream-spend';
@@ -94,6 +95,17 @@ export const daydreamSpendExtract: ActivityHandler = {
         ? `${density.perWeek}/week — dense enough to correlate`
         : `${density.perWeek}/week, needs ${density.needed} to be worth correlating`,
     );
+
+    // Shortlisted is what the extractor was ASKED about; written is what the
+    // amount-in-the-source check let through. A week with no receipts
+    // shortlists nothing and so says nothing here, which is the point of the
+    // `proposed > 0` condition.
+    await noteLaneOutcome({
+      lane: 'daydream-spend',
+      proposed: res.shortlisted,
+      admitted: res.written,
+      dropped: res.unverified ? [`${res.unverified} refused — amount not in the source`] : res.errors,
+    });
 
     // Every extraction failing while some were shortlisted is a fault; finding
     // no receipts at all in a quiet week is not.

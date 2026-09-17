@@ -11,6 +11,7 @@ import { saveProposals } from '$lib/daydream/hypotheses/store';
 import { markBatchInfluenced } from '$lib/daydream/hypotheses/steer';
 import { testDueHypotheses } from '$lib/daydream/hypotheses/test';
 import { FAMILY_SUBJECTS, SETTINGS_ENABLED_KEY } from '$lib/daydream/types';
+import { noteLaneOutcome } from '$lib/daydream/faults';
 import type { ActivityHandler } from '../types';
 import { applyEffort } from '$lib/daydream/effort';
 import { loadResolvedEffort } from '$lib/daydream/effort.server';
@@ -156,6 +157,18 @@ export const daydreamHypothesise: ActivityHandler = {
       perSubject[subject] = { proposeError, ...run };
       if (line.length) notes.push(`${subject}: ${line.join(', ')}`);
     }
+
+    // The audit, across every subject. `admitted` is what SURVIVED validation
+    // — a duplicate is the gate working correctly, so it counts as admitted;
+    // only an audit rejection counts against the lane. This is the proposer
+    // that once had every lead rejected for `unknown metrics` with nothing
+    // reading the refusal back.
+    await noteLaneOutcome({
+      lane: 'daydream-hypothesise',
+      proposed,
+      admitted: Math.max(0, proposed - rejected.length),
+      dropped: rejected.map((r) => String(r)),
+    });
 
     // Naming who missed out, rather than truncating in silence.
     if (budgetSkipped.length) {
