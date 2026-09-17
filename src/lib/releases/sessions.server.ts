@@ -62,6 +62,20 @@ export interface ReleaseSessionsBand {
   sessionsWithoutPrs: number;
 }
 
+/**
+ * `db.execute()` returns the driver's QueryResult — `{ rows, rowCount, … }` —
+ * NOT an array of rows. Casting it straight to a row array type compiles
+ * perfectly and then throws `rows.map is not a function` at runtime, which is
+ * how /releases went 500 for the owner on 2026-09-17.
+ *
+ * So the unwrap lives in one place and every reader goes through it. The house
+ * pattern is `result.rows` (see $lib/jkai/grounding/quality.server.ts).
+ */
+function rowsOf(result: unknown): Record<string, unknown>[] {
+  const rows = (result as { rows?: unknown })?.rows;
+  return Array.isArray(rows) ? (rows as Record<string, unknown>[]) : [];
+}
+
 const EMPTY: ReleaseSessionsBand = { sessions: [], byRelease: {}, unlinkedInWindow: 0, sessionsWithoutPrs: 0 };
 
 /**
@@ -101,7 +115,7 @@ export async function getReleaseSessions(releaseIds: number[]): Promise<ReleaseS
     order by s.started_at desc nulls last
   `);
 
-  const sessions: ReleaseSession[] = (rows as unknown as Record<string, unknown>[]).map((r) => ({
+  const sessions: ReleaseSession[] = rowsOf(rows).map((r) => ({
     id: String(r.id),
     title: (r.title as string) ?? null,
     project: String(r.project ?? 'unknown'),
@@ -125,7 +139,7 @@ export async function getReleaseSessions(releaseIds: number[]): Promise<ReleaseS
       order by session_id, ordinal
     `);
     const byId = new Map(sessions.map((s) => [s.id, s]));
-    for (const r of stageRows as unknown as Record<string, unknown>[]) {
+    for (const r of rowsOf(stageRows)) {
       byId.get(String(r.session_id))?.stages.push({
         stage: String(r.stage),
         ordinal: Number(r.ordinal ?? 0),
@@ -143,7 +157,7 @@ export async function getReleaseSessions(releaseIds: number[]): Promise<ReleaseS
   // The caveat the band states about itself. A session with no PR is not a
   // failure of the join — it is a session that opened no pull request — but the
   // page must say so rather than quietly showing fewer sessions than exist.
-  const [counts] = (await db.execute(sql`
+  const [counts] = rowsOf(await db.execute(sql`
     select
       count(*) filter (where jsonb_array_length(pull_requests) = 0) as without_prs,
       count(*) filter (
@@ -154,7 +168,7 @@ export async function getReleaseSessions(releaseIds: number[]): Promise<ReleaseS
                 ${sql.join(releaseIds.map((id) => sql`${id}`), sql`, `)}))
       ) as unlinked_in_window
     from claude_sessions
-  `)) as unknown as Record<string, unknown>[];
+  `));
 
   return {
     sessions,
