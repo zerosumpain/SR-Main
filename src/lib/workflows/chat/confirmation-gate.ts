@@ -1,5 +1,5 @@
 import { publishJobEvent, createWaiter, getJob } from './job-store';
-import { loadToolRegistry } from '$lib/workflows/site-tools/load-registry';
+import { isDestructiveTool } from '$lib/workflows/site-tools/executor';
 import { notifyAllSubscribers } from '$lib/server/push';
 
 /**
@@ -9,10 +9,14 @@ import { notifyAllSubscribers } from '$lib/server/push';
  * a client as `annotations.destructiveHint`.
  */
 export async function isDestructive(toolName: string): Promise<boolean> {
-  // Dynamic: the tool registry imports all 52 tool modules for their register()
-  // side effects, and this gate is on the chat endpoint's static import path.
-  const { getTool } = await loadToolRegistry();
-  return getTool(toolName)?.destructive === true;
+  // Through the executor seam, not the registry directly. The dynamic load is
+  // still what keeps the 52 tool modules off this gate's static import path —
+  // `executor.ts` does it — and going through there means this gate keeps
+  // working when the catalogue moves to another process. Reading the registry
+  // from here was the second reader that would have been left behind, and the
+  // failure is silent: every tool reports not-destructive and the confirmation
+  // card stops appearing.
+  return isDestructiveTool(toolName);
 }
 
 /**
