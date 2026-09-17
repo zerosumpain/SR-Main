@@ -76,3 +76,16 @@ export function invokeLaneFor(request: Request): InvokeLane {
 	if (matches(provided, env.JKAI_INVOKE_TOKEN)) return 'standard';
 	return 'none';
 }
+
+/**
+ * Is this SR-JKAI calling, at all?
+ *
+ * The two-lane split above is about what the caller may DO — the destructive
+ * tools — not about who it is. An endpoint that only needs "this is the chat
+ * application and not the internet" asks this instead, and either lane answers
+ * it. A third credential for the same caller would be one more thing to rotate
+ * and one more way for the halves to disagree about who is on the other end.
+ */
+export function hasJkaiServiceToken(request: Request): boolean {
+	return invokeLaneFor(request) !== 'none';
+}

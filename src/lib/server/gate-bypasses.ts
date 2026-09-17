@@ -67,6 +67,14 @@ export const HOOK_BYPASSES: string[] = [
   // What tools exist and which need a human — the other half of the same seam,
   // on the same credential. GET only, and it carries no descriptions or schemas.
   '/api/platform/tools/catalogue', // GET only, same credential
+  // The three server-side calls chat makes to intel, which become cross-process
+  // when chat moves. Same SR-JKAI credential; each also accepts an owner session
+  // and re-checks it. Named one at a time — /api/jkai/intel is NOT a tree here,
+  // and its siblings (backfill, clusters/recalculate, entities/split) carry the
+  // maintenance secret instead.
+  '/api/jkai/intel/chat-context', // POST only, JKAI_INVOKE_TOKEN or owner
+  '/api/jkai/intel/extract-thread', // POST only, same
+  '/api/jkai/intel/daily-alerts', // GET only, same
   // Autonomous-builder tool bridge. HMAC-over-build-id bearer token, verified
   // in $lib/jkai/tool-bridge. Named one path at a time on purpose: the sibling
   // /api/jkai/tools/promote has NO auth of its own and must stay owner-gated.
@@ -162,6 +170,9 @@ export const BYPASS_GUARDS: Record<string, string> = {
   '/api/platform/tools/invoke':
     'POST only · JKAI_INVOKE_TOKEN; destructive tools need JKAI_INVOKE_DESTRUCTIVE_TOKEN, unset by default',
   '/api/platform/tools/catalogue': 'GET only · JKAI_INVOKE_TOKEN; tool names and their destructive flag',
+  '/api/jkai/intel/chat-context': 'POST only · JKAI_INVOKE_TOKEN or owner session; intel context for a chat turn',
+  '/api/jkai/intel/extract-thread': 'POST only · JKAI_INVOKE_TOKEN or owner session; fire-and-forget extraction',
+  '/api/jkai/intel/daily-alerts': 'GET only · JKAI_INVOKE_TOKEN or owner session; 24h alert summary',
   '/api/jkai/tools/manifest': 'JKAI_BRIDGE_TOKEN',
   '/api/jkai/tools/invoke': 'JKAI_BRIDGE_TOKEN',
   '/api/jkai/studio/image': 'JKAI_BRIDGE_TOKEN',

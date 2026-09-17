@@ -25,7 +25,7 @@ import { rateLimit } from '$lib/server/rate-limit';
 import { hasMaintenanceSecret } from '$lib/server/maintenance-auth';
 import { isPublicApiPath } from '$lib/server/public-api-paths';
 import { hasStudioServiceToken } from '$lib/server/studio-auth';
-import { invokeLaneFor } from '$lib/server/invoke-auth';
+import { invokeLaneFor, hasJkaiServiceToken } from '$lib/server/invoke-auth';
 import { isLoopbackAddress, isPrivateAddress } from '$lib/server/client-address';
 import { SvelteKitAuth } from '@auth/sveltekit';
 import Google from '@auth/sveltekit/providers/google';
@@ -630,6 +630,20 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   // is shut by default). Scoped to exactly this path and to POST; the route
   // re-checks the credential itself, defence in depth, and an unrecognised one
   // falls through to the owner gate below and 401s there.
+  // The intel lane: the three calls chat makes to intel on the SERVER, which
+  // become cross-process the day chat moves. Same credential as the tool lane —
+  // it identifies SR-JKAI as the caller, and what it may DO is the tool lane's
+  // question, not this one. Each route also accepts an owner session and
+  // re-checks for itself, so this bypass only ever widens the tokened path.
+  if (
+    ((pathname === '/api/jkai/intel/chat-context' && event.request.method === 'POST') ||
+      (pathname === '/api/jkai/intel/extract-thread' && event.request.method === 'POST') ||
+      (pathname === '/api/jkai/intel/daily-alerts' && event.request.method === 'GET')) &&
+    hasJkaiServiceToken(event.request)
+  ) {
+    return resolve(event);
+  }
+
   // Named one path and verb at a time, like the bridge above it: neither is a
   // tree, so nothing new under /api/platform/tools is reachable by existing.
   if (
