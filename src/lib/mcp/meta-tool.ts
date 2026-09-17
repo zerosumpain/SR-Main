@@ -11,16 +11,17 @@ import { resolveCapabilities } from '$lib/jkai/grounding/capabilities';
 // every agent prompt before the user message is even seen. Phase 3 of the
 // prefill-reduction plan (docs/plans/2026-05-27-jkai-prefill-reduction.md).
 
-import type { getTools as GetToolsFn } from '$lib/workflows/site-tools/registry';
 // Loaded on demand: importing the registry statically pulls all 52 tool
 // modules, and JKAI_EXTENDED_TOOL below is a plain definition that the chat
 // endpoint imports for its schema alone.
-const registry = loadToolRegistry;
 import type { ToolExecContext } from '$lib/workflows/site-tools/registry-internal';
 import { isEssentialUnderPolicy } from './essentials';
-import { loadToolRegistry } from '$lib/workflows/site-tools/load-registry';
+import { catalogueTools } from '$lib/workflows/site-tools/catalogue';
+import type { CatalogueTool } from '$lib/workflows/site-tools/invoke-contract';
+import { executeSiteTool } from '$lib/workflows/site-tools/executor';
 import { describeWithPolicy, getActivePolicy, type ToolPolicyVersion } from '$lib/toolpolicy/policy';
 import type { McpTool } from './server';
+export { JKAI_EXTENDED_TOOL } from './extended-tool';
 
 export type MetaOperation = 'list' | 'schema' | 'invoke';
 
@@ -82,72 +83,6 @@ interface MetaErrorResult {
  * directly at the tools/list layer in $lib/mcp/server.ts when the flag is
  * on, and dispatched here when tools/call lands on `jkai_extended`.
  */
-export const JKAI_EXTENDED_TOOL: McpTool = {
-  name: 'jkai_extended',
-  description:
-    "Discover and invoke jkai's extended tool catalogue (~128 tools across " +
-    // The domain list is the model's cheapest map of what jkai can reach, and
-    // for a long time it named `gmail` but neither `calendar` nor `payments`.
-    // That is not cosmetic: on 2026-08-15 two calendar questions routed to
-    // Google before Apple Calendar, and on 2026-08-16 a PayPal question spent
-    // fourteen Gmail searches while `api_integration_call` sat one call away.
-    // A domain that is absent here is a domain the model does not know it has.
-    'blog, health, calendar, workflow, gmail, payments and API integrations, ' +
-    'research, scraper, files and drive, datastore, the intel knowledge graph, ' +
-    'build, schedule, monitors, agents, decks, home-assistant, render, ' +
-    'document, image, audio, system domains). Use this when you need a ' +
-    'capability beyond the essential tools you can see directly. Workflow: ' +
-    'operation="list" to discover (optionally with a "query" — plain words ' +
-    'work, e.g. "add a tool" or "read my calendar"; results are ranked by how ' +
-    'well they match — or compact=true for a cheap name+truncated-description ' +
-    'catalogue survey). Every list entry carries its REQUIRED argument names, ' +
-    'so for a tool with few arguments you can go straight from "list" to ' +
-    '"invoke" — operation="schema" is only worth a round trip when you need ' +
-    'the full types or the optional arguments. Use operation="schema" with ' +
-    '"name" (or "names" to batch several schemas in one call) for that, then ' +
-    'operation="invoke" with "name" and "args" to run it.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      operation: {
-        type: 'string',
-        enum: ['list', 'schema', 'invoke'],
-        description:
-          '"list" returns matching tool names + descriptions; ' +
-          '"schema" returns the full input JSON Schema for one or more named tools; ' +
-          '"invoke" executes a named tool with the provided args.',
-      },
-      query: {
-        type: 'string',
-        description:
-          'For operation="list" only. Words describing the capability you want — a phrase is fine ("add a tool", "fix a broken tool", "read the calendar"). Matches on tool name and description and returns the best matches first. Combine with compact=true for a lean filtered survey.',
-      },
-      name: {
-        type: 'string',
-        description:
-          'For operation="schema" and operation="invoke". The exact tool name (e.g. "gmail_search", "blog_create_post"). For "schema" you may pass either this single name or `names` to batch several in one call; either is sufficient.',
-      },
-      names: {
-        type: 'array',
-        items: { type: 'string' },
-        description:
-          'For operation="schema" only. Batch fetch: an array of tool names to describe in ONE call, e.g. ["gmail_search", "blog_list"]. Returns an array of schema entries (one per tool). Prefer this over many single-`name` calls to save round-trips. Any unknown name produces an error object listing them.',
-      },
-      compact: {
-        type: 'boolean',
-        description:
-          'For operation="list" only. When true, returns a leaner entry per tool — {name, description, required} with the description truncated to ~120 chars and no destructive flag — so a full-catalogue survey costs far fewer tokens. The required argument names are kept even here, because they are what lets you skip the schema call.',
-      },
-      args: {
-        type: 'object',
-        description:
-          'For operation="invoke" only. The tool\'s argument object — must match the inputSchema returned by operation="schema".',
-        additionalProperties: true,
-      },
-    },
-    required: ['operation'],
-  },
-};
 
 const MAX_COMPACT_DESC = 120;
 
@@ -201,12 +136,15 @@ function truncateDescription(desc: string): string {
     : desc;
 }
 
-async function getExtendedTools(policy: ToolPolicyVersion): Promise<ReturnType<typeof GetToolsFn>> {
-  const { getTools } = await registry();
-  const all = getTools();
+async function getExtendedTools(policy: ToolPolicyVersion): Promise<CatalogueTool[]> {
+  // The declared metadata, not the live `ToolDefinition`s: this function reads
+  // names, descriptions and schemas and never calls a handler, and importing the
+  // registry barrel for the handler is what put 175 tool modules on every
+  // reader's graph.
+  const all = await catalogueTools();
   // A tool promoted into the visible set must leave the extended catalogue, or
   // the model sees it twice and can reach it by two different call shapes.
-  return all.filter((t) => !isEssentialUnderPolicy(t.name, policy)) as typeof all;
+  return all.filter((t) => !isEssentialUnderPolicy(t.name, policy));
 }
 
 /**
@@ -295,7 +233,7 @@ export async function dispatchMetaTool(
     const schemas: ExtendedToolSchemaEntry[] = [];
     const unknown: string[] = [];
     for (const n of requested) {
-      const tool = (await registry()).getTools().find((t) => t.name === n);
+      const tool = (await catalogueTools()).find((t) => t.name === n);
       if (!tool) {
         unknown.push(n);
         continue;
@@ -324,13 +262,13 @@ export async function dispatchMetaTool(
 
   if (operation === 'invoke') {
     if (!name) return { error: 'jkai_extended: operation="invoke" requires "name"' };
-    const tool = (await registry()).getTools().find((t) => t.name === name);
+    const tool = (await catalogueTools()).find((t) => t.name === name);
     if (!tool) return { error: `jkai_extended: unknown tool "${name}" (not in extended catalogue)` };
     // Reuse the registry's executeTool so we get the same handler error
     // envelope as a direct tools/call. ctx is forwarded so progress emits
     // and conversationId-aware tools (e.g. workflow_build_from_spec) work
     // identically through the dispatcher and through the direct path.
-    return await (await registry()).executeTool(name, args ?? {}, ctx);
+    return await executeSiteTool(name, args ?? {}, ctx);
   }
 
   return { error: `jkai_extended: unknown operation "${String(operation)}" (expected: list, schema, invoke)` };

@@ -28,7 +28,7 @@ import {
   deleteRecord,
   updateRecord,
 } from '$lib/datastore';
-import { safeFunction } from '$lib/workflows/nodes/safe-eval';
+import { safeFunction } from '$lib/utils/safe-eval';
 import { slugifyName } from '$lib/workflows/site-tools/tools/apis';
 import { apiRegistryDisabled } from './registry-enabled';
 

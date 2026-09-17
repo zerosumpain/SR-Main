@@ -8,7 +8,9 @@ import { workflows, workflowNodes, workflowEdges, workflowSchedules, workflowRun
 import { eq, desc, inArray } from 'drizzle-orm';
 import { ensureCollection, upsertRecord, queryRecords, deleteRecord, DatastoreError } from '$lib/datastore';
 
-export const MONITORS_COLLECTION = 'monitors';
+// Re-exported so nothing that already imported it from here had to change.
+export { MONITORS_COLLECTION } from './collection';
+import { MONITORS_COLLECTION } from './collection';
 const ACTOR = 'jkai';
 const DEFAULT_CRON = '0 */6 * * *'; // every 6 hours when the description gives no cadence
 

@@ -4,7 +4,7 @@ import { db } from '$lib/db';
 import { orchestratorChats } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import type { ToolTrace } from '$lib/jkai/tool-trace';
-import { loadToolRegistry } from '$lib/workflows/site-tools/load-registry';
+import { allTools, toolShapes } from '$lib/workflows/site-tools/catalogue';
 import {
   analyseChain,
   buildAnalysisMessages,
@@ -41,7 +41,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
   // rate. The backlog is where a hypothesis belongs; the live tool policy is
   // not, and nothing here writes to it.
   if (Array.isArray(body.send)) {
-    const registered = new Set((await loadToolRegistry()).getTools().map((t) => t.name));
+    const registered = new Set((await allTools()).map((t) => t.name));
     const findings = (body.send as ChainFinding[]).filter(
       (f) => f && typeof f === 'object' && typeof f.tool === 'string' && registered.has(f.tool) && typeof f.rationale === 'string',
     );
@@ -59,7 +59,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
   // ── Analyse ─────────────────────────────────────────────────────────────
   const trace = row.steps as ToolTrace;
-  const shapes = (await loadToolRegistry()).getTools().map((t) => ({ name: t.name, description: t.description, parameters: t.parameters }));
+  const shapes = await toolShapes();
   const analysis = analyseChain(trace, shapes);
 
   // Nothing measurable is worth a model call. Saying so is the honest answer,

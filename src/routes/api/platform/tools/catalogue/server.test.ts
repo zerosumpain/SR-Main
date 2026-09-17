@@ -13,10 +13,13 @@ import { env } from '$env/dynamic/private';
 vi.mock('$lib/workflows/site-tools/load-registry', () => ({
   loadToolRegistry: async () => ({
     getTools: () => [
-      { name: 'site_blog_list', destructive: false, description: 'long prose', parameters: {} },
-      { name: 'gmail_send', destructive: true, description: 'more prose', parameters: {} },
-      { name: 'research_start' /* no flag at all */, parameters: {} },
+      { name: 'site_blog_list', destructive: false, description: 'list posts', parameters: { type: 'object', properties: {} }, toolset: 'blog', category: 'content' },
+      { name: 'gmail_send', destructive: true, description: 'send mail', parameters: { type: 'object', properties: {} }, toolset: 'gmail', category: 'comms' },
+      { name: 'research_start' /* no flag at all */, description: 'start', parameters: { type: 'object', properties: {} }, toolset: 'research', category: 'research' },
     ],
+    getAvailableToolsets: () => ['blog', 'gmail', 'research'],
+    getToolsetManifest: () => [{ toolset: 'blog', description: 'Blog', tools: [{ name: 'site_blog_list', description: 'list posts' }] }],
+    buildSystemPromptSection: () => 'TOOLSETS: blog, gmail, research',
   }),
 }));
 
@@ -69,22 +72,32 @@ describe('GET /api/platform/tools/catalogue', () => {
   it('lists every tool with its destructive flag', async () => {
     const { status, body } = await call(TOKEN);
     expect(status).toBe(200);
-    expect(body.tools).toEqual([
-      { name: 'site_blog_list', destructive: false },
-      { name: 'gmail_send', destructive: true },
-      { name: 'research_start', destructive: false },
+    expect(body.tools.map((t: { name: string; destructive: boolean }) => [t.name, t.destructive])).toEqual([
+      ['site_blog_list', false],
+      ['gmail_send', true],
+      // A tool that declares nothing is not destructive — asserted rather than
+      // assumed, because the flag crossing as `undefined` would read as "unknown"
+      // on the far side, where unknown fails CLOSED and would confirm everything.
+      ['research_start', false],
     ]);
   });
 
-  // Not the manifest. A chat process composing a prompt needs descriptions and
-  // schemas and gets them elsewhere; this answers only the two questions the
-  // chat LOOP asks about a name it has already been given, so there is nothing
-  // here worth leaking.
-  it('carries no descriptions or schemas', async () => {
+  /**
+   * It IS the manifest, and that is the correction this endpoint went through.
+   *
+   * The first cut served names and a destructive flag, on the theory that a
+   * chat process composing a prompt gets the full definitions "from the same
+   * place it always did". That place is `site-tools/registry` — the barrel the
+   * boundary exists to leave behind — so serving names only left the prompt
+   * builder, the meta-tools and the chat loop still holding it.
+   */
+  it('carries the descriptions, schemas and prompt section a prompt needs', async () => {
     const { body } = await call(TOKEN);
-    const serialised = JSON.stringify(body);
-    expect(serialised).not.toContain('prose');
-    expect(serialised).not.toContain('parameters');
+    expect(body.tools[0].parameters).toEqual({ type: 'object', properties: {} });
+    expect(body.tools[0].description).toBe('list posts');
+    expect(body.toolsets).toEqual(['blog', 'gmail', 'research']);
+    expect(body.manifest[0].toolset).toBe('blog');
+    expect(body.promptSection).toContain('TOOLSETS');
   });
 
   it('401s without the credential', async () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { transformExecutor, transformDef } from '$lib/workflows/nodes/transform';
-import { UnsafeExpressionError } from '$lib/workflows/nodes/safe-eval';
+import { UnsafeExpressionError } from '$lib/utils/safe-eval';
 import type { ExecutionContext } from '$lib/workflows/types';
 
 const mockContext: ExecutionContext = {

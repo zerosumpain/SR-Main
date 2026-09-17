@@ -1,5 +1,13 @@
 /**
- * Safe expression evaluator for workflow nodes.
+ * Safe expression evaluator.
+ *
+ * It lived in `workflows/nodes/` because the workflow nodes were its first
+ * callers, and that directory placement had a cost nobody was looking for: it is
+ * also used by `$lib/apis/integrations`, which the chat loop reaches, so a
+ * generic evaluator was the single edge putting `workflows/nodes` on the chat
+ * surface's runtime graph. Nothing about it is a node — it imports one parser and
+ * nothing else — so it moved to where its callers can share it without one of
+ * them importing the other's domain.
  *
  * Parses the expression into an AST and walks the full tree, rejecting any
  * construct that could escape the `new Function` sandbox and reach Node.js

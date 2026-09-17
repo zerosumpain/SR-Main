@@ -1,5 +1,5 @@
 import type { NodeExecutor, NodeResult, ExecutionContext, JsonSchema } from '../types';
-import { safeFunction } from './safe-eval';
+import { safeFunction } from '$lib/utils/safe-eval';
 
 export { loopDef } from './loop.def';
 

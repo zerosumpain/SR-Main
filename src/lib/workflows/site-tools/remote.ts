@@ -3,8 +3,10 @@ import https from 'node:https';
 import { env } from '$env/dynamic/private';
 import type { ToolExecContext, ToolResult } from './registry-internal';
 import {
+	coerceCataloguePayload,
 	createNdjsonReader,
 	NDJSON_CONTENT_TYPE,
+	type CataloguePayload,
 	type InvokeContext,
 } from './invoke-contract';
 
@@ -85,8 +87,8 @@ export function remoteInvokeTarget(): RemoteInvokeTarget | null {
  * empty would report every tool unknown, and the chat would tell the owner his
  * tools do not exist rather than that it could not reach them.
  */
-let catalogueCache: { at: number; tools: Map<string, boolean> } | null = null;
-let cataloguePending: Promise<Map<string, boolean>> | null = null;
+let catalogueCache: { at: number; payload: CataloguePayload } | null = null;
+let cataloguePending: Promise<CataloguePayload> | null = null;
 const CATALOGUE_TTL_MS = 60_000;
 
 export function resetRemoteCatalogue(): void {
@@ -94,25 +96,23 @@ export function resetRemoteCatalogue(): void {
 	cataloguePending = null;
 }
 
-export async function remoteCatalogue(target: RemoteInvokeTarget): Promise<Map<string, boolean>> {
+export async function remoteCatalogue(target: RemoteInvokeTarget): Promise<CataloguePayload> {
 	if (catalogueCache && Date.now() - catalogueCache.at < CATALOGUE_TTL_MS) {
-		return catalogueCache.tools;
+		return catalogueCache.payload;
 	}
 	// Cache the PROMISE, not the result, so concurrent callers in the same tick
 	// share one request — the same reason `load-registry.ts` does it.
 	cataloguePending ??= (async () => {
 		try {
-			const body = await getJson(target, '/api/platform/tools/catalogue');
-			const rows = (body as { tools?: Array<{ name?: unknown; destructive?: unknown }> }).tools;
-			if (!Array.isArray(rows)) throw new RemoteInvokeError('catalogue response had no tools');
-			const tools = new Map<string, boolean>();
-			for (const row of rows) {
-				if (typeof row?.name === 'string') tools.set(row.name, row.destructive === true);
-			}
-			catalogueCache = { at: Date.now(), tools };
-			return tools;
+			const payload = coerceCataloguePayload(await getJson(target, '/api/platform/tools/catalogue'));
+			catalogueCache = { at: Date.now(), payload };
+			return payload;
 		} catch (e) {
-			if (catalogueCache) return catalogueCache.tools;
+			// A refresh that fails serves the last good answer; with no answer
+			// ever, throw rather than return an empty catalogue, which would
+			// report every tool unknown and tell the owner his tools do not
+			// exist rather than that they could not be reached.
+			if (catalogueCache) return catalogueCache.payload;
 			throw e instanceof Error ? e : new RemoteInvokeError(String(e));
 		} finally {
 			cataloguePending = null;

@@ -3,7 +3,7 @@ import {
   validateExpression,
   safeFunction,
   UnsafeExpressionError,
-} from '$lib/workflows/nodes/safe-eval';
+} from '$lib/utils/safe-eval';
 
 describe('validateExpression — rejects sandbox escapes', () => {
   // The headline acceptance case: the constructor-walk RCE that defeated the

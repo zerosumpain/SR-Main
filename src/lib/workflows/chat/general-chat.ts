@@ -26,9 +26,9 @@ import { resolveThinkingModel } from '$lib/server/models/settings';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 import { thinkingRequestParams, type ThinkingLevel } from '$lib/models/thinking';
 import { coerceModelContext } from '$lib/constants/default-models';
-import { loadToolRegistry } from '$lib/workflows/site-tools/load-registry';
 import { getMetaToolDefinitions, getToolsetDefinitions, getToolDefinitionsByName, buildSiteSystemPromptSection } from '$lib/workflows/site-tools/llm-tools';
 import { executeSiteTool, isRegisteredTool } from '$lib/workflows/site-tools/executor';
+import { allTools } from '$lib/workflows/site-tools/catalogue';
 import { setJobPhase } from '$lib/workflows/chat/job-store';
 import { handleJkaiHelp, handleCreateTool, handleListCustomTools, handleDeleteTool } from '$lib/workflows/site-tools/meta-tools';
 import { BEHAVIOUR_POLICY } from '$lib/jkai/grounding/policy';
@@ -534,30 +534,13 @@ async function runSingleToolCall(
     toolResult = { error: `Unknown function: ${fnName}` };
   }
 
-  // Auto-register a perpetual heartbeat watcher for any tool that declares
-  // producesLongRunningTask. Generic, no per-tool special-casing in this
-  // file — adding new long-running task families means declaring metadata
-  // on the tool and adding a state-provider entry, not editing here.
-  if (conversationId && toolResult?.success) {
-    try {
-      const { getTool } = await loadToolRegistry();
-      const def = getTool(fnName);
-      if (def?.producesLongRunningTask) {
-        const { autoRegisterFromToolResult } = await import('$lib/heartbeat/auto-register');
-        const outcome = await autoRegisterFromToolResult({
-          conversationId,
-          toolName: fnName,
-          produces: def.producesLongRunningTask,
-          resultData: toolResult.data,
-        });
-        if (!outcome.registered) {
-          console.warn(`[heartbeat-auto] skipped ${fnName}: ${outcome.reason}`);
-        }
-      }
-    } catch (err) {
-      console.error('[heartbeat-auto] auto-register threw:', err instanceof Error ? err.message : err);
-    }
-  }
+  // The heartbeat watcher for a `producesLongRunningTask` tool is attached by
+  // `registry.executeTool`, at the shared execution boundary, so both this loop
+  // and the workflow engine get it. A second copy lived here until the boundary
+  // took it over; it was idempotent — `autoRegisterFromToolResult` keys on the
+  // watcher name and updates in place — so it registered nothing twice, it just
+  // re-wrote the row and reset nextRunAt on every call. It was also the last
+  // reason this file read the tool catalogue directly.
 
   // Truncate result for progress display (keep full for LLM context)
   const progressResultStr = JSON.stringify(toolResult);
@@ -1006,8 +989,7 @@ async function runGeneralChat(
     ...(await getMetaToolDefinitions()),
     ...(await getToolsetDefinitions('discovery')),
   ];
-  const { getTools: getRegisteredCapabilities } = await loadToolRegistry();
-  const routedCapabilities = resolveCapabilities(getRegisteredCapabilities(), userMessage, 3);
+  const routedCapabilities = resolveCapabilities(await allTools(), userMessage, 3);
   activeTools.push(...(await getToolDefinitionsByName(routedCapabilities.map(t => t.name))));
   if (integrationContext.integrations.length) { activeTools.push(...(await getToolDefinitionsByName(['api_integration_call']))); contract.needsReview = true; }
   const activatedToolsets = new Set<string>();

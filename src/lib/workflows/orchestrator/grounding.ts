@@ -104,7 +104,12 @@ export async function buildSiteToolCatalog(): Promise<string> {
   let getTools: () => ReadonlyArray<CatalogTool>;
   let isDenylistedTool: (name: string) => boolean;
   try {
-    ({ getTools } = await import('$lib/workflows/site-tools/registry'));
+    // Through the catalogue seam, not the registry barrel: this file is on the
+    // chat surface's graph, and the barrel is 175 tool modules plus — via
+    // `tools/workflows.ts` — the workflow node registry underneath it.
+    const { allTools } = await import('$lib/workflows/site-tools/catalogue');
+    const catalogue = await allTools();
+    getTools = () => catalogue;
     ({ isDenylistedTool } = await import('$lib/workflows/nodes/site-tool-denylist'));
   } catch {
     return '';
