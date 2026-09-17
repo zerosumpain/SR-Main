@@ -10,12 +10,11 @@ import {
   gmailAccounts,
   workflowFiles,
 } from '$lib/db/schema';
-import { desc, sql, gte, eq } from 'drizzle-orm';
+import { desc, sql, eq } from 'drizzle-orm';
+import { spendToday } from '$lib/costs/ledger.server';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async () => {
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
 
   const [
     whoopConnected,
@@ -61,14 +60,10 @@ export const load: PageServerLoad = async () => {
       })
       .from(customTools)
       .catch(() => [{ total: 0, enabled: 0 }]),
-    db
-      .select({
-        cost: sql<number>`coalesce(sum(${agentActions.costUsd}), 0)`,
-        count: sql<number>`count(*)`,
-      })
-      .from(agentActions)
-      .where(gte(agentActions.createdAt, todayStart))
-      .catch(() => [{ cost: 0, count: 0 }]),
+    // One ledger, one midnight. This used to zero the hours on the NODE clock
+    // and sum every action_type in the table, so the tile disagreed with
+    // /admin/ops/costs on both the window and the rows.
+    spendToday().catch(() => ({ costUsd: 0, calls: 0, tokensIn: 0, tokensOut: 0 })),
   ]);
 
   const blogCounts = {
@@ -96,8 +91,8 @@ export const load: PageServerLoad = async () => {
       enabled: Number(customToolStats[0]?.enabled ?? 0),
     },
     agent: {
-      todayCost: Number(todayCost[0]?.cost ?? 0),
-      todayActions: Number(todayCost[0]?.count ?? 0),
+      todayCost: todayCost.costUsd,
+      todayActions: todayCost.calls,
     },
   };
 };
