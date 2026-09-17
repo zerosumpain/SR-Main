@@ -82,7 +82,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     href: '/admin/ops/live',
     match: (p) => p.startsWith('/admin/ops'),
     items: [
-      { label: 'Actions', href: '/admin/ops/actions' },
+      { label: 'Run log', href: '/admin/ops/actions' },
       { label: 'Costs', href: '/admin/ops/costs' },
       { label: 'Tool usage', href: '/admin/ops/tool-usage' },
       { label: 'Live', href: '/admin/ops/live' },

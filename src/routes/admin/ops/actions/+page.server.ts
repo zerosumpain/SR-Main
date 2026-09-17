@@ -1,14 +1,7 @@
 import type { PageServerLoad } from './$types';
-import { db } from '$lib/db';
-import { agentActions } from '$lib/db/schema';
-import { desc } from 'drizzle-orm';
+import { getRunLog } from '$lib/costs/runs.server';
 
-export const load: PageServerLoad = async () => {
-  const actions = await db
-    .select()
-    .from(agentActions)
-    .orderBy(desc(agentActions.createdAt))
-    .limit(100);
-
-  return { actions };
+export const load: PageServerLoad = async ({ url }) => {
+  const page = Math.max(0, Number(url.searchParams.get('page') ?? 0) || 0);
+  return { page, ...(await getRunLog(page)) };
 };
