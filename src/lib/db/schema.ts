@@ -6846,6 +6846,18 @@ export const policyAnalyses = pgTable('policy_analyses', {
    * so a row is readable whichever it is.
    */
   sealed: boolean('sealed').notNull().default(false),
+  /**
+   * A sealed policy run the reader has allowed to search externally anyway.
+   *
+   * Owned by SR-Policy-Analysis; declared here because THIS file is what
+   * `drizzle-kit push` applies on every release, so a column missing here is a
+   * column that gets dropped. Sealing still switches off cross-policy comparison
+   * and the persona library unconditionally — those write the paper's substance
+   * into rows that outlive the run, where shredding its key cannot reach. Only
+   * external search is offered as a choice, because its exposure is a third
+   * party's logs rather than anything this site keeps.
+   */
+  sealedResearch: boolean('sealed_research').notNull().default(false),
   status: text('status').notNull().default('queued'),
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
   error: text('error'),
