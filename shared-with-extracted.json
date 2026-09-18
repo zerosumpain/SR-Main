@@ -109,7 +109,36 @@
     "  The four webdav/* modules left both repositories on 2026-09-13 with the",
     "    WebDAV mount itself. webdav_credentials keeps its declaration — the two",
     "    rows were created and last used on 9 May, a connection test and nothing",
-    "    since — because an undeclared table is a DROPPED table."
+    "    since — because an undeclared table is a DROPPED table.",
+    "",
+    "THE NAV KIT — the one bar, held in four repositories.",
+    "",
+    "site-nav.ts is the manifest that decides a path's section, its sub-nav, its",
+    "parent and whether it wears the bar at all; SiteHeader.svelte renders it;",
+    "page-path.ts reads the current path without touching $app/state.",
+    "",
+    "These are registered because of what happened on 2026-09-18, not on principle.",
+    "Policy Analysis moved under /projects and /live was retired. This repository's",
+    "copy followed; the three vendored copies did not, so /drive and nine /health",
+    "pages went on offering a cell to a URL that had moved and one to a page with no",
+    "owner in SR-Infra's registry. Nothing failed. deploy/kit.json guards gateway/",
+    "and scripts/ only, so a vendored file under src/ had no guard of any kind.",
+    "",
+    "The failure is quiet by construction: a stale nav still compiles, still renders",
+    "and still passes every test in the repository that holds it. It is only wrong",
+    "against THIS repository, which is why the check belongs here.",
+    "",
+    "SR-Policy-Analysis holds page-path.ts byte for byte and is named for it. Its",
+    "site-nav.ts and SiteHeader.svelte are deliberately NOT registered: that copy",
+    "carries real /projects/broads-pilot and /broads/speed chrome exclusions this",
+    "repository does not have, and puts data-sveltekit-reload on the whole header",
+    "because every cell in that application leaves it. A guard that fires on a",
+    "difference that is meant to be there gets routed around.",
+    "",
+    "SR-JKAI is NOT named. It holds all three, but only on move/routes-wip — its",
+    "master has no src/lib/nav at all. A peer is somewhere a change can GO, and an",
+    "unmerged branch is not that. When that branch lands, re-sync the three files",
+    "against this repository and add the peer here."
   ],
   "files": {
     "src/lib/health/polyline.ts": {
@@ -296,6 +325,28 @@
     "src/lib/server/ssrf-guard.ts": {
       "peer": "zerosumpain/SR-Health",
       "sha256": "a02188790f878b7fbe62ad2514bd1536f37db3d6ae7496ae83a545b2f6d65aeb"
+    },
+    "src/lib/nav/site-nav.ts": {
+      "peer": [
+        "zerosumpain/SR-Drive",
+        "zerosumpain/SR-Health"
+      ],
+      "sha256": "688dd7e61f53e9cdd3789f8aae59c45f70e08d1ffe66fb3f94f1d7427dd762b3"
+    },
+    "src/lib/components/SiteHeader.svelte": {
+      "peer": [
+        "zerosumpain/SR-Drive",
+        "zerosumpain/SR-Health"
+      ],
+      "sha256": "1b7b4c8458b0011a6459908e485d834a210663d94671a2f9de1df5b156b6fd9c"
+    },
+    "src/lib/nav/page-path.ts": {
+      "peer": [
+        "zerosumpain/SR-Drive",
+        "zerosumpain/SR-Health",
+        "zerosumpain/SR-Policy-Analysis"
+      ],
+      "sha256": "0500e5eed1ecfed42cfa3dacd09799ba73b28df69faddcacebcd7423d88f89c7"
     }
   }
 }
