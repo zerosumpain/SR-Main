@@ -6879,6 +6879,49 @@ export const policyDocuments = pgTable('policy_documents', {
   metadata: jsonb('metadata'),
 }, (t) => [uniqueIndex('policy_documents_analysis_idx').on(t.analysisId)]);
 
+/**
+ * Material attached to an assessment AFTER it reported, and the pass that read it.
+ *
+ * DECLARED HERE BECAUSE THIS FILE IS WHAT `drizzle-kit push` APPLIES. The policy
+ * pipeline lives in SR-Policy-Analysis and nothing in this repository reads this
+ * table — but a table production holds and this schema does not declare is the
+ * drop side of a rename pair, which takes the deploy interactive and hangs it.
+ * See `drizzle.config.ts`'s `tablesFilter` for the alternative; declaring it is
+ * the better one, because every other `policy_*` table is declared here too.
+ *
+ * Pass `n` owns stage ordinals `100 * n + k` in `policy_stages`, which is what
+ * lets work be appended to a finished assessment without re-running a stage —
+ * `policy_artefacts` is keyed on `(analysis_id, id)` and the `s<stage>_` id
+ * namespace collides if a stage ever runs twice.
+ *
+ * KEEP THIS IN STEP WITH SR-Policy-Analysis's own `schema.ts`, exactly as
+ * `policy_model_calls` says. The two declare the same table and this one is
+ * where the push runs.
+ */
+export const policyPasses = pgTable('policy_passes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  analysisId: uuid('analysis_id').notNull().references(() => policyAnalyses.id, { onDelete: 'cascade' }),
+  /** 1, 2, 3 … The stage ordinals this pass owns are `100 * pass + k`. */
+  pass: integer('pass').notNull(),
+  /** 'addendum' — four stages, carries material — or 'restatement' — one stage, none. */
+  kind: text('kind').notNull(),
+  /** What the reader said the material is; it decides how the model is told to read it. */
+  role: text('role'),
+  note: text('note'),
+  filename: text('filename'),
+  mimeType: text('mime_type'),
+  size: integer('size'),
+  sha256: text('sha256'),
+  /** Base64 of the bounded original bytes, exactly as `policy_documents` holds it. */
+  content: text('content'),
+  extractedText: text('extracted_text'),
+  metadata: jsonb('metadata'),
+  status: text('status').notNull().default('queued'),
+  error: text('error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+}, (t) => [uniqueIndex('policy_passes_analysis_pass_idx').on(t.analysisId, t.pass)]);
+
 export const policyStages = pgTable('policy_stages', {
   id: uuid('id').primaryKey().defaultRandom(),
   analysisId: uuid('analysis_id').notNull().references(() => policyAnalyses.id, { onDelete: 'cascade' }),
