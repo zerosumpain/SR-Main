@@ -245,6 +245,7 @@ export const SECTIONS: NavSection[] = [
       // an EXACT bypass, never a prefix. Every child below is owner-gated.
       { label: 'Dashboard', href: '/health', match: (p) => p === '/health' },
       { label: 'Activities', href: '/health/activities', ownerOnly: true },
+      { label: 'Analytics', href: '/health/analytics', ownerOnly: true },
       { label: 'Segments', href: '/health/segments', ownerOnly: true },
       { label: 'Routes', href: '/health/routes', ownerOnly: true },
       { label: 'Plan', href: '/health/plan', ownerOnly: true },

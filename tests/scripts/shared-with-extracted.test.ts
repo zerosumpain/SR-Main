@@ -59,6 +59,7 @@ describe('modules shared with the extracted applications', () => {
     // Adding a duplicate without listing it here is how the two copies start
     // disagreeing with nothing to notice.
     expect(Object.keys(manifest.files).sort()).toEqual([
+      'src/lib/components/SiteHeader.svelte',
       'src/lib/config/owner.ts',
       'src/lib/constants/apple-health-scale.ts',
       'src/lib/constants/planner-sports.ts',
@@ -86,6 +87,8 @@ describe('modules shared with the extracted applications', () => {
       'src/lib/llm/usage-capture.ts',
       'src/lib/llm/usage-log.ts',
       'src/lib/llm/usage-meter.ts',
+      'src/lib/nav/page-path.ts',
+      'src/lib/nav/site-nav.ts',
       'src/lib/secrets/crypto.ts',
       'src/lib/server/access-util.ts',
       'src/lib/server/access.ts',
