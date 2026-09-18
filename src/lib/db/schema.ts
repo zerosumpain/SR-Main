@@ -6967,7 +6967,20 @@ export const policyModelCalls = pgTable('policy_model_calls', {
   callKey: text('call_key').notNull(),
   promptVersion: text('prompt_version').notNull(),
   inputHash: text('input_hash').notNull(),
-  input: jsonb('input').notNull(),
+  // NULLABLE BECAUSE A SEALED RUN WRITES NEITHER OF THESE. The policy pipeline
+  // lives in SR-Policy-Analysis now, but THIS file is what `drizzle-kit push`
+  // applies on every release here, so this declaration is what the database
+  // actually gets. That application's `provider.ts` stores `input: null` and
+  // `output: null` when a run is sealed — the prompt carries the paper verbatim
+  // and the reply carries the assessment of it, and sealing exists so neither is
+  // ever written in readable form.
+  //
+  // `output` was nullable from the start and `input` was not, so every sealed
+  // assessment died on its FIRST model call with a not-null violation: measured
+  // 2026-09-18, a sealed deep run that failed at stage 1 in 47 seconds having
+  // never reached the provider. Restoring `notNull` here would silently break it
+  // again on the next release from this repository.
+  input: jsonb('input'),
   output: jsonb('output'),
   status: text('status').notNull(),
   provider: text('provider'),
