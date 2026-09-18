@@ -6829,6 +6829,31 @@ export const policyAnalyses = pgTable('policy_analyses', {
   // nullable text: an unspecified submission takes the default.
   concurrency: integer('concurrency'),
   /**
+   * HOW DECOMPOSITION ASKED FOR THE INVENTORY: 'prose' or 'indexed'.
+   *
+   * NULL means 'prose', which is what every assessment before this column ran
+   * on — so a run already in flight when this shipped carries on exactly as it
+   * started, and a reader who never touches the control gets the contract they
+   * have always had. Text rather than a boolean for the same reason `model` and
+   * `thinking_level` are text: a third way of asking needs no migration.
+   *
+   * Kept per run rather than in configuration BECAUSE IT IS THE ROLLBACK. The
+   * same paper can be submitted under each and the two reports compared, and a
+   * bad result is undone by the next submission rather than by a release.
+   */
+  extraction: text('extraction'),
+  /**
+   * Whether the heavy fan-out stages put their SHARED context first and fit it
+   * once, so a provider's prompt cache can match a prefix across the calls of a
+   * stage.
+   *
+   * NOT NULL DEFAULT false, like `sealed`: every assessment before this ran
+   * without it, and false is what an absent form field means. Separate from
+   * `extraction` on purpose — the two changes are independent, and one toggle
+   * for both would make it impossible to say which one moved a number.
+   */
+  sharedContextFirst: boolean('shared_context_first').notNull().default(false),
+  /**
    * A SEALED run writes no readable bytes.
    *
    * Every free-text column below — the document, the artefacts, the stage
