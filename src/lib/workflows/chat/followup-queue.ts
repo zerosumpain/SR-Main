@@ -306,9 +306,8 @@ async function deliverFollowUp(item: FollowUp, check: FollowUpCheck) {
     // WhatsApp notification if requested
     if (item.notifyWhatsApp && item.whatsAppNumber) {
       try {
-        const { getWhatsAppService } = await import('$lib/workflows/whatsapp/service');
-        const wa = getWhatsAppService();
-        await wa.sendMessage(item.whatsAppNumber, response);
+        const { sendWhatsAppMessage } = await import('$lib/workflows/whatsapp/send');
+        await sendWhatsAppMessage(item.whatsAppNumber, response);
         console.log(`[followup] WhatsApp notification sent to ${item.whatsAppNumber}`);
       } catch (waErr) {
         console.error(`[followup] WhatsApp send failed:`, waErr instanceof Error ? waErr.message : waErr);
