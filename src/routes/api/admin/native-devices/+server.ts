@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import QRCode from 'qrcode';
 import type { RequestHandler } from './$types';
 import { createPairingCode, listDevices, revokeDevice } from '$lib/server/native-auth';
 
@@ -35,16 +36,26 @@ export const POST: RequestHandler = async ({ locals, url }) => {
   if (!email) return json({ error: 'Unauthorized' }, { status: 401 });
 
   const { code, expiresAt } = await createPairingCode(email);
-  return json({
+  const payload = JSON.stringify({
+    type: 'sr-native-pair',
+    version: 1,
+    server: url.origin,
     code,
-    expiresAt: expiresAt.toISOString(),
-    payload: JSON.stringify({
-      type: 'sr-native-pair',
-      version: 1,
-      server: url.origin,
-      code,
-    }),
   });
+
+  // The QR is rendered HERE, server-side, and handed over as a data URL.
+  //
+  // The page that shows it is the companion dashboard at /apple-app, which is
+  // served by a different process on the same hostname. Returning only the
+  // payload would mean that page needs a QR library, and its CSP is
+  // `script-src 'self'` — so the library would have to be vendored into the
+  // pilot, which is the one thing worth avoiding here: the pilot server has no
+  // business handling a credential that opens chat and the whole news desk.
+  // A data URL crosses as an image, under that page's `img-src 'self' data:`,
+  // and the token itself never reaches the pilot's server at all.
+  const qr = await QRCode.toDataURL(payload, { errorCorrectionLevel: 'M', margin: 4, scale: 6 });
+
+  return json({ code, expiresAt: expiresAt.toISOString(), payload, qr });
 };
 
 /** DELETE — revoke one device immediately. */
