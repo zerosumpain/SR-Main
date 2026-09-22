@@ -21,6 +21,7 @@ src/lib/selfimprove/board.test.ts
 src/lib/selfimprove/narrative.probe.test.ts
 src/lib/selfimprove/verify.test.ts
 src/lib/server/jsdom.test.ts
+src/lib/server/native-auth.test.ts
 src/lib/workflows/site-tools/registry-closure.test.ts
 src/lib/workflows/site-tools/tools/publish-page.test.ts
 src/routes/projects/engine-room/lib/tour-routes.test.ts

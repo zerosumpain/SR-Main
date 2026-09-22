@@ -7164,3 +7164,40 @@ export const policyShares = pgTable('policy_share', {
   uniqueIndex('policy_share_token_hash_idx').on(t.tokenHash),
   index('policy_share_analysis_idx').on(t.analysisId),
 ]);
+
+/**
+ * A paired iPhone's credential, and the one-time code that mints it.
+ *
+ * Two kinds in one table, the way the companion pilot's `credentials` table
+ * already does it, because they share every column and differ only in lifetime:
+ *
+ *   `pair`   — a one-time code shown on the website, 10 minutes, single use.
+ *   `device` — what the phone exchanges it for, 90 days, revocable.
+ *
+ * Only the SHA-256 of the secret is stored. A row is therefore enough to revoke
+ * a phone and never enough to impersonate one, which is the property that lets
+ * the device list render in the browser at all.
+ *
+ * Modelled on `policyShares` above rather than invented: token hash under a
+ * unique index, a lifetime that cannot be omitted, an explicit `revokedAt`, and
+ * use accounting. Drive's first capability table had a nullable expiry and
+ * never wrote it, so every link it minted was permanent and unkillable; a
+ * credential that reaches chat and the whole news desk is at least as sensitive.
+ */
+export const nativeCredentials = pgTable('native_credentials', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  kind: text('kind').notNull(),
+  /** Lower-cased owner email — the identity the site's allow-list speaks in. */
+  ownerEmail: text('owner_email').notNull(),
+  tokenHash: text('token_hash').notNull(),
+  /** `SR iPhone` — what the device list calls this row. */
+  label: text('label'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+  useCount: integer('use_count').notNull().default(0),
+}, (t) => [
+  uniqueIndex('native_credentials_token_hash_idx').on(t.tokenHash),
+  index('native_credentials_owner_kind_idx').on(t.ownerEmail, t.kind),
+]);

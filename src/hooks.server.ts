@@ -22,6 +22,7 @@ import { requestHost } from '$lib/request-host';
 import { resolveAdminRedirect } from '$lib/components/admin/admin-nav';
 import { isEmailAllowedToSignIn, isOwnerEmail } from '$lib/server/access';
 import { rateLimit } from '$lib/server/rate-limit';
+import { hasNativeDevice } from '$lib/server/native-gate';
 import { hasMaintenanceSecret } from '$lib/server/maintenance-auth';
 import { isPublicApiPath } from '$lib/server/public-api-paths';
 import { hasStudioServiceToken } from '$lib/server/studio-auth';
@@ -650,6 +651,52 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     ((pathname === '/api/platform/tools/invoke' && event.request.method === 'POST') ||
       (pathname === '/api/platform/tools/catalogue' && event.request.method === 'GET')) &&
     invokeLaneFor(event.request) !== 'none'
+  ) {
+    return resolve(event);
+  }
+
+  // The native lane: the iPhone companion reading chat and the news desk.
+  //
+  // This one IS a tree, which every bypass above it deliberately is not, so it
+  // owes an explanation. The lanes above guard endpoints that already existed
+  // for a browser and were later opened to one extra caller — naming each path
+  // is what stops the next file added beside them inheriting the opening.
+  // `/api/native` has no browser caller and never will: the whole subtree exists
+  // only for this credential, so "everything under here" is the accurate rule
+  // rather than a widening of somebody else's.
+  //
+  // What makes it safe is not the tree, it is `withDevice` in
+  // `$lib/server/native-handler`: every handler under here resolves the identity
+  // itself and 401s without one, so this bypass grants reachability and nothing
+  // else. A new file that forgets is not a hole that opens quietly — it has no
+  // session and no identity, so it cannot read anything.
+  //
+  // `/api/native/pair` is the deliberate exception and gates itself: it is the
+  // one path that must answer a caller holding no device token yet, because
+  // exchanging the one-time code is how a caller gets one.
+  if (pathname.startsWith('/api/native/')) {
+    return resolve(event);
+  }
+
+  // The same credential, on the three orchestrator paths a turn actually needs:
+  // POST to start one, GET to stream or poll it, DELETE to cancel.
+  //
+  // Named one path and verb at a time, like the bridges above — this is NOT a
+  // tree, so nothing new under /api/workflows/orchestrator becomes reachable by
+  // existing. The phone calls these directly rather than through a proxy under
+  // /api/native because `handleWithLoop` is 590 lines of the busiest endpoint on
+  // the site and reads nothing from the session: it is driven entirely by its
+  // body. Lifting it into $lib to wrap it would be a refactor of chat itself,
+  // carried out in a change about an iPhone app, for no behavioural gain.
+  //
+  // The credential is checked here rather than in the route because these
+  // handlers are shared with the browser and must keep answering a session
+  // exactly as they do today.
+  if (
+    (pathname === '/api/workflows/orchestrator/chat' ||
+      pathname === '/api/workflows/orchestrator/chat/stream') &&
+    ['GET', 'POST', 'DELETE', 'PATCH'].includes(event.request.method) &&
+    (await hasNativeDevice(event.request))
   ) {
     return resolve(event);
   }

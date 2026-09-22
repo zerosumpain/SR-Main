@@ -33,6 +33,12 @@
  * These are PREFIXES: an entry opens the path and everything beneath it.
  */
 export const HOOK_BYPASSES: string[] = [
+  // The iPhone companion's lane. The only bypass here that is a genuine TREE
+  // on purpose: nothing under /api/native has a browser caller, so the subtree
+  // exists solely for this credential rather than being an opening cut into
+  // somebody else's endpoints. Every handler under it resolves its own identity
+  // through `withDevice`, so a file added here without one answers nothing.
+  '/api/native',
   '/api/scraper/script', // SCRAPER_SERVICE_TOKEN
   '/api/mcp', // bridge token (tools/list + tools/call)
   '/api/claude-changelog', // POST only, ingest secret
@@ -122,6 +128,16 @@ export const HOOK_BYPASSES: string[] = [
  */
 export const HOOK_EXACT_BYPASSES: string[] = [
   '/health', // the public health landing; every /health/* child is owner-only
+  // The two orchestrator paths a chat turn needs, opened to a paired iPhone's
+  // device token as well as an owner session.
+  //
+  // EXACT, and that distinction is the whole point. Listed as prefixes these
+  // would drag `chat/active`, `chat/presence` and `chat/[workflowId]` into the
+  // anonymous surface with them — which `check-public-routes` duly reported
+  // when they were first written into `HOOK_BYPASSES`. The hook itself always
+  // compared with `===`; the catalogue was the thing that was wrong.
+  '/api/workflows/orchestrator/chat',
+  '/api/workflows/orchestrator/chat/stream',
 ];
 
 /** Prefix bypasses at the page level. `/tools` is a genuine tree (static/tools/*). */
@@ -150,6 +166,11 @@ export const HOOK_NON_BYPASSES: string[] = [
  * HOOK_BYPASSES.
  */
 export const BYPASS_GUARDS: Record<string, string> = {
+  '/api/native': 'Bearer device token (native_credentials row) · re-checked per handler by withDevice',
+  '/api/workflows/orchestrator/chat':
+    'owner session OR Bearer device token · the phone starting, polling and cancelling a chat turn',
+  '/api/workflows/orchestrator/chat/stream':
+    'owner session OR Bearer device token · SSE for the turn above',
   '/api/scraper/script': 'homeserv-only + SCRAPER_SERVICE_TOKEN',
   '/api/mcp': 'Bearer SERVICE_BRIDGE_SECRET',
   '/api/claude-changelog': 'POST only · ingest secret',

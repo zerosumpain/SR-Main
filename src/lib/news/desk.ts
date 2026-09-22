@@ -1,0 +1,179 @@
+import { getNewsFeed, MAX_NEWS_STORIES_PER_SOURCE, normalizeNewsLimit } from './sources';
+import { getNewsStats, keptKeysFor, type NewsStats } from './stats';
+import { listNewsFavourites } from './favourites';
+import { newSinceLastVisit, readKeysFor } from './store';
+import { correlateStories } from './correlate';
+import { loadAnchors } from './correlate.server';
+import { NEWS_SOURCES, NEWS_SOURCE_LABELS } from '$lib/constants/news-sources';
+import type { NewsFeed, NewsSort, NewsStory, NewsView, NewsWireView } from './types';
+
+/**
+ * What the news desk IS, once, for every reader of it.
+ *
+ * Extracted from `/news/+page.server.ts` when the iPhone app became a second
+ * consumer. It is one module rather than two loaders for the same reason
+ * /health's taxonomy tiles and its dashboard share one `formTaxonomy`: the two
+ * surfaces must keep printing the same counts, and the way that stops being
+ * true is a second copy drifting a rule.
+ *
+ * Nothing in here is presentation. The phone and the desk disagree about layout
+ * — a ledger row versus a 14-column table — and agree about what a story is,
+ * which is the split this file draws.
+ */
+
+/** What a row needs to say why it surfaced, and nothing more. */
+export interface StoryCorrelation {
+  score: number;
+  names: string[];
+  why: string;
+  /** What the knowledge base already holds on the strongest match. */
+  evidence: { notes: number; lastSeen: string | null } | null;
+}
+
+export interface NewsDesk {
+  feed: NewsFeed;
+  newSince: { count: number; since: string | null };
+  stats: NewsStats;
+  sort: NewsSort;
+  limit: number;
+  maxLimit: number;
+  correlations: Record<string, StoryCorrelation>;
+  anchorCount: number;
+  readKeys: string[];
+  keptKeys: string[];
+}
+
+export function parseNewsView(raw: string | null): NewsView {
+  return raw === 'new' || raw === 'best' || raw === 'for-you' || raw === 'favourites'
+    ? raw
+    : 'top';
+}
+
+/**
+ * Heat, not points, is what `best` defaults to.
+ *
+ * Raw scores are not comparable across wires and one wire reports none at all,
+ * so a points default made "best" mean "best on the two wires that vote".
+ */
+export function parseNewsSort(raw: string | null, view: NewsView): NewsSort {
+  if (raw === 'points' || raw === 'time' || raw === 'heat') return raw;
+  return view === 'best' ? 'heat' : 'time';
+}
+
+/**
+ * Correlated stories first, everything else in the order it already had.
+ *
+ * RANKS, never filters. A desk that hides what did not correlate loses the
+ * serendipity that makes a wire worth reading at all, and gives you no way to
+ * notice what it dropped — so the uncorrelated stories stay, below the fold.
+ */
+export function rankForYou(
+  stories: readonly NewsStory[],
+  correlations: Record<string, StoryCorrelation>,
+): NewsStory[] {
+  return [...stories].sort((a, b) => {
+    const scoreA = correlations[a.key]?.score ?? 0;
+    const scoreB = correlations[b.key]?.score ?? 0;
+    return scoreB - scoreA || b.heat - a.heat;
+  });
+}
+
+export async function correlationsFor(
+  feed: NewsFeed,
+): Promise<{ correlations: Record<string, StoryCorrelation>; anchorCount: number }> {
+  try {
+    const { anchors } = await loadAnchors();
+    if (anchors.length === 0) return { correlations: {}, anchorCount: 0 };
+    // No limit: the page wants to know about every row it is going to draw,
+    // not the top eight the tool answer wants.
+    const correlated = correlateStories(feed.stories, anchors, { limit: feed.stories.length });
+    return {
+      anchorCount: anchors.length,
+      correlations: Object.fromEntries(
+        correlated.map((entry) => [
+          entry.story.key,
+          {
+            score: entry.score,
+            names: entry.matches.map((match) => match.anchor.name),
+            why: entry.matches[0].anchor.why,
+            evidence: entry.matches[0].anchor.evidence ?? null,
+          },
+        ]),
+      ),
+    };
+  } catch (err) {
+    console.error('[news] correlation failed:', err instanceof Error ? err.message : err);
+    return { correlations: {}, anchorCount: 0 };
+  }
+}
+
+/**
+ * The whole desk for one reader.
+ *
+ * `ownerKey` is passed in rather than resolved here because the two callers
+ * establish identity differently — the page from a browser session, the phone
+ * from a paired device credential — and a module that reached for `locals`
+ * could only ever serve the first.
+ */
+export async function loadNewsDesk(opts: {
+  view: NewsView;
+  sort: NewsSort;
+  limit: number;
+  force: boolean;
+  ownerKey: string;
+}): Promise<NewsDesk> {
+  const { view, sort, force, ownerKey } = opts;
+  const limit = normalizeNewsLimit(opts.limit);
+
+  const feedPromise: Promise<NewsFeed> =
+    view === 'favourites'
+      ? listNewsFavourites(ownerKey).then((stories) => ({
+          view,
+          stories,
+          // Derived from the source list, not a hand-written triple — the old
+          // literal would have under-reported the moment a fourth wire existed.
+          sources: NEWS_SOURCES.map((source) => ({
+            source,
+            label: NEWS_SOURCE_LABELS[source],
+            count: stories.filter((story) => story.source === source).length,
+            ok: true,
+            error: null,
+          })),
+          updatedAt: new Date().toISOString(),
+          newSinceLast: 0,
+          cached: true,
+        }))
+      : // `for-you` reorders the top wire rather than fetching its own.
+        getNewsFeed(view === 'for-you' ? 'top' : (view as NewsWireView), { force, limit });
+
+  const [feed, stats] = await Promise.all([feedPromise, getNewsStats(ownerKey)]);
+
+  // All best-effort decoration on a desk that must render without any of it.
+  const keys = feed.stories.map((story) => story.key);
+  const [correlated, readKeys, keptKeys, newSince] = await Promise.all([
+    correlationsFor(feed),
+    readKeysFor(ownerKey, keys),
+    keptKeysFor(keys),
+    // A saved list has no arrival time of its own — every row got there because
+    // the owner put it there, so "new since you looked" is not a question about it.
+    view === 'favourites'
+      ? Promise.resolve({ count: 0, since: null })
+      : newSinceLastVisit(ownerKey, feed.stories),
+  ]);
+  const { correlations, anchorCount } = correlated;
+
+  const stories = view === 'for-you' ? rankForYou(feed.stories, correlations) : feed.stories;
+
+  return {
+    feed: { ...feed, view, stories, newSinceLast: newSince.count },
+    newSince,
+    stats,
+    sort,
+    limit,
+    maxLimit: MAX_NEWS_STORIES_PER_SOURCE,
+    correlations,
+    anchorCount,
+    readKeys: [...readKeys],
+    keptKeys: [...keptKeys],
+  };
+}
