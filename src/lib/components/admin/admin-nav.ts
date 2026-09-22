@@ -140,7 +140,7 @@ export const ADMIN_ROUTE_REDIRECTS: Record<string, string> = {
   // rather than from two that look identical and revoke different things. The
   // API stays at /api/admin/native-devices under the owner gate; only the UI
   // moved, so the pilot server never mints a site credential.
-  '/admin/access/devices': '/apple-app/',
+  '/admin/access/devices': '/apple-app',
   '/admin/blog': '/admin/content/blog',
   '/admin/hero': '/admin/content/hero',
   '/admin/health': '/admin/connections/health',
