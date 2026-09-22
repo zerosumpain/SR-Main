@@ -27,8 +27,8 @@
 import { and, desc, eq, gt, inArray, isNull, lt } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { notificationEvents, notificationRoutes } from '$lib/db/schema';
-import { ownerPhone } from '$lib/config/owner';
 import { categoryOf, NOTIFICATION_CATEGORIES, type NotificationCategory } from './categories';
+import { notificationChannel } from './channels';
 
 const SITE_URL = 'https://strangeramblings.com';
 
@@ -226,36 +226,32 @@ export async function notifyOwner(input: NotifyInput): Promise<NotifyResult> {
 }
 
 /**
- * The WhatsApp half.
+ * The WhatsApp half — through the registered channel, not through an import.
  *
- * Lazy-imported, exactly as `run-notifications.ts` does it: the engine must not
- * pull the WhatsApp stack in because something imported the notifier. There is
- * no `state.status` gate either — in delegated mode that value is a boot-time
- * probe that is never refreshed, so it latched the channel off after any
- * restart during an outage. Attempt the send; the result is the truth.
+ * This used to `await import('$lib/workflows/whatsapp/service')`, which pointed
+ * a platform module at a domain one and made the two mutually dependent. The
+ * sender registers itself at boot instead (`$lib/workflows/index.ts`), so this
+ * file names a channel and knows nothing about what fills it.
+ *
+ * An absent channel is an ordinary outcome, not a failure: the run worker and
+ * every test process have no WhatsApp client, and the alert is already written.
  */
 async function sendWhatsApp(input: NotifyInput, eventId: string): Promise<boolean> {
-  const to = ownerPhone();
-  if (!to) return false;
-  try {
-    const { getWhatsAppService } = await import('$lib/workflows/whatsapp/service');
-    const link = input.url
-      ? `\n\n${input.url.startsWith('http') ? input.url : SITE_URL + input.url}`
-      : '';
-    const result = await getWhatsAppService().sendMessage(to, `*${input.title}*\n\n${input.body}${link}`);
-    if (result.sent) {
-      await db
-        .update(notificationEvents)
-        .set({ whatsappAt: new Date() })
-        .where(eq(notificationEvents.id, eventId));
-      return true;
-    }
-    console.error(`[notify] WhatsApp refused ${eventId}: ${result.error}`);
-    return false;
-  } catch (error) {
-    console.error(`[notify] WhatsApp send threw for ${eventId}`, error);
+  const send = notificationChannel('whatsapp');
+  if (!send) return false;
+  const link = input.url
+    ? `\n\n${input.url.startsWith('http') ? input.url : SITE_URL + input.url}`
+    : '';
+  const sent = await send(`*${input.title}*\n\n${input.body}${link}`);
+  if (!sent) {
+    console.error(`[notify] the whatsapp channel did not take ${eventId}`);
     return false;
   }
+  await db
+    .update(notificationEvents)
+    .set({ whatsappAt: new Date() })
+    .where(eq(notificationEvents.id, eventId));
+  return true;
 }
 
 /**
@@ -335,3 +331,5 @@ export async function pruneEvents(days = 90): Promise<void> {
 }
 
 export { NOTIFICATION_CATEGORIES } from './categories';
+export { registerNotificationChannel, clearNotificationChannels } from './channels';
+export type { NotificationSender } from './channels';

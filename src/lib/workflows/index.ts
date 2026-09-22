@@ -97,6 +97,8 @@ import { postitDef, postitExecutor } from './nodes/postit';
 import { annotationDef, annotationExecutor } from './nodes/annotation';
 import { appleCalendarDef, appleCalendarExecutor } from './nodes/apple-calendar';
 import { getWhatsAppService } from './whatsapp/service';
+import { ownerPhone } from '$lib/config/owner';
+import { registerNotificationChannel } from '$lib/server/notify';
 import { OrchestratorBridge } from './whatsapp/orchestrator-bridge';
 import { syncPrompts } from './prompts/loader';
 import { loadCustomTools } from './site-tools/custom-tool-loader';
@@ -299,6 +301,36 @@ async function bootWhatsApp() {
 // also have started the scheduler, and two schedulers on one database fires
 // every cron twice.
 if (runsService('whatsapp')) bootWhatsApp();
+
+// Fill the notifier's WhatsApp slot.
+//
+// `$lib/server/notify` is the platform layer and may not know what a WhatsApp
+// service is; this module is a domain and may. So the dependency points down,
+// which is the direction `check-module-boundaries` requires and also the one
+// that makes the notifier testable without a Baileys client.
+//
+// Registered UNCONDITIONALLY, not behind `runsService('whatsapp')`. The service
+// delegates to the worker when this process does not hold the socket, and that
+// delegation is the whole point — gating registration on owning the socket
+// would silence WhatsApp everywhere except the one process that happens to be
+// paired.
+//
+// No `state.status` check. In delegated mode that value is a boot-time probe
+// that is never refreshed, so any VPS restart during an outage — a CI deploy
+// counts — pinned the channel off permanently. Attempt the send; the result is
+// the truth.
+registerNotificationChannel('whatsapp', async (text) => {
+  const to = ownerPhone();
+  if (!to) return false;
+  try {
+    const result = await getWhatsAppService().sendMessage(to, text);
+    if (!result.sent) console.error(`[notify] WhatsApp refused a send: ${result.error}`);
+    return result.sent;
+  } catch (error) {
+    console.error('[notify] WhatsApp send threw', error);
+    return false;
+  }
+});
 
 // Boot Home Assistant service if configured
 async function bootHomeAssistant() {
