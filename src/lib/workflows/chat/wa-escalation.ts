@@ -1,7 +1,7 @@
 import { ownerPhone } from '$lib/config/owner';
 import { getJob, getStreamSubscriberCount, registerEventHook, type JobEvent } from './job-store';
 import { isUserPresent } from './presence';
-import { getWhatsAppService } from '$lib/workflows/whatsapp/service';
+import { sendWhatsAppMessage } from '$lib/workflows/whatsapp/send';
 
 const SITE_URL = 'https://strangeramblings.com';
 const GRACE_MS = 15_000;
@@ -60,12 +60,10 @@ function buildWaiterMessage(label: string, body: string, conversationId: string 
 
 async function sendWa(text: string): Promise<void> {
   try {
-    const wa = getWhatsAppService();
-    // No `state.status` gate. In delegated mode that value is set ONCE by a probe
-    // at boot and never re-probed, so any VPS restart during an outage — a CI
-    // deploy counts — pinned this channel off permanently, even after homeserv
-    // came back. Attempt the send and report what actually happened.
-    const result = await wa.sendMessage(ownerPhone() ?? '', text);
+    // Through the send seam, not the service: this file wants one POST to the
+    // bridge and the class it used to import can start a Baileys session. The
+    // `state.status` gate is still deliberately absent — see `send.ts`.
+    const result = await sendWhatsAppMessage(ownerPhone() ?? '', text);
     if (!result.sent) console.error(`[wa-escalation] send failed: ${result.error}`);
   } catch (err) {
     console.error('[wa-escalation] send threw:', err);
