@@ -143,3 +143,49 @@ describe('a caller cannot ask for an unbounded page', () => {
     expect(clampLimit('banana', 40, 100)).toBe(40);
   });
 });
+
+/**
+ * The device lanes must be rate-limited too.
+ *
+ * The orchestrator's 10/min cap lives INSIDE the owner-gate block, and both
+ * native lanes return before reaching it. Without an explicit limit a paired
+ * phone could start chat turns without a ceiling — and every turn is a paid
+ * model call, on a client that retries. This asserts the hook actually applies
+ * one on both lanes rather than trusting the comment that says it does.
+ */
+describe('the phone is capped like a browser', () => {
+  const hook = readFileSync(join(process.cwd(), 'src/hooks.server.ts'), 'utf8');
+
+  it('applies a limit on the native tree and the orchestrator lane', () => {
+    // Both bypasses must consult the shared limiter before resolving.
+    const nativeLane = hook.slice(hook.indexOf("pathname.startsWith('/api/native/')"));
+    expect(nativeLane.slice(0, 600)).toContain('rateLimited(');
+
+    const chatLane = hook.slice(hook.indexOf("'/api/workflows/orchestrator/chat/stream'"));
+    expect(chatLane.slice(0, 900)).toContain('rateLimited(');
+  });
+
+  it('keys the bucket on the DEVICE, not on a shared name', () => {
+    // One phone stuck in a retry loop must not consume the browser's allowance.
+    expect(hook).toContain('`device:${device.id}`');
+  });
+
+  it('has exactly one implementation of the limit decision', () => {
+    // The owner gate had its own copy; two copies is how a ceiling drifts from
+    // the table it is meant to enforce.
+    //
+    // Comments are stripped first: the RATE_LIMITS table's own note mentions
+    // `RATE_LIMITS.find()` in prose, and counting that found a duplicate
+    // implementation that does not exist.
+    const code = hook
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('//') && !line.trim().startsWith('*'))
+      .join('\n');
+    expect(code.match(/function rateLimited\(/g)?.length).toBe(1);
+    expect(code.match(/RATE_LIMITS\.find\(/g)?.length).toBe(1);
+  });
+
+  it('still exempts the pairing endpoint, which has its own ceiling', () => {
+    expect(hook).toContain("pathname !== '/api/native/pair'");
+  });
+});

@@ -22,7 +22,7 @@ import { requestHost } from '$lib/request-host';
 import { resolveAdminRedirect } from '$lib/components/admin/admin-nav';
 import { isEmailAllowedToSignIn, isOwnerEmail } from '$lib/server/access';
 import { rateLimit } from '$lib/server/rate-limit';
-import { hasNativeDevice } from '$lib/server/native-gate';
+import { nativeDevice } from '$lib/server/native-gate';
 import { hasMaintenanceSecret } from '$lib/server/maintenance-auth';
 import { isPublicApiPath } from '$lib/server/public-api-paths';
 import { hasStudioServiceToken } from '$lib/server/studio-auth';
@@ -34,6 +34,35 @@ import { isRedirect, redirect, type Handle } from '@sveltejs/kit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { env } from '$env/dynamic/private';
 import { runsService } from '$lib/workflows/service-role';
+
+/**
+ * The rate-limit decision, shared by the owner gate and the native device lanes.
+ *
+ * Lifted out of the owner gate when the iPhone lane was added: that lane returns
+ * before the gate, so a copy of this logic there would have been a second place
+ * for the ceilings to drift from the table they are supposed to enforce.
+ *
+ * Returns a 429 Response when the caller is over, or null to proceed.
+ */
+function rateLimited(pathname: string, method: string, callerKey: string): Response | null {
+  const limit = RATE_LIMITS.find((r) => r.pattern.test(pathname));
+  if (!limit || method === 'GET') return null;
+  const result = rateLimit(`${callerKey}:${pathname}`, {
+    capacity: limit.capacity,
+    refillPerSecond: limit.refillPerSecond,
+  });
+  if (result.allowed) return null;
+  return new Response(
+    JSON.stringify({ error: 'Rate limit exceeded', retryAfterMs: result.retryAfterMs }),
+    {
+      status: 429,
+      headers: {
+        'Content-Type': 'application/json',
+        'Retry-After': String(Math.ceil(result.retryAfterMs / 1000)),
+      },
+    },
+  );
+}
 
 // Expensive endpoints — apply per-user rate limits.
 // Pattern → { capacity (burst), refillPerSecond (steady-state) }.
@@ -675,6 +704,14 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   // one path that must answer a caller holding no device token yet, because
   // exchanging the one-time code is how a caller gets one.
   if (pathname.startsWith('/api/native/')) {
+    // /api/native/pair gates itself and has its own per-address ceiling; every
+    // other path here is behind a device token and gets the same per-caller
+    // limits a browser session would.
+    if (pathname !== '/api/native/pair') {
+      const device = await nativeDevice(event.request);
+      const capped = device ? rateLimited(pathname, event.request.method, `device:${device.id}`) : null;
+      if (capped) return capped;
+    }
     return resolve(event);
   }
 
@@ -695,10 +732,20 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   if (
     (pathname === '/api/workflows/orchestrator/chat' ||
       pathname === '/api/workflows/orchestrator/chat/stream') &&
-    ['GET', 'POST', 'DELETE', 'PATCH'].includes(event.request.method) &&
-    (await hasNativeDevice(event.request))
+    ['GET', 'POST', 'DELETE', 'PATCH'].includes(event.request.method)
   ) {
-    return resolve(event);
+    const device = await nativeDevice(event.request);
+    if (device) {
+      // The 10/min orchestrator cap lives INSIDE the owner-gate block below, and
+      // this lane returns before reaching it — so without this a paired phone
+      // could start chat turns without limit. Every turn is a paid model call
+      // and the app retries on failure, so an unbounded lane is a cost hole, not
+      // just a load one. Keyed on the DEVICE, so one phone stuck in a retry loop
+      // cannot spend the browser's allowance too.
+      const capped = rateLimited(pathname, event.request.method, `device:${device.id}`);
+      if (capped) return capped;
+      return resolve(event);
+    }
   }
 
   // API routes return 401
@@ -727,27 +774,11 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
       });
     }
 
-    // Rate-limit expensive endpoints per authenticated user.
-    const limit = RATE_LIMITS.find((r) => r.pattern.test(pathname));
-    if (limit && event.request.method !== 'GET') {
-      const userKey = (session.user as any).email || (session.user as any).id || 'anon';
-      const result = rateLimit(`${userKey}:${pathname}`, {
-        capacity: limit.capacity,
-        refillPerSecond: limit.refillPerSecond,
-      });
-      if (!result.allowed) {
-        return new Response(
-          JSON.stringify({ error: 'Rate limit exceeded', retryAfterMs: result.retryAfterMs }),
-          {
-            status: 429,
-            headers: {
-              'Content-Type': 'application/json',
-              'Retry-After': String(Math.ceil(result.retryAfterMs / 1000)),
-            },
-          },
-        );
-      }
-    }
+    // Rate-limit expensive endpoints per authenticated user. Same helper the
+    // device lanes use, so the ceilings cannot drift between the two.
+    const userKey = (session.user as any).email || (session.user as any).id || 'anon';
+    const capped = rateLimited(pathname, event.request.method, userKey);
+    if (capped) return capped;
 
     return resolve(event);
   }
