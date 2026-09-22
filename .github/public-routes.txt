@@ -42,6 +42,13 @@
 /api/maps/config
 /api/mcp
 /api/mcp/local
+/api/native/chat/conversations
+/api/native/chat/conversations/[id]/messages
+/api/native/me
+/api/native/news
+/api/native/news/actions
+/api/native/news/story/[source]/[id]
+/api/native/pair
 /api/platform/tools/catalogue
 /api/platform/tools/invoke
 /api/platform/workflow-engine
@@ -56,6 +63,8 @@
 /api/version
 /api/vitals/state
 /api/whatsapp/inbound
+/api/workflows/orchestrator/chat
+/api/workflows/orchestrator/chat/stream
 /auth-error
 /blog
 /blog/[slug]
