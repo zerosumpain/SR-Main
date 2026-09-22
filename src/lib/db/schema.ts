@@ -7201,3 +7201,94 @@ export const nativeCredentials = pgTable('native_credentials', {
   uniqueIndex('native_credentials_token_hash_idx').on(t.tokenHash),
   index('native_credentials_owner_kind_idx').on(t.ownerEmail, t.kind),
 ]);
+
+/**
+ * One thing worth telling the owner about, and how it was told.
+ *
+ * Until now "notify" meant one thing: put it on WhatsApp. `push.ts` is a pair of
+ * empty functions left behind when web push was retired, so every alert the site
+ * raises — an intel hit, a failed run, a deploy — goes to the same phone number
+ * whether it is urgent or merely interesting, and there is no record afterwards
+ * of what was sent.
+ *
+ * This is the ledger. A row is written BEFORE any channel is attempted, so an
+ * alert that WhatsApp drops still exists to be read; and each channel stamps its
+ * own column, so changing where a category is routed can never re-send what has
+ * already gone out. `nativeAt` is a COLLECTION time, not a delivery time — the
+ * iPhone has no push certificate, so it pulls this list on a background refresh
+ * and raises a local notification itself. The distinction matters when reading
+ * the ledger back: a row with `nativeAt` set is one the phone has taken
+ * responsibility for, not one a person has necessarily seen.
+ *
+ * `dedupeKey` is what stops a watcher that runs every fifteen minutes from
+ * saying the same thing every fifteen minutes. It is deliberately not unique —
+ * the same key SHOULD be able to recur tomorrow — so the window is applied in
+ * the query, not by the database.
+ */
+export const notificationEvents = pgTable('notification_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  /** One of `$lib/server/notify/categories`. Text, not an enum: adding a
+   *  category must not be a schema migration. */
+  category: text('category').notNull(),
+  title: text('title').notNull(),
+  body: text('body').notNull(),
+  /** Where to go to act on it. Relative to the site root. */
+  url: text('url'),
+  severity: text('severity').notNull().default('info'),
+  dedupeKey: text('dedupe_key'),
+  /** Anything the phone should show but not re-fetch — a figure, a count. */
+  data: jsonb('data').$type<Record<string, unknown>>(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  /** When WhatsApp accepted it. Null means never routed there, or it failed. */
+  whatsappAt: timestamp('whatsapp_at', { withTimezone: true }),
+  /** When the phone collected it. See the note above: collection, not reading. */
+  nativeAt: timestamp('native_at', { withTimezone: true }),
+  readAt: timestamp('read_at', { withTimezone: true }),
+}, (t) => [
+  index('notification_events_created_idx').on(t.createdAt),
+  // The phone's poll is "everything routed native and not yet collected,
+  // newest first" — a partial index would be tighter, but drizzle-kit does not
+  // declare those and a hand-written one would drift out of this file.
+  index('notification_events_native_idx').on(t.nativeAt, t.createdAt),
+  index('notification_events_dedupe_idx').on(t.dedupeKey, t.createdAt),
+]);
+
+/**
+ * Where each category goes, and how often it is allowed to.
+ *
+ * One row per category, created on demand from the catalogue's defaults — an
+ * absent row means "the default", so a new category needs no backfill and a
+ * reset is a DELETE.
+ *
+ * `minIntervalSeconds` is the floor John asked for on health: a metric that
+ * moves all day must not be allowed to buzz all day. It is enforced against
+ * `lastRaisedAt` at the point the event is RAISED, not at the point it is
+ * delivered, because the cheapest thing to do with a notification nobody should
+ * get is not to write it down.
+ */
+export const notificationRoutes = pgTable('notification_routes', {
+  category: text('category').primaryKey(),
+  whatsapp: boolean('whatsapp').notNull().default(true),
+  native: boolean('native').notNull().default(true),
+  minIntervalSeconds: integer('min_interval_seconds').notNull().default(0),
+  lastRaisedAt: timestamp('last_raised_at', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * The last health reading the phone was told about.
+ *
+ * A single row (`id = 'health'`), holding the fingerprint of the figures at the
+ * moment a notification was raised. The watcher compares the current
+ * fingerprint against it; identical means nothing moved and nothing is said,
+ * which is what makes a fifteen-minute poll safe behind a three-hour floor.
+ *
+ * Kept here rather than in `notification_events.data` because the question
+ * "what did it say last time" must survive the ledger being pruned.
+ */
+export const notificationWatermarks = pgTable('notification_watermarks', {
+  id: text('id').primaryKey(),
+  fingerprint: text('fingerprint').notNull(),
+  snapshot: jsonb('snapshot').$type<Record<string, unknown>>(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});

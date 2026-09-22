@@ -9,6 +9,7 @@ import {
   startDependencyMonitor,
   stopDependencyMonitor,
 } from '$lib/dependencies/monitor.server';
+import { startHealthWatch, stopHealthWatch } from '$lib/server/notify/health-watch';
 // JKAI build orchestrator no longer boots in the SvelteKit web app — it runs
 // in the jkai-builder sidecar service (packages/jkai-builder/, system unit
 // jkai-builder.service). Build-control routes call it over the Unix socket
@@ -89,6 +90,16 @@ const RATE_LIMITS: Array<{ pattern: RegExp; capacity: number; refillPerSecond: n
   // in that window could hold open at once.
   { pattern: /^\/api\/jkai\/run-snippet(\/|$)/, capacity: 20, refillPerSecond: 20 / 60 },
   { pattern: /^\/api\/projects\/share(\/|$)/, capacity: 30, refillPerSecond: 30 / 60 }, // share-link create/revoke
+  // The phone's writes. Matched nothing until now: the per-device key was being
+  // computed and handed to a table with no pattern for it, so `rateLimited`
+  // returned null and the lane was uncapped. The limiter only fires on non-GET,
+  // so this covers acknowledging notifications, changing a routing switch,
+  // starting a thread and renaming or deleting one — not the reads.
+  //
+  // 60/min is far above anything a thumb produces (a background refresh sends
+  // ONE acknowledgement for a whole batch) and low enough to stop a retry loop
+  // in a background task from running all night.
+  { pattern: /^\/api\/native(\/|$)/, capacity: 60, refillPerSecond: 60 / 60 },
 ];
 
 // Start the health data sync scheduler
@@ -116,6 +127,13 @@ if (runsService('scheduler')) startHeroTitlesScheduler();
 // Record the public journey and upstream provider state every five minutes,
 // including while nobody has /admin open.
 if (runsService('scheduler')) startDependencyMonitor();
+
+// Watch the health figures and raise a notification when they move. The check
+// is cheap (a fingerprint comparison) and frequent; the three-hour floor John
+// asked for lives on the `health` notification category, enforced against the
+// ledger inside notifyOwner — so this interval is free to be much shorter than
+// the rate at which anybody is told anything.
+if (runsService('scheduler')) startHealthWatch();
 
 // Start the JKAI orphan attachment sweep (runs immediately + hourly)
 if (runsService('background')) startOrphanSweep();
@@ -252,6 +270,7 @@ async function gracefulShutdown() {
   stopForgeScheduler();
   stopHeroTitlesScheduler();
   stopDependencyMonitor();
+  stopHealthWatch();
   stopGmailWatcher();
   unregisterGmailBridge();
   stopDatastoreReaper();

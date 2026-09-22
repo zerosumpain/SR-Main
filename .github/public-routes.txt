@@ -43,12 +43,17 @@
 /api/mcp
 /api/mcp/local
 /api/native/chat/conversations
+/api/native/chat/conversations/[id]
 /api/native/chat/conversations/[id]/messages
+/api/native/health/summary
 /api/native/me
 /api/native/news
 /api/native/news/actions
 /api/native/news/story/[source]/[id]
+/api/native/notifications
+/api/native/notifications/routes
 /api/native/pair
+/api/native/today
 /api/platform/tools/catalogue
 /api/platform/tools/invoke
 /api/platform/workflow-engine

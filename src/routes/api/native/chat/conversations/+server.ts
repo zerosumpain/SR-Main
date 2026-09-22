@@ -1,7 +1,12 @@
 import type { RequestHandler } from './$types';
 import { json } from '@sveltejs/kit';
+import { db } from '$lib/db';
+import { conversations } from '$lib/db/schema';
 import { clampLimit, withDevice } from '$lib/server/native-handler';
 import { getConversationList, searchConversationList } from '$lib/jkai/queries';
+import { resolveDefaultThinkingLevel } from '$lib/server/models/settings';
+import { resolveChatTurnModel } from '$lib/server/models/workload-settings';
+import { snapshotPrice } from '$lib/server/models/price-snapshot';
 
 /**
  * GET /api/native/chat/conversations — the thread list, and its search.
@@ -75,3 +80,62 @@ function card(row: ConversationRow) {
     updatedAt: row.updatedAt.toISOString(),
   };
 }
+
+/**
+ * POST /api/native/chat/conversations — start one.
+ *
+ * The phone had no way to begin a thread: every turn it could send had to go
+ * into a conversation the website had already created, so the app's only entry
+ * into chat was a thread somebody had started at the desk. A composer with
+ * nothing to compose into is the shortest description of what was wrong with
+ * the chat tab.
+ *
+ * No model picker in the body. The web endpoint takes one because the composer
+ * has one; here the thread opens on the `chat` workload's model, which follows
+ * the site default until pinned, and `modelPinnedByUser` is false to say that
+ * choosing nothing is not a choice. Pinning a model from a phone would stamp a
+ * price snapshot the person never saw.
+ */
+export const POST: RequestHandler = withDevice(async ({ request }) => {
+  let body: unknown = {};
+  try {
+    body = await request.json();
+  } catch {
+    // A bodiless POST is a perfectly good "start a thread". Only a malformed
+    // one would land here, and defaulting is kinder than 400ing the + button.
+  }
+  const payload = (body ?? {}) as { title?: unknown };
+  const title = typeof payload.title === 'string' ? payload.title.trim().slice(0, 200) : '';
+
+  const ctx = await resolveChatTurnModel();
+  const [conv] = await db
+    .insert(conversations)
+    .values({
+      title: title.length > 0 ? title : null,
+      source: 'web',
+      modelProvider: ctx.provider,
+      modelId: ctx.modelId,
+      modelPinnedByUser: false,
+      thinkingLevel: await resolveDefaultThinkingLevel(),
+      priceSnapshot: await snapshotPrice(ctx),
+    })
+    .returning();
+
+  // The same projection the list uses, so the app can insert the row it gets
+  // back straight into the ledger rather than re-fetching the whole page.
+  return json(
+    {
+      id: conv.id,
+      title: conv.title,
+      source: conv.source,
+      pinned: conv.pinned,
+      messageCount: 0,
+      modelProvider: conv.modelProvider,
+      modelId: conv.modelId,
+      preview: null,
+      createdAt: conv.createdAt.toISOString(),
+      updatedAt: conv.updatedAt.toISOString(),
+    },
+    { status: 201 },
+  );
+});

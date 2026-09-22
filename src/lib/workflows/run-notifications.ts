@@ -19,7 +19,6 @@
  * doesn't pull in the WhatsApp stack unless a run actually needs to notify.
  */
 
-import { ownerPhone } from '$lib/config/owner';
 import { db } from '$lib/db';
 import { workflows, type WorkflowNotifications } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -94,16 +93,24 @@ export function resolveNaming(
   return { display, slug };
 }
 
-async function sendWhatsApp(text: string): Promise<void> {
+/**
+ * Hand the outcome to the notifier.
+ *
+ * Was a direct WhatsApp send. The workflow's own `notifications` config still
+ * decides WHETHER to say anything — that is a per-workflow opt-in and none of
+ * the notifier's business — but WHERE it goes is now the `build` category's
+ * decision, so turning workflow pings off on WhatsApp no longer means turning
+ * them off entirely.
+ *
+ * Lazy import, same as the WhatsApp service was: the engine must not pull the
+ * notifier's dependency graph in because it imported this module.
+ */
+async function raise(title: string, body: string, url: string, severity: 'info' | 'warn'): Promise<void> {
   try {
-    const { getWhatsAppService } = await import('$lib/workflows/whatsapp/service');
-    const wa = getWhatsAppService();
-    const result = await wa.sendMessage(ownerPhone() ?? '', text);
-    if (!result.sent) {
-      console.warn(`[run-notifications] WhatsApp send failed: ${result.error ?? 'unknown error'}`);
-    }
+    const { notifyOwner } = await import('$lib/server/notify');
+    await notifyOwner({ category: 'build', title, body, url, severity });
   } catch (err) {
-    console.error('[run-notifications] WhatsApp send threw:', err instanceof Error ? err.message : err);
+    console.error('[run-notifications] notify threw:', err instanceof Error ? err.message : err);
   }
 }
 
@@ -153,24 +160,24 @@ export async function notifyRunOutcome(args: NotifyRunOutcomeArgs): Promise<void
       const errorLine = rawError.length > MAX_ERROR_CHARS
         ? `${rawError.slice(0, MAX_ERROR_CHARS - 1)}…`
         : rawError;
-      await sendWhatsApp(`⚠ Workflow ${display} failed: ${errorLine} — ${url}`);
+      await raise(`⚠ ${display} failed`, errorLine, url, 'warn');
       return;
     }
 
     // isCompletion
     if (cfg.onCompletion !== true) return;
-    let message = `✓ ${display} completed`;
+    let message = 'Run finished.';
     if (cfg.digestField) {
       const raw = resolvePath(args.terminalOutputs ?? {}, cfg.digestField);
       const digest = stringifyDigest(raw, MAX_DIGEST_CHARS);
       if (digest) {
         // Run the digest through the markdown→WhatsApp translator so a model's
-        // markdown (headings/bold/links) renders cleanly on the phone.
-        message += `\n\n${markdownToWhatsApp(digest)}`;
+        // markdown (headings/bold/links) renders cleanly on the phone. It is
+        // harmless on a notification body, which is plain text either way.
+        message = markdownToWhatsApp(digest);
       }
     }
-    message += `\n\n${url}`;
-    await sendWhatsApp(message);
+    await raise(`✓ ${display} completed`, message, url, 'info');
   } catch (err) {
     // Absolute belt-and-braces: nothing in here may propagate to the engine.
     console.error('[run-notifications] notifyRunOutcome threw:', err instanceof Error ? err.message : err);
