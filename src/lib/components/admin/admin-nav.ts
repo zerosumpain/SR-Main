@@ -109,6 +109,12 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     match: (p) => p.startsWith('/admin/access'),
     items: [
       { label: 'Allow-list', href: '/admin/access', match: (p) => p === '/admin/access' },
+      // Pairing lives on the companion dashboard, but it still needs a way IN
+      // from here. Removing the page and leaving only a redirect meant the only
+      // route to it was knowing the old URL — which is no route at all.
+      // `match` never fires: /apple-app is served by another process and never
+      // reaches this nav, so the cell simply never lights.
+      { label: 'Devices', href: '/apple-app', match: () => false },
       { label: 'Security', href: '/admin/access/security' },
     ],
   },
