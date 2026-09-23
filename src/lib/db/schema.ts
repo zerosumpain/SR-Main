@@ -701,6 +701,29 @@ export type AppleHealthMetricRecord = typeof appleHealthMetrics.$inferSelect;
 export type NewAppleHealthMetric = typeof appleHealthMetrics.$inferInsert;
 
 // ==========================================
+// Apple Watch sleep stages
+// ==========================================
+// Every stage interval the SR iPhone app reads from HealthKit, one row per
+// HealthKit sample, written by SR-Health's companion feed. Whoop stays the
+// primary sleep source; this is the second opinion, and the only per-interval
+// sleep data on the estate (whoop_sleep holds nightly totals).
+export const appleSleepStages = pgTable(
+  'apple_sleep_stages',
+  {
+    id: text('id').primaryKey(), // HealthKit sample UUID
+    stage: text('stage').notNull(), // in_bed | asleep | awake | core | deep | rem
+    startDate: integer('start_date').notNull(), // unix seconds
+    endDate: integer('end_date').notNull(),
+    startDateLocal: text('start_date_local').notNull(), // 'YYYY-MM-DD HH:MM:SS +0100', phone-local
+    source: text('source').notNull(),
+    syncedAt: integer('synced_at').default(sql`extract(epoch from now())::integer`),
+  },
+  (t) => [index('apple_sleep_stages_start_idx').on(t.startDate)],
+);
+export type AppleSleepStage = typeof appleSleepStages.$inferSelect;
+export type NewAppleSleepStage = typeof appleSleepStages.$inferInsert;
+
+// ==========================================
 // Trails — Activities, Tracks, Series
 // ==========================================
 // Source-agnostic workout records for /trails. Written by the Apple Health
