@@ -351,10 +351,10 @@
   <section class="nm-sec">
     <div class="nm-sec-hd">
       <span class="sr-label-tight">Apple Health</span>
-      <span class="nm-pill" data-state="connected">Webhook</span>
-      <span class="nm-sec-meta">/api/health/apple/ingest</span>
+      <span class="nm-pill" data-state="connected">SR iPhone app</span>
+      <span class="nm-sec-meta">/api/health/apple/companion/pull</span>
     </div>
-    <p class="muted">HR + activity from the Apple device webhook. No backfill controls — data lands as the watch reports it.</p>
+    <p class="muted">Everything Apple Health holds, from the SR iPhone app: its server rings /health after each upload and /health pulls the export. The old Health Auto Export webhook answers 410. No backfill controls — the phone re-reads its own history.</p>
   </section>
 
   <!-- Epic activities (featured) -->
