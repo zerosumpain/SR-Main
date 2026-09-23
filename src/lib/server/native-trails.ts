@@ -47,6 +47,13 @@ export interface UpstreamActivityRow {
   segmentCount: number;
   /** Present only if Health's list endpoint chose to include one. */
   highlight?: UpstreamHighlight | null;
+  /**
+   * Where the row came from — `apple`, or `companion` for an outing the SR app
+   * captured in the background. Optional because an older Health omits it.
+   */
+  source?: string;
+  /** Origins whose duplicate of this outing Health folded into this row. */
+  alsoFrom?: string[];
 }
 
 export interface UpstreamActivityDetail extends UpstreamActivityRow {
@@ -154,10 +161,14 @@ export interface NativeActivityRow {
   hasTrack: boolean;
   segmentCount: number;
   highlight: { label: string; detail: string } | null;
+  /** `apple`, `companion`, … — null only from an older Health that did not say. */
+  source: string | null;
+  /** `['companion']` on a workout the SR app also caught; usually empty. */
+  alsoFrom: string[];
 }
 
 export interface NativeActivityDetail {
-  activity: NativeActivityRow & {
+  activity: Omit<NativeActivityRow, 'source'> & {
     maxHeartrate: number | null;
     avgCadence: number | null;
     elevationLossM: number | null;
@@ -318,6 +329,11 @@ export function projectActivityRow(row: UpstreamActivityRow): NativeActivityRow 
     hasTrack: row.hasTrack,
     segmentCount: row.segmentCount,
     highlight: row.highlight ? highlightOf(row.highlight) : null,
+    // Passed through untouched: the words for each origin are the phone's to
+    // choose, and the list must say which rows are workouts and which the app
+    // captured on its own.
+    source: row.source ?? null,
+    alsoFrom: Array.isArray(row.alsoFrom) ? row.alsoFrom : [],
   };
 }
 

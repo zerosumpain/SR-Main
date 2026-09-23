@@ -115,6 +115,25 @@ describe('activity rows', () => {
     expect(row.highlight).toBeNull();
   });
 
+  it('says where each row came from, and what was folded into it', () => {
+    const { activities } = projectActivityList(
+      {
+        rows: [
+          { ...ROW, source: 'companion', alsoFrom: [] },
+          { ...ROW, source: 'apple', alsoFrom: ['companion'] },
+          ROW,
+        ],
+      },
+      30,
+    );
+    expect(activities.map((a) => [a.source, a.alsoFrom])).toEqual([
+      ['companion', []],
+      ['apple', ['companion']],
+      // An older Health that sent neither.
+      [null, []],
+    ]);
+  });
+
   it('keeps a missing energy reading missing rather than zero', () => {
     expect(kcalFromKj(null)).toBeNull();
     const { activities } = projectActivityList({ rows: [{ ...ROW, activeEnergyKj: null }] }, 30);
