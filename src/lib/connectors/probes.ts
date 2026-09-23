@@ -356,7 +356,8 @@ async function probeOAuthHealth(service: 'whoop'): Promise<ConnectorReport> {
 // ---------------------------------------------------------------------------
 // Apple Health — freshness of the table data actually lands in. Deliberately
 // NOT health_sync_state: that row is written by the pull-sync job and stays
-// months stale while the webhook keeps delivering, so it reports a false alarm.
+// months stale while data keeps arriving (now from the SR iPhone app), so it
+// would report a false alarm.
 // ---------------------------------------------------------------------------
 async function probeAppleHealth(): Promise<ConnectorReport> {
   return guard('apple-health', 'Apple Health', 'Health', 'account', async () => {
@@ -372,7 +373,7 @@ async function probeAppleHealth(): Promise<ConnectorReport> {
         status: 'unconfigured' as ConnectorStatus,
         detail: 'no metrics recorded',
         live: false,
-        fixHint: 'Check the Apple device webhook is posting',
+        fixHint: 'Check the SR iPhone app: Settings → Apple Health shows its queue and any categories needing permission',
       };
     }
     const ageMs = Date.now() - row.latest * 1000;
@@ -386,7 +387,7 @@ async function probeAppleHealth(): Promise<ConnectorReport> {
         live: false,
         lastOkAt,
         impact,
-        fixHint: 'The Apple device webhook has stopped posting — check the shortcut on the phone',
+        fixHint: 'Nothing has landed from the SR iPhone app — open it to sync, and check /admin/connections/health',
       };
     }
     if (ageMs > 12 * 3600 * 1000)
