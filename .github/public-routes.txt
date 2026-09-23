@@ -45,6 +45,10 @@
 /api/native/chat/conversations
 /api/native/chat/conversations/[id]
 /api/native/chat/conversations/[id]/messages
+/api/native/health/activities
+/api/native/health/activities/[id]
+/api/native/health/segments
+/api/native/health/segments/[id]
 /api/native/health/summary
 /api/native/me
 /api/native/news
