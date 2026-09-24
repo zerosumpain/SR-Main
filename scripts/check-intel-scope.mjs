@@ -33,10 +33,9 @@ const BASELINE = 'scripts/intel-scope-baseline.json';
  * positive). PR A2 fills in the rest as each file is reviewed — see the plan.
  */
 export const MAINTENANCE = {
-  'src/lib/jkai/intel/resolve/merge.ts':
-    'Resolver sweep. Its whole-table reads (address names, neighbour index, candidate loads) ' +
-    'shape match weights and never return rows to a user; pairs are space-guarded at blocking, ' +
-    'semantic pairing and mergeEntities. The nightly engine runs it per space (plan Task 14).',
+  // merge.ts was here (A1) as a resolver sweep that "never returns rows to a
+  // user" — but sweepDuplicates feeds the duplicates page. Task 11b scoped it to
+  // one space instead, so it passes on its own.
   // Task 11a — not table readers (the READS regex matches a comment or a SQL fragment).
   'src/lib/jkai/intel/analytics/cluster-label.ts':
     'Pure labelling over an analysed snapshot; `intel_notes` appears only in a comment.',
@@ -65,6 +64,10 @@ export const MAINTENANCE = {
     'The type/category vocabulary is shared by every space: usage counts per type/category ' +
     'and relationship type names, never row content. Evidence samples, which name rows, are ' +
     'in taxonomy-governance.server.ts and are scoped there.',
+  // Task 11b — not a table reader.
+  'src/lib/jkai/intel/resolve/match.ts':
+    'Pure matcher (no database import); `intel_entities` appears only in comments. The ' +
+    'entities it scores come from merge.ts and ingestion.server.ts, which load one space.',
   'src/lib/jkai/intel/source-policy.server.ts':
     'Drive folder policy sync (the Drive is the owner\'s): re-stamps categories on, or cascades ' +
     'the deletion of, notes derived from Drive files, by file id; returns counts only.',

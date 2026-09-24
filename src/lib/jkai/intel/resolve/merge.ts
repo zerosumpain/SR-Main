@@ -38,6 +38,20 @@ import {
 import { invalidateGraphAnalysis } from '../analytics/load';
 import { loadDecisions, repointDecisions, type MatchDecision } from './decisions';
 import { pairKeyOf as pairKey } from './pair-key';
+import { OWNER_INTEL_SCOPE, OWNER_SPACE, spaceIn, type IntelScope } from '../scope';
+
+// ── Spaces ───────────────────────────────────────────────────────────────────
+//
+// Resolution sees exactly ONE space at a time, never household alongside: the
+// sweep, its signals and its memos all take a `space` (the owner's by default,
+// until the nightly engine loops every space). Two things follow. A duplicate
+// pair can only ever be two of one person's entities, and the evidence that
+// weighs a pair — who else wrote under an address, who shares a neighbour — is
+// counted in that person's graph, so a member's contacts cannot damp the
+// owner's `same_email` signal or the other way round.
+//
+// The functions that take ids from a request (merge, unmerge) take a reader's
+// `scope` instead, and an id outside it is not found.
 
 export interface MergeOutcome {
   keptId: string;
@@ -58,7 +72,7 @@ export interface MergeOutcome {
 export async function mergeEntities(
   keepId: string,
   mergeId: string,
-  opts: { method?: 'auto' | 'manual'; score?: number; reason?: string } = {},
+  opts: { method?: 'auto' | 'manual'; score?: number; reason?: string; scope?: IntelScope } = {},
 ): Promise<MergeOutcome> {
   if (keepId === mergeId) throw new Error('cannot merge an entity into itself');
 
@@ -73,7 +87,8 @@ export async function mergeEntities(
       spaceId: intelEntities.spaceId,
     })
     .from(intelEntities)
-    .where(sql`${intelEntities.id} IN (${keepId}, ${mergeId})`);
+    // The ids come from a request: one the caller cannot see is not found.
+    .where(and(sql`${intelEntities.id} IN (${keepId}, ${mergeId})`, spaceIn(intelEntities.spaceId, opts.scope ?? OWNER_INTEL_SCOPE)));
 
   const keep = rows.find((r) => r.id === keepId);
   const merge = rows.find((r) => r.id === mergeId);
@@ -309,8 +324,19 @@ function rowCount(result: unknown): number {
  *
  * Merges predating the ledger unmerge as before — tombstone cleared, edges
  * stay with the survivor.
+ *
+ * `scope` is who is asking; an entity outside it is not found and nothing moves.
  */
-export async function unmergeEntity(entityId: string): Promise<{ restored: number }> {
+export async function unmergeEntity(
+  entityId: string,
+  scope: IntelScope = OWNER_INTEL_SCOPE,
+): Promise<{ restored: number }> {
+  const [visible] = await db
+    .select({ id: intelEntities.id })
+    .from(intelEntities)
+    .where(and(eq(intelEntities.id, entityId), spaceIn(intelEntities.spaceId, scope)));
+  if (!visible) throw new Error(`entity ${entityId} not found`);
+
   // Replay the ledger entry rather than just clearing the tombstone. Without
   // this, an unmerge handed back an entity with none of its connections —
   // technically reversible, practically useless.
@@ -411,6 +437,10 @@ export async function unmergeEntity(entityId: string): Promise<{ restored: numbe
  *
  * Idempotent, cheap, and safe to run on every sweep: it only writes where the
  * computed list differs from what is stored.
+ *
+ * Every space in one pass: a tombstone and its survivor are always in the same
+ * space (mergeEntities refuses anything else), so each survivor only ever
+ * learns its own space's names. Returns counts.
  */
 export async function backfillAliasesFromTombstones(
   opts: { onProgress?: (done: number, total: number) => void } = {},
@@ -484,17 +514,19 @@ export async function backfillAliasesFromTombstones(
  * matcher mutates it.
  */
 const ENTITY_CACHE_MS = 60_000;
-let entityCache: { at: number; entities: ResolvableEntity[] } | null = null;
+/** One snapshot per space — see the note on spaces at the top. */
+const entityCache = new Map<string, { at: number; entities: ResolvableEntity[] }>();
 
-/** Drop both memos. Called on every merge. */
+/** Drop both memos, for every space. Called on every merge. */
 export function invalidateResolutionCaches(): void {
-  entityCache = null;
+  entityCache.clear();
   invalidateSemanticPairs();
 }
 
-/** Every live entity, in the shape the matcher wants. */
-export async function loadResolvableEntities(): Promise<ResolvableEntity[]> {
-  if (entityCache && Date.now() - entityCache.at < ENTITY_CACHE_MS) return entityCache.entities;
+/** Every live entity in one space, in the shape the matcher wants. */
+export async function loadResolvableEntities(space: string = OWNER_SPACE): Promise<ResolvableEntity[]> {
+  const cached = entityCache.get(space);
+  if (cached && Date.now() - cached.at < ENTITY_CACHE_MS) return cached.entities;
 
   const res = await db.execute(sql`
     SELECT
@@ -519,15 +551,16 @@ export async function loadResolvableEntities(): Promise<ResolvableEntity[]> {
     LEFT JOIN intel_entity_types t ON t.id = e.type_id
     LEFT JOIN (
       SELECT id, COUNT(*)::int AS degree FROM (
-        SELECT source_entity_id AS id FROM intel_relationships
+        SELECT source_entity_id AS id FROM intel_relationships WHERE space_id = ${space}
         UNION ALL
-        SELECT target_entity_id AS id FROM intel_relationships
+        SELECT target_entity_id AS id FROM intel_relationships WHERE space_id = ${space}
       ) x GROUP BY id
     ) d ON d.id = e.id
     LEFT JOIN (
       SELECT entity_id, COUNT(*)::int AS note_count FROM intel_note_entities GROUP BY entity_id
     ) n ON n.entity_id = e.id
     WHERE e.merged_into_id IS NULL
+      AND e.space_id = ${space}
   `);
 
   const entities = (res.rows as Array<Record<string, unknown>>).map((r) => {
@@ -552,7 +585,7 @@ export async function loadResolvableEntities(): Promise<ResolvableEntity[]> {
     };
   });
 
-  entityCache = { at: Date.now(), entities };
+  entityCache.set(space, { at: Date.now(), entities });
   return entities;
 }
 
@@ -635,12 +668,18 @@ export interface DuplicateReport {
  * it: fold two names into one and the survivor carries a single name again, so
  * a count over live rows alone can never reach the threshold that would have
  * stopped the merge. The tombstones remember.
+ *
+ * Counted within ONE space. A member's contacts are a different address book:
+ * counted in, a colleague the owner and a member both correspond with would
+ * look like a shared sender in both graphs, and the owner's `same_email`
+ * signal would be damped by names the owner never saw.
  */
-export async function loadAddressNames(): Promise<Map<string, string[]>> {
+export async function loadAddressNames(space: string = OWNER_SPACE): Promise<Map<string, string[]>> {
   const res = await db.execute(sql`
     SELECT lower(properties->>'email') AS email, name
     FROM intel_entities
     WHERE properties->>'email' IS NOT NULL AND name IS NOT NULL
+      AND space_id = ${space}
   `);
 
   const out = new Map<string, string[]>();
@@ -655,14 +694,14 @@ export async function loadAddressNames(): Promise<Map<string, string[]>> {
   return out;
 }
 
-/** Addresses that write as many different people, so cannot prove identity. */
-export async function loadSharedSenderAddresses(): Promise<Set<string>> {
-  return findSharedSenderAddresses(await loadAddressNames());
+/** Addresses that write as many different people in one space, so cannot prove identity there. */
+export async function loadSharedSenderAddresses(space: string = OWNER_SPACE): Promise<Set<string>> {
+  return findSharedSenderAddresses(await loadAddressNames(space));
 }
 
-/** Address → how many distinct identities have written under it. */
-export async function loadAddressIdentities(): Promise<Map<string, number>> {
-  return countIdentitiesByAddress(await loadAddressNames());
+/** Address → how many distinct identities have written under it, in one space. */
+export async function loadAddressIdentities(space: string = OWNER_SPACE): Promise<Map<string, number>> {
+  return countIdentitiesByAddress(await loadAddressNames(space));
 }
 
 /**
@@ -673,10 +712,14 @@ export async function loadAddressIdentities(): Promise<Map<string, number>> {
  * Suppressed edges are included — a human rejecting a LINK says nothing about
  * whether two other entities are one, and excluding them would quietly weaken
  * the signal every time someone tidied the graph.
+ *
+ * One space's edges: the pairs it weighs are one space's, and so is anything
+ * `adjudicateCandidates` names as a shared neighbour.
  */
-export async function loadNeighbourIndex(): Promise<Map<string, Set<string>>> {
+export async function loadNeighbourIndex(space: string = OWNER_SPACE): Promise<Map<string, Set<string>>> {
   const res = await db.execute(sql`
     SELECT source_entity_id AS a, target_entity_id AS b FROM intel_relationships
+    WHERE space_id = ${space}
   `);
   const out = new Map<string, Set<string>>();
   const add = (x: string, y: string) => {
@@ -757,13 +800,14 @@ export function invalidateSemanticPairs(): void {
 }
 
 export async function loadSemanticPairs(
-  opts: { distance?: number; k?: number; limit?: number } = {},
+  opts: { distance?: number; k?: number; limit?: number; space?: string } = {},
 ): Promise<Array<[string, string]>> {
   const distance = opts.distance ?? SEMANTIC_BLOCK_DISTANCE;
   const k = Math.max(1, Math.min(20, opts.k ?? SEMANTIC_BLOCK_K));
   const limit = opts.limit ?? 20000;
+  const space = opts.space ?? OWNER_SPACE;
 
-  const cacheKey = `${distance}|${k}|${limit}`;
+  const cacheKey = `${space}|${distance}|${k}|${limit}`;
   if (semanticCache && semanticCache.key === cacheKey && Date.now() - semanticCache.at < SEMANTIC_CACHE_MS) {
     return semanticCache.pairs;
   }
@@ -802,6 +846,7 @@ export async function loadSemanticPairs(
       ) n
       WHERE e.merged_into_id IS NULL
         AND e.embedding IS NOT NULL
+        AND e.space_id = ${space}
         AND n.dist < ${distance}
       LIMIT ${limit}
     `);
@@ -836,6 +881,11 @@ export interface FindDuplicatesOptions {
    * swallows its own decisions is indistinguishable from one that is broken.
    */
   includeRuledOut?: boolean;
+  /**
+   * The ONE space to sweep. The owner's by default; the nightly engine runs a
+   * sweep per space. Every report names two of this space's entities.
+   */
+  space?: string;
 }
 
 export interface DuplicateSweep {
@@ -861,7 +911,7 @@ export interface DuplicateSweep {
   confirmedSame: number;
 }
 
-/** Duplicate candidates across the whole graph, strongest first. */
+/** Duplicate candidates across one space's graph, strongest first. */
 export async function findDuplicates(
   minConfidence = 0.35,
   opts: FindDuplicatesOptions = {},
@@ -875,12 +925,13 @@ export async function sweepDuplicates(
   opts: FindDuplicatesOptions = {},
 ): Promise<DuplicateSweep> {
   const useSemantic = opts.semantic !== false;
+  const space = opts.space ?? OWNER_SPACE;
   const [entities, addressIdentities, neighbours, decisions, extraPairs] = await Promise.all([
-    loadResolvableEntities(),
-    loadAddressIdentities(),
-    loadNeighbourIndex(),
-    loadDecisions(),
-    useSemantic ? loadSemanticPairs().catch((err) => {
+    loadResolvableEntities(space),
+    loadAddressIdentities(space),
+    loadNeighbourIndex(space),
+    loadDecisions(space),
+    useSemantic ? loadSemanticPairs({ space }).catch((err) => {
       // A missing index or an unembedded corpus must not take the whole sweep
       // down — lexical blocking still works, and saying so beats a 500.
       console.error('[intel:resolve] semantic blocking unavailable:', err instanceof Error ? err.message : err);
@@ -1034,11 +1085,12 @@ export function chainedInto(
  */
 export async function autoMergeDuplicates(
   threshold = AUTO_MERGE_THRESHOLD,
-  opts: { dryRun?: boolean; limit?: number } = {},
+  opts: { dryRun?: boolean; limit?: number; space?: string } = {},
 ): Promise<SweepResult> {
-  const reports = (await findDuplicates(threshold)).filter((r) => r.autoMergeable && r.candidate.confidence >= threshold);
-  const historical = await loadHistoricalMembers();
-  const addressIdentities = await loadAddressIdentities();
+  const space = opts.space ?? OWNER_SPACE;
+  const reports = (await findDuplicates(threshold, { space })).filter((r) => r.autoMergeable && r.candidate.confidence >= threshold);
+  const historical = await loadHistoricalMembers(space);
+  const addressIdentities = await loadAddressIdentities(space);
   const limit = opts.limit ?? 200;
   const result: SweepResult = { candidates: reports.length, merged: 0, skipped: 0, chainsBroken: 0, details: [] };
   const gone = new Set<string>();
@@ -1077,7 +1129,7 @@ export async function autoMergeDuplicates(
       continue;
     }
     try {
-      await mergeEntities(r.keep.id, r.merge.id);
+      await mergeEntities(r.keep.id, r.merge.id, { scope: [space] });
       gone.add(r.merge.id);
       absorbed.set(r.keep.id, [...already, r.merge.id]);
       result.merged++;
@@ -1091,13 +1143,13 @@ export async function autoMergeDuplicates(
   return result;
 }
 
-/** Entities parked under the `concept` fallback, awaiting a real type. */
-export async function findUntypedEntities(limit = 100) {
+/** Entities in `scope` parked under the `concept` fallback, awaiting a real type. */
+export async function findUntypedEntities(limit = 100, scope: IntelScope = OWNER_INTEL_SCOPE) {
   return db
     .select({ id: intelEntities.id, name: intelEntities.name, summary: intelEntities.summary })
     .from(intelEntities)
     .innerJoin(intelEntityTypes, eq(intelEntities.typeId, intelEntityTypes.id))
-    .where(and(eq(intelEntityTypes.name, 'concept'), isNull(intelEntities.mergedIntoId)))
+    .where(and(eq(intelEntityTypes.name, 'concept'), isNull(intelEntities.mergedIntoId), spaceIn(intelEntities.spaceId, scope)))
     .limit(limit);
 }
 
@@ -1110,6 +1162,8 @@ export async function findUntypedEntities(limit = 100) {
  * counts derived from this table — the entity card's source count, the
  * thin-evidence detector — were inflated as a result. Keeps the row with the
  * strongest relevance, then the one carrying an excerpt.
+ *
+ * Every space: it removes exact duplicate rows and returns a count.
  */
 export async function dedupeNoteLinks(): Promise<{ removed: number }> {
   const result = await db.execute(sql`
@@ -1172,7 +1226,12 @@ export async function rejectProposedType(
   return { moved };
 }
 
-/** Types awaiting a decision, with how many entities are already waiting on them. */
+/**
+ * Types awaiting a decision, with how many entities are already waiting on them.
+ *
+ * Counts every space: the type vocabulary is shared (see taxonomy.ts), and a
+ * usage count names no row.
+ */
 export async function listProposedTypes() {
   const res = await db.execute(sql`
     SELECT t.id, t.name, t.icon, t.description, t.proposed_rationale AS rationale,
@@ -1198,8 +1257,8 @@ export async function mergeEntityTypes(fromTypeId: string, intoTypeId: string): 
 }
 
 /** Tombstones retain original names and properties for checks across separate nightly runs. */
-async function loadHistoricalMembers(): Promise<Map<string, ResolvableEntity[]>> {
-  const rows = await db.execute(sql`SELECT e.*, t.name AS type_name FROM intel_entities e JOIN intel_entity_types t ON t.id=e.type_id WHERE e.merged_into_id IS NOT NULL`);
+async function loadHistoricalMembers(space: string): Promise<Map<string, ResolvableEntity[]>> {
+  const rows = await db.execute(sql`SELECT e.*, t.name AS type_name FROM intel_entities e JOIN intel_entity_types t ON t.id=e.type_id WHERE e.merged_into_id IS NOT NULL AND e.space_id = ${space}`);
   const groups = new Map<string, ResolvableEntity[]>();
   for (const r of rows.rows as Record<string, unknown>[]) {
     const key = String(r.merged_into_id);

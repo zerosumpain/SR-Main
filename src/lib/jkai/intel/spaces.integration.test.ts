@@ -21,6 +21,20 @@ import { persistExtraction } from './graph';
 import { storedHashes, refIdForThread } from './gmail-ingest';
 import { mergeEntities } from './resolve/merge';
 import { mentionCandidates } from './resolve/ingestion.server';
+import { deleteNoteCascade } from './ingest';
+import { confirmRelationship, rejectRelationship } from './confirm-link';
+import { loadMailQueue, similarPending } from './mail-queue';
+import { admitMailNotes, rejectMailNotes, requeueMailNotes } from './mail-admit';
+import { purgeMailFromGraph } from './mail-purge';
+import { loadAnchoredEntities, nearestAnchored } from './mail-relevance';
+import { gatherProposalContext } from './mail-rules/propose';
+import {
+  invalidateResolutionCaches, loadResolvableEntities, sweepDuplicates, loadAddressNames, loadNeighbourIndex,
+} from './resolve/merge';
+import { loadEntityNames, loadPairEvidence, loadCoMentions } from './resolve/adjudicate';
+import { loadEvidenceVersions } from './resolve/evidence-version.server';
+import { conflationCandidates } from './resolve/conflation.server';
+import { splitEntity } from './resolve/split';
 
 // Offline and deterministic: the test is about which space a row lands in, not
 // about embeddings or entity summaries. Resolution's semantic search already
@@ -123,7 +137,9 @@ describe.skipIf(!process.env.DATABASE_URL)('writes carry the note space', () => 
     const [a] = await db.insert(intelEntities).values({ name: 'Space A thing', typeId: type.id, spaceId: 'owner' }).returning();
     const [b] = await db.insert(intelEntities).values({ name: 'Space B thing', typeId: type.id, spaceId: 'u_test' }).returning();
     try {
-      await expect(mergeEntities(a.id, b.id)).rejects.toThrow(/different spaces/);
+      // A scope that sees both, so the refusal is the space guard itself — the
+      // owner's default scope would not find b at all (see the 11b block).
+      await expect(mergeEntities(a.id, b.id, { scope: ['owner', 'u_test'] })).rejects.toThrow(/different spaces/);
     } finally {
       await db.delete(intelEntities).where(inArray(intelEntities.id, [a.id, b.id]));
     }
@@ -310,5 +326,168 @@ describe.skipIf(!process.env.DATABASE_URL)('artefacts are written to, and read f
     expect((await listInsights({ kind: 'space_test', status: 'all', scope: TEST_SCOPE })).some((r) => r.id === row.id)).toBe(true);
     expect((await insightsByDedupeKey([key], TEST_SCOPE)).has(key)).toBe(true);
     expect((await setInsightStatus(row.id, 'seen', null, TEST_SCOPE))?.status).toBe('seen');
+  });
+});
+
+// Task 11b: the write, mail and resolve half. A u_test email thread, two u_test
+// duplicates and an edge between them: the owner's mail queue, triage actions,
+// duplicate sweep, adjudication and conflation loaders must never see them, and
+// the same functions pointed at u_test must — so every absence is the predicate.
+describe.skipIf(!process.env.DATABASE_URL)('mail and resolution stay inside one space', () => {
+  const TEST_SCOPE = ['u_test', 'household'] as const;
+  const vec = Array.from({ length: 1536 }, (_, i) => (i === 11 ? 1 : 0));
+  const DOMAIN = `quarnby-${crypto.randomUUID().slice(0, 8)}.example`;
+  const ids = { theirMail: '', ownMail: '', dupA: '', dupB: '', depot: '', edge: '' };
+
+  beforeAll(async () => {
+    const [type] = await db.select({ id: intelEntityTypes.id }).from(intelEntityTypes).limit(1);
+    const [theirs] = await db.insert(intelNotes).values({
+      title: 'Quarnby Holloway works order', rawContent: 'Quarnby Holloway Works confirmed the order.',
+      source: 'email', status: 'held', graphState: 'pending', spaceId: 'u_test', embedding: vec,
+      metadata: { senderDomain: DOMAIN, gmailThreadId: 'space-test-thread' },
+    }).returning({ id: intelNotes.id });
+    ids.theirMail = theirs.id;
+    // An owner thread with the SAME vector, so a nearest-neighbour search that
+    // ignored space would put the u_test thread at distance 0 from it.
+    const [own] = await db.insert(intelNotes).values({
+      title: 'Space test owner thread', rawContent: 'An owner thread.',
+      source: 'email', status: 'held', graphState: 'pending', spaceId: 'owner', embedding: vec,
+    }).returning({ id: intelNotes.id });
+    ids.ownMail = own.id;
+    const email = `works@${DOMAIN}`;
+    const [a] = await db.insert(intelEntities).values({
+      name: 'Quarnby Holloway Works', typeId: type.id, spaceId: 'u_test', embedding: vec,
+      properties: { email }, firstSeenIn: ids.theirMail,
+    }).returning({ id: intelEntities.id });
+    const [b] = await db.insert(intelEntities).values({
+      name: 'Quarnby Holloway Works', typeId: type.id, spaceId: 'u_test', embedding: vec,
+      properties: { email }, firstSeenIn: ids.theirMail,
+    }).returning({ id: intelEntities.id });
+    // A third entity for the edge: an edge between the duplicates themselves
+    // would read to the matcher as evidence that they are two things.
+    const [depot] = await db.insert(intelEntities).values({
+      name: 'Quarnby Depot', typeId: type.id, spaceId: 'u_test', firstSeenIn: ids.theirMail,
+    }).returning({ id: intelEntities.id });
+    ids.dupA = a.id;
+    ids.dupB = b.id;
+    ids.depot = depot.id;
+    await db.insert(intelNoteEntities).values([
+      { noteId: ids.theirMail, entityId: a.id, relevance: 'primary', excerpt: 'Quarnby Holloway Works confirmed the order.' },
+      { noteId: ids.theirMail, entityId: b.id, relevance: 'primary', excerpt: 'Quarnby Holloway Works confirmed the order.' },
+    ]);
+    const [edge] = await db.insert(intelRelationships).values({
+      sourceEntityId: a.id, targetEntityId: depot.id, type: 'supplies', sourceNoteId: ids.theirMail, spaceId: 'u_test',
+    }).returning({ id: intelRelationships.id });
+    ids.edge = edge.id;
+    // The resolver memoises its entity snapshot for a minute.
+    invalidateResolutionCaches();
+  });
+
+  afterAll(async () => {
+    const entityIds = [ids.dupA, ids.dupB, ids.depot].filter(Boolean);
+    if (entityIds.length) await db.delete(intelEntities).where(inArray(intelEntities.id, entityIds));
+    const noteIds = [ids.theirMail, ids.ownMail].filter(Boolean);
+    if (noteIds.length) await db.delete(intelNotes).where(inArray(intelNotes.id, noteIds));
+    invalidateResolutionCaches();
+  });
+
+  it("a member's held thread never lists in the owner's mail queue", async () => {
+    const owner = await loadMailQueue();
+    expect(owner.rows.some((r) => r.id === ids.theirMail)).toBe(false);
+    expect(owner.clusters.some((c) => c.domain === DOMAIN)).toBe(false);
+    const theirs = await loadMailQueue(Date.now(), TEST_SCOPE);
+    expect(theirs.rows.map((r) => r.id)).toContain(ids.theirMail);
+    expect(theirs.rows.some((r) => r.id === ids.ownMail)).toBe(false);
+  });
+
+  it('similar threads, and the rule proposer, are the scope’s', async () => {
+    expect(await similarPending(ids.ownMail)).not.toContain(ids.theirMail);
+    expect(await similarPending(ids.theirMail, 40, ['owner', 'u_test'])).toContain(ids.ownMail);
+    expect(await gatherProposalContext()).not.toContain(DOMAIN);
+    expect(await gatherProposalContext(TEST_SCOPE)).toContain(DOMAIN);
+  });
+
+  it("the owner's triage actions cannot touch a member's thread", async () => {
+    // Every one of these would make a model call or rewrite graph state if it
+    // found the note; not-found is the only acceptable answer.
+    const admitted = await admitMailNotes([ids.theirMail]);
+    expect(admitted.items).toEqual([expect.objectContaining({ noteId: ids.theirMail, status: 'not-found' })]);
+    const rejected = await rejectMailNotes([ids.theirMail]);
+    expect(rejected.items).toEqual([{ noteId: ids.theirMail, status: 'not-found' }]);
+    expect(await requeueMailNotes([ids.theirMail])).toBe(0);
+    expect((await purgeMailFromGraph({ dryRun: true, noteIds: [ids.theirMail] })).notesRetained).toBe(0);
+    expect((await purgeMailFromGraph({ dryRun: true, noteIds: [ids.theirMail], scope: TEST_SCOPE })).notesRetained).toBe(1);
+    const [row] = await db.select({ state: intelNotes.graphState }).from(intelNotes).where(eq(intelNotes.id, ids.theirMail));
+    expect(row.state).toBe('pending');
+  });
+
+  it("mail relevance scores against the scope's entities only", async () => {
+    // Anchored because the u_test entity is watched.
+    await db.update(intelEntities).set({ watched: true }).where(eq(intelEntities.id, ids.dupA));
+    try {
+      expect((await loadAnchoredEntities()).some((e) => e.id === ids.dupA)).toBe(false);
+      expect((await loadAnchoredEntities(TEST_SCOPE)).some((e) => e.id === ids.dupA)).toBe(true);
+      const anchored = new Set([ids.dupA]);
+      expect((await nearestAnchored([ids.ownMail], anchored)).has(ids.ownMail)).toBe(false);
+      expect((await nearestAnchored([ids.theirMail], anchored, TEST_SCOPE)).get(ids.theirMail)).toBeCloseTo(1, 3);
+    } finally {
+      await db.update(intelEntities).set({ watched: false }).where(eq(intelEntities.id, ids.dupA));
+    }
+  });
+
+  it("the owner's duplicate sweep never proposes a member's pair", async () => {
+    const pairOf = (r: { keep: { id: string }; merge: { id: string } }) =>
+      [r.keep.id, r.merge.id].sort().join('|') === [ids.dupA, ids.dupB].sort().join('|');
+    expect((await loadResolvableEntities()).some((e) => e.id === ids.dupA)).toBe(false);
+    const owner = await sweepDuplicates(0.35, { semantic: false });
+    expect(owner.reports.some(pairOf)).toBe(false);
+    const theirs = await sweepDuplicates(0.35, { semantic: false, space: 'u_test' });
+    expect(theirs.reports.some(pairOf)).toBe(true);
+  });
+
+  it("member contacts do not damp the owner's address signals", async () => {
+    const email = `works@${DOMAIN}`;
+    expect((await loadAddressNames()).has(email)).toBe(false);
+    expect((await loadAddressNames('u_test')).get(email)).toEqual(['Quarnby Holloway Works', 'Quarnby Holloway Works']);
+    expect((await loadNeighbourIndex()).has(ids.dupA)).toBe(false);
+    expect((await loadNeighbourIndex('u_test')).get(ids.dupA)?.has(ids.depot)).toBe(true);
+  });
+
+  it("the adjudicator's dossier is read inside the pair's space", async () => {
+    expect((await loadEntityNames([ids.dupA])).size).toBe(0);
+    expect((await loadEntityNames([ids.dupA], 'u_test')).get(ids.dupA)).toBe('Quarnby Holloway Works');
+    // Held mail is not evidence; admit it for the length of the check.
+    await db.update(intelNotes).set({ graphState: 'admitted' }).where(eq(intelNotes.id, ids.theirMail));
+    try {
+      expect(await loadPairEvidence(ids.dupA, ids.dupB)).toEqual([]);
+      expect(await loadCoMentions(ids.dupA, ids.dupB)).toEqual([]);
+      expect((await loadPairEvidence(ids.dupA, ids.dupB, 'u_test')).length).toBe(2);
+      expect((await loadCoMentions(ids.dupA, ids.dupB, 2, 'u_test')).length).toBe(1);
+      expect((await loadEvidenceVersions()).has(ids.dupA)).toBe(false);
+      expect((await loadEvidenceVersions('u_test')).has(ids.dupA)).toBe(true);
+    } finally {
+      await db.update(intelNotes).set({ graphState: 'pending' }).where(eq(intelNotes.id, ids.theirMail));
+    }
+  });
+
+  it('the conflation candidates are the space’s', async () => {
+    expect((await conflationCandidates()).entities.some((e) => e.id === ids.dupA)).toBe(false);
+    expect((await conflationCandidates('u_test')).entities.some((e) => e.id === ids.dupA)).toBe(true);
+  });
+
+  it("the owner cannot merge, split, link or delete a member's rows by id", async () => {
+    await expect(mergeEntities(ids.dupA, ids.dupB)).rejects.toThrow(/not found/);
+    await expect(
+      splitEntity({ fromId: ids.dupA, to: { entityId: ids.dupB }, relationshipIds: [ids.edge], reason: 'space test' }),
+    ).rejects.toThrow(/no such entity/);
+    await expect(confirmRelationship({ sourceEntityId: ids.dupA, targetEntityId: ids.depot })).rejects.toThrow(/not found/);
+    await expect(rejectRelationship({ sourceEntityId: ids.dupA, targetEntityId: ids.depot })).rejects.toThrow(/not found/);
+    const [edge] = await db.select().from(intelRelationships).where(eq(intelRelationships.id, ids.edge));
+    expect(edge.suppressed).toBe(false);
+    expect(edge.manual).toBe(false);
+
+    expect(await deleteNoteCascade(ids.theirMail)).toBeNull();
+    const [still] = await db.select({ id: intelNotes.id }).from(intelNotes).where(eq(intelNotes.id, ids.theirMail));
+    expect(still?.id).toBe(ids.theirMail);
   });
 });

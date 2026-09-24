@@ -29,6 +29,12 @@ import { resolveResolutionModel } from '$lib/server/models/workload-settings';
 import { withActivity } from '$lib/context/activity';
 import type { ResolvableEntity } from './match';
 import { recordDecision, type Verdict } from './decisions';
+import { OWNER_SPACE } from '../scope';
+
+// Every read here is confined to the ONE space whose pairs are being judged
+// (the owner's by default). The dossier handed to the model — names, excerpts,
+// shared neighbours — is evidence about one person's graph, and must never
+// quote a note from another.
 
 /** Excerpts shown per entity. Three is enough to characterise; thirty is a bill. */
 const EXCERPTS_PER_ENTITY = 3;
@@ -88,24 +94,25 @@ Rules:
 - Conflicting email addresses mean "different" unless the evidence explicitly says one person holds both.
 - The rationale is one sentence, points at the evidence, and never restates the names.`;
 
-/** Names for a set of entity ids. Empty in, empty out — no query. */
-export async function loadEntityNames(ids: string[]): Promise<Map<string, string>> {
+/** Names for a set of entity ids in one space. Empty in, empty out — no query. */
+export async function loadEntityNames(ids: string[], space: string = OWNER_SPACE): Promise<Map<string, string>> {
   if (!ids.length) return new Map();
   const res = await db.execute(sql`
-    SELECT id, name FROM intel_entities WHERE id = ANY(${pgTextArray(ids)}::text[])
+    SELECT id, name FROM intel_entities WHERE id = ANY(${pgTextArray(ids)}::text[]) AND space_id = ${space}
   `);
   return new Map(
     (res.rows as Array<Record<string, unknown>>).map((r) => [String(r.id), String(r.name ?? '')]),
   );
 }
 
-/** Assemble what the reader is given. One query, both entities. */
-export async function loadPairEvidence(aId: string, bId: string): Promise<PairEvidence[]> {
+/** Assemble what the reader is given. One query, both entities, one space. */
+export async function loadPairEvidence(aId: string, bId: string, space: string = OWNER_SPACE): Promise<PairEvidence[]> {
   const res = await db.execute(sql`
     SELECT n.id AS note_id, ne.entity_id, n.title, n.source, ne.excerpt
     FROM intel_note_entities ne
     JOIN intel_notes n ON n.id = ne.note_id
     WHERE ne.entity_id IN (${aId}, ${bId})
+      AND n.space_id = ${space}
       AND n.graph_state = 'admitted'
       AND ne.excerpt IS NOT NULL
       AND length(ne.excerpt) > 0
@@ -140,7 +147,12 @@ export async function loadPairEvidence(aId: string, bId: string): Promise<PairEv
  * the Body"). Either way it settles the question, and either way it was sitting
  * in the corpus unread.
  */
-export async function loadCoMentions(aId: string, bId: string, limit = 2): Promise<PairEvidence[]> {
+export async function loadCoMentions(
+  aId: string,
+  bId: string,
+  limit = 2,
+  space: string = OWNER_SPACE,
+): Promise<PairEvidence[]> {
   const res = await db.execute(sql`
     SELECT n.id AS note_id, n.title, n.source,
            COALESCE(a.excerpt, b.excerpt) AS excerpt
@@ -148,6 +160,7 @@ export async function loadCoMentions(aId: string, bId: string, limit = 2): Promi
     JOIN intel_note_entities b ON b.note_id = a.note_id AND b.entity_id = ${bId}
     JOIN intel_notes n ON n.id = a.note_id
     WHERE a.entity_id = ${aId}
+      AND n.space_id = ${space}
       AND n.graph_state = 'admitted'
       AND COALESCE(a.excerpt, b.excerpt) IS NOT NULL
     ORDER BY n.created_at DESC
@@ -322,11 +335,14 @@ export async function adjudicateBatch(
      * minutes of work, so every one of them has to say the process is busy.
      */
     onProgress?: (done: number, total: number) => void;
+    /** The one space these pairs belong to. The owner's by default. */
+    space?: string;
   } = {},
 ): Promise<AdjudicationRun> {
   const run: AdjudicationRun = { considered: pairs.length, decided: 0, same: 0, different: 0, unsure: 0, failed: 0 };
+  const space = opts.space ?? OWNER_SPACE;
 
-  const versions = await loadEvidenceVersions();
+  const versions = await loadEvidenceVersions(space);
   let index = 0;
   for (const pair of pairs) {
     opts.onProgress?.(index++, pairs.length);
@@ -334,8 +350,8 @@ export async function adjudicateBatch(
       const [own, together] = pair.evidence.length
         ? [pair.evidence, [] as PairEvidence[]]
         : await Promise.all([
-            loadPairEvidence(pair.a.id, pair.b.id),
-            loadCoMentions(pair.a.id, pair.b.id),
+            loadPairEvidence(pair.a.id, pair.b.id, space),
+            loadCoMentions(pair.a.id, pair.b.id, 2, space),
           ]);
       const evidence = [...own, ...together];
       const sharedNeighbours = pair.sharedNeighbours.length
@@ -346,6 +362,8 @@ export async function adjudicateBatch(
         run.failed++;
         continue;
       }
+      // Scoped to the space, so a pair that is not this space's is refused
+      // rather than recorded (and counted as failed below).
       await recordDecision({
         evidenceVersion: pairEvidenceVersion(pair.a.id, pair.b.id, versions),
         citations: verdict.citations,
@@ -359,7 +377,7 @@ export async function adjudicateBatch(
         model: verdict.model,
         aName: pair.a.name,
         bName: pair.b.name,
-      });
+      }, [space]);
       run.decided++;
       run[verdict.verdict]++;
     } catch (err) {
@@ -408,8 +426,14 @@ export async function adjudicateCandidates(
     force?: boolean;
     /** Passed through to `adjudicateBatch` — see why it matters there. */
     onProgress?: (done: number, total: number) => void;
+    /**
+     * The space the reports were swept from (`sweepDuplicates`' `space`). The
+     * owner's by default; the neighbour index and every name come from it.
+     */
+    space?: string;
   } = {},
 ): Promise<AdjudicationRun & { skipped: number }> {
+  const space = opts.space ?? OWNER_SPACE;
   const band = opts.band ?? ADJUDICATION_BAND;
   const limit = opts.limit ?? ADJUDICATION_NIGHTLY_LIMIT;
 
@@ -422,7 +446,7 @@ export async function adjudicateCandidates(
   const skipped = reports.length - eligible.length;
 
   const { loadNeighbourIndex } = await import('./merge');
-  const neighbours = await loadNeighbourIndex().catch(() => new Map<string, Set<string>>());
+  const neighbours = await loadNeighbourIndex(space).catch(() => new Map<string, Set<string>>());
 
   const chosen = eligible.slice(0, limit);
 
@@ -443,7 +467,7 @@ export async function adjudicateCandidates(
     }
     return ids;
   });
-  const names = await loadEntityNames([...sharedIds]);
+  const names = await loadEntityNames([...sharedIds], space);
 
   const inputs: AdjudicationInput[] = chosen.map((r, i) => {
     const shared = sharedPerPair[i].map((id) => names.get(id)).filter((n): n is string => Boolean(n));
@@ -457,6 +481,6 @@ export async function adjudicateCandidates(
     };
   });
 
-  const run = await adjudicateBatch(inputs, { onProgress: opts.onProgress });
+  const run = await adjudicateBatch(inputs, { onProgress: opts.onProgress, space });
   return { ...run, skipped };
 }
