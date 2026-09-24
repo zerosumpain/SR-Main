@@ -42,6 +42,8 @@
 /api/maps/config
 /api/mcp
 /api/mcp/local
+/api/native/chat/attachments
+/api/native/chat/attachments/[id]
 /api/native/chat/conversations
 /api/native/chat/conversations/[id]
 /api/native/chat/conversations/[id]/messages
