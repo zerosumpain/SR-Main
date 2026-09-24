@@ -2,6 +2,7 @@ import { db } from '$lib/db';
 import { intelAlerts } from '$lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { notifyOwner } from '$lib/server/notify';
+import { OWNER_INTEL_SCOPE, spaceIn } from './scope';
 
 /**
  * Send high-significance alerts wherever intel is routed.
@@ -15,6 +16,11 @@ import { notifyOwner } from '$lib/server/notify';
  * `delivered` still means what it meant: this row has been handed to the
  * notifier and must not be handed to it again. It no longer implies WhatsApp
  * specifically.
+ *
+ * `notifyOwner` reaches the owner's phone, so only alerts inside the owner's
+ * scope are offered to it — fixed, not a parameter: a member's note must never
+ * page the owner. The same predicate on the `delivered` update keeps the write
+ * inside what was read. A member's own alert channel is PR B's.
  */
 export async function pushHighAlerts(noteId: string): Promise<number> {
 	const alerts = await db
@@ -25,6 +31,7 @@ export async function pushHighAlerts(noteId: string): Promise<number> {
 				eq(intelAlerts.noteId, noteId),
 				eq(intelAlerts.significance, 'high'),
 				eq(intelAlerts.delivered, false),
+				spaceIn(intelAlerts.spaceId, OWNER_INTEL_SCOPE),
 			),
 		);
 
@@ -60,7 +67,7 @@ export async function pushHighAlerts(noteId: string): Promise<number> {
 			await db
 				.update(intelAlerts)
 				.set({ delivered: true })
-				.where(eq(intelAlerts.id, alert.id));
+				.where(and(eq(intelAlerts.id, alert.id), spaceIn(intelAlerts.spaceId, OWNER_INTEL_SCOPE)));
 			delivered++;
 		}
 	}

@@ -18,6 +18,7 @@
 // derivation below is unit-tested. Same reason as entity-query.ts.
 import { and, desc, eq, inArray, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
 import { intelInsights, type IntelInsight, type NewIntelInsight } from '$lib/db/schema';
+import { OWNER_INTEL_SCOPE, spaceIn, writeSpace, type IntelScope } from './scope';
 
 // ── Shape ────────────────────────────────────────────────────────────────────
 
@@ -136,6 +137,8 @@ export function normalizeKeyEntityIds(ids: readonly unknown[] | null | undefined
  *
  * PURE — no clock, no DB, no randomness. Two runs over the same graph must
  * produce byte-identical keys or the whole dismiss/snooze mechanism leaks.
+ *
+ * Keys are globally unique and carry no space; prefixing a member's is PR B's.
  */
 export function dedupeKeyFor(insight: Pick<StorableInsight, 'kind' | 'score' | 'entityIds'>): string {
   const kind = String(insight.kind ?? '').trim().toLowerCase() || 'unknown';
@@ -203,6 +206,9 @@ const DAY_MS = 86_400_000;
  * so a null there means the row was written by something else (a migration, a
  * manual edit) and would otherwise be invisible forever — a silent dismissal
  * nobody chose.
+ *
+ * Every space at once, deliberately: an expired snooze is due back whoever owns
+ * it, and this returns a count, never a row.
  */
 export async function reviveSnoozed(now: Date = new Date()): Promise<number> {
   const { db } = await import('$lib/db');
@@ -227,12 +233,19 @@ export async function reviveSnoozed(now: Date = new Date()): Promise<number> {
  * judged. `narrative` is never overwritten either: it is optional LLM phrasing
  * applied to the top few findings, and a plain re-run has nothing better to
  * put there than null.
+ *
+ * The findings are written into the scope's own space (`writeSpace`). A key is
+ * global today, so the status lookup and the conflict update are both confined
+ * to that space: another space's row with the same key neither suppresses this
+ * run nor gets its text overwritten by it.
  */
 export async function persistInsights(
   insights: readonly StorableInsight[],
   runId: string | null = null,
+  scope: IntelScope = OWNER_INTEL_SCOPE,
 ): Promise<PersistResult> {
   const { db } = await import('$lib/db');
+  const spaceId = writeSpace(scope);
 
   // Two detectors can land on the same key (a broker that is also an emerging
   // hub). Postgres refuses to let one statement touch a row twice — "ON
@@ -252,7 +265,7 @@ export async function persistInsights(
   const existing = await db
     .select({ dedupeKey: intelInsights.dedupeKey, status: intelInsights.status })
     .from(intelInsights)
-    .where(inArray(intelInsights.dedupeKey, keys));
+    .where(and(inArray(intelInsights.dedupeKey, keys), eq(intelInsights.spaceId, spaceId)));
 
   const statusByKey = new Map(existing.map((r) => [r.dedupeKey, r.status]));
   const writable = keys.filter(
@@ -264,7 +277,7 @@ export async function persistInsights(
   const excluded = (column: string): SQL => sql.raw(`excluded.${column}`);
   await db
     .insert(intelInsights)
-    .values(writable.map((key) => toInsightRow(byKey.get(key)!, key, runId)))
+    .values(writable.map((key) => ({ ...toInsightRow(byKey.get(key)!, key, runId), spaceId })))
     .onConflictDoUpdate({
       target: intelInsights.dedupeKey,
       set: {
@@ -282,7 +295,7 @@ export async function persistInsights(
       // Belt and braces against a dismissal landing between the SELECT above
       // and this write. Without it a concurrent dismiss would keep its status
       // but silently acquire the new run's text.
-      setWhere: sql`${intelInsights.status} NOT IN ('dismissed', 'snoozed')`,
+      setWhere: sql`${intelInsights.status} NOT IN ('dismissed', 'snoozed') AND ${intelInsights.spaceId} = ${spaceId}`,
     });
 
   const updated = writable.filter((k) => statusByKey.has(k)).length;
@@ -294,6 +307,8 @@ export interface ListInsightsOptions {
   status?: string | readonly string[];
   kind?: string | readonly string[];
   limit?: number;
+  /** Whose insights. Defaults to the owner's. */
+  scope?: IntelScope;
 }
 
 export const DEFAULT_INSIGHT_LIMIT = 60;
@@ -322,7 +337,7 @@ export async function listInsights(options: ListInsightsOptions = {}): Promise<I
 
   const statuses = toList(options.status);
   const kinds = toList(options.kind).map((k) => k.toLowerCase());
-  const conditions = [];
+  const conditions = [spaceIn(intelInsights.spaceId, options.scope ?? OWNER_INTEL_SCOPE)];
 
   if (!statuses.includes('all')) {
     const valid = statuses.filter(isInsightStatus);
@@ -334,7 +349,7 @@ export async function listInsights(options: ListInsightsOptions = {}): Promise<I
   return db
     .select()
     .from(intelInsights)
-    .where(conditions.length ? and(...conditions) : undefined)
+    .where(and(...conditions))
     .orderBy(desc(intelInsights.score), desc(intelInsights.createdAt))
     .limit(clampInsightLimit(options.limit ?? DEFAULT_INSIGHT_LIMIT));
 }
@@ -342,6 +357,7 @@ export async function listInsights(options: ListInsightsOptions = {}): Promise<I
 /** Stored rows for a set of keys — lets a computed list wear its saved state. */
 export async function insightsByDedupeKey(
   keys: readonly string[],
+  scope: IntelScope = OWNER_INTEL_SCOPE,
 ): Promise<Map<string, IntelInsight>> {
   const unique = [...new Set(keys.filter(Boolean))];
   if (!unique.length) return new Map();
@@ -349,7 +365,7 @@ export async function insightsByDedupeKey(
   const rows = await db
     .select()
     .from(intelInsights)
-    .where(inArray(intelInsights.dedupeKey, unique));
+    .where(and(inArray(intelInsights.dedupeKey, unique), spaceIn(intelInsights.spaceId, scope)));
   return new Map(rows.map((r) => [r.dedupeKey, r]));
 }
 
@@ -357,6 +373,7 @@ export async function setInsightStatus(
   id: string,
   status: InsightStatus,
   reason?: string | null,
+  scope: IntelScope = OWNER_INTEL_SCOPE,
 ): Promise<IntelInsight | null> {
   if (!isInsightStatus(status)) throw new Error(`unknown insight status: ${status}`);
   const { db } = await import('$lib/db');
@@ -371,7 +388,7 @@ export async function setInsightStatus(
       snoozeUntil: null,
       updatedAt: new Date(),
     })
-    .where(eq(intelInsights.id, id))
+    .where(and(eq(intelInsights.id, id), spaceIn(intelInsights.spaceId, scope)))
     .returning();
   return row ?? null;
 }
@@ -380,6 +397,7 @@ export async function snoozeInsight(
   id: string,
   days: number,
   now: Date = new Date(),
+  scope: IntelScope = OWNER_INTEL_SCOPE,
 ): Promise<IntelInsight | null> {
   const { db } = await import('$lib/db');
   const [row] = await db
@@ -390,7 +408,7 @@ export async function snoozeInsight(
       dismissedReason: null,
       updatedAt: now,
     })
-    .where(eq(intelInsights.id, id))
+    .where(and(eq(intelInsights.id, id), spaceIn(intelInsights.spaceId, scope)))
     .returning();
   return row ?? null;
 }

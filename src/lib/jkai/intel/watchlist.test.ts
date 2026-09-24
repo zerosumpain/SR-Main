@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  watchlistSnapshotKey,
+  WATCHLIST_SNAPSHOT_KEY,
   ALARM_KINDS,
   changeToInsight,
   communityAnchors,
@@ -408,5 +410,17 @@ describe('changeToInsight', () => {
         ),
       );
     expect(run()).toBe(run());
+  });
+});
+
+describe('watchlistSnapshotKey', () => {
+  it("keeps the owner's existing key, so the first scoped run is not a new baseline", () => {
+    expect(watchlistSnapshotKey(['owner', 'household'])).toBe(WATCHLIST_SNAPSHOT_KEY);
+    expect(watchlistSnapshotKey(['household', 'owner'])).toBe(WATCHLIST_SNAPSHOT_KEY);
+  });
+
+  it('gives any other scope a yesterday of its own', () => {
+    expect(watchlistSnapshotKey(['u_x', 'household'])).not.toBe(WATCHLIST_SNAPSHOT_KEY);
+    expect(watchlistSnapshotKey(['u_x', 'household'])).not.toBe(watchlistSnapshotKey(['u_y', 'household']));
   });
 });

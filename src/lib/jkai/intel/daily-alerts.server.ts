@@ -2,9 +2,13 @@ import { db } from '$lib/db';
 import { intelAlerts } from '$lib/db/schema';
 import { and, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import type { DailyAlertsSummary } from '$lib/constants/daily-alerts';
+import { OWNER_INTEL_SCOPE, spaceIn, type IntelScope } from './scope';
 
-/** Shared rolling daily window; delivery does not dismiss an alert. */
-export async function loadDailyAlerts(now = new Date()): Promise<DailyAlertsSummary> {
+/** Shared rolling daily window; delivery does not dismiss an alert. Scoped to whose digest it is. */
+export async function loadDailyAlerts(
+  now = new Date(),
+  scope: IntelScope = OWNER_INTEL_SCOPE,
+): Promise<DailyAlertsSummary> {
   const since = new Date(now.getTime() - 24 * 3_600_000);
   const base = { since: since.toISOString(), asOf: now.toISOString(), total: 0, high: 0, items: [] };
   try {
@@ -15,6 +19,7 @@ export async function loadDailyAlerts(now = new Date()): Promise<DailyAlertsSumm
       high: sql<number>`count(*) filter (where ${intelAlerts.significance} = 'high') over ()`.mapWith(Number),
     }).from(intelAlerts).where(and(
       eq(intelAlerts.dismissed, false), gte(intelAlerts.createdAt, since), lte(intelAlerts.createdAt, now),
+      spaceIn(intelAlerts.spaceId, scope),
     )).orderBy(
       sql`case ${intelAlerts.significance} when 'high' then 0 when 'medium' then 1 else 2 end`,
       desc(intelAlerts.createdAt), intelAlerts.id,

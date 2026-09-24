@@ -8,6 +8,11 @@ import { buildKnowledgeContext } from './context';
 import { listEntities, getEntityDetail, getNoteDetail } from './queries';
 import { queryEntityPage } from './entity-query.server';
 import { DEFAULT_ENTITY_QUERY } from './entity-query';
+import { createLens, deleteLens, getLens, listLenses, lensEntityIds } from './lenses.server';
+import { EMPTY_LENS_FILTERS } from './lenses';
+import { persistInsights, listInsights, setInsightStatus, insightsByDedupeKey, dedupeKeyFor } from './insight-store';
+import { intelInsights, intelLenses, intelAlerts } from '$lib/db/schema';
+import { loadDailyAlerts } from './daily-alerts.server';
 import { createNote } from './ingest';
 import { persistExtraction } from './graph';
 import { storedHashes, refIdForThread } from './gmail-ingest';
@@ -189,5 +194,73 @@ describe.skipIf(!process.env.DATABASE_URL)('readers only see their scope', () =>
     const detail = await getEntityDetail(entityId, TEST_SCOPE);
     expect(detail?.notes.map((n) => n.id)).toContain(noteId);
     expect((await getNoteDetail(noteId, TEST_SCOPE))?.entities.map((e) => e.entityId)).toContain(entityId);
+  });
+
+  it('the daily alerts digest', async () => {
+    const [alert] = await db.insert(intelAlerts).values({
+      noteId, type: 'connection', title: 'Plimsworth Quarry alert', content: 'x', significance: 'high', spaceId: 'u_test',
+    }).returning({ id: intelAlerts.id });
+    try {
+      expect((await loadDailyAlerts()).items.some((i) => i.id === alert.id)).toBe(false);
+      expect((await loadDailyAlerts(new Date(), TEST_SCOPE)).items.some((i) => i.id === alert.id)).toBe(true);
+    } finally {
+      await db.delete(intelAlerts).where(eq(intelAlerts.id, alert.id));
+    }
+  });
+});
+
+// Artefacts: a lens or an insight made under a member's scope lands in their
+// space, and the owner can neither list it nor reach it by id.
+describe.skipIf(!process.env.DATABASE_URL)('artefacts are written to, and read from, their own space', () => {
+  const TEST_SCOPE = ['u_test', 'household'] as const;
+  const lensIds: string[] = [];
+  const insightKeys: string[] = [];
+
+  afterAll(async () => {
+    if (lensIds.length) await db.delete(intelLenses).where(inArray(intelLenses.id, lensIds));
+    if (insightKeys.length) await db.delete(intelInsights).where(inArray(intelInsights.dedupeKey, insightKeys));
+  });
+
+  it('a lens', async () => {
+    const lens = await createLens({ name: `Space test lens ${crypto.randomUUID().slice(0, 8)}` }, TEST_SCOPE);
+    lensIds.push(lens.id);
+    const [row] = await db.select({ space: intelLenses.spaceId }).from(intelLenses).where(eq(intelLenses.id, lens.id));
+    expect(row.space).toBe('u_test');
+
+    expect((await listLenses()).some((l) => l.id === lens.id)).toBe(false);
+    expect(await getLens(lens.slug)).toBeNull();
+    expect(await deleteLens(lens.id)).toBe(false);
+
+    expect((await listLenses(TEST_SCOPE)).some((l) => l.id === lens.id)).toBe(true);
+    expect((await getLens(lens.slug, TEST_SCOPE))?.id).toBe(lens.id);
+  });
+
+  it("a lens's entity set is the scope's", async () => {
+    const [type] = await db.select({ id: intelEntityTypes.id }).from(intelEntityTypes).limit(1);
+    const [e] = await db.insert(intelEntities).values({ name: 'Lens space thing', typeId: type.id, spaceId: 'u_test' }).returning();
+    try {
+      expect(await lensEntityIds(EMPTY_LENS_FILTERS)).not.toContain(e.id);
+      expect(await lensEntityIds(EMPTY_LENS_FILTERS, TEST_SCOPE)).toContain(e.id);
+    } finally {
+      await db.delete(intelEntities).where(eq(intelEntities.id, e.id));
+    }
+  });
+
+  it('an insight', async () => {
+    // A key of its own, so the global dedupe index cannot meet a real row.
+    const insight = { kind: 'space_test', title: 'Space test', detail: 'x', score: 0.5, entityIds: [crypto.randomUUID()] };
+    const key = dedupeKeyFor(insight);
+    insightKeys.push(key);
+    await persistInsights([insight], null, TEST_SCOPE);
+    const [row] = await db.select().from(intelInsights).where(eq(intelInsights.dedupeKey, key));
+    expect(row.spaceId).toBe('u_test');
+
+    expect((await listInsights({ kind: 'space_test', status: 'all' })).some((r) => r.id === row.id)).toBe(false);
+    expect((await insightsByDedupeKey([key])).has(key)).toBe(false);
+    expect(await setInsightStatus(row.id, 'seen')).toBeNull();
+
+    expect((await listInsights({ kind: 'space_test', status: 'all', scope: TEST_SCOPE })).some((r) => r.id === row.id)).toBe(true);
+    expect((await insightsByDedupeKey([key], TEST_SCOPE)).has(key)).toBe(true);
+    expect((await setInsightStatus(row.id, 'seen', null, TEST_SCOPE))?.status).toBe('seen');
   });
 });

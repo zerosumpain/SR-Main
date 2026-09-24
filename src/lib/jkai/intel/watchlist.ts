@@ -34,9 +34,22 @@ import {
   type PersistResult,
   type StorableInsight,
 } from './insight-store';
+import { OWNER_INTEL_SCOPE, scopeKey, spaceIn, type IntelScope } from './scope';
 
 /** app_settings key holding the previous run's structural snapshot. */
 export const WATCHLIST_SNAPSHOT_KEY = 'intel.watchlist.snapshot';
+
+/**
+ * The snapshot key for a scope. One snapshot per scope: diffing a member's
+ * watchlist against the owner's yesterday would report every owner entity as
+ * `disappeared` — by name, in the member's insights. The owner keeps the
+ * original key so the first run after spaces is not a fresh baseline.
+ */
+export function watchlistSnapshotKey(scope: IntelScope): string {
+  return scopeKey(scope) === scopeKey(OWNER_INTEL_SCOPE)
+    ? WATCHLIST_SNAPSHOT_KEY
+    : `${WATCHLIST_SNAPSHOT_KEY}:${scopeKey(scope)}`;
+}
 
 // ── Snapshot shape ───────────────────────────────────────────────────────────
 
@@ -446,8 +459,8 @@ export function changeToInsight(c: WatchChange): StorableInsight {
 
 // ── DB-bound ─────────────────────────────────────────────────────────────────
 
-/** Current structure of every watched entity. */
-export async function snapshotWatched(): Promise<WatchlistSnapshot> {
+/** Current structure of every watched entity the scope can see. */
+export async function snapshotWatched(scope: IntelScope = OWNER_INTEL_SCOPE): Promise<WatchlistSnapshot> {
   const { db } = await import('$lib/db');
   const { getGraphAnalysis } = await import('./analytics/load');
 
@@ -459,8 +472,10 @@ export async function snapshotWatched(): Promise<WatchlistSnapshot> {
         confidenceScore: intelEntities.confidenceScore,
       })
       .from(intelEntities)
-      .where(and(eq(intelEntities.watched, true), isNull(intelEntities.mergedIntoId))),
-    getGraphAnalysis(),
+      .where(
+        and(eq(intelEntities.watched, true), isNull(intelEntities.mergedIntoId), spaceIn(intelEntities.spaceId, scope)),
+      ),
+    getGraphAnalysis(false, { scope }),
   ]);
 
   const { index, centrality, community } = analysis;
@@ -538,9 +553,11 @@ export interface WatchlistCheckResult {
   persisted: PersistResult;
 }
 
-export async function readWatchlistSnapshot(): Promise<WatchlistSnapshot | null> {
+export async function readWatchlistSnapshot(
+  scope: IntelScope = OWNER_INTEL_SCOPE,
+): Promise<WatchlistSnapshot | null> {
   const { getSetting } = await import('$lib/server/models/settings');
-  const stored = await getSetting<WatchlistSnapshot>(WATCHLIST_SNAPSHOT_KEY);
+  const stored = await getSetting<WatchlistSnapshot>(watchlistSnapshotKey(scope));
   if (!stored || !Array.isArray(stored.entities)) return null;
   return stored;
 }
@@ -552,15 +569,16 @@ export async function readWatchlistSnapshot(): Promise<WatchlistSnapshot | null>
  * persistence fails, the next run compares against the same yesterday and
  * re-detects the change rather than losing it silently.
  */
-export async function runWatchlistCheck(): Promise<WatchlistCheckResult> {
+export async function runWatchlistCheck(scope: IntelScope = OWNER_INTEL_SCOPE): Promise<WatchlistCheckResult> {
   const { setSetting } = await import('$lib/server/models/settings');
+  const key = watchlistSnapshotKey(scope);
 
-  const previous = await readWatchlistSnapshot();
-  const current = await snapshotWatched();
+  const previous = await readWatchlistSnapshot(scope);
+  const current = await snapshotWatched(scope);
   const takenAt = new Date(current.takenAt).toISOString();
 
   if (!previous) {
-    await setSetting(WATCHLIST_SNAPSHOT_KEY, current);
+    await setSetting(key, current);
     return {
       baseline: true,
       watched: current.entities.length,
@@ -574,10 +592,10 @@ export async function runWatchlistCheck(): Promise<WatchlistCheckResult> {
   const changes = diffWatched(previous, current);
   const alarms = changes.filter((c) => ALARM_KINDS.has(c.kind));
   const persisted = alarms.length
-    ? await persistInsights(alarms.map(changeToInsight), `watchlist:${takenAt}`)
+    ? await persistInsights(alarms.map(changeToInsight), `watchlist:${takenAt}`, scope)
     : { ...EMPTY_PERSIST_RESULT };
 
-  await setSetting(WATCHLIST_SNAPSHOT_KEY, current);
+  await setSetting(key, current);
 
   return {
     baseline: false,
@@ -589,16 +607,17 @@ export async function runWatchlistCheck(): Promise<WatchlistCheckResult> {
   };
 }
 
-/** Put an entity on the watchlist, or take it off. Returns null if unknown. */
+/** Put an entity on the watchlist, or take it off. Returns null if unknown or out of scope. */
 export async function setWatched(
   entityId: string,
   watched: boolean,
+  scope: IntelScope = OWNER_INTEL_SCOPE,
 ): Promise<{ id: string; name: string; watched: boolean } | null> {
   const { db } = await import('$lib/db');
   const [row] = await db
     .update(intelEntities)
     .set({ watched, updatedAt: new Date() })
-    .where(eq(intelEntities.id, entityId))
+    .where(and(eq(intelEntities.id, entityId), spaceIn(intelEntities.spaceId, scope)))
     .returning({ id: intelEntities.id, name: intelEntities.name, watched: intelEntities.watched });
   return row ?? null;
 }
