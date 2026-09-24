@@ -9,7 +9,7 @@
 import { desc, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { alexaUtterances } from '$lib/db/schema';
-import { dropReplays, isVoiceEventEntity, parseVoiceHistory, type LastHeard } from './parse';
+import { isVoiceEventEntity, newSpeech, parseVoiceHistory, type LastHeard } from './parse';
 
 /** Re-read this much before the newest row we hold. Rows are keyed, so it is free. */
 const OVERLAP_MS = 2 * 3_600_000;
@@ -108,8 +108,8 @@ export async function syncVoiceHistory(service: VoiceSource, now = Date.now()): 
     .orderBy(alexaUtterances.entityId, desc(alexaUtterances.occurredAt));
   const last: Record<string, LastHeard> = Object.fromEntries(lastRows.map((r) => [r.entityId, r]));
   // HA returns the state current at `since` too, which can predate it.
-  const parsed = parseVoiceHistory(history.data, rooms).filter((r) => r.occurredAt.getTime() >= LOG_STARTS_AT);
-  const rows = dropReplays(parsed, last);
+  const parsed = parseVoiceHistory(history.data, rooms);
+  const rows = newSpeech(parsed, last, LOG_STARTS_AT);
   let inserted = 0;
   if (rows.length > 0) {
     const out = await db

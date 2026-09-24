@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deviceName, dropReplays, isVoiceEventEntity, parseVoiceHistory, parseVoiceState } from './parse';
+import { deviceName, dropReplays, isVoiceEventEntity, newSpeech, parseVoiceHistory, parseVoiceState } from './parse';
 
 const fired = (entity_id: string, state: string, attributes: Record<string, unknown> = {}) => ({
   entity_id,
@@ -118,5 +118,38 @@ describe('dropReplays', () => {
       {},
     );
     expect(out.map((r) => `${r.entityId} ${r.command}`)).toEqual(['e.a what time is it', 'e.a play radio 2', 'e.b play radio 2']);
+  });
+});
+
+describe('newSpeech', () => {
+  const row = (entityId: string, iso: string, command: string, reply: string | null = null) => ({
+    id: `${entityId}|${iso}`,
+    entityId,
+    device: 'd',
+    room: null,
+    occurredAt: new Date(iso),
+    command,
+    reply,
+    intent: null,
+    personName: null,
+    personType: null,
+  });
+  const fence = Date.parse('2026-09-24T18:00:00Z');
+
+  // 2026-09-24: a device with no stored row had its restart replay stored as
+  // new speech, because the opening state that proves it a replay was fenced
+  // off before the comparison.
+  it('lets a state from before the fence catch a replay after it', () => {
+    const out = newSpeech(
+      [
+        row('e.k', '2026-09-24T17:59:57.270Z', "what's the b. b. c. news"),
+        row('e.k', '2026-09-24T20:55:34.554Z', "what's the b. b. c. news"),
+        row('e.j', '2026-09-24T17:59:57.270Z', 'alexa stop the music', 'Goodbye.'),
+        row('e.j', '2026-09-24T20:55:34.554Z', 'alexa will it rain tomorrow', 'Probably not.'),
+      ],
+      {},
+      fence,
+    );
+    expect(out.map((r) => `${r.entityId} ${r.command}`)).toEqual(['e.j alexa will it rain tomorrow']);
   });
 });
