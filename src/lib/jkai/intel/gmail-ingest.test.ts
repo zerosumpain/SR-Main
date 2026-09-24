@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import {
   clampThreadLimit,
   CORRESPONDENCE_EDGE_TYPE,
@@ -19,6 +20,7 @@ import {
   IMPORTANT_LABEL,
   DEFAULT_GMAIL_INTEL_QUERY,
   ROLLING_GMAIL_INTEL_QUERY,
+  rollingAccountsWhere,
   type ThreadInput,
   type ThreadMessageInput,
 } from './gmail-ingest';
@@ -706,5 +708,30 @@ describe('threadContentHash with HTML-only mail', () => {
     const before = threadContentHash(thread([msg({ bodyText: '', bodyHtml: '' })]));
     const after = threadContentHash(thread([msg({ bodyText: '', bodyHtml: '<p>Real content.</p>' })]));
     expect(after).not.toBe(before);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Which mailboxes the nightly rolling sweep reads
+// ---------------------------------------------------------------------------
+
+describe('rollingAccountsWhere', () => {
+  // Rendered rather than run: the question is the shape of the filter, and the
+  // shared dev database is not somewhere to go looking for accounts.
+  const rendered = new PgDialect().sqlToQuery(rollingAccountsWhere());
+
+  it('takes active accounts only', () => {
+    expect(rendered.sql).toMatch(/"gmail_accounts"\."status" = \$1/);
+    expect(rendered.params[0]).toBe('active');
+  });
+
+  it("takes the owner's accounts only, until members are admitted (PR B)", () => {
+    expect(rendered.sql).toMatch(/"gmail_accounts"\."principal_id" = \$2/);
+    expect(rendered.params[1]).toBe('owner');
+  });
+
+  it('ANDs the two, so an expired owner account is not swept', () => {
+    expect(rendered.sql).toBe('("gmail_accounts"."status" = $1 and "gmail_accounts"."principal_id" = $2)');
+    expect(rendered.params).toHaveLength(2);
   });
 });
