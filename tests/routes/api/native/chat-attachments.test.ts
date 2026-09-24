@@ -43,22 +43,28 @@ afterEach(async () => {
   await rm(tmpRoot, { recursive: true, force: true });
 });
 
-async function post(fd: FormData) {
+async function post(body: BodyInit, query: Record<string, string> = {}, type = 'image/png') {
   const mod: any = await import('../../../../src/routes/api/native/chat/attachments/+server');
-  const request = new Request('http://x/api/native/chat/attachments', {
+  const url = new URL('http://x/api/native/chat/attachments');
+  for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v);
+  const request = new Request(url, {
     method: 'POST',
-    body: fd,
-    headers: { Authorization: 'Bearer t' },
+    body,
+    headers: { Authorization: 'Bearer t', 'Content-Type': type },
   });
-  return mod.POST({ request, url: new URL(request.url) } as any) as Promise<Response>;
+  return mod.POST({ request, url } as any) as Promise<Response>;
 }
 
 describe('POST /api/native/chat/attachments', () => {
+  it('is never sent as a form, which SvelteKit would refuse without an Origin', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync('src/routes/api/native/chat/attachments/+server.ts', 'utf8');
+    expect(src).not.toContain('request.formData()');
+  });
+
+
   it('stores a photo and answers in the transcript attachment shape', async () => {
-    const fd = new FormData();
-    fd.append('conversationId', 'conv-1');
-    fd.append('file', new Blob([PNG], { type: 'image/png' }), 'photo.png');
-    const res = await post(fd);
+    const res = await post(PNG, { conversationId: 'conv-1', filename: 'photo.png' });
     expect(res.status).toBe(201);
     expect(await res.json()).toEqual({
       id: 'att-1', filename: 'photo.png', kind: 'image', mimeType: 'image/png', sizeBytes: PNG.length,
@@ -67,17 +73,12 @@ describe('POST /api/native/chat/attachments', () => {
   });
 
   it('never lets the phone label its upload as agent output', async () => {
-    const fd = new FormData();
-    fd.append('source', 'generated');
-    fd.append('file', new Blob([PNG], { type: 'image/png' }), 'photo.png');
-    await post(fd);
+    await post(PNG, { filename: 'photo.png', source: 'generated' });
     expect(inserted[0].source).toBe('web');
   });
 
   it('says why a file was refused instead of a generic 500', async () => {
-    const fd = new FormData();
-    fd.append('file', new Blob([new Uint8Array([0, 1, 2, 3])], { type: 'application/x-msdownload' }), 'a.exe');
-    const res = await post(fd);
+    const res = await post(new Uint8Array([0, 1, 2, 3]), { filename: 'a.exe' }, 'application/x-msdownload');
     expect(res.status).toBe(415);
     expect((await res.json()).error).toMatch(/unsupported mime type/);
     expect(inserted.length).toBe(0);
@@ -85,9 +86,7 @@ describe('POST /api/native/chat/attachments', () => {
 
   it('refuses an unpaired caller before reading the body', async () => {
     paired = false;
-    const fd = new FormData();
-    fd.append('file', new Blob([PNG], { type: 'image/png' }), 'photo.png');
-    const res = await post(fd);
+    const res = await post(PNG, { filename: 'photo.png' });
     expect(res.status).toBe(401);
     expect(inserted.length).toBe(0);
   });
