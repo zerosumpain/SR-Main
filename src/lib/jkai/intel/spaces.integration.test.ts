@@ -36,6 +36,10 @@ import { loadEvidenceVersions } from './resolve/evidence-version.server';
 import { conflationCandidates } from './resolve/conflation.server';
 import { splitEntity } from './resolve/split';
 import { resolveRequestScope } from './scope.server';
+import { buildClusterRoster, recalculateClusterRoster } from './cluster-roster';
+import { recordIntelRun } from './run-log';
+import { pairKeyOf } from './resolve/pair-key';
+import { intelMatchDecisions, intelResolutionLabels } from '$lib/db/schema';
 
 // Offline and deterministic: the test is about which space a row lands in, not
 // about embeddings or entity summaries. Resolution's semantic search already
@@ -54,6 +58,30 @@ vi.mock('./scope.server', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./scope.server')>();
   return { ...actual, resolveRequestScope: vi.fn(actual.resolveRequestScope) };
 });
+// Tripwires behind the owner-only gates the route block asserts. The dev DB is
+// shared, so a gate that regressed must never reach a real apply: every
+// every-space writer those routes call is a spy that THROWS instead of running,
+// and the route block asserts it was never called. The cleanup PREVIEW (no
+// `apply`) stays real, for the artefacts block that reads it.
+vi.mock('./cleanup.server', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./cleanup.server')>();
+  return {
+    ...actual,
+    cleanupIntelligence: vi.fn(async (options: Parameters<typeof actual.cleanupIntelligence>[0] = {}) => {
+      if (options.apply) throw new Error('tripwire: cleanup apply must never run in this test');
+      return actual.cleanupIntelligence(options);
+    }),
+  };
+});
+vi.mock('./run-log', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./run-log')>();
+  // No run record either: a regressed gate must not write to the run history.
+  return { ...actual, ensureIntelRunCollection: vi.fn(async () => {}), recordIntelRun: vi.fn(async () => {}) };
+});
+vi.mock('./cluster-roster', () => ({
+  buildClusterRoster: vi.fn(async () => { throw new Error('tripwire: the roster must never be rebuilt in this test'); }),
+  recalculateClusterRoster: vi.fn(async () => { throw new Error('tripwire: the roster must never be recalculated in this test'); }),
+}));
 
 const created: string[] = [];
 
@@ -556,6 +584,13 @@ describe.skipIf(!process.env.DATABASE_URL)('routes answer only within the reques
 
   afterAll(async () => {
     vi.mocked(resolveRequestScope).mockReset();
+    // Only if a scope check regressed would these exist: the verdict routes
+    // write a decision and a label for the pair. Keyed on this block's own ids.
+    if (ids.theirs && ids.second) {
+      const key = pairKeyOf(ids.theirs, ids.second);
+      await db.delete(intelMatchDecisions).where(eq(intelMatchDecisions.pairKey, key));
+      await db.delete(intelResolutionLabels).where(eq(intelResolutionLabels.pairKey, key));
+    }
     await db.delete(intelEntities).where(inArray(intelEntities.id, [ids.theirs, ids.second, ids.mine].filter(Boolean)));
     if (ids.note) await db.delete(intelNotes).where(eq(intelNotes.id, ids.note)); // alert cascades
   });
@@ -613,16 +648,34 @@ describe.skipIf(!process.env.DATABASE_URL)('routes answer only within the reques
   });
 
   it("refuses a member every-space operation, and the owner's roster", async () => {
+    // Every destructive path behind these gates is a throwing spy (see the
+    // tripwires at the top of the file), and each is asserted never called: a
+    // regressed gate fails this test without applying anything.
+    const cleanupSpy = vi.mocked(cleanupIntelligence);
+    cleanupSpy.mockClear();
+    vi.mocked(buildClusterRoster).mockClear();
+    vi.mocked(recalculateClusterRoster).mockClear();
+    vi.mocked(recordIntelRun).mockClear();
+
     const cleanup = await import('../../../routes/api/jkai/intel/cleanup/+server');
     expect(await statusOf(() => cleanup.POST(event({ body: { action: 'run' } })))).toBe(403);
+    expect(cleanupSpy).not.toHaveBeenCalled();
+    expect(vi.mocked(recordIntelRun)).not.toHaveBeenCalled();
 
+    // A type id that cannot exist: even past a regressed gate the DELETE matches no row.
     const review = await import('../../../routes/api/jkai/intel/review/[id]/+server');
-    expect(await statusOf(() => review.POST(event({ params: { id: 'no-such-type' }, url: 'http://test.local/?action=delete-type', body: {} })))).toBe(403);
+    expect(await statusOf(() => review.POST(event({ params: { id: `no-such-type-${crypto.randomUUID()}` }, url: 'http://test.local/?action=delete-type', body: {} })))).toBe(403);
 
     const clusters = await import('../../../routes/api/jkai/intel/clusters/+server');
     expect(await statusOf(() => clusters.GET(event({})))).toBe(403);
+    expect(await statusOf(() => clusters.POST(event({ body: { action: 'recalculate' } })))).toBe(403);
+    expect(vi.mocked(buildClusterRoster)).not.toHaveBeenCalled();
+    expect(vi.mocked(recalculateClusterRoster)).not.toHaveBeenCalled();
 
+    // The taxonomy writers are raw statements in the route itself, so no spy can
+    // stand behind the gate. The body is an action the handler REJECTS (400)
+    // after the gate, so a regression shows as 400 — never as a write.
     const taxonomy = await import('../../../routes/api/jkai/intel/taxonomy/+server');
-    expect(await statusOf(() => taxonomy.POST(event({ body: { action: 'undismiss-all' } })))).toBe(403);
+    expect(await statusOf(() => taxonomy.POST(event({ body: { action: 'tripwire-no-such-action' } })))).toBe(403);
   });
 });
