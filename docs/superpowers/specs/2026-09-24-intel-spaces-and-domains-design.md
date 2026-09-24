@@ -213,9 +213,10 @@ empty). From A2 the gate runs `--strict`, so no PR can reintroduce an unscoped
 intel reader; that — not a runtime check — is what makes member data safe to
 write in PR B.
 
-PR B refuses to write a non-owner space while the baseline is non-empty — the
-member Gmail sweep checks it in code, so the ordering is enforced, not
-remembered.
+So the ordering "no member data until every reader is scoped" is enforced by
+that strict gate: PR B cannot merge while any unscoped intel reader exists,
+because CI fails first. There is no separate runtime check in the member Gmail
+sweep; the gate is the safeguard.
 
 **PR B — members.** `allowed_user.role`, `drive_folder_settings.space_id`, the Gmail watcher skipping non-owner accounts (it dispatches workflows and pushes chat previews), household/user principals, member
 path allow-list, member Gmail, account-list filters, header tweaks.

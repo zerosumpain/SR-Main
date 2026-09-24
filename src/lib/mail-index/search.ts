@@ -12,8 +12,22 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { mailEmbeddings, intelNotes } from '$lib/db/schema';
-import { OWNER_INTEL_SCOPE, spaceIn } from '$lib/jkai/intel/scope';
+import { pgTextArray } from '$lib/db/sql-array';
 import { embedQuery } from './embed';
+
+/**
+ * The spaces a caller may read, as `$lib/jkai/intel/scope`'s IntelScope — but
+ * typed structurally and REQUIRED, because this module sits below jkai (jkai's
+ * engine and mail admission import the index store) and must not import the
+ * owner constant back. The caller decides whose mail it is: chat's mail tools
+ * pass the owner's scope, the mail page passes the request's.
+ */
+export type MailScope = readonly string[];
+
+/** Passages carry no space of their own: the thread's note says whose mail it is. */
+function noteInScope(scope: MailScope) {
+  return sql`intel_notes.space_id = ANY(${pgTextArray(scope)}::text[])`;
+}
 
 export type MailSearchHit = {
   noteId: string;
@@ -48,11 +62,10 @@ const MAX_PASSAGE_CHARS = 1200;
  * other modules, and a search that quietly starts returning unapproved mail is
  * precisely the failure this whole feature exists to prevent.
  *
- * The same join confines it to the owner's scope. Passages carry no space of
- * their own, so the note is what says whose mail a passage is: chat's
- * `mail_search` is the owner's tool, and a member's thread is never a hit.
+ * The same join confines it to `scope`. Passages carry no space of their own,
+ * so the note is what says whose mail a passage is.
  */
-export async function searchMail(query: string, options: MailSearchOptions = {}): Promise<MailSearchHit[]> {
+export async function searchMail(query: string, scope: MailScope, options: MailSearchOptions = {}): Promise<MailSearchHit[]> {
   const q = (query || '').trim();
   if (!q) return [];
   const topK = Number.isFinite(options.topK) ? Math.min(Math.max(options.topK as number, 1), 30) : DEFAULT_TOP_K;
@@ -82,7 +95,7 @@ export async function searchMail(query: string, options: MailSearchOptions = {})
     .where(
       and(
         eq(intelNotes.graphState, 'admitted'),
-        spaceIn(intelNotes.spaceId, OWNER_INTEL_SCOPE),
+        noteInScope(scope),
         sql`${mailEmbeddings.embedding} <=> ${literal}::vector <= ${maxDistance}`,
       ),
     )
@@ -109,9 +122,9 @@ export async function searchMail(query: string, options: MailSearchOptions = {})
 
 /**
  * Every passage of one thread, in order. The "open it" half of a search hit.
- * A thread outside the owner's scope reads as not found, like an unadmitted one.
+ * A thread outside `scope` reads as not found, like an unadmitted one.
  */
-export async function readMail(noteId: string): Promise<{ subject: string; passages: Array<{ part: string; filename: string | null; text: string }> } | null> {
+export async function readMail(noteId: string, scope: MailScope): Promise<{ subject: string; passages: Array<{ part: string; filename: string | null; text: string }> } | null> {
   const rows = await db
     .select({
       subject: mailEmbeddings.source,
@@ -125,7 +138,7 @@ export async function readMail(noteId: string): Promise<{ subject: string; passa
     .where(and(
       eq(mailEmbeddings.noteId, noteId),
       eq(intelNotes.graphState, 'admitted'),
-      spaceIn(intelNotes.spaceId, OWNER_INTEL_SCOPE),
+      noteInScope(scope),
     ))
     .orderBy(mailEmbeddings.chunkOrd);
   if (!rows.length) return null;
@@ -135,8 +148,8 @@ export async function readMail(noteId: string): Promise<{ subject: string; passa
   };
 }
 
-/** How many threads and passages the index holds for the owner. For the queue header. */
-export async function mailIndexStats(): Promise<{ threads: number; chunks: number }> {
+/** How many threads and passages the index holds within `scope`. For the queue header. */
+export async function mailIndexStats(scope: MailScope): Promise<{ threads: number; chunks: number }> {
   const [row] = await db
     .select({
       threads: sql<number>`count(distinct ${mailEmbeddings.noteId})::int`,
@@ -144,18 +157,18 @@ export async function mailIndexStats(): Promise<{ threads: number; chunks: numbe
     })
     .from(mailEmbeddings)
     .innerJoin(intelNotes, eq(mailEmbeddings.noteId, intelNotes.id))
-    .where(spaceIn(intelNotes.spaceId, OWNER_INTEL_SCOPE));
+    .where(noteInScope(scope));
   return { threads: Number(row?.threads) || 0, chunks: Number(row?.chunks) || 0 };
 }
 
 /** Chunk counts for a set of notes — used to show "indexed" on a queue row. */
-export async function chunkCountsFor(noteIds: string[]): Promise<Map<string, number>> {
+export async function chunkCountsFor(noteIds: string[], scope: MailScope): Promise<Map<string, number>> {
   if (!noteIds.length) return new Map();
   const rows = await db
     .select({ noteId: mailEmbeddings.noteId, n: sql<number>`count(*)::int` })
     .from(mailEmbeddings)
     .innerJoin(intelNotes, eq(mailEmbeddings.noteId, intelNotes.id))
-    .where(and(inArray(mailEmbeddings.noteId, noteIds), spaceIn(intelNotes.spaceId, OWNER_INTEL_SCOPE)))
+    .where(and(inArray(mailEmbeddings.noteId, noteIds), noteInScope(scope)))
     .groupBy(mailEmbeddings.noteId);
   return new Map(rows.map((r) => [r.noteId, Number(r.n) || 0]));
 }

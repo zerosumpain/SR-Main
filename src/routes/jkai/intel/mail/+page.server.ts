@@ -66,7 +66,7 @@ export const load: PageServerLoad = async (event) => {
     loadMailQueue(undefined, scope),
     owner ? listMailRules().catch(() => []) : [],
     owner ? tallyMailDecisions().catch(() => noDecisions) : noDecisions,
-    owner ? mailIndexStats().catch(() => ({ threads: 0, chunks: 0 })) : { threads: 0, chunks: 0 },
+    owner ? mailIndexStats(scope).catch(() => ({ threads: 0, chunks: 0 })) : { threads: 0, chunks: 0 },
     relevanceCoverage(scope).catch(() => ({ withHits: 0, unscored: 0, foregroundHits: 0, foreground: 0 })),
   ]);
 

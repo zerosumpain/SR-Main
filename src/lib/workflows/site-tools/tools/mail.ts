@@ -10,6 +10,14 @@
 // not approved. That is enforced in the index and again in the query.
 import { register } from '../registry-internal';
 import { searchMail, readMail } from '$lib/mail-index/search';
+import { OWNER_INTEL_SCOPE, type IntelScope } from '$lib/jkai/intel/scope';
+
+/**
+ * Whose mail these tools read. Chat is the owner's (a member scope gets no
+ * chat intel at all), so both read the owner's scope; PR B threads the
+ * caller's scope through `ToolExecContext` here. Same rule as intel-graph.ts.
+ */
+const TOOL_SCOPE: IntelScope = OWNER_INTEL_SCOPE;
 
 register({
   name: 'mail_search',
@@ -29,7 +37,7 @@ register({
   handler: async (args) => {
     const query = typeof args.query === 'string' ? args.query.trim() : '';
     if (!query) return { success: false, error: 'mail_search needs a query.' };
-    const hits = await searchMail(query, {
+    const hits = await searchMail(query, TOOL_SCOPE, {
       topK: Number(args.limit) || undefined,
       minSim: Number.isFinite(Number(args.minScore)) ? Number(args.minScore) : undefined,
     });
@@ -66,7 +74,7 @@ register({
   handler: async (args) => {
     const noteId = typeof args.noteId === 'string' ? args.noteId.trim() : '';
     if (!noteId) return { success: false, error: 'mail_read needs a noteId.' };
-    const thread = await readMail(noteId);
+    const thread = await readMail(noteId, TOOL_SCOPE);
     if (!thread) {
       return { success: false, error: 'No admitted thread with that id — it may be held or rejected.' };
     }

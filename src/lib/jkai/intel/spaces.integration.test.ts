@@ -36,6 +36,7 @@ import { loadEvidenceVersions } from './resolve/evidence-version.server';
 import { conflationCandidates } from './resolve/conflation.server';
 import { splitEntity } from './resolve/split';
 import { resolveRequestScope } from './scope.server';
+import { OWNER_INTEL_SCOPE } from './scope';
 import { buildClusterRoster, recalculateClusterRoster } from './cluster-roster';
 import { recordIntelRun } from './run-log';
 import { pairKeyOf } from './resolve/pair-key';
@@ -847,8 +848,16 @@ describe.skipIf(!process.env.DATABASE_URL)('owner-only consumers never see anoth
 
   it('the mail passage index', async () => {
     const { searchMail, readMail } = await import('$lib/mail-index/search');
-    expect((await searchMail('Plimsworth offer', { minSim: 0 })).some((h) => h.noteId === ids.mail)).toBe(false);
-    expect(await readMail(ids.mail)).toBeNull();
+    // Through chat's tools, which pass the owner's scope.
+    await import('$lib/workflows/site-tools/tools/mail');
+    const { tools } = await import('$lib/workflows/site-tools/registry-internal');
+    const search = await tools.find((t) => t.name === 'mail_search')!.handler({ query: 'Plimsworth offer', minScore: 0 });
+    expect(((search.data as { hits?: Array<{ noteId: string }> })?.hits ?? []).some((h) => h.noteId === ids.mail)).toBe(false);
+    expect((await tools.find((t) => t.name === 'mail_read')!.handler({ noteId: ids.mail })).success).toBe(false);
+    // And the index itself, given the u_test scope, has the thread: the absence is the scope.
+    expect((await searchMail('Plimsworth offer', TEST_SCOPE, { minSim: 0 })).some((h) => h.noteId === ids.mail)).toBe(true);
+    expect((await readMail(ids.mail, TEST_SCOPE))?.passages).toHaveLength(1);
+    expect(await readMail(ids.mail, OWNER_INTEL_SCOPE)).toBeNull();
   });
 
   it("the context router's anchors, and the thread inspector", async () => {
