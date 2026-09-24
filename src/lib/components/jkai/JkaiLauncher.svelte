@@ -54,6 +54,7 @@
         { code: 'KN', label: 'Recall', href: '/jkai/intel/search', desc: 'Search notes, entities, files, research, memory & datastore', keywords: 'recall search @knowledge unified knowledge' },
         { code: 'SRC', label: 'Sources', href: '/jkai/sources', desc: 'Connected accounts, archives and data permissions', keywords: 'activity integrations steam music podcasts reddit github data source connect' },
         { code: 'ACT', label: 'Activity', href: '/jkai/activity', desc: 'Audit evidence and its provenance', keywords: 'timeline events evidence provenance history activity' },
+        { code: 'VOX', label: 'Voice', href: '/jkai/voice', desc: 'What the house says to Alexa, and the replies', keywords: 'alexa echo voice history utterances speaker household' },
         { code: 'AG', label: 'Agent team', href: '/jkai/agents', desc: 'Specialists, prompts and shared memory', keywords: 'delegate specialist team persona prompt workbench system soul' },
       ],
     },

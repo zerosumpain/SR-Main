@@ -7315,3 +7315,41 @@ export const notificationWatermarks = pgTable('notification_watermarks', {
   snapshot: jsonb('snapshot').$type<Record<string, unknown>>(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// What the household said to Alexa, and what Alexa said back.
+//
+// Read from Home Assistant's `alexa_devices` voice event entities (one per
+// Echo) by the `voice-sync` heartbeat. The key is `<entity>|<event time>`: the
+// event entity's state IS the time it fired, so a re-read of an overlapping
+// history window lands on the same key and is dropped. Owner-only — this is the
+// whole family's speech, and nothing public reads it.
+//
+// `topic` is filled later by `voice-topics` from a fixed vocabulary
+// (`VOICE_TOPICS` in $lib/voice/types); null means not yet tagged.
+export const alexaUtterances = pgTable(
+  'alexa_utterances',
+  {
+    id: text('id').primaryKey(),
+    entityId: text('entity_id').notNull(),
+    /** Friendly name without HA's " Voice event" suffix — "John's Echo Studio". */
+    device: text('device').notNull(),
+    /** HA area of the device when it has one — "Kitchen". */
+    room: text('room'),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+    command: text('command').notNull(),
+    reply: text('reply'),
+    /** Amazon's own intent name, when it sends one. */
+    intent: text('intent'),
+    /** Alexa voice ID's guess at the speaker; null when it did not recognise them. */
+    personName: text('person_name'),
+    personType: text('person_type'),
+    topic: text('topic'),
+    firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('alexa_utterances_occurred_idx').on(t.occurredAt),
+    index('alexa_utterances_device_occurred_idx').on(t.device, t.occurredAt),
+  ],
+);
+
+export type AlexaUtterance = typeof alexaUtterances.$inferSelect;

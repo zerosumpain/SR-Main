@@ -28,6 +28,7 @@ import { daydreamImprove } from './activities/daydream-improve';
 import { daydreamReview } from './activities/daydream-review';
 import { daydreamWeekly } from './activities/daydream-weekly';
 import { activitySync } from './activities/activity-sync';
+import { alexaVoiceSync, alexaVoiceTopics } from './activities/alexa-voice';
 import { newsBrief } from './activities/news-brief';
 
 /**
@@ -66,6 +67,8 @@ const handlers: ActivityHandler[] = [
   daydreamReview,
   daydreamWeekly,
   activitySync,
+  alexaVoiceSync,
+  alexaVoiceTopics,
 ];
 
 const byName = new Map(handlers.map((h) => [h.name, h]));

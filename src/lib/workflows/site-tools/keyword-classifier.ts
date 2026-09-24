@@ -17,6 +17,10 @@ const TOOLSET_PATTERNS: Array<{ toolset: string; pattern: RegExp }> = [
   { toolset: 'research', pattern: /research|investigate|deep\s*dive|look\s+into|find\s+out/i },
   { toolset: 'workflows', pattern: /workflow|automat|schedule|trigger|cron/i },
   { toolset: 'home', pattern: /light|temperature|thermostat|speaker|room|house|home|blind|curtain|switch(?:es)?|heat(?:ing)?|sensor|door|camera|ring|alexa|tado|hue|media\s*player|tv\b|bravia/i },
+  // What the household said to the Echos (/jkai/voice). `alexa` also loads
+  // `home` above, which is right: "turn the kitchen Alexa down" is a device,
+  // "what did Rory ask Alexa" is the log, and the model picks by tool name.
+  { toolset: 'alexa', pattern: /\balexa\b|\becho\s+(?:dot|show|studio|flex)\b|\bechos\b|voice\s+(?:history|log|commands?|assistant)|utterances?/i },
   { toolset: 'gmail', pattern: /gmail|\bemails?\b|\be-?mails?\b|inbox|reply\s+to\s+(?:the\s+)?(?:email|message|thread)/i },
   { toolset: 'apple-calendar', pattern: /\b(?:apple|icloud|i\s*cloud)\s+calendar\b|\bcalendar\s+(?:event|appointment|meeting)\b|\b(?:add|create|put|schedule)\b.*\b(?:calendar|appointment|meeting|event)\b|\b(?:what(?:'s| is)|show|list|check)\b.*\b(?:my\s+)?calendar\b/i },
   { toolset: 'node-builder', pattern: /node\s*builder|new\s+node\s+type|build\s+(?:a\s+)?(?:new\s+)?(?:canvas\s+)?node|create\s+(?:a\s+)?node\s+type/i },

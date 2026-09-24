@@ -58,6 +58,24 @@ describe('inferToolsets', () => {
     });
   });
 
+  describe('alexa — the household voice log on /jkai/voice', () => {
+    it.each([
+      'what did Rory ask Alexa last night?',
+      'how often do we use alexa in the kitchen',
+      'what are the most common things said to the echo dot',
+      'show me my voice history from this week',
+      'which utterances did Alexa fail to answer?',
+      'what do the kids ask the echos about at bedtime and what time is it busiest in the house',
+    ])('activates on %j', (msg) => {
+      expect(inferToolsets(msg)).toContain('alexa');
+    });
+
+    it('does not fire on ordinary chat', () => {
+      expect(inferToolsets('turn the living room lights down')).not.toContain('alexa');
+      expect(inferToolsets('that post is an echo chamber')).not.toContain('alexa');
+    });
+  });
+
   describe('decks', () => {
     // Both toolsets or neither: the builders take a spec whose vocabulary only
     // presentation_describe_vocabulary can explain.
