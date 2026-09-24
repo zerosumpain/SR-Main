@@ -18,10 +18,19 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { recalculateClusterRoster } from '$lib/jkai/intel/cluster-roster';
 import { isMaintenanceAuthorized } from '$lib/server/maintenance-auth';
+import { isOwnerScope } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
-export const POST: RequestHandler = async ({ request, locals }) => {
+export const POST: RequestHandler = async (event) => {
+  const { request, locals } = event;
   if (!(await isMaintenanceAuthorized(request, locals))) {
     return json({ error: 'not authorised' }, { status: 403 });
+  }
+  // The roster is ONE global list detected over the owner's graph, and this
+  // rewrites it. `isMaintenanceAuthorized` admits any signed-in session, so a
+  // member's request must be refused rather than allowed to rewrite the owner's.
+  if (!isOwnerScope(await resolveRequestScope(event))) {
+    return json({ error: 'owner only' }, { status: 403 });
   }
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;

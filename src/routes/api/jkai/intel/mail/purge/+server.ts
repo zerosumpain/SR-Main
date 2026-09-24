@@ -13,17 +13,21 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { purgeMailFromGraph, purgeMailAndRefresh } from '$lib/jkai/intel/mail-purge';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
 const CONFIRM = 'purge-email-from-graph';
 
-export const GET: RequestHandler = async () => {
-  return json(await purgeMailFromGraph({ dryRun: true }));
+// Both verbs are the request's scope: the dry run counts, and the purge
+// deletes, only what that reader's mail taught the graph.
+export const GET: RequestHandler = async (event) => {
+  return json(await purgeMailFromGraph({ dryRun: true, scope: await resolveRequestScope(event) }));
 };
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async (event) => {
+  const scope = await resolveRequestScope(event);
   let body: Record<string, unknown> = {};
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    body = (await event.request.json()) as Record<string, unknown>;
   } catch {
     // An empty body is fine; it just will not carry the confirmation.
   }
@@ -36,5 +40,5 @@ export const POST: RequestHandler = async ({ request }) => {
   const noteIds = Array.isArray(body.noteIds)
     ? body.noteIds.map((v) => String(v ?? '').trim()).filter(Boolean)
     : undefined;
-  return json(await purgeMailAndRefresh(noteIds?.length ? { noteIds } : {}));
+  return json(await purgeMailAndRefresh(noteIds?.length ? { noteIds, scope } : { scope }));
 };

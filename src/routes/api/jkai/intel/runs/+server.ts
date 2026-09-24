@@ -12,6 +12,8 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { listIntelRuns, ensureIntelRunCollection, RUN_HISTORY_LIMIT } from '$lib/jkai/intel/run-log';
 import { isGmailRollingEnabled, isIntelEngineEnabled } from '$lib/jkai/intel/engine';
+import { isOwnerScope } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
 function readLimit(raw: string | null): number {
   const n = Number(raw);
@@ -19,7 +21,13 @@ function readLimit(raw: string | null): number {
   return Math.min(Math.floor(n), RUN_HISTORY_LIMIT);
 }
 
-export const GET: RequestHandler = async ({ url }) => {
+// The nightly sweep runs over every space and its log reports whole-corpus
+// counts and raw stage errors, so it is the owner's, not a scoped read.
+export const GET: RequestHandler = async (event) => {
+  const { url } = event;
+  if (!isOwnerScope(await resolveRequestScope(event))) {
+    return json({ error: 'owner only' }, { status: 403 });
+  }
   try {
     // A host that has never run a sweep has no collection yet; creating it here
     // means the panel renders "no runs recorded" rather than an error, which is

@@ -1,14 +1,17 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createNote, processNote } from '$lib/jkai/intel/ingest';
-import { OWNER_SPACE } from '$lib/jkai/intel/scope';
+import { writeSpace } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 import { saveBuffer } from '$lib/jkai/media/storage';
 import { kindFromMime, extensionForMime, isAllowedMime } from '$lib/jkai/media/mime';
 import { db } from '$lib/db';
 import { jkaiAttachments } from '$lib/db/schema';
 import type { JkaiAttachment } from '$lib/db/schema';
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async (event) => {
+  const { request } = event;
+  const scope = await resolveRequestScope(event);
   const contentType = request.headers.get('content-type') ?? '';
 
   let title: string | undefined;
@@ -75,7 +78,9 @@ export const POST: RequestHandler = async ({ request }) => {
 
   if (!rawContent) throw error(400, 'content is required');
 
-  const noteId = await createNote({ title, rawContent, source, format, metadata, attachment, spaceId: OWNER_SPACE });
+  // A captured note is the reader's own, in their space — never silently the
+  // owner's (or the household's). Everything extracted from it follows it.
+  const noteId = await createNote({ title, rawContent, source, format, metadata, attachment, spaceId: writeSpace(scope) });
 
   processNote(noteId, attachment).catch((err) => {
     console.error(`[intel] Background processing failed for note ${noteId}:`, err);

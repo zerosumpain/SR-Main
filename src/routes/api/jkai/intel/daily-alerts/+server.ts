@@ -1,5 +1,6 @@
 import { json, error } from '@sveltejs/kit';
 import { hasJkaiServiceToken } from '$lib/server/invoke-auth';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 import type { RequestHandler } from './$types';
 
 /**
@@ -12,10 +13,12 @@ import type { RequestHandler } from './$types';
  * has to distinguish "no alerts" from "could not ask" already can, by reading
  * `status`.
  */
-export const GET: RequestHandler = async ({ request, locals }) => {
+export const GET: RequestHandler = async (event) => {
+	const { request, locals } = event;
 	const session = await locals.auth();
 	if (!hasJkaiServiceToken(request) && !session?.user) throw error(401, 'Unauthorized');
 
 	const { loadDailyAlerts } = await import('$lib/jkai/intel/daily-alerts.server');
-	return json(await loadDailyAlerts());
+	// Whose digest: the reader's scope, never the owner default.
+	return json(await loadDailyAlerts(undefined, await resolveRequestScope(event)));
 };

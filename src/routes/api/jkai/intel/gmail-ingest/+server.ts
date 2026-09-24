@@ -18,6 +18,8 @@ import {
   clampThreadLimit,
   type GmailSweepMode,
 } from '$lib/jkai/intel/gmail-ingest';
+import { isOwnerScope } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
 /** A Gmail query longer than this is a mistake, not a query. */
 const MAX_QUERY_CHARS = 500;
@@ -53,7 +55,17 @@ function statusFor(message: string): number {
   return 502;
 }
 
-export const GET: RequestHandler = async ({ url }) => {
+// The connected Gmail accounts are the owner's and the sweep writes into the
+// owner's space, so both verbs are owner-only: a member may neither preview the
+// owner's mailbox nor sweep it.
+async function refuseNonOwner(event: Parameters<RequestHandler>[0]): Promise<Response | null> {
+  return isOwnerScope(await resolveRequestScope(event)) ? null : json({ error: 'owner only' }, { status: 403 });
+}
+
+export const GET: RequestHandler = async (event) => {
+  const { url } = event;
+  const refused = await refuseNonOwner(event);
+  if (refused) return refused;
   try {
     const preview = await previewGmailSweep({
       query: readQuery(url.searchParams.get('query')),
@@ -73,7 +85,10 @@ export const GET: RequestHandler = async ({ url }) => {
   }
 };
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async (event) => {
+  const { request } = event;
+  const refused = await refuseNonOwner(event);
+  if (refused) return refused;
   if (!isAutoExtractEnabled()) {
     return json({ error: 'Intel auto-extraction is disabled (INTEL_AUTO_EXTRACT=0).' }, { status: 409 });
   }

@@ -25,6 +25,8 @@ import {
   type StorableInsight,
 } from '$lib/jkai/intel/insight-store';
 import type { IntelInsight } from '$lib/db/schema';
+import { isOwnerScope, scopeKey, type IntelScope } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
 /**
  * The analysis snapshot the last persist ran against. Findings only change when
@@ -32,10 +34,13 @@ import type { IntelInsight } from '$lib/db/schema';
  * than once per dashboard poll — which, with a polling UI, is the difference
  * between a handful of upserts an hour and a few thousand.
  *
+ * Per scope (`scopeKey`): each scope has its own analysis snapshot, and one
+ * scope's persist must not stand in for another's.
+ *
  * Deliberately NOT exported: a non-handler export from a +server.ts breaks the
  * route at runtime.
  */
-let lastPersistedAnalysis = 0;
+const lastPersistedAnalysis = new Map<string, number>();
 
 /**
  * The detectors, memoised against the analysis snapshot they ran on.
@@ -52,25 +57,34 @@ let lastPersistedAnalysis = 0;
  * there is nothing to recompute. `getGraphAnalysis` bumps `computedAt` whenever
  * the graph changes, so this can never serve findings from a stale graph.
  *
+ * One entry per scope (`scopeKey`), for the reason the analysis cache is: two
+ * scopes' snapshots can share a `computedAt`, and serving one reader findings
+ * computed over another's graph is exactly the leak spaces exist to stop.
+ *
  * Deliberately NOT exported — a non-handler export from a +server.ts breaks the
  * route at runtime.
  */
-let derived: {
-  computedAt: number;
-  all: Awaited<ReturnType<typeof generateInsights>>;
-  surprising: Awaited<ReturnType<typeof scoreSurprisingLinks>>;
-  predicted: ReturnType<typeof predictMissingLinks>;
-} | null = null;
+const derived = new Map<
+  string,
+  {
+    computedAt: number;
+    all: Awaited<ReturnType<typeof generateInsights>>;
+    surprising: Awaited<ReturnType<typeof scoreSurprisingLinks>>;
+    predicted: ReturnType<typeof predictMissingLinks>;
+  }
+>();
 
-async function persistOnce(computedAt: number, insights: StorableInsight[]): Promise<void> {
-  if (computedAt === lastPersistedAnalysis) return;
-  lastPersistedAnalysis = computedAt;
+async function persistOnce(computedAt: number, insights: StorableInsight[], scope: IntelScope): Promise<void> {
+  const key = scopeKey(scope);
+  if (computedAt === lastPersistedAnalysis.get(key)) return;
+  lastPersistedAnalysis.set(key, computedAt);
   try {
-    await persistInsights(insights, `insights:${new Date(computedAt).toISOString()}`);
+    // Into the reader's own space (`persistInsights` writes to writeSpace(scope)).
+    await persistInsights(insights, `insights:${new Date(computedAt).toISOString()}`, scope);
   } catch (err) {
     // Reading the dashboard must not fail because the write did. Reset so the
     // next request retries rather than skipping this snapshot forever.
-    lastPersistedAnalysis = 0;
+    lastPersistedAnalysis.delete(key);
     console.error('[intel/insights] persist failed', err);
   }
 }
@@ -83,10 +97,16 @@ async function persistOnce(computedAt: number, insights: StorableInsight[]): Pro
  * every time anyone opens the dashboard and says nothing about whether new
  * material arrived. `evidenceAt` is when the thing was actually observed.
  *
+ * Owner scope only. `reconcileFromAnalysis` rewrites the ONE global roster,
+ * which is detected over the owner's graph: a member's request must never
+ * reconcile it against their own analysis, so any other scope gets no cluster
+ * findings (as `describeClusters` gives it no cluster context).
+ *
  * Deliberately NOT exported — a non-handler export from a +server.ts breaks the
  * route at runtime.
  */
-async function clusterFindings(analysis: Awaited<ReturnType<typeof getGraphAnalysis>>) {
+async function clusterFindings(analysis: Awaited<ReturnType<typeof getGraphAnalysis>>, scope: IntelScope) {
+  if (!isOwnerScope(scope)) return [];
   try {
     const reconciled = await reconcileFromAnalysis(analysis);
     const freshestEvidence = new Map<string, number>();
@@ -129,12 +149,14 @@ function statusFilter(param: string | null): (status: string) => boolean {
   return (status) => valid.has(status);
 }
 
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async (event) => {
+  const { url } = event;
+  const scope = await resolveRequestScope(event);
   const limit = Math.min(Math.max(Number(url.searchParams.get('limit') ?? 20), 1), 60);
   const kind = url.searchParams.get('kind');
   const keep = statusFilter(url.searchParams.get('status'));
 
-  const analysis = await getGraphAnalysis();
+  const analysis = await getGraphAnalysis(false, { scope });
   const { index, community, embeddings, suppressedPairs } = analysis;
 
   const decorate = (ids: string[]) =>
@@ -143,12 +165,13 @@ export const GET: RequestHandler = async ({ url }) => {
       .filter((n): n is NonNullable<typeof n> => Boolean(n))
       .map((n) => ({ id: n.id, name: n.name, type: n.typeName, icon: n.icon, color: n.color }));
 
-  if (derived?.computedAt !== analysis.computedAt) {
+  let cached = derived.get(scopeKey(scope));
+  if (cached?.computedAt !== analysis.computedAt) {
     // Semantic distance is one of the surprise factors, so the embeddings have
     // to be in place before either detector runs. Awaited only on a recompute:
     // this is the one surface that needs them.
     await ensureEmbeddings(analysis);
-    derived = {
+    cached = {
       computedAt: analysis.computedAt,
       // Persist the FULL set, not the filtered one: a `?kind=` view must not
       // stop findings of other kinds from being recorded.
@@ -157,7 +180,7 @@ export const GET: RequestHandler = async ({ url }) => {
       // because they are the only ones that need the stored roster, and that
       // module is pure over a snapshot and tested without a database. A roster
       // that cannot be read costs the three cluster findings and nothing else.
-      all: [...(await generateInsights(analysis)), ...(await clusterFindings(analysis))],
+      all: [...(await generateInsights(analysis)), ...(await clusterFindings(analysis, scope))],
       surprising: await scoreSurprisingLinks(
         { index, membership: community.membership, embeddings },
         { maxHops: 3, limit: 20, minScore: 0.08 },
@@ -168,11 +191,12 @@ export const GET: RequestHandler = async ({ url }) => {
         { limit: 15, minScore: 0.8 },
       ),
     };
+    derived.set(scopeKey(scope), cached);
   }
-  const { all, surprising, predicted } = derived;
+  const { all, surprising, predicted } = cached;
 
-  await persistOnce(analysis.computedAt, all);
-  const stored = await insightsByDedupeKey(all.map((i) => dedupeKeyFor(i))).catch(
+  await persistOnce(analysis.computedAt, all, scope);
+  const stored = await insightsByDedupeKey(all.map((i) => dedupeKeyFor(i)), scope).catch(
     () => new Map<string, IntelInsight>(),
   );
 
@@ -221,8 +245,10 @@ export const GET: RequestHandler = async ({ url }) => {
   });
 };
 
-export const POST: RequestHandler = async ({ request }) => {
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+export const POST: RequestHandler = async (event) => {
+  // Every status write carries the scope: an insight outside it is not found.
+  const scope = await resolveRequestScope(event);
+  const body = (await event.request.json().catch(() => ({}))) as Record<string, unknown>;
   const id = String(body.id ?? body.insightId ?? '').trim();
   if (!id) throw error(400, 'id is required');
 
@@ -232,20 +258,20 @@ export const POST: RequestHandler = async ({ request }) => {
 
   switch (action) {
     case 'dismiss':
-      row = await setInsightStatus(id, 'dismissed', reason);
+      row = await setInsightStatus(id, 'dismissed', reason, scope);
       break;
     case 'snooze':
-      row = await snoozeInsight(id, Number(body.days ?? 7));
+      row = await snoozeInsight(id, Number(body.days ?? 7), undefined, scope);
       break;
     case 'seen':
-      row = await setInsightStatus(id, 'seen');
+      row = await setInsightStatus(id, 'seen', undefined, scope);
       break;
     case 'actioned':
-      row = await setInsightStatus(id, 'actioned');
+      row = await setInsightStatus(id, 'actioned', undefined, scope);
       break;
     // Undo — puts a dismissed or snoozed finding back in the queue.
     case 'reset':
-      row = await setInsightStatus(id, 'new');
+      row = await setInsightStatus(id, 'new', undefined, scope);
       break;
     default:
       throw error(400, 'action must be one of dismiss, snooze, seen, actioned, reset');

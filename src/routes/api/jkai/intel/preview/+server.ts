@@ -17,6 +17,7 @@ import {
   MIN_PREVIEW_CHARS,
   previewExtraction,
 } from '$lib/jkai/intel/ingest-preview';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
 /** Mirrors the formats intel notes are stored under (see $lib/jkai/intel/ingest). */
 const VALID_FORMATS = new Set([
@@ -28,8 +29,11 @@ const VALID_FORMATS = new Set([
   'summary',
 ]);
 
-export const POST: RequestHandler = async ({ request }) => {
-  const body = (await request.json().catch(() => ({}))) as { text?: unknown; format?: unknown };
+export const POST: RequestHandler = async (event) => {
+  // The diff is classified against the reader's graph: "existing" means one of
+  // THEIR entities, never a match in someone else's space.
+  const scope = await resolveRequestScope(event);
+  const body = (await event.request.json().catch(() => ({}))) as { text?: unknown; format?: unknown };
 
   const text = typeof body.text === 'string' ? body.text : '';
   if (text.trim().length < MIN_PREVIEW_CHARS) {
@@ -43,7 +47,7 @@ export const POST: RequestHandler = async ({ request }) => {
   const format = VALID_FORMATS.has(requested) ? requested : 'text';
 
   try {
-    const preview = await previewExtraction(text, format);
+    const preview = await previewExtraction(text, format, scope);
     return json({ ...preview, maxChars: MAX_PREVIEW_CHARS });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
