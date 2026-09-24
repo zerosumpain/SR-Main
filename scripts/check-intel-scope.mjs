@@ -104,6 +104,10 @@ export const MAINTENANCE = {
     'Passage indexing is per note, like embeddings (spec §2): backfillMailIndex indexes every ' +
     'admitted thread that has no chunks and pruneUnadmittedMail drops unadmitted ones; both return ' +
     'counts. The reader is mail-index/search.ts, which is scoped.',
+  // Task 14 — the nightly engine's one direct read.
+  'src/lib/jkai/intel/engine.ts':
+    'activeSpaces lists the distinct space ids in intel_entities (never row content) so each ' +
+    'per-space stage can run inside one space; the stages it calls each apply that space.',
 };
 
 export function classify(files, baseline, maintenance) {
