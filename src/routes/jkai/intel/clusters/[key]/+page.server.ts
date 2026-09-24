@@ -3,6 +3,8 @@ import { error } from '@sveltejs/kit';
 import { getGraphAnalysis } from '$lib/jkai/intel/analytics/load';
 import { buildClusterRoster } from '$lib/jkai/intel/cluster-roster';
 import { loadClusters } from '$lib/jkai/intel/cluster-store';
+import { isOwnerScope } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
 /**
  * Members shown in the table. The rail card shows six; this page is where the
@@ -12,8 +14,13 @@ import { loadClusters } from '$lib/jkai/intel/cluster-store';
  */
 const MAX_MEMBERS = 200;
 
-export const load: PageServerLoad = async ({ params }) => {
-  const analysis = await getGraphAnalysis();
+// Owner-only, like the roster page: the roster is one global list over the
+// owner's graph, and building it reconciles (rewrites) that list.
+export const load: PageServerLoad = async (event) => {
+  const { params } = event;
+  const scope = await resolveRequestScope(event);
+  if (!isOwnerScope(scope)) throw error(403, 'The cluster roster is owner-only');
+  const analysis = await getGraphAnalysis(false, { scope });
   const roster = await buildClusterRoster(analysis);
   const cluster = roster.clusters.find((c) => c.key === params.key);
   if (!cluster) throw error(404, 'no such cluster');

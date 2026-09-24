@@ -2,10 +2,12 @@ import type { PageServerLoad } from './$types';
 import { listEntityTypes } from '$lib/jkai/intel/queries';
 import { parseEntityQuery } from '$lib/jkai/intel/entity-query';
 import { queryEntityPage } from '$lib/jkai/intel/entity-query.server';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
-export const load: PageServerLoad = async ({ url }) => {
-  const query = parseEntityQuery(url.searchParams);
-  const [result, types] = await Promise.all([queryEntityPage(query), listEntityTypes()]);
+export const load: PageServerLoad = async (event) => {
+  const query = parseEntityQuery(event.url.searchParams);
+  const scope = await resolveRequestScope(event);
+  const [result, types] = await Promise.all([queryEntityPage(query, scope), listEntityTypes()]);
 
   return {
     ...result,

@@ -1,6 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { listTimelineEvents } from '$lib/jkai/intel/queries';
 import { getLens, lensEntityIds, listLenses } from '$lib/jkai/intel/lenses.server';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
 /**
  * 200 was a list's page size. An axis wants the whole history — a timeline that
@@ -9,14 +10,18 @@ import { getLens, lensEntityIds, listLenses } from '$lib/jkai/intel/lenses.serve
  */
 const MAX_EVENTS = 500;
 
-export const load: PageServerLoad = async ({ url }) => {
+export const load: PageServerLoad = async (event) => {
+  const { url } = event;
+  // The events, the lens list, the chosen lens and its matches are all the
+  // reader's scope: a lens from another space is not found and filters nothing.
+  const scope = await resolveRequestScope(event);
   const entityId = url.searchParams.get('entityId') ?? undefined;
   const type = url.searchParams.get('type') ?? undefined;
   const lensKey = url.searchParams.get('lens') ?? undefined;
 
   const [events, lenses] = await Promise.all([
-    listTimelineEvents({ limit: MAX_EVENTS, entityId, type }),
-    listLenses(),
+    listTimelineEvents({ limit: MAX_EVENTS, entityId, type, scope }),
+    listLenses(scope),
   ]);
 
   // A lens narrows ENTITIES, so it reaches the timeline through each event's
@@ -28,9 +33,9 @@ export const load: PageServerLoad = async ({ url }) => {
   let activeLens: { id: string; slug: string; name: string; summary: string } | null = null;
 
   if (lensKey) {
-    const lens = await getLens(lensKey);
+    const lens = await getLens(lensKey, scope);
     if (lens) {
-      const ids = new Set(await lensEntityIds(lens.filters));
+      const ids = new Set(await lensEntityIds(lens.filters, scope));
       visible = events.filter((e) => e.entityId && ids.has(e.entityId));
       hiddenByLens = events.length - visible.length;
       activeLens = { id: lens.id, slug: lens.slug, name: lens.name, summary: lens.summary };
