@@ -35,6 +35,21 @@ function sanitizeFilename(name: string | null | undefined): string | null {
   return stripped.slice(0, 255);
 }
 
+/**
+ * One name per format. `file-type` sniffs an iPhone voice memo (AAC in an MP4
+ * box, `ftyp M4A`) as `audio/x-m4a`, which no table downstream knows — so a
+ * voice note from the app was a 415. Everything after this point, down to the
+ * transcriber's format map, already reads `audio/mp4`.
+ */
+const CANONICAL_MIME: Record<string, string> = {
+  'audio/x-m4a': 'audio/mp4',
+  'audio/m4a': 'audio/mp4',
+};
+
+export function canonicalMime(mime: string): string {
+  return CANONICAL_MIME[mime] ?? mime;
+}
+
 export async function storeChatUpload(
   file: FormDataEntryValue | null,
   conversationId: string | null,
@@ -54,7 +69,7 @@ export async function storeChatUpload(
   // codecs=opus`) which doesn't match the bare-MIME allowlist. Strip any
   // RFC 6838 parameters (everything after the first `;`) before lookup —
   // the kind/extension tables only key on the canonical type/subtype.
-  const baseMime = mime.split(';', 1)[0].trim();
+  const baseMime = canonicalMime(mime.split(';', 1)[0].trim());
   if (!isAllowedMime(baseMime)) throw error(415, `unsupported mime type: ${mime}`);
   mime = baseMime;
 

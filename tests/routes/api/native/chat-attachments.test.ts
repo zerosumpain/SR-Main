@@ -84,6 +84,18 @@ describe('POST /api/native/chat/attachments', () => {
     expect(inserted.length).toBe(0);
   });
 
+  it('takes an iPhone voice memo, which sniffs as audio/x-m4a', async () => {
+    // An AAC-in-MP4 header, as AVAudioRecorder writes it.
+    const m4a = new Uint8Array([
+      0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x4d, 0x34, 0x41, 0x20,
+      0x00, 0x00, 0x02, 0x00, 0x4d, 0x34, 0x41, 0x20, 0x69, 0x73, 0x6f, 0x6d,
+      ...new Array(64).fill(0),
+    ]);
+    const res = await post(m4a, { filename: 'Voice note.m4a' }, 'audio/mp4');
+    expect(res.status).toBe(201);
+    expect(await res.json()).toMatchObject({ kind: 'audio', mimeType: 'audio/mp4' });
+  });
+
   it('refuses an unpaired caller before reading the body', async () => {
     paired = false;
     const res = await post(PNG, { filename: 'photo.png' });
