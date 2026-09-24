@@ -105,3 +105,18 @@ export function dropReplays(rows: readonly ParsedUtterance[], last: Record<strin
   }
   return out;
 }
+
+/**
+ * What to store from one history read: replays dropped, then anything before
+ * `startsAt` fenced off. That order matters. HA's history opens with each
+ * device's state as of the window start, which may predate the fence, and for
+ * a device with no stored row it is the only record that can prove a restart
+ * replay is one. Fencing first threw that proof away and stored the replay.
+ */
+export function newSpeech(
+  rows: readonly ParsedUtterance[],
+  last: Record<string, LastHeard | undefined>,
+  startsAt: number,
+): ParsedUtterance[] {
+  return dropReplays(rows, last).filter((r) => r.occurredAt.getTime() >= startsAt);
+}
