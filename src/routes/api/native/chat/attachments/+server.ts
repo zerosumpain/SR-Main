@@ -18,17 +18,26 @@ import { storeChatUpload } from '$lib/jkai/media/upload';
  *   flatten a thrown 413 into "Something went wrong", and "too large" is the
  *   one thing the phone can actually act on.
  */
-export const POST: RequestHandler = withDevice(async ({ request }) => {
-  const form = await request.formData().catch(() => null);
-  if (!form) return json({ error: 'Send the file as multipart form data.' }, { status: 400 });
-  const conversationId = form.get('conversationId');
+export const POST: RequestHandler = withDevice(async ({ request, url }) => {
+  // The file IS the body, not a multipart form, and that is not a style
+  // choice. SvelteKit refuses any form-encoded POST whose `Origin` header does
+  // not match the site ("Cross-site POST form submissions are forbidden", 403)
+  // before a handler runs. A browser always sends one; a phone sends none. So
+  // the first cut of this route, multipart like the web one, 403'd every upload
+  // from the app, and its unit tests, which call the handler directly, could
+  // not see the layer that refused it. A raw body is not a form, so the check
+  // does not apply, and the bearer token is what makes a cross-site forgery
+  // impossible here anyway.
+  const buf = await request.arrayBuffer().catch(() => null);
+  if (!buf || buf.byteLength === 0) return json({ error: 'The upload was empty.' }, { status: 400 });
+  const filename = url.searchParams.get('filename') || 'upload';
+  const conversationId = url.searchParams.get('conversationId');
+  const file = new File([buf], filename, {
+    type: request.headers.get('content-type') ?? 'application/octet-stream',
+  });
 
   try {
-    const row = await storeChatUpload(
-      form.get('file'),
-      typeof conversationId === 'string' ? conversationId : null,
-      'web',
-    );
+    const row = await storeChatUpload(file, conversationId, 'web');
     // The transcript's attachment shape, not the table's: the phone decodes
     // this with the same type as an attachment on a loaded message.
     return json({
