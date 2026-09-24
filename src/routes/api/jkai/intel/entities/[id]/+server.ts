@@ -5,14 +5,19 @@ import { db } from '$lib/db';
 import { intelEntities, intelAssertions } from '$lib/db/schema';
 import { eq, and, isNull, sql } from 'drizzle-orm';
 import { canonicalName } from '$lib/jkai/intel/resolve/match';
+import { spaceIn } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
-export const GET: RequestHandler = async ({ params }) => {
-  const detail = await getEntityDetail(params.id);
+export const GET: RequestHandler = async (event) => {
+  const scope = await resolveRequestScope(event);
+  const detail = await getEntityDetail(event.params.id, scope);
   if (!detail) return json({ error: 'Not found' }, { status: 404 });
   return json(detail);
 };
 
-export const PUT: RequestHandler = async ({ params, request }) => {
+export const PUT: RequestHandler = async (event) => {
+  const { params, request } = event;
+  const scope = await resolveRequestScope(event);
   const body = await request.json();
   if (body.properties !== undefined && body.properties !== null && (typeof body.properties !== 'object' || Array.isArray(body.properties))) return json({ error: 'Properties must be an object or null' }, { status: 400 });
   if (body.summary !== undefined && body.summary !== null && typeof body.summary !== 'string') return json({ error: 'Summary must be text or null' }, { status: 400 });
@@ -28,7 +33,9 @@ export const PUT: RequestHandler = async ({ params, request }) => {
   if (body.properties !== undefined) updates.properties = body.properties;
   if (body.summary !== undefined) updates.summary = body.summary;
   const updated = await db.transaction(async tx => {
-    const [row] = await tx.update(intelEntities).set(updates).where(eq(intelEntities.id, params.id)).returning();
+    // Scoped on the UPDATE: an entity outside the reader's scope matches no row,
+    // so it is a 404 and none of the owner-edit claims below are written for it.
+    const [row] = await tx.update(intelEntities).set(updates).where(and(eq(intelEntities.id, params.id), spaceIn(intelEntities.spaceId, scope))).returning();
     if (!row) return null;
     // Retain explicit owner edits independently of source-derived claims.
     const claims: Array<[string, unknown]> = [];
@@ -52,7 +59,12 @@ export const PUT: RequestHandler = async ({ params, request }) => {
   return json(updated);
 };
 
-export const DELETE: RequestHandler = async ({ params }) => {
-  await db.delete(intelEntities).where(eq(intelEntities.id, params.id));
+export const DELETE: RequestHandler = async (event) => {
+  const scope = await resolveRequestScope(event);
+  const deleted = await db
+    .delete(intelEntities)
+    .where(and(eq(intelEntities.id, event.params.id), spaceIn(intelEntities.spaceId, scope)))
+    .returning({ id: intelEntities.id });
+  if (deleted.length === 0) return json({ error: 'Not found' }, { status: 404 });
   return json({ deleted: true });
 };

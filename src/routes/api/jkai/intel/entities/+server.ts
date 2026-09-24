@@ -11,13 +11,18 @@ import { parseEntityQuery } from '$lib/jkai/intel/entity-query';
 import { queryEntityPage } from '$lib/jkai/intel/entity-query.server';
 import { db } from '$lib/db';
 import { intelEntities, intelEntityTypes } from '$lib/db/schema';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { invalidateGraphAnalysis } from '$lib/jkai/intel/analytics/load';
 import { mergeEntities } from '$lib/jkai/intel/resolve/merge';
+import { spaceIn } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
+import { rethrowScoped } from '$lib/jkai/intel/not-found';
 
-export const GET: RequestHandler = async ({ url }) => {
-  const query = parseEntityQuery(url.searchParams);
-  const [result, types] = await Promise.all([queryEntityPage(query), listEntityTypes()]);
+export const GET: RequestHandler = async (event) => {
+  const scope = await resolveRequestScope(event);
+  const query = parseEntityQuery(event.url.searchParams);
+  // The type list is the shared vocabulary (spec §2), not rows: unscoped.
+  const [result, types] = await Promise.all([queryEntityPage(query, scope), listEntityTypes()]);
   return json({ ...result, types, query });
 };
 
@@ -32,8 +37,9 @@ function readIds(body: Record<string, unknown>): string[] {
   return ids;
 }
 
-export const POST: RequestHandler = async ({ request }) => {
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+export const POST: RequestHandler = async (event) => {
+  const scope = await resolveRequestScope(event);
+  const body = (await event.request.json().catch(() => ({}))) as Record<string, unknown>;
   const action = String(body.action ?? '');
 
   // Merge takes an ordered pair rather than a set — which entity survives is
@@ -43,19 +49,22 @@ export const POST: RequestHandler = async ({ request }) => {
     const mergeId = String(body.mergeId ?? '');
     if (!keepId || !mergeId) throw error(400, 'keepId and mergeId are required');
     try {
-      return json({ ok: true, result: await mergeEntities(keepId, mergeId, { method: 'manual' }) });
+      return json({ ok: true, result: await mergeEntities(keepId, mergeId, { method: 'manual', scope }) });
     } catch (err) {
-      throw error(400, err instanceof Error ? err.message : 'merge failed');
+      rethrowScoped(err, 400, 'merge failed');
     }
   }
 
+  // Every bulk write below is scoped on the statement itself: an id outside the
+  // reader's scope simply matches no row and is left out of `affected`.
   const ids = readIds(body);
+  const selected = and(inArray(intelEntities.id, ids), spaceIn(intelEntities.spaceId, scope));
 
   if (action === 'confirm' || action === 'unconfirm') {
     const updated = await db
       .update(intelEntities)
       .set({ confirmed: action === 'confirm', updatedAt: new Date() })
-      .where(inArray(intelEntities.id, ids))
+      .where(selected)
       .returning({ id: intelEntities.id });
     return json({ ok: true, affected: updated.length });
   }
@@ -64,7 +73,7 @@ export const POST: RequestHandler = async ({ request }) => {
     const updated = await db
       .update(intelEntities)
       .set({ watched: action === 'watch', updatedAt: new Date() })
-      .where(inArray(intelEntities.id, ids))
+      .where(selected)
       .returning({ id: intelEntities.id });
     return json({ ok: true, affected: updated.length });
   }
@@ -76,7 +85,7 @@ export const POST: RequestHandler = async ({ request }) => {
     const updated = await db
       .update(intelEntities)
       .set({ lens: raw || null, updatedAt: new Date() })
-      .where(inArray(intelEntities.id, ids))
+      .where(selected)
       .returning({ id: intelEntities.id });
     return json({ ok: true, affected: updated.length });
   }
@@ -94,7 +103,7 @@ export const POST: RequestHandler = async ({ request }) => {
     const updated = await db
       .update(intelEntities)
       .set({ typeId, updatedAt: new Date() })
-      .where(inArray(intelEntities.id, ids))
+      .where(selected)
       .returning({ id: intelEntities.id });
     // Type drives the analytics colouring and the type-outlier insight.
     invalidateGraphAnalysis();
@@ -104,7 +113,7 @@ export const POST: RequestHandler = async ({ request }) => {
   if (action === 'delete') {
     const deleted = await db
       .delete(intelEntities)
-      .where(inArray(intelEntities.id, ids))
+      .where(selected)
       .returning({ id: intelEntities.id });
     invalidateGraphAnalysis();
     return json({ ok: true, affected: deleted.length });

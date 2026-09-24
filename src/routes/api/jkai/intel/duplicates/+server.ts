@@ -15,11 +15,19 @@ import {
   ADJUDICATION_BAND,
   ADJUDICATION_NIGHTLY_LIMIT,
 } from '$lib/jkai/intel/resolve/adjudicate';
+import { isOwnerScope, writeSpace } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
+import { rethrowScoped } from '$lib/jkai/intel/not-found';
 
 /** Rows sent to the page. The sweep itself is unbounded; the payload is not. */
 const PAGE_LIMIT = 200;
 
-export const GET: RequestHandler = async ({ url }) => {
+// Duplicates are found within ONE space (a pair never spans two people's
+// graphs), and the space a reader resolves is their own: the head of their
+// scope, the same one their writes land in (`writeSpace`).
+export const GET: RequestHandler = async (event) => {
+  const { url } = event;
+  const space = writeSpace(await resolveRequestScope(event));
   const minConfidence = Math.min(Math.max(Number(url.searchParams.get('min') ?? 0.35), 0), 1);
   // The ruled-out view. It exists because a filter that hides its own decisions
   // is indistinguishable from one that is broken — the source filter on this
@@ -29,7 +37,7 @@ export const GET: RequestHandler = async ({ url }) => {
   // `listProposedTypes` went with the taxonomy panel: proposals are governed at
   // /jkai/intel/categories now, and returning them here was one query per load
   // for a list nothing rendered.
-  const sweep = await sweepDuplicates(minConfidence, { includeRuledOut });
+  const sweep = await sweepDuplicates(minConfidence, { includeRuledOut, space });
   const reports = includeRuledOut ? sweep.reports.filter((r) => r.decision) : sweep.reports;
 
   return json({
@@ -89,8 +97,10 @@ export const GET: RequestHandler = async ({ url }) => {
   });
 };
 
-export const POST: RequestHandler = async ({ request }) => {
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+export const POST: RequestHandler = async (event) => {
+  const scope = await resolveRequestScope(event);
+  const space = writeSpace(scope);
+  const body = (await event.request.json().catch(() => ({}))) as Record<string, unknown>;
   const action = String(body.action ?? 'merge');
 
   if (action === 'merge') {
@@ -98,9 +108,9 @@ export const POST: RequestHandler = async ({ request }) => {
     const mergeId = String(body.mergeId ?? '');
     if (!keepId || !mergeId) throw error(400, 'keepId and mergeId are required');
     try {
-      return json({ ok: true, result: await mergeEntities(keepId, mergeId) });
+      return json({ ok: true, result: await mergeEntities(keepId, mergeId, { scope }) });
     } catch (err) {
-      throw error(400, err instanceof Error ? err.message : 'merge failed');
+      rethrowScoped(err, 400, 'merge failed');
     }
   }
 
@@ -127,7 +137,7 @@ export const POST: RequestHandler = async ({ request }) => {
         continue;
       }
       try {
-        await mergeEntities(keepId, mergeId);
+        await mergeEntities(keepId, mergeId, { scope });
         merged.push({ keepId, mergeId });
       } catch (err) {
         failed.push({ keepId, mergeId, reason: err instanceof Error ? err.message : 'merge failed' });
@@ -144,6 +154,8 @@ export const POST: RequestHandler = async ({ request }) => {
     const aId = String(body.aId ?? body.keepId ?? '');
     const bId = String(body.bId ?? body.mergeId ?? '');
     if (!aId || !bId) throw error(400, 'aId and bId are required');
+    // recordDecision throws for a pair outside the scope (or since deleted):
+    // that is a 404, not a server fault.
     await recordDecision({
       aId,
       bId,
@@ -155,7 +167,7 @@ export const POST: RequestHandler = async ({ request }) => {
       rationale: typeof body.rationale === 'string' ? body.rationale.slice(0, 400) : null,
       aName: typeof body.aName === 'string' ? body.aName : null,
       bName: typeof body.bName === 'string' ? body.bName : null,
-    });
+    }, scope).catch((err) => rethrowScoped(err, 500, 'decision failed'));
     return json({ ok: true });
   }
 
@@ -164,7 +176,7 @@ export const POST: RequestHandler = async ({ request }) => {
     const aId = String(body.aId ?? '');
     const bId = String(body.bId ?? '');
     if (!aId || !bId) throw error(400, 'aId and bId are required');
-    await clearDecision(aId, bId);
+    await clearDecision(aId, bId, scope).catch((err) => rethrowScoped(err, 500, 'undo failed'));
     return json({ ok: true });
   }
 
@@ -182,7 +194,7 @@ export const POST: RequestHandler = async ({ request }) => {
       ? new Set((body.pairs as Array<Record<string, unknown>>).map((p) => `${p.aId}|${p.bId}`))
       : null;
 
-    const sweep = await sweepDuplicates(min);
+    const sweep = await sweepDuplicates(min, { space });
     const reports = only
       ? sweep.reports.filter(
           (r) => only.has(`${r.keep.id}|${r.merge.id}`) || only.has(`${r.merge.id}|${r.keep.id}`),
@@ -194,6 +206,7 @@ export const POST: RequestHandler = async ({ request }) => {
       // An explicit request about named pairs is a request, not a sweep: it may
       // re-ask a question the model has already answered. A blanket run may not.
       force: Boolean(only),
+      space,
     });
     return json({ ok: true, result: run });
   }
@@ -205,6 +218,8 @@ export const POST: RequestHandler = async ({ request }) => {
   // because it is idempotent — it only writes where the computed alias list
   // differs from what is stored, so a second run does nothing.
   if (action === 'backfill-aliases') {
+    // Walks every space's tombstones — an every-space operation, owner only.
+    if (!isOwnerScope(scope)) throw error(403, 'backfill-aliases is owner-only');
     const { backfillAliasesFromTombstones } = await import('$lib/jkai/intel/resolve/merge');
     return json({ ok: true, result: await backfillAliasesFromTombstones() });
   }
@@ -212,7 +227,7 @@ export const POST: RequestHandler = async ({ request }) => {
   if (action === 'unmerge') {
     const entityId = String(body.entityId ?? '');
     if (!entityId) throw error(400, 'entityId is required');
-    await unmergeEntity(entityId);
+    await unmergeEntity(entityId, scope).catch((err) => rethrowScoped(err, 400, 'unmerge failed'));
     return json({ ok: true });
   }
 
@@ -225,11 +240,17 @@ export const POST: RequestHandler = async ({ request }) => {
       ? Math.min(1, Math.max(AUTO_MERGE_THRESHOLD, raw))
       : AUTO_MERGE_THRESHOLD;
     const dryRun = Boolean(body.dryRun);
-    return json({ ok: true, result: await autoMergeDuplicates(threshold, { dryRun }) });
+    return json({ ok: true, result: await autoMergeDuplicates(threshold, { dryRun, space }) });
   }
 
   // Proposed-type governance. Extraction now HOLDS a model-coined type rather
   // than admitting it, so these are how a proposal becomes real or goes away.
+  // The type vocabulary is shared by every space (spec §2): admitting,
+  // rejecting (which retypes entities in every space) or merging a type changes
+  // everyone's graph, so only the owner's scope may govern it.
+  if (['admit-type', 'reject-type', 'merge-types'].includes(action) && !isOwnerScope(scope)) {
+    throw error(403, 'type governance is owner-only');
+  }
   if (action === 'admit-type' || action === 'reject-type') {
     const typeId = String(body.typeId ?? '');
     if (!typeId) throw error(400, 'typeId is required');

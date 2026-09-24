@@ -24,6 +24,8 @@ import { entityRelevance } from '$lib/jkai/intel/staleness';
 import { UNASSESSED_SCORE } from '$lib/jkai/intel/trust';
 import { acronymsOf } from '$lib/jkai/intel/resolve/match';
 import { observedAtSql, sourceHref } from '$lib/jkai/intel/provenance';
+import { spaceIn, type IntelScope } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
 /** Cap on names shipped to the client for mention matching. */
 const MAX_MENTIONS = 1200;
@@ -43,8 +45,14 @@ function sortByRecency<T extends { observedAt?: Date | string | null; createdAt:
   return [...rows].sort((a, b) => at(b) - at(a));
 }
 
-export const GET: RequestHandler = async ({ url }) => {
-  if (url.searchParams.get('mentions')) return mentionsIndex();
+// Every query here carries the request's scope. The card is the one surface
+// that reaches into the graph from ANY page (the chat linkifier and the hover
+// card), so an entity outside the scope is a 404, and every list it renders —
+// neighbours, notes, the histogram, the timeline — shows only rows in scope.
+export const GET: RequestHandler = async (event) => {
+  const { url } = event;
+  const scope = await resolveRequestScope(event);
+  if (url.searchParams.get('mentions')) return mentionsIndex(scope);
 
   const id = url.searchParams.get('id');
   if (!id) throw error(400, 'id is required');
@@ -69,12 +77,12 @@ export const GET: RequestHandler = async ({ url }) => {
     })
     .from(intelEntities)
     .innerJoin(intelEntityTypes, eq(intelEntities.typeId, intelEntityTypes.id))
-    .where(eq(intelEntities.id, id))
+    .where(and(eq(intelEntities.id, id), spaceIn(intelEntities.spaceId, scope)))
     .limit(1);
 
   if (!row) throw error(404, 'entity not found');
 
-  const analysis = await getGraphAnalysis();
+  const analysis = await getGraphAnalysis(false, { scope });
   const { index, centrality, community } = analysis;
 
   const neighbourIds = [...(index.neighbours.get(id) ?? [])];
@@ -118,7 +126,7 @@ export const GET: RequestHandler = async ({ url }) => {
     })
     .from(intelNoteEntities)
     .innerJoin(intelNotes, eq(intelNoteEntities.noteId, intelNotes.id))
-    .where(eq(intelNoteEntities.entityId, id))
+    .where(and(eq(intelNoteEntities.entityId, id), spaceIn(intelNotes.spaceId, scope)))
     // By the OBSERVATION clock, falling back to ingest where nothing carries
     // one. Ordering by `created_at` — as this did — sorts by the night the sweep
     // ran, so the ten most recent pieces of evidence for any email-heavy entity
@@ -139,6 +147,7 @@ export const GET: RequestHandler = async ({ url }) => {
     FROM intel_note_entities ne
     JOIN intel_notes n ON n.id = ne.note_id
     WHERE ne.entity_id = ${id}
+      AND ${spaceIn(sql`n.space_id`, scope)}
     GROUP BY 1 ORDER BY 1
   `);
 
@@ -162,7 +171,7 @@ export const GET: RequestHandler = async ({ url }) => {
               metadata: intelNotes.metadata,
             })
             .from(intelNotes)
-            .where(eq(intelNotes.id, firstSeenId))
+            .where(and(eq(intelNotes.id, firstSeenId), spaceIn(intelNotes.spaceId, scope)))
             .limit(1)
         )[0] ?? null
       : null;
@@ -177,7 +186,7 @@ export const GET: RequestHandler = async ({ url }) => {
       description: intelTimelineEvents.description,
     })
     .from(intelTimelineEvents)
-    .where(eq(intelTimelineEvents.entityId, id))
+    .where(and(eq(intelTimelineEvents.entityId, id), spaceIn(intelTimelineEvents.spaceId, scope)))
     .orderBy(desc(intelTimelineEvents.date))
     .limit(8);
 
@@ -187,7 +196,8 @@ export const GET: RequestHandler = async ({ url }) => {
   const [{ total: noteTotal } = { total: 0 }] = await db
     .select({ total: sql<number>`count(*)::int` })
     .from(intelNoteEntities)
-    .where(eq(intelNoteEntities.entityId, id));
+    .innerJoin(intelNotes, eq(intelNoteEntities.noteId, intelNotes.id))
+    .where(and(eq(intelNoteEntities.entityId, id), spaceIn(intelNotes.spaceId, scope)));
 
   const maxPagerank = Math.max(1e-9, ...[...centrality.pagerank.values()]);
 
@@ -284,7 +294,7 @@ export const GET: RequestHandler = async ({ url }) => {
  * orphan entity is usually an extraction artefact, and linkifying it in chat
  * would offer a card with nothing in it.
  */
-async function mentionsIndex() {
+async function mentionsIndex(scope: IntelScope) {
   const rows = await db
     .select({
       id: intelEntities.id,
@@ -292,12 +302,19 @@ async function mentionsIndex() {
       typeName: intelEntityTypes.name,
       degree: sql<number>`(
         SELECT count(*) FROM intel_relationships r
-        WHERE r.source_entity_id = intel_entities.id OR r.target_entity_id = intel_entities.id
+        WHERE (r.source_entity_id = intel_entities.id OR r.target_entity_id = intel_entities.id)
+          AND ${spaceIn(sql`r.space_id`, scope)}
       )::int`.as('degree'),
     })
     .from(intelEntities)
     .innerJoin(intelEntityTypes, eq(intelEntities.typeId, intelEntityTypes.id))
-    .where(and(isNull(intelEntities.mergedIntoId), eq(intelEntities.confirmed, true)))
+    .where(
+      and(
+        isNull(intelEntities.mergedIntoId),
+        eq(intelEntities.confirmed, true),
+        spaceIn(intelEntities.spaceId, scope),
+      ),
+    )
     .orderBy(desc(sql`degree`))
     .limit(MAX_MENTIONS);
 

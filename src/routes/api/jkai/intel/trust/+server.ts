@@ -10,7 +10,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { intelEntities, intelNotes, intelNoteEntities } from '$lib/db/schema';
 import {
   ageInDays,
@@ -23,6 +23,8 @@ import {
   SOURCE_GRADES,
   type TrustPayload,
 } from '$lib/jkai/intel/trust';
+import { spaceIn, type IntelScope } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
 /** Evidence is for reading, not for paging — enough to judge a claim by. */
 const MAX_EVIDENCE = 25;
@@ -30,17 +32,18 @@ const MAX_EVIDENCE = 25;
 /** Below this the denormalised column is not worth a write. */
 const SCORE_EPSILON = 0.005;
 
-export const GET: RequestHandler = async ({ url }) => {
-  const id = url.searchParams.get('id');
+export const GET: RequestHandler = async (event) => {
+  const id = event.url.searchParams.get('id');
   if (!id) throw error(400, 'id is required');
 
-  const payload = await buildTrust(id);
+  const payload = await buildTrust(id, await resolveRequestScope(event));
   if (!payload) throw error(404, 'entity not found');
   return json(payload);
 };
 
-export const POST: RequestHandler = async ({ request }) => {
-  const body = (await request.json().catch(() => null)) as {
+export const POST: RequestHandler = async (event) => {
+  const scope = await resolveRequestScope(event);
+  const body = (await event.request.json().catch(() => null)) as {
     entityId?: string;
     sourceGrade?: string | null;
     credibility?: number | string | null;
@@ -80,16 +83,20 @@ export const POST: RequestHandler = async ({ request }) => {
   const [updated] = await db
     .update(intelEntities)
     .set(updates)
-    .where(eq(intelEntities.id, entityId))
+    .where(and(eq(intelEntities.id, entityId), spaceIn(intelEntities.spaceId, scope)))
     .returning({ id: intelEntities.id });
   if (!updated) throw error(404, 'entity not found');
 
-  const payload = await buildTrust(entityId);
+  const payload = await buildTrust(entityId, scope);
   if (!payload) throw error(404, 'entity not found');
   return json(payload);
 };
 
-async function buildTrust(id: string): Promise<TrustPayload | null> {
+/**
+ * An entity outside `scope` is null (the route's 404). Its evidence is only the
+ * notes in scope too — the score is computed from what this reader can check.
+ */
+async function buildTrust(id: string, scope: IntelScope): Promise<TrustPayload | null> {
   const [row] = await db
     .select({
       id: intelEntities.id,
@@ -103,7 +110,7 @@ async function buildTrust(id: string): Promise<TrustPayload | null> {
       updatedAt: intelEntities.updatedAt,
     })
     .from(intelEntities)
-    .where(eq(intelEntities.id, id))
+    .where(and(eq(intelEntities.id, id), spaceIn(intelEntities.spaceId, scope)))
     .limit(1);
 
   if (!row) return null;
@@ -120,7 +127,7 @@ async function buildTrust(id: string): Promise<TrustPayload | null> {
     })
     .from(intelNoteEntities)
     .innerJoin(intelNotes, eq(intelNoteEntities.noteId, intelNotes.id))
-    .where(eq(intelNoteEntities.entityId, id))
+    .where(and(eq(intelNoteEntities.entityId, id), spaceIn(intelNotes.spaceId, scope)))
     .orderBy(desc(intelNotes.createdAt))
     .limit(MAX_EVIDENCE);
 
@@ -130,7 +137,8 @@ async function buildTrust(id: string): Promise<TrustPayload | null> {
   const [{ total: distinctNotes } = { total: 0 }] = await db
     .select({ total: sql<number>`count(DISTINCT ${intelNoteEntities.noteId})::int` })
     .from(intelNoteEntities)
-    .where(eq(intelNoteEntities.entityId, id));
+    .innerJoin(intelNotes, eq(intelNoteEntities.noteId, intelNotes.id))
+    .where(and(eq(intelNoteEntities.entityId, id), spaceIn(intelNotes.spaceId, scope)));
 
   const corroboration = Math.max(distinctNotes, row.corroboration ?? 0);
 
@@ -159,7 +167,7 @@ async function buildTrust(id: string): Promise<TrustPayload | null> {
     await db
       .update(intelEntities)
       .set({ confidenceScore: trust.score, corroboration })
-      .where(eq(intelEntities.id, id))
+      .where(and(eq(intelEntities.id, id), spaceIn(intelEntities.spaceId, scope)))
       .catch(() => {
         // Reporting trust must not fail because the cache write did.
       });

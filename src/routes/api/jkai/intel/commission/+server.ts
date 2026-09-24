@@ -15,6 +15,9 @@ import { db } from '$lib/db';
 import { researchSessions, intelCommissions } from '$lib/db/schema';
 import { desc, inArray } from 'drizzle-orm';
 import { getGraphAnalysis } from '$lib/jkai/intel/analytics/load';
+import { spaceIn, writeSpace, type IntelScope } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
+import { rethrowScoped } from '$lib/jkai/intel/not-found';
 
 export type CommissionKind =
   | 'research'
@@ -37,10 +40,14 @@ export interface CommissionResult {
   started: boolean;
 }
 
-/** Context lines about the entities involved, so commissioned work starts informed. */
-async function entityContext(entityIds: string[]): Promise<string> {
+/**
+ * Context lines about the entities involved, so commissioned work starts informed.
+ * From the reader's scoped graph: an id outside it simply contributes no line,
+ * so a deep dive or prompt never carries another space's summaries.
+ */
+async function entityContext(entityIds: string[], scope: IntelScope): Promise<string> {
   if (!entityIds.length) return '';
-  const { index } = await getGraphAnalysis();
+  const { index } = await getGraphAnalysis(false, { scope });
   const lines = entityIds
     .map((id) => index.byId.get(id))
     .filter((n): n is NonNullable<typeof n> => Boolean(n))
@@ -59,7 +66,9 @@ async function entityContext(entityIds: string[]): Promise<string> {
   return `What my intel graph already knows:\n${lines.join('\n')}`;
 }
 
-export const POST: RequestHandler = async ({ request, fetch }) => {
+export const POST: RequestHandler = async (event) => {
+  const { request, fetch } = event;
+  const scope = await resolveRequestScope(event);
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   const kind = String(body.kind ?? '') as CommissionKind;
   const payload = String(body.payload ?? '').trim();
@@ -68,7 +77,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
   if (!kind) throw error(400, 'kind is required');
   if (!payload && kind !== 'review') throw error(400, 'payload is required');
 
-  const context = await entityContext(entityIds);
+  const context = await entityContext(entityIds, scope);
   const insightId = typeof body.insightId === 'string' ? body.insightId : null;
 
   /**
@@ -88,6 +97,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
         externalId: result.id ?? null,
         externalUrl: result.url,
         status: result.started ? 'running' : 'queued',
+        spaceId: writeSpace(scope),
       });
     } catch (err) {
       // Bookkeeping must never cost the user the work they asked for.
@@ -189,11 +199,12 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
       if (sourceEntityId === targetEntityId) throw error(400, 'cannot link an entity to itself');
 
       const { confirmRelationship } = await import('$lib/jkai/intel/confirm-link');
-      const outcome = await confirmRelationship({
-        sourceEntityId,
-        targetEntityId,
-        label: payload || null,
-      });
+      // Throws for an entity outside the scope (or across two spaces): the
+      // former is a 404, the latter a bad request.
+      const outcome = await confirmRelationship(
+        { sourceEntityId, targetEntityId, label: payload || null },
+        scope,
+      ).catch((err) => rethrowScoped(err, 400, 'confirm failed'));
 
       return json(
         await record({
@@ -218,11 +229,10 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
       const [sourceEntityId, targetEntityId] = entityIds;
 
       const { rejectRelationship } = await import('$lib/jkai/intel/confirm-link');
-      const outcome = await rejectRelationship({
-        sourceEntityId,
-        targetEntityId,
-        reason: payload || 'Rejected from the intel dashboard',
-      });
+      const outcome = await rejectRelationship(
+        { sourceEntityId, targetEntityId, reason: payload || 'Rejected from the intel dashboard' },
+        scope,
+      ).catch((err) => rethrowScoped(err, 400, 'reject failed'));
 
       return json(
         await record({
@@ -266,11 +276,14 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
  * view. Research sessions are joined so a completed dive shows as complete
  * without a separate poller.
  */
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async (event) => {
+  const { url } = event;
+  const scope = await resolveRequestScope(event);
   const limit = Math.min(Math.max(Number(url.searchParams.get('limit') ?? 25), 1), 100);
   const rows = await db
     .select()
     .from(intelCommissions)
+    .where(spaceIn(intelCommissions.spaceId, scope))
     .orderBy(desc(intelCommissions.createdAt))
     .limit(limit);
 

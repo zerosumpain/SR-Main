@@ -22,6 +22,8 @@ import {
   intelTimelineEvents,
 } from '$lib/db/schema';
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { spaceIn, type IntelScope } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
 const DOSSIER_STATUSES = ['open', 'parked', 'closed'] as const;
 const ITEM_KINDS = ['entity', 'note', 'insight', 'commission', 'timeline', 'text'] as const;
@@ -55,8 +57,12 @@ interface HydratedItem {
  * A dangling pin (the entity was merged away, the note deleted) keeps its row
  * and comes back with `label: null` rather than vanishing — an item silently
  * disappearing from a case file is worse than one marked missing.
+ *
+ * Every lookup is scoped: a pin's `refId` is whatever a request sent, so one
+ * naming a row outside the reader's scope hydrates exactly like a deleted one
+ * (marked missing) and never shows that row's content.
  */
-async function hydrateItems(dossierId: string): Promise<HydratedItem[]> {
+async function hydrateItems(dossierId: string, scope: IntelScope): Promise<HydratedItem[]> {
   const rows = await db
     .select()
     .from(intelDossierItems)
@@ -86,13 +92,14 @@ async function hydrateItems(dossierId: string): Promise<HydratedItem[]> {
             typeColor: intelEntityTypes.color,
             connectionCount: sql<number>`(
               select count(*) from intel_relationships
-              where intel_relationships.source_entity_id = intel_entities.id
-                 or intel_relationships.target_entity_id = intel_entities.id
+              where (intel_relationships.source_entity_id = intel_entities.id
+                 or intel_relationships.target_entity_id = intel_entities.id)
+                and ${spaceIn(sql`intel_relationships.space_id`, scope)}
             )::int`.as('connection_count'),
           })
           .from(intelEntities)
           .innerJoin(intelEntityTypes, eq(intelEntities.typeId, intelEntityTypes.id))
-          .where(inArray(intelEntities.id, entityIds))
+          .where(and(inArray(intelEntities.id, entityIds), spaceIn(intelEntities.spaceId, scope)))
       : [],
     noteIds.length
       ? db
@@ -106,7 +113,7 @@ async function hydrateItems(dossierId: string): Promise<HydratedItem[]> {
             ),
           })
           .from(intelNotes)
-          .where(inArray(intelNotes.id, noteIds))
+          .where(and(inArray(intelNotes.id, noteIds), spaceIn(intelNotes.spaceId, scope)))
       : [],
     insightIds.length
       ? db
@@ -119,7 +126,7 @@ async function hydrateItems(dossierId: string): Promise<HydratedItem[]> {
             status: intelInsights.status,
           })
           .from(intelInsights)
-          .where(inArray(intelInsights.id, insightIds))
+          .where(and(inArray(intelInsights.id, insightIds), spaceIn(intelInsights.spaceId, scope)))
       : [],
     timelineIds.length
       ? db
@@ -130,7 +137,7 @@ async function hydrateItems(dossierId: string): Promise<HydratedItem[]> {
             date: intelTimelineEvents.date,
           })
           .from(intelTimelineEvents)
-          .where(inArray(intelTimelineEvents.id, timelineIds))
+          .where(and(inArray(intelTimelineEvents.id, timelineIds), spaceIn(intelTimelineEvents.spaceId, scope)))
       : [],
   ]);
 
@@ -220,8 +227,13 @@ async function hydrateItems(dossierId: string): Promise<HydratedItem[]> {
   });
 }
 
-async function loadDossier(id: string) {
-  const [row] = await db.select().from(intelDossiers).where(eq(intelDossiers.id, id)).limit(1);
+/** A dossier outside the reader's scope is the same 404 as a missing one. */
+async function loadDossier(id: string, scope: IntelScope) {
+  const [row] = await db
+    .select()
+    .from(intelDossiers)
+    .where(and(eq(intelDossiers.id, id), spaceIn(intelDossiers.spaceId, scope)))
+    .limit(1);
   if (!row) throw error(404, 'dossier not found');
   return row;
 }
@@ -239,14 +251,15 @@ function readQuestions(value: unknown): string[] {
     .slice(0, MAX_QUESTIONS);
 }
 
-export const GET: RequestHandler = async ({ params }) => {
-  const dossier = await loadDossier(params.id);
-  return json({ dossier, items: await hydrateItems(dossier.id) });
+export const GET: RequestHandler = async (event) => {
+  const scope = await resolveRequestScope(event);
+  const dossier = await loadDossier(event.params.id, scope);
+  return json({ dossier, items: await hydrateItems(dossier.id, scope) });
 };
 
-export const PATCH: RequestHandler = async ({ params, request }) => {
-  const dossier = await loadDossier(params.id);
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+export const PATCH: RequestHandler = async (event) => {
+  const dossier = await loadDossier(event.params.id, await resolveRequestScope(event));
+  const body = (await event.request.json().catch(() => ({}))) as Record<string, unknown>;
 
   const patch: Record<string, unknown> = { updatedAt: new Date() };
 
@@ -281,9 +294,10 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
   return json({ dossier: row });
 };
 
-export const POST: RequestHandler = async ({ params, request }) => {
-  const dossier = await loadDossier(params.id);
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+export const POST: RequestHandler = async (event) => {
+  const scope = await resolveRequestScope(event);
+  const dossier = await loadDossier(event.params.id, scope);
+  const body = (await event.request.json().catch(() => ({}))) as Record<string, unknown>;
   const action = String(body.action ?? '').trim();
 
   if (action === 'add') {
@@ -314,7 +328,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
           ),
         )
         .limit(1);
-      if (existing) return json({ ok: true, duplicate: true, items: await hydrateItems(dossier.id) });
+      if (existing) return json({ ok: true, duplicate: true, items: await hydrateItems(dossier.id, scope) });
     }
 
     const [{ next } = { next: 0 }] = await db
@@ -330,7 +344,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
       position: Number(next ?? 0),
     });
     await touch(dossier.id);
-    return json({ ok: true, items: await hydrateItems(dossier.id) }, { status: 201 });
+    return json({ ok: true, items: await hydrateItems(dossier.id, scope) }, { status: 201 });
   }
 
   if (action === 'remove') {
@@ -340,7 +354,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
       .delete(intelDossierItems)
       .where(and(eq(intelDossierItems.id, itemId), eq(intelDossierItems.dossierId, dossier.id)));
     await touch(dossier.id);
-    return json({ ok: true, items: await hydrateItems(dossier.id) });
+    return json({ ok: true, items: await hydrateItems(dossier.id, scope) });
   }
 
   if (action === 'update') {
@@ -365,7 +379,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
     if (!updated.length) throw error(404, 'no editable item with that id');
 
     await touch(dossier.id);
-    return json({ ok: true, items: await hydrateItems(dossier.id) });
+    return json({ ok: true, items: await hydrateItems(dossier.id, scope) });
   }
 
   if (action === 'reorder') {
@@ -383,14 +397,14 @@ export const POST: RequestHandler = async ({ params, request }) => {
       ),
     );
     await touch(dossier.id);
-    return json({ ok: true, items: await hydrateItems(dossier.id) });
+    return json({ ok: true, items: await hydrateItems(dossier.id, scope) });
   }
 
   throw error(400, 'action must be one of add, remove, update, reorder');
 };
 
-export const DELETE: RequestHandler = async ({ params }) => {
-  const dossier = await loadDossier(params.id);
+export const DELETE: RequestHandler = async (event) => {
+  const dossier = await loadDossier(event.params.id, await resolveRequestScope(event));
   await db.delete(intelDossiers).where(eq(intelDossiers.id, dossier.id));
   return json({ ok: true });
 };

@@ -4,19 +4,27 @@ import { getNoteDetail } from '$lib/jkai/intel/queries';
 import { processNote, deleteNoteCascade } from '$lib/jkai/intel/ingest';
 import { db } from '$lib/db';
 import { intelNotes } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
+import { spaceIn } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
-export const GET: RequestHandler = async ({ params }) => {
-  const detail = await getNoteDetail(params.id);
+export const GET: RequestHandler = async (event) => {
+  const scope = await resolveRequestScope(event);
+  const detail = await getNoteDetail(event.params.id, scope);
   if (!detail) return json({ error: 'Not found' }, { status: 404 });
   return json(detail);
 };
 
-export const POST: RequestHandler = async ({ params }) => {
+export const POST: RequestHandler = async (event) => {
+  const { params } = event;
+  const scope = await resolveRequestScope(event);
+  // processNote reads and rewrites the note by id alone (it runs unattended from
+  // the ingest queue too), so THIS lookup is the scope check: a note outside the
+  // reader's scope is a 404 and is never re-processed.
   const [note] = await db
     .select({ id: intelNotes.id, status: intelNotes.status })
     .from(intelNotes)
-    .where(eq(intelNotes.id, params.id))
+    .where(and(eq(intelNotes.id, params.id), spaceIn(intelNotes.spaceId, scope)))
     .limit(1);
 
   if (!note) return json({ error: 'Not found' }, { status: 404 });
@@ -28,9 +36,12 @@ export const POST: RequestHandler = async ({ params }) => {
   return json({ id: params.id, status: 'processing' });
 };
 
-export const DELETE: RequestHandler = async ({ params }) => {
+export const DELETE: RequestHandler = async (event) => {
+  const { params } = event;
+  const scope = await resolveRequestScope(event);
   try {
-    const result = await deleteNoteCascade(params.id);
+    // Null for a note that does not exist OR sits outside the scope — both 404.
+    const result = await deleteNoteCascade(params.id, scope);
     if (!result) return json({ error: 'Not found' }, { status: 404 });
     return json(result);
   } catch (err) {

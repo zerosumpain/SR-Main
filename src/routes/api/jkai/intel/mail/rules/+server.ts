@@ -32,10 +32,22 @@ import { backtestRule, judgeBacktest, type CorpusNote } from '$lib/jkai/intel/ma
 import { proposeMailRules } from '$lib/jkai/intel/mail-rules/propose';
 import { applyMailRules } from '$lib/jkai/intel/mail-rules/apply';
 import { ownerDecisions } from '$lib/jkai/intel/mail-decisions';
+import { isOwnerScope, spaceIn, type IntelScope } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
+
+// Spaces. The rule set is ONE global list, learned from the owner's decisions
+// and applied to the owner's queue (see applyMailRules), so every verb here is
+// owner-only: a member must not read, propose, activate or run the owner's
+// admission rules. The scope still goes into every intel read below, so the
+// corpus a rule is backtested against is exactly the queue it will run over.
+async function ownerScope(event: Parameters<RequestHandler>[0]): Promise<IntelScope | null> {
+  const scope = await resolveRequestScope(event);
+  return isOwnerScope(scope) ? scope : null;
+}
 
 /** Every email note, for a replay. Bounded — a backtest over a corpus this size
  *  is already a second of work, and a larger one is a different problem. */
-async function loadCorpus(): Promise<CorpusNote[]> {
+async function loadCorpus(scope: IntelScope): Promise<CorpusNote[]> {
   const rows = await db
     .select({
       id: intelNotes.id,
@@ -47,12 +59,13 @@ async function loadCorpus(): Promise<CorpusNote[]> {
       graphState: intelNotes.graphState,
     })
     .from(intelNotes)
-    .where(eq(intelNotes.source, 'email'))
+    .where(and(eq(intelNotes.source, 'email'), spaceIn(intelNotes.spaceId, scope)))
     .limit(10_000);
   return rows as CorpusNote[];
 }
 
-export const GET: RequestHandler = async () => {
+export const GET: RequestHandler = async (event) => {
+  if (!(await ownerScope(event))) return json({ error: 'Forbidden' }, { status: 403 });
   const rules = await listMailRules();
   return json({
     rules: rules.map((r) => ({ ...r, explanation: describeCondition(r.condition) })),
@@ -60,10 +73,12 @@ export const GET: RequestHandler = async () => {
   });
 };
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async (event) => {
+  const scope = await ownerScope(event);
+  if (!scope) return json({ error: 'Forbidden' }, { status: 403 });
   let body: Record<string, unknown>;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    body = (await event.request.json()) as Record<string, unknown>;
   } catch {
     return json({ error: 'Body must be JSON.' }, { status: 400 });
   }
@@ -75,7 +90,7 @@ export const POST: RequestHandler = async ({ request }) => {
     if (created) {
       // Backtest them immediately — a proposal the owner cannot see the numbers
       // for is a proposal they cannot responsibly approve.
-      const [corpus, decisions] = await Promise.all([loadCorpus(), ownerDecisions()]);
+      const [corpus, decisions] = await Promise.all([loadCorpus(scope), ownerDecisions()]);
       const now = Date.now();
       for (const seed of [SEED_RULE, RELEVANCE_SEED_RULE]) {
         await saveBacktest(seed.key, backtestRule(seed, corpus, decisions, { now }));
@@ -85,10 +100,10 @@ export const POST: RequestHandler = async ({ request }) => {
   }
 
   if (action === 'propose') {
-    const batch = await proposeMailRules();
+    const batch = await proposeMailRules(undefined, scope);
     if (batch.error && !batch.proposals.length) return json({ error: batch.error }, { status: 422 });
 
-    const [corpus, decisions] = await Promise.all([loadCorpus(), ownerDecisions()]);
+    const [corpus, decisions] = await Promise.all([loadCorpus(scope), ownerDecisions()]);
     const now = Date.now();
     const accepted: MailRule[] = [];
     const refused: Array<{ key: string; reasons: string[] }> = [];
@@ -117,7 +132,7 @@ export const POST: RequestHandler = async ({ request }) => {
   if (action === 'backtest') {
     const rule = (await listMailRules()).find((r) => r.key === key);
     if (!rule) return json({ error: `No rule called "${key}".` }, { status: 404 });
-    const [corpus, decisions] = await Promise.all([loadCorpus(), ownerDecisions()]);
+    const [corpus, decisions] = await Promise.all([loadCorpus(scope), ownerDecisions()]);
     const backtest = backtestRule(rule, corpus, decisions, { now: Date.now() });
     await saveBacktest(key, backtest);
     return json({ backtest, judgement: judgeBacktest(rule, backtest, decisions.length) });
@@ -136,7 +151,7 @@ export const POST: RequestHandler = async ({ request }) => {
   }
 
   if (action === 'apply') {
-    return json(await applyMailRules());
+    return json(await applyMailRules(undefined, scope));
   }
 
   return json({ error: `Unknown action "${action}".` }, { status: 400 });

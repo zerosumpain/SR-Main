@@ -21,22 +21,32 @@ import type { RequestHandler } from './$types';
 import { splitEntity, undoSplit, listSplits } from '$lib/jkai/intel/resolve/split';
 import { runConflationSweep } from '$lib/jkai/intel/resolve/conflation.server';
 import { isMaintenanceAuthorized } from '$lib/server/maintenance-auth';
+import { writeSpace } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
+import { rethrowScoped } from '$lib/jkai/intel/not-found';
 
 // Both verbs re-check. A GET that lists what has been repaired is still a
 // disclosure about the graph, and "the read-only one is fine" is how the
 // loopback half of this condition — theatre on a VPS behind cloudflared, where
 // every request appears to come from 127.0.0.1 — becomes the only control.
-export const GET: RequestHandler = async ({ request, locals }) => {
+//
+// `isMaintenanceAuthorized` admits ANY signed-in session, not only the owner's,
+// so both verbs also resolve the request's scope: a split, an undo and the list
+// see only the reader's entities, and the detector sweeps the reader's own space.
+export const GET: RequestHandler = async (event) => {
+  const { request, locals } = event;
   if (!(await isMaintenanceAuthorized(request, locals))) {
     return json({ error: 'not authorised' }, { status: 403 });
   }
-  return json({ splits: await listSplits() });
+  return json({ splits: await listSplits(await resolveRequestScope(event)) });
 };
 
-export const POST: RequestHandler = async ({ request, locals }) => {
+export const POST: RequestHandler = async (event) => {
+  const { request, locals } = event;
   if (!(await isMaintenanceAuthorized(request, locals))) {
     return json({ error: 'not authorised' }, { status: 403 });
   }
+  const scope = await resolveRequestScope(event);
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
 
@@ -58,7 +68,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     // be repeated while a prompt is being tuned. `apply` stays opt-in either way.
     return json(
       await runConflationSweep(
-        dryRun ? { apply: false, record: false, limit } : { limit },
+        dryRun
+          ? { apply: false, record: false, limit, space: writeSpace(scope) }
+          : { limit, space: writeSpace(scope) },
       ),
     );
   }
@@ -66,7 +78,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   if (body.action === 'undo') {
     const key = String(body.key ?? '').trim();
     if (!key) throw error(400, 'key is required');
-    return json(await undoSplit(key));
+    return json(await undoSplit(key, scope).catch((err) => rethrowScoped(err, 400, 'undo failed')));
   }
 
   const fromId = String(body.fromId ?? '').trim();
@@ -91,10 +103,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   if (!target) throw error(400, 'to must be { entityId } or { name, typeId }');
 
   try {
-    return json(await splitEntity({ fromId, to: target, relationshipIds, reason }));
+    return json(await splitEntity({ fromId, to: target, relationshipIds, reason }, scope));
   } catch (err) {
     // A plan written against a stale snapshot names entities that may have been
-    // merged away since. That is a bad request, not a server fault.
-    throw error(400, err instanceof Error ? err.message : 'split failed');
+    // merged away since. That is a bad request, not a server fault — unless the
+    // entity is not found (or outside the scope), which is a 404.
+    rethrowScoped(err, 400, 'split failed');
   }
 };
