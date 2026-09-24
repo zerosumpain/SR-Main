@@ -147,6 +147,7 @@
       meta: activitySourceCount > 0 ? `${activitySourceCount} CONNECTED` : 'CONNECT ACCOUNTS',
     },
     { label: 'Activity', href: '/jkai/activity', meta: 'EVIDENCE AUDIT' },
+    { label: 'Voice', href: '/jkai/voice', meta: 'ALEXA LOG' },
   ]);
   const system = $derived<MenuRow[]>([
     { label: 'Agent team', href: '/jkai/agents', meta: 'AGENTS · PROMPTS' },

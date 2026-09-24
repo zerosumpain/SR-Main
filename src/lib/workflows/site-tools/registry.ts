@@ -27,6 +27,7 @@ import './tools/followup';
 import './tools/heartbeat';
 import './tools/scheduled';
 import './tools/home-assistant';
+import './tools/alexa';
 import './tools/visualise';
 import './tools/ephemeral-tools';
 import './tools/media-write-document';
