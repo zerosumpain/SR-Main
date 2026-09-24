@@ -62,6 +62,7 @@ import {
   intelRelationships,
   intelTimelineEvents,
 } from '$lib/db/schema';
+import { OWNER_INTEL_SCOPE, spaceIn, type IntelScope } from './scope';
 
 export interface MailPurgeResult {
   /** True when nothing was written — the counts are a forecast. */
@@ -111,6 +112,14 @@ export interface MailPurgeOptions {
    * out of the graph" action; omitted for the full reset.
    */
   noteIds?: string[];
+  /**
+   * Whose mail. Only email notes in this scope are touched — or counted — and
+   * everything below is derived from those notes, so the purge cannot reach
+   * past them: their edges, events, alerts and links are theirs, and the
+   * entities at risk are the ones only they assert. The owner's by default,
+   * so the full reset never empties a member's graph.
+   */
+  scope?: IntelScope;
 }
 
 /**
@@ -126,12 +135,13 @@ export async function purgeMailFromGraph(opts: MailPurgeOptions = {}): Promise<M
   return await db.transaction(async (tx) => {
     const result: MailPurgeResult = { dryRun, ...EMPTY };
 
-    // ── A. Scope ────────────────────────────────────────────────────────────
-    const scope = opts.noteIds?.length
-      ? and(eq(intelNotes.source, 'email'), inArray(intelNotes.id, opts.noteIds))
-      : eq(intelNotes.source, 'email');
+    // ── A. Which notes ──────────────────────────────────────────────────────
+    const inSpace = spaceIn(intelNotes.spaceId, opts.scope ?? OWNER_INTEL_SCOPE);
+    const selected = opts.noteIds?.length
+      ? and(eq(intelNotes.source, 'email'), inArray(intelNotes.id, opts.noteIds), inSpace)
+      : and(eq(intelNotes.source, 'email'), inSpace);
 
-    const notes = await tx.select({ id: intelNotes.id }).from(intelNotes).where(scope);
+    const notes = await tx.select({ id: intelNotes.id }).from(intelNotes).where(selected);
     const noteIds = notes.map((n) => n.id);
     result.notesRetained = noteIds.length;
     if (noteIds.length === 0) return result;
@@ -240,6 +250,9 @@ export async function purgeMailFromGraph(opts: MailPurgeOptions = {}): Promise<M
     // delete by id rather than a jsonb containment query — there are hundreds of
     // rows, not millions, and a `?|` with an array parameter spliced through the
     // query builder is exactly the shape that silently matches nothing.
+    //
+    // Every space's insights, deliberately: the ids are global and nothing is
+    // returned, and a card naming a deleted entity is dead wherever it lives.
     let staleInsightIds: string[] = [];
     if (doomedIds.length > 0) {
       const doomedSet = new Set(doomedIds);
@@ -268,7 +281,7 @@ export async function purgeMailFromGraph(opts: MailPurgeOptions = {}): Promise<M
     const [heldRow] = await tx
       .select({ n })
       .from(intelNotes)
-      .where(and(scope, sql`${intelNotes.graphState} <> 'pending'`));
+      .where(and(selected, sql`${intelNotes.graphState} <> 'pending'`));
     result.notesHeld = Number(heldRow?.n) || 0;
 
     // Everything above is SELECT only, so returning here writes nothing and the
@@ -322,7 +335,7 @@ export async function purgeMailFromGraph(opts: MailPurgeOptions = {}): Promise<M
     await tx
       .update(intelNotes)
       .set({ graphState: 'pending', status: 'held', updatedAt: new Date() })
-      .where(and(scope, sql`${intelNotes.graphState} <> 'pending'`));
+      .where(and(selected, sql`${intelNotes.graphState} <> 'pending'`));
 
     return result;
   });

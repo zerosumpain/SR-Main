@@ -28,6 +28,7 @@ import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { intelNotes } from '$lib/db/schema';
 import { factsFor, subjectFamily, type MailFacts, type NoteForFacts } from './mail-facts';
+import { OWNER_INTEL_SCOPE, spaceIn, type IntelScope } from './scope';
 
 export interface QueueNote extends NoteForFacts {
   id: string;
@@ -284,8 +285,16 @@ export interface MailQueue {
 const MAX_ROWS = 4000;
 const SUGGESTION_COUNT = 25;
 
-/** Load and shape the whole queue. The only DB read the page needs. */
-export async function loadMailQueue(now = Date.now()): Promise<MailQueue> {
+/**
+ * Load and shape the whole queue. The only DB read the page needs.
+ *
+ * `scope` is whose mail: a thread is held in the space of the mailbox it was
+ * swept from, and a member's held mail must never list — or be counted — on the
+ * owner's queue. The owner scope is the default, because this is an owner
+ * surface today.
+ */
+export async function loadMailQueue(now = Date.now(), scope: IntelScope = OWNER_INTEL_SCOPE): Promise<MailQueue> {
+  const inScope = spaceIn(intelNotes.spaceId, scope);
   const [counts] = await db
     .select({
       pending: sql<number>`count(*) filter (where ${intelNotes.graphState} = 'pending')::int`,
@@ -293,7 +302,7 @@ export async function loadMailQueue(now = Date.now()): Promise<MailQueue> {
       rejected: sql<number>`count(*) filter (where ${intelNotes.graphState} = 'rejected')::int`,
     })
     .from(intelNotes)
-    .where(eq(intelNotes.source, 'email'));
+    .where(and(eq(intelNotes.source, 'email'), inScope));
 
   const notes = await db
     .select({
@@ -306,7 +315,7 @@ export async function loadMailQueue(now = Date.now()): Promise<MailQueue> {
       graphState: intelNotes.graphState,
     })
     .from(intelNotes)
-    .where(and(eq(intelNotes.source, 'email'), eq(intelNotes.graphState, 'pending')))
+    .where(and(eq(intelNotes.source, 'email'), eq(intelNotes.graphState, 'pending'), inScope))
     .orderBy(desc(sql`coalesce(${intelNotes.observedAt}, ${intelNotes.createdAt})`))
     .limit(MAX_ROWS + 1);
 
@@ -337,6 +346,8 @@ export async function loadMailQueue(now = Date.now()): Promise<MailQueue> {
  * Bounded per call so one request cannot walk the whole corpus, and skipped for
  * anything too short to embed usefully — a 124-character structural stub has no
  * topic to find.
+ *
+ * Every space: an embedding is per row (spec §2), and this returns counts only.
  */
 export async function backfillPendingEmbeddings(limit = 400): Promise<{
   scanned: number;
@@ -410,18 +421,28 @@ export async function backfillPendingEmbeddings(limit = 400): Promise<{
  * run when the owner asks rather than for every thread up front. Subject
  * families catch the repetitive mail; this catches the case they cannot, where
  * the same subject matter arrives under a dozen different subject lines.
+ *
+ * Both halves are scoped: the seed thread must be one the caller can see (an
+ * out-of-scope id has no vector, so nothing is similar to it), and the matches
+ * are only threads in the scope.
  */
-export async function similarPending(noteId: string, limit = 40): Promise<string[]> {
+export async function similarPending(
+  noteId: string,
+  limit = 40,
+  scope: IntelScope = OWNER_INTEL_SCOPE,
+): Promise<string[]> {
+  const seed = sql`(SELECT s.embedding FROM intel_notes s WHERE s.id = ${noteId} AND ${spaceIn(sql`s.space_id`, scope)})`;
   const { rows } = await db.execute(sql`
     SELECT n.id
     FROM intel_notes n
     WHERE n.id <> ${noteId}
       AND n.source = 'email'
       AND n.graph_state = 'pending'
+      AND ${spaceIn(sql`n.space_id`, scope)}
       AND n.embedding IS NOT NULL
-      AND (SELECT embedding FROM intel_notes WHERE id = ${noteId}) IS NOT NULL
-      AND (n.embedding <=> (SELECT embedding FROM intel_notes WHERE id = ${noteId})) < 0.35
-    ORDER BY n.embedding <=> (SELECT embedding FROM intel_notes WHERE id = ${noteId})
+      AND ${seed} IS NOT NULL
+      AND (n.embedding <=> ${seed}) < 0.35
+    ORDER BY n.embedding <=> ${seed}
     LIMIT ${limit}
   `);
   return (rows as Array<Record<string, unknown>>).map((r) => String(r.id));
