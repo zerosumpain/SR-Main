@@ -11,16 +11,24 @@ import {
 } from '$lib/db/schema';
 import { desc, eq, sql, isNull, asc, and } from 'drizzle-orm';
 import { linksToItem, observedAtSql, sourceHref } from './provenance';
+import { OWNER_INTEL_SCOPE, spaceIn, type IntelScope } from './scope';
 
-export async function listNotes(opts: { limit?: number; offset?: number; source?: string; format?: string } = {}) {
-  const { limit = 50, offset = 0, source, format } = opts;
+// Every reader here takes the reader's scope (default: the owner's). A lookup
+// by id gets the predicate too: an id from another space returns null, which a
+// route turns into a 404, rather than loading someone else's row.
+
+export async function listNotes(
+  opts: { limit?: number; offset?: number; source?: string; format?: string; scope?: IntelScope } = {},
+) {
+  const { limit = 50, offset = 0, source, format, scope = OWNER_INTEL_SCOPE } = opts;
 
   const conditions = [
+    spaceIn(intelNotes.spaceId, scope),
     ...(source ? [eq(intelNotes.source, source)] : []),
     ...(format ? [eq(intelNotes.format, format)] : []),
   ];
 
-  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const where = and(...conditions);
 
   const notes = await db
     .select({
@@ -45,11 +53,11 @@ export async function listNotes(opts: { limit?: number; offset?: number; source?
   return notes;
 }
 
-export async function getNoteDetail(id: string) {
+export async function getNoteDetail(id: string, scope: IntelScope = OWNER_INTEL_SCOPE) {
   const [note] = await db
     .select()
     .from(intelNotes)
-    .where(eq(intelNotes.id, id))
+    .where(and(eq(intelNotes.id, id), spaceIn(intelNotes.spaceId, scope)))
     .limit(1);
 
   if (!note) return null;
@@ -67,22 +75,25 @@ export async function getNoteDetail(id: string) {
     .from(intelNoteEntities)
     .innerJoin(intelEntities, eq(intelNoteEntities.entityId, intelEntities.id))
     .innerJoin(intelEntityTypes, eq(intelEntities.typeId, intelEntityTypes.id))
-    .where(eq(intelNoteEntities.noteId, id));
+    .where(and(eq(intelNoteEntities.noteId, id), spaceIn(intelEntities.spaceId, scope)));
 
   const timelineEvents = await db
     .select()
     .from(intelTimelineEvents)
-    .where(eq(intelTimelineEvents.noteId, id))
+    .where(and(eq(intelTimelineEvents.noteId, id), spaceIn(intelTimelineEvents.spaceId, scope)))
     .orderBy(asc(intelTimelineEvents.date));
 
   return { note, entities, timelineEvents };
 }
 
-export async function listEntities(opts: { limit?: number; offset?: number; typeId?: string } = {}) {
-  const { limit = 50, offset = 0, typeId } = opts;
+export async function listEntities(
+  opts: { limit?: number; offset?: number; typeId?: string; scope?: IntelScope } = {},
+) {
+  const { limit = 50, offset = 0, typeId, scope = OWNER_INTEL_SCOPE } = opts;
 
   const conditions = [
     isNull(intelEntities.mergedIntoId),
+    spaceIn(intelEntities.spaceId, scope),
     ...(typeId ? [eq(intelEntities.typeId, typeId)] : []),
   ];
 
@@ -104,8 +115,9 @@ export async function listEntities(opts: { limit?: number; offset?: number; type
       )::int`.as('note_count'),
       relationshipCount: sql<number>`(
         select count(*) from intel_relationships
-        where intel_relationships.source_entity_id = intel_entities.id
-           or intel_relationships.target_entity_id = intel_entities.id
+        where (intel_relationships.source_entity_id = intel_entities.id
+           or intel_relationships.target_entity_id = intel_entities.id)
+          and ${spaceIn(sql`intel_relationships.space_id`, scope)}
       )::int`.as('relationship_count'),
     })
     .from(intelEntities)
@@ -124,7 +136,7 @@ function hrefFields(noteId: string, metadata: unknown) {
   return { href, direct: linksToItem(href) };
 }
 
-export async function getEntityDetail(id: string) {
+export async function getEntityDetail(id: string, scope: IntelScope = OWNER_INTEL_SCOPE) {
   const [entity] = await db
     .select({
       id: intelEntities.id,
@@ -143,7 +155,7 @@ export async function getEntityDetail(id: string) {
     })
     .from(intelEntities)
     .innerJoin(intelEntityTypes, eq(intelEntities.typeId, intelEntityTypes.id))
-    .where(eq(intelEntities.id, id))
+    .where(and(eq(intelEntities.id, id), spaceIn(intelEntities.spaceId, scope)))
     .limit(1);
 
   if (!entity) return null;
@@ -160,7 +172,10 @@ export async function getEntityDetail(id: string) {
     })
     .from(intelRelationships)
     .where(
-      sql`${intelRelationships.sourceEntityId} = ${id} OR ${intelRelationships.targetEntityId} = ${id}`,
+      and(
+        sql`(${intelRelationships.sourceEntityId} = ${id} OR ${intelRelationships.targetEntityId} = ${id})`,
+        spaceIn(intelRelationships.spaceId, scope),
+      ),
     );
 
   const relatedIds = new Set<string>();
@@ -175,7 +190,12 @@ export async function getEntityDetail(id: string) {
         .select({ id: intelEntities.id, name: intelEntities.name, typeIcon: intelEntityTypes.icon })
         .from(intelEntities)
         .innerJoin(intelEntityTypes, eq(intelEntities.typeId, intelEntityTypes.id))
-        .where(sql`${intelEntities.id} IN (${sql.join([...relatedIds].map(i => sql`${i}`), sql`, `)})`)
+        .where(
+          and(
+            sql`${intelEntities.id} IN (${sql.join([...relatedIds].map(i => sql`${i}`), sql`, `)})`,
+            spaceIn(intelEntities.spaceId, scope),
+          ),
+        )
     : [];
 
   const entityNameMap = new Map(relatedEntities.map((e) => [e.id, { name: e.name, icon: e.typeIcon }]));
@@ -195,7 +215,7 @@ export async function getEntityDetail(id: string) {
     })
     .from(intelNoteEntities)
     .innerJoin(intelNotes, eq(intelNoteEntities.noteId, intelNotes.id))
-    .where(eq(intelNoteEntities.entityId, id))
+    .where(and(eq(intelNoteEntities.entityId, id), spaceIn(intelNotes.spaceId, scope)))
     .orderBy(sql`COALESCE(${observedAtSql(intelNotes.observedAt, intelNotes.id)}, ${intelNotes.createdAt}) DESC`);
 
   // The note the entity was first extracted from is not always among the linked
@@ -216,7 +236,7 @@ export async function getEntityDetail(id: string) {
             observedAt: observedAtSql(intelNotes.observedAt, intelNotes.id).as('observed_at'),
           })
           .from(intelNotes)
-          .where(eq(intelNotes.id, firstSeenId))
+          .where(and(eq(intelNotes.id, firstSeenId), spaceIn(intelNotes.spaceId, scope)))
           .limit(1)
       : [];
 
@@ -258,7 +278,7 @@ export async function getEntityDetail(id: string) {
   const timelineEvents = await db
     .select()
     .from(intelTimelineEvents)
-    .where(eq(intelTimelineEvents.entityId, id))
+    .where(and(eq(intelTimelineEvents.entityId, id), spaceIn(intelTimelineEvents.spaceId, scope)))
     .orderBy(asc(intelTimelineEvents.date));
 
   return {
@@ -276,7 +296,7 @@ export async function getEntityDetail(id: string) {
   };
 }
 
-export async function getIntelStats() {
+export async function getIntelStats(scope: IntelScope = OWNER_INTEL_SCOPE) {
   const [
     [noteCount],
     [entityCount],
@@ -285,17 +305,27 @@ export async function getIntelStats() {
     [unconnectedCount],
     [dossierCount],
   ] = await Promise.all([
-    db.select({ count: sql<number>`count(*)::int` }).from(intelNotes),
-    db.select({ count: sql<number>`count(*)::int` }).from(intelEntities).where(isNull(intelEntities.mergedIntoId)),
+    db.select({ count: sql<number>`count(*)::int` }).from(intelNotes).where(spaceIn(intelNotes.spaceId, scope)),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(intelEntities)
+      .where(and(isNull(intelEntities.mergedIntoId), spaceIn(intelEntities.spaceId, scope))),
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(intelEntities)
       .innerJoin(intelEntityTypes, eq(intelEntities.typeId, intelEntityTypes.id))
-      .where(and(eq(intelEntityTypes.name, 'risk'), isNull(intelEntities.mergedIntoId))),
+      .where(and(eq(intelEntityTypes.name, 'risk'), isNull(intelEntities.mergedIntoId), spaceIn(intelEntities.spaceId, scope))),
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(intelEntities)
-      .where(and(eq(intelEntities.confirmed, false), eq(intelEntities.confidence, 'low'), isNull(intelEntities.mergedIntoId))),
+      .where(
+        and(
+          eq(intelEntities.confirmed, false),
+          eq(intelEntities.confidence, 'low'),
+          isNull(intelEntities.mergedIntoId),
+          spaceIn(intelEntities.spaceId, scope),
+        ),
+      ),
     // The `03 repair` reading: live entities with no edge in either direction.
     // Fragments that never joined up are the thing that stage exists to fix.
     db
@@ -304,10 +334,12 @@ export async function getIntelStats() {
       .where(
         and(
           isNull(intelEntities.mergedIntoId),
+          spaceIn(intelEntities.spaceId, scope),
           sql`not exists (
             select 1 from intel_relationships r
-            where r.source_entity_id = ${intelEntities.id}
-               or r.target_entity_id = ${intelEntities.id}
+            where (r.source_entity_id = ${intelEntities.id}
+               or r.target_entity_id = ${intelEntities.id})
+              and ${spaceIn(sql`r.space_id`, scope)}
           )`,
         ),
       ),
@@ -316,7 +348,7 @@ export async function getIntelStats() {
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(intelDossiers)
-      .where(eq(intelDossiers.status, 'open')),
+      .where(and(eq(intelDossiers.status, 'open'), spaceIn(intelDossiers.spaceId, scope))),
   ]);
 
   return {
@@ -333,15 +365,18 @@ export async function listEntityTypes() {
   return db.select().from(intelEntityTypes).orderBy(asc(intelEntityTypes.name));
 }
 
-export async function listTimelineEvents(opts: { limit?: number; entityId?: string; type?: string } = {}) {
-  const { limit = 100, entityId, type } = opts;
+export async function listTimelineEvents(
+  opts: { limit?: number; entityId?: string; type?: string; scope?: IntelScope } = {},
+) {
+  const { limit = 100, entityId, type, scope = OWNER_INTEL_SCOPE } = opts;
 
   const conditions = [
+    spaceIn(intelTimelineEvents.spaceId, scope),
     ...(entityId ? [eq(intelTimelineEvents.entityId, entityId)] : []),
     ...(type ? [eq(intelTimelineEvents.type, type)] : []),
   ];
 
-  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const where = and(...conditions);
 
   return db
     .select({
@@ -365,15 +400,18 @@ export async function listTimelineEvents(opts: { limit?: number; entityId?: stri
     .limit(limit);
 }
 
-export async function listAlerts(opts: { limit?: number; significance?: string; includeDismissed?: boolean } = {}) {
-  const { limit = 50, significance, includeDismissed = false } = opts;
+export async function listAlerts(
+  opts: { limit?: number; significance?: string; includeDismissed?: boolean; scope?: IntelScope } = {},
+) {
+  const { limit = 50, significance, includeDismissed = false, scope = OWNER_INTEL_SCOPE } = opts;
 
   const conditions = [
+    spaceIn(intelAlerts.spaceId, scope),
     ...(significance ? [eq(intelAlerts.significance, significance)] : []),
     ...(!includeDismissed ? [eq(intelAlerts.dismissed, false)] : []),
   ];
 
-  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const where = and(...conditions);
 
   return db
     .select()
@@ -383,7 +421,7 @@ export async function listAlerts(opts: { limit?: number; significance?: string; 
     .limit(limit);
 }
 
-export async function listPendingReview() {
+export async function listPendingReview(scope: IntelScope = OWNER_INTEL_SCOPE) {
   const entities = await db
     .select({
       id: intelEntities.id,
@@ -398,10 +436,11 @@ export async function listPendingReview() {
     })
     .from(intelEntities)
     .innerJoin(intelEntityTypes, eq(intelEntities.typeId, intelEntityTypes.id))
-    .leftJoin(intelNotes, eq(intelEntities.firstSeenIn, intelNotes.id))
+    .leftJoin(intelNotes, and(eq(intelEntities.firstSeenIn, intelNotes.id), spaceIn(intelNotes.spaceId, scope)))
     .where(and(
       eq(intelEntities.confirmed, false),
       isNull(intelEntities.mergedIntoId),
+      spaceIn(intelEntities.spaceId, scope),
     ))
     .orderBy(asc(intelEntities.confidence), desc(intelEntities.createdAt));
 

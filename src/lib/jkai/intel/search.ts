@@ -2,6 +2,7 @@ import { db } from '$lib/db';
 import { sql } from 'drizzle-orm';
 import { pgTextArray } from '$lib/db/sql-array';
 import { generateEmbedding } from './embed';
+import { OWNER_INTEL_SCOPE, spaceIn, type IntelScope } from './scope';
 
 export type IntelItem = {
   id: string;
@@ -41,7 +42,16 @@ export type SearchResult = {
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
 
-export async function searchIntel(query: string, facets: IntelFacets): Promise<SearchResult> {
+/**
+ * `scope` is a separate trailing parameter rather than a facet: the canvas
+ * preview and the intelligence node build facets from request and node input,
+ * and a field on that object is one a caller could fill from outside.
+ */
+export async function searchIntel(
+  query: string,
+  facets: IntelFacets = {},
+  scope: IntelScope = OWNER_INTEL_SCOPE,
+): Promise<SearchResult> {
   const q = query.trim();
   const hasTimeRange = facets.timeRange != null;
   const hasEntityTypes = (facets.entityTypes?.length ?? 0) > 0;
@@ -91,6 +101,7 @@ export async function searchIntel(query: string, facets: IntelFacets): Promise<S
       -- part of it. Admitted mail is searchable here and, at passage level, via
       -- $lib/mail-index.
       n.graph_state = 'admitted'
+      AND ${spaceIn(sql`n.space_id`, scope)}
       AND ${q ? sql`(n.title ILIKE ${`%${q}%`} OR COALESCE(n.processed_content, n.raw_content) ILIKE ${`%${q}%`})` : sql`TRUE`}
       ${fromTs ? sql`AND n.created_at >= ${fromTs}::timestamptz` : sql``}
       ${toTs ? sql`AND n.created_at < ${toTs}::timestamptz` : sql``}
@@ -112,6 +123,7 @@ export async function searchIntel(query: string, facets: IntelFacets): Promise<S
     FROM intel_entities e
     JOIN intel_entity_types et ON e.type_id = et.id
     WHERE e.merged_into_id IS NULL
+      AND ${spaceIn(sql`e.space_id`, scope)}
       ${q ? sql`AND (e.name ILIKE ${`%${q}%`} OR e.summary ILIKE ${`%${q}%`})` : sql``}
       ${entityTypeFilter ? sql`AND et.name = ANY(${pgTextArray(entityTypeFilter)}::text[])` : sql``}
       ${fromTs ? sql`AND e.updated_at >= ${fromTs}::timestamptz` : sql``}

@@ -1,7 +1,8 @@
 import { db } from '$lib/db';
 import { intelEntities, intelEntityTypes, intelRelationships, intelNotes, intelNoteEntities } from '$lib/db/schema';
-import { desc, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { generateEmbedding } from './embed';
+import { OWNER_INTEL_SCOPE, scopeKey, spaceIn, type IntelScope } from './scope';
 
 interface KnowledgeContext {
   entities: Array<{
@@ -52,6 +53,8 @@ export interface KnowledgeContextOptions {
   clusters?: 'all' | readonly string[];
   /** Vector-matched entities. Off when the caller grounds named anchors itself. */
   entities?: boolean;
+  /** Whose graph to read. Defaults to the owner's. */
+  scope?: IntelScope;
 }
 
 export async function buildKnowledgeContext(userMessage: string, options: KnowledgeContextOptions = {}): Promise<string> {
@@ -106,7 +109,7 @@ const SSD_RANDOM_PAGE_COST = 1.1;
  * resets itself on commit (safe on a pooled connection — Postgres unwinds
  * `SET LOCAL` at transaction end, so it cannot leak to the next borrower).
  */
-async function vectorLookups(vectorStr: string): Promise<[unknown[], unknown[]]> {
+async function vectorLookups(vectorStr: string, scope: IntelScope): Promise<[unknown[], unknown[]]> {
   return db.transaction(async (tx) => {
     await tx.execute(sql`SET LOCAL random_page_cost = ${sql.raw(String(SSD_RANDOM_PAGE_COST))}`);
 
@@ -118,6 +121,7 @@ async function vectorLookups(vectorStr: string): Promise<[unknown[], unknown[]]>
       JOIN intel_entity_types et ON e.type_id = et.id
       WHERE e.embedding IS NOT NULL
         AND e.merged_into_id IS NULL
+        AND ${spaceIn(sql`e.space_id`, scope)}
       ORDER BY distance ASC
       LIMIT 8
     `);
@@ -136,6 +140,7 @@ async function vectorLookups(vectorStr: string): Promise<[unknown[], unknown[]]>
         -- whole mail gate exists to keep shut: chat must never answer from an
         -- email nobody approved.
         AND n.graph_state = 'admitted'
+        AND ${spaceIn(sql`n.space_id`, scope)}
       ORDER BY distance ASC
       LIMIT 5
     `);
@@ -146,16 +151,17 @@ async function vectorLookups(vectorStr: string): Promise<[unknown[], unknown[]]>
 
 async function findRelevantContext(query: string, options: KnowledgeContextOptions = {}): Promise<KnowledgeContext> {
   const clusterFilter = options.clusters ?? 'all';
+  const scope = options.scope ?? OWNER_INTEL_SCOPE;
   let embedding: number[];
   try {
     embedding = await generateEmbedding(query);
   } catch {
-    return { entities: [], noteExcerpts: [], clusters: await describeClusters(clusterFilter) };
+    return { entities: [], noteExcerpts: [], clusters: await describeClusters(clusterFilter, scope) };
   }
 
   const vectorStr = `[${embedding.join(',')}]`;
 
-  const [entityRows, noteRows] = await vectorLookups(vectorStr);
+  const [entityRows, noteRows] = await vectorLookups(vectorStr, scope);
 
   const relevantEntities = options.entities === false ? [] : (entityRows as any[]).filter((r) => r.distance < 0.6);
   const relevantNotes = (noteRows as any[]).filter((r) => r.distance < 0.5);
@@ -184,9 +190,12 @@ async function findRelevantContext(query: string, options: KnowledgeContextOptio
           })
           .from(intelRelationships)
           .where(
-            or(
-              inArray(intelRelationships.sourceEntityId, entityIds),
-              inArray(intelRelationships.targetEntityId, entityIds),
+            and(
+              or(
+                inArray(intelRelationships.sourceEntityId, entityIds),
+                inArray(intelRelationships.targetEntityId, entityIds),
+              ),
+              spaceIn(intelRelationships.spaceId, scope),
             ),
           )
           // Generous headroom over the per-entity cap applied below. A hub
@@ -216,7 +225,7 @@ async function findRelevantContext(query: string, options: KnowledgeContextOptio
       ? await db
           .select({ id: intelEntities.id, name: intelEntities.name })
           .from(intelEntities)
-          .where(inArray(intelEntities.id, otherIds))
+          .where(and(inArray(intelEntities.id, otherIds), spaceIn(intelEntities.spaceId, scope)))
       : [];
   const nameById = new Map(nameRows.map((r) => [r.id, r.name]));
 
@@ -251,7 +260,7 @@ async function findRelevantContext(query: string, options: KnowledgeContextOptio
       excerpt: n.excerpt,
       date: new Date(n.created_at).toLocaleDateString(),
     })),
-    clusters: await describeClusters(clusterFilter),
+    clusters: await describeClusters(clusterFilter, scope),
   };
 }
 
@@ -268,8 +277,15 @@ async function findRelevantContext(query: string, options: KnowledgeContextOptio
  * thousand tokens on every turn, and the opening line is the part that says
  * what the cluster is.
  */
-async function describeClusters(filter: 'all' | readonly string[] = 'all'): Promise<KnowledgeContext['clusters']> {
+async function describeClusters(
+  filter: 'all' | readonly string[] = 'all',
+  scope: IntelScope = OWNER_INTEL_SCOPE,
+): Promise<KnowledgeContext['clusters']> {
   if (filter !== 'all' && filter.length === 0) return [];
+  // The roster has no space: it is detected over the owner's graph, so its names
+  // and narratives are the owner's. Any other scope gets none rather than a
+  // description of somebody else's neighbourhoods.
+  if (scopeKey(scope) !== scopeKey(OWNER_INTEL_SCOPE)) return [];
   try {
     const roster = await loadClusterRoster();
     return roster
@@ -304,6 +320,8 @@ export interface RosterCluster {
  * Shared by the context block above and the chat's context router, which hands
  * the labels to its model as the vocabulary a turn can be routed onto, and maps
  * anchor entities back to their cluster through `members`.
+ *
+ * Owner-only, like the roster itself (see `describeClusters`).
  */
 export async function loadClusterRoster(): Promise<RosterCluster[]> {
   const { loadClusters } = await import('./cluster-store');
@@ -399,11 +417,14 @@ export async function buildEntityGrounding(
   entityIds: string[],
   /** Who picked the entities: the user with `@entity`, or chat's context router. */
   origin: 'mentioned' | 'routed' = 'mentioned',
+  scope: IntelScope = OWNER_INTEL_SCOPE,
 ): Promise<string> {
   if (!entityIds.length) return '';
 
+  // The scoped analysis is what makes an id from another space ground nothing:
+  // it is not in `index.byId`, so the loop below skips it.
   const { getGraphAnalysis } = await import('./analytics/load');
-  const { index } = await getGraphAnalysis();
+  const { index } = await getGraphAnalysis(false, { scope });
 
   const blocks: string[] = [];
 
@@ -433,7 +454,7 @@ export async function buildEntityGrounding(
       })
       .from(intelNoteEntities)
       .innerJoin(intelNotes, eq(intelNoteEntities.noteId, intelNotes.id))
-      .where(eq(intelNoteEntities.entityId, id))
+      .where(and(eq(intelNoteEntities.entityId, id), spaceIn(intelNotes.spaceId, scope)))
       .orderBy(desc(intelNotes.createdAt))
       .limit(4);
 

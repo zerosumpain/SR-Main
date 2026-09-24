@@ -14,6 +14,7 @@ import { and, asc, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from 'd
 import { intelEntities, intelEntityTypes, intelNotes } from '$lib/db/schema';
 import { alias } from 'drizzle-orm/pg-core';
 import { linksToItem, observedAtSql, sourceHref } from './provenance';
+import { OWNER_INTEL_SCOPE, spaceIn, type IntelScope } from './scope';
 import {
   escapeLike,
   pageInfo,
@@ -25,8 +26,8 @@ import {
   type SourceRef,
 } from './entity-query';
 
-function baseConditions(query: EntityQuery): SQL[] {
-  const conditions: SQL[] = [isNull(intelEntities.mergedIntoId)];
+function baseConditions(query: EntityQuery, scope: IntelScope): SQL[] {
+  const conditions: SQL[] = [isNull(intelEntities.mergedIntoId), spaceIn(intelEntities.spaceId, scope)];
 
   if (query.q) {
     const pattern = `%${escapeLike(query.q)}%`;
@@ -51,8 +52,8 @@ function baseConditions(query: EntityQuery): SQL[] {
   return conditions;
 }
 
-function allConditions(query: EntityQuery): SQL[] {
-  const conditions = baseConditions(query);
+function allConditions(query: EntityQuery, scope: IntelScope): SQL[] {
+  const conditions = baseConditions(query, scope);
   if (query.typeIds.length) conditions.push(inArray(intelEntities.typeId, query.typeIds));
   return conditions;
 }
@@ -62,16 +63,21 @@ const NOTE_COUNT = sql<number>`(
   where intel_note_entities.entity_id = intel_entities.id
 )::int`;
 
-const REL_COUNT = sql<number>`(
+const relCount = (scope: IntelScope) => sql<number>`(
   select count(*) from intel_relationships
-  where intel_relationships.source_entity_id = intel_entities.id
-     or intel_relationships.target_entity_id = intel_entities.id
+  where (intel_relationships.source_entity_id = intel_entities.id
+     or intel_relationships.target_entity_id = intel_entities.id)
+    and ${spaceIn(sql`intel_relationships.space_id`, scope)}
 )::int`;
 
 /** Aliased so both the first-seen note and the latest one can be selected. */
 const firstSeenNote = alias(intelNotes, 'first_seen_note');
 
-function rowSelection() {
+/** The first-seen join, scoped like every other table the page reads. */
+const firstSeenJoin = (scope: IntelScope) =>
+  and(eq(firstSeenNote.id, intelEntities.firstSeenIn), spaceIn(firstSeenNote.spaceId, scope));
+
+function rowSelection(scope: IntelScope) {
   return {
     id: intelEntities.id,
     name: intelEntities.name,
@@ -90,7 +96,7 @@ function rowSelection() {
     createdAt: intelEntities.createdAt,
     updatedAt: intelEntities.updatedAt,
     noteCount: NOTE_COUNT.as('note_count'),
-    relationshipCount: REL_COUNT.as('relationship_count'),
+    relationshipCount: relCount(scope).as('relationship_count'),
     // Provenance for the row's origin, joined rather than sub-selected: it is a
     // plain foreign key. The LATEST source needs the note-link table and is
     // fetched for the page's rows in one follow-up query instead — see
@@ -140,6 +146,7 @@ function toSourceRef(row: {
 async function attachProvenance(
   db: (typeof import('$lib/db'))['db'],
   rows: Array<Record<string, unknown>>,
+  scope: IntelScope,
 ): Promise<EntityRow[]> {
   const ids = rows.map((r) => String(r.id));
   if (!ids.length) return [];
@@ -155,7 +162,7 @@ async function attachProvenance(
              ne.entity_id, n.id, n.title, n.source, n.metadata, n.created_at,
              ${observed} AS observed_at
       FROM intel_note_entities ne
-      JOIN intel_notes n ON n.id = ne.note_id
+      JOIN intel_notes n ON n.id = ne.note_id AND ${spaceIn(sql`n.space_id`, scope)}
       WHERE ne.entity_id IN (${idList})
       ORDER BY ne.entity_id, COALESCE(${observed}, n.created_at) DESC, n.id
     `),
@@ -165,7 +172,7 @@ async function attachProvenance(
     db.execute(sql`
       SELECT ne.entity_id, count(*)::int AS later
       FROM intel_note_entities ne
-      JOIN intel_entities e ON e.id = ne.entity_id
+      JOIN intel_entities e ON e.id = ne.entity_id AND ${spaceIn(sql`e.space_id`, scope)}
       WHERE ne.entity_id IN (${idList})
         AND (e.first_seen_in IS NULL OR ne.note_id <> e.first_seen_in)
       GROUP BY 1
@@ -240,21 +247,26 @@ function orderFor(query: EntityQuery): SQL[] {
  * borrows the cached analytics snapshot rather than reimplementing it, ranks
  * the matching ids in memory, and then fetches only the page's rows.
  */
-export async function queryEntityPage(query: EntityQuery): Promise<EntityPage> {
+export async function queryEntityPage(
+  query: EntityQuery,
+  // A trailing parameter, not a field on `query`: that object is parsed from
+  // the URL, and a scope must never come from the request.
+  scope: IntelScope = OWNER_INTEL_SCOPE,
+): Promise<EntityPage> {
   const { db } = await import('$lib/db');
-  const conditions = allConditions(query);
+  const conditions = allConditions(query, scope);
   const where = and(...conditions);
 
   const [typeCountRows, lensRows] = await Promise.all([
     db
       .select({ typeId: intelEntities.typeId, count: sql<number>`count(*)::int` })
       .from(intelEntities)
-      .where(and(...baseConditions(query)))
+      .where(and(...baseConditions(query, scope)))
       .groupBy(intelEntities.typeId),
     db
       .selectDistinct({ lens: intelEntities.lens })
       .from(intelEntities)
-      .where(isNull(intelEntities.mergedIntoId)),
+      .where(and(isNull(intelEntities.mergedIntoId), spaceIn(intelEntities.spaceId, scope))),
   ]);
 
   const typeCounts: Record<string, number> = {};
@@ -270,7 +282,7 @@ export async function queryEntityPage(query: EntityQuery): Promise<EntityPage> {
     ).map((r) => r.id);
 
     const { getGraphAnalysis } = await import('./analytics/load');
-    const analysis = await getGraphAnalysis();
+    const analysis = await getGraphAnalysis(false, { scope });
     const rank = analysis.centrality.pagerank;
     const sign = query.dir === 'asc' ? -1 : 1;
     ids.sort((a, b) => sign * ((rank.get(b) ?? 0) - (rank.get(a) ?? 0)) || a.localeCompare(b));
@@ -280,13 +292,13 @@ export async function queryEntityPage(query: EntityQuery): Promise<EntityPage> {
     if (!pageIds.length) return { entities: [], page: info, typeCounts, lensValues };
 
     const rows = await db
-      .select(rowSelection())
+      .select(rowSelection(scope))
       .from(intelEntities)
       .innerJoin(intelEntityTypes, eq(intelEntities.typeId, intelEntityTypes.id))
-      .leftJoin(firstSeenNote, eq(firstSeenNote.id, intelEntities.firstSeenIn))
-      .where(inArray(intelEntities.id, pageIds));
+      .leftJoin(firstSeenNote, firstSeenJoin(scope))
+      .where(and(inArray(intelEntities.id, pageIds), spaceIn(intelEntities.spaceId, scope)));
 
-    const byId = new Map((await attachProvenance(db, rows)).map((r) => [r.id, r]));
+    const byId = new Map((await attachProvenance(db, rows, scope)).map((r) => [r.id, r]));
     return {
       entities: pageIds.map((id) => byId.get(id)).filter((r): r is EntityRow => Boolean(r)),
       page: info,
@@ -303,16 +315,16 @@ export async function queryEntityPage(query: EntityQuery): Promise<EntityPage> {
   const info = pageInfo(count, query);
 
   const rows = await db
-    .select(rowSelection())
+    .select(rowSelection(scope))
     .from(intelEntities)
     .innerJoin(intelEntityTypes, eq(intelEntities.typeId, intelEntityTypes.id))
-    .leftJoin(firstSeenNote, eq(firstSeenNote.id, intelEntities.firstSeenIn))
+    .leftJoin(firstSeenNote, firstSeenJoin(scope))
     .where(where)
     .orderBy(...orderFor(query))
     .limit(info.pageSize)
     .offset(info.offset);
 
-  const entities = await attachProvenance(db, rows);
+  const entities = await attachProvenance(db, rows, scope);
 
   return { entities, page: info, typeCounts, lensValues };
 }
