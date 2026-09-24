@@ -1,3 +1,5 @@
+import type { IntelScope } from './scope';
+
 export interface CleanupOptions {
   apply?: boolean;
   pathPrefix?: string;
@@ -7,6 +9,11 @@ export interface CleanupOptions {
   /** Used when a source is explicitly deleted. */
   noteIds?: string[];
   scanOrphans?: boolean;
+  /**
+   * Whose rows the RESULT may name. The sweep itself spans every space; only
+   * the preview samples and the review list are confined. Defaults to the owner's.
+   */
+  scope?: IntelScope;
 }
 
 export interface CleanupResult {

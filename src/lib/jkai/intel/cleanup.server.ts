@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 import { pgTextArray } from '$lib/db/sql-array';
 import { resolveFilePolicy, isUnder, folderOf, type FolderSetting } from './source-policy';
 import type { CleanupOptions, CleanupResult } from './cleanup-types';
+import { OWNER_INTEL_SCOPE, spaceIn } from './scope';
 
 const BATCH_LIMIT = 250;
 const SAMPLE_LIMIT = 50;
@@ -34,8 +35,18 @@ const connected = (excluded: string[]) => sql`EXISTS (
  * Preview and apply use the same planner; apply always replans under write locks.
  * Small batches bound lock time. Exceptions roll back the whole batch and reach
  * the caller, so a failed purge cannot be reported as a successful exclusion.
+ *
+ * Spaces: the planner and the deletes are a maintenance sweep and span every
+ * space — a Drive exclusion or an unsupported orphan is groomed whoever owns it,
+ * and every derived-row delete is keyed by the doomed note/entity ids, whose
+ * derived rows share their space. What comes BACK is confined to
+ * `options.scope`: the sampled notes and entities, and the review list, name
+ * rows, and a preview must never name someone else's. Counts are numbers and
+ * stay whole-sweep, because they describe what apply will do.
  */
 export async function cleanupIntelligence(options: CleanupOptions = {}): Promise<CleanupResult> {
+  const scope = options.scope ?? OWNER_INTEL_SCOPE;
+  const visible = (space: string) => scope.includes(space);
   const result = await db.transaction(async tx => {
     await tx.execute(sql`SET LOCAL lock_timeout = '5s'`);
     await tx.execute(sql`SET LOCAL statement_timeout = '30s'`);
@@ -49,22 +60,22 @@ export async function cleanupIntelligence(options: CleanupOptions = {}): Promise
 
     const settings = (await tx.execute(sql`SELECT path, intel_mode AS "intelMode", category_ids AS "categoryIds" FROM drive_folder_settings`)).rows as unknown as FolderSetting[];
     const sources = (await tx.execute(sql`
-      SELECT n.id, n.title, n.metadata->>'refId' AS ref, f.name
+      SELECT n.id, n.title, n.metadata->>'refId' AS ref, f.name, n.space_id AS space
       FROM intel_notes n LEFT JOIN workflow_files f ON f.id=n.metadata->>'refId'
       WHERE n.metadata->>'autoKind'='file' AND n.source <> 'email'
         AND coalesce(n.metadata->>'channel','') <> 'gmail'
         AND coalesce(n.metadata->>'refId','') NOT LIKE 'gmail:%'
       ORDER BY n.created_at, n.id
-    `)).rows as Array<{ id: string; title: string | null; ref: string | null; name: string | null }>;
+    `)).rows as Array<{ id: string; title: string | null; ref: string | null; name: string | null; space: string }>;
     let stale = sources.filter(n => {
       if (options.noteIds) return options.noteIds.includes(n.id);
       if (options.entityIds) return false;
       if (options.fileIds && !options.fileIds.includes(n.ref ?? '')) return false;
       if (options.pathPrefix !== undefined && (!n.name || !isUnder(folderOf(n.name), options.pathPrefix))) return false;
       return !n.name || !resolveFilePolicy(n.name, settings).included;
-    }).map(n => ({ id: n.id, title: n.title ?? n.name ?? 'Untitled source', reason: n.name ? 'Excluded Drive folder' : 'Drive file no longer exists' }));
+    }).map(n => ({ id: n.id, title: n.title ?? n.name ?? 'Untitled source', reason: n.name ? 'Excluded Drive folder' : 'Drive file no longer exists', space: n.space }));
     if (options.noteIds) {
-      stale = (await tx.execute(sql`SELECT id, coalesce(title,'Untitled source') AS title FROM intel_notes WHERE id=ANY(${pgTextArray(options.noteIds)}::text[]) ORDER BY id`)).rows.map(n => ({ id: String(n.id), title: String(n.title), reason: 'Source removed' }));
+      stale = (await tx.execute(sql`SELECT id, coalesce(title,'Untitled source') AS title, space_id AS space FROM intel_notes WHERE id=ANY(${pgTextArray(options.noteIds)}::text[]) ORDER BY id`)).rows.map(n => ({ id: String(n.id), title: String(n.title), reason: 'Source removed', space: String(n.space) }));
     }
     const notes = stale.slice(0, BATCH_LIMIT);
     const noteIds = notes.map(n => n.id);
@@ -96,18 +107,20 @@ export async function cleanupIntelligence(options: CleanupOptions = {}): Promise
           WHERE NOT ${supported(noteIds)} AND NOT ${protectedEntity} AND NOT ${connected(noteIds)}
       ), candidates(id) AS (
         SELECT unnest(${pgTextArray(candidates)}::text[]) UNION SELECT id FROM doomed_aliases
-      ) SELECT e.id, e.name, ${supported(noteIds)} AS supported,
+      ) SELECT e.id, e.name, e.space_id AS space, ${supported(noteIds)} AS supported,
         ${protectedEntity} AS protected, ${connected(noteIds)} AS connected
       FROM intel_entities e JOIN candidates c ON c.id=e.id
-    `)).rows as Array<{ id: string; name: string; supported: boolean; protected: boolean; connected: boolean }>;
+    `)).rows as Array<{ id: string; name: string; space: string; supported: boolean; protected: boolean; connected: boolean }>;
     const doomed = rows.filter(r => !r.supported && !r.protected && !r.connected);
     const doomedIds = doomed.map(r => r.id);
     const survivorIds = affected.filter(id => !doomedIds.includes(id));
     const doomedArray = pgTextArray(doomedIds);
     // Old, unreferenced nodes with lost provenance are reviewable, not disposable.
+    // Report-only — nothing below deletes them — so the scope goes in the SQL.
     const review = scan ? (await tx.execute(sql`
       SELECT e.id, e.name, count(*) OVER()::int AS total FROM intel_entities e
       WHERE e.merged_into_id IS NULL AND e.first_seen_in IS NULL
+        AND ${spaceIn(sql`e.space_id`, scope)}
         ${options.entityIds ? sql`AND e.id=ANY(${pgTextArray(options.entityIds)}::text[])` : sql``}
         AND e.updated_at < now() - ${GRACE_HOURS} * interval '1 hour'
         AND NOT ${supported([])} AND NOT ${protectedEntity} AND NOT ${connected([])}
@@ -159,7 +172,13 @@ export async function cleanupIntelligence(options: CleanupOptions = {}): Promise
       await tx.execute(sql`UPDATE intel_entities SET merged_into_id=NULL, updated_at=now()
         WHERE merged_into_id=ANY(${doomedArray}::text[]) OR id=ANY(${pgTextArray(brokenMerges.slice(0, BATCH_LIMIT))}::text[])`);
     }
-    return { applied: !!options.apply, notes: notes.slice(0, SAMPLE_LIMIT), entities: doomed.slice(0, SAMPLE_LIMIT).map(({id,name})=>({id,name})), review: review.map(({id,name})=>({id,name})), counts };
+    return {
+      applied: !!options.apply,
+      notes: notes.filter(n => visible(n.space)).slice(0, SAMPLE_LIMIT).map(({ id, title, reason }) => ({ id, title, reason })),
+      entities: doomed.filter(r => visible(r.space)).slice(0, SAMPLE_LIMIT).map(({ id, name }) => ({ id, name })),
+      review: review.map(({ id, name }) => ({ id, name })),
+      counts,
+    };
   });
   if (options.apply) {
     const [{ invalidateGraphAnalysis }, { invalidateResolutionCaches }] = await Promise.all([

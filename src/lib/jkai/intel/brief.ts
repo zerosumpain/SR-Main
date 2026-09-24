@@ -26,6 +26,7 @@ import {
   intelTimelineEvents,
   researchSessions,
 } from '$lib/db/schema';
+import { OWNER_INTEL_SCOPE, spaceIn, type IntelScope } from './scope';
 
 // ── Shape ────────────────────────────────────────────────────────────────────
 
@@ -503,6 +504,12 @@ export interface AssembleOptions {
   /** Heading for the brief; defaults to the subject names. */
   title?: string;
   openQuestions?: string[];
+  /**
+   * Whose graph the brief may draw on. Defaults to the owner's. Every table
+   * read below is confined to it, so a subject id from another space resolves
+   * to nothing and a brief can never cite a note its reader could not open.
+   */
+  scope?: IntelScope;
 }
 
 function normalizeIds(ids: readonly string[]): string[] {
@@ -536,6 +543,7 @@ export async function assembleBriefContext(
     generatedAt,
   };
   if (!ids.length) return empty;
+  const scope = options.scope ?? OWNER_INTEL_SCOPE;
 
   const { db } = await import('$lib/db');
   const { getGraphAnalysis } = await import('./analytics/load');
@@ -561,11 +569,11 @@ export async function assembleBriefContext(
     })
     .from(intelEntities)
     .innerJoin(intelEntityTypes, eq(intelEntities.typeId, intelEntityTypes.id))
-    .where(inArray(intelEntities.id, ids));
+    .where(and(inArray(intelEntities.id, ids), spaceIn(intelEntities.spaceId, scope)));
 
   if (!rows.length) return empty;
 
-  const analysis = await getGraphAnalysis();
+  const analysis = await getGraphAnalysis(false, { scope });
   const { index, community } = analysis;
 
   // Keep the caller's order — a dossier's pin order is a deliberate ordering.
@@ -662,7 +670,7 @@ export async function assembleBriefContext(
     })
     .from(intelNoteEntities)
     .innerJoin(intelNotes, eq(intelNoteEntities.noteId, intelNotes.id))
-    .where(inArray(intelNoteEntities.entityId, resolvedIds))
+    .where(and(inArray(intelNoteEntities.entityId, resolvedIds), spaceIn(intelNotes.spaceId, scope)))
     .orderBy(desc(intelNotes.createdAt))
     .limit(MAX_SOURCES * 4);
 
@@ -702,7 +710,7 @@ export async function assembleBriefContext(
       entityId: intelTimelineEvents.entityId,
     })
     .from(intelTimelineEvents)
-    .where(inArray(intelTimelineEvents.entityId, resolvedIds))
+    .where(and(inArray(intelTimelineEvents.entityId, resolvedIds), spaceIn(intelTimelineEvents.spaceId, scope)))
     .orderBy(desc(intelTimelineEvents.date))
     .limit(MAX_TIMELINE);
 
@@ -731,7 +739,13 @@ export async function assembleBriefContext(
     })
     .from(intelCommissions)
     .leftJoin(researchSessions, eq(intelCommissions.externalId, researchSessions.id))
-    .where(and(eq(intelCommissions.kind, 'research'), inArray(intelCommissions.entityId, resolvedIds)))
+    .where(
+      and(
+        eq(intelCommissions.kind, 'research'),
+        inArray(intelCommissions.entityId, resolvedIds),
+        spaceIn(intelCommissions.spaceId, scope),
+      ),
+    )
     .orderBy(desc(intelCommissions.createdAt))
     .limit(6);
 
@@ -774,9 +788,10 @@ export async function assembleBriefContext(
 export async function assembleClusterBriefContext(
   memberIds: readonly string[],
   facts: Omit<ClusterBriefFacts, 'subjectCount'>,
+  scope: IntelScope = OWNER_INTEL_SCOPE,
 ): Promise<BriefContext> {
   const subjects = memberIds.slice(0, MAX_SUBJECTS);
-  const context = await assembleBriefContext(subjects, { title: facts.label });
+  const context = await assembleBriefContext(subjects, { title: facts.label, scope });
   return {
     ...context,
     cluster: { ...facts, subjectCount: context.subjects.length },
@@ -788,13 +803,16 @@ export async function assembleClusterBriefContext(
  * one pass, rather than one entity at a time. Returns null when the dossier
  * does not exist.
  */
-export async function assembleDossierBriefContext(dossierId: string): Promise<BriefContext | null> {
+export async function assembleDossierBriefContext(
+  dossierId: string,
+  scope: IntelScope = OWNER_INTEL_SCOPE,
+): Promise<BriefContext | null> {
   const { db } = await import('$lib/db');
 
   const [dossier] = await db
     .select()
     .from(intelDossiers)
-    .where(eq(intelDossiers.id, dossierId))
+    .where(and(eq(intelDossiers.id, dossierId), spaceIn(intelDossiers.spaceId, scope)))
     .limit(1);
   if (!dossier) return null;
 
@@ -812,7 +830,7 @@ export async function assembleDossierBriefContext(dossierId: string): Promise<Br
 
   return assembleBriefContext(
     items.map((i) => String(i.refId)),
-    { title: dossier.title, openQuestions: dossier.openQuestions ?? [] },
+    { title: dossier.title, openQuestions: dossier.openQuestions ?? [], scope },
   );
 }
 

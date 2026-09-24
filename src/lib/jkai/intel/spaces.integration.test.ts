@@ -13,6 +13,9 @@ import { EMPTY_LENS_FILTERS } from './lenses';
 import { persistInsights, listInsights, setInsightStatus, insightsByDedupeKey, dedupeKeyFor } from './insight-store';
 import { intelInsights, intelLenses, intelAlerts } from '$lib/db/schema';
 import { loadDailyAlerts } from './daily-alerts.server';
+import { cleanupIntelligence } from './cleanup.server';
+import { assembleBriefContext } from './brief';
+import { taxonomyEvidence } from './taxonomy-governance.server';
 import { createNote } from './ingest';
 import { persistExtraction } from './graph';
 import { storedHashes, refIdForThread } from './gmail-ingest';
@@ -196,6 +199,17 @@ describe.skipIf(!process.env.DATABASE_URL)('readers only see their scope', () =>
     expect((await getNoteDetail(noteId, TEST_SCOPE))?.entities.map((e) => e.entityId)).toContain(entityId);
   });
 
+  it('a brief, and the taxonomy evidence samples', async () => {
+    expect((await assembleBriefContext([entityId])).subjects).toHaveLength(0);
+    const theirs = await assembleBriefContext([entityId], { scope: TEST_SCOPE });
+    expect(theirs.subjects.map((x) => x.id)).toEqual([entityId]);
+    expect(theirs.sources.map((x) => x.noteId)).toContain(noteId);
+
+    const [row] = await db.select({ typeId: intelEntities.typeId }).from(intelEntities).where(eq(intelEntities.id, entityId));
+    expect((await taxonomyEvidence('type', row.typeId)).some((r) => r.id === entityId)).toBe(false);
+    expect((await taxonomyEvidence('type', row.typeId, TEST_SCOPE)).some((r) => r.id === entityId)).toBe(true);
+  });
+
   it('the daily alerts digest', async () => {
     const [alert] = await db.insert(intelAlerts).values({
       noteId, type: 'connection', title: 'Plimsworth Quarry alert', content: 'x', significance: 'high', spaceId: 'u_test',
@@ -241,6 +255,22 @@ describe.skipIf(!process.env.DATABASE_URL)('artefacts are written to, and read f
     try {
       expect(await lensEntityIds(EMPTY_LENS_FILTERS)).not.toContain(e.id);
       expect(await lensEntityIds(EMPTY_LENS_FILTERS, TEST_SCOPE)).toContain(e.id);
+    } finally {
+      await db.delete(intelEntities).where(eq(intelEntities.id, e.id));
+    }
+  });
+
+  it("the cleanup preview names only the scope's rows", async () => {
+    // An old entity with no provenance and no support: the review list's kind.
+    // Preview only — a read-only transaction, nothing is deleted.
+    const [type] = await db.select({ id: intelEntityTypes.id }).from(intelEntityTypes).limit(1);
+    const [e] = await db.insert(intelEntities).values({
+      name: 'Cleanup space thing', typeId: type.id, spaceId: 'u_test',
+      updatedAt: new Date(Date.now() - 72 * 3_600_000),
+    }).returning();
+    try {
+      expect((await cleanupIntelligence()).review.some((r) => r.id === e.id)).toBe(false);
+      expect((await cleanupIntelligence({ scope: TEST_SCOPE })).review.some((r) => r.id === e.id)).toBe(true);
     } finally {
       await db.delete(intelEntities).where(eq(intelEntities.id, e.id));
     }

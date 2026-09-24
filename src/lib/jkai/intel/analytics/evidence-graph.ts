@@ -119,7 +119,7 @@ export async function countEvidenceNotes(
   const { rows } = await db.execute(sql`
     SELECT n.space_id AS space, n.source AS source, COUNT(*) AS count
     FROM (${qualifyingNotes(scope)}) q
-    JOIN intel_notes n ON n.id = q.note_id
+    JOIN intel_notes n ON n.id = q.note_id AND ${spaceIn(sql`n.space_id`, scope)}
     GROUP BY n.space_id, n.source
   `);
   return (rows as Array<{ space: string; source: string | null; count: number | string }>).map((r) => ({

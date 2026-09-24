@@ -37,6 +37,37 @@ export const MAINTENANCE = {
     'Resolver sweep. Its whole-table reads (address names, neighbour index, candidate loads) ' +
     'shape match weights and never return rows to a user; pairs are space-guarded at blocking, ' +
     'semantic pairing and mergeEntities. The nightly engine runs it per space (plan Task 14).',
+  // Task 11a — not table readers (the READS regex matches a comment or a SQL fragment).
+  'src/lib/jkai/intel/analytics/cluster-label.ts':
+    'Pure labelling over an analysed snapshot; `intel_notes` appears only in a comment.',
+  'src/lib/jkai/intel/analytics/filter.ts':
+    'Pure filters over an analysed snapshot; the intel table names appear only in comments.',
+  'src/lib/jkai/intel/analytics/model.ts':
+    'Pure type module for the analysed graph; the intel table names appear only in comments.',
+  'src/lib/jkai/intel/domains.ts':
+    'Pure source-to-domain mapping; `intel_notes.source` appears only in a comment.',
+  'src/lib/jkai/intel/entity-query.ts':
+    'Pure URL parsing and types for the entities index (client-safe); the reader is ' +
+    'entity-query.server.ts, which is scoped. `intel_notes` appears only in a comment.',
+  'src/lib/jkai/intel/staleness.ts':
+    'Pure recency and relevance maths; the intel table names appear only in comments.',
+  'src/lib/jkai/intel/provenance.ts':
+    'observedAtSql is a SQL fragment, not a reader: MAX(last_seen_at) over the edges of ' +
+    'the note id it is given, which carry that note\'s space. The calling query scopes the note.',
+  // Task 11a — whole-graph maintenance that never returns rows to a user-facing caller.
+  'src/lib/jkai/intel/embed.ts':
+    'Embeddings are per row and global (spec §2): embedNote/embedEntity read a row by id only ' +
+    'to write its own embedding back; the backfill returns counts.',
+  'src/lib/jkai/intel/trust-refresh.ts':
+    'Confidence is per row and global (spec §2): scores each entity from its own notes (same ' +
+    'space by construction) and writes it back; returns counts.',
+  'src/lib/jkai/intel/taxonomy.ts':
+    'The type/category vocabulary is shared by every space: usage counts per type/category ' +
+    'and relationship type names, never row content. Evidence samples, which name rows, are ' +
+    'in taxonomy-governance.server.ts and are scoped there.',
+  'src/lib/jkai/intel/source-policy.server.ts':
+    'Drive folder policy sync (the Drive is the owner\'s): re-stamps categories on, or cascades ' +
+    'the deletion of, notes derived from Drive files, by file id; returns counts only.',
 };
 
 export function classify(files, baseline, maintenance) {
