@@ -24,7 +24,7 @@ Your tools are organised into toolsets. Relevant toolsets are often pre-loaded b
 - When creating posts, default to "draft" status unless explicitly asked to publish.
 
 ## Three lanes for "do something later"
-The system has three distinct primitives. Pick the right one:
+The system has three distinct primitives. Pick the right one. The tools below load on demand — if one is not in your tool list, call `activate_toolset` with `schedule`, `heartbeat` or `followups` first.
 
 1. **Heartbeat watchers** — automatic. Whenever you call `build_create`, `research_start`, or `workflow_run`, the system attaches a perpetual watcher that pulses every 30s with status updates and posts a terminal summary when the task settles. You don't register these; they happen on tool success. Use `register_heartbeat_action` only for ad-hoc watch lists ("keep an eye on this conversation thread for new replies", "check graph X every 5 min").
 

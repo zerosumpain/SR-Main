@@ -188,3 +188,34 @@ describe('inferToolsetsForTurn', () => {
     expect(inferToolsetsForTurn('make me a deck')).toEqual(inferToolsets('make me a deck'));
   });
 });
+
+/**
+ * The scheduling and tool-authoring groups are no longer on every turn
+ * (2026-09-24). The context router asks for them; these rows are the backstop
+ * for plain wording the router can miss — it missed "prove the heartbeat is
+ * working" on the production eval.
+ */
+describe('on-demand tool groups', () => {
+  it.each([
+    ['i think the heartbeat is working but prove it to me', 'heartbeat'],
+    ['remind me to put the bins out at 7pm', 'schedule'],
+    ['set a reminder for the dentist', 'schedule'],
+    ['check you can see locations in about 90 seconds', 'schedule'],
+    ['check back in tomorrow', 'schedule'],
+    ['What workflows and scheduled tasks do I have running right now?', 'schedule'],
+    ['cancel that follow-up', 'followups'],
+    ['build me a tool that converts miles to km', 'custom-tools'],
+    ['list my custom tools', 'custom-tools'],
+  ])('%s → %s', (message, toolset) => {
+    expect(inferToolsets(message)).toContain(toolset);
+  });
+
+  it.each([
+    ['what did I have for dinner in 2019'],
+    ['how did I sleep last night'],
+    ['use the right tool for the job'],
+  ])('leaves them out of %s', (message) => {
+    const got = inferToolsets(message);
+    for (const ts of ['heartbeat', 'schedule', 'followups', 'custom-tools']) expect(got).not.toContain(ts);
+  });
+});

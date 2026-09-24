@@ -4,6 +4,7 @@ import {
   messagesToResponsesInput,
   toolsToResponsesTools,
   promptCacheKey,
+  callerCacheKey,
   clampCallId,
 } from './responses-input';
 import type { ChatMessage } from './messages';
@@ -161,5 +162,19 @@ describe('clampCallId', () => {
 
   it('clamps an over-long id — the endpoint rejects the whole request otherwise', () => {
     expect(clampCallId('c'.repeat(200))).toHaveLength(64);
+  });
+});
+
+describe('callerCacheKey', () => {
+  it('admits a key the endpoint accepts', () => {
+    expect(callerCacheKey('jkai_3f9a01bc')).toBe('jkai_3f9a01bc');
+  });
+
+  it('refuses anything else rather than sending a request the endpoint rejects', () => {
+    expect(callerCacheKey(undefined)).toBeUndefined();
+    expect(callerCacheKey(42)).toBeUndefined();
+    expect(callerCacheKey('')).toBeUndefined();
+    expect(callerCacheKey('x'.repeat(65))).toBeUndefined();
+    expect(callerCacheKey('has space')).toBeUndefined();
   });
 });

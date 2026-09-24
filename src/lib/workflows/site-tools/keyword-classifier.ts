@@ -74,6 +74,15 @@ const TOOLSET_PATTERNS: Array<{ toolset: string; pattern: RegExp }> = [
   { toolset: 'decks', pattern: DECK_PATTERN },
   { toolset: 'presentations', pattern: DECK_PATTERN },
   { toolset: 'capabilities', pattern: /what\s+can\s+you\s+do|what\s+are\s+you\s+(?:able|capable)|your\s+capabilit|\bcapabilit(?:y|ies)\b/i },
+  // The scheduling and tool-authoring groups stopped being sent on every turn
+  // on 2026-09-24 (see TOOL_CAPABILITIES in grounding/context-route). The
+  // context router asks for them when a turn needs them; these rows are the
+  // deterministic backstop for the plain wording, which the router missed on
+  // one real turn ("prove the heartbeat is working").
+  { toolset: 'heartbeat', pattern: /\bheartbeat\b/i },
+  { toolset: 'schedule', pattern: /\bremind(?:er|ers|\s+me)\b|check\s+(?:back|in)\s+(?:in|at|on|later|tomorrow)|\bin\s+(?:about\s+)?\d+\s*(?:secs?|seconds?|mins?|minutes?|hours?)\b|\bscheduled\s+(?:tasks?|callbacks?|jobs?|turns?)\b/i },
+  { toolset: 'followups', pattern: /\bfollow[\s-]?ups?\b/i },
+  { toolset: 'custom-tools', pattern: /\b(?:custom|ephemeral)\s+tools?\b|\b(?:build|create|make|write|author)\s+(?:me\s+)?(?:a|an|the)?\s*(?:new\s+)?tool\b/i },
 ];
 
 export function inferToolsets(message: string): string[] {

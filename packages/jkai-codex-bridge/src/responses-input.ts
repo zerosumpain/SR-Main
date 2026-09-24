@@ -168,3 +168,17 @@ export function promptCacheKey(instructions: string): string | undefined {
   }
   return `jkai_${h.toString(16)}`;
 }
+
+/**
+ * A cache key the CALLER chose, when it is one the endpoint will accept.
+ *
+ * `promptCacheKey` above hashes the whole `instructions`, which is only a good
+ * key while the instructions are identical turn to turn. The site's are not
+ * quite: a per-turn tail (the history summary, the answer contract) moved the
+ * hash every turn, so repeat turns of one thread were routed to different
+ * caches and only 8% of chat input was read from cache (2026-09-24). The site
+ * now sends a key derived from its stable prefix; this admits it.
+ */
+export function callerCacheKey(v: unknown): string | undefined {
+  return typeof v === 'string' && /^[A-Za-z0-9_.:-]{1,64}$/.test(v) ? v : undefined;
+}

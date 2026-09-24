@@ -28,6 +28,7 @@ import {
 } from './codex-runner';
 import { toAnnotations, type CapturedSearch } from './web-search';
 import type { ChatMessage } from './messages';
+import { callerCacheKey } from './responses-input';
 import {
   registerTools,
   unregisterTools,
@@ -229,6 +230,8 @@ interface ChatCompletionRequest {
   tools?: unknown;
   tool_choice?: unknown;
   reasoning_effort?: string;
+  /** The caller's prompt cache key; admitted by `callerCacheKey`. */
+  prompt_cache_key?: unknown;
 }
 
 /** Mirrors CODEX_REASONING_EFFORTS in the site catalogue. `max` is accepted here
@@ -268,7 +271,11 @@ async function handleChatCompletions(
   const useMcpTools = wantsTools && activeTransport() === 'sdk';
   const registration = useMcpTools ? registerTools(body.tools as OpenAiTool[]) : null;
   const toolServerUrl = registration ? `${selfBaseUrl()}${registration.path}` : undefined;
-  const structured = { messages: messages as ChatMessage[], tools: wantsTools ? body.tools : undefined };
+  const structured = {
+    messages: messages as ChatMessage[],
+    tools: wantsTools ? body.tools : undefined,
+    promptCacheKey: callerCacheKey(body.prompt_cache_key),
+  };
   let prompt = messagesToPrompt(messages);
   const outputSchema = extractOutputSchema(body.response_format);
   if (!outputSchema && wantsBareJson(body.response_format)) {
