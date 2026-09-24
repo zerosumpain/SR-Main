@@ -40,3 +40,16 @@ export function narrowScope(allowed: IntelScope, requested: readonly string[]): 
 export function spaceIn(column: SQL | AnyColumn, scope: IntelScope): SQL {
   return sql`${column} = ANY(${pgTextArray(scope)}::text[])`;
 }
+
+/**
+ * The space a write lands in, for an artefact a reader creates (an insight, a
+ * lens, a watchlist entry) rather than a row derived from a note — those take
+ * the note's space instead. A reader's scope is always `[own, 'household']`,
+ * own first (see `resolveRequestScope`), so the head is the reader's own space:
+ * what they make is theirs, never silently shared with the household.
+ */
+export function writeSpace(scope: IntelScope): string {
+  const own = scope[0];
+  if (!own) throw new Error('writeSpace: empty scope — no space to write into');
+  return own;
+}
