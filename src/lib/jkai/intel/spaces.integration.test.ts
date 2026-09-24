@@ -40,6 +40,7 @@ import { buildClusterRoster, recalculateClusterRoster } from './cluster-roster';
 import { recordIntelRun } from './run-log';
 import { pairKeyOf } from './resolve/pair-key';
 import { intelMatchDecisions, intelResolutionLabels } from '$lib/db/schema';
+import { conversations, jkaiMemories, jkaiMemoryEntities, mailEmbeddings } from '$lib/db/schema';
 
 // Offline and deterministic: the test is about which space a row lands in, not
 // about embeddings or entity summaries. Resolution's semantic search already
@@ -52,6 +53,13 @@ vi.mock('./embed', () => ({
 vi.mock('$lib/llm/client', () => ({
   getLLMClient: vi.fn(() => { throw new Error('offline'); }),
 }));
+// The mail passage index embeds its query through its own module. Only the query
+// half is replaced (the consumers block points it at a seeded vector); indexing
+// stays as it was for the mail-admit cases.
+vi.mock('$lib/mail-index/embed', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('$lib/mail-index/embed')>();
+  return { ...actual, embedQuery: vi.fn(actual.embedQuery) };
+});
 // Only the route seam is replaced, and only the route block below changes what
 // it returns: noteSpace / entitySpace stay real for every other block.
 vi.mock('./scope.server', async (importOriginal) => {
@@ -677,5 +685,179 @@ describe.skipIf(!process.env.DATABASE_URL)('routes answer only within the reques
     // after the gate, so a regression shows as 400 — never as a write.
     const taxonomy = await import('../../../routes/api/jkai/intel/taxonomy/+server');
     expect(await statusOf(() => taxonomy.POST(event({ body: { action: 'tripwire-no-such-action' } })))).toBe(403);
+  });
+});
+
+// Task 13: the owner-only consumers OUTSIDE the intel library — chat's graph
+// tools, memory recall, daydream, news, the mail passage index, the deep-dive
+// commit, the context router and the thread inspector. None of them is a
+// member's surface, so each is fixed to the owner's scope: a u_test thread, its
+// entities, an edge, a dated event, a finding and a memory linked to one of
+// them must never reach any of them. Where a reader takes a scope, the same
+// call pointed at u_test finds the rows, so the absence is the predicate.
+describe.skipIf(!process.env.DATABASE_URL)('owner-only consumers never see another space', () => {
+  const TEST_SCOPE = ['u_test', 'household'] as const;
+  const vec = Array.from({ length: 1536 }, (_, i) => (i === 13 ? 1 : 0));
+  const tag = crypto.randomUUID().slice(0, 8);
+  const ids = {
+    mail: '', research: '', quarry: '', holdings: '', event: '', insight: '', memory: '', conversation: '',
+    session: crypto.randomUUID(), newsKey: `space-test-news-${tag}`,
+  };
+
+  beforeAll(async () => {
+    vi.mocked(generateEmbedding).mockImplementation(async () => vec);
+    const { embedQuery } = await import('$lib/mail-index/embed');
+    vi.mocked(embedQuery).mockImplementation(async () => vec);
+
+    const [conv] = await db.insert(conversations).values({ title: `Space test ${tag}` }).returning({ id: conversations.id });
+    ids.conversation = conv.id;
+    const [type] = await db.select({ id: intelEntityTypes.id }).from(intelEntityTypes).limit(1);
+    // One thread that every consumer has a reason to read: a bulk offer mail,
+    // kept from the news desk, derived from a chat thread, and indexed.
+    const [mail] = await db.insert(intelNotes).values({
+      title: 'Plimsworth Quarry: 20% off your next visit, use code PLIMS20',
+      rawContent: 'Plimsworth Quarry is offering 20% off. Use code PLIMS20 before it expires.',
+      processedContent: 'Plimsworth Quarry is offering 20% off.',
+      source: 'email', status: 'processed', graphState: 'admitted', spaceId: 'u_test', embedding: vec,
+      observedAt: new Date(),
+      metadata: {
+        emailKind: 'bulk', senderDomain: 'plimsworth.example', channel: 'gmail', gmailThreadId: `space-test-${tag}`,
+        newsKey: ids.newsKey, autoKind: 'chat', refId: conv.id,
+      },
+    }).returning({ id: intelNotes.id });
+    ids.mail = mail.id;
+    const [research] = await db.insert(intelNotes).values({
+      title: 'Plimsworth Quarry research', rawContent: 'A committed deep dive.', source: 'research',
+      status: 'processed', graphState: 'admitted', spaceId: 'u_test',
+      metadata: { autoKind: 'research', refId: ids.session },
+    }).returning({ id: intelNotes.id });
+    ids.research = research.id;
+    const [quarry] = await db.insert(intelEntities).values({
+      name: 'Plimsworth Quarry', typeId: type.id, spaceId: 'u_test', firstSeenIn: mail.id,
+      summary: 'A quarry.', embedding: vec, watched: true, confirmed: true,
+    }).returning({ id: intelEntities.id });
+    const [holdings] = await db.insert(intelEntities).values({
+      name: 'Plimsworth Holdings', typeId: type.id, spaceId: 'u_test', firstSeenIn: mail.id,
+    }).returning({ id: intelEntities.id });
+    ids.quarry = quarry.id;
+    ids.holdings = holdings.id;
+    await db.insert(intelNoteEntities).values([
+      { noteId: mail.id, entityId: quarry.id, relevance: 'primary' },
+      { noteId: mail.id, entityId: holdings.id, relevance: 'primary' },
+    ]);
+    await db.insert(intelRelationships).values({
+      sourceEntityId: holdings.id, targetEntityId: quarry.id, type: 'owns', label: 'owns', sourceNoteId: mail.id, spaceId: 'u_test',
+    });
+    const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    const [ev] = await db.insert(intelTimelineEvents).values({
+      noteId: mail.id, entityId: quarry.id, date: tomorrow, type: 'deadline', title: 'Plimsworth Quarry renewal', spaceId: 'u_test',
+    }).returning({ id: intelTimelineEvents.id });
+    ids.event = ev.id;
+    const [insight] = await db.insert(intelInsights).values({
+      kind: 'broker', title: 'Plimsworth Quarry finding', explanation: 'x', entityIds: [quarry.id],
+      dedupeKey: `space-test-${tag}`, spaceId: 'u_test',
+    }).returning({ id: intelInsights.id });
+    ids.insight = insight.id;
+    const [memory] = await db.insert(jkaiMemories).values({
+      category: 'places', content: `Space test ${tag}: the quarry visit`,
+    }).returning({ id: jkaiMemories.id });
+    ids.memory = memory.id;
+    await db.insert(jkaiMemoryEntities).values({ memoryId: memory.id, entityId: quarry.id, method: 'review' });
+    await db.insert(mailEmbeddings).values({
+      noteId: mail.id, contentHash: 'space-test', chunkOrd: 0, source: 'Plimsworth Quarry offer', part: 'body',
+      text: 'Plimsworth Quarry is offering 20% off.', charStart: 0, charEnd: 38,
+      embeddingModel: 'space-test', embeddingDim: 1536, embedding: vec,
+    });
+  });
+
+  afterAll(async () => {
+    vi.mocked(generateEmbedding).mockImplementation(async () => { throw new Error('offline'); });
+    // The memory first (its links cascade), then the entities (edges, events and
+    // note links cascade), then the notes (mail passages cascade).
+    if (ids.memory) await db.delete(jkaiMemories).where(eq(jkaiMemories.id, ids.memory));
+    if (ids.insight) await db.delete(intelInsights).where(eq(intelInsights.id, ids.insight));
+    if (ids.event) await db.delete(intelTimelineEvents).where(eq(intelTimelineEvents.id, ids.event));
+    const entityIds = [ids.quarry, ids.holdings].filter(Boolean);
+    if (entityIds.length) await db.delete(intelEntities).where(inArray(intelEntities.id, entityIds));
+    const noteIds = [ids.mail, ids.research].filter(Boolean);
+    if (noteIds.length) await db.delete(intelNotes).where(inArray(intelNotes.id, noteIds));
+    if (ids.conversation) await db.delete(conversations).where(eq(conversations.id, ids.conversation));
+  });
+
+  it("chat's intel_find tool", async () => {
+    await import('$lib/workflows/site-tools/tools/intel-graph');
+    const { tools } = await import('$lib/workflows/site-tools/registry-internal');
+    const find = tools.find((t) => t.name === 'intel_find');
+    const res = await find!.handler({ query: 'Plimsworth' });
+    const found = ((res.data as { entities?: Array<{ id: string }> })?.entities ?? []).map((e) => e.id);
+    expect(found).not.toContain(ids.quarry);
+    expect(found).not.toContain(ids.holdings);
+    // The tool takes no scope; the graph it reads does, and u_test's has them.
+    const { getGraphAnalysis } = await import('./analytics/load');
+    expect((await getGraphAnalysis(true, { scope: TEST_SCOPE })).index.byId.has(ids.quarry)).toBe(true);
+  });
+
+  it('memory recall and memory links', async () => {
+    const { graphMemoryIds, memoryLinks, setMemoryLinks } = await import('$lib/jkai/memory/graph.server');
+    expect(await graphMemoryIds('what happened at Plimsworth Quarry')).not.toContain(ids.memory);
+    expect(await memoryLinks([ids.memory])).toEqual([]);
+    expect(await graphMemoryIds('what happened at Plimsworth Quarry', TEST_SCOPE)).toContain(ids.memory);
+    expect((await memoryLinks([ids.memory], TEST_SCOPE)).map((l) => l.id)).toEqual([ids.quarry]);
+    // A memory is the owner's: linking it to another space's entity is refused
+    // before anything is replaced.
+    await expect(setMemoryLinks(ids.memory, [ids.quarry])).rejects.toThrow(/changed/);
+    expect((await memoryLinks([ids.memory], TEST_SCOPE)).map((l) => l.id)).toEqual([ids.quarry]);
+  });
+
+  it("a daydream thought's evidence", async () => {
+    const { resolveEvidence } = await import('$lib/daydream/evidence');
+    const out = await resolveEvidence([
+      { kind: 'email', id: ids.mail },
+      { kind: 'intel', id: ids.insight },
+      { kind: 'intel-entity', id: ids.quarry },
+      { kind: 'interest', id: ids.mail },
+    ]);
+    const by = (kind: string) => out.find((r) => r.kind === kind)!;
+    expect(by('email').missing).toBe(true);
+    expect(by('intel').missing).toBe(true);
+    expect(by('intel-entity').missing).toBe(true);
+    expect(by('interest').href).not.toContain(ids.mail);
+    expect(JSON.stringify(out)).not.toContain('Plimsworth');
+  });
+
+  it('daydream offers, money and the deep-dive commit', async () => {
+    const { findOfferCandidates } = await import('$lib/daydream/offers');
+    expect((await findOfferCandidates(50)).some((c) => c.noteId === ids.mail)).toBe(false);
+    const { loadMoney } = await import('$lib/daydream/ledger');
+    expect((await loadMoney()).renewals.some((r) => r.id === ids.event)).toBe(false);
+    const { commitState } = await import('$lib/deepdive/graph-commit');
+    expect((await commitState(ids.session)).committed).toBe(false);
+  });
+
+  it('the news desk', async () => {
+    const { keptKeysFor, getNewsStats } = await import('$lib/news/stats');
+    expect((await keptKeysFor([ids.newsKey])).has(ids.newsKey)).toBe(false);
+    expect(typeof (await getNewsStats('space-test')).retainedCount).toBe('number');
+    const { loadAnchors, clearAnchorCache } = await import('$lib/news/correlate.server');
+    clearAnchorCache();
+    const { anchors } = await loadAnchors();
+    clearAnchorCache();
+    expect(anchors.some((a) => a.id === ids.quarry || a.id === ids.holdings)).toBe(false);
+  });
+
+  it('the mail passage index', async () => {
+    const { searchMail, readMail } = await import('$lib/mail-index/search');
+    expect((await searchMail('Plimsworth offer', { minSim: 0 })).some((h) => h.noteId === ids.mail)).toBe(false);
+    expect(await readMail(ids.mail)).toBeNull();
+  });
+
+  it("the context router's anchors, and the thread inspector", async () => {
+    const { resolveAnchors } = await import('$lib/jkai/grounding/context-route.server');
+    expect(await resolveAnchors(['Plimsworth Quarry'])).toEqual([]);
+    const { buildThreadGraph } = await import('$lib/jkai/thread-graph.server');
+    const graph = await buildThreadGraph(ids.conversation, { full: true });
+    expect(graph.nodes.some((n) => n.id === `entity:${ids.quarry}`)).toBe(false);
+    const { composeDrill } = await import('$lib/jkai/context-panel/drill.server');
+    expect(await composeDrill(ids.conversation, { kind: 'entity', id: ids.quarry })).toBeNull();
   });
 });

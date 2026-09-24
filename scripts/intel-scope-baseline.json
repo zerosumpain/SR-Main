@@ -1,14 +1,1 @@
-[
-  "src/lib/components/jkai/KnowledgeGraphModal.svelte",
-  "src/lib/daydream/adjudicate.ts",
-  "src/lib/daydream/mechanics.ts",
-  "src/lib/daydream/notebook/cards.ts",
-  "src/lib/daydream/thought-store.ts",
-  "src/lib/jkai/graph-colors.ts",
-  "src/lib/jkai/thread-graph.ts",
-  "src/lib/mail-index/store.ts",
-  "src/lib/news/relabel.ts",
-  "src/lib/workflows/chat/legacy-tool-log.ts",
-  "src/lib/workflows/chat/tool-summary.ts",
-  "src/lib/workflows/site-tools/keyword-classifier.ts"
-]
+[]

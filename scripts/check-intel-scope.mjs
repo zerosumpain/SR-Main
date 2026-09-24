@@ -71,6 +71,39 @@ export const MAINTENANCE = {
   'src/lib/jkai/intel/source-policy.server.ts':
     'Drive folder policy sync (the Drive is the owner\'s): re-stamps categories on, or cascades ' +
     'the deletion of, notes derived from Drive files, by file id; returns counts only.',
+  // Task 13 — consumers outside the intel library the READS regex flags but that read no intel table.
+  'src/lib/components/jkai/KnowledgeGraphModal.svelte':
+    'Not a table reader: a client component; `intel_relationships` appears only in a CSS comment. ' +
+    'Its data comes from the thread-graph and entity-card routes, which are scoped.',
+  'src/lib/daydream/adjudicate.ts':
+    'Not a table reader: the tool NAME \'intel_find\' in the reviewer\'s allow-list and ' +
+    '`intel_notes` in comments. The tools it hands the reviewer read the owner\'s scope.',
+  'src/lib/daydream/mechanics.ts':
+    'Not a table reader: descriptive strings for the mechanics page (`reads: [\'intel_notes (email)\']`).',
+  'src/lib/daydream/notebook/cards.ts':
+    'Not a table reader: `intel_notes.graph_state` appears only in a comment; the weave writes ' +
+    'through extractIntoIntel into OWNER_SPACE.',
+  'src/lib/daydream/thought-store.ts':
+    'Not a table reader: `intel_insights` appears only in the header comment; it reads daydream_thoughts.',
+  'src/lib/jkai/graph-colors.ts':
+    'Not a table reader: pure colour mapping; `intel_relationships` appears only in a comment.',
+  'src/lib/jkai/thread-graph.ts':
+    'Not a table reader: the pure half of the thread graph (client-safe); `intel_relationships` ' +
+    'appears only in a comment. The reader is thread-graph.server.ts, which is scoped.',
+  'src/lib/workflows/chat/legacy-tool-log.ts':
+    'Not a table reader: tool NAMES (\'intel_insights\' etc.) mapped to log sentences.',
+  'src/lib/workflows/chat/tool-summary.ts':
+    'Not a table reader: tool NAMES (\'intel_insights\' etc.) in switch cases that summarise results.',
+  'src/lib/workflows/site-tools/keyword-classifier.ts':
+    'Not a table reader: tool NAMES (\'intel_insights\' etc.) in a comment beside a toolset pattern.',
+  // Task 13 — maintenance that spans every space and returns only counts.
+  'src/lib/news/relabel.ts':
+    'Whole-table maintenance relabel (secret-authorised backfill route): moves kept news from ' +
+    'source \'web\' to \'news\' in every space by its newsKey; returns a count.',
+  'src/lib/mail-index/store.ts':
+    'Passage indexing is per note, like embeddings (spec §2): backfillMailIndex indexes every ' +
+    'admitted thread that has no chunks and pruneUnadmittedMail drops unadmitted ones; both return ' +
+    'counts. The reader is mail-index/search.ts, which is scoped.',
 };
 
 export function classify(files, baseline, maintenance) {
