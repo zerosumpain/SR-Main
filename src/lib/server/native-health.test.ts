@@ -20,7 +20,8 @@ const CONTEXT = {
   seriesIsMock: false,
   strap: 'Body reporting in.',
   today: { rec: 61, hrv: 52, rhr: 58, slept: 7.4 },
-  todayDeltas: { hrvDeltaPct: -8, rhrDelta: 3, sleepDelta: -0.75 },
+  // sleepDelta is SECONDS, as SR-Health sends it: 45 minutes short.
+  todayDeltas: { hrvDeltaPct: -8, rhrDelta: 3, sleepDelta: -2700 },
   days: [
     { date: '2026-09-20', rec: 55, hrv: 48, rhr: 60, slept: 6.8, sleepScore: 71 },
     { date: '2026-09-21', rec: 58, hrv: 50, rhr: 59, slept: 8.15, sleepScore: 80 },
@@ -75,6 +76,21 @@ describe('the four figures', () => {
     expect(rhr.improving).toBe(false);
     expect(hrv.direction).toBe('down');
     expect(hrv.improving).toBe(false);
+  });
+
+  it('says what each delta is measured against', async () => {
+    const result = await summary();
+    const caption = (key: string) => result.figures.find((f) => f.key === key)!.caption;
+    expect(caption('hrv')).toBe('vs yesterday');
+    expect(caption('rhr')).toBe('vs 30-day median');
+    expect(caption('sleep')).toBe('vs 7-day average');
+  });
+
+  it('reads the sleep delta as seconds, not hours', async () => {
+    const result = await summary();
+    const sleep = result.figures.find((f) => f.key === 'sleep')!;
+    expect(sleep.delta).toBeCloseTo(-0.75);
+    expect(sleep.deltaDisplay).toBe('−45m');
   });
 
   it('renders sleep as hours and minutes, never as a decimal', async () => {

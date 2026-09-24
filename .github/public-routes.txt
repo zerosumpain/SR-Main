@@ -50,6 +50,7 @@
 /api/native/chat/conversations/[id]/model
 /api/native/health/activities
 /api/native/health/activities/[id]
+/api/native/health/hub
 /api/native/health/segments
 /api/native/health/segments/[id]
 /api/native/health/summary

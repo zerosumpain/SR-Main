@@ -93,6 +93,7 @@ describe('modules shared with the extracted applications', () => {
       'src/lib/server/access-util.ts',
       'src/lib/server/access.ts',
       'src/lib/server/health-context-contract.ts',
+      'src/lib/server/health-hub-contract.ts',
       'src/lib/server/health-signals-contract.ts',
       'src/lib/server/owner.ts',
       'src/lib/server/rate-limit.ts',
