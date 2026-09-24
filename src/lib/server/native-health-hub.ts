@@ -1,5 +1,5 @@
 import { getFromExtracted } from '$lib/server/extracted-app';
-import type { HubDigest } from './native-health-hub-contract';
+import type { HubDigest } from './health-hub-contract';
 
 /**
  * /health's summary intelligence for the phone — sections A to I, digested by

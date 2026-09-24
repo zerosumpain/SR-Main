@@ -36,6 +36,10 @@
     "    for byte. Redeclaring it instead is how a field starts arriving undefined",
     "    with nothing red anywhere.",
     "",
+    "  health-hub-contract — the digest SR-Health's /api/health/hub returns and",
+    "    the iPhone's Health tab renders, passed through /api/native/health/hub.",
+    "    Same reasoning as the context contract: types only, byte for byte.",
+    "",
     "",
     "  file-index/* — this is a MAIN module that Drive borrowed, not the reverse.",
     "    /dav, deepdive/to-drive, intel/mail-admit, knowledge/search, the file-search",
@@ -180,6 +184,10 @@
     "src/lib/server/health-context-contract.ts": {
       "peer": "zerosumpain/SR-Health",
       "sha256": "e345cab90fb7f2183287a2903c62cd9a492b25c2e3ae515ab2ce5dacb6b8bf79"
+    },
+    "src/lib/server/health-hub-contract.ts": {
+      "peer": "zerosumpain/SR-Health",
+      "sha256": "65a7089c4d043b2600d2cfc47ec41a6a982fd6462372a30f624139439af51df8"
     },
     "src/lib/file-index/content.ts": {
       "peer": "zerosumpain/SR-Drive",

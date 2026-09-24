@@ -1,5 +1,3 @@
-// Copied from SR-Health src/lib/health/hub-contract.ts — the contract, not an import:
-// the two apps share no code, and a copy that drifts fails the phone's decode loudly.
 /**
  * /health's summary intelligence, digested for the iPhone. The contract between
  * SR-Health (`GET /api/health/hub`, owner-only) and SR-Main's device lane
