@@ -12,7 +12,7 @@
 </script>
 
 {#snippet sourceIcon(source: string)}
-  {#if source === 'web'}
+  {#if source === 'web' || source === 'news'}
     <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="M3 10h14M10 3c2 2.5 2 11.5 0 14M10 3c-2 2.5-2 11.5 0 14"/></svg>
   {:else if source === 'whatsapp'}
     <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 16l1-3a6 6 0 113 2.5L4 16z"/></svg>

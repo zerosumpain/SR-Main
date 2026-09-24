@@ -124,24 +124,26 @@ export async function splitEntity(plan: SplitPlan): Promise<SplitOutcome> {
 
   const [from] = (
     await db.execute(sql`
-      SELECT id, name, first_seen_in FROM intel_entities WHERE id = ${plan.fromId}
+      SELECT id, name, first_seen_in, space_id FROM intel_entities WHERE id = ${plan.fromId}
     `)
-  ).rows as Array<{ id: string; name: string; first_seen_in: string | null }>;
+  ).rows as Array<{ id: string; name: string; first_seen_in: string | null; space_id: string }>;
   if (!from) throw new Error(`no such entity: ${plan.fromId}`);
 
   let toId: string;
   let createdEntity = false;
   if ('entityId' in plan.to) {
     const [target] = (
-      await db.execute(sql`SELECT id FROM intel_entities WHERE id = ${plan.to.entityId}`)
-    ).rows as Array<{ id: string }>;
+      await db.execute(sql`SELECT id, space_id FROM intel_entities WHERE id = ${plan.to.entityId}`)
+    ).rows as Array<{ id: string; space_id: string }>;
     if (!target) throw new Error(`no such entity: ${plan.to.entityId}`);
+    // Moving edges onto another space's entity would be a merge across spaces.
+    if (target.space_id !== from.space_id) throw new Error('cannot split onto an entity in a different space');
     toId = target.id;
   } else {
     const [made] = (
       await db.execute(sql`
-        INSERT INTO intel_entities (name, type_id, confidence, confirmed, first_seen_in)
-        VALUES (${plan.to.name}, ${plan.to.typeId}, 'medium', true, ${from.first_seen_in})
+        INSERT INTO intel_entities (name, type_id, confidence, confirmed, first_seen_in, space_id)
+        VALUES (${plan.to.name}, ${plan.to.typeId}, 'medium', true, ${from.first_seen_in}, ${from.space_id})
         RETURNING id
       `)
     ).rows as Array<{ id: string }>;

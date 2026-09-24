@@ -13,6 +13,7 @@ import { buildIndex, resolveEntitySources } from './model';
 import { computeCentrality, type CentralityScores } from './centrality';
 import { detectCommunities, type CommunityResult } from './community';
 import { channelArtefactIds } from '../channel-artefacts';
+import { OWNER_INTEL_SCOPE, scopeKey, spaceIn, type IntelScope } from '../scope';
 
 export interface GraphAnalysis {
   snapshot: GraphSnapshot;
@@ -40,6 +41,12 @@ export interface GraphAnalysis {
    * rejecting one achieves nothing.
    */
   suppressedPairs: Set<string>;
+  /**
+   * The spaces this analysis was computed over. Kept on the analysis so a
+   * follow-up read against it — the embeddings, above — stays inside the same
+   * scope without every caller having to pass it again.
+   */
+  scope: IntelScope;
   computedAt: number;
 }
 
@@ -56,14 +63,17 @@ export function pairKeyFor(a: string, b: string): string {
 const TTL_MS = 60_000;
 
 /**
- * One cache per variant. The analysed graph excludes channel artefacts; the
- * `withArtefacts` variant exists only so a surface can SHOW them on request,
- * and keying them separately is what stops a request for the display variant
- * poisoning the analytic one for the rest of the TTL.
+ * One cache per variant and scope. The analysed graph excludes channel
+ * artefacts; the `withArtefacts` variant exists only so a surface can SHOW them
+ * on request, and keying them separately is what stops a request for the
+ * display variant poisoning the analytic one for the rest of the TTL. The scope
+ * is in the key for the same reason and a sharper one: a shared entry would
+ * serve one person's graph to another.
  */
 const cached = new Map<string, GraphAnalysis>();
 const inflight = new Map<string, Promise<GraphAnalysis>>();
-const variantKey = (includeArtefacts: boolean) => (includeArtefacts ? 'with-artefacts' : 'analysed');
+const variantKey = (includeArtefacts: boolean, scope: IntelScope) =>
+  `${includeArtefacts ? 'with-artefacts' : 'analysed'}|${scopeKey(scope)}`;
 /**
  * Bumped on every invalidation. A computation that started before the bump is
  * reading pre-write data, so it must not install itself as the cache when it
@@ -107,7 +117,7 @@ function parseVector(raw: unknown): number[] | null {
   return out.every((n) => Number.isFinite(n)) ? out : null;
 }
 
-async function loadSnapshot(includeArtefacts: boolean): Promise<{
+async function loadSnapshot(includeArtefacts: boolean, scope: IntelScope): Promise<{
   snapshot: GraphSnapshot;
   suppressedPairs: Set<string>;
 }> {
@@ -137,6 +147,7 @@ async function loadSnapshot(includeArtefacts: boolean): Promise<{
       e.created_at,
       e.updated_at,
       e.aliases                     AS aliases,
+      e.space_id,
       COALESCE(ne.note_count, 0)    AS note_count,
       ne.last_seen_at,
       COALESCE(ne.categories, ARRAY[]::text[]) AS categories,
@@ -152,7 +163,8 @@ async function loadSnapshot(includeArtefacts: boolean): Promise<{
       fsn.created_at                AS first_seen_at
     FROM intel_entities e
     LEFT JOIN intel_entity_types t ON t.id = e.type_id
-    LEFT JOIN intel_notes fsn ON fsn.id = e.first_seen_in
+    -- Scoped for the same reason as the sources sub-select below.
+    LEFT JOIN intel_notes fsn ON fsn.id = e.first_seen_in AND ${spaceIn(sql`fsn.space_id`, scope)}
     LEFT JOIN (
       -- ER categories are set per SOURCE, so an entity carries the union of the
       -- categories of every note asserting it: filtering on 'work' returns
@@ -199,12 +211,15 @@ async function loadSnapshot(includeArtefacts: boolean): Promise<{
                         FILTER (WHERE n.metadata->>'senderDomain' IS NOT NULL), ARRAY[]::text[])
              ) AS sources
       FROM intel_note_entities ne
-      JOIN intel_notes n ON n.id = ne.note_id
+      -- Scoped here as well as on the entity, belt and braces: a note link from
+      -- another space must not leak that space's source labels onto a node.
+      JOIN intel_notes n ON n.id = ne.note_id AND ${spaceIn(sql`n.space_id`, scope)}
       LEFT JOIN LATERAL jsonb_array_elements_text(COALESCE(n.categories, '[]'::jsonb))
         AS cat(value) ON TRUE
       GROUP BY ne.entity_id
     ) ne ON ne.entity_id = e.id
     WHERE e.merged_into_id IS NULL
+      AND ${spaceIn(sql`e.space_id`, scope)}
   `);
 
   const nodes: GraphNode[] = (entityRes.rows as Array<Record<string, unknown>>)
@@ -249,6 +264,7 @@ async function loadSnapshot(includeArtefacts: boolean): Promise<{
       aliases: toStringArray(r.aliases),
       categories: toStringArray(r.categories),
       sources,
+      space: String(r.space_id),
     };
   });
 
@@ -275,7 +291,12 @@ async function loadSnapshot(includeArtefacts: boolean): Promise<{
     LEFT JOIN intel_notes n     ON n.id  = r.source_note_id
     -- A suppressed edge was deleted deliberately with a reason. It must not
     -- reappear in the analysed graph, or "reject this link" would be cosmetic.
+    --
+    -- Scoped on the edge alone. Its endpoints, and the survivors they were
+    -- merged into, are in the edge's space by construction: an edge takes its
+    -- note's space, and neither resolution nor merge crosses one.
     WHERE r.suppressed IS NOT TRUE
+      AND ${spaceIn(sql`r.space_id`, scope)}
   `);
 
   const edges: GraphEdge[] = (edgeRes.rows as Array<Record<string, unknown>>)
@@ -318,6 +339,7 @@ async function loadSnapshot(includeArtefacts: boolean): Promise<{
     LEFT JOIN intel_entities t  ON t.id  = r.target_entity_id
     LEFT JOIN intel_entities tm ON tm.id = t.merged_into_id
     WHERE r.suppressed IS TRUE
+      AND ${spaceIn(sql`r.space_id`, scope)}
   `);
   const suppressedPairs = new Set(
     (suppressedRes.rows as Array<Record<string, unknown>>).map((r) =>
@@ -369,6 +391,7 @@ export async function ensureEmbeddings(analysis: GraphAnalysis): Promise<Map<str
       SELECT id, embedding::text AS embedding
       FROM intel_entities
       WHERE merged_into_id IS NULL AND embedding IS NOT NULL
+        AND ${spaceIn(sql`space_id`, analysis.scope)}
     `);
     // Parsed in chunks with a yield between them. Several thousand 1,536-value
     // vectors is ~1.1s of unbroken string splitting, and that lands in the same
@@ -399,12 +422,18 @@ export async function ensureEmbeddings(analysis: GraphAnalysis): Promise<Map<str
 /**
  * The current graph analysis, computed at most once per TTL. Concurrent callers
  * share one in-flight computation rather than each running Louvain.
+ *
+ * `scope` defaults to the owner's, which is what every existing caller wants; a
+ * surface a member can reach passes the scope `resolveRequestScope` returns.
  */
 export async function getGraphAnalysis(
   force = false,
-  { includeArtefacts = false }: { includeArtefacts?: boolean } = {},
+  {
+    includeArtefacts = false,
+    scope = OWNER_INTEL_SCOPE,
+  }: { includeArtefacts?: boolean; scope?: IntelScope } = {},
 ): Promise<GraphAnalysis> {
-  const key = variantKey(includeArtefacts);
+  const key = variantKey(includeArtefacts, scope);
   const now = Date.now();
   const hit = cached.get(key);
   if (!force && hit && now - hit.computedAt < TTL_MS) return hit;
@@ -413,7 +442,7 @@ export async function getGraphAnalysis(
 
   const startedAt = generation;
   const work = (async () => {
-    const { snapshot, suppressedPairs } = await loadSnapshot(includeArtefacts);
+    const { snapshot, suppressedPairs } = await loadSnapshot(includeArtefacts, scope);
     const index = buildIndex(snapshot);
     const analysis: GraphAnalysis = {
       snapshot,
@@ -423,6 +452,7 @@ export async function getGraphAnalysis(
       // Filled in by `ensureEmbeddings` on first use — see the field's comment.
       embeddings: new Map<string, number[]>(),
       suppressedPairs,
+      scope,
       computedAt: Date.now(),
     };
     // Only cache if nothing invalidated while we were reading. The caller still

@@ -2772,6 +2772,8 @@ export const intelNotes = pgTable('intel_notes', {
    * to. Nothing here is a general-purpose moderation queue.
    */
   graphState: text('graph_state').notNull().default('admitted'),
+  /** Whose intel this is — see $lib/jkai/intel/scope. 'owner' | 'household' | 'u_…'. */
+  spaceId: text('space_id').notNull().default('owner'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
@@ -2786,6 +2788,7 @@ export const intelNotes = pgTable('intel_notes', {
   // The mail queue's every read is "pending email notes, newest first", and the
   // graph's every read is now "admitted only". Both are this index.
   byGraphState: index('intel_notes_graph_state_idx').on(t.graphState, t.source),
+  bySpace: index('intel_notes_space_idx').on(t.spaceId, t.graphState),
 }));
 
 export type IntelNote = typeof intelNotes.$inferSelect;
@@ -2804,6 +2807,8 @@ export const intelEntities = pgTable(
     confirmed: boolean('confirmed').notNull().default(false),
     mergedIntoId: text('merged_into_id'),
     firstSeenIn: text('first_seen_in').references(() => intelNotes.id, { onDelete: 'set null' }),
+    /** Whose intel this is — see $lib/jkai/intel/scope. 'owner' | 'household' | 'u_…'. */
+    spaceId: text('space_id').notNull().default('owner'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 
@@ -2843,6 +2848,7 @@ export const intelEntities = pgTable(
     byWatched: index('intel_entities_watched_idx').on(t.watched),
     byUpdated: index('intel_entities_updated_idx').on(t.updatedAt),
     byCanonical: index('intel_entities_canonical_idx').on(t.canonicalName),
+    bySpace: index('intel_entities_space_idx').on(t.spaceId),
     // Cosine-distance ANN index for the `<=>` lookup `buildKnowledgeContext`
     // runs on EVERY chat turn. Without it that query is a Seq Scan over every
     // embedded entity: measured 2026-08-24 on production at 187ms / 13,313
@@ -2893,6 +2899,8 @@ export const intelRelationships = pgTable(
     properties: jsonb('properties').$type<Record<string, unknown>>(),
     confidence: text('confidence').notNull().default('medium'),
     sourceNoteId: text('source_note_id').references(() => intelNotes.id, { onDelete: 'set null' }),
+    /** Whose intel this is — see $lib/jkai/intel/scope. 'owner' | 'household' | 'u_…'. */
+    spaceId: text('space_id').notNull().default('owner'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 
     /** Continuous edge weight 0..1. The TEXT `strength` column has never been
@@ -2917,6 +2925,7 @@ export const intelRelationships = pgTable(
     bySource: index('intel_rel_source_idx').on(t.sourceEntityId),
     byTarget: index('intel_rel_target_idx').on(t.targetEntityId),
     byNote: index('intel_rel_note_idx').on(t.sourceNoteId),
+    bySpace: index('intel_relationships_space_idx').on(t.spaceId),
   }),
 );
 
@@ -3005,6 +3014,8 @@ export const intelTimelineEvents = pgTable('intel_timeline_events', {
   type: text('type').notNull(),
   title: text('title').notNull(),
   description: text('description'),
+  /** Whose intel this is — see $lib/jkai/intel/scope. 'owner' | 'household' | 'u_…'. */
+  spaceId: text('space_id').notNull().default('owner'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -3024,6 +3035,8 @@ export const intelAlerts = pgTable('intel_alerts', {
   dismissedReason: text('dismissed_reason'),
   /** Stable key so the same alert is not raised twice. */
   dedupeKey: text('dedupe_key'),
+  /** Whose intel this is — see $lib/jkai/intel/scope. 'owner' | 'household' | 'u_…'. */
+  spaceId: text('space_id').notNull().default('owner'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -3097,6 +3110,8 @@ export const intelInsights = pgTable(
       .notNull()
       .default(sql`'[]'::jsonb`),
     runId: text('run_id'),
+    /** Whose intel this is — see $lib/jkai/intel/scope. 'owner' | 'household' | 'u_…'. */
+    spaceId: text('space_id').notNull().default('owner'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -3128,6 +3143,8 @@ export const intelLenses = pgTable(
     cron: text('cron'),
     lastRunAt: timestamp('last_run_at', { withTimezone: true }),
     lastCount: integer('last_count'),
+    /** Whose intel this is — see $lib/jkai/intel/scope. 'owner' | 'household' | 'u_…'. */
+    spaceId: text('space_id').notNull().default('owner'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -3148,6 +3165,8 @@ export const intelDossiers = pgTable(
     lensId: text('lens_id'),
     status: text('status').notNull().default('open'), // open|parked|closed
     openQuestions: jsonb('open_questions').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    /** Whose intel this is — see $lib/jkai/intel/scope. 'owner' | 'household' | 'u_…'. */
+    spaceId: text('space_id').notNull().default('owner'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -3195,6 +3214,8 @@ export const intelCommissions = pgTable(
     status: text('status').notNull().default('queued'), // queued|running|complete|failed
     resultNoteId: text('result_note_id'),
     error: text('error'),
+    /** Whose intel this is — see $lib/jkai/intel/scope. 'owner' | 'household' | 'u_…'. */
+    spaceId: text('space_id').notNull().default('owner'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -3427,6 +3448,8 @@ export const gmailAccounts = pgTable('gmail_accounts', {
   accessTokenExpiresAt: timestamp('access_token_expires_at'),
   scopes: text('scopes').notNull(), // space-separated
   status: text('status').notNull().default('active'), // active | auth_expired | disabled
+  /** The principal this mailbox belongs to; its intel lands in that space. */
+  principalId: text('principal_id').notNull().default('owner'),
   lastError: text('last_error'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

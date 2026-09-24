@@ -856,8 +856,15 @@ export function threadContentHash(thread: ThreadInput): string {
   return createHash('sha256').update(parts.join('')).digest('hex');
 }
 
-/** Stored content hashes for a set of thread refIds. */
-async function storedHashes(refIds: string[]): Promise<Map<string, string>> {
+/**
+ * Stored content hashes for a set of thread refIds, in ONE space.
+ *
+ * Scoped because the hash is a fact about the thread, not the mailbox: the same
+ * thread in two people's mail hashes identically, and an unscoped lookup would
+ * tell the second sweep it had already been read — so that person never got a
+ * note at all. Same rule as the derived-note lookup in ./auto-extract.
+ */
+export async function storedHashes(refIds: string[], spaceId: string): Promise<Map<string, string>> {
   if (!refIds.length) return new Map();
   const { db } = await import('$lib/db');
   // `pgTextArray`, not the array itself: interpolating a JS array here binds a
@@ -867,7 +874,7 @@ async function storedHashes(refIds: string[]): Promise<Map<string, string>> {
   const { rows } = await db.execute(sql`
     SELECT metadata->>'refId' AS ref_id, metadata->>'contentHash' AS content_hash
     FROM intel_notes
-    WHERE metadata->>'refId' = ANY(${pgTextArray(refIds)}::text[])
+    WHERE metadata->>'refId' = ANY(${pgTextArray(refIds)}::text[]) AND space_id = ${spaceId}
   `);
   const out = new Map<string, string>();
   for (const r of rows as Array<Record<string, unknown>>) {
@@ -1125,6 +1132,8 @@ async function persistStructuralOnly(
     threadId: string;
     subject: string;
     account: string;
+    /** The mailbox owner's space — the note, and so everything derived from it, lands there. */
+    spaceId: string;
     participants: ParsedAddress[];
     important?: boolean;
     /**
@@ -1160,7 +1169,7 @@ async function persistStructuralOnly(
   };
 
   const { rows } = await db.execute(sql`
-    SELECT id FROM intel_notes WHERE metadata->>'refId' = ${refId} LIMIT 1
+    SELECT id FROM intel_notes WHERE metadata->>'refId' = ${refId} AND space_id = ${ctx.spaceId} LIMIT 1
   `);
   const existingId = (rows as Array<Record<string, unknown>>)[0]?.id;
 
@@ -1187,6 +1196,7 @@ async function persistStructuralOnly(
       status: 'pending',
       metadata,
       observedAt: opts.observedAt,
+      spaceId: ctx.spaceId,
     })
     .returning({ id: intelNotes.id });
 
@@ -1223,7 +1233,7 @@ export async function previewGmailSweep(opts: GmailIngestOptions = {}): Promise<
     const { rows } = await db.execute(sql`
       SELECT metadata->>'refId' AS ref_id
       FROM intel_notes
-      WHERE metadata->>'refId' = ANY(${pgTextArray(refIds)}::text[])
+      WHERE metadata->>'refId' = ANY(${pgTextArray(refIds)}::text[]) AND space_id = ${acct.principalId}
     `);
     const known = new Set((rows as Array<Record<string, unknown>>).map((r) => String(r.ref_id)));
     return {
@@ -1250,7 +1260,7 @@ export async function previewGmailSweep(opts: GmailIngestOptions = {}): Promise<
   const { rows } = await db.execute(sql`
     SELECT metadata->>'refId' AS ref_id
     FROM intel_notes
-    WHERE metadata->>'refId' = ANY(${pgTextArray(refIds)}::text[])
+    WHERE metadata->>'refId' = ANY(${pgTextArray(refIds)}::text[]) AND space_id = ${acct.principalId}
   `);
   const known = new Set((rows as Array<Record<string, unknown>>).map((r) => String(r.ref_id)));
 
@@ -1329,7 +1339,7 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
 
   // One query for every thread's stored hash, so the per-thread "has this
   // changed?" test below costs nothing.
-  const alreadyIngested = await storedHashes(threadIds.map(refIdForThread));
+  const alreadyIngested = await storedHashes(threadIds.map(refIdForThread), acct.principalId);
   const result: GmailIngestResult = {
     account: acct.email,
     query,
@@ -1411,6 +1421,7 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
               threadId,
               subject,
               account: acct.email,
+              spaceId: acct.principalId,
               participants: structural.participants,
               important: threadIsImportant(thread),
               reason: 'bodyless',
@@ -1458,6 +1469,7 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
               threadId,
               subject,
               account: acct.email,
+              spaceId: acct.principalId,
               participants: structural.participants,
               important: threadIsImportant(thread),
             },
@@ -1497,6 +1509,8 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
         // reads `source`, not `kind`.
         source: 'email',
         refId: refIdForThread(threadId),
+        // Whose mailbox this is: a member's mail is the member's intel.
+        spaceId: acct.principalId,
         title: subject.slice(0, 200),
         text: noteText,
         // The MESSAGE-only hash computed above, not a hash of `noteText`.

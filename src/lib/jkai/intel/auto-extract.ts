@@ -28,6 +28,7 @@ import { intelNotes, researchSessions } from '$lib/db/schema';
 import { extractFromNote, type ExtractionResult } from './extract';
 import { persistExtraction } from './graph';
 import { embedNote } from './embed';
+import { OWNER_SPACE } from './scope';
 
 /**
  * `daydream` is the fourth: a thought the owner explicitly called useful, woven
@@ -45,6 +46,12 @@ export type AutoKind = 'file' | 'research' | 'chat' | 'daydream' | 'note';
 
 export interface AutoExtractInput {
   kind: AutoKind;
+  /**
+   * Whose intel this is. Required so every caller decides — see ./scope. Also
+   * part of the derived note's identity: two people receiving the same Gmail
+   * thread get a note each, never one shared between them.
+   */
+  spaceId: string;
   /** Stable id of the upstream row (file id / research session id). */
   refId: string;
   title: string;
@@ -148,7 +155,7 @@ export function isAutoExtractEnabled(): boolean {
   return process.env.INTEL_AUTO_EXTRACT !== '0';
 }
 
-async function findDerivedNote(kind: AutoKind, refId: string) {
+async function findDerivedNote(kind: AutoKind, refId: string, spaceId: string) {
   const [row] = await db
     .select({ id: intelNotes.id, metadata: intelNotes.metadata, graphState: intelNotes.graphState })
     .from(intelNotes)
@@ -156,6 +163,7 @@ async function findDerivedNote(kind: AutoKind, refId: string) {
       and(
         sql`${intelNotes.metadata}->>'autoKind' = ${kind}`,
         sql`${intelNotes.metadata}->>'refId' = ${refId}`,
+        eq(intelNotes.spaceId, spaceId),
       ),
     )
     .limit(1);
@@ -226,7 +234,7 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
 
   try {
     if (!(await admitDriveSource(input))) return { status: 'skipped' };
-    const existing = await findDerivedNote(input.kind, input.refId);
+    const existing = await findDerivedNote(input.kind, input.refId, input.spaceId);
     if (existing && !input.force) {
       const prevHash = (existing.metadata as Record<string, unknown> | null)?.contentHash;
       if (prevHash === input.contentHash) return { status: 'unchanged', noteId: existing.id };
@@ -307,6 +315,9 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
             metadata,
             categories,
             observedAt: input.observedAt,
+            // Insert only: a note never changes space, so the update branch
+            // above leaves it alone.
+            spaceId: input.spaceId,
           })
           .returning({ id: intelNotes.id });
         noteId = created.id;
@@ -472,6 +483,7 @@ export interface DerivedDeleteResult {
 export async function deleteDerivedIntel(
   kind: AutoKind,
   refId: string,
+  spaceId: string = OWNER_SPACE,
 ): Promise<DerivedDeleteResult> {
   const result: DerivedDeleteResult = {
     notesDeleted: 0,
@@ -486,6 +498,7 @@ export async function deleteDerivedIntel(
     const notes = await db.select({ id: intelNotes.id }).from(intelNotes).where(and(
       sql`${intelNotes.metadata}->>'autoKind' = ${kind}`,
       sql`${intelNotes.metadata}->>'refId' = ${refId}`,
+      eq(intelNotes.spaceId, spaceId),
     ));
     if (!notes.length) return result;
     const { cleanupIntelligence } = await import('./cleanup.server');
@@ -506,6 +519,7 @@ export async function deleteDerivedIntel(
         and(
           sql`${intelNotes.metadata}->>'autoKind' = ${kind}`,
           sql`${intelNotes.metadata}->>'refId' = ${refId}`,
+          eq(intelNotes.spaceId, spaceId),
         ),
       );
     if (notes.length === 0) return result;
@@ -537,8 +551,8 @@ export async function deleteDerivedIntel(
 }
 
 /** Fire-and-forget form for delete handlers that must not wait on the graph. */
-export function queueDerivedIntelDelete(kind: AutoKind, refId: string): void {
-  void deleteDerivedIntel(kind, refId).catch(() => {});
+export function queueDerivedIntelDelete(kind: AutoKind, refId: string, spaceId: string = OWNER_SPACE): void {
+  void deleteDerivedIntel(kind, refId, spaceId).catch(() => {});
 }
 
 export interface BackfillProgress {
@@ -642,6 +656,8 @@ export async function backfillIntelExtraction(opts: BackfillOptions = {}): Promi
           contentHash: String(row.hash ?? ''),
           categories: policy.categorySlugs,
           metadata: { sourceUrl: '/drive', backfilled: true },
+          // Drive is the owner's.
+          spaceId: OWNER_SPACE,
         }),
       );
     }

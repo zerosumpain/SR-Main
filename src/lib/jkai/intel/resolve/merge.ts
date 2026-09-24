@@ -70,6 +70,7 @@ export async function mergeEntities(
       properties: intelEntities.properties,
       summary: intelEntities.summary,
       mergedIntoId: intelEntities.mergedIntoId,
+      spaceId: intelEntities.spaceId,
     })
     .from(intelEntities)
     .where(sql`${intelEntities.id} IN (${keepId}, ${mergeId})`);
@@ -79,6 +80,10 @@ export async function mergeEntities(
   if (!keep) throw new Error(`survivor ${keepId} not found`);
   if (!merge) throw new Error(`entity ${mergeId} not found`);
   if (merge.mergedIntoId) throw new Error(`${mergeId} is already merged`);
+  // A space is a person's graph. Folding one person's "Tesco" into another's
+  // would carry their summary, aliases and evidence across — the exact leak
+  // spaces exist to stop.
+  if (keep.spaceId !== merge.spaceId) throw new Error('cannot merge entities from different spaces');
   // Merging INTO a tombstone would build a chain the graph loader cannot
   // follow — it resolves merged_into_id one level only, so anything pointing at
   // an already-merged entity would silently vanish from every view.
@@ -507,6 +512,7 @@ export async function loadResolvableEntities(): Promise<ResolvableEntity[]> {
       -- the same thing under that name.
       e.aliases                   AS aliases,
       e.summary                   AS summary,
+      e.space_id                  AS space_id,
       COALESCE(d.degree, 0)       AS degree,
       COALESCE(n.note_count, 0)   AS note_count
     FROM intel_entities e
@@ -542,6 +548,7 @@ export async function loadResolvableEntities(): Promise<ResolvableEntity[]> {
       properties: asProperties(r.properties),
       aliases: asStringArray(r.aliases),
       summary: typeof r.summary === 'string' ? r.summary : null,
+      spaceId: String(r.space_id ?? ''),
     };
   });
 
@@ -788,6 +795,8 @@ export async function loadSemanticPairs(
         WHERE o.merged_into_id IS NULL
           AND o.embedding IS NOT NULL
           AND o.id <> e.id
+          -- A pair across spaces is one mergeEntities refuses; never propose it.
+          AND o.space_id = e.space_id
         ORDER BY e.embedding <=> o.embedding
         LIMIT ${k}
       ) n

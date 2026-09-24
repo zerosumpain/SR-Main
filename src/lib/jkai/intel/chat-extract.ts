@@ -15,6 +15,7 @@ import { conversations, orchestratorChats } from '$lib/db/schema';
 import { asc, desc, eq, sql } from 'drizzle-orm';
 import { createHash } from 'node:crypto';
 import { extractIntoIntel, type AutoExtractOutcome } from './auto-extract';
+import { OWNER_SPACE } from './scope';
 import { publishConversationSignal } from '$lib/workflows/chat/followup-queue';
 
 /**
@@ -179,6 +180,7 @@ export async function maybeExtractThreadConcepts(
         text: transcript,
         contentHash: createHash('sha256').update(transcript).digest('hex'),
         metadata: { conversationId, assistantTurns },
+        spaceId: OWNER_SPACE,
         // A forced pass is the backfill, and the backfill exists because the
         // EXTRACTOR changed, not the transcript — so the hash gate would skip
         // every thread it is meant to redo.

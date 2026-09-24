@@ -156,7 +156,7 @@ Rules:
 export async function recallAndAlert(noteId: string): Promise<number> {
   try {
     const [note] = await db
-      .select({ processedContent: intelNotes.processedContent, rawContent: intelNotes.rawContent })
+      .select({ processedContent: intelNotes.processedContent, rawContent: intelNotes.rawContent, spaceId: intelNotes.spaceId })
       .from(intelNotes)
       .where(eq(intelNotes.id, noteId))
       .limit(1);
@@ -183,6 +183,8 @@ export async function recallAndAlert(noteId: string): Promise<number> {
         content: conn.content,
         significance: conn.significance,
         relatedEntityIds: conn.relatedEntityIds,
+        // An alert is about its note, so it is seen by whoever can see the note.
+        spaceId: note.spaceId,
       });
       alertCount++;
     }

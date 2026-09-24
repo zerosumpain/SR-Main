@@ -21,6 +21,7 @@
   import ClusterPicker from '$lib/components/intel/ClusterPicker.svelte';
   import type { ClusterRoster } from '$lib/components/intel/cluster-types';
   import SourcePicker from '$lib/components/intel/SourcePicker.svelte';
+  import ScopePicker from '$lib/components/intel/ScopePicker.svelte';
   import RecencySlicer from '$lib/components/intel/RecencySlicer.svelte';
   import RailSection from '$lib/components/intel/RailSection.svelte';
   import GmailSweepPanel from '$lib/components/intel/GmailSweepPanel.svelte';
@@ -34,12 +35,21 @@
   import { commission } from '$lib/jkai/intel/entity-card-store';
   import type { InsightData, UnlikelyRelation, PredictedLink } from '$lib/components/intel/types';
 import type { NetworkPayload } from '$lib/codegraph/types';
+  import type { DomainId } from '$lib/jkai/intel/domains';
   import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import { onMount } from 'svelte';
 
   let { data } = $props();
 
-  let network = $state<NetworkPayload | null>(null);
+  /** The intel routes add whole-scope space and domain counts for the Scope
+   *  chips; the codegraph shares the rest of the payload and has neither. */
+  type IntelNetwork = NetworkPayload & {
+    spaces?: Array<{ id: string; count: number }>;
+    domains?: Array<{ id: DomainId; count: number }>;
+  };
+
+  let network = $state<IntelNetwork | null>(null);
   let insights = $state<InsightData[]>([]);
   let unlikely = $state<UnlikelyRelation[]>([]);
   let predicted = $state<PredictedLink[]>([]);
@@ -73,6 +83,19 @@ import type { NetworkPayload } from '$lib/codegraph/types';
   let activeCategories = $state<string[]>([]);
   /** Note sources allowed to contribute. Empty = no filter, i.e. all of them. */
   let activeSources = $state<string[]>([]);
+
+  /** A comma list from the page URL, read once at load, so a link like
+   *  `/jkai/intel?domains=news` opens already filtered. */
+  function initialCsv(key: string): string[] {
+    return (page.url.searchParams.get(key) ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+  /** Space chips. Empty = every space this reader may see (own + household). */
+  let activeSpaces = $state<string[]>(initialCsv('spaces'));
+  /** Domain chips. Empty = no filter. */
+  let activeDomains = $state<string[]>(initialCsv('domains'));
   /** Entity ids the view is pinned to. Empty = the whole graph. */
   let pinnedIds = $state<string[]>([]);
 
@@ -258,6 +281,24 @@ import type { NetworkPayload } from '$lib/codegraph/types';
     activeCategories = [];
   }
 
+  // New arrays every time, never push/splice: the query derives from these.
+  function toggleSpace(id: string) {
+    activeSpaces = activeSpaces.includes(id)
+      ? activeSpaces.filter((s) => s !== id)
+      : [...activeSpaces, id];
+  }
+
+  function toggleDomain(id: string) {
+    activeDomains = activeDomains.includes(id)
+      ? activeDomains.filter((d) => d !== id)
+      : [...activeDomains, id];
+  }
+
+  function clearScope() {
+    activeSpaces = [];
+    activeDomains = [];
+  }
+
   function pinEntity(id: string) {
     if (!id || pinnedIds.includes(id)) return;
     pinnedIds = [...pinnedIds, id];
@@ -273,6 +314,8 @@ import type { NetworkPayload } from '$lib/codegraph/types';
     keywordApplied = '';
     activeCategories = [];
     activeSources = [];
+    activeSpaces = [];
+    activeDomains = [];
     pinnedIds = [];
     typeId = '';
     activeTypes = [];
@@ -289,6 +332,8 @@ import type { NetworkPayload } from '$lib/codegraph/types';
     (keywordApplied ? 1 : 0) +
       activeCategories.length +
       activeSources.length +
+      activeSpaces.length +
+      activeDomains.length +
       (pinnedIds.length ? 1 : 0) +
       (typeId ? 1 : 0) +
       activeTypes.length +
@@ -447,6 +492,8 @@ import type { NetworkPayload } from '$lib/codegraph/types';
     }
     if (activeCategories.length) p.set('categories', activeCategories.join(','));
     if (activeSources.length) p.set('sources', activeSources.join(','));
+    if (activeSpaces.length) p.set('spaces', activeSpaces.join(','));
+    if (activeDomains.length) p.set('domains', activeDomains.join(','));
     if (pinnedIds.length) p.set('entities', pinnedIds.join(','));
     if (since !== null) p.set('since', String(since));
     if (until !== null) p.set('until', String(until));
@@ -1053,6 +1100,18 @@ import type { NetworkPayload } from '$lib/codegraph/types';
           <span class="rail-state">All data</span>
         {/if}
       </div>
+
+      <RailSection title="Scope" badge={activeSpaces.length + activeDomains.length || null} open={true}>
+        <ScopePicker
+          spaces={network?.spaces ?? []}
+          domains={network?.domains ?? []}
+          {activeSpaces}
+          {activeDomains}
+          onToggleSpace={toggleSpace}
+          onToggleDomain={toggleDomain}
+          onClear={clearScope}
+        />
+      </RailSection>
 
       <RailSection title="Search" badge={keywordApplied ? 1 : null}>
         <input

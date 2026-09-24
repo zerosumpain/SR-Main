@@ -1,6 +1,7 @@
 import type { NodeExecutor, NodeResult, ExecutionContext } from '../types';
 import { interpolateTemplate } from './template';
 import { createNote, processNote } from '$lib/jkai/intel/ingest';
+import { OWNER_SPACE } from '$lib/jkai/intel/scope';
 
 export { intelWriteDef } from './intel-write.def';
 
@@ -74,6 +75,7 @@ export const intelWriteExecutor: NodeExecutor = {
       source: 'workflow',
       format,
       metadata,
+      spaceId: OWNER_SPACE,
     });
 
     // Fire-and-forget: extraction + embedding + graph persistence run async so

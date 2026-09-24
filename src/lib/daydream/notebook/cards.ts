@@ -129,9 +129,10 @@ export async function weaveNote(noteId: string): Promise<
   | { status: 'failed'; error: string }
 > {
   try {
-    const [{ getNote, markWoven }, { MIN_EXTRACT_CHARS, extractIntoIntel }] = await Promise.all([
+    const [{ getNote, markWoven }, { MIN_EXTRACT_CHARS, extractIntoIntel }, { OWNER_SPACE }] = await Promise.all([
       import('./store'),
       import('$lib/jkai/intel/auto-extract'),
+      import('$lib/jkai/intel/scope'),
     ]);
     const note = await getNote(noteId);
     if (!note) return { status: 'skipped', reason: `no such note: ${noteId}` };
@@ -147,6 +148,8 @@ export async function weaveNote(noteId: string): Promise<
       contentHash: weaveHash(text),
       source: 'notebook',
       metadata: { noteFolder: note.folder, notebookId: note.id },
+      // The notebook is the owner's.
+      spaceId: OWNER_SPACE,
     });
 
     if (out.status === 'extracted') {

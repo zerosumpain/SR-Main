@@ -10,6 +10,7 @@
 //   GET             → { enabled, files, research, chats, alreadyExtracted }
 //   POST { kinds?, limit? } → run a pass, returns progress counters
 //   POST { aliases: true }  → recover the surface forms past merges discarded
+//   POST { newsSource: true } → relabel kept news from 'web' to 'news'
 //
 // `kinds: ['chat']` is the odd one out: re-extracting a thread is NOT a no-op
 // the way re-extracting an unchanged file is. The old cadence (turn 2, then
@@ -23,6 +24,8 @@ import { db } from '$lib/db';
 import { sql } from 'drizzle-orm';
 import { isMaintenanceAuthorized } from '$lib/server/maintenance-auth';
 import { backfillIntelExtraction, isAutoExtractEnabled, type AutoKind } from '$lib/jkai/intel/auto-extract';
+import { invalidateGraphAnalysis } from '$lib/jkai/intel/analytics/load';
+import { relabelKeptNews } from '$lib/news/relabel';
 
 const VALID_KINDS: AutoKind[] = ['file', 'research', 'chat'];
 /** The corpus sweep in auto-extract.ts only knows about these two; `chat` has
@@ -63,6 +66,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     dedupeLinks?: boolean;
     confidence?: boolean;
     aliases?: boolean;
+    newsSource?: boolean;
   };
 
   // Surface forms recovered from past merges.
@@ -75,6 +79,15 @@ export const POST: RequestHandler = async ({ locals, request }) => {
   if (body.aliases) {
     const { backfillAliasesFromTombstones } = await import('$lib/jkai/intel/resolve/merge');
     return json(await backfillAliasesFromTombstones());
+  }
+
+  // Kept news stories were written as source 'web' until 2026-09-24. Every one
+  // carries metadata.newsKey, so the relabel is exact. Idempotent. Above the
+  // auto-extract gate for the same reason as `aliases`: it calls no model.
+  if (body?.newsSource === true) {
+    const relabelled = await relabelKeptNews();
+    invalidateGraphAnalysis();
+    return json({ newsSource: relabelled });
   }
 
   if (!isAutoExtractEnabled()) {

@@ -16,6 +16,7 @@ import { db } from '$lib/db';
 import { intelRelationships } from '$lib/db/schema';
 import { weightFor, strengthBucket } from './graph';
 import { invalidateGraphAnalysis } from './analytics/load';
+import { entitySpace } from './scope.server';
 
 /** The relationship type a hand-confirmed link is recorded under. */
 export const CONFIRMED_EDGE_TYPE = 'related_to';
@@ -55,6 +56,16 @@ async function findEdgeBetween(a: string, b: string) {
 }
 
 /**
+ * The space a hand-made edge lands in: its endpoints', which must agree. An
+ * edge between two people's graphs would be a link neither of them owns.
+ */
+async function linkSpace(sourceId: string, targetId: string): Promise<string> {
+  const space = await entitySpace(sourceId);
+  if ((await entitySpace(targetId)) !== space) throw new Error('cannot link entities in different spaces');
+  return space;
+}
+
+/**
  * Record that two entities really are related.
  *
  * Written `manual: true` and at high confidence: this is the user asserting it,
@@ -89,6 +100,7 @@ export async function confirmRelationship(input: ConfirmLinkInput): Promise<Conf
     return { relationshipId: existing.id, created: false };
   }
 
+  const spaceId = await linkSpace(sourceEntityId, targetEntityId);
   const [created] = await db
     .insert(intelRelationships)
     .values({
@@ -102,6 +114,7 @@ export async function confirmRelationship(input: ConfirmLinkInput): Promise<Conf
       weight: weightFor(1, 'high'),
       strength: strengthBucket(weightFor(1, 'high')),
       lastSeenAt: new Date(),
+      spaceId,
     })
     .returning({ id: intelRelationships.id });
 
@@ -148,6 +161,7 @@ export async function rejectRelationship(input: RejectLinkInput): Promise<Reject
     return { suppressed: true, relationshipId: existing.id };
   }
 
+  const spaceId = await linkSpace(sourceEntityId, targetEntityId);
   const [created] = await db
     .insert(intelRelationships)
     .values({
@@ -162,6 +176,7 @@ export async function rejectRelationship(input: RejectLinkInput): Promise<Reject
       observationCount: 0,
       weight: 0,
       strength: 'weak',
+      spaceId,
     })
     .returning({ id: intelRelationships.id });
 

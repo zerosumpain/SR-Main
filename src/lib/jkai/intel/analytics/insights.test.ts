@@ -4,6 +4,7 @@ import { computeCentrality } from './centrality';
 import { detectCommunities } from './community';
 import { generateInsights } from './insights';
 import type { GraphAnalysis } from './load';
+import { OWNER_INTEL_SCOPE } from '../scope';
 
 const DAY = 86_400_000;
 const NOW = 1_800_000_000_000;
@@ -29,6 +30,7 @@ function node(id: string, over: Partial<GraphNode> = {}): GraphNode {
     aliases: [],
     categories: [],
     sources: [],
+    space: 'owner',
     ...over,
   };
 }
@@ -57,6 +59,7 @@ async function analyse(snapshot: GraphSnapshot, embeddings = new Map<string, num
     community: detectCommunities(index),
     embeddings,
     suppressedPairs: new Set<string>(),
+    scope: OWNER_INTEL_SCOPE,
     computedAt: NOW,
   };
 }

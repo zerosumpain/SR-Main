@@ -22,6 +22,7 @@ import { sha256Hex } from './hash';
 import { fileToText, isIndexableMime } from './content';
 import { embedChunks, FILE_INDEX_EMBEDDING_MODEL } from './embed';
 import { queueIntelExtraction } from '$lib/jkai/intel/auto-extract';
+import { OWNER_SPACE } from '$lib/jkai/intel/scope';
 import { policyForFileName } from '$lib/jkai/intel/source-policy.server';
 
 // Cap the bytes we ever read into RAM to embed. The WebDAV write site allowed
@@ -189,6 +190,7 @@ export async function indexFile(fileId: string): Promise<IndexResult> {
       contentHash: hash,
       categories: policy?.categorySlugs ?? [],
       metadata: { mimeType: row.mimeType, modality: content.modality, sourceUrl: '/drive' },
+      spaceId: OWNER_SPACE,
     });
   }
 

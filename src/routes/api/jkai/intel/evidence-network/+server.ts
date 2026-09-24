@@ -13,6 +13,7 @@ import { parseCsv } from '$lib/jkai/intel/analytics/filter';
 import {
   analyseEvidenceGraph,
   buildEvidenceGraph,
+  countEvidenceNotes,
   isEvidenceNode,
   styleForSource,
 } from '$lib/jkai/intel/analytics/evidence-graph';
@@ -20,19 +21,37 @@ import { components } from '$lib/jkai/intel/analytics/model';
 import { db } from '$lib/db';
 import { intelCategories, intelEntityTypes } from '$lib/db/schema';
 import { recencyOf } from '$lib/jkai/intel/staleness';
+import { narrowScope } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
+import { domainCountsFromNodes } from '$lib/jkai/intel/domains';
 
 /** Same ceiling as the entity view — a force layout beyond this is a smudge. */
 const MAX_NODES = 600;
 
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async (event) => {
+  const { url } = event;
   const sourceFilter = parseCsv(url.searchParams.get('sources'));
+  const domainFilter = parseCsv(url.searchParams.get('domains'));
   const q = (url.searchParams.get('q') ?? '').trim().toLowerCase();
   const noteLimit = Number(url.searchParams.get('notes') ?? 400);
 
-  const built = await buildEvidenceGraph({
-    sources: sourceFilter,
-    limit: Number.isFinite(noteLimit) ? noteLimit : 400,
-  });
+  // Whose evidence. Unlike the entity view, the NARROWED scope goes into the
+  // build: `limit` picks the top notes in SQL, so narrowing after the build
+  // would take the top 400 of every space and then show whichever few were
+  // household. The space and domain chips are counted separately, over the
+  // whole of `allowed`, so unticking a space never makes its chip read 0.
+  const allowed = await resolveRequestScope(event);
+  const scope = narrowScope(allowed, parseCsv(url.searchParams.get('spaces')));
+
+  const [built, chipCounts] = await Promise.all([
+    buildEvidenceGraph({
+      sources: sourceFilter,
+      domains: domainFilter,
+      scope,
+      limit: Number.isFinite(noteLimit) ? noteLimit : 400,
+    }),
+    countEvidenceNotes(allowed),
+  ]);
   const { index, community, rank } = analyseEvidenceGraph(built.snapshot);
   const now = Date.now();
 
@@ -137,6 +156,9 @@ export const GET: RequestHandler = async ({ url }) => {
   const sources = [...sourceCounts]
     .map(([id, count]) => ({ id, count }))
     .sort((a, b) => b.count - a.count || a.id.localeCompare(b.id));
+  // Chip counts in NOTES, over the whole allowed scope (see countEvidenceNotes).
+  const spaceCounts = new Map<string, number>();
+  for (const row of chipCounts) spaceCounts.set(row.space, (spaceCounts.get(row.space) ?? 0) + row.count);
 
   const comps = components(index);
   const clusterReach = [...community.communities.entries()]
@@ -157,9 +179,19 @@ export const GET: RequestHandler = async ({ url }) => {
     sources,
     sourceKinds: [],
     sourceDomains: [],
+    // Notes per domain: one source per note, so each group is distinct.
+    domains: domainCountsFromNodes(
+      chipCounts.map((r) => ({ sources: r.source ? [r.source] : [], count: r.count })),
+    ),
+    // Every allowed space, even at zero, so a space with nothing yet is visibly empty.
+    spaces: [...allowed].map((id) => ({ id, count: spaceCounts.get(id) ?? 0 })),
     matched,
     trimmed,
-    filtering: sourceFilter.length > 0 || Boolean(q),
+    filtering:
+      sourceFilter.length > 0 ||
+      domainFilter.length > 0 ||
+      scope.length < allowed.length ||
+      Boolean(q),
     mode: 'evidence',
     stats: {
       totalNodes: built.snapshot.nodes.length,

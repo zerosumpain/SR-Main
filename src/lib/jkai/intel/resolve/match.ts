@@ -560,6 +560,12 @@ export interface ResolvableEntity {
   aliases?: string[] | null;
   /** The entity's own description. Read by the adjudicator, not by the rules. */
   summary?: string | null;
+  /**
+   * `intel_entities.space_id`. Duplicate blocking never pairs two entities from
+   * different spaces — `mergeEntities` would refuse the merge anyway. Absent
+   * (a pure test fixture) counts as one shared space.
+   */
+  spaceId?: string;
 }
 
 /**
@@ -999,6 +1005,8 @@ export function findDuplicateCandidates(
 
   const addTo = (key: string, e: ResolvableEntity) => {
     if (!key) return;
+    // Blocks are per space, so two spaces' "Tesco" never meet.
+    key = `${e.spaceId ?? ''}\u0000${key}`;
     const list = blocks.get(key);
     // Deduplicated: an entity whose name and alias share a token would
     // otherwise appear twice in the same block and be compared with itself.
@@ -1052,7 +1060,7 @@ export function findDuplicateCandidates(
     for (const [x, y] of opts.extraPairs) {
       const a = byId.get(x);
       const b = byId.get(y);
-      if (!a || !b) continue;
+      if (!a || !b || (a.spaceId ?? '') !== (b.spaceId ?? '')) continue;
       const cand = scorePair(a, b, { addressIdentities, neighbours });
       if (!cand || cand.confidence < minConfidence) continue;
       const key = `${cand.aId}|${cand.bId}`;

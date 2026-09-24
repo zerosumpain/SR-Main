@@ -16,9 +16,11 @@
 // `channelArtefactIds()` — because an entity that identifies the channel is no
 // more use here than there.
 import { db } from '$lib/db';
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import { channelArtefactIds } from '../channel-artefacts';
 import { pgTextArray } from '$lib/db/sql-array';
+import { OWNER_INTEL_SCOPE, spaceIn, type IntelScope } from '../scope';
+import { INTEL_DOMAINS, sourcesForDomains } from '../domains';
 import { buildIndex } from './model';
 import { detectCommunities } from './community';
 import { pagerank } from './centrality';
@@ -73,6 +75,59 @@ interface LinkRow {
   summary: string | null;
   confirmed: boolean | null;
   sources: string[] | null;
+  note_space: string;
+  entity_space: string;
+}
+
+/**
+ * The notes this view can draw: each one with how many live entities it
+ * mentions, keeping only notes that mention more than one. A note linking a
+ * single entity adds a leaf and says nothing about how anything relates.
+ *
+ * One definition shared by the build (which ranks and caps it) and the chip
+ * counts (which aggregate it whole), so the two cannot drift apart. `where`
+ * carries the build's source and domain predicates; the counts pass none.
+ */
+function qualifyingNotes(scope: IntelScope, where: SQL = sql``): SQL {
+  return sql`
+      SELECT ne.note_id, COUNT(DISTINCT ne.entity_id) AS mentions
+      FROM intel_note_entities ne
+      JOIN intel_notes n ON n.id = ne.note_id
+      JOIN intel_entities e ON e.id = ne.entity_id AND e.merged_into_id IS NULL
+      WHERE ${spaceIn(sql`n.space_id`, scope)}
+        AND ${spaceIn(sql`e.space_id`, scope)}
+        ${where}
+      GROUP BY ne.note_id
+      HAVING COUNT(DISTINCT ne.entity_id) > 1`;
+}
+
+/**
+ * Qualifying notes per (space, source) over the whole of `scope`, for the
+ * space and domain chips.
+ *
+ * The unit is NOTES — the thing this view's source and domain filters select —
+ * and each note has exactly one source, so per-source groups never overlap and
+ * summing them into domains counts every note once. Uncapped and unfiltered
+ * on purpose: the build is capped at `limit` and narrowed by the request, and
+ * a chip counted from that would read 0 for every space the user unticked.
+ * Channel artefacts are filtered from the build in JS per mention, not here;
+ * they remove entities rather than notes, so the difference is small.
+ */
+export async function countEvidenceNotes(
+  scope: IntelScope,
+): Promise<Array<{ space: string; source: string | null; count: number }>> {
+  const { rows } = await db.execute(sql`
+    SELECT n.space_id AS space, n.source AS source, COUNT(*) AS count
+    FROM (${qualifyingNotes(scope)}) q
+    JOIN intel_notes n ON n.id = q.note_id
+    GROUP BY n.space_id, n.source
+  `);
+  return (rows as Array<{ space: string; source: string | null; count: number | string }>).map((r) => ({
+    space: String(r.space),
+    source: r.source,
+    // COUNT(*) is bigint, which node-postgres hands back as a string.
+    count: Number(r.count),
+  }));
 }
 
 /**
@@ -83,16 +138,33 @@ interface LinkRow {
  * mentioned, including the ones whose evidence is overwhelmingly email; here it
  * keeps chat's notes and shows exactly which entities they account for.
  *
+ * `domains` filters on the note too, and intersects with `sources`. It goes
+ * into the SQL rather than being applied to the built graph for the same reason
+ * `sources` does: `limit` picks the top notes, and filtering after the cap
+ * would pick the top 400 of everything and then show the few that happened to
+ * be research.
+ *
+ * `scope` is every space the reader may see, narrowed by the caller's chips.
+ * Each intel table in the query carries its own predicate — the CTE that ranks
+ * notes, the outer select that fetches what they mention, and the
+ * relationship subquery — because resolution never crosses a space today, and
+ * a reader must not depend on that staying true to stay inside its scope.
+ *
  * `limit` caps NOTES, not total nodes: the entities come along because a note
  * mentions them, and dropping an entity would leave an edge pointing at nothing.
  */
 export async function buildEvidenceGraph(opts: {
   sources?: string[];
+  domains?: string[];
   limit?: number;
+  scope?: IntelScope;
 } = {}): Promise<EvidenceGraph> {
   const artefacts = await channelArtefactIds();
   const limit = Math.max(1, Math.min(opts.limit ?? 400, 2000));
   const sources = (opts.sources ?? []).filter(Boolean);
+  // Intel domains (../domains), not the sender domains parsed from `sources` below.
+  const wantedDomains = (opts.domains ?? []).filter(Boolean);
+  const scope = opts.scope ?? OWNER_INTEL_SCOPE;
 
   // Facet values ('email:bulk', 'email@linkedin.com') are matched against the
   // note's own metadata rather than the entity's aggregated source array — the
@@ -122,17 +194,30 @@ export async function buildEvidenceGraph(opts: {
     ? sql`AND (${sql.join(conditions, sql` OR `)})`
     : sql``;
 
-  // The notes worth drawing are the ones that mention the most entities: a note
-  // linking one entity adds a leaf and says nothing about how anything relates.
+  // Domains, as a second group ANDed with the sources above. 'other' has no
+  // source list — it is whatever no domain claims — so it is the complement of
+  // every mapped source rather than an expansion. A note with no source fails
+  // both (NULL compares to nothing), matching the entity view's no-exemption
+  // rule in filter.ts.
+  const domainConditions: ReturnType<typeof sql>[] = [];
+  const domainSources = sourcesForDomains(wantedDomains);
+  if (domainSources.length) {
+    domainConditions.push(sql`n.source = ANY(${pgTextArray(domainSources)}::text[])`);
+  }
+  if (wantedDomains.includes('other')) {
+    const mapped = INTEL_DOMAINS.flatMap((d) => [...d.sources]);
+    domainConditions.push(sql`n.source <> ALL(${pgTextArray(mapped)}::text[])`);
+  }
+  const domainWhere = domainConditions.length
+    ? sql`AND (${sql.join(domainConditions, sql` OR `)})`
+    : wantedDomains.length
+      ? sql`AND FALSE` // only unknown domain ids asked for: nothing, not everything
+      : sql``;
+
+  // The notes worth drawing are the ones that mention the most entities.
   const { rows } = await db.execute(sql`
     WITH ranked AS (
-      SELECT ne.note_id, COUNT(DISTINCT ne.entity_id) AS mentions
-      FROM intel_note_entities ne
-      JOIN intel_notes n ON n.id = ne.note_id
-      JOIN intel_entities e ON e.id = ne.entity_id AND e.merged_into_id IS NULL
-      WHERE TRUE ${where}
-      GROUP BY ne.note_id
-      HAVING COUNT(DISTINCT ne.entity_id) > 1
+      ${qualifyingNotes(scope, sql`${where} ${domainWhere}`)}
       ORDER BY mentions DESC
       LIMIT ${limit}
     )
@@ -140,8 +225,10 @@ export async function buildEvidenceGraph(opts: {
            n.title         AS note_title,
            n.source        AS note_source,
            n.created_at    AS created_at,
+           n.space_id      AS note_space,
            (SELECT MAX(r.last_seen_at) FROM intel_relationships r
-             WHERE r.source_note_id = n.id AND r.suppressed IS NOT TRUE) AS observed_at,
+             WHERE r.source_note_id = n.id AND r.suppressed IS NOT TRUE
+               AND ${spaceIn(sql`r.space_id`, scope)}) AS observed_at,
            e.id            AS entity_id,
            e.name          AS entity_name,
            t.id            AS type_id,
@@ -149,11 +236,14 @@ export async function buildEvidenceGraph(opts: {
            t.icon          AS icon,
            t.color         AS color,
            e.summary       AS summary,
-           e.confirmed     AS confirmed
+           e.confirmed     AS confirmed,
+           e.space_id      AS entity_space
     FROM ranked
     JOIN intel_note_entities ne ON ne.note_id = ranked.note_id
     JOIN intel_notes n          ON n.id = ranked.note_id
+                               AND ${spaceIn(sql`n.space_id`, scope)}
     JOIN intel_entities e       ON e.id = ne.entity_id AND e.merged_into_id IS NULL
+                               AND ${spaceIn(sql`e.space_id`, scope)}
     LEFT JOIN intel_entity_types t ON t.id = e.type_id
   `);
 
@@ -192,6 +282,7 @@ export async function buildEvidenceGraph(opts: {
         // select these nodes exactly as they select entities.
         sources: raw.note_source ? [raw.note_source] : [],
         aliases: [],
+        space: String(raw.note_space),
       });
     }
 
@@ -215,6 +306,7 @@ export async function buildEvidenceGraph(opts: {
         categories: [],
         sources: raw.note_source ? [raw.note_source] : [],
         aliases: [],
+        space: String(raw.entity_space),
       });
     }
 

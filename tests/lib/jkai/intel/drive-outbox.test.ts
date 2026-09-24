@@ -59,7 +59,7 @@ describe('drive → intel outbox', () => {
 
     expect(deleteDerivedIntel).toHaveBeenCalledWith('file', 'file-1');
     expect(syncSourcePolicy).toHaveBeenCalledWith('Notes/', ['a']);
-    expect(queueIntelExtraction).toHaveBeenCalledWith({ kind: 'file', refId: 'file-2' });
+    expect(queueIntelExtraction).toHaveBeenCalledWith({ kind: 'file', refId: 'file-2', spaceId: 'owner' });
     expect(result).toEqual({ processed: 3, failed: 0 });
   });
 

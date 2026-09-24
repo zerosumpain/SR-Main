@@ -27,6 +27,7 @@ const node = (id: string): GraphNode => ({
   aliases: [],
   categories: [],
   sources: [],
+  space: 'owner',
 });
 
 const edge = (s: string, t: string): GraphEdge => ({

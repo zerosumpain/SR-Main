@@ -40,6 +40,7 @@ function node(
     aliases: [],
     categories: [],
     sources: [],
+    space: 'owner',
     ...over,
   };
 }
@@ -248,6 +249,52 @@ describe('source filter', () => {
       categories: ['work'],
     });
     expect([...keep]).toEqual(['ada']);
+  });
+});
+
+describe('spaces and domains', () => {
+  it('keeps only nodes in the requested spaces', () => {
+    const index = buildIndex({ nodes: [node('ada', { space: 'owner' }), node('hal', { space: 'household' })], edges: [] });
+    const { keep } = applyGraphFilter(index, new Map(), { spaces: ['household'] });
+    expect([...keep]).toEqual(['hal']);
+  });
+
+  it('a domain keeps any node with a source in it, facets included', () => {
+    const index = buildIndex({ nodes: [
+      node('ada', { sources: ['daydream'] }),
+      node('bob', { sources: ['email', 'email:bulk'] }),
+    ], edges: [] });
+    const { keep } = applyGraphFilter(index, new Map(), { domains: ['research'] });
+    expect([...keep]).toEqual(['ada']);
+  });
+
+  it('domains and sources intersect', () => {
+    const index = buildIndex({ nodes: [
+      node('ada', { sources: ['daydream'] }),
+      node('bob', { sources: ['research'] }),
+    ], edges: [] });
+    const { keep } = applyGraphFilter(index, new Map(), { domains: ['research'], sources: ['research'] });
+    expect([...keep]).toEqual(['bob']);
+  });
+
+  it('the other domain keeps nodes whose sources map nowhere', () => {
+    const index = buildIndex({ nodes: [node('wes', { sources: ['telegram'] }), node('ada', { sources: ['email'] })], edges: [] });
+    const { keep } = applyGraphFilter(index, new Map(), { domains: ['other'] });
+    expect([...keep]).toEqual(['wes']);
+  });
+
+  it('drops an unsourced entity under a domain filter, as the source filter does', () => {
+    // Same rule as `sources`: no exemption. An entity with no source is a data
+    // defect, not a member of every domain — and not of 'other' either, which
+    // means "a source we have no domain for", not "no source at all".
+    const index = buildIndex({ nodes: [node('eve', { sources: [] }), node('wes', { sources: ['telegram'] })], edges: [] });
+    expect([...applyGraphFilter(index, new Map(), { domains: ['other'] }).keep]).toEqual(['wes']);
+    expect(applyGraphFilter(index, new Map(), { domains: ['email'] }).keep.size).toBe(0);
+  });
+
+  it('applies no filter when either list is empty', () => {
+    const index = buildIndex({ nodes: [node('ada', { space: 'owner' }), node('hal', { space: 'household' })], edges: [] });
+    expect(applyGraphFilter(index, new Map(), { spaces: [], domains: [] }).keep.size).toBe(2);
   });
 });
 
