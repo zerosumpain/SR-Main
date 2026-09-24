@@ -50,7 +50,7 @@ import {
 import type { ResearchReport } from './types';
 import { buildResearchDigest, collectFactIds, isOpaqueId } from './intel-bridge';
 import { extractIntoIntel, type AutoExtractOutcome } from '$lib/jkai/intel/auto-extract';
-import { OWNER_SPACE } from '$lib/jkai/intel/scope';
+import { OWNER_INTEL_SCOPE, OWNER_SPACE, spaceIn } from '$lib/jkai/intel/scope';
 import type {
   ExtractionResult,
   ExtractedEntity,
@@ -139,6 +139,9 @@ export async function commitState(sessionId: string): Promise<CommitState> {
           sql`${intelNotes.metadata}->>'autoKind' = 'research'`,
           sql`${intelNotes.metadata}->>'refId' = ${sessionId}`,
           eq(intelNotes.graphState, 'admitted'),
+          // A deep dive commits into the owner's space (see below), so only a
+          // note he can see says it is in his graph.
+          spaceIn(intelNotes.spaceId, OWNER_INTEL_SCOPE),
         ),
       )
       .limit(1),

@@ -38,6 +38,10 @@
 // with it. That is the wire John asked for in the other direction: the intel
 // bridge already turns graph insights INTO thoughts, and this turns a
 // thought's own sources back into graph entities you can open.
+//
+// Daydream is the owner's, so every graph row here is read inside the owner's
+// scope. A ref to a row in another space resolves exactly like a deleted one:
+// "no longer there", never its title.
 
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
@@ -55,6 +59,7 @@ import {
   intelNotes,
   jkaiMemories,
 } from '$lib/db/schema';
+import { OWNER_INTEL_SCOPE, spaceIn } from '$lib/jkai/intel/scope';
 import type { EvidenceRef } from './snapshot-types';
 
 export interface GraphEntity {
@@ -201,7 +206,7 @@ async function resolveEmails(ids: string[], fill: Fill): Promise<void> {
       graphState: intelNotes.graphState,
     })
     .from(intelNotes)
-    .where(inArray(intelNotes.id, ids));
+    .where(and(inArray(intelNotes.id, ids), spaceIn(intelNotes.spaceId, OWNER_INTEL_SCOPE)));
 
   const found = new Set(rows.map((r) => r.id));
   for (const id of ids) if (!found.has(id)) fill('email', id, { missing: true, title: 'This email is no longer in the corpus', lines: ['It was cited when the thought was formed and has since been pruned.'] });
@@ -222,6 +227,7 @@ async function resolveEmails(ids: string[], fill: Fill): Promise<void> {
           and(
             inArray(intelNoteEntities.noteId, rows.map((r) => r.id)),
             sql`${intelEntities.mergedIntoId} is null`,
+            spaceIn(intelEntities.spaceId, OWNER_INTEL_SCOPE),
           ),
         )
     : [];
@@ -471,7 +477,7 @@ async function resolveInsights(ids: string[], fill: Fill): Promise<void> {
       createdAt: intelInsights.createdAt,
     })
     .from(intelInsights)
-    .where(inArray(intelInsights.id, ids));
+    .where(and(inArray(intelInsights.id, ids), spaceIn(intelInsights.spaceId, OWNER_INTEL_SCOPE)));
 
   const found = new Set(rows.map((r) => r.id));
   for (const id of ids) if (!found.has(id)) fill('intel', id, { missing: true, title: 'This graph finding has been superseded' });
@@ -519,7 +525,7 @@ async function resolveInterests(ids: string[], fill: Fill): Promise<void> {
   const rows = await db
     .select({ id: intelNotes.id, title: intelNotes.title, source: intelNotes.source })
     .from(intelNotes)
-    .where(inArray(intelNotes.id, ids));
+    .where(and(inArray(intelNotes.id, ids), spaceIn(intelNotes.spaceId, OWNER_INTEL_SCOPE)));
   for (const r of rows) {
     fill('interest', r.id, {
       title: r.title ?? 'Something you were reading',
@@ -572,7 +578,7 @@ async function namedEntities(ids: string[]): Promise<Map<string, GraphEntity>> {
     })
     .from(intelEntities)
     .leftJoin(intelEntityTypes, eq(intelEntityTypes.id, intelEntities.typeId))
-    .where(inArray(intelEntities.id, ids));
+    .where(and(inArray(intelEntities.id, ids), spaceIn(intelEntities.spaceId, OWNER_INTEL_SCOPE)));
   return new Map(
     rows
       .filter((r) => !r.mergedIntoId)

@@ -1,5 +1,15 @@
-import { describe, it, expect } from 'vitest';
-import { GRAPH_SPECS, GRAPH_BACKFILL_DAYS } from './graph';
+import { describe, it, expect, vi } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
+import { GRAPH_SPECS, GRAPH_BACKFILL_DAYS, buildGraphSignals } from './graph';
+import { db } from '$lib/db';
+
+// No database: every query is captured and rendered, and answers no rows.
+vi.mock('$lib/db', () => ({ db: { execute: vi.fn(async () => ({ rows: [] })) } }));
+vi.mock('./registry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./registry')>();
+  return { ...actual, registerSignals: vi.fn(async () => ({ registered: 0 })), setObservations: vi.fn(async () => 0) };
+});
 import { SWEEP_METRICS } from '../stats/sweep';
 import { MIN_PAIRS } from '../stats/tests';
 
@@ -76,6 +86,24 @@ describe('the proposer’s vocabulary stays shut', () => {
     // still be a bare feature column name, with no namespace prefix.
     for (const m of SWEEP_METRICS) {
       expect(m).not.toContain(':');
+    }
+  });
+});
+
+describe('graph signals count the owner\'s graph only', () => {
+  // These series are correlated against the owner's days, so a member's mail
+  // must not move them — not even as a count.
+  it('every query carries the owner-scope space predicate', async () => {
+    vi.mocked(db.execute).mockClear();
+    const { errors } = await buildGraphSignals({ windowDays: 3, now: new Date('2026-09-24T12:00:00Z') });
+    expect(errors).toEqual([]);
+    const queries = vi.mocked(db.execute).mock.calls.map(([q]) => new PgDialect().sqlToQuery(q as SQL));
+    // Six rates and two levels.
+    expect(queries).toHaveLength(8);
+    for (const q of queries) {
+      expect(q.sql).toMatch(/\bfrom intel_\w+/);
+      expect(q.sql).toMatch(/and space_id = ANY\(\$\d+::text\[\]\)/);
+      expect(q.params).toContain('{"owner","household"}');
     }
   });
 });

@@ -240,7 +240,8 @@ async function relatedRefs(
   try {
     const { db } = await import('$lib/db');
     const { intelEntities, researchSessions } = await import('$lib/db/schema');
-    const { desc, ilike, or, sql } = await import('drizzle-orm');
+    const { OWNER_INTEL_SCOPE, spaceIn } = await import('$lib/jkai/intel/scope');
+    const { and, desc, ilike, or, sql } = await import('drizzle-orm');
 
     // The words worth matching on: long enough to be a name, capped so one
     // long note does not build a hundred-clause query.
@@ -252,7 +253,11 @@ async function relatedRefs(
       db
         .select({ id: intelEntities.id, name: intelEntities.canonicalName })
         .from(intelEntities)
-        .where(or(...terms.map((t) => ilike(intelEntities.canonicalName, `%${t}%`))))
+        // The notebook is the owner's, so it links only to entities he can see.
+        .where(and(
+          or(...terms.map((t) => ilike(intelEntities.canonicalName, `%${t}%`))),
+          spaceIn(intelEntities.spaceId, OWNER_INTEL_SCOPE),
+        ))
         .orderBy(desc(intelEntities.updatedAt))
         .limit(15),
       db

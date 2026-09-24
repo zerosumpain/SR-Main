@@ -1,6 +1,7 @@
 import { desc, eq, gte, and } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { intelInsights } from '$lib/db/schema';
+import { OWNER_INTEL_SCOPE, spaceIn } from '$lib/jkai/intel/scope';
 import { getSetting } from '$lib/server/models/settings';
 import { insightToCandidate, MAX_BRIDGED_PER_RUN, type InsightRow } from '$lib/daydream/intel-bridge';
 import { persistCandidates } from '$lib/daydream/thought-store';
@@ -92,7 +93,13 @@ export const daydreamIntelBridge: ActivityHandler = {
           proposedActions: intelInsights.proposedActions,
         })
         .from(intelInsights)
-        .where(and(eq(intelInsights.status, 'new'), gte(intelInsights.createdAt, since)))
+        // Daydream is the owner's: the recompute above persists into his space
+        // (the library's owner default), and only his findings become thoughts.
+        .where(and(
+          eq(intelInsights.status, 'new'),
+          gte(intelInsights.createdAt, since),
+          spaceIn(intelInsights.spaceId, OWNER_INTEL_SCOPE),
+        ))
         .orderBy(desc(intelInsights.score))
         .limit(25);
 
