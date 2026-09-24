@@ -38,6 +38,16 @@ export const DEFAULT_AGENTIC_MODEL_ID = DEFAULT_CHAT_MODEL_ID;
 // in 2026-07 and the column carries forward — see reference_openrouter_throughput_source.
 export const DEFAULT_EXTRACTION_MODEL_ID = 'openai/gpt-oss-120b';
 
+// The per-turn context router: one small JSON call ahead of every chat turn,
+// deciding which slices of memory, graph and integrations the turn may see.
+// It sits in front of the first token, so it must be a NON-reasoning model —
+// every cheap role above is a reasoning model, and the ledger measured them at
+// 4–16s median on sub-3k prompts (2026-09-24). Benchmarked on the router
+// prompt the same day: gemini-2.5-flash-lite 0.43–0.68s at ~$0.00002 a call;
+// mistral-small 1.3–4s; gpt-oss-20b and gpt-5-nano refuse `reasoning: off`.
+// Override with the `jkai.chat.context_router_model` setting.
+export const DEFAULT_CONTEXT_ROUTER_MODEL_ID = 'google/gemini-2.5-flash-lite';
+
 // ── The remaining workload fallbacks ────────────────────────────────────────
 //
 // Each of these is the model a role uses when its `app_settings` key is unset.

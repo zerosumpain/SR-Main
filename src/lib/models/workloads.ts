@@ -35,6 +35,7 @@
  */
 import {
   DEFAULT_EXTRACTION_MODEL_ID,
+  DEFAULT_CONTEXT_ROUTER_MODEL_ID,
   DEFAULT_SELFIMPROVE_MODEL_ID,
   DEFAULT_DOCTOR_MODEL_ID,
   DEFAULT_VISION_MODEL_ID,
@@ -145,6 +146,16 @@ export interface WorkloadDef {
    * decision; one they can't is a bug waiting to be rediscovered.
    */
   reason: string | null;
+  /**
+   * False when the owner's session pin must NOT reach this role.
+   *
+   * Every role follows the pin by default (see `sessionModelForWorkload`). The
+   * exception is a role whose call sits in FRONT of the reply rather than doing
+   * the reply's work: the pin says "this model answers my session", not "put
+   * a second call to it ahead of every answer". A pinned reasoning model there
+   * adds its whole latency to every turn to produce routing JSON nobody reads.
+   */
+  followsSessionPin?: false;
 }
 
 /**
@@ -422,6 +433,19 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
     catalogue: 'tools',
     reason:
       'Nobody reads this output directly; it only has to be faithful. A cheap fast model is the obvious pin, and it is separated from the chat turn itself precisely so pinning one does not move the other.',
+  },
+  {
+    id: 'context-router',
+    scope: 'site',
+    label: 'Chat context router',
+    blurb: 'Decides, before each /jkai turn, which memories, graph entities and integrations the reply may see.',
+    key: 'jkai.chat.context_router_model',
+    fallbackModelId: DEFAULT_CONTEXT_ROUTER_MODEL_ID,
+    requires: null,
+    catalogue: 'tools',
+    followsSessionPin: false,
+    reason:
+      'Runs ahead of the first token on every turn, so it must be a fast NON-reasoning model: the cheap reasoning models measured 4–16s on this shape of call, this one about half a second. Ignores the session pin for the same reason — a pinned model answers the turn, it should not also gate it. On a timeout the turn falls back to plain retrieval rather than waiting.',
   },
   {
     id: 'intel-analysis',

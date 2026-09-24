@@ -68,6 +68,32 @@ export interface MemoryTurnStamp {
   chars: number;
   /** Retrieval threw; the model was told so. */
   unavailable?: boolean;
+  /**
+   * How the turn's context was chosen — see `$lib/jkai/grounding/context-route`.
+   * Rides on the memory stamp so every caller that already persists `memory`
+   * (hub, WhatsApp, follow-ups) records it too. Absent before 2026-09-24.
+   */
+  context?: ContextTurnStamp;
+}
+
+export interface ContextTurnStamp {
+  kind: 'casual' | 'meta' | 'task';
+  source: 'router' | 'fallback';
+  domains: string[];
+  query: string;
+  memory: 'pinned' | 'relevant';
+  graph: 'none' | 'anchored' | 'search' | 'overview';
+  anchors: Array<{ id: string; name: string }>;
+  clusters: string[];
+  integrations: string[];
+  graphChars: number;
+  routerMs?: number;
+  routerError?: string;
+}
+
+/** Pinned memories only — what a casual or meta turn is shown. */
+export function pinnedOnly<T extends RankedMemory>(rows: T[]): T[] {
+  return rows.filter((r) => r.provenance?.pinned);
 }
 
 // ── State vocabulary ──────────────────────────────────────────────────────

@@ -76,6 +76,9 @@ export async function resolveWorkloadModel(def: WorkloadDef): Promise<ModelConte
  * mismatched one land in a fixed-dimension column that cannot hold them.
  */
 async function sessionModelForWorkload(def: WorkloadDef): Promise<ModelContext | null> {
+  // A role that gates the reply rather than doing its work — see
+  // `WorkloadDef.followsSessionPin`.
+  if (def.followsSessionPin === false) return null;
   const { currentSessionModel } = await import('$lib/context/chat');
   const pinned = currentSessionModel();
   if (!pinned) return null;
@@ -309,6 +312,9 @@ export const resolveBlogModel = () => resolveById('blog');
 
 /** Chat history compression and memory review. */
 export const resolveChatMaintenanceModel = () => resolveById('chat-maintenance');
+
+/** The per-turn context router in front of every /jkai reply. Ignores the session pin. */
+export const resolveContextRouterModel = () => resolveById('context-router');
 
 /** Intel's read side: preprocessing, briefs, recall and conflation repair. */
 export const resolveIntelAnalysisModel = () => resolveById('intel-analysis');
