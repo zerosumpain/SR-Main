@@ -19,6 +19,7 @@
 // the actual hits.
 import type { AdjacencyIndex, GraphEdge, GraphNode } from './model';
 import { hopNeighbourhood } from './model';
+import { domainOf } from '../domains';
 
 /**
  * Which clock the time window is measured against.
@@ -90,6 +91,21 @@ export interface GraphFilter {
    * NOT "exclude everything" — so the default view is the whole graph.
    */
   sources?: string[];
+  /**
+   * Space ids to keep. Empty/absent = every space the snapshot holds (it is
+   * already scoped). This only ever NARROWS: the route builds the snapshot from
+   * the reader's allowed scope and passes `spaces` only when the request sent
+   * `spaces=`, so the chip counts stay whole-graph while the view shrinks.
+   */
+  spaces?: string[];
+  /**
+   * Domain ids (see ../domains). A node passes if ANY of its sources falls in
+   * ANY of them. Intersects with `sources`. Judged per source through
+   * `domainOf`, not by expanding domains into a source list, because 'other'
+   * has no source list — it is whatever `domainOf` cannot place — and facet
+   * values like 'email:bulk' belong to their base source's domain.
+   */
+  domains?: string[];
   /** Restrict to these entity ids (before keyword expansion). */
   entityIds?: string[];
   /** Window start, epoch ms. Null/undefined = open-ended. */
@@ -132,6 +148,8 @@ export function applyGraphFilter(
   const needle = (filter.q ?? '').trim().toLowerCase();
   const categories = (filter.categories ?? []).filter(Boolean);
   const sources = (filter.sources ?? []).filter(Boolean);
+  const spaces = (filter.spaces ?? []).filter(Boolean);
+  const domains = (filter.domains ?? []).filter(Boolean);
 
   let keep = new Set(index.ids);
 
@@ -185,6 +203,24 @@ export function applyGraphFilter(
         return sources.some((s) => on.includes(s));
       }),
     );
+  }
+  if (domains.length > 0) {
+    keep = new Set(
+      [...keep].filter((id) => {
+        const on = index.byId.get(id)?.sources ?? [];
+        // The same no-exemption rule as `sources` above, for the same reason:
+        // an unsourced entity is a data defect, not a member of every domain.
+        // Nor is it 'other' — that domain means "a source nothing maps yet",
+        // which an entity with no source at all does not have.
+        return on.some((s) => domains.includes(domainOf(s)));
+      }),
+    );
+  }
+  if (spaces.length > 0) {
+    keep = new Set([...keep].filter((id) => {
+      const space = index.byId.get(id)?.space;
+      return space ? spaces.includes(space) : false;
+    }));
   }
   // 2b. The time window.
   //

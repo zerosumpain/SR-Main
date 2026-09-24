@@ -2,6 +2,7 @@ import { desc, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { intelNotes, researchSessions } from '$lib/db/schema';
 import { createNote as createIntelNote, processNote } from '$lib/jkai/intel/ingest';
+import { OWNER_SPACE } from '$lib/jkai/intel/scope';
 import { saveNote } from '$lib/daydream/notebook/store';
 import { depthPreset } from '$lib/deepdive/depth';
 import { coerceScope } from '$lib/deepdive/scope';
@@ -46,7 +47,7 @@ export async function keepNewsInGraph(article: NewsArticle): Promise<{
   const id = await createIntelNote({
     title: article.story.title,
     rawContent: body,
-    source: 'web',
+    source: 'news',
     format: 'text',
     metadata: {
       newsKey: article.story.key,
@@ -55,6 +56,7 @@ export async function keepNewsInGraph(article: NewsArticle): Promise<{
       discussionUrl: article.story.discussionUrl,
       publishedAt: article.story.publishedAt,
     },
+    spaceId: OWNER_SPACE,
   });
   void processNote(id).catch((err) => console.error(`[news] graph processing failed for ${id}:`, err));
   return { id, href: `/jkai/intel/notes/${id}`, existing: false };

@@ -34,6 +34,7 @@ function node(id: string, typeName = 'person'): GraphSnapshot['nodes'][number] {
     aliases: [],
     categories: [],
     sources: [],
+    space: 'owner',
   };
 }
 function edge(a: string, b: string, type = 'knows'): GraphSnapshot['edges'][number] {

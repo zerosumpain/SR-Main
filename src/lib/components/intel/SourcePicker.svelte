@@ -54,6 +54,7 @@
     research: { name: 'Research', hint: 'Deep dives' },
     chat: { name: 'Chat', hint: 'jkai conversations' },
     web: { name: 'Web', hint: 'Captured pages and notes' },
+    news: { name: 'News', hint: 'Stories kept from /news' },
     whatsapp: { name: 'WhatsApp', hint: 'Bridged messages' },
     workflow: { name: 'Workflows', hint: 'Canvas output' },
     pwa: { name: 'Mobile', hint: 'Captured on the phone' },

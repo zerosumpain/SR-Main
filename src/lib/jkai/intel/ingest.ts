@@ -22,10 +22,12 @@ export interface IngestInput {
   rawContent: string;
   // 'file' | 'research' are minted by auto-extraction (see ./auto-extract.ts),
   // not by a human writing a note.
-  source: 'web' | 'whatsapp' | 'pwa' | 'email' | 'workflow' | 'file' | 'research';
+  source: 'web' | 'whatsapp' | 'pwa' | 'email' | 'workflow' | 'file' | 'research' | 'news';
   format: 'text' | 'handwriting_scan' | 'audio_transcript' | 'email' | 'meeting_transcript' | 'summary';
   metadata?: Record<string, unknown>;
   attachment?: JkaiAttachment;
+  /** Whose intel this is. Required so every caller decides — see ./scope. */
+  spaceId: string;
 }
 
 export async function createNote(input: IngestInput): Promise<string> {
@@ -38,6 +40,7 @@ export async function createNote(input: IngestInput): Promise<string> {
       format: input.format,
       status: 'pending',
       metadata: input.metadata ?? null,
+      spaceId: input.spaceId,
     })
     .returning({ id: intelNotes.id });
 

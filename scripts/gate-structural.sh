@@ -23,6 +23,8 @@ npm run gate:source-footprint
 npm run gate:schema-imports
 npm run gate:schema-drift
 npm run gate:boundaries
+node --test scripts/check-intel-scope.test.mjs
+npm run gate:intel-scope
 
 # The vendored SR-Infra application registry. On a host WITHOUT an SR-Infra
 # checkout (CI, the VPS) this passes with a note — the committed generated file

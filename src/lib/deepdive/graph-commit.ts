@@ -50,6 +50,7 @@ import {
 import type { ResearchReport } from './types';
 import { buildResearchDigest, collectFactIds, isOpaqueId } from './intel-bridge';
 import { extractIntoIntel, type AutoExtractOutcome } from '$lib/jkai/intel/auto-extract';
+import { OWNER_SPACE } from '$lib/jkai/intel/scope';
 import type {
   ExtractionResult,
   ExtractedEntity,
@@ -397,6 +398,7 @@ export async function commitSessionGraph(
   const outcome: AutoExtractOutcome = await extractIntoIntel({
     kind: 'research',
     refId: sessionId,
+    spaceId: OWNER_SPACE,
     title: session.topic,
     text: body,
     // The hash covers the GRAPH as well as the prose. Hashing the digest alone

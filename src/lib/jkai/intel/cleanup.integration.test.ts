@@ -174,7 +174,7 @@ describe.skipIf(!enabled)('local graph cleanup', () => {
     extract.mockClear();
     try {
       const { extractIntoIntel } = await import('./auto-extract');
-      const result=await extractIntoIntel({kind:'file',refId:id('queued'),title:'Synthetic queued source',text:'Synthetic source content. '.repeat(20),contentHash:'admission-race'});
+      const result=await extractIntoIntel({kind:'file',refId:id('queued'),title:'Synthetic queued source',text:'Synthetic source content. '.repeat(20),contentHash:'admission-race',spaceId:'owner'});
       expect(result.status).toBe('skipped'); expect(extract).not.toHaveBeenCalled();
       expect((await db.execute(sql`SELECT id FROM intel_notes WHERE metadata->>'refId'=${id('queued')}`)).rows).toHaveLength(0);
     } finally { staleRead.mockRestore(); }
@@ -187,7 +187,7 @@ describe.skipIf(!enabled)('local graph cleanup', () => {
       return { entities:[],relationships:[],timelineEvents:[],proposedNewTypes:[],summary:'Synthetic result' };
     });
     const { extractIntoIntel } = await import('./auto-extract');
-    const result=await extractIntoIntel({ kind:'file',refId:id('queued'),title:'Queued',text:'Synthetic source content. '.repeat(20),contentHash:'test-hash' });
+    const result=await extractIntoIntel({ kind:'file',refId:id('queued'),title:'Queued',text:'Synthetic source content. '.repeat(20),contentHash:'test-hash',spaceId:'owner' });
     expect(result.status).toBe('skipped'); expect(extract).toHaveBeenCalled();
     expect((await db.execute(sql`SELECT id FROM intel_notes WHERE metadata->>'refId'=${id('queued')}`)).rows).toHaveLength(0);
   });

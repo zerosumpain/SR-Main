@@ -3,6 +3,7 @@ import { db, type DbExecutor } from '$lib/db';
 import { jkaiMemories, jkaiMemoryEntities } from '$lib/db/schema';
 import { eq, sql, and, isNull } from 'drizzle-orm';
 import { resolveMention } from '$lib/jkai/intel/resolve/ingestion.server';
+import { OWNER_SPACE } from '$lib/jkai/intel/scope';
 
 /** Keep original entity references: canonical IDs resolve at read time, including after unmerge. */
 export async function setMemoryLinks(memoryId: string, entityIds: string[], tx: DbExecutor = db) {
@@ -59,10 +60,11 @@ export async function linkMemoryAutomatically(id: string) {
   const [memory] = await db.select().from(jkaiMemories).where(and(eq(jkaiMemories.id,id),isNull(jkaiMemories.supersededBy),isNull(jkaiMemories.daydreamOrigin)));
   if (!memory || (memory.provenance?.scope && memory.provenance.scope !== 'personal')) return 0;
     const candidates = await db.execute(sql`SELECT e.name, t.name AS type, e.type_id FROM intel_entities e JOIN intel_entity_types t ON t.id=e.type_id
-      WHERE e.merged_into_id IS NULL AND length(e.name)>=3 AND position(lower(e.name) in lower(${memory.content}))>0 ORDER BY length(e.name) DESC LIMIT 12`);
+      WHERE e.merged_into_id IS NULL AND e.space_id=${OWNER_SPACE} AND length(e.name)>=3 AND position(lower(e.name) in lower(${memory.content}))>0 ORDER BY length(e.name) DESC LIMIT 12`);
     const ids: string[] = [];
     for (const c of candidates.rows) {
-      const result = await resolveMention({ name: String(c.name), type: String(c.type), properties: {}, confidence: 'medium', possibleMatchId: null }, String(c.type_id), db, false);
+      // A jkai memory is the owner's own, never a member's, so it links only into the owner's space.
+      const result = await resolveMention({ name: String(c.name), type: String(c.type), properties: {}, confidence: 'medium', possibleMatchId: null }, String(c.type_id), db, false, OWNER_SPACE);
       if (result.outcome === 'link' && result.entity) ids.push(result.entity.id);
     }
     await db.transaction(async tx => { await tx.execute(sql`select pg_advisory_xact_lock(hashtext('jkai-memory-write'))`); await setMemoryLinks(memory.id, ids, tx); });

@@ -1,6 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createNote, processNote } from '$lib/jkai/intel/ingest';
+import { OWNER_SPACE } from '$lib/jkai/intel/scope';
 import { saveBuffer } from '$lib/jkai/media/storage';
 import { kindFromMime, extensionForMime, isAllowedMime } from '$lib/jkai/media/mime';
 import { db } from '$lib/db';
@@ -74,7 +75,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
   if (!rawContent) throw error(400, 'content is required');
 
-  const noteId = await createNote({ title, rawContent, source, format, metadata, attachment });
+  const noteId = await createNote({ title, rawContent, source, format, metadata, attachment, spaceId: OWNER_SPACE });
 
   processNote(noteId, attachment).catch((err) => {
     console.error(`[intel] Background processing failed for note ${noteId}:`, err);

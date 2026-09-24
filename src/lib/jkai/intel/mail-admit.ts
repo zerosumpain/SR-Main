@@ -236,6 +236,7 @@ export async function admitMailNotes(noteIds: string[], opts: AdmitOptions = {})
       metadata: intelNotes.metadata,
       graphState: intelNotes.graphState,
       rawContent: intelNotes.rawContent,
+      spaceId: intelNotes.spaceId,
     })
     .from(intelNotes)
     .where(and(inArray(intelNotes.id, noteIds), eq(intelNotes.source, 'email')));
@@ -353,6 +354,9 @@ export async function admitMailNotes(noteIds: string[], opts: AdmitOptions = {})
         kind: 'file',
         source: 'email',
         refId: refIdForThread(threadId),
+        // The held note's own space: admitting a thread must find (and fill)
+        // the note that was held, never mint a second one somewhere else.
+        spaceId: note.spaceId,
         title: subject.slice(0, 200),
         text: body,
         contentHash: hash,

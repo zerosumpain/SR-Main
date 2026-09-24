@@ -471,6 +471,7 @@ async function buildGraphLookup(extraction: ExtractionResult, text: string): Pro
   const ids = [...new Set((extraction.entities ?? []).map((e) => e.possibleMatchId).filter((v): v is string => Boolean(v)))];
 
   const { resolveMention } = await import('./resolve/ingestion.server');
+  const { OWNER_SPACE } = await import('./scope');
   const { groundMention } = await import('./resolve/policy');
   const resolutions = new Map<ExtractedEntity, Awaited<ReturnType<typeof resolveMention>>>();
   for (const entity of extraction.entities) {
@@ -479,7 +480,8 @@ async function buildGraphLookup(extraction: ExtractionResult, text: string): Pro
     if (!span) { resolutions.set(entity, {outcome:'unresolved',entity:null,reason:'No verifiable mention in source',ranked:[]}); continue; }
     const properties = {...entity.properties};
     if (typeof properties.email === 'string' && !span.excerpt.toLowerCase().includes(properties.email.toLowerCase())) delete properties.email;
-    resolutions.set(entity, await resolveMention({...entity,properties,mention:{text:span.surface,context:span.excerpt}}, String(type.rows[0]?.id ?? 'unrecognised-type')));
+    // A preview has no note yet, so no space to inherit; pasted text is the owner's.
+    resolutions.set(entity, await resolveMention({...entity,properties,mention:{text:span.surface,context:span.excerpt}}, String(type.rows[0]?.id ?? 'unrecognised-type'), db, true, OWNER_SPACE));
   }
   const byName = new Map<string, GraphEntityRef>();
   const byId = new Map<string, GraphEntityRef>();

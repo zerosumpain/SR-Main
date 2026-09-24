@@ -34,6 +34,7 @@ const n = (
   aliases: [],
   categories: [],
   sources,
+  space: 'owner',
 });
 
 /** Rank by the order given: first id is the most central. */

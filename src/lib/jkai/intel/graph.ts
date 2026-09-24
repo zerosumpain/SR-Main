@@ -14,6 +14,7 @@ import { resolveExtractionModel } from '$lib/server/models/workload-settings';
 import { withActivity } from '$lib/context/activity';
 import { decayWeight } from './staleness';
 import { canonicalName } from './resolve/match';
+import { noteSpace } from './scope.server';
 import type {
   ExtractionResult,
   ExtractedEntity,
@@ -431,6 +432,8 @@ export async function persistExtraction(
     .where(eq(intelNotes.id, noteId))
     .limit(1);
   const noteText = noteRow?.processed || noteRow?.raw || '';
+  // Every edge and event this extraction writes lands in the note's space.
+  const space = await noteSpace(noteId);
 
   const entityIdMap = new Map<string, string>();
   const resolvedEntities = new Map<ExtractedEntity, string>();
@@ -579,6 +582,7 @@ export async function persistExtraction(
       weight: aged(1, rel.confidence),
       strength: strengthBucket(aged(1, rel.confidence)),
       lastSeenAt: observedAt,
+      spaceId: space,
     });
     relationshipCount++;
   }
@@ -608,6 +612,7 @@ export async function persistExtraction(
       type: event.type,
       title: event.title,
       description: event.description ?? null,
+      spaceId: space,
     });
     timelineEventCount++;
   }

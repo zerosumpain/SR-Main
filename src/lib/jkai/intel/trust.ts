@@ -56,6 +56,8 @@ export const CREDIBILITY_LABEL: Record<CredibilityRating, string> = {
  *    several web sources before writing a fact. Better than a raw page, but
  *    still machine-summarised, so B.
  *  - `web` — one fetched page of unknown provenance. C.
+ *  - `news` — a story kept from /news: a fetched page like `web`, picked off
+ *    an aggregator rather than vouched for. C.
  *  - `workflow` — an automated pipeline with no human in the loop. C.
  * Anything unrecognised falls to F, which is neutral, not punitive: an
  * unfamiliar source is an unassessed source.
@@ -67,6 +69,7 @@ const SOURCE_DEFAULT_GRADE: Record<string, SourceGrade> = {
   email: 'B',
   research: 'B',
   web: 'C',
+  news: 'C',
   workflow: 'C',
 };
 

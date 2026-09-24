@@ -44,6 +44,7 @@ import type { JkaiAttachment } from '$lib/db/schema';
 import type { HistoryMessage } from './conversation-history';
 import { buildKnowledgeContext, buildEntityGrounding, loadClusterRoster, type RosterCluster } from '$lib/jkai/intel/context';
 import { createNote, processNote } from '$lib/jkai/intel/ingest';
+import { OWNER_SPACE } from '$lib/jkai/intel/scope';
 import { summarizeToolResult, summarizeRunningTool } from './tool-summary';
 import { extractReasoningDelta } from './reasoning-delta';
 import { extractPlan, awaitPlanApproval, isReadOnlyPlan } from './plan-phase';
@@ -385,6 +386,7 @@ function maybeIngestAsNote(userMessage: string): void {
     source: 'web',
     format: 'text',
     metadata: { capturedFrom: 'chat' },
+    spaceId: OWNER_SPACE,
   }).then((noteId) => {
     processNote(noteId).catch((err) => {
       console.error(`[intel] Chat capture processing failed:`, err);

@@ -6,14 +6,15 @@ import { canonicalName, type ResolvableEntity } from './match';
 import { assessIdentity, chooseIdentity, groundMention } from './policy';
 import { generateEmbedding } from '../embed';
 import type { ExtractedEntity } from '../extract';
+import { noteSpace } from '../scope.server';
 
 /** Per-mention lexical, identifier and contextual candidate retrieval, bounded independently. */
-export async function mentionCandidates(entity: ExtractedEntity, executor: DbExecutor = db, semantic = true): Promise<Array<ResolvableEntity & { semanticDistance?: number }>> {
+export async function mentionCandidates(entity: ExtractedEntity, executor: DbExecutor = db, semantic = true, spaceId: string): Promise<Array<ResolvableEntity & { semanticDistance?: number }>> {
   const names = [entity.name, entity.mention?.text].filter(Boolean).map(n => n!.toLowerCase());
   const email = typeof entity.properties.email === 'string' ? entity.properties.email.toLowerCase() : '';
   const rows = await executor.execute(sql`
     SELECT e.*, t.name AS type_name FROM intel_entities e JOIN intel_entity_types t ON t.id=e.type_id
-    WHERE e.merged_into_id IS NULL AND (lower(e.name) = ANY(${pgTextArray(names)}::text[])
+    WHERE e.merged_into_id IS NULL AND e.space_id = ${spaceId} AND (lower(e.name) = ANY(${pgTextArray(names)}::text[])
       OR e.canonical_name = ${canonicalName(entity.name)} OR e.id = ${entity.possibleMatchId ?? ''}
       OR (${email} <> '' AND lower(e.properties->>'email') = ${email})
       OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(e.aliases) a WHERE lower(a) = ANY(${pgTextArray(names)}::text[]))
@@ -23,7 +24,7 @@ export async function mentionCandidates(entity: ExtractedEntity, executor: DbExe
     try {
       const vec = await generateEmbedding(`${entity.name}\n${entity.mention?.context ?? entity.mention?.text ?? ''}`);
       const nearest = await executor.execute(sql`SELECT e.*, e.embedding <=> ${JSON.stringify(vec)}::vector AS distance, t.name AS type_name FROM intel_entities e JOIN intel_entity_types t ON t.id=e.type_id
-        WHERE e.merged_into_id IS NULL AND e.embedding IS NOT NULL ORDER BY e.embedding <=> ${JSON.stringify(vec)}::vector LIMIT 8`);
+        WHERE e.merged_into_id IS NULL AND e.space_id = ${spaceId} AND e.embedding IS NOT NULL ORDER BY e.embedding <=> ${JSON.stringify(vec)}::vector LIMIT 8`);
       for (const r of nearest.rows as Record<string, unknown>[]) if (!all.some(a => a.id === r.id)) all.push(r);
     } catch { /* Exact identity candidates remain available offline. */ }
   }
@@ -32,13 +33,13 @@ export async function mentionCandidates(entity: ExtractedEntity, executor: DbExe
     embedding: null, degree: 0, noteCount: 0, semanticDistance: typeof r.distance === 'number' ? r.distance : undefined }));
 }
 
-export async function resolveMention(entity: ExtractedEntity, typeId: string, executor: DbExecutor = db, semantic = true) {
-  const candidates = await mentionCandidates(entity, executor, semantic);
+export async function resolveMention(entity: ExtractedEntity, typeId: string, executor: DbExecutor = db, semantic = true, spaceId: string) {
+  const candidates = await mentionCandidates(entity, executor, semantic, spaceId);
   const fresh: ResolvableEntity = { id: 'incoming-mention', name: entity.mention?.text ?? entity.name, typeId, typeName: entity.type,
     properties: entity.properties, embedding: null, degree: 0, noteCount: 0 };
   // Count sender identities including merged records, rather than trusting a shared notification address.
   const identities = await executor.execute(sql`SELECT lower(properties->>'email') AS email, count(DISTINCT lower(name))::int AS n
-    FROM intel_entities WHERE properties->>'email' IS NOT NULL GROUP BY lower(properties->>'email')`);
+    FROM intel_entities WHERE space_id = ${spaceId} AND properties->>'email' IS NOT NULL GROUP BY lower(properties->>'email')`);
   const addressIdentities = new Map((identities.rows as {email: string; n: number}[]).map(r => [r.email, r.n]));
   return chooseIdentity(candidates.map(candidate => {
     let assessment=assessIdentity(fresh,candidate,{addressIdentities});
@@ -52,7 +53,9 @@ export async function persistMention(entity: ExtractedEntity, noteId: string, ty
   // Embedding/provider work is outside the write transaction.
   const identityEntity = { ...entity, mention: span ? { ...entity.mention, text: span.surface, context: span.excerpt } : entity.mention, properties: { ...entity.properties } };
   if (typeof identityEntity.properties.email === 'string' && !span?.excerpt.toLowerCase().includes(identityEntity.properties.email.toLowerCase())) delete identityEntity.properties.email;
-  const resolved = await resolveMention(identityEntity, typeId);
+  // Resolution looks only inside the note's space, and a new entity lands there.
+  const space = await noteSpace(noteId);
+  const resolved = await resolveMention(identityEntity, typeId, db, true, space);
   const id = await db.transaction(async tx => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('intel-identity-write'))`);
     const [previous] = await tx.select().from(intelMentions).where(and(eq(intelMentions.noteId,noteId),eq(intelMentions.surface,span?.surface ?? entity.name),span ? eq(intelMentions.start,span.start) : isNull(intelMentions.start))).limit(1);
@@ -63,7 +66,7 @@ export async function persistMention(entity: ExtractedEntity, noteId: string, ty
       previousTarget = target?.mergedIntoId ?? target?.id ?? null;
     }
     // Repeat deterministic retrieval inside the lock to observe concurrent insertions.
-    const current = await resolveMention(identityEntity, typeId, tx, false);
+    const current = await resolveMention(identityEntity, typeId, tx, false, space);
     // Retain contextual review candidates while only fresh, locked evidence can bind an identity.
     const contextual = resolved.ranked.filter(c => !current.ranked.some(fresh => fresh.entity.id === c.entity.id));
     const choice = chooseIdentity([...current.ranked, ...contextual.map(c => ({
@@ -77,7 +80,7 @@ export async function persistMention(entity: ExtractedEntity, noteId: string, ty
       if (live) entityId = live.id;
     } else if (outcome === 'new') {
       const [row] = await tx.insert(intelEntities).values({ name: entity.name, canonicalName: canonicalName(entity.name), typeId,
-        properties: identityEntity.properties, confidence: entity.confidence, confirmed: false, firstSeenIn: noteId }).returning();
+        properties: identityEntity.properties, confidence: entity.confidence, confirmed: false, firstSeenIn: noteId, spaceId: space }).returning();
       entityId = row.id;
     }
     const mentionRecord = { noteId, entityId, surface: span?.surface ?? entity.name, start: span?.start, end: span?.end,

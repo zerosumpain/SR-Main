@@ -7,6 +7,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import { canonicalName } from '$lib/jkai/intel/resolve/match';
 import { persistExtraction } from '$lib/jkai/intel/graph';
 import type { ExtractionResult } from '$lib/jkai/intel/extract';
+import { noteSpace } from '$lib/jkai/intel/scope.server';
 export const GET: RequestHandler = async () => {
   const result=await db.execute(sql`SELECT m.*,n.title AS note_title FROM intel_mentions m JOIN intel_notes n ON n.id=m.note_id WHERE m.status='unresolved' ORDER BY m.created_at DESC LIMIT 100`);
   const ids = [...new Set(result.rows.flatMap(r => (r.candidates as Array<{id:string}>).map(c=>c.id)))];
@@ -50,7 +51,7 @@ export const POST: RequestHandler = async ({request}) => {
     if(body.action==='create'){
       const type=await tx.execute(sql`SELECT id FROM intel_entity_types WHERE name=${mention.proposedType} AND status='active' LIMIT 1`);
       if(!type.rows.length)throw error(400,'Admit or select an active type first');
-      const [entity]=await tx.insert(intelEntities).values({name:mention.surface,canonicalName:canonicalName(mention.surface),typeId:String(type.rows[0].id),confirmed:true,firstSeenIn:mention.noteId}).returning();entityId=entity.id;
+      const [entity]=await tx.insert(intelEntities).values({name:mention.surface,canonicalName:canonicalName(mention.surface),typeId:String(type.rows[0].id),confirmed:true,firstSeenIn:mention.noteId,spaceId:await noteSpace(mention.noteId,tx)}).returning();entityId=entity.id;
     }
     await tx.update(intelMentions).set({entityId,status:body.action==='reject'?'rejected':'reviewed',reason:'Human review'}).where(eq(intelMentions.id,mention.id));
     return mention.noteId;

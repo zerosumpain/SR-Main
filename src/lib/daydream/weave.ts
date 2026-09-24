@@ -33,6 +33,7 @@ import { createHash } from 'node:crypto';
 import { db } from '$lib/db';
 import { daydreamThoughts } from '$lib/db/schema';
 import { MIN_EXTRACT_CHARS, extractIntoIntel } from '$lib/jkai/intel/auto-extract';
+import { OWNER_SPACE } from '$lib/jkai/intel/scope';
 import { resolveEvidence } from './evidence';
 import { errMsg } from './types';
 
@@ -141,6 +142,7 @@ export async function weaveThought(thoughtId: string): Promise<WeaveOutcome> {
       contentHash: weaveHash(text),
       source: 'daydream',
       metadata: { daydreamKind: row.kind, daydreamThoughtId: row.id },
+      spaceId: OWNER_SPACE,
     });
 
     if (outcome.status === 'extracted') {

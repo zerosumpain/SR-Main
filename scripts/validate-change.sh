@@ -42,6 +42,7 @@ npm run gate:measure
 npm run gate:source-footprint
 npm run gate:schema-imports
 npm run gate:boundaries
+npm run gate:intel-scope
 
 LEVEL="$(./scripts/gate-level.sh "$BASE" | sed -n 's/^level=//p' | head -1)"
 echo "==> Change level: ${LEVEL:-L3}"

@@ -22,6 +22,7 @@
  * `recency` and `relevance` are 1 and the renderers' fade never fires.
  */
 import type { GraphNode, GraphEdge, GraphSnapshot } from '$lib/jkai/intel/analytics/model';
+import { OWNER_SPACE } from '$lib/jkai/intel/scope';
 
 export interface SessionEntityRow {
   id: string;
@@ -164,6 +165,9 @@ export function buildSessionSnapshot(
       aliases: [],
       categories: [],
       sources: ['research'],
+      // Deep-dive entities live in their own tables with no space column; a
+      // research run is the owner's, so its graph is too.
+      space: OWNER_SPACE,
     }));
 
   const edges: GraphEdge[] = usable

@@ -291,6 +291,14 @@ describe('findDuplicateCandidates', () => {
     expect(findDuplicateCandidates([])).toEqual([]);
   });
 
+  it('never pairs two spaces, by block or by an extra pair', () => {
+    const entities = [ent('1', 'Tesco', { spaceId: 'owner' }), ent('2', 'Tesco', { spaceId: 'u_test' })];
+    expect(findDuplicateCandidates(entities)).toEqual([]);
+    expect(findDuplicateCandidates(entities, { extraPairs: [['1', '2']] })).toEqual([]);
+    // Same names in the same space still pair, so the absence is the space.
+    expect(findDuplicateCandidates([ent('1', 'Tesco', { spaceId: 'owner' }), ent('2', 'Tesco', { spaceId: 'owner' })])).toHaveLength(1);
+  });
+
   it('returns candidates in descending confidence', () => {
     const cands = findDuplicateCandidates([
       ent('1', 'IBCA', { degree: 119 }),

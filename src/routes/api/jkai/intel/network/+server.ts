@@ -18,6 +18,9 @@ import { labelForView } from '$lib/jkai/intel/analytics/cluster-label';
 import { db } from '$lib/db';
 import { intelCategories, intelEntityTypes } from '$lib/db/schema';
 import { recencyOf, entityRelevance } from '$lib/jkai/intel/staleness';
+import { narrowScope } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
+import { domainCountsFromNodes } from '$lib/jkai/intel/domains';
 
 /**
  * Above this many nodes the payload is trimmed to the most central entities.
@@ -26,7 +29,8 @@ import { recencyOf, entityRelevance } from '$lib/jkai/intel/staleness';
  */
 const MAX_NODES = 600;
 
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async (event) => {
+  const { url } = event;
   const typeId = url.searchParams.get('typeId');
   const typeIds = parseCsv(url.searchParams.get('types'));
   const focusId = url.searchParams.get('focus');
@@ -51,7 +55,22 @@ export const GET: RequestHandler = async ({ url }) => {
   const clock: GraphClock = url.searchParams.get('clock') === 'added' ? 'added' : 'updated';
   const windowed = since !== null || until !== null;
 
-  const analysis = await getGraphAnalysis();
+  // Whose graph. `allowed` is everything this reader may see and is what the
+  // snapshot is built from, so the space and domain chips count the whole
+  // graph; `spaces=` only narrows the VIEW, inside `allowed`, through the
+  // filter below. A request never widens its own scope.
+  const allowed = await resolveRequestScope(event);
+  const requestedSpaces = parseCsv(url.searchParams.get('spaces'));
+  const scope = narrowScope(allowed, requestedSpaces);
+  const domainFilter = parseCsv(url.searchParams.get('domains'));
+  // Narrowed to nothing (every requested space is outside `allowed`) must show
+  // nothing, but an empty `spaces` list reads as "no filter". The requested ids
+  // match no node — the snapshot holds only allowed spaces — so passing them
+  // through gives the empty view without a special case in the filter.
+  const spaceFilter =
+    requestedSpaces.length === 0 ? undefined : scope.length > 0 ? [...scope] : requestedSpaces;
+
+  const analysis = await getGraphAnalysis(false, { scope: allowed });
   const { index, centrality, community } = analysis;
 
   // The durable identity behind each detected community. Colouring and placing
@@ -97,6 +116,8 @@ export const GET: RequestHandler = async ({ url }) => {
     qHops: qHopsParam === null ? 1 : Number(qHopsParam),
     categories: categoryFilter,
     sources: sourceFilter,
+    domains: domainFilter,
+    spaces: spaceFilter,
     entityIds: entityFilter,
     since,
     until,
@@ -133,6 +154,9 @@ export const GET: RequestHandler = async ({ url }) => {
     windowed ||
     categoryFilter.length > 0 ||
     sourceFilter.length > 0 ||
+    domainFilter.length > 0 ||
+    // Only when the chips actually narrow: ticking every space is the whole graph.
+    scope.length < allowed.length ||
     entityFilter.length > 0;
 
   let keep = filtered.keep;
@@ -362,6 +386,15 @@ export const GET: RequestHandler = async ({ url }) => {
   sourceKinds.sort(byCount);
   sourceDomains.sort(byCount);
 
+  // Same whole-index rule for the space chips. Every allowed space is listed,
+  // even at zero, so a space with nothing in it yet is visibly empty rather
+  // than missing.
+  const spaceCounts = new Map<string, number>();
+  for (const id of index.ids) {
+    const s = index.byId.get(id)?.space;
+    if (s) spaceCounts.set(s, (spaceCounts.get(s) ?? 0) + 1);
+  }
+
   return json({
     nodes,
     edges,
@@ -370,6 +403,13 @@ export const GET: RequestHandler = async ({ url }) => {
     sources,
     sourceKinds,
     sourceDomains,
+    // Distinct entities per domain over the whole allowed index — the same
+    // whole-graph rule as the source counts above, but counted per entity so
+    // one asserted by research AND daydream is one Research entity, not two.
+    domains: domainCountsFromNodes(
+      index.ids.map((id) => ({ sources: index.byId.get(id)?.sources ?? [] })),
+    ),
+    spaces: [...allowed].map((id) => ({ id, count: spaceCounts.get(id) ?? 0 })),
     // The literal keyword hits, kept separate from `nodes` so the client can
     // highlight them rather than pretending the expanded neighbourhood matched.
     matched: filtered.matched.filter((id) => keep.has(id)),
