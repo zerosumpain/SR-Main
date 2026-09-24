@@ -13,10 +13,11 @@
 // src/lib/jkai/memory/graph.server.ts). PR A2 audits every READS-matching
 // file, not only the baseline.
 //
-// The baseline is the readers that existed before spaces did. It may only
-// shrink: an entry that is now scoped or deleted fails the check until it is
-// removed, so the list cannot rot. `--strict` requires it to be empty — PR B
-// (member data) turns that on.
+// The baseline was the readers that existed before spaces did. PR A2 burned it
+// down to `[]` and the gate now runs `--strict` (package.json
+// `gate:intel-scope`), which fails on any baseline entry: the baseline is
+// closed and must stay empty. A new unscoped reader must be scoped, or go in
+// MAINTENANCE below with a reason — never back in the baseline.
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';

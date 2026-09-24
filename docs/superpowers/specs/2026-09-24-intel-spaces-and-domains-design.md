@@ -209,7 +209,9 @@ readers (~100 files; 56 use raw SQL) so a new unscoped reader fails CI at once.
 **PR A2 — burn-down.** Scope every baseline reader (library functions take
 `scope: IntelScope = OWNER_INTEL_SCOPE`, so owner call sites do not change), the
 nightly engine iterates spaces, and the guard flips to strict (baseline must be
-empty).
+empty). From A2 the gate runs `--strict`, so no PR can reintroduce an unscoped
+intel reader; that — not a runtime check — is what makes member data safe to
+write in PR B.
 
 PR B refuses to write a non-owner space while the baseline is non-empty — the
 member Gmail sweep checks it in code, so the ordering is enforced, not
