@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { OWNER_INTEL_SCOPE, scopeKey, narrowScope, writeSpace } from './scope';
+import { OWNER_INTEL_SCOPE, scopeKey, narrowScope, writeSpace, isOwnerScope } from './scope';
 
 describe('scope', () => {
   it('owner scope is own space plus household', () => {
@@ -27,5 +27,14 @@ describe('scope', () => {
 
   it('an empty scope has nowhere to write', () => {
     expect(() => writeSpace([])).toThrow(/empty scope/);
+  });
+
+  it('only the whole owner scope may run an every-space operation', () => {
+    expect(isOwnerScope(OWNER_INTEL_SCOPE)).toBe(true);
+    expect(isOwnerScope(['household', 'owner'])).toBe(true);
+    // A member's scope, and a narrowed owner view, are not the owner.
+    expect(isOwnerScope(['u_x', 'household'])).toBe(false);
+    expect(isOwnerScope(['owner'])).toBe(false);
+    expect(isOwnerScope([])).toBe(false);
   });
 });

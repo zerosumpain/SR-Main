@@ -53,3 +53,15 @@ export function writeSpace(scope: IntelScope): string {
   if (!own) throw new Error('writeSpace: empty scope — no space to write into');
   return own;
 }
+
+/**
+ * True only for the owner's whole scope. Some operations are not reads of a
+ * scope at all: they sweep every space (cleanup's apply, the alias backfill),
+ * rewrite something every space shares (the entity-type vocabulary, the cluster
+ * roster), or run a whole-corpus backfill. A member's request must never run
+ * those, and neither may a view the owner has narrowed to one space — the
+ * operation would still reach the rest. Routes gate them on this.
+ */
+export function isOwnerScope(scope: IntelScope): boolean {
+  return scopeKey(scope) === scopeKey(OWNER_INTEL_SCOPE);
+}
