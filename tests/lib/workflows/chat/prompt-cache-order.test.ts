@@ -70,7 +70,19 @@ describe('system prompt is assembled stable-first, for the cache', () => {
   it('keeps retrieved memory, pages and graph outside the system instructions', () => {
     const { prefix, suffix } = promptHalves();
     for (const name of ['memorySection', 'pastedUrlsSection', 'graphSection']) expect(prefix + suffix).not.toContain(slot(name));
-    expect(SRC).toContain('JSON.stringify({ memory: memorySection, graph: graphSection, pages: pastedUrlsSection, savedIntegrations: integrationContext })');
+    expect(SRC).toContain('retrievedContextMessage({ memory: memorySection, graph: graphSection, pages: pastedUrlsSection, savedIntegrations: integrationContext })');
+  });
+
+  it('puts the retrieved context after the history, just before the new message', () => {
+    // Ahead of the history, the model read the block as something the user had
+    // sent ("Yeah, that context dump was a bit much", 2026-09-23), and a block
+    // rebuilt every turn broke the cached prefix for the whole conversation.
+    const history = SRC.indexOf('for (const h of recentHistory)');
+    const retrieved = SRC.indexOf('if (retrieved) messages.push(');
+    const user = SRC.indexOf("messages.push({ role: 'user', content: userContent as any })");
+    expect(history).toBeGreaterThan(0);
+    expect(retrieved).toBeGreaterThan(history);
+    expect(user).toBeGreaterThan(retrieved);
   });
 });
 

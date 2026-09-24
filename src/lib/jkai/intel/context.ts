@@ -21,18 +21,42 @@ interface KnowledgeContext {
   /**
    * The named neighbourhoods the graph divides into.
    *
-   * Included unconditionally rather than by similarity search, because a cluster
+   * Selected by the caller rather than by similarity search, because a cluster
    * name is often something the embedding has never seen — the user typed it —
-   * and "tell me about the DfE cluster" has to resolve on the name itself. It is
-   * a short list of short strings; the whole roster costs less than one note
-   * excerpt.
+   * and "tell me about the DfE cluster" has to resolve on the name itself.
+   *
+   * This used to be unconditional, on the grounds that the roster is cheap. It
+   * is cheap in tokens and expensive in attention: on a two-word casual turn
+   * the model read "195 entities in the scheduler cluster" as something the
+   * user had sent it (2026-09-23). Chat now asks for the roster only when the
+   * turn is about the graph, and otherwise only for its anchors' own clusters.
    */
   clusters: Array<{ label: string; size: number; sources: string; narrative: string | null }>;
 }
 
-export async function buildKnowledgeContext(userMessage: string): Promise<string> {
+/**
+ * Which parts of the graph a caller wants.
+ *
+ * The defaults are the historic behaviour — every entity near the message, and
+ * the whole cluster roster — which the pull-side callers (the memory tool, the
+ * intel workflow nodes) still want: they asked about the graph. Chat does not
+ * pass the defaults: its context router decides per turn, because the roster
+ * arriving on "Shit bra" is what made a casual reply read a knowledge-graph
+ * index as something the user had said.
+ */
+export interface KnowledgeContextOptions {
+  /**
+   * `'all'` — the live roster (the default). An array — only the clusters with
+   * these keys, e.g. the ones the turn's anchors belong to. `[]` — none.
+   */
+  clusters?: 'all' | readonly string[];
+  /** Vector-matched entities. Off when the caller grounds named anchors itself. */
+  entities?: boolean;
+}
+
+export async function buildKnowledgeContext(userMessage: string, options: KnowledgeContextOptions = {}): Promise<string> {
   try {
-    const context = await findRelevantContext(userMessage);
+    const context = await findRelevantContext(userMessage, options);
 
     if (
       context.entities.length === 0 &&
@@ -120,19 +144,20 @@ async function vectorLookups(vectorStr: string): Promise<[unknown[], unknown[]]>
   });
 }
 
-async function findRelevantContext(query: string): Promise<KnowledgeContext> {
+async function findRelevantContext(query: string, options: KnowledgeContextOptions = {}): Promise<KnowledgeContext> {
+  const clusterFilter = options.clusters ?? 'all';
   let embedding: number[];
   try {
     embedding = await generateEmbedding(query);
   } catch {
-    return { entities: [], noteExcerpts: [], clusters: await describeClusters() };
+    return { entities: [], noteExcerpts: [], clusters: await describeClusters(clusterFilter) };
   }
 
   const vectorStr = `[${embedding.join(',')}]`;
 
   const [entityRows, noteRows] = await vectorLookups(vectorStr);
 
-  const relevantEntities = (entityRows as any[]).filter((r) => r.distance < 0.6);
+  const relevantEntities = options.entities === false ? [] : (entityRows as any[]).filter((r) => r.distance < 0.6);
   const relevantNotes = (noteRows as any[]).filter((r) => r.distance < 0.5);
 
   const entityIds = relevantEntities.map((e: any) => e.id);
@@ -226,7 +251,7 @@ async function findRelevantContext(query: string): Promise<KnowledgeContext> {
       excerpt: n.excerpt,
       date: new Date(n.created_at).toLocaleDateString(),
     })),
-    clusters: await describeClusters(),
+    clusters: await describeClusters(clusterFilter),
   };
 }
 
@@ -243,16 +268,14 @@ async function findRelevantContext(query: string): Promise<KnowledgeContext> {
  * thousand tokens on every turn, and the opening line is the part that says
  * what the cluster is.
  */
-async function describeClusters(): Promise<KnowledgeContext['clusters']> {
+async function describeClusters(filter: 'all' | readonly string[] = 'all'): Promise<KnowledgeContext['clusters']> {
+  if (filter !== 'all' && filter.length === 0) return [];
   try {
-    const { loadClusters } = await import('./cluster-store');
-    const clusters = await loadClusters();
-    return clusters
-      .filter((c) => c.live)
-      .sort((a, b) => b.size - a.size)
-      .slice(0, MAX_CLUSTERS)
+    const roster = await loadClusterRoster();
+    return roster
+      .filter((c) => filter === 'all' || filter.includes(c.key))
       .map((c) => ({
-        label: c.name ?? c.autoLabel,
+        label: c.label,
         size: c.size,
         sources: sourceMixOf(c.members.length),
         narrative: firstSentence(c.narrative),
@@ -265,6 +288,32 @@ async function describeClusters(): Promise<KnowledgeContext['clusters']> {
 
 /** How many clusters the chat context carries. */
 const MAX_CLUSTERS = 12;
+
+/** A live cluster as the chat context sees it: identity, name and members. */
+export interface RosterCluster {
+  key: string;
+  label: string;
+  size: number;
+  members: string[];
+  narrative: string | null;
+}
+
+/**
+ * The live clusters, largest first, capped at MAX_CLUSTERS.
+ *
+ * Shared by the context block above and the chat's context router, which hands
+ * the labels to its model as the vocabulary a turn can be routed onto, and maps
+ * anchor entities back to their cluster through `members`.
+ */
+export async function loadClusterRoster(): Promise<RosterCluster[]> {
+  const { loadClusters } = await import('./cluster-store');
+  const clusters = await loadClusters();
+  return clusters
+    .filter((c) => c.live)
+    .sort((a, b) => b.size - a.size)
+    .slice(0, MAX_CLUSTERS)
+    .map((c) => ({ key: c.key, label: c.name ?? c.autoLabel, size: c.size, members: c.members, narrative: c.narrative }));
+}
 
 /**
  * A short provenance phrase for a cluster.
@@ -346,7 +395,11 @@ function formatContext(context: KnowledgeContext): string {
  *
  * Returns '' when nothing resolves, so the caller can skip the block entirely.
  */
-export async function buildEntityGrounding(entityIds: string[]): Promise<string> {
+export async function buildEntityGrounding(
+  entityIds: string[],
+  /** Who picked the entities: the user with `@entity`, or chat's context router. */
+  origin: 'mentioned' | 'routed' = 'mentioned',
+): Promise<string> {
   if (!entityIds.length) return '';
 
   const { getGraphAnalysis } = await import('./analytics/load');
@@ -397,8 +450,12 @@ export async function buildEntityGrounding(entityIds: string[]): Promise<string>
 
   if (!blocks.length) return '';
   return [
-    'INTEL GRAPH CONTEXT — the user named these entities explicitly.',
-    'Use this as the factual basis for your answer, and say so when you rely on it.',
+    origin === 'mentioned'
+      ? 'INTEL GRAPH CONTEXT — the user named these entities explicitly.'
+      : 'INTEL GRAPH CONTEXT — the entities this message is about, matched by name in the knowledge graph.',
+    origin === 'mentioned'
+      ? 'Use this as the factual basis for your answer, and say so when you rely on it.'
+      : 'Use it where it bears on the answer, and say so when you rely on it.',
     '',
     ...blocks,
   ].join('\n');
