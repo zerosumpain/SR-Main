@@ -31,6 +31,7 @@ export const POST: RequestHandler = async ({ params }) => {
 export const DELETE: RequestHandler = async ({ params }) => {
   try {
     const result = await deleteNoteCascade(params.id);
+    if (!result) return json({ error: 'Not found' }, { status: 404 });
     return json(result);
   } catch (err) {
     console.error(`[intel] Cascade delete failed for note ${params.id}:`, err);

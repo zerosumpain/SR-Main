@@ -11,12 +11,12 @@
 // pairs the user has already ruled on. Rejection therefore SUPPRESSES rather
 // than deletes, because a later extraction would otherwise re-create the edge
 // and undo the correction.
-import { and, eq, or } from 'drizzle-orm';
+import { and, eq, inArray, or } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { intelRelationships } from '$lib/db/schema';
+import { intelEntities, intelRelationships } from '$lib/db/schema';
 import { weightFor, strengthBucket } from './graph';
 import { invalidateGraphAnalysis } from './analytics/load';
-import { entitySpace } from './scope.server';
+import { OWNER_INTEL_SCOPE, spaceIn, type IntelScope } from './scope';
 
 /** The relationship type a hand-confirmed link is recorded under. */
 export const CONFIRMED_EDGE_TYPE = 'related_to';
@@ -41,14 +41,17 @@ export interface ConfirmLinkResult {
  * exists would leave two edges saying the same thing and double the pair's
  * apparent corroboration.
  */
-async function findEdgeBetween(a: string, b: string) {
+async function findEdgeBetween(a: string, b: string, space: string) {
   const [row] = await db
     .select()
     .from(intelRelationships)
     .where(
-      or(
-        and(eq(intelRelationships.sourceEntityId, a), eq(intelRelationships.targetEntityId, b)),
-        and(eq(intelRelationships.sourceEntityId, b), eq(intelRelationships.targetEntityId, a)),
+      and(
+        or(
+          and(eq(intelRelationships.sourceEntityId, a), eq(intelRelationships.targetEntityId, b)),
+          and(eq(intelRelationships.sourceEntityId, b), eq(intelRelationships.targetEntityId, a)),
+        ),
+        eq(intelRelationships.spaceId, space),
       ),
     )
     .limit(1);
@@ -58,11 +61,23 @@ async function findEdgeBetween(a: string, b: string) {
 /**
  * The space a hand-made edge lands in: its endpoints', which must agree. An
  * edge between two people's graphs would be a link neither of them owns.
+ *
+ * Checked FIRST, before any existing edge is looked at, and only among the
+ * entities `scope` can see — the ids come from a request, and an id outside the
+ * scope is not found, so nobody can confirm or suppress an edge in a graph that
+ * is not theirs.
  */
-async function linkSpace(sourceId: string, targetId: string): Promise<string> {
-  const space = await entitySpace(sourceId);
-  if ((await entitySpace(targetId)) !== space) throw new Error('cannot link entities in different spaces');
-  return space;
+async function linkSpace(sourceId: string, targetId: string, scope: IntelScope): Promise<string> {
+  const rows = await db
+    .select({ id: intelEntities.id, space: intelEntities.spaceId })
+    .from(intelEntities)
+    .where(and(inArray(intelEntities.id, [sourceId, targetId]), spaceIn(intelEntities.spaceId, scope)));
+  const source = rows.find((r) => r.id === sourceId);
+  const target = rows.find((r) => r.id === targetId);
+  if (!source) throw new Error(`entity ${sourceId} not found`);
+  if (!target) throw new Error(`entity ${targetId} not found`);
+  if (source.space !== target.space) throw new Error('cannot link entities in different spaces');
+  return source.space;
 }
 
 /**
@@ -72,11 +87,15 @@ async function linkSpace(sourceId: string, targetId: string): Promise<string> {
  * which outranks anything an extractor inferred. `manual` is also what stops
  * persistExtraction overwriting the label on a later re-ingest.
  */
-export async function confirmRelationship(input: ConfirmLinkInput): Promise<ConfirmLinkResult> {
+export async function confirmRelationship(
+  input: ConfirmLinkInput,
+  scope: IntelScope = OWNER_INTEL_SCOPE,
+): Promise<ConfirmLinkResult> {
   const { sourceEntityId, targetEntityId } = input;
   const label = (input.label ?? '').trim().slice(0, 500) || 'Confirmed by hand';
 
-  const existing = await findEdgeBetween(sourceEntityId, targetEntityId);
+  const spaceId = await linkSpace(sourceEntityId, targetEntityId, scope);
+  const existing = await findEdgeBetween(sourceEntityId, targetEntityId, spaceId);
 
   if (existing) {
     // Confirming an edge that already exists is still meaningful — it may have
@@ -100,7 +119,6 @@ export async function confirmRelationship(input: ConfirmLinkInput): Promise<Conf
     return { relationshipId: existing.id, created: false };
   }
 
-  const spaceId = await linkSpace(sourceEntityId, targetEntityId);
   const [created] = await db
     .insert(intelRelationships)
     .values({
@@ -145,11 +163,15 @@ export interface RejectLinkResult {
  * case, since these are PREDICTIONS — a suppressed placeholder is written, so
  * the same rejection blocks the edge if an extractor later proposes it.
  */
-export async function rejectRelationship(input: RejectLinkInput): Promise<RejectLinkResult> {
+export async function rejectRelationship(
+  input: RejectLinkInput,
+  scope: IntelScope = OWNER_INTEL_SCOPE,
+): Promise<RejectLinkResult> {
   const { sourceEntityId, targetEntityId } = input;
   const reason = (input.reason ?? '').trim().slice(0, 500) || 'Rejected from the intel dashboard';
 
-  const existing = await findEdgeBetween(sourceEntityId, targetEntityId);
+  const spaceId = await linkSpace(sourceEntityId, targetEntityId, scope);
+  const existing = await findEdgeBetween(sourceEntityId, targetEntityId, spaceId);
 
   if (existing) {
     if (existing.suppressed) return { suppressed: false, relationshipId: existing.id };
@@ -161,7 +183,6 @@ export async function rejectRelationship(input: RejectLinkInput): Promise<Reject
     return { suppressed: true, relationshipId: existing.id };
   }
 
-  const spaceId = await linkSpace(sourceEntityId, targetEntityId);
   const [created] = await db
     .insert(intelRelationships)
     .values({

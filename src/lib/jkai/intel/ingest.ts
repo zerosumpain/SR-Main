@@ -9,6 +9,7 @@ import {
   intelInsights,
 } from '$lib/db/schema';
 import { eq, ne, and, inArray } from 'drizzle-orm';
+import { OWNER_INTEL_SCOPE, spaceIn, type IntelScope } from './scope';
 import { extractFromNote } from './extract';
 import { persistExtraction } from './graph';
 import { ocrHandwriting, transcribeAudio, parseEmail } from './preprocess';
@@ -155,9 +156,23 @@ export interface CascadeDeleteResult {
  * query excludes `merged_into_id IS NOT NULL`) while never being deleted itself.
  *
  * Runs inside a single transaction. Returns counts for logging / UI use.
+ *
+ * `scope` is who is asking: a note outside it is not found, and nothing is
+ * deleted (null — the route's 404). Everything after that check follows from
+ * the note, so it stays in the note's space: its entities, their tombstones and
+ * the artefacts about them were all made there.
  */
-export async function deleteNoteCascade(noteId: string): Promise<CascadeDeleteResult> {
+export async function deleteNoteCascade(
+  noteId: string,
+  scope: IntelScope = OWNER_INTEL_SCOPE,
+): Promise<CascadeDeleteResult | null> {
   return await db.transaction(async (tx) => {
+    const [visible] = await tx
+      .select({ id: intelNotes.id })
+      .from(intelNotes)
+      .where(and(eq(intelNotes.id, noteId), spaceIn(intelNotes.spaceId, scope)));
+    if (!visible) return null;
+
     // A. Find entities linked to this note.
     const linkedHere = await tx
       .select({ entityId: intelNoteEntities.entityId })
@@ -244,6 +259,10 @@ export async function deleteNoteCascade(noteId: string): Promise<CascadeDeleteRe
       // spliced through the query builder is exactly the kind of thing that
       // silently matches nothing if the array parameter is bound as a list of
       // scalars. A read-then-delete-by-id is unambiguously correct.
+      //
+      // Not space-filtered, deliberately: nothing here is returned, entity ids
+      // are globally unique, and a card naming a deleted entity is dead in
+      // whichever space it was filed.
       const doomedSet = new Set(doomedIds);
       const candidateInsights = await tx
         .select({ id: intelInsights.id, entityIds: intelInsights.entityIds })
