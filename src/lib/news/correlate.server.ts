@@ -25,13 +25,17 @@ import {
   jkaiMemories,
   researchSessions,
 } from '$lib/db/schema';
+import { OWNER_INTEL_SCOPE, spaceIn } from '$lib/jkai/intel/scope';
 import type { Anchor } from './correlate';
 
 /**
  * Anchors are three DB queries and the desk re-renders on every tab, sort and
- * filter click, so they are cached in-process. Ten minutes: what the graph
- * considers important moves on the scale of days, and a stale anchor costs a
- * missed badge rather than a wrong one.
+ * filter click, so they are cached in-process. One entry, because the desk is
+ * the owner's and the graph half is always read in his scope (see
+ * `entityAnchors`); a per-member desk would key this by `scopeKey`.
+ *
+ * Ten minutes: what the graph considers important moves on the scale of days,
+ * and a stale anchor costs a missed badge rather than a wrong one.
  */
 const ANCHOR_TTL_MS = 10 * 60 * 1000;
 let anchorCache: { value: { anchors: Anchor[]; gathered: string[] }; expiresAt: number } | null = null;
@@ -66,8 +70,14 @@ function clamp01(n: number): number {
  * table rather than a correlated subquery per entity — `intel_relationships` is
  * large and the per-row shape is exactly the pattern this repo has had to index
  * its way out of before.
+ *
+ * Every intel table below is read inside the owner's scope — the entities,
+ * the edges counted for degree, and the notes counted as evidence or checked
+ * for the anchor rule — so neither a member's entity nor a member's note about
+ * an owner entity can make a story look relevant to him.
  */
 async function entityAnchors(): Promise<Anchor[]> {
+  const scoped = (column: string) => spaceIn(sql.raw(column), OWNER_INTEL_SCOPE);
   const degrees = db.$with('degrees').as(
     db
       .select({
@@ -76,9 +86,9 @@ async function entityAnchors(): Promise<Anchor[]> {
       })
       .from(
         sql`(
-          SELECT source_entity_id AS entity_id FROM intel_relationships
+          SELECT source_entity_id AS entity_id FROM intel_relationships WHERE ${scoped('space_id')}
           UNION ALL
-          SELECT target_entity_id AS entity_id FROM intel_relationships
+          SELECT target_entity_id AS entity_id FROM intel_relationships WHERE ${scoped('space_id')}
         ) x`,
       )
       .groupBy(sql`x.entity_id`),
@@ -94,7 +104,7 @@ async function entityAnchors(): Promise<Anchor[]> {
         notes: sql<number>`count(distinct ne.note_id)::int`.as('ev_notes'),
         lastSeen: sql<string | null>`max(n.created_at)`.as('ev_last_seen'),
       })
-      .from(sql`intel_note_entities ne JOIN intel_notes n ON n.id = ne.note_id`)
+      .from(sql`intel_note_entities ne JOIN intel_notes n ON n.id = ne.note_id AND ${scoped('n.space_id')}`)
       .groupBy(sql`ne.entity_id`),
   );
 
@@ -120,6 +130,7 @@ async function entityAnchors(): Promise<Anchor[]> {
       and(
         // A merged entity is a tombstone; its surviving twin carries the aliases.
         isNull(intelEntities.mergedIntoId),
+        spaceIn(intelEntities.spaceId, OWNER_INTEL_SCOPE),
         // THE ANCHOR RULE. "Keep in graph" on a story writes an intel note
         // carrying `metadata.newsKey`, which mints entities — so without this,
         // keeping one story makes the next story about it look relevant, and
@@ -138,6 +149,7 @@ async function entityAnchors(): Promise<Anchor[]> {
             JOIN intel_notes n ON n.id = ne.note_id
             WHERE ne.entity_id = ${intelEntities.id}
               AND n.metadata->>'newsKey' IS NULL
+              AND ${scoped('n.space_id')}
           )
           OR NOT EXISTS (
             SELECT 1 FROM intel_note_entities ne

@@ -7,10 +7,7 @@
   "src/lib/jkai/graph-colors.ts",
   "src/lib/jkai/thread-graph.ts",
   "src/lib/mail-index/store.ts",
-  "src/lib/news/actions.ts",
-  "src/lib/news/correlate.server.ts",
   "src/lib/news/relabel.ts",
-  "src/lib/news/stats.ts",
   "src/lib/workflows/chat/legacy-tool-log.ts",
   "src/lib/workflows/chat/tool-summary.ts",
   "src/lib/workflows/site-tools/keyword-classifier.ts"
