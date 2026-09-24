@@ -5,6 +5,7 @@ import { db } from '$lib/db';
 import { conversations } from '$lib/db/schema';
 import { getConversationMessages } from '$lib/jkai/queries';
 import { clampLimit, withDevice } from '$lib/server/native-handler';
+import { nativeArtifacts, nativeSources } from '$lib/jkai/native-rich';
 
 /**
  * GET /api/native/chat/conversations/[id]/messages — one thread's history.
@@ -17,6 +18,11 @@ import { clampLimit, withDevice } from '$lib/server/native-handler';
  * metadata and can carry file paths and query bodies; the phone renders one grey
  * line per step saying what ran and whether it worked, which is the whole of
  * what a transcript on a small screen can usefully say.
+ *
+ * What a turn MADE travels separately, already reduced for a phone:
+ * `artifacts` (charts, tables, diagrams from the visualise tools — see
+ * `$lib/jkai/native-rich`) and `sources` (the files and research it cited).
+ * Without these the phone showed "render_chart ✓" where the web shows a chart.
  */
 export const GET: RequestHandler = withDevice(async ({ params, url }) => {
   const beforeRaw = url.searchParams.get('before');
@@ -66,6 +72,8 @@ export const GET: RequestHandler = withDevice(async ({ params, url }) => {
             summary: typeof entry.summary === 'string' ? entry.summary : null,
           };
         }),
+        artifacts: nativeArtifacts(metadata.toolSteps),
+        sources: nativeSources(metadata),
         attachments: message.attachments.map((attachment) => ({
           id: attachment.id,
           /** The column is `originalName`; it is nullable for a pasted blob. */
