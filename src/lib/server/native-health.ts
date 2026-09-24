@@ -84,7 +84,10 @@ interface StatsResponse {
   personalRecords?: Array<{ label: string; value: number; unit: string; display?: string; date?: string | null }>;
 }
 
-/** One hour. The figures move on a daily rhythm; a fresher read buys nothing. */
+/**
+ * One minute. The comment here used to say one hour while the value said a
+ * minute; the minute is what shipped, and pull-to-refresh bypasses it anyway.
+ */
 const CACHE_MS = 60_000;
 let cached: { at: number; value: NativeHealthSummary } | null = null;
 
@@ -161,7 +164,10 @@ export async function getNativeHealthSummary(
       direction: sign(context.todayDeltas.rhrDelta),
       // The one metric where down is the good direction.
       improving: improving(context.todayDeltas.rhrDelta, 'down'),
-      caption: 'vs yesterday',
+      // NOT yesterday: SR-Health measures RHR against the 30-day MEDIAN
+      // (`series-30d-service`, `rhrBaseline`). This said "vs yesterday" and was
+      // wrong for as long as the app existed.
+      caption: 'vs 30-day median',
       series: series.map((d) => d.rhr),
     },
     {
@@ -170,11 +176,15 @@ export async function getNativeHealthSummary(
       value: context.today.slept,
       unit: 'h',
       display: render(context.today.slept, hoursMinutes),
-      delta: context.todayDeltas.sleepDelta,
-      deltaDisplay: signedHours(context.todayDeltas.sleepDelta),
+      // SECONDS, against the 7-day average: SR-Health computes it as
+      // `today.slept * 3600 - avg7 * 3600`. It was read as hours, so a night 30
+      // minutes short would have said "−1800h 0m". Converted once, here, so
+      // `delta` carries the same unit as `value`.
+      delta: context.todayDeltas.sleepDelta / 3600,
+      deltaDisplay: signedHours(context.todayDeltas.sleepDelta / 3600),
       direction: sign(context.todayDeltas.sleepDelta),
       improving: improving(context.todayDeltas.sleepDelta, 'up'),
-      caption: 'last night',
+      caption: 'vs 7-day average',
       series: series.map((d) => d.slept),
     },
   ];
