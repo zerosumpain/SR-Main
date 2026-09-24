@@ -5,13 +5,13 @@ import { intelNotes, intelEntities, intelEntityTypes, intelRelationships, intelN
 import { generateEmbedding } from './embed';
 import { searchIntel } from './search';
 import { buildKnowledgeContext } from './context';
-import { listEntities, getEntityDetail, getNoteDetail } from './queries';
+import { listEntities, getEntityDetail, getNoteDetail, listTimelineEvents } from './queries';
 import { queryEntityPage } from './entity-query.server';
 import { DEFAULT_ENTITY_QUERY } from './entity-query';
 import { createLens, deleteLens, getLens, listLenses, lensEntityIds } from './lenses.server';
 import { EMPTY_LENS_FILTERS } from './lenses';
 import { persistInsights, listInsights, setInsightStatus, insightsByDedupeKey, dedupeKeyFor } from './insight-store';
-import { intelInsights, intelLenses, intelAlerts } from '$lib/db/schema';
+import { intelInsights, intelLenses, intelAlerts, intelTimelineEvents } from '$lib/db/schema';
 import { loadDailyAlerts } from './daily-alerts.server';
 import { cleanupIntelligence } from './cleanup.server';
 import { assembleBriefContext } from './brief';
@@ -208,6 +208,24 @@ describe.skipIf(!process.env.DATABASE_URL)('readers only see their scope', () =>
     const [row] = await db.select({ typeId: intelEntities.typeId }).from(intelEntities).where(eq(intelEntities.id, entityId));
     expect((await taxonomyEvidence('type', row.typeId)).some((r) => r.id === entityId)).toBe(false);
     expect((await taxonomyEvidence('type', row.typeId, TEST_SCOPE)).some((r) => r.id === entityId)).toBe(true);
+  });
+
+  it("the timeline's entity join is scoped, not only the event", async () => {
+    // Deliberately inconsistent: an OWNER event pointing at the u_test entity.
+    // Resolution never makes one, which is exactly why the join must not rely
+    // on that — the owner sees the event, never the other space's entity name.
+    const [ev] = await db.insert(intelTimelineEvents).values({
+      noteId, entityId, date: '2026-09-24', type: 'event', title: 'Space test event', spaceId: 'owner',
+    }).returning({ id: intelTimelineEvents.id });
+    try {
+      const owner = (await listTimelineEvents({ entityId, limit: 50 })).find((e) => e.id === ev.id);
+      expect(owner).toBeDefined();
+      expect(owner?.entityName).toBeNull();
+      const theirs = (await listTimelineEvents({ entityId, limit: 50, scope: ['owner', 'u_test'] })).find((e) => e.id === ev.id);
+      expect(theirs?.entityName).toBe('Plimsworth Quarry');
+    } finally {
+      await db.delete(intelTimelineEvents).where(eq(intelTimelineEvents.id, ev.id));
+    }
   });
 
   it('the daily alerts digest', async () => {

@@ -393,7 +393,9 @@ export async function listTimelineEvents(
       createdAt: intelTimelineEvents.createdAt,
     })
     .from(intelTimelineEvents)
-    .leftJoin(intelEntities, eq(intelTimelineEvents.entityId, intelEntities.id))
+    // Scoped in the ON clause, so an event with no (visible) entity is kept
+    // but can never carry another space's entity name.
+    .leftJoin(intelEntities, and(eq(intelTimelineEvents.entityId, intelEntities.id), spaceIn(intelEntities.spaceId, scope)))
     .leftJoin(intelEntityTypes, eq(intelEntities.typeId, intelEntityTypes.id))
     .where(where)
     .orderBy(asc(intelTimelineEvents.date))
