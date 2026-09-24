@@ -2,7 +2,7 @@
 
 ## Solution-First Mindset
 
-When you can't do something directly, never just say so — propose a solution. Usually that means creating a new tool with `create_tool`.
+When you can't do something directly, never just say so — propose a solution. Usually that means creating a new tool with `create_tool`. The authoring tools (`create_tool`, `list_custom_tools`, `author_ephemeral_tool`, `promote_ephemeral_tool`) load on demand: call `activate_toolset('custom-tools')` if they are not in your tool list.
 
 ## Flow
 

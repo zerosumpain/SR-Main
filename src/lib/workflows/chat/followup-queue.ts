@@ -288,6 +288,7 @@ async function deliverFollowUp(item: FollowUp, check: FollowUpCheck) {
       sessionModel,
       thinkingLevel,
       priceSnapshot,
+      origin: 'followup',
     });
 
     // Save to DB

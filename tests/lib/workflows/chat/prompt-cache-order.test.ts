@@ -22,10 +22,12 @@ const SRC = readFileSync(resolve(ROOT, 'src/lib/workflows/chat/general-chat.ts')
  * thing a later edit reshuffles without noticing.
  */
 
-/** Rebuilt from this message, every turn. */
-const VOLATILE = ['scraperSection', 'compressionSection'];
+/** Changes between turns of one conversation, rarely (skills: casual vs task; summary: on refresh). */
+const VOLATILE = ['skillsSection', 'compressionSection'];
 /** Identical on the next turn of the same conversation. */
-const STABLE = ['basePrompt', 'siteSection', 'skillsSection', 'apiFirstSection'];
+const STABLE = ['basePrompt', 'siteSection', 'apiFirstSection', 'planSection', 'BEHAVIOUR_POLICY'];
+/** Decided by THIS message — must not be in the system message at all. */
+const PER_MESSAGE = ['scraperSection', 'newsSection', 'renderAnswerContract(contract)'];
 
 /** The two halves of the system prompt, exactly as written in the source. */
 function promptHalves(): { prefix: string; suffix: string } {
@@ -43,7 +45,22 @@ describe('system prompt is assembled stable-first, for the cache', () => {
   it('splits the prompt into a stable prefix and a per-turn suffix', () => {
     expect(SRC).toMatch(/const stablePrefix = `/);
     expect(SRC).toMatch(/const perTurnSuffix = `/);
-    expect(SRC).toContain('const systemContent = `' + slot('stablePrefix') + slot('perTurnSuffix') + slot('BEHAVIOUR_POLICY') + '${renderGlobalGuidance(capabilityPolicy)}${renderAnswerContract(contract)}`');
+    expect(SRC).toContain('const systemContent = `' + slot('stablePrefix') + slot('perTurnSuffix') + '`;');
+  });
+
+  it.each(PER_MESSAGE)('keeps %s out of the system message, in the turn note after the history', (name) => {
+    // The answer contract changes with the wording of each message. Inside the
+    // system message it moved the bridge's cache key every turn; only 8% of
+    // chat input was read from cache (2026-09-24).
+    const { prefix, suffix } = promptHalves();
+    expect(prefix + suffix).not.toContain(slot(name));
+    const note = SRC.match(/const turnNote = `([^`]*)`/);
+    expect(note?.[1]).toContain(slot(name));
+  });
+
+  it('sends a cache key derived from the stable prefix alone', () => {
+    expect(SRC).toMatch(/const promptCacheKey = `jkai_\$\{promptIdentity\(stablePrefix\)/);
+    expect(SRC).toMatch(/prompt_cache_key: promptCacheKey/);
   });
 
   it.each(STABLE)('%s sits in the cacheable prefix', (name) => {
@@ -105,13 +122,35 @@ describe('the Home Assistant registry is not read on every turn', () => {
   });
 });
 
+describe('tools are assembled stable-first, for the cache', () => {
+  it('pushes every per-message tool after every fixed one', () => {
+    // Tool schemas precede the instructions in the cached prefix, so one tool
+    // that varies by message ahead of the fixed ones invalidates everything.
+    const alwaysOn = SRC.indexOf('getToolDefinitionsByName(ALWAYS_ON_TOOL_NAMES)');
+    const visualise = SRC.indexOf("getToolsetDefinitions('visualise')");
+    const routed = SRC.indexOf('getToolDefinitionsByName(routedCapabilities.map');
+    const inferredLoop = SRC.indexOf('for (const ts of inferred)');
+    expect(alwaysOn).toBeGreaterThan(0);
+    expect(routed).toBeGreaterThan(Math.max(alwaysOn, visualise));
+    expect(inferredLoop).toBeGreaterThan(routed);
+  });
+
+  it('loads the rarely-used groups only on request', () => {
+    // 90 days, 1,583 turns: scheduling 17 calls, authoring 17, agent_spawn 0.
+    expect(SRC).not.toMatch(/for \(const ts of \['followups', 'heartbeat', 'schedule'\]\)/);
+    expect(SRC).toMatch(/if \(wantsGroup\('schedule'\) \|\| options\.origin === 'followup'\)/);
+    expect(SRC).toMatch(/if \(wantsGroup\('build-tool'\)\)/);
+    expect(SRC).toMatch(/if \(wantsGroup\('delegate'\)/);
+  });
+});
+
 describe('tools the prompt orders are actually handed over', () => {
   it('pushes them by name, not by dragging their toolsets in', () => {
     // `research_web_search` lives in `research`, which also carries nine
     // session-management tools nobody wants on an ordinary turn.
     expect(SRC).toMatch(/ALWAYS_ON_TOOL_NAMES/);
     expect(SRC).toMatch(/getToolDefinitionsByName\(ALWAYS_ON_TOOL_NAMES\)/);
-    for (const t of ['api_search', 'api_call', 'datastore_query', 'research_web_search', 'fetch_url']) {
+    for (const t of ['api_search', 'api_call', 'research_web_search', 'fetch_url']) {
       expect(SRC).toContain(`'${t}'`);
     }
   });

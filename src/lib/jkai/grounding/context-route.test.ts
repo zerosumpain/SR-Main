@@ -4,7 +4,7 @@ import { fallbackRoute, parseRoute, planContext, renderRouterInput, type Context
 const ROSTER = ['Scheduler / Steampunk workshop', 'PayPal / NatWest', 'IBCA Data Strategy / David Foley'];
 
 function route(over: Partial<ContextRoute>): ContextRoute {
-  return { kind: 'task', domains: [], entities: [], clusters: [], query: '', source: 'router', ...over };
+  return { kind: 'task', domains: [], entities: [], clusters: [], query: '', capabilities: [], source: 'router', ...over };
 }
 
 describe('planContext', () => {
@@ -12,7 +12,7 @@ describe('planContext', () => {
   // booking, graph acronyms, twelve clusters and a PayPal contract.
   it.each(['casual', 'meta'] as const)('gives a %s turn pinned memory and nothing else', (kind) => {
     expect(planContext(route({ kind, domains: ['finance'], entities: ['PayPal'] }), 'Shit bra')).toEqual({
-      memory: 'pinned', graph: 'none', integrations: false, query: '',
+      memory: 'pinned', graph: 'none', integrations: false, query: '', toolGroups: [], skills: false,
     });
   });
 
@@ -49,6 +49,31 @@ describe('planContext', () => {
   });
 });
 
+describe('tool groups and skills', () => {
+  it('loads only the rare tool groups the router asked for', () => {
+    expect(planContext(route({ capabilities: ['schedule'] }), 'remind me at 9').toolGroups).toEqual(['schedule']);
+    expect(planContext(route({}), 'what is the weather').toolGroups).toEqual([]);
+  });
+
+  it('keeps every tool on a turn nobody classified', () => {
+    // A router timeout must not quietly take a tool away from a real request.
+    expect(planContext(fallbackRoute('set up a reminder for the bins every Tuesday'), 'x').toolGroups).toBe('all');
+    expect(planContext(fallbackRoute('yup'), 'yup').toolGroups).toBe('all');
+  });
+
+  it('honours a capability even on a turn that reads as casual', () => {
+    // "yes please" agreeing to a reminder is short, but it still needs the tool.
+    expect(planContext(route({ kind: 'casual', capabilities: ['schedule'] }), 'yes please').toolGroups).toEqual(['schedule']);
+  });
+
+  it('sends the skills index only to tasks and to unclassified turns', () => {
+    expect(planContext(route({ kind: 'casual' }), 'Sup dog').skills).toBe(false);
+    expect(planContext(route({ kind: 'meta' }), 'why did you say that').skills).toBe(false);
+    expect(planContext(route({}), 'build me a deck').skills).toBe(true);
+    expect(planContext(fallbackRoute('build me a deck about the data spine'), 'x').skills).toBe(true);
+  });
+});
+
 describe('fallbackRoute', () => {
   it('treats a two-word reaction as casual', () => {
     expect(fallbackRoute('Shit bra').kind).toBe('casual');
@@ -64,7 +89,7 @@ describe('fallbackRoute', () => {
 describe('parseRoute', () => {
   it('reads a well-formed route', () => {
     const r = parseRoute('{"kind":"task","domains":["travel","Calendar"],"entities":["Rome"],"clusters":[],"query":"Rome flights"}', ROSTER);
-    expect(r).toEqual({ kind: 'task', domains: ['travel', 'calendar'], entities: ['Rome'], clusters: [], query: 'Rome flights', source: 'router' });
+    expect(r).toEqual({ kind: 'task', domains: ['travel', 'calendar'], entities: ['Rome'], clusters: [], query: 'Rome flights', capabilities: [], source: 'router' });
   });
 
   it('accepts a fenced block', () => {
@@ -87,6 +112,11 @@ describe('parseRoute', () => {
     expect(parseRoute('not json', ROSTER)).toBeNull();
     expect(parseRoute('{"kind":"chitchat"}', ROSTER)).toBeNull();
     expect(parseRoute('[]', ROSTER)).toBeNull();
+  });
+
+  it('keeps only known capabilities', () => {
+    expect(parseRoute('{"kind":"task","capabilities":["Schedule","teleport","build-tool"]}', ROSTER)?.capabilities).toEqual(['schedule', 'build-tool']);
+    expect(parseRoute('{"kind":"task"}', ROSTER)?.capabilities).toEqual([]);
   });
 
   it('caps entities and the query', () => {

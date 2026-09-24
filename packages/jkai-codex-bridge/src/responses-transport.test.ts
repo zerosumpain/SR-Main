@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sseEvents } from './responses-transport';
+import { sseEvents, buildBody } from './responses-transport';
 
 /**
  * The SSE reader.
@@ -79,5 +79,20 @@ describe('sseEvents', () => {
       },
     });
     expect(await collect(s)).toEqual([{ t: 'café' }]);
+  });
+});
+
+describe('buildBody cache key', () => {
+  const messages = [
+    { role: 'system', content: 'You are jkai.' },
+    { role: 'user', content: 'hi' },
+  ] as any;
+
+  it("prefers the caller's key, which survives a changing instructions tail", () => {
+    expect(buildBody({ model: 'm', messages, promptCacheKey: 'jkai_stable' }).prompt_cache_key).toBe('jkai_stable');
+  });
+
+  it('falls back to hashing the instructions', () => {
+    expect(buildBody({ model: 'm', messages }).prompt_cache_key).toMatch(/^jkai_/);
   });
 });

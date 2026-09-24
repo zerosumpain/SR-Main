@@ -43,6 +43,8 @@ export interface ResponsesRunRequest {
   reasoningEffort?: string;
   webSearch?: boolean;
   signal?: AbortSignal;
+  /** The caller's own cache key — see `callerCacheKey`. Beats the instructions hash. */
+  promptCacheKey?: string;
 }
 
 /** Accumulator for a function call arriving across several SSE events. */
@@ -103,11 +105,12 @@ function toUsage(u: Record<string, any> | undefined) {
   };
 }
 
-function buildBody(req: ResponsesRunRequest): Record<string, unknown> {
+/** Exported for tests. */
+export function buildBody(req: ResponsesRunRequest): Record<string, unknown> {
   const { instructions, rest } = splitInstructions(req.messages);
   const tools = toolsToResponsesTools(req.tools);
   const allTools: unknown[] = req.webSearch ? [...tools, { type: 'web_search' }] : tools;
-  const cacheKey = promptCacheKey(instructions);
+  const cacheKey = req.promptCacheKey ?? promptCacheKey(instructions);
 
   return {
     model: req.model,

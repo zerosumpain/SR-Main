@@ -40,6 +40,20 @@ export const CONTEXT_DOMAINS = [
 export type ContextDomain = (typeof CONTEXT_DOMAINS)[number];
 
 /**
+ * Rarely-used tool groups a turn has to ASK for.
+ *
+ * Measured 2026-09-24 over 90 days and 1,583 turns: the scheduling tools
+ * (follow-ups, heartbeat actions, timed callbacks — 11 schemas, 9.7k chars)
+ * were called 17 times; tool authoring (6 schemas, 6.7k chars) 17 times;
+ * `agent_spawn` never; `datastore_query` once. All were sent on every round
+ * of every turn — about 4k tokens each time. They are now loaded when the
+ * router says the turn needs them, and stay one `activate_toolset` away when
+ * it does not.
+ */
+export const TOOL_CAPABILITIES = ['schedule', 'build-tool', 'delegate', 'datastore'] as const;
+export type ToolCapability = (typeof TOOL_CAPABILITIES)[number];
+
+/**
  * The words a message must actually contain before the whole roster is sent.
  *
  * The router alone is not trusted with this: on the production eval it tagged
@@ -61,6 +75,8 @@ export interface ContextRoute {
   clusters: string[];
   /** A standalone retrieval query, with pronouns resolved from the thread. Empty for casual/meta. */
   query: string;
+  /** Rarely-used tool groups the turn needs — the message, or what it agrees to in recent turns. */
+  capabilities: ToolCapability[];
   /** `router` — the model decided. `fallback` — it timed out, failed or was skipped. */
   source: 'router' | 'fallback';
 }
@@ -77,10 +93,18 @@ export interface ContextPlan {
   integrations: boolean;
   /** What the retrievals search on. */
   query: string;
+  /**
+   * The rarely-used tool groups to load up front. `'all'` when the route is a
+   * fallback: a turn nobody classified keeps every tool it had before.
+   */
+  toolGroups: ToolCapability[] | 'all';
+  /** Whether the skills index goes in the prompt. A casual or meta turn loads no playbook. */
+  skills: boolean;
 }
 
 export function planContext(route: ContextRoute, message: string): ContextPlan {
-  if (route.kind !== 'task') return { memory: 'pinned', graph: 'none', integrations: false, query: '' };
+  const toolGroups = route.source === 'fallback' ? ('all' as const) : route.capabilities;
+  if (route.kind !== 'task') return { memory: 'pinned', graph: 'none', integrations: false, query: '', toolGroups, skills: false };
   const query = route.query.trim() || message.trim();
   // A fallback route knows nothing about the turn's domains, so it searches;
   // a router that named no graph-shaped domain and no entity is trusted.
@@ -91,7 +115,7 @@ export function planContext(route: ContextRoute, message: string): ContextPlan {
       : route.source === 'fallback' || route.domains.some((d) => GRAPH_DOMAINS.has(d) || d === 'graph')
         ? 'search'
         : 'none';
-  return { memory: 'relevant', graph, integrations: true, query };
+  return { memory: 'relevant', graph, integrations: true, query, toolGroups, skills: true };
 }
 
 /**
@@ -107,9 +131,9 @@ export function planContext(route: ContextRoute, message: string): ContextPlan {
 export function fallbackRoute(message: string): ContextRoute {
   const words = message.trim().split(/\s+/).filter(Boolean);
   if (words.length <= 2 && !message.includes('?')) {
-    return { kind: 'casual', domains: [], entities: [], clusters: [], query: '', source: 'fallback' };
+    return { kind: 'casual', domains: [], entities: [], clusters: [], query: '', capabilities: [], source: 'fallback' };
   }
-  return { kind: 'task', domains: [], entities: [], clusters: [], query: message.trim(), source: 'fallback' };
+  return { kind: 'task', domains: [], entities: [], clusters: [], query: message.trim(), capabilities: [], source: 'fallback' };
 }
 
 const MAX_ENTITIES = 5;
@@ -141,6 +165,7 @@ export function parseRoute(raw: string, rosterLabels: readonly string[]): Contex
     entities: [...new Set(strings(o.entities))].slice(0, MAX_ENTITIES),
     clusters: [...new Set(strings(o.clusters).map((c) => byLower.get(c.toLowerCase())).filter((c): c is string => !!c))],
     query: typeof o.query === 'string' ? o.query.trim().slice(0, MAX_QUERY_CHARS) : '',
+    capabilities: [...new Set(strings(o.capabilities).map((c) => c.toLowerCase()))].filter((c): c is ToolCapability => (TOOL_CAPABILITIES as readonly string[]).includes(c)),
     source: 'router',
   };
 }
@@ -150,7 +175,7 @@ const HISTORY_TURNS = 4;
 const HISTORY_CHARS = 280;
 
 export const ROUTER_SYSTEM = `You route context for a personal assistant. Before each reply, decide what the user's latest message is about so only relevant personal context is retrieved. Return JSON only:
-{"kind":"casual"|"meta"|"task","domains":[...],"entities":[...],"clusters":[...],"query":"..."}
+{"kind":"casual"|"meta"|"task","domains":[...],"entities":[...],"clusters":[...],"query":"...","capabilities":[...]}
 
 kind — exactly one of these three:
 - "casual": banter, reactions, greetings, thanks, swearing, small talk.
@@ -161,12 +186,14 @@ domains: any of ${CONTEXT_DOMAINS.join(', ')}. Use "graph" only when the message
 entities: specific named people, organisations, projects, places, products or systems the message is about — resolve pronouns from the recent turns. Never generic words.
 clusters: labels copied exactly from the cluster list below, only when the message is plainly about one. Usually empty.
 query: the message rewritten as a standalone search query with pronouns resolved. Empty for casual/meta.
+capabilities: special tools the turn needs, from: "schedule" (reminders, checking back later, doing something at a time or on a recurring basis), "build-tool" (creating, authoring, updating or deleting a custom tool), "delegate" (spinning off parallel sub-agents), "datastore" (querying or saving structured records in the datastore). Judge it from the message AND what it agrees to in the recent turns — "yes please" after "shall I remind you tomorrow?" needs "schedule". Usually empty.
 
 Examples:
-"cheers" → {"kind":"casual","domains":[],"entities":[],"clusters":[],"query":""}
-"why did you bring up PayPal?" → {"kind":"meta","domains":[],"entities":[],"clusters":[],"query":""}
-"what clusters are in my knowledge graph?" → {"kind":"task","domains":["graph"],"entities":[],"clusters":[],"query":"clusters in the knowledge graph"}
-"how many views did those posts get?" → {"kind":"task","domains":["projects"],"entities":[],"clusters":[],"query":"view counts for the recent blog posts"}`;
+"cheers" → {"kind":"casual","domains":[],"entities":[],"clusters":[],"query":"","capabilities":[]}
+"remind me to call the plumber at 9 tomorrow" → {"kind":"task","domains":["home"],"entities":[],"clusters":[],"query":"reminder to call the plumber","capabilities":["schedule"]}
+"why did you bring up PayPal?" → {"kind":"meta","domains":[],"entities":[],"clusters":[],"query":"","capabilities":[]}
+"what clusters are in my knowledge graph?" → {"kind":"task","domains":["graph"],"entities":[],"clusters":[],"query":"clusters in the knowledge graph","capabilities":[]}
+"how many views did those posts get?" → {"kind":"task","domains":["projects"],"entities":[],"clusters":[],"query":"view counts for the recent blog posts","capabilities":[]}`;
 
 export function renderRouterInput(
   message: string,

@@ -114,6 +114,8 @@ export interface RunRequest {
    */
   messages?: ChatMessage[];
   tools?: unknown;
+  /** Caller-chosen prompt cache key (Responses transport only). */
+  promptCacheKey?: string;
 }
 
 /**
@@ -348,6 +350,7 @@ export async function* runStreamed(req: RunRequest): AsyncGenerator<StreamChunk>
       reasoningEffort: req.reasoningEffort as string | undefined,
       webSearch: req.webSearch,
       signal: req.signal,
+      promptCacheKey: req.promptCacheKey,
     });
     return;
   }

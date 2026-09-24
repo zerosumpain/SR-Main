@@ -5,7 +5,7 @@ import { assessAnswer } from '$lib/jkai/grounding/answer.server';
 import { contextResult } from '$lib/jkai/grounding/evidence';
 import { retrieveMemories } from '$lib/jkai/memory/retrieve.server';
 import { MEMORY_PROMPT_BUDGET, selectMemoryLines, pinnedOnly, type MemorySelection, type MemoryTurnStamp, type ContextTurnStamp } from '$lib/jkai/memory/contracts';
-import { fallbackRoute, planContext, type ContextPlan, type ContextRoute } from '$lib/jkai/grounding/context-route';
+import { fallbackRoute, planContext, type ContextPlan, type ContextRoute, type ToolCapability } from '$lib/jkai/grounding/context-route';
 import { routeTurn, resolveAnchors, clustersForTurn, type Anchor, type RoutedTurn } from '$lib/jkai/grounding/context-route.server';
 import { getActivePolicy, renderGlobalGuidance } from '$lib/toolpolicy/policy';
 import { applyCapabilityPolicy, resolveCapabilities } from '$lib/jkai/grounding/capabilities';
@@ -272,6 +272,28 @@ interface ChatOptions {
       and bumped further at plan-emission time when the plan has many
       steps (steps × 3, capped at ABSOLUTE_TOOL_ROUNDS). */
   maxRounds?: number;
+  /**
+   * `followup` — a turn the follow-up queue scheduled. It keeps the scheduling
+   * tools whatever the context router says: the likeliest next step of a
+   * scheduled turn is to schedule the one after it.
+   */
+  origin?: 'followup';
+}
+
+/**
+ * The scheduling toolsets — follow-up queue, heartbeat actions, timed callbacks.
+ * Sent on every turn until 2026-09-24; now tier 2 (see the tool assembly).
+ */
+const SCHEDULING_TOOLSETS = ['followups', 'heartbeat', 'schedule'] as const;
+
+/**
+ * Meta-tools that belong with tool AUTHORING rather than with finding tools.
+ * They are defined outside every toolset, so `custom-tools` has to bring them.
+ */
+const AUTHORING_META_TOOLS: ReadonlySet<string> = new Set(['create_tool', 'list_custom_tools', 'delete_tool']);
+
+async function authoringMetaTools() {
+  return (await getMetaToolDefinitions()).filter((t) => AUTHORING_META_TOOLS.has(t.function.name));
 }
 
 const MEMORY_BUDGET = MEMORY_PROMPT_BUDGET; // max chars for memory section — one constant, shared with the rail's gauge
@@ -451,7 +473,13 @@ async function runSingleToolCall(
         toolResult = { success: false, error: 'Home Assistant is not configured — no entities available.' };
       }
     } else {
-      const defs = await getToolsetDefinitions(toolset);
+      // `custom-tools` also carries the three authoring meta-tools, which live
+      // outside every toolset — without them the activation would hand over
+      // `author_ephemeral_tool` but not `create_tool`.
+      const defs = [
+        ...(toolset === 'custom-tools' ? await authoringMetaTools() : []),
+        ...(await getToolsetDefinitions(toolset)),
+      ];
       if (defs.length === 0) {
         toolResult = { success: false, error: `Unknown toolset: ${toolset}` };
       } else {
@@ -1001,7 +1029,11 @@ async function runGeneralChat(
   // The skills index. One line per skill with its FULL description — the old index cut
   // these to 60 characters, which is why whichever skill happened to fit a
   // keyword inside that budget won the routing regardless of merit.
-  const skillsIndex = renderSkillIndex();
+  //
+  // Only on a task. 13k characters — the second-largest block in the prompt —
+  // is worth sending when a playbook might apply; on "Sup dog" it was a fifth
+  // of the turn's input for nothing (see `planContext`).
+  const skillsIndex = contextPlan.skills ? renderSkillIndex() : '';
   const skillsSection = skillsIndex
     ? `\n\n--- Skills ---\nCurated playbooks for specific jobs. If one covers what you are about to do, read it with skill_view(id) BEFORE starting — it carries the specifics, constraints and traps that general knowledge does not. Prefer loading one over guessing; do not load one that is merely adjacent.\n\n${skillsIndex}\n`
     : '';
@@ -1035,10 +1067,23 @@ async function runGeneralChat(
   // derived from THIS message goes last. `memorySection` stays in the stable
   // block and still sits below the instructions, which `07-memory.md` promises
   // the model it does.
-  const stablePrefix = `${personaSection}${basePrompt}${siteSection}${skillsSection}${apiFirstSection}${canvasSection}`;
-  const perTurnSuffix = `${compressionSection}${scraperSection}${newsSection}${clarifySection}${planSection}`;
+  //
+  // Second pass, 2026-09-24, when production measured 8% of chat input read
+  // from cache. The answer contract (brief/detailed, per message) and the
+  // scraper/news playbooks (per inferred toolset) still sat INSIDE the system
+  // message — and the Codex bridge derived its cache key from the whole of it,
+  // so repeat turns of one thread were keyed apart. Now the system message is
+  // stable-first, then the two blocks that change rarely (the skills index,
+  // task turns only; the history summary, on refresh), and everything decided
+  // by THIS message rides in `turnNote` after the history.
   const capabilityPolicy = await getActivePolicy();
-  const systemContent = `${stablePrefix}${perTurnSuffix}${BEHAVIOUR_POLICY}${renderGlobalGuidance(capabilityPolicy)}${renderAnswerContract(contract)}`;
+  const stablePrefix = `${personaSection}${basePrompt}${siteSection}${apiFirstSection}${canvasSection}${clarifySection}${planSection}${BEHAVIOUR_POLICY}${renderGlobalGuidance(capabilityPolicy)}`;
+  const perTurnSuffix = `${skillsSection}${compressionSection}`;
+  const systemContent = `${stablePrefix}${perTurnSuffix}`;
+  const turnNote = `${scraperSection}${newsSection}${renderAnswerContract(contract)}`.trim();
+  // The key the provider routes this thread's cache by — derived from the
+  // stable prefix alone, so it holds across every turn of a conversation.
+  const promptCacheKey = `jkai_${promptIdentity(stablePrefix).slice(-24)}`;
 
   // Build messages
   const messages: Array<any> = [
@@ -1073,6 +1118,7 @@ async function runGeneralChat(
   // Omitted entirely when a turn retrieved nothing.
   const retrieved = retrievedContextMessage({ memory: memorySection, graph: graphSection, pages: pastedUrlsSection, savedIntegrations: integrationContext });
   if (retrieved) messages.push({ role: 'user', content: retrieved });
+  messages.push({ role: 'user', content: `[Application note — not written by the user, and not visible to them.] Guidance for answering the next message:\n${turnNote}` });
 
   const userParts = await buildMultimodalContent(userMessage, input.attachments ?? [], {
     caps: mediaCaps,
@@ -1089,34 +1135,33 @@ async function runGeneralChat(
   messages.push({ role: 'user', content: userContent as any });
 
   // --- Tiered tool assembly ---
-  // Always include meta-tools, and the discovery toolset alongside them: tools
-  // for FINDING tools are useless if you must already know to activate them.
-  // Seeded from the registry rather than hand-copied into META_TOOL_DEFINITIONS
-  // so the schemas cannot drift from the `register()` calls that define them.
+  //
+  // ORDER IS A CACHE DECISION, same as the system prompt's. The tool schemas
+  // sit in front of the instructions in the provider's cached prefix, so a
+  // tool that varies by message must come AFTER every tool that does not —
+  // otherwise it invalidates the whole prompt behind it. Before 2026-09-24 the
+  // per-message routed tools were third in the list, and 32 of 34 recorded
+  // turns sent a different tool list. Three tiers now:
+  //   1. the same on every turn          (meta, discovery, always-on, visualise, the canvas's workflows)
+  //   2. rarely used, loaded on request  (scheduling, tool authoring, datastore, agent_spawn)
+  //   3. chosen from THIS message        (routed capabilities, integrations, inferred toolsets)
+  const activatedToolsets = new Set<string>();
+  const toolGroups = contextPlan.toolGroups;
+  const wantsGroup = (g: ToolCapability) => toolGroups === 'all' || toolGroups.includes(g);
+
+  // Tier 1. Meta-tools and discovery always: tools for FINDING tools are
+  // useless if you must already know to activate them. The authoring meta
+  // tools are tier 2 — see AUTHORING_META_TOOLS.
   const activeTools: Array<any> = [
-    ...(await getMetaToolDefinitions()),
+    ...(await getMetaToolDefinitions()).filter((t) => !AUTHORING_META_TOOLS.has(t.function.name)),
     ...(await getToolsetDefinitions('discovery')),
   ];
-  const routedCapabilities = resolveCapabilities(await allTools(), userMessage, 3);
-  activeTools.push(...(await getToolDefinitionsByName(routedCapabilities.map(t => t.name))));
-  if (integrationContext.integrations.length) { activeTools.push(...(await getToolDefinitionsByName(['api_integration_call']))); contract.needsReview = true; }
-  const activatedToolsets = new Set<string>();
-
-  // Always-on background-task toolsets: follow-up queue, heartbeat actions,
-  // and one-shot scheduled callbacks. These need to be reachable on every
-  // turn so any "I'll check in" promise can be backed by an actual scheduled
-  // action without forcing the model to call activate_toolset first.
-  // (Formerly a single 'system' toolset — split into three for clarity.)
-  for (const ts of ['followups', 'heartbeat', 'schedule']) {
-    activeTools.push(...(await getToolsetDefinitions(ts)));
-    activatedToolsets.add(ts);
-  }
 
   // Tools the always-on prompt ORDERS the model to use, pushed by name.
   //
   // Two separate gaps, one fix. The API-first section below instructs every
   // turn to reach `api_search` → `api_call` before answering from memory, and
-  // says structured data belongs in `datastore_query` — while a comment above
+  // said structured data belongs in `datastore_query` — while a comment above
   // it claimed those were reachable because they are in ESSENTIAL_TOOL_NAMES.
   // They are not: that set lives in `$lib/mcp/essentials` and is read by the
   // tool-policy publisher, which this file has never imported. The model was
@@ -1132,37 +1177,70 @@ async function runGeneralChat(
   // BY NAME, not by toolset: `research` carries nine session-management tools
   // that have no business on an ordinary turn. Cost is ~400-600 tokens of
   // schema against a ~4.3s round, and it now sits inside the cacheable prefix.
+  //
+  // `datastore_query` left this list on 2026-09-24: one call in 90 days, at
+  // 1.4k characters on every round. It is tier 2 now, under `datastore`.
   const ALWAYS_ON_TOOL_NAMES = [
     'api_search',
     'api_call',
-    'datastore_query',
     'research_web_search',
     'fetch_url',
     'evidence_read',
   ] as const;
   activeTools.push(...(await getToolDefinitionsByName(ALWAYS_ON_TOOL_NAMES)));
 
-  // Include agent_spawn as a meta-tool available in all chats — but ONLY
-  // when this IS a top-level orchestrator call (not itself a sub-agent).
-  if ((options.subagentDepth ?? 0) === 0 && options.jobId) {
+  // Visualise tools are always available — the LLM should be able to reach
+  // for render_chart/render_table/render_diagram whenever it wants to answer
+  // with a multimedia response.
+  activeTools.push(...(await getToolsetDefinitions('visualise')));
+  activatedToolsets.add('visualise');
+
+  // Canvas context: always include the workflows toolset so the model
+  // can build/modify THIS canvas without needing the user to say a magic
+  // keyword first. Stable for the whole of a canvas conversation.
+  if (options.workflowId) {
+    activeTools.push(...(await getToolsetDefinitions('workflows')));
+    activatedToolsets.add('workflows');
+  }
+
+  // Tier 2 — the rarely-used groups, when the context router asked for them
+  // (or on every one of them when the turn was never routed). Otherwise each
+  // is one `activate_toolset` call away, and the prompt says so.
+  //
+  // A follow-up turn always gets the scheduling set: it IS a scheduled turn,
+  // and the likeliest thing it does next is schedule the one after.
+  if (wantsGroup('schedule') || options.origin === 'followup') {
+    for (const ts of SCHEDULING_TOOLSETS) {
+      activeTools.push(...(await getToolsetDefinitions(ts)));
+      activatedToolsets.add(ts);
+    }
+  }
+  if (wantsGroup('build-tool')) {
+    activeTools.push(...(await authoringMetaTools()), ...(await getToolsetDefinitions('custom-tools')));
+    activatedToolsets.add('custom-tools');
+  }
+  if (wantsGroup('datastore')) {
+    activeTools.push(...(await getToolDefinitionsByName(['datastore_query'])));
+  }
+  // agent_spawn only on a top-level orchestrator call, never inside a sub-agent.
+  if (wantsGroup('delegate') && (options.subagentDepth ?? 0) === 0 && options.jobId) {
     // Lazy import to keep sub-agent logic out of cold prompt assembly.
     const { AGENT_SPAWN_SCHEMA } = await import('./sub-agent');
     activeTools.push(AGENT_SPAWN_SCHEMA);
   }
 
+  // Tier 3 — chosen from this message.
+  const routedCapabilities = resolveCapabilities(await allTools(), userMessage, 3);
+  activeTools.push(...(await getToolDefinitionsByName(routedCapabilities.map(t => t.name))));
+  if (integrationContext.integrations.length) { activeTools.push(...(await getToolDefinitionsByName(['api_integration_call']))); contract.needsReview = true; }
+
   // Auto-activate the toolsets the classifier matched earlier in this turn.
   for (const ts of inferred) {
     if (ts === 'home' && haEntityCount === 0) continue;
+    if (activatedToolsets.has(ts)) continue;
+    if (ts === 'custom-tools') activeTools.push(...(await authoringMetaTools()));
     activeTools.push(...(await getToolsetDefinitions(ts)));
     activatedToolsets.add(ts);
-  }
-
-  // Canvas context: always include the workflows toolset so the model
-  // can build/modify THIS canvas without needing the user to say a magic
-  // keyword first.
-  if (options.workflowId && !activatedToolsets.has('workflows')) {
-    activeTools.push(...(await getToolsetDefinitions('workflows')));
-    activatedToolsets.add('workflows');
   }
 
   // If we're inside an empty canvas, hide workflow_build_from_spec entirely
@@ -1189,21 +1267,6 @@ async function runGeneralChat(
     }
   }
 
-  // Visualise tools are always available — the LLM should be able to reach
-  // for render_chart/render_table/render_diagram whenever it wants to answer
-  // with a multimedia response.
-  if (!activatedToolsets.has('visualise')) {
-    activeTools.push(...(await getToolsetDefinitions('visualise')));
-    activatedToolsets.add('visualise');
-  }
-
-  // Custom-tools meta-tools (author/promote ephemeral tools) are always
-  // available — these were previously reachable via the 'visualise' toolset
-  // before being moved to their own 'custom-tools' toolset.
-  if (!activatedToolsets.has('custom-tools')) {
-    activeTools.push(...(await getToolsetDefinitions('custom-tools')));
-    activatedToolsets.add('custom-tools');
-  }
 
   const baseCtx = options.modelContext;
   // Smarter / larger-context model used for plan/clarify rounds and any
@@ -1295,6 +1358,10 @@ async function runGeneralChat(
       options.thinkingLevel,
       turnModel.modelId,
     );
+    // Codex only: the bridge admits the caller's key (`callerCacheKey`) and
+    // would otherwise hash the whole instructions. OpenRouter is not sent one —
+    // what it does with the field varies by upstream.
+    const cacheParams = turnModel.provider === 'codex' ? { prompt_cache_key: promptCacheKey } : {};
 
     // Halfway through available rounds: get a plain-English status update so
     // the user can see progress. Separate call with no tools, doesn't count
@@ -1426,6 +1493,7 @@ async function runGeneralChat(
         max_tokens: 16384,
         ...(tools ? { tools } : {}),
         ...thinking,
+        ...cacheParams,
         stream: true,
         stream_options: { include_usage: true },
       });
@@ -1502,6 +1570,7 @@ async function runGeneralChat(
             max_tokens: 16384,
             ...(tools ? { tools } : {}),
             ...thinking,
+            ...cacheParams,
           });
           const rchoice = retry.choices[0];
           fullContent = rchoice?.message?.content ?? '';
