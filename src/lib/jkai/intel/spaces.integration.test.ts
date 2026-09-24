@@ -35,6 +35,7 @@ import { loadEntityNames, loadPairEvidence, loadCoMentions } from './resolve/adj
 import { loadEvidenceVersions } from './resolve/evidence-version.server';
 import { conflationCandidates } from './resolve/conflation.server';
 import { splitEntity } from './resolve/split';
+import { resolveRequestScope } from './scope.server';
 
 // Offline and deterministic: the test is about which space a row lands in, not
 // about embeddings or entity summaries. Resolution's semantic search already
@@ -47,6 +48,12 @@ vi.mock('./embed', () => ({
 vi.mock('$lib/llm/client', () => ({
   getLLMClient: vi.fn(() => { throw new Error('offline'); }),
 }));
+// Only the route seam is replaced, and only the route block below changes what
+// it returns: noteSpace / entitySpace stay real for every other block.
+vi.mock('./scope.server', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./scope.server')>();
+  return { ...actual, resolveRequestScope: vi.fn(actual.resolveRequestScope) };
+});
 
 const created: string[] = [];
 
@@ -489,5 +496,133 @@ describe.skipIf(!process.env.DATABASE_URL)('mail and resolution stay inside one 
     expect(await deleteNoteCascade(ids.theirMail)).toBeNull();
     const [still] = await db.select({ id: intelNotes.id }).from(intelNotes).where(eq(intelNotes.id, ids.theirMail));
     expect(still?.id).toBe(ids.theirMail);
+  });
+});
+
+// Task 12: the routes. A member's request (scope u_test + household) reaching a
+// by-id route with the id of a row in ANOTHER space (u_other) must get the same
+// 404 as a missing id — and nothing may change — and an every-space operation
+// must be refused outright. The seam is mocked; the handlers and the database
+// are real.
+describe.skipIf(!process.env.DATABASE_URL)('routes answer only within the request scope', () => {
+  const ids: Record<string, string> = {};
+
+  /** A handler's status, whether it returned a Response or threw an HttpError. */
+  async function statusOf(run: () => Response | Promise<Response>): Promise<number> {
+    try {
+      return (await run()).status;
+    } catch (err) {
+      const status = (err as { status?: unknown }).status;
+      if (typeof status === 'number') return status;
+      throw err;
+    }
+  }
+
+  /** Just enough of a RequestEvent: the scope comes from the mocked seam. */
+  function event(opts: { params?: Record<string, string>; url?: string; body?: unknown; method?: string }) {
+    const url = new URL(opts.url ?? 'http://test.local/');
+    const request = new Request(url, {
+      method: opts.method ?? (opts.body === undefined ? 'GET' : 'POST'),
+      headers: { 'content-type': 'application/json' },
+      body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+    });
+    return { params: opts.params ?? {}, url, request, locals: { auth: async () => null }, fetch } as any;
+  }
+
+  beforeAll(async () => {
+    vi.mocked(resolveRequestScope).mockResolvedValue(['u_test', 'household']);
+    const [type] = await db.select({ id: intelEntityTypes.id }).from(intelEntityTypes).limit(1);
+    const [note] = await db.insert(intelNotes).values({
+      title: 'Route space test', rawContent: 'Another member wrote this.', source: 'web', spaceId: 'u_other',
+    }).returning({ id: intelNotes.id });
+    ids.note = note.id;
+    const [theirs] = await db.insert(intelEntities).values({
+      name: 'Route space other', typeId: type.id, spaceId: 'u_other', firstSeenIn: note.id,
+    }).returning({ id: intelEntities.id });
+    ids.theirs = theirs.id;
+    const [second] = await db.insert(intelEntities).values({
+      name: 'Route space other two', typeId: type.id, spaceId: 'u_other', firstSeenIn: note.id,
+    }).returning({ id: intelEntities.id });
+    ids.second = second.id;
+    const [mine] = await db.insert(intelEntities).values({
+      name: 'Route space mine', typeId: type.id, spaceId: 'u_test',
+    }).returning({ id: intelEntities.id });
+    ids.mine = mine.id;
+    const [alert] = await db.insert(intelAlerts).values({
+      noteId: note.id, type: 'test', title: 'Route space alert', content: 'x', spaceId: 'u_other',
+    }).returning({ id: intelAlerts.id });
+    ids.alert = alert.id;
+  });
+
+  afterAll(async () => {
+    vi.mocked(resolveRequestScope).mockReset();
+    await db.delete(intelEntities).where(inArray(intelEntities.id, [ids.theirs, ids.second, ids.mine].filter(Boolean)));
+    if (ids.note) await db.delete(intelNotes).where(eq(intelNotes.id, ids.note)); // alert cascades
+  });
+
+  it('by-id reads 404 for a row in another space, and serve the reader their own', async () => {
+    const card = await import('../../../routes/api/jkai/intel/entity-card/+server');
+    expect(await statusOf(() => card.GET(event({ url: `http://test.local/?id=${ids.theirs}` })))).toBe(404);
+    expect(await statusOf(() => card.GET(event({ url: `http://test.local/?id=${ids.mine}` })))).toBe(200);
+
+    const entity = await import('../../../routes/api/jkai/intel/entities/[id]/+server');
+    expect(await statusOf(() => entity.GET(event({ params: { id: ids.theirs } })))).toBe(404);
+
+    const note = await import('../../../routes/api/jkai/intel/notes/[id]/+server');
+    expect(await statusOf(() => note.GET(event({ params: { id: ids.note } })))).toBe(404);
+
+    const trust = await import('../../../routes/api/jkai/intel/trust/+server');
+    expect(await statusOf(() => trust.GET(event({ url: `http://test.local/?id=${ids.theirs}` })))).toBe(404);
+  });
+
+  it('by-id writes 404 for a row in another space and change nothing', async () => {
+    const note = await import('../../../routes/api/jkai/intel/notes/[id]/+server');
+    // The retry is gated on the note being in scope: processNote reads by id alone.
+    expect(await statusOf(() => note.POST(event({ params: { id: ids.note }, body: {} })))).toBe(404);
+    expect(await statusOf(() => note.DELETE(event({ params: { id: ids.note }, method: 'DELETE' })))).toBe(404);
+
+    const entity = await import('../../../routes/api/jkai/intel/entities/[id]/+server');
+    expect(await statusOf(() => entity.DELETE(event({ params: { id: ids.theirs }, method: 'DELETE' })))).toBe(404);
+    expect(await statusOf(() => entity.PUT(event({ params: { id: ids.theirs }, body: { name: 'renamed' }, method: 'PUT' })))).toBe(404);
+
+    const review = await import('../../../routes/api/jkai/intel/review/[id]/+server');
+    expect(await statusOf(() => review.POST(event({ params: { id: ids.theirs }, url: 'http://test.local/?action=accept', body: {} })))).toBe(404);
+    expect(await statusOf(() => review.POST(event({ params: { id: ids.theirs }, url: 'http://test.local/?action=reject', body: {} })))).toBe(404);
+
+    const alert = await import('../../../routes/api/jkai/intel/alerts/[id]/+server');
+    expect(await statusOf(() => alert.PUT(event({ params: { id: ids.alert }, body: {}, method: 'PUT' })))).toBe(404);
+
+    const triage = await import('../../../routes/api/jkai/intel/triage/+server');
+    expect(await statusOf(() => triage.POST(event({ body: { action: 'confirm', entityId: ids.theirs } })))).toBe(404);
+    expect(await statusOf(() => triage.POST(event({ body: { action: 'dismiss-alert', alertId: ids.alert } })))).toBe(404);
+
+    // A library that THROWS for an out-of-scope id: a 404, not the old 400/500.
+    const duplicates = await import('../../../routes/api/jkai/intel/duplicates/+server');
+    expect(await statusOf(() => duplicates.POST(event({ body: { action: 'merge', keepId: ids.theirs, mergeId: ids.second } })))).toBe(404);
+    expect(await statusOf(() => duplicates.POST(event({ body: { action: 'not-duplicate', aId: ids.theirs, bId: ids.second } })))).toBe(404);
+    expect(await statusOf(() => duplicates.POST(event({ body: { action: 'unmerge', entityId: ids.theirs } })))).toBe(404);
+
+    const [n] = await db.select({ id: intelNotes.id }).from(intelNotes).where(eq(intelNotes.id, ids.note));
+    expect(n?.id).toBe(ids.note);
+    const ents = await db.select({ id: intelEntities.id, name: intelEntities.name, confirmed: intelEntities.confirmed })
+      .from(intelEntities).where(inArray(intelEntities.id, [ids.theirs, ids.second]));
+    expect(ents).toHaveLength(2);
+    expect(ents.every((e) => !e.confirmed && e.name.startsWith('Route space other'))).toBe(true);
+    const [a] = await db.select({ dismissed: intelAlerts.dismissed }).from(intelAlerts).where(eq(intelAlerts.id, ids.alert));
+    expect(a.dismissed).toBe(false);
+  });
+
+  it("refuses a member every-space operation, and the owner's roster", async () => {
+    const cleanup = await import('../../../routes/api/jkai/intel/cleanup/+server');
+    expect(await statusOf(() => cleanup.POST(event({ body: { action: 'run' } })))).toBe(403);
+
+    const review = await import('../../../routes/api/jkai/intel/review/[id]/+server');
+    expect(await statusOf(() => review.POST(event({ params: { id: 'no-such-type' }, url: 'http://test.local/?action=delete-type', body: {} })))).toBe(403);
+
+    const clusters = await import('../../../routes/api/jkai/intel/clusters/+server');
+    expect(await statusOf(() => clusters.GET(event({})))).toBe(403);
+
+    const taxonomy = await import('../../../routes/api/jkai/intel/taxonomy/+server');
+    expect(await statusOf(() => taxonomy.POST(event({ body: { action: 'undismiss-all' } })))).toBe(403);
   });
 });
