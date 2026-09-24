@@ -18,6 +18,7 @@ import {
   intelRelationships,
 } from '$lib/db/schema';
 import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
+import { OWNER_INTEL_SCOPE, spaceIn } from '$lib/jkai/intel/scope';
 import { shortModelLabel } from '$lib/jkai/model-label';
 import { readTurnStamp } from '$lib/jkai/turn-stamp';
 import {
@@ -193,6 +194,9 @@ export async function buildThreadGraph(
   }
 
   // ── Concept nodes ─────────────────────────────────────────────────────────
+  // A /jkai thread is the owner's, and so is everything read below: the note
+  // its extraction wrote, the entities, and the edges between them are all
+  // confined to his scope.
   const [derivedNote] = await db
     .select({ id: intelNotes.id })
     .from(intelNotes)
@@ -200,6 +204,7 @@ export async function buildThreadGraph(
       and(
         sql`${intelNotes.metadata}->>'autoKind' = 'chat'`,
         sql`${intelNotes.metadata}->>'refId' = ${conversationId}`,
+        spaceIn(intelNotes.spaceId, OWNER_INTEL_SCOPE),
       ),
     )
     .limit(1);
@@ -218,7 +223,7 @@ export async function buildThreadGraph(
       .from(intelNoteEntities)
       .innerJoin(intelEntities, eq(intelEntities.id, intelNoteEntities.entityId))
       .innerJoin(intelEntityTypes, eq(intelEntityTypes.id, intelEntities.typeId))
-      .where(eq(intelNoteEntities.noteId, derivedNote.id));
+      .where(and(eq(intelNoteEntities.noteId, derivedNote.id), spaceIn(intelEntities.spaceId, OWNER_INTEL_SCOPE)));
 
     // Which of these the knowledge base already knew. One grouped count over the
     // note links, excluding THIS thread's derived note — an entity with any other
@@ -296,6 +301,7 @@ export async function buildThreadGraph(
         and(
           inArray(intelRelationships.sourceEntityId, conceptIds),
           inArray(intelRelationships.targetEntityId, conceptIds),
+          spaceIn(intelRelationships.spaceId, OWNER_INTEL_SCOPE),
         ),
       );
     for (const r of rels) {

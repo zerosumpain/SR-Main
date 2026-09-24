@@ -17,12 +17,8 @@
   "src/lib/heartbeat/activities/daydream-intel.ts",
   "src/lib/heartbeat/activities/daydream-mail.ts",
   "src/lib/heartbeat/activities/daydream-notebook.ts",
-  "src/lib/jkai/context-panel/drill.server.ts",
   "src/lib/jkai/graph-colors.ts",
-  "src/lib/jkai/grounding/context-route.server.ts",
-  "src/lib/jkai/thread-graph.server.ts",
   "src/lib/jkai/thread-graph.ts",
-  "src/lib/mail-index/search.ts",
   "src/lib/mail-index/store.ts",
   "src/lib/news/actions.ts",
   "src/lib/news/correlate.server.ts",
@@ -30,6 +26,5 @@
   "src/lib/news/stats.ts",
   "src/lib/workflows/chat/legacy-tool-log.ts",
   "src/lib/workflows/chat/tool-summary.ts",
-  "src/lib/workflows/site-tools/keyword-classifier.ts",
-  "src/lib/workflows/site-tools/tools/intel-graph.ts"
+  "src/lib/workflows/site-tools/keyword-classifier.ts"
 ]

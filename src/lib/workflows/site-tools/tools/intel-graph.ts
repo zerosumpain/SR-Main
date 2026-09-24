@@ -12,6 +12,15 @@
 import { register } from '../registry-internal';
 import { normaliseName } from '$lib/jkai/intel/resolve/match';
 import type { AdjacencyIndex } from '$lib/jkai/intel/analytics/model';
+import { OWNER_INTEL_SCOPE, type IntelScope } from '$lib/jkai/intel/scope';
+
+/**
+ * Whose graph these tools read. Chat is the owner's (a member scope gets no
+ * chat intel at all), so every handler reads the owner's scope — named here
+ * rather than left to the analysis's default, so the one place PR B threads a
+ * caller's scope through is obvious. Pure constant: no database on import.
+ */
+const TOOL_SCOPE: IntelScope = OWNER_INTEL_SCOPE;
 
 // The analytics modules reach `$lib/db`, and this file is imported by the tool
 // registry — which is itself imported by route handlers and tests that have no
@@ -97,7 +106,7 @@ register({
 
     const { getGraphAnalysis } = await loadAnalytics();
     const { brokerageScore } = await loadCentrality();
-    const { index, centrality: cent } = await getGraphAnalysis();
+    const { index, centrality: cent } = await getGraphAnalysis(false, { scope: TOOL_SCOPE });
     const nq = normaliseName(query);
 
     const hits = index.ids
@@ -149,7 +158,7 @@ register({
 
     const { getGraphAnalysis } = await loadAnalytics();
     const { hopNeighbourhood } = await loadModel();
-    const analysis = await getGraphAnalysis();
+    const analysis = await getGraphAnalysis(false, { scope: TOOL_SCOPE });
     const { index, community } = analysis;
     const resolved = resolveEntity(index, query);
     if (!resolved) return notFound(query);
@@ -223,7 +232,7 @@ register({
 
     const { getGraphAnalysis } = await loadAnalytics();
     const { findPaths } = await loadPaths();
-    const { index } = await getGraphAnalysis();
+    const { index } = await getGraphAnalysis(false, { scope: TOOL_SCOPE });
     const a = resolveEntity(index, fromQ);
     const b = resolveEntity(index, toQ);
     if (!a) return notFound(fromQ);
@@ -283,7 +292,7 @@ register({
 
     const { getGraphAnalysis, ensureEmbeddings } = await loadAnalytics();
     const { generateInsights } = await loadInsights();
-    const analysis = await getGraphAnalysis();
+    const analysis = await getGraphAnalysis(false, { scope: TOOL_SCOPE });
     // generateInsights scores semantic distance, which needs the embeddings the
     // analysis no longer loads eagerly.
     await ensureEmbeddings(analysis);
@@ -333,7 +342,7 @@ register({
 
     const { getGraphAnalysis, ensureEmbeddings } = await loadAnalytics();
     const { scoreSurprisingLinks } = await loadSurprise();
-    const analysis = await getGraphAnalysis();
+    const analysis = await getGraphAnalysis(false, { scope: TOOL_SCOPE });
     await ensureEmbeddings(analysis);
     const links = await scoreSurprisingLinks(
       { index: analysis.index, membership: analysis.community.membership, embeddings: analysis.embeddings },
