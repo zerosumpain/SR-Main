@@ -2,8 +2,12 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { workflows, intelEntities, intelEntityTypes } from '$lib/db/schema';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
+import { OWNER_INTEL_SCOPE, spaceIn } from '$lib/jkai/intel/scope';
 
+// Owner scope, explicitly — not resolveRequestScope. A canvas is the owner's and
+// its nodes also run unattended (cron, webhooks), where there is no request
+// principal to resolve; its intel reads are the owner's graph either way.
 export const POST: RequestHandler = async ({ params, request }) => {
   const [wf] = await db
     .select({ id: workflows.id })
@@ -28,7 +32,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
     })
     .from(intelEntities)
     .innerJoin(intelEntityTypes, eq(intelEntities.typeId, intelEntityTypes.id))
-    .where(inArray(intelEntities.id, entityIds));
+    .where(and(inArray(intelEntities.id, entityIds), spaceIn(intelEntities.spaceId, OWNER_INTEL_SCOPE)));
 
   type GeoItem = { id: string; name: string; lat: number; lng: number; type: string };
 

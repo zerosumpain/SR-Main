@@ -4,7 +4,11 @@ import { db } from '$lib/db';
 import { workflows } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { searchIntel, type IntelFacets } from '$lib/jkai/intel/search';
+import { OWNER_INTEL_SCOPE } from '$lib/jkai/intel/scope';
 
+// Owner scope, explicitly — not resolveRequestScope. A canvas is the owner's and
+// its nodes also run unattended (cron, webhooks), where there is no request
+// principal to resolve; its intel reads are the owner's graph either way.
 export const GET: RequestHandler = async ({ url, params }) => {
   const [wf] = await db
     .select({ id: workflows.id })
@@ -36,7 +40,7 @@ export const GET: RequestHandler = async ({ url, params }) => {
   };
 
   try {
-    const { items, total } = await searchIntel(query, facets);
+    const { items, total } = await searchIntel(query, facets, OWNER_INTEL_SCOPE);
     return json({ items, total });
   } catch (err) {
     console.error('[canvas/intel/preview]', err);

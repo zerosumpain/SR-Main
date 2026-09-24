@@ -26,6 +26,8 @@ import { priceFor, computeCost } from '$lib/llm/pricing';
 import type { TurnStamp } from '$lib/jkai/turn-stamp';
 import { recordDurableLLMCall } from '$lib/llm/usage-log';
 import { maybeExtractThreadConcepts } from '$lib/jkai/intel/chat-extract';
+import { isOwnerScope } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 // The leaf, not `meta-tool`: that module implements the operations and so
 // reads the tool catalogue, which would put all 175 tool modules back on this
 // endpoint's runtime graph for the sake of one schema.
@@ -41,7 +43,16 @@ export const POST: RequestHandler = async (event) => handleWithLoop(event);
 // Legacy branch (flag OFF) — unchanged behaviour, body lifted into a helper.
 // ---------------------------------------------------------------------------
 
-async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promise<Response> {
+async function handleWithLoop(event: Parameters<RequestHandler>[0]): Promise<Response> {
+  const { request } = event;
+  // Whose graph grounds this turn. `@entity` grounding takes the scope. The
+  // chat loop's own intel section and the thread extraction do not: both are
+  // the owner's graph (general-chat builds the section with the owner default,
+  // and chat extraction writes into the owner's space). So for any other scope
+  // those two are off, rather than a member's turn reading or writing the
+  // owner's graph.
+  const intelScope = await resolveRequestScope(event);
+  const ownerIntel = isOwnerScope(intelScope);
   const body = await request.json();
   const { message, workflowId, conversationId: rawConversationId, attachmentIds, useIntelContext, chatNodeId, intelEntityIds, silent } = body as {
     message: string;
@@ -162,7 +173,7 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
   if (Array.isArray(intelEntityIds) && intelEntityIds.length) {
     try {
       const { buildEntityGrounding } = await import('$lib/jkai/intel/context');
-      const grounding = await buildEntityGrounding(intelEntityIds.slice(0, 5));
+      const grounding = await buildEntityGrounding(intelEntityIds.slice(0, 5), 'mentioned', intelScope);
       if (grounding) outbound = `${grounding}\n\n---\n\n${message}`;
     } catch (err) {
       // Grounding is an enhancement; a failure must not cost the user their turn.
@@ -346,7 +357,7 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
           sessionModel,
           thinkingLevel,
           priceSnapshot,
-          useIntelContext: useIntelContext !== false,
+          useIntelContext: ownerIntel && useIntelContext !== false,
         });
 
         if (abortController.signal.aborted) throw new Error('Job cancelled');
@@ -568,7 +579,7 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
         // every thread since has been empty, which reads as a broken rail and is
         // not one. There is a test asserting this call exists, because "imported
         // but never called" is not something the type checker or the gate sees.
-        if (conversationId) {
+        if (conversationId && ownerIntel) {
           void maybeExtractThreadConcepts(conversationId, null).catch(() => {});
         }
 

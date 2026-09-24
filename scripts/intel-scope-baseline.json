@@ -31,13 +31,5 @@
   "src/lib/workflows/chat/legacy-tool-log.ts",
   "src/lib/workflows/chat/tool-summary.ts",
   "src/lib/workflows/site-tools/keyword-classifier.ts",
-  "src/lib/workflows/site-tools/tools/intel-graph.ts",
-  "src/routes/api/canvas/[slug]/intel/geo/+server.ts",
-  "src/routes/api/canvas/[slug]/intel/graph/+server.ts",
-  "src/routes/api/jkai/memory/+server.ts",
-  "src/routes/api/workflows/orchestrator/chat/+server.ts",
-  "src/routes/jkai/intel/+layout.server.ts",
-  "src/routes/jkai/intel/+page.server.ts",
-  "src/routes/jkai/intel/mail/+page.server.ts",
-  "src/routes/jkai/intel/review/+page.server.ts"
+  "src/lib/workflows/site-tools/tools/intel-graph.ts"
 ]
