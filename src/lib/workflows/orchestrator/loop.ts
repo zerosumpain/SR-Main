@@ -407,3 +407,32 @@ export function assembleWorkflow(
     trigger: draft.trigger,
   };
 }
+
+/** Sent back once when the model answers in prose instead of building. */
+export const PROSE_NUDGE =
+  'Build the workflow with the tools (use_node, connect_nodes, finalize_workflow). If you genuinely need information you cannot infer, call ask_user — do not reply in prose.';
+
+export type ProseTurnOutcome =
+  | { kind: 'followUp'; text: string }
+  | { kind: 'nudge'; message: string }
+  | { kind: 'stop' };
+
+/**
+ * What to do with a model turn that carried text and no tool call.
+ *
+ * It used to end the loop and the text was thrown away, so a model that asked
+ * its question in prose instead of through `ask_user` produced an empty draft
+ * and "no workflow came out of that description" — the question never reached
+ * the person who could answer it (2026-09-25, "send me a random joke to my
+ * whatsapp every hour"). A question is a follow-up; other prose gets one nudge
+ * back to the tools, and prose after the nudge is surfaced rather than looped.
+ */
+export function proseTurnOutcome(
+  content: string | null | undefined,
+  state: { nodeCount: number; nudged: boolean },
+): ProseTurnOutcome {
+  const text = (content ?? '').trim();
+  if (!text) return { kind: 'stop' };
+  if (text.includes('?') || state.nudged) return { kind: 'followUp', text };
+  return { kind: 'nudge', message: PROSE_NUDGE };
+}

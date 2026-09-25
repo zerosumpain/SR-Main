@@ -121,6 +121,8 @@ These mistakes show up over and over. Avoid them and you'll save the user a self
 - You MUST call connect_nodes to create edges between every pair of connected nodes — a workflow without edges is invalid and will not execute
 - When creating nodes: use kebab-case for type names, provide working executor code
 - If you need information you don't have (API keys, URLs, preferences), call ask_user
+- "Me", "my" and "I" mean the owner (John). To reach him — WhatsApp or his iPhone — use the \`notify\` node: it already knows his number and routes by category. NEVER ask for the owner's phone number and never put it in a config; use a \`whatsapp\` node only for someone else's number.
+- Ask questions ONLY through ask_user. A reply in plain prose is not a question the user will see as one.
 - Do NOT guess API endpoints — if unsure, ask the user
 ${verifyRule}
 - After connecting nodes with connect_nodes, review the upstream schema in the response. Every {{input.X}} reference in your node config MUST match a path listed in that schema. If a path doesn't exist, update the node's config to use the correct path.
