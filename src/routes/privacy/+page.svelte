@@ -86,8 +86,7 @@
 
   <h2>Getting hold of me</h2>
   <p>
-    The easiest way is through <a href="https://github.com/jkrup" target="_blank" rel="noopener">GitHub</a>,
-    or the contact address shown on Google's sign-in screen for this site. If this page changes, the date
-    at the top changes with it.
+    Email me at <a href="mailto:john@strangeramblings.com">john@strangeramblings.com</a>. If this page
+    changes, the date at the top changes with it.
   </p>
 </LegalPage>

@@ -59,7 +59,7 @@
   <h2>Changes and law</h2>
   <p>
     I may update these terms, and the date at the top will say when. They're governed by the law of
-    England and Wales. Questions go to me through
-    <a href="https://github.com/jkrup" target="_blank" rel="noopener">GitHub</a>.
+    England and Wales. Questions go to me at
+    <a href="mailto:john@strangeramblings.com">john@strangeramblings.com</a>.
   </p>
 </LegalPage>

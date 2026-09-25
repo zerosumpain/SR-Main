@@ -159,6 +159,8 @@
     <a href="/health" class="nav-link">Health</a>
     <a href="https://library.strangeramblings.com" class="nav-link">Library</a>
     <a href="/admin" class="nav-link">Admin</a>
+    <a href="/privacy" class="nav-link">Privacy</a>
+    <a href="/tos" class="nav-link">Terms</a>
   </div>
 </footer>
 
