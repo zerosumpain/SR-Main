@@ -3,12 +3,12 @@
   //
   //   A  The record      how much has shipped, and what the queue looks like
   //   B  Cadence         how often it ships, and what those deploys carry
-  //   C  The log         every entry, as deep as the reader is allowed to go
+  //   C  The log         sessions → releases → commits for the owner
   //
   // Signed out, C is the capability record: the publicly-describable things
   // that went live, grouped by day, complete and indexable. Signed in, C is the
-  // console that used to live at /admin/ops/releases — the version log with
-  // commits, files, evidence and the summariser controls.
+  // console that used to live at /admin/ops/releases — sessions grouped with
+  // their linked releases, commits, evidence and summariser controls.
   //
   // The loader has already built one payload or the other; this component
   // chooses a view over what it was given and never a filter on top of it.
@@ -28,7 +28,6 @@
   import ReleaseFilters from './ReleaseFilters.svelte';
   import CapabilityRecord from './CapabilityRecord.svelte';
   import VersionLog from './VersionLog.svelte';
-  import WorkBehind from './WorkBehind.svelte';
   import type { ReleasesData, Tile } from './types';
 
   let { data }: { data: ReleasesData } = $props();
@@ -125,7 +124,7 @@
   // ——— C ————————————————————————————————————————————————————————————
   const logKicker = $derived(
     data.mode === 'owner'
-      ? `C / Version log · page ${data.filters.page + 1}`
+      ? `C / Work and releases · page ${data.filters.page + 1}`
       : `C / What shipped · ${plural(data.items.length, 'entry', 'entries')}`,
   );
 
@@ -183,11 +182,15 @@
     <div class="c-inner">
       <SectionHead
         kicker={logKicker}
-        title={data.mode === 'owner' ? ['The log,', 'with its evidence'] : ['The log,', 'day by day']}
+        title={data.mode === 'owner' ? ['From session', 'to shipped code'] : ['The log,', 'day by day']}
         strap={data.mode === 'owner'
-          ? 'Open a release for its summary, its entries and the commits behind them. The filter above reads the same URL params the public view uses.'
+          ? 'Sessions and indicative costs lead into the releases and commits linked by pull request. A PR can contain several sessions; production commits may be squashed, so the link is to the shared work, not an exact attribution. Open a release for its evidence.'
           : 'Grouped by the day it went live. Version numbers are date-derived, and the backfilled releases carry approximate timestamps.'}
       />
+
+      {#if data.mode === 'owner' && data.sampleData}
+        <p class="sample-note">Local preview · synthetic sessions and releases</p>
+      {/if}
 
       {#if data.mode === 'owner'}
         <ReleaseFilters
@@ -201,6 +204,7 @@
         />
         <VersionLog
           items={data.items}
+          sessions={data.sessions}
           filters={data.filters}
           hasMore={data.hasMore}
           {busy}
@@ -218,19 +222,6 @@
     </div>
   </section>
 
-  {#if data.mode === 'owner'}
-    <!-- Band D. Outside the {:else} above so it reads as its own band rather
-         than an owner variant of the record, and so the public tree has no
-         branch here at all. -->
-    <section class="c">
-      <div class="inner">
-        <WorkBehind
-          band={data.sessions}
-          versionById={new Map(data.items.map((i) => [i.id, i.version]))}
-        />
-      </div>
-    </section>
-  {/if}
 </HealthShell>
 
 <style>
@@ -245,4 +236,5 @@
     padding-top: clamp(28px, 3.5vw, 48px);
     border-top: 1px solid var(--line-strong);
   }
+  .sample-note { margin: 0 0 16px; padding: 8px 10px; border-left: 3px solid var(--accent-ink); background: var(--accent-ink-tint-06); color: var(--text-secondary); font: var(--fs-label) var(--font-mono); }
 </style>

@@ -1,6 +1,6 @@
 <script lang="ts">
-  // C (owner) — THE VERSION LOG. Every deploy in the filtered set, newest
-  // first, with the evidence under it.
+  // C (owner) — THE WORK LOG. PR-linked sessions sit above the releases and
+  // commits they relate to. Every deploy in the filtered set appears once.
   //
   // This is what used to be /admin/ops/releases. It reads the SAME URL params
   // as the public half, so a filter typed on one is the same link on the other
@@ -15,31 +15,32 @@
   // payload, and the loader is what stops them, not this template.
   import { KIND_LABEL, type CommitFact, type FileFact, type ReleaseItemKind } from '$lib/releases/types';
   import type { ConsoleFilters, ConsoleRelease } from '$lib/releases/console';
+  import type { ReleaseSessionsBand } from '$lib/releases/sessions.server';
+  import { groupReleaseWork } from './work-groups';
+  import WorkGroupHeader from './WorkGroupHeader.svelte';
 
   interface Props {
     items: ConsoleRelease[];
     filters: ConsoleFilters;
     hasMore: boolean;
+    sessions: ReleaseSessionsBand;
     busy?: boolean;
     /** Re-run the summariser over one release. */
     onRegenerate: (id: number, version: string) => void;
   }
 
-  let { items, filters, hasMore, busy = false, onRegenerate }: Props = $props();
+  let { items, filters, hasMore, sessions, busy = false, onRegenerate }: Props = $props();
+  const groups = $derived(groupReleaseWork(items, sessions));
 
   // Per-card UI state, keyed by release id. Reassigned wholesale (not mutated)
   // so the template's reads stay reactive.
   let expanded = $state<Record<number, boolean>>({});
-  let evidenceOpen = $state<Record<number, boolean>>({});
 
   type RawView = { version: string; commits: CommitFact[]; files: FileFact[] };
   let raw = $state<RawView | null>(null);
 
   function toggle(id: number) {
     expanded = { ...expanded, [id]: !expanded[id] };
-  }
-  function toggleEvidence(id: number) {
-    evidenceOpen = { ...evidenceOpen, [id]: !evidenceOpen[id] };
   }
 
   /** Portal to <body> so the overlay escapes the page's stacking context.
@@ -85,7 +86,10 @@
   </p>
 {:else}
   <div class="vl">
-    {#each items as r (r.id)}
+    {#each groups as group (group.releases[0].id)}
+      <section class="work-group" class:linked={group.sessions.length > 0} aria-label={group.sessions.length ? 'Work sessions and releases' : 'Release without recorded session'}>
+        <WorkGroupHeader {group} />
+        {#each group.releases as r (r.id)}
       <article class="rel" class:open={expanded[r.id]}>
         <button class="rel-hd" onclick={() => toggle(r.id)} aria-expanded={expanded[r.id] ?? false}>
           <span class="rel-ver">{r.version}</span>
@@ -106,6 +110,17 @@
           <span class="rel-counts">{r.stats.commits ?? 0}c · {r.stats.files ?? 0}f</span>
           <span class="rel-chev" aria-hidden="true">{expanded[r.id] ? '▾' : '▸'}</span>
         </button>
+
+        {#if !expanded[r.id] && r.commits.length}
+          <ol class="commit-preview" aria-label="Commits in {r.version}">
+            {#each r.commits.slice(0, 3) as commit (commit.sha)}
+              <li><span class="sha">{commit.short}</span><span>{commit.subject}</span></li>
+            {/each}
+            {#if r.commits.length > 3}
+              <li class="more">+{r.commits.length - 3} more in this release</li>
+            {/if}
+          </ol>
+        {/if}
 
         {#if expanded[r.id]}
           <div class="rel-body">
@@ -194,16 +209,14 @@
               >
                 Full diff detail
               </button>
-              <button class="act" onclick={() => toggleEvidence(r.id)}>
-                {evidenceOpen[r.id] ? 'Hide' : 'Show'} commit list
-              </button>
               <button class="act" disabled={busy} onclick={() => onRegenerate(r.id, r.version)}>
                 Regenerate summary
               </button>
               {#if r.summaryModel}<span class="model-note">{r.summaryModel}</span>{/if}
             </div>
 
-            {#if evidenceOpen[r.id]}
+            {#if r.commits.length}
+              <div class="commit-heading">Commits in this release · {r.commits.length}</div>
               <ul class="commit-list">
                 {#each r.commits as c (c.sha)}
                   <li>
@@ -221,8 +234,17 @@
           </div>
         {/if}
       </article>
+        {/each}
+      </section>
     {/each}
   </div>
+
+  {#if sessions.unlinkedInWindow > 0}
+    <p class="session-caveat">
+      {sessions.unlinkedInWindow} {sessions.unlinkedInWindow === 1 ? 'session in this date window has' : 'sessions in this date window have'} no PR link to a release.
+      {sessions.sessionsWithoutPrs} sessions in the full record have no PR number.
+    </p>
+  {/if}
 
   <div class="pager">
     {#if filters.page > 0}
@@ -301,7 +323,17 @@
   .vl {
     display: flex;
     flex-direction: column;
+    gap: 20px;
   }
+  .work-group { border-left: 2px solid var(--line-strong); padding-left: clamp(8px, 1.2vw, 18px); }
+  .work-group.linked { border-left-color: var(--accent); }
+  .commit-heading { font: 700 var(--fs-label-xs) var(--font-mono); text-transform: uppercase; letter-spacing: var(--tracking-label); color: var(--text-muted); }
+  .commit-preview { margin: -2px 0 13px 8.5rem; padding: 0 0 0 14px; list-style: none; border-left: 1px solid var(--line-strong); display: flex; flex-direction: column; gap: 5px; }
+  .commit-preview li { display: flex; gap: 12px; min-width: 0; color: var(--text-muted); font-size: var(--fs-label); line-height: 1.35; overflow-wrap: anywhere; }
+  .commit-preview .sha { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent-ink); white-space: nowrap; }
+  .commit-preview .more { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
+  @media (max-width: 860px) { .commit-preview { margin-left: 0; } }
+  .session-caveat { margin: 20px 0 0; padding-top: 12px; border-top: 1px solid var(--line-hair); color: var(--text-muted); font-size: var(--fs-label); line-height: 1.5; }
   .rel {
     border-bottom: 1px solid var(--line-hair);
   }

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { render } from 'svelte/server';
 import ReleasesHub from './ReleasesHub.svelte';
 import { weeklyCadence } from '$lib/releases/console';
+import { groupReleaseWork } from './work-groups';
 import type { OwnerReleasesData, PublicReleasesData } from './types';
 
 // /releases serves two documents at one URL, and the anonymous one is the
@@ -191,7 +192,7 @@ describe('the public document', () => {
   });
 
   it('carries no session, prompt or per-stage cost', () => {
-    // Band D is owner-only STRUCTURALLY: the loader fetches it inside the owner
+    // Session data is owner-only STRUCTURALLY: the loader fetches it inside the owner
     // branch, so PublicReleasesData has no `sessions` member at all and the
     // anonymous render cannot ship the bytes even by mistake. This asserts the
     // rendered output too, because the type is only half the guarantee.
@@ -216,6 +217,10 @@ describe('the owner document', () => {
   it('renders the version log and the owner-only filters', () => {
     expect(body).toContain('2026.07.29.6');
     expect(body).toContain('Connector health monitoring');
+    expect(body).toContain('Fold the changelog into the release log');
+    expect(body).toContain('$18.42');
+    expect(body).toContain('1 commit');
+    expect(body).toContain('fix jid normalisation');
     expect(body).toContain('All sources');
     expect(body).toContain('User-facing');
     expect(body).toContain('Older →');
@@ -241,6 +246,29 @@ describe('the owner document', () => {
 
   it('is not indexable copy — it names the full read', () => {
     expect(body).toContain('full read');
+  });
+});
+
+describe('session to release grouping', () => {
+  it('keeps a shared PR and its commits together without duplicating a release', () => {
+    const data = ownerData();
+    const first = data.items[0];
+    const second = { ...first, id: 2, version: '2026.07.29.7', commits: [
+      { ...first.commits[0], sha: 'second-sha', short: 'second', subject: 'follow-up fix' },
+    ] };
+    const other = { ...first, id: 3, version: '2026.07.28.1', commits: [] };
+    const session = data.sessions.sessions[0];
+    const shared = { ...session, id: 'sess-2', title: 'Follow-up session', releaseIds: [2] };
+    const groups = groupReleaseWork([first, second, other], {
+      ...data.sessions,
+      sessions: [{ ...session, releaseIds: [1, 2] }, shared],
+      byRelease: { 1: ['sess-1'], 2: ['sess-1', 'sess-2'] },
+    });
+
+    expect(groups.map((group) => group.releases.map((release) => release.id))).toEqual([[1, 2], [3]]);
+    expect(groups[0].sessions.map((item) => item.id)).toEqual(['sess-1', 'sess-2']);
+    expect(groups[0].commitCount).toBe(2);
+    expect(groups[1].sessions).toEqual([]);
   });
 });
 
