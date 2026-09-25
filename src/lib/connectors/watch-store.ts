@@ -33,7 +33,14 @@ export async function readMarks(): Promise<Map<string, ConnectorMark>> {
   const out = new Map<string, ConnectorMark>();
   for (const row of rows) {
     if (isMark(row.snapshot)) {
-      const mark = { strikes: 1, auth: false, lastNotifiedAt: null, ...row.snapshot } as ConnectorMark;
+      // Defaults for anything an older row lacks.
+      const snap = row.snapshot;
+      const mark: ConnectorMark = {
+        ...snap,
+        strikes: typeof snap.strikes === 'number' ? snap.strikes : 1,
+        auth: snap.auth === true,
+        lastNotifiedAt: typeof snap.lastNotifiedAt === 'string' ? snap.lastNotifiedAt : null,
+      };
       out.set(mark.key, mark);
     }
   }
