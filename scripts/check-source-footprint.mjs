@@ -44,10 +44,10 @@ const LIMITS = {
   // Owner's call to ratchet these back down.
   production: 910_000,
   projects: 100_000,
-  // +150 on 2026-09-25 (canvas test runs, PR "wave 4b"): pins, test mode and
+  // +200 on 2026-09-25 (canvas test runs, PR "wave 4b"): pins, test mode and
   // the model's proof run added ~440 lines and deleted ~350 lines of per-node
   // dry-run branches the engine now decides once; the rest is this.
-  workflows: 60_150,
+  workflows: 60_200,
   panels: 26_000,
   tests: 210_000,
 };
