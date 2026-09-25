@@ -5,6 +5,7 @@
 # not a module they import. An import graph cannot see that coupling, so
 # these run at EVERY gate level regardless of what changed.
 # this list from the source and fails if it has drifted, so a new filesystem-
+src/lib/auth.test.ts
 src/lib/costs/ledger.test.ts
 src/lib/estate/estate.test.ts
 src/lib/jkai/explainer-kit.test.ts

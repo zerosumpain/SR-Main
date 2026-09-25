@@ -19,6 +19,7 @@
 import { db } from '$lib/db';
 import { appleHealthMetrics, gmailAccounts, healthSyncState, integrationCredentials } from '$lib/db/schema';
 import { inArray, ne, sql } from 'drizzle-orm';
+import { ownerGmailWhere } from '$lib/workflows/gmail/owner-accounts';
 
 /** A sync is "stalled" once nothing has landed for this long. */
 const STALE_MS = 3 * 24 * 3600 * 1000;
@@ -40,7 +41,7 @@ export async function syncAttentionSummary(): Promise<SyncAttentionSummary> {
     db
       .select({ email: gmailAccounts.email })
       .from(gmailAccounts)
-      .where(ne(gmailAccounts.status, 'active'))
+      .where(ownerGmailWhere(ne(gmailAccounts.status, 'active')))
       .catch(() => []),
     // Whoop only. Two services with a row here are deliberately excluded:
     //

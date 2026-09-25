@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { memberRouteIds } from '$lib/auth';
 
 /**
  * Every intel route resolves its scope — the PR B precondition.
@@ -81,5 +82,36 @@ describe('every intel route resolves its scope', () => {
       expect(readers, f).toContain(f);
       expect(SCOPED.test(readFileSync(f, 'utf8')), f).toBe(false);
     }
+  });
+});
+
+/**
+ * A member can reach these (isMemberAllowedRoute), so every one must read
+ * through `resolveRequestScope` itself — `OWNER_INTEL_SCOPE` is not good enough
+ * here, it is exactly what a member must never be handed. Stronger than the
+ * rule above, which accepts either.
+ *
+ * Still a file-level check: members.integration.test.ts is what proves a member
+ * session sees none of the owner's rows through these.
+ */
+describe('every route a member can reach resolves the request scope', () => {
+  const intelRoutes = memberRouteIds().filter((id) => id.includes('/intel'));
+
+  it('covers the intel member routes', () => {
+    expect(intelRoutes.length).toBeGreaterThan(10);
+  });
+
+  it('calls resolveRequestScope in each route file, and never names the owner scope', () => {
+    for (const id of intelRoutes) {
+      const file = id.startsWith('/api/') ? `src/routes${id}/+server.ts` : `src/routes${id}/+page.server.ts`;
+      expect(existsSync(file), `${id} has no server load to scope`).toBe(true);
+      const source = readFileSync(file, 'utf8');
+      expect(source, file).toMatch(/\bresolveRequestScope\b/);
+      expect(source, file).not.toMatch(/\bOWNER_INTEL_SCOPE\b/);
+    }
+  });
+
+  it('and the intel layout every page renders under does too', () => {
+    expect(readFileSync('src/routes/jkai/intel/+layout.server.ts', 'utf8')).toMatch(/\bresolveRequestScope\b/);
   });
 });

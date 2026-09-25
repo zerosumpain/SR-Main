@@ -5,6 +5,7 @@ import type { GmailMessage } from '$lib/workflows/gmail/types';
 import { db } from '$lib/db';
 import { gmailAccounts } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
+import { ownerGmailWhere } from '$lib/workflows/gmail/owner-accounts';
 
 export { gmailSearchDef } from './gmail-search.def';
 
@@ -15,7 +16,9 @@ async function loadAccount(config: Record<string, unknown>, input: Record<string
     0,
   );
   if (!accountId) throw new Error('accountId is required (in config or input)');
-  const rows = await db.select().from(gmailAccounts).where(eq(gmailAccounts.id, accountId));
+  // Owner accounts only: a workflow acts for the owner, and a member's
+  // mailbox is read by nothing but their own intel sweep (owner-accounts.ts).
+  const rows = await db.select().from(gmailAccounts).where(ownerGmailWhere(eq(gmailAccounts.id, accountId)));
   const acct = rows[0];
   if (!acct) throw new Error(`Gmail account ${accountId} not found`);
   return acct;

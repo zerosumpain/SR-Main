@@ -3,6 +3,7 @@ import { db } from '$lib/db';
 import { gmailAccounts, type GmailAccount } from '$lib/db/schema';
 import { desc, eq } from 'drizzle-orm';
 import { gmailService } from '$lib/workflows/gmail/service';
+import { ownerGmailWhere } from '$lib/workflows/gmail/owner-accounts';
 
 const MAX_BODY_CHARS = 4000;
 
@@ -27,8 +28,11 @@ async function resolveAccount(args: Record<string, unknown>): Promise<GmailAccou
   const id = typeof rawId === 'number' || typeof rawId === 'string' ? Number(rawId) : NaN;
   const hasId = Number.isFinite(id) && id > 0;
 
+  // Every lookup is the owner's mailboxes only. These tools search, read, send
+  // and relabel for the owner; a family member's mailbox is not addressable
+  // from chat by id, by address or by default (owner-accounts.ts).
   if (hasId) {
-    const [acct] = await db.select().from(gmailAccounts).where(eq(gmailAccounts.id, id)).limit(1);
+    const [acct] = await db.select().from(gmailAccounts).where(ownerGmailWhere(eq(gmailAccounts.id, id))).limit(1);
     if (!acct) return { error: `Gmail account ${id} not found` };
     return acct;
   }
@@ -37,17 +41,17 @@ async function resolveAccount(args: Record<string, unknown>): Promise<GmailAccou
     const [acct] = await db
       .select()
       .from(gmailAccounts)
-      .where(eq(gmailAccounts.email, rawEmail))
+      .where(ownerGmailWhere(eq(gmailAccounts.email, rawEmail)))
       .limit(1);
     if (!acct) return { error: `Gmail account "${rawEmail}" not found` };
     return acct;
   }
 
-  // Default: most recently updated active account.
+  // Default: the owner's most recently updated active account.
   const [acct] = await db
     .select()
     .from(gmailAccounts)
-    .where(eq(gmailAccounts.status, 'active'))
+    .where(ownerGmailWhere(eq(gmailAccounts.status, 'active')))
     .orderBy(desc(gmailAccounts.updatedAt))
     .limit(1);
   if (!acct) {
@@ -86,6 +90,7 @@ register({
         updatedAt: gmailAccounts.updatedAt,
       })
       .from(gmailAccounts)
+      .where(ownerGmailWhere())
       .orderBy(desc(gmailAccounts.updatedAt));
     return { success: true, data: rows };
   },

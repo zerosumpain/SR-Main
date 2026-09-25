@@ -6,6 +6,7 @@
 // probe says so via `live: false` rather than implying it verified something.
 import { whatsappBridgeUrl } from '$lib/config/whatsapp-bridge';
 import type { ConnectorReport, ConnectorStatus, ConnectorTier } from './types';
+import { ownerGmailWhere } from '$lib/workflows/gmail/owner-accounts';
 
 const TIMEOUT_MS = 8000;
 
@@ -59,7 +60,7 @@ function agoLabel(ms: number): string {
 async function probeGmail(): Promise<ConnectorReport[]> {
   const { db } = await import('$lib/db');
   const { gmailAccounts } = await import('$lib/db/schema');
-  const accounts = await db.select().from(gmailAccounts);
+  const accounts = await db.select().from(gmailAccounts).where(ownerGmailWhere());
 
   if (!accounts.length) {
     return [

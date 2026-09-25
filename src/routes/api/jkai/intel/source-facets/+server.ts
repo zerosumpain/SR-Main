@@ -36,7 +36,7 @@ import {
   SEED_ARTEFACT_NAMES,
 } from '$lib/jkai/intel/channel-artefacts';
 import { invalidateGraphAnalysis } from '$lib/jkai/intel/analytics/load';
-import { isOwnerScope } from '$lib/jkai/intel/scope';
+import { isOwnerScope, OWNER_SPACE } from '$lib/jkai/intel/scope';
 import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
 interface Outcome {
@@ -73,14 +73,18 @@ interface ImportantOutcome {
 async function backfillImportant(dryRun: boolean): Promise<ImportantOutcome> {
   const empty: ImportantOutcome = { matched: 0, present: 0, updated: 0, already: 0 };
   try {
-    const [{ gmailService }, { gmailAccounts }] = await Promise.all([
+    const [{ gmailService }, { gmailAccounts }, { ownerGmailWhere }] = await Promise.all([
       import('$lib/workflows/gmail/service'),
       import('$lib/db/schema'),
+      import('$lib/workflows/gmail/owner-accounts'),
     ]);
+    // The owner's mailboxes, and only the owner's notes below: Gmail thread ids
+    // are per mailbox, so an id from one account says nothing about a note in
+    // another space.
     const accounts = await db
       .select()
       .from(gmailAccounts)
-      .where(eq(gmailAccounts.status, 'active'));
+      .where(ownerGmailWhere(eq(gmailAccounts.status, 'active')));
     if (!accounts.length) return { ...empty, skipped: 'no active Gmail account' };
 
     const threadIds = new Set<string>();
@@ -102,6 +106,7 @@ async function backfillImportant(dryRun: boolean): Promise<ImportantOutcome> {
       .where(
         and(
           eq(intelNotes.source, 'email'),
+          eq(intelNotes.spaceId, OWNER_SPACE),
           sql`${intelNotes.metadata}->>'gmailThreadId' = ANY(${pgTextArray(ids)}::text[])`,
         ),
       );

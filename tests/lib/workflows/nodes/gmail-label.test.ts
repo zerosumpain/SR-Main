@@ -23,6 +23,8 @@ vi.mock('$lib/workflows/gmail/service', () => ({
 vi.mock('$lib/db', () => ({ db: dbMock }));
 vi.mock('$lib/db/schema', () => ({ gmailAccounts: { id: 'id', email: 'email' } }));
 vi.mock('drizzle-orm', () => ({ eq: (a: any, b: any) => ({ a, b }) }));
+// The owner filter is its own module's test (owner-accounts); here it passes the id lookup through.
+vi.mock('$lib/workflows/gmail/owner-accounts', () => ({ ownerGmailWhere: (c: unknown) => c }));
 
 const ctx: any = { runId: 'r', emit: vi.fn(), getNodeOutput: () => undefined };
 

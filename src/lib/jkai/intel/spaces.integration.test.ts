@@ -10,7 +10,7 @@ import { queryEntityPage } from './entity-query.server';
 import { DEFAULT_ENTITY_QUERY } from './entity-query';
 import { createLens, deleteLens, getLens, listLenses, lensEntityIds } from './lenses.server';
 import { EMPTY_LENS_FILTERS } from './lenses';
-import { persistInsights, listInsights, setInsightStatus, insightsByDedupeKey, dedupeKeyFor } from './insight-store';
+import { persistInsights, listInsights, setInsightStatus, insightsByDedupeKey, dedupeKeyFor, storedDedupeKey } from './insight-store';
 import { intelInsights, intelLenses, intelAlerts, intelTimelineEvents } from '$lib/db/schema';
 import { loadDailyAlerts } from './daily-alerts.server';
 import { cleanupIntelligence } from './cleanup.server';
@@ -358,9 +358,12 @@ describe.skipIf(!process.env.DATABASE_URL)('artefacts are written to, and read f
     // A key of its own, so the global dedupe index cannot meet a real row.
     const insight = { kind: 'space_test', title: 'Space test', detail: 'x', score: 0.5, entityIds: [crypto.randomUUID()] };
     const key = dedupeKeyFor(insight);
-    insightKeys.push(key);
+    // Stored under the space's prefix (PR B); callers still ask by the bare key.
+    const stored = storedDedupeKey('u_test', key);
+    expect(stored).not.toBe(key);
+    insightKeys.push(stored);
     await persistInsights([insight], null, TEST_SCOPE);
-    const [row] = await db.select().from(intelInsights).where(eq(intelInsights.dedupeKey, key));
+    const [row] = await db.select().from(intelInsights).where(eq(intelInsights.dedupeKey, stored));
     expect(row.spaceId).toBe('u_test');
 
     expect((await listInsights({ kind: 'space_test', status: 'all' })).some((r) => r.id === row.id)).toBe(false);

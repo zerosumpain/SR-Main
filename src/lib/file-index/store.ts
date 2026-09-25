@@ -190,7 +190,8 @@ export async function indexFile(fileId: string): Promise<IndexResult> {
       contentHash: hash,
       categories: policy?.categorySlugs ?? [],
       metadata: { mimeType: row.mimeType, modality: content.modality, sourceUrl: '/drive' },
-      spaceId: OWNER_SPACE,
+      // The owner's, unless its folder routes it to household (./source-space).
+      spaceId: policy?.spaceId ?? OWNER_SPACE,
     });
   }
 

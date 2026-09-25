@@ -28,7 +28,7 @@ import { intelNotes, researchSessions } from '$lib/db/schema';
 import { extractFromNote, type ExtractionResult } from './extract';
 import { persistExtraction } from './graph';
 import { embedNote } from './embed';
-import { OWNER_SPACE } from './scope';
+import { OWNER_INTEL_SCOPE, OWNER_SPACE, spaceIn } from './scope';
 
 /**
  * `daydream` is the fourth: a thought the owner explicitly called useful, woven
@@ -494,11 +494,17 @@ export async function deleteDerivedIntel(
 
   // Drive exclusions must be atomic and report failures. The cleanup planner
   // also protects owner-kept entities and refreshes shared-source evidence.
+  //
+  // A Drive file's note is the owner's or, if its folder routes there, the
+  // household's (./source-space) — and the folder may have changed since. So a
+  // Drive delete looks in both of the owner's Drive spaces rather than the one
+  // its caller would have to know; every Drive delete path passes the default.
   if (kind === 'file') {
+    const spaces = spaceId === OWNER_SPACE ? OWNER_INTEL_SCOPE : [spaceId];
     const notes = await db.select({ id: intelNotes.id }).from(intelNotes).where(and(
       sql`${intelNotes.metadata}->>'autoKind' = ${kind}`,
       sql`${intelNotes.metadata}->>'refId' = ${refId}`,
-      eq(intelNotes.spaceId, spaceId),
+      spaceIn(intelNotes.spaceId, spaces),
     ));
     if (!notes.length) return result;
     const { cleanupIntelligence } = await import('./cleanup.server');
@@ -658,8 +664,8 @@ export async function backfillIntelExtraction(opts: BackfillOptions = {}): Promi
           contentHash: String(row.hash ?? ''),
           categories: policy.categorySlugs,
           metadata: { sourceUrl: '/drive', backfilled: true },
-          // Drive is the owner's.
-          spaceId: OWNER_SPACE,
+          // Drive is the owner's; a folder may route it to household.
+          spaceId: policy.spaceId,
         }),
       );
     }

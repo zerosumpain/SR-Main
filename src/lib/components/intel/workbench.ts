@@ -37,6 +37,19 @@ export interface IntelSurface {
   warnAbove?: number;
 }
 
+/**
+ * The surfaces a family member reaches — their own graph, read-only, plus the
+ * mail gate for their own held threads. Must stay a subset of the page routes
+ * in `isMemberAllowedRoute` ($lib/auth); a link to anything else is a redirect.
+ */
+export const MEMBER_SURFACE_HREFS: ReadonlySet<string> = new Set([
+  '/jkai/intel/mail',
+  '/jkai/intel/notes',
+  '/jkai/intel',
+  '/jkai/intel/entities',
+  '/jkai/intel/timeline',
+]);
+
 export const SURFACES: IntelSurface[] = [
   {
     href: '/jkai/intel/mail',

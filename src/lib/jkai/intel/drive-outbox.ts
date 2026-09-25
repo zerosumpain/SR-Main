@@ -1,7 +1,6 @@
 import { and, asc, eq, isNull, lt, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { driveIntelOutbox } from '$lib/db/schema';
-import { OWNER_SPACE } from './scope';
 
 /**
  * The Intelligence side of the Drive → Intel contract.
@@ -74,10 +73,13 @@ async function handle(row: { kind: string; ref: string; payload: unknown }): Pro
     const { queueIntelExtraction } = await import('./auto-extract');
     // The payload carries what queueIntelExtraction needs; Drive built it from
     // the same row it just wrote, so it does not have to be re-derived here.
-    // Except the space: Drive is the owner's, and a payload written by the
-    // Drive app has never carried one — without it the derived-note lookup
-    // matches nothing and every re-index would mint a fresh note.
-    queueIntelExtraction({ ...payload, spaceId: OWNER_SPACE } as never);
+    // Except the space: a payload written by the Drive app has never carried
+    // one — without it the derived-note lookup matches nothing and every
+    // re-index would mint a fresh note. Drive is the owner's, and a folder may
+    // route its files to household (./source-space); the file's current name
+    // says which.
+    const { spaceForDriveFile } = await import('./source-policy.server');
+    queueIntelExtraction({ ...payload, spaceId: await spaceForDriveFile(row.ref) } as never);
     return null;
   }
   throw new Error(`unknown drive-intel kind: ${row.kind}`);

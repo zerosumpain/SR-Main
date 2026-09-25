@@ -3,6 +3,7 @@ import { db } from '$lib/db';
 import { gmailAccounts, gmailWatches, gmailHistoryCursors, type GmailAccount } from '$lib/db/schema';
 import { and, eq } from 'drizzle-orm';
 import { gmailService } from './service';
+import { ownerGmailWhere } from '$lib/workflows/gmail/owner-accounts';
 
 // Local event bus. The upcoming orchestrator-bridge (plan Task 10) will
 // subscribe to this and route events into the workflow engine.
@@ -78,7 +79,10 @@ export function startWatcher(): void {
   const loop = async () => {
     if (stopping) return;
     try {
-      const accounts = await db.select().from(gmailAccounts).where(eq(gmailAccounts.status, 'active'));
+      // Owner mailboxes only. The watcher dispatches the owner's workflows and
+      // pushes previews into the owner's chat; a member's mail is read by their
+      // nightly intel sweep and nothing else.
+      const accounts = await db.select().from(gmailAccounts).where(ownerGmailWhere(eq(gmailAccounts.status, 'active')));
       for (const acct of accounts) {
         try {
           await pollAccountOnce(acct);

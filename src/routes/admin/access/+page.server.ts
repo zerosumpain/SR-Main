@@ -10,6 +10,7 @@ export const load: PageServerLoad = async () => {
       email: allowedUser.email,
       note: allowedUser.note,
       addedBy: allowedUser.addedBy,
+      role: allowedUser.role,
       createdAt: allowedUser.createdAt,
     })
     .from(allowedUser)

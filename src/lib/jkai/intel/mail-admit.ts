@@ -25,7 +25,7 @@
 // alternative is an all-or-nothing button nobody can trust.
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { intelNotes, workflowFiles, driveFolderSettings, type WorkflowFilePermissions } from '$lib/db/schema';
+import { gmailAccounts, intelNotes, workflowFiles, driveFolderSettings, type GmailAccount, type WorkflowFilePermissions } from '$lib/db/schema';
 import { newDiskPath, saveBuffer, deleteFile } from '$lib/file-store/storage';
 import { reindexFileInBackground } from '$lib/file-index/store';
 import { indexMail, removeMail, type MailAttachmentText } from '$lib/mail-index/store';
@@ -45,7 +45,7 @@ import {
 } from './gmail-ingest';
 import { recencyOf } from './staleness';
 import { recordMailDecision } from './mail-decisions';
-import { OWNER_INTEL_SCOPE, spaceIn, type IntelScope } from './scope';
+import { OWNER_INTEL_SCOPE, OWNER_SPACE, spaceIn, type IntelScope } from './scope';
 
 /** Attachments are evidence, not scratch — read-only to every workflow. */
 const PERMISSIONS: WorkflowFilePermissions = { read: true, write: false, append: false, delete: false };
@@ -95,7 +95,7 @@ export interface AdmitResult {
 
 /** Who asked. Recorded on the decision so the rule engine can tell a rule's
  *  own admissions apart from the owner's — a rule must never learn from itself. */
-export type AdmitActor = 'owner' | 'rule' | 'seed';
+export type AdmitActor = 'owner' | 'member' | 'rule' | 'seed';
 
 export interface AdmitOptions {
   actor?: AdmitActor;
@@ -219,6 +219,24 @@ async function saveAttachment(
  * and risks rate-limiting the gateway mid-run, which would leave the queue in a
  * state nobody could reason about.
  */
+/**
+ * The mailbox a held thread is re-read from: the one it was swept from, and
+ * only if that mailbox belongs to the note's own space. A thread id means
+ * nothing in any other mailbox, and reading it against the wrong one is either
+ * an empty thread or somebody else's mail — so this fails closed rather than
+ * falling back to a default. A note old enough to carry no account name was
+ * swept when the owner's was the only mailbox, and takes the owner's default.
+ */
+async function accountForNote(accountEmail: string | undefined, spaceId: string): Promise<GmailAccount | null> {
+  if (!accountEmail) return spaceId === OWNER_SPACE ? resolveAccount() : null;
+  const [acct] = await db
+    .select()
+    .from(gmailAccounts)
+    .where(and(eq(gmailAccounts.email, accountEmail), eq(gmailAccounts.principalId, spaceId)))
+    .limit(1);
+  return acct ?? null;
+}
+
 export async function admitMailNotes(noteIds: string[], opts: AdmitOptions = {}): Promise<AdmitResult> {
   const result: AdmitResult = {
     admitted: 0,
@@ -306,13 +324,12 @@ export async function admitMailNotes(noteIds: string[], opts: AdmitOptions = {})
 
     try {
       const accountEmail = typeof meta.gmailAccount === 'string' ? meta.gmailAccount : undefined;
-      const acct = await resolveAccount();
-      if (accountEmail && acct.email !== accountEmail) {
-        // Not fatal — one mailbox is the norm — but say so, because reading a
-        // thread id against the wrong account silently returns nothing.
-        console.warn(
-          `[intel:mail-admit] note ${note.id} was swept from ${accountEmail}; admitting against ${acct.email}`,
-        );
+      const acct = await accountForNote(accountEmail, note.spaceId);
+      if (!acct) {
+        item.reason = 'The mailbox this thread came from is no longer connected.';
+        result.items.push(item);
+        result.failed++;
+        continue;
       }
 
       const thread = await fetchThread(acct, threadId);
@@ -336,10 +353,14 @@ export async function admitMailNotes(noteIds: string[], opts: AdmitOptions = {})
       let body = threadToNoteText(thread) || note.rawContent || '';
       const attachmentTexts: MailAttachmentText[] = [];
       const { attachments } = await threadAttachments(acct, thread);
-      if (attachments.length) await ensureMailFolderExcluded();
+      // Filed to /drive only from the owner's own mail. /drive is the owner's —
+      // readable by every workflow and indexed for @files — so a member's
+      // attachment is read into their note and never copied there.
+      const fileAttachments = note.spaceId === OWNER_SPACE;
+      if (attachments.length && fileAttachments) await ensureMailFolderExcluded();
       for (const att of attachments) {
         try {
-          const saved = await saveAttachment(threadId, subject, att);
+          const saved = fileAttachments ? await saveAttachment(threadId, subject, att) : { saved: false };
           if (saved.saved) {
             result.attachmentsSaved++;
             item.attachmentsSaved = (item.attachmentsSaved ?? 0) + 1;
@@ -428,6 +449,7 @@ export async function admitMailNotes(noteIds: string[], opts: AdmitOptions = {})
         noteId: outcome.noteId,
         decision: 'admit',
         actor: opts.actor ?? 'owner',
+        spaceId: note.spaceId,
         ruleKey: opts.ruleKey,
         reason: opts.reason,
         metadata: meta,
@@ -481,7 +503,13 @@ export async function rejectMailNotes(noteIds: string[], opts: AdmitOptions = {}
 
   const scope = opts.scope ?? OWNER_INTEL_SCOPE;
   const notes = await db
-    .select({ id: intelNotes.id, title: intelNotes.title, metadata: intelNotes.metadata, graphState: intelNotes.graphState })
+    .select({
+      id: intelNotes.id,
+      title: intelNotes.title,
+      metadata: intelNotes.metadata,
+      graphState: intelNotes.graphState,
+      spaceId: intelNotes.spaceId,
+    })
     .from(intelNotes)
     .where(and(inArray(intelNotes.id, noteIds), eq(intelNotes.source, 'email'), spaceIn(intelNotes.spaceId, scope)));
   const found = new Set(notes.map((n) => n.id));
@@ -509,6 +537,7 @@ export async function rejectMailNotes(noteIds: string[], opts: AdmitOptions = {}
       noteId: note.id,
       decision: 'reject',
       actor: opts.actor ?? 'owner',
+      spaceId: note.spaceId,
       ruleKey: opts.ruleKey,
       reason: opts.reason,
       metadata: (note.metadata ?? {}) as Record<string, unknown>,

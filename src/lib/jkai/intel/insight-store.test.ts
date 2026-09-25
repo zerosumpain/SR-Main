@@ -4,6 +4,7 @@ import {
   clampScore,
   clampSnoozeDays,
   dedupeKeyFor,
+  storedDedupeKey,
   isInsightStatus,
   MAX_KEY_ENTITIES,
   MAX_SNOOZE_DAYS,
@@ -246,5 +247,16 @@ describe('isInsightStatus', () => {
     expect(isInsightStatus('snoozed')).toBe(true);
     expect(isInsightStatus('deleted')).toBe(false);
     expect(isInsightStatus(null)).toBe(false);
+  });
+});
+
+describe('storedDedupeKey', () => {
+  it("keeps the owner's keys bare, so rows from before members keep matching", () => {
+    expect(storedDedupeKey('owner', 'bridge|a+b|b4')).toBe('bridge|a+b|b4');
+  });
+
+  it("prefixes anyone else's, so a member's finding cannot collide with the owner's", () => {
+    expect(storedDedupeKey('u_abc', 'bridge|a+b|b4')).toBe('u_abc:bridge|a+b|b4');
+    expect(storedDedupeKey('u_abc', 'k')).not.toBe(storedDedupeKey('owner', 'k'));
   });
 });

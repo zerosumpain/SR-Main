@@ -169,6 +169,13 @@ describe('activeSpaces', () => {
     expect(text).toMatch(/SELECT DISTINCT space_id\s+FROM intel_entities/);
   });
 
+  it("also reads active mailboxes' principals, so a member with only held mail is scored", async () => {
+    const { calls, executor } = stub([{ space_id: 'owner' }]);
+    await activeSpaces(executor);
+    const text = new PgDialect().sqlToQuery(calls[0]).sql;
+    expect(text).toMatch(/UNION\s+SELECT DISTINCT principal_id AS space_id FROM gmail_accounts WHERE status = 'active'/);
+  });
+
   it('always includes the owner, even on an empty graph', async () => {
     expect(await activeSpaces(stub([]).executor)).toEqual(['owner']);
   });
@@ -316,8 +323,8 @@ describe('runIntelSweep — Gmail', () => {
 
     expect(argsOf(rollingSweepAccounts)).toHaveLength(1);
     expect(argsOf(ingestGmailThreads)).toEqual([
-      [{ mode: 'rolling', accountId: 7 }],
-      [{ mode: 'rolling', accountId: 9 }],
+      [{ mode: 'rolling', accountId: 7, anyPrincipal: true }],
+      [{ mode: 'rolling', accountId: 9, anyPrincipal: true }],
     ]);
     const gmail = out.stages.find((s) => s.stage === 'gmail')!;
     expect(gmail.ok).toBe(true);

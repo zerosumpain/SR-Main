@@ -12,7 +12,13 @@
   // /jkai page via ⌘/Ctrl-K or the header's ⌘K chip. The floating fallback
   // button is gone: the header carries the trigger on every surface now.
 
+  // A family member reaches only their intel space (see isMemberAllowedRoute),
+  // so the shell drops everything that is the owner's: the activity strip polls
+  // the owner's hub status, the launcher and tab bar list owner surfaces.
+  const member = $derived(data.member === true);
+
   onMount(() => {
+    if (data.member) return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
         e.preventDefault();
@@ -44,7 +50,7 @@
 </svelte:head>
 
 <div class="jkai-root">
-  <ActivityStrip />
+  {#if !member}<ActivityStrip />{/if}
 
   <HubHeader
     tokensToday={data.hub.tokensToday}
@@ -59,15 +65,18 @@
     workflowFailedToday={data.hub.workflowFailedToday}
     activitySourceCount={data.hub.activitySourceCount}
     buildVersion={data.deploy.short}
+    {member}
   />
 
   <div class="jkai-body">
     {@render children()}
   </div>
 
-  <JkaiTabBar />
+  {#if !member}
+    <JkaiTabBar />
 
-  <JkaiLauncher open={launcher.open} onClose={closeLauncher} />
+    <JkaiLauncher open={launcher.open} onClose={closeLauncher} />
+  {/if}
 </div>
 
 <style>

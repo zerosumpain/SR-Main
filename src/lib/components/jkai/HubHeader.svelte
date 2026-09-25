@@ -22,6 +22,7 @@
     workflowFailedToday = 0,
     activitySourceCount = 0,
     buildVersion = 'development',
+    member = false,
   }: {
     tokensToday: number;
     spendTodayUsd: number;
@@ -39,6 +40,13 @@
     /** Personal activity sources with an active connection (/jkai/sources). */
     activitySourceCount?: number;
     buildVersion?: string;
+    /**
+     * A family member's session. They reach only their intel space, so the
+     * header drops everything that is the owner's: the spend/credit meters, the
+     * command palette (every row is an owner surface) and a back chip that
+     * would lead out of intel into chat.
+     */
+    member?: boolean;
   } = $props();
 
   /**
@@ -96,6 +104,10 @@
    * /jkai itself, where the home icon on the left is already the answer.
    */
   const backTo = $derived.by(() => {
+    if (member) {
+      // Up to their graph from any intel page, and no further.
+      return page.url.pathname === '/jkai/intel' ? null : { href: '/jkai/intel', label: 'Intel' };
+    }
     if (pageMenu?.back) return pageMenu.back;
     const path = page.url.pathname;
     const href = parentHref(path);
@@ -229,8 +241,9 @@
       <span class="hdr-divider" aria-hidden="true"></span>
       <!-- `.brand` is the site-wide mark: it supplies the accent `>` via
            ::before, so the word is all this needs to carry. -->
-      <a class="brand" href="/jkai" title="jkai">jkai</a>
+      <a class="brand" href={member ? '/jkai/intel' : '/jkai'} title="jkai">jkai</a>
       <span class="hdr-divider" aria-hidden="true"></span>
+      {#if !member}
       <div class="strip-slot">
         <HubTokenStrip
           {tokensToday}
@@ -244,9 +257,11 @@
           bpm={hub.bpm}
         />
       </div>
+      {/if}
     </div>
 
     <div class="hdr-right" data-hub-menu>
+      {#if !member}
       <!-- Mobile promotes spend out of the strip and into a tappable pill. On a
            subscription model the cash figure is always £0.00 — Codex calls price
            as null, not zero — so the pill carries the quota instead. -->
@@ -262,6 +277,7 @@
       <button type="button" class="chip palette-chip" onclick={openLauncher} title="Command palette">
         ⌘K
       </button>
+      {/if}
 
       {#if backTo}
         <!-- The way out, always visible rather than a row inside the dropdown:
@@ -346,6 +362,7 @@
 
   <!-- Mobile metric strip (2a): 34px, scrolls horizontally, never wraps.
        Spend is already in the pill above, so it is dropped here. -->
+  {#if !member}
   <div class="mobile-strip">
     <HubTokenStrip
       variant="mobile"
@@ -360,6 +377,7 @@
       bpm={hub.bpm}
     />
   </div>
+  {/if}
 </header>
 
 <style>

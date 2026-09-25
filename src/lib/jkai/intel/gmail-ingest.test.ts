@@ -725,13 +725,9 @@ describe('rollingAccountsWhere', () => {
     expect(rendered.params[0]).toBe('active');
   });
 
-  it("takes the owner's accounts only, until members are admitted (PR B)", () => {
-    expect(rendered.sql).toMatch(/"gmail_accounts"\."principal_id" = \$2/);
-    expect(rendered.params[1]).toBe('owner');
-  });
-
-  it('ANDs the two, so an expired owner account is not swept', () => {
-    expect(rendered.sql).toBe('("gmail_accounts"."status" = $1 and "gmail_accounts"."principal_id" = $2)');
-    expect(rendered.params).toHaveLength(2);
+  it("takes every principal's accounts — members are swept into their own space (PR B)", () => {
+    expect(rendered.sql).not.toMatch(/principal_id/);
+    expect(rendered.sql).toBe('"gmail_accounts"."status" = $1');
+    expect(rendered.params).toHaveLength(1);
   });
 });
