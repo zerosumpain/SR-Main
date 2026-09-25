@@ -80,7 +80,8 @@ export interface CodexModel {
  * Source: the account's own catalogue, `GET
  * chatgpt.com/backend-api/codex/models?client_version=<v>`, read 2026-09-25
  * (GPT-6 Sol and Luna added; there is no GPT-6 Terra — the API refuses
- * `gpt-6-terra` on a ChatGPT account).
+ * `gpt-6-terra` on a ChatGPT account). GPT-5.3 Codex Spark was removed the same
+ * day: the list stopped naming it, and the API refuses it the same way.
  * Re-check when a GPT generation ships — nothing in the code detects a stale
  * entry, a retired slug simply fails at call time with the bridge surfacing
  * Codex's own error.
@@ -126,12 +127,6 @@ export const CODEX_MODELS: CodexModel[] = [
     slug: 'gpt-5.6-luna',
     name: 'GPT-5.6 Luna',
     description: 'Previous-generation fast model — strong capability at low quota cost.',
-  },
-  {
-    slug: 'gpt-5.3-codex-spark',
-    name: 'GPT-5.3 Codex Spark',
-    description: 'Text-only research preview for real-time coding iteration.',
-    proOnly: true,
   },
   {
     slug: 'gpt-5.5',
