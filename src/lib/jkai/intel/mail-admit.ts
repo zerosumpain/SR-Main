@@ -95,7 +95,7 @@ export interface AdmitResult {
 
 /** Who asked. Recorded on the decision so the rule engine can tell a rule's
  *  own admissions apart from the owner's — a rule must never learn from itself. */
-export type AdmitActor = 'owner' | 'rule' | 'seed';
+export type AdmitActor = 'owner' | 'member' | 'rule' | 'seed';
 
 export interface AdmitOptions {
   actor?: AdmitActor;

@@ -1,7 +1,6 @@
 import { and, asc, eq, isNull, lt, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { driveIntelOutbox, workflowFiles } from '$lib/db/schema';
-import { OWNER_SPACE } from './scope';
+import { driveIntelOutbox } from '$lib/db/schema';
 
 /**
  * The Intelligence side of the Drive → Intel contract.
@@ -56,14 +55,6 @@ export async function enqueueDriveIntel(
   await db.insert(driveIntelOutbox).values({ kind, ref, payload: payload ?? null });
 }
 
-/** The space a Drive file's intel belongs in — the owner's unless its folder says household. */
-async function driveFileSpace(fileId: string): Promise<string> {
-  const [file] = await db.select({ name: workflowFiles.name }).from(workflowFiles).where(eq(workflowFiles.id, fileId)).limit(1);
-  if (!file) return OWNER_SPACE;
-  const { policyForFileName } = await import('./source-policy.server');
-  return (await policyForFileName(file.name)).spaceId;
-}
-
 async function handle(row: { kind: string; ref: string; payload: unknown }): Promise<unknown> {
   const payload = (row.payload ?? {}) as Record<string, unknown>;
   if (row.kind === 'file-deleted') {
@@ -87,7 +78,8 @@ async function handle(row: { kind: string; ref: string; payload: unknown }): Pro
     // re-index would mint a fresh note. Drive is the owner's, and a folder may
     // route its files to household (./source-space); the file's current name
     // says which.
-    queueIntelExtraction({ ...payload, spaceId: await driveFileSpace(row.ref) } as never);
+    const { spaceForDriveFile } = await import('./source-policy.server');
+    queueIntelExtraction({ ...payload, spaceId: await spaceForDriveFile(row.ref) } as never);
     return null;
   }
   throw new Error(`unknown drive-intel kind: ${row.kind}`);

@@ -169,7 +169,7 @@ describe.skipIf(!enabled)('local graph cleanup', () => {
     const policy = await import('./source-policy.server');
     const staleRead = vi.spyOn(policy,'policyForFileName').mockImplementationOnce(async () => {
       await exclude('included');
-      return {included:true,categorySlugs:[]};
+      return {included:true,categorySlugs:[],spaceId:'owner'};
     });
     extract.mockClear();
     try {

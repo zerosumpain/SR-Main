@@ -28,8 +28,10 @@ const queueIntelExtraction = vi.fn();
 const queueDerivedIntelDelete = vi.fn();
 const deleteDerivedIntel = vi.fn(async () => ({ notesDeleted: 0, entitiesRemoved: 0, relationshipsRemoved: 0 }));
 const syncSourcePolicy = vi.fn(async () => ({ scanned: 0 }));
+// A folder can route a file to household; the drain must carry what it resolves.
+const spaceForDriveFile = vi.fn(async () => 'household');
 vi.mock('../../../../src/lib/jkai/intel/auto-extract', () => ({ queueIntelExtraction, queueDerivedIntelDelete, deleteDerivedIntel }));
-vi.mock('../../../../src/lib/jkai/intel/source-policy.server', () => ({ syncSourcePolicy }));
+vi.mock('../../../../src/lib/jkai/intel/source-policy.server', () => ({ syncSourcePolicy, spaceForDriveFile }));
 
 const mod = () => import('../../../../src/lib/jkai/intel/drive-outbox');
 
@@ -59,7 +61,8 @@ describe('drive → intel outbox', () => {
 
     expect(deleteDerivedIntel).toHaveBeenCalledWith('file', 'file-1');
     expect(syncSourcePolicy).toHaveBeenCalledWith('Notes/', ['a']);
-    expect(queueIntelExtraction).toHaveBeenCalledWith({ kind: 'file', refId: 'file-2', spaceId: 'owner' });
+    expect(spaceForDriveFile).toHaveBeenCalledWith('file-2');
+    expect(queueIntelExtraction).toHaveBeenCalledWith({ kind: 'file', refId: 'file-2', spaceId: 'household' });
     expect(result).toEqual({ processed: 3, failed: 0 });
   });
 
