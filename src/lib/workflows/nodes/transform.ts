@@ -94,6 +94,7 @@ export const transformDef: NodeDefinition = {
   type: 'transform',
   label: 'Transform',
   category: 'core',
+  idempotent: true,
   description: 'Reshape data with a JavaScript expression. The input object is available as `input`.',
   configSchema: {
     type: 'object',

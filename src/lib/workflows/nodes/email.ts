@@ -2,6 +2,7 @@ import type { NodeExecutor, NodeResult, ExecutionContext } from '../types';
 import { interpolateTemplate } from './template';
 import nodemailer from 'nodemailer';
 import { env } from '$env/dynamic/private';
+import { FatalError } from '../errors';
 
 export { emailDef } from './email.def';
 
@@ -35,9 +36,7 @@ export const emailExecutor: NodeExecutor = {
     const body = interpolateTemplate((config.body as string) || '', input);
     const from = (config.from as string) || env.SMTP_FROM || 'noreply@localhost';
 
-    if (!to) {
-      return { output: { error: 'No recipient (to) configured' }, rowCount: 1 };
-    }
+    if (!to) throw new FatalError('No recipient (to) configured');
 
     if (context.dryRun) {
       return {

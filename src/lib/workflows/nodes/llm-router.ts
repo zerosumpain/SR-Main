@@ -1,5 +1,6 @@
 import type { NodeExecutor, NodeResult, ExecutionContext } from '../types';
 import { resilientChatCompletion } from '$lib/llm/workflow-gateway';
+import { FatalError } from '../errors';
 
 export { llmRouterDef } from './llm-router.def';
 
@@ -11,9 +12,9 @@ export const llmRouterExecutor: NodeExecutor = {
     try {
       routes = JSON.parse(routesStr);
     } catch {
-      return { output: { ...input, error: 'Invalid routes JSON' }, rowCount: 1 };
+      throw new FatalError('Invalid routes JSON');
     }
-    if (routes.length === 0) return { output: { ...input, error: 'No routes defined' }, rowCount: 1 };
+    if (routes.length === 0) throw new FatalError('No routes defined');
 
     const routeList = routes.map((r, i) => `${i + 1}. "${r.handle}" — ${r.description}`).join('\n');
     const systemPrompt = `You are a routing engine. Given input data and routes, respond with ONLY the handle name of the best matching route. No explanation, no quotes.\n\nAvailable routes:\n${routeList}`;

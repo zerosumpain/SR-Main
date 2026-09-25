@@ -5,6 +5,7 @@ export const openrouterDef: NodeDefinition = {
   type: 'openrouter',
   label: 'OpenRouter',
   category: 'integration',
+  idempotent: true,
   description:
     'OpenRouter integration: chat completion with model picker, list available models, or get API usage stats.',
   configSchema: {

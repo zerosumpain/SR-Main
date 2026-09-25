@@ -51,6 +51,7 @@ export const conditionalDef: NodeDefinition = {
   type: 'conditional',
   label: 'Conditional',
   category: 'control',
+  idempotent: true,
   description: 'Evaluates a JS boolean expression and routes to the "true" or "false" output handle.',
   configSchema: {
     type: 'object',

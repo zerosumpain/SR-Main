@@ -12,9 +12,6 @@
 // tests or is registry plumbing, and exercising it would mean standing up a fake
 // NodeRegistry — a mock large enough that it would only ever test itself.
 
-import { db } from '$lib/db';
-import { workflows, workflowNodes, workflowEdges } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
 import type { VerificationIssue } from '$lib/workflows/orchestrator/verify';
 import { errMsg } from './types';
 
@@ -52,33 +49,17 @@ function summarise(issues: VerificationIssue[]): WorkflowLint {
  * silently believed. `lintWorkflows()` absorbs it for the batch case.
  */
 export async function lintWorkflow(workflowId: string): Promise<WorkflowLint> {
-  const [workflow] = await db.select().from(workflows).where(eq(workflows.id, workflowId)).limit(1);
-  if (!workflow) throw new Error(`Workflow not found: ${workflowId}`);
-
-  const nodes = await db.select().from(workflowNodes).where(eq(workflowNodes.workflowId, workflowId));
-  if (nodes.length === 0) return emptyLint();
-  const edges = await db.select().from(workflowEdges).where(eq(workflowEdges.workflowId, workflowId));
+  const { loadDefinition } = await import('$lib/workflows/start-run');
+  const graph = await loadDefinition(workflowId, { includeDisplayOnly: true });
+  if (!graph) throw new Error(`Workflow not found: ${workflowId}`);
+  if (graph.nodes.length === 0) return emptyLint();
+  const { nodes: nodeDefs, edges: edgeDefs } = graph;
 
   // Lazy, and it must stay lazy: `$lib/workflows` eagerly registers ~130 server
   // node modules, so a static import here would drag all of them into the
   // doctor's module graph and into every test that touches it.
   const { registry } = await import('$lib/workflows');
   const { verifyWorkflow } = await import('$lib/workflows/orchestrator/verify');
-
-  const nodeDefs = nodes.map((n) => ({
-    id: n.id,
-    type: n.type,
-    label: n.label,
-    position: n.position as { x: number; y: number },
-    config: (n.config || {}) as Record<string, unknown>,
-  }));
-  const edgeDefs = edges.map((e) => ({
-    id: e.id,
-    sourceNodeId: e.sourceNodeId,
-    targetNodeId: e.targetNodeId,
-    sourceHandle: e.sourceHandle,
-    targetHandle: e.targetHandle,
-  }));
 
   // The dominant real failure: a node whose type was renamed out from under the
   // stored row (`icloud-cal` → `apple-calendar`, 5,053 failed runs). verifyWorkflow

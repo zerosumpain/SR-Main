@@ -4,6 +4,7 @@ export const webScrapeDef: NodeDefinition = {
   type: 'web-scrape',
   label: 'Web Scrape',
   category: 'integration',
+  idempotent: true,
   description: 'Fetch a URL and extract the readable article text using Mozilla Readability. Strips nav, ads, and chrome.',
   configSchema: {
     type: 'object',

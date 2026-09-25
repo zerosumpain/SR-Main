@@ -1,6 +1,7 @@
 import type { NodeExecutor, NodeResult, ExecutionContext } from '../types';
 import { executeSiteTool } from '$lib/workflows/site-tools/executor';
 import { interpolateTemplate } from './template';
+import { FatalError } from '../errors';
 
 export { jkaiDef } from './jkai.def';
 
@@ -20,15 +21,13 @@ export const jkaiExecutor: NodeExecutor = {
     context: ExecutionContext,
   ): Promise<NodeResult> {
     const operation = config.operation as string | undefined;
-    if (!operation) {
-      return { output: { success: false, error: 'No operation configured' }, rowCount: 1 };
-    }
+    if (!operation) throw new FatalError('No operation configured');
 
     switch (operation) {
       case 'start': {
         const prompt = interpolateTemplate((config.prompt as string) || '', input);
         const title = interpolateTemplate((config.title as string) || '', input);
-        if (!prompt) return { output: { success: false, error: 'Prompt is required to start a build' }, rowCount: 1 };
+        if (!prompt) throw new FatalError('Prompt is required to start a build');
         // DRY RUN: never spawn a real autonomous build (build_create calls
         // orchestrator.startBuild). Return a simulated result so verify/dry-run
         // can check wiring without side effects — mirrors blog/site-tool nodes.
@@ -47,7 +46,7 @@ export const jkaiExecutor: NodeExecutor = {
 
       case 'status': {
         const buildId = interpolateTemplate((config.buildId as string) || '', input);
-        if (!buildId) return { output: { success: false, error: 'Build ID is required' }, rowCount: 1 };
+        if (!buildId) throw new FatalError('Build ID is required');
         const result = await executeSiteTool('build_inspect', { id: buildId });
         return { output: result, rowCount: 1 };
       }
@@ -61,8 +60,8 @@ export const jkaiExecutor: NodeExecutor = {
       case 'control': {
         const buildId = interpolateTemplate((config.buildId as string) || '', input);
         const rawAction = config.action as string;
-        if (!buildId) return { output: { success: false, error: 'Build ID is required' }, rowCount: 1 };
-        if (!rawAction) return { output: { success: false, error: 'Action is required' }, rowCount: 1 };
+        if (!buildId) throw new FatalError('Build ID is required');
+        if (!rawAction) throw new FatalError('Action is required');
         // Back-compat: older canvases stored 'cancel' — build_control speaks 'stop'.
         const action = rawAction === 'cancel' ? 'stop' : rawAction;
         // DRY RUN: never pause/resume/stop/publish a real build (build_control is
@@ -79,7 +78,7 @@ export const jkaiExecutor: NodeExecutor = {
       }
 
       default:
-        return { output: { success: false, error: `Unknown operation: ${operation}` }, rowCount: 1 };
+        throw new FatalError(`Unknown operation: ${operation}`);
     }
   },
 

@@ -4,6 +4,7 @@ import { db } from '$lib/db';
 import { quickAnswers } from '$lib/db/schema';
 import { runQuickAnswerSync, requestStop } from '$lib/quickanswer/worker';
 import { quickAnswerDef } from './quick-answer.def';
+import { FatalError } from '../errors';
 export { quickAnswerDef } from './quick-answer.def';
 
 export const quickAnswerExecutor: NodeExecutor = {
@@ -16,9 +17,7 @@ export const quickAnswerExecutor: NodeExecutor = {
   ): Promise<NodeResult> {
     const topicTemplate = typeof config.topic === 'string' ? (config.topic as string) : '';
     const topic = interpolateTemplate(topicTemplate, input).trim();
-    if (!topic) {
-      return { output: { ...input, success: false, error: 'Topic is required' }, rowCount: 1 };
-    }
+    if (!topic) throw new FatalError('Topic is required');
 
     const goalsRaw = (config.goals as unknown) ?? [];
     const goals: string[] = Array.isArray(goalsRaw)

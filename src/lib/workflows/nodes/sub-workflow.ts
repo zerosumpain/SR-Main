@@ -4,17 +4,22 @@ import type {
   ExecutionContext,
   WorkflowDefinition,
   RunStatus,
+  JsonSchema,
 } from '../types';
+import type { EngineResult } from '../engine';
 import { db } from '$lib/db';
-import { workflows, workflowNodes, workflowEdges } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { workflowRuns, workflowInteractions } from '$lib/db/schema';
+import { and, eq, isNull } from 'drizzle-orm';
+import { FatalError } from '../errors';
+import { validateAgainstSchema } from '$lib/datastore/validate';
+
+/** How deep sub-workflows may nest (parent → child → …) before a run is refused. */
+export const MAX_SUBWORKFLOW_DEPTH = 5;
 
 /**
- * Structured outcome of running a sub-workflow once. Unlike the executor
- * (which throws on failure), this helper never throws for a run-level failure —
- * it reports the status + a human-readable error summary so callers can decide
- * whether to abort (sub-workflow node) or record-and-continue (loop v2's
- * per-item fan-out).
+ * Structured outcome of running a sub-workflow once. Never throws for a
+ * run-level failure — the sub-workflow node throws, loop's per-item fan-out
+ * records and continues.
  */
 export interface SubWorkflowRunResult {
   status: RunStatus;
@@ -22,140 +27,121 @@ export interface SubWorkflowRunResult {
   output: Record<string, unknown>;
   /** Set when status is 'failed' or 'completed_with_errors'. */
   error?: string;
-  /** The synthetic run id used for the sub-run. */
+  /** The child's workflow_runs id. */
   subRunId: string;
 }
 
-/**
- * Load a saved workflow from the DB and shape it into a `WorkflowDefinition`
- * the engine can execute. Returns null when the id doesn't resolve to a
- * workflow (caller decides whether that's a hard error).
- *
- * NB: the DB access order (workflow row via `.limit(1)`, then nodes, then
- * edges) is load-bearing for the executor's unit test, which sequences its
- * mocked `where()` responses in exactly this order.
- */
-export async function loadSubWorkflowDefinition(
-  workflowId: string,
-): Promise<WorkflowDefinition | null> {
-  const [workflow] = await db
-    .select()
-    .from(workflows)
-    .where(eq(workflows.id, workflowId))
-    .limit(1);
-
-  if (!workflow) return null;
-
-  const nodes = await db
-    .select()
-    .from(workflowNodes)
-    .where(eq(workflowNodes.workflowId, workflowId));
-
-  const edges = await db
-    .select()
-    .from(workflowEdges)
-    .where(eq(workflowEdges.workflowId, workflowId));
-
-  return {
-    id: workflowId,
-    name: workflow.name,
-    nodes: nodes.map((n) => ({
-      id: n.id,
-      type: n.type,
-      config: (n.config as Record<string, unknown>) ?? {},
-      label: n.label ?? n.type,
-      position: (n.position as { x: number; y: number }) ?? { x: 0, y: 0 },
-    })),
-    edges: edges.map((e) => ({
-      id: e.id,
-      sourceNodeId: e.sourceNodeId,
-      targetNodeId: e.targetNodeId,
-      sourceHandle: e.sourceHandle ?? undefined,
-      targetHandle: e.targetHandle ?? undefined,
-    })),
-  };
+/** A saved workflow's runnable definition (display-only nodes dropped); null when gone. */
+export async function loadSubWorkflowDefinition(workflowId: string): Promise<WorkflowDefinition | null> {
+  const { loadDefinition } = await import('../start-run');
+  return loadDefinition(workflowId);
 }
 
-/**
- * Run a loaded sub-workflow definition once and collect the merged sink-node
- * output. Propagates the parent run's dryRun flag so side-effecting nodes
- * inside the sub-workflow simulate too. Never throws on a run-level failure —
- * returns the status + error summary instead (see {@link SubWorkflowRunResult}).
- *
- * This is the single invocation primitive shared by the `sub-workflow` node
- * and `loop` v2's `subworkflow` mode — keep both callers on this path so
- * recursion/dryRun/output-merge semantics stay in one place.
- */
-export async function runSubWorkflowDefinition(
-  definition: WorkflowDefinition,
-  input: Record<string, unknown>,
-  context: ExecutionContext,
-  subRunId?: string,
-): Promise<SubWorkflowRunResult> {
-  // Import engine lazily to avoid circular dependency.
-  const { engine } = await import('$lib/workflows');
-  const runId = subRunId ?? `sub-${context.runId}-${crypto.randomUUID().slice(0, 8)}`;
-
-  const result = await engine.execute(
-    definition,
-    runId,
-    input,
-    undefined,
-    definition.id,
-    { dryRun: context.dryRun },
-  );
-
-  // Identify sink nodes (nodes with no outgoing edges) and merge their outputs
-  // (common for fan-in-style terminals).
+/** Merge the sink nodes' outputs (nodes with no outgoing edge) and summarise the status. */
+export function childOutcome(definition: WorkflowDefinition, result: EngineResult): Omit<SubWorkflowRunResult, 'subRunId'> {
   const sinkIds = new Set(definition.nodes.map((n) => n.id));
   for (const edge of definition.edges) sinkIds.delete(edge.sourceNodeId);
-
   let output: Record<string, unknown> = {};
   for (const id of sinkIds) {
     const out = result.nodeOutputs.get(id);
     if (out) output = { ...output, ...out };
   }
-
   let error: string | undefined;
-  if (result.status === 'failed') {
-    error = result.error || 'Unknown error';
-  } else if (result.status === 'completed_with_errors') {
-    error = Array.from(result.nodeErrors.entries())
-      .map(([nodeId, err]) => `${nodeId}: ${err}`)
-      .join('; ');
+  if (result.status === 'failed') error = result.error || 'Unknown error';
+  else if (result.status === 'completed_with_errors') {
+    error = Array.from(result.nodeErrors.entries()).map(([nodeId, err]) => `${nodeId}: ${err}`).join('; ');
   }
+  return { status: result.status, output, error };
+}
 
-  return { status: result.status, output, error, subRunId: runId };
+/** How many parents sit above `runId` (0 for a top-level run). */
+async function runDepth(runId: string): Promise<number> {
+  let depth = 0;
+  let current: string | null = runId;
+  while (current && depth <= MAX_SUBWORKFLOW_DEPTH) {
+    const [row]: Array<{ parentRunId: string | null }> = await db
+      .select({ parentRunId: workflowRuns.parentRunId }).from(workflowRuns).where(eq(workflowRuns.id, current)).limit(1);
+    current = row?.parentRunId ?? null;
+    if (current) depth++;
+  }
+  return depth;
+}
+
+/**
+ * Run `definition` as a CHILD run of the current one: a real workflow_runs row
+ * (parent_run_id, its own pinned version, its own node rows and history),
+ * executed in this process without taking a top-level concurrency slot, and
+ * cancelled when the parent is. The single invocation primitive shared by the
+ * sub-workflow node and loop's `subworkflow` mode.
+ */
+export async function runSubWorkflowDefinition(
+  definition: WorkflowDefinition,
+  input: Record<string, unknown>,
+  context: ExecutionContext,
+): Promise<SubWorkflowRunResult> {
+  if ((await runDepth(context.runId)) + 1 > MAX_SUBWORKFLOW_DEPTH) {
+    throw new FatalError(`Sub-workflows nest deeper than ${MAX_SUBWORKFLOW_DEPTH} levels — is a workflow calling itself?`);
+  }
+  const { startRun } = await import('../start-run');
+  const started = await startRun({
+    workflowId: definition.id,
+    definition,
+    trigger: 'sub-workflow',
+    input,
+    parentRunId: context.runId,
+    dryRun: context.dryRun,
+    label: 'sub-workflow',
+  });
+  if (!started) throw new FatalError(`Sub-workflow not found: ${definition.id}`);
+  const cancel = () => void import('$lib/workflows').then(({ engine }) => engine.cancelRun(started.runId));
+  context.abortSignal.addEventListener('abort', cancel, { once: true });
+  try {
+    const result = await started.done;
+    if (!result) return { status: 'failed', output: {}, error: 'Sub-workflow execution threw', subRunId: started.runId };
+    return { ...childOutcome(definition, result), subRunId: started.runId };
+  } finally {
+    context.abortSignal.removeEventListener('abort', cancel);
+  }
+}
+
+function checkSchema(value: unknown, schema: unknown, where: string): void {
+  if (!schema || typeof schema !== 'object') return;
+  const res = validateAgainstSchema(value, schema as JsonSchema);
+  if (!res.ok) throw new FatalError(`Sub-workflow ${where} does not match its schema: ${res.errors.join('; ')}`);
 }
 
 export const subWorkflowExecutor: NodeExecutor = {
   type: 'sub-workflow',
   async execute(input, config, context): Promise<NodeResult> {
     const workflowId = config.workflowId as string;
-    if (!workflowId) return { output: { error: 'No workflowId configured' }, rowCount: 1 };
+    if (!workflowId) throw new FatalError('No workflowId configured');
+    checkSchema(input, config.inputSchema, 'input');
 
     const definition = await loadSubWorkflowDefinition(workflowId);
-    if (!definition) {
-      throw new Error(`Sub-workflow not found: ${workflowId}`);
-    }
+    if (!definition) throw new FatalError(`Sub-workflow not found: ${workflowId}`);
 
     const res = await runSubWorkflowDefinition(definition, input, context);
+    const metadata = { subRunId: res.subRunId, subWorkflowId: workflowId, subStatus: res.status };
 
-    if (res.status === 'failed') {
-      throw new Error(`Sub-workflow failed: ${res.error || 'Unknown error'}`);
+    // The child is waiting on a person: so does the parent. When the child
+    // settles, engine-resume.continueParent resumes (or fails) this step.
+    if (res.status === 'awaiting_human') {
+      const [pending] = await db.select({ id: workflowInteractions.id }).from(workflowInteractions)
+        .where(and(eq(workflowInteractions.runId, res.subRunId), isNull(workflowInteractions.resolvedAt))).limit(1);
+      return { output: {}, metadata, pause: { reason: 'awaiting_human', interactionId: pending?.id ?? 0 } };
     }
-    if (res.status === 'completed_with_errors') {
-      throw new Error(`Sub-workflow completed with errors — ${res.error}`);
-    }
+    if (res.status === 'failed') throw new Error(`Sub-workflow failed: ${res.error || 'Unknown error'}`);
+    if (res.status === 'completed_with_errors') throw new Error(`Sub-workflow completed with errors — ${res.error}`);
 
-    return {
-      output: res.output,
-      metadata: { subRunId: res.subRunId, subWorkflowId: workflowId, subStatus: res.status },
-      rowCount: 1,
-    };
+    checkSchema(res.output, config.outputSchema, 'output');
+    return { output: res.output, metadata, rowCount: 1 };
   },
-  getInputSchema() { return { type: 'object', description: 'Passed as initial input to the sub-workflow' }; },
-  getOutputSchema() { return { type: 'object', description: "Output from the sub-workflow's final node" }; },
+  getInputSchema(config) {
+    return (config.inputSchema as JsonSchema) ?? { type: 'object', description: 'Passed as initial input to the sub-workflow' };
+  },
+  getOutputSchema(config) {
+    return (config.outputSchema as JsonSchema) ?? { type: 'object', description: "Output from the sub-workflow's final node" };
+  },
 };
 
 export { subWorkflowDef } from './sub-workflow.def';

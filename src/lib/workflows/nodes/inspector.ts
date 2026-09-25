@@ -36,6 +36,7 @@ export const inspectorDef: NodeDefinition = {
   type: 'inspector',
   label: 'Inspector',
   category: 'core',
+  idempotent: true,
   description:
     'Runtime debug view. Captures the upstream node\'s output and renders it as JSON, tables, HTML, images, video, audio, or plain text.',
   configSchema: {

@@ -31,8 +31,7 @@ describe('jkai node → build_* tool names', () => {
   });
 
   it('start without prompt → error, no tool call', async () => {
-    const r = await jkaiExecutor.execute({}, { operation: 'start' }, ctx);
-    expect(r.output).toMatchObject({ success: false });
+    await expect(jkaiExecutor.execute({}, { operation: 'start' }, ctx)).rejects.toThrow(/Prompt is required/);
     expect(executeSiteTool).not.toHaveBeenCalled();
   });
 
@@ -59,8 +58,7 @@ describe('jkai node → build_* tool names', () => {
   });
 
   it('control without buildId → error, no tool call', async () => {
-    const r = await jkaiExecutor.execute({}, { operation: 'control', action: 'pause' }, ctx);
-    expect(r.output).toMatchObject({ success: false });
+    await expect(jkaiExecutor.execute({}, { operation: 'control', action: 'pause' }, ctx)).rejects.toThrow(/Build ID/);
     expect(executeSiteTool).not.toHaveBeenCalled();
   });
 

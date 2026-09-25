@@ -31,6 +31,7 @@ import { db } from '$lib/db';
 import { nodeExecutions } from '$lib/db/schema';
 import { and, eq } from 'drizzle-orm';
 import { mergeUpstreamInput, resolveNodeConfig } from './engine-node-runner';
+import { classifyError, retryPolicyFor, runWithRetries } from './errors';
 import { commitDeferredDedupeRecords } from './nodes/dedupe';
 import { loadStoreSnapshot } from './nodes/data-store';
 import { notifyRunOutcome } from './run-notifications';
@@ -52,29 +53,24 @@ const runAbortControllers = new Map<string, AbortController>();
 const inFlightRuns = new Map<string, Promise<EngineResult>>();
 let draining = false;
 
-/** Cancellation error thrown internally when a run is cancelled mid-flight. */
-class RunCancelledError extends Error {
-  constructor() {
-    super('Run cancelled');
-    this.name = 'RunCancelledError';
-  }
+/** True while this process is executing the run (the reaper must leave it alone). */
+export function isRunInFlight(runId: string): boolean {
+  return inFlightRuns.has(runId);
 }
 
 /**
- * #20 INCREMENTAL PERSIST: write a node's terminal output/status to its
- * pre-created node_executions row AT COMPLETION (rather than only in the
- * post-run persister). Best-effort and runId-scoped: the UPDATE matches the
- * row pre-created with status 'pending' (run route / scheduler). A no-match
- * UPDATE (e.g. unit tests that never insert rows) is harmless. Never throws —
- * a DB hiccup must not fail the node. The post-run persister still runs and is
- * idempotent (same runId+nodeId .where), so this only moves the write earlier
- * so engine-resume sees completed outputs even if the process dies mid-run.
+ * #20 INCREMENTAL PERSIST: write a node's state to its pre-created
+ * node_executions row as it happens — `running` before the executor is called,
+ * the terminal status at completion — not only in the post-run finaliser, so
+ * resume and crash recovery see what the process had done (and was doing) if it
+ * dies mid-run. Best-effort and runId-scoped; a no-match UPDATE is harmless;
+ * never throws. The finaliser re-writes the same row idempotently.
  */
-async function persistNodeCompletion(
+async function persistNodeRow(
   runId: string,
   nodeId: string,
   fields: {
-    status: 'completed' | 'failed';
+    status: 'running' | 'completed' | 'failed';
     startedAt?: Date;
     inputData?: Record<string, unknown> | null;
     outputData?: Record<string, unknown> | null;
@@ -93,7 +89,7 @@ async function persistNodeCompletion(
         ...(fields.outputData !== undefined ? { outputData: fields.outputData } : {}),
         ...(fields.error !== undefined ? { error: fields.error } : {}),
         ...(fields.selectedHandle !== undefined ? { selectedHandle: fields.selectedHandle } : {}),
-        completedAt: new Date(),
+        ...(fields.status !== 'running' ? { completedAt: new Date() } : {}),
         ...(fields.usage ?? {}),
       })
       .where(and(eq(nodeExecutions.runId, runId), eq(nodeExecutions.nodeId, nodeId)));
@@ -103,6 +99,13 @@ async function persistNodeCompletion(
       e instanceof Error ? e.message : e,
     );
   }
+}
+
+export interface EngineRunOptions {
+  selfHealing?: boolean;
+  dryRun?: boolean;
+  /** A sub-workflow child run: its parent already holds a concurrency slot. */
+  child?: boolean;
 }
 
 /** Thrown internally by the engine when a node returns a pause sentinel. */
@@ -261,28 +264,6 @@ export class WorkflowEngine {
   }
 
   /**
-   * Resume a paused run by pre-seeding node outputs for already-completed
-   * nodes (including the resolved interactive-step node). The engine's
-   * topological walker will skip any node whose output is already present
-   * in nodeOutputs.
-   *
-   * `preSeededHandles` carries the branch each seeded node selected. A seeded
-   * node is never executed, so without these its routing would never be
-   * applied: every branch below a conditional decided before the pause — and
-   * both branches below the approval being resumed — would run.
-   */
-  async executeWithPreSeededOutputs(
-    workflow: WorkflowDefinition,
-    runId: string,
-    preSeededOutputs: Record<string, Record<string, unknown>>,
-    workflowId?: string,
-    options?: { selfHealing?: boolean; dryRun?: boolean },
-    preSeededHandles?: Record<string, string>,
-  ): Promise<EngineResult> {
-    return this.execute(workflow, runId, {}, undefined, workflowId, options, preSeededOutputs, preSeededHandles);
-  }
-
-  /**
    * Public entry point. Thin wrapper that:
    *  - #10: rejects/no-ops cleanly while draining (returns a failed result so
    *    callers' .then persisters run normally without special-casing),
@@ -297,7 +278,7 @@ export class WorkflowEngine {
     initialInput: Record<string, unknown>,
     breakpoints?: Set<string>,
     workflowId?: string,
-    options?: { selfHealing?: boolean; dryRun?: boolean },
+    options?: EngineRunOptions,
     preSeededOutputs?: Record<string, Record<string, unknown>>,
     preSeededHandles?: Record<string, string>,
   ): Promise<EngineResult> {
@@ -344,7 +325,7 @@ export class WorkflowEngine {
     abortController: AbortController,
     breakpoints?: Set<string>,
     workflowId?: string,
-    options?: { selfHealing?: boolean; dryRun?: boolean },
+    options?: EngineRunOptions,
     preSeededOutputs?: Record<string, Record<string, unknown>>,
     preSeededHandles?: Record<string, string>,
   ): Promise<EngineResult> {
@@ -368,7 +349,9 @@ export class WorkflowEngine {
     // Concurrency cap: queue if MAX_CONCURRENT_RUNS already in-flight. Cheap
     // when under cap, prevents starvation when bursts of webhook + scheduled
     // + manual triggers land in the same minute.
-    const releaseSlot = await acquireRunSlot(runId);
+    // A child run never queues for a slot: its parent holds one and is waiting
+    // on it, so five parents each starting a child would deadlock the cap.
+    const releaseSlot = options?.child ? () => {} : await acquireRunSlot(runId);
     // Heartbeat: writes workflow_runs.heartbeat_at every 10s so the reaper
     // can distinguish a wedged run from a legitimately long-running one.
     const stopHeartbeat = startHeartbeat(runId);
@@ -490,6 +473,9 @@ export class WorkflowEngine {
 
           const nodeStartedAt = Date.now();
           nodeStartTimes.set(nodeId, new Date(nodeStartedAt));
+          // Awaited, so the row says 'running' before any side effect: crash
+          // recovery must know which nodes were mid-flight when the process died.
+          await persistNodeRow(runId, nodeId, { status: 'running', startedAt: new Date(nodeStartedAt), inputData: nodeInputs.get(nodeId) ?? null });
           emit('node_started', nodeId);
           emitObs('node.started', {
             workflowId: workflowId ?? workflow.id,
@@ -540,7 +526,7 @@ export class WorkflowEngine {
             // #20 INCREMENTAL PERSIST: write the node's completed output to its
             // node_executions row now (best-effort, fire-and-forget). The
             // post-run persister re-writes the same runId+nodeId row idempotently.
-            void persistNodeCompletion(runId, nodeId, {
+            void persistNodeRow(runId, nodeId, {
               status: 'completed',
               startedAt: nodeStartTimes.get(nodeId),
               inputData: nodeInputs.get(nodeId) ?? null,
@@ -560,7 +546,7 @@ export class WorkflowEngine {
               error,
             });
             // #20 INCREMENTAL PERSIST: write the failure to its row now.
-            void persistNodeCompletion(runId, nodeId, {
+            void persistNodeRow(runId, nodeId, {
               status: 'failed',
               startedAt: nodeStartTimes.get(nodeId),
               // The input it failed on, so a single-node re-run can retry it.
@@ -614,8 +600,7 @@ export class WorkflowEngine {
           // executor call uniformly. Default is 'stop' (legacy behaviour).
           const onErrorCfg = (nodeDef.config?._onError as NodeOnErrorConfig | undefined) ?? { mode: 'stop' };
           const onErrorMode = onErrorCfg.mode ?? 'stop';
-          const onErrorRetries = Math.max(0, Math.min(10, Number(onErrorCfg.retries ?? 0)));
-          const onErrorDelayMs = Math.max(0, Number(onErrorCfg.retryDelayMs ?? 0));
+          const retryPolicy = retryPolicyFor(onErrorCfg, this.registry.getDefinition(nodeDef.type)?.idempotent === true);
 
           // Per-node hard timeout: a hung node aborts and surfaces as a
           // node-level failure rather than wedging the run forever. Optional
@@ -638,32 +623,21 @@ export class WorkflowEngine {
           }
 
           try {
-            // Retry wrapper: re-attempt up to `onErrorRetries` times before
-            // letting the caught path run. Pause signals propagate immediately
-            // and are never retried.
-            let result: NodeResult | null = null;
-            let attemptErr: unknown = null;
-            const maxAttempts = onErrorMode === 'retry' ? onErrorRetries + 1 : 1;
-            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-              try {
-                result = await withNodeTimeout(nodeId, nodeDef.type, timeoutMs, nodeController, () =>
-                  executionContext.run(execCtx, () =>
-                    executor.execute(mergedInput, resolvedConfig, context),
-                  ),
-                );
-                attemptErr = null;
-                break;
-              } catch (err) {
-                if (err instanceof PauseForHumanSignal) throw err;
-                attemptErr = err;
-                if (attempt < maxAttempts && onErrorDelayMs > 0) {
-                  await new Promise((r) => setTimeout(r, onErrorDelayMs));
-                }
-              }
-            }
-            if (attemptErr) throw attemptErr;
-            // Non-null after a successful attempt; assertion narrows the type.
-            const r = result as NodeResult;
+            // Typed retries with exponential backoff + jitter (errors.ts): a
+            // FatalError never retries; transient failures retry on idempotent
+            // nodes; `_onError` retry mode retries anything not fatal.
+            const r: NodeResult = await runWithRetries(
+              () => withNodeTimeout(nodeId, nodeDef.type, timeoutMs, nodeController, () =>
+                executionContext.run(execCtx, () => executor.execute(mergedInput, resolvedConfig, context)),
+              ),
+              retryPolicy,
+              {
+                signal: nodeController.signal,
+                onRetry: (attempt, e, delayMs) => console.warn(
+                  `[engine] node.retry run=${runId} node=${nodeId} attempt=${attempt} in=${delayMs}ms err=${(e instanceof Error ? e.message : String(e)).slice(0, 160)}`,
+                ),
+              },
+            );
 
             // Option A pause sentinel: node executor requests human interaction.
             if (r.pause?.reason === 'awaiting_human') {
@@ -749,8 +723,10 @@ export class WorkflowEngine {
             // types that skip healing entirely, regardless of the caller's
             // selfHealing flag.
             const HEALING_EXEMPT_TYPES = new Set(['site-mapper']);
+            // A transient failure (network, 429, 5xx) is not a config problem:
+            // asking a model to rewrite the config for it only burns calls.
             const selfHealing =
-              options?.selfHealing !== false && !HEALING_EXEMPT_TYPES.has(nodeDef.type);
+              options?.selfHealing !== false && !HEALING_EXEMPT_TYPES.has(nodeDef.type) && classifyError(err) !== 'retryable';
             console.log(`[healing] Node ${nodeId} (${nodeDef.type}) failed: ${message.slice(0, 100)}`);
 
             if (!selfHealing) {

@@ -2,6 +2,7 @@ import type { NodeExecutor, NodeResult, ExecutionContext } from '../types';
 import { interpolateTemplate } from './template';
 import { createNote, processNote } from '$lib/jkai/intel/ingest';
 import { OWNER_SPACE } from '$lib/jkai/intel/scope';
+import { FatalError } from '../errors';
 
 export { intelWriteDef } from './intel-write.def';
 
@@ -17,9 +18,7 @@ export const intelWriteExecutor: NodeExecutor = {
     context: ExecutionContext,
   ): Promise<NodeResult> {
     const content = interpolateTemplate((config.content as string) || '', input).trim();
-    if (!content) {
-      return { output: { success: false, error: 'intel-write: content is required' }, rowCount: 1 };
-    }
+    if (!content) throw new FatalError('intel-write: content is required');
 
     const rawTitle = interpolateTemplate((config.title as string) || '', input).trim();
     const title = rawTitle || undefined;

@@ -3,6 +3,7 @@ import type { NodeDefinition } from '../types';
 export const gmailTriggerDef: NodeDefinition = {
   type: 'gmail-trigger',
   category: 'trigger',
+  idempotent: true,
   label: 'Gmail Trigger',
   description: 'Fires when a new Gmail message matches a watched query',
   defaultConfig: { accountId: 0, watchId: null },

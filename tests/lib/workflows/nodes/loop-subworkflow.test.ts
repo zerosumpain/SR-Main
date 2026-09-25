@@ -156,6 +156,16 @@ describe('loop — subworkflow mode', () => {
     expect(failed?.error).toBe('kaboom');
   });
 
+  it('a child that pauses for a person is a failed item: a loop cannot wait', async () => {
+    mockRun.mockResolvedValue({ status: 'awaiting_human', output: {}, subRunId: 'r' });
+    const res = await loopExecutor.execute(
+      { rows: items(1) },
+      { mode: 'subworkflow', arrayPath: 'rows', subWorkflowId: 'sub-wf' },
+      makeContext(),
+    );
+    expect(asResults(res.output)[0]).toMatchObject({ status: 'failed', error: expect.stringMatching(/paused for a person/) });
+  });
+
   it('failurePolicy=stop halts on the first failure', async () => {
     mockRun.mockImplementation(async (_def, input) => {
       if ((input as { index: number }).index === 0) {
@@ -177,13 +187,11 @@ describe('loop — subworkflow mode', () => {
   });
 
   it('rejects self-recursion (subWorkflowId === current workflowId) before invoking', async () => {
-    const res = await loopExecutor.execute(
+    await expect(loopExecutor.execute(
       { rows: items(2) },
       { mode: 'subworkflow', arrayPath: 'rows', subWorkflowId: 'parent-wf' },
       makeContext({ workflowId: 'parent-wf' }),
-    );
-
-    expect(res.output.error).toMatch(/self-recursion/i);
+    )).rejects.toThrow(/self-recursion/i);
     expect(mockLoad).not.toHaveBeenCalled();
     expect(mockRun).not.toHaveBeenCalled();
   });
@@ -235,33 +243,30 @@ describe('loop — subworkflow mode', () => {
   });
 
   it('errors when the array path is not an array', async () => {
-    const res = await loopExecutor.execute(
+    await expect(loopExecutor.execute(
       { rows: 'nope' },
       { mode: 'subworkflow', arrayPath: 'rows', subWorkflowId: 'sub-wf' },
       makeContext(),
-    );
-    expect(res.output).toEqual({ error: 'Not an array', path: 'rows' });
+    )).rejects.toThrow('Not an array at path "rows"');
     expect(mockRun).not.toHaveBeenCalled();
   });
 
   it('errors when no subWorkflowId is configured', async () => {
-    const res = await loopExecutor.execute(
+    await expect(loopExecutor.execute(
       { rows: items(2) },
       { mode: 'subworkflow', arrayPath: 'rows' },
       makeContext(),
-    );
-    expect(res.output.error).toMatch(/no subworkflowid/i);
+    )).rejects.toThrow(/no subworkflowid/i);
     expect(mockLoad).not.toHaveBeenCalled();
   });
 
   it('errors when the sub-workflow id does not resolve', async () => {
     mockLoad.mockResolvedValue(null);
-    const res = await loopExecutor.execute(
+    await expect(loopExecutor.execute(
       { rows: items(2) },
       { mode: 'subworkflow', arrayPath: 'rows', subWorkflowId: 'ghost' },
       makeContext(),
-    );
-    expect(res.output.error).toMatch(/not found/i);
+    )).rejects.toThrow(/not found/i);
     expect(mockRun).not.toHaveBeenCalled();
   });
 });

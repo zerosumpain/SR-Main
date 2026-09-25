@@ -29,8 +29,7 @@ describe('quick-answer executor', () => {
   });
 
   it('errors when topic is empty after interpolation', async () => {
-    const res = await quickAnswerExecutor.execute({}, { topic: '' }, ctx());
-    expect(res.output.success).toBe(false);
+    await expect(quickAnswerExecutor.execute({}, { topic: '' }, ctx())).rejects.toThrow(/Topic is required/);
   });
 
   it('inserts a row, runs the worker synchronously, and returns the answer', async () => {

@@ -13,14 +13,8 @@
  * re-claimable once its lease expires.
  */
 
-import { db } from '$lib/db';
-import { workflowRuns, nodeExecutions } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
-import { engine } from '$lib/workflows';
-import type { WorkflowDefinition } from './types';
-import { loadDefinition } from './start-run';
-import { emitObs } from './observability-bus';
-import { finaliseRun } from './run-finalise';
+import { executeRun, loadPinnedDefinition } from './start-run';
+import { failRun } from './run-finalise';
 import {
   claimNext,
   renewLease,
@@ -43,32 +37,9 @@ let stopping = false;
 let workerId = '';
 let loopPromise: Promise<void> | null = null;
 
-/** The worker id for this process (set on start). Exported for diagnostics. */
-export function getWorkerId(): string {
-  return workerId;
-}
-
-/** Ensure pending node_executions rows exist for the run (idempotent — the
- *  enqueuing route/scheduler already creates them; this is a safety net for
- *  runs enqueued without them). */
-async function ensureNodeExecutions(runId: string, def: WorkflowDefinition): Promise<void> {
-  const existing = await db
-    .select({ nodeId: nodeExecutions.nodeId })
-    .from(nodeExecutions)
-    .where(eq(nodeExecutions.runId, runId));
-  const have = new Set(existing.map((r) => r.nodeId));
-  for (const node of def.nodes) {
-    if (!have.has(node.id)) {
-      await db.insert(nodeExecutions).values({ runId, nodeId: node.id, status: 'pending' });
-    }
-  }
-}
-
 /** Execute one claimed run end-to-end with a lease-renewal heartbeat. */
 async function executeClaimed(claimed: ClaimedRun): Promise<void> {
   const { id: runId, workflowId } = claimed;
-  const runStartedAt = Date.now();
-
   // Lease-renewal heartbeat: keeps our claim alive while the run executes.
   const renewTimer = setInterval(() => {
     void renewLease(runId, workerId, LEASE_MS).catch((e) =>
@@ -77,39 +48,27 @@ async function executeClaimed(claimed: ClaimedRun): Promise<void> {
   }, RENEW_INTERVAL_MS);
 
   try {
-    const def = await loadDefinition(workflowId);
+    // The version pinned when the run was enqueued, not the graph as it is now.
+    const def = await loadPinnedDefinition(claimed);
     if (!def) {
-      await db
-        .update(workflowRuns)
-        .set({ status: 'failed', completedAt: new Date(), error: `workflow ${workflowId} not found` })
-        .where(eq(workflowRuns.id, runId));
+      await failRun({ workflowId, runId, error: `workflow ${workflowId} not found`, label: 'run-worker' });
       return;
     }
-    await ensureNodeExecutions(runId, def);
-
-    emitObs('run.started', {
-      workflowId,
-      runId,
-      trigger: (claimed.trigger as 'manual' | 'scheduled' | 'event') ?? 'manual',
-      startedAt: new Date(runStartedAt).toISOString(),
-    });
-
-    const result = await engine.execute(def, runId, claimed.input ?? {}, undefined, workflowId, { selfHealing: true });
-    // Same finaliser as every in-process start path. Note: this process has its
+    // Same kernel as every in-process start path. Note: this process has its
     // own platform bus, so the workflow_completed it emits reaches listeners in
-    // the WORKER process only — a durable cross-process event log is later work.
-    await finaliseRun({ workflowId, runId, result, runStartedAt, label: 'run-worker' });
+    // the WORKER process only.
+    await executeRun({
+      runId,
+      workflowId,
+      definition: def,
+      input: claimed.input ?? {},
+      trigger: claimed.trigger,
+      selfHealing: true,
+      label: 'run-worker',
+    });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`[run-worker] run ${runId} threw:`, message);
-    try {
-      await db
-        .update(workflowRuns)
-        .set({ status: 'failed', completedAt: new Date(), error: message })
-        .where(eq(workflowRuns.id, runId));
-    } catch {
-      /* swallow */
-    }
+    console.error(`[run-worker] run ${runId} threw:`, err instanceof Error ? err.message : err);
+    await failRun({ workflowId, runId, error: err, label: 'run-worker' }).catch(() => {});
   } finally {
     clearInterval(renewTimer);
     await clearLease(runId, workerId).catch(() => {});

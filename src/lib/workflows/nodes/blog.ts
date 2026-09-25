@@ -1,6 +1,7 @@
 import type { NodeExecutor, NodeResult, ExecutionContext } from '../types';
 import { executeSiteTool } from '$lib/workflows/site-tools/executor';
 import { interpolateTemplate } from './template';
+import { FatalError } from '../errors';
 
 export { blogDef } from './blog.def';
 
@@ -13,9 +14,7 @@ export const blogExecutor: NodeExecutor = {
     context: ExecutionContext,
   ): Promise<NodeResult> {
     const operation = config.operation as string | undefined;
-    if (!operation) {
-      return { output: { success: false, error: 'No operation configured' }, rowCount: 1 };
-    }
+    if (!operation) throw new FatalError('No operation configured');
 
     switch (operation) {
       case 'list': {
@@ -25,7 +24,7 @@ export const blogExecutor: NodeExecutor = {
 
       case 'get': {
         const postId = interpolateTemplate((config.postId as string) || '', input);
-        if (!postId) return { output: { success: false, error: 'No postId configured' }, rowCount: 1 };
+        if (!postId) throw new FatalError('No postId configured');
         const result = await executeSiteTool('site_blog_get', { postId });
         return { output: result, rowCount: 1 };
       }
@@ -33,7 +32,7 @@ export const blogExecutor: NodeExecutor = {
       case 'create': {
         const title = interpolateTemplate((config.title as string) || '', input);
         const content = interpolateTemplate((config.content as string) || '', input);
-        if (!title) return { output: { success: false, error: 'Title is required for create' }, rowCount: 1 };
+        if (!title) throw new FatalError('Title is required for create');
         if (context.dryRun) {
           return {
             output: {
@@ -57,7 +56,7 @@ export const blogExecutor: NodeExecutor = {
 
       case 'update': {
         const postId = interpolateTemplate((config.postId as string) || '', input);
-        if (!postId) return { output: { success: false, error: 'No postId configured for update' }, rowCount: 1 };
+        if (!postId) throw new FatalError('No postId configured for update');
         const interpolatedTitle = config.title ? interpolateTemplate((config.title as string), input) : undefined;
         if (context.dryRun) {
           return {
@@ -83,7 +82,7 @@ export const blogExecutor: NodeExecutor = {
       }
 
       default:
-        return { output: { success: false, error: `Unknown operation: ${operation}` }, rowCount: 1 };
+        throw new FatalError(`Unknown operation: ${operation}`);
     }
   },
 

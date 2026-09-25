@@ -4,6 +4,7 @@ export const errorHandlerDef: NodeDefinition = {
   type: 'error-handler',
   label: 'Error Handler',
   category: 'control',
+  idempotent: true,
   description:
     'Routes to success or error output based on error detection: checks for an explicit error field OR HTTP status codes >= 400 from upstream http-request nodes.',
   configSchema: {

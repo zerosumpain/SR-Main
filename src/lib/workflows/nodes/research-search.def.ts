@@ -10,6 +10,7 @@ export const researchSearchDef: NodeDefinition = {
   type: 'research-search',
   label: 'Research search (RAG)',
   category: 'integration',
+  idempotent: true,
   description:
     'Semantic search across the MATERIALS of every deep-dive research session at once — distilled facts AND raw source passages — ranked by meaning. Cross-session research memory for grounding a workflow.',
   configSchema: {

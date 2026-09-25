@@ -22,9 +22,7 @@ describe('deep-research executor', () => {
   });
 
   it('returns error when topic is missing', async () => {
-    const res = await deepResearchExecutor.execute({}, { topic: '' }, ctx());
-    expect(res.output.success).toBe(false);
-    expect(res.output.error).toMatch(/topic/i);
+    await expect(deepResearchExecutor.execute({}, { topic: '' }, ctx())).rejects.toThrow(/topic/i);
   });
 
   // A budgeted tier (instant/scan/brief) finishes inside research_start, which

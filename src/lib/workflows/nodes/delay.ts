@@ -26,6 +26,7 @@ export const delayDef: NodeDefinition = {
   type: 'delay',
   label: 'Delay',
   category: 'control',
+  idempotent: true,
   description: 'Wait a fixed duration, then pass input through unchanged.',
   configSchema: {
     type: 'object',

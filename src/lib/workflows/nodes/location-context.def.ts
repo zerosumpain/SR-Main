@@ -4,6 +4,7 @@ export const locationContextDef: NodeDefinition = {
   type: 'location-context',
   label: 'Location context',
   category: 'integration',
+  idempotent: true,
   description:
     'Resolve where home is and where the person actually is right now, from Home Assistant. Returns both coordinate pairs plus distance, place label and staleness — the input for location-aware weather and briefings.',
   configSchema: {

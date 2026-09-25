@@ -1,6 +1,7 @@
 import type { NodeExecutor, NodeResult, ExecutionContext } from '../types';
 import { executeSiteTool } from '$lib/workflows/site-tools/executor';
 import { interpolateTemplate } from './template';
+import { FatalError } from '../errors';
 
 export { deepDiveDef } from './deep-dive.def';
 
@@ -13,15 +14,13 @@ export const deepDiveExecutor: NodeExecutor = {
     _context: ExecutionContext,
   ): Promise<NodeResult> {
     const operation = config.operation as string | undefined;
-    if (!operation) {
-      return { output: { success: false, error: 'No operation configured' }, rowCount: 1 };
-    }
+    if (!operation) throw new FatalError('No operation configured');
 
     switch (operation) {
       case 'start': {
         const topic = interpolateTemplate((config.topic as string) || '', input);
         const goals = interpolateTemplate((config.goals as string) || '', input);
-        if (!topic) return { output: { success: false, error: 'Topic is required to start research' }, rowCount: 1 };
+        if (!topic) throw new FatalError('Topic is required to start research');
         const args: Record<string, unknown> = { topic };
         if (goals) args.goals = goals;
         if (config.depth) args.depth = config.depth;
@@ -31,7 +30,7 @@ export const deepDiveExecutor: NodeExecutor = {
 
       case 'status': {
         const sessionId = interpolateTemplate((config.sessionId as string) || '', input);
-        if (!sessionId) return { output: { success: false, error: 'Session ID is required' }, rowCount: 1 };
+        if (!sessionId) throw new FatalError('Session ID is required');
         const result = await executeSiteTool('research_status', { id: sessionId });
         return { output: result, rowCount: 1 };
       }
@@ -43,7 +42,7 @@ export const deepDiveExecutor: NodeExecutor = {
 
       case 'report': {
         const sessionId = interpolateTemplate((config.sessionId as string) || '', input);
-        if (!sessionId) return { output: { success: false, error: 'Session ID is required for report' }, rowCount: 1 };
+        if (!sessionId) throw new FatalError('Session ID is required for report');
         const result = await executeSiteTool('research_get_report', { id: sessionId });
         return { output: result, rowCount: 1 };
       }
@@ -51,14 +50,14 @@ export const deepDiveExecutor: NodeExecutor = {
       case 'control': {
         const sessionId = interpolateTemplate((config.sessionId as string) || '', input);
         const action = config.action as string;
-        if (!sessionId) return { output: { success: false, error: 'Session ID is required' }, rowCount: 1 };
-        if (!action) return { output: { success: false, error: 'Action is required' }, rowCount: 1 };
+        if (!sessionId) throw new FatalError('Session ID is required');
+        if (!action) throw new FatalError('Action is required');
         const result = await executeSiteTool('research_control', { id: sessionId, action });
         return { output: result, rowCount: 1 };
       }
 
       default:
-        return { output: { success: false, error: `Unknown operation: ${operation}` }, rowCount: 1 };
+        throw new FatalError(`Unknown operation: ${operation}`);
     }
   },
 

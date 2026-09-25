@@ -1,11 +1,10 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { workflows, workflowNodes, workflowRuns, nodeExecutions } from '$lib/db/schema';
+import { workflows, workflowNodes, nodeExecutions } from '$lib/db/schema';
 import { and, eq, desc, isNotNull, sql } from 'drizzle-orm';
-import type { WorkflowDefinition } from '$lib/workflows';
 import { isDisplayOnlyType } from '$lib/workflows/types';
-import { runWorkflowAndPersist } from '$lib/workflows/run-helpers';
+import { startRun } from '$lib/workflows/start-run';
 
 /**
  * POST /api/workflows/:id/nodes/:nodeId/run
@@ -72,46 +71,30 @@ export const POST: RequestHandler = async ({ params, request }) => {
     }
   }
 
-  const [run] = await db
-    .insert(workflowRuns)
-    .values({
-      workflowId: params.id!,
-      status: 'running',
-      trigger: 'manual',
-      startedAt: new Date(),
-    })
-    .returning();
-
-  await db.insert(nodeExecutions).values({
-    runId: run.id,
-    nodeId: node.id,
-    status: 'pending',
-  });
-
-  const definition: WorkflowDefinition = {
-    id: workflow.id,
-    name: workflow.name,
-    nodes: [
-      {
+  // A definition of just this node and no edges, so nothing up- or downstream
+  // runs. Self-healing is off: healing fires another LLM diagnosis loop on
+  // failure, and the user clicked Re-Run to iterate — fast failure is a feature.
+  const started = await startRun({
+    workflowId: params.id!,
+    trigger: 'manual',
+    input: initialInput,
+    definition: {
+      id: workflow.id,
+      name: workflow.name,
+      nodes: [{
         id: node.id,
         type: node.type,
         position: node.position as { x: number; y: number },
         config: (node.config ?? {}) as Record<string, unknown>,
         label: node.label,
-      },
-    ],
-    edges: [],
-  };
-
-  // Single-node Re-Run disables self-healing: healing fires another LLM
-  // diagnosis loop on node failure, which for LLM-driven nodes (site-mapper,
-  // llm-call, etc.) just burns 3×60s retrying the same thing. The user
-  // clicked Re-Run because they want to iterate — fast failure is a feature.
-  runWorkflowAndPersist(definition, run.id, initialInput, {
-    workflowId: params.id!,
-    label: 'node-rerun',
+      }],
+      edges: [],
+    },
     selfHealing: false,
+    watchdog: true,
+    label: 'node-rerun',
   });
+  if (!started) throw error(404, 'workflow not found');
 
-  return json({ runId: run.id, nodeId: node.id, status: 'running' }, { status: 201 });
+  return json({ runId: started.runId, nodeId: node.id, status: 'running' }, { status: 201 });
 };

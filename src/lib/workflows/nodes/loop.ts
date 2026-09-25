@@ -1,6 +1,7 @@
 import type { NodeExecutor, NodeResult, ExecutionContext, JsonSchema } from '../types';
 import { safeFunction } from '$lib/utils/safe-eval';
 import { getPath as resolvePath } from '../expressions';
+import { FatalError } from '../errors';
 
 export { loopDef } from './loop.def';
 
@@ -22,11 +23,9 @@ interface LoopItemResult {
  * Guards: rejects a missing/self-referential sub-workflow id; honours
  * `context.abortSignal` between items; dryRun never invokes anything.
  *
- * NOTE: each invocation runs the sub-workflow through `engine.execute`, which
- * acquires a global run slot (MAX_CONCURRENT_RUNS, default 5). The parent run
- * holds one slot while this node fans out, so effective parallelism is bounded
- * by both `concurrency` here AND the free run-slot budget — keep `concurrency`
- * comfortably under MAX_CONCURRENT_RUNS to avoid queuing behind the cap.
+ * Each item is a child run (its own workflow_runs row). Children never take a
+ * top-level run slot, so a fan-out cannot deadlock behind MAX_CONCURRENT_RUNS.
+ * A child that pauses for a person counts as a failed item: a loop cannot wait.
  */
 async function executeSubworkflowMode(
   input: Record<string, unknown>,
@@ -36,23 +35,14 @@ async function executeSubworkflowMode(
   const arrayPath = (config.arrayPath as string) || '';
   const array = resolvePath(input, arrayPath);
 
-  if (!Array.isArray(array)) {
-    return { output: { error: 'Not an array', path: arrayPath }, rowCount: 1 };
-  }
+  if (!Array.isArray(array)) throw new FatalError(`Not an array at path "${arrayPath}"`);
 
   const subWorkflowId = String(config.subWorkflowId ?? '').trim();
-  if (!subWorkflowId) {
-    return { output: { error: 'No subWorkflowId configured' }, rowCount: 1 };
-  }
+  if (!subWorkflowId) throw new FatalError('No subWorkflowId configured');
 
   // Hard self-recursion reject: a loop must never invoke its own workflow.
   if (subWorkflowId === context.workflowId) {
-    return {
-      output: {
-        error: `Self-recursion rejected: loop cannot invoke its own workflow (${subWorkflowId})`,
-      },
-      rowCount: 1,
-    };
+    throw new FatalError(`Self-recursion rejected: loop cannot invoke its own workflow (${subWorkflowId})`);
   }
 
   // maxItems: hard cap on how many elements we fan out (default 50).
@@ -88,9 +78,7 @@ async function executeSubworkflowMode(
   );
 
   const definition = await loadSubWorkflowDefinition(subWorkflowId);
-  if (!definition) {
-    return { output: { error: `Sub-workflow not found: ${subWorkflowId}` }, rowCount: 1 };
-  }
+  if (!definition) throw new FatalError(`Sub-workflow not found: ${subWorkflowId}`);
 
   // Sparse array — each worker writes its result at the item's original index,
   // so output order matches input order regardless of completion order.
@@ -110,14 +98,10 @@ async function executeSubworkflowMode(
       if (i >= items.length) return;
 
       try {
-        const res = await runSubWorkflowDefinition(
-          definition,
-          { item: items[i], index: i },
-          context,
-          `subloop-${context.runId}-${i}-${crypto.randomUUID().slice(0, 8)}`,
-        );
-        if (res.status === 'failed' || res.status === 'completed_with_errors') {
-          results[i] = { index: i, status: 'failed', error: res.error || 'Sub-workflow error' };
+        const res = await runSubWorkflowDefinition(definition, { item: items[i], index: i }, context);
+        if (res.status !== 'completed') {
+          const error = res.status === 'awaiting_human' ? 'Sub-workflow paused for a person; loop items cannot wait' : res.error;
+          results[i] = { index: i, status: 'failed', error: error || 'Sub-workflow error' };
           if (failurePolicy === 'stop') {
             stopped = true;
             return;
@@ -186,9 +170,7 @@ export const loopExecutor: NodeExecutor = {
     const arrayPath = (config.arrayPath as string) || '';
     const array = resolvePath(input, arrayPath);
 
-    if (!Array.isArray(array)) {
-      return { output: { error: 'Not an array', path: arrayPath }, rowCount: 1 };
-    }
+    if (!Array.isArray(array)) throw new FatalError(`Not an array at path "${arrayPath}"`);
 
     // Compile the per-item expression once (it is synchronous: `new Function`).
     const fn = config.expression

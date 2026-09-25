@@ -112,12 +112,22 @@ export function startHeartbeat(runId: string): () => void {
   return () => { stopped = true; clearInterval(id); };
 }
 
-/** One pass of the stale-run reaper. Marks runs whose heartbeat is older than
- *  STALE_HEARTBEAT_MS (or never set + startedAt older than the threshold) as
- *  `failed` with an explanatory error. Returns the count of reaped runs. */
-export async function reapStaleRuns(): Promise<number> {
-  const cutoff = new Date(Date.now() - STALE_HEARTBEAT_MS);
-  const stale = await db
+/** Heartbeat age that proves the owning process is gone when THIS one just booted. */
+const BOOT_STALE_MS = 30_000;
+const BOOT_SWEEP_DELAY_MS = 45_000;
+const ABANDONED = 'abandoned: heartbeat stale (engine crashed, restarted, or run wedged)';
+
+/**
+ * One pass of the stale-run reaper. A run whose heartbeat is older than
+ * `staleMs` (or never set, started before it) has lost its process. In-process
+ * mode resumes it once from its persisted outputs (engine-resume.recoverRun —
+ * which fails it instead when a side-effecting step was cut off mid-flight);
+ * a `pending` run, or any run in worker mode, is failed as before. Returns the
+ * count of runs handled.
+ */
+export async function reapStaleRuns(staleMs = STALE_HEARTBEAT_MS): Promise<number> {
+  const cutoff = new Date(Date.now() - staleMs);
+  const rows = await db
     .select({ id: workflowRuns.id, status: workflowRuns.status })
     .from(workflowRuns)
     .where(
@@ -130,27 +140,43 @@ export async function reapStaleRuns(): Promise<number> {
         ),
       ),
     );
+  // A run this process is still executing (a long event-loop stall starves the
+  // heartbeat timer) is not abandoned.
+  const { isRunInFlight } = await import('./engine');
+  const stale = rows.filter((r) => !isRunInFlight(r.id));
   if (stale.length === 0) return 0;
-  const ids = stale.map((r) => r.id);
-  await db.update(workflowRuns)
-    .set({
-      status: 'failed',
-      completedAt: new Date(),
-      error: 'abandoned: heartbeat stale (engine crashed, restarted, or run wedged)',
-    })
-    .where(inArray(workflowRuns.id, ids));
-  console.warn(`[engine-runtime] reaped ${ids.length} stale run(s):`, ids.slice(0, 10).join(', '));
-  return ids.length;
+  const recoverable = process.env.JKAI_RUN_WORKER === '1' ? [] : stale.filter((r) => r.status !== 'pending');
+  const failIds = stale.filter((r) => !recoverable.includes(r)).map((r) => r.id);
+  if (failIds.length > 0) {
+    await db.update(workflowRuns)
+      .set({ status: 'failed', completedAt: new Date(), error: ABANDONED })
+      .where(inArray(workflowRuns.id, failIds));
+  }
+  if (recoverable.length > 0) {
+    const { recoverRun } = await import('./engine-resume');
+    for (const r of recoverable) {
+      const outcome = await recoverRun(r.id, ABANDONED).catch((e) => {
+        console.warn(`[engine-runtime] recovery of ${r.id} threw:`, e instanceof Error ? e.message : e);
+        return 'error';
+      });
+      console.warn(`[engine-runtime] stale run ${r.id} (${r.status}) → ${outcome}`);
+    }
+  }
+  if (failIds.length > 0) console.warn(`[engine-runtime] reaped ${failIds.length} stale run(s):`, failIds.slice(0, 10).join(', '));
+  return stale.length;
 }
 
 let reaperStarted = false;
 export function startReaper(): void {
   if (reaperStarted) return;
   reaperStarted = true;
-  // Boot sweep first — clears anything left behind by the previous process
-  // (deploy mid-run, OOM, manual restart). Then a periodic sweep catches
-  // anything that wedges later.
-  void reapStaleRuns().catch((e) => console.warn('[engine-runtime] boot reap failed:', e));
+  // Boot sweep: anything left `running` by the previous process, or parked
+  // `paused` by the deploy drain, resumes here. A short delay and a 30s
+  // threshold are enough — a live process heartbeats every 10s — so a deploy
+  // no longer waits five minutes to either resume or kill its runs.
+  setTimeout(() => {
+    void reapStaleRuns(BOOT_STALE_MS).catch((e) => console.warn('[engine-runtime] boot reap failed:', e));
+  }, BOOT_SWEEP_DELAY_MS).unref();
   setInterval(() => {
     void reapStaleRuns().catch((e) => console.warn('[engine-runtime] periodic reap failed:', e));
   }, REAPER_INTERVAL_MS).unref();
@@ -312,9 +338,4 @@ export function startBlockReporter(): void {
     console.warn(`[runtime] event loop blocked ~${drift}ms during ${where}`);
   }, SAMPLE_MS);
   sampler.unref?.();
-}
-
-export function stopBlockReporter(): void {
-  if (sampler) clearInterval(sampler);
-  sampler = null;
 }

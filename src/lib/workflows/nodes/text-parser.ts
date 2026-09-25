@@ -1,4 +1,5 @@
 import type { NodeExecutor, NodeDefinition, NodeResult, ExecutionContext, JsonSchema } from '../types';
+import { FatalError } from '../errors';
 
 export const textParserExecutor: NodeExecutor = {
   type: 'text-parser',
@@ -54,13 +55,7 @@ export const textParserExecutor: NodeExecutor = {
       const pattern = (config.pattern as string) || '';
       const flags = (config.flags as string) || '';
 
-      if (!pattern) {
-        return {
-          output: { ...input, match: null, groups: null, allMatches: [], error: 'No pattern provided' },
-          logs: ['text-parser: no regex pattern configured'],
-          rowCount: 1,
-        };
-      }
+      if (!pattern) throw new FatalError('text-parser: no regex pattern configured');
 
       try {
         const re = new RegExp(pattern, flags);
@@ -97,11 +92,7 @@ export const textParserExecutor: NodeExecutor = {
       return { output: { ...input, items, count: items.length }, rowCount: items.length };
     }
 
-    return {
-      output: { ...input, error: `Unknown mode: ${mode}` },
-      logs: [`text-parser: unknown mode "${mode}"`],
-      rowCount: 1,
-    };
+    throw new FatalError(`text-parser: unknown mode "${mode}"`);
   },
 
   getInputSchema() {
@@ -136,6 +127,7 @@ export const textParserDef: NodeDefinition = {
   type: 'text-parser',
   label: 'Text Parser',
   category: 'core',
+  idempotent: true,
   description: 'Extract structured data from text: JSON extraction, regex matching, or text splitting.',
   configSchema: {
     type: 'object',

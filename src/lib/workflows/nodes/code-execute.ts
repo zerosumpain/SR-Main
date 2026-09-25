@@ -3,6 +3,7 @@ import { withBranches } from '../engine-node-runner';
 import { ensureContainerRunning, execInContainer, writeFileInContainer } from '$lib/jkai/sandbox';
 import { loadKeys } from '$lib/llm/keys';
 import { getOpenRouterApiKey } from '$lib/server/models/settings';
+import { FatalError } from '../errors';
 
 export { codeExecuteDef } from './code-execute.def';
 
@@ -36,9 +37,7 @@ export const codeExecuteExecutor: NodeExecutor = {
     const code = config.code as string;
     const logs: string[] = [];
 
-    if (!code) {
-      return { output: { error: 'No code provided' }, logs: ['No code provided'], rowCount: 1 };
-    }
+    if (!code) throw new FatalError('No code provided');
 
     if (context.dryRun) {
       return {
@@ -113,13 +112,8 @@ export const codeExecuteExecutor: NodeExecutor = {
       logs.push(result.stderr);
     }
 
-    if (result.exitCode !== 0) {
-      return {
-        output: { error: result.stderr || 'Non-zero exit code', exitCode: result.exitCode },
-        logs,
-        rowCount: 1,
-      };
-    }
+    // A failed script is a failed step, not an output shaped like one.
+    if (result.exitCode !== 0) throw new Error(`Exit code ${result.exitCode}: ${result.stderr || 'no stderr'}`);
 
     // Try to parse the last line of stdout as JSON output
     const stdoutLines = result.stdout.trim().split('\n');

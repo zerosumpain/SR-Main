@@ -1,10 +1,8 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { workflows, workflowNodes, workflowEdges, workflowRuns } from '$lib/db/schema';
+import { workflows } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { engine } from '$lib/workflows';
-import type { WorkflowDefinition } from '$lib/workflows';
 import {
   isWebhookSignatureAuthorized,
   WEBHOOK_SIGNATURE_HEADER,
@@ -14,7 +12,7 @@ import {
 import { assertPublicRequestBudget } from '$lib/server/public-request-guard';
 import { readLimitedText } from '$lib/server/service-auth';
 import { isOwnerEmail } from '$lib/server/access';
-import { finaliseRun, failRun } from '$lib/workflows/run-finalise';
+import { startRun } from '$lib/workflows/start-run';
 
 const seenSignatures = new Map<string, number>();
 
@@ -73,56 +71,10 @@ export const POST: RequestHandler = async (event) => {
   }
   catch { return json({ error: 'Invalid JSON' }, { status: 400 }); }
 
-  const nodes = await db.select().from(workflowNodes).where(eq(workflowNodes.workflowId, params.id));
-  const edges = await db.select().from(workflowEdges).where(eq(workflowEdges.workflowId, params.id));
-
-  const [run] = await db.insert(workflowRuns).values({
-    workflowId: params.id,
-    status: 'running',
-    trigger: 'webhook',
-    startedAt: new Date(),
-    // Persist the webhook payload so the enqueue path (worker mode) can replay
-    // it; the in-process path below passes `body` directly and ignores this.
-    inputData: body,
-  }).returning();
-
-  const definition: WorkflowDefinition = {
-    id: workflow.id,
-    name: workflow.name,
-    nodes: nodes.map(n => ({
-      id: n.id,
-      type: n.type,
-      position: n.position as { x: number; y: number },
-      config: (n.config || {}) as Record<string, unknown>,
-      label: n.label,
-    })),
-    edges: edges.map(e => ({
-      id: e.id,
-      sourceNodeId: e.sourceNodeId,
-      targetNodeId: e.targetNodeId,
-      sourceHandle: e.sourceHandle,
-      targetHandle: e.targetHandle,
-    })),
-  };
-
-  // #19 DISPATCH SWITCH (ADDITIVE, FEATURE-FLAGGED): in worker mode, enqueue the
-  // run (payload already persisted to input_data above) for the out-of-process
-  // worker and return. When the flag is OFF this is skipped and execution runs
-  // in-process below, byte-for-byte as before.
-  if (process.env.JKAI_RUN_WORKER === '1') {
-    const { enqueue } = await import('$lib/workflows/run-queue');
-    await enqueue(run.id);
-    return json({ runId: run.id, status: 'accepted' }, { status: 202 });
-  }
-
-  // Execute in background; the shared finaliser records pausedAtNodeId (so a
-  // webhook run that hits an approval can resume), node rows and the
-  // workflow_completed this path never used to emit.
-  const runStartedAt = Date.now();
-  engine
-    .execute(definition, run.id, body, undefined, params.id)
-    .then((result) => finaliseRun({ workflowId: params.id, runId: run.id, result, runStartedAt, label: 'webhook' }))
-    .catch((err) => failRun({ workflowId: params.id, runId: run.id, error: err, label: 'webhook' }));
-
-  return json({ runId: run.id, status: 'accepted' }, { status: 202 });
+  // The run kernel records pausedAtNodeId (so a webhook run that hits an
+  // approval can resume), node rows and workflow_completed; in worker mode it
+  // enqueues with the payload persisted for replay.
+  const started = await startRun({ workflowId: params.id, trigger: 'webhook', input: body, label: 'webhook' });
+  if (!started) return json({ error: 'Workflow not found' }, { status: 404 });
+  return json({ runId: started.runId, status: 'accepted' }, { status: 202 });
 };

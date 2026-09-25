@@ -56,8 +56,8 @@ vi.mock('$lib/db', () => {
   return { db };
 });
 
-const runWorkflowAndPersist = vi.hoisted(() => vi.fn());
-vi.mock('$lib/workflows/run-helpers', () => ({ runWorkflowAndPersist }));
+const startRun = vi.hoisted(() => vi.fn(async () => ({ runId: 'run-new', status: 'running', done: Promise.resolve(null) })));
+vi.mock('$lib/workflows/start-run', () => ({ startRun }));
 
 import { POST } from './+server';
 
@@ -68,7 +68,7 @@ function flatten(p: unknown): Array<{ op: string; col?: unknown; val?: unknown }
 }
 
 beforeEach(() => {
-  runWorkflowAndPersist.mockReset();
+  startRun.mockClear();
   cap.seedWhere = null;
   cap.seedRows = [];
 });
@@ -85,12 +85,12 @@ describe('POST /api/workflows/:id/nodes/:nodeId/run', () => {
     expect(conds.some((c) => c.col === 'exec.status')).toBe(false);
     expect(conds).toContainEqual({ op: 'eq', col: 'exec.nodeId', val: 'n1' });
     expect(conds).toContainEqual({ op: 'isNotNull', col: 'exec.inputData' });
-    expect(runWorkflowAndPersist).toHaveBeenCalledWith(
-      expect.anything(),
-      'run-new',
-      { from: 'the failed run' },
-      expect.objectContaining({ workflowId: 'wf-1' }),
-    );
+    expect(startRun).toHaveBeenCalledWith(expect.objectContaining({
+      workflowId: 'wf-1',
+      input: { from: 'the failed run' },
+      selfHealing: false,
+      definition: expect.objectContaining({ edges: [], nodes: [expect.objectContaining({ id: 'n1' })] }),
+    }));
   });
 
   it('an explicit input wins over the recorded one', async () => {
@@ -99,6 +99,6 @@ describe('POST /api/workflows/:id/nodes/:nodeId/run', () => {
       params: { id: 'wf-1', nodeId: 'n1' },
       request: new Request('http://x', { method: 'POST', body: JSON.stringify({ input: { mine: 1 } }) }),
     } as never);
-    expect(runWorkflowAndPersist.mock.calls[0][2]).toEqual({ mine: 1 });
+    expect((startRun.mock.calls[0] as unknown as [{ input: unknown }])[0].input).toEqual({ mine: 1 });
   });
 });

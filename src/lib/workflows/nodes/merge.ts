@@ -19,6 +19,7 @@ export const mergeDef: NodeDefinition = {
   type: 'merge',
   label: 'Merge',
   category: 'control',
+  idempotent: true,
   description:
     'Combine the outputs of every upstream node into a single object. Use after parallel branches converge. ' +
     'Keys are merged flat — if two branches emit the same key, one overwrites the other.',

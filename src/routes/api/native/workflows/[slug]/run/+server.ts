@@ -7,12 +7,8 @@ import { findCanvas } from '$lib/workflows/native/workflows.server';
 /**
  * POST /api/native/workflows/:slug/run { input? } → 202 { runId }
  *
- * Started by the `workflow_run` tool through the site-tool seam — the start
- * path chat already uses: a manual run row, pending step rows, and
- * `runWorkflowAndPersist` (watchdogs, and the shared run finaliser). Called,
- * not copied. The canvas Run button's handler would be the other candidate,
- * but a route may not import a route, and its start logic is inline; wave 3's
- * single `startRun` is where the two converge.
+ * Started by the `workflow_run` tool through the site-tool seam, which starts
+ * it through the run kernel (`$lib/workflows/start-run`) like every other path.
  */
 export const POST: RequestHandler = withDevice(async ({ params, request }) => {
   let input: Record<string, unknown> = {};

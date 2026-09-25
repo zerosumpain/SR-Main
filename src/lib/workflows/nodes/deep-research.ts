@@ -3,6 +3,7 @@ import { executeSiteTool } from '$lib/workflows/site-tools/executor';
 import { interpolateTemplate } from './template';
 import { coerceDepth, depthPreset } from '$lib/deepdive/depth';
 import { deepResearchDef } from './deep-research.def';
+import { FatalError } from '../errors';
 export { deepResearchDef } from './deep-research.def';
 
 async function sleep(ms: number) {
@@ -19,9 +20,7 @@ export const deepResearchExecutor: NodeExecutor = {
   ): Promise<NodeResult> {
     const topicTemplate = typeof config.topic === 'string' ? (config.topic as string) : '';
     const topic = interpolateTemplate(topicTemplate, input).trim();
-    if (!topic) {
-      return { output: { ...input, success: false, error: 'Topic is required' }, rowCount: 1 };
-    }
+    if (!topic) throw new FatalError('Topic is required');
 
     const goalsRaw = typeof config.goals === 'string' ? (config.goals as string) : '';
     const goals = interpolateTemplate(goalsRaw, input).trim();

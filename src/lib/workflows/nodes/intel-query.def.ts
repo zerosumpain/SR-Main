@@ -4,6 +4,7 @@ export const intelQueryDef: NodeDefinition = {
   type: 'intel-query',
   label: 'Intel Query',
   category: 'core',
+  idempotent: true,
   description:
     'Search the intel knowledge graph; appends matching context as intelContext to downstream input.',
   configSchema: {

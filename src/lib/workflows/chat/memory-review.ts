@@ -192,10 +192,3 @@ export function startMemoryReview(): void {
   // Run once on startup after a short delay
   setTimeout(runMemoryReview, 10_000);
 }
-
-export function stopMemoryReview(): void {
-  if (reviewInterval) {
-    clearInterval(reviewInterval);
-    reviewInterval = null;
-  }
-}

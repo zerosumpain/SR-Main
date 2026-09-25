@@ -61,21 +61,19 @@ describe('llmRouterExecutor', () => {
   });
 
   it('returns error on invalid routes JSON', async () => {
-    const result = await llmRouterExecutor.execute(
+    await expect(llmRouterExecutor.execute(
       { text: 'some input' },
       { routes: 'not valid json', model: 'openai/gpt-4o-mini' },
       mockContext,
-    );
-    expect(result.output.error).toBe('Invalid routes JSON');
+    )).rejects.toThrow('Invalid routes JSON');
   });
 
   it('returns error on empty routes array', async () => {
-    const result = await llmRouterExecutor.execute(
+    await expect(llmRouterExecutor.execute(
       { text: 'some input' },
       { routes: '[]', model: 'openai/gpt-4o-mini' },
       mockContext,
-    );
-    expect(result.output.error).toBe('No routes defined');
+    )).rejects.toThrow('No routes defined');
   });
 
   it('spreads input fields into output', async () => {

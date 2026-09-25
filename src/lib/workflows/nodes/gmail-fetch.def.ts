@@ -3,6 +3,7 @@ import type { NodeDefinition } from '../types';
 export const gmailFetchDef: NodeDefinition = {
   type: 'gmail-fetch',
   category: 'integration',
+  idempotent: true,
   label: 'Gmail — Fetch Message',
   description: 'Fetch a Gmail message by id, returning full headers + text/html bodies + attachment refs.',
   defaultConfig: { messageId: '{{input.messageId}}', accountId: 0 },

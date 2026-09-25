@@ -13,28 +13,17 @@ vi.mock('$lib/db/schema', () => ({
 vi.mock('drizzle-orm', () => ({ eq: (..._a: any[]) => ({}) }));
 vi.mock('$lib/server/access', () => ({ isOwnerEmail: (email: string | null | undefined) => email === 'owner@test' }));
 
-// engine.execute is fire-and-forget in the route; return a resolved outcome so
-// the trailing .then() (which calls db.update) has something to chain on.
-const executeMock = vi.fn((..._a: any[]) => Promise.resolve({ status: 'completed', error: null }));
-vi.mock('$lib/workflows', () => ({ engine: { execute: (...a: any[]) => executeMock(...a) } }));
+// The route hands a verified request to the run kernel.
+const executeMock = vi.fn(async (..._a: any[]) => ({ runId: 'run-1', status: 'running', done: Promise.resolve(null) }));
+vi.mock('$lib/workflows/start-run', () => ({ startRun: (...a: any[]) => executeMock(...a) }));
 
-vi.mock('$lib/db', () => {
-  const db = {
+vi.mock('$lib/db', () => ({
+  db: {
     select: () => ({
-      from: (table: any) => ({
-        where: () => {
-          if (table?.__t === 'workflows') return Promise.resolve(workflowRow ? [workflowRow] : []);
-          return Promise.resolve([]); // nodes, edges
-        },
-      }),
+      from: () => ({ where: () => Promise.resolve(workflowRow ? [workflowRow] : []) }),
     }),
-    insert: (_t: any) => ({
-      values: (_v: any) => ({ returning: async () => [{ id: 'run-1' }] }),
-    }),
-    update: (_t: any) => ({ set: (_v: any) => ({ where: async () => undefined }) }),
-  };
-  return { db };
-});
+  },
+}));
 
 import { POST } from './+server';
 import {
@@ -98,6 +87,7 @@ describe('POST /api/workflows/webhook/[id] — secret matrix', () => {
     const res = await POST(makeEvent({ secret: 's3cr3t' }));
     expect(res.status).toBe(202);
     expect(executeMock).toHaveBeenCalledTimes(1);
+    expect(executeMock.mock.calls[0][0]).toMatchObject({ workflowId: 'wf-1', trigger: 'webhook', input: { payload: true } });
   });
 
   it('secret configured (nested config) + correct signature ⇒ 202', async () => {
