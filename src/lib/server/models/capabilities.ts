@@ -41,11 +41,14 @@ const TEXT_ONLY: ModelCapabilities = { image: false, audio: false, video: false,
 // the nightly refresh keeps current. These entries survive only to answer the
 // first few calls after boot, and to cover a model the catalogue has dropped.
 const OPENROUTER_CAPS: Record<string, ModelCapabilities> = {
-  // GLM family via OpenRouter z-ai/* slugs (multimodal parity with the old
-  // direct-z.ai capability map).
-  'z-ai/glm-5': ALL,
-  'z-ai/glm-5.2': ALL,
-  'z-ai/glm-5.1': ALL,
+  // GLM family via OpenRouter z-ai/* slugs. glm-5, 5.1 and 5.2 said ALL here
+  // ("parity with the old direct-z.ai map") while the catalogue lists them as
+  // `["text"]` and OpenRouter answers an image with 404 "No endpoints found
+  // that support image input". This map answers the first calls after a boot,
+  // so the overclaim sent a Codex thread's photo to glm-5.1 (2026-09-25).
+  'z-ai/glm-5': TEXT_ONLY,
+  'z-ai/glm-5.2': TEXT_ONLY,
+  'z-ai/glm-5.1': TEXT_ONLY,
   'z-ai/glm-5v-turbo': IMAGE_ONLY,
   'z-ai/glm-4.6v': IMAGE_ONLY,
   'z-ai/glm-4.5v': IMAGE_ONLY,

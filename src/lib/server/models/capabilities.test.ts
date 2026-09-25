@@ -8,7 +8,7 @@ import {
 
 const CODEX = { provider: 'codex', modelId: 'codex/gpt-5.6-terra' } as const;
 const TEXT_ONLY_OPENROUTER = { provider: 'openrouter', modelId: 'deepseek/deepseek-v4-flash' } as const;
-const MULTIMODAL = { provider: 'openrouter', modelId: 'z-ai/glm-5.1' } as const;
+const MULTIMODAL = { provider: 'openrouter', modelId: 'google/gemini-2.5-flash' } as const;
 
 // Capabilities are warmed from the openrouter_models catalogue on first use.
 // Dropping the cache before each test keeps these assertions about the STATIC
