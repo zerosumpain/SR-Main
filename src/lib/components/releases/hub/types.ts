@@ -23,6 +23,7 @@ export interface PublicReleasesData {
 export interface OwnerReleasesData extends ConsolePayload {
   mode: 'owner';
   sourceFootprint: typeof SOURCE_FOOTPRINT;
+  sampleData?: boolean;
   /**
    * The Claude Code sessions that produced the releases on this page, joined on
    * pull-request number. Owner-only by construction: the public branch of the

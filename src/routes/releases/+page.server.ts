@@ -29,16 +29,21 @@ export const load: PageServerLoad = async (event) => {
 
   if (await isOwnerRequest(event)) {
     const console_ = await getReleaseConsole(filters);
-    // Band D — the work behind these releases, joined on PR number. Scoped to
-    // the releases on THIS page: a second pager over 296 sessions would compete
-    // with the console's own, and the join is the organising principle.
+    // Sessions for the releases on THIS page, joined on PR number. The owner
+    // log groups them with those releases, so there is only one pager.
     //
     // Fetched inside the owner branch, never outside it. The public payload must
     // not carry session prose, prompts or per-stage costs at all — shipping the
     // bytes and hiding them behind {#if owner} is the disclosure this page's
     // whole design exists to prevent.
     const sessions = await getReleaseSessions(console_.items.map((i) => i.id));
-    return { sourceFootprint: SOURCE_FOOTPRINT, mode: 'owner' as const, ...console_, sessions };
+    return {
+      sourceFootprint: SOURCE_FOOTPRINT,
+      mode: 'owner' as const,
+      ...console_,
+      sessions,
+      sampleData: process.env.SHIPPED_PREVIEW_SAMPLE_DATA === '1',
+    };
   }
 
   const data = await getReleaseShowcase();
