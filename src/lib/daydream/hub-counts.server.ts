@@ -27,12 +27,15 @@ export interface HubCounts extends BadgeCounts {
   jobs: number;
   engine: EngineState;
   threshold: { value: number; feedbackCount: number };
+  /** Think notes only — what the cover deck reports since the P2 rebuild. */
+  think: { week: number; useful30d: number; rated30d: number; lastCycleAt: Date | null };
 }
 
 
 export async function loadHubCounts(opts: { activeWatches?: number } = {}): Promise<HubCounts> {
   const weekAgo = new Date(Date.now() - 7 * 86_400_000);
-  const [thoughtRows, placeRows, ruleRows, jobRows, engine, threshold] = await Promise.all([
+  const monthAgo = new Date(Date.now() - 30 * 86_400_000);
+  const [thoughtRows, placeRows, ruleRows, jobRows, engine, threshold, thinkRows] = await Promise.all([
     db
       .select({
         undecided: sql<number>`count(*) filter (where ${daydreamThoughts.status} = 'new')::int`,
@@ -68,7 +71,17 @@ export async function loadHubCounts(opts: { activeWatches?: number } = {}): Prom
       .where(sql`${heartbeatActions.name} like 'daydream-%'`),
     loadEngineState(),
     loadThreshold(),
+    db
+      .select({
+        week: sql<number>`count(*) filter (where ${daydreamThoughts.createdAt} >= ${weekAgo})::int`,
+        useful: sql<number>`count(*) filter (where ${daydreamThoughts.createdAt} >= ${monthAgo} and ${daydreamThoughts.feedback} = 'useful')::int`,
+        rated: sql<number>`count(*) filter (where ${daydreamThoughts.createdAt} >= ${monthAgo} and ${daydreamThoughts.feedback} is not null)::int`,
+        lastCycleAt: sql<Date | null>`(select ${heartbeatActions.lastRunAt} from ${heartbeatActions} where ${heartbeatActions.name} = 'daydream-think')`,
+      })
+      .from(daydreamThoughts)
+      .where(sql`${daydreamThoughts.kind} like 'think\\_%'`),
   ]);
+  const k = thinkRows[0];
   const t = thoughtRows[0];
   const p = placeRows[0];
   return {
@@ -89,6 +102,12 @@ export async function loadHubCounts(opts: { activeWatches?: number } = {}): Prom
     activeWatches: opts.activeWatches ?? 0,
     engine,
     threshold,
+    think: {
+      week: k?.week ?? 0,
+      useful30d: k?.useful ?? 0,
+      rated30d: k?.rated ?? 0,
+      lastCycleAt: k?.lastCycleAt ? new Date(k.lastCycleAt) : null,
+    },
   };
 }
 
@@ -121,5 +140,6 @@ export function emptyHubCounts(): HubCounts {
       summary: null,
     },
     threshold: { value: 0, feedbackCount: 0 },
+    think: { week: 0, useful30d: 0, rated30d: 0, lastCycleAt: null },
   };
 }
