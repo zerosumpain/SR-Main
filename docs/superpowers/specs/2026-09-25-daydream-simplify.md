@@ -166,7 +166,7 @@ exemption is exact-path).
 
 | Phase | What | Verify |
 |---|---|---|
-| **P0** | Pause jobs that produce nothing (heartbeat rows, reversible): suggest, hypothesise, sweep, explore, rulesmith, appetite, offers, spend, weekly, signals. | pulses stop; ponder/compose unaffected |
+| **P0** | **DONE 2026-09-25 19:0x UTC** — paused (status `paused`, seed is `onConflictDoNothing` so a deploy won't revive them): suggest, hypothesise, sweep, explore, rulesmith, appetite, offers, spend, weekly. `signals` kept (free; ponder's house cards read it until P1). | pulses stop; ponder/compose unaffected |
 | **P1** | `daydream-think` + questions + tool sets + `correlate` + health tools + `daydream` notify category + `subject` on thoughts. Runs beside ponder. | first live cycle writes a cited note; lands in the phone queue |
 | **P2** | Surfaces: one-page feed, native Today section + feedback endpoint, iOS Today card + Health tab strip, briefing re-point. Ponder + compose disabled. | screenshot of feed; iOS CI screenshot of Today; `/api/native/today` carries `daydream` |
 | **P3** | Location out: `$lib/presence`, 10-min poll, Landgrab re-pointed; places/family rooms removed. | Landgrab page renders; trail still writes |
