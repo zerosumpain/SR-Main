@@ -261,20 +261,6 @@ describe('the session pin', () => {
 });
 
 
-describe('daydream reviewer inheritance', () => {
-  it('follows JKAI chat default rather than the site default', async () => {
-    getSetting.mockImplementation(async (key: string) => key === 'jkai.chat.turn_model' ? { modelId: 'codex/gpt-5.6-luna' } : null);
-    expect((await resolveWorkloadModel(wl('daydream-review'))).modelId).toBe('codex/gpt-5.6-luna');
-    const { describeSiteWorkloads } = await import('./workload-settings');
-    expect((await describeSiteWorkloads()).find((w) => w.id === 'daydream-review')?.effectiveModelId).toBe('codex/gpt-5.6-luna');
-  });
-  it('honours an explicit reviewer override', async () => {
-    getSetting.mockImplementation(async (key: string) => key === 'jkai.daydream.review_model' ? { modelId: 'codex/gpt-5.6-luna' } : null);
-    expect((await resolveWorkloadModel(wl('daydream-review'))).modelId).toBe('codex/gpt-5.6-luna');
-  });
-});
-
-
 describe('fast research model selection', () => {
   beforeEach(() => { vi.stubEnv('RESEARCH_FAST_MODEL', ''); });
   afterEach(() => { vi.unstubAllEnvs(); vi.mocked(resolveDefaultModel).mockResolvedValue({ provider: 'codex', modelId: 'codex/gpt-5.6-terra' }); });

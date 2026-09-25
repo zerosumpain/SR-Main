@@ -631,18 +631,6 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
       'Follows the site default. A node that names a model in its own config still wins — this is what the blank field means, and it is resolved fresh on every run rather than stamped, so a change here moves existing workflows too.',
   },
   {
-    id: 'daydream-review',
-    scope: 'site',
-    label: 'Daydream reviewer',
-    blurb: 'The verifier that decides whether a daydream thought is true before it is sent.',
-    key: 'jkai.daydream.review_model',
-    fallbackModelId: null,
-    requires: 'tools',
-    catalogue: 'tools',
-    reason:
-      'Inherits the default JKAI chat model unless explicitly pinned. Reads cited sources with tools; source verification remains distinct from statistical support. Provider budgets still apply.',
-  },
-  {
     id: 'notebook-review',
     scope: 'site',
     label: 'Notebook note reviewer',

@@ -66,9 +66,9 @@ describe('allActivities', () => {
     expect(keys).not.toContain('source:workflow');
   });
 
-  it('names the last four roles that used to be unswitchable', () => {
+  it('names the last roles that used to be unswitchable', () => {
     const keys = new Set(allActivities().map((a) => a.key));
-    for (const id of ['chat', 'workflow-node', 'daydream-review', 'notebook-review']) {
+    for (const id of ['chat', 'workflow-node', 'notebook-review']) {
       expect(keys.has(id), `${id} has no row`).toBe(true);
     }
   });

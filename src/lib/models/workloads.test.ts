@@ -30,11 +30,11 @@ describe('workload registry', () => {
     }
   });
 
-  it('gives the four formerly per-call reasons a key of their own', () => {
+  it('gives the formerly per-call reasons a key of their own', () => {
     // The whole point of the 2026-09-03 change: every reason on
     // /admin/ops/costs names a model you can set. A missing key here puts the
     // row back to "per-call", which is how it read for months.
-    for (const id of ['chat', 'workflow-node', 'daydream-review', 'notebook-review']) {
+    for (const id of ['chat', 'workflow-node', 'notebook-review']) {
       const w = getWorkload(id);
       expect(w, `${id} is not registered`).toBeTruthy();
       expect(w!.key, `${id} has no settings key`).toMatch(/^jkai\./);
