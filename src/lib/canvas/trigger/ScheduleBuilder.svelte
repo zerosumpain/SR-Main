@@ -4,7 +4,18 @@
   // the UI state is derived from the incoming cron `value`, and every control
   // change compiles a fresh cron and calls onChange. Best-effort parse on the
   // way in means presets / raw-cron edits round-trip into the friendly UI.
-  let { value, onChange }: { value: string; onChange: (cron: string) => void } = $props();
+  //
+  // The preview names the zone the schedule actually runs in. It said "server
+  // time" — but the scheduler resolves every schedule's zone through
+  // $lib/workflows/cron-timezone (Europe/London unless the schedule names one),
+  // and the server itself is UTC, so "server time" was an hour wrong all summer.
+  import { DEFAULT_CRON_TZ } from '$lib/workflows/cron-timezone';
+
+  let {
+    value,
+    onChange,
+    timezone = DEFAULT_CRON_TZ,
+  }: { value: string; onChange: (cron: string) => void; timezone?: string } = $props();
 
   type Freq = 'minutes' | 'hours' | 'daily' | 'weekly';
 
@@ -136,7 +147,7 @@
     </div>
   {/if}
 
-  <p class="sb-preview">{describe(st)} <span class="sb-tz">· server time</span></p>
+  <p class="sb-preview">{describe(st)} <span class="sb-tz">· {timezone} time</span></p>
 </div>
 
 <style>
