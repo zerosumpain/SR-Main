@@ -172,13 +172,15 @@ async function discoverSiteTools(
       'llm-agent: toolSource "site-tools" requires a non-empty siteToolAllowlist. An agent is never granted all tools — list the exact tool names it may use.',
     );
   }
-  const { getTool } = await import('$lib/workflows/site-tools/registry');
+  // The catalogue seam, not the registry module — see runSiteTool below.
+  const { catalogueTools } = await import('$lib/workflows/site-tools/catalogue');
+  const catalogue = new Map((await catalogueTools()).map((t) => [t.name, t]));
   const tools: ToolDef[] = [];
   const allowed = new Set<string>();
   const skipped: string[] = [];
   for (const name of allowlist) {
     if (isDenylistedTool(name)) { skipped.push(`${name} (denylisted)`); continue; }
-    const tool = getTool(name);
+    const tool = catalogue.get(name);
     if (!tool) { skipped.push(`${name} (unknown)`); continue; }
     if (tool.destructive) { skipped.push(`${name} (destructive — never allowed in an agent)`); continue; }
     tools.push({
@@ -199,19 +201,31 @@ async function discoverSiteTools(
   return { tools, allowed };
 }
 
-/** Execute one allowlisted, non-destructive site tool and return its envelope. */
+/**
+ * Execute one allowlisted, non-destructive site tool and return its envelope.
+ *
+ * Through `executeSiteTool`, the seam chat and the build bridge use, so the
+ * registry's own gates apply here too: argument validation against the tool's
+ * schema, the allowedTools scope (the agent's allowlist), cancellation, and the
+ * remote invoke lane. Calling `tool.handler` directly skipped all of them.
+ */
 async function runSiteTool(
   name: string,
   args: Record<string, unknown>,
   allowed: Set<string>,
+  signal?: AbortSignal,
+  workflowId?: string,
 ): Promise<unknown> {
   if (!allowed.has(name)) return { error: `Tool "${name}" is not in this agent's allowlist.` };
   if (isDenylistedTool(name)) return { error: `Tool "${name}" is denylisted and cannot be run.` };
-  const { getTool } = await import('$lib/workflows/site-tools/registry');
-  const tool = getTool(name);
-  if (!tool) return { error: `Unknown tool: ${name}` };
-  if (tool.destructive) return { error: `Tool "${name}" is destructive and cannot be run by an agent.` };
-  return await tool.handler(args);
+  const { executeSiteTool, isDestructiveTool } = await import('$lib/workflows/site-tools/executor');
+  if (await isDestructiveTool(name)) return { error: `Tool "${name}" is destructive and cannot be run by an agent.` };
+  return await executeSiteTool(name, args, {
+    emit: () => {},
+    allowedTools: [...allowed],
+    signal,
+    workflowId,
+  });
 }
 
 export const llmAgentExecutor: NodeExecutor = {
@@ -368,7 +382,7 @@ export const llmAgentExecutor: NodeExecutor = {
                 const r = await executor.execute(args, entry!.nodeConfig, context);
                 return r.output;
               }
-              return await runSiteTool(toolName, args, allowedSiteTools);
+              return await runSiteTool(toolName, args, allowedSiteTools, context.abortSignal, context.workflowId);
             },
           );
           const durationMs = Date.now() - toolStart;

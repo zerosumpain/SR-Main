@@ -22,13 +22,17 @@ vi.mock('$lib/llm/client', () => ({
   }),
   clearLLMClientCache: vi.fn(),
 }));
+const { executeTool } = vi.hoisted(() => ({ executeTool: vi.fn() }));
 vi.mock('$lib/workflows/site-tools/registry', () => ({
   getTool: (name: string) => registryTools[name],
+  getTools: () => Object.values(registryTools),
+  isRegisteredTool: (name: string) => name in registryTools,
   getToolDefinitions: () =>
     Object.values(registryTools).map((t: any) => ({
       type: 'function' as const,
       function: { name: t.name, description: t.description ?? '', parameters: t.parameters ?? { type: 'object' } },
     })),
+  executeTool,
 }));
 
 import { llmAgentExecutor, runAgentSubCall } from '$lib/workflows/nodes/llm-agent';
@@ -64,6 +68,11 @@ function finalAnswer(content: string) {
 }
 
 beforeEach(() => {
+  executeTool.mockReset();
+  executeTool.mockImplementation(async (name: string, args: Record<string, unknown>, ctx?: { allowedTools?: string[] }) => {
+    if (ctx?.allowedTools && !ctx.allowedTools.includes(name)) return { success: false, error: 'outside scope' };
+    return registryTools[name].handler(args, ctx);
+  });
   mockCreate.mockReset();
   for (const k of Object.keys(registryTools)) delete registryTools[k];
   registryTools.file_search = {
@@ -103,7 +112,13 @@ describe('llm-agent site-tools mode', () => {
     // Only the allowlisted tool is offered to the model.
     const offered = (mockCreate.mock.calls[0][0].tools as any[]).map((t) => t.function.name);
     expect(offered).toEqual(['file_search']);
-    expect(registryTools.file_search.handler).toHaveBeenCalledWith(expect.objectContaining({ query: 'invoices' }));
+    expect(registryTools.file_search.handler).toHaveBeenCalledWith(expect.objectContaining({ query: 'invoices' }), expect.anything());
+    // Through the executor seam, scoped to the agent's allowlist.
+    expect(executeTool).toHaveBeenCalledWith(
+      'file_search',
+      { query: 'invoices' },
+      expect.objectContaining({ allowedTools: ['file_search'] }),
+    );
     const history = result.output.toolCallHistory as any[];
     expect(history[0].tool).toBe('file_search');
     expect(history[0].output).toEqual({ success: true, data: { hits: [1] } });

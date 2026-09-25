@@ -5,13 +5,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // map each test seeds.
 const { registryTools } = vi.hoisted(() => ({ registryTools: {} as Record<string, any> }));
 
+// `executeTool` is the registry's gate (allowedTools / deadline / depth / argument
+// validation) that the executor seam calls. The fake mirrors the argument check
+// so a test can prove the node now goes THROUGH it rather than to the handler.
+const { executeTool } = vi.hoisted(() => ({ executeTool: vi.fn() }));
+
 vi.mock('$lib/workflows/site-tools/registry', () => ({
   getTool: (name: string) => registryTools[name],
+  getTools: () => Object.values(registryTools),
+  isRegisteredTool: (name: string) => name in registryTools,
   getToolDefinitions: () =>
     Object.values(registryTools).map((t: any) => ({
       type: 'function' as const,
       function: { name: t.name, description: t.description ?? '', parameters: t.parameters ?? { type: 'object' } },
     })),
+  executeTool,
 }));
 
 import { siteToolExecutor } from '$lib/workflows/nodes/site-tool';
@@ -36,6 +44,14 @@ function makeCtx(overrides: Record<string, any> = {}): ExecutionContext {
 }
 
 beforeEach(() => {
+  executeTool.mockReset();
+  executeTool.mockImplementation(async (name: string, args: Record<string, unknown>, ctx: unknown) => {
+    const tool = registryTools[name];
+    if (!tool) return { success: false, error: `Unknown tool: ${name}` };
+    const missing = (tool.parameters?.required ?? []).filter((k: string) => !(k in args));
+    if (missing.length) return { success: false, error: 'invalid_arguments', data: { issues: missing } };
+    return tool.handler(args, ctx);
+  });
   for (const k of Object.keys(registryTools)) delete registryTools[k];
   registryTools.save_memory = {
     name: 'save_memory',
@@ -148,6 +164,22 @@ describe('site-tool executor — gating matrix', () => {
     await expect(
       siteToolExecutor.execute({}, { toolName: 'save_memory', args: { content: 'x' } }, makeCtx()),
     ).rejects.toThrow(/store offline/);
+  });
+
+  it('invokes through the executor seam, never tool.handler directly', async () => {
+    await siteToolExecutor.execute({}, { toolName: 'save_memory', args: { content: 'x' } }, makeCtx());
+    expect(executeTool).toHaveBeenCalledWith(
+      'save_memory',
+      { content: 'x' },
+      expect.objectContaining({ emit: expect.any(Function), workflowId: 'w1' }),
+    );
+  });
+
+  it('argument validation applies: a missing required arg fails the node, handler not invoked', async () => {
+    await expect(
+      siteToolExecutor.execute({}, { toolName: 'save_memory', args: {} }, makeCtx()),
+    ).rejects.toThrow(/invalid_arguments/);
+    expect(registryTools.save_memory.handler).not.toHaveBeenCalled();
   });
 
   it('missing toolName → throws', async () => {

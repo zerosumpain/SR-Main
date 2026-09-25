@@ -98,12 +98,16 @@ export const siteToolExecutor: NodeExecutor = {
       );
     }
 
-    // Lazy dynamic import — the site-tools registry pulls server-only domain
-    // modules and MUST NOT be imported at module-init time (circular-init hazard).
-    const { getTool, getToolDefinitions } = await import('$lib/workflows/site-tools/registry');
-    const tool = getTool(toolName);
-    if (!tool) {
-      const all = getToolDefinitions().map((d) => d.function.name);
+    // Through the catalogue/executor seam, never the registry module: the same
+    // path chat and the build bridge take, so argument validation, the
+    // allowedTools / depth / deadline gates and the remote invoke lane all
+    // apply here too. Lazy — the seam loads the catalogue on first use.
+    const { executeSiteTool, isRegisteredTool, isDestructiveTool } = await import(
+      '$lib/workflows/site-tools/executor'
+    );
+    if (!(await isRegisteredTool(toolName))) {
+      const { allTools } = await import('$lib/workflows/site-tools/catalogue');
+      const all = (await allTools()).map((t) => t.name);
       const suggestions = didYouMean(toolName, all);
       const hint =
         suggestions.length > 0
@@ -125,7 +129,7 @@ export const siteToolExecutor: NodeExecutor = {
     }
 
     // Destructive gating.
-    if (tool.destructive) {
+    if (await isDestructiveTool(toolName)) {
       if (config.allowDestructive !== true) {
         throw new Error(
           `site-tool: "${toolName}" is a destructive tool (it sends/publishes/deletes). To run it, set allowDestructive: true AND place an approval node upstream of this node so the run pauses for human sign-off first.`,
@@ -139,7 +143,7 @@ export const siteToolExecutor: NodeExecutor = {
     }
 
     // Bridge the tool's progress-emit onto the workflow event stream as a log.
-    const toolCtx = {
+    const result = await executeSiteTool(toolName, interpolatedArgs, {
       emit: (text: string) => {
         context.emit({
           type: 'log',
@@ -149,14 +153,17 @@ export const siteToolExecutor: NodeExecutor = {
           timestamp: new Date().toISOString(),
         });
       },
-    };
-
-    const result = await tool.handler(interpolatedArgs, toolCtx);
+      signal: context.abortSignal,
+      workflowId: context.workflowId,
+    });
 
     if (!result.success) {
       // Route through the node error path so the node's On-failure config
-      // (retry / continue / route) governs what happens next.
-      throw new Error(result.error || `site-tool: "${toolName}" failed`);
+      // (retry / continue / route) governs what happens next. An argument
+      // rejection names the issues so the config can be fixed.
+      const issues = (result.data as { issues?: unknown } | undefined)?.issues;
+      const detail = result.error === 'invalid_arguments' && issues ? `: ${JSON.stringify(issues).slice(0, 500)}` : '';
+      throw new Error(`${result.error || `site-tool: "${toolName}" failed`}${detail}`);
     }
 
     return {
