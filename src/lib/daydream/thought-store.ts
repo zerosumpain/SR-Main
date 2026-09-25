@@ -16,7 +16,7 @@ import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from 'dri
 import { db } from '$lib/db';
 import { daydreamThoughts } from '$lib/db/schema';
 import { getSetting } from '$lib/server/models/settings';
-import { LOCAL_TZ, SETTINGS_MUTED_KINDS_KEY, errMsg } from './types';
+import { DEFAULT_SUBJECT, LOCAL_TZ, SETTINGS_MUTED_KINDS_KEY, errMsg } from './types';
 import { echoOf, loadRefutedClaims, loadLiveClaims, liveEchoOf, type RefutedClaim, type LiveClaim } from './refutations';
 import { familyOf } from './thought-groups';
 import {
@@ -301,7 +301,7 @@ export function buildScoringContext(
  */
 export async function persistCandidates(
   candidates: Candidate[],
-  opts: { runId: string; now?: Date },
+  opts: { runId: string; now?: Date; subject?: string },
 ): Promise<PersistResult> {
   const now = opts.now ?? new Date();
   const result: PersistResult = { ...EMPTY_PERSIST, createdKeys: [] };
@@ -445,6 +445,9 @@ export async function persistCandidates(
       await db
         .insert(daydreamThoughts)
         .values({
+          // Who it is about. Omitted by every caller that predates the column,
+          // which is right: all of them write the owner's thoughts.
+          subject: opts.subject ?? DEFAULT_SUBJECT,
           kind: candidate.kind,
           title: candidate.title,
           explanation: candidate.explanation,

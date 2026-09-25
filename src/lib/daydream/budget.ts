@@ -74,6 +74,10 @@ export const SPENDING_ACTIONS = [
   'daydream-hypothesise',
   'daydream-spend',
   'daydream-ponder',
+  // The think loop (spec 2026-09-25): a tool loop of up to six model calls a
+  // cycle, every 45 minutes. In this list from its first commit — the
+  // omission has happened twice before and the symptom is silence.
+  'daydream-think',
   'daydream-weekly',
   // The reviewer is xhigh reasoning with a tool loop, on every thought — the
   // most expensive thing on this list by some distance. Omitting an action here

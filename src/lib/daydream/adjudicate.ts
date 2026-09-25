@@ -486,6 +486,10 @@ export async function pendingReview(limit: number): Promise<ThoughtToReview[]> {
         // the suppression. Six of those is the bill this whole change exists to
         // stop paying.
         sql`coalesce(${daydreamThoughts.suppressedReason}, '') not like 'already_refuted%'`,
+        // A think note has already passed the citation audit over cards code
+        // built; a second xhigh pass over it is the ~13k-token bill the
+        // simplification exists to stop paying.
+        sql`${daydreamThoughts.kind} not like 'think\\_%'`,
       ),
     )
     .orderBy(sql`${daydreamThoughts.score} desc, ${daydreamThoughts.createdAt} desc`)
