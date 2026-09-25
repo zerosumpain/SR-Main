@@ -95,6 +95,22 @@ export const NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
     minIntervalSeconds: 60 * 60,
   },
   {
+    id: 'daydream',
+    label: 'Daydream',
+    description: 'Something the engine noticed on its spare cycles — an anomaly, a proposal, a plan.',
+    // Phone AND WhatsApp, like every alert that reached WhatsApp before: the
+    // ponder musings this replaces went there, and the owner rates them by
+    // replying. Either is one switch away on the phone.
+    whatsapp: true,
+    native: true,
+    // Per NOTE, not per category: the think loop passes each note's own dedupe
+    // key, so this only stops the same note being raised twice in a day. The
+    // rate limit is the loop itself — at most two notes a cycle, one cycle
+    // every 45 minutes in waking hours — and a category-wide floor would
+    // silently eat the second note of every cycle.
+    minIntervalSeconds: 24 * 60 * 60,
+  },
+  {
     id: 'connections',
     label: 'Connections that need you',
     description: 'An account that needs signing in again, or a service that stopped working.',

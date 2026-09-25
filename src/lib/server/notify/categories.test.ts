@@ -55,6 +55,17 @@ describe('the notification catalogue', () => {
     expect(connections.minIntervalSeconds).toBe(12 * 60 * 60);
   });
 
+  it('sends daydream notes to the phone and WhatsApp, floored per note', () => {
+    // The think loop's delivery. Both channels, and a floor that only means
+    // anything per dedupe key — the loop passes each note's own key, so the
+    // second note of a cycle is not throttled by the first.
+    const daydream = categoryOf('daydream');
+    expect(daydream.id).toBe('daydream');
+    expect(daydream.native).toBe(true);
+    expect(daydream.whatsapp).toBe(true);
+    expect(daydream.minIntervalSeconds).toBeGreaterThanOrEqual(60 * 60);
+  });
+
   it('answers for a category it has never heard of rather than throwing', () => {
     // A caller raising an alert is already in the middle of something going
     // wrong. A typo in a category name must not become a second failure.
