@@ -1,13 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { FixKind } from './types';
 
-const h = vi.hoisted(() => ({ raised: [] as Array<{ kind: string; identifier: string; detail?: string | null }> }));
+type Idea = { title: string; detail: string; kind: string; priority?: number; source?: string };
+const h = vi.hoisted(() => ({ raised: [] as Idea[], existing: new Set<string>(), throws: false }));
 
-vi.mock('$lib/daydream/faults', () => ({
-  raiseFault: vi.fn(async (input: { kind: string; identifier: string; detail?: string | null }) => {
-    h.raised.push(input);
-  }),
-}));
+vi.mock('$lib/selfimprove/backlog', async () => {
+  const { slugifyIdea } = await import('$lib/selfimprove/types');
+  return {
+    addIdeas: vi.fn(async (ideas: Idea[]) => {
+      if (h.throws) throw new Error('datastore down');
+      const created: string[] = [];
+      for (const i of ideas) {
+        const slug = slugifyIdea(i.title);
+        if (h.existing.has(slug)) continue;
+        h.raised.push(i);
+        created.push(slug);
+      }
+      return created;
+    }),
+  };
+});
 
 import { escalateFindings, escalationIdentifier, shouldEscalate, ESCALATE_AFTER } from './escalate';
 
@@ -26,6 +38,8 @@ const finding = (fixKind: FixKind, occurrences = 10) => ({
 
 beforeEach(() => {
   h.raised = [];
+  h.existing = new Set();
+  h.throws = false;
   vi.clearAllMocks();
 });
 
@@ -55,21 +69,32 @@ describe('shouldEscalate', () => {
 });
 
 describe('escalateFindings', () => {
-  it('raises a workflow_dead_node fault a human can read', async () => {
+  it('queues a backlog feature a human can read, from the doctor channel', async () => {
     const raised = await escalateFindings([finding('dead-node-type')]);
     expect(raised).toEqual(['Morning briefing / Read the diary (dead-node-type)']);
-    expect(h.raised[0].kind).toBe('workflow_dead_node');
+    expect(h.raised[0]).toMatchObject({ kind: 'feature', source: 'doctor', priority: 1 });
+    expect(h.raised[0].title).toBe('Fix Morning briefing / Read the diary (dead-node-type)');
     expect(h.raised[0].detail).toContain('Migrate it to apple-calendar');
   });
 
-  it('raises everything else as workflow_failing', async () => {
+  it('queues a persistent failure the same way', async () => {
     await escalateFindings([finding('unclassified', 5)]);
-    expect(h.raised[0].kind).toBe('workflow_failing');
+    expect(h.raised[0]).toMatchObject({ kind: 'feature', source: 'doctor' });
   });
 
-  it('raises nothing for the kinds it leaves alone', async () => {
+  it('queues nothing for the kinds it leaves alone', async () => {
     expect(await escalateFindings([finding('runaway-schedule'), finding('missing-credential')])).toEqual([]);
     expect(h.raised).toEqual([]);
+  });
+
+  it('reports only what was NEWLY queued — a standing defect is queued once', async () => {
+    h.existing.add('fix-morning-briefing-read-the-diary-dead-node-type');
+    expect(await escalateFindings([finding('dead-node-type')])).toEqual([]);
+  });
+
+  it('is soft when the backlog cannot be written', async () => {
+    h.throws = true;
+    expect(await escalateFindings([finding('dead-node-type')])).toEqual([]);
   });
 
   it('names the run when the node has no label', () => {

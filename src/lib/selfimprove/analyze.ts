@@ -6,7 +6,7 @@
 // (`latest` + `weekly:<YYYY-WW>`).
 
 import { db } from '$lib/db';
-import { orchestratorChats, customTools, daydreamSignals } from '$lib/db/schema';
+import { orchestratorChats, customTools } from '$lib/db/schema';
 import { and, eq, gte, desc, sql } from 'drizzle-orm';
 import {
   DatastoreError,
@@ -28,11 +28,6 @@ import {
 } from './types';
 import type { Budget } from './run';
 import { addIdeas } from './backlog';
-import { collectStarvation } from '$lib/daydream/starvation';
-import { collectHealthFaults } from '$lib/daydream/health-quality';
-import { collectFaultIdeas } from '$lib/daydream/faults';
-import { engineProposals } from '$lib/daydream/engine-proposals';
-import { collectCapabilityIdeas } from '$lib/daydream/appetite/intake';
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_MESSAGES = 300;
@@ -49,7 +44,6 @@ export interface GatheredSignals {
 export interface CapabilityInventory {
   platformToolsets: Array<{ name: string; tools: number }>;
   catalogApis: Array<{ name: string; status: string; capabilities: string[] }>;
-  daydreamSources: Array<{ source: string; signals: number; observing: number }>;
 }
 
 /** Give the learner the source/service portfolio, not only a list of tools. */
@@ -57,7 +51,6 @@ async function loadCapabilityInventory(): Promise<CapabilityInventory | null> {
   const inventory: CapabilityInventory = {
     platformToolsets: [],
     catalogApis: [],
-    daydreamSources: [],
   };
 
   try {
@@ -87,25 +80,7 @@ async function loadCapabilityInventory(): Promise<CapabilityInventory | null> {
     console.error('[selfimprove] capability API catalogue failed:', errMsg(err));
   }
 
-  try {
-    const rows = await db
-      .select({
-        source: daydreamSignals.source,
-        signals: sql<number>`count(*)::int`,
-        observing: sql<number>`count(*) filter (where ${daydreamSignals.observedDays} > 0)::int`,
-      })
-      .from(daydreamSignals)
-      .groupBy(daydreamSignals.source);
-    inventory.daydreamSources = rows.map((r) => ({
-      source: r.source,
-      signals: Number(r.signals ?? 0),
-      observing: Number(r.observing ?? 0),
-    }));
-  } catch (err) {
-    console.error('[selfimprove] capability daydream sources failed:', errMsg(err));
-  }
-
-  return inventory.platformToolsets.length || inventory.catalogApis.length || inventory.daydreamSources.length
+  return inventory.platformToolsets.length || inventory.catalogApis.length
     ? inventory
     : null;
 }
@@ -264,15 +239,6 @@ export function coerceInsights(json: unknown, period: string): QuestionInsights 
 }
 
 /** LEARN: one gateway call → insights, upserted to `latest` + `weekly:<YYYY-WW>`. */
-/**
- * The fault kinds the workflow doctor raises.
- *
- * Its findings arrive as ordinary `daydream_faults` rows — that fold is the
- * design, one door into the engine rather than a second wire — so the kind is
- * the only thing that still says where they came from.
- */
-const DOCTOR_FAULT_KINDS: ReadonlyArray<string> = ['workflow_dead_node', 'workflow_failing'];
-
 export async function learnInsights(
   signals: GatheredSignals,
   budget: Budget,
@@ -375,131 +341,14 @@ export async function learnInsights(
     })),
   ];
 
-  // Starvation leads, questions follow.
-  //
-  // Question-mining produced 33 tools in the fortnight to 2026-08-30 and not
-  // one was ever called: a question asked once is not a standing appetite, so
-  // the tool built to answer it waits for a repeat that never comes.
-  // Daydreaming runs every day whether or not anybody asks it anything, and it
-  // keeps a record of what it could not settle — a tool built for one of those
-  // has a caller the moment it ships, namely the thing that named the gap.
-  //
-  // Ordered first so the nightly intake cap spends its slots here before the
-  // question-mined ideas, rather than after.
-  let starving: Awaited<ReturnType<typeof collectStarvation>> = [];
   try {
-    starving = await collectStarvation();
-  } catch (err) {
-    console.error('[selfimprove] starvation collection failed:', errMsg(err));
-  }
-
-  // A health source emitting numbers that cannot be true. Empty in a healthy
-  // system, so this usually costs one read and adds nothing — but when a unit
-  // mismatch appears it is the difference between a card saying "you slept
-  // 464,018 hours" and a job to go and fix where that value is read.
-  //
-  // Pulled from here rather than pushed from the snapshot: this file already
-  // imports daydream, and the reverse direction closes a cycle.
-  let healthFaults: Awaited<ReturnType<typeof collectHealthFaults>> = [];
-  try {
-    healthFaults = await collectHealthFaults();
-  } catch (err) {
-    console.error('[selfimprove] health fault collection failed:', errMsg(err));
-  }
-  // The APPETITE LEDGER, first of all.
-  //
-  // The order of these four collections is the engine's priority, and until
-  // 2026-09-04 it ran fault → starvation → health → questions: every driver a
-  // repair of something that already existed. The owner's instruction is that
-  // capability should outrank efficiency, so the leads go in ahead of the
-  // faults — an accepted lead ahead of a proposed one, and inside each group
-  // the lanes that bring new data in first (`collectCapabilityIdeas`).
-  //
-  // This is only half the bias. The other half is `pickWithNewDataFirst`,
-  // which reserves build slots — an ordering alone is discarded by the first
-  // night with more work than slots.
-  let capabilityIdeas: Awaited<ReturnType<typeof collectCapabilityIdeas>> = [];
-  try {
-    capabilityIdeas = await collectCapabilityIdeas();
-  } catch (err) {
-    console.error('[selfimprove] appetite ledger read failed:', errMsg(err));
-  }
-
-  // The fault ledger, next. Every site where daydreaming could not do
-  // something writes here with the shape of the fix; nothing else in this
-  // pass says as precisely what to build. Then the engine's proposals about
-  // itself — kind `engine`, never built, only listed.
-  let faultIdeas: Awaited<ReturnType<typeof collectFaultIdeas>> = [];
-  try {
-    faultIdeas = await collectFaultIdeas();
-  } catch (err) {
-    console.error('[selfimprove] fault ledger read failed:', errMsg(err));
-  }
-  let engineIdeas: Awaited<ReturnType<typeof engineProposals>> = [];
-  try {
-    engineIdeas = await engineProposals();
-  } catch (err) {
-    console.error('[selfimprove] engine proposals failed:', errMsg(err));
-  }
-  for (const s of [...capabilityIdeas, ...faultIdeas, ...starving, ...healthFaults, ...engineIdeas]) {
-    actions.push({
-      kind: 'insight',
-      detail: `${s.title} — ${s.evidence}`,
-      story: {
-        subject: s.title,
-        driver: s.detail,
-        driverEvidence: s.evidence,
-        // `recorded`, not inferred: this is a measurement, not a guess about
-        // what somebody meant.
-        driverRef: undefined,
-      },
-    });
-  }
-
-  try {
-    // Every group is stamped with the channel it arrived through. This is the
-    // only place four of the nine channels are distinguishable at all — once
-    // they are all `IdeaInput`s in one array, a fault and a question look
-    // identical. The doctor's escalations are the interesting split: they
-    // reach `collectFaultIdeas` as ordinary `daydream_faults` rows (that fold
-    // IS the design), so `faultKind` is what tells them apart.
+    // Stamped with the channel it arrived through. The daydream inputs that
+    // used to queue here — the appetite ledger, the fault ledger, starvation,
+    // tool health and the engine's own proposals — were deleted in P4a
+    // (2026-09-25, spec D3), along with the workflow doctor's fault
+    // escalation, which nothing called. The think loop queues a `build` note
+    // as it writes it (`daydream/think/run.ts`).
     const added = await addIdeas([
-      ...capabilityIdeas.map((s) => ({
-        title: s.title,
-        detail: s.detail,
-        kind: s.kind,
-        priority: s.priority,
-        capabilitySlug: s.capabilitySlug,
-        source: 'appetite' as const,
-      })),
-      ...faultIdeas.map((s) => ({
-        title: s.title,
-        detail: s.detail,
-        kind: s.kind,
-        priority: s.priority,
-        source: DOCTOR_FAULT_KINDS.includes(s.faultKind) ? ('doctor' as const) : ('fault' as const),
-      })),
-      ...healthFaults.map((s) => ({
-        title: s.title,
-        detail: s.detail,
-        kind: s.kind,
-        priority: s.priority,
-        source: 'health' as const,
-      })),
-      ...starving.map((s) => ({
-        title: s.title,
-        detail: s.detail,
-        kind: s.kind,
-        priority: s.priority,
-        source: 'starved' as const,
-      })),
-      ...engineIdeas.map((s) => ({
-        title: s.title,
-        detail: s.detail,
-        kind: s.kind,
-        priority: s.priority,
-        source: 'engine' as const,
-      })),
       // Everything in `ideas` is mined from the questions the owner asked —
       // unmet needs, under-served intents, and portfolio opportunities.
       ...ideas.map((i) => ({ ...i, source: 'question' as const })),

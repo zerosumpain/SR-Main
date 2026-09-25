@@ -745,13 +745,13 @@ export async function runDoctorNow(
             });
           }
 
-          // ── Into the fault ledger ────────────────────────────────────
+          // ── Into the backlog ─────────────────────────────────────────
           //
-          // The fold. A finding a human has to write code for becomes an
-          // ordinary daydream fault, which is the door self-improvement
-          // already reads first — so the doctor stops being a second engine
-          // with its own private conclusions and starts feeding the same
-          // queue as everything else. `shouldEscalate` keeps the doctor's own
+          // The fold. A finding a human has to write code for becomes a
+          // self-improvement backlog item (it went via the daydream fault
+          // ledger until P4a) — so the doctor stops being a second engine
+          // with its own private conclusions and feeds the same queue as
+          // everything else. `shouldEscalate` keeps the doctor's own
           // lanes out of it: a config edit it can make itself and a runaway
           // the breaker already stopped are not work for anyone.
           const escalated = await escalateFindings(
@@ -771,7 +771,7 @@ export async function runDoctorNow(
           if (escalated.length) {
             actions.push({
               kind: 'escalated',
-              detail: `${escalated.length} finding(s) escalated to the fault ledger for a code change: ${escalated.slice(0, 3).join('; ')}`,
+              detail: `${escalated.length} finding(s) queued in the backlog for a code change: ${escalated.slice(0, 3).join('; ')}`,
             });
           }
 

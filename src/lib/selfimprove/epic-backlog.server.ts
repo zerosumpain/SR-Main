@@ -4,10 +4,14 @@ import { listBacklog, MAX_ATTEMPTS, setPriority } from './backlog';
 import { listEpics } from './epics';
 import { buildEpicBacklog, type BacklogEpic } from './epic-backlog';
 import { COLLECTIONS, SYSTEM_ACTOR, asData, type EpicData } from './types';
-import { listCapabilities } from '$lib/daydream/appetite/store';
 import { ensureSystemCollections } from './seed-apis';
 import { suggestBacklogGrooming } from './backlog-grooming';
 import { loadCustomToolHealth } from './context';
+
+/** A capability lead reached a decision path. None can since P4a — the
+ *  appetite ledger is gone and the board is built without one — so this is
+ *  a guard, not a path. */
+const RETIRED_CAPABILITY = 'Capability leads were retired with the daydream appetite ledger';
 
 export interface BacklogRoom {
   epics: BacklogEpic[];
@@ -22,16 +26,17 @@ export interface BacklogRoom {
   board: BoardView;
 }
 
-/** Reconcile from both intake ledgers. Every arrival is assigned automatically;
+/** Reconcile from the backlog. Every arrival is assigned automatically;
  * grouping never abandons deliverables, changes their status or starts a build.
+ * (The second intake ledger, the daydream appetite's capability leads, was
+ * deleted in P4a — 2026-09-25, spec D3 — so the board carries none.)
  */
 export async function loadBacklogRoom(): Promise<BacklogRoom> {
   await ensureSystemCollections();
-  const [backlog, capabilities, tools, saved] = await Promise.all([
-    listBacklog(undefined, { strict: true }), listCapabilities({ limit: null }), loadCustomToolHealth(), listEpics(),
+  const [backlog, tools, saved] = await Promise.all([
+    listBacklog(undefined, { strict: true }), loadCustomToolHealth(), listEpics(),
   ]);
-  const board = buildBoard({ backlog, capabilities: capabilities.map((c) => ({ ...c, evidence: c.cites })),
-    tools, attemptCeiling: MAX_ATTEMPTS, settledLimit: null });
+  const board = buildBoard({ backlog, capabilities: [], tools, attemptCeiling: MAX_ATTEMPTS, settledLimit: null });
   const epics = buildEpicBacklog(board.items, saved);
   const now = new Date().toISOString();
   for (const epic of epics) {
@@ -112,33 +117,11 @@ export async function decideBacklogGrooming(id: string, decision: 'apply' | 'kee
       if (!source || source.status !== 'open' || source.attempts || source.title !== item.title || source.detail !== item.detail || JSON.stringify(source.grooming ?? null) !== JSON.stringify(item.grooming)) throw new Error('Suggestion changed; delivery or requirements changed');
       await setParked(item.slug, true, reason);
     }
-    else {
-      const { getCapability, setCapabilityStatus } = await import('$lib/daydream/appetite/store');
-      const current = await getCapability(item.slug);
-      if (!current || current.status !== 'proposed' || current.need !== item.detail) throw new Error('Suggestion changed; capability changed');
-      if (!await setCapabilityStatus(item.slug, 'declined', { by, outcome: reason, outcomeRef: suggestion.targetId })) {
-        throw new Error('Capability could not be retired; reload and try again');
-      }
-    }
+    else throw new Error(RETIRED_CAPABILITY);
     await audit('applied');
     return;
   }
-  if (item.source === 'capability') {
-    const { getCapability, setCapabilityStatus, setMergedCapabilityRequirements } = await import('$lib/daydream/appetite/store');
-    const source = await getCapability(item.slug);
-    if (!source || source.status !== 'proposed') throw new Error('Suggestion changed; capability started building');
-    const brief = `${source.title}\n${source.need}\nValue: ${source.value}\nConsumer: ${source.consumer}\nIntegration: ${source.integrationHint ?? ''}\nEvidence: ${source.cites.join('\n')}`;
-    if (suggestion.targetId.startsWith('backlog:')) {
-      const target = await getBacklogItem(suggestion.targetId.slice(8));
-      if (!target || target.status !== 'open' || target.attempts) throw new Error('Suggestion changed; matching deliverable started');
-      await upsertRecord(COLLECTIONS.backlog, { key: target.slug, data: asData({ ...target,
-        absorbedRequirements: { ...target.absorbedRequirements, [item.id]: brief }, updatedAt: new Date().toISOString(),
-      }) }, SYSTEM_ACTOR);
-    } else await setMergedCapabilityRequirements(suggestion.targetId.slice(11), source.slug, brief);
-    if (!await setCapabilityStatus(source.slug, 'declined', { by, outcome: `Merged into ${suggestion.targetTitle}`, outcomeRef: suggestion.targetId })) throw new Error('Could not retire merged capability');
-    await audit('applied');
-    return;
-  }
+  if (item.source === 'capability') throw new Error(RETIRED_CAPABILITY);
   const targetSlug = suggestion.targetId.replace(/^backlog:/, '');
   const [source, target] = await Promise.all([getBacklogItem(item.slug), getBacklogItem(targetSlug)]);
   if (!source || !target || source.status !== 'open' || target.status !== 'open' || source.attempts || target.attempts) {
@@ -182,23 +165,7 @@ export async function overrideBacklogGrooming(itemId: string, keepSeparate: bool
         await upsertRecord(COLLECTIONS.backlog, { key: target.slug, data: asData({ ...target, absorbedRequirements: requirements }) }, SYSTEM_ACTOR);
       }
     }
-  } else {
-    const { setCapabilityStatus, getCapability, setMergedCapabilityRequirements } = await import('$lib/daydream/appetite/store');
-    if (!await setCapabilityStatus(item.slug, 'proposed', { by: 'owner', outcome: 'Restored separately by owner' })) throw new Error('Could not restore capability');
-    for (const action of actions.filter((a) => a.kind === 'merge')) {
-      if (action.targetId.startsWith('capability:')) {
-        const target = await getCapability(action.targetId.slice(11));
-        if (target?.status === 'proposed') await setMergedCapabilityRequirements(target.slug, item.slug, null);
-      } else {
-        const { getBacklogItem } = await import('./backlog');
-        const target = await getBacklogItem(action.targetId.slice(8));
-        if (target?.status === 'open' && target.attempts === 0) {
-          const requirements = { ...target.absorbedRequirements }; delete requirements[item.id];
-          await upsertRecord(COLLECTIONS.backlog, { key: target.slug, data: asData({ ...target, absorbedRequirements: requirements }) }, SYSTEM_ACTOR);
-        }
-      }
-    }
-  }
+  } else throw new Error(RETIRED_CAPABILITY);
   // Mark history only after restoration succeeds. A failed call is safe to retry.
   for (const meta of await listEpics()) if (meta.groomingHistory?.some((a) => a.itemId === itemId && a.state !== 'undone')) {
     await upsertRecord(COLLECTIONS.epics, { key: meta.slug, data: asData({ ...meta,

@@ -62,7 +62,8 @@ export const IDEA_SOURCES = [
   'owner',
   /** Mined from the questions the owner actually asked. */
   'question',
-  /** A `daydream_faults` row: daydreaming tried something and could not. */
+  /** A `daydream_faults` row: daydreaming tried something and could not.
+   *  Retired in P4a (2026-09-25); kept so older rows still read back. */
   'fault',
   /** A workflow-doctor finding that needed repo code, escalated as a fault. */
   'doctor',
@@ -78,6 +79,8 @@ export const IDEA_SOURCES = [
   'toolsmith',
   /** A chat turn the owner analysed and sent to the engine. */
   'trace',
+  /** A daydream think note with outcome `build` (spec 2026-09-25, D3). */
+  'daydream',
   /** Queued before this field existed. Never a guess. */
   'unattributed',
 ] as const;
@@ -212,6 +215,7 @@ export const SOURCE_LABEL: Readonly<Record<IdeaSource, { label: string; from: st
   engine: { label: 'About the engine', from: 'its own proposals, never built by a lane' },
   toolsmith: { label: 'The toolsmith', from: 'asides had while authoring' },
   trace: { label: 'A turn you sent', from: 'a chat trace analysed by hand' },
+  daydream: { label: 'Daydream proposals', from: 'a think note proposing a build' },
   unattributed: { label: 'Before this was recorded', from: 'queued before the channel was stamped' },
 };
 

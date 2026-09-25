@@ -4,16 +4,15 @@
 //
 // ── Why this shape ──────────────────────────────────────────────────────────
 //
-// The obvious wiring — have `selfimprove/analyze.ts` read doctor findings the
-// way it reads the fault ledger — is not available: `$lib/workflowdoctor`
-// already imports `$lib/selfimprove` (the budget shape, the idle gate), so an
-// import back would close a cycle in front of `check-module-boundaries`.
+// A doctor finding a human must write code for becomes a `feature` idea in
+// the self-improvement backlog, stamped with the `doctor` intake channel.
+// `$lib/workflowdoctor` already imports `$lib/selfimprove` (the idle gate), so
+// this is the existing direction, not a new edge.
 //
-// The better answer was there anyway. `daydream_faults` is ALREADY the door
-// every gap comes through, and self-improve already reads it first. So a
-// doctor finding it cannot fix becomes an ordinary fault, and the two engines
-// stop being two: one ledger of what is broken, one queue of what to do about
-// it, one room that shows both.
+// It used to go the long way round: an ordinary `daydream_faults` row, which
+// self-improve then read back out as an idea. That ledger was deleted with the
+// daydream engine in P4a (2026-09-25, spec D3), and the doctor now queues
+// directly — one queue, the same `Fix …` title the fault fold produced.
 //
 // ── What escalates, and what deliberately does not ──────────────────────────
 //
@@ -22,16 +21,16 @@
 // AUTO_APPLY_KINDS are config edits it can make itself, and the circuit
 // breaker already stops a runaway schedule. And a finding whose fix is "go and
 // pay the bill" or "reconnect the account" is not a code change — raising it
-// would fill the ledger with work nothing in the loop can ever close, which is
-// the noise `collectStarvation` learned to refuse.
+// would fill the backlog with work nothing in the loop can ever close.
 
-import { raiseFault } from '$lib/daydream/faults';
+import { addIdeas } from '$lib/selfimprove/backlog';
+import { slugifyIdea } from '$lib/selfimprove/types';
 import { AUTO_APPLY_KINDS, errMsg, type DoctorFindingData, type FixKind } from './types';
 
 /**
  * Fixes that need a person with a card, an account or a password. Real, and
- * already on `/jkai/daydreams/improvement` as findings — but not buildable, so
- * they never enter the fault ledger.
+ * already on `/jkai/daydreams/doctor` as findings — but not buildable, so
+ * they never enter the backlog.
  */
 const HUMAN_ONLY: ReadonlyArray<FixKind> = [
   'missing-credential',
@@ -45,8 +44,7 @@ const HUMAN_ONLY: ReadonlyArray<FixKind> = [
  *
  * One occurrence is a bad afternoon. The doctor triages a 7-day window that
  * overlaps every night, so a genuine standing defect accumulates; a transient
- * one does not. Three is the same bar `collectFaultIdeas` uses to call a fault
- * priority 1.
+ * one does not. Three is also the bar for queueing it at priority 1.
  */
 export const ESCALATE_AFTER = 3;
 
@@ -63,7 +61,7 @@ export interface EscalationInput {
   fix: string;
 }
 
-/** Should this finding become a fault? PURE, so the rule is testable without
+/** Should this finding become backlog work? PURE, so the rule is testable without
  *  a database and cannot drift into the writer. */
 export function shouldEscalate(f: Pick<EscalationInput, 'fixKind' | 'occurrences'>): boolean {
   if (f.fixKind === 'dead-node-type') return true; // static defect; it can never run
@@ -73,38 +71,48 @@ export function shouldEscalate(f: Pick<EscalationInput, 'fixKind' | 'occurrences
   return f.occurrences >= ESCALATE_AFTER;
 }
 
-/** The fault's identity. Stable across nights, and readable in the ledger. */
+/** The finding's identity. Stable across nights, and readable in the backlog. */
 export function escalationIdentifier(f: Pick<EscalationInput, 'workflowName' | 'nodeType' | 'nodeLabel' | 'fixKind'>): string {
   const where = f.nodeLabel ?? f.nodeType ?? 'the run';
   return `${f.workflowName} / ${where} (${f.fixKind})`;
 }
 
+/** The backlog title for a finding — the `Fix …` shape the fault fold used,
+ *  so a finding queued before and after P4a slugs to the same item. */
+export function escalationTitle(identifier: string): string {
+  return `Fix ${identifier}`.slice(0, 200);
+}
+
 /**
- * Raise a fault for every finding a human has to write code for. Soft — the
- * doctor's night must not fail because the ledger was unwritable.
+ * Queue every finding a human has to write code for as a backlog `feature`.
+ * Soft — the doctor's night must not fail because the backlog was unwritable.
  *
- * Returns the identifiers raised, for the run record and the pulse: a silent
- * escalation is indistinguishable from none, and this is the step that decides
- * what self-improvement works on tomorrow night.
+ * Returns the identifiers NEWLY queued, for the run record and the pulse. An
+ * item already in the backlog keeps its history (`addIdeas` never rewrites an
+ * existing slug), so a standing defect is queued once, not every night.
  */
 export async function escalateFindings(findings: EscalationInput[]): Promise<string[]> {
-  const raised: string[] = [];
-  for (const f of findings) {
-    if (!shouldEscalate(f)) continue;
+  const wanted = findings.filter(shouldEscalate).map((f) => {
     const identifier = escalationIdentifier(f);
-    try {
-      await raiseFault({
-        kind: f.fixKind === 'dead-node-type' ? 'workflow_dead_node' : 'workflow_failing',
-        identifier,
-        site: 'workflow-doctor',
-        detail: `${f.symptom} ${f.cause} Suggested fix: ${f.fix}`.slice(0, 1000),
-      });
-      raised.push(identifier);
-    } catch (err) {
-      console.warn(`[workflowdoctor] escalation failed for ${identifier}: ${errMsg(err)}`);
-    }
+    return {
+      identifier,
+      idea: {
+        title: escalationTitle(identifier),
+        detail: `${f.symptom} ${f.cause} Suggested fix: ${f.fix} (seen ${f.occurrences} time${f.occurrences === 1 ? '' : 's'} by the workflow doctor).`.slice(0, 2000),
+        kind: 'feature' as const,
+        priority: f.occurrences >= ESCALATE_AFTER ? 1 : 2,
+        source: 'doctor' as const,
+      },
+    };
+  });
+  if (wanted.length === 0) return [];
+  try {
+    const created = new Set(await addIdeas(wanted.map((w) => w.idea)));
+    return wanted.filter((w) => created.has(slugifyIdea(w.idea.title))).map((w) => w.identifier);
+  } catch (err) {
+    console.warn(`[workflowdoctor] escalation to the backlog failed: ${errMsg(err)}`);
+    return [];
   }
-  return raised;
 }
 
 /** Narrow a persisted finding to what escalation needs. */

@@ -37,14 +37,14 @@ const DEFAULTS: Required<DoctorConfig> = { allowDevHost: false };
  * ── Where the fold actually is ──────────────────────────────────────────────
  *
  * Not here. A shared scheduler is tidiness; the fold is that the propose phase
- * now escalates a finding a human has to write code for into
- * `daydream_faults`, which self-improvement reads first. One ledger of what is
- * broken, one queue of what to do about it.
+ * now queues a finding a human has to write code for straight into the
+ * self-improvement backlog (it went via `daydream_faults` until P4a). One
+ * queue of what to do about what is broken.
  */
 export const daydreamDoctor: ActivityHandler = {
   name: NAME,
   description:
-    'The workflow doctor: triages failed canvas runs over a 7-day window, lints the persisted graph, explains each failure in plain English, flips the circuit breaker on a runaway schedule, repairs node config inside a narrow whitelist when auto-apply is on, and escalates anything needing repo code into the daydream fault ledger — where self-improvement picks it up. One doctor_runs record per night. Skips when the owner has been active in the last hour.',
+    'The workflow doctor: triages failed canvas runs over a 7-day window, lints the persisted graph, explains each failure in plain English, flips the circuit breaker on a runaway schedule, repairs node config inside a narrow whitelist when auto-apply is on, and queues anything needing repo code in the self-improvement backlog. One doctor_runs record per night. Skips when the owner has been active in the last hour.',
   // Daily; the window is what decides when it lands.
   defaultCadenceSeconds: 86_400,
   defaultEnabled: true,

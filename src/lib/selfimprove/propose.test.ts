@@ -3,9 +3,7 @@ import type { BacklogItemData } from './types';
 
 const h = vi.hoisted(() => ({
   backlog: [] as BacklogItemData[],
-  accepted: new Set<string>(),
   attempts: [] as Array<{ slug: string; status: string; error?: string }>,
-  capability: [] as Array<{ slug: string; status: string; outcome: string; ref?: string }>,
   changeRequests: [] as Array<{ title: string; request: string }>,
   watches: [] as Array<{ description: string }>,
   changeRequestThrows: false,
@@ -19,13 +17,6 @@ vi.mock('./backlog', () => ({
   ),
   markAttempt: vi.fn(async (item: BacklogItemData, o: { status: string; error?: string }) => {
     h.attempts.push({ slug: item.slug, status: o.status, error: o.error });
-  }),
-}));
-
-vi.mock('$lib/daydream/appetite/intake', () => ({
-  ownerAcceptedCapabilities: vi.fn(async () => h.accepted),
-  markCapability: vi.fn(async (slug: string, status: string, outcome: string, ref?: string) => {
-    h.capability.push({ slug, status, outcome, ref });
   }),
 }));
 
@@ -81,9 +72,7 @@ const lanes = {
 
 beforeEach(() => {
   h.backlog = [];
-  h.accepted = new Set();
   h.attempts = [];
-  h.capability = [];
   h.changeRequests = [];
   h.watches = [];
   h.changeRequestThrows = false;
@@ -91,22 +80,10 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe('the tap gate', () => {
-  it('dispatches a repo build for a lead the owner accepted', async () => {
-    h.backlog = [item({ slug: 'rail', title: 'A rail feed', capabilitySlug: 'feature:rail' })];
-    h.accepted = new Set(['feature:rail']);
-
-    const actions = await proposeFeatures(budget, 'run1', { lanes });
-
-    expect(h.changeRequests).toHaveLength(1);
-    expect(h.changeRequests[0].title).toBe('A rail feed');
-    expect(actions.map((a) => a.kind)).toContain('change_requested');
-    expect(h.capability).toEqual([
-      { slug: 'feature:rail', status: 'building', outcome: expect.stringContaining('issue #9'), ref: 'build:abc123' },
-    ]);
-  });
-
-  it('refuses to spend on an untapped lead, and says why', async () => {
+describe('the autobuild gate', () => {
+  // The appetite ledger's owner-accepted leads were the other door; it was
+  // deleted in P4a (2026-09-25), so autobuild is the only one left.
+  it('refuses to spend without autobuild, and says why', async () => {
     h.backlog = [item({ slug: 'rail', capabilitySlug: 'feature:rail' })];
 
     const actions = await proposeFeatures(budget, 'run1', { lanes });
@@ -116,20 +93,14 @@ describe('the tap gate', () => {
     expect(actions[0].detail).toContain('£2');
   });
 
-  it('dispatches an untapped lead when autobuild is explicitly on', async () => {
-    h.backlog = [item({ slug: 'rail', capabilitySlug: 'feature:rail' })];
+  it('dispatches a repo build when autobuild is explicitly on', async () => {
+    h.backlog = [item({ slug: 'rail', title: 'A rail feed', capabilitySlug: 'feature:rail' })];
 
-    await proposeFeatures(budget, 'run1', { lanes, autobuild: true });
+    const actions = await proposeFeatures(budget, 'run1', { lanes, autobuild: true });
 
     expect(h.changeRequests).toHaveLength(1);
-  });
-
-  it('holds an item with no lead behind the same gate — a fault-mined feature is not a tap', async () => {
-    h.backlog = [item({ slug: 'from-a-fault' })];
-
-    await proposeFeatures(budget, 'run1', { lanes });
-
-    expect(h.changeRequests).toHaveLength(0);
+    expect(h.changeRequests[0].title).toBe('A rail feed');
+    expect(actions.map((a) => a.kind)).toContain('change_requested');
   });
 
   it('stops at one change request a night', async () => {
@@ -137,7 +108,6 @@ describe('the tap gate', () => {
       item({ slug: 'a', capabilitySlug: 'feature:a' }),
       item({ slug: 'b', capabilitySlug: 'feature:b' }),
     ];
-    h.accepted = new Set(['feature:a', 'feature:b']);
     h.prConfigured = true;
 
     await proposeFeatures(budget, 'run1', { lanes, autobuild: true });
@@ -147,15 +117,13 @@ describe('the tap gate', () => {
 });
 
 describe('watches', () => {
-  it('creates a monitor for an accepted watch lead', async () => {
+  it('creates a monitor for a watch when autobuild is on', async () => {
     h.backlog = [item({ slug: 'w', kind: 'watch', title: 'Watch the tide', capabilitySlug: 'watch:tide' })];
-    h.accepted = new Set(['watch:tide']);
 
-    const actions = await proposeFeatures(budget, 'run1', { lanes });
+    const actions = await proposeFeatures(budget, 'run1', { lanes, autobuild: true });
 
     expect(h.watches[0].description).toContain('Watch the tide');
     expect(actions.map((a) => a.kind)).toContain('watch_created');
-    expect(h.capability[0]).toMatchObject({ status: 'shipped', ref: 'monitor:w1' });
   });
 
   it('holds an untapped watch — it fires on a schedule and can notify', async () => {
@@ -169,9 +137,8 @@ describe('watches', () => {
 
   it('says so when the host has no watch lane at all', async () => {
     h.backlog = [item({ slug: 'w', kind: 'watch', capabilitySlug: 'watch:tide' })];
-    h.accepted = new Set(['watch:tide']);
 
-    const actions = await proposeFeatures(budget, 'run1', { lanes: {} });
+    const actions = await proposeFeatures(budget, 'run1', { lanes: {}, autobuild: true });
 
     expect(actions[0].detail).toContain('no watch lane');
   });
@@ -180,7 +147,6 @@ describe('watches', () => {
 describe('the fallback', () => {
   it('writes a blind draft PR only when there is no build lane', async () => {
     h.backlog = [item({ slug: 'rail', capabilitySlug: 'feature:rail' })];
-    h.accepted = new Set(['feature:rail']);
     h.prConfigured = true;
     budget.call.mockResolvedValueOnce({
       content: '',
@@ -190,7 +156,6 @@ describe('the fallback', () => {
     const actions = await proposeFeatures(budget, 'run1', { lanes: { createWatch: lanes.createWatch } });
 
     expect(actions.map((a) => a.kind)).toContain('pr_opened');
-    expect(h.capability[0]).toMatchObject({ status: 'building', ref: 'https://github.com/x/y/pull/7' });
   });
 
   it('does nothing at all with no lane and no token', async () => {
@@ -206,32 +171,20 @@ describe('the fallback', () => {
 describe('failures', () => {
   it('records a failed dispatch against the item instead of sinking the phase', async () => {
     h.backlog = [item({ slug: 'rail', capabilitySlug: 'feature:rail' })];
-    h.accepted = new Set(['feature:rail']);
     h.changeRequestThrows = true;
 
-    const actions = await proposeFeatures(budget, 'run1', { lanes });
+    const actions = await proposeFeatures(budget, 'run1', { lanes, autobuild: true });
 
     expect(h.attempts).toEqual([{ slug: 'rail', status: 'open', error: 'builder unavailable' }]);
     expect(actions.some((a) => a.detail.includes('builder unavailable'))).toBe(true);
-  });
-
-  it('carries on when the accepted-leads read fails', async () => {
-    const intake = await import('$lib/daydream/appetite/intake');
-    vi.mocked(intake.ownerAcceptedCapabilities).mockRejectedValueOnce(new Error('db down'));
-    h.backlog = [item({ slug: 'rail' })];
-
-    const actions = await proposeFeatures(budget, 'run1', { lanes });
-
-    expect(actions[0].detail).toContain('waiting for a tap');
   });
 });
 
 describe('the ask handed to the builder', () => {
   it('names where it came from and refuses to license weakening a gate', async () => {
     h.backlog = [item({ slug: 'rail', capabilitySlug: 'feature:rail', detail: 'the specific need' })];
-    h.accepted = new Set(['feature:rail']);
 
-    await proposeFeatures(budget, 'run7', { lanes });
+    await proposeFeatures(budget, 'run7', { lanes, autobuild: true });
 
     const req = h.changeRequests[0].request;
     expect(req).toContain('the specific need');

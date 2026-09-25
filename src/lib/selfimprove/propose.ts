@@ -34,12 +34,13 @@
 // ── Who is allowed to spend ─────────────────────────────────────────────────
 //
 // A change-request build can cost £2, roughly ten times a whole night here, so
-// the gate is explicit (owner decision, 2026-09-04):
+// the gate is explicit (owner decision, 2026-09-04): nothing is dispatched
+// unless `daydream.appetite.autobuild` is explicitly true, in which case the
+// engine may dispatch on its own, one change request and one watch a night.
 //
-//   * an item whose appetite lead the owner ACCEPTED on the Improvement room
-//     is dispatched — that acceptance is the tap; or
-//   * `daydream.appetite.autobuild` is explicitly true, in which case the
-//     engine may dispatch on its own, one change request and one watch a night.
+// There used to be a second door — an appetite lead the owner ACCEPTED on the
+// Improvement room was its own tap. The appetite ledger was deleted in P4a
+// (2026-09-25, spec D3), and that door with it.
 //
 // Everything else is queued and reported, exactly as before.
 
@@ -49,7 +50,6 @@ import { buildContextPack, renderContext } from './context';
 import { listBacklog, markAttempt, pickWork } from './backlog';
 import { openDraftPr, pathAllowed, prConfigured, type FileChange } from '$lib/github/pr';
 import type { BacklogItemData } from './types';
-import { markCapability, ownerAcceptedCapabilities } from '$lib/daydream/appetite/intake';
 import { renderBacklogBrief } from './grooming';
 
 interface ProposedChange {
@@ -198,16 +198,6 @@ export async function proposeFeatures(
 
   const backlog = await listBacklog();
 
-  // Which items the owner has explicitly said yes to. An empty set is the
-  // normal case and simply means nothing is dispatched unattended.
-  let accepted = new Set<string>();
-  try {
-    accepted = await ownerAcceptedCapabilities();
-  } catch (err) {
-    console.error('[selfimprove] owner-accepted leads unread:', errMsg(err));
-  }
-  const tapped = (item: BacklogItemData) => !!item.capabilitySlug && accepted.has(item.capabilitySlug);
-
   // ── Watches ───────────────────────────────────────────────────────────────
   const watchWork = pickWork(backlog, 'watch', WORK_CAPS.maxWatches);
   for (const item of watchWork) {
@@ -215,7 +205,7 @@ export async function proposeFeatures(
       actions.push({ kind: 'proposal', detail: `${item.slug}: no watch lane on this host` });
       continue;
     }
-    if (!tapped(item) && !autobuild) {
+    if (!autobuild) {
       actions.push({
         kind: 'proposal',
         detail: `${item.slug}: waiting for a tap — a watch fires on a schedule and can notify, so it is not dispatched unattended (set daydream.appetite.autobuild to change that)`,
@@ -225,9 +215,6 @@ export async function proposeFeatures(
     try {
       const res = await lanes.createWatch({ description: renderBacklogBrief(item).slice(0, 1000) });
       await markAttempt(item, { status: 'shipped', runId });
-      if (item.capabilitySlug) {
-        await markCapability(item.capabilitySlug, 'shipped', `Created as a ${res.label}.`, res.ref);
-      }
       actions.push({
         kind: 'watch_created',
         detail: `${res.label} — for "${item.title}"`,
@@ -259,7 +246,7 @@ export async function proposeFeatures(
     // The build lane first: it is the only one of the two that produces code
     // anybody has run.
     if (lanes.changeRequest && dispatched < WORK_CAPS.maxChangeRequests) {
-      if (!tapped(item) && !autobuild) {
+      if (!autobuild) {
         actions.push({
           kind: 'proposal',
           detail: `${item.slug}: waiting for a tap — a repo build costs up to £2 and opens a PR to review (set daydream.appetite.autobuild to change that)`,
@@ -273,9 +260,6 @@ export async function proposeFeatures(
         });
         dispatched++;
         await markAttempt(item, { status: 'open', runId, buildRef: res.ref });
-        if (item.capabilitySlug) {
-          await markCapability(item.capabilitySlug, 'building', `Handed to the builder — ${res.label}.`, res.ref);
-        }
         actions.push({
           kind: 'change_requested',
           detail: `${res.label} — "${item.title}"`,
@@ -327,9 +311,6 @@ export async function proposeFeatures(
       });
 
       await markAttempt(item, { status: 'shipped', runId, prUrl: pr.url });
-      if (item.capabilitySlug) {
-        await markCapability(item.capabilitySlug, 'building', `Draft PR #${pr.number} opened (unrun).`, pr.url);
-      }
       actions.push({
         kind: 'pr_opened',
         detail: `#${pr.number} ${change.title} — ${pr.url} (${change.files.length} file(s), draft)`,

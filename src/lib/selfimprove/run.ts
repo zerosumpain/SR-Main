@@ -35,8 +35,6 @@ import { proposeFeatures } from './propose';
 import { optimiseCalls } from './optimise';
 import { finalizeAndNotify } from './report';
 import type { QuestionInsights } from './types';
-import { faultNeeds } from '$lib/daydream/faults';
-import { capabilityNeeds } from '$lib/daydream/appetite/intake';
 import { hasOpenNewDataWork, listBacklog } from './backlog';
 import { getSetting } from '$lib/server/models/settings';
 
@@ -336,14 +334,9 @@ export async function runImprovementNow(
                 `${o.title}: ${o.need} Consumer: ${o.consumer}. Value: ${o.value}` +
                 (o.integrationHint ? ` Suggested integration: ${o.integrationHint}` : ''),
             );
-          // The appetite ledger FIRST: a fault's connector is a source that
-          // broke, a lead's is one that never existed, and the owner's
-          // instruction is that the second outranks the first.
-          return discoverApis(state.insights, budget, [
-            ...(await capabilityNeeds().catch(() => [])),
-            ...(await faultNeeds().catch(() => [])),
-            ...portfolioNeeds,
-          ]);
+          // The appetite and fault ledgers used to lead this list; both were
+          // deleted with the daydream engine in P4a (2026-09-25, spec D3).
+          return discoverApis(state.insights, budget, portfolioNeeds);
         },
       ],
       ['build', async () => buildTool(state.insights, state.signals, budget, runId)],
