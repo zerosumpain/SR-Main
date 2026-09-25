@@ -100,7 +100,9 @@ describe('codex capabilities', () => {
     // Text-only until 2026-09-25, when the Responses transport started carrying
     // `input_image` and `input_file` (see capabilities.ts).
     const caps = getModelCapabilities({ provider: 'codex', modelId: 'codex/gpt-5.6-sol' });
-    expect(caps).toEqual({ image: true, audio: false, video: false, pdf: true, documentText: true });
+    expect(caps).toMatchObject({ image: true, audio: false, video: false, pdf: true, documentText: true });
+    // Only the types the endpoint takes travel as parts; HEIC and .docx are described first.
+    expect(caps.nativeMimes).toEqual(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf']);
   });
 
   it('does tools and structured output and streaming; embeddings remain the gap', () => {

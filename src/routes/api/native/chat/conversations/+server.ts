@@ -6,6 +6,7 @@ import { clampLimit, withDevice } from '$lib/server/native-handler';
 import { getConversationList, searchConversationList } from '$lib/jkai/queries';
 import { resolveDefaultThinkingLevel } from '$lib/server/models/settings';
 import { resolveChatTurnModel } from '$lib/server/models/workload-settings';
+import { isPlaceholderTitle } from '$lib/jkai/thread-title';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
 
 /**
@@ -111,7 +112,11 @@ export const POST: RequestHandler = withDevice(async ({ request }) => {
   const [conv] = await db
     .insert(conversations)
     .values({
-      title: title.length > 0 ? title : null,
+      // The app opens every thread as "New thread". Stored, that read as a
+      // name: the first reply never titled the thread, and /drive filed every
+      // photo from the phone in one "New thread" folder. NULL is what the web
+      // sends, and what the app already shows as "Untitled thread".
+      title: isPlaceholderTitle(title) ? null : title,
       source: 'web',
       modelProvider: ctx.provider,
       modelId: ctx.modelId,

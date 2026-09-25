@@ -38,29 +38,45 @@ function dataUrl(mime: string, buf: Buffer): string {
  * Whether `caps` lets this attachment travel as its own part. No caps means
  * "assume yes", the original contract for callers that handle media themselves.
  */
-export function isNativeFor(att: JkaiAttachment, caps?: ModelCapabilities): boolean {
+export function isNativeFor(att: Pick<JkaiAttachment, 'kind' | 'mimeType'>, caps?: ModelCapabilities): boolean {
+  if (!caps || att.kind === 'text') return true;
+  if (caps.nativeMimes && !caps.nativeMimes.includes(att.mimeType)) return false;
   return (
-    !caps ||
     (att.kind === 'image' && caps.image) ||
     (att.kind === 'audio' && caps.audio) ||
     (att.kind === 'video' && caps.video) ||
-    ((att.kind === 'pdf' || att.kind === 'document') && caps.pdf) ||
-    att.kind === 'text'
+    ((att.kind === 'pdf' || att.kind === 'document') && caps.pdf)
   );
 }
 
 /**
- * How many encoded bytes of files one chat request may carry.
+ * How many encoded bytes of files one Codex request may carry.
  *
  * Every turn re-sends the thread, so a photo sent natively is sent again on
  * every later turn, and on every tool round of each. That is the point (the
- * model keeps looking at the picture, not at a paragraph about it), but it has
- * a ceiling: the Codex bridge refuses a body over 32MB, and a few full-size
- * photos from the web composer (15MB each) would pass it. Newest first, so the
- * picture being talked about is the one that stays; anything older that does
- * not fit falls back to its cached description.
+ * model keeps looking at the picture, not at a paragraph about it), but the
+ * Codex bridge refuses a body over 32MB, and a few full-size photos from the
+ * web composer (15MB each) would pass it. Newest first, so the picture being
+ * talked about is the one that stays; anything older that does not fit falls
+ * back to its cached description.
+ *
+ * Codex only. OpenRouter has no such ceiling here and has always been sent
+ * every file natively; `JKAI_MAX_TURN_BYTES` in general-chat still guards it.
  */
 export const MEDIA_BUDGET_BYTES = Number(process.env.JKAI_MEDIA_BUDGET_BYTES ?? 20 * 1024 * 1024);
+
+/** The budget for this provider: see `MEDIA_BUDGET_BYTES`. */
+export function mediaBudgetFor(provider: string): number {
+  return provider === 'codex' ? MEDIA_BUDGET_BYTES : Number.POSITIVE_INFINITY;
+}
+
+/**
+ * The files this request carries as native parts. A round may only be
+ * handed to a model that can read every one of them.
+ */
+export function nativeAttachments(turns: JkaiAttachment[][], caps: ModelCapabilities[]): JkaiAttachment[] {
+  return turns.flatMap((atts, i) => atts.filter((a) => a.kind !== 'text' && isNativeFor(a, caps[i])));
+}
 
 /** The same model, reading nothing natively: every file pre-analysed to text. */
 const TEXT_ONLY_CAPS: ModelCapabilities = {
@@ -101,7 +117,11 @@ export function allocateMediaCaps(
 export async function buildMultimodalContent(
   text: string,
   attachments: JkaiAttachment[],
-  opts?: { caps?: ModelCapabilities },
+  opts?: {
+    caps?: ModelCapabilities;
+    /** Name each native file in a text line first (see `nativeLabel`). */
+    label?: boolean;
+  },
 ): Promise<ContentPart[]> {
   const parts: ContentPart[] = [];
   if (text && text.length > 0) parts.push({ type: 'text', text });
@@ -114,7 +134,7 @@ export async function buildMultimodalContent(
       continue;
     }
 
-    const label = nativeLabel(att);
+    const label = opts?.label ? nativeLabel(att) : null;
     if (label) parts.push({ type: 'text', text: label });
 
     if (att.kind === 'image') {

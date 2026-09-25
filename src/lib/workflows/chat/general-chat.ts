@@ -38,7 +38,14 @@ import { getCompiledPrompt, promptIdentity } from '$lib/workflows/prompts/loader
 import { inferToolsets } from '$lib/workflows/site-tools/keyword-classifier';
 import { notifySubscribers } from '$lib/workflows/chat/followup-queue';
 import type { JobEvent } from '$lib/workflows/chat/job-store';
-import { allocateMediaCaps, buildMultimodalContent, encodedSizeBytes } from '$lib/jkai/media/multimodal';
+import {
+  allocateMediaCaps,
+  buildMultimodalContent,
+  encodedSizeBytes,
+  isNativeFor,
+  mediaBudgetFor,
+  nativeAttachments,
+} from '$lib/jkai/media/multimodal';
 import { extractUrlsFromText, fetchUrlContent, isUrlFetchError } from '$lib/jkai/extract/url';
 import type { JkaiAttachment } from '$lib/db/schema';
 import type { HistoryMessage } from './conversation-history';
@@ -1101,17 +1108,27 @@ async function runGeneralChat(
   const recentHistory = compressed.messages;
   // Files the model can read go to it as files on EVERY turn, not only the one
   // they arrived on — a follow-up about a photo has to be answered from the
-  // photo. Newest first, within a byte budget; see `allocateMediaCaps`.
+  // photo. Newest first, within the provider's byte budget; see `allocateMediaCaps`.
+  const turnFiles = [
+    ...recentHistory.map((h) => (h.role === 'user' ? h.attachments ?? [] : [])),
+    input.attachments ?? [],
+  ];
   const turnCaps = allocateMediaCaps(
-    [
-      ...recentHistory.map((h) => (h.role === 'user' ? h.attachments ?? [] : [])),
-      input.attachments ?? [],
-    ],
+    turnFiles,
     mediaCaps,
+    mediaBudgetFor(coerceModelContext(options.modelContext).provider),
   );
-  for (const [i, h] of recentHistory.entries()) {
+  // What this request carries as files. A round is only escalated to the
+  // thinking model below if that model can read all of them; otherwise it
+  // would be handed pixels it cannot take and 404 ("No endpoints found that
+  // support image input"), which is how a Codex thread failed on homeserv
+  // when the thinking tier there was an OpenRouter model.
+  const sentAsFiles = nativeAttachments(turnFiles, turnCaps);
+  let turn = 0;
+  for (const h of recentHistory) {
+    const caps = turnCaps[turn++];
     if (h.role === 'user' && h.attachments && h.attachments.length > 0) {
-      const parts = await buildMultimodalContent(h.content, h.attachments, { caps: turnCaps[i] });
+      const parts = await buildMultimodalContent(h.content, h.attachments, { caps, label: true });
       messages.push({ role: 'user', content: parts as any });
     } else {
       messages.push({ role: h.role, content: h.content } as any);
@@ -1134,6 +1151,7 @@ async function runGeneralChat(
 
   const userParts = await buildMultimodalContent(userMessage, input.attachments ?? [], {
     caps: turnCaps[turnCaps.length - 1],
+    label: true,
   });
   const maxTurnBytes = Number(process.env.JKAI_MAX_TURN_BYTES ?? 104857600);
   if (encodedSizeBytes(userParts) > maxTurnBytes) {
@@ -1299,6 +1317,16 @@ async function runGeneralChat(
   // narrowed — it is dormant today, and changing when a tier fires is a
   // decision, not a cleanup.
   let thinkingCtxPromise: Promise<ModelContext | null> | null = null;
+  /** Whether `ctx` can take every file this request carries, within its budget. */
+  const canReadFiles = (ctx: ModelContext): boolean => {
+    if (sentAsFiles.length === 0) return true;
+    const caps = getModelCapabilities(ctx);
+    const bytes = sentAsFiles.reduce((n, a) => n + Math.ceil((a.sizeBytes * 4) / 3), 0);
+    return (
+      sentAsFiles.every((a) => isNativeFor(a, caps)) &&
+      bytes <= mediaBudgetFor(coerceModelContext(ctx).provider)
+    );
+  };
   const getThinkingCtx = (): Promise<ModelContext | null> => {
     if (!isOrchestrator) return Promise.resolve(null);
     thinkingCtxPromise ??= resolveThinkingModel();
@@ -1357,7 +1385,8 @@ async function runGeneralChat(
     // in the logs.
     const escalates =
       !!thinkingCtx &&
-      (thinkingCtx.provider !== baseCtx.provider || thinkingCtx.modelId !== baseCtx.modelId);
+      (thinkingCtx.provider !== baseCtx.provider || thinkingCtx.modelId !== baseCtx.modelId) &&
+      canReadFiles(thinkingCtx);
     const turnCtx = escalates && thinkingCtx ? thinkingCtx : baseCtx;
     const { client, model } = await getLLMClient(turnCtx);
     // Read off the context that will actually serve THIS round, not the

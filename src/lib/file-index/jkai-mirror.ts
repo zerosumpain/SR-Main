@@ -8,10 +8,9 @@
 // the caller ignores the return value on error.
 
 import { randomUUID } from 'node:crypto';
-import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { workflowFiles, conversations, jkaiAttachments } from '$lib/db/schema';
-import { isPlaceholderTitle } from '$lib/jkai/thread-title';
+import { workflowFiles, conversations } from '$lib/db/schema';
 import { newDiskPath, saveBuffer } from '$lib/file-store/storage';
 import { reindexFileInBackground } from './store';
 
@@ -74,9 +73,7 @@ export async function jkaiDriveFolder(conversationId: string | null | undefined)
         .from(conversations)
         .where(eq(conversations.id, conversationId))
         .limit(1);
-      // "New thread" is what the iPhone app names every thread it opens. As a
-      // folder it put every photo from the app in one pile.
-      const seg = isPlaceholderTitle(conv?.title) ? '' : folderSegment(conv?.title ?? '');
+      const seg = folderSegment(conv?.title ?? '');
       if (seg) return `${JKAI_FOLDER}${seg}/`;
     } catch (err) {
       // A lookup failure must not cost the mirror — fall through to the date.
@@ -103,8 +100,6 @@ export async function mirrorJkaiAttachmentToDrive(opts: {
    *  conversation touched rather than only the half the user typed. */
   source?: 'web' | 'generated';
   uploadedBy?: string | null;
-  /** The chat's own row for this file, stamped with where the copy went. */
-  attachmentId?: string | null;
 }): Promise<string | null> {
   try {
     const folder = await jkaiDriveFolder(opts.conversationId);
@@ -139,93 +134,9 @@ export async function mirrorJkaiAttachmentToDrive(opts: {
       .returning({ id: workflowFiles.id });
 
     if (row) reindexFileInBackground(row.id);
-    if (row && opts.attachmentId) await stampDriveLink(opts.attachmentId, row.id, name);
     return row?.id ?? null;
   } catch (err) {
     console.warn(`[file-index] jkai attachment mirror failed: ${(err as Error).message}`);
     return null;
-  }
-}
-
-/**
- * Record on the chat's attachment row which /drive file is its copy.
- *
- * Without it the two stores only shared a filename: nothing could move a
- * thread's files when it got a title, and the model could not be told where
- * the original of the photo it is looking at lives. Merged into `metadata` in
- * SQL, because pre-analysis writes the same column (`$lib/jkai/media/preanalyse`).
- */
-async function stampDriveLink(attachmentId: string, driveFileId: string, drivePath: string): Promise<void> {
-  const patch = JSON.stringify({ driveFileId, drivePath });
-  await db
-    .update(jkaiAttachments)
-    .set({ metadata: sql`coalesce(${jkaiAttachments.metadata}, '{}'::jsonb) || ${patch}::jsonb` })
-    .where(eq(jkaiAttachments.id, attachmentId));
-}
-
-/** A folder a file lands in before its thread has a name. */
-function isFallbackFolder(path: string): boolean {
-  const rest = path.slice(JKAI_FOLDER.length);
-  const folder = rest.includes('/') ? rest.slice(0, rest.indexOf('/')) : '';
-  return path.startsWith(JKAI_FOLDER) && (folder === '' || /^\d{4}-\d{2}$/.test(folder) || isPlaceholderTitle(folder));
-}
-
-/**
- * Move a thread's files into `jkai/<title>/` once the thread has a title.
- *
- * A file is uploaded before the message it belongs to is sent, and the title
- * is written from that first message, so the first files in every thread were
- * filed under the month (or, from the phone, under "New thread") and stayed
- * there. Called when a title is written. Only files still in a fallback folder
- * move: one the owner has already filed somewhere else in /drive stays put.
- *
- * Best-effort, like the mirror: a failure leaves the file where it was.
- */
-export async function refileConversationFiles(conversationId: string): Promise<number> {
-  try {
-    const folder = await jkaiDriveFolder(conversationId);
-    if (isFallbackFolder(folder)) return 0;
-
-    const atts = await db
-      .select({ id: jkaiAttachments.id, metadata: jkaiAttachments.metadata })
-      .from(jkaiAttachments)
-      .where(and(eq(jkaiAttachments.conversationId, conversationId), isNotNull(jkaiAttachments.metadata)));
-    const byFile = new Map<string, string>();
-    for (const a of atts) {
-      const id = (a.metadata as { driveFileId?: unknown } | null)?.driveFileId;
-      if (typeof id === 'string') byFile.set(id, a.id);
-    }
-    if (byFile.size === 0) return 0;
-
-    const files = await db
-      .select({ id: workflowFiles.id, name: workflowFiles.name })
-      .from(workflowFiles)
-      .where(inArray(workflowFiles.id, [...byFile.keys()]));
-
-    let moved = 0;
-    for (const f of files) {
-      if (!isFallbackFolder(f.name)) continue;
-      const base = f.name.slice(f.name.lastIndexOf('/') + 1);
-      let name = `${folder}${base}`.slice(0, 200);
-      const [clash] = await db
-        .select({ id: workflowFiles.id })
-        .from(workflowFiles)
-        .where(eq(workflowFiles.name, name))
-        .limit(1);
-      if (clash) {
-        const { stem, ext } = splitExt(base);
-        name = `${folder}${stem}-${randomUUID().slice(0, 8)}${ext}`.slice(0, 200);
-      }
-      // `name` is only the /drive path; the bytes stay where `diskPath` says.
-      // `updated_at` is left alone, as /drive's own move does: a move is not
-      // an edit, and "last added" sorts on it.
-      await db.update(workflowFiles).set({ name }).where(eq(workflowFiles.id, f.id));
-      await stampDriveLink(byFile.get(f.id)!, f.id, name);
-      moved++;
-    }
-    return moved;
-  } catch (err) {
-    console.warn(`[file-index] jkai refile failed for ${conversationId}: ${(err as Error).message}`);
-    return 0;
   }
 }

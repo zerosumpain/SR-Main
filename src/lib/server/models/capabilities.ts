@@ -10,11 +10,22 @@ export interface ModelCapabilities {
   video: boolean;
   pdf: boolean;
   documentText: boolean;
+  /**
+   * When set, only these MIME types travel as native parts; any other file of
+   * an allowed kind is pre-analysed to text. Unset means the kind flags decide
+   * alone. Codex needs it: its endpoint takes jpeg/png/webp/gif and PDF, and a
+   * HEIC photo or a .docx sent as a part fails the whole request.
+   */
+  nativeMimes?: readonly string[];
 }
 
 const ALL: ModelCapabilities = { image: true, audio: true, video: true, pdf: true, documentText: true };
 const IMAGE_ONLY: ModelCapabilities = { image: true, audio: false, video: false, pdf: false, documentText: true };
 const IMAGE_PDF: ModelCapabilities = { image: true, audio: false, video: false, pdf: true, documentText: true };
+const CODEX_CAPS: ModelCapabilities = {
+  ...IMAGE_PDF,
+  nativeMimes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'],
+};
 const TEXT_ONLY: ModelCapabilities = { image: false, audio: false, video: false, pdf: false, documentText: true };
 
 // STATIC FALLBACK ONLY — the live catalogue is the source of truth.
@@ -86,7 +97,9 @@ const OPENROUTER_CAPS: Record<string, ModelCapabilities> = {
  * on what the model itself accepts.
  */
 export function getChatInputCapabilities(ctx: ModelContext): ModelCapabilities {
-  const native = getModelCapabilities(ctx);
+  // `nativeMimes` is about what travels as a part, which the composer does not
+  // decide; left on, it would read as "the chat only accepts these".
+  const { nativeMimes: _, ...native } = getModelCapabilities(ctx);
   return { ...native, image: true, pdf: true, audio: true, documentText: true };
 }
 
@@ -167,9 +180,10 @@ export function getModelCapabilities(ctx: ModelContext): ModelCapabilities {
   // look at it again ("I can't measure it from the description alone").
   //
   // Audio and video stay false, because the list does not claim them. Audio is
-  // still transcribed first. The `sdk` rollback transport cannot carry any of
+  // still transcribed first. HEIC, Office files and the rest are described
+  // first too (`nativeMimes`): the endpoint takes only these five types. The `sdk` rollback transport cannot carry any of
   // this; setting CODEX_BRIDGE_TRANSPORT=sdk puts images back to "[image omitted]".
-  if (ctx.provider === 'codex' || isCodexModelId(ctx.modelId)) return IMAGE_PDF;
+  if (ctx.provider === 'codex' || isCodexModelId(ctx.modelId)) return CODEX_CAPS;
   warmCatalogueCaps();
   const id = mapLegacyModelId(ctx.modelId);
   return catalogueCaps?.get(id) ?? OPENROUTER_CAPS[id] ?? TEXT_ONLY;

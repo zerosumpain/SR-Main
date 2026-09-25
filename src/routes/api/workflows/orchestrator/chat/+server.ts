@@ -36,7 +36,7 @@ import { JKAI_EXTENDED_TOOL } from '$lib/mcp/extended-tool';
 import { createTraceRecorder, compactStepsForMessage, type CompactToolStep } from '$lib/jkai/tool-trace';
 import { resolveChatTurnModel } from '$lib/server/models/workload-settings';
 import { isPlaceholderTitle } from '$lib/jkai/thread-title';
-import { refileConversationFiles } from '$lib/file-index/jkai-mirror';
+import { refileConversationFiles } from '$lib/jkai/media/drive-link';
 
 const MAX_MESSAGE_LEN = 20_000;
 

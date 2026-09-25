@@ -5,7 +5,7 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('./storage', () => ({ readBuffer: vi.fn() }));
 vi.mock('./preanalyse', () => ({ preanalyseAttachment: vi.fn(), preanalysisPartText: vi.fn() }));
 
-import { allocateMediaCaps, nativeLabel, isNativeFor } from './multimodal';
+import { allocateMediaCaps, nativeLabel, isNativeFor, mediaBudgetFor, nativeAttachments } from './multimodal';
 import type { JkaiAttachment } from '$lib/db/schema';
 import type { ModelCapabilities } from '$lib/server/models/capabilities';
 
@@ -77,6 +77,40 @@ describe('isNativeFor', () => {
   it('follows the caps otherwise', () => {
     expect(isNativeFor(att('image', 1), SEES)).toBe(true);
     expect(isNativeFor(att('audio', 1), SEES)).toBe(false);
+  });
+
+  it('describes a HEIC photo or a .docx first when the caps name the types they take', () => {
+    // Codex's endpoint takes jpeg/png/webp/gif and PDF; anything else fails the
+    // whole request, and then every later turn that re-sends it.
+    const codex = { ...SEES, nativeMimes: ['image/jpeg', 'image/png', 'application/pdf'] };
+    expect(isNativeFor(att('image', 1, { mimeType: 'image/jpeg' }), codex)).toBe(true);
+    expect(isNativeFor(att('image', 1, { mimeType: 'image/heic' }), codex)).toBe(false);
+    expect(
+      isNativeFor(
+        att('document', 1, {
+          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        }),
+        codex,
+      ),
+    ).toBe(false);
+  });
+});
+
+describe('mediaBudgetFor', () => {
+  it('budgets Codex, whose bridge refuses bodies over 32MB, and nothing else', () => {
+    expect(mediaBudgetFor('codex')).toBeLessThan(32 * MB);
+    // OpenRouter has always been sent every file; a 20MB video on Gemini must
+    // not start arriving as "contents unavailable".
+    expect(mediaBudgetFor('openrouter')).toBe(Number.POSITIVE_INFINITY);
+  });
+});
+
+describe('nativeAttachments', () => {
+  it('lists the files that travel as files, which a model must be able to read', () => {
+    const photo = att('image', 1);
+    const note = att('audio', 1);
+    const text = att('text', 1);
+    expect(nativeAttachments([[photo, note], [text]], [SEES, SEES])).toEqual([photo]);
   });
 });
 
