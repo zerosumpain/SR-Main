@@ -378,6 +378,7 @@ export function outputRows(output: unknown): number | null {
 export interface AttentionInput {
   lastRun: Pick<RunRow, 'status' | 'error'> | null;
   buildError: string | null;
+  question?: string | null;
   pendingFixes?: number;
 }
 
@@ -390,11 +391,12 @@ function firstLine(text: string, max = 140): string {
 /**
  * Whether a workflow needs the owner, and why, in one sentence.
  *
- * Only states the owner can act on: a build that failed, a run that failed or
+ * Only states the owner can act on: a build that failed or asked a question, a run that failed or
  * half-failed, a run paused for an approval, a fix waiting to be accepted. A
  * run in progress, or a workflow that has never run, is not a problem.
  */
 export function attentionFor(input: AttentionInput): { needsAttention: boolean; attentionReason: string | null } {
+  if (input.question) return { needsAttention: true, attentionReason: 'jkai has a question' };
   if (input.buildError) {
     return { needsAttention: true, attentionReason: firstLine(input.buildError) };
   }

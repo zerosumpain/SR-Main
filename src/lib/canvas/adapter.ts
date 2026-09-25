@@ -1222,6 +1222,8 @@ export type CanvasSummary = {
   triggerType: string;
   latestRunAt: string | null;
   latestRunStatus: string | null;
+  /** A Describe-it build waiting on the owner: jkai's question. */
+  buildQuestion: string | null;
   updatedAt: string;
 };
 

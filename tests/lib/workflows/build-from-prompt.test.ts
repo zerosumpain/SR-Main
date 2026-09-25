@@ -8,8 +8,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const markers: Array<{ workflowId: string; status: string; error?: string }> = [];
 vi.mock('$lib/workflows/build-state.server', () => ({
-  recordBuildState: vi.fn(async (workflowId: string, status: string, _content: string, error?: string) => {
-    markers.push({ workflowId, status, error });
+  recordBuildState: vi.fn(async (workflowId: string, status: string, _content: string, extra?: { error?: string }) => {
+    markers.push({ workflowId, status, error: extra?.error });
   }),
 }));
 
@@ -116,12 +116,10 @@ describe('buildInBackground', () => {
     await buildInBackground('wf-1', 'every morning at 8 send me the news', null);
     expect(markers).toEqual([{ workflowId: 'wf-1', status: 'failed', error: 'built, but the test run failed at "Fetch": HTTP 404' }]);
     const { recordBuildState } = await import('$lib/workflows/build-state.server');
-    expect(vi.mocked(recordBuildState).mock.calls.at(-1)?.[4]).toBe(failing);
+    expect(vi.mocked(recordBuildState).mock.calls.at(-1)?.[3]?.verification).toBe(failing);
   });
 
-  it('marks a clarifying question, an empty graph, a lint error and a crash as failures', async () => {
-    generateWorkflow.mockResolvedValueOnce({ workflow: null, followUp: 'Which city?', messages: [] });
-    await buildInBackground('wf-1', 'weather', null);
+  it('marks an empty graph, a lint error and a crash as failures', async () => {
     generateWorkflow.mockResolvedValueOnce({ workflow: null, messages: [] });
     await buildInBackground('wf-1', '?', null);
     generateWorkflow.mockResolvedValueOnce(generated());
@@ -130,9 +128,39 @@ describe('buildInBackground', () => {
     generateWorkflow.mockRejectedValueOnce(new Error('gateway down'));
     await buildInBackground('wf-1', 'x', null);
 
-    expect(markers.map((m) => m.status)).toEqual(['failed', 'failed', 'failed', 'failed']);
-    expect(markers[0].error).toContain('Which city?');
-    expect(markers[2].error).toContain('“Send”: message is empty');
-    expect(markers[3].error).toContain('gateway down');
+    expect(markers.map((m) => m.status)).toEqual(['failed', 'failed', 'failed']);
+    expect(markers[1].error).toContain('“Send”: message is empty');
+    expect(markers[2].error).toContain('gateway down');
+  });
+
+  it('a clarifying question waits for the owner (needs_input), carrying what to rebuild from', async () => {
+    generateWorkflow.mockResolvedValueOnce({ workflow: null, followUp: 'What calendar date should the jokes stop at?', messages: [] });
+    await buildInBackground('wf-1', 'a joke every hour till 6pm today', 'Jokes');
+    const { recordBuildState } = await import('$lib/workflows/build-state.server');
+    const [, status, content, extra] = vi.mocked(recordBuildState).mock.calls.at(-1)!;
+    expect(status).toBe('needs_input');
+    expect(content).toBe('jkai has a question before it can build this: What calendar date should the jokes stop at?');
+    expect(extra).toEqual({
+      question: 'What calendar date should the jokes stop at?',
+      resume: { prompt: 'a joke every hour till 6pm today', title: 'Jokes', attempt: 1, qa: [] },
+    });
+    expect(saved).toHaveLength(0);
+  });
+
+  it('sends the original prompt plus every answer, and fails once three questions are spent', async () => {
+    const qa = [{ q: 'Which city?', a: 'Leeds' }, { q: 'Which day?', a: '' }];
+    generateWorkflow.mockResolvedValueOnce({ workflow: null, followUp: 'What time?', messages: [] });
+    await buildInBackground('wf-1', 'weather', null, qa);
+    expect(generateWorkflow.mock.calls[0][0]).toBe(
+      'weather\n\nEarlier questions and your answers:\nQ: Which city?\nA: Leeds\nQ: Which day?\nA: (skipped)' +
+        '\n\nMake reasonable assumptions for anything unspecified and state them in the description.',
+    );
+    expect(markers.at(-1)?.status).toBe('needs_input');
+
+    const three = [...qa, { q: 'What time?', a: '9am' }];
+    generateWorkflow.mockResolvedValueOnce({ workflow: null, followUp: 'And the units?', messages: [] });
+    await buildInBackground('wf-1', 'weather', null, three);
+    expect(generateWorkflow.mock.calls[1][0]).toMatch(/Do not ask any more questions: proceed with your best assumptions/);
+    expect(markers.at(-1)).toMatchObject({ status: 'failed', error: expect.stringContaining('And the units?') });
   });
 });

@@ -334,14 +334,28 @@ describe('trigger', () => {
 describe('build state', () => {
   const at = new Date('2026-09-25T06:00:00Z');
   it('reads building, done and failed markers, and turns a stale build into a failure', () => {
-    expect(buildStateFrom(null, at)).toEqual({ building: false, buildError: null });
-    expect(buildStateFrom({ status: 'building' }, at, at.getTime() + 1000)).toEqual({ building: true, buildError: null });
+    expect(buildStateFrom(null, at)).toEqual({ building: false, buildError: null, question: null });
+    expect(buildStateFrom({ status: 'building' }, at, at.getTime() + 1000)).toEqual({ building: true, buildError: null, question: null });
     expect(buildStateFrom({ status: 'building' }, at, at.getTime() + BUILD_STALE_MS + 1)).toEqual({
       building: false,
       buildError: STALE_BUILD_ERROR,
+      question: null,
     });
-    expect(buildStateFrom({ status: 'failed', error: 'nope' }, at)).toEqual({ building: false, buildError: 'nope' });
-    expect(buildStateFrom({ status: 'done' }, at)).toEqual({ building: false, buildError: null });
+    expect(buildStateFrom({ status: 'failed', error: 'nope' }, at)).toEqual({ building: false, buildError: 'nope', question: null });
+    expect(buildStateFrom({ status: 'done' }, at)).toEqual({ building: false, buildError: null, question: null });
+  });
+
+  it('a question waits for the owner and never goes stale into a failure', () => {
+    const later = at.getTime() + 7 * 24 * 60 * 60 * 1000;
+    expect(buildStateFrom({ status: 'needs_input', question: 'Which city?' }, at, later)).toEqual({
+      building: false,
+      buildError: null,
+      question: 'Which city?',
+    });
+    expect(attentionFor({ lastRun: { status: 'failed', error: 'x' }, buildError: null, question: 'Which city?' })).toEqual({
+      needsAttention: true,
+      attentionReason: 'jkai has a question',
+    });
   });
 });
 

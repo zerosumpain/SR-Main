@@ -1,5 +1,5 @@
 import { listRuns, loadRunDetail } from '$lib/workflows/native/workflows.server';
-import { readBuildState, type BuildState } from '$lib/workflows/build-state.server';
+import { readBuildState, NO_BUILD, type BuildState } from '$lib/workflows/build-state.server';
 
 /**
  * What the canvas editor's needs-attention banner shows: the latest run, when
@@ -40,7 +40,7 @@ export async function loadCanvasJourneyState(
   workflowId: string,
 ): Promise<{ build: BuildState; attention: CanvasAttention | null }> {
   const [build, attention] = await Promise.all([
-    readBuildState(workflowId).catch(() => ({ building: false, buildError: null })),
+    readBuildState(workflowId).catch(() => NO_BUILD),
     loadCanvasAttention(workflowId).catch(() => null),
   ]);
   return { build, attention };

@@ -8,7 +8,8 @@ import type { AmendOp } from '$lib/canvas/amend.server';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { resilientChatCompletion } from '$lib/llm/workflow-gateway';
 import { publishWorkflowUpdate } from '$lib/jkai/workflow-updates-bus';
-import { recordBuildState } from './build-state.server';
+import { recordBuildState, type BuildQA } from './build-state.server';
+import { composeBuildPrompt, MAX_BUILD_QUESTIONS } from '$lib/canvas/build-questions';
 import { saveWorkflowTrigger } from './trigger-save.server';
 import { loadGraph } from './native/workflows.server';
 import { screenNativeOps } from './native/amend.server';
@@ -52,7 +53,7 @@ export async function startBuildFromPrompt(req: BuildRequest): Promise<{ workflo
   const givenTitle = req.title?.trim() || null;
   const { slug } = await allocateCanvasName(givenTitle || clip(prompt, 40));
   const { workflowId } = await createCanvas(slug, givenTitle || clip(prompt, 80));
-  await recordBuildState(workflowId, 'building', `Building this workflow from your description: “${clip(prompt, 300)}”`, undefined, undefined, { prompt, title: givenTitle, attempt: 1 });
+  await recordBuildState(workflowId, 'building', `Building this workflow from your description: “${clip(prompt, 300)}”`, { resume: { prompt, title: givenTitle, attempt: 1 } });
 
   void buildInBackground(workflowId, prompt, givenTitle).catch((err) => {
     console.error(`[build-from-prompt] ${workflowId} failed outside its own handler`, err);
@@ -66,10 +67,10 @@ export async function resumeInterruptedBuilds(bootedAt: number): Promise<number>
     const { findInterruptedBuilds } = await import('./build-state.server');
     const builds = await findInterruptedBuilds(bootedAt);
     for (const b of builds) {
-      const resume = { prompt: b.prompt, title: b.title, attempt: b.attempt + 1 };
-      await recordBuildState(b.workflowId, 'building', 'The site restarted while this was being built — picking it up again.', undefined, undefined, resume);
+      const resume = { prompt: b.prompt, title: b.title, attempt: b.attempt + 1, qa: b.qa };
+      await recordBuildState(b.workflowId, 'building', 'The site restarted while this was being built — picking it up again.', { resume });
       console.log(`[build-from-prompt] resuming interrupted build ${b.workflowId} (attempt ${b.attempt + 1})`);
-      void buildInBackground(b.workflowId, b.prompt, b.title).catch((err) => console.error(`[build-from-prompt] ${b.workflowId} resume failed`, err));
+      void buildInBackground(b.workflowId, b.prompt, b.title, b.qa).catch((err) => console.error(`[build-from-prompt] ${b.workflowId} resume failed`, err));
     }
     return builds.length;
   } catch (err) {
@@ -79,7 +80,7 @@ export async function resumeInterruptedBuilds(bootedAt: number): Promise<number>
 }
 
 async function fail(workflowId: string, error: string): Promise<void> {
-  await recordBuildState(workflowId, 'failed', `The build did not finish: ${error}`, error);
+  await recordBuildState(workflowId, 'failed', `The build did not finish: ${error}`, { error });
   publishWorkflowUpdate({ workflowId, kind: 'build_complete', summary: 'Build failed', ts: Date.now() });
 }
 
@@ -105,7 +106,8 @@ function triggerBody(trigger: { type: string; config?: Record<string, unknown> }
   }
 }
 
-export async function buildInBackground(workflowId: string, prompt: string, givenTitle: string | null): Promise<void> {
+/** `qa`: questions already asked and answered — see `$lib/canvas/build-questions`. */
+export async function buildInBackground(workflowId: string, prompt: string, givenTitle: string | null, qa: BuildQA[] = []): Promise<void> {
   try {
     const { generateWorkflow, saveWorkflowFromGenerated, runWorkflowVerification } = await import(
       '$lib/workflows/orchestrator'
@@ -114,9 +116,15 @@ export async function buildInBackground(workflowId: string, prompt: string, give
     // `null`, as workflow_generate passes when it CREATES a canvas: the
     // generator then reads no chat history (this canvas has only the marker
     // above) and writes no chat rows of its own — the markers are the record.
-    const result = await generateWorkflow(prompt, null);
-    if (result.followUp) {
+    const result = await generateWorkflow(composeBuildPrompt(prompt, qa), null);
+    if (result.followUp && qa.length >= MAX_BUILD_QUESTIONS) {
       return fail(workflowId, `jkai needs more to go on — ${clip(result.followUp, 400)}`);
+    }
+    if (result.followUp) {
+      // Wait for the owner (POST …/build-answer, or the phone's …/answer), don't fail.
+      const question = clip(result.followUp, 400);
+      await recordBuildState(workflowId, 'needs_input', `jkai has a question before it can build this: ${question}`, { question, resume: { prompt, title: givenTitle, attempt: 1, qa } });
+      return publishWorkflowUpdate({ workflowId, kind: 'build_complete', summary: 'jkai has a question', ts: Date.now() });
     }
     const generated = result.workflow;
     if (!generated || generated.nodes.length === 0) {
@@ -174,7 +182,7 @@ export async function buildInBackground(workflowId: string, prompt: string, give
     const verification = await proveWithRepair(workflowId);
     if (!verification.passed) {
       const error = `built, but ${describeVerification(verification)}`;
-      await recordBuildState(workflowId, 'failed', `The build finished but did not pass its test run: ${error}`, error, verification);
+      await recordBuildState(workflowId, 'failed', `The build finished but did not pass its test run: ${error}`, { error, verification });
       publishWorkflowUpdate({ workflowId, kind: 'build_complete', summary: 'Built — test run failed', ts: Date.now() });
       return;
     }
@@ -182,8 +190,7 @@ export async function buildInBackground(workflowId: string, prompt: string, give
       workflowId,
       'done',
       `${generated.explanation || 'Built from your description.'}\n\nTest run: ${describeVerification(verification)}.`,
-      undefined,
-      verification,
+      { verification },
     );
     publishWorkflowUpdate({ workflowId, kind: 'build_complete', summary: 'Generated', ts: Date.now() });
   } catch (err) {

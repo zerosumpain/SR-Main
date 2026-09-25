@@ -237,7 +237,7 @@ export async function listWorkflowCards(): Promise<WorkflowCardDTO[]> {
       trigger: triggerFor(row, graphNodes, graphEdges, schedulesBy.get(row.id) ?? []),
       nodeCount: graphNodes.filter((n) => isStepNode(n, graphEdges)).length,
       lastRun: run ? runSummary(run) : null,
-      ...attentionFor({ lastRun: run, buildError: build.buildError, pendingFixes: pendingFixes.get(row.id) ?? 0 }),
+      ...attentionFor({ lastRun: run, buildError: build.buildError, question: build.question, pendingFixes: pendingFixes.get(row.id) ?? 0 }),
       updatedAt: row.updatedAt.toISOString(),
     };
   });
@@ -267,6 +267,8 @@ export interface WorkflowDetailDTO {
   trigger: TriggerDTO;
   building: boolean;
   buildError: string | null;
+  /** jkai's question when the build is waiting on the owner (answer: POST …/answer). */
+  question: string | null;
   /** The last describe-it build's lint + test-run proof, when there is one. */
   verification: WorkflowVerification | null;
   steps: StepDTO[];
@@ -334,6 +336,7 @@ export async function loadWorkflowDetail(workflow: Workflow): Promise<WorkflowDe
     trigger: triggerFor(workflow, nodes, edges, schedules),
     building: build.building,
     buildError: build.buildError,
+    question: build.question,
     verification: build.verification ?? null,
     steps: stepNodes.map((n) => stepFrom(n, edges)),
     edges: edges

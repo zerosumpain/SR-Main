@@ -14,6 +14,7 @@ import { DEFAULT_CHAT_MODEL_ID } from '$lib/constants/default-models';
 import { getSetting } from '$lib/server/models/settings';
 import { slugify as _slugify } from './slug';
 import { mapTypeToKind } from './adapter';
+import { readBuildStates } from '$lib/workflows/build-state.server';
 import type {
   Canvas,
   CanvasNode,
@@ -427,7 +428,7 @@ export async function listCanvases(): Promise<CanvasSummary[]> {
   // Fetch all summary data in three grouped queries. The previous loop issued
   // three sequential queries per canvas (1 + 3N total), so the page slowed
   // linearly with every canvas added.
-  const [nodeCounts, edgeCounts, latestRuns] = await Promise.all([
+  const [nodeCounts, edgeCounts, latestRuns, builds] = await Promise.all([
     db
       .select({
         workflowId: workflowNodes.workflowId,
@@ -453,6 +454,7 @@ export async function listCanvases(): Promise<CanvasSummary[]> {
       .from(workflowRuns)
       .where(inArray(workflowRuns.workflowId, workflowIds))
       .orderBy(workflowRuns.workflowId, desc(workflowRuns.startedAt)),
+    readBuildStates(workflowIds).catch(() => new Map<string, { question: string | null }>()),
   ]);
 
   const nodeCountByWorkflow = new Map(nodeCounts.map((row) => [row.workflowId, row.n]));
@@ -471,6 +473,7 @@ export async function listCanvases(): Promise<CanvasSummary[]> {
       triggerType: trigger.type ?? 'manual',
       latestRunAt: latestRun?.startedAt ? new Date(latestRun.startedAt).toISOString() : null,
       latestRunStatus: latestRun?.status ?? null,
+      buildQuestion: builds.get(w.id)?.question ?? null,
       updatedAt: new Date(w.updatedAt).toISOString(),
     };
   });

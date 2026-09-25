@@ -66,6 +66,7 @@
 /api/native/workflows
 /api/native/workflows/[slug]
 /api/native/workflows/[slug]/amend
+/api/native/workflows/[slug]/answer
 /api/native/workflows/[slug]/ask
 /api/native/workflows/[slug]/fix-proposals
 /api/native/workflows/[slug]/fix-proposals/[id]

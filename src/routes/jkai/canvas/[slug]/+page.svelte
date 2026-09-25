@@ -4300,6 +4300,7 @@
     slug={canvas.slug}
     building={data.build?.building ?? false}
     buildError={data.build?.buildError ?? null}
+    question={data.build?.question ?? null}
     onSettled={() => void invalidateAll()}
   />
   {#if data.attention && !data.build?.building}
