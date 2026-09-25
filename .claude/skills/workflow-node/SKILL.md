@@ -38,4 +38,4 @@ const res = await resilientChatCompletion(configuredModel, { messages, temperatu
 
 ## Eval harness
 
-`src/lib/workflows/eval/` scores the workflow *generator* (excluded from vitest): `RUN_WORKFLOW_EVAL=1 npx tsx src/lib/workflows/eval/run-eval.ts`. A new node becomes generator-reachable via good `llmDescription`/`llmExamples`.
+`npm run eval:workflows` (`scripts/workflow-eval.mjs`, LIVE LLM calls, never in CI) scores the generator (`src/lib/workflows/eval/cases.ts`), the chat add/amend/lint path on an empty canvas, and amend proposals on an existing graph; it writes `docs/evals/workflow-eval.json`. `--suite`/`--case` narrow it, `--dry` lists cases. A new node becomes generator-reachable via good `llmDescription`/`llmExamples`.

@@ -7,6 +7,7 @@ import {
   reapExpiredInteractions,
 } from '$lib/canvas/adapter.server';
 import { CANVAS_NODE_TYPES } from '$lib/canvas/adapter';
+import { loadCanvasJourneyState } from '$lib/canvas/attention.server';
 import { db } from '$lib/db';
 import { intelExplorations, workflowNodes, conversations, workflows } from '$lib/db/schema';
 import { and, eq, inArray } from 'drizzle-orm';
@@ -64,20 +65,24 @@ export const load: PageServerLoad = async ({ params, url }) => {
   // Strip this canvas from the peers list (used by the event-trigger picker)
   const peerCanvases = allCanvases.filter((c) => c.workflowId !== canvas.workflowId);
 
-  const activeExplorations = await db
-    .select({
-      nodeId: intelExplorations.nodeId,
-      engine: intelExplorations.engine,
-      sessionId: intelExplorations.sessionId,
-      status: intelExplorations.status,
-    })
-    .from(intelExplorations)
-    .where(
-      and(
-        eq(intelExplorations.workflowId, canvas.workflowId),
-        inArray(intelExplorations.status, ['running', 'failed']),
+  const [activeExplorations, journey] = await Promise.all([
+    db
+      .select({
+        nodeId: intelExplorations.nodeId,
+        engine: intelExplorations.engine,
+        sessionId: intelExplorations.sessionId,
+        status: intelExplorations.status,
+      })
+      .from(intelExplorations)
+      .where(
+        and(
+          eq(intelExplorations.workflowId, canvas.workflowId),
+          inArray(intelExplorations.status, ['running', 'failed']),
+        ),
       ),
-    );
+    // Describe-it build state + the needs-attention banner's latest failed run.
+    loadCanvasJourneyState(canvas.workflowId),
+  ]);
 
   const pendingExplorations = Object.fromEntries(
     activeExplorations.map((e) => [
@@ -94,7 +99,15 @@ export const load: PageServerLoad = async ({ params, url }) => {
     ]),
   );
 
-  return { canvas, modelCatalogue, nodeTypes: CANVAS_NODE_TYPES, peerCanvases, pendingExplorations };
+  return {
+    canvas,
+    modelCatalogue,
+    nodeTypes: CANVAS_NODE_TYPES,
+    peerCanvases,
+    pendingExplorations,
+    build: journey.build,
+    attention: journey.attention,
+  };
 };
 
 /**

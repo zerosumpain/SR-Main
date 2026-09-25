@@ -10,6 +10,10 @@
   import type { FilterClause } from '$lib/events/filter';
   import FixProposalsBanner from '$lib/canvas/FixProposalsBanner.svelte';
   import InspectorBody from '$lib/canvas/InspectorBody.svelte';
+  import InspectorDock from '$lib/canvas/InspectorDock.svelte';
+  import CanvasPromptBar from '$lib/canvas/CanvasPromptBar.svelte';
+  import AttentionBanner from '$lib/canvas/AttentionBanner.svelte';
+  import BuildStateBanner from '$lib/canvas/BuildStateBanner.svelte';
   import { useIsMobile } from '$lib/canvas/use-mobile.svelte';
   import { portal } from '$lib/canvas/portal';
   import type { Execution as InspectorExecution } from '$lib/canvas/InspectorHistory.svelte';
@@ -1988,6 +1992,12 @@
     panY: number;
     pointerId: number;
   } | null>(null);
+  // Did the current background press move? Plain handle — pointer handlers only.
+  let panMoved = false;
+
+  // Prompt bar: the steps an open proposal touches are outlined on the canvas.
+  let proposedIds = $state.raw<Set<string>>(new Set());
+  let promptBar = $state<ReturnType<typeof CanvasPromptBar> | undefined>(undefined);
 
   function clampZoom(z: number) {
     return shellClampZoom(z, MIN_ZOOM, MAX_ZOOM);
@@ -2294,10 +2304,11 @@
     if (isMobile && e.pointerType === 'touch') return;
     selectedId = null;
     selectedEdgeId = null;
-    // Intentionally do NOT clear menuForNodeId here — the inline config menu
-    // only closes via its top-right Close button (or explicit Save / Delete).
+    // The inspector closes on pointer-UP (onPointerUp), and only when this
+    // turns out to be a click rather than a pan.
     edgeInspectorFor = null;
     panStart = { x: e.clientX, y: e.clientY, panX, panY, pointerId: e.pointerId };
+    panMoved = false;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
 
@@ -2305,11 +2316,15 @@
     if (!panStart || panStart.pointerId !== e.pointerId) return;
     panX = panStart.panX + (e.clientX - panStart.x);
     panY = panStart.panY + (e.clientY - panStart.y);
+    if (Math.hypot(e.clientX - panStart.x, e.clientY - panStart.y) > 3) panMoved = true;
   }
 
   function onPointerUp(e: PointerEvent) {
     if (!panStart || panStart.pointerId !== e.pointerId) return;
     panStart = null;
+    // A click on empty canvas (not a pan) closes the inspector — unless it
+    // holds unsaved edits, which only Save / Close / Escape may discard.
+    if (!panMoved && menuForNodeId && !configDirty) closeMenu();
     try {
       (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
     } catch {
@@ -2421,8 +2436,8 @@
       delete next[nodeId];
       nodePositions = next;
     } else {
-      // Click (no drag) → select only
-      selectedId = n.id;
+      // Click (no drag) → open the docked inspector (double-click still does).
+      openInspector(n.id);
     }
   }
 
@@ -3868,10 +3883,25 @@
       : [],
   );
 
-  function openMenu(e: Event, id: string) {
-    e.stopPropagation();
+  // Width of the docked inspector (InspectorDock.svelte) — the canvas narrows
+  // by this much when it opens.
+  const DOCK_W = 420;
+  function openInspector(id: string) {
+    const opening = !menuForNodeId;
     menuForNodeId = id;
     selectedId = id;
+    // Keep the node in view beside the dock: when the dock is about to take
+    // the right-hand strip, pan left just enough that the node clears it.
+    const n = byId[id];
+    if (!n || isMobile || !opening) return;
+    const right = (n.x + nodeW(n)) * zoom + panX;
+    const room = viewportW - DOCK_W - 24;
+    if (right > room) panX -= right - room;
+  }
+
+  function openMenu(e: Event, id: string) {
+    e.stopPropagation();
+    openInspector(id);
   }
 
   function closeMenu() {
@@ -3929,7 +3959,9 @@
       'global-keymap',
       (ev) => {
         if (ev.key === 'Escape') {
-          // Menu only closes via its Close button — don't dismiss it on Escape.
+          // Escape closes the docked inspector too — unless it holds unsaved
+          // edits (its own Close / the name field's Escape still discard).
+          if (menuForNodeId && !configDirty && !isTypingTarget(ev.target)) closeMenu();
           selectedId = null;
           selectedEdgeId = null;
           pipePickerOpen = false;
@@ -3970,7 +4002,7 @@
         } else if (
           (ev.key === 'Delete' || ev.key === 'Backspace') &&
           selectedId &&
-          !menuForNodeId &&
+          !configDirty &&
           !isTypingTarget(ev.target)
         ) {
           ev.preventDefault();
@@ -4249,6 +4281,40 @@
     />
   {/if}
 
+  <BuildStateBanner
+    slug={canvas.slug}
+    building={data.build?.building ?? false}
+    buildError={data.build?.buildError ?? null}
+    onSettled={() => void invalidateAll()}
+  />
+  {#if data.attention && !data.build?.building}
+    <AttentionBanner
+      attention={data.attention}
+      onFocusNode={(id) => openInspector(id)}
+      onAskFix={(text) => promptBar?.prefill(text)}
+    />
+  {/if}
+  {#if canvas.workflowId}
+    <CanvasPromptBar
+      bind:this={promptBar}
+      slug={canvas.slug}
+      wording={{
+        nodeName: (id) => byId[id]?.name ?? null,
+        typeLabel: (t) => byNodeType(t)?.label ?? t,
+        edgeName: (id) => {
+          const e = canvas.edges.find((x) => x.id === id);
+          return e && byId[e.from] && byId[e.to] ? `“${byId[e.from].name}” → “${byId[e.to].name}”` : null;
+        },
+      }}
+      edgeEnds={(id) => {
+        const e = canvas.edges.find((x) => x.id === id);
+        return e ? [e.from, e.to] : [];
+      }}
+      onHighlight={(ids) => (proposedIds = ids ?? new Set())}
+      onApplied={() => invalidateAll()}
+    />
+  {/if}
+
   {#if findOpen}
     <div class="find-bar" role="search">
       <span class="find-icon" aria-hidden="true">⌕</span>
@@ -4267,6 +4333,7 @@
     </div>
   {/if}
 
+  <div class="canvas-stage">
   <!-- Viewport -->
   <div
     class="viewport"
@@ -5159,6 +5226,7 @@
             class:drop-target={edgeDrag?.hoverTargetId === n.id}
             class:is-incompatible={edgeDrag?.hoverTargetId === n.id && edgeDragCompatible === false}
             class:is-trigger={n.kind === 'trigger'}
+            class:is-proposed={proposedIds.has(n.id)}
             class:flash={flashNodeId === n.id}
             data-kind={n.kind}
             data-status={liveStatus[n.id] ?? n.status ?? 'idle'}
@@ -5340,1273 +5408,6 @@
 
     </div>
 
-      <!-- Inline node inspector. Rendered OUTSIDE the .graph (i.e. outside the
-           canvas pan/zoom transform) so that on mobile the bottom-sheet CSS
-           can pin it to the viewport reliably. Desktop positioning uses
-           SCREEN coords (menuNode.x * zoom + panX) instead of world coords,
-           since we no longer inherit the parent transform. -->
-      {#if menuNode && isMobile}
-        <button
-          class="nm-mobile-backdrop"
-          type="button"
-          aria-label="Close inspector"
-          onclick={closeMenu}
-        ></button>
-      {/if}
-      {#if menuNode}
-        <div
-          class="nm-inline"
-          class:nm-inline--mobile={isMobile}
-          style:left="{(menuNode.x - 18) * zoom + panX}px"
-          style:top="{(menuNode.y - 18) * zoom + panY}px"
-          role="dialog"
-          aria-label="Node inspector"
-        >
-          <div class="nm-inline-hdr">
-            <span class="nm-bar" style:background={KIND_COLOR[menuNode.kind]}></span>
-            <input
-              class="nm-label-input"
-              type="text"
-              value={labelDraft}
-              bind:this={labelInputEl}
-              oninput={(e) => setLabel((e.target as HTMLInputElement).value)}
-              onkeydown={(e) => {
-                if (e.key === 'Enter' && configDirty && !saving) {
-                  e.preventDefault();
-                  saveNode();
-                } else if (e.key === 'Escape') {
-                  e.preventDefault();
-                  closeMenu();
-                }
-              }}
-              placeholder="Node name"
-              title="Press Enter to save, Esc to cancel"
-              aria-label="Node name"
-            />
-            <span class="nm-hdr-kind">{menuNode.kind}</span>
-            {#if configDirty}
-              <button
-                class="nm-save-btn"
-                onclick={menuNode.kind === 'trigger' ? saveTrigger : saveNode}
-                disabled={saving}
-              >
-                {saving ? 'Saving…' : 'Save'}
-              </button>
-            {/if}
-            {#if saveError}
-              <span class="nm-save-err" title={saveError}>⚠</span>
-            {/if}
-            {#if menuRequiredMissing.length}
-              <span
-                class="nm-req-warn"
-                title={`Required field${menuRequiredMissing.length === 1 ? '' : 's'} still empty: ${menuRequiredMissing.join(', ')}`}
-                style="font-family:var(--font-mono); font-size:var(--fs-label-xs); color:var(--status-error, #c0392b); white-space:nowrap; cursor:default; align-self:center;"
-              >⚠ {menuRequiredMissing.length} required</span>
-            {/if}
-            {#if menuUpstreamCollisions.length}
-              <span
-                class="nm-req-warn"
-                title={`Field name clash — ${menuUpstreamCollisions.map((c) => `"${c.key}" arrives from ${c.labels.join(' & ')}`).join('; ')}. They silently overwrite each other in {{input}} (last upstream wins).`}
-                style="font-family:var(--font-mono); font-size:var(--fs-label-xs); color:var(--status-error, #c0392b); white-space:nowrap; cursor:default; align-self:center;"
-              >⚠ {menuUpstreamCollisions.length} clash</span>
-            {/if}
-            <button
-              class="p-icon-btn"
-              onclick={closeMenu}
-              aria-label="Close inspector"
-              title="Close (Esc)">✕</button
-            >
-          </div>
-          <div class="nm-inline-body">
-            <!-- Shared header: kind · id · status · name · upstream/downstream chips -->
-            <div class="nm-hdr">
-              <div class="nm-hdr-row">
-                <span class="nm-bar" style:background={KIND_COLOR[menuNode.kind]}></span>
-                <span class="nm-hdr-type" title={byNodeType(menuNode.type)?.description ?? ''}>
-                  {byNodeType(menuNode.type)?.label ?? menuNode.type}
-                </span>
-                <span class="nm-hdr-typecode">{menuNode.type}</span>
-                <span class="nm-hdr-id">#{menuNode.id.slice(0, 8)}</span>
-                {#if menuNode.status === 'running'}
-                  <span class="chip chip-accent chip-pill chip-live ms-auto">RUNNING</span>
-                {:else if menuNode.status === 'failed'}
-                  <span class="chip chip-pill chip-failed ms-auto">FAILED ×1</span>
-                {:else if menuNode.status === 'ok'}
-                  <span class="chip chip-pill ms-auto">OK</span>
-                {/if}
-              </div>
-              <div class="nm-hdr-name">{menuNode.name}</div>
-              <div class="nm-ctx">
-                <div class="nm-ctx-row">
-                  <span class="nm-ctx-lbl">↑ UPSTREAM</span>
-                  {#if menuUpstream.length}
-                    {#each menuUpstream as u (u.id)}
-                      <span class="nm-pin" data-kind={u.kind}>{u.name}</span>
-                    {/each}
-                  {:else}
-                    <span class="nm-ctx-empty">none</span>
-                  {/if}
-                </div>
-                <div class="nm-ctx-row">
-                  <span class="nm-ctx-lbl">↓ DOWNSTREAM</span>
-                  {#if menuDownstream.length}
-                    {#each menuDownstream as d (d.id)}
-                      <span class="nm-pin" data-kind={d.kind}>{d.name}</span>
-                    {/each}
-                  {:else}
-                    <span class="nm-ctx-empty">none</span>
-                  {/if}
-                </div>
-              </div>
-            </div>
-
-            <!-- Kind-specific body -->
-            <div class="nm-body">
-              {#each [summarizeNode(menuNode.type, configDraft as Record<string, unknown>, getDefinition(menuNode.type)?.description)] as _previewSummary (1)}
-                {#if _previewSummary.line}
-                  <section class="nm-sec nm-action-preview" aria-label="What this node will do">
-                    <header class="nm-action-hdr">
-                      <span class="sr-label-tight">What this does</span>
-                      <span class="nm-action-kind">{_previewSummary.preview.kind}</span>
-                    </header>
-                    <p class="nm-action-line">{_previewSummary.line}</p>
-                    {#if Object.keys(_previewSummary.preview.details).length > 0}
-                      <dl class="nm-action-grid">
-                        {#each Object.entries(_previewSummary.preview.details) as [k, v] (k)}
-                          <dt>{k}</dt>
-                          <dd>{v}</dd>
-                        {/each}
-                      </dl>
-                    {/if}
-                  </section>
-                {/if}
-              {/each}
-              {#if menuNode.kind === 'trigger'}
-                {@const kind = ((configDraft.kind as string) || 'manual') as
-                  | 'manual'
-                  | 'cron'
-                  | 'webhook'
-                  | 'event'}
-                <section class="nm-sec">
-                  <div class="nm-sec-hd">
-                    <span class="sr-label-tight">TRIGGER TYPE</span>
-                  </div>
-                  <div class="trig-pills">
-                    {#each ['manual', 'cron', 'webhook', 'event'] as k}
-                      <button
-                        class="trig-pill"
-                        class:active={kind === k}
-                        onclick={() => setConfigField('kind', k)}
-                      >
-                        {k}
-                      </button>
-                    {/each}
-                  </div>
-                </section>
-
-                {#if kind === 'manual'}
-                  <section class="nm-sec">
-                    <div class="chat-explainer">
-                      <p>
-                        Fires on demand: a chat send, a "Run" click from the canvas toolbar, or
-                        any POST to <code>/api/workflows/{canvas.workflowId}/run</code>.
-                      </p>
-                    </div>
-                  </section>
-                {:else if kind === 'cron'}
-                  <section class="nm-sec">
-                    <div class="nm-sec-hd">
-                      <span class="sr-label-tight">SCHEDULE</span>
-                      <span class="nm-sec-meta">when this runs</span>
-                    </div>
-                    <ScheduleBuilder
-                      value={(configDraft.cron as string) ?? ''}
-                      onChange={(c) => setConfigField('cron', c)}
-                    />
-                    <details class="nm-cron-adv" style="margin-top:8px;">
-                      <summary style="cursor:pointer; font-family:var(--font-mono); font-size:var(--fs-label-xs); text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted);">Advanced — presets &amp; raw cron</summary>
-                      <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
-                        <select
-                          class="nm-text-input"
-                          value={(configDraft.cron as string) ?? ''}
-                          onchange={(e) =>
-                            setConfigField('cron', (e.target as HTMLSelectElement).value)}
-                        >
-                          <option value="">— pick a preset —</option>
-                          {#each CRON_PRESETS as p (p.value)}
-                            <option value={p.value}>{p.label}</option>
-                          {/each}
-                        </select>
-                        <input
-                          class="nm-text-input"
-                          type="text"
-                          value={(configDraft.cron as string) ?? ''}
-                          oninput={(e) =>
-                            setConfigField('cron', (e.target as HTMLInputElement).value)}
-                          placeholder="*/15 * * * *"
-                        />
-                        <span class="nm-sec-meta">min hour dom mon dow</span>
-                      </div>
-                    </details>
-                  </section>
-                {:else if kind === 'webhook'}
-                  <section class="nm-sec">
-                    <div class="nm-sec-hd">
-                      <span class="sr-label-tight">WEBHOOK URL</span>
-                      <span class="nm-sec-meta">POST to fire the workflow</span>
-                    </div>
-                    <div class="nm-field nm-field-read">
-                      <pre>POST {webhookAbsoluteUrl()}</pre>
-                    </div>
-                    <div class="wh-actions">
-                      <button
-                        class="nm-btn-ghost"
-                        onclick={() => copyWebhookText(webhookAbsoluteUrl(), 'url')}
-                      >
-                        {webhookUrlCopied ? 'Copied ✓' : 'Copy URL'}
-                      </button>
-                      <button
-                        class="nm-btn-ghost"
-                        onclick={sendWebhookTest}
-                        disabled={webhookTestState === 'sending'}
-                      >
-                        {webhookTestState === 'sending' ? 'Sending…' : 'Send test'}
-                      </button>
-                    </div>
-                    {#if webhookTestState === 'ok' || webhookTestState === 'fail'}
-                      <span
-                        class="wh-test-result"
-                        class:ok={webhookTestState === 'ok'}
-                        class:fail={webhookTestState === 'fail'}
-                        title={webhookTestMsg ?? ''}
-                      >
-                        {webhookTestState === 'ok' ? '✓' : '⚠'} {webhookTestMsg}
-                      </span>
-                    {/if}
-                  </section>
-
-                  <!-- External webhook requests use a timestamped HMAC signature.
-                       Same-origin owner tests are authenticated by the session. -->
-                  <section class="nm-sec">
-                    <div class="nm-sec-hd">
-                      <span class="sr-label-tight">SECRET</span>
-                      <span class="nm-sec-meta">HMAC-SHA256 · five-minute validity</span>
-                    </div>
-                    {#if configDraft.secret}
-                      <button
-                        type="button"
-                        class="nm-field nm-field-read wh-secret"
-                        title="Click to copy"
-                        onclick={() => copyWebhookText(configDraft.secret as string, 'secret')}
-                      >
-                        <pre>{webhookSecretCopied
-                            ? 'Copied ✓'
-                            : `Signing secret: ${configDraft.secret}`}</pre>
-                      </button>
-                      <div class="wh-actions">
-                        <button
-                          class="nm-btn-ghost"
-                          onclick={generateWebhookSecret}
-                          disabled={savingWebhookSecret}
-                        >
-                          {savingWebhookSecret ? 'Saving…' : 'Regenerate'}
-                        </button>
-                        <button
-                          class="nm-btn-ghost"
-                          onclick={clearWebhookSecret}
-                          disabled={savingWebhookSecret}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    {:else}
-                      <div class="chat-explainer">
-                        <p>
-                          External delivery is disabled. Generate a secret, then send
-                          <code>X-Webhook-Timestamp</code> and <code>X-Webhook-Signature</code>
-                          where the signature is HMAC-SHA256 of timestamp + "." + raw body.
-                        </p>
-                      </div>
-                      <div class="wh-actions">
-                        <button
-                          class="nm-save-btn"
-                          onclick={generateWebhookSecret}
-                          disabled={savingWebhookSecret}
-                        >
-                          {savingWebhookSecret ? 'Saving…' : 'Generate secret'}
-                        </button>
-                      </div>
-                    {/if}
-                  </section>
-
-                  <section class="nm-sec">
-                    <div class="chat-explainer">
-                      <p>
-                        The body becomes <code>initialInput</code> for the run. Any shape is
-                        accepted; downstream nodes can template it as <code>{'{{input.field}}'}</code>.
-                      </p>
-                    </div>
-                  </section>
-                {:else if kind === 'event'}
-                  <EventTriggerPicker
-                    eventType={(configDraft.eventType as string) ?? ''}
-                    sourceWorkflowId={(configDraft.sourceWorkflowId as string) ?? ''}
-                    filter={(configDraft.filter as FilterClause[]) ?? []}
-                    {peerCanvases}
-                    onChange={setConfigField}
-                  />
-                {/if}
-
-                <section class="nm-sec">
-                  <div class="nm-sec-hd">
-                    <span class="sr-label-tight">ENABLED</span>
-                  </div>
-                  <label class="nm-toggle">
-                    <input
-                      type="checkbox"
-                      checked={configDraft.enabled !== false}
-                      onchange={(e) =>
-                        setConfigField('enabled', (e.target as HTMLInputElement).checked)}
-                    />
-                    <span>Fire on matching signal</span>
-                  </label>
-                </section>
-
-                <!-- D1 — run-outcome notifications (workflow-level; saved on toggle). -->
-                <section class="nm-sec">
-                  <div class="nm-sec-hd">
-                    <span class="sr-label-tight">NOTIFICATIONS</span>
-                    <span class="nm-sec-meta">WhatsApp me about this workflow's runs</span>
-                  </div>
-                  <label class="nm-toggle">
-                    <input
-                      type="checkbox"
-                      checked={canvas.notifications?.onFailure === true}
-                      disabled={savingNotif}
-                      onchange={(e) =>
-                        saveNotifications({ onFailure: (e.target as HTMLInputElement).checked })}
-                    />
-                    <span>Alert me on failure</span>
-                  </label>
-                  <label class="nm-toggle">
-                    <input
-                      type="checkbox"
-                      checked={canvas.notifications?.onCompletion === true}
-                      disabled={savingNotif}
-                      onchange={(e) =>
-                        saveNotifications({ onCompletion: (e.target as HTMLInputElement).checked })}
-                    />
-                    <span>Message me on completion</span>
-                  </label>
-                  <label class="nm-toggle">
-                    <input
-                      type="checkbox"
-                      checked={canvas.notifications?.approvals === true}
-                      disabled={savingNotif}
-                      onchange={(e) =>
-                        saveNotifications({ approvals: (e.target as HTMLInputElement).checked })}
-                    />
-                    <span>Ask me to approve on WhatsApp (reply APPROVE/DENY)</span>
-                  </label>
-                  {#if notifSaveError}
-                    <span class="nm-save-err" title={notifSaveError}
-                      >⚠ {notifSaveError}</span
-                    >
-                  {/if}
-                </section>
-              {:else if menuNode.kind === 'chat'}
-                <section class="nm-sec">
-                  <div class="nm-sec-hd">
-                    <span class="sr-label-tight">MODEL</span>
-                    <span class="nm-sec-meta"
-                      >conversation-pinned; applies on standalone chat runs</span
-                    >
-                  </div>
-                  <select
-                    class="nm-text-input"
-                    value={(configDraft.model as string) ?? ''}
-                    onchange={(e) =>
-                      setConfigField('model', (e.target as HTMLSelectElement).value)}
-                  >
-                    <option value="">{modelCatalogue.defaultLabel}</option>
-                    {#if modelCatalogue.glm.length}
-                      <optgroup label="GLM (OpenRouter)">
-                        {#each modelCatalogue.glm as opt (opt.value)}
-                          <option value={opt.value}>{opt.label}</option>
-                        {/each}
-                      </optgroup>
-                    {/if}
-                    {#if modelCatalogue.openrouter.length}
-                      <optgroup label="OpenRouter ({modelCatalogue.openrouter.length})">
-                        {#each modelCatalogue.openrouter as opt (opt.value)}
-                          <option value={opt.value}>{opt.label}</option>
-                        {/each}
-                      </optgroup>
-                    {/if}
-                    {#if configDraft.model && !knownModelValues.has(configDraft.model as string)}
-                      <optgroup label="Custom">
-                        <option value={configDraft.model as string}>{configDraft.model}</option>
-                      </optgroup>
-                    {/if}
-                  </select>
-                </section>
-
-                <section class="nm-sec">
-                  <div class="nm-sec-hd">
-                    <span class="sr-label-tight">INTEL KNOWLEDGE GRAPH</span>
-                    <span class="nm-sec-meta"
-                      >vector-search your notes & entities into the system prompt</span
-                    >
-                  </div>
-                  <label class="nm-toggle">
-                    <input
-                      type="checkbox"
-                      checked={configDraft.useIntelContext !== false}
-                      onchange={(e) =>
-                        setConfigField('useIntelContext', (e.target as HTMLInputElement).checked)}
-                    />
-                    <span>Inject intel context per turn</span>
-                  </label>
-                </section>
-
-                <section class="nm-sec">
-                  <div class="nm-sec-hd">
-                    <span class="sr-label-tight">BEHAVIOUR</span>
-                  </div>
-                  <div class="chat-explainer">
-                    <p>
-                      Standalone (no outgoing edges): runs the full jkai chat loop — dynamic
-                      system prompt, memory, intel, and tool calling. A lone chat node is a
-                      usable AI workspace.
-                    </p>
-                    <p>
-                      Wired downstream: acts as a trigger. The user message (and the chat
-                      node's conversation id) are piped into the graph; the LLM work happens
-                      in downstream nodes.
-                    </p>
-                  </div>
-                </section>
-              {:else if menuNode.kind === 'llm' && !SPECIALISED_PANEL_TYPES.has(menuNode.type)}
-                <section class="nm-sec">
-                  <div class="nm-sec-hd">
-                    <span class="sr-label-tight">USER PROMPT</span>
-                    <span class="nm-sec-meta">type {'{{'} to pick an upstream field</span>
-                  </div>
-                  <div class="nm-field">
-                    <TemplatedTextarea
-                      rows={4}
-                      value={(configDraft.userPrompt as string) ?? ''}
-                      onChange={(v) => setConfigField('userPrompt', v)}
-                      placeholder="What you want the LLM to do…"
-                    />
-                  </div>
-                </section>
-
-                <section class="nm-sec">
-                  <div class="nm-sec-hd">
-                    <span class="sr-label-tight">SYSTEM PROMPT</span>
-                    <span class="nm-sec-meta">optional</span>
-                  </div>
-                  <div class="nm-field">
-                    <TemplatedTextarea
-                      rows={2}
-                      value={(configDraft.systemPrompt as string) ?? ''}
-                      onChange={(v) => setConfigField('systemPrompt', v)}
-                      placeholder="You are a helpful assistant…"
-                    />
-                  </div>
-                </section>
-
-                <section class="nm-sec nm-sec-row">
-                  <div class="nm-control">
-                    <span class="sr-label-tight">MODEL</span>
-                    <select
-                      class="nm-text-input"
-                      value={(configDraft.model as string) ?? ''}
-                      onchange={(e) =>
-                        setConfigField('model', (e.target as HTMLSelectElement).value)}
-                    >
-                      <option value="">{modelCatalogue.defaultLabel}</option>
-                      {#if modelCatalogue.glm.length}
-                        <optgroup label="GLM (OpenRouter)">
-                          {#each modelCatalogue.glm as opt (opt.value)}
-                            <option value={opt.value}>{opt.label}</option>
-                          {/each}
-                        </optgroup>
-                      {/if}
-                      {#if modelCatalogue.openrouter.length}
-                        <optgroup
-                          label="OpenRouter ({modelCatalogue.openrouter.length})"
-                        >
-                          {#each modelCatalogue.openrouter as opt (opt.value)}
-                            <option value={opt.value}>{opt.label}</option>
-                          {/each}
-                        </optgroup>
-                      {/if}
-                      {#if configDraft.model && !knownModelValues.has(configDraft.model as string)}
-                        <optgroup label="Custom">
-                          <option value={configDraft.model as string}
-                            >{configDraft.model}</option
-                          >
-                        </optgroup>
-                      {/if}
-                    </select>
-                  </div>
-                  <div class="nm-control">
-                    <span class="sr-label-tight">TEMP</span>
-                    <input
-                      class="nm-text-input"
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      max="2"
-                      value={(configDraft.temperature as number) ?? 0.7}
-                      oninput={(e) =>
-                        setConfigField(
-                          'temperature',
-                          parseFloat((e.target as HTMLInputElement).value),
-                        )}
-                    />
-                  </div>
-                  <div class="nm-control">
-                    <span class="sr-label-tight">MAX TOK</span>
-                    <input
-                      class="nm-text-input"
-                      type="number"
-                      step="64"
-                      min="1"
-                      value={(configDraft.maxTokens as number) ?? 1024}
-                      oninput={(e) =>
-                        setConfigField(
-                          'maxTokens',
-                          parseInt((e.target as HTMLInputElement).value, 10),
-                        )}
-                    />
-                  </div>
-                </section>
-
-                {#if pinnedOutput && pinnedOutput.nodeId !== menuNode.id}
-                  <section class="nm-sec nm-pinned">
-                    <div class="nm-sec-hd">
-                      <span class="sr-label-tight">PINNED · {pinnedOutput.name}</span>
-                      <button
-                        class="nm-pin-btn"
-                        onclick={() => (pinnedOutput = null)}
-                        title="Unpin"
-                      >unpin</button>
-                    </div>
-                    <div class="nm-field nm-field-read">
-                      <InspectorBody data={pinnedOutput.data} />
-                    </div>
-                  </section>
-                {/if}
-
-                <section class="nm-sec">
-                  <div class="nm-sec-hd">
-                    <span class="sr-label-tight">INPUT DATA</span>
-                    <span class="nm-sec-meta">from ↑ upstream</span>
-                  </div>
-                  <div class="nm-field nm-field-read">
-                    {#if menuNode.inputData !== undefined}
-                      <InspectorBody data={menuNode.inputData} />
-                    {:else}
-                      <pre class="ghost">// no run yet — press ▶ Run to pipe data</pre>
-                    {/if}
-                  </div>
-                </section>
-
-                <section class="nm-sec">
-                  <div class="nm-sec-hd">
-                    <span class="sr-label-tight">OUTPUT DATA</span>
-                    <span class="nm-sec-meta">pipes to ↓ downstream</span>
-                    {#if menuNode.outputData !== undefined}
-                      {#if pinnedOutput?.nodeId === menuNode.id}
-                        <button class="nm-pin-btn nm-pin-active" onclick={() => (pinnedOutput = null)} title="Unpin this output">pinned ✓</button>
-                      {:else}
-                        <button
-                          class="nm-pin-btn"
-                          onclick={() => (pinnedOutput = { nodeId: menuNode!.id, name: menuNode!.name, data: menuNode!.outputData })}
-                          title="Pin this output, then open another node to compare side-by-side"
-                        >pin</button>
-                      {/if}
-                    {/if}
-                  </div>
-                  <div class="nm-field nm-field-read">
-                    {#if menuNode.status === 'running' && menuHealing?.phase === 'healing'}
-                      <div class="nm-heal nm-heal-active">
-                        <span class="nm-heal-hd"><svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:4px;"><path d="M14.5 5.5a3 3 0 01-3.9 3.9L5 15l-1 1H3v-1l1-1 5.6-5.6a3 3 0 013.9-3.9L12 4.5l1.5 1.5 1-1z"/></svg>Auto-fixing…{menuHealing.attempt ? ` (attempt ${menuHealing.attempt}${menuHealing.maxAttempts ? ` of ${menuHealing.maxAttempts}` : ''})` : ''}</span>
-                        {#if menuHealing.fixDescription}<span class="nm-heal-fix">{menuHealing.fixDescription}</span>{/if}
-                        {#if menuHealing.progress.length}<pre class="nm-heal-log">{menuHealing.progress.join('\n')}</pre>{/if}
-                      </div>
-                    {:else if menuNode.status === 'running'}
-                      <pre class="ghost">// running…</pre>
-                    {:else if menuNode.outputData !== undefined}
-                      {#if menuHealing?.phase === 'recovered'}
-                        <div class="nm-heal nm-heal-ok">
-                          <span class="nm-heal-hd">✓ Auto-fixed and recovered</span>
-                          {#if menuHealing.fixDescription}<span class="nm-heal-fix">{menuHealing.fixDescription}</span>{/if}
-                          <span class="nm-heal-note">Saved config unchanged — the fix applied to this run only. Apply it permanently from the banner above the canvas.</span>
-                        </div>
-                      {/if}
-                      <InspectorBody data={menuNode.outputData} />
-                    {:else if menuHealing?.phase === 'blocked'}
-                      <div class="nm-heal nm-heal-blocked">
-                        <span class="nm-heal-hd">⚙ Needs setup — not a config error</span>
-                        {#if menuHealing.diagnosis}<span class="nm-heal-fix">{menuHealing.diagnosis}</span>{/if}
-                        {#if menuHealing.environmentAction}<span class="nm-heal-action">→ {menuHealing.environmentAction}</span>{/if}
-                        {#if menuHealing.alternative}<span class="nm-heal-note">Alternative: {menuHealing.alternative}</span>{/if}
-                      </div>
-                    {:else if menuNode.error}
-                      <div class="nm-err">
-                        <span class="nm-err-hd">⚠ This step failed</span>
-                        {#if menuHealing?.phase === 'failed' && menuHealing.attempts?.length}
-                          <span class="nm-err-sub">Auto-fix tried {menuHealing.attempts.length} time{menuHealing.attempts.length === 1 ? '' : 's'} but couldn't recover.</span>
-                          <span class="nm-err-diag">{menuHealing.attempts[menuHealing.attempts.length - 1].diagnosis}</span>
-                        {/if}
-                        <details class="nm-err-tech">
-                          <summary>Technical details</summary>
-                          <pre class="error-text">{menuNode.error}</pre>
-                        </details>
-                      </div>
-                    {:else}
-                      <pre class="ghost">// pending</pre>
-                    {/if}
-                  </div>
-                </section>
-
-                {#if menuNode.durationMs != null}
-                  <section class="nm-sec">
-                    <div class="nm-sec-hd">
-                      <span class="sr-label-tight">LAST RUN</span>
-                      <span class="nm-sec-meta"
-                        >completed in {(menuNode.durationMs / 1000).toFixed(2)}s</span
-                      >
-                    </div>
-                  </section>
-                {/if}
-              {:else if menuNode.kind === 'parse'}
-                <section class="nm-sec nm-sec-row">
-                  <div class="nm-control">
-                    <span class="sr-label-tight">MODE</span>
-                    <select
-                      class="nm-text-input"
-                      value={(configDraft.mode as string) ?? 'json'}
-                      onchange={(e) =>
-                        setConfigField('mode', (e.target as HTMLSelectElement).value)}
-                    >
-                      <option value="json">json</option>
-                      <option value="regex">regex</option>
-                    </select>
-                  </div>
-                  <div class="nm-control">
-                    <span class="sr-label-tight">INPUT FIELD</span>
-                    <input
-                      class="nm-text-input"
-                      type="text"
-                      value={(configDraft.inputField as string) ?? 'response'}
-                      oninput={(e) =>
-                        setConfigField('inputField', (e.target as HTMLInputElement).value)}
-                      placeholder="response"
-                    />
-                  </div>
-                </section>
-                {#if (configDraft.mode as string) === 'regex'}
-                  <section class="nm-sec">
-                    <div class="nm-sec-hd"><span class="sr-label-tight">PATTERN</span></div>
-                    <div class="nm-field">
-                      <input
-                        class="nm-text-input"
-                        style:width="100%"
-                        type="text"
-                        value={(configDraft.pattern as string) ?? ''}
-                        oninput={(e) =>
-                          setConfigField('pattern', (e.target as HTMLInputElement).value)}
-                        placeholder="\\d+"
-                      />
-                    </div>
-                  </section>
-                {/if}
-                <section class="nm-sec">
-                  <div class="nm-sec-hd">
-                    <span class="sr-label-tight">INPUT DATA</span>
-                    <span class="nm-sec-meta">from ↑ upstream</span>
-                  </div>
-                  <div class="nm-field nm-field-read">
-                    {#if menuNode.inputData !== undefined}
-                      <InspectorBody data={menuNode.inputData} />
-                    {:else}
-                      <pre class="ghost">// no run yet</pre>
-                    {/if}
-                  </div>
-                </section>
-                <!-- Last run: always shown so the user gets a clear signal
-                     whether the node ran, completed, failed, or never executed
-                     — even when outputData is undefined (e.g. node that doesn't
-                     produce a payload). -->
-                <section class="nm-sec nm-sec-lastrun">
-                  <div class="nm-sec-hd">
-                    <span class="sr-label-tight">LAST RUN</span>
-                    {#if menuNode.status === 'failed'}
-                      <span class="chip chip-pill chip-failed">FAILED</span>
-                    {:else if menuNode.status === 'running'}
-                      <span class="chip chip-pill chip-accent chip-live">RUNNING</span>
-                    {:else if menuNode.status === 'ok'}
-                      <span class="chip chip-pill chip-ok">OK</span>
-                    {:else}
-                      <span class="chip chip-pill">NEVER RUN</span>
-                    {/if}
-                  </div>
-                  {#if menuNode.error}
-                    <div class="nm-field nm-field-read">
-                      <div class="sr-label-tight error" style="margin-bottom:4px;">ERROR</div>
-                      <pre class="error-text">{menuNode.error}</pre>
-                    </div>
-                  {/if}
-                  {#if menuNode.outputData !== undefined}
-                    <div class="nm-field nm-field-read">
-                      <div class="sr-label-tight" style="margin-bottom:4px;">OUTPUT</div>
-                      <InspectorBody data={menuNode.outputData} />
-                    </div>
-                  {:else if !menuNode.error}
-                    <div class="nm-field nm-field-read">
-                      <pre class="ghost">// no output produced by the last run{menuNode.status === 'ok' ? ' (node completed without returning a payload)' : ''}</pre>
-                    </div>
-                  {/if}
-                </section>
-              {:else if menuNode.kind === 'input'}
-                <section class="nm-sec">
-                  <div class="nm-sec-hd"><span class="sr-label-tight">SOURCE</span></div>
-                  <div class="nm-field">
-                    <button class="nm-select" style:width="100%">Manual trigger (run button)</button>
-                  </div>
-                </section>
-                <section class="nm-sec">
-                  <div class="nm-sec-hd">
-                    <span class="sr-label-tight">OUTPUT DATA</span>
-                    <span class="nm-sec-meta">pipes to ↓ downstream</span>
-                  </div>
-                  <div class="nm-field nm-field-read">
-                    {#if menuNode.outputData !== undefined}
-                      <InspectorBody data={menuNode.outputData} />
-                    {:else}
-                      <pre class="ghost">// no run yet</pre>
-                    {/if}
-                  </div>
-                </section>
-              {:else if menuNode.kind === 'output'}
-                {#if menuNode.type === 'transform'}
-                  <section class="nm-sec">
-                    <div class="nm-sec-hd">
-                      <span class="sr-label-tight">TRANSFORM EXPRESSION</span>
-                      <span class="nm-sec-meta">optional · JS, `input` is the payload</span>
-                    </div>
-                    <div class="nm-field">
-                      <textarea
-                        rows="3"
-                        value={(configDraft.expression as string) ?? ''}
-                        oninput={(e) =>
-                          setConfigField(
-                            'expression',
-                            (e.target as HTMLTextAreaElement).value,
-                          )}
-                        placeholder={'return { reply: input.response }'}
-                      ></textarea>
-                    </div>
-                  </section>
-                {/if}
-                <section class="nm-sec">
-                  <div class="nm-sec-hd">
-                    <span class="sr-label-tight">INPUT DATA</span>
-                    <span class="nm-sec-meta">from ↑ upstream</span>
-                  </div>
-                  <div class="nm-field nm-field-read">
-                    {#if menuNode.inputData !== undefined}
-                      <InspectorBody data={menuNode.inputData} />
-                    {:else}
-                      <pre class="ghost">// pending</pre>
-                    {/if}
-                  </div>
-                </section>
-                <section class="nm-sec">
-                  <div class="nm-sec-hd"><span class="sr-label-tight">OUTPUT DATA</span></div>
-                  <div class="nm-field nm-field-read">
-                    {#if menuNode.outputData !== undefined}
-                      <InspectorBody data={menuNode.outputData} />
-                    {:else}
-                      <pre class="ghost">// pending</pre>
-                    {/if}
-                  </div>
-                </section>
-              {:else if menuNode.kind === 'intel'}
-                {#if menuNode.type === 'intel-query'}
-                  <section class="nm-sec">
-                    <div class="nm-sec-hd">
-                      <span class="sr-label-tight">QUERY</span>
-                      <span class="nm-sec-meta">type {'{{'} to pick an upstream field</span>
-                    </div>
-                    <div class="nm-field">
-                      <TemplatedTextarea
-                        rows={2}
-                        value={(configDraft.query as string) ?? ''}
-                        onChange={(v) => setConfigField('query', v)}
-                          placeholder={'{{input.message}}'}
-                      />
-                    </div>
-                  </section>
-                  <section class="nm-sec">
-                    <div class="nm-sec-hd">
-                      <span class="sr-label-tight">LAST RESULT</span>
-                      <span class="nm-sec-meta">intelContext appended to downstream input</span>
-                    </div>
-                    <div class="nm-field nm-field-read">
-                      {#if menuNode.outputData !== undefined}
-                        <InspectorBody data={menuNode.outputData} />
-                      {:else}
-                        <pre class="ghost">// no run yet</pre>
-                      {/if}
-                    </div>
-                  </section>
-                {:else if menuNode.type === 'quick-answer'}
-                  <section class="nm-sec">
-                    <div class="nm-sec-hd">
-                      <span class="sr-label-tight">TOPIC</span>
-                      <span class="nm-sec-meta">supports {'{{input.field}}'} / {'{{item.*}}'} templates</span>
-                    </div>
-                    <div class="nm-field">
-                      <textarea
-                        rows="2"
-                        value={(configDraft.topic as string) ?? ''}
-                        oninput={(e) =>
-                          setConfigField('topic', (e.target as HTMLTextAreaElement).value)}
-                        placeholder={'What is the impact of …'}
-                      ></textarea>
-                    </div>
-                  </section>
-                  <section class="nm-sec">
-                    <div class="nm-sec-hd">
-                      <span class="sr-label-tight">GOALS</span>
-                      <span class="nm-sec-meta">optional — one per line</span>
-                    </div>
-                    <div class="nm-field">
-                      <textarea
-                        rows="3"
-                        value={Array.isArray(configDraft.goals) ? (configDraft.goals as string[]).join('\n') : ((configDraft.goals as string) ?? '')}
-                        oninput={(e) => {
-                          const lines = (e.target as HTMLTextAreaElement).value.split('\n').map((l) => l.trim()).filter(Boolean);
-                          setConfigField('goals', lines);
-                        }}
-                        placeholder="Understand key players, risks, opportunities"
-                      ></textarea>
-                    </div>
-                  </section>
-                  <section class="nm-sec nm-sec-row">
-                    <div class="nm-control">
-                      <span class="sr-label-tight">MAX WAIT (MS)</span>
-                      <input
-                        class="nm-text-input"
-                        type="number"
-                        value={(configDraft.maxWaitMs as number) ?? 180000}
-                        oninput={(e) =>
-                          setConfigField('maxWaitMs', Number((e.target as HTMLInputElement).value) || 180000)}
-                      />
-                    </div>
-                    <div class="nm-control">
-                      <span class="sr-label-tight">POLL INTERVAL</span>
-                      <input
-                        class="nm-text-input"
-                        type="number"
-                        value={(configDraft.pollIntervalMs as number) ?? 1500}
-                        oninput={(e) =>
-                          setConfigField('pollIntervalMs', Number((e.target as HTMLInputElement).value) || 1500)}
-                      />
-                    </div>
-                  </section>
-                {:else if menuNode.type === 'deep-research'}
-                  <section class="nm-sec">
-                    <div class="nm-sec-hd">
-                      <span class="sr-label-tight">TOPIC</span>
-                      <span class="nm-sec-meta">supports {'{{input.field}}'} / {'{{item.*}}'} templates</span>
-                    </div>
-                    <div class="nm-field">
-                      <textarea
-                        rows="2"
-                        value={(configDraft.topic as string) ?? ''}
-                        oninput={(e) =>
-                          setConfigField('topic', (e.target as HTMLTextAreaElement).value)}
-                        placeholder={'{{item.title}}'}
-                      ></textarea>
-                    </div>
-                  </section>
-                  <section class="nm-sec">
-                    <div class="nm-sec-hd">
-                      <span class="sr-label-tight">GOALS</span>
-                      <span class="nm-sec-meta">optional — free text</span>
-                    </div>
-                    <div class="nm-field">
-                      <textarea
-                        rows="3"
-                        value={(configDraft.goals as string) ?? ''}
-                        oninput={(e) =>
-                          setConfigField('goals', (e.target as HTMLTextAreaElement).value)}
-                        placeholder="Key advances, practical applications"
-                      ></textarea>
-                    </div>
-                  </section>
-                  <section class="nm-sec nm-sec-row">
-                    <div class="nm-control">
-                      <span class="sr-label-tight">DEPTH</span>
-                      <select
-                        class="nm-text-input"
-                        value={(configDraft.depth as string) ?? 'medium'}
-                        onchange={(e) =>
-                          setConfigField('depth', (e.target as HTMLSelectElement).value)}
-                      >
-                        <option value="shallow">shallow</option>
-                        <option value="medium">medium</option>
-                        <option value="deep">deep</option>
-                      </select>
-                    </div>
-                    <div class="nm-control">
-                      <span class="sr-label-tight">MAX WAIT (MS)</span>
-                      <input
-                        class="nm-text-input"
-                        type="number"
-                        value={(configDraft.maxWaitMs as number) ?? 900000}
-                        oninput={(e) =>
-                          setConfigField('maxWaitMs', Number((e.target as HTMLInputElement).value) || 900000)}
-                      />
-                    </div>
-                  </section>
-                {:else if menuNode.type === 'intel-write'}
-                  <section class="nm-sec">
-                    <div class="nm-sec-hd">
-                      <span class="sr-label-tight">CONTENT</span>
-                      <span class="nm-sec-meta">text to add to intel</span>
-                    </div>
-                    <div class="nm-field">
-                      <textarea
-                        rows="3"
-                        value={(configDraft.content as string) ?? ''}
-                        oninput={(e) =>
-                          setConfigField('content', (e.target as HTMLTextAreaElement).value)}
-                        placeholder={'{{input.summary}}'}
-                      ></textarea>
-                    </div>
-                  </section>
-                  <section class="nm-sec nm-sec-row">
-                    <div class="nm-control">
-                      <span class="sr-label-tight">TITLE</span>
-                      <input
-                        class="nm-text-input"
-                        type="text"
-                        value={(configDraft.title as string) ?? ''}
-                        oninput={(e) =>
-                          setConfigField('title', (e.target as HTMLInputElement).value)}
-                        placeholder="optional"
-                      />
-                    </div>
-                    <div class="nm-control">
-                      <span class="sr-label-tight">FORMAT</span>
-                      <select
-                        class="nm-text-input"
-                        value={(configDraft.format as string) ?? 'summary'}
-                        onchange={(e) =>
-                          setConfigField('format', (e.target as HTMLSelectElement).value)}
-                      >
-                        <option value="summary">summary</option>
-                        <option value="text">text</option>
-                        <option value="email">email</option>
-                        <option value="meeting_transcript">meeting_transcript</option>
-                      </select>
-                    </div>
-                  </section>
-                {/if}
-                <section class="nm-sec">
-                  <div class="nm-sec-hd">
-                    <span class="sr-label-tight">INPUT DATA</span>
-                    <span class="nm-sec-meta">from ↑ upstream</span>
-                  </div>
-                  <div class="nm-field nm-field-read">
-                    {#if menuNode.inputData !== undefined}
-                      <InspectorBody data={menuNode.inputData} />
-                    {:else}
-                      <pre class="ghost">// no run yet</pre>
-                    {/if}
-                  </div>
-                </section>
-              {:else if menuNode.kind === 'intelligence' && menuNode.type === 'research-result'}
-                {@const rrEngine = ((configDraft.engine as string) ?? 'deep') as 'deep' | 'quick'}
-                {@const rrSessions = rrEngine === 'deep' ? deepSessions : quickSessions}
-                <section class="nm-sec nm-sec-row">
-                  <div class="nm-control">
-                    <span class="sr-label-tight">ENGINE</span>
-                    <select
-                      class="nm-text-input"
-                      value={(configDraft.engine as string) ?? 'deep'}
-                      onchange={(e) => {
-                        const engine = (e.target as HTMLSelectElement).value as 'deep' | 'quick';
-                        setConfigField('engine', engine);
-                        loadSessionsFor(engine);
-                      }}
-                    >
-                      <option value="deep">Deep research</option>
-                      <option value="quick">Quick research</option>
-                    </select>
-                  </div>
-                </section>
-                <section class="nm-sec">
-                  <div class="nm-sec-hd">
-                    <span class="sr-label-tight">PICK EXISTING SESSION</span>
-                    <span class="nm-sec-meta">most recent first</span>
-                  </div>
-                  <select
-                    class="nm-text-input"
-                    value={(configDraft.sessionId as string) ?? ''}
-                    onchange={(e) => {
-                      const id = (e.target as HTMLSelectElement).value;
-                      setConfigField('sessionId', id);
-                      const found = rrSessions.find((s) => s.id === id);
-                      if (found) setConfigField('topic', found.topic);
-                    }}
-                  >
-                    <option value="">— select a session —</option>
-                    {#each rrSessions as s (s.id)}
-                      <option value={s.id}>{s.topic} · {s.status}</option>
-                    {/each}
-                  </select>
-                </section>
-                <section class="nm-sec">
-                  <div class="nm-sec-hd">
-                    <span class="sr-label-tight">SESSION ID</span>
-                    <span class="nm-sec-meta">or template from upstream · {'{{input.researchSessionId}}'}</span>
-                  </div>
-                  <div class="nm-field">
-                    <textarea
-                      rows="1"
-                      value={(configDraft.sessionId as string) ?? ''}
-                      oninput={(e) =>
-                        setConfigField('sessionId', (e.target as HTMLTextAreaElement).value)}
-                      placeholder={'{{input.researchSessionId}}'}
-                    ></textarea>
-                  </div>
-                </section>
-                <section class="nm-sec">
-                  <div class="nm-sec-hd">
-                    <span class="sr-label-tight">TOPIC</span>
-                    <span class="nm-sec-meta">shown in header</span>
-                  </div>
-                  <div class="nm-field">
-                    <input
-                      class="nm-text-input"
-                      type="text"
-                      value={(configDraft.topic as string) ?? ''}
-                      oninput={(e) =>
-                        setConfigField('topic', (e.target as HTMLInputElement).value)}
-                    />
-                  </div>
-                </section>
-              {:else if menuNode.kind === 'intelligence' && menuNode.type === 'intelligence'}
-                <section class="nm-sec">
-                  <div class="nm-sec-hd">
-                    <span class="sr-label-tight">QUERY</span>
-                    <span class="nm-sec-meta">edit inline on the node for live preview</span>
-                  </div>
-                  <div class="nm-field">
-                    <textarea
-                      rows="2"
-                      value={(configDraft.query as string) ?? ''}
-                      oninput={(e) =>
-                        setConfigField('query', (e.target as HTMLTextAreaElement).value)}
-                      placeholder="new projects"
-                    ></textarea>
-                  </div>
-                </section>
-                <section class="nm-sec">
-                  <div class="nm-sec-hd">
-                    <span class="sr-label-tight">CURRENT FOCUS</span>
-                    <span class="nm-sec-meta">from last run</span>
-                  </div>
-                  <div class="nm-field nm-field-read">
-                    {#if menuNode.outputData !== undefined}
-                      <InspectorBody data={(menuNode.outputData as Record<string, unknown> | undefined)?.intelFocus ?? menuNode.outputData} />
-                    {:else}
-                      <pre class="ghost">// no run yet</pre>
-                    {/if}
-                  </div>
-                </section>
-              {/if}
-
-              <!-- Schema-driven config panel: specialised → BasicConfigForm (basicConfig) → JSON fallback.
-                   Skipped for kinds that already have a hand-crafted inline editor above. -->
-              {#if menuShowsConfigPanel(menuNode.type, menuNode.kind)}
-                {@const menuDefinition = getDefinition(menuNode.type)}
-                {@const _upstreamFields = Array.from(new Set([
-                  ...computeUpstreamFields(
-                    menuNode.id,
-                    (canvas.nodes ?? []) as Array<{ id: string; outputData?: unknown }>,
-                    (canvas.edges ?? []).map((e) => ({ sourceNodeId: e.from, targetNodeId: e.to })),
-                  ),
-                  ...(declaredUpstreamFields[menuNode.id] ?? []),
-                ]))}
-                {@const _summary = menuDefinition?.summarize?.(configDraft)}
-                {#if _summary}
-                  <div class="nm-summary">
-                    <span class="nm-summary-eyebrow">What this does</span>
-                    <p class="nm-summary-line">{_summary.line}</p>
-                    {#if _summary.preview && Object.keys(_summary.preview.details).length}
-                      <dl class="nm-summary-grid">
-                        {#each Object.entries(_summary.preview.details) as [k, v] (k)}
-                          <dt>{k}</dt><dd>{v}</dd>
-                        {/each}
-                      </dl>
-                    {/if}
-                  </div>
-                {/if}
-                <div class="menu-config-section">
-                  <!-- Keyed on node id: switching between two nodes of the SAME
-                       type must remount the panel, or its internal editor state
-                       (JSON drafts, pickers) leaks from one node to the other. -->
-                  {#key menuNode.id}
-                    <LazyPanel
-                      type={menuNode.type}
-                      config={configDraft}
-                      onChange={(cfg) => { configDraft = cfg; configDirty = true; }}
-                      definition={menuDefinition}
-                      nodeId={menuNode.id}
-                      workflowId={canvas.workflowId}
-                      upstreamFields={_upstreamFields}
-                    />
-                  {/key}
-                </div>
-              {/if}
-
-              <!-- Universal "truth required" flag, available on every node
-                   regardless of which editor renders above. Stored as the
-                   engine-level `_truthRequired` key (same convention as
-                   `_onError`). Summarising nodes read it to decide whether a
-                   missing source is a footnote or the headline. -->
-              <label class="nm-truth">
-                <input
-                  type="checkbox"
-                  checked={configDraft._truthRequired === true}
-                  onchange={(e) => {
-                    const on = (e.currentTarget as HTMLInputElement).checked;
-                    const next = { ...configDraft };
-                    if (on) next._truthRequired = true;
-                    else delete next._truthRequired;
-                    configDraft = next;
-                    configDirty = true;
-                  }}
-                />
-                <span class="nm-truth-text">
-                  <span class="sr-label-tight">Truth required</span>
-                  <span class="nm-truth-hint">
-                    If this source produces nothing, say so prominently rather than quietly leaving it out.
-                  </span>
-                </span>
-              </label>
-
-              <!-- Universal "Advanced — raw JSON" disclosure available on every
-                   node, regardless of which editor renders above. The structured
-                   editors are the primary surface; this is the power-user
-                   escape hatch. -->
-              <details class="nm-raw-json">
-                <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
-                <textarea
-                  class="nm-raw-textarea"
-                  rows="10"
-                  spellcheck="false"
-                  value={JSON.stringify(configDraft, null, 2)}
-                  oninput={(e) => {
-                    const txt = (e.currentTarget as HTMLTextAreaElement).value;
-                    try {
-                      const next = JSON.parse(txt);
-                      if (next && typeof next === 'object') {
-                        configDraft = next as Record<string, unknown>;
-                        configDirty = true;
-                      }
-                    } catch {
-                      /* invalid JSON — keep typing, don't apply */
-                    }
-                  }}
-                ></textarea>
-              </details>
-            </div>
-
-            <!-- Actions footer -->
-            <div class="nm-foot">
-              {#if actionError}
-                <div class="nm-action-err">⚠ {actionError}</div>
-              {/if}
-              <div class="nm-actions">
-                <button
-                  class="nm-act"
-                  onclick={actReRun}
-                  disabled={runMeta.state === 'running'}
-                  title="Run ONLY this node (use the toolbar Run for the whole canvas)"
-                >
-                  <span class="nm-act-ic">↻</span>Run this node
-                </button>
-                <button class="nm-act" onclick={actBranch} title="Clone this node">
-                  <span class="nm-act-ic">⎇</span>Branch
-                </button>
-                <button
-                  class="nm-act"
-                  onclick={() => (pipePickerOpen = !pipePickerOpen)}
-                  title="Add an edge to another node"
-                >
-                  <span class="nm-act-ic">↘</span>Pipe to…
-                </button>
-                <button
-                  class="nm-act"
-                  disabled
-                  title="Chat integration coming in phase E"
-                >
-                  <span class="nm-act-ic">◉</span>Pin to chat
-                </button>
-                <button
-                  class="nm-act"
-                  onclick={actDetach}
-                  title="Remove all edges to/from this node"
-                >
-                  <span class="nm-act-ic">⊘</span>Detach
-                </button>
-                <button
-                  class="nm-act is-danger"
-                  onclick={actDelete}
-                  title="Delete this node and its edges"
-                >
-                  <span class="nm-act-ic">×</span>Delete
-                </button>
-              </div>
-
-              {#if pipePickerOpen}
-                <div class="pipe-picker">
-                  <div class="pipe-picker-hd">
-                    <span class="sr-label-tight">PIPE TO…</span>
-                    <button
-                      class="p-icon-btn"
-                      onclick={() => (pipePickerOpen = false)}
-                      aria-label="Cancel">✕</button
-                    >
-                  </div>
-                  <div class="pipe-picker-list">
-                    {#each viewNodes.filter((n) => n.id !== menuNode.id) as target (target.id)}
-                      <button class="nm-pin pipe-target" onclick={() => pipeTo(target.id)}>
-                        <span class="nm-pin-kind-bar" data-kind={target.kind}></span>
-                        <span>{target.name}</span>
-                      </button>
-                    {/each}
-                    {#if viewNodes.length <= 1}
-                      <span class="nm-ctx-empty">no other nodes</span>
-                    {/if}
-                  </div>
-                </div>
-              {/if}
-            </div>
-          </div>
-        </div>
-      {/if}
     <!-- Legend -->
     <div class="legend">
       {#each [['input', 'var(--text-muted)'], ['llm', 'var(--accent)'], ['parse', 'var(--error)'], ['output', 'var(--text-primary)'], ['intel', 'var(--accent)']] as [k, c]}
@@ -6733,6 +5534,1175 @@
           {/if}
         </div>
       </div>
+    {/if}
+  </div>
+    <!-- Node inspector: docked beside the canvas (desktop) / bottom sheet
+         (phone). Single click on a node opens it; double-click still does. -->
+    {#if menuNode}
+      <InspectorDock
+        node={menuNode}
+        kindColor={KIND_COLOR[menuNode.kind]}
+        typeLabel={byNodeType(menuNode.type)?.label ?? menuNode.type}
+        typeDescription={byNodeType(menuNode.type)?.description ?? ''}
+        {labelDraft}
+        bind:labelInputEl
+        {configDirty}
+        {saving}
+        {saveError}
+        requiredMissing={menuRequiredMissing}
+        collisions={menuUpstreamCollisions}
+        upstream={menuUpstream}
+        downstream={menuDownstream}
+        {isMobile}
+        onLabelInput={setLabel}
+        onSave={menuNode.kind === 'trigger' ? saveTrigger : saveNode}
+        onClose={closeMenu}
+      >
+        <!-- Kind-specific body -->
+        <div class="nm-body">
+          {#each [summarizeNode(menuNode.type, configDraft as Record<string, unknown>, getDefinition(menuNode.type)?.description)] as _previewSummary (1)}
+            {#if _previewSummary.line}
+              <section class="nm-sec nm-action-preview" aria-label="What this node will do">
+                <header class="nm-action-hdr">
+                  <span class="sr-label-tight">What this does</span>
+                  <span class="nm-action-kind">{_previewSummary.preview.kind}</span>
+                </header>
+                <p class="nm-action-line">{_previewSummary.line}</p>
+                {#if Object.keys(_previewSummary.preview.details).length > 0}
+                  <dl class="nm-action-grid">
+                    {#each Object.entries(_previewSummary.preview.details) as [k, v] (k)}
+                      <dt>{k}</dt>
+                      <dd>{v}</dd>
+                    {/each}
+                  </dl>
+                {/if}
+              </section>
+            {/if}
+          {/each}
+          {#if menuNode.kind === 'trigger'}
+            {@const kind = ((configDraft.kind as string) || 'manual') as
+              | 'manual'
+              | 'cron'
+              | 'webhook'
+              | 'event'}
+            <section class="nm-sec">
+              <div class="nm-sec-hd">
+                <span class="sr-label-tight">TRIGGER TYPE</span>
+              </div>
+              <div class="trig-pills">
+                {#each ['manual', 'cron', 'webhook', 'event'] as k}
+                  <button
+                    class="trig-pill"
+                    class:active={kind === k}
+                    onclick={() => setConfigField('kind', k)}
+                  >
+                    {k}
+                  </button>
+                {/each}
+              </div>
+            </section>
+
+            {#if kind === 'manual'}
+              <section class="nm-sec">
+                <div class="chat-explainer">
+                  <p>
+                    Fires on demand: a chat send, a "Run" click from the canvas toolbar, or
+                    any POST to <code>/api/workflows/{canvas.workflowId}/run</code>.
+                  </p>
+                </div>
+              </section>
+            {:else if kind === 'cron'}
+              <section class="nm-sec">
+                <div class="nm-sec-hd">
+                  <span class="sr-label-tight">SCHEDULE</span>
+                  <span class="nm-sec-meta">when this runs</span>
+                </div>
+                <ScheduleBuilder
+                  value={(configDraft.cron as string) ?? ''}
+                  onChange={(c) => setConfigField('cron', c)}
+                />
+                <details class="nm-cron-adv" style="margin-top:8px;">
+                  <summary style="cursor:pointer; font-family:var(--font-mono); font-size:var(--fs-label-xs); text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted);">Advanced — presets &amp; raw cron</summary>
+                  <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
+                    <select
+                      class="nm-text-input"
+                      value={(configDraft.cron as string) ?? ''}
+                      onchange={(e) =>
+                        setConfigField('cron', (e.target as HTMLSelectElement).value)}
+                    >
+                      <option value="">— pick a preset —</option>
+                      {#each CRON_PRESETS as p (p.value)}
+                        <option value={p.value}>{p.label}</option>
+                      {/each}
+                    </select>
+                    <input
+                      class="nm-text-input"
+                      type="text"
+                      value={(configDraft.cron as string) ?? ''}
+                      oninput={(e) =>
+                        setConfigField('cron', (e.target as HTMLInputElement).value)}
+                      placeholder="*/15 * * * *"
+                    />
+                    <span class="nm-sec-meta">min hour dom mon dow</span>
+                  </div>
+                </details>
+              </section>
+            {:else if kind === 'webhook'}
+              <section class="nm-sec">
+                <div class="nm-sec-hd">
+                  <span class="sr-label-tight">WEBHOOK URL</span>
+                  <span class="nm-sec-meta">POST to fire the workflow</span>
+                </div>
+                <div class="nm-field nm-field-read">
+                  <pre>POST {webhookAbsoluteUrl()}</pre>
+                </div>
+                <div class="wh-actions">
+                  <button
+                    class="nm-btn-ghost"
+                    onclick={() => copyWebhookText(webhookAbsoluteUrl(), 'url')}
+                  >
+                    {webhookUrlCopied ? 'Copied ✓' : 'Copy URL'}
+                  </button>
+                  <button
+                    class="nm-btn-ghost"
+                    onclick={sendWebhookTest}
+                    disabled={webhookTestState === 'sending'}
+                  >
+                    {webhookTestState === 'sending' ? 'Sending…' : 'Send test'}
+                  </button>
+                </div>
+                {#if webhookTestState === 'ok' || webhookTestState === 'fail'}
+                  <span
+                    class="wh-test-result"
+                    class:ok={webhookTestState === 'ok'}
+                    class:fail={webhookTestState === 'fail'}
+                    title={webhookTestMsg ?? ''}
+                  >
+                    {webhookTestState === 'ok' ? '✓' : '⚠'} {webhookTestMsg}
+                  </span>
+                {/if}
+              </section>
+
+              <!-- External webhook requests use a timestamped HMAC signature.
+                   Same-origin owner tests are authenticated by the session. -->
+              <section class="nm-sec">
+                <div class="nm-sec-hd">
+                  <span class="sr-label-tight">SECRET</span>
+                  <span class="nm-sec-meta">HMAC-SHA256 · five-minute validity</span>
+                </div>
+                {#if configDraft.secret}
+                  <button
+                    type="button"
+                    class="nm-field nm-field-read wh-secret"
+                    title="Click to copy"
+                    onclick={() => copyWebhookText(configDraft.secret as string, 'secret')}
+                  >
+                    <pre>{webhookSecretCopied
+                        ? 'Copied ✓'
+                        : `Signing secret: ${configDraft.secret}`}</pre>
+                  </button>
+                  <div class="wh-actions">
+                    <button
+                      class="nm-btn-ghost"
+                      onclick={generateWebhookSecret}
+                      disabled={savingWebhookSecret}
+                    >
+                      {savingWebhookSecret ? 'Saving…' : 'Regenerate'}
+                    </button>
+                    <button
+                      class="nm-btn-ghost"
+                      onclick={clearWebhookSecret}
+                      disabled={savingWebhookSecret}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                {:else}
+                  <div class="chat-explainer">
+                    <p>
+                      External delivery is disabled. Generate a secret, then send
+                      <code>X-Webhook-Timestamp</code> and <code>X-Webhook-Signature</code>
+                      where the signature is HMAC-SHA256 of timestamp + "." + raw body.
+                    </p>
+                  </div>
+                  <div class="wh-actions">
+                    <button
+                      class="nm-save-btn"
+                      onclick={generateWebhookSecret}
+                      disabled={savingWebhookSecret}
+                    >
+                      {savingWebhookSecret ? 'Saving…' : 'Generate secret'}
+                    </button>
+                  </div>
+                {/if}
+              </section>
+
+              <section class="nm-sec">
+                <div class="chat-explainer">
+                  <p>
+                    The body becomes <code>initialInput</code> for the run. Any shape is
+                    accepted; downstream nodes can template it as <code>{'{{input.field}}'}</code>.
+                  </p>
+                </div>
+              </section>
+            {:else if kind === 'event'}
+              <EventTriggerPicker
+                eventType={(configDraft.eventType as string) ?? ''}
+                sourceWorkflowId={(configDraft.sourceWorkflowId as string) ?? ''}
+                filter={(configDraft.filter as FilterClause[]) ?? []}
+                {peerCanvases}
+                onChange={setConfigField}
+              />
+            {/if}
+
+            <section class="nm-sec">
+              <div class="nm-sec-hd">
+                <span class="sr-label-tight">ENABLED</span>
+              </div>
+              <label class="nm-toggle">
+                <input
+                  type="checkbox"
+                  checked={configDraft.enabled !== false}
+                  onchange={(e) =>
+                    setConfigField('enabled', (e.target as HTMLInputElement).checked)}
+                />
+                <span>Fire on matching signal</span>
+              </label>
+            </section>
+
+            <!-- D1 — run-outcome notifications (workflow-level; saved on toggle). -->
+            <section class="nm-sec">
+              <div class="nm-sec-hd">
+                <span class="sr-label-tight">NOTIFICATIONS</span>
+                <span class="nm-sec-meta">WhatsApp me about this workflow's runs</span>
+              </div>
+              <label class="nm-toggle">
+                <input
+                  type="checkbox"
+                  checked={canvas.notifications?.onFailure === true}
+                  disabled={savingNotif}
+                  onchange={(e) =>
+                    saveNotifications({ onFailure: (e.target as HTMLInputElement).checked })}
+                />
+                <span>Alert me on failure</span>
+              </label>
+              <label class="nm-toggle">
+                <input
+                  type="checkbox"
+                  checked={canvas.notifications?.onCompletion === true}
+                  disabled={savingNotif}
+                  onchange={(e) =>
+                    saveNotifications({ onCompletion: (e.target as HTMLInputElement).checked })}
+                />
+                <span>Message me on completion</span>
+              </label>
+              <label class="nm-toggle">
+                <input
+                  type="checkbox"
+                  checked={canvas.notifications?.approvals === true}
+                  disabled={savingNotif}
+                  onchange={(e) =>
+                    saveNotifications({ approvals: (e.target as HTMLInputElement).checked })}
+                />
+                <span>Ask me to approve on WhatsApp (reply APPROVE/DENY)</span>
+              </label>
+              {#if notifSaveError}
+                <span class="nm-save-err" title={notifSaveError}
+                  >⚠ {notifSaveError}</span
+                >
+              {/if}
+            </section>
+          {:else if menuNode.kind === 'chat'}
+            <section class="nm-sec">
+              <div class="nm-sec-hd">
+                <span class="sr-label-tight">MODEL</span>
+                <span class="nm-sec-meta"
+                  >conversation-pinned; applies on standalone chat runs</span
+                >
+              </div>
+              <select
+                class="nm-text-input"
+                value={(configDraft.model as string) ?? ''}
+                onchange={(e) =>
+                  setConfigField('model', (e.target as HTMLSelectElement).value)}
+              >
+                <option value="">{modelCatalogue.defaultLabel}</option>
+                {#if modelCatalogue.glm.length}
+                  <optgroup label="GLM (OpenRouter)">
+                    {#each modelCatalogue.glm as opt (opt.value)}
+                      <option value={opt.value}>{opt.label}</option>
+                    {/each}
+                  </optgroup>
+                {/if}
+                {#if modelCatalogue.openrouter.length}
+                  <optgroup label="OpenRouter ({modelCatalogue.openrouter.length})">
+                    {#each modelCatalogue.openrouter as opt (opt.value)}
+                      <option value={opt.value}>{opt.label}</option>
+                    {/each}
+                  </optgroup>
+                {/if}
+                {#if configDraft.model && !knownModelValues.has(configDraft.model as string)}
+                  <optgroup label="Custom">
+                    <option value={configDraft.model as string}>{configDraft.model}</option>
+                  </optgroup>
+                {/if}
+              </select>
+            </section>
+
+            <section class="nm-sec">
+              <div class="nm-sec-hd">
+                <span class="sr-label-tight">INTEL KNOWLEDGE GRAPH</span>
+                <span class="nm-sec-meta"
+                  >vector-search your notes & entities into the system prompt</span
+                >
+              </div>
+              <label class="nm-toggle">
+                <input
+                  type="checkbox"
+                  checked={configDraft.useIntelContext !== false}
+                  onchange={(e) =>
+                    setConfigField('useIntelContext', (e.target as HTMLInputElement).checked)}
+                />
+                <span>Inject intel context per turn</span>
+              </label>
+            </section>
+
+            <section class="nm-sec">
+              <div class="nm-sec-hd">
+                <span class="sr-label-tight">BEHAVIOUR</span>
+              </div>
+              <div class="chat-explainer">
+                <p>
+                  Standalone (no outgoing edges): runs the full jkai chat loop — dynamic
+                  system prompt, memory, intel, and tool calling. A lone chat node is a
+                  usable AI workspace.
+                </p>
+                <p>
+                  Wired downstream: acts as a trigger. The user message (and the chat
+                  node's conversation id) are piped into the graph; the LLM work happens
+                  in downstream nodes.
+                </p>
+              </div>
+            </section>
+          {:else if menuNode.kind === 'llm' && !SPECIALISED_PANEL_TYPES.has(menuNode.type)}
+            <section class="nm-sec">
+              <div class="nm-sec-hd">
+                <span class="sr-label-tight">USER PROMPT</span>
+                <span class="nm-sec-meta">type {'{{'} to pick an upstream field</span>
+              </div>
+              <div class="nm-field">
+                <TemplatedTextarea
+                  rows={4}
+                  value={(configDraft.userPrompt as string) ?? ''}
+                  onChange={(v) => setConfigField('userPrompt', v)}
+                  placeholder="What you want the LLM to do…"
+                />
+              </div>
+            </section>
+
+            <section class="nm-sec">
+              <div class="nm-sec-hd">
+                <span class="sr-label-tight">SYSTEM PROMPT</span>
+                <span class="nm-sec-meta">optional</span>
+              </div>
+              <div class="nm-field">
+                <TemplatedTextarea
+                  rows={2}
+                  value={(configDraft.systemPrompt as string) ?? ''}
+                  onChange={(v) => setConfigField('systemPrompt', v)}
+                  placeholder="You are a helpful assistant…"
+                />
+              </div>
+            </section>
+
+            <section class="nm-sec nm-sec-row">
+              <div class="nm-control">
+                <span class="sr-label-tight">MODEL</span>
+                <select
+                  class="nm-text-input"
+                  value={(configDraft.model as string) ?? ''}
+                  onchange={(e) =>
+                    setConfigField('model', (e.target as HTMLSelectElement).value)}
+                >
+                  <option value="">{modelCatalogue.defaultLabel}</option>
+                  {#if modelCatalogue.glm.length}
+                    <optgroup label="GLM (OpenRouter)">
+                      {#each modelCatalogue.glm as opt (opt.value)}
+                        <option value={opt.value}>{opt.label}</option>
+                      {/each}
+                    </optgroup>
+                  {/if}
+                  {#if modelCatalogue.openrouter.length}
+                    <optgroup
+                      label="OpenRouter ({modelCatalogue.openrouter.length})"
+                    >
+                      {#each modelCatalogue.openrouter as opt (opt.value)}
+                        <option value={opt.value}>{opt.label}</option>
+                      {/each}
+                    </optgroup>
+                  {/if}
+                  {#if configDraft.model && !knownModelValues.has(configDraft.model as string)}
+                    <optgroup label="Custom">
+                      <option value={configDraft.model as string}
+                        >{configDraft.model}</option
+                      >
+                    </optgroup>
+                  {/if}
+                </select>
+              </div>
+              <div class="nm-control">
+                <span class="sr-label-tight">TEMP</span>
+                <input
+                  class="nm-text-input"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="2"
+                  value={(configDraft.temperature as number) ?? 0.7}
+                  oninput={(e) =>
+                    setConfigField(
+                      'temperature',
+                      parseFloat((e.target as HTMLInputElement).value),
+                    )}
+                />
+              </div>
+              <div class="nm-control">
+                <span class="sr-label-tight">MAX TOK</span>
+                <input
+                  class="nm-text-input"
+                  type="number"
+                  step="64"
+                  min="1"
+                  value={(configDraft.maxTokens as number) ?? 1024}
+                  oninput={(e) =>
+                    setConfigField(
+                      'maxTokens',
+                      parseInt((e.target as HTMLInputElement).value, 10),
+                    )}
+                />
+              </div>
+            </section>
+
+            {#if pinnedOutput && pinnedOutput.nodeId !== menuNode.id}
+              <section class="nm-sec nm-pinned">
+                <div class="nm-sec-hd">
+                  <span class="sr-label-tight">PINNED · {pinnedOutput.name}</span>
+                  <button
+                    class="nm-pin-btn"
+                    onclick={() => (pinnedOutput = null)}
+                    title="Unpin"
+                  >unpin</button>
+                </div>
+                <div class="nm-field nm-field-read">
+                  <InspectorBody data={pinnedOutput.data} />
+                </div>
+              </section>
+            {/if}
+
+            <section class="nm-sec">
+              <div class="nm-sec-hd">
+                <span class="sr-label-tight">INPUT DATA</span>
+                <span class="nm-sec-meta">from ↑ upstream</span>
+              </div>
+              <div class="nm-field nm-field-read">
+                {#if menuNode.inputData !== undefined}
+                  <InspectorBody data={menuNode.inputData} />
+                {:else}
+                  <pre class="ghost">// no run yet — press ▶ Run to pipe data</pre>
+                {/if}
+              </div>
+            </section>
+
+            <section class="nm-sec">
+              <div class="nm-sec-hd">
+                <span class="sr-label-tight">OUTPUT DATA</span>
+                <span class="nm-sec-meta">pipes to ↓ downstream</span>
+                {#if menuNode.outputData !== undefined}
+                  {#if pinnedOutput?.nodeId === menuNode.id}
+                    <button class="nm-pin-btn nm-pin-active" onclick={() => (pinnedOutput = null)} title="Unpin this output">pinned ✓</button>
+                  {:else}
+                    <button
+                      class="nm-pin-btn"
+                      onclick={() => (pinnedOutput = { nodeId: menuNode!.id, name: menuNode!.name, data: menuNode!.outputData })}
+                      title="Pin this output, then open another node to compare side-by-side"
+                    >pin</button>
+                  {/if}
+                {/if}
+              </div>
+              <div class="nm-field nm-field-read">
+                {#if menuNode.status === 'running' && menuHealing?.phase === 'healing'}
+                  <div class="nm-heal nm-heal-active">
+                    <span class="nm-heal-hd"><svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:4px;"><path d="M14.5 5.5a3 3 0 01-3.9 3.9L5 15l-1 1H3v-1l1-1 5.6-5.6a3 3 0 013.9-3.9L12 4.5l1.5 1.5 1-1z"/></svg>Auto-fixing…{menuHealing.attempt ? ` (attempt ${menuHealing.attempt}${menuHealing.maxAttempts ? ` of ${menuHealing.maxAttempts}` : ''})` : ''}</span>
+                    {#if menuHealing.fixDescription}<span class="nm-heal-fix">{menuHealing.fixDescription}</span>{/if}
+                    {#if menuHealing.progress.length}<pre class="nm-heal-log">{menuHealing.progress.join('\n')}</pre>{/if}
+                  </div>
+                {:else if menuNode.status === 'running'}
+                  <pre class="ghost">// running…</pre>
+                {:else if menuNode.outputData !== undefined}
+                  {#if menuHealing?.phase === 'recovered'}
+                    <div class="nm-heal nm-heal-ok">
+                      <span class="nm-heal-hd">✓ Auto-fixed and recovered</span>
+                      {#if menuHealing.fixDescription}<span class="nm-heal-fix">{menuHealing.fixDescription}</span>{/if}
+                      <span class="nm-heal-note">Saved config unchanged — the fix applied to this run only. Apply it permanently from the banner above the canvas.</span>
+                    </div>
+                  {/if}
+                  <InspectorBody data={menuNode.outputData} />
+                {:else if menuHealing?.phase === 'blocked'}
+                  <div class="nm-heal nm-heal-blocked">
+                    <span class="nm-heal-hd">⚙ Needs setup — not a config error</span>
+                    {#if menuHealing.diagnosis}<span class="nm-heal-fix">{menuHealing.diagnosis}</span>{/if}
+                    {#if menuHealing.environmentAction}<span class="nm-heal-action">→ {menuHealing.environmentAction}</span>{/if}
+                    {#if menuHealing.alternative}<span class="nm-heal-note">Alternative: {menuHealing.alternative}</span>{/if}
+                  </div>
+                {:else if menuNode.error}
+                  <div class="nm-err">
+                    <span class="nm-err-hd">⚠ This step failed</span>
+                    {#if menuHealing?.phase === 'failed' && menuHealing.attempts?.length}
+                      <span class="nm-err-sub">Auto-fix tried {menuHealing.attempts.length} time{menuHealing.attempts.length === 1 ? '' : 's'} but couldn't recover.</span>
+                      <span class="nm-err-diag">{menuHealing.attempts[menuHealing.attempts.length - 1].diagnosis}</span>
+                    {/if}
+                    <details class="nm-err-tech">
+                      <summary>Technical details</summary>
+                      <pre class="error-text">{menuNode.error}</pre>
+                    </details>
+                  </div>
+                {:else}
+                  <pre class="ghost">// pending</pre>
+                {/if}
+              </div>
+            </section>
+
+            {#if menuNode.durationMs != null}
+              <section class="nm-sec">
+                <div class="nm-sec-hd">
+                  <span class="sr-label-tight">LAST RUN</span>
+                  <span class="nm-sec-meta"
+                    >completed in {(menuNode.durationMs / 1000).toFixed(2)}s</span
+                  >
+                </div>
+              </section>
+            {/if}
+          {:else if menuNode.kind === 'parse'}
+            <section class="nm-sec nm-sec-row">
+              <div class="nm-control">
+                <span class="sr-label-tight">MODE</span>
+                <select
+                  class="nm-text-input"
+                  value={(configDraft.mode as string) ?? 'json'}
+                  onchange={(e) =>
+                    setConfigField('mode', (e.target as HTMLSelectElement).value)}
+                >
+                  <option value="json">json</option>
+                  <option value="regex">regex</option>
+                </select>
+              </div>
+              <div class="nm-control">
+                <span class="sr-label-tight">INPUT FIELD</span>
+                <input
+                  class="nm-text-input"
+                  type="text"
+                  value={(configDraft.inputField as string) ?? 'response'}
+                  oninput={(e) =>
+                    setConfigField('inputField', (e.target as HTMLInputElement).value)}
+                  placeholder="response"
+                />
+              </div>
+            </section>
+            {#if (configDraft.mode as string) === 'regex'}
+              <section class="nm-sec">
+                <div class="nm-sec-hd"><span class="sr-label-tight">PATTERN</span></div>
+                <div class="nm-field">
+                  <input
+                    class="nm-text-input"
+                    style:width="100%"
+                    type="text"
+                    value={(configDraft.pattern as string) ?? ''}
+                    oninput={(e) =>
+                      setConfigField('pattern', (e.target as HTMLInputElement).value)}
+                    placeholder="\\d+"
+                  />
+                </div>
+              </section>
+            {/if}
+            <section class="nm-sec">
+              <div class="nm-sec-hd">
+                <span class="sr-label-tight">INPUT DATA</span>
+                <span class="nm-sec-meta">from ↑ upstream</span>
+              </div>
+              <div class="nm-field nm-field-read">
+                {#if menuNode.inputData !== undefined}
+                  <InspectorBody data={menuNode.inputData} />
+                {:else}
+                  <pre class="ghost">// no run yet</pre>
+                {/if}
+              </div>
+            </section>
+            <!-- Last run: always shown so the user gets a clear signal
+                 whether the node ran, completed, failed, or never executed
+                 — even when outputData is undefined (e.g. node that doesn't
+                 produce a payload). -->
+            <section class="nm-sec nm-sec-lastrun">
+              <div class="nm-sec-hd">
+                <span class="sr-label-tight">LAST RUN</span>
+                {#if menuNode.status === 'failed'}
+                  <span class="chip chip-pill chip-failed">FAILED</span>
+                {:else if menuNode.status === 'running'}
+                  <span class="chip chip-pill chip-accent chip-live">RUNNING</span>
+                {:else if menuNode.status === 'ok'}
+                  <span class="chip chip-pill chip-ok">OK</span>
+                {:else}
+                  <span class="chip chip-pill">NEVER RUN</span>
+                {/if}
+              </div>
+              {#if menuNode.error}
+                <div class="nm-field nm-field-read">
+                  <div class="sr-label-tight error" style="margin-bottom:4px;">ERROR</div>
+                  <pre class="error-text">{menuNode.error}</pre>
+                </div>
+              {/if}
+              {#if menuNode.outputData !== undefined}
+                <div class="nm-field nm-field-read">
+                  <div class="sr-label-tight" style="margin-bottom:4px;">OUTPUT</div>
+                  <InspectorBody data={menuNode.outputData} />
+                </div>
+              {:else if !menuNode.error}
+                <div class="nm-field nm-field-read">
+                  <pre class="ghost">// no output produced by the last run{menuNode.status === 'ok' ? ' (node completed without returning a payload)' : ''}</pre>
+                </div>
+              {/if}
+            </section>
+          {:else if menuNode.kind === 'input'}
+            <section class="nm-sec">
+              <div class="nm-sec-hd"><span class="sr-label-tight">SOURCE</span></div>
+              <div class="nm-field">
+                <button class="nm-select" style:width="100%">Manual trigger (run button)</button>
+              </div>
+            </section>
+            <section class="nm-sec">
+              <div class="nm-sec-hd">
+                <span class="sr-label-tight">OUTPUT DATA</span>
+                <span class="nm-sec-meta">pipes to ↓ downstream</span>
+              </div>
+              <div class="nm-field nm-field-read">
+                {#if menuNode.outputData !== undefined}
+                  <InspectorBody data={menuNode.outputData} />
+                {:else}
+                  <pre class="ghost">// no run yet</pre>
+                {/if}
+              </div>
+            </section>
+          {:else if menuNode.kind === 'output'}
+            {#if menuNode.type === 'transform'}
+              <section class="nm-sec">
+                <div class="nm-sec-hd">
+                  <span class="sr-label-tight">TRANSFORM EXPRESSION</span>
+                  <span class="nm-sec-meta">optional · JS, `input` is the payload</span>
+                </div>
+                <div class="nm-field">
+                  <textarea
+                    rows="3"
+                    value={(configDraft.expression as string) ?? ''}
+                    oninput={(e) =>
+                      setConfigField(
+                        'expression',
+                        (e.target as HTMLTextAreaElement).value,
+                      )}
+                    placeholder={'return { reply: input.response }'}
+                  ></textarea>
+                </div>
+              </section>
+            {/if}
+            <section class="nm-sec">
+              <div class="nm-sec-hd">
+                <span class="sr-label-tight">INPUT DATA</span>
+                <span class="nm-sec-meta">from ↑ upstream</span>
+              </div>
+              <div class="nm-field nm-field-read">
+                {#if menuNode.inputData !== undefined}
+                  <InspectorBody data={menuNode.inputData} />
+                {:else}
+                  <pre class="ghost">// pending</pre>
+                {/if}
+              </div>
+            </section>
+            <section class="nm-sec">
+              <div class="nm-sec-hd"><span class="sr-label-tight">OUTPUT DATA</span></div>
+              <div class="nm-field nm-field-read">
+                {#if menuNode.outputData !== undefined}
+                  <InspectorBody data={menuNode.outputData} />
+                {:else}
+                  <pre class="ghost">// pending</pre>
+                {/if}
+              </div>
+            </section>
+          {:else if menuNode.kind === 'intel'}
+            {#if menuNode.type === 'intel-query'}
+              <section class="nm-sec">
+                <div class="nm-sec-hd">
+                  <span class="sr-label-tight">QUERY</span>
+                  <span class="nm-sec-meta">type {'{{'} to pick an upstream field</span>
+                </div>
+                <div class="nm-field">
+                  <TemplatedTextarea
+                    rows={2}
+                    value={(configDraft.query as string) ?? ''}
+                    onChange={(v) => setConfigField('query', v)}
+                      placeholder={'{{input.message}}'}
+                  />
+                </div>
+              </section>
+              <section class="nm-sec">
+                <div class="nm-sec-hd">
+                  <span class="sr-label-tight">LAST RESULT</span>
+                  <span class="nm-sec-meta">intelContext appended to downstream input</span>
+                </div>
+                <div class="nm-field nm-field-read">
+                  {#if menuNode.outputData !== undefined}
+                    <InspectorBody data={menuNode.outputData} />
+                  {:else}
+                    <pre class="ghost">// no run yet</pre>
+                  {/if}
+                </div>
+              </section>
+            {:else if menuNode.type === 'quick-answer'}
+              <section class="nm-sec">
+                <div class="nm-sec-hd">
+                  <span class="sr-label-tight">TOPIC</span>
+                  <span class="nm-sec-meta">supports {'{{input.field}}'} / {'{{item.*}}'} templates</span>
+                </div>
+                <div class="nm-field">
+                  <textarea
+                    rows="2"
+                    value={(configDraft.topic as string) ?? ''}
+                    oninput={(e) =>
+                      setConfigField('topic', (e.target as HTMLTextAreaElement).value)}
+                    placeholder={'What is the impact of …'}
+                  ></textarea>
+                </div>
+              </section>
+              <section class="nm-sec">
+                <div class="nm-sec-hd">
+                  <span class="sr-label-tight">GOALS</span>
+                  <span class="nm-sec-meta">optional — one per line</span>
+                </div>
+                <div class="nm-field">
+                  <textarea
+                    rows="3"
+                    value={Array.isArray(configDraft.goals) ? (configDraft.goals as string[]).join('\n') : ((configDraft.goals as string) ?? '')}
+                    oninput={(e) => {
+                      const lines = (e.target as HTMLTextAreaElement).value.split('\n').map((l) => l.trim()).filter(Boolean);
+                      setConfigField('goals', lines);
+                    }}
+                    placeholder="Understand key players, risks, opportunities"
+                  ></textarea>
+                </div>
+              </section>
+              <section class="nm-sec nm-sec-row">
+                <div class="nm-control">
+                  <span class="sr-label-tight">MAX WAIT (MS)</span>
+                  <input
+                    class="nm-text-input"
+                    type="number"
+                    value={(configDraft.maxWaitMs as number) ?? 180000}
+                    oninput={(e) =>
+                      setConfigField('maxWaitMs', Number((e.target as HTMLInputElement).value) || 180000)}
+                  />
+                </div>
+                <div class="nm-control">
+                  <span class="sr-label-tight">POLL INTERVAL</span>
+                  <input
+                    class="nm-text-input"
+                    type="number"
+                    value={(configDraft.pollIntervalMs as number) ?? 1500}
+                    oninput={(e) =>
+                      setConfigField('pollIntervalMs', Number((e.target as HTMLInputElement).value) || 1500)}
+                  />
+                </div>
+              </section>
+            {:else if menuNode.type === 'deep-research'}
+              <section class="nm-sec">
+                <div class="nm-sec-hd">
+                  <span class="sr-label-tight">TOPIC</span>
+                  <span class="nm-sec-meta">supports {'{{input.field}}'} / {'{{item.*}}'} templates</span>
+                </div>
+                <div class="nm-field">
+                  <textarea
+                    rows="2"
+                    value={(configDraft.topic as string) ?? ''}
+                    oninput={(e) =>
+                      setConfigField('topic', (e.target as HTMLTextAreaElement).value)}
+                    placeholder={'{{item.title}}'}
+                  ></textarea>
+                </div>
+              </section>
+              <section class="nm-sec">
+                <div class="nm-sec-hd">
+                  <span class="sr-label-tight">GOALS</span>
+                  <span class="nm-sec-meta">optional — free text</span>
+                </div>
+                <div class="nm-field">
+                  <textarea
+                    rows="3"
+                    value={(configDraft.goals as string) ?? ''}
+                    oninput={(e) =>
+                      setConfigField('goals', (e.target as HTMLTextAreaElement).value)}
+                    placeholder="Key advances, practical applications"
+                  ></textarea>
+                </div>
+              </section>
+              <section class="nm-sec nm-sec-row">
+                <div class="nm-control">
+                  <span class="sr-label-tight">DEPTH</span>
+                  <select
+                    class="nm-text-input"
+                    value={(configDraft.depth as string) ?? 'medium'}
+                    onchange={(e) =>
+                      setConfigField('depth', (e.target as HTMLSelectElement).value)}
+                  >
+                    <option value="shallow">shallow</option>
+                    <option value="medium">medium</option>
+                    <option value="deep">deep</option>
+                  </select>
+                </div>
+                <div class="nm-control">
+                  <span class="sr-label-tight">MAX WAIT (MS)</span>
+                  <input
+                    class="nm-text-input"
+                    type="number"
+                    value={(configDraft.maxWaitMs as number) ?? 900000}
+                    oninput={(e) =>
+                      setConfigField('maxWaitMs', Number((e.target as HTMLInputElement).value) || 900000)}
+                  />
+                </div>
+              </section>
+            {:else if menuNode.type === 'intel-write'}
+              <section class="nm-sec">
+                <div class="nm-sec-hd">
+                  <span class="sr-label-tight">CONTENT</span>
+                  <span class="nm-sec-meta">text to add to intel</span>
+                </div>
+                <div class="nm-field">
+                  <textarea
+                    rows="3"
+                    value={(configDraft.content as string) ?? ''}
+                    oninput={(e) =>
+                      setConfigField('content', (e.target as HTMLTextAreaElement).value)}
+                    placeholder={'{{input.summary}}'}
+                  ></textarea>
+                </div>
+              </section>
+              <section class="nm-sec nm-sec-row">
+                <div class="nm-control">
+                  <span class="sr-label-tight">TITLE</span>
+                  <input
+                    class="nm-text-input"
+                    type="text"
+                    value={(configDraft.title as string) ?? ''}
+                    oninput={(e) =>
+                      setConfigField('title', (e.target as HTMLInputElement).value)}
+                    placeholder="optional"
+                  />
+                </div>
+                <div class="nm-control">
+                  <span class="sr-label-tight">FORMAT</span>
+                  <select
+                    class="nm-text-input"
+                    value={(configDraft.format as string) ?? 'summary'}
+                    onchange={(e) =>
+                      setConfigField('format', (e.target as HTMLSelectElement).value)}
+                  >
+                    <option value="summary">summary</option>
+                    <option value="text">text</option>
+                    <option value="email">email</option>
+                    <option value="meeting_transcript">meeting_transcript</option>
+                  </select>
+                </div>
+              </section>
+            {/if}
+            <section class="nm-sec">
+              <div class="nm-sec-hd">
+                <span class="sr-label-tight">INPUT DATA</span>
+                <span class="nm-sec-meta">from ↑ upstream</span>
+              </div>
+              <div class="nm-field nm-field-read">
+                {#if menuNode.inputData !== undefined}
+                  <InspectorBody data={menuNode.inputData} />
+                {:else}
+                  <pre class="ghost">// no run yet</pre>
+                {/if}
+              </div>
+            </section>
+          {:else if menuNode.kind === 'intelligence' && menuNode.type === 'research-result'}
+            {@const rrEngine = ((configDraft.engine as string) ?? 'deep') as 'deep' | 'quick'}
+            {@const rrSessions = rrEngine === 'deep' ? deepSessions : quickSessions}
+            <section class="nm-sec nm-sec-row">
+              <div class="nm-control">
+                <span class="sr-label-tight">ENGINE</span>
+                <select
+                  class="nm-text-input"
+                  value={(configDraft.engine as string) ?? 'deep'}
+                  onchange={(e) => {
+                    const engine = (e.target as HTMLSelectElement).value as 'deep' | 'quick';
+                    setConfigField('engine', engine);
+                    loadSessionsFor(engine);
+                  }}
+                >
+                  <option value="deep">Deep research</option>
+                  <option value="quick">Quick research</option>
+                </select>
+              </div>
+            </section>
+            <section class="nm-sec">
+              <div class="nm-sec-hd">
+                <span class="sr-label-tight">PICK EXISTING SESSION</span>
+                <span class="nm-sec-meta">most recent first</span>
+              </div>
+              <select
+                class="nm-text-input"
+                value={(configDraft.sessionId as string) ?? ''}
+                onchange={(e) => {
+                  const id = (e.target as HTMLSelectElement).value;
+                  setConfigField('sessionId', id);
+                  const found = rrSessions.find((s) => s.id === id);
+                  if (found) setConfigField('topic', found.topic);
+                }}
+              >
+                <option value="">— select a session —</option>
+                {#each rrSessions as s (s.id)}
+                  <option value={s.id}>{s.topic} · {s.status}</option>
+                {/each}
+              </select>
+            </section>
+            <section class="nm-sec">
+              <div class="nm-sec-hd">
+                <span class="sr-label-tight">SESSION ID</span>
+                <span class="nm-sec-meta">or template from upstream · {'{{input.researchSessionId}}'}</span>
+              </div>
+              <div class="nm-field">
+                <textarea
+                  rows="1"
+                  value={(configDraft.sessionId as string) ?? ''}
+                  oninput={(e) =>
+                    setConfigField('sessionId', (e.target as HTMLTextAreaElement).value)}
+                  placeholder={'{{input.researchSessionId}}'}
+                ></textarea>
+              </div>
+            </section>
+            <section class="nm-sec">
+              <div class="nm-sec-hd">
+                <span class="sr-label-tight">TOPIC</span>
+                <span class="nm-sec-meta">shown in header</span>
+              </div>
+              <div class="nm-field">
+                <input
+                  class="nm-text-input"
+                  type="text"
+                  value={(configDraft.topic as string) ?? ''}
+                  oninput={(e) =>
+                    setConfigField('topic', (e.target as HTMLInputElement).value)}
+                />
+              </div>
+            </section>
+          {:else if menuNode.kind === 'intelligence' && menuNode.type === 'intelligence'}
+            <section class="nm-sec">
+              <div class="nm-sec-hd">
+                <span class="sr-label-tight">QUERY</span>
+                <span class="nm-sec-meta">edit inline on the node for live preview</span>
+              </div>
+              <div class="nm-field">
+                <textarea
+                  rows="2"
+                  value={(configDraft.query as string) ?? ''}
+                  oninput={(e) =>
+                    setConfigField('query', (e.target as HTMLTextAreaElement).value)}
+                  placeholder="new projects"
+                ></textarea>
+              </div>
+            </section>
+            <section class="nm-sec">
+              <div class="nm-sec-hd">
+                <span class="sr-label-tight">CURRENT FOCUS</span>
+                <span class="nm-sec-meta">from last run</span>
+              </div>
+              <div class="nm-field nm-field-read">
+                {#if menuNode.outputData !== undefined}
+                  <InspectorBody data={(menuNode.outputData as Record<string, unknown> | undefined)?.intelFocus ?? menuNode.outputData} />
+                {:else}
+                  <pre class="ghost">// no run yet</pre>
+                {/if}
+              </div>
+            </section>
+          {/if}
+
+          <!-- Schema-driven config panel: specialised → BasicConfigForm (basicConfig) → JSON fallback.
+               Skipped for kinds that already have a hand-crafted inline editor above. -->
+          {#if menuShowsConfigPanel(menuNode.type, menuNode.kind)}
+            {@const menuDefinition = getDefinition(menuNode.type)}
+            {@const _upstreamFields = Array.from(new Set([
+              ...computeUpstreamFields(
+                menuNode.id,
+                (canvas.nodes ?? []) as Array<{ id: string; outputData?: unknown }>,
+                (canvas.edges ?? []).map((e) => ({ sourceNodeId: e.from, targetNodeId: e.to })),
+              ),
+              ...(declaredUpstreamFields[menuNode.id] ?? []),
+            ]))}
+            {@const _summary = menuDefinition?.summarize?.(configDraft)}
+            {#if _summary}
+              <div class="nm-summary">
+                <span class="nm-summary-eyebrow">What this does</span>
+                <p class="nm-summary-line">{_summary.line}</p>
+                {#if _summary.preview && Object.keys(_summary.preview.details).length}
+                  <dl class="nm-summary-grid">
+                    {#each Object.entries(_summary.preview.details) as [k, v] (k)}
+                      <dt>{k}</dt><dd>{v}</dd>
+                    {/each}
+                  </dl>
+                {/if}
+              </div>
+            {/if}
+            <div class="menu-config-section">
+              <!-- Keyed on node id: switching between two nodes of the SAME
+                   type must remount the panel, or its internal editor state
+                   (JSON drafts, pickers) leaks from one node to the other. -->
+              {#key menuNode.id}
+                <LazyPanel
+                  type={menuNode.type}
+                  config={configDraft}
+                  onChange={(cfg) => { configDraft = cfg; configDirty = true; }}
+                  definition={menuDefinition}
+                  nodeId={menuNode.id}
+                  workflowId={canvas.workflowId}
+                  upstreamFields={_upstreamFields}
+                />
+              {/key}
+            </div>
+          {/if}
+
+          <!-- Universal "truth required" flag, available on every node
+               regardless of which editor renders above. Stored as the
+               engine-level `_truthRequired` key (same convention as
+               `_onError`). Summarising nodes read it to decide whether a
+               missing source is a footnote or the headline. -->
+          <label class="nm-truth">
+            <input
+              type="checkbox"
+              checked={configDraft._truthRequired === true}
+              onchange={(e) => {
+                const on = (e.currentTarget as HTMLInputElement).checked;
+                const next = { ...configDraft };
+                if (on) next._truthRequired = true;
+                else delete next._truthRequired;
+                configDraft = next;
+                configDirty = true;
+              }}
+            />
+            <span class="nm-truth-text">
+              <span class="sr-label-tight">Truth required</span>
+              <span class="nm-truth-hint">
+                If this source produces nothing, say so prominently rather than quietly leaving it out.
+              </span>
+            </span>
+          </label>
+
+          <!-- Universal "Advanced — raw JSON" disclosure available on every
+               node, regardless of which editor renders above. The structured
+               editors are the primary surface; this is the power-user
+               escape hatch. -->
+          <details class="nm-raw-json">
+            <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
+            <textarea
+              class="nm-raw-textarea"
+              rows="10"
+              spellcheck="false"
+              value={JSON.stringify(configDraft, null, 2)}
+              oninput={(e) => {
+                const txt = (e.currentTarget as HTMLTextAreaElement).value;
+                try {
+                  const next = JSON.parse(txt);
+                  if (next && typeof next === 'object') {
+                    configDraft = next as Record<string, unknown>;
+                    configDirty = true;
+                  }
+                } catch {
+                  /* invalid JSON — keep typing, don't apply */
+                }
+              }}
+            ></textarea>
+          </details>
+        </div>
+
+        <!-- Actions footer -->
+        <div class="nm-foot">
+          {#if actionError}
+            <div class="nm-action-err">⚠ {actionError}</div>
+          {/if}
+          <div class="nm-actions">
+            <button
+              class="nm-act"
+              onclick={actReRun}
+              disabled={runMeta.state === 'running'}
+              title="Run ONLY this node (use the toolbar Run for the whole canvas)"
+            >
+              <span class="nm-act-ic">↻</span>Run this node
+            </button>
+            <button class="nm-act" onclick={actBranch} title="Clone this node">
+              <span class="nm-act-ic">⎇</span>Branch
+            </button>
+            <button
+              class="nm-act"
+              onclick={() => (pipePickerOpen = !pipePickerOpen)}
+              title="Add an edge to another node"
+            >
+              <span class="nm-act-ic">↘</span>Pipe to…
+            </button>
+            <button
+              class="nm-act"
+              disabled
+              title="Chat integration coming in phase E"
+            >
+              <span class="nm-act-ic">◉</span>Pin to chat
+            </button>
+            <button
+              class="nm-act"
+              onclick={actDetach}
+              title="Remove all edges to/from this node"
+            >
+              <span class="nm-act-ic">⊘</span>Detach
+            </button>
+            <button
+              class="nm-act is-danger"
+              onclick={actDelete}
+              title="Delete this node and its edges"
+            >
+              <span class="nm-act-ic">×</span>Delete
+            </button>
+          </div>
+
+          {#if pipePickerOpen}
+            <div class="pipe-picker">
+              <div class="pipe-picker-hd">
+                <span class="sr-label-tight">PIPE TO…</span>
+                <button
+                  class="p-icon-btn"
+                  onclick={() => (pipePickerOpen = false)}
+                  aria-label="Cancel">✕</button
+                >
+              </div>
+              <div class="pipe-picker-list">
+                {#each viewNodes.filter((n) => n.id !== menuNode.id) as target (target.id)}
+                  <button class="nm-pin pipe-target" onclick={() => pipeTo(target.id)}>
+                    <span class="nm-pin-kind-bar" data-kind={target.kind}></span>
+                    <span>{target.name}</span>
+                  </button>
+                {/each}
+                {#if viewNodes.length <= 1}
+                  <span class="nm-ctx-empty">no other nodes</span>
+                {/if}
+              </div>
+            </div>
+          {/if}
+        </div>
+      </InspectorDock>
     {/if}
   </div>
   </div>
@@ -6930,6 +6900,17 @@
     min-height: 0;
     background: var(--bg);
     color: var(--text-primary);
+  }
+  /* Viewport + docked inspector side by side: the canvas narrows while the
+     inspector is open and stays pannable/clickable beside it. */
+  .canvas-stage {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+    position: relative;
+  }
+  .canvas-stage > .viewport {
+    min-width: 0;
   }
   .canvas-head-meta {
     display: inline-flex;
@@ -7863,6 +7844,11 @@
   .wf-node.failed::before {
     background: var(--error);
   }
+  /* A step the open prompt-bar proposal would change. */
+  .wf-node.is-proposed {
+    outline: 2px dashed var(--accent-ink);
+    outline-offset: 4px;
+  }
   .wf-node.is-selected {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
@@ -8173,69 +8159,7 @@
   /* ——— Inline node menu (phase C) ——— */
   /* .nm-inline, .nm-inline-hdr, .nm-inline-hdr .wf-name, .nm-inline-body
    * moved to $lib/styles/nm-tokens.css */
-  .mono12 {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label);
-  }
-  .nm-bar {
-    display: inline-block;
-    width: 3px;
-    height: 14px;
-    flex-shrink: 0;
-  }
 
-  .nm-hdr {
-    padding: 12px 14px;
-    border-bottom: 1px solid var(--line-hair);
-    background: var(--bg);
-    position: relative;
-    flex-shrink: 0;
-  }
-  .nm-hdr-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 4px;
-  }
-  .nm-hdr-kind {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--text-ghost);
-  }
-  .nm-hdr-type {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-primary);
-    font-weight: 600;
-  }
-  .nm-hdr-typecode {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    color: var(--text-ghost);
-    background: var(--surface-sunken);
-    padding: 1px 5px;
-    border-radius: var(--radius-sharp);
-    margin-left: 4px;
-  }
-  .nm-hdr-id {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    color: var(--text-muted);
-    margin-left: 4px;
-  }
-  .nm-hdr-name {
-    font-family: var(--font-mono);
-    font-size: var(--fs-body);
-    color: var(--text-primary);
-    font-weight: 500;
-  }
-  .ms-auto {
-    margin-left: auto;
-  }
   .chip-failed {
     background: var(--error);
     color: var(--bg);
@@ -8248,28 +8172,6 @@
   }
   /* .nm-sec-lastrun .nm-sec-hd moved to $lib/styles/nm-tokens.css */
 
-  .nm-ctx {
-    display: grid;
-    gap: 4px;
-    margin-top: 10px;
-    padding-top: 8px;
-    border-top: 1px dashed var(--line-hair);
-  }
-  .nm-ctx-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-  .nm-ctx-lbl {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--accent);
-    width: 90px;
-    flex-shrink: 0;
-  }
   .nm-ctx-empty {
     font-family: var(--font-mono);
     font-size: var(--fs-label);
@@ -8294,24 +8196,6 @@
     height: 10px;
     background: var(--text-ghost);
     margin-right: 6px;
-  }
-  .nm-pin[data-kind='llm']::before {
-    background: var(--accent);
-  }
-  .nm-pin[data-kind='parse']::before {
-    background: var(--error);
-  }
-  .nm-pin[data-kind='output']::before {
-    background: var(--text-primary);
-  }
-  .nm-pin[data-kind='input']::before {
-    background: var(--text-muted);
-  }
-  .nm-pin[data-kind='intel']::before {
-    background: var(--accent);
-  }
-  .nm-pin[data-kind='agent']::before {
-    background: var(--text-primary);
   }
 
   .nm-body {
@@ -9437,67 +9321,8 @@
   /* ── Mobile mode (viewport <=768px) ──────────────────────────────── */
   /* touch-action: none stays on .viewport (desktop default) so our touch
    * handlers manage single-finger pan + two-finger pinch directly — keeps
-   * pinch scoped to canvas content rather than zooming the whole page. */
-
-  /* Inspector-as-bottom-sheet. The .nm-inline--mobile class is on the
-   * element (added when isMobile) — this works regardless of where the
-   * element lives in the DOM after the portal action moves it to body. */
-  :global(.nm-inline--mobile) {
-    position: fixed !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    top: auto !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    max-height: 85dvh !important;
-    border-radius: var(--radius-round) var(--radius-round) 0 0 !important;
-    border-top: 1px solid var(--line-strong) !important;
-    display: flex !important;
-    flex-direction: column !important;
-    overflow: hidden !important;
-    animation: nm-slide-up 200ms ease-out !important;
-    z-index: 2147483646 !important; /* max possible, beats anything */
-    transform: none !important;
-  }
-  :global(.nm-inline--mobile::before) {
-    content: '';
-    display: block;
-    width: 40px;
-    height: 4px;
-    border-radius: 2px;
-    background: var(--line);
-    margin: 8px auto 4px;
-    flex: 0 0 auto;
-  }
-  :global(.nm-inline--mobile .nm-inline-body) {
-    overflow-y: auto !important;
-    flex: 1 1 auto !important;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  /* Backdrop: dims the rest of the screen behind the sheet. Portalled to
-   * body so it escapes the canvas transform too. */
-  :global(.nm-mobile-backdrop) {
-    position: fixed;
-    inset: 0;
-    z-index: 2147483645; /* one less than the sheet — sits behind it */
-    background: rgba(0, 0, 0, 0.4);
-    border: 0;
-    padding: 0;
-    margin: 0;
-    cursor: pointer;
-    animation: nm-fade-in 200ms ease-out;
-  }
-
-  @keyframes nm-slide-up {
-    from { transform: translateY(100%); }
-    to { transform: translateY(0); }
-  }
-  @keyframes nm-fade-in {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
+   * pinch scoped to canvas content rather than zooming the whole page.
+   * The inspector's bottom sheet lives in $lib/canvas/InspectorDock.svelte. */
 
   /* ——— Mobile layout (<=768px, matches useIsMobile breakpoint) ———
      The toolbar is a dense one-row control strip on desktop. On a phone it

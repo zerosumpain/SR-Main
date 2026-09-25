@@ -144,7 +144,7 @@ const summarizers: Record<string, (cfg: Cfg) => NodeSummary> = {
     };
   },
   'delay': (c) => {
-    const ms = Number(c.delayMs ?? c.ms ?? 1000);
+    const ms = Number(c.milliseconds ?? c.delayMs ?? c.ms ?? 1000);
     const human = ms >= 60000 ? `${Math.round(ms / 60000)} min` : ms >= 1000 ? `${Math.round(ms / 1000)} s` : `${ms} ms`;
     return { line: `Wait ${human}`, preview: { kind: 'control', details: { Duration: human } } };
   },

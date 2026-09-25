@@ -264,7 +264,7 @@ export function memoryLiesBetween(
 // ──────────────────────────────────────────────────────────────────────────
 // Two-run idempotency (B6). PURE structural simulation — NO engine, NO DB.
 //
-// run-eval never executes graphs, so we prove idempotency structurally: take a
+// The eval never executes graphs, so we prove idempotency structurally: take a
 // representative SOURCE output fixture, read the generated dedupe node's own
 // config, and simulate two runs against an in-memory seen-set:
 //   run 1 (empty store)   → every item is new, its id is recorded;
