@@ -2,6 +2,7 @@ import type { NodeDefinition } from '../types';
 
 export const builderChatDef: NodeDefinition = {
   type: 'builder-chat',
+  sideEffects: true,
   label: 'Builder Chat',
   category: 'integration',
   description:
@@ -32,6 +33,7 @@ export const builderChatDef: NodeDefinition = {
 
 export const builderPiDef: NodeDefinition = {
   type: 'builder-pi',
+  sideEffects: true,
   label: 'Builder Pi',
   category: 'integration',
   description:

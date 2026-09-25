@@ -21,7 +21,7 @@ interface LoopItemResult {
  * cap (default 50), and a failure policy ('continue' default | 'stop').
  *
  * Guards: rejects a missing/self-referential sub-workflow id; honours
- * `context.abortSignal` between items; dryRun never invokes anything.
+ * `context.abortSignal` between items; in a test run each child is a test run.
  *
  * Each item is a child run (its own workflow_runs row). Children never take a
  * top-level run slot, so a fan-out cannot deadlock behind MAX_CONCURRENT_RUNS.
@@ -50,21 +50,6 @@ async function executeSubworkflowMode(
   const maxItems = Number.isFinite(rawMax) && rawMax >= 1 ? Math.floor(rawMax) : 50;
   const truncated = array.length > maxItems;
   const items = truncated ? array.slice(0, maxItems) : array;
-
-  // dryRun: do NOT invoke sub-workflows — report what would happen.
-  if (context.dryRun) {
-    const logs: string[] = [];
-    if (truncated) {
-      logs.push(
-        `Loop (dry-run) would truncate ${array.length} items to maxItems=${maxItems}.`,
-      );
-    }
-    return {
-      output: { results: [], dryRun: true, wouldProcess: items.length },
-      logs: logs.length ? logs : undefined,
-      rowCount: 0,
-    };
-  }
 
   // concurrency: default 3, clamped to [1, 10].
   const rawConc = Number(config.concurrency);

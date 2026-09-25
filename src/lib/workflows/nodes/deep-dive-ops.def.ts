@@ -2,6 +2,7 @@ import type { NodeDefinition } from '../types';
 
 export const deepDiveStartDef: NodeDefinition = {
   type: 'deep-dive-start',
+  sideEffects: true,
   label: 'Deep dive: start',
   category: 'integration',
   description: 'Kick off a new deep research session. Returns a session id you can poll with `deep-dive-status` or fetch the report with `deep-dive-report`.',
@@ -96,6 +97,7 @@ export const deepDiveListDef: NodeDefinition = {
 
 export const deepDiveControlDef: NodeDefinition = {
   type: 'deep-dive-control',
+  sideEffects: true,
   label: 'Deep dive: control session',
   category: 'integration',
   description: 'Pause, resume, or cancel a running research session.',

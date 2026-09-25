@@ -175,6 +175,29 @@ describe('startRun', () => {
     expect(finaliseRun).toHaveBeenCalledWith(expect.objectContaining({ parentRunId: 'parent' }));
   });
 
+  it('a TEST run is recorded as one, runs here, stubs and never self-heals', async () => {
+    process.env.JKAI_RUN_WORKER = '1';
+    const pins = { t: { output: { saved: true }, handle: null } };
+    const started = await startRun({ workflowId: 'wf', trigger: 'manual', mode: 'test', pins, allowSideEffects: ['n'], selfHealing: true });
+    await started!.done;
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(inserted('runs')[0]).toMatchObject({ status: 'running', mode: 'test' });
+    const opts = (execute.mock.calls[0] as unknown[])[5] as Record<string, unknown>;
+    expect(opts).toMatchObject({ dryRun: true, selfHealing: false, pins });
+    expect([...(opts.allowSideEffects as Set<string>)]).toEqual(['n']);
+    expect(finaliseRun).toHaveBeenCalledWith(expect.objectContaining({ test: true }));
+  });
+
+  it('a live run is recorded as live and passes no pins', async () => {
+    const started = await startRun({ workflowId: 'wf', trigger: 'manual', pins: { t: { output: {} } } });
+    await started!.done;
+    expect(inserted('runs')[0]).toMatchObject({ mode: 'live' });
+    const opts = (execute.mock.calls[0] as unknown[])[5] as Record<string, unknown>;
+    expect(opts.pins).toBeUndefined();
+    expect(opts.dryRun).toBeFalsy();
+    expect(finaliseRun).toHaveBeenCalledWith(expect.objectContaining({ test: false }));
+  });
+
   it('starts nothing for a deleted workflow', async () => {
     state.workflow = [];
     expect(await startRun({ workflowId: 'gone', trigger: 'manual' })).toBeNull();

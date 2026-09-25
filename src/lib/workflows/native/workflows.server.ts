@@ -13,6 +13,7 @@ import { getDefinition } from '$lib/workflows/registry-client';
 import { summarizeNode } from '$lib/workflows/node-summary';
 import { cronTimezone } from '$lib/workflows/cron-timezone';
 import { readBuildState, readBuildStates, NO_BUILD } from '$lib/workflows/build-state.server';
+import type { WorkflowVerification } from '$lib/workflows/test-runs.server';
 import {
   attentionFor,
   deriveFormFields,
@@ -199,7 +200,8 @@ export async function listWorkflowCards(): Promise<WorkflowCardDTO[]> {
         error: workflowRuns.error,
       })
       .from(workflowRuns)
-      .where(inArray(workflowRuns.workflowId, ids))
+      // A test run proves a draft; it is not how the workflow is doing.
+      .where(and(inArray(workflowRuns.workflowId, ids), eq(workflowRuns.mode, 'live')))
       .orderBy(workflowRuns.workflowId, sql`${workflowRuns.startedAt} DESC NULLS LAST`),
     readBuildStates(ids),
     // A proposals store that cannot be read must not take the list down with it.
@@ -265,6 +267,8 @@ export interface WorkflowDetailDTO {
   trigger: TriggerDTO;
   building: boolean;
   buildError: string | null;
+  /** The last describe-it build's lint + test-run proof, when there is one. */
+  verification: WorkflowVerification | null;
   steps: StepDTO[];
   edges: Array<{ id: string; source: string; target: string; sourceHandle: string | null }>;
   recentRuns: RunSummaryDTO[];
@@ -330,6 +334,7 @@ export async function loadWorkflowDetail(workflow: Workflow): Promise<WorkflowDe
     trigger: triggerFor(workflow, nodes, edges, schedules),
     building: build.building,
     buildError: build.buildError,
+    verification: build.verification ?? null,
     steps: stepNodes.map((n) => stepFrom(n, edges)),
     edges: edges
       .filter((e) => stepIds.has(e.sourceNodeId) && stepIds.has(e.targetNodeId))
@@ -342,7 +347,7 @@ export async function loadWorkflowDetail(workflow: Workflow): Promise<WorkflowDe
 
 // ———————————————————————————————————————————— runs
 
-export async function listRuns(workflowId: string, limit: number): Promise<RunSummaryDTO[]> {
+export async function listRuns(workflowId: string, limit: number, opts: { liveOnly?: boolean } = {}): Promise<RunSummaryDTO[]> {
   const rows = await db
     .select({
       id: workflowRuns.id,
@@ -351,9 +356,12 @@ export async function listRuns(workflowId: string, limit: number): Promise<RunSu
       startedAt: workflowRuns.startedAt,
       completedAt: workflowRuns.completedAt,
       error: workflowRuns.error,
+      mode: workflowRuns.mode,
     })
     .from(workflowRuns)
-    .where(eq(workflowRuns.workflowId, workflowId))
+    .where(opts.liveOnly
+      ? and(eq(workflowRuns.workflowId, workflowId), eq(workflowRuns.mode, 'live'))
+      : eq(workflowRuns.workflowId, workflowId))
     .orderBy(sql`${workflowRuns.startedAt} DESC NULLS LAST`)
     .limit(limit);
   return rows.map(runSummary);
@@ -383,6 +391,7 @@ export async function loadRunDetail(
       startedAt: workflowRuns.startedAt,
       completedAt: workflowRuns.completedAt,
       error: workflowRuns.error,
+      mode: workflowRuns.mode,
       name: workflows.name,
     })
     .from(workflowRuns)

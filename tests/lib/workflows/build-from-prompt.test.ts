@@ -44,6 +44,15 @@ vi.mock('$lib/jkai/workflow-updates-bus', () => ({ publishWorkflowUpdate: vi.fn(
 vi.mock('$lib/workflows/native/workflows.server', () => ({ loadGraph: vi.fn() }));
 vi.mock('$lib/workflows/native/amend.server', () => ({ screenNativeOps: vi.fn() }));
 
+// The proof: a test run (side effects stubbed) with one repair round, mocked here.
+const passing = { lint: { errors: 0, warnings: 0, issues: [] }, passed: true, testRun: { runId: 'r1', status: 'completed', stubbed: [], pinned: [] } };
+const prove = vi.fn(async () => passing as Record<string, unknown>);
+vi.mock('$lib/workflows/test-runs.server', () => ({
+  proveWithRepair: () => prove(),
+  describeVerification: (v: { passed: boolean; testRun: { failedNode?: string; error?: string } }) =>
+    v.passed ? 'the test run completed' : `the test run failed at "${v.testRun.failedNode}": ${v.testRun.error}`,
+}));
+
 import { buildInBackground } from '$lib/workflows/build-from-prompt.server';
 
 const generated = (over: Record<string, unknown> = {}) => ({
@@ -66,6 +75,8 @@ beforeEach(() => {
   generateWorkflow.mockReset();
   verify.mockReset();
   verify.mockReturnValue([]);
+  prove.mockReset();
+  prove.mockResolvedValue(passing);
 });
 
 describe('buildInBackground', () => {
@@ -75,6 +86,7 @@ describe('buildInBackground', () => {
 
     // The generator runs as workflow_generate runs it for a NEW canvas.
     expect(generateWorkflow.mock.calls[0]).toEqual(['every morning at 8 send me the news', null]);
+    expect(prove).toHaveBeenCalledTimes(1);
     expect(saved[0].generated.name).toBe('canvas:morning-news');
     expect(saved[0].generated.description).toBe('Sends the news at 8');
     expect(triggerSaves).toEqual([{ kind: 'cron', cron: '0 8 * * *', timezone: undefined, enabled: true }]);
@@ -95,6 +107,16 @@ describe('buildInBackground', () => {
     expect(saved).toHaveLength(0);
     expect(markers[0].status).toBe('failed');
     expect(markers[0].error).toMatch(/password or API key/);
+  });
+
+  it('says "built, but" when the test run fails, and keeps the proof on the marker', async () => {
+    generateWorkflow.mockResolvedValue(generated());
+    const failing = { ...passing, passed: false, testRun: { runId: 'r2', status: 'failed', failedNode: 'Fetch', error: 'HTTP 404', stubbed: ['Send'], pinned: [] } };
+    prove.mockResolvedValue(failing);
+    await buildInBackground('wf-1', 'every morning at 8 send me the news', null);
+    expect(markers).toEqual([{ workflowId: 'wf-1', status: 'failed', error: 'built, but the test run failed at "Fetch": HTTP 404' }]);
+    const { recordBuildState } = await import('$lib/workflows/build-state.server');
+    expect(vi.mocked(recordBuildState).mock.calls.at(-1)?.[4]).toBe(failing);
   });
 
   it('marks a clarifying question, an empty graph, a lint error and a crash as failures', async () => {

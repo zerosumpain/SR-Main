@@ -2,6 +2,7 @@ import type { NodeDefinition } from '../types';
 
 export const gmailSendDef: NodeDefinition = {
   type: 'gmail-send',
+  sideEffects: true,
   category: 'integration',
   label: 'Gmail — Send Message',
   description: 'Compose and send a new Gmail message. Supports template interpolation for recipient, subject, and body.',

@@ -1,4 +1,5 @@
 import type { NodeDefinition } from '../types';
+import { opIn } from '../side-effects';
 
 // Op groupings used for `visibleWhen` on the basic-config form.
 const AUTOCREATE_OPS = ['insert', 'upsert'];
@@ -19,6 +20,7 @@ const VERSION_OPS = ['update', 'patch'];
  */
 export const databaseDef: NodeDefinition = {
   type: 'database',
+  sideEffects: opIn('operation', ['insert', 'upsert', 'update', 'patch', 'delete'], 'query'),
   label: 'Database',
   category: 'integration',
   description:
@@ -324,7 +326,7 @@ export const databaseDef: NodeDefinition = {
     'delete (remove one record by `key`); ' +
     'count (number of records matching `filters`); ' +
     'aggregate (`aggregateOp` count/sum/avg/min/max over `aggregatePath`, optional `groupBy`). ' +
-    'insert/upsert auto-create the collection by default (`autoCreate`). `collection`, `key`, `data`, `patch`, and `filters` all support {{input.field}} templates. Writes honour dry-run (they are simulated, not executed). ' +
+    'insert/upsert auto-create the collection by default (`autoCreate`). `collection`, `key`, `data`, `patch`, and `filters` all support {{input.field}} templates. Writes are stubbed in a test run. ' +
     'Prefer upsert with a stable natural `key` so re-runs update the same row instead of duplicating.',
   llmExamples: [
     { operation: 'upsert', collection: 'notes', key: '{{input.id}}', data: '{ "title": "{{input.title}}", "status": "open" }' },

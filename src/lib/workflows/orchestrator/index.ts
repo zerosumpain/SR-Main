@@ -395,7 +395,7 @@ async function runToolLoop(
             if (
               output &&
               typeof output === 'object' &&
-              (output as { simulated?: unknown }).simulated === true
+              (output as { _stubbed?: unknown })._stubbed === true
             ) {
               const nodeType = definition.nodes.find((n) => n.id === nodeId)?.type ?? 'unknown';
               captureLog.push({ nodeId, nodeType, capture: truncate(output) });
@@ -403,7 +403,7 @@ async function runToolLoop(
           }
 
           onChunk?.(
-            `Verification round ${behaviouralVerifyAttempts}/${MAX_BEHAVIOURAL_VERIFY_ROUNDS}: ${captureLog.length} simulated send(s)\n`,
+            `Verification round ${behaviouralVerifyAttempts}/${MAX_BEHAVIOURAL_VERIFY_ROUNDS}: ${captureLog.length} stubbed side effect(s)\n`,
           );
 
           messages.push({

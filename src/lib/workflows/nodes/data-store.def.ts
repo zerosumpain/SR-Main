@@ -1,10 +1,12 @@
 import type { NodeDefinition } from '../types';
+import { opIn } from '../side-effects';
 
 const ARRAY_OPS = ['append', 'add_to_set'];
 const VALUE_OPS = ['set', 'append', 'add_to_set', 'has'];
 
 export const dataStoreDef: NodeDefinition = {
   type: 'data-store',
+  sideEffects: opIn('operation', ['set', 'append', 'add_to_set', 'increment', 'delete'], 'get'),
   label: 'Data Store',
   category: 'core',
   description:

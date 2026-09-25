@@ -38,14 +38,6 @@ export const emailExecutor: NodeExecutor = {
 
     if (!to) throw new FatalError('No recipient (to) configured');
 
-    if (context.dryRun) {
-      return {
-        output: { simulated: true, would_send: { to, subject, body } },
-        rowCount: 1,
-        logs: [`[dry-run] would send email to ${to} (subject: ${String(subject).slice(0, 80)})`],
-      };
-    }
-
     const isHtml = body.trimStart().startsWith('<');
     const transporter = getTransporter();
 

@@ -73,23 +73,6 @@ describe('deck-build executor', () => {
     expect(presentationTool.handler).not.toHaveBeenCalled();
   });
 
-  it('dryRun → does NOT invoke the tool, returns simulated output', async () => {
-    const res = await deckBuildExecutor.execute(
-      {},
-      { title: 'Weekly Briefing', spec: JSON.stringify(SPEC) },
-      makeCtx({ dryRun: true }),
-    );
-    expect(presentationTool.handler).not.toHaveBeenCalled();
-    expect(res.output).toMatchObject({
-      dryRun: true,
-      deckId: 'dry-run',
-      slug: 'weekly-briefing',
-      url: 'https://strangeramblings.com/decks/weekly-briefing',
-      shareUrl: 'https://strangeramblings.com/decks/weekly-briefing?t=dry-run',
-      slideCount: 1,
-    });
-  });
-
   it('success → invokes tool with parsed slides and maps the data envelope', async () => {
     const res = await deckBuildExecutor.execute(
       {},

@@ -1,7 +1,9 @@
 import type { NodeDefinition } from '../types';
+import { opIn } from '../side-effects';
 
 export const homeAssistantDef: NodeDefinition = {
   type: 'home-assistant',
+  sideEffects: opIn('operation', ['call_service', 'fire_event'], 'query_state'),
   label: 'Home Assistant',
   category: 'integration',
   description: 'Control Home Assistant: query state, call services, fire events, get history, render templates.',

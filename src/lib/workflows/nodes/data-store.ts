@@ -324,15 +324,6 @@ export const dataStoreExecutor: NodeExecutor = {
       return { output: { value: present, key }, rowCount: 1 };
     }
 
-    // ---- Writes ----------------------------------------------------------
-    if (context.dryRun) {
-      return {
-        output: { simulated: true, key, operation },
-        rowCount: 1,
-        logs: [`[dry-run] would ${operation} data-store key "${key}"`],
-      };
-    }
-
     if (operation === 'set') {
       const value = extractValue(input, config);
       await setStoreValue(workflowId, key, value);

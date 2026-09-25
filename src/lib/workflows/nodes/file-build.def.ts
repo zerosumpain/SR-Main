@@ -2,6 +2,7 @@ import type { NodeDefinition } from '../types';
 
 export const fileBuildDef: NodeDefinition = {
   type: 'file-build',
+  sideEffects: (c) => String(c.persist) === 'true',
   label: 'Build new file',
   category: 'integration',
   description: 'Synthesise a new file (docx / pdf / html / xlsx / csv) from text / markdown / json / csv / xlsx input.',

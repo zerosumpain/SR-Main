@@ -1,7 +1,9 @@
 import type { NodeDefinition } from '../types';
+import { opIn } from '../side-effects';
 
 export const deepDiveDef: NodeDefinition = {
   type: 'deep-dive',
+  sideEffects: opIn('operation', ['start', 'control'], 'list'),
   label: 'Deep Dive (legacy)',
   category: 'integration',
   hidden: true,

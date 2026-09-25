@@ -116,6 +116,13 @@ describe('finaliseRun', () => {
     );
   });
 
+  it('a TEST run announces nothing and proposes no fix', async () => {
+    await finaliseRun({ workflowId: 'wf', runId: 'r1', runStartedAt: Date.now(), result: result({ healingHistory: [heal] }), test: true });
+    expect(emitPlatform).not.toHaveBeenCalled();
+    expect(recordFixProposalsFromHealing).not.toHaveBeenCalled();
+    expect(writes.updates.find((u) => u.table === 'workflow_runs')?.set.status).toBe('completed');
+  });
+
   it('carries the chain depth of an event-started run', async () => {
     await finaliseRun({ workflowId: 'wf', runId: 'r1', runStartedAt: Date.now(), result: result(), chainDepth: 2 });
     expect(emitPlatform).toHaveBeenCalledWith('workflow.completed', expect.anything(), expect.objectContaining({ chainDepth: 2 }));

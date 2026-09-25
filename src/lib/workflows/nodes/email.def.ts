@@ -2,6 +2,7 @@ import type { NodeDefinition } from '../types';
 
 export const emailDef: NodeDefinition = {
   type: 'email',
+  sideEffects: true,
   label: 'Email',
   category: 'integration',
   description: 'Send an email via SMTP. To, subject, and body support {{input.field}} templates.',

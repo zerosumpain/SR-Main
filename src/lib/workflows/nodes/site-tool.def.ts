@@ -5,11 +5,12 @@ import type { NodeDefinition } from '../types';
  * Invokes ONE registered tool by name with templated JSON args and unwraps its
  * `{ success, data, error }` envelope. Destructive tools are gated behind an
  * approval node (config.allowDestructive + an upstream `approval` node); a small
- * set of arbitrary-code / wipe tools are denylisted entirely. Read-only under
- * dryRun (never invokes anything). See `site-tool.ts` for the executor.
+ * set of arbitrary-code / wipe tools are denylisted entirely. Stubbed in a
+ * test run (never invokes anything). See `site-tool.ts` for the executor.
  */
 export const siteToolDef: NodeDefinition = {
   type: 'site-tool',
+  sideEffects: true,
   label: 'Site Tool',
   category: 'integration',
   description:
@@ -55,7 +56,7 @@ Output on success: { success: true, toolName, data: <the tool's data envelope> }
 
 DESTRUCTIVE / APPROVAL RULE: tools that send, publish, or delete are flagged \`destructive\`. To run one you MUST set \`allowDestructive: true\` AND place an \`approval\` node upstream on this node's path — the run pauses for human sign-off before the destructive tool fires. Without the flag the node refuses; with the flag but no upstream approval the workflow fails author-time verification. A hard denylist (ephemeral/custom-tool authoring, node_builder_* codegen+deploy, workflow_delete, workflow_clear_data_store, build_delete) is NEVER invocable from a workflow, flag or not.
 
-DRY RUN: under a dry run this node NEVER invokes any tool — it returns { dryRun: true, wouldInvoke, args } so you can verify wiring without side effects.
+TEST RUN: this node is stubbed in a test run — it NEVER invokes the tool, and returns { _stubbed: true, wouldHave, config }.
 
 Prefer a dedicated node when one exists (whatsapp, blog-create, deep-research, file-search, tavily-search, …) — they have richer panels and schema hints. Use site-tool only for capabilities without a dedicated node. The generator grounding lists the available tools + their destructive flag.`,
   llmExamples: [

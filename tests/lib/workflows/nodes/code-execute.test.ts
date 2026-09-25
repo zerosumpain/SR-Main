@@ -101,24 +101,6 @@ describe('codeExecuteExecutor', () => {
     expect(codeExecuteExecutor.type).toBe('code-execute');
   });
 
-  it('skips execution entirely on dryRun and returns a simulated result', async () => {
-    vi.mocked(ensureContainerRunning).mockClear();
-    vi.mocked(execInContainer).mockClear();
-    vi.mocked(writeFileInContainer).mockClear();
-
-    const result = await codeExecuteExecutor.execute(
-      { value: 5 },
-      { language: 'javascript', code: 'console.log("should not run")' },
-      { ...mockContext, dryRun: true },
-    );
-
-    expect(result.output).toMatchObject({ simulated: true });
-    expect(result.logs?.[0]).toContain('skipped-for-dry-run');
-    // Critically: no sandbox interaction at all.
-    expect(ensureContainerRunning).not.toHaveBeenCalled();
-    expect(execInContainer).not.toHaveBeenCalled();
-    expect(writeFileInContainer).not.toHaveBeenCalled();
-  });
 });
 
 describe('codeExecuteDef', () => {

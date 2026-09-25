@@ -216,6 +216,6 @@ export const openaiTools: OpenAIFunctionDef[] = [
   zodToFunction(
     'verify_workflow',
     verifyWorkflowSchema,
-    'Run the current workflow draft in dry-run mode (side-effecting nodes simulated, capture log returned). Use BEFORE finalize_workflow when the workflow contains any side-effecting nodes (whatsapp, email, gmail-send, gmail-reply, gmail-label, blog, home-assistant, data-store, intel-write). Review the captureLog against the user\'s original goal — if it does not satisfy the goal, call update_node to fix and verify again. You may call verify_workflow at most 3 times per draft.',
+    'Run the current workflow draft in dry-run mode (side-effecting nodes stubbed — { _stubbed, wouldHave, config } — capture log returned). Use BEFORE finalize_workflow when the workflow contains any side-effecting nodes (whatsapp, email, gmail-send, gmail-reply, gmail-label, blog, home-assistant, data-store, intel-write). Review the captureLog against the user\'s original goal — if it does not satisfy the goal, call update_node to fix and verify again. You may call verify_workflow at most 3 times per draft.',
   ),
 ];

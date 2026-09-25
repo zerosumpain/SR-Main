@@ -6,7 +6,8 @@
   // the page's kind-specific body through `children`, so the panels
   // themselves are untouched. Opened by a single click on a node (double-click
   // still works); Escape or a click on empty canvas closes it.
-  import type { Snippet } from 'svelte';
+  import type { Snippet, ComponentProps } from 'svelte';
+  import NodeTestData from './NodeTestData.svelte';
 
   type PinNode = { id: string; name: string; kind: string };
 
@@ -28,6 +29,8 @@
     onLabelInput: (value: string) => void;
     onSave: () => void;
     onClose: () => void;
+    /** Pinned test data + run-from-here for this node (absent: not shown). */
+    test?: Omit<ComponentProps<typeof NodeTestData>, 'nodeId'>;
     children: Snippet;
   };
   let {
@@ -48,6 +51,7 @@
     onLabelInput,
     onSave,
     onClose,
+    test,
     children,
   }: Props = $props();
 
@@ -154,6 +158,7 @@
       </div>
     </div>
     {@render children()}
+    {#if test}<NodeTestData {...test} nodeId={node.id} />{/if}
   </div>
 </div>
 

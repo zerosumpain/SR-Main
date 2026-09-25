@@ -16,9 +16,6 @@ export const notifyExecutor: NodeExecutor = {
     const body = text('body');
     if (!title) throw new Error('notify: a title or message is required (supports {{input.field}} templates)');
     const severity = SEVERITIES.has(String(config.severity)) ? (config.severity as 'info' | 'warn' | 'alert') : 'info';
-    if (context.dryRun) {
-      return { output: { simulated: true, would_notify: { category, title, body } }, rowCount: 1 };
-    }
     const result = await notifyOwner({
       category,
       title,

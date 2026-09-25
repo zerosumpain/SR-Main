@@ -8,6 +8,7 @@ import {
 } from '$lib/canvas/adapter.server';
 import { CANVAS_NODE_TYPES } from '$lib/canvas/adapter';
 import { loadCanvasJourneyState } from '$lib/canvas/attention.server';
+import { listPins } from '$lib/workflows/test-runs.server';
 import { db } from '$lib/db';
 import { intelExplorations, workflowNodes, conversations, workflows } from '$lib/db/schema';
 import { and, eq, inArray } from 'drizzle-orm';
@@ -65,7 +66,7 @@ export const load: PageServerLoad = async ({ params, url }) => {
   // Strip this canvas from the peers list (used by the event-trigger picker)
   const peerCanvases = allCanvases.filter((c) => c.workflowId !== canvas.workflowId);
 
-  const [activeExplorations, journey] = await Promise.all([
+  const [activeExplorations, journey, pins] = await Promise.all([
     db
       .select({
         nodeId: intelExplorations.nodeId,
@@ -82,6 +83,8 @@ export const load: PageServerLoad = async ({ params, url }) => {
       ),
     // Describe-it build state + the needs-attention banner's latest failed run.
     loadCanvasJourneyState(canvas.workflowId),
+    // Pinned test data per node (badges + the inspector's test-data section).
+    listPins(canvas.workflowId).catch(() => ({})),
   ]);
 
   const pendingExplorations = Object.fromEntries(
@@ -107,6 +110,7 @@ export const load: PageServerLoad = async ({ params, url }) => {
     pendingExplorations,
     build: journey.build,
     attention: journey.attention,
+    pins,
   };
 };
 

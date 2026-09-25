@@ -2,6 +2,7 @@ import type { NodeDefinition } from '../types';
 
 export const infrastructureUpdateDef: NodeDefinition = {
   type: 'infrastructure-update', label: 'Infrastructure update', category: 'control',
+  sideEffects: true,
   description: 'Approval-gated executor for a small server-side allowlist. Refuses arbitrary commands, packages and services.',
   configSchema: { type: 'object', properties: { action: { type: 'string', description: 'verify_only | home_assistant_check' } } },
   defaultConfig: { action: 'verify_only' },

@@ -237,8 +237,10 @@ describe('runs', () => {
       completedAt: '2026-09-25T07:00:02.500Z',
       durationMs: 2500,
       error: null,
+      mode: 'live',
     });
     expect(runSummary({ id: 'r', status: 'running', trigger: 'manual', startedAt, completedAt: null, error: null }).durationMs).toBeNull();
+    expect(runSummary({ id: 'r', status: 'completed', trigger: 'manual', startedAt, completedAt: null, error: null, mode: 'test' }).mode).toBe('test');
   });
 
   it('pretty-prints output and clips it at 4 KB', () => {

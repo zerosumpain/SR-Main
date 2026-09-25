@@ -33,20 +33,6 @@ export const blogExecutor: NodeExecutor = {
         const title = interpolateTemplate((config.title as string) || '', input);
         const content = interpolateTemplate((config.content as string) || '', input);
         if (!title) throw new FatalError('Title is required for create');
-        if (context.dryRun) {
-          return {
-            output: {
-              simulated: true,
-              would_publish: {
-                title,
-                slug: (config.slug as string | undefined) ?? null,
-                status: (config.status as string | undefined) ?? 'draft',
-              },
-            },
-            rowCount: 1,
-            logs: [`[dry-run] would create blog post "${title}" (status: ${config.status ?? 'draft'})`],
-          };
-        }
         const args: Record<string, unknown> = { title, content };
         if (config.status) args.status = config.status;
         if (config.tags) args.tags = config.tags;
@@ -58,20 +44,6 @@ export const blogExecutor: NodeExecutor = {
         const postId = interpolateTemplate((config.postId as string) || '', input);
         if (!postId) throw new FatalError('No postId configured for update');
         const interpolatedTitle = config.title ? interpolateTemplate((config.title as string), input) : undefined;
-        if (context.dryRun) {
-          return {
-            output: {
-              simulated: true,
-              would_publish: {
-                title: interpolatedTitle ?? `(unchanged, postId=${postId})`,
-                slug: (config.slug as string | undefined) ?? null,
-                status: (config.status as string | undefined) ?? null,
-              },
-            },
-            rowCount: 1,
-            logs: [`[dry-run] would update blog post ${postId}${interpolatedTitle ? ` -> "${interpolatedTitle}"` : ''}`],
-          };
-        }
         const args: Record<string, unknown> = { postId };
         if (interpolatedTitle !== undefined) args.title = interpolatedTitle;
         if (config.content) args.content = interpolateTemplate((config.content as string), input);

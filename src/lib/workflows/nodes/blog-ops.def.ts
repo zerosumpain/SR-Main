@@ -38,6 +38,7 @@ export const blogGetDef: NodeDefinition = {
 
 export const blogCreateDef: NodeDefinition = {
   type: 'blog-create',
+  sideEffects: true,
   label: 'Blog: create post',
   category: 'integration',
   description: 'Create a new blog post. Supports template interpolation in title and content.',
@@ -72,6 +73,7 @@ export const blogCreateDef: NodeDefinition = {
 
 export const blogUpdateDef: NodeDefinition = {
   type: 'blog-update',
+  sideEffects: true,
   label: 'Blog: update post',
   category: 'integration',
   description: 'Update an existing blog post. Pass only the fields you want to change.',

@@ -14,10 +14,12 @@
  *   chat       the CHAT path: an empty canvas and one real jkai chat turn
  *              (`generalChat`, the /jkai loop) limited to the granular workflow
  *              tools — add_node / add_edge / amend / lint. Passes when the graph
- *              it leaves behind scores clean AND it ran workflow_lint.
+ *              it leaves behind scores clean, it ran workflow_lint, AND a
+ *              building tool's RESULT carried a `verification` test run.
  *   amend      an EXISTING graph and an instruction through `proposeAmendOps`
  *              (the canvas prompt bar and the iPhone's /ask), applied through
- *              `applyNativeAmend` exactly as Apply does, then scored.
+ *              the `workflow_amend` tool, then scored — its result must carry a
+ *              `verification` test run (side effects stubbed).
  *
  * Model: never chosen here. The generator and the ask path resolve the site
  * default (`jkai.chat.default_model`); the chat turn resolves the `chat`
@@ -210,6 +212,7 @@ try {
       const started = Date.now();
       process.stdout.write(`\n→ [chat] ${c.name}\n`);
       const toolsCalled = [];
+      const toolResults = [];
       let result;
       try {
         const { slug, workflowId } = await scratchCanvas('chat');
@@ -231,7 +234,9 @@ try {
             toolWhitelist: TOOLS,
             maxRounds: 18,
             onToolProgress: (s) => {
-              if (s.status !== 'running') toolsCalled.push(s.tool);
+              if (s.status === 'running') return;
+              toolsCalled.push(s.tool);
+              toolResults.push(s.result);
             },
           },
         );
@@ -239,6 +244,12 @@ try {
         result = assertions.scoreGraph(graph, c.expect);
         if (!toolsCalled.includes('workflow_lint')) {
           result = { ...result, passed: false, failures: [...result.failures, { kind: 'verify-error', message: 'Never ran workflow_lint.' }] };
+        }
+        // The contract: a building tool's RESULT carried a verification block with a test run.
+        const testRuns = assertions.verificationTestRuns(toolResults);
+        result = { ...result, testRuns: testRuns.length };
+        if (testRuns.length === 0) {
+          result = { ...result, passed: false, failures: [...result.failures, { kind: 'verify-error', message: 'No tool result carried a verification test run.' }] };
         }
       } catch (err) {
         result = failed(`Chat turn threw: ${err instanceof Error ? err.message : String(err)}`);
@@ -250,7 +261,7 @@ try {
   // ——— amend
   if (plan.amend.length) {
     const { proposeAmendOps } = await load('/src/lib/workflows/build-from-prompt.server.ts');
-    const { applyNativeAmend } = await load('/src/lib/workflows/native/amend.server.ts');
+    const { executeSiteTool } = await load('/src/lib/workflows/site-tools/executor.ts');
     const { applyAmendOps } = await load('/src/lib/canvas/amend.server.ts');
     const { loadGraph } = await load('/src/lib/workflows/native/workflows.server.ts');
     for (const c of plan.amend) {
@@ -278,9 +289,11 @@ try {
         if (proposal.ops.length === 0) {
           result = failed(`No ops proposed: ${proposal.summary} ${proposal.warnings.join(' ')}`.trim());
         } else {
-          const applied = await applyNativeAmend({ workflowId, ops: proposal.ops, actor: 'owner' });
-          if (!applied.ok) {
-            result = failed(`Proposal did not apply (${applied.status}): ${applied.error}`);
+          // Applied through the chat's own tool, whose RESULT must carry the proof.
+          const applied = await executeSiteTool('workflow_amend', { workflowId, ops: proposal.ops, reason: 'workflow eval' });
+          const testRuns = assertions.verificationTestRuns([applied]);
+          if (!applied.data?.applied) {
+            result = failed(`Proposal did not apply: ${applied.error}`);
           } else {
             const g = await loadGraph(workflowId);
             result = assertions.scoreGraph(toEvalGraph(g, { type: 'manual' }), c.expect);
@@ -294,6 +307,10 @@ try {
             for (const t of c.absent ?? []) {
               if (types.has(t)) result.failures.push({ kind: 'missing-node-type', message: `A "${t}" step is still there.` });
             }
+            if (testRuns.length === 0) {
+              result.failures.push({ kind: 'verify-error', message: 'workflow_amend result carried no verification test run.' });
+            }
+            result.testRun = applied.data?.verification?.testRun ?? null;
             result.passed = result.failures.length === 0;
           }
         }
@@ -341,6 +358,9 @@ const report = {
     warnings: r.result.warnings,
     ...(r.toolsCalled ? { toolsCalled: r.toolsCalled } : {}),
     ...(r.proposal ? { proposal: r.proposal } : {}),
+    // The proof the building tools returned: how many test runs, and the last one.
+    ...(r.result.testRuns !== undefined ? { testRuns: r.result.testRuns } : {}),
+    ...(r.result.testRun ? { testRun: r.result.testRun } : {}),
   })),
 };
 mkdirSync(path.dirname(outPath), { recursive: true });

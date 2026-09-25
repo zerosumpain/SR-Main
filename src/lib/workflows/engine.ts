@@ -36,6 +36,7 @@ import { commitDeferredDedupeRecords } from './nodes/dedupe';
 import { loadStoreSnapshot } from './nodes/data-store';
 import { notifyRunOutcome } from './run-notifications';
 import { workflowUsesStateTemplates } from './expressions';
+import { hasSideEffects, stubOutput, type PinnedOutput } from './side-effects';
 
 /**
  * Module-level run registry (shared across the singleton engine instance).
@@ -103,7 +104,13 @@ async function persistNodeRow(
 
 export interface EngineRunOptions {
   selfHealing?: boolean;
+  /** A test run (or the generator's verify pass): side-effecting nodes are
+   *  stubbed, nothing is announced, no dedupe id is committed. */
   dryRun?: boolean;
+  /** Test runs: node id → output used INSTEAD of executing the node. */
+  pins?: Record<string, PinnedOutput>;
+  /** Test runs: side-effecting nodes the owner let run for real this once. */
+  allowSideEffects?: ReadonlySet<string>;
   /** A sub-workflow child run: its parent already holds a concurrency slot. */
   child?: boolean;
 }
@@ -579,7 +586,8 @@ export class WorkflowEngine {
             runId,
             workflowId: workflowId ?? workflow.id,
             workspaceDir: `/tmp/workflow-${runId}`,
-            dryRun: options?.dryRun ?? false,
+            // A side effect the owner allowed in a test run runs for real.
+            dryRun: (options?.dryRun ?? false) && !options?.allowSideEffects?.has(nodeId),
             emit: (event) => emitWorkflowEvent(event),
             getNodeOutput: (id) => nodeOutputs.get(id),
             getNodeError: (id) => nodeErrors.get(id),
@@ -622,11 +630,23 @@ export class WorkflowEngine {
             emit('node_warning', nodeId, { warnings: configWarnings });
           }
 
+          // Test runs: a pinned node is not executed — its pinned output (and
+          // branch) stands in; a side-effecting one is stubbed unless the owner
+          // allowed it for this run. The decision is here, not in each node.
+          const pin = options?.pins?.[nodeId];
+          const typeDef = this.registry.getDefinition(nodeDef.type);
+          const stub = !pin && options?.dryRun === true && !options.allowSideEffects?.has(nodeId)
+            && hasSideEffects(typeDef, resolvedConfig);
+
           try {
             // Typed retries with exponential backoff + jitter (errors.ts): a
             // FatalError never retries; transient failures retry on idempotent
             // nodes; `_onError` retry mode retries anything not fatal.
-            const r: NodeResult = await runWithRetries(
+            const r: NodeResult = pin
+              ? { output: { ...pin.output, _pinned: true }, metadata: pin.handle ? { _selectedHandle: pin.handle } : undefined }
+              : stub
+                ? { output: stubOutput(typeDef, nodeDef.type, resolvedConfig), rowCount: 1 }
+                : await runWithRetries(
               () => withNodeTimeout(nodeId, nodeDef.type, timeoutMs, nodeController, () =>
                 executionContext.run(execCtx, () => executor.execute(mergedInput, resolvedConfig, context)),
               ),
@@ -950,7 +970,8 @@ export class WorkflowEngine {
         for (const [nid, out] of nodeOutputs) {
           if (graph.nodeMap.get(nid)?.type === 'dedupe') dedupeOutputs.push(out);
         }
-        await commitDeferredDedupeRecords(dedupeOutputs);
+        // A dry/test run never records a dedupe id (its sends were stubbed).
+        if (!options?.dryRun) await commitDeferredDedupeRecords(dedupeOutputs);
       } else if (finalStatus === 'completed_with_errors') {
         emit('run_completed_with_errors');
         // Some node failed — do NOT commit deferred dedupe ids (a failed send
@@ -972,7 +993,7 @@ export class WorkflowEngine {
           if (o && typeof o === 'object') Object.assign(terminalOutputs, o);
         }
       }
-      void notifyRunOutcome({
+      if (!options?.dryRun) void notifyRunOutcome({
         workflowId: effectiveWorkflowId,
         workflowName: workflow.name,
         runId,
@@ -1016,7 +1037,7 @@ export class WorkflowEngine {
       // D1: fire-and-forget failure notification for the thrown-error path too.
       // No terminalOutputs here (graph is unavailable in this scope) — a failed
       // run never sends a completion digest anyway. Never throws.
-      void notifyRunOutcome({
+      if (!options?.dryRun) void notifyRunOutcome({
         workflowId: workflowId ?? workflow.id,
         workflowName: workflow.name,
         runId,

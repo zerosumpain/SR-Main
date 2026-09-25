@@ -1,5 +1,5 @@
 {
-  "date": "2026-09-25T08:13:46.821Z",
+  "date": "2026-09-25T09:28:03.410Z",
   "models": {
     "generatorAndAsk": "z-ai/glm-5.1",
     "chat": "z-ai/glm-5.1"
@@ -22,94 +22,112 @@
       "suite": "chat",
       "name": "chat: fetch → WhatsApp on an empty canvas",
       "passed": true,
-      "durationMs": 77971,
+      "durationMs": 75184,
       "failures": [],
       "warnings": [
-        "verify warning [Prepare URL/connection]: Connection trigger → transform: trigger emits [trigger-signal] but transform accepts [text, json]. Consider a transform node to bridge the data, or a different target."
+        "verify warning [Prepare/connection]: Connection trigger → transform: trigger emits [trigger-signal] but transform accepts [text, json]. Consider a transform node to bridge the data, or a different target."
       ],
       "toolsCalled": [
         "workflow_list_node_types",
-        "workflow_inspect",
         "workflow_describe_node",
         "workflow_amend",
         "workflow_lint",
         "workflow_update_node",
+        "workflow_lint",
         "workflow_list_node_types",
         "workflow_describe_node",
         "workflow_amend",
-        "workflow_update_node",
-        "workflow_lint"
-      ]
+        "workflow_lint",
+        "workflow_inspect"
+      ],
+      "testRuns": 2
     },
     {
       "suite": "chat",
       "name": "chat: fetch → LLM pick → store on an empty canvas",
       "passed": true,
-      "durationMs": 47095,
+      "durationMs": 35955,
       "failures": [],
       "warnings": [
-        "verify warning [Prepare Fetch/connection]: Connection trigger → transform: trigger emits [trigger-signal] but transform accepts [text, json]. Consider a transform node to bridge the data, or a different target."
+        "verify warning [Fetch News Feed/connection]: Connection trigger → http-request: trigger emits [trigger-signal] but http-request accepts [text, json, url]. Consider a transform node to bridge the data, or a different target."
       ],
       "toolsCalled": [
         "workflow_list_node_types",
-        "workflow_describe_node",
-        "workflow_amend",
-        "workflow_lint",
-        "workflow_amend",
-        "workflow_lint"
-      ]
-    },
-    {
-      "suite": "chat",
-      "name": "chat: fetch → branch → WhatsApp on an empty canvas",
-      "passed": true,
-      "durationMs": 45273,
-      "failures": [],
-      "warnings": [
-        "verify warning [Fetch London Weather/connection]: Connection trigger → http-request: trigger emits [trigger-signal] but http-request accepts [text, json, url]. Consider a transform node to bridge the data, or a different target."
-      ],
-      "toolsCalled": [
+        "workflow_list_node_types",
         "workflow_list_node_types",
         "workflow_describe_node",
         "workflow_amend",
         "workflow_lint",
         "workflow_update_node",
         "workflow_lint"
-      ]
+      ],
+      "testRuns": 1
+    },
+    {
+      "suite": "chat",
+      "name": "chat: fetch → branch → WhatsApp on an empty canvas",
+      "passed": true,
+      "durationMs": 86667,
+      "failures": [],
+      "warnings": [
+        "verify warning [Seed URL/connection]: Connection trigger → transform: trigger emits [trigger-signal] but transform accepts [text, json]. Consider a transform node to bridge the data, or a different target."
+      ],
+      "toolsCalled": [
+        "workflow_list_node_types",
+        "workflow_describe_node",
+        "workflow_amend",
+        "workflow_lint",
+        "workflow_amend",
+        "workflow_lint"
+      ],
+      "testRuns": 2
     },
     {
       "suite": "amend",
       "name": "amend: put a 5-minute wait before the WhatsApp send",
       "passed": true,
-      "durationMs": 7441,
+      "durationMs": 4118,
       "failures": [],
       "warnings": [
         "verify warning [Fetch status/connection]: Connection trigger → http-request: trigger emits [trigger-signal] but http-request accepts [text, json, url]. Consider a transform node to bridge the data, or a different target."
       ],
       "proposal": {
-        "summary": "Inserts a 5-minute delay between the HTTP fetch and the WhatsApp send, so the status message is not sent immediately after fetching.",
+        "summary": "Insert a 5-minute delay between the HTTP fetch and the WhatsApp send so the message is held before delivery.",
         "ops": [
           "insert_between"
         ]
+      },
+      "testRun": {
+        "runId": "06da25c6-ba70-489f-9a32-a36ac9b78ab1",
+        "status": "failed",
+        "failedNode": "Fetch status",
+        "error": "fetch failed",
+        "stubbed": [],
+        "pinned": []
       }
     },
     {
       "suite": "amend",
       "name": "amend: send the summary by WhatsApp instead of email",
       "passed": true,
-      "durationMs": 9394,
+      "durationMs": 24596,
       "failures": [],
       "warnings": [
         "verify warning [Fetch news/connection]: Connection trigger → http-request: trigger emits [trigger-signal] but http-request accepts [text, json, url]. Consider a transform node to bridge the data, or a different target."
       ],
       "proposal": {
-        "summary": "Replace the email node with a WhatsApp node sending to +447700900000, keeping the same flow from Summarise.",
+        "summary": "Replace the email node with a WhatsApp node that sends the summarised news to +447700900000, preserving the node's position and run history.",
         "ops": [
-          "remove_edge",
-          "remove_node",
-          "add_node",
-          "add_edge"
+          "update_node"
         ]
+      },
+      "testRun": {
+        "runId": "2b985095-399f-40d7-8772-d28e727dbfcd",
+        "status": "failed",
+        "failedNode": "Fetch news",
+        "error": "fetch failed",
+        "stubbed": [],
+        "pinned": []
       }
     }
   ]

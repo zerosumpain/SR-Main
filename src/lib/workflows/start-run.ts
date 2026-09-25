@@ -9,6 +9,9 @@ import type { EngineResult } from './engine';
 import { emitObs } from './observability-bus';
 import { finaliseRun, failRun } from './run-finalise';
 import { stableStringify } from './fix-proposals.server';
+import type { PinnedOutput } from './side-effects';
+
+export type RunMode = 'live' | 'test';
 
 /**
  * The run kernel: the ONE way a run is started, executed and settled.
@@ -135,6 +138,14 @@ export interface ExecuteRunOptions {
   seed?: { outputs: Record<string, Record<string, unknown>>; handles: Record<string, string> };
   /** Wall-clock the run began (resume keeps the original). */
   runStartedAt?: number;
+  /**
+   * 'test': pins stand in for their nodes, side effects are stubbed (bar
+   * `allowSideEffects`), self-heal is off and nothing is announced. Recorded on
+   * the run row, so a resume keeps it. Default 'live'.
+   */
+  mode?: RunMode;
+  pins?: Record<string, PinnedOutput>;
+  allowSideEffects?: string[];
 }
 
 /**
@@ -144,6 +155,7 @@ export interface ExecuteRunOptions {
  */
 export async function executeRun(o: ExecuteRunOptions): Promise<EngineResult | null> {
   const label = o.label ?? 'run';
+  const test = o.mode === 'test';
   const runStartedAt = o.runStartedAt ?? Date.now();
   if (o.chainDepth) setRunChainDepth(o.runId, o.chainDepth);
   if (!o.seed) {
@@ -162,7 +174,12 @@ export async function executeRun(o: ExecuteRunOptions): Promise<EngineResult | n
       o.input,
       o.breakpoints,
       o.workflowId,
-      { selfHealing: o.selfHealing, dryRun: o.dryRun, child: !!o.parentRunId },
+      {
+        selfHealing: test ? false : o.selfHealing,
+        dryRun: test || o.dryRun,
+        child: !!o.parentRunId,
+        ...(test ? { pins: o.pins, allowSideEffects: new Set(o.allowSideEffects ?? []) } : {}),
+      },
       o.seed?.outputs,
       o.seed?.handles,
     );
@@ -176,6 +193,7 @@ export async function executeRun(o: ExecuteRunOptions): Promise<EngineResult | n
       parentRunId: o.parentRunId,
       seededNodeIds: o.seed ? new Set(Object.keys(o.seed.outputs)) : undefined,
       label,
+      test,
     });
     return result;
   } catch (err) {
@@ -211,8 +229,9 @@ export async function startRun(opts: StartRunOptions): Promise<StartedRun | null
   if (!definition) return null;
   const input = opts.input ?? {};
   const versionId = await pinVersion(opts.workflowId, definition);
-  // A child is awaited by its parent's node, so it always runs here.
-  const workerMode = process.env.JKAI_RUN_WORKER === '1' && !opts.parentRunId;
+  // A child is awaited by its parent's node, so it always runs here — and so
+  // does a test run, whose pins and allowances live only in this call.
+  const workerMode = process.env.JKAI_RUN_WORKER === '1' && !opts.parentRunId && opts.mode !== 'test';
   const runId = crypto.randomUUID();
   await db.insert(workflowRuns).values({
     id: runId,
@@ -223,6 +242,7 @@ export async function startRun(opts: StartRunOptions): Promise<StartedRun | null
     inputData: input,
     versionId,
     parentRunId: opts.parentRunId ?? null,
+    mode: opts.mode ?? 'live',
   });
   if (definition.nodes.length > 0) {
     await db.insert(nodeExecutions).values(definition.nodes.map((n) => ({ runId, nodeId: n.id, status: 'pending' })));

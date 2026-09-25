@@ -33,22 +33,6 @@ export const gmailLabelExecutor: NodeExecutor = {
     const add = (config.add as string[] | undefined) ?? [];
     const remove = (config.remove as string[] | undefined) ?? [];
 
-    if (context.dryRun) {
-      const accountId = Number(
-        (config.accountId as number | string | undefined) ??
-        (input.accountId as number | string | undefined) ??
-        0,
-      );
-      return {
-        output: {
-          simulated: true,
-          would_label: { accountId, messageId, addLabels: add, removeLabels: remove },
-        },
-        rowCount: 1,
-        logs: [`[dry-run] would modify labels on Gmail message ${messageId}: +${add.join(',')} -${remove.join(',')}`],
-      };
-    }
-
     const acct = await loadAccount(config, input);
 
     await gmailService.modifyLabels(acct, messageId, add, remove);

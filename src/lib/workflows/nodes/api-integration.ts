@@ -51,16 +51,6 @@ export const apiIntegrationExecutor: NodeExecutor = {
 
     const { callIntegration } = await import('$lib/apis/integrations');
 
-    // DRY RUN: describe the call without making it.
-    if (context.dryRun) {
-      const planned = await callIntegration({ key, params, dryRun: true });
-      return {
-        output: { success: true, dryRun: true, integration: planned.integration, method: planned.method, params },
-        rowCount: 1,
-        metadata: { dryRun: true },
-      };
-    }
-
     const result = await callIntegration({
       key,
       params,
@@ -106,7 +96,6 @@ export const apiIntegrationExecutor: NodeExecutor = {
         },
         json: { type: 'any', description: 'Parsed JSON response body' },
         text: { type: 'string', description: 'Raw response text (when not JSON)' },
-        dryRun: { type: 'boolean', description: 'true only on a dry run (no request made)' },
       },
     };
   },

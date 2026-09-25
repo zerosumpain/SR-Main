@@ -22,7 +22,6 @@ export const DATABASE_OPS = [
 export type DatabaseOp = (typeof DATABASE_OPS)[number];
 
 /** Ops that mutate the store — gated by dry-run + permission fields. */
-const WRITE_OPS = new Set<DatabaseOp>(['insert', 'upsert', 'update', 'patch', 'delete']);
 
 /** Default result key per op (overridable via config.outputKey). */
 function defaultOutputKey(op: DatabaseOp): string {
@@ -97,23 +96,6 @@ export const databaseExecutor: NodeExecutor = {
     // Ops requiring a key.
     if (['upsert', 'get', 'update', 'patch', 'delete'].includes(operation) && !key) {
       throw new Error(`database: "${operation}" requires a key (supports {{input.field}} templates).`);
-    }
-
-    // Dry run: writes are simulated (never mutate); reads run normally.
-    if (context.dryRun && WRITE_OPS.has(operation)) {
-      return {
-        output: {
-          dryRun: true,
-          wouldExecute: {
-            operation,
-            collection,
-            ...(key ? { key } : {}),
-          },
-        },
-        rowCount: 1,
-        logs: [`[dry-run] would ${operation} in datastore collection "${collection}"`],
-        metadata: { dryRun: true },
-      };
     }
 
     try {

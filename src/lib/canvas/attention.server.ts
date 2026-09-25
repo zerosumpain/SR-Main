@@ -20,7 +20,8 @@ export interface CanvasAttention {
 const ATTENTION_STATUSES = new Set(['failed', 'completed_with_errors']);
 
 export async function loadCanvasAttention(workflowId: string): Promise<CanvasAttention | null> {
-  const [latest] = await listRuns(workflowId, 1);
+  // Live runs only: a failed TEST run is a draft being proved, not a workflow in trouble.
+  const [latest] = await listRuns(workflowId, 1, { liveOnly: true });
   if (!latest || !ATTENTION_STATUSES.has(latest.status)) return null;
   const detail = await loadRunDetail(latest.id);
   const failed = detail?.steps.find((s) => s.status === 'failed' && s.error) ?? detail?.steps.find((s) => s.status === 'failed');

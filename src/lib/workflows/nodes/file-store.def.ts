@@ -1,7 +1,9 @@
 import type { NodeDefinition } from '../types';
+import { opIn } from '../side-effects';
 
 export const fileStoreDef: NodeDefinition = {
   type: 'file-store',
+  sideEffects: opIn('operation', ['write', 'append', 'delete'], 'read'),
   label: 'File Store (legacy)',
   category: 'integration',
   hidden: true,

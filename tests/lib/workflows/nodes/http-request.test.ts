@@ -110,18 +110,6 @@ describe('httpRequestExecutor', () => {
     expect(httpRequestExecutor.type).toBe('http-request');
   });
 
-  it('skips the network request on dryRun and returns a simulated result', async () => {
-    const result = await httpRequestExecutor.execute(
-      { userId: '7' },
-      { method: 'POST', url: 'https://example.com/users/{{input.userId}}', headers: '{}', body: '{"a":1}', auth: 'none' },
-      { ...mockContext, dryRun: true },
-    );
-
-    expect(result.output).toMatchObject({ simulated: true });
-    expect(result.logs?.[0]).toContain('skipped-for-dry-run');
-    // Critically: fetch is never called.
-    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
-  });
 });
 
 describe('httpRequestExecutor pagination', () => {
@@ -368,19 +356,6 @@ describe('httpRequestExecutor pagination', () => {
     expect(result.output.pages).toBeUndefined();
   });
 
-  it('does not fetch on dryRun even when pagination is configured', async () => {
-    const result = await httpRequestExecutor.execute(
-      {},
-      {
-        method: 'GET', url: 'https://example.com/feed', headers: '{}', auth: 'none',
-        pagination: { mode: 'page', pageParam: 'page', startPage: 1, itemsPath: 'results', maxPages: 5 },
-      },
-      { ...mockContext, dryRun: true },
-    );
-
-    expect(result.output).toMatchObject({ simulated: true });
-    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
-  });
 });
 
 describe('httpRequestDef', () => {

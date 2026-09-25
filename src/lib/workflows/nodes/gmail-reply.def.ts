@@ -2,6 +2,7 @@ import type { NodeDefinition } from '../types';
 
 export const gmailReplyDef: NodeDefinition = {
   type: 'gmail-reply',
+  sideEffects: true,
   category: 'integration',
   label: 'Gmail — Reply to Message',
   description: 'Send a reply to an existing Gmail thread, preserving In-Reply-To and References headers for proper threading.',

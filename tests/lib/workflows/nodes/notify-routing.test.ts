@@ -144,12 +144,6 @@ describe('notify node', () => {
     expect(result.output).toMatchObject({ raised: true, whatsapp: 'off', iphone: 'queued', channels: 'iPhone' });
   });
 
-  it('does not send in a dry run', async () => {
-    const result = await notifyExecutor.execute({}, { category: 'build', title: 't', body: 'b' }, { ...ctx(), dryRun: true });
-    expect(channel).not.toHaveBeenCalled();
-    expect(result.output).toMatchObject({ simulated: true });
-  });
-
   it('refuses a raise with nothing to say', async () => {
     await expect(notifyExecutor.execute({}, { category: 'build', title: '', body: '' }, ctx())).rejects.toThrow(/title/);
   });
