@@ -18,7 +18,7 @@
   import type { Snippet } from 'svelte';
   import { onDestroy } from 'svelte';
   import { setPageMenu, clearPageMenu, type PageMenu } from '$lib/jkai/hub-bus.svelte';
-  import { SURFACES, type IntelCounts } from '$lib/components/intel/workbench';
+  import { MEMBER_SURFACE_HREFS, SURFACES, type IntelCounts } from '$lib/components/intel/workbench';
   import type { LayoutData } from './$types';
 
   let { children, data }: { children: Snippet; data: LayoutData } = $props();
@@ -28,6 +28,10 @@
     const value = counts?.[key];
     return typeof value === 'number' ? value : null;
   }
+
+  // A member sees the surfaces they can reach and nothing that leads out of
+  // their space: no "new note" (capture is the owner's in phase one) and no hub.
+  const surfaces = $derived(data.member ? SURFACES.filter((s) => MEMBER_SURFACE_HREFS.has(s.href)) : SURFACES);
 
   const menu = $derived<PageMenu>({
     label: 'intel',
@@ -39,7 +43,7 @@
     groups: [
       {
         heading: 'The loop',
-        rows: SURFACES.map((s) => {
+        rows: surfaces.map((s) => {
           const n = badge(data.intelCounts, s.count);
           return {
             label: s.label,
@@ -57,7 +61,7 @@
           };
         }),
       },
-      {
+      ...(data.member ? [] : [{
         heading: 'Add',
         rows: [{ label: 'New note', href: '/jkai/intel/notes/new', meta: 'CAPTURE' }],
       },
@@ -69,7 +73,7 @@
           { label: 'Research', href: '/research', meta: 'DEEP DIVE' },
           { label: 'Develop', href: '/jkai/develop', meta: 'AUTONOMOUS' },
         ],
-      },
+      }]),
     ],
   });
 

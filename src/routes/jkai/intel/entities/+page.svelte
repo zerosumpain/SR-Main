@@ -27,6 +27,13 @@
 
   let { data }: { data: PageData } = $props();
 
+  /**
+   * A family member browses and filters; every write here (confirm, watch,
+   * retype, merge, delete) is a POST to an owner-only endpoint, so the
+   * selection column, the bulk bar and the per-row star are left out for them.
+   */
+  const member = $derived(data.member === true);
+
   let searchText = $state(data.query.q);
   /** Ordered: with two selected, the order decides which survives a merge. */
   let selected = $state<string[]>([]);
@@ -97,7 +104,7 @@
   }
 
   async function bulk(body: Record<string, unknown>, describe: (affected: number) => string) {
-    if (busy) return;
+    if (busy || member) return;
     busy = true;
     try {
       const res = await fetch('/api/jkai/intel/entities', {
@@ -254,7 +261,7 @@
     </div>
   </div>
 
-  {#if selected.length}
+  {#if selected.length && !member}
     <div class="bulkbar">
       <span class="count">{selected.length} selected</span>
       <button type="button" disabled={busy} onclick={confirmAll}>Confirm</button>
@@ -293,6 +300,7 @@
       <table>
         <thead>
           <tr>
+            {#if !member}
             <th class="pick">
               <input
                 type="checkbox"
@@ -301,6 +309,7 @@
                 aria-label="Select every entity on this page"
               />
             </th>
+            {/if}
             <th>
               <button type="button" onclick={() => applySort('name')}>Name {sortIndicator('name')}</button>
             </th>
@@ -320,6 +329,7 @@
         <tbody>
           {#each data.entities as entity (entity.id)}
             <tr class:picked={selected.includes(entity.id)}>
+              {#if !member}
               <td class="pick">
                 <input
                   type="checkbox"
@@ -328,6 +338,7 @@
                   aria-label="Select {entity.name}"
                 />
               </td>
+              {/if}
               <td>
                 <a class="row" href="/jkai/intel/entities/{entity.id}">
                   <span class="icon">{entity.typeIcon}</span>
@@ -385,6 +396,7 @@
                 {:else}
                   <span class="badge warn" title="Unconfirmed">?</span>
                 {/if}
+                {#if !member}
                 <button
                   type="button"
                   class="star"
@@ -394,6 +406,7 @@
                   aria-label={entity.watched ? `Stop watching ${entity.name}` : `Watch ${entity.name}`}
                   onclick={() => toggleWatchRow(entity.id, entity.watched)}
                 >{entity.watched ? '★' : '☆'}</button>
+                {/if}
               </td>
             </tr>
           {/each}

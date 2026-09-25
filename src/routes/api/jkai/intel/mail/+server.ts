@@ -3,13 +3,14 @@
 //   GET                            the whole queue — counts, suggestions, clusters, rows
 //   POST { action, noteIds }       admit | reject | requeue | similar
 //
-// Owner-gated by hooks.server.ts like every other /api/jkai route. The work
+// Reachable by the owner and by a member (isMemberAllowedRoute), each within
+// their own scope; backfill-embeddings is the owner's alone. The work
 // lives in $lib/jkai/intel/mail-*; this route validates and shapes.
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { loadMailQueue, similarPending, backfillPendingEmbeddings } from '$lib/jkai/intel/mail-queue';
 import { admitMailNotes, rejectMailNotes, requeueMailNotes } from '$lib/jkai/intel/mail-admit';
-import { isOwnerScope } from '$lib/jkai/intel/scope';
+import { isOwnerScope, OWNER_SPACE, writeSpace } from '$lib/jkai/intel/scope';
 import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
 /**
@@ -56,6 +57,10 @@ export const POST: RequestHandler = async (event) => {
     return json({ error: 'Body must be JSON.' }, { status: 400 });
   }
 
+  // Who decided, for the ledger. Only the owner's own decisions train the
+  // admission rules (`ownerDecisions`); a member's are recorded as theirs.
+  const actor = writeSpace(scope) === OWNER_SPACE ? 'owner' : 'member';
+
   const action = String(body.action ?? '');
   const noteIds = readIds(body.noteIds);
   const reason = typeof body.reason === 'string' ? body.reason.slice(0, 500) : undefined;
@@ -92,7 +97,7 @@ export const POST: RequestHandler = async (event) => {
     if (action === 'admit') {
       const batch = noteIds.slice(0, MAX_ADMIT_PER_REQUEST);
       const result = await admitMailNotes(batch, {
-        actor: 'owner',
+        actor,
         reason,
         budgetMs: ADMIT_BUDGET_MS,
         scope,
@@ -108,7 +113,7 @@ export const POST: RequestHandler = async (event) => {
       // No time budget: a rejection is one UPDATE and a ledger write, so a
       // thousand of them finish in well under the proxy's window.
       const batch = noteIds.slice(0, MAX_REJECT_PER_REQUEST);
-      const result = await rejectMailNotes(batch, { actor: 'owner', reason, scope });
+      const result = await rejectMailNotes(batch, { actor, reason, scope });
       return json({ ...result, remaining: noteIds.slice(MAX_REJECT_PER_REQUEST) });
     }
     if (action === 'requeue') {

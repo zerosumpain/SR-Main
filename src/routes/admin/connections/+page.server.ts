@@ -2,6 +2,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { fail } from '@sveltejs/kit';
 import { probeAll } from '$lib/connectors/probes';
 import { needsResync, sortReports } from '$lib/connectors/types';
+import { ownerGmailWhere } from '$lib/workflows/gmail/owner-accounts';
 
 // Owner-gated by hooks. Every row is probed live on load — the point of this
 // page is that it never repeats a stored status column back at you.
@@ -64,7 +65,7 @@ export const actions: Actions = {
     const { db } = await import('$lib/db');
     const { gmailAccounts } = await import('$lib/db/schema');
     const { eq } = await import('drizzle-orm');
-    const [acct] = await db.select().from(gmailAccounts).where(eq(gmailAccounts.id, id)).limit(1);
+    const [acct] = await db.select().from(gmailAccounts).where(ownerGmailWhere(eq(gmailAccounts.id, id))).limit(1);
     if (!acct) return fail(404, { ok: false, key, error: 'account not found' });
 
     try {

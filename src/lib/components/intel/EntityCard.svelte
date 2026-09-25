@@ -11,6 +11,7 @@
     type EntityCardData,
   } from '$lib/jkai/intel/entity-card-store';
   import EvidenceList from './EvidenceList.svelte';
+  import { currentIsMember } from './member-mode';
   import EvidenceTimeline from './EvidenceTimeline.svelte';
   import {
     ageInDays,
@@ -47,6 +48,14 @@
   let watchBusy = $state(false);
 
   /**
+   * A family member reads their own graph and changes nothing on it: no watch
+   * star, no dossier pin, no trust grades, no commissions — each of those is an
+   * owner-only endpoint the server would refuse. False outside /jkai/intel, so
+   * the chat hover card is unchanged.
+   */
+  const member = $derived(currentIsMember());
+
+  /**
    * Put this entity on the watchlist, or take it off.
    *
    * The same call the entities index makes, so there is one write path and one
@@ -60,7 +69,7 @@
    * back to where it was.
    */
   async function toggleWatch() {
-    if (!data || watchBusy) return;
+    if (!data || watchBusy || member) return;
     const next = !data.entity.watched;
     watchBusy = true;
     data.entity.watched = next;
@@ -123,7 +132,9 @@
 
   $effect(() => {
     const id = entityId;
-    const wantsServerCopy = !compact;
+    // Never for a member: /api/jkai/intel/trust is owner-only, and the locally
+    // computed score below is the whole of what they need.
+    const wantsServerCopy = !compact && !member;
     serverTrust = null;
     draftGrade = null;
     draftCredibility = null;
@@ -184,6 +195,7 @@
   let pinResult = $state<string | null>(null);
 
   async function openPin() {
+    if (member) return;
     pinOpen = !pinOpen;
     if (!pinOpen || dossiersLoaded) return;
     try {
@@ -225,7 +237,7 @@
   );
 
   async function saveGrades() {
-    if (saving) return;
+    if (saving || member) return;
     saving = true;
     try {
       const res = await fetch('/api/jkai/intel/trust', {
@@ -282,6 +294,7 @@
           {/if}
         </div>
       </div>
+      {#if !member}
       <button
         type="button"
         class="star"
@@ -292,6 +305,7 @@
         aria-pressed={data.entity.watched}
         onclick={toggleWatch}
       >{data.entity.watched ? '★' : '☆'}</button>
+      {/if}
     </header>
 
     {#if data.entity.summary}
@@ -304,7 +318,7 @@
          this" and "add to dossier" below a scroll on every entity worth
          reading about. They are what you came to do; they should not be the
          last thing you can reach. -->
-    {#if onCommission}
+    {#if onCommission && !member}
       <footer>
         <button
           type="button"
@@ -340,6 +354,12 @@
       {#if pinResult}
         <p class="pin-note done">{pinResult}</p>
       {/if}
+    {:else if member && !compact}
+      <!-- The one action a member keeps: the entity's own page, which reads
+           their scope like everything else they can reach. -->
+      <footer>
+        <a class="btn-link" href="/jkai/intel/entities/{entityId}">Open</a>
+      </footer>
     {/if}
 
     <div class="metrics">
@@ -423,7 +443,7 @@
             </li>
           </ul>
 
-          {#if !compact && serverTrust}
+          {#if !compact && serverTrust && !member}
             <div class="grader">
               <label>
                 <span>source</span>

@@ -13,6 +13,7 @@
   import { entityHover, computeHoverLayout, constrainPanel, CARD_W, type HoverAnchor } from './entity-hover.svelte';
   import { commission } from '$lib/jkai/intel/entity-card-store';
   import { goto } from '$app/navigation';
+  import { currentIsMember } from './member-mode';
 
   let host = $state<HTMLDivElement | null>(null);
   let height = $state(300);
@@ -93,8 +94,11 @@
     layout.bottom !== undefined ? `bottom: ${layout.bottom}px` : `top: ${layout.top ?? 0}px`,
   );
 
+  /** A member commissions nothing: /api/jkai/intel/commission is owner-only. */
+  const member = $derived(currentIsMember());
+
   async function onCommission(kind: string, payload: string, entityIds: string[]) {
-    if (busy) return;
+    if (busy || member) return;
     busy = true;
     try {
       const result = await commission(kind, payload, entityIds);
@@ -164,7 +168,7 @@
       <EntityCard
         entityId={anchor.entityId}
         compact={!anchor.pinned}
-        onCommission={anchor.pinned ? onCommission : undefined}
+        onCommission={anchor.pinned && !member ? onCommission : undefined}
         onFocus={(id) => (relation = { from: anchor.entityId, to: id })}
       />
     </div>

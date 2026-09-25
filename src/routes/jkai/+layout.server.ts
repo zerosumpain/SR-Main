@@ -8,6 +8,23 @@ import { getSetting, resolveDefaultModel } from '$lib/server/models/settings';
 import { getOpenRouterCredits } from '$lib/server/models/openrouter-credits';
 import { getCodexUsage } from '$lib/server/models/codex-usage';
 import { getDeployVersion } from '$lib/server/deploy-version';
+import { isMemberRequest } from '$lib/server/viewer';
+
+/** What the header shows a member: nothing. Spend, credit, the Codex quota and
+ *  the workflow counts are the owner's operational data, not theirs. */
+const MEMBER_HUB = {
+  tokensToday: 0,
+  spendTodayUsd: 0,
+  budgetUsd: 0,
+  credit: null,
+  codex: null,
+  defaultModelId: '',
+  activeRuns: 0,
+  workflowCount: 0,
+  workflowLiveCount: 0,
+  workflowFailedToday: 0,
+  activitySourceCount: 0,
+};
 
 /** Fallback spend ceiling, used ONLY when OpenRouter can't tell us the real
  *  credit balance. Overridable from app_settings so it can be raised without a
@@ -22,8 +39,12 @@ const DAILY_BUDGET_SETTING_KEY = 'jkai.dailyBudgetUsd';
  *  navigation. It is deliberately three cheap aggregates — no filesystem
  *  reads, no cross-host round-trip. Anything per-thread (context use, thread cost)
  *  is client state and arrives via $lib/jkai/hub-bus. */
-export const load: LayoutServerLoad = async () => {
-  // Auth is handled centrally by hooks.server.ts
+export const load: LayoutServerLoad = async (event) => {
+  // Auth is handled centrally by hooks.server.ts. A member reaches /jkai only
+  // for their intel space (isMemberAllowedRoute), and this load runs under it.
+  if (await isMemberRequest(event)) {
+    return { deploy: getDeployVersion(), member: true as const, hub: MEMBER_HUB };
+  }
   // Midnight in the database's timezone, the same boundary the spend ledger
   // uses — this was a rolling 24 hours while everything beside it in the header
   // said "today", so two figures under one word measured different windows.
@@ -102,6 +123,7 @@ export const load: LayoutServerLoad = async () => {
 
   return {
     deploy: getDeployVersion(),
+    member: false as const,
     hub: {
       tokensToday: today?.tokens ?? 0,
       spendTodayUsd: today?.spendUsd ?? 0,

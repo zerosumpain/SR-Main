@@ -9,6 +9,7 @@
     email: string;
     note: string | null;
     addedBy: string | null;
+    role: string;
     createdAt: string | Date;
   };
 
@@ -79,6 +80,34 @@
     }
   }
 
+  // A member reaches their own intel space at /jkai/intel (their graph plus the
+  // household's) and can connect their own Gmail read-only. Nothing else of
+  // the signed-in site opens to them.
+  async function setRole(email: string, role: 'guest' | 'member') {
+    const verb = role === 'member' ? 'Make' : 'Stop';
+    const what =
+      role === 'member'
+        ? `${email} a member? They get their own intel space at /jkai/intel and can connect their Gmail read-only.`
+        : `${email} being a member? Their intel stays, but their Gmail stops being swept.`;
+    if (!confirm(`${verb} ${what}`)) return;
+    busyEmail = email;
+    errorMsg = '';
+    try {
+      const res = await fetch(apiUrl(), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, role }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok) guests = body.guests ?? guests;
+      else errorMsg = body.error ?? 'Could not change that role';
+    } catch {
+      errorMsg = 'Network error';
+    } finally {
+      busyEmail = null;
+    }
+  }
+
   function formatDate(d: string | Date) {
     return new Date(d).toLocaleDateString('en-GB', {
       day: 'numeric',
@@ -92,7 +121,7 @@
   <PageHeader
     kicker="Access"
     title="Login allow-list"
-    sub="Grant a Google account permission to sign in. The signed-in site is owner-only, so guests are recognised but currently see only public pages — they can't reach admin, /jkai, /live or your private tools."
+    sub="Grant a Google account permission to sign in. Guests see only public pages. A member also gets their own intel space at /jkai/intel, with the household's, and can connect their own Gmail read-only — nothing else of /jkai, admin or your private tools."
   />
 
   <!-- Owners (read-only) -->
@@ -166,7 +195,15 @@
         <li class="access-row">
           <span class="email">{guest.email}</span>
           {#if guest.note}<span class="note">{guest.note}</span>{/if}
+          {#if guest.role === 'member'}<span class="member-tag">Member</span>{/if}
           <span class="added">added {formatDate(guest.createdAt)}</span>
+          <button
+            class="row-link"
+            onclick={() => setRole(guest.email, guest.role === 'member' ? 'guest' : 'member')}
+            disabled={busyEmail === guest.email}
+          >
+            {guest.role === 'member' ? 'Make guest' : 'Make member'}
+          </button>
           <button
             class="row-link danger"
             onclick={() => removeGuest(guest.email)}
@@ -232,6 +269,16 @@
     letter-spacing: 0.15em;
     color: var(--accent);
     border: 1px solid var(--accent);
+    padding: 0.1rem 0.4rem;
+    border-radius: 2px;
+  }
+  .member-tag {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-secondary);
+    border: 1px solid var(--divider);
     padding: 0.1rem 0.4rem;
     border-radius: 2px;
   }

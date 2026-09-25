@@ -3,6 +3,7 @@ import { db } from '$lib/db';
 import { gmailAccounts } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { gmailService } from '$lib/workflows/gmail/service';
+import { ownerGmailWhere } from '$lib/workflows/gmail/owner-accounts';
 
 // Gmail system labels which cannot be added or removed via users.messages.modify.
 // Gmail API rejects requests that try to mutate these.
@@ -28,7 +29,7 @@ export const GET: RequestHandler = async ({ params }) => {
     return json({ error: 'invalid account id' }, { status: 400 });
   }
 
-  const [acct] = await db.select().from(gmailAccounts).where(eq(gmailAccounts.id, accountId));
+  const [acct] = await db.select().from(gmailAccounts).where(ownerGmailWhere(eq(gmailAccounts.id, accountId)));
   if (!acct) return json({ error: 'not found' }, { status: 404 });
 
   if (acct.status === 'auth_expired') {

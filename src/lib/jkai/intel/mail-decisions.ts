@@ -19,6 +19,7 @@
 import { ensureCollection, upsertRecord, queryRecords } from '$lib/datastore';
 import type { PermissionSet } from '$lib/datastore';
 import { factsFor, type MailFacts, type NoteForFacts } from './mail-facts';
+import { OWNER_SPACE } from './scope';
 
 export const SYSTEM_ACTOR = 'system';
 
@@ -38,8 +39,13 @@ export type MailDecisionKind = 'admit' | 'reject';
 export interface MailDecision {
   noteId: string;
   decision: MailDecisionKind;
-  /** 'owner' | 'rule' | 'seed' — a rule must never learn from its own output. */
+  /** 'owner' | 'member' | 'rule' | 'seed' — a rule must never learn from its own output. */
   actor: string;
+  /**
+   * The intel space of the thread decided on. Absent on decisions made before
+   * members existed, all of which were the owner's — read as OWNER_SPACE.
+   */
+  spaceId?: string;
   ruleKey?: string;
   reason?: string;
   subject: string;
@@ -66,6 +72,8 @@ export interface RecordDecisionInput {
   noteId: string;
   decision: MailDecisionKind;
   actor: string;
+  /** The note's space. Required, so a caller cannot forget whose mail it was. */
+  spaceId: string;
   ruleKey?: string;
   reason?: string;
   subject: string;
@@ -94,6 +102,7 @@ export async function recordMailDecision(input: RecordDecisionInput): Promise<vo
       noteId: input.noteId,
       decision: input.decision,
       actor: input.actor,
+      spaceId: input.spaceId,
       ...(input.ruleKey ? { ruleKey: input.ruleKey } : {}),
       ...(input.reason ? { reason: input.reason } : {}),
       subject: input.subject.slice(0, 300),
@@ -134,9 +143,18 @@ export async function listMailDecisions(): Promise<MailDecision[]> {
  * would be scoring itself: rule A admits a hundred newsletters, rule B is
  * proposed, and B backtests brilliantly because it agrees with A. Seeds are
  * excluded for the same reason.
+ *
+ * And only on the owner's own mail. A member's admits are theirs (actor
+ * 'member', their space) and must not train rules that run over the owner's
+ * queue — nor carry a member's subject lines into the owner's rule proposer.
  */
 export async function ownerDecisions(): Promise<MailDecision[]> {
-  return (await listMailDecisions()).filter((d) => d.actor === 'owner');
+  return (await listMailDecisions()).filter((d) => d.actor === 'owner' && isOwnerSpaceDecision(d));
+}
+
+/** A decision on the owner's own mail — every decision predating members is. */
+export function isOwnerSpaceDecision(d: Pick<MailDecision, 'spaceId'>): boolean {
+  return (d.spaceId ?? OWNER_SPACE) === OWNER_SPACE;
 }
 
 export interface DecisionTally {
@@ -146,8 +164,9 @@ export interface DecisionTally {
   byOwner: number;
 }
 
+/** The owner's tally — shown on the owner's mail page, so the owner's mail only. */
 export async function tallyMailDecisions(): Promise<DecisionTally> {
-  const all = await listMailDecisions();
+  const all = (await listMailDecisions()).filter(isOwnerSpaceDecision);
   return {
     total: all.length,
     admitted: all.filter((d) => d.decision === 'admit').length,

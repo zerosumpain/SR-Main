@@ -30,15 +30,23 @@
 <div class="p-6 sm:p-10 w-full">
   <div class="flex items-center justify-between mb-6">
     <div></div>
+    <!-- Capture is the owner's in phase one: a member's notes arrive through
+         the mail gate, and /jkai/intel/notes/new is not a route they reach. -->
+    {#if !data.member}
     <a href="/jkai/intel/notes/new" class="px-4 py-2 rounded-[var(--radius-round)] text-sm font-medium" style="background: var(--accent); color: white;">
       + New Note
     </a>
+    {/if}
   </div>
 
   {#if data.notes.length === 0}
     <div class="text-center py-16" style="color: var(--text-ghost);">
       <p class="text-lg mb-2">No notes yet</p>
-      <p class="text-sm">Add your first note to start building your knowledge graph.</p>
+      {#if data.member}
+        <p class="text-sm">Notes appear here as you admit threads at <a href="/jkai/intel/mail" style="color: var(--accent);">the mail gate</a>.</p>
+      {:else}
+        <p class="text-sm">Add your first note to start building your knowledge graph.</p>
+      {/if}
     </div>
   {:else}
     <div class="space-y-2">

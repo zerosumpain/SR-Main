@@ -18,7 +18,7 @@
 // derivation below is unit-tested. Same reason as entity-query.ts.
 import { and, desc, eq, inArray, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
 import { intelInsights, type IntelInsight, type NewIntelInsight } from '$lib/db/schema';
-import { OWNER_INTEL_SCOPE, spaceIn, writeSpace, type IntelScope } from './scope';
+import { OWNER_INTEL_SCOPE, OWNER_SPACE, spaceIn, writeSpace, type IntelScope } from './scope';
 
 // ── Shape ────────────────────────────────────────────────────────────────────
 
@@ -138,13 +138,25 @@ export function normalizeKeyEntityIds(ids: readonly unknown[] | null | undefined
  * PURE — no clock, no DB, no randomness. Two runs over the same graph must
  * produce byte-identical keys or the whole dismiss/snooze mechanism leaks.
  *
- * Keys are globally unique and carry no space; prefixing a member's is PR B's.
+ * This is the key a detector's finding is known by. What is STORED is
+ * `storedDedupeKey(space, key)`: the column is uniquely indexed across every
+ * space, and a member's finding over household entities would otherwise land
+ * on the owner's row's key and be silently dropped by the upsert's space guard.
  */
 export function dedupeKeyFor(insight: Pick<StorableInsight, 'kind' | 'score' | 'entityIds'>): string {
   const kind = String(insight.kind ?? '').trim().toLowerCase() || 'unknown';
   const ids = SAMPLE_KINDS.has(kind) ? [] : normalizeKeyEntityIds(insight.entityIds);
   const subject = ids.length ? ids.join('+') : '*';
   return `${kind}|${subject}|b${scoreBucket(insight.score)}`;
+}
+
+/**
+ * The key as stored for a space: bare for the owner, so every row written
+ * before members existed keeps its key; `<space>:` in front for anyone else.
+ * Callers always deal in the bare key — the store translates both ways.
+ */
+export function storedDedupeKey(spaceId: string, key: string): string {
+  return spaceId === OWNER_SPACE ? key : `${spaceId}:${key}`;
 }
 
 // ── Row mapping (pure) ───────────────────────────────────────────────────────
@@ -261,7 +273,10 @@ export async function persistInsights(
 
   await reviveSnoozed();
 
-  const keys = [...byKey.keys()];
+  // Stored keys from here on: `byKey` is re-keyed so the insert, the status
+  // lookup and the conflict target all agree on the space-prefixed form.
+  const stored = new Map([...byKey].map(([k, v]) => [storedDedupeKey(spaceId, k), v]));
+  const keys = [...stored.keys()];
   const existing = await db
     .select({ dedupeKey: intelInsights.dedupeKey, status: intelInsights.status })
     .from(intelInsights)
@@ -277,7 +292,7 @@ export async function persistInsights(
   const excluded = (column: string): SQL => sql.raw(`excluded.${column}`);
   await db
     .insert(intelInsights)
-    .values(writable.map((key) => ({ ...toInsightRow(byKey.get(key)!, key, runId), spaceId })))
+    .values(writable.map((key) => ({ ...toInsightRow(stored.get(key)!, key, runId), spaceId })))
     .onConflictDoUpdate({
       target: intelInsights.dedupeKey,
       set: {
@@ -362,11 +377,16 @@ export async function insightsByDedupeKey(
   const unique = [...new Set(keys.filter(Boolean))];
   if (!unique.length) return new Map();
   const { db } = await import('$lib/db');
+  // Findings are persisted into the reader's own space (`persistInsights`), so
+  // that is the space whose stored keys are looked up; the map comes back keyed
+  // by the bare key the caller asked with.
+  const space = writeSpace(scope);
+  const bare = new Map(unique.map((k) => [storedDedupeKey(space, k), k]));
   const rows = await db
     .select()
     .from(intelInsights)
-    .where(and(inArray(intelInsights.dedupeKey, unique), spaceIn(intelInsights.spaceId, scope)));
-  return new Map(rows.map((r) => [r.dedupeKey, r]));
+    .where(and(inArray(intelInsights.dedupeKey, [...bare.keys()]), spaceIn(intelInsights.spaceId, scope)));
+  return new Map(rows.map((r) => [bare.get(r.dedupeKey) ?? r.dedupeKey, r]));
 }
 
 export async function setInsightStatus(

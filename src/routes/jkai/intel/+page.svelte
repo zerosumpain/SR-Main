@@ -42,6 +42,47 @@ import type { NetworkPayload } from '$lib/codegraph/types';
 
   let { data } = $props();
 
+  /**
+   * A family member's view of this page. They reach the graph, its read APIs
+   * and the mail gate, nothing else (MEMBER_ROUTES in $lib/auth), so every
+   * control that would call or link to an owner-only route is left out rather
+   * than shown and refused: the cluster roster and its actions, duplicates,
+   * the watchlist, findings, commissions and the Gmail sweep. In their place,
+   * the rail offers their own mailbox.
+   */
+  const member = $derived(data.member === true);
+
+  const GMAIL_STATUS_LABEL: Record<string, string> = {
+    active: 'connected',
+    auth_expired: 'needs reconnecting',
+    disabled: 'paused',
+  };
+
+  /** Plain sentences for the codes /api/gmail/callback redirects back with. */
+  const GMAIL_ERROR_TEXT: Record<string, string> = {
+    no_code: 'Google did not send an authorisation code back. Try again.',
+    no_refresh_token: 'Google did not grant lasting access to the mailbox. Try again.',
+    bad_state: 'That connection request had expired. Try again.',
+    wrong_account: 'That Google account is not the one you signed in with.',
+    taken: 'That mailbox is already connected to someone else.',
+    failed: 'Connecting Gmail did not work. Try again.',
+  };
+
+  const memberGmail = $derived(data.memberGmail ?? []);
+  /** Offer the connect link until one mailbox is actually being read. */
+  const gmailNeedsConnect = $derived(!memberGmail.some((a) => a.status === 'active'));
+  const gmailNotice = $derived.by(() => {
+    if (!member || page.url.searchParams.get('gmail') !== 'connected') return null;
+    const email = page.url.searchParams.get('email');
+    return email ? `Connected ${email}.` : 'Gmail connected.';
+  });
+  const gmailError = $derived.by(() => {
+    if (!member) return null;
+    const code = page.url.searchParams.get('gmail_error');
+    if (!code) return null;
+    return GMAIL_ERROR_TEXT[code] ?? GMAIL_ERROR_TEXT.failed;
+  });
+
   /** The intel routes add whole-scope space and domain counts for the Scope
    *  chips; the codegraph shares the rest of the payload and has neither. */
   type IntelNetwork = NetworkPayload & {
@@ -580,6 +621,10 @@ import type { NetworkPayload } from '$lib/codegraph/types';
       // Unreadable storage just means the default stands.
     }
 
+    // Everything below is an owner-only endpoint (MEMBER_ROUTES in $lib/auth):
+    // a member's page never asks for it, rather than asking and being refused.
+    if (member) return;
+
     // The cluster roster. Cheap — the analysis it reads is the same cached
     // snapshot the graph request just built.
     void loadRoster();
@@ -641,6 +686,7 @@ import type { NetworkPayload } from '$lib/codegraph/types';
   }
 
   function toggleFindings() {
+    if (member) return;
     findingsOpen = !findingsOpen;
     if (findingsOpen) void loadFindings();
   }
@@ -658,7 +704,7 @@ import type { NetworkPayload } from '$lib/codegraph/types';
   const IN_PLACE_KINDS = new Set(['confirm_link', 'reject_link']);
 
   async function runCommission(kind: string, payload: string, entityIds: string[], key: string) {
-    if (busyId) return;
+    if (busyId || member) return;
     busyId = key;
     try {
       const result = await commission(kind, payload, entityIds);
@@ -1006,17 +1052,19 @@ import type { NetworkPayload } from '$lib/codegraph/types';
 </script>
 
 <div class="wrap">
+  {#if !member}
   <CommissionBar
     busy={!!busyId}
     matchCount={liveSearch.trim() ? liveMatches.length : null}
     onRun={(kind, payload) => runCommission(kind, payload, [], 'bar')}
     onSearch={(t) => (liveSearch = t)}
   />
+  {/if}
 
   <!-- Vital signs. The low, dark ledger borrows /health's instrument register:
        paper figures on brown ink, with lifted orange reserved for a backlog or
        data-quality problem. Ten readings, one compact scan line. -->
-  <div class="tiles cellgrid">
+  <div class="tiles cellgrid" class:member>
     <a class="tile" class:narrowed href="/jkai/intel/entities">
       <span class="n">{entityCount ?? data.stats.entityCount}</span>
       <span class="l">{narrowed ? 'Entities here' : 'Entities'}</span>
@@ -1038,10 +1086,12 @@ import type { NetworkPayload } from '$lib/codegraph/types';
       <span class="n">{network?.stats.components ?? '—'}</span>
       <span class="l">Fragments</span>
     </div>
+    {#if !member}
     <a class="tile" class:warn={(duplicates?.total ?? 0) > 0} href="/jkai/intel/quality">
       <span class="n">{duplicates?.total ?? '—'}</span>
       <span class="l">Duplicates</span>
     </a>
+    {/if}
     <!-- Stage 00, and the only tile that is about what has NOT reached the graph
          yet. It sits with the other vital signs rather than in the six-stage
          loop because the gate happens BEFORE capture, not inside it.
@@ -1050,14 +1100,17 @@ import type { NetworkPayload } from '$lib/codegraph/types';
       <span class="n">{data.intelCounts?.heldMail ?? '—'}</span>
       <span class="l">Held mail</span>
     </a>
+    {#if !member}
     <a class="tile" href="/jkai/intel/review">
       <span class="n">{data.stats.pendingReviewCount}</span>
       <span class="l">To review</span>
     </a>
+    {/if}
     <a class="tile" href="/jkai/intel/notes">
       <span class="n">{data.stats.noteCount}</span>
       <span class="l">Notes</span>
     </a>
+    {#if !member}
     <a class="tile" href="/jkai/intel/entities?watched=watched">
       <span class="n">{watchedCount || '—'}</span>
       <span class="l">Watched</span>
@@ -1066,11 +1119,15 @@ import type { NetworkPayload } from '$lib/codegraph/types';
       <span class="n">{data.recentAlerts.length}</span>
       <span class="l">Alerts</span>
     </a>
+    {/if}
   </div>
 
   <!-- The loop, stated once. Six cells: where you are, how much is waiting, and
        what the stage is FOR — the question strings come from workbench.ts, so
        the nav and this grid can never drift apart. -->
+  <!-- Not for a member: four of the six stages (triage, repair, collect, act)
+       are owner surfaces they cannot open. -->
+  {#if !member}
   <section class="loop cellgrid" aria-label="The intel loop">
     {#each LOOP_CELLS as cell (cell.stage + cell.label)}
       <a class="loop-cell" href={cell.href}>
@@ -1084,6 +1141,7 @@ import type { NetworkPayload } from '$lib/codegraph/types';
       </a>
     {/each}
   </section>
+  {/if}
 
   <div class="intel-board">
   <div class="board-main">
@@ -1100,6 +1158,43 @@ import type { NetworkPayload } from '$lib/codegraph/types';
           <span class="rail-state">All data</span>
         {/if}
       </div>
+
+      {#if member}
+        <!-- Their own mailbox, in place of the owner's sweep controls. The
+             connect link is a full navigation: /api/gmail/connect redirects to
+             Google, and the callback comes back here with ?gmail=… on it. -->
+        <RailSection title="Your mail" badge={memberGmail.length || null} open={true}>
+          {#if gmailNotice}
+            <p class="mail-ok">{gmailNotice}</p>
+          {/if}
+          {#if gmailError}
+            <p class="cluster-err">{gmailError}</p>
+          {/if}
+          {#if memberGmail.length}
+            <ul class="my-mail">
+              {#each memberGmail as acct (acct.email)}
+                <li>
+                  <span class="mm-addr">{acct.email}</span>
+                  <span class="mm-status" class:warn={acct.status !== 'active'}
+                    >{GMAIL_STATUS_LABEL[acct.status] ?? acct.status}</span
+                  >
+                </li>
+              {/each}
+            </ul>
+          {:else}
+            <p class="path-none">No Gmail connected yet.</p>
+          {/if}
+          {#if gmailNeedsConnect}
+            <a class="go" href="/api/gmail/connect" data-sveltekit-reload
+              >{memberGmail.length ? 'Reconnect Gmail' : 'Connect Gmail'}</a
+            >
+          {/if}
+          <p class="hint">
+            Read-only access. Threads wait at <a href="/jkai/intel/mail">the mail gate</a> until you
+            admit them.
+          </p>
+        </RailSection>
+      {/if}
 
       <RailSection title="Scope" badge={activeSpaces.length + activeDomains.length || null} open={true}>
         <ScopePicker
@@ -1241,11 +1336,11 @@ import type { NetworkPayload } from '$lib/codegraph/types';
              structure. -->
         <ClusterPicker
           communities={network?.communities ?? []}
-          roster={evidenceView ? [] : visibleClusters}
+          roster={evidenceView || member ? [] : visibleClusters}
           {narrowed}
           reachedTotal={network?.stats.selectedCommunities ?? 0}
-          stats={evidenceView ? null : (roster?.stats ?? null)}
-          resolution={evidenceView ? null : (roster?.resolution ?? null)}
+          stats={evidenceView || member ? null : (roster?.stats ?? null)}
+          resolution={evidenceView || member ? null : (roster?.resolution ?? null)}
           {recalculating}
           {narrating}
           focused={focusCommunities}
@@ -1253,10 +1348,10 @@ import type { NetworkPayload } from '$lib/codegraph/types';
           onToggleFocus={toggleCluster}
           onClearFocus={() => (focusCommunities = [])}
           onFilter={(id) => (communityId = id === null ? '' : String(id))}
-          onRecalculate={evidenceView ? undefined : recalculateClusters}
-          onRename={evidenceView ? undefined : renameCluster}
-          onNarrate={evidenceView ? undefined : narrateCluster}
-          onOpen={evidenceView ? undefined : (key) => goto(`/jkai/intel/clusters/${key}`)}
+          onRecalculate={evidenceView || member ? undefined : recalculateClusters}
+          onRename={evidenceView || member ? undefined : renameCluster}
+          onNarrate={evidenceView || member ? undefined : narrateCluster}
+          onOpen={evidenceView || member ? undefined : (key) => goto(`/jkai/intel/clusters/${key}`)}
         />
         {#if clusterError}
           <p class="cluster-err">{clusterError}</p>
@@ -1353,6 +1448,7 @@ import type { NetworkPayload } from '$lib/codegraph/types';
       <!-- How email gets into the graph in the first place, and whether it did.
            Folded by default: it answers "why is this missing", which is a
            question you ask occasionally, not one you filter by. -->
+      {#if !member}
       <RailSection title="Email ingest" open={false}>
         <GmailSweepPanel
           onDone={() => {
@@ -1364,6 +1460,7 @@ import type { NetworkPayload } from '$lib/codegraph/types';
         />
         <SweepHistoryPanel bind:this={sweepHistory} />
       </RailSection>
+      {/if}
 
       <RailSection title="Reading the graph" open={false}>
         <ul class="legend">
@@ -1465,7 +1562,9 @@ import type { NetworkPayload } from '$lib/codegraph/types';
     </div>
   </section>
 
-  <!-- Findings. Closed, and unfetched, until asked for. -->
+  <!-- Findings. Closed, and unfetched, until asked for. Never for a member:
+       insights and commissions are owner-only endpoints. -->
+  {#if !member}
   <section class="findings" class:open={findingsOpen}>
     <button type="button" class="findings-head" aria-expanded={findingsOpen} onclick={toggleFindings}>
       <span class="chev" aria-hidden="true">{findingsOpen ? '▾' : '▸'}</span>
@@ -1622,6 +1721,7 @@ import type { NetworkPayload } from '$lib/codegraph/types';
       {/if}
     {/if}
   </section>
+  {/if}
   </div>
 
   <!-- Signals: what came looking for you, what is coming, what was read last.
@@ -1637,7 +1737,7 @@ import type { NetworkPayload } from '$lib/codegraph/types';
         <span class="sig-label">
           <span class="metric-label">Alerts</span><b>{data.recentAlerts.length}</b>
         </span>
-        <a class="sig-more" href="/jkai/intel/alerts">All →</a>
+        {#if !member}<a class="sig-more" href="/jkai/intel/alerts">All →</a>{/if}
       </div>
       {#if data.recentAlerts.length > 0}
         <ul class="sig-list">
@@ -1769,6 +1869,10 @@ import type { NetworkPayload } from '$lib/codegraph/types';
        tail. The height is unchanged; the scan order is clearer. */
     .tiles {
       grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+    /* A member's six tiles, as two rows of three. */
+    .tiles.member {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
   }
   @media (max-width: 700px) {
@@ -2434,6 +2538,48 @@ import type { NetworkPayload } from '$lib/codegraph/types';
   .go:disabled {
     opacity: 0.4;
     cursor: default;
+  }
+  a.go {
+    display: inline-block;
+    text-decoration: none;
+  }
+
+  /* A member's own mailboxes, in the rail. */
+  .my-mail {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .my-mail li {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    font-size: var(--fs-label-xs);
+  }
+  .mm-addr {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--text-primary);
+  }
+  .mm-status {
+    flex: none;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--success);
+  }
+  .mm-status.warn {
+    color: var(--warn);
+  }
+  .mail-ok {
+    margin: 0;
+    font-size: var(--fs-label-xs);
+    line-height: 1.45;
+    color: var(--success);
   }
 
   .path {

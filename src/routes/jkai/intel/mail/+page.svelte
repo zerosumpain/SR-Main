@@ -14,6 +14,13 @@
 
   let { data } = $props();
 
+  /**
+   * A family member triages their own held mail: admit, reject, requeue,
+   * re-score. Rules, the seed offer and the search-index figures are the
+   * owner's (the rules endpoint is owner-only), so none of them render.
+   */
+  const member = $derived(data.member === true);
+
   type Tab = 'suggested' | 'clusters' | 'all' | 'rules';
   let tab = $state<Tab>('suggested');
 
@@ -192,7 +199,7 @@
   }
 
   async function ruleAction(action: string, key?: string) {
-    if (busy) return;
+    if (busy || member) return;
     busy = true;
     message = action === 'propose' ? 'Looking for a pattern in your decisions…' : '';
     try {
@@ -240,18 +247,27 @@
 <JkaiPageTitle title="INTEL / MAIL" titleHref="/jkai/intel" />
 
 <div class="wrap">
+  {#if member}
+    <p class="lede">
+      Every thread swept from your Gmail waits here. Nothing reaches your graph until you add it. Choosing
+      Never does not delete the email; it only keeps it out of the graph.
+    </p>
+  {:else}
   <p class="lede">
     Every swept thread waits here. Nothing reaches the graph until you say so — or until a rule you approved
     says so for you. Rejecting a thread does not delete it: daydreaming still reads your mail for vouchers,
     receipts and interests exactly as before.
   </p>
+  {/if}
 
   <div class="stats">
     <span><b>{queue.pending.toLocaleString()}</b> held</span>
     <span><b>{queue.admitted.toLocaleString()}</b> in the graph</span>
     <span><b>{queue.rejected.toLocaleString()}</b> refused</span>
     <span><b>{data.relevance.withHits.toLocaleString()}</b> name the graph</span>
+    {#if !member}
     <span class="ghost">{data.index.threads.toLocaleString()} threads searchable · {data.index.chunks.toLocaleString()} passages</span>
+    {/if}
     <button class="plain" disabled={busy} onclick={scoreRelevance}>Re-score against the graph</button>
   </div>
   {#if data.relevance.unscored > 0}
@@ -260,7 +276,9 @@
       graph* fact reads 0 for them and no topical rule can match them. Re-score to fix it.
     </p>
   {/if}
-  {#if data.relevance.foreground === 0}
+  <!-- The foreground warning is about arming the owner's topical admit rule,
+       by watching entities — neither of which a member can do. -->
+  {#if data.relevance.foreground === 0 && !member}
     <p class="hint warn">
       Nothing is watched, lensed or in a dossier, so no thread can score as naming something you track and the
       topical admit rule matches nothing. That is the rule working, not failing. Measured on this mailbox, a rule
@@ -268,7 +286,7 @@
       same brands and topics newsletters are about. Watch the twenty or thirty things that actually matter on
       <a href="/jkai/intel/entities">the entities page</a> and the rule becomes both safe and useful.
     </p>
-  {:else}
+  {:else if data.relevance.foreground > 0}
     <p class="hint">
       {data.relevance.foreground.toLocaleString()} entities in your foreground ·
       {data.relevance.foregroundHits.toLocaleString()} held threads name one.
@@ -285,9 +303,11 @@
     <button class:on={tab === 'all'} onclick={() => (tab = 'all')}>
       All threads <b>{queue.pending}</b>
     </button>
+    {#if !member}
     <button class:on={tab === 'rules'} onclick={() => (tab = 'rules')}>
       Rules <b>{data.rules.filter((r) => r.status === 'active').length}</b>
     </button>
+    {/if}
     <span class="spacer"></span>
     {#if tab !== 'rules'}
       <input class="search" placeholder="filter by subject or sender" bind:value={filter} />
@@ -428,7 +448,7 @@
     {#if visibleRows.length > 400}
       <p class="hint">{(visibleRows.length - 400).toLocaleString()} more match — narrow the filter or use a cluster.</p>
     {/if}
-  {:else}
+  {:else if !member}
     <p class="hint">
       A rule is data, not code: a fixed set of facts about a thread, compared against values. Every proposal is
       replayed over your whole mailbox and against your own decisions before you see it, and nothing switches

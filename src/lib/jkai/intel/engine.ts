@@ -116,13 +116,21 @@ function messageOf(err: unknown): string {
  *
  * Read from entities, not notes, because every per-space stage works on
  * entities — a space with notes held at the gate and nothing admitted has
- * nothing to resolve. Lists ids only, never row content: the stages it feeds
+ * nothing to resolve. The one addition is a space with an active mailbox, for
+ * the mail-relevance stage; every other stage finds nothing there and moves on. Lists ids only, never row content: the stages it feeds
  * each apply their own space.
  */
 export async function activeSpaces(
   executor: { execute: (query: ReturnType<typeof sql>) => Promise<{ rows: unknown[] }> } = db,
 ): Promise<string[]> {
-  const { rows } = await executor.execute(sql`SELECT DISTINCT space_id FROM intel_entities`);
+  // Plus every principal with an active mailbox: a member whose mail is all
+  // still held has no entities yet, and their queue still needs scoring at
+  // night. Ids only, as above.
+  const { rows } = await executor.execute(sql`
+    SELECT DISTINCT space_id FROM intel_entities
+    UNION
+    SELECT DISTINCT principal_id AS space_id FROM gmail_accounts WHERE status = 'active'
+  `);
   const others = new Set<string>();
   for (const row of rows as Array<{ space_id?: unknown }>) {
     const space = typeof row.space_id === 'string' ? row.space_id : '';
@@ -296,7 +304,7 @@ export async function runIntelSweep(
     stages.push(
       await runStage('gmail', async () => {
         const { ingestGmailThreads, rollingSweepAccounts, NO_GMAIL_ACCOUNT_MESSAGE } = await import('./gmail-ingest');
-        // Every active owner mailbox, not just the most recently touched one.
+        // Every active mailbox — the owner's and each member's — not just the most recently touched one.
         // Each is swept by id — into its own principal's space, which
         // `ingestGmailThreads` takes from the account — and isolated, so one
         // revoked token costs that mailbox's night and nobody else's. Named by
@@ -304,7 +312,7 @@ export async function runIntelSweep(
         const accounts = await rollingSweepAccounts();
         if (!accounts.length) throw new Error(NO_GMAIL_ACCOUNT_MESSAGE);
         return forEachIsolated(accounts, (a) => `account ${a.id}`, async (acct) => {
-          const sweep = await ingestGmailThreads({ mode: 'rolling', accountId: acct.id });
+          const sweep = await ingestGmailThreads({ mode: 'rolling', accountId: acct.id, anyPrincipal: true });
           return {
             accounts: 1,
             threads: sweep.threads,

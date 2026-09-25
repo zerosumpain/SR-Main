@@ -50,14 +50,13 @@
 // codebase and this is not a second one.
 import { createHash } from 'node:crypto';
 import sanitizeHtml from 'sanitize-html';
-import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
+import { desc, eq, sql, type SQL } from 'drizzle-orm';
 import { gmailAccounts, type GmailAccount } from '$lib/db/schema';
 import { pgTextArray } from '$lib/db/sql-array';
 import { beginBatch } from '$lib/workflows/engine-runtime';
 import type { AutoExtractOutcome } from './auto-extract';
 import type { ExtractedEntity, ExtractedRelationship, ExtractionResult } from './extract';
 import { recencyOf, ROLLING_WINDOW_DAYS } from './staleness';
-import { OWNER_SPACE } from './scope';
 import {
   planAttachments,
   attachmentSection,
@@ -740,6 +739,13 @@ export interface GmailIngestOptions {
   limit?: number;
   /** Defaults to the most recently used active account. */
   accountId?: number;
+  /**
+   * Allow `accountId` to name a family member's mailbox. Only the nightly
+   * rolling sweep sets it — it reads each member's mail into that member's own
+   * space. Every owner-facing caller (the sweep panel, a preview) leaves it off,
+   * so neither can reach a member's mailbox by id or by default.
+   */
+  anyPrincipal?: boolean;
   /** 'marked' (the curated sweep) or 'rolling' (12 weeks of everything). */
   mode?: GmailSweepMode;
   /** Rolling only — LLM body extractions this run may pay for. */
@@ -887,17 +893,29 @@ export async function storedHashes(refIds: string[], spaceId: string): Promise<M
 /** Why a sweep with nothing to read fails: the reason is its own fix. */
 export const NO_GMAIL_ACCOUNT_MESSAGE = 'No active Gmail account. Connect one at /admin/connections/gmail.';
 
-export async function resolveAccount(accountId?: number): Promise<GmailAccount> {
+/**
+ * The mailbox a sweep reads. With no id, the OWNER's most recently updated
+ * active account — never a member's, whose token refreshes bump `updated_at`
+ * like anybody's. By id, the owner's too unless `anyPrincipal` is set, which
+ * only the nightly per-account sweep does (see owner-accounts.ts).
+ */
+export async function resolveAccount(accountId?: number, opts: { anyPrincipal?: boolean } = {}): Promise<GmailAccount> {
   const { db } = await import('$lib/db');
+  const { ownerGmailWhere } = await import('$lib/workflows/gmail/owner-accounts');
   if (accountId) {
-    const [acct] = await db.select().from(gmailAccounts).where(eq(gmailAccounts.id, accountId)).limit(1);
+    const byId = eq(gmailAccounts.id, accountId);
+    const [acct] = await db
+      .select()
+      .from(gmailAccounts)
+      .where(opts.anyPrincipal ? byId : ownerGmailWhere(byId))
+      .limit(1);
     if (!acct) throw new Error(`Gmail account ${accountId} not found`);
     return acct;
   }
   const [acct] = await db
     .select()
     .from(gmailAccounts)
-    .where(eq(gmailAccounts.status, 'active'))
+    .where(ownerGmailWhere(eq(gmailAccounts.status, 'active')))
     .orderBy(desc(gmailAccounts.updatedAt))
     .limit(1);
   if (!acct) throw new Error(NO_GMAIL_ACCOUNT_MESSAGE);
@@ -915,12 +933,15 @@ export async function resolveAccount(accountId?: number): Promise<GmailAccount> 
  * says it needs re-authenticating, and a nightly failure would only repeat that
  * every night until someone did.
  *
- * The owner filter is PR A2's: a member's mailbox is theirs, and their sweep
- * waits for PR B, which admits members and drops this clause. Exported as a
- * predicate so a test can read its shape without a database.
+ * Every principal's, since PR B: a family member's mailbox is swept too, into
+ * that member's own space (`ingestGmailThreads` takes the space from the
+ * account). The sweep is gated, so a member's mail costs no model call until
+ * they admit a thread at /jkai/intel/mail. A demoted member's accounts are
+ * `disabled` (see $lib/server/members), which is what takes them out of this.
+ * Exported as a predicate so a test can read its shape without a database.
  */
 export function rollingAccountsWhere(): SQL {
-  return and(eq(gmailAccounts.status, 'active'), eq(gmailAccounts.principalId, OWNER_SPACE))!;
+  return eq(gmailAccounts.status, 'active');
 }
 
 /**
@@ -1248,7 +1269,7 @@ export interface GmailSweepPreview {
 
 /** What a sweep WOULD touch, without extracting anything. No LLM calls. */
 export async function previewGmailSweep(opts: GmailIngestOptions = {}): Promise<GmailSweepPreview> {
-  const acct = await resolveAccount(opts.accountId);
+  const acct = await resolveAccount(opts.accountId, { anyPrincipal: opts.anyPrincipal });
   const mode: GmailSweepMode = opts.mode === 'rolling' ? 'rolling' : 'marked';
   const fallbackQuery = queryForMode(mode);
   const query = (opts.query ?? fallbackQuery).trim() || fallbackQuery;
@@ -1328,7 +1349,7 @@ export async function previewGmailSweep(opts: GmailIngestOptions = {}): Promise<
  * own. `metadata.channel = 'gmail'` distinguishes these notes meanwhile.
  */
 export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise<GmailIngestResult> {
-  const acct = await resolveAccount(opts.accountId);
+  const acct = await resolveAccount(opts.accountId, { anyPrincipal: opts.anyPrincipal });
   if (acct.status === 'auth_expired') {
     throw new Error(`Gmail account ${acct.email} needs re-authentication at /admin/connections/gmail.`);
   }

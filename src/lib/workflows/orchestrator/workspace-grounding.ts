@@ -25,6 +25,7 @@ import {
   homeAssistantConfig,
 } from '$lib/db/schema';
 import { eq, desc, ne, asc } from 'drizzle-orm';
+import { ownerGmailWhere } from '$lib/workflows/gmail/owner-accounts';
 
 const MAX_HA_ENTITIES = 50;
 const MAX_BLOG_POSTS = 50;
@@ -55,7 +56,7 @@ async function buildGmailAccountsSection(): Promise<string | null> {
         status: gmailAccounts.status,
       })
       .from(gmailAccounts)
-      .where(eq(gmailAccounts.status, 'active'))
+      .where(ownerGmailWhere(eq(gmailAccounts.status, 'active')))
       .orderBy(asc(gmailAccounts.id));
 
     if (rows.length === 0) return null;

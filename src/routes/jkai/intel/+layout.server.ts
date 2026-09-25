@@ -7,6 +7,7 @@
 import type { LayoutServerLoad } from './$types';
 import { db } from '$lib/db';
 import {
+  gmailAccounts,
   intelAlerts,
   intelDossiers,
   intelEntities,
@@ -14,14 +15,24 @@ import {
   intelTimelineEvents,
 } from '$lib/db/schema';
 import { and, count, eq, isNull, sql } from 'drizzle-orm';
-import { spaceIn } from '$lib/jkai/intel/scope';
+import { spaceIn, writeSpace } from '$lib/jkai/intel/scope';
 import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
+import { viewerOf } from '$lib/server/viewer';
 
 // Every badge counts the request's scope: a count is still a disclosure (how
 // much mail, how many dossiers) and the nav is on every intel page. The one
 // exception is `proposedTypes`, which counts the shared type vocabulary.
 export const load: LayoutServerLoad = async (event) => {
   const scope = await resolveRequestScope(event);
+  const member = (await viewerOf(event)).kind === 'member';
+  // A member's own mailboxes, for the connect panel on /jkai/intel. Addresses
+  // and status only — never a token, and never anybody else's row.
+  const memberGmail = member
+    ? await db
+        .select({ email: gmailAccounts.email, status: gmailAccounts.status })
+        .from(gmailAccounts)
+        .where(eq(gmailAccounts.principalId, writeSpace(scope)))
+    : [];
   const [entities, notes, pending, alerts, dossiers, events, watched, heldMail] = await Promise.all([
     db
       .select({ n: count() })
@@ -93,8 +104,11 @@ export const load: LayoutServerLoad = async (event) => {
   `).then((r) => r.rows as Array<{ n: number }>);
 
   return {
+    member,
+    memberGmail,
     intelCounts: {
-      proposedTypes: Number(proposedTypes?.n ?? 0),
+      // The type vocabulary is shared and its triage is the owner's.
+      proposedTypes: member ? 0 : Number(proposedTypes?.n ?? 0),
       entities: entities[0]?.n ?? 0,
       notes: notes[0]?.n ?? 0,
       pending: pending[0]?.n ?? 0,

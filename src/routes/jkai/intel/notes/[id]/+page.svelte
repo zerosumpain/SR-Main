@@ -4,6 +4,9 @@
 
   let { data } = $props();
 
+  /** A member reads a note; retry and delete are owner-only endpoints. */
+  const member = $derived(data.member === true);
+
   let noteStatus = $state(data.note.status);
   let retrying = $state(false);
   let deleting = $state(false);
@@ -19,6 +22,7 @@
   const badge = $derived(statusBadge[noteStatus] ?? statusBadge.pending);
 
   async function retryProcessing() {
+    if (member) return;
     retrying = true;
     noteStatus = 'processing';
     try {
@@ -46,6 +50,7 @@
   }
 
   async function deleteNote() {
+    if (member) return;
     const ok = confirm(
       'Delete this note? Any entities and relationships that came only from this note will also be removed.',
     );
@@ -70,7 +75,7 @@
   <div class="flex items-start justify-between mb-4">
     <h2 class="text-xl font-bold">{data.note.title ?? 'Untitled Note'}</h2>
     <div class="flex items-center gap-2">
-      {#if noteStatus === 'failed' || noteStatus === 'pending'}
+      {#if !member && (noteStatus === 'failed' || noteStatus === 'pending')}
         <button
           onclick={retryProcessing}
           disabled={retrying}
@@ -79,6 +84,7 @@
         >{retrying ? 'Retrying...' : 'Retry'}</button>
       {/if}
       <span class="px-2 py-1 rounded text-xs border" style="{badge.bg} {badge.text} border-color: var(--line-strong);">{noteStatus}</span>
+      {#if !member}
       <button
         onclick={deleteNote}
         disabled={deleting}
@@ -86,6 +92,7 @@
         style="background: transparent; color: var(--text-secondary); border-color: var(--line-strong);"
         aria-label="Delete note"
       >{deleting ? 'Deleting...' : 'Delete'}</button>
+      {/if}
     </div>
   </div>
   {#if deleteError}

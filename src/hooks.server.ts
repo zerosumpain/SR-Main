@@ -18,10 +18,11 @@ import { startOrphanSweep } from '$lib/jkai/media/sweep';
 // Side-effect import: every integration adapter registers itself on load.
 // The barrel is maintained by the node-builder codegen.
 import '$lib/integrations/adapters';
-import { isPublicPath, isGuestAllowedPath } from '$lib/auth';
+import { isPublicPath, isGuestAllowedPath, isMemberAllowedRoute } from '$lib/auth';
 import { requestHost } from '$lib/request-host';
 import { resolveAdminRedirect } from '$lib/components/admin/admin-nav';
 import { isEmailAllowedToSignIn, isOwnerEmail } from '$lib/server/access';
+import { viewerOf } from '$lib/server/viewer';
 import { rateLimit } from '$lib/server/rate-limit';
 import { nativeDevice } from '$lib/server/native-gate';
 import { hasMaintenanceSecret } from '$lib/server/maintenance-auth';
@@ -786,7 +787,11 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     // guests existed a session implied owner; introducing guests broke that
     // equivalence for every authed API, so gate them all here. (The homeserv LAN
     // bypass returns earlier still, so local access on the box is unaffected.)
-    if (!isOwnerEmail(session.user.email) && !isGuestAllowedPath(pathname)) {
+    if (
+      !isOwnerEmail(session.user.email) &&
+      !isGuestAllowedPath(pathname) &&
+      !(await memberMayReach(event))
+    ) {
       return new Response(JSON.stringify({ error: 'Forbidden' }), {
         status: 403,
         headers: { 'Content-Type': 'application/json' },
@@ -833,12 +838,34 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   // (isGuestAllowedPath — empty by default). /jkai, /admin, /live, /deepdive, the
   // canvas, etc. are all owner-only. The homeserv LAN bypass above returns
   // earlier, so local access on the box is unaffected.
-  if (!isOwnerEmail(session.user.email) && !isGuestAllowedPath(pathname)) {
+  if (
+    !isOwnerEmail(session.user.email) &&
+    !isGuestAllowedPath(pathname) &&
+    !(await memberMayReach(event))
+  ) {
     throw redirect(303, '/');
   }
 
   return resolve(event);
 };
+
+/**
+ * A member (see $lib/server/members) may reach the exact routes and verbs in
+ * `isMemberAllowedRoute` and nothing else. The route is checked first, so a
+ * guest's request for anything outside that list costs no database read. What
+ * the member then SEES is `resolveRequestScope`'s job, not this gate's.
+ */
+async function memberMayReach(event: Parameters<Handle>[0]['event']): Promise<boolean> {
+  if (!isMemberAllowedRoute(event.route.id, event.request.method)) return false;
+  try {
+    return (await viewerOf(event)).kind === 'member';
+  } catch (err) {
+    // Fail closed: a member lookup that cannot reach the database refuses the
+    // request, it does not wave it through.
+    console.error('[auth] member lookup failed:', err);
+    return false;
+  }
+}
 
 const securityHeadersHandle: Handle = async ({ event, resolve }) => {
   let response: Response;

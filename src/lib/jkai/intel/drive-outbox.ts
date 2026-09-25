@@ -1,6 +1,6 @@
 import { and, asc, eq, isNull, lt, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { driveIntelOutbox } from '$lib/db/schema';
+import { driveIntelOutbox, workflowFiles } from '$lib/db/schema';
 import { OWNER_SPACE } from './scope';
 
 /**
@@ -56,6 +56,14 @@ export async function enqueueDriveIntel(
   await db.insert(driveIntelOutbox).values({ kind, ref, payload: payload ?? null });
 }
 
+/** The space a Drive file's intel belongs in — the owner's unless its folder says household. */
+async function driveFileSpace(fileId: string): Promise<string> {
+  const [file] = await db.select({ name: workflowFiles.name }).from(workflowFiles).where(eq(workflowFiles.id, fileId)).limit(1);
+  if (!file) return OWNER_SPACE;
+  const { policyForFileName } = await import('./source-policy.server');
+  return (await policyForFileName(file.name)).spaceId;
+}
+
 async function handle(row: { kind: string; ref: string; payload: unknown }): Promise<unknown> {
   const payload = (row.payload ?? {}) as Record<string, unknown>;
   if (row.kind === 'file-deleted') {
@@ -74,10 +82,12 @@ async function handle(row: { kind: string; ref: string; payload: unknown }): Pro
     const { queueIntelExtraction } = await import('./auto-extract');
     // The payload carries what queueIntelExtraction needs; Drive built it from
     // the same row it just wrote, so it does not have to be re-derived here.
-    // Except the space: Drive is the owner's, and a payload written by the
-    // Drive app has never carried one — without it the derived-note lookup
-    // matches nothing and every re-index would mint a fresh note.
-    queueIntelExtraction({ ...payload, spaceId: OWNER_SPACE } as never);
+    // Except the space: a payload written by the Drive app has never carried
+    // one — without it the derived-note lookup matches nothing and every
+    // re-index would mint a fresh note. Drive is the owner's, and a folder may
+    // route its files to household (./source-space); the file's current name
+    // says which.
+    queueIntelExtraction({ ...payload, spaceId: await driveFileSpace(row.ref) } as never);
     return null;
   }
   throw new Error(`unknown drive-intel kind: ${row.kind}`);
