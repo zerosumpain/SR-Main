@@ -109,7 +109,7 @@
     "@codemirror/view": "^6.41.0",
     "@hapi/boom": "^9.1.4",
     "@mozilla/readability": "^0.6.0",
-    "@openai/codex-sdk": "^0.147.0",
+    "@openai/codex-sdk": "^0.157.0",
     "@sveltejs/adapter-node": "^5.5.4",
     "@tiptap/core": "^3.30.5",
     "@tiptap/extension-image": "^3.30.5",
