@@ -25,6 +25,7 @@ import { and, gte, inArray } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { appleHealthMetrics, whoopCycles, whoopRecovery, whoopSleep } from '$lib/db/schema';
 import { getNativeHealthHub } from '$lib/server/native-health-hub';
+import { getNativeActivities } from '$lib/server/native-trails';
 import type { HubDigest } from '$lib/server/health-hub-contract';
 import { aggregate, appleValue, msToMinutes, strainValue, type Aggregation } from '../features/normalise';
 import { appleLocalDay, localDay } from '../features/build';
@@ -336,4 +337,31 @@ export function healthSeriesDescription(): string {
     `Apple Watch / HealthKit: ${Object.keys(APPLE_SERIES).join(', ')}. ` +
     'Readings outside plausible bounds are dropped and counted, never shown.'
   );
+}
+
+/**
+ * `activities` — the list the phone shows, workouts and the app's own
+ * background outings together. It replaces the household GPS trail as the
+ * engine's one view of location (2026-09-25): list rows carry no coordinates,
+ * so nothing here can place him on a map, only say he walked 4 km at 07:40.
+ */
+export async function activitiesTool(args: Record<string, unknown>): Promise<string> {
+  const n = typeof args.limit === 'number' && Number.isFinite(args.limit) ? Math.round(args.limit) : 30;
+  const limit = Math.min(60, Math.max(5, n));
+  const { activities } = await getNativeActivities({ limit, before: null });
+  if (!activities.length) return 'No activities recorded.';
+  return activities
+    .map((a) => {
+      const parts = [
+        a.startDateLocal,
+        a.activityType,
+        a.source === 'companion' ? 'caught by the app' : a.source ?? '',
+        a.distanceM != null ? `${(a.distanceM / 1000).toFixed(1)} km` : '',
+        `${Math.round(a.durationS / 60)} min`,
+        a.paceSPerKm != null ? `${Math.floor(a.paceSPerKm / 60)}:${String(Math.round(a.paceSPerKm % 60)).padStart(2, '0')}/km` : '',
+        a.avgHeartrate != null ? `HR ${Math.round(a.avgHeartrate)}` : '',
+      ].filter(Boolean);
+      return parts.join(' · ');
+    })
+    .join('\n');
 }

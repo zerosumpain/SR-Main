@@ -155,12 +155,21 @@ places/naming/family rooms, per-person feature building.
 
 Tables are **dumped to `/opt/strange-rambling-svelte/backups/` then dropped**.
 
-### Location (D1)
+### Location (D1) — revised 2026-09-25 evening
 
-`$lib/presence/` takes `observe` + trail + prune; Landgrab imports from there.
-Poll 10 min (was 2). Places, clustering, naming, geocoder and the family room
-leave daydream. `/api/daydream/observe` keeps its path as an alias (auth
-exemption is exact-path).
+The move-out assumed Landgrab still read the trail. **It does not exist**:
+Landgrab was pruned from Main in #871 (2026-09-13); `/projects/landgrab` 404s
+and its two heartbeat rows (`geo-territory`, `landgrab-weekly`) have skipped
+hourly with "no handler registered" since. Nothing outside daydream reads
+`daydream_trail`. So there is nothing to move it FOR:
+
+- `daydream-observe` (5 people every 2 min) and `daydream-places` are paused,
+  as are the two orphan Landgrab rows. Tables stay until P4 dumps them.
+- The loop's one view of location is the `activities` tool — the phone's own
+  activity list (Apple workouts + the app's background outings, via SR-Health's
+  read-through of the companion), with NO coordinates. `ha_get_history` can
+  still read a person entity if a question needs a zone.
+- `$lib/presence` is not built.
 
 ## Phases — each a PR, each live before the next
 
@@ -169,7 +178,7 @@ exemption is exact-path).
 | **P0** | **DONE 2026-09-25 19:0x UTC** — paused (status `paused`, seed is `onConflictDoNothing` so a deploy won't revive them): suggest, hypothesise, sweep, explore, rulesmith, appetite, offers, spend, weekly. `signals` kept (free; ponder's house cards read it until P1). | pulses stop; ponder/compose unaffected |
 | **P1** | `daydream-think` + questions + tool sets + `correlate` + health tools + `daydream` notify category + `subject` on thoughts. Runs beside ponder. | first live cycle writes a cited note; lands in the phone queue |
 | **P2** | Surfaces: one-page feed, native Today section + feedback endpoint, iOS Today card + Health tab strip, briefing re-point. Ponder + compose disabled. | screenshot of feed; iOS CI screenshot of Today; `/api/native/today` carries `daydream` |
-| **P3** | Location out: `$lib/presence`, 10-min poll, Landgrab re-pointed; places/family rooms removed. | Landgrab page renders; trail still writes |
+| **P3** | `activities` tool; observe/places + orphan Landgrab rows paused (Landgrab is gone — see D1 revised). | a cycle can cite an `activities` card; no trail writes |
 | **P4** | Deletion: modules, jobs, rooms, API actions; dump + drop tables; redirects. | build + gate green; room URLs 308; line count |
 
 ## Success, measured 30 days after P2
