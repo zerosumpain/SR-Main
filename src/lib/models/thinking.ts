@@ -80,7 +80,6 @@ export const CODEX_EFFORT_CEILING: Record<string, ThinkingLevel> = {
   'gpt-5.6-terra': 'max',
   'gpt-5.6-luna': 'max',
   'gpt-5.5': 'xhigh',
-  'gpt-5.3-codex-spark': 'xhigh',
 };
 
 /**
