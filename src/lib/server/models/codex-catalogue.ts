@@ -78,7 +78,9 @@ export interface CodexModel {
 
 /**
  * Source: the account's own catalogue, `GET
- * chatgpt.com/backend-api/codex/models?client_version=<v>`, read 2026-09-05.
+ * chatgpt.com/backend-api/codex/models?client_version=<v>`, read 2026-09-25
+ * (GPT-6 Sol and Luna added; there is no GPT-6 Terra — the API refuses
+ * `gpt-6-terra` on a ChatGPT account).
  * Re-check when a GPT generation ships — nothing in the code detects a stale
  * entry, a retired slug simply fails at call time with the bridge surfacing
  * Codex's own error.
@@ -100,20 +102,30 @@ export const CODEX_MODELS: CodexModel[] = [
       'GPT-6 flagship, and the site default. State of the art on coding, computer use, research and professional work; 272k context and the deepest reasoning ladder Codex offers.',
   },
   {
+    slug: 'gpt-6-sol',
+    name: 'GPT-6 Sol',
+    description: 'GPT-6 workhorse for coding and everyday work. Lighter on quota than Astra.',
+  },
+  {
+    slug: 'gpt-6-luna',
+    name: 'GPT-6 Luna',
+    description: 'Fast GPT-6 for easier tasks, at the lowest quota cost of the generation.',
+  },
+  {
     slug: 'gpt-5.6-sol',
     name: 'GPT-5.6 Sol',
     description:
-      'Flagship GPT-5.6 — strongest on complex coding, computer use, research and cybersecurity. Slowest and heaviest on quota.',
+      'Previous-generation flagship — strong on complex coding, computer use, research and cybersecurity. Slowest and heaviest on quota.',
   },
   {
     slug: 'gpt-5.6-terra',
     name: 'GPT-5.6 Terra',
-    description: 'Balanced GPT-5.6 for everyday work. The Codex default.',
+    description: 'Previous-generation balanced model for straightforward work. GPT-6 has no Terra; Sol covers it.',
   },
   {
     slug: 'gpt-5.6-luna',
     name: 'GPT-5.6 Luna',
-    description: 'Fast GPT-5.6 — strong capability at the lowest quota cost. Best fit for background site tasks.',
+    description: 'Previous-generation fast model — strong capability at low quota cost.',
   },
   {
     slug: 'gpt-5.3-codex-spark',

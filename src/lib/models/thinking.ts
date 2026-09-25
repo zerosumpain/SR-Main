@@ -74,6 +74,8 @@ const CODEX_LEVELS: ThinkingLevel[] = ['low', 'medium', 'high', 'xhigh', 'max'];
  */
 export const CODEX_EFFORT_CEILING: Record<string, ThinkingLevel> = {
   'gpt-6-astra': 'max',
+  'gpt-6-sol': 'max',
+  'gpt-6-luna': 'max',
   'gpt-5.6-sol': 'max',
   'gpt-5.6-terra': 'max',
   'gpt-5.6-luna': 'max',
