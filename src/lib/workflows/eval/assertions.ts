@@ -20,6 +20,7 @@ import type {
   WorkflowEdgeDef,
   JsonSchema,
 } from '$lib/workflows/types';
+import { getPath as resolvePath } from '../expressions';
 
 /**
  * The minimal shape an eval scores. Mirrors the `GeneratedWorkflow` returned by
@@ -278,17 +279,6 @@ export function memoryLiesBetween(
 // ──────────────────────────────────────────────────────────────────────────
 
 /** Mirror of dedupe.ts `resolvePath`. */
-function resolvePath(obj: unknown, path: string): unknown {
-  if (!path) return undefined;
-  const parts = path.split('.');
-  let current: unknown = obj;
-  for (const part of parts) {
-    if (current === null || current === undefined || typeof current !== 'object') return undefined;
-    current = (current as Record<string, unknown>)[part];
-  }
-  return current;
-}
-
 /** Mirror of dedupe.ts `extractId` (idPath, then url→id fallback, then primitive). */
 function extractId(item: unknown, idPath: string): unknown {
   if (idPath) return resolvePath(item, idPath);

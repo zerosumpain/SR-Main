@@ -1,5 +1,6 @@
 import type { WorkflowNodeDef, WorkflowEdgeDef } from '../types';
 import { getPatternsForOrchestrator, getGoldenExemplarsForOrchestrator } from './patterns';
+import { EXPRESSION_SYNTAX } from '../expressions';
 
 export function buildToolUseSystemPrompt(
   nodeGrounding: string,
@@ -89,7 +90,7 @@ ${getPatternsForOrchestrator()}
 
 ## Worked Examples (request → concrete graph)
 
-These are fully worked translations from a user request to a real node graph — real node types, the load-bearing config on each node (with literal \`{{input.X}}\` / \`{{trigger.output.X}}\` data references), and exact edge wiring including conditional handles. Mirror the closest one when the user's request resembles it; don't copy node types that aren't relevant.
+These are fully worked translations from a user request to a real node graph — real node types, the load-bearing config on each node (with literal \`{{input.X}}\` / \`{{trigger.X}}\` / \`{{nodes.<id>.X}}\` data references), and exact edge wiring including conditional handles. Mirror the closest one when the user's request resembles it; don't copy node types that aren't relevant.
 
 ${getGoldenExemplarsForOrchestrator()}
 
@@ -97,7 +98,7 @@ ${getGoldenExemplarsForOrchestrator()}
 
 These mistakes show up over and over. Avoid them and you'll save the user a self-healing round.
 
-- **Templates use \`{{...}}\` with exactly four namespaces — that's the entire syntax.** \`{{input.path}}\` (a field from upstream node output), \`{{state.KEY}}\` (a value the engine reads from this workflow's persistent store before the node runs — e.g. a cursor a \`data-store\`/\`dedupe\` node saved, like \`{{state.last_seen_id}}\`), \`{{today}}\` (today's date, en-GB long — use this in LLM prompts instead of hardcoding a date), and \`{{now}}\` (ISO timestamp). No \`{% %}\`, no \`{{#if}}\`, no \`{{!comment}}\`, no Jinja, no Handlebars helpers. If you need conditionals or loops, use a \`code-execute\` or \`transform\` node instead.
+- **Template syntax — this is all of it.** ${EXPRESSION_SYNTAX} \`{{state.KEY}}\` reads what a \`data-store\`/\`dedupe\` node saved; \`{{today}}\` (en-GB long) belongs in LLM prompts instead of a hardcoded date. When two branches feed one node, read each with \`{{nodes.<slug>.x}}\` rather than \`{{input.x}}\` (the flat merge keeps only the last). The node must be upstream — the linter rejects anything else. For conditionals or loops use a \`code-execute\` or \`transform\` node (they see branches as \`input.$from.<id>\`).
 - **Dedup cursor pattern:** for a recurring "only act on new items" workflow, store a cursor with \`data-store\` (e.g. \`set\` key \`last_seen_id\`) and reference it downstream as \`{{state.last_seen_id}}\`; put \`{{today}}\` in the summary/LLM prompt so the model never invents the date.
 - **Reference paths from the upstream schema literally.** When \`connect_nodes\` returns the upstream schema, every \`{{input.X}}\` you write must match a path it lists. Don't shorten \`input.body.data\` to \`input.data\` and don't invent fields that aren't there.
 - **Conditional nodes need \`sourceHandle\` on the outgoing edge.** Always specify \`"true"\` or \`"false"\` when calling \`connect_nodes\` from a conditional. Without a handle, the engine doesn't know which branch you meant.

@@ -1,75 +1,38 @@
 // src/lib/workflows/nodes/template.ts
+//
+// Per-executor interpolation, now a thin shim over `../expressions`. Inside an
+// engine run the config has ALREADY been resolved once (engine-node-runner
+// marks the input), so these return the text untouched — resolving again would
+// substitute into upstream DATA that merely contains braces. Callers outside the
+// engine (node-call tool, llm-agent tool nodes, the scraper endpoint) still get
+// `{{input.*}}` resolved here, with the same syntax.
+import { resolveConfig, toText } from '../expressions';
 
-/**
- * Interpolate {{input.field.path}} references in a template string.
- * Resolves dot-paths into the input object. Non-string values are JSON-serialised.
- * Unknown paths produce empty string.
- */
-export function interpolateTemplate(template: string, input: Record<string, unknown>): string {
-  return template.replace(/\{\{input\.([^}]+)\}\}/g, (_match, path: string) => {
-    const value = resolvePath(input, path);
-    if (value === undefined || value === null) return '';
-    if (typeof value === 'string') return value;
-    return JSON.stringify(value);
-  });
+/** input object → (resolved text → references it could not find). */
+const engineResolved = new WeakMap<object, Map<string, string[]>>();
+
+/** Called by the engine once it has resolved a node's config against `input`. */
+export function markEngineResolved(input: object, missingByText: Map<string, string[]>): void {
+  engineResolved.set(input, missingByText);
 }
 
 /**
- * Strict interpolation that tracks unresolved paths.
- * A path is "missing" when the key doesn't exist in the input tree.
- * null values are treated as present-but-empty (not missing).
+ * Strict interpolation that tracks unresolved references. A reference is
+ * "missing" when a key doesn't exist; a null value is present-but-empty.
  */
 export function interpolateTemplateStrict(
-  template: string,
+  template: unknown,
   input: Record<string, unknown>,
 ): { result: string; missingPaths: string[] } {
-  const missingPaths: string[] = [];
-  const result = template.replace(/\{\{input\.([^}]+)\}\}/g, (_match, path: string) => {
-    const resolved = resolvePathWithPresence(input, path);
-    if (!resolved.exists) {
-      missingPaths.push(`input.${path}`);
-      return '';
-    }
-    const value = resolved.value;
-    if (value === undefined || value === null) return '';
-    if (typeof value === 'string') return value;
-    return JSON.stringify(value);
-  });
-  return { result, missingPaths };
+  const text = toText(template);
+  const done = engineResolved.get(input);
+  if (done) return { result: text, missingPaths: done.get(text) ?? [] };
+  if (!text.includes('{{')) return { result: text, missingPaths: [] };
+  const r = resolveConfig({ t: text }, { input });
+  return { result: r.config.t as string, missingPaths: r.missingByText.get(r.config.t as string) ?? [] };
 }
 
-function resolvePath(obj: Record<string, unknown>, path: string): unknown {
-  const parts = path.split('.');
-  let current: unknown = obj;
-  for (const part of parts) {
-    if (current === null || current === undefined || typeof current !== 'object') return undefined;
-    current = (current as Record<string, unknown>)[part];
-  }
-  return current;
-}
-
-/**
- * Resolve a dot-path into an arbitrary value, tracking presence.
- * A path is "present" only when every segment exists; a null leaf counts as
- * present (present-but-empty), a missing segment does not. Exported so the
- * engine-level template resolver and the author-time verifier can share the
- * exact same presence semantics as `{{input.*}}` interpolation.
- */
-export function resolvePathWithPresence(
-  obj: unknown,
-  path: string,
-): { exists: boolean; value: unknown } {
-  const parts = path.split('.');
-  let current: unknown = obj;
-  for (let i = 0; i < parts.length; i++) {
-    if (current === null || current === undefined || typeof current !== 'object') {
-      return { exists: false, value: undefined };
-    }
-    const rec = current as Record<string, unknown>;
-    if (!(parts[i] in rec)) {
-      return { exists: false, value: undefined };
-    }
-    current = rec[parts[i]];
-  }
-  return { exists: true, value: current };
+/** Interpolate `{{input.path}}` (and friends); unknown paths become ''. */
+export function interpolateTemplate(template: unknown, input: Record<string, unknown>): string {
+  return interpolateTemplateStrict(template, input).result;
 }

@@ -14,8 +14,8 @@
 //   {{input.*}}                          → left untouched here; each executor
 //                                          resolves it against its merged input.
 
-import type { WorkflowNodeDef } from './types';
-import { resolvePathWithPresence } from './nodes/template';
+import type { WorkflowNodeDef } from '$lib/workflows/types';
+import { resolvePathWithPresence } from './legacy-template';
 
 /** Matches a single `{{ ... }}` token, capturing the (untrimmed) inner text. */
 const TOKEN_RE = /\{\{\s*([^}]+?)\s*\}\}/g;

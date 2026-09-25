@@ -118,6 +118,9 @@ export interface NodeDefinition {
    * superseded by per-operation splits.
    */
   hidden?: boolean;
+  /** Config keys holding code/expressions the executor evaluates itself —
+   *  the engine's template resolver copies them through untouched. */
+  rawConfigKeys?: readonly string[];
 }
 
 export interface NodeResult {

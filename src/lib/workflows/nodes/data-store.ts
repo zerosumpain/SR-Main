@@ -3,6 +3,7 @@ import { interpolateTemplate } from './template';
 import { db } from '$lib/db';
 import { workflowDataStore } from '$lib/db/schema';
 import { and, eq, sql, type SQL } from 'drizzle-orm';
+import { getPath as resolvePath } from '../expressions';
 
 export { dataStoreDef } from './data-store.def';
 
@@ -253,16 +254,6 @@ export async function deleteStoreKey(workflowId: string, key: string): Promise<b
   `);
   const rows = (res as { rows?: unknown[] }).rows ?? [];
   return rows.length > 0;
-}
-
-function resolvePath(obj: Record<string, unknown>, path: string): unknown {
-  const parts = path.split('.');
-  let current: unknown = obj;
-  for (const part of parts) {
-    if (current === null || current === undefined || typeof current !== 'object') return undefined;
-    current = (current as Record<string, unknown>)[part];
-  }
-  return current;
 }
 
 /** Extract the value to store/check from input, honouring `valuePath`. */

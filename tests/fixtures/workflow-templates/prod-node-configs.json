@@ -1,0 +1,477 @@
+{
+ "source": "production workflow_nodes whose config contains a template (read-only SELECT, 2026-09-25). Text outside template tokens redacted to x/0; labels, ids and non-template values dropped.",
+ "nodes": [
+  {
+   "n": 1,
+   "type": "whatsapp",
+   "config": {
+    "message": "{{input.response}}"
+   }
+  },
+  {
+   "n": 2,
+   "type": "llm-call",
+   "config": {
+    "userPrompt": "xxxx xxx xxx xxxxxx xx xxxx xxxx xxxxxxx:\n\n{{input.results}}"
+   }
+  },
+  {
+   "n": 3,
+   "type": "whatsapp",
+   "config": {
+    "message": "xxxxxx xxxxx — xxxx 00 xxx\n• xxx {{input.avgMph}} xxx ({{input.avgKnots}} xx)\n• {{input.count}} xxxxxxx"
+   }
+  },
+  {
+   "n": 4,
+   "type": "database",
+   "config": {
+    "key": "{{input.staleIds.0}}"
+   }
+  },
+  {
+   "n": 5,
+   "type": "database",
+   "config": {
+    "data": "{{input.windowJson}}"
+   }
+  },
+  {
+   "n": 6,
+   "type": "whatsapp",
+   "config": {
+    "message": "{{input.response}}"
+   }
+  },
+  {
+   "n": 7,
+   "type": "whatsapp",
+   "config": {
+    "message": "xxxx xxxxx + xxxxxxxxx xxxxxxxx xxxxx:\n\n{{input.response}}"
+   }
+  },
+  {
+   "n": 8,
+   "type": "llm-call",
+   "config": {
+    "userPrompt": "xxxxx xxx xxxxx xxxxxxxxxx, xxxxxxxxxx xxxxxx xxxxxxxxx xxxxxxxx xx ‘xxxx xxxxx’ xx xxxxxxxxx. xxxxxx xxxx xxxxx xxxxx:\\x\\x{{input.items}}"
+   }
+  },
+  {
+   "n": 9,
+   "type": "llm-call",
+   "config": {
+    "userPrompt": "xxx xxxx x xxxx xx xxxxxxxxx xxx xxxxxxxx (xxxxxxx xxxxxxxx xxxxxxx xxxxxxxxxx xxxxxxxxxx xxxx - xx xxx xxxxxx-xxxxx xxxx).\n\nxxxxxx xxxxx: {{input.query}}\n\nxxx xxxxxxxx (xxxx):\n{{input.items}}\n\nxxxxx xxx xxxxxxxx xxx, xxxxx xxxx xxxx xxxxx xxx xxxxxxxx.",
+    "systemPrompt": "xxx xxx xx xxxxxxxxxxxx xxxxxxx xxxxxxxxx x xxxxx xxxxxxx xxxxxxxx xxx xxxx xxxxx, xxxxx xxxx xxxxxxx xx xxx xx xxxxxxxxxx xxx xxxxxxxxx.\n\nxxxxx:\n- xx xxxxxx xxx xxxxxxx — xx xxxxxxx\n- xxxxx xx xxxxxxxxx xxx, xxxxxxxxxx xxxxxxxxxxxx\n- xxxx xxxxxxx xxxxx, xxxxxx xx, xxx xxxxxxxxxx xxxxxxxx\n- xx xxxxxxxx xxxxxxxxxx\n- xxxx xxxxxxxx xxxxxxxx xxxxxxxx xx xxx xxxx xxxxxxxx xx xxxxxxx xxxxxxxxxxxxxx\n\nxxxxxx:\n📊 xxxxxxx xxxxxxxxxxxx — {{today}}\n\n• [0-0 xxxxxx xxxxxx xx xxx xxxx xxxxxxxxx xxxx]\n\n🔑 xxx xxxxxxxx\n[xxx xxxxxxxx]\n\nxxxx xx xxxxx 000 xxxxx. xxx xxxxxxxxxx."
+   }
+  },
+  {
+   "n": 10,
+   "type": "whatsapp",
+   "config": {
+    "message": "{{input.response}}"
+   }
+  },
+  {
+   "n": 11,
+   "type": "whatsapp",
+   "config": {
+    "message": "📅 xxx xxxxxxxx xxxxx:\n{{input.summary}}"
+   }
+  },
+  {
+   "n": 12,
+   "type": "whatsapp",
+   "config": {
+    "message": "xxxxxxx xx xxxxxxxx! xxx xx xxxxxxx xxxxx xx xxx xx xxx xxxxxxx xxxxxx xx {{input.value.eta}}"
+   }
+  },
+  {
+   "n": 13,
+   "type": "whatsapp",
+   "config": {
+    "message": "{{input.response}}"
+   }
+  },
+  {
+   "n": 14,
+   "type": "llm-call",
+   "config": {
+    "userPrompt": "xxxxxxx xxxxx xxx xxxxxxxx xxxxxx xxxx xxx xxxxxx'x xxxxxxx xxx xxxxxxxxx xxx xxxxxxxxx xx xxxxxx xx xx xx xxxxxxx xx xxx xxxxx xxxxxxxx.\n\nxxx xxxxxx:\n{{input.result.newEventsText}}\n\nxxxxxx xxxxxxxxx:\n{{input.result.familyText}}\n\nxxxxx:\n- xx xx xxxxx xxx x xxxxxxxx xxx x xxxxxx xxxxxx xx xxxxxx (xxxxxx ~0xx), xxx xxx xxx xxxx xxx xxxxxxxxx\n- xx xx xxxxx xxx xx xxxxxxxx, xxxx xxxx xxx xxxxx xxxxx xxx xxxx\n- xx xxxxxx xx xxxx xxx xxxxx xxxxxxxx, xxxx xxx xxxxxx xxxxx xxx xxxx xxx xx xxxxx\n- xxxxxxxxx xxxxxx xxxxxxxxxxx, xxx'x xxxxx xxxxxxxxxxxx\n- xx xxx xxx'x xxxxxxxxx xxxxxxxxx, xxx xx"
+   }
+  },
+  {
+   "n": 15,
+   "type": "intel-query",
+   "config": {
+    "query": "{{input.intelQuery}}"
+   }
+  },
+  {
+   "n": 16,
+   "type": "home-assistant",
+   "config": {
+    "template": "{% xxx x xx xxxxxx.xxxxxx %}{\"xx\":\"{{ s.entity_id }}\",\"xxxx\":\"{{ s.name }}\",\"xxxxx\":\"{{ s.state }}\",\"xxx\":{{ s.attributes.latitude | default('null') }},\"xxx\":{{ s.attributes.longitude | default('null') }}}{% xx xxx xxxx.xxxx %},{% xxxxx %}{% xxxxxx %}"
+   }
+  },
+  {
+   "n": 17,
+   "type": "weather-brief",
+   "config": {
+    "label": "{{input.current.label}}",
+    "latitude": "{{input.current.lat}}",
+    "longitude": "{{input.current.lon}}"
+   }
+  },
+  {
+   "n": 18,
+   "type": "database",
+   "config": {
+    "key": "{{input.recordKey}}",
+    "data": "{{input.record}}"
+   }
+  },
+  {
+   "n": 19,
+   "type": "whatsapp",
+   "config": {
+    "message": "{{input.whatsapp}}"
+   }
+  },
+  {
+   "n": 20,
+   "type": "llm-call",
+   "config": {
+    "userPrompt": "xxxxx xx {{input.briefing.dateLabel}}.\n\nxxxxx\n{{input.factSheet}}\n\nxxxx\n{{input.gapSheet}}"
+   }
+  },
+  {
+   "n": 21,
+   "type": "weather-brief",
+   "config": {
+    "latitude": "{{input.home.lat}}",
+    "longitude": "{{input.home.lon}}"
+   }
+  },
+  {
+   "n": 22,
+   "type": "home-assistant",
+   "config": {
+    "template": "{{ {\n  \"xxxxxx\": {\n    \"xxx\": xxxxx_xxxx(\"xxxxxx_xxxxxxx.xxxx000_xxxxxx_xxxxx\", \"xxxxxxxx\"),\n    \"xxx\": xxxxx_xxxx(\"xxxxxx_xxxxxxx.xxxx000_xxxxxx_xxxxx\", \"xxxxxxxxx\"),\n    \"xxxxx\": xxxxxx(\"xxxxxx_xxxxxxx.xxxx000_xxxxxx_xxxxx\")\n  },\n  \"xxxxxx\": {\n    \"xxx\": xxxxx_xxxx(\"xxxxxx_xxxxxxx.xxxx000_xxxxxx_xxxxx\", \"xxxxxxxx\"),\n    \"xxx\": xxxxx_xxxx(\"xxxxxx_xxxxxxx.xxxx000_xxxxxx_xxxxx\", \"xxxxxxxxx\"),\n    \"xxxxx\": xxxxxx(\"xxxxxx_xxxxxxx.xxxx000_xxxxxx_xxxxx\")\n  },\n  \"xxxx\": {\n    \"xxx\": xxxxx_xxxx(\"xxxxxx_xxxxxxx.xxxx000_xxxx_xxxxx\", \"xxxxxxxx\"),\n    \"xxx\": xxxxx_xxxx(\"xxxxxx_xxxxxxx.xxxx000_xxxx_xxxxx\", \"xxxxxxxxx\"),\n    \"xxxxx\": xxxxxx(\"xxxxxx_xxxxxxx.xxxx000_xxxx_xxxxx\")\n  },\n  \"xxxxx\": {\n    \"xxx\": xxxxx_xxxx(\"xxxxxx_xxxxxxx.xxxx000_xxxxx_xxxxx\", \"xxxxxxxx\"),\n    \"xxx\": xxxxx_xxxx(\"xxxxxx_xxxxxxx.xxxx000_xxxxx_xxxxx\", \"xxxxxxxxx\"),\n    \"xxxxx\": xxxxxx(\"xxxxxx_xxxxxxx.xxxx000_xxxxx_xxxxx\")\n  },\n  \"xxxx\": {\n    \"xxx\": xxxxx_xxxx(\"xxxxxx_xxxxxxx.xxxx000_xxxx_xxxxx\", \"xxxxxxxx\"),\n    \"xxx\": xxxxx_xxxx(\"xxxxxx_xxxxxxx.xxxx000_xxxx_xxxxx\", \"xxxxxxxxx\"),\n    \"xxxxx\": xxxxxx(\"xxxxxx_xxxxxxx.xxxx000_xxxx_xxxxx\")\n  }\n} | xxxxxx }}"
+   }
+  },
+  {
+   "n": 23,
+   "type": "llm-call",
+   "config": {
+    "userPrompt": "xxxxxxx xxx xxxxxxx xxxxxxxxxxxxxx xxxxxxx-xxxxxxxx xxxxxx xxxx xxxx xxxx-xxxx xxxx xxxxx.\\x\\xxxxxxx x xxxxxxxx xxxxxxx → xxxxxx xxxxxx xxxxxxxx xxxxx xxxxxxxx xxxxxxxxxx. xxx xxxx: xxxxxxxxx/xxxxxxx xxxxxxx + xxxxxxxx xxxxxx; xxxxxx xxxxxx xxxxxxx + xxxxxxxx xxxxxxxxx xxxxxxx xxx/xxxx; xxxxxxx xxxxxxx; xxxxxxxxxxx xxxxxx/xxxxxxxx-xxxxxx xx xxxxxxx xxxxxxxxxxx; xxxxxxxxxxxxxx xxx xxxxxxxxxx. xx xxxxxxxx xx xxxxxx, xxxxx xx xxxxxxxx `xxxxxxxxxxx` xxx xxxxxx xxxx xxxxxxx xxxx.\\x\\xxxxxx xxxxxxxxx: {{input.auditedAt}}\\xxxxx-xxxx: {{input.readOnly}}\\xxxxxxxxxxx: {{input.collectors}}\\xxxxxxxxx: {{input.findings}}\\xxxxxxxx xxxxxxx: {{input.versionReviews}}\\xxxxxxx xxxxxxxxxx: {{input.updateCandidates}}"
+   }
+  },
+  {
+   "n": 24,
+   "type": "whatsapp",
+   "config": {
+    "message": "{{input.message}}"
+   }
+  },
+  {
+   "n": 25,
+   "type": "whatsapp",
+   "config": {
+    "message": "{{input.message}}"
+   }
+  },
+  {
+   "n": 26,
+   "type": "http-request",
+   "config": {
+    "url": "xxxxx://xxxx.xxxxxx.xx/xxx/xxxxxx-xxxxxx/xxx-xxxxx?xxx=00.0000&xxx=-0.0000&xxxx={{input.latestDate}}"
+   }
+  },
+  {
+   "n": 27,
+   "type": "whatsapp",
+   "config": {
+    "message": "{{input.message}}"
+   }
+  },
+  {
+   "n": 28,
+   "type": "whatsapp",
+   "config": {
+    "message": "{{input.response}}"
+   }
+  },
+  {
+   "n": 29,
+   "type": "gmail-send",
+   "config": {
+    "bodyHtml": "{{input.htmlBody}}"
+   }
+  },
+  {
+   "n": 30,
+   "type": "whatsapp",
+   "config": {
+    "message": "🚨 xxxxxxxxxx xxxxx xxxxxx\n\nxxx xxxxx xxxx xxxxxxxxx xxx {{input.latestDateFormatted}}.\n\n📊 xxxxx xxxxxx: {{input.totalCrimes}}\n\nxxxxxxxxx:\n{{input.summary}}\n\nxxxxxx: xxxxxx.xx"
+   }
+  },
+  {
+   "n": 31,
+   "type": "whatsapp",
+   "config": {
+    "message": "{{input._whatsapp_msg}}"
+   }
+  },
+  {
+   "n": 32,
+   "type": "whatsapp",
+   "config": {
+    "message": "⚠️ xxxxxxxxxx xxxxx xxxxxxxx xxxxx\n\nxx xxx xxxx xxxxxx. xxx xxxxxxxx xxxx xxx xxxxxxx x xxxxx xxxxxx.\n\nxxxxxx xxxx: {{input.status || 'N/A'}}\nxxxxxxxx: {{input.body || input.error || 'Unknown error'}}"
+   }
+  },
+  {
+   "n": 33,
+   "type": "api-integration",
+   "config": {
+    "params": {
+     "to": "{{input.to}}",
+     "from": "{{input.from}}",
+     "account_id": "{{input.account_id}}"
+    }
+   }
+  },
+  {
+   "n": 34,
+   "type": "api-integration",
+   "config": {
+    "params": {
+     "to": "{{input.to}}",
+     "from": "{{input.from}}",
+     "account_id": "{{input.account_id}}"
+    }
+   }
+  },
+  {
+   "n": 35,
+   "type": "whatsapp",
+   "config": {
+    "message": "{{input.message}}"
+   }
+  },
+  {
+   "n": 36,
+   "type": "home-assistant",
+   "config": {
+    "template": "{{ {\"xxxxxx\": {\"xxx\": xxxxxx.xxxxxx_xxxxxxx.xxxx000_xxxxxx_xxxxx.xxxxxxxxxx.xxxxxxxx, \"xxx\": xxxxxx.xxxxxx_xxxxxxx.xxxx000_xxxxxx_xxxxx.xxxxxxxxxx.xxxxxxxxx, \"xxxx\": xxxxxx.xxxxxx_xxxxxxx.xxxx000_xxxxxx_xxxxx.xxxxxxxxxx.xxxxxxxx_xxxx, \"xxxxx\": xxxxxx.xxxxxx_xxxxxxx.xxxx000_xxxxxx_xxxxx.xxxxx}, \"xxxxxx\": {\"xxx\": xxxxxx.xxxxxx_xxxxxxx.xxxx000_xxxxxx_xxxxx.xxxxxxxxxx.xxxxxxxx, \"xxx\": xxxxxx.xxxxxx_xxxxxxx.xxxx000_xxxxxx_xxxxx.xxxxxxxxxx.xxxxxxxxx, \"xxxx\": xxxxxx.xxxxxx_xxxxxxx.xxxx000_xxxxxx_xxxxx.xxxxxxxxxx.xxxxxxxx_xxxx, \"xxxxx\": xxxxxx.xxxxxx_xxxxxxx.xxxx000_xxxxxx_xxxxx.xxxxx}, \"xxxx\": {\"xxx\": xxxxxx.xxxxxx_xxxxxxx.xxxx000_xxxx_xxxxx.xxxxxxxxxx.xxxxxxxx, \"xxx\": xxxxxx.xxxxxx_xxxxxxx.xxxx000_xxxx_xxxxx.xxxxxxxxxx.xxxxxxxxx, \"xxxx\": xxxxxx.xxxxxx_xxxxxxx.xxxx000_xxxx_xxxxx.xxxxxxxxxx.xxxxxxxx_xxxx, \"xxxxx\": xxxxxx.xxxxxx_xxxxxxx.xxxx000_xxxx_xxxxx.xxxxx}, \"xxxxx\": {\"xxx\": xxxxxx.xxxxxx_xxxxxxx.xxxx000_xxxxx_xxxxx.xxxxxxxxxx.xxxxxxxx, \"xxx\": xxxxxx.xxxxxx_xxxxxxx.xxxx000_xxxxx_xxxxx.xxxxxxxxxx.xxxxxxxxx, \"xxxx\": xxxxxx.xxxxxx_xxxxxxx.xxxx000_xxxxx_xxxxx.xxxxxxxxxx.xxxxxxxx_xxxx, \"xxxxx\": xxxxxx.xxxxxx_xxxxxxx.xxxx000_xxxxx_xxxxx.xxxxx}, \"xxxx\": {\"xxx\": xxxxxx.xxxxxx_xxxxxxx.xxxx000_xxxx_xxxxx.xxxxxxxxxx.xxxxxxxx, \"xxx\": xxxxxx.xxxxxx_xxxxxxx.xxxx000_xxxx_xxxxx.xxxxxxxxxx.xxxxxxxxx, \"xxxx\": xxxxxx.xxxxxx_xxxxxxx.xxxx000_xxxx_xxxxx.xxxxxxxxxx.xxxxxxxx_xxxx, \"xxxxx\": xxxxxx.xxxxxx_xxxxxxx.xxxx000_xxxx_xxxxx.xxxxx}} | xxxxxx }}"
+   }
+  },
+  {
+   "n": 37,
+   "type": "api-integration",
+   "config": {
+    "params": {
+     "end_date": "{{input.end_date}}",
+     "start_date": "{{input.start_date}}"
+    }
+   }
+  },
+  {
+   "n": 38,
+   "type": "llm-call",
+   "config": {
+    "userPrompt": "xxxx xx xxx xxxxxxxxx'x xx:\n\n{{input.content}}\n\nxxxx xxx {{input.total_after_filter}} xxx xxxxx xx xxxxx:\n\n{{input.items}}\n\nxxx xxxx xxxx, xxxxx xx xxxxxxx xxx xx xxx xxxxxx x xxxx xxxxx xxxxx xxxx xxxxxxx xxx xxxxxxx xxxxx xxxxxx:\n- \"xxxxx\": xxx xxxxx (xxxxxx)\n- \"xxx\": xxx xxx (xxxxxx)\n- \"xxxxxx\": xxxxxx xx xxxxxxxx (xxxxxx)\n- \"xxxxxxxx\": xxxxxxxx xx xxxxxxxx (xxxxxx)\n- \"xxxxxxx_xxxx\": xxxxxxx xxxx xx xxxxxxxx (xxxxxx)\n- \"xxxxxxxxxx\": xxxxxxxxxx xx xxxxxxxx (xxxxxx)\n- \"xxxxx\": xxxxx xxxxx 0-000 (xxxxxxx)\n- \"xxxxxxxxx\": xxxxx xx 0-0 xxxxxxxx-xxxxxx xxxxxxxx xxxxxxx\n- \"xxxxxxxxxx\": xxxxx xx 0-0 xxxxxxxx xxxxxxxx xxxxxxx\n\nxxx xxxx xxxxxxx xxxxx xxxx xx xxx xxxxxx xxxxx. xx xxx xxxx xxx. xxxxxx xxxx xxx xxxx xxxxx, xxxxxxx xxxx."
+   }
+  },
+  {
+   "n": 39,
+   "type": "llm-call",
+   "config": {
+    "userPrompt": "xxxxxx xxxxx xxxxxx xx xxxx/xxxxxxx xxxxxxxxxx:\n\n{{input.items}}\n\nxxxxxx xxxxxxx xxx xx xxxxx:\n0) xxx xxxxx xxxx xx_xxxxxxxxxxx_xxxxx xx xxxx xx xxxxxxxxx xxxxxxxxxxx; xx\n0) x xxxxxxxx-xxxxx xxxxxxx xx xx xxxx xxxx xxxxx xxxxxxx, xxx xxxxxxx xxxx.\n\nxxxxxxxx xx xxxx: xxx xxxxxxx xxx xx xx xxxxx xxxx x0-0000x xxxx 0xx xxx, xxxxx xx xxxxxxxx 000 xxx x 000xx xxxxx. xxxxxx xxxx xxxxxxx, xxxxx-xxxxxxxx xxxxxx xxxx xxxx xx xxxxx 00xx xxx xxxxxx xx x xxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxx xx xx xxxxx 00xx; xxxxxxxxxx xxxx xxx xxxxxxxxxx xxxx xxx x0-0000x xxx xxxxxxxxxxx xxx xxxxxxxxxx (xx xxxxx xxxx xxxxxx xxx xxxxx, xx x xxxxxxx xxxxxxxxx xxxxxxxxxxxxx xxxxxxxx xxxxxxxxx); xxxx xxxxxxx/xxxxxxx; xxx xxx xxxxxxx xx xxxxxxxx xxxx-xxxxxx. xxxxxx 00xx-xxxxxxx xxxxxxx. xxxxxxx x xxxxxxxx xx xxxxxx/xxxxxxxx. xxxxxx xxxxxxxx, xxxxxx xxxxxxxxx, xxxx, xxxxxxxxxx, xxxxxxxxxxx, xxxxxxxxx, xx xxxxx-xxxxxxxxxx xxxxxxxx.\n\nxxxx xxxxxxxx xxxxxx xxxx xxxxxxx: xxxxx xxxxx/xxxx, xxxxx xxxxxxxxxx xxxxx, xxxxxx/xxxxxx, xxxxxxx xxxxx xxxxxxx xx xxxx-xxxxxx, xxx xx xx x xxxxx xxxxxxx xxxx xxx x0-0000x/0xx xxxxxxxx, xxxxxxxx xx xxxxx, xxx xxx xxxxxx xxx. xxx xxxx x xxxxxx xxxxxxxxx xxx. xxxxxxx xxxxxxxxxx xxxxx, xxxxx, xxxxx/xxxxxxx xxxxx xxx xxxxxxxx xxxx xxxxx/xxxxxxx xxxxx xxxxxxxxxx xxxxxxx; xxxxxxxxx xxxxxx. xx xxx xxxxxxx xxxxxxxx xxxxxxxxxx."
+   }
+  },
+  {
+   "n": 40,
+   "type": "whatsapp",
+   "config": {
+    "message": "{{input.messageText}}"
+   }
+  },
+  {
+   "n": 41,
+   "type": "api-call",
+   "config": {
+    "path": "/xxxx/x0/xxxxxxxx/{{input.accountId}}/xxxxxxxxxxxx?xxxx={{input.from}}&xx={{input.to}}"
+   }
+  },
+  {
+   "n": 42,
+   "type": "api-call",
+   "config": {
+    "path": "/xxxx/x0/xxxxx/{{input.card1Id}}/xxxxxxxxxxxx?xxxx={{input.from}}&xx={{input.to}}"
+   }
+  },
+  {
+   "n": 43,
+   "type": "api-call",
+   "config": {
+    "path": "/xxxx/x0/xxxxx/{{input.card2Id}}/xxxxxxxxxxxx?xxxx={{input.from}}&xx={{input.to}}"
+   }
+  },
+  {
+   "n": 44,
+   "type": "whatsapp",
+   "config": {
+    "message": "{{input.response}}"
+   }
+  },
+  {
+   "n": 45,
+   "type": "whatsapp",
+   "config": {
+    "message": "{{input.message}}"
+   }
+  },
+  {
+   "n": 46,
+   "type": "http-request",
+   "config": {
+    "body": "[xxx:xxxx][xxxxxxx:00];xxxx[\"xxxxxxx\"=\"xxxxxxxxxxx\"][\"xxxx\"~\"xxxxxxxxx\",x](xxxxxx:000,{{input.lat}},{{input.lon}});xxx xxxx;"
+   }
+  },
+  {
+   "n": 47,
+   "type": "llm-call",
+   "config": {
+    "userPrompt": "{{input.emailSummary}}\n\n(xxxxx xxxxx: {{input.emailCount}})"
+   }
+  },
+  {
+   "n": 48,
+   "type": "whatsapp",
+   "config": {
+    "message": "☀️ *xxxxxxx xxxxxxxx*\n\n{{input.response}}"
+   }
+  },
+  {
+   "n": 49,
+   "type": "whatsapp",
+   "config": {
+    "message": "📍 xxx'xx xxxx xxxxxxxxx'x! xxxxx xx xxxxxxxxx {{input.result.locationString}}."
+   }
+  },
+  {
+   "n": 50,
+   "type": "whatsapp",
+   "config": {
+    "message": "xxxxxxxxxx xxxxxx xxxxxxx xx xxxx xx **${{input.gbo}}** — xxxx xx xxx xx."
+   }
+  },
+  {
+   "n": 51,
+   "type": "whatsapp",
+   "config": {
+    "message": "🎲 xxx xxxxx xxxx xxxxxx \"{{input.workflowName}}\"\n\nxxxxxxxx {{input.receivedCount}} xxxxxxx ({{input.iterationsCompleted}} xxxxx xxxxxxxxxx).\nxxxxx xxxx: {{input.value.0}}\nxxxxxx xxxxx xxx \"{{input.key}}\"."
+   }
+  },
+  {
+   "n": 52,
+   "type": "home-assistant",
+   "config": {
+    "historyEnd": "{{input.end}}",
+    "historyStart": "{{input.start}}"
+   }
+  },
+  {
+   "n": 53,
+   "type": "whatsapp",
+   "config": {
+    "message": "⚡ xxxxx xxxxx! xxxx xx xxxxx {{input.data.attributes.speed}} xxx (xxxxxxxxx: 00 xxx). xxxxxxxx xxx xx {{input.data.attributes.source}}."
+   }
+  },
+  {
+   "n": 54,
+   "type": "whatsapp",
+   "config": {
+    "message": "🌭 xxxxxxx xxxxxx xxxx xxxxxx \"{{input.workflowName}}\"\n\nxxxxxxxx {{input.receivedCount}} xxxxxx ({{input.iterationsCompleted}} xxxxx xxxxxxxxxx).\nxxxxx xxxxx: {{input.value.0}}\nxxxxxx xxxxx xxx \"{{input.key}}\"."
+   }
+  },
+  {
+   "n": 55,
+   "type": "whatsapp",
+   "config": {
+    "message": "🤖 xxxxxxxxxx xxxxx xxxx xxxxxx \"{{input.workflowName}}\"\n\nxxxxxxxx {{input.receivedCount}} xxxxxx ({{input.iterationsCompleted}} xxxxx xxxxxxxxxx).\nxxxxx xxxxx: {{input.value.0}}\nxxxxxx xxxxx xxx \"{{input.key}}\"."
+   }
+  },
+  {
+   "n": 56,
+   "type": "whatsapp",
+   "config": {
+    "message": "🏃 xxx xxxxxxx, xxx! xxxxx: {{input.data.attributes.speed}} xx/x"
+   }
+  },
+  {
+   "n": 57,
+   "type": "whatsapp",
+   "config": {
+    "message": "🌡️ xxxxxx xxxxxxxxxxx xxxxxx (0 xx)\n\nxxxxxxxxxx xxxxxxx: {{input.data.attributes.current_temperature}}°x\nxxxxxxxxxx xxx xx: {{input.data.attributes.temperature}}°x"
+   }
+  },
+  {
+   "n": 58,
+   "type": "whatsapp",
+   "config": {
+    "message": "🌡️ xxxxxx xxxxxxxxxxx: {{input.data.attributes.current_temperature}}°x ({{input.data.state}})"
+   }
+  },
+  {
+   "n": 59,
+   "type": "whatsapp",
+   "config": {
+    "message": "{{input.message}}"
+   }
+  },
+  {
+   "n": 60,
+   "type": "whatsapp",
+   "config": {
+    "message": "📏 xxx 0-xxxx xxxxxxxx xxxxxx!\n\n{{input.maxPair}}: {{input.maxDistKm}} xx xxxxx\nxxxxxxxx xxx: {{input.storedMax}} xx ({{input.storedPair}})\n\nxxx xxxxxxxxx:\n{{input.locations}}"
+   }
+  },
+  {
+   "n": 61,
+   "type": "whatsapp",
+   "config": {
+    "message": "{{input.message}}"
+   }
+  },
+  {
+   "n": 62,
+   "type": "llm-call",
+   "config": {
+    "userPrompt": "xxx xxxxxxxxxxxx xxxxx xxx xxxx xxxxxx (xxxxxxx xx xxxxxxxxxxx_xx). xxxxxxxx, xxx x xxxxx xxx xxxx, xxx xxxxxx xx xxxxxxxx:\n\n{{input.items}}"
+   }
+  },
+  {
+   "n": 63,
+   "type": "whatsapp",
+   "config": {
+    "message": "{{input.message}}"
+   }
+  },
+  {
+   "n": 64,
+   "type": "home-assistant",
+   "config": {
+    "template": "{{ {\n  'xxxx': {'xxx': xxxxx_xxxx('xxxxxx_xxxxxxx.xxxx000_xxxx_xxxxx', 'xxxxxxxx'), 'xxx': xxxxx_xxxx('xxxxxx_xxxxxxx.xxxx000_xxxx_xxxxx', 'xxxxxxxxx'), 'xxxxx': xxxxxx('xxxxxx_xxxxxxx.xxxx000_xxxx_xxxxx')},\n  'xxxxx': {'xxx': xxxxx_xxxx('xxxxxx_xxxxxxx.xxxx000_xxxxx_xxxxx', 'xxxxxxxx'), 'xxx': xxxxx_xxxx('xxxxxx_xxxxxxx.xxxx000_xxxxx_xxxxx', 'xxxxxxxxx'), 'xxxxx': xxxxxx('xxxxxx_xxxxxxx.xxxx000_xxxxx_xxxxx')},\n  'xxxxxx': {'xxx': xxxxx_xxxx('xxxxxx_xxxxxxx.xxxx000_xxxxxx_xxxxx', 'xxxxxxxx'), 'xxx': xxxxx_xxxx('xxxxxx_xxxxxxx.xxxx000_xxxxxx_xxxxx', 'xxxxxxxxx'), 'xxxxx': xxxxxx('xxxxxx_xxxxxxx.xxxx000_xxxxxx_xxxxx')},\n  'xxxxxx': {'xxx': xxxxx_xxxx('xxxxxx_xxxxxxx.xxxx000_xxxxxx_xxxxx', 'xxxxxxxx'), 'xxx': xxxxx_xxxx('xxxxxx_xxxxxxx.xxxx000_xxxxxx_xxxxx', 'xxxxxxxxx'), 'xxxxx': xxxxxx('xxxxxx_xxxxxxx.xxxx000_xxxxxx_xxxxx')},\n  'xxxx': {'xxx': xxxxx_xxxx('xxxxxx_xxxxxxx.xxxx000_xxxx_xxxxx', 'xxxxxxxx'), 'xxx': xxxxx_xxxx('xxxxxx_xxxxxxx.xxxx000_xxxx_xxxxx', 'xxxxxxxxx'), 'xxxxx': xxxxxx('xxxxxx_xxxxxxx.xxxx000_xxxx_xxxxx')}\n} | xxxxxx }}"
+   }
+  },
+  {
+   "n": 65,
+   "type": "whatsapp",
+   "config": {
+    "message": "{{input.result.formatted}}"
+   }
+  }
+ ]
+}

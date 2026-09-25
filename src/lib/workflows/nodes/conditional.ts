@@ -47,6 +47,7 @@ export const conditionalExecutor: NodeExecutor = {
 };
 
 export const conditionalDef: NodeDefinition = {
+  rawConfigKeys: ['expression'],
   type: 'conditional',
   label: 'Conditional',
   category: 'control',

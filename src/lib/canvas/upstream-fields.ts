@@ -14,8 +14,12 @@ interface CanvasEdgeLike {
   targetNodeId: string;
 }
 
+import { nodeSlug } from '$lib/workflows/expressions';
+
 interface CanvasNodeLike {
   id: string;
+  /** Node label (canvas `name`) — its slug is how `{{nodes.<slug>.x}}` names it. */
+  name?: string;
   outputData?: unknown;
 }
 
@@ -108,6 +112,57 @@ export function computeUpstreamFields(
   }
 
   return Array.from(out).sort();
+}
+
+/** Svelte context key: the canvas page provides `() => string[]` of full expressions. */
+export const TEMPLATE_FIELDS_CONTEXT = 'sr:template-fields';
+const NAMESPACED = /^(?:(?:input|nodes|trigger|state)\.|(?:today|now)$)/;
+
+/** Autocomplete candidates: bare run-data paths become `input.<path>` (a bare
+ *  `{{body.x}}` never resolves); `extra` adds the page's nodes/trigger entries. */
+export function templateCandidates(fields: string[], extra: string[] = []): string[] {
+  return [...new Set([...fields.map((f) => (NAMESPACED.test(f) ? f : `input.${f}`)), ...extra])];
+}
+
+/** The first `limit` candidates containing what was typed after `{{`. */
+export function filterTemplateCandidates(candidates: string[], partial: string, limit = 8): string[] {
+  const needle = partial.trim().toLowerCase().replace(/^input\./, '');
+  return candidates.filter((f) => !needle || f.toLowerCase().includes(needle)).slice(0, limit);
+}
+
+/**
+ * Full `{{...}}` expressions for the template autocomplete: the merged view
+ * (`input.x`, run data plus any `declared` schema paths), each upstream node
+ * on its own (`nodes.<label-slug>.x` — the one that survives a fan-in), and the
+ * trigger's payload (`trigger.x`, from the root upstream node's last output).
+ */
+export function computeTemplateSuggestions(
+  targetNodeId: string,
+  nodes: CanvasNodeLike[],
+  edges: CanvasEdgeLike[],
+  declared: string[] = [],
+): string[] {
+  const out = new Set<string>();
+  for (const p of [...computeUpstreamFields(targetNodeId, nodes, edges), ...declared]) out.add(`input.${p}`);
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const sourcesOf = (id: string) => edges.filter((e) => e.targetNodeId === id).map((e) => e.sourceNodeId);
+  const seen = new Set<string>();
+  const queue = sourcesOf(targetNodeId);
+  while (queue.length && out.size < MAX_TOTAL_FIELDS) {
+    const id = queue.shift()!;
+    if (seen.has(id) || id === targetNodeId) continue;
+    seen.add(id);
+    const node = byId.get(id);
+    const parents = sourcesOf(id);
+    queue.push(...parents);
+    if (node?.outputData === undefined) continue;
+    const paths = new Set<string>();
+    walkOutput(node.outputData, '', paths, 0);
+    const ref = (node.name && nodeSlug(node.name)) || id;
+    for (const p of paths) out.add(`nodes.${ref}.${p}`);
+    if (parents.length === 0) for (const p of paths) out.add(`trigger.${p}`);
+  }
+  return Array.from(out);
 }
 
 /**

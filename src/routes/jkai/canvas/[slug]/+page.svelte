@@ -31,7 +31,7 @@
   import SecretRequestModal from '$lib/components/jkai/SecretRequestModal.svelte';
   import type { SecretRequestEvent, SecretUpdateEvent } from '$lib/secrets/credential-requests';
   import { streamChatJob, type ChatStreamHandle } from '$lib/jkai/chat-stream';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, setContext } from 'svelte';
   // Shared canvas-shell geometry (E1). These are the SAME formulas this surface
   // already shipped, extracted so the research desk shares one implementation.
   // The local wrappers below keep their names + signatures; only their bodies
@@ -55,7 +55,13 @@
   import { getDefinition } from '$lib/workflows/registry-client';
   import { summarizeNode } from '$lib/workflows/node-summary';
   import { memoryBadgeFor } from '$lib/canvas/memory-badge';
-  import { computeUpstreamFields, computeUpstreamCollisions } from '$lib/canvas/upstream-fields';
+  import {
+    computeUpstreamFields,
+    computeTemplateSuggestions,
+    computeUpstreamCollisions,
+    TEMPLATE_FIELDS_CONTEXT,
+  } from '$lib/canvas/upstream-fields';
+  import TemplatedTextarea from '$lib/canvas/nodes/panels/shared/TemplatedTextarea.svelte';
   import MappingAssistant from '$lib/canvas/MappingAssistant.svelte';
   import type { EdgeMappingProposal } from '$lib/workflows/mapping/types';
 
@@ -3786,6 +3792,20 @@
   // the chicken-and-egg gap where pickers were empty on a fresh canvas. Cached
   // by node id (additive hint; run-data paths stay live via computeUpstreamFields).
   let declaredUpstreamFields = $state.raw<Record<string, string[]>>({});
+  // `{{` autocomplete for the open node: input.*, nodes.<slug>.* per upstream,
+  // trigger.*. Every TemplatedInput/Textarea under this page reads it via context;
+  // panels keep getting bare paths (their field pickers write `arrayPath` etc.).
+  setContext(TEMPLATE_FIELDS_CONTEXT, () => menuTemplateFields);
+  const menuTemplateFields = $derived(
+    menuNode
+      ? computeTemplateSuggestions(
+          menuNode.id,
+          (canvas.nodes ?? []) as Array<{ id: string; name?: string; outputData?: unknown }>,
+          (canvas.edges ?? []).map((e) => ({ sourceNodeId: e.from, targetNodeId: e.to })),
+          declaredUpstreamFields[menuNode.id] ?? [],
+        )
+      : [],
+  );
   $effect(() => {
     const id = menuForNodeId;
     const wf = canvas.workflowId;
@@ -5770,16 +5790,15 @@
                 <section class="nm-sec">
                   <div class="nm-sec-hd">
                     <span class="sr-label-tight">USER PROMPT</span>
-                    <span class="nm-sec-meta">supports {'{{input.field}}'} templates</span>
+                    <span class="nm-sec-meta">type {'{{'} to pick an upstream field</span>
                   </div>
                   <div class="nm-field">
-                    <textarea
-                      rows="4"
+                    <TemplatedTextarea
+                      rows={4}
                       value={(configDraft.userPrompt as string) ?? ''}
-                      oninput={(e) =>
-                        setConfigField('userPrompt', (e.target as HTMLTextAreaElement).value)}
+                      onChange={(v) => setConfigField('userPrompt', v)}
                       placeholder="What you want the LLM to do…"
-                    ></textarea>
+                    />
                   </div>
                 </section>
 
@@ -5789,13 +5808,12 @@
                     <span class="nm-sec-meta">optional</span>
                   </div>
                   <div class="nm-field">
-                    <textarea
-                      rows="2"
+                    <TemplatedTextarea
+                      rows={2}
                       value={(configDraft.systemPrompt as string) ?? ''}
-                      oninput={(e) =>
-                        setConfigField('systemPrompt', (e.target as HTMLTextAreaElement).value)}
+                      onChange={(v) => setConfigField('systemPrompt', v)}
                       placeholder="You are a helpful assistant…"
-                    ></textarea>
+                    />
                   </div>
                 </section>
 
@@ -6124,16 +6142,15 @@
                   <section class="nm-sec">
                     <div class="nm-sec-hd">
                       <span class="sr-label-tight">QUERY</span>
-                      <span class="nm-sec-meta">supports {'{{input.field}}'} templates</span>
+                      <span class="nm-sec-meta">type {'{{'} to pick an upstream field</span>
                     </div>
                     <div class="nm-field">
-                      <textarea
-                        rows="2"
+                      <TemplatedTextarea
+                        rows={2}
                         value={(configDraft.query as string) ?? ''}
-                        oninput={(e) =>
-                          setConfigField('query', (e.target as HTMLTextAreaElement).value)}
-                        placeholder={'{{input.message}}'}
-                      ></textarea>
+                        onChange={(v) => setConfigField('query', v)}
+                          placeholder={'{{input.message}}'}
+                      />
                     </div>
                   </section>
                   <section class="nm-sec">
@@ -8875,7 +8892,8 @@
     color: var(--error);
     font-size: var(--fs-body-sm);
   }
-  .nm-field textarea {
+  .nm-field textarea,
+  .nm-field :global(textarea.tt-textarea) {
     width: 100%;
     border: none;
     background: transparent;

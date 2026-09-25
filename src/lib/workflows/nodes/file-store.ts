@@ -11,20 +11,11 @@ import {
   newDiskPath,
 } from '$lib/file-store/storage';
 import { queueDerivedIntelDelete } from '$lib/jkai/intel/auto-extract';
+import { getPath as resolvePath } from '../expressions';
 
 export { fileStoreDef } from './file-store.def';
 
 type Operation = 'read' | 'write' | 'append' | 'delete' | 'list';
-
-function resolvePath(obj: Record<string, unknown>, path: string): unknown {
-  const parts = path.split('.');
-  let current: unknown = obj;
-  for (const part of parts) {
-    if (current === null || current === undefined || typeof current !== 'object') return undefined;
-    current = (current as Record<string, unknown>)[part];
-  }
-  return current;
-}
 
 function permissionsFor(raw: unknown): WorkflowFilePermissions {
   const p = (raw ?? {}) as Partial<WorkflowFilePermissions>;

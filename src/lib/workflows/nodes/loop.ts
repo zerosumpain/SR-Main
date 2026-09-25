@@ -1,14 +1,8 @@
 import type { NodeExecutor, NodeResult, ExecutionContext, JsonSchema } from '../types';
 import { safeFunction } from '$lib/utils/safe-eval';
+import { getPath as resolvePath } from '../expressions';
 
 export { loopDef } from './loop.def';
-
-function resolvePath(obj: Record<string, unknown>, path: string): unknown {
-  return path.split('.').reduce((acc: unknown, key) => {
-    if (acc && typeof acc === 'object') return (acc as Record<string, unknown>)[key];
-    return undefined;
-  }, obj);
-}
 
 /** One entry in the subworkflow-mode results array. */
 interface LoopItemResult {

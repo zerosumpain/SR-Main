@@ -5,15 +5,9 @@ import {
   sendApprovalPendingMessage,
   WA_APPROVAL_SNAPSHOT_KEY,
 } from '$lib/workflows/whatsapp/approval-notify';
+import { getPath as resolvePath } from '../expressions';
 
 export { approvalDef } from './approval.def';
-
-function resolvePath(obj: Record<string, unknown>, path: string): unknown {
-  return path.split('.').reduce((acc: unknown, key) => {
-    if (acc && typeof acc === 'object') return (acc as Record<string, unknown>)[key];
-    return undefined;
-  }, obj);
-}
 
 /**
  * Normalise an arbitrary decision value into the standard approved/rejected
