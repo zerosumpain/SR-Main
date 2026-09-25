@@ -109,3 +109,21 @@ describe('PUT /api/workflows/[id]/trigger — webhook secret round-trip', () => 
     expect(body.trigger.secret).toBe('spaced');
   });
 });
+
+describe('PUT /api/workflows/[id]/trigger — cron timezone', () => {
+  it('stores a named zone on the trigger and the node, and leaves it off when absent', async () => {
+    await PUT(makeEvent({ kind: 'cron', cron: '0 8 * * *', timezone: 'America/New_York' }));
+    expect(workflowUpdates[0].trigger).toEqual({ type: 'cron', cron: '0 8 * * *', timezone: 'America/New_York' });
+    expect(nodeUpdates[0].config.timezone).toBe('America/New_York');
+
+    workflowUpdates.length = 0;
+    await PUT(makeEvent({ kind: 'cron', cron: '0 8 * * *' }));
+    expect(workflowUpdates[0].trigger).toEqual({ type: 'cron', cron: '0 8 * * *' });
+  });
+
+  it('refuses a zone Intl does not know rather than scheduling it an hour out', async () => {
+    const res = await PUT(makeEvent({ kind: 'cron', cron: '0 8 * * *', timezone: 'Mars/Olympus' }));
+    expect(res.status).toBe(400);
+    expect(workflowUpdates).toHaveLength(0);
+  });
+});

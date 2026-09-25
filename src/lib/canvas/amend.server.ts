@@ -105,6 +105,12 @@ export interface AmendInput {
   ops: AmendOp[];
   actor: string;
   reason: string;
+  /**
+   * Runs first INSIDE the transaction, before any op. Throw to abort with
+   * nothing written — the native lane checks its graph-level `expectedVersion`
+   * here, so the check and the writes see the same graph.
+   */
+  precondition?: (tx: DbExecutor) => Promise<void>;
 }
 
 /**
@@ -120,7 +126,7 @@ function resolveRef(id: string, refs: Map<string, string>): string {
 }
 
 export async function applyAmendOps(input: AmendInput): Promise<AmendResult> {
-  const { workflowId, ops, actor, reason } = input;
+  const { workflowId, ops, actor, reason, precondition } = input;
 
   if (ops.length === 0) throw new Error('no ops to apply');
 
@@ -142,6 +148,7 @@ export async function applyAmendOps(input: AmendInput): Promise<AmendResult> {
   await db.transaction(async (tx) => {
     txRef.current = tx;
     const refs = new Map<string, string>();
+    if (precondition) await precondition(tx);
 
     for (let i = 0; i < ops.length; i++) {
       const op = ops[i];
