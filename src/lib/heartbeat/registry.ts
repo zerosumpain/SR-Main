@@ -23,6 +23,7 @@ import { daydreamIntelBridge } from './activities/daydream-intel';
 import { daydreamMail } from './activities/daydream-mail';
 import { daydreamNotebook } from './activities/daydream-notebook';
 import { daydreamPonder } from './activities/daydream-ponder';
+import { daydreamThink } from './activities/daydream-think';
 import { daydreamMemory } from './activities/daydream-memory';
 import { daydreamImprove } from './activities/daydream-improve';
 import { daydreamReview } from './activities/daydream-review';
@@ -62,6 +63,7 @@ const handlers: ActivityHandler[] = [
   daydreamIntelBridge,
   daydreamNotebook,
   daydreamPonder,
+  daydreamThink,
   daydreamMemory,
   daydreamImprove,
   daydreamReview,
