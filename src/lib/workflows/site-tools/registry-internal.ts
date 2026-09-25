@@ -107,6 +107,20 @@ export interface ToolDefinition {
     ctx?: ToolExecContext,
   ) => Promise<ToolResult>;
   producesLongRunningTask?: ProducesLongRunningTask;
+  /**
+   * Where the tool is offered. Absent = everywhere it is today. Only the
+   * workflow site-tool picker reads it so far; chat and MCP ignore it.
+   */
+  surfaces?: ToolSurface[];
+  /** `$lib/events/catalogue` types a successful call raises. */
+  emits?: string[];
+}
+
+export type ToolSurface = 'chat' | 'workflow' | 'mcp' | 'app';
+
+/** Whether a tool is offered on `surface` (no `surfaces` list = yes). */
+export function offeredOn(tool: Pick<ToolDefinition, 'surfaces'>, surface: ToolSurface): boolean {
+  return !tool.surfaces || tool.surfaces.includes(surface);
 }
 
 export const tools: ToolDefinition[] = [];

@@ -8,19 +8,17 @@
  * gmail bridge's find-and-dispatch path) and the bridge replies
  * "▶ Started <name>"; otherwise the message falls through untouched.
  *
- * Mirrors `gmail/orchestrator-bridge.ts` findMatchingWorkflows/dispatchWorkflow.
- * `engine` is imported here (this module is itself loaded lazily by the bridge,
- * so it never widens the bridge's static import graph — the same reason the
- * gmail bridge can import `engine` at module top).
+ * Every owner message is ALSO a `whatsapp.inbound` platform event (see
+ * inbound-intercept), so an event trigger with a `text contains …` filter is the
+ * general form of this keyword match. Loaded lazily by the bridge, so the start
+ * path's engine import never widens the bridge's static graph.
  */
 
 import { db } from '$lib/db';
-import { workflows, workflowNodes, workflowEdges, workflowRuns } from '$lib/db/schema';
+import { workflows, workflowNodes } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { engine } from '$lib/workflows';
-import type { WorkflowDefinition } from '$lib/workflows/types';
 import { getOwnerPhone } from './approval-notify';
-import { finaliseRun, failRun } from '$lib/workflows/run-finalise';
+import { startTriggeredRun } from '$lib/workflows/start-run';
 
 export type WaMatchMode = 'prefix' | 'exact' | 'contains';
 
@@ -172,69 +170,6 @@ export async function findMatchingWhatsAppWorkflows(text: string): Promise<WaWor
   return matched;
 }
 
-/**
- * Build a WorkflowDefinition from the DB and fire it via the engine, persisting
- * run status on completion. Byte-for-byte mirror of the gmail bridge's
- * dispatchWorkflow (same worker-mode switch, same run row shape).
- */
-async function dispatchRun(workflowId: string, initialInput: Record<string, unknown>): Promise<void> {
-  const [wf] = await db
-    .select({ id: workflows.id, name: workflows.name })
-    .from(workflows)
-    .where(eq(workflows.id, workflowId))
-    .limit(1);
-  if (!wf) return;
-
-  const nodes = await db.select().from(workflowNodes).where(eq(workflowNodes.workflowId, workflowId));
-  const edges = await db.select().from(workflowEdges).where(eq(workflowEdges.workflowId, workflowId));
-
-  const definition: WorkflowDefinition = {
-    id: wf.id,
-    name: wf.name,
-    nodes: nodes.map((n) => ({
-      id: n.id,
-      type: n.type,
-      config: (n.config as Record<string, unknown>) ?? {},
-      label: n.label,
-      position: (n.position as { x: number; y: number }) ?? { x: 0, y: 0 },
-    })),
-    edges: edges.map((e) => ({
-      id: e.id,
-      sourceNodeId: e.sourceNodeId,
-      targetNodeId: e.targetNodeId,
-      sourceHandle: e.sourceHandle ?? undefined,
-      targetHandle: e.targetHandle ?? undefined,
-    })),
-  };
-
-  const runId = crypto.randomUUID();
-  const workerMode = process.env.JKAI_RUN_WORKER === '1';
-
-  await db.insert(workflowRuns).values({
-    id: runId,
-    workflowId,
-    status: workerMode ? 'pending' : 'running',
-    trigger: 'event',
-    startedAt: new Date(),
-    inputData: initialInput,
-  });
-
-  if (workerMode) {
-    const { enqueue } = await import('$lib/workflows/run-queue');
-    await enqueue(runId);
-    return;
-  }
-
-  const runStartedAt = Date.now();
-  engine
-    .execute(definition, runId, initialInput, undefined, workflowId)
-    .then((result) => finaliseRun({ workflowId, runId, result, runStartedAt, label: 'whatsapp-dispatch' }))
-    .catch((err) => {
-      console.error(`[whatsapp-dispatch] workflow execution error (runId=${runId}):`, err instanceof Error ? err.message : err);
-      return failRun({ workflowId, runId, error: err, label: 'whatsapp-dispatch' });
-    });
-}
-
 export interface WaDispatchResult {
   /** True = a workflow was dispatched; the bridge must NOT fall through to chat. */
   dispatched: boolean;
@@ -267,12 +202,11 @@ export async function dispatchWhatsAppWorkflow(from: string, text: string): Prom
     const chosen = matches[0];
     console.log(`[whatsapp-dispatch] dispatching workflow "${chosen.workflowName}" (${chosen.workflowId}) keyword=${chosen.keyword}`);
 
-    await dispatchRun(chosen.workflowId, {
-      message: chosen.stripped,
-      rawMessage: text,
-      from,
-      matchedKeyword: chosen.keyword,
-    });
+    await startTriggeredRun(
+      chosen.workflowId,
+      { message: chosen.stripped, rawMessage: text, from, matchedKeyword: chosen.keyword },
+      { label: 'whatsapp-dispatch' },
+    );
 
     return { dispatched: true, workflowName: chosen.workflowName };
   } catch (err) {

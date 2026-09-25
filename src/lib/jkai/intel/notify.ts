@@ -2,6 +2,7 @@ import { db } from '$lib/db';
 import { intelAlerts } from '$lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { notifyOwner } from '$lib/server/notify';
+import { emit as emitPlatformEvent } from '$lib/events/platform-bus';
 import { OWNER_INTEL_SCOPE, spaceIn } from './scope';
 
 /**
@@ -69,6 +70,12 @@ export async function pushHighAlerts(noteId: string): Promise<number> {
 				.set({ delivered: true })
 				.where(and(eq(intelAlerts.id, alert.id), spaceIn(intelAlerts.spaceId, OWNER_INTEL_SCOPE)));
 			delivered++;
+			// Once per alert: only here does it stop being re-offered.
+			emitPlatformEvent(
+				'intel.alert',
+				{ alertId: alert.id, noteId, type: alert.type, title: alert.title, content: alert.content },
+				{ source: 'intel' },
+			);
 		}
 	}
 

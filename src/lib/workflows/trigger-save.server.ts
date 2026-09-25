@@ -4,6 +4,8 @@ import { and, eq } from 'drizzle-orm';
 import { registerCronJob, unregisterCronJob } from '$lib/workflows/scheduler';
 import { recordAudit } from '$lib/canvas/audit';
 import { getWebhookSecret, type TriggerLike } from '$lib/workflows/webhook-secret';
+import { canonicalEventType, isKnownEventType } from '$lib/events/catalogue';
+import { normaliseFilter } from '$lib/events/filter';
 
 /**
  * Save a workflow's trigger — the body of `PUT /api/workflows/:id/trigger`,
@@ -41,6 +43,8 @@ export interface TriggerSaveInput {
   timezone?: unknown;
   eventType?: unknown;
   sourceWorkflowId?: unknown;
+  /** Event payload filter, `[{ key, op: 'equals'|'contains', value }]` — see `$lib/events/filter`. */
+  filter?: unknown;
   enabled?: unknown;
   secret?: unknown;
 }
@@ -68,7 +72,9 @@ export async function saveWorkflowTrigger(
   const kind: TriggerKind =
     kindRaw === 'cron' || kindRaw === 'webhook' || kindRaw === 'event' ? kindRaw : 'manual';
   const cron = typeof body.cron === 'string' ? body.cron.trim() : '';
-  const eventType = typeof body.eventType === 'string' ? body.eventType : '';
+  const eventType = typeof body.eventType === 'string' ? canonicalEventType(body.eventType.trim()) : '';
+  const parsedFilter = normaliseFilter(body.filter);
+  const filter = parsedFilter.ok && kind === 'event' ? parsedFilter.filter : [];
   const sourceWorkflowId =
     typeof body.sourceWorkflowId === 'string' ? body.sourceWorkflowId : '';
   const enabled = body.enabled !== false;
@@ -91,6 +97,10 @@ export async function saveWorkflowTrigger(
   if (kind === 'event' && !eventType) {
     return { ok: false, status: 400, error: 'eventType required when kind=event' };
   }
+  if (kind === 'event' && !isKnownEventType(eventType)) {
+    return { ok: false, status: 400, error: `unknown event type "${eventType}"` };
+  }
+  if (kind === 'event' && !parsedFilter.ok) return { ok: false, status: 400, error: parsedFilter.error };
 
   const [workflow] = await db.select().from(workflows).where(eq(workflows.id, workflowId));
   if (!workflow) return { ok: false, status: 404, error: 'Workflow not found' };
@@ -109,6 +119,7 @@ export async function saveWorkflowTrigger(
   if (kind === 'event') {
     triggerMetadata.eventType = eventType;
     if (sourceWorkflowId) triggerMetadata.sourceWorkflowId = sourceWorkflowId;
+    if (filter.length) triggerMetadata.filter = filter;
   }
   // Secret is only carried for webhook triggers (dropped when switching kind).
   if (kind === 'webhook' && secret) triggerMetadata.secret = secret;
@@ -142,6 +153,7 @@ export async function saveWorkflowTrigger(
   } else if (enabled && kind === 'event') {
     const cfg: Record<string, unknown> = { eventType };
     if (sourceWorkflowId) cfg.sourceWorkflowId = sourceWorkflowId;
+    if (filter.length) cfg.filter = filter;
     await db.insert(workflowSchedules).values({
       workflowId,
       type: 'event',
@@ -163,6 +175,7 @@ export async function saveWorkflowTrigger(
   if (kind === 'cron' && timezone) nodeConfig.timezone = timezone;
   if (eventType) nodeConfig.eventType = eventType;
   if (sourceWorkflowId) nodeConfig.sourceWorkflowId = sourceWorkflowId;
+  if (filter.length) nodeConfig.filter = filter;
   // Mirror the secret so the canvas trigger panel can read it back and offer
   // copy / send-test without a second round-trip.
   if (kind === 'webhook' && secret) nodeConfig.secret = secret;
@@ -182,6 +195,7 @@ export async function saveWorkflowTrigger(
         cron: kind === 'cron' ? cron : null,
         ...(kind === 'cron' && timezone ? { timezone } : {}),
         eventType: kind === 'event' ? eventType : null,
+        ...(filter.length ? { filter } : {}),
         enabled,
         // Record only whether a secret is set — never the value itself.
         hasSecret: kind === 'webhook' ? Boolean(secret) : false,

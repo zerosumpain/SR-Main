@@ -5,6 +5,8 @@ import type { ExecutionContext } from '$lib/workflows/types';
 // Mock the WhatsApp service boundary.
 const mockSendMessage = vi.fn();
 const mockSendAttachment = vi.fn();
+// No owner configured: these cover the DIRECT send. Owner routing is notify-routing.test.ts.
+vi.mock('$lib/config/owner', () => ({ ownerPhone: () => null }));
 vi.mock('$lib/workflows/whatsapp/service', () => ({
   getWhatsAppService: () => ({ sendMessage: mockSendMessage, sendAttachment: mockSendAttachment }),
 }));

@@ -12,10 +12,15 @@ vi.mock('$lib/workflows/whatsapp/workflow-dispatch', () => ({
   dispatchWhatsAppWorkflow: (...args: unknown[]) => mockDispatchWhatsAppWorkflow(...args),
 }));
 
+const emitted = vi.hoisted(() => [] as unknown[][]);
+vi.mock('$lib/events/platform-bus', () => ({ emit: (...a: unknown[]) => emitted.push(a) }));
+vi.mock('$lib/config/owner-number', () => ({ isOwnerNumber: (n: string) => n.replace(/\D+/g, '') === '447359228511' }));
+
 const { interceptOwnerInbound } = await import('$lib/workflows/whatsapp/inbound-intercept');
 
 beforeEach(() => {
   vi.clearAllMocks();
+  emitted.length = 0;
   mockHandleApprovalReply.mockResolvedValue({ handled: false });
   mockDispatchWhatsAppWorkflow.mockResolvedValue({ dispatched: false });
 });
@@ -45,5 +50,16 @@ describe('interceptOwnerInbound (delegated-mode entry point for D2/D3)', () => {
     expect(r).toEqual({ handled: false });
     expect(mockHandleApprovalReply).toHaveBeenCalled();
     expect(mockDispatchWhatsAppWorkflow).toHaveBeenCalled();
+  });
+
+  it('raises whatsapp.inbound for the owner, whatever consumes the message', async () => {
+    mockDispatchWhatsAppWorkflow.mockResolvedValue({ dispatched: true, workflowName: 'X' });
+    await interceptOwnerInbound('447359228511', 'lights off');
+    expect(emitted).toEqual([['whatsapp.inbound', { from: '447359228511', text: 'lights off' }, { source: 'whatsapp-inbound' }]]);
+  });
+
+  it('never raises an event for someone else', async () => {
+    await interceptOwnerInbound('15550001111', 'lights off');
+    expect(emitted).toHaveLength(0);
   });
 });

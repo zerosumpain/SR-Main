@@ -4,6 +4,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mockSendMessage = vi.fn();
 const mockGetState = vi.fn();
 
+// No owner configured: these cover the DIRECT send. Owner routing is notify-routing.test.ts.
+vi.mock('$lib/config/owner', () => ({ ownerPhone: () => null }));
 vi.mock('$lib/workflows/whatsapp/service', () => ({
   getWhatsAppService: () => ({
     sendMessage: mockSendMessage,

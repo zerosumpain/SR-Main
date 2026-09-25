@@ -71,6 +71,7 @@
 /api/native/workflows/[slug]/run
 /api/native/workflows/[slug]/runs
 /api/native/workflows/[slug]/trigger
+/api/native/workflows/event-types
 /api/native/workflows/node-types
 /api/native/workflows/runs/[runId]
 /api/platform/tools/catalogue

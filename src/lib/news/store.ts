@@ -10,6 +10,8 @@ import { db } from '$lib/db';
 import { newsReads, newsStories } from '$lib/db/schema';
 import { getSetting, setSetting } from '$lib/server/models/settings';
 import type { NewsSource, NewsStory } from './types';
+import { emit as emitPlatformEvent } from '$lib/events/platform-bus';
+import { newsItemPayload } from './item-event';
 
 /**
  * Upsert today's gather.
@@ -43,7 +45,7 @@ export async function recordStories(stories: readonly NewsStory[]): Promise<void
   }));
 
   try {
-    await db
+    const written = await db
       .insert(newsStories)
       .values(rows)
       .onConflictDoUpdate({
@@ -55,7 +57,20 @@ export async function recordStories(stories: readonly NewsStory[]): Promise<void
           summary: sql`excluded.summary`,
           lastSeenAt: sql`now()`,
         },
+      })
+      // `xmax = 0` is Postgres's tell for a row this statement INSERTED rather
+      // than updated through the conflict clause — i.e. a story never seen before.
+      .returning({
+        key: newsStories.newsKey,
+        source: newsStories.source,
+        title: newsStories.title,
+        url: newsStories.url,
+        domain: newsStories.domain,
+        inserted: sql<boolean>`(xmax = 0)`,
       });
+    const fresh = written.filter((r) => r.inserted);
+    const payload = newsItemPayload(fresh.map((r) => ({ key: r.key, source: r.source, title: r.title, url: r.url, domain: r.domain })));
+    if (payload) emitPlatformEvent('news.item', payload, { source: 'news-desk' });
   } catch (err) {
     console.error('[news] could not record the gather:', err instanceof Error ? err.message : err);
   }

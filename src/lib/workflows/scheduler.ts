@@ -1,10 +1,9 @@
 import { Cron } from 'croner';
 import { db } from '$lib/db';
-import { workflowSchedules, workflows, workflowNodes, workflowEdges, workflowRuns, nodeExecutions } from '$lib/db/schema';
+import { workflowSchedules, workflows, workflowRuns, nodeExecutions } from '$lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { engine } from '$lib/workflows';
-import type { WorkflowDefinition } from '$lib/workflows';
-import { isDisplayOnlyType } from '$lib/workflows/types';
+import { loadDefinition } from './start-run';
 import { emitObs } from '$lib/workflows/observability-bus';
 import { cronTimezone } from '$lib/workflows/cron-timezone';
 import { runsService } from './service-role';
@@ -284,44 +283,12 @@ async function runScheduledWorkflow(workflowId: string, scheduleId: string): Pro
   });
 
   try {
-    const nodes = await db
-      .select()
-      .from(workflowNodes)
-      .where(eq(workflowNodes.workflowId, workflowId));
-    const edges = await db
-      .select()
-      .from(workflowEdges)
-      .where(eq(workflowEdges.workflowId, workflowId));
-
-    const runnableNodes = nodes.filter((n) => !isDisplayOnlyType(n.type));
-    const runnableEdges = edges.filter((e) => {
-      const src = runnableNodes.find((n) => n.id === e.sourceNodeId);
-      const tgt = runnableNodes.find((n) => n.id === e.targetNodeId);
-      return src && tgt;
-    });
-
-    const definition: WorkflowDefinition = {
-      id: workflowId,
-      name: workflow.name,
-      nodes: runnableNodes.map((n) => ({
-        id: n.id,
-        type: n.type,
-        config: (n.config as Record<string, unknown>) ?? {},
-        label: n.label ?? n.type,
-        position: (n.position as { x: number; y: number }) ?? { x: 0, y: 0 },
-      })),
-      edges: runnableEdges.map((e) => ({
-        id: e.id,
-        sourceNodeId: e.sourceNodeId,
-        targetNodeId: e.targetNodeId,
-        sourceHandle: e.sourceHandle ?? undefined,
-        targetHandle: e.targetHandle ?? undefined,
-      })),
-    };
+    const definition = await loadDefinition(workflowId);
+    if (!definition) throw new Error(`workflow ${workflowId} not found`);
 
     // Create pending node execution records so scheduled runs have the same
     // diagnostic trail as manual runs (see routes/api/workflows/[id]/run/+server.ts).
-    for (const node of runnableNodes) {
+    for (const node of definition.nodes) {
       await db.insert(nodeExecutions).values({
         runId,
         nodeId: node.id,

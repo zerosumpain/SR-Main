@@ -18,7 +18,7 @@ let registered = false;
 export function registerDeliveryListener(): void {
   if (registered) return;
   registered = true;
-  onPlatformEvent('workflow_completed', async (event) => {
+  onPlatformEvent('workflow.completed', async (event) => {
     const payload = event.payload as { workflowId?: string; runId?: string } | undefined;
     if (!payload?.workflowId || !payload.runId) return;
     try {

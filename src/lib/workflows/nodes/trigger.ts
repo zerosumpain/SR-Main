@@ -56,7 +56,11 @@ export const triggerDef: NodeDefinition = {
       },
       eventType: {
         type: 'string',
-        description: 'Platform event to listen for (e.g. workflow_completed).',
+        description: 'Platform event to listen for — a $lib/events/catalogue type, e.g. workflow.completed, whatsapp.inbound, news.item. The event payload arrives as {{input.event.<key>}}.',
+      },
+      filter: {
+        type: 'array',
+        description: 'Optional payload filter, all must match: [{ key: top-level payload field, op: "equals" | "contains", value }].',
       },
       sourceWorkflowId: {
         type: 'string',
@@ -68,7 +72,7 @@ export const triggerDef: NodeDefinition = {
   inputs: [],
   outputs: [{ name: 'output', type: 'any', label: 'Output' }],
   basicConfig: [],
-  llmDescription: `Configurable workflow entry point. \`kind\` selects the firing mechanism: manual (user runs it), cron (a 5-field \`cron\` expression), webhook (an inbound POST to the workflow's webhook URL), or event (fires on a platform \`eventType\`, optionally scoped to a \`sourceWorkflowId\`). The run payload passes straight through to downstream nodes. Use this for scheduled or externally-triggered workflows; use \`manual-trigger\` for a plain run-button start.`,
+  llmDescription: `Configurable workflow entry point. \`kind\` selects the firing mechanism: manual (user runs it), cron (a 5-field \`cron\` expression), webhook (an inbound POST to the workflow's webhook URL), or event (fires on a platform \`eventType\` — workflow.completed, notification.raised, whatsapp.inbound, gmail.inbound, news.item, intel.alert, health.summary_changed, alexa.utterance, whoop_recovery_updated — optionally scoped to a \`sourceWorkflowId\` and narrowed by a \`filter\` of { key, op: equals|contains, value } clauses on top-level payload fields; downstream reads \`{{input.event.<key>}}\`). The run payload passes straight through to downstream nodes. Use this for scheduled or externally-triggered workflows; use \`manual-trigger\` for a plain run-button start.`,
   llmExamples: [
     { kind: 'cron', cron: '0 7 * * *' },
     { kind: 'webhook' },

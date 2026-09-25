@@ -7,6 +7,8 @@ import { join, basename } from 'node:path';
 import { interpolateTemplate } from './template';
 import { getWhatsAppService } from '../whatsapp/service';
 import { markdownToWhatsApp, chunkMessage } from '../whatsapp/format';
+import { isOwnerNumber } from '$lib/config/owner-number';
+import { notifyOwner, deliveryReport } from '$lib/server/notify';
 // Single source of truth for the key name, shared with the canvas UI (the node
 // inspector displays and clears it). Defined in that pure, fetch-free module so
 // the browser never pulls this executor in just to learn the key's name — and
@@ -240,8 +242,41 @@ export const whatsappExecutor: NodeExecutor = {
       }
     }
 
-    // ---- Chunked text send ---------------------------------------------
     const chunks = chunkMessage(message, normaliseMaxChunks(config.maxChunks));
+    const rememberSent = async () => {
+      if (!hash || !workflowId) return;
+      const { appendAtomic } = await import('./data-store');
+      await appendAtomic(workflowId, SENT_HASHES_KEY, [{ h: hash, ts: Date.now() }], SENT_HASHES_MAX);
+    };
+
+    // ---- Owner-bound text: through the notifier ---------------------------
+    // A message to the owner's own number is an owner notification, so the
+    // routing table, ledger and iPhone lane apply to it. The category defaults
+    // to `system`, which routes to WhatsApp by default: nothing that reached
+    // WhatsApp before stops reaching it. Anyone else stays on the direct send.
+    if (isOwnerNumber(to)) {
+      const category = String(config.category || 'system');
+      const text = chunks.join('\n\n');
+      const result = await notifyOwner({
+        category,
+        title: message.split('\n')[0].replace(/[*_~]/g, '').slice(0, 120) || 'Workflow message',
+        body: text,
+        whatsappText: text,
+        data: { workflowId: workflowId ?? null, runId: context.runId },
+      });
+      const report = deliveryReport(result);
+      if (result.reason === 'error' || report.whatsapp === 'failed') {
+        throw new Error(`WhatsApp send to the owner failed (${report.channels}); the ledger row stands`);
+      }
+      if (report.whatsapp === 'sent') await rememberSent();
+      const skipped = !report.raised;
+      return {
+        output: { ...report, sent: report.whatsapp === 'sent', routedVia: 'notify', category, suppressed: skipped, skipped, error: null },
+        rowCount: 1,
+      };
+    }
+
+    // ---- Chunked text send ---------------------------------------------
     const messageIds: string[] = [];
     let allSent = true;
     let firstError: string | null = null;
@@ -259,10 +294,7 @@ export const whatsappExecutor: NodeExecutor = {
     }
 
     // Record the hash only AFTER a fully-successful send.
-    if (allSent && hash && workflowId) {
-      const { appendAtomic } = await import('./data-store');
-      await appendAtomic(workflowId, SENT_HASHES_KEY, [{ h: hash, ts: Date.now() }], SENT_HASHES_MAX);
-    }
+    if (allSent) await rememberSent();
 
     // A send that did not send is a FAILED node, not a completed one.
     //

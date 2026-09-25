@@ -5,7 +5,7 @@ import { saveWorkflowTrigger } from '$lib/workflows/trigger-save.server';
 /**
  * PUT /api/workflows/:id/trigger
  *
- * Body: { kind, cron?, timezone?, eventType?, sourceWorkflowId?, enabled?, secret? }
+ * Body: { kind, cron?, timezone?, eventType?, sourceWorkflowId?, filter?, enabled?, secret? }
  *
  * The three-place sync (workflows.trigger, workflow_schedules, the trigger
  * node's config) and the live cron (un)registration live in

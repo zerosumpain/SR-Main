@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import { getHandler } from './registry';
 import { withActivity } from '$lib/context/activity';
 import { recordPulse, prunePulses } from './audit';
+import { prunePlatformEvents } from '$lib/events/store';
 import { seedDefaultActions } from './seed';
 import { runTargetedAction } from './handlers/targeted';
 import { withinActiveHours, rescheduleAfterWindowSkip } from './schedule';
@@ -76,6 +77,8 @@ async function runTick(): Promise<void> {
   // 308,639 rows before anyone looked. Nothing reads a six-week-old pulse.
   if (tickCount++ % PRUNE_EVERY_TICKS === 0) {
     void prunePulses();
+    // Same cadence for the platform event log (30 days).
+    void prunePlatformEvents();
   }
   const rows = await db
     .select()
