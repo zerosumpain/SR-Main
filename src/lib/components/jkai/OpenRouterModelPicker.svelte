@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
+  import { registerCodexEffortCeilings } from '$lib/models/thinking';
   import type { ModelContext } from '$lib/server/models/types';
   import ModelValueChart from '$lib/components/jkai/ModelValueChart.svelte';
 
@@ -313,7 +314,7 @@
 
   /**
    * Codex models, loaded once rather than on every filter change: they come
-   * from a five-row static table, not the DB query the OpenRouter rows use, so
+   * from a short Codex list (static rows plus discovered ones), not the DB query the OpenRouter rows use, so
    * there is nothing for the server to re-sort or re-score. Filtering by the
    * search box happens client-side below.
    */
@@ -322,6 +323,9 @@
       const res = await fetch('/api/admin/models/codex');
       if (!res.ok) return;
       const data = await res.json();
+      // Discovered models carry their tested ceiling; without this their
+      // thinking menu would stop at `xhigh`.
+      registerCodexEffortCeilings(data.rows ?? []);
       // Show them only when the operator has enabled Codex AND the bridge can
       // serve a call — a model you can pick but that always fails is worse
       // than one that isn't offered.

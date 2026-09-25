@@ -83,6 +83,28 @@ export const CODEX_EFFORT_CEILING: Record<string, ThinkingLevel> = {
   'gpt-5.3-codex-spark': 'xhigh',
 };
 
+/**
+ * Ceilings for models the nightly discovery found and tested (see
+ * $lib/server/models/codex-discovery), which are not in the table above.
+ *
+ * Kept apart from CODEX_EFFORT_CEILING so that table stays the hand-measured
+ * record codex-catalogue.test pins against CODEX_MODELS. Filled on the server
+ * when the discovered list loads, and in the browser from the `effortCeiling`
+ * the pickers receive on /api/admin/models/codex. Until it is filled, a
+ * discovered model gets the `xhigh` default below. That is safe, only shallower.
+ */
+const discoveredCeilings = new Map<string, ThinkingLevel>();
+
+export function registerCodexEffortCeilings(
+  rows: Iterable<{ slug: string; effortCeiling?: string | null }>,
+): void {
+  for (const r of rows) {
+    if (r.effortCeiling && isThinkingLevel(r.effortCeiling) && !(r.slug in CODEX_EFFORT_CEILING)) {
+      discoveredCeilings.set(r.slug, r.effortCeiling);
+    }
+  }
+}
+
 /** Bare slug from a possibly-prefixed id. `toCodexSlug` does the same job, but
  *  it lives in `$lib/server/*` and this module is imported by the chat UI. */
 function codexSlug(modelId: string | null | undefined): string {
@@ -95,7 +117,8 @@ export function thinkingLevelsFor(
   modelId?: string | null,
 ): ThinkingLevel[] {
   if (provider !== 'codex') return OPENROUTER_LEVELS;
-  const ceiling = CODEX_EFFORT_CEILING[codexSlug(modelId)] ?? 'xhigh';
+  const slug = codexSlug(modelId);
+  const ceiling = CODEX_EFFORT_CEILING[slug] ?? discoveredCeilings.get(slug) ?? 'xhigh';
   return CODEX_LEVELS.slice(0, CODEX_LEVELS.indexOf(ceiling) + 1);
 }
 

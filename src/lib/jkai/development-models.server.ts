@@ -1,6 +1,7 @@
 import { db } from '$lib/db';
 import { openrouterModels } from '$lib/db/schema';
-import { CODEX_MODELS, toCodexModelId } from '$lib/server/models/codex-catalogue';
+import { toCodexModelId } from '$lib/server/models/codex-catalogue';
+import { listCodexModels } from '$lib/server/models/codex-discovery';
 import { coerceModelContext } from '$lib/constants/default-models';
 import { resolveBuilderModel } from '$lib/server/models/workload-settings';
 
@@ -11,7 +12,8 @@ export async function developmentModels() {
     const raw = row.raw as { supported_parameters?: string[] } | null;
     return raw?.supported_parameters?.includes('tools');
   }).map(({ id, name }) => ({ id, name, provider: 'openrouter' }));
-  return [...CODEX_MODELS.map(m => ({ id: toCodexModelId(m.slug), name: m.name, provider: 'codex' })), ...models];
+  const codex = await listCodexModels();
+  return [...codex.map(m => ({ id: toCodexModelId(m.slug), name: m.name, provider: 'codex' })), ...models];
 }
 export async function resolveDevelopmentModel(value: unknown) {
   if (value === undefined || value === '') return resolveBuilderModel();

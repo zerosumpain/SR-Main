@@ -7,7 +7,8 @@ import { withDevice } from '$lib/server/native-handler';
 import { coerceModelContext } from '$lib/constants/default-models';
 import { modelSupportsThinking } from '$lib/server/models/capabilities';
 import { resolveChatTurnModel } from '$lib/server/models/workload-settings';
-import { CODEX_MODELS, findCodexModel, toCodexModelId } from '$lib/server/models/codex-catalogue';
+import { toCodexModelId, toCodexSlug } from '$lib/server/models/codex-catalogue';
+import { listCodexModels } from '$lib/server/models/codex-discovery';
 import { isCodexEnabled } from '$lib/server/models/settings';
 import { thinkingLevelsFor } from '$lib/models/thinking';
 
@@ -70,8 +71,11 @@ export const GET: RequestHandler = withDevice(async ({ params }) => {
 
   const defaultCtx = coerceModelContext(fallback);
   add({ provider: defaultCtx.provider as Choice['provider'], modelId: defaultCtx.modelId, group: 'default' });
+  // Static rows plus anything the nightly discovery found; see codex-discovery.
+  const codexModels = await listCodexModels();
+  const codexName = (modelId: string) => codexModels.find((m) => m.slug === toCodexSlug(modelId))?.name;
   if (codexOn) {
-    for (const m of CODEX_MODELS) add({ provider: 'codex', modelId: toCodexModelId(m.slug), label: m.name, group: 'codex' });
+    for (const m of codexModels) add({ provider: 'codex', modelId: toCodexModelId(m.slug), label: m.name, group: 'codex' });
   }
   let recent = 0;
   for (const row of recentRows) {
@@ -94,11 +98,11 @@ export const GET: RequestHandler = withDevice(async ({ params }) => {
     const byId = new Map(names.map((n) => [n.id, n.name]));
     for (const c of choices) if (c.provider === 'openrouter') c.label = byId.get(c.modelId) ?? c.label;
   }
-  for (const c of choices) if (c.provider === 'codex') c.label = findCodexModel(c.modelId)?.name ?? c.label;
+  for (const c of choices) if (c.provider === 'codex') c.label = codexName(c.modelId) ?? c.label;
 
   const currentLabel =
     choices.find((c) => c.provider === current.provider && c.modelId === current.modelId)?.label ??
-    findCodexModel(current.modelId)?.name ??
+    codexName(current.modelId) ??
     current.modelId;
 
   return {

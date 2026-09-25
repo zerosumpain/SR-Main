@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { ModelContext } from '$lib/server/models/types';
   import { onMount } from 'svelte';
+  import { registerCodexEffortCeilings } from '$lib/models/thinking';
 
   /** `need` names the provider feature this picker's role requires. When a
    *  provider can't do it, its models are listed but disabled with the reason,
@@ -25,6 +26,7 @@
     }
     if (codexRes.ok) {
       const data = await codexRes.json();
+      registerCodexEffortCeilings(data.rows ?? []);
       // Only offer Codex where the operator has switched it on AND the bridge
       // can actually serve a call.
       if (data.enabled && data.health?.ok) {

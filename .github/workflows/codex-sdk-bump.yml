@@ -1,0 +1,111 @@
+name: Codex SDK bump
+
+# Opens a pull request when npm has a newer @openai/codex-sdk than we lock.
+#
+# Why this exists: the SDK sat at 0.147.0 while Codex moved to 0.157.0. The
+# `^0.147.0` range cannot move it, because a caret on a 0.x version only allows
+# patch releases. Two things break silently while it is stale:
+#
+#  - The `sdk` transport, which is the bridge's one-env-var rollback
+#    (CODEX_BRIDGE_TRANSPORT=sdk), drives the CLI this package vendors. That CLI
+#    refuses any model newer than itself ("requires a newer version of Codex"),
+#    so the rollback also takes away every current model.
+#  - The Codex model list hides models from an old client. Model discovery
+#    ($lib/server/models/codex-discovery) works around that by asking as the
+#    latest client, but nothing else in the repo does.
+#
+# It only OPENS the pull request. package.json and package-lock.json are
+# protected paths, so the risk tier is high and a person merges it. On merge the
+# release job redeploys the bridge like any other change to it.
+#
+# A SEPARATE FILE for the same reason nightly.yml is: any trigger added to
+# ci.yml fires its gate job and holds the deploy lock.
+
+on:
+  schedule:
+    # Mondays, 05:00 UTC. GitHub cron is always UTC.
+    - cron: '0 5 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: sr-main-codex-sdk-bump
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  bump:
+    name: Open a bump PR if npm is ahead
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # The push below uses AUTOMERGE_TOKEN. A checkout that keeps
+          # GITHUB_TOKEN in git's extraheader would override it, and a push made
+          # with GITHUB_TOKEN never triggers CI on the new branch.
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Compare the locked version with npm
+        id: versions
+        run: |
+          CURRENT=$(node -p "require('./package-lock.json').packages['node_modules/@openai/codex-sdk'].version")
+          LATEST=$(npm view @openai/codex-sdk version)
+          echo "Locked: $CURRENT  npm: $LATEST"
+          NEWER=$(node -e "
+            const [a, b] = process.argv.slice(1).map((v) => v.split('.').map(Number));
+            for (let i = 0; i < 3; i++) if (a[i] !== b[i]) { console.log(b[i] > a[i]); process.exit(0); }
+            console.log(false);
+          " "$CURRENT" "$LATEST")
+          {
+            echo "current=$CURRENT"
+            echo "latest=$LATEST"
+            echo "newer=$NEWER"
+            echo "branch=deps/codex-sdk-$LATEST"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Open the pull request
+        if: steps.versions.outputs.newer == 'true'
+        env:
+          AUTOMERGE_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
+          REPO: ${{ github.repository }}
+          CURRENT: ${{ steps.versions.outputs.current }}
+          LATEST: ${{ steps.versions.outputs.latest }}
+          BRANCH: ${{ steps.versions.outputs.branch }}
+        run: |
+          if [ -z "${AUTOMERGE_TOKEN:-}" ]; then
+            echo "::warning::AUTOMERGE_TOKEN is not set. @openai/codex-sdk $LATEST is out (we lock $CURRENT), but no PR can be opened."
+            exit 0
+          fi
+          REMOTE="https://x-access-token:${AUTOMERGE_TOKEN}@github.com/${REPO}.git"
+          if git ls-remote --exit-code --heads "$REMOTE" "$BRANCH" >/dev/null; then
+            echo "$BRANCH already exists, so a PR for $LATEST is already open or was closed on purpose."
+            exit 0
+          fi
+
+          # Lockfile only: the SDK vendors a ~300MB CLI binary per platform,
+          # and CI installs it anyway.
+          npm install --package-lock-only --ignore-scripts "@openai/codex-sdk@^$LATEST"
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -c "$BRANCH"
+          git add package.json package-lock.json
+          git commit -m "deps: @openai/codex-sdk $CURRENT -> $LATEST"
+          git push "$REMOTE" "HEAD:$BRANCH"
+
+          GH_TOKEN="$AUTOMERGE_TOKEN" gh pr create --repo "$REPO" --base master --head "$BRANCH" \
+            --title "deps: @openai/codex-sdk $CURRENT -> $LATEST" \
+            --body "$(cat <<EOF
+          Opened by \`.github/workflows/codex-sdk-bump.yml\`: npm has \`@openai/codex-sdk\` **$LATEST**, and we lock **$CURRENT**.
+
+          This keeps the bridge's \`sdk\` transport (the \`CODEX_BRIDGE_TRANSPORT=sdk\` rollback) able to run current Codex models. The CLI it vendors refuses any model newer than itself.
+
+          It touches \`package.json\`, so it will not auto-merge. Once CI is green, merging it redeploys the bridge through the release job. To check it afterwards, \`/health\` on the bridge reports the new \`codexVersion\`.
+          EOF
+          )"

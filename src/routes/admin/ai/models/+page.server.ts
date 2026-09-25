@@ -5,7 +5,7 @@ import { db } from '$lib/db';
 import { openrouterModels } from '$lib/db/schema';
 import { sql } from 'drizzle-orm';
 import { DEFAULT_CHAT_MODEL_ID } from '$lib/constants/default-models';
-import { CODEX_MODELS } from '$lib/server/models/codex-catalogue';
+import { listCodexModels } from '$lib/server/models/codex-discovery';
 import { getCodexBridgeUrl, isCodexEnabled } from '$lib/server/models/settings';
 
 interface CodexBridgeHealth {
@@ -73,7 +73,7 @@ export const load: PageServerLoad = async () => {
     codex: {
       enabled: codexEnabled,
       health: codexHealth,
-      modelCount: CODEX_MODELS.length,
+      modelCount: (await listCodexModels()).length,
     },
   };
 };
