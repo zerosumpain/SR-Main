@@ -4,7 +4,7 @@ import { isPublicPath, isGuestAllowedPath, isMemberAllowedRoute, memberRouteIds 
 
 describe('isPublicPath', () => {
   it('allows known public pages and APIs', () => {
-    for (const p of ['/', '/projects', '/projects/engine-room', '/blog', '/blog/x', '/api/landing/vitals', '/api/blog/images/9/x.png', '/jkai/shared', '/jkai/shared/tok_abc123']) {
+    for (const p of ['/', '/projects', '/projects/engine-room', '/blog', '/blog/x', '/api/landing/vitals', '/api/blog/images/9/x.png', '/jkai/shared', '/jkai/shared/tok_abc123', '/privacy', '/tos']) {
       expect(isPublicPath(p)).toBe(true);
     }
   });
