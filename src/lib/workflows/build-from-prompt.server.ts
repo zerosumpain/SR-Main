@@ -51,12 +51,30 @@ export async function startBuildFromPrompt(req: BuildRequest): Promise<{ workflo
   const givenTitle = req.title?.trim() || null;
   const { slug } = await allocateCanvasName(givenTitle || clip(prompt, 40));
   const { workflowId } = await createCanvas(slug, givenTitle || clip(prompt, 80));
-  await recordBuildState(workflowId, 'building', `Building this workflow from your description: “${clip(prompt, 300)}”`);
+  await recordBuildState(workflowId, 'building', `Building this workflow from your description: “${clip(prompt, 300)}”`, undefined, undefined, { prompt, title: givenTitle, attempt: 1 });
 
   void buildInBackground(workflowId, prompt, givenTitle).catch((err) => {
     console.error(`[build-from-prompt] ${workflowId} failed outside its own handler`, err);
   });
   return { workflowId, slug };
+}
+
+/** Boot sweep: restart Describe-it builds a deploy killed (capped by MAX_BUILD_ATTEMPTS). Never throws. */
+export async function resumeInterruptedBuilds(bootedAt: number): Promise<number> {
+  try {
+    const { findInterruptedBuilds } = await import('./build-state.server');
+    const builds = await findInterruptedBuilds(bootedAt);
+    for (const b of builds) {
+      const resume = { prompt: b.prompt, title: b.title, attempt: b.attempt + 1 };
+      await recordBuildState(b.workflowId, 'building', 'The site restarted while this was being built — picking it up again.', undefined, undefined, resume);
+      console.log(`[build-from-prompt] resuming interrupted build ${b.workflowId} (attempt ${b.attempt + 1})`);
+      void buildInBackground(b.workflowId, b.prompt, b.title).catch((err) => console.error(`[build-from-prompt] ${b.workflowId} resume failed`, err));
+    }
+    return builds.length;
+  } catch (err) {
+    console.warn('[build-from-prompt] resume sweep failed:', err);
+    return 0;
+  }
 }
 
 async function fail(workflowId: string, error: string): Promise<void> {
