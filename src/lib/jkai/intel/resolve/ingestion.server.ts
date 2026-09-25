@@ -6,7 +6,7 @@ import { canonicalName, type ResolvableEntity } from './match';
 import { assessIdentity, chooseIdentity, groundMention } from './policy';
 import { generateEmbedding } from '../embed';
 import type { ExtractedEntity } from '../extract';
-import { noteSpace } from '../scope.server';
+import { noteSpace } from '../row-space';
 
 /** Per-mention lexical, identifier and contextual candidate retrieval, bounded independently. */
 export async function mentionCandidates(entity: ExtractedEntity, executor: DbExecutor = db, semantic = true, spaceId: string): Promise<Array<ResolvableEntity & { semanticDistance?: number }>> {

@@ -1,7 +1,4 @@
-import { eq } from 'drizzle-orm';
 import { error } from '@sveltejs/kit';
-import { db, type DbExecutor } from '$lib/db';
-import { intelNotes, intelEntities } from '$lib/db/schema';
 import { viewerOf } from '$lib/server/viewer';
 import { HOUSEHOLD_SPACE, OWNER_INTEL_SCOPE, type IntelScope } from './scope';
 
@@ -35,18 +32,5 @@ export async function resolveRequestScope(event: { locals: App.Locals }): Promis
   throw error(403, 'Forbidden');
 }
 
-/** A derived row's space is its note's — never a parameter a caller could get wrong. */
-export async function noteSpace(noteId: string, executor: DbExecutor = db): Promise<string> {
-  const [row] = await executor.select({ space: intelNotes.spaceId }).from(intelNotes)
-    .where(eq(intelNotes.id, noteId)).limit(1);
-  if (!row) throw new Error(`intel note ${noteId} not found`);
-  return row.space;
-}
-
-/** The same rule for rows derived from an entity rather than a note. */
-export async function entitySpace(entityId: string, executor: DbExecutor = db): Promise<string> {
-  const [row] = await executor.select({ space: intelEntities.spaceId }).from(intelEntities)
-    .where(eq(intelEntities.id, entityId)).limit(1);
-  if (!row) throw new Error(`intel entity ${entityId} not found`);
-  return row.space;
-}
+// Re-exported for the routes that already import them from here.
+export { noteSpace, entitySpace } from './row-space';

@@ -14,7 +14,7 @@ import { resolveExtractionModel } from '$lib/server/models/workload-settings';
 import { withActivity } from '$lib/context/activity';
 import { decayWeight } from './staleness';
 import { canonicalName } from './resolve/match';
-import { noteSpace } from './scope.server';
+import { noteSpace } from './row-space';
 import type {
   ExtractionResult,
   ExtractedEntity,
