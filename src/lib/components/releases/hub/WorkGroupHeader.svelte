@@ -12,7 +12,7 @@
 
   function barHeight(cost: number | null, max: number): number {
     if (!cost || max <= 0) return 8;
-    return Math.max(8, Math.round((cost / max) * 42));
+    return Math.max(6, Math.round((cost / max) * 32));
   }
 
   function date(value: Date | string | null): string {
@@ -78,7 +78,7 @@
 </div>
 
 <style>
-  .group-head { background: var(--surface-sunken); border-top: 2px solid var(--text-primary); padding: 12px 16px 10px; }
+  .group-head { background: var(--surface-sunken); border-top: 2px solid var(--text-primary); padding: 8px 12px 6px; }
   .group-head.unlinked { border-top-color: var(--line-strong); }
   .group-label { display: flex; justify-content: space-between; gap: 1rem; align-items: baseline; margin-bottom: 5px; }
   .eyebrow, .group-count, .session-date, .cost, .session-context, .stage-name, .stage-cost {
@@ -88,13 +88,13 @@
   .group-count { color: var(--text-muted); white-space: nowrap; }
   .unlinked-note { color: var(--text-muted); font-size: var(--fs-label); margin: 0.5rem 0 0; }
   .session { border-top: 1px solid var(--line-hair); }
-  .session summary { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr) auto auto 1rem; gap: 1rem; align-items: center; min-height: 57px; cursor: pointer; list-style: none; }
+  .session summary { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr) auto auto 1rem; gap: 0.75rem; align-items: center; min-height: 45px; cursor: pointer; list-style: none; }
   .session summary::-webkit-details-marker { display: none; }
   .session summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .session-date { color: var(--text-ghost); white-space: nowrap; }
   .session-title { font-size: var(--fs-body-sm); font-weight: 600; line-height: 1.35; min-width: 0; overflow-wrap: anywhere; }
-  .strip { display: flex; align-items: flex-end; gap: 2px; height: 42px; }
-  .bar { width: 5px; min-height: 8px; background: var(--text-ghost); }
+  .strip { display: flex; align-items: flex-end; gap: 2px; height: 32px; }
+  .bar { width: 5px; min-height: 6px; background: var(--text-ghost); }
   .bar[data-stage='request'] { background: var(--accent-ink); }
   .bar[data-stage='design'] { background: color-mix(in srgb, var(--accent-ink) 62%, var(--accent)); }
   .bar[data-stage='plan'] { background: color-mix(in srgb, var(--accent-ink) 32%, var(--accent)); }
@@ -103,11 +103,11 @@
   .cost { color: var(--text-secondary); text-align: right; white-space: nowrap; }
   .chev { color: var(--text-ghost); transition: transform var(--t-fast) var(--ease-out); }
   .session[open] .chev { transform: rotate(180deg); }
-  .session-detail { padding: 0 0 12px 5.5rem; }
+  .session-detail { padding: 0 0 8px 5.5rem; }
   .session-context { color: var(--text-muted); line-height: 1.5; margin: 0 0 8px; }
   .session-context a { color: var(--accent-ink); }
   .stages { list-style: none; margin: 0; padding: 0; }
-  .stages li { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr) auto; gap: 0.8rem; padding: 4px 0; border-top: 1px solid var(--line-hair); }
+  .stages li { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr) auto; gap: 0.8rem; padding: 3px 0; border-top: 1px solid var(--line-hair); }
   .stage-name { text-transform: uppercase; color: var(--accent-ink); }
   .stage-title { font-size: var(--fs-label); color: var(--text-secondary); }
   .stage-cost { color: var(--text-muted); white-space: nowrap; }

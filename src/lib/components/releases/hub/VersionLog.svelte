@@ -323,12 +323,12 @@
   .vl {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 12px;
   }
   .work-group { border-left: 2px solid var(--line-strong); padding-left: clamp(8px, 1.2vw, 18px); }
   .work-group.linked { border-left-color: var(--accent); }
   .commit-heading { font: 700 var(--fs-label-xs) var(--font-mono); text-transform: uppercase; letter-spacing: var(--tracking-label); color: var(--text-muted); }
-  .commit-preview { margin: -2px 0 13px 8.5rem; padding: 0 0 0 14px; list-style: none; border-left: 1px solid var(--line-strong); display: flex; flex-direction: column; gap: 5px; }
+  .commit-preview { margin: -2px 0 8px 8.5rem; padding: 0 0 0 12px; list-style: none; border-left: 1px solid var(--line-strong); display: flex; flex-direction: column; gap: 3px; }
   .commit-preview li { display: flex; gap: 12px; min-width: 0; color: var(--text-muted); font-size: var(--fs-label); line-height: 1.35; overflow-wrap: anywhere; }
   .commit-preview .sha { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent-ink); white-space: nowrap; }
   .commit-preview .more { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
@@ -349,7 +349,7 @@
     align-items: baseline;
     gap: 16px;
     width: 100%;
-    padding: 15px 0;
+    padding: 10px 0;
     background: none;
     border: none;
     border-radius: 0;
@@ -377,7 +377,7 @@
   .rel-titles {
     display: flex;
     flex-direction: column;
-    gap: 7px;
+    gap: 4px;
     min-width: 0;
   }
   .rel-title {
@@ -392,7 +392,7 @@
   .rel-meta {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 5px;
     flex-wrap: wrap;
   }
   .rel-date {

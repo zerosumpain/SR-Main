@@ -1,5 +1,5 @@
 import type { SOURCE_FOOTPRINT } from 'virtual:sr-source-footprint';
-import type { CadenceWeek, ConsolePayload } from '$lib/releases/console';
+import type { CadenceWeek, ConsolePayload, ReleaseMonth } from '$lib/releases/console';
 import type { KindSlice, ShowcaseItem, ShowcaseTotals } from '$lib/releases/public';
 import type { ReleaseSessionsBand } from '$lib/releases/sessions.server';
 
@@ -9,20 +9,23 @@ export type ReleasesAudience = 'owner' | 'public';
 export interface PublicReleasesData {
   mode: 'public';
   sourceFootprint: typeof SOURCE_FOOTPRINT;
+  today: string;
   totals: ShowcaseTotals;
   cadence: CadenceWeek[];
+  timeBuckets: ReleaseMonth[];
   /** The mix over the FILTERED items — it describes what is on the page. */
   kindMix: KindSlice[];
   /** The kinds the whole safe corpus contains — what the picker may offer. */
   kindOptions: string[];
   items: ShowcaseItem[];
-  filters: { kind: string; q: string };
+  filters: { kind: string; q: string; from: string; to: string };
 }
 
 /** What the owner gets — the whole console, formerly /admin/ops/releases. */
 export interface OwnerReleasesData extends ConsolePayload {
   mode: 'owner';
   sourceFootprint: typeof SOURCE_FOOTPRINT;
+  today: string;
   sampleData?: boolean;
   /**
    * The Claude Code sessions that produced the releases on this page, joined on

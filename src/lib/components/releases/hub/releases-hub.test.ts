@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render } from 'svelte/server';
 import ReleasesHub from './ReleasesHub.svelte';
-import { weeklyCadence } from '$lib/releases/console';
+import { monthlyReleaseBuckets, parseConsoleFilters, weeklyCadence } from '$lib/releases/console';
 import { groupReleaseWork } from './work-groups';
 import type { OwnerReleasesData, PublicReleasesData } from './types';
 
@@ -24,6 +24,7 @@ const COMMIT_BODY = 'normalise the JID for the number that kept failing';
 function publicData(over: Partial<PublicReleasesData> = {}): PublicReleasesData {
   return {
     mode: 'public',
+    today: '2026-09-25',
     sourceFootprint: { lines: 456789, files: 2345, measuredAt: '2026-09-07T09:00:00Z' },
     totals: {
       releases: 1004,
@@ -36,7 +37,8 @@ function publicData(over: Partial<PublicReleasesData> = {}): PublicReleasesData 
       lastDeploy: '2026-07-29T13:52:00.000Z',
       days: 133,
     },
-    cadence: [{ week: '2026-W30', deploys: 9, shipped: 14 }],
+    cadence: [{ week: '2026-W30', deploys: 9, shipped: 14, insertions: 120, deletions: 34 }],
+    timeBuckets: [{ month: '2026-07', deploys: 9 }],
     kindMix: [{ kind: 'feature', count: 1 }],
     kindOptions: ['feature', 'fix', 'improvement', 'content'],
     items: [
@@ -49,7 +51,7 @@ function publicData(over: Partial<PublicReleasesData> = {}): PublicReleasesData 
         deployedAt: '2026-07-11T23:37:00.000Z',
       },
     ],
-    filters: { kind: 'all', q: '' },
+    filters: { kind: 'all', q: '', from: '', to: '' },
     ...over,
   };
 }
@@ -57,8 +59,9 @@ function publicData(over: Partial<PublicReleasesData> = {}): PublicReleasesData 
 function ownerData(over: Partial<OwnerReleasesData> = {}): OwnerReleasesData {
   return {
     mode: 'owner',
+    today: '2026-09-25',
     sourceFootprint: { lines: 456789, files: 2345, measuredAt: '2026-09-07T09:00:00Z' },
-    filters: { kind: 'all', impact: 'all', via: 'all', q: '', page: 0 },
+    filters: { kind: 'all', impact: 'all', via: 'all', q: '', from: '', to: '', page: 0 },
     totals: {
       releases: 418,
       commits: 2338,
@@ -72,7 +75,8 @@ function ownerData(over: Partial<OwnerReleasesData> = {}): OwnerReleasesData {
     },
     vias: [{ via: 'github-actions', count: 400 }],
     kindDist: [{ kind: 'feature', count: 308 }],
-    cadence: [{ week: '2026-W30', deploys: 9, shipped: 14 }],
+    cadence: [{ week: '2026-W30', deploys: 9, shipped: 14, insertions: 120, deletions: 34 }],
+    timeBuckets: [{ month: '2026-07', deploys: 9 }],
     items: [
       {
         id: 1,
@@ -167,6 +171,8 @@ describe('the public document', () => {
     expect(body).toContain('All kinds');
     expect(body).toContain('Cadence');
     expect(body).toContain('Capabilities');
+    expect(body).toContain('Code change');
+    expect(body).toContain('Filter by deployment month');
   });
 
   it('offers only the kinds its corpus can actually return', () => {
@@ -224,6 +230,7 @@ describe('the owner document', () => {
     expect(body).toContain('All sources');
     expect(body).toContain('User-facing');
     expect(body).toContain('Older →');
+    expect(body).toContain('30 days');
   });
 
   it('holds the evidence back until a release is opened', () => {
@@ -246,6 +253,28 @@ describe('the owner document', () => {
 
   it('is not indexable copy — it names the full read', () => {
     expect(body).toContain('full read');
+  });
+});
+
+describe('visual time filter', () => {
+  it('normalises invalid and reversed UTC dates', () => {
+    expect(parseConsoleFilters(new URL('https://example.test/releases?from=2026-09-31&to=bad')).from).toBe('');
+    expect(parseConsoleFilters(new URL('https://example.test/releases?from=2026-09-25&to=2026-08-01')))
+      .toMatchObject({ from: '2026-08-01', to: '2026-09-25' });
+  });
+
+  it('keeps month gaps visible and preserves other filters in month links', () => {
+    expect(monthlyReleaseBuckets([
+      { date: '2026-07-03', count: 2 },
+      { date: '2026-09-12', count: 1 },
+    ])).toEqual([
+      { month: '2026-07', deploys: 2 },
+      { month: '2026-08', deploys: 0 },
+      { month: '2026-09', deploys: 1 },
+    ]);
+    const body = html(ownerData({ filters: { ...ownerData().filters, q: 'dashboard', from: '2026-07-01', to: '2026-07-31' } }));
+    expect(body).toContain('q=dashboard');
+    expect(body).toContain('2026-07-31');
   });
 });
 
@@ -292,15 +321,24 @@ describe('weeklyCadence', () => {
   it('rolls the public per-day series into ISO weeks', () => {
     // 2026-07-27 is a Monday; 2026-08-02 the Sunday that closes the same week.
     const weeks = weeklyCadence([
-      { date: '2026-07-27', count: 2, shipped: 5 },
-      { date: '2026-07-29', count: 6, shipped: 9 },
-      { date: '2026-08-02', count: 1, shipped: 1 },
-      { date: '2026-08-03', count: 4, shipped: 2 },
+      { date: '2026-07-27', count: 2, shipped: 5, insertions: 12, deletions: 3 },
+      { date: '2026-07-29', count: 6, shipped: 9, insertions: 20, deletions: 7 },
+      { date: '2026-08-02', count: 1, shipped: 1, insertions: 2, deletions: 1 },
+      { date: '2026-08-03', count: 4, shipped: 2, insertions: 5, deletions: 8 },
     ]);
     expect(weeks).toEqual([
-      { week: '2026-W31', deploys: 9, shipped: 15 },
-      { week: '2026-W32', deploys: 4, shipped: 2 },
+      { week: '2026-W31', deploys: 9, shipped: 15, insertions: 34, deletions: 11 },
+      { week: '2026-W32', deploys: 4, shipped: 2, insertions: 5, deletions: 8 },
     ]);
+  });
+
+  it('shows empty weeks as zero rather than joining distant releases', () => {
+    const weeks = weeklyCadence([
+      { date: '2026-07-27', count: 1, shipped: 1, insertions: 10, deletions: 2 },
+      { date: '2026-08-10', count: 1, shipped: 1, insertions: 4, deletions: 7 },
+    ]);
+    expect(weeks.map((week) => week.deploys)).toEqual([1, 0, 1]);
+    expect(weeks[1]).toMatchObject({ insertions: 0, deletions: 0 });
   });
 
   it('keeps only the most recent weeks, oldest first', () => {

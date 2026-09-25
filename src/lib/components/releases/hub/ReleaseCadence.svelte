@@ -30,8 +30,12 @@
   }
 
   let { kicker, cadence, kindMix, shippedLabel, strap }: Props = $props();
+  let view = $state<'activity' | 'churn'>('activity');
 
   const peak = $derived(Math.max(1, ...cadence.flatMap((w) => [w.deploys, w.shipped])));
+  const churnPeak = $derived(Math.max(1, ...cadence.flatMap((w) => [w.insertions, w.deletions])));
+  const added = $derived(cadence.reduce((total, week) => total + week.insertions, 0));
+  const removed = $derived(cadence.reduce((total, week) => total + week.deletions, 0));
   const kindMax = $derived(Math.max(1, ...kindMix.map((k) => k.count)));
 
   const busiest = $derived(
@@ -45,6 +49,10 @@
     const [year, w] = week.split('-');
     return `${w} '${year.slice(2)}`;
   }
+
+  function fmt(n: number): string {
+    return n.toLocaleString('en-GB');
+  }
 </script>
 
 <section class="b">
@@ -54,16 +62,27 @@
     <div class="b-grid">
       <figure class="b-panel wide">
         <figcaption class="b-panel-hd">
-          <span class="b-panel-name">Cadence · last {cadence.length} week{cadence.length === 1 ? '' : 's'}</span>
-          <span class="b-legend">
-            <span class="b-key"><span class="b-swatch deploys"></span>Deploys</span>
-            <span class="b-key"><span class="b-swatch shipped"></span>{shippedLabel}</span>
+          <span class="b-panel-name">Weekly record · latest {cadence.length} week{cadence.length === 1 ? '' : 's'} in view</span>
+          <span class="b-view" aria-label="Chart view">
+            <button type="button" aria-pressed={view === 'activity'} onclick={() => (view = 'activity')}>Activity</button>
+            <button type="button" aria-pressed={view === 'churn'} onclick={() => (view = 'churn')}>Code change</button>
           </span>
         </figcaption>
 
+        <div class="b-legend">
+          {#if view === 'activity'}
+            <span class="b-key"><span class="b-swatch deploys"></span>Deploys</span>
+            <span class="b-key"><span class="b-swatch shipped"></span>{shippedLabel}</span>
+          {:else}
+            <span class="b-key"><span class="b-swatch added"></span>Lines added</span>
+            <span class="b-key"><span class="b-swatch removed"></span>Lines removed</span>
+            <span class="b-legend-total">+{fmt(added)} / −{fmt(removed)} lines in view</span>
+          {/if}
+        </div>
+
         {#if cadence.length === 0}
           <p class="b-empty">No releases recorded.</p>
-        {:else}
+        {:else if view === 'activity'}
           <div class="b-plot" style="--peak: {peak}">
             <span class="b-peak">{peak}</span>
             <div class="b-cols">
@@ -84,6 +103,30 @@
                   Busiest week {weekLabel(busiest.week)} · {busiest.deploys} deploys
                 </span>
               {/if}
+              <span>{weekLabel(cadence[cadence.length - 1].week)}</span>
+            </div>
+          </div>
+        {:else}
+          <div class="b-plot churn-plot">
+            <div class="churn-scale" aria-hidden="true">
+              <span>+{fmt(churnPeak)}</span><span>0</span><span>−{fmt(churnPeak)}</span>
+            </div>
+            <div class="churn-cols">
+              {#each cadence as w (w.week)}
+                <div
+                  class="churn-col"
+                  role="img"
+                  aria-label="{w.week}: {fmt(w.insertions)} lines added, {fmt(w.deletions)} lines removed"
+                  title="{w.week}: +{fmt(w.insertions)} / −{fmt(w.deletions)} lines"
+                >
+                  <span class="churn-up" style="height: {(w.insertions / churnPeak) * 50}%"></span>
+                  <span class="churn-down" style="height: {(w.deletions / churnPeak) * 50}%"></span>
+                </div>
+              {/each}
+            </div>
+            <div class="b-axis">
+              <span>{weekLabel(cadence[0].week)}</span>
+              <span class="b-note">Weekly lines changed · zero at centre</span>
               <span>{weekLabel(cadence[cadence.length - 1].week)}</span>
             </div>
           </div>
@@ -120,21 +163,22 @@
   .b {
     background: var(--bg);
     color: var(--text-primary);
-    padding: clamp(44px, 5vw, 76px) clamp(20px, 3vw, 44px);
+    padding: clamp(28px, 3vw, 46px) clamp(20px, 3vw, 44px);
   }
   .b-inner {
     max-width: 1400px;
     margin: 0 auto;
   }
+  .b :global(.hd) { margin-bottom: 20px; }
 
   .b-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    gap: 16px;
+    gap: 12px;
   }
   .b-panel {
     border: 1px solid var(--line-strong);
-    padding: 22px;
+    padding: 15px 17px;
     margin: 0;
     min-width: 0;
   }
@@ -154,7 +198,7 @@
     justify-content: space-between;
     gap: 14px;
     flex-wrap: wrap;
-    margin-bottom: 18px;
+    margin-bottom: 8px;
   }
   .b-panel-name,
   .b-panel-meta {
@@ -174,9 +218,16 @@
 
   .b-legend {
     display: flex;
-    gap: 16px;
+    gap: 12px;
     flex-wrap: wrap;
+    margin-bottom: 8px;
   }
+  .b-view { display: flex; border: 1px solid var(--line-strong); }
+  .b-view button { border: 0; background: transparent; color: var(--text-muted); font: var(--fs-label-xs) var(--font-mono); padding: 5px 9px; cursor: pointer; }
+  .b-view button + button { border-left: 1px solid var(--line-strong); }
+  .b-view button[aria-pressed='true'] { background: var(--text-primary); color: var(--bg); }
+  .b-view button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .b-legend-total { font: var(--fs-label-xs) var(--font-mono); color: var(--text-muted); margin-left: auto; }
   .b-key {
     display: inline-flex;
     align-items: center;
@@ -197,6 +248,8 @@
   .b-swatch.shipped {
     background: var(--accent-ink);
   }
+  .b-swatch.added { background: var(--accent); }
+  .b-swatch.removed { background: var(--accent-ink); }
 
   .b-plot {
     position: relative;
@@ -215,7 +268,7 @@
     display: flex;
     align-items: flex-end;
     gap: 3px;
-    height: 168px;
+    height: 142px;
     border-bottom: 1px solid var(--line-strong);
   }
   .b-col {
@@ -241,6 +294,13 @@
   .b-bar.shipped {
     background: var(--accent-ink);
   }
+  .churn-plot { padding-left: 70px; }
+  .churn-scale { position: absolute; left: 0; top: 0; height: 142px; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; color: var(--text-ghost); font: var(--fs-label-xs) var(--font-mono); font-variant-numeric: tabular-nums; }
+  .churn-cols { display: flex; height: 142px; border-bottom: 1px solid var(--line-hair); background: linear-gradient(to bottom, transparent calc(50% - 0.5px), var(--line-strong) 50%, transparent calc(50% + 0.5px)); }
+  .churn-col { position: relative; flex: 1; min-width: 0; height: 100%; }
+  .churn-up, .churn-down { position: absolute; left: 18%; width: 64%; }
+  .churn-up { bottom: 50%; background: var(--accent); }
+  .churn-down { top: 50%; background: var(--accent-ink); }
 
   .b-axis {
     display: flex;
@@ -262,7 +322,7 @@
   .b-rows {
     display: flex;
     flex-direction: column;
-    gap: 11px;
+    gap: 8px;
   }
   .b-row {
     display: grid;

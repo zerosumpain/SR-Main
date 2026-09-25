@@ -117,8 +117,8 @@
 
   const cadenceStrap = $derived(
     data.mode === 'owner'
-      ? 'Deploys per week against the entries they carried, over the last weeks in this view. Both series are counts on one scale.'
-      : 'Deploys per week against the capabilities they carried. Deploy counts are the whole record; the lower series counts only what this page can describe.',
+      ? 'Switch between deploy activity and code added or removed by week. The chart follows the filters above; code counts come from each release’s recorded diff stats.'
+      : 'Switch between deploy activity and code added or removed by week. Deploy and code counts cover all recorded releases; capabilities count only what this page can describe.',
   );
 
   // ——— C ————————————————————————————————————————————————————————————
@@ -139,7 +139,7 @@
       ? [
           'strangeramblings.com/releases · full read · commits, files and evidence',
           `${fmt(data.totals.pending)} pending · ${fmt(data.totals.failed)} failed`,
-          'Owner view — this is the whole log, unfiltered',
+          'Owner view — full release evidence',
         ]
       : [
           'strangeramblings.com/releases · public read',
@@ -170,6 +170,40 @@
     onSummarise={summarise}
   />
 
+  <section class="filters">
+    <div class="filters-inner">
+      {#if data.mode === 'owner' && data.sampleData}
+        <p class="sample-note">Local preview · synthetic sessions and releases</p>
+      {/if}
+      {#if data.mode === 'owner'}
+        <ReleaseFilters
+          owner
+          kind={data.filters.kind}
+          q={data.filters.q}
+          from={data.filters.from}
+          to={data.filters.to}
+          today={data.today}
+          timeBuckets={data.timeBuckets}
+          impact={data.filters.impact}
+          via={data.filters.via}
+          vias={data.vias}
+          {result}
+        />
+      {:else}
+        <ReleaseFilters
+          kind={data.filters.kind}
+          q={data.filters.q}
+          from={data.filters.from}
+          to={data.filters.to}
+          today={data.today}
+          timeBuckets={data.timeBuckets}
+          kinds={data.kindOptions}
+          {result}
+        />
+      {/if}
+    </div>
+  </section>
+
   <ReleaseCadence
     kicker={`B / Cadence · ${plural(data.cadence.length, 'week', 'weeks')}`}
     cadence={data.cadence}
@@ -188,20 +222,7 @@
           : 'Grouped by the day it went live. Version numbers are date-derived, and the backfilled releases carry approximate timestamps.'}
       />
 
-      {#if data.mode === 'owner' && data.sampleData}
-        <p class="sample-note">Local preview · synthetic sessions and releases</p>
-      {/if}
-
       {#if data.mode === 'owner'}
-        <ReleaseFilters
-          owner
-          kind={data.filters.kind}
-          q={data.filters.q}
-          impact={data.filters.impact}
-          via={data.filters.via}
-          vias={data.vias}
-          {result}
-        />
         <VersionLog
           items={data.items}
           sessions={data.sessions}
@@ -211,12 +232,6 @@
           onRegenerate={(id, version) => summarise({ id, force: true }, `re-summarising ${version}…`)}
         />
       {:else}
-        <ReleaseFilters
-          kind={data.filters.kind}
-          q={data.filters.q}
-          kinds={data.kindOptions}
-          {result}
-        />
         <CapabilityRecord items={data.items} />
       {/if}
     </div>
@@ -225,15 +240,17 @@
 </HealthShell>
 
 <style>
+  .filters { background: var(--bg); color: var(--text-primary); padding: 10px clamp(20px, 3vw, 44px) 0; }
+  .filters-inner { max-width: 1400px; margin: 0 auto; }
   .c {
     background: var(--bg);
     color: var(--text-primary);
-    padding: 0 clamp(20px, 3vw, 44px) clamp(52px, 6vw, 88px);
+    padding: 0 clamp(20px, 3vw, 44px) clamp(42px, 5vw, 68px);
   }
   .c-inner {
     max-width: 1400px;
     margin: 0 auto;
-    padding-top: clamp(28px, 3.5vw, 48px);
+    padding-top: clamp(20px, 2.5vw, 34px);
     border-top: 1px solid var(--line-strong);
   }
   .sample-note { margin: 0 0 16px; padding: 8px 10px; border-left: 3px solid var(--accent-ink); background: var(--accent-ink-tint-06); color: var(--text-secondary); font: var(--fs-label) var(--font-mono); }

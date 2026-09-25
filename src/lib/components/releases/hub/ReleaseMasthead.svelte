@@ -109,7 +109,7 @@
   .a {
     background: var(--text-primary);
     color: var(--bg);
-    padding: clamp(44px, 5vw, 76px) clamp(20px, 3vw, 44px) clamp(40px, 5vw, 68px);
+    padding: clamp(30px, 3.5vw, 52px) clamp(20px, 3vw, 44px) clamp(28px, 3.5vw, 46px);
   }
   .a-inner {
     max-width: 1400px;
@@ -121,11 +121,11 @@
   .a-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-    gap: 14px;
+    gap: 8px;
   }
   .a-tile {
     border: 1px solid rgba(237, 228, 212, 0.16);
-    padding: 18px 20px;
+    padding: 12px 14px;
     min-width: 0;
   }
   .a-label {
@@ -135,11 +135,11 @@
     letter-spacing: 0.15em;
     text-transform: uppercase;
     color: rgba(237, 228, 212, 0.55);
-    margin: 0 0 12px;
+    margin: 0 0 7px;
   }
   .a-value {
     font-family: var(--font-display);
-    font-size: 34px;
+    font-size: 30px;
     line-height: 0.86;
     letter-spacing: -0.02em;
     font-variant-numeric: tabular-nums;
@@ -152,11 +152,11 @@
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: rgba(237, 228, 212, 0.45);
-    margin: 10px 0 0;
+    margin: 6px 0 0;
   }
 
   .a-source {
-    margin: 18px 0 0;
+    margin: 12px 0 0;
     max-width: 90ch;
     font-family: var(--font-body);
     font-size: var(--fs-label-xs);
@@ -171,8 +171,8 @@
     justify-content: space-between;
     gap: 20px;
     flex-wrap: wrap;
-    margin-top: 22px;
-    padding-top: 20px;
+    margin-top: 14px;
+    padding-top: 14px;
     border-top: 1px solid rgba(237, 228, 212, 0.16);
   }
   .a-ops-state {

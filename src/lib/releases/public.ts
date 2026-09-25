@@ -52,6 +52,9 @@ export interface CadenceDay {
   count: number;
   /** Publicly-describable capabilities those deploys carried. */
   shipped: number;
+  /** Code churn from all recorded releases, as in the public headline totals. */
+  insertions: number;
+  deletions: number;
 }
 
 export interface KindSlice {
@@ -89,7 +92,7 @@ async function visibilityMap(): Promise<Record<string, boolean>> {
 
 /** Fill every day between first and last so the cadence chart has no gaps. */
 function denseCadence(
-  deploys: Map<string, number>,
+  deploys: Map<string, { count: number; insertions: number; deletions: number }>,
   shipped: Map<string, number>,
   from: Date,
   to: Date,
@@ -99,7 +102,14 @@ function denseCadence(
   const end = Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate());
   while (cursor.getTime() <= end) {
     const iso = cursor.toISOString().slice(0, 10);
-    out.push({ date: iso, count: deploys.get(iso) ?? 0, shipped: shipped.get(iso) ?? 0 });
+    const day = deploys.get(iso);
+    out.push({
+      date: iso,
+      count: day?.count ?? 0,
+      shipped: shipped.get(iso) ?? 0,
+      insertions: day?.insertions ?? 0,
+      deletions: day?.deletions ?? 0,
+    });
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
   return out;
@@ -133,8 +143,10 @@ async function compute(): Promise<ShowcasePayload> {
       .from(releases),
     db
       .select({
-        day: sql<string>`to_char(${releases.deployedAt}, 'YYYY-MM-DD')`,
+        day: sql<string>`to_char(${releases.deployedAt} at time zone 'UTC', 'YYYY-MM-DD')`,
         n: sql<number>`count(*)::int`,
+        insertions: sql<number>`coalesce(sum((${releases.stats}->>'insertions')::int), 0)::int`,
+        deletions: sql<number>`coalesce(sum((${releases.stats}->>'deletions')::int), 0)::int`,
       })
       .from(releases)
       .groupBy(sql`1`),
@@ -169,7 +181,9 @@ async function compute(): Promise<ShowcasePayload> {
   const kindCounts = new Map<string, number>();
   for (const r of safe) kindCounts.set(r.kind, (kindCounts.get(r.kind) ?? 0) + 1);
 
-  const dayCounts = new Map(dayRows.map((d) => [d.day, d.n]));
+  const dayCounts = new Map(dayRows.map((d) => [d.day, {
+    count: d.n, insertions: d.insertions, deletions: d.deletions,
+  }]));
 
   // Capabilities per day, counted from the SAFE set only — so the lower comb
   // never implies work the page is not allowed to describe.
