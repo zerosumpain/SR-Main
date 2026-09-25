@@ -46,6 +46,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "eval:workflows": "node --env-file=.env scripts/workflow-eval.mjs",
     "gate": "./scripts/gate-structural.sh && npm run gate:check && npm run gate:test && npm run gate:build",
     "gate:public-routes": "node scripts/check-public-routes.mjs",
     "gate:font-sizes": "node scripts/check-font-sizes.mjs",

@@ -14,7 +14,7 @@
  *   6. loop / map over a list
  *   7. cron → fetch → store (schedule + persistence)
  *
- * These are scored by ./assertions and run live by ./run-eval (which calls the
+ * These are scored by ./assertions and run live by scripts/workflow-eval.mjs (the
  * REAL generateWorkflow). They are NOT executed by the normal vitest suite.
  *
  * Node type names are checked against the real registry (registry-client.ts).
@@ -31,7 +31,7 @@ export interface EvalCase {
   prompt: string;
   expect: ExpectationSpec;
   /**
-   * Opt-in two-run idempotency check (B6). When set, run-eval proves the
+   * Opt-in two-run idempotency check (B6). When set, the eval proves the
    * accepted graph's dedupe node filters a re-run to zero new items against the
    * given source-output fixture. See `checkIdempotency` in ./assertions.
    */

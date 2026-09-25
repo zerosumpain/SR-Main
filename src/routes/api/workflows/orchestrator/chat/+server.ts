@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
 import { generalChat } from '$lib/workflows/chat/general-chat';
 import { db } from '$lib/db';
-import { workflowNodes, orchestratorChats, conversations, jkaiAttachments, jkaiToolTraces } from '$lib/db/schema';
+import { workflowNodes, workflows, orchestratorChats, conversations, jkaiAttachments, jkaiToolTraces } from '$lib/db/schema';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { createJob, getJob, cancelJob, cancelAllRunning, cancelForScope, cleanOldJobs, deleteJob, listJobs, publishJobEvent, respondToWaiter, getRunningJobIdForConversation, markJobQueued, clearJobQueued, whenJobSettles } from '$lib/workflows/chat/job-store';
 import type { OrchestratorJob, JobEvent } from '$lib/workflows/chat/job-store';
@@ -24,6 +24,7 @@ import { requireSecret, requireSecretUpdate } from '$lib/workflows/chat/secret-g
 import { specForRequest } from '$lib/workflows/site-tools/tools/request-credential';
 import { priceFor, computeCost } from '$lib/llm/pricing';
 import type { TurnStamp } from '$lib/jkai/turn-stamp';
+import { collectWorkflowRefs, finishWorkflowRefs, type WorkflowChipRef } from '$lib/jkai/workflow-refs';
 import { recordDurableLLMCall } from '$lib/llm/usage-log';
 import { maybeExtractThreadConcepts } from '$lib/jkai/intel/chat-extract';
 import { isOwnerScope } from '$lib/jkai/intel/scope';
@@ -455,9 +456,26 @@ async function handleWithLoop(event: Parameters<RequestHandler>[0]): Promise<Res
           }
         }
 
+        // Canvas chips: every canvas a workflow tool built or edited this turn.
+        // Best-effort like the trace — a lookup failure costs the chip, not the reply.
+        let workflowRefs: WorkflowChipRef[] = [];
+        try {
+          const pendingRefs = collectWorkflowRefs(job.toolSteps);
+          if (pendingRefs.length > 0) {
+            const refRows = await db
+              .select({ id: workflows.id, name: workflows.name, description: workflows.description })
+              .from(workflows)
+              .where(inArray(workflows.id, pendingRefs.map((r) => r.workflowId)));
+            workflowRefs = finishWorkflowRefs(pendingRefs, refRows);
+          }
+        } catch (err) {
+          console.warn('[general-chat] workflow chips skipped:', err instanceof Error ? err.message : err);
+        }
+
         const assistantMetaParts: Record<string, unknown> = {};
         if (cleanedToolSteps.length > 0) assistantMetaParts.toolSteps = cleanedToolSteps;
         if (traceId) assistantMetaParts.traceId = traceId;
+        if (workflowRefs.length > 0) assistantMetaParts.workflowRefs = workflowRefs;
         if (chatNodeId) assistantMetaParts.chatNodeId = chatNodeId;
         if (turnStamp) assistantMetaParts.usage = turnStamp;
         // Which memories the model was GIVEN this turn — the durable record the
@@ -597,6 +615,8 @@ async function handleWithLoop(event: Parameters<RequestHandler>[0]): Promise<Res
           // from `metadata.usage` on reload. Both, or the line appears only
           // after a refresh.
           ...(turnStamp ? { usage: turnStamp } : {}),
+          // Live chips; `metadata.workflowRefs` rebuilds them on reload.
+          ...(workflowRefs.length > 0 ? { workflowRefs } : {}),
         };
 
       job.status = 'done';

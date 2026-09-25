@@ -83,8 +83,10 @@ export async function applyNativeAmend(input: {
   workflowId: string;
   ops: AmendOp[];
   expectedVersion?: number;
+  /** Audit actor — the web canvas's reviewed proposals apply as `owner`. */
+  actor?: 'native' | 'owner';
 }): Promise<NativeAmendResult> {
-  const { workflowId, ops, expectedVersion } = input;
+  const { workflowId, ops, expectedVersion, actor = 'native' } = input;
 
   const refused = await screenNativeOps(ops);
   if (refused) return { ok: false, status: 422, ...refused };
@@ -94,8 +96,8 @@ export async function applyNativeAmend(input: {
     result = await applyAmendOps({
       workflowId,
       ops,
-      actor: 'native',
-      reason: 'iPhone edit',
+      actor,
+      reason: actor === 'owner' ? 'Canvas proposal applied' : 'iPhone edit',
       precondition:
         typeof expectedVersion === 'number'
           ? async (tx) => {

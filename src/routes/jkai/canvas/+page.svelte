@@ -2,6 +2,7 @@
   import { goto, invalidateAll } from '$app/navigation';
   import { slugify } from '$lib/canvas/slug';
   import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
+  import DescribeWorkflowBox from '$lib/canvas/DescribeWorkflowBox.svelte';
   import type { CanvasSummary } from '$lib/canvas/adapter';
 
   let { data } = $props();
@@ -288,7 +289,10 @@
         onchange={onImportPick}
       />
     </div>
-    <form class="form" onsubmit={createCanvas}>
+    <div class="create-grid">
+    <DescribeWorkflowBox />
+    <form class="form blank-form" onsubmit={createCanvas}>
+      <span class="sr-label-tight">Or start blank</span>
       <div class="row">
         <label class="field">
           <span class="sr-label-tight">Title <em>— free text</em></span>
@@ -329,6 +333,7 @@
         </span>
       </div>
     </form>
+    </div>
   </section>
 
   <section class="nm-sec">
@@ -856,7 +861,27 @@
     color: var(--text-muted);
   }
 
-  /* ——— Create form ——— */
+  /* ——— Create: Describe it (lead) beside the blank-canvas form ——— */
+  .create-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: 1.25rem;
+    align-items: start;
+  }
+  .blank-form {
+    padding-left: 1.25rem;
+    border-left: 1px solid var(--line-strong);
+  }
+  .blank-form .row { grid-template-columns: 1fr; }
+  @media (max-width: 900px) {
+    .create-grid { grid-template-columns: 1fr; }
+    .blank-form {
+      padding-left: 0;
+      padding-top: 1rem;
+      border-left: 0;
+      border-top: 1px dashed var(--line-strong);
+    }
+  }
   .form { display: grid; gap: 0.9rem; }
   .field { display: grid; gap: 0.35rem; min-width: 0; }
   .field em { color: var(--text-ghost); font-style: normal; font-weight: 400; }
