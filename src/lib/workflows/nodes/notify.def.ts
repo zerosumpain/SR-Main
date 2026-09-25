@@ -12,6 +12,7 @@ export const notifyDef: NodeDefinition = {
   configSchema: {
     type: 'object',
     properties: {
+      channel: { type: 'string', description: 'route | whatsapp | iphone | both. Default route (the category decides). Set it whenever the user names a channel ("to my WhatsApp" → whatsapp).' },
       category: { type: 'string', description: `Notification category: ${categoryOptions.map((o) => o.value).join(' | ')}. Default system.` },
       title: { type: 'string', description: 'Short headline. Supports {{input.field}} templates.' },
       body: { type: 'string', description: 'The message. Supports {{input.field}} templates.' },
@@ -22,7 +23,7 @@ export const notifyDef: NodeDefinition = {
     },
     required: ['title'],
   },
-  defaultConfig: { category: 'system', title: '', body: '', severity: 'info' },
+  defaultConfig: { channel: 'route', category: 'system', title: '', body: '', severity: 'info' },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Delivery' }],
   summarize: (config) => {
@@ -34,7 +35,16 @@ export const notifyDef: NodeDefinition = {
     };
   },
   basicConfig: [
-    { key: 'category', label: 'Category', type: 'dropdown', options: categoryOptions, description: 'Routes to WhatsApp and/or the iPhone per the category\'s settings.' },
+    {
+      key: 'channel', label: 'Send to', type: 'dropdown',
+      options: [
+        { value: 'route', label: 'Wherever the category routes' },
+        { value: 'whatsapp', label: 'WhatsApp' },
+        { value: 'iphone', label: 'iPhone' },
+        { value: 'both', label: 'WhatsApp and iPhone' },
+      ],
+    },
+    { key: 'category', label: 'Category', type: 'dropdown', options: categoryOptions, description: 'Routes to WhatsApp and/or the iPhone per the category\'s settings, unless "Send to" names a channel.' },
     { key: 'title', label: 'Title', type: 'template-textarea', placeholder: 'Build shipped: {{input.title}}' },
     { key: 'body', label: 'Message', type: 'template-textarea', placeholder: '{{input.summary}}' },
     { key: 'url', label: 'Link', type: 'text', placeholder: '/jkai/builds', section: 'OPTIONS' },
@@ -45,7 +55,7 @@ export const notifyDef: NodeDefinition = {
     { key: 'dedupeKey', label: 'Dedupe key', type: 'text', placeholder: 'build:{{input.id}}', section: 'OPTIONS', advancedOnly: true },
     { key: 'minIntervalSeconds', label: 'Min interval (s)', type: 'number', min: 0, section: 'OPTIONS', advancedOnly: true },
   ],
-  llmDescription: `Notify the OWNER (John) under a notification category — the way to reach his iPhone, and the preferred way to reach his WhatsApp. The category's route decides the channels: build/deploy/uptime/intel/system go to WhatsApp and the iPhone, health/news/chat to the iPhone only, by default. Use this instead of a \`whatsapp\` node whenever the recipient is the owner. Output: { raised, channels ("WhatsApp + iPhone" | "iPhone" | "suppressed (…)"), whatsapp: sent|failed|off, iphone: queued|off, id }.`,
+  llmDescription: `Notify the OWNER (John) under a notification category — the way to reach his iPhone, and the preferred way to reach his WhatsApp. The category's route decides the channels: build/deploy/uptime/intel/system go to WhatsApp and the iPhone, health/news/chat to the iPhone only, by default. Use this instead of a \`whatsapp\` node whenever the recipient is the owner. **When the user names a channel, set \`channel\`** — "to my WhatsApp" → \`channel: 'whatsapp'\`, "to my phone"/"iPhone" → \`'iphone'\`, both → \`'both'\` — it overrides the category's route; leave it \`'route'\` only when no channel was named. Output: { raised, channels ("WhatsApp + iPhone" | "iPhone" | "suppressed (…)"), whatsapp: sent|failed|off, iphone: queued|off, id }.`,
   llmExamples: [
     { category: 'build', title: 'Nightly build failed', body: '{{input.error}}', url: '/jkai/builds', severity: 'warn' },
     { category: 'news', title: '{{input.count}} new stories', body: '{{input.titles}}', dedupeKey: 'news:{{input.count}}' },

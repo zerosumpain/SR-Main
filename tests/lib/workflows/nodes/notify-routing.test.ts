@@ -147,4 +147,35 @@ describe('notify node', () => {
   it('refuses a raise with nothing to say', async () => {
     await expect(notifyExecutor.execute({}, { category: 'build', title: '', body: '' }, ctx())).rejects.toThrow(/title/);
   });
+
+  // 2026-09-25: "send a rude joke to my whatsapp every hour" was built with
+  // category `chat`, which routes to the iPhone only — the 11:35 joke never
+  // reached WhatsApp. A channel the owner NAMED must not hinge on a category.
+  it('an explicit "Send to: WhatsApp" reaches WhatsApp even under an iPhone-only category', async () => {
+    db.routes = [{ category: 'chat', whatsapp: false, native: true, minIntervalSeconds: 0 }];
+    const result = await notifyExecutor.execute(
+      { response: 'A rude joke' },
+      { category: 'chat', channel: 'whatsapp', title: 'Hourly rude joke', body: '{{input.response}}' },
+      ctx(),
+    );
+    expect(channel).toHaveBeenCalledTimes(1);
+    expect(result.output).toMatchObject({ whatsapp: 'sent', iphone: 'off' });
+  });
+
+  it('"Send to: iPhone" keeps it off WhatsApp even under a WhatsApp category', async () => {
+    const result = await notifyExecutor.execute({}, { category: 'system', channel: 'iphone', title: 't' }, ctx());
+    expect(channel).not.toHaveBeenCalled();
+    expect(result.output).toMatchObject({ whatsapp: 'off', iphone: 'queued' });
+  });
+
+  it('"both" opens both; "route" (the default) leaves the category in charge', async () => {
+    db.routes = [{ category: 'chat', whatsapp: false, native: true, minIntervalSeconds: 0 }];
+    const both = await notifyExecutor.execute({}, { category: 'chat', channel: 'both', title: 't' }, ctx());
+    expect(both.output).toMatchObject({ whatsapp: 'sent', iphone: 'queued' });
+    channel.mockClear();
+    const routed = await notifyExecutor.execute({}, { category: 'chat', title: 't2' }, ctx());
+    expect(channel).not.toHaveBeenCalled();
+    expect(routed.output).toMatchObject({ whatsapp: 'off', iphone: 'queued' });
+  });
 });
+

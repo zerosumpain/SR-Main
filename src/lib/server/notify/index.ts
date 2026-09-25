@@ -63,6 +63,13 @@ export interface NotifyInput {
    * owner receives what was written, not a re-wrapped copy of it.
    */
   whatsappText?: string;
+  /**
+   * Channels this ONE raise names explicitly, overriding the category's route
+   * for them. A workflow step the owner configured as "send to WhatsApp" must
+   * reach WhatsApp whatever its category routes to (2026-09-25: a `chat`
+   * category, iPhone-only, swallowed "send a joke to my whatsapp").
+   */
+  channels?: { whatsapp?: boolean; native?: boolean };
 }
 
 export interface NotifyResult {
@@ -154,7 +161,12 @@ function stripUndefined<T extends Record<string, unknown>>(value: T): Partial<T>
  */
 export async function notifyOwner(input: NotifyInput): Promise<NotifyResult> {
   try {
-    const route = await routeFor(input.category);
+    const routed = await routeFor(input.category);
+    const route = {
+      ...routed,
+      whatsapp: input.channels?.whatsapp ?? routed.whatsapp,
+      native: input.channels?.native ?? routed.native,
+    };
     const floor = Math.max(input.minIntervalSeconds ?? 0, route.minIntervalSeconds);
 
     if (floor > 0) {
