@@ -879,9 +879,8 @@ Expected: FAIL — module not found.
 // Intel rows belong to a person (see src/lib/jkai/intel/scope.ts). A query
 // with no space predicate reads everyone's graph — the owner's chat would
 // quote a family member's email, or worse the other way round. Postgres RLS
-// cannot enforce this here (the production app role bypasses row-level
-// security), so the check is in code: a file that reads an intel table must
-// show it thought about space, or be named below with a reason.
+// is not used for this; the check is in code: a file that reads an intel table
+// must show it thought about space, or be named below with a reason.
 //
 // The baseline is the readers that existed before spaces did. It may only
 // shrink: an entry that is now scoped or deleted fails the check until it is
@@ -1033,7 +1032,7 @@ Then: `/api/jkai/intel/network?domains=news` (owner session) returns only nodes 
 
 - [ ] **Step 6: Memory**
 
-Update `project_intel_command_centre.md` with a dated "Spaces + domains (A1)" section (columns, `scope.ts`, the ratchet, the finding that the production app role bypasses RLS) and add one index line to `MEMORY.md` under *Intel*.
+Update `project_intel_command_centre.md` with a dated "Spaces + domains (A1)" section (columns, `scope.ts`, the ratchet, why scoping lives in code) and add one index line to `MEMORY.md` under *Intel*.
 
 ---
 

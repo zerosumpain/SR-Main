@@ -40,6 +40,17 @@ describe('rethrowScoped', () => {
   it('is a 404 for an id outside the scope and the route code otherwise', () => {
     expect(statusOf(() => rethrowScoped(new Error('entity e1 not found'), 400, 'x'))).toBe(404);
     expect(statusOf(() => rethrowScoped(new Error('e1 is already merged'), 400, 'x'))).toBe(400);
-    expect(statusOf(() => rethrowScoped('boom', 500, 'x'))).toBe(500);
+  });
+
+  it('rethrows a 500 untouched, so its text never reaches the response body', () => {
+    const boom = new Error('relation "intel_entities" does not exist');
+    let thrown: unknown;
+    try {
+      rethrowScoped(boom, 500, 'x');
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBe(boom);
+    expect(statusOf(() => rethrowScoped(new Error('entity e1 not found'), 500, 'x'))).toBe(404);
   });
 });

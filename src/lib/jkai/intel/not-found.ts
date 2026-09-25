@@ -18,8 +18,15 @@ export function isNotFoundError(err: unknown): boolean {
 /**
  * Rethrow a library failure as an HTTP error: 404 for "not found / out of
  * scope", `status` (the route's existing code, usually 400) for anything else.
+ *
+ * A 500 is a server fault, not a bad request, so its text is not the caller's
+ * business: the original error is rethrown untouched and SvelteKit answers with
+ * its generic "Internal Error" (the message still reaches the server log), as
+ * these routes did before they were scoped.
  */
 export function rethrowScoped(err: unknown, status: 400 | 409 | 500, fallback: string): never {
+  if (isNotFoundError(err)) throw error(404, (err as Error).message);
+  if (status === 500) throw err;
   const message = err instanceof Error ? err.message : fallback;
-  throw error(isNotFoundError(err) ? 404 : status, message);
+  throw error(status, message);
 }

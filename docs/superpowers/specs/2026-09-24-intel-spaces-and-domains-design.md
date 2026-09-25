@@ -25,10 +25,9 @@ email / news / documents / home": news "keep" and chat captures both write
 | 3 | Domains | **Domain grouping now; Home Assistant ingest is a later phase.** Home is an empty domain until then. |
 | 4 | Phase 1 reach | **Member role + intel.** Members reach `/jkai/intel` read surfaces and connect their own Gmail. Chat, the app and the rest of the site stay owner-only. |
 
-Rejected: Postgres row-level security with an owner-scope default — the
-production app role bypasses row-level security (checked 2026-09-24), so RLS
-cannot enforce this; making it work means a new DB role and an edit to the
-immutable production `.env`. Rejected: one Postgres schema per person (every Drizzle table object doubles; no
+Rejected: Postgres row-level security — it cannot be enforced for the app's
+connection in this deployment without changing how production connects, so
+scoping lives in code, where the gate can see it. Rejected: one Postgres schema per person (every Drizzle table object doubles; no
 precedent in the repo); a shared-entity graph filtered by contributor (summaries
 and aliases leak across people — ruled out by decision 1).
 
@@ -209,14 +208,16 @@ readers (~100 files; 56 use raw SQL) so a new unscoped reader fails CI at once.
 **PR A2 — burn-down.** Scope every baseline reader (library functions take
 `scope: IntelScope = OWNER_INTEL_SCOPE`, so owner call sites do not change), the
 nightly engine iterates spaces, and the guard flips to strict (baseline must be
-empty). From A2 the gate runs `--strict`, so no PR can reintroduce an unscoped
-intel reader; that — not a runtime check — is what makes member data safe to
-write in PR B.
+empty).
 
-So the ordering "no member data until every reader is scoped" is enforced by
-that strict gate: PR B cannot merge while any unscoped intel reader exists,
-because CI fails first. There is no separate runtime check in the member Gmail
-sweep; the gate is the safeguard.
+The strict gate is a ratchet, not a proof. It works per FILE — one scoped query
+makes a whole file pass — and `route-scope.test.ts` covers only the intel route
+trees plus a hand-kept list. A reader that reaches intel through a library
+default (`knowledge/search.ts`, the workflows `nodes/intelligence.ts`,
+`chat/general-chat.ts`) is invisible to both, and gets the OWNER scope. So PR B
+must route every member-reachable path through `resolveRequestScope`, and prove
+it with tests that a member session sees none of the owner's rows; the gate
+alone is not the safeguard.
 
 **PR B — members.** `allowed_user.role`, `drive_folder_settings.space_id`, the Gmail watcher skipping non-owner accounts (it dispatches workflows and pushes chat previews), household/user principals, member
 path allow-list, member Gmail, account-list filters, header tweaks.
