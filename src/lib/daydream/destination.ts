@@ -138,7 +138,9 @@ export function thoughtDestination(t: DestinationInput): Destination | null {
 
   const tab = tabFor(t.kind);
   if (tab) {
-    return { href: `/jkai/daydreams/${tab.tab}`, label: tab.label, hint: tab.hint, external: false };
+    // The household room moved out of the hub to /home/people (2026-09-25).
+    const href = tab.tab === 'family' ? '/home/people' : `/jkai/daydreams/${tab.tab}`;
+    return { href, label: tab.label, hint: tab.hint, external: false };
   }
 
   return null;

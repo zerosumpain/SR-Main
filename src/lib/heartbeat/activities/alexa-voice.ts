@@ -3,7 +3,7 @@ import { tagUtteranceTopics } from '$lib/alexa/topics.server';
 import type { ActivityHandler } from '../types';
 
 /**
- * Keeps /jkai/voice current: reads Home Assistant's Alexa voice events since the
+ * Keeps /home/voice current: reads Home Assistant's Alexa voice events since the
  * newest row held and inserts what is new. An unreachable house is `skipped`,
  * not `error` — HA keeps thirty days, so the next run reads the gap and nothing
  * is lost, and a flaky tailnet should not spend this action's failure budget.
@@ -11,7 +11,7 @@ import type { ActivityHandler } from '../types';
 export const alexaVoiceSync: ActivityHandler = {
   name: 'alexa-voice-sync',
   description:
-    "Copies what the household said to Alexa (and Alexa's replies) from Home Assistant's alexa_devices voice events into alexa_utterances for /jkai/voice. Reads from the newest held row minus two hours; keyed rows make the overlap free.",
+    "Copies what the household said to Alexa (and Alexa's replies) from Home Assistant's alexa_devices voice events into alexa_utterances for /home/voice. Reads from the newest held row minus two hours; keyed rows make the overlap free.",
   defaultCadenceSeconds: 300,
   defaultEnabled: true,
   async run() {
@@ -29,7 +29,7 @@ export const alexaVoiceSync: ActivityHandler = {
 };
 
 /**
- * The Echos' other reports for /jkai/voice's House tab: room temperature, light
+ * The Echos' other reports for /home/echoes: room temperature, light
  * and motion, alarm/timer/reminder changes, and what is playing. Its own
  * activity rather than a second step in the voice sync, so a failure in one
  * never costs the other its run. Unreachable HA is `skipped`, as above.
@@ -37,7 +37,7 @@ export const alexaVoiceSync: ActivityHandler = {
 export const alexaSignalsSync: ActivityHandler = {
   name: 'alexa-signals-sync',
   description:
-    "Copies the Echos' room sensors (temperature, light, motion), their next alarm/timer/reminder and what they are playing from Home Assistant into alexa_signals for /jkai/voice. Stores changes only; reads from the newest held row minus two hours.",
+    "Copies the Echos' room sensors (temperature, light, motion), their next alarm/timer/reminder and what they are playing from Home Assistant into alexa_signals for /home/echoes. Stores changes only; reads from the newest held row minus two hours.",
   defaultCadenceSeconds: 300,
   defaultEnabled: true,
   async run() {

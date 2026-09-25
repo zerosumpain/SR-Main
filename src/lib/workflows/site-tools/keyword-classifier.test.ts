@@ -58,7 +58,7 @@ describe('inferToolsets', () => {
     });
   });
 
-  describe('alexa — the household voice log on /jkai/voice', () => {
+  describe('alexa — the household voice log on /home/voice', () => {
     it.each([
       'what did Rory ask Alexa last night?',
       'how often do we use alexa in the kitchen',

@@ -88,7 +88,7 @@ describe('parentHref — the common way back', () => {
 describe('owner filtering', () => {
   it('offers a signed-out visitor nothing that would bounce to /login', () => {
     const anon = visibleItems(SITE_ITEMS, false).map((i) => i.href);
-    for (const owned of ['/releases', '/news', '/drive', '/live', '/jkai', '/research']) {
+    for (const owned of ['/releases', '/news', '/drive', '/live', '/jkai', '/research', '/home']) {
       expect(anon, `${owned} was offered to an anonymous visitor`).not.toContain(owned);
     }
     expect(anon).toContain('/projects');

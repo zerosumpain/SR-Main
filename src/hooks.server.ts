@@ -437,6 +437,9 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     ['/jkai/doctor', '/jkai/daydreams/doctor'],
     ['/jkai/prompts', '/jkai/agents?tab=prompts'],
     ['/jkai/research', '/research'],
+    // The household moved to its own top-level section, /home (2026-09-25).
+    ['/jkai/voice', '/home/voice'],
+    ['/jkai/daydreams/family', '/home/people'],
   ]).get(pathname);
   if (retiredJkaiPage) {
     const destination = new URL(retiredJkaiPage, event.url.origin);
