@@ -49,7 +49,9 @@ const LIMITS = {
   // dry-run branches the engine now decides once; the rest is this.
   // +50 on 2026-09-25 (Describe-it fixes #951 and this): resuming builds a
   // deploy killed, and telling the generator today's date.
-  workflows: 60_250,
+  // +25 on 2026-09-25 (#964, alexa_home_signals): the tool's registration and
+  // keyword rule only — its caveats and answer live in $lib/alexa.
+  workflows: 60_275,
   panels: 26_000,
   tests: 210_000,
 };

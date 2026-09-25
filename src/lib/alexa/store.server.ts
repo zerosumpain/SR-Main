@@ -406,3 +406,30 @@ export async function houseSummary(opts: { days?: number } = {}): Promise<HouseS
     },
   };
 }
+
+const HOUSE_CAVEATS = [
+  'Room sensors, motion and alarms are what Home Assistant POLLS from Amazon every five minutes: a motion blip or a two-minute timer between polls is never seen.',
+  'Only some Echos have sensors (an Echo 4th gen / Show has temperature and light; a Dot may have motion). A device missing from `now` has none.',
+  'Alarms/timers/reminders: a row is a NEW due time on a device. `scheduled.setAt` is when it came into view (within five minutes of being set); a repeating alarm reappears each time it rolls forward. Cancelling is not recorded (Home Assistant cannot tell it from the Echo dropping offline), so `pending` can include one cancelled early.',
+  "Listening comes from Amazon's push feed, the same one voice events use; an empty list can mean the feed is down rather than nothing played.",
+  'Hours are Europe/London.',
+];
+
+/**
+ * `alexa_home_signals`' answer. Lives here rather than beside the tool so the
+ * workflows tree carries only the registration.
+ */
+export async function houseToolAnswer(days: number) {
+  const s = await houseSummary({ days });
+  return {
+    ...s,
+    // A month of hourly points per device would swamp the context; the range
+    // plus the last day is what a question about warmth needs.
+    temperature: s.temperature.map((t) => ({ ...t, points: t.points.slice(-24) })),
+    coverage:
+      s.allTime === 0
+        ? 'Nothing recorded yet. Home Assistant keeps thirty days, so the first sync back-fills what it still holds.'
+        : `Log runs ${s.firstAt} → ${s.lastAt} (${s.allTime} changes in total).`,
+    caveats: HOUSE_CAVEATS,
+  };
+}
