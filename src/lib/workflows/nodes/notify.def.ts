@@ -29,9 +29,13 @@ export const notifyDef: NodeDefinition = {
   summarize: (config) => {
     const title = String(config.title ?? '').trim();
     const cat = categoryOptions.find((o) => o.value === config.category)?.label ?? 'Everything else';
+    const c = NOTIFICATION_CATEGORIES.find((x) => x.id === (config.category ?? 'system')) ?? { whatsapp: true, native: true };
+    const ch = String(config.channel ?? 'route');
+    const [wa, ip] = ch === 'whatsapp' ? [true, false] : ch === 'iphone' ? [false, true] : ch === 'both' ? [true, true] : [c.whatsapp, c.native];
+    const to = wa && ip ? 'WhatsApp + iPhone' : wa ? 'WhatsApp only' : ip ? 'iPhone only' : 'nowhere (category off)';
     return {
-      line: title ? `Notify me (${cat}): "${title.length > 50 ? `${title.slice(0, 47)}…` : title}"` : 'Notify me (set a title first)',
-      preview: { kind: 'message', details: { Category: cat, Title: title || '—' } },
+      line: title ? `Notify me → ${to} (${cat}): "${title.length > 50 ? `${title.slice(0, 47)}…` : title}"` : 'Notify me (set a title first)',
+      preview: { kind: 'message', details: { To: to, Category: cat, Title: title || '—' } },
     };
   },
   basicConfig: [
