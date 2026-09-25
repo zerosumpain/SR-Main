@@ -6,7 +6,7 @@
 // its top survivors were identities (rain against precipitation). The think
 // loop inverts that: a cycle that has a reason to want a relationship asks for
 // that one, gets a number, and has to cite the card. The instruments are the
-// sweep's own (`stats/tests.ts`): Spearman on pairwise-complete days, a p-value
+// sweep's own (`think/stats.ts`): Spearman on pairwise-complete days, a p-value
 // on the serial-correlation-adjusted n, and Benjamini-Hochberg — here across
 // the tests THIS cycle has run, which is the honest m for a model that may ask
 // three or four times before it writes anything.
@@ -15,8 +15,8 @@
 // one place every unit has already been normalised (`features/normalise.ts`),
 // so nothing here re-derives a Whoop millisecond or an Apple ×100.
 
-import { SWEEP_METRICS, column, isEntangled, loadSeries } from '../stats/sweep';
-import { benjaminiHochberg, correlate as testPair, MIN_PAIRS, type TestResult } from '../stats/tests';
+import { SWEEP_METRICS, column, isEntangled, loadSeries } from './series';
+import { benjaminiHochberg, correlate as testPair, MIN_PAIRS, type TestResult } from './stats';
 import { metricHeading } from '../features/metrics';
 import { DEFAULT_SUBJECT } from '../types';
 

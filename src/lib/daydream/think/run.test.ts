@@ -4,7 +4,8 @@ import { describe, it, expect, vi } from 'vitest';
 // dependencies (model gateway, notifier, database readers) off the import graph.
 vi.mock('$lib/llm/client', () => ({ getLLMClient: vi.fn() }));
 vi.mock('$lib/server/notify', () => ({ notifyOwner: vi.fn() }));
-vi.mock('../ponder/profile', () => ({ buildProfileLines: vi.fn(async () => []) }));
+vi.mock('./profile', () => ({ buildProfileLines: vi.fn(async () => []) }));
+vi.mock('$lib/selfimprove/backlog', () => ({ addIdeas: vi.fn(async () => []) }));
 
 import { outcomesFor, systemPrompt } from './run';
 import { questionForSlot } from './questions';

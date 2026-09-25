@@ -1,6 +1,6 @@
-// src/lib/daydream/ponder/profile.ts
+// src/lib/daydream/think/profile.ts (was ponder/profile.ts)
 //
-// "Your shadow" — the behaviour profile that rides in the ponder prompt so
+// "Your shadow" — the behaviour profile that rides in the think prompt so
 // the model muses like John's second brain rather than a generic assistant.
 //
 // Deliberately DETERMINISTIC in v1: assembled from the feedback ledger, his

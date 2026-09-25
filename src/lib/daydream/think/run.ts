@@ -25,7 +25,7 @@ import { notifyOwner } from '$lib/server/notify';
 import { resolveDaydreamModel } from '../model';
 import { persistCandidates, type PersistResult } from '../thought-store';
 import { DEFAULT_SUBJECT, errMsg } from '../types';
-import { buildProfileLines } from '../ponder/profile';
+import { buildProfileLines } from './profile';
 import { TITLE_ECHO_WINDOW_DAYS } from '../refutations';
 import { localDay } from '../features/build';
 import { OUTCOMES, OUTCOME_ASK, questionAt, type Outcome, type Question } from './questions';
@@ -33,6 +33,7 @@ import { MAX_TOOL_CALLS, RESEARCH_SITE_TOOLS, createToolbox, toolSetFor, type To
 import { MAX_NOTES, MAX_BODY_CHARS, parseReply, validateThinkOutput } from './audit';
 import { DAILY_RAISE_CAP, noteHref } from './notes';
 import { countRaisedToday } from './notes.server';
+import { queueBuildNotes } from './backlog';
 
 /** Tool rounds at full budget. The activity passes fewer when the budget is
  *  thin — a round is a model call. */
@@ -51,6 +52,8 @@ export interface ThinkResult {
   notes: PersistResult & { proposed: number };
   /** Notes that reached `notifyOwner` and were raised. */
   notified: number;
+  /** Backlog slugs created from NEW `build` notes (spec D3). */
+  backlog: string[];
   rejected: string[];
   citationDrops: number;
   tokens: { prompt: number; completion: number };
@@ -189,6 +192,7 @@ export async function runThink(
     cards: 0,
     notes: { created: 0, updated: 0, suppressed: 0, muted: 0, alreadyRefuted: 0, protectedSkipped: 0, merged: 0, createdKeys: [], proposed: 0 },
     notified: 0,
+    backlog: [],
     rejected: [],
     citationDrops: 0,
     tokens: { prompt: 0, completion: 0 },
@@ -314,6 +318,11 @@ export async function runThink(
         })
         .from(daydreamThoughts)
         .where(and(inArray(daydreamThoughts.dedupeKey, persisted.createdKeys), eq(daydreamThoughts.status, 'new')));
+      // A NEW `build` note is also a proposal in the self-improvement backlog
+      // (spec D3) — queued, never built from here. Only rows created this cycle
+      // and still `new`: an update, an echo or a refuted claim is not a new
+      // proposal.
+      result.backlog = await queueBuildNotes(rows);
       let budget = DAILY_RAISE_CAP - (await countRaisedToday(now));
       for (const row of rows) {
         if (budget <= 0) {

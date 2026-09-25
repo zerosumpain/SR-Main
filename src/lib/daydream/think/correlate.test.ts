@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('../stats/sweep', async (orig) => {
-  const real = await orig<typeof import('../stats/sweep')>();
+vi.mock('./series', async (orig) => {
+  const real = await orig<typeof import('./series')>();
   return { ...real, loadSeries: vi.fn() };
 });
 
-import { loadSeries } from '../stats/sweep';
-import { MIN_PAIRS } from '../stats/tests';
+import { loadSeries } from './series';
+import { MIN_PAIRS } from './stats';
 import { correlateRows, createCorrelator, refusal } from './correlate';
 
 /** `n` days where b tracks a closely, with a little noise. */

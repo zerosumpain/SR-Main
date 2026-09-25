@@ -1,31 +1,36 @@
 // src/lib/daydream/features/build.ts
 //
-// Turning five tables and a live diary read into one row per day.
+// Turning the owner's health, activity, spend and diary into one row per day.
 //
 // The joining is the whole job. Apple stores a local ISO string with an offset,
 // Whoop stores a unix epoch on one table and an ISO string with a Z on two
-// others, activities store a timestamptz, and the trail stores a timestamptz in
-// UTC. Every one has to become the same Europe/London calendar day before any
-// two of them can be compared, and getting that wrong moves half of every
-// evening onto the previous date.
+// others, and activities store a timestamptz. Every one has to become the same
+// Europe/London calendar day before any two of them can be compared, and
+// getting that wrong moves half of every evening onto the previous date.
+//
+// OWNER ONLY, and no trail, since P4a (2026-09-25). The household GPS trail
+// and the per-person rows it fed were retired with the rest of location (spec
+// D1 revised): nothing writes the trail any more. The movement columns
+// (`minutesAtHome`, `distinctPlaces`, …) are no longer written, so a rebuild
+// leaves whatever an earlier build put there and `correlate` no longer offers
+// them.
 //
 // Normalisation of the VALUES lives in ./normalise.ts and is never repeated
 // here. This file decides which rows belong to which day and how a day's worth
 // of samples collapses to one number; that file decides what the numbers mean.
 
-import { and, eq, gte, inArray, lte, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import {
   activities,
   appleHealthMetrics,
   daydreamDayFeatures,
   daydreamSpend,
-  daydreamTrail,
   whoopCycles,
   whoopRecovery,
   whoopSleep,
 } from '$lib/db/schema';
-import { DEFAULT_SUBJECT, LOCAL_TZ, OBSERVE_CADENCE_SECONDS, errMsg } from '../types';
+import { DEFAULT_SUBJECT, LOCAL_TZ, errMsg } from '../types';
 import {
   APPLE_AGGREGATION,
   aggregate,
@@ -39,16 +44,6 @@ import { fetchCalendarDays, toolChunkFetch, type CalendarDay } from './calendar'
 
 /** How many days one build covers by default. */
 export const DEFAULT_WINDOW_DAYS = 120;
-
-/** Fixes a fully-observed day would produce at the poll floor. */
-export const EXPECTED_FIXES_PER_DAY = (24 * 3600) / OBSERVE_CADENCE_SECONDS;
-
-/**
- * Below this share of a day observed, movement features are recorded as
- * `partial` — the same gate the detectors already apply, kept identical so the
- * two surfaces cannot disagree about what "seen" means.
- */
-export const MIN_DAY_COVERAGE = 0.6;
 
 export interface BuildResult {
   days: number;
@@ -86,23 +81,9 @@ export function appleLocalDay(dateLocal: string, epochSeconds: number): string {
   return localDay(new Date(epochSeconds * 1000));
 }
 
-/** Minutes since local midnight, for "when did he first leave". */
-export function localMinutes(d: Date, tz = LOCAL_TZ): number {
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: tz,
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).formatToParts(d);
-  const h = Number(parts.find((p) => p.type === 'hour')?.value ?? '0');
-  const m = Number(parts.find((p) => p.type === 'minute')?.value ?? '0');
-  return h * 60 + m;
-}
-
 type DayBucket = {
   day: string;
   apple: Map<string, number[]>;
-  trail: Array<{ ts: Date; isHome: boolean | null; placeId: string | null; positioned: boolean }>;
   strain: number[];
   recovery: Array<{ score: number; rhr: number; hrv: number }>;
   sleep: Array<{ minutes: number; performance: number | null; efficiency: number | null; disturbances: number | null }>;
@@ -116,7 +97,7 @@ type DayBucket = {
 };
 
 function emptyBucket(day: string): DayBucket {
-  return { day, apple: new Map(), trail: [], strain: [], recovery: [], sleep: [], activities: [], calendar: null, spendMinor: null };
+  return { day, apple: new Map(), strain: [], recovery: [], sleep: [], activities: [], calendar: null, spendMinor: null };
 }
 
 /**
@@ -129,32 +110,15 @@ function emptyBucket(day: string): DayBucket {
 export async function buildDayFeatures(
   opts: {
     windowDays?: number;
-    subject?: string;
     now?: Date;
     /** Test seam. Production uses the site-tools registry via toolChunkFetch(). */
     calendarFetch?: Parameters<typeof fetchCalendarDays>[2];
   } = {},
 ): Promise<BuildResult> {
   const windowDays = opts.windowDays ?? DEFAULT_WINDOW_DAYS;
-  const subject = opts.subject ?? DEFAULT_SUBJECT;
-
-  /**
-   * Whose health, diary and money these are.
-   *
-   * Whoop, Apple Health, `daydream_spend` and the calendar have NO subject
-   * column — there is one owner and every row belongs to him. The trail is the
-   * only domain that is genuinely per-person. So when this builds a day for
-   * anybody else, those domains are SKIPPED, and their columns stay absent.
-   *
-   * Skipping is the whole point rather than an optimisation: without it, a row
-   * for Katie would carry John's sleep score, John's strain and John's
-   * spending under her name, and every correlation drawn from it would be a
-   * confident statement about the wrong person. Absent is not zero here, so
-   * "no pairs for Katie" is the correct and honest outcome.
-   *
-   * It also stops four redundant CalDAV round trips every six hours.
-   */
-  const isOwner = subject === DEFAULT_SUBJECT;
+  // Whoop, Apple Health, `daydream_spend` and the calendar have no subject
+  // column — there is one owner and every row belongs to him.
+  const subject = DEFAULT_SUBJECT;
   const now = opts.now ?? new Date();
   const from = new Date(now.getTime() - windowDays * 86_400_000);
   const result: BuildResult = { ...EMPTY_BUILD, absent: {}, errors: [] };
@@ -170,8 +134,7 @@ export async function buildDayFeatures(
   };
 
   // ── Apple: 470k rows overall, so the window and metric list both matter ──
-  // Owner only — see isOwner above.
-  if (isOwner) try {
+  try {
     const wanted = Object.keys(APPLE_AGGREGATION);
     const rows = await db
       .select({
@@ -204,44 +167,8 @@ export async function buildDayFeatures(
     result.errors.push(`apple: ${errMsg(err)}`);
   }
 
-  // ── Trail ──
+  // ── Whoop cycles (strain) ──
   try {
-    const rows = await db
-      .select({
-        ts: daydreamTrail.ts,
-        isHome: daydreamTrail.isHome,
-        placeId: daydreamTrail.placeId,
-        lat: daydreamTrail.lat,
-      })
-      .from(daydreamTrail)
-      // Subject-filtered. Without this every person's day row was built from
-      // the WHOLE household's fixes — harmless while only `john` was ever
-      // built, and wrong the moment the builder ran for anybody else. The
-      // trail has been per-subject since the family backfill; this read had
-      // not caught up.
-      .where(
-        and(
-          eq(daydreamTrail.subject, subject),
-          gte(daydreamTrail.ts, from),
-          lte(daydreamTrail.ts, now),
-        ),
-      );
-    for (const r of rows) {
-      bucket(localDay(r.ts)).trail.push({
-        ts: r.ts,
-        isHome: r.isHome,
-        placeId: r.placeId,
-        // A gap row has no position. It still counts as an observation — that
-        // is the whole point of writing them — but it cannot place him.
-        positioned: r.lat != null,
-      });
-    }
-  } catch (err) {
-    result.errors.push(`trail: ${errMsg(err)}`);
-  }
-
-  // ── Whoop cycles (strain) ── owner only
-  if (isOwner) try {
     const rows = await db
       .select({ startDateLocal: whoopCycles.startDateLocal, strain: whoopCycles.strain })
       .from(whoopCycles);
@@ -255,8 +182,8 @@ export async function buildDayFeatures(
     result.errors.push(`whoop_cycles: ${errMsg(err)}`);
   }
 
-  // ── Whoop recovery. `created_date` is a unix epoch, not a date. ── owner only
-  if (isOwner) try {
+  // ── Whoop recovery. `created_date` is a unix epoch, not a date. ──
+  try {
     const rows = await db
       .select({
         createdDate: whoopRecovery.createdDate,
@@ -277,8 +204,8 @@ export async function buildDayFeatures(
     result.errors.push(`whoop_recovery: ${errMsg(err)}`);
   }
 
-  // ── Whoop sleep. Durations are MILLISECONDS despite the column names. ── owner only
-  if (isOwner) try {
+  // ── Whoop sleep. Durations are MILLISECONDS despite the column names. ──
+  try {
     const rows = await db
       .select({
         startDateLocal: whoopSleep.startDateLocal,
@@ -345,11 +272,8 @@ export async function buildDayFeatures(
   // key it that way), so this is a plain group-by. When the table is readable,
   // every bucketed day gets at least a zero — "no evidenced spend" is a real
   // observation of the evidence, deliberately unlike the sensor domains.
-  // Owner only: `daydream_spend` has no subject column — every receipt and
-  // bank row is his. Summing them into somebody else's day would invent a
-  // spending habit for a nine-year-old.
   let spendReadable = false;
-  if (isOwner) try {
+  try {
     const rows = await db
       .select({ day: daydreamSpend.day, total: sql<number>`sum(${daydreamSpend.amountMinor})::int` })
       .from(daydreamSpend)
@@ -365,10 +289,7 @@ export async function buildDayFeatures(
   // Unlike the other domains this is a live CalDAV read, not a table. A failed
   // chunk leaves its days ABSENT; a day the diary answered about with no events
   // is a real zero. Truncated or partially-read chunks mark their days partial.
-  //
-  // Owner only. It is his diary, and running it for all five would also mean
-  // four extra CalDAV walks of the whole window every six hours.
-  if (isOwner) try {
+  try {
     // Loaded once for the whole rebuild, not once per chunk — and not at all
     // when a caller supplied its own fetcher, which is how the tests run.
     let fetcher = opts.calendarFetch;
@@ -423,15 +344,6 @@ export function collapse(b: DayBucket, subject: string) {
     return aggregate(values, how);
   };
 
-  const positioned = b.trail.filter((t) => t.positioned);
-  const coverage = b.trail.length ? Math.min(1, b.trail.length / EXPECTED_FIXES_PER_DAY) : null;
-  const homeFixes = positioned.filter((t) => t.isHome === true).length;
-  const outFixes = positioned.filter((t) => t.isHome === false).length;
-  const perFixMins = OBSERVE_CADENCE_SECONDS / 60;
-
-  const outTimes = positioned.filter((t) => t.isHome === false).map((t) => localMinutes(t.ts));
-  const homeTimes = positioned.filter((t) => t.isHome === true).map((t) => localMinutes(t.ts));
-
   const sleep = b.sleep[0] ?? null;
   const recovery = b.recovery[0] ?? null;
 
@@ -439,7 +351,6 @@ export function collapse(b: DayBucket, subject: string) {
   // something the coverage gate distrusts, 'ok' otherwise. Never inferred from
   // a zero — that distinction is the reason this column exists.
   const sources: Record<string, string> = {
-    trail: b.trail.length === 0 ? 'absent' : (coverage ?? 0) < MIN_DAY_COVERAGE ? 'partial' : 'ok',
     apple: b.apple.size === 0 ? 'absent' : 'ok',
     whoopStrain: b.strain.length === 0 ? 'absent' : 'ok',
     whoopRecovery: b.recovery.length === 0 ? 'absent' : 'ok',
@@ -460,22 +371,8 @@ export function collapse(b: DayBucket, subject: string) {
     subject,
     day: b.day,
 
-    trailFixes: b.trail.length || null,
-    trailCoverage: coverage,
-    // VISITS, not fixes. This counted every fix that carried a place id, so a
-    // day sitting at home recorded 245 "places visited" against 2 distinct
-    // places and 247 fixes — an alias for trailFixes under a name that reads
-    // as something else, and swept against every other feature as though it
-    // were independent. A visit is a contiguous run at one place, which is the
-    // same definition segmentVisits uses.
-    placesVisited: countVisits(positioned),
-    distinctPlaces: positioned.length
-      ? new Set(positioned.map((t) => t.placeId).filter(Boolean)).size || null
-      : null,
-    minutesAtHome: homeFixes ? Math.round(homeFixes * perFixMins) : null,
-    minutesOut: outFixes ? Math.round(outFixes * perFixMins) : null,
-    firstOutAtMins: outTimes.length ? Math.min(...outTimes) : null,
-    lastHomeAtMins: homeTimes.length ? Math.max(...homeTimes) : null,
+    // No trail columns: see the header. Omitted rather than nulled, so the
+    // upsert leaves what an earlier build wrote.
 
     steps: plausible('steps', appleAgg('step_count')) != null
       ? Math.round(plausible('steps', appleAgg('step_count')) as number)
@@ -514,24 +411,4 @@ export function collapse(b: DayBucket, subject: string) {
 
     sources,
   };
-}
-
-/**
- * How many separate visits a day contains — a run of consecutive fixes at one
- * place, ending when the place changes or the trail leaves a place entirely.
- *
- * Deliberately NOT `segmentVisits`: this is a whole-day sequence already
- * assigned to places by `refreshPlaces`, so the expensive part is done and the
- * question here is only how many times the answer changed. Returning to the
- * same place after going elsewhere is two visits; that is the whole point.
- */
-export function countVisits(rows: Array<{ placeId: string | null }>): number | null {
-  let visits = 0;
-  let prev: string | null = null;
-  for (const r of rows) {
-    const here = r.placeId ?? null;
-    if (here && here !== prev) visits++;
-    prev = here;
-  }
-  return visits || null;
 }

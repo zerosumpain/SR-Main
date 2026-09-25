@@ -9,7 +9,7 @@
 // audit here shares, so a model that echoes "[C3]" as rendered has cited C3.
 
 import { resolveCites } from '../cites';
-import type { Candidate } from '../snapshot-types';
+import type { Candidate } from '../candidate';
 import { OUTCOMES, type Channel, type Outcome } from './questions';
 import type { Card } from './tools';
 

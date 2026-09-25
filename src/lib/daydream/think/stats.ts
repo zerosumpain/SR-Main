@@ -1,9 +1,9 @@
-// src/lib/daydream/stats/tests.ts
+// src/lib/daydream/think/stats.ts (was stats/tests.ts)
 //
 // The statistical instruments, and the thing that stops them lying.
 //
 // The lying is the point of this file. A feature store with m metrics offers
-// m(m-1)/2 distinct pairs — SWEEP_METRICS in sweep.ts is the live list, and at
+// m(m-1)/2 distinct pairs — SWEEP_METRICS in ./series.ts is the live list, and at
 // twenty-odd metrics that is a couple of hundred pairs; testing all of them at
 // p < 0.05 produces about one "significant" result per twenty pairs by chance
 // alone, on data with no structure whatsoever.

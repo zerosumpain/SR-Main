@@ -9,7 +9,7 @@ import {
   pValueForR,
   rankOf,
   spearman,
-} from './tests';
+} from './stats';
 
 /** Deterministic PRNG — Math.random would make these tests flaky by design. */
 function mulberry32(seed: number) {

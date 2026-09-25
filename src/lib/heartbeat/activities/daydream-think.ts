@@ -10,6 +10,7 @@ import {
 } from '$lib/daydream/budget';
 import { resolveDaydreamModel } from '$lib/daydream/model';
 import { runThink, MAX_ROUNDS } from '$lib/daydream/think/run';
+import { wakeSnoozed } from '$lib/daydream/thought-store';
 import { SETTINGS_ENABLED_KEY, errMsg } from '$lib/daydream/types';
 import type { ActivityHandler } from '../types';
 
@@ -57,6 +58,11 @@ export const daydreamThink: ActivityHandler = {
       return { outcome: 'skipped', summary: 'daydreaming disabled' };
     }
 
+    // A snooze has to end somewhere. The detect pass that used to wake them was
+    // retired (P4a), and the context panel still offers "snooze a week" — so
+    // this cheap update runs every tick, spare or not.
+    await wakeSnoozed(now).catch((err) => console.warn(`[daydream] wake snoozed failed: ${errMsg(err)}`));
+
     // Spare cycles means spare — ponder's two gates, unchanged.
     const running = (await listChatJobs()).filter((j) => j.status === 'running');
     if (running.length > 0) {
@@ -92,6 +98,7 @@ export const daydreamThink: ActivityHandler = {
       // unseen for a month.
       `${n.proposed} note${n.proposed === 1 ? '' : 's'} (${n.created} new${n.merged ? `, ${n.merged} merged` : ''}${n.updated ? `, ${n.updated} refreshed` : ''}${n.suppressed ? `, ${n.suppressed} held` : ''}${n.muted ? `, ${n.muted} muted` : ''})`,
       ...(result.notified ? [`${result.notified} sent`] : []),
+      ...(result.backlog.length ? [`${result.backlog.length} to the backlog`] : []),
       // The fabrication meter. Always reported — a quiet audit is a claim.
       `audit dropped ${result.rejected.length}`,
     ];
