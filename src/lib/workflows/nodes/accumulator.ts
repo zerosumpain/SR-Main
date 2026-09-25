@@ -47,6 +47,7 @@ export const accumulatorDef: NodeDefinition = {
   type: 'accumulator',
   label: 'Accumulator',
   category: 'control',
+  idempotent: true,
   description: 'Wrap the current input (or a chosen field) into an array within this run. Does NOT persist or accumulate across separate runs.',
   configSchema: {
     type: 'object',

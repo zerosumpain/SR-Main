@@ -1,124 +1,59 @@
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
-// Regression test for the node_executions clobber bug: per-run node-execution
-// UPDATEs must be scoped by BOTH runId AND nodeId. Because nodeId is the static
-// graph-node id (reused on every run), scoping by nodeId alone would overwrite
-// the status/IO/cost/timestamps of every prior run's execution of that node.
-//
-// Strategy: mock drizzle-orm's eq/and so we can capture the exact predicate
-// passed to each `.where(...)`, mock $lib/db with a chainable stub that records
-// which table each update targeted and what predicate it was filtered by, and
-// mock the engine so the run resolves with one node output + one node error.
-// Then assert that every nodeExecutions UPDATE was filtered by an and() over
-// the run's id, not by nodeId alone.
-//
-// NOTE: vi.mock factories are hoisted above all top-level code, so any value a
-// factory references must be created INSIDE the factory (or via vi.hoisted).
-// The captured predicates live on a hoisted array shared with the test body.
+// armRunWatchdog: an interactive run that goes quiet is failed and announced,
+// and one that settles disarms both timers.
 
-const captured = vi.hoisted(() => ({ nodeExecUpdateWheres: [] as unknown[] }));
-
-vi.mock('$lib/db/schema', () => ({
-  nodeExecutions: { __table: 'node_executions', runId: 'col:runId', nodeId: 'col:nodeId' },
-  workflowRuns: { __table: 'workflow_runs', id: 'col:id' },
-  workflowNodes: { __table: 'workflow_nodes', id: 'col:id' },
+const state = vi.hoisted(() => ({
+  updates: [] as Array<Record<string, unknown>>,
+  listeners: new Map<string, (e: { type: string }) => void>(),
+  emitted: [] as Array<{ type: string; runId: string }>,
 }));
 
-// eq/and return structured descriptors so assertions can inspect the predicate
-// tree instead of matching opaque drizzle SQL objects.
-vi.mock('drizzle-orm', () => ({
-  eq: (col: unknown, val: unknown) => ({ op: 'eq', col, val }),
-  and: (...conds: unknown[]) => ({ op: 'and', conds }),
+vi.mock('$lib/db/schema', () => ({ workflowRuns: { id: 'id' } }));
+vi.mock('drizzle-orm', () => ({ eq: () => ({}) }));
+vi.mock('$lib/db', () => ({
+  db: { update: () => ({ set: (v: Record<string, unknown>) => ({ where: async () => void state.updates.push(v) }) }) },
 }));
-
-vi.mock('$lib/db', () => {
-  let currentTable: { __table?: string } | null = null;
-  const chain = {
-    update: vi.fn((table: { __table?: string }) => {
-      currentTable = table;
-      return chain;
-    }),
-    set: vi.fn(() => chain),
-    where: vi.fn((predicate: unknown) => {
-      if (currentTable?.__table === 'node_executions') {
-        captured.nodeExecUpdateWheres.push(predicate);
-      }
-      currentTable = null;
-      // The finaliser checks whether the UPDATE matched a pre-created row.
-      const p = Promise.resolve() as Promise<void> & { returning: () => Promise<Array<{ id: string }>> };
-      p.returning = async () => [{ id: 'row' }];
-      return p;
-    }),
-  };
-  return { db: chain };
-});
-
-// Engine resolves immediately with one completed node and one failed node, so
-// both nodeExecutions UPDATE loops in runWorkflowAndPersist execute.
-vi.mock('$lib/workflows', () => ({
-  engine: {
-    execute: vi.fn(() =>
-      Promise.resolve({
-        status: 'completed_with_errors' as const,
-        error: null,
-        healingHistory: [],
-        nodeOutputs: new Map<string, unknown>([['node-A', { ok: true }]]),
-        nodeErrors: new Map<string, string>([['node-B', 'boom']]),
-        nodeInputs: new Map<string, unknown>(),
-        nodeUsage: new Map<string, unknown>(),
-        nodeStartTimes: new Map<string, Date>(),
-        nodeSelectedHandles: new Map<string, string>(),
-      }),
-    ),
+vi.mock('$lib/workflows/events', () => ({
+  emitWorkflowEvent: (e: { type: string; runId: string }) => state.emitted.push(e),
+  onWorkflowEvent: (runId: string, fn: (e: { type: string }) => void) => {
+    state.listeners.set(runId, fn);
+    return () => state.listeners.delete(runId);
   },
 }));
 
-vi.mock('$lib/events/platform-bus', () => ({ emit: vi.fn() }));
+import { armRunWatchdog } from '$lib/workflows/run-helpers';
 
-vi.mock('../../../src/lib/workflows/events', () => ({
-  emitWorkflowEvent: vi.fn(),
-  onWorkflowEvent: vi.fn(() => () => {}),
-}));
-vi.mock('$lib/workflows/observability-bus', () => ({
-  emitObs: vi.fn(),
-}));
+beforeEach(() => {
+  vi.useFakeTimers();
+  state.updates = [];
+  state.emitted = [];
+  state.listeners.clear();
+});
+afterEach(() => vi.useRealTimers());
 
-import { runWorkflowAndPersist } from '../../../src/lib/workflows/run-helpers';
-
-describe('runWorkflowAndPersist node_executions scoping', () => {
-  beforeEach(() => {
-    captured.nodeExecUpdateWheres.length = 0;
+describe('armRunWatchdog', () => {
+  it('fails a run that emits nothing for three minutes', async () => {
+    armRunWatchdog('r1', 'test');
+    await vi.advanceTimersByTimeAsync(3 * 60 * 1000 + 10);
+    expect(state.updates[0]).toMatchObject({ status: 'failed' });
+    expect(String(state.updates[0].error)).toMatch(/idle/);
+    expect(state.emitted).toContainEqual(expect.objectContaining({ type: 'run_failed', runId: 'r1' }));
   });
 
-  it('scopes every node_executions UPDATE by runId AND nodeId', async () => {
-    const runId = 'run-123';
-    runWorkflowAndPersist(
-      { id: 'wf-1', name: 'wf', nodes: [], edges: [] },
-      runId,
-      {},
-      { workflowId: 'wf-1', label: 'test', selfHealing: false },
-    );
+  it('any event on the run resets the idle timer', async () => {
+    armRunWatchdog('r2', 'test');
+    await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
+    state.listeners.get('r2')!({ type: 'token' });
+    await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
+    expect(state.updates).toHaveLength(0);
+  });
 
-    // The persistence writes happen in a detached promise chain after the
-    // mocked engine resolves; flush microtasks until they land.
-    for (let i = 0; i < 50 && captured.nodeExecUpdateWheres.length < 2; i++) {
-      await Promise.resolve();
-    }
-
-    // One completed node + one failed node = two node_executions UPDATEs.
-    expect(captured.nodeExecUpdateWheres).toHaveLength(2);
-
-    for (const predicate of captured.nodeExecUpdateWheres) {
-      const p = predicate as { op: string; conds?: { op: string; col: unknown; val: unknown }[] };
-      // Must be an and(...) — a bare eq(nodeId) is the bug we're guarding.
-      expect(p.op).toBe('and');
-      const cols = p.conds!.map((c) => c.col);
-      const vals = p.conds!.map((c) => c.val);
-      // One condition must pin the runId column to this run's id.
-      expect(cols).toContain('col:runId');
-      expect(vals).toContain(runId);
-      // The other must pin the nodeId column.
-      expect(cols).toContain('col:nodeId');
-    }
+  it('disarms when the run settles', async () => {
+    const disarm = armRunWatchdog('r3', 'test');
+    disarm();
+    await vi.advanceTimersByTimeAsync(20 * 60 * 1000);
+    expect(state.updates).toHaveLength(0);
+    expect(state.listeners.has('r3')).toBe(false);
   });
 });

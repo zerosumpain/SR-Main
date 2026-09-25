@@ -20,6 +20,7 @@ import { snapshotPrice } from '$lib/server/models/price-snapshot';
 import type { ModelContext } from '$lib/server/models/types';
 import { publishedLink } from '$lib/builds/published-link';
 import { builderChatDef, builderPiDef, buildViewDef } from './builder-canvas.def';
+import { FatalError } from '../errors';
 export { builderChatDef, builderPiDef, buildViewDef } from './builder-canvas.def';
 
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'paused']);
@@ -71,9 +72,7 @@ export const builderChatExecutor: NodeExecutor = {
     }
 
     const prompt = tplString(config.prompt, input).trim();
-    if (!prompt) {
-      return { output: { success: false, error: 'prompt is required' }, rowCount: 1 };
-    }
+    if (!prompt) throw new FatalError('prompt is required');
 
     let ctx: ModelContext;
     const provider = tplString(config.modelProvider, input).trim();
@@ -171,9 +170,7 @@ export const builderPiExecutor: NodeExecutor = {
     const buildId =
       tplString(config.buildId, input).trim() ||
       String((input as { buildId?: unknown })?.buildId ?? '').trim();
-    if (!buildId) {
-      return { output: { success: false, error: 'buildId is required (set in config or upstream input)' }, rowCount: 1 };
-    }
+    if (!buildId) throw new FatalError('buildId is required (set in config or upstream input)');
     const waitForCompletion = config.waitForCompletion === true;
     const pollMs = Math.max(500, pickNumber(config.pollIntervalMs) ?? 2000);
     const maxWait = Math.max(5_000, pickNumber(config.maxWaitMs) ?? 8 * 60 * 60 * 1000);
@@ -183,7 +180,7 @@ export const builderPiExecutor: NodeExecutor = {
     // want the current build state don't block waiting for terminal.
     if (!waitForCompletion) {
       const [row] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
-      if (!row) return { output: { success: false, error: `build ${buildId} not found` }, rowCount: 1 };
+      if (!row) throw new FatalError(`build ${buildId} not found`);
       return {
         output: {
           success: true,
@@ -204,9 +201,7 @@ export const builderPiExecutor: NodeExecutor = {
     // waitForCompletion: poll until terminal or timeout.
     while (Date.now() - start < maxWait) {
       const [row] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
-      if (!row) {
-        return { output: { success: false, error: `build ${buildId} not found` }, rowCount: 1 };
-      }
+      if (!row) throw new FatalError(`build ${buildId} not found`);
       if (TERMINAL_STATUSES.has(row.status)) {
         return {
           output: {
@@ -270,13 +265,9 @@ export const buildViewExecutor: NodeExecutor = {
     const buildId =
       tplString(config.buildId, input).trim() ||
       String((input as { buildId?: unknown })?.buildId ?? '').trim();
-    if (!buildId) {
-      return { output: { success: false, error: 'buildId is required' }, rowCount: 1 };
-    }
+    if (!buildId) throw new FatalError('buildId is required');
     const [row] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
-    if (!row) {
-      return { output: { success: false, error: `build ${buildId} not found` }, rowCount: 1 };
-    }
+    if (!row) throw new FatalError(`build ${buildId} not found`);
     // Friendly workflow name — strip the "canvas:" prefix so downstream
     // templates (e.g. WhatsApp messages) read like a slug, not a uuid.
     let workflowName = '';

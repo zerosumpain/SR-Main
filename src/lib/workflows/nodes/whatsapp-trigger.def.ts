@@ -15,6 +15,7 @@ import type { NodeDefinition } from '../types';
 export const whatsappTriggerDef: NodeDefinition = {
   type: 'whatsapp-trigger',
   category: 'trigger',
+  idempotent: true,
   label: 'WhatsApp Trigger',
   description: 'Fires when an inbound WhatsApp message from the owner matches a keyword',
   defaultConfig: { keyword: '', matchMode: 'prefix', stripKeyword: true },

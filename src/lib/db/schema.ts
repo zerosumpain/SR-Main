@@ -2039,6 +2039,23 @@ export const workflowEdges = pgTable('workflow_edges', {
 export type WorkflowEdge = typeof workflowEdges.$inferSelect;
 export type NewWorkflowEdge = typeof workflowEdges.$inferInsert;
 
+/**
+ * An immutable snapshot of a workflow's runnable definition. Every run pins one
+ * (`workflow_runs.version_id`) so a resume, a crash recovery or a sub-workflow
+ * child executes the graph it started with, not whatever the canvas holds now.
+ * One row per distinct content hash: a schedule firing 288 times a day on an
+ * unchanged graph reuses the same row.
+ */
+export const workflowVersions = pgTable('workflow_versions', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  workflowId: text('workflow_id').notNull().references(() => workflows.id, { onDelete: 'cascade' }),
+  hash: text('hash').notNull(),
+  definition: jsonb('definition').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('workflow_versions_workflow_hash_idx').on(t.workflowId, t.hash),
+]);
+
 export const workflowRuns = pgTable('workflow_runs', {
   id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
   workflowId: text('workflow_id').notNull().references(() => workflows.id, { onDelete: 'cascade' }),
@@ -2077,6 +2094,12 @@ export const workflowRuns = pgTable('workflow_runs', {
    * paths and only read by the worker. Scheduled runs leave it null ({}).
    */
   inputData: jsonb('input_data'),
+  /** The pinned definition this run executes (workflow_versions). */
+  versionId: text('version_id').references(() => workflowVersions.id, { onDelete: 'set null' }),
+  /** Set on a sub-workflow child run: the run whose node started it. */
+  parentRunId: text('parent_run_id'),
+  /** How many times crash/deploy recovery has resumed this run (capped at 1). */
+  resumeCount: integer('resume_count').notNull().default(0),
 }, (t) => [
   // 44k rows and, until now, nothing but the primary key. Twenty-two call sites
   // filter by workflow_id and twenty-three order by started_at, so every one of
@@ -2094,7 +2117,9 @@ export type NewWorkflowRun = typeof workflowRuns.$inferInsert;
 export const nodeExecutions = pgTable('node_executions', {
   id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
   runId: text('run_id').notNull().references(() => workflowRuns.id, { onDelete: 'cascade' }),
-  nodeId: text('node_id').notNull().references(() => workflowNodes.id, { onDelete: 'cascade' }),
+  // No foreign key: deleting a node from the canvas must not erase the history
+  // of every run it took part in. The run's pinned version still names it.
+  nodeId: text('node_id').notNull(),
   status: text('status').notNull().default('pending'),
   inputData: jsonb('input_data'),
   outputData: jsonb('output_data'),

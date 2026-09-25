@@ -4,6 +4,7 @@ export const weatherBriefDef: NodeDefinition = {
   type: 'weather-brief',
   label: 'Weather brief',
   category: 'integration',
+  idempotent: true,
   description:
     'Decoded weather for a coordinate pair (Open-Meteo). Returns named conditions, metric temperatures, rain/wind/UV and derived "local factors" — no raw WMO codes for a downstream LLM to guess at.',
   configSchema: {

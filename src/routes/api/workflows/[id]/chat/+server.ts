@@ -4,15 +4,11 @@ import { db } from '$lib/db';
 import {
   workflows,
   workflowNodes,
-  workflowEdges,
-  workflowRuns,
-  nodeExecutions,
   orchestratorChats,
   conversations,
 } from '$lib/db/schema';
 import { and, eq } from 'drizzle-orm';
-import type { WorkflowDefinition } from '$lib/workflows';
-import { runWorkflowAndPersist } from '$lib/workflows/run-helpers';
+import { startRun } from '$lib/workflows/start-run';
 import { resolveChatTurnModel } from '$lib/server/models/workload-settings';
 
 /**
@@ -38,7 +34,6 @@ export const POST: RequestHandler = async ({ params, request }) => {
   if (!workflow) return json({ error: 'Workflow not found' }, { status: 404 });
 
   const nodes = await db.select().from(workflowNodes).where(eq(workflowNodes.workflowId, params.id));
-  const edges = await db.select().from(workflowEdges).where(eq(workflowEdges.workflowId, params.id));
 
   // Pick the chat node (caller-specified, else first chat-type node).
   const chatNodeId =
@@ -100,48 +95,19 @@ export const POST: RequestHandler = async ({ params, request }) => {
     })
     .returning();
 
-  const [run] = await db
-    .insert(workflowRuns)
-    .values({
-      workflowId: params.id,
-      status: 'running',
-      trigger: 'chat',
-      startedAt: new Date(),
-    })
-    .returning();
-
-  for (const node of nodes) {
-    await db.insert(nodeExecutions).values({ runId: run.id, nodeId: node.id, status: 'pending' });
-  }
-
-  const definition: WorkflowDefinition = {
-    id: workflow.id,
-    name: workflow.name,
-    nodes: nodes.map((n) => ({
-      id: n.id,
-      type: n.type,
-      position: n.position as { x: number; y: number },
-      config: (n.config || {}) as Record<string, unknown>,
-      label: n.label,
-    })),
-    edges: edges.map((e) => ({
-      id: e.id,
-      sourceNodeId: e.sourceNodeId,
-      targetNodeId: e.targetNodeId,
-      sourceHandle: e.sourceHandle,
-      targetHandle: e.targetHandle,
-    })),
-  };
-
-  runWorkflowAndPersist(
-    definition,
-    run.id,
-    { message: text, _chatNodeId: chatNodeId, _conversationId: conversationId },
-    { workflowId: params.id, label: 'canvas/chat' },
-  );
+  // The kernel loads the definition AFTER the conversation id was written to
+  // the chat node, so the run sees it in config as well as in its input.
+  const started = await startRun({
+    workflowId: params.id,
+    trigger: 'chat',
+    input: { message: text, _chatNodeId: chatNodeId, _conversationId: conversationId },
+    watchdog: true,
+    label: 'canvas/chat',
+  });
+  if (!started) return json({ error: 'Workflow not found' }, { status: 404 });
 
   return json({
-    runId: run.id,
+    runId: started.runId,
     userMessageId: userMsg.id,
     chatNodeId,
     conversationId,

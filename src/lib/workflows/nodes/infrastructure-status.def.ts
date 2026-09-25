@@ -4,6 +4,7 @@ export const infrastructureStatusDef: NodeDefinition = {
   type: 'infrastructure-status',
   label: 'Infrastructure status',
   category: 'integration',
+  idempotent: true,
   description: 'Read-only current-to-latest infrastructure review. Uses bounded official publisher releases and explicitly labels unavailable evidence.',
   configSchema: {
     type: 'object',

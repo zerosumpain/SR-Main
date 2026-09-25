@@ -4,6 +4,7 @@ import { db } from '$lib/db';
 import { workflowDataStore } from '$lib/db/schema';
 import { and, eq, sql, type SQL } from 'drizzle-orm';
 import { getPath as resolvePath } from '../expressions';
+import { FatalError } from '../errors';
 
 export { dataStoreDef } from './data-store.def';
 
@@ -369,7 +370,7 @@ export const dataStoreExecutor: NodeExecutor = {
       return { output: { key, deleted }, rowCount: deleted ? 1 : 0 };
     }
 
-    return { output: { error: `Unknown operation: ${operation}` }, rowCount: 1 };
+    throw new FatalError(`Unknown operation: ${operation}`);
   },
 
   getInputSchema(_config: Record<string, unknown>) {

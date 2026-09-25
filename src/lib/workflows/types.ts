@@ -121,6 +121,13 @@ export interface NodeDefinition {
   /** Config keys holding code/expressions the executor evaluates itself —
    *  the engine's template resolver copies them through untouched. */
   rawConfigKeys?: readonly string[];
+  /**
+   * Running this node twice has no effect beyond running it once (it reads, or
+   * computes). The engine then retries it on transient failures unasked, and
+   * crash recovery re-runs it if the process died mid-node. Leave unset on
+   * anything that sends, writes, pays or starts something.
+   */
+  idempotent?: boolean;
 }
 
 export interface NodeResult {

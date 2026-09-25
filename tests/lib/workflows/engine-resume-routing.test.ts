@@ -77,12 +77,14 @@ async function pauseThenResume(approved: boolean) {
     resolved: { completed: true, formValues: { approved } },
     executor: registry.getExecutor('approval'),
   });
-  const second = await engine.executeWithPreSeededOutputs(
+  const second = await engine.execute(
     workflow,
     `run-pause-${approved}`,
-    seed.outputs,
+    {},
+    undefined,
     'wf-resume',
     undefined,
+    seed.outputs,
     seed.handles,
   );
   return { first, seed, second };

@@ -35,6 +35,8 @@ export interface ClaimedRun {
    *  worker replays this into engine.execute so enqueued event/manual runs
    *  receive the same input the in-process path would have passed. */
   input: Record<string, unknown> | null;
+  /** The pinned workflow_versions row (null for runs from before versioning). */
+  versionId?: string | null;
 }
 
 /**
@@ -131,7 +133,7 @@ export async function claimNext(
         heartbeat_at = now()
     FROM next
     WHERE r.id = next.id
-    RETURNING r.id AS id, r.workflow_id AS "workflowId", r.trigger AS trigger, r.input_data AS input
+    RETURNING r.id AS id, r.workflow_id AS "workflowId", r.trigger AS trigger, r.input_data AS input, r.version_id AS "versionId"
   `);
   const rows = (res as unknown as { rows?: ClaimedRun[] }).rows ?? [];
   return rows[0] ?? null;

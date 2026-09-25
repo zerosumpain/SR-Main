@@ -27,6 +27,7 @@ export const manualTriggerDef: NodeDefinition = {
   type: 'manual-trigger',
   label: 'Manual Trigger',
   category: 'trigger',
+  idempotent: true,
   description: 'Starts a workflow manually. Optionally accepts initial data.',
   configSchema: { type: 'object', properties: {} },
   defaultConfig: {},

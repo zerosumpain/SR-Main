@@ -42,6 +42,10 @@ vi.mock('$lib/db', () => {
   return { db: { select: () => chain() } };
 });
 
+vi.mock('$lib/workflows/start-run', () => ({
+  loadDefinition: async () => ({ id: 'wf', name: 'wf', nodes: ROWS.NODES, edges: ROWS.EDGES }),
+}));
+
 // The api-call source's output schema → gives the proposer real available paths.
 vi.mock('$lib/workflows', () => ({
   registry: {

@@ -180,39 +180,36 @@ describe('finaliseRun', () => {
   });
 });
 
-// Every start path must finalise through the one helper, and none may write a
-// heal back to the saved node. Read as source because the paths are route
-// handlers and detached promise chains that a unit test cannot reach cheaply.
-describe('every run start path uses finaliseRun', () => {
+// One run kernel. Every start path — the Run button, the scheduler, webhooks,
+// events, gmail/whatsapp, canvas chat, the single-node re-run, the workflow_run
+// tool, sub-workflow children, the worker, resume and recovery — goes through
+// start-run.ts, so nothing else may execute the engine, finalise a run, or
+// write a run row. Read as source: the paths are routes and detached promises.
+describe('the run kernel is the only start path', () => {
   const SRC = path.resolve(__dirname, '../../../src');
-  const START_PATHS = [
-    'lib/workflows/run-helpers.ts',
-    'routes/api/workflows/[id]/run/+server.ts',
-    'lib/workflows/run-worker.ts',
-    'lib/workflows/scheduler.ts',
-    'lib/workflows/start-run.ts',
-    'routes/api/workflows/webhook/[id]/+server.ts',
-    'lib/workflows/engine-resume.ts',
-  ];
-  // Triggered starts (events, WhatsApp keywords, email) share start-run.ts,
-  // which finalises; they must not carry their own copy of a run start.
-  const TRIGGERED_PATHS = [
-    'lib/workflows/event-bus.ts',
-    'lib/workflows/gmail/orchestrator-bridge.ts',
-    'lib/workflows/whatsapp/workflow-dispatch.ts',
-  ];
+  const files: string[] = [];
+  const walk = (dir: string) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (/\.(ts|svelte)$/.test(e.name) && !/\.test\.ts$/.test(e.name)) files.push(full);
+    }
+  };
+  walk(SRC);
+  const users = (re: RegExp) =>
+    files.filter((f) => re.test(fs.readFileSync(f, 'utf8').replace(/^\s*(\/\/|\*).*$/gm, ''))).map((f) => path.relative(SRC, f)).sort();
 
-  it.each(START_PATHS)('%s calls finaliseRun and never rewrites workflow_nodes config', (rel) => {
-    const src = fs.readFileSync(path.join(SRC, rel), 'utf8');
-    expect(src).toMatch(/\bfinaliseRun\(/);
-    expect(src).not.toMatch(/emit\(\s*'workflow_completed'/);
-    expect(src).not.toMatch(/\.update\(\s*workflowNodes\s*\)/);
+  it('only start-run.ts executes the engine (plus the generator\'s draft dry-run, which has no run row)', () => {
+    expect(users(/\bengine\s*\.\s*execute\(/)).toEqual(['lib/workflows/orchestrator/index.ts', 'lib/workflows/start-run.ts']);
   });
 
-  it.each(TRIGGERED_PATHS)('%s starts runs through startTriggeredRun, not its own engine.execute', (rel) => {
-    const src = fs.readFileSync(path.join(SRC, rel), 'utf8');
-    expect(src).toMatch(/\bstartTriggeredRun\(/);
-    expect(src).not.toMatch(/engine\s*\.\s*execute\(/);
+  it('only start-run.ts finalises a run or inserts a run row', () => {
+    expect(users(/\bfinaliseRun\(/)).toEqual(['lib/workflows/run-finalise.ts', 'lib/workflows/start-run.ts']);
+    expect(users(/insert\(\s*workflowRuns\s*\)/)).toEqual(['lib/workflows/start-run.ts']);
+  });
+
+  it('the kernel never writes a heal back to the saved node', () => {
+    const src = fs.readFileSync(path.join(SRC, 'lib/workflows/start-run.ts'), 'utf8');
     expect(src).not.toMatch(/\.update\(\s*workflowNodes\s*\)/);
   });
 });

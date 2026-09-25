@@ -521,11 +521,6 @@ export function getJob(jobId: string): OrchestratorJob | null {
   return jobs.get(jobId) ?? null;
 }
 
-export function touchJob(jobId: string): void {
-  const job = jobs.get(jobId);
-  if (job) job.lastEventAt = Date.now();
-}
-
 export function cancelJob(jobId: string): boolean {
   const job = jobs.get(jobId);
   if (!job || job.status !== 'running') return false;
@@ -707,15 +702,6 @@ export function respondToWaiter(jobId: string, key: string, value: unknown): boo
   w.resolve(value);
   clearWaiterIfDrained(jobId);
   return true;
-}
-
-export function rejectWaiter(jobId: string, key: string, reason: string): void {
-  const m = waiters.get(jobId); if (!m) return;
-  const w = m.get(key); if (!w) return;
-  m.delete(key);
-  if (m.size === 0) waiters.delete(jobId);
-  w.reject(new Error(reason));
-  clearWaiterIfDrained(jobId);
 }
 
 // When a job ends (done / error / cancelled), reject every outstanding waiter

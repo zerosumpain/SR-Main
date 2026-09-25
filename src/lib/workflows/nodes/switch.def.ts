@@ -35,6 +35,7 @@ export const switchDef: NodeDefinition = {
   type: 'switch',
   label: 'Switch',
   category: 'control',
+  idempotent: true,
   description:
     'Evaluates a JS expression and routes execution to the first matching case\'s output handle, or the default handle if nothing matches. Deterministic n-way branch.',
   configSchema: {

@@ -3,6 +3,7 @@ import { DEFAULT_NODE_MAX_TOKENS } from '$lib/constants/default-models';
 
 export const thinkDef: NodeDefinition = {
   type: 'think', label: 'Think', category: 'agentic',
+  idempotent: true,
   description: 'Chain-of-thought reasoning. LLM reasons step-by-step, outputs reasoning + conclusion.',
   configSchema: { type: 'object', properties: {
     prompt: { type: 'string', description: 'What to reason about. Supports {{input.field}} templates.' },

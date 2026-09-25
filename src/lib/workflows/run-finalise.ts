@@ -42,6 +42,8 @@ export interface FinaliseRunInput {
   chainDepth?: number;
   /** Log prefix. */
   label?: string;
+  /** A sub-workflow child: settling it may release a parent waiting on it. */
+  parentRunId?: string | null;
 }
 
 type NodeExecFields = Partial<typeof nodeExecutions.$inferInsert>;
@@ -100,6 +102,7 @@ async function persistNodeRows(input: FinaliseRunInput): Promise<void> {
   const pausedId = result.status === 'awaiting_human' ? result.pausedAtNodeId : undefined;
   if (pausedId && !result.nodeOutputs.has(pausedId)) {
     await upsertNodeExecution(runId, pausedId, {
+      status: 'pending',
       startedAt: result.nodeStartTimes.get(pausedId) ?? undefined,
       inputData: result.nodeInputs.get(pausedId) ?? null,
     });
@@ -158,6 +161,17 @@ export async function finaliseRun(input: FinaliseRunInput): Promise<void> {
       completedAt: completedAt.toISOString(),
       durationMs: completedAt.getTime() - runStartedAt,
     });
+  }
+
+  // A child that settled after a pause (its parent stopped waiting on it and
+  // went to awaiting_human) hands its outcome back up.
+  if (input.parentRunId && !isPaused) {
+    try {
+      const { continueParent } = await import('./engine-resume');
+      await continueParent(input.parentRunId, runId, result);
+    } catch (err) {
+      console.error(`[${label}] failed to continue parent run ${input.parentRunId} (runId=${runId})`, err);
+    }
   }
 
   // Last, so a subscriber reading node_executions sees this run's outputs. The

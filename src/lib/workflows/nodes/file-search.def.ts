@@ -10,6 +10,7 @@ export const fileSearchDef: NodeDefinition = {
   type: 'file-search',
   label: 'File search (RAG)',
   category: 'integration',
+  idempotent: true,
   description:
     'Semantic search across the CONTENT of every file in the /drive store — text by meaning, images by visual content + OCR, audio by transcript. Returns ranked passages with the source file name and id.',
   configSchema: {

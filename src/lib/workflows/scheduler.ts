@@ -1,13 +1,10 @@
 import { Cron } from 'croner';
 import { db } from '$lib/db';
-import { workflowSchedules, workflows, workflowRuns, nodeExecutions } from '$lib/db/schema';
+import { workflowSchedules } from '$lib/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { engine } from '$lib/workflows';
-import { loadDefinition } from './start-run';
-import { emitObs } from '$lib/workflows/observability-bus';
+import { startRun } from './start-run';
 import { cronTimezone } from '$lib/workflows/cron-timezone';
 import { runsService } from './service-role';
-import { finaliseRun } from './run-finalise';
 
 // Tracks active Cron instances keyed by schedule ID
 const activeJobs = new Map<string, Cron>();
@@ -227,7 +224,8 @@ export function registerCronJob(schedule: {
   // labelled it Europe/London. See $lib/workflows/cron-timezone.
   const timezone = cronTimezone(cfg);
   const job = new Cron(expression, { timezone }, async () => {
-    await runScheduledWorkflow(schedule.workflowId, schedule.id);
+    await runScheduledWorkflow(schedule.workflowId, schedule.id).catch((err: unknown) =>
+      console.error(`[scheduler] run of ${schedule.workflowId} did not start:`, err instanceof Error ? err.message : err));
   });
 
   activeJobs.set(schedule.id, job);
@@ -242,109 +240,23 @@ export function unregisterCronJob(scheduleId: string): void {
 }
 
 async function runScheduledWorkflow(workflowId: string, scheduleId: string): Promise<void> {
-  const [workflow] = await db
-    .select()
-    .from(workflows)
-    .where(eq(workflows.id, workflowId))
-    .limit(1);
-
-  if (!workflow) {
+  const now = new Date();
+  // The run kernel: pinned version, pending node rows, pausedAtNodeId (so a
+  // scheduled run that hits an approval can resume), workflow_completed, and
+  // the worker-mode enqueue. Awaited, so the schedule stamps after the run.
+  const started = await startRun({ workflowId, trigger: 'scheduled', label: 'scheduler' });
+  if (!started) {
     console.warn(`[scheduler] Workflow ${workflowId} not found, stopping job`);
     unregisterCronJob(scheduleId);
     return;
   }
-
-  // #19 DISPATCH SWITCH (ADDITIVE, FEATURE-FLAGGED): in worker mode the row is
-  // created 'pending' so the out-of-process worker claims it (vs 'running' for
-  // the in-process path below). When the flag is OFF this is exactly the
-  // original 'running' insert.
-  const workerMode = process.env.JKAI_RUN_WORKER === '1';
-
-  const [runRow] = await db
-    .insert(workflowRuns)
-    .values({
-      workflowId,
-      status: workerMode ? 'pending' : 'running',
-      trigger: 'scheduled',
-      startedAt: new Date(),
-    })
-    .returning();
-
-  const runId = runRow.id;
-  const now = new Date();
-  console.log(`[scheduler] Starting run ${runId} for workflow ${workflowId}`);
-
-  const runStartedAt = Date.now();
-  emitObs('run.started', {
-    workflowId,
-    runId,
-    trigger: 'scheduled',
-    startedAt: new Date(runStartedAt).toISOString(),
-  });
-
-  try {
-    const definition = await loadDefinition(workflowId);
-    if (!definition) throw new Error(`workflow ${workflowId} not found`);
-
-    // Create pending node execution records so scheduled runs have the same
-    // diagnostic trail as manual runs (see routes/api/workflows/[id]/run/+server.ts).
-    for (const node of definition.nodes) {
-      await db.insert(nodeExecutions).values({
-        runId,
-        nodeId: node.id,
-        status: 'pending',
-      });
-    }
-
-    // #19 DISPATCH SWITCH: in worker mode, ENQUEUE the (already-'pending') run
-    // for the out-of-process worker and return — the worker persists results +
-    // updates the schedule's lastRunAt/nextRunAt is still handled below for the
-    // schedule bookkeeping. We update the schedule timestamps then bail out of
-    // the in-process execute/persist path. When the flag is OFF this branch is
-    // skipped and execution proceeds in-process exactly as before.
-    if (workerMode) {
-      const { enqueue } = await import('./run-queue');
-      await enqueue(runId);
-      const job = activeJobs.get(scheduleId);
-      await db
-        .update(workflowSchedules)
-        .set({ lastRunAt: now, nextRunAt: job?.nextRun() ?? null })
-        .where(eq(workflowSchedules.id, scheduleId));
-      console.log(`[scheduler] Enqueued run ${runId} for run-worker (worker mode)`);
-      return;
-    }
-
-    const result = await engine.execute(definition, runId, {}, undefined, workflowId);
-
-    // Shared finaliser: run status (and pausedAtNodeId, so a scheduled run that
-    // hits an approval can be resumed), node rows, fix proposals, obs, and the
-    // workflow_completed a scheduled run never used to emit.
-    await finaliseRun({ workflowId, runId, result, runStartedAt, label: 'scheduler' });
-
-    // Update lastRunAt/nextRunAt on the schedule
-    const job = activeJobs.get(scheduleId);
-    await db
-      .update(workflowSchedules)
-      .set({
-        lastRunAt: now,
-        nextRunAt: job?.nextRun() ?? null,
-      })
-      .where(eq(workflowSchedules.id, scheduleId));
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    const failedAt = new Date();
-    await db
-      .update(workflowRuns)
-      .set({ status: 'failed', completedAt: failedAt, error: message })
-      .where(eq(workflowRuns.id, runId));
-    console.error(`[scheduler] Run ${runId} failed:`, message);
-    emitObs('run.failed', {
-      workflowId,
-      runId,
-      error: message,
-      completedAt: failedAt.toISOString(),
-    });
-  }
+  console.log(`[scheduler] Started run ${started.runId} for workflow ${workflowId} (${started.status})`);
+  await started.done;
+  const job = activeJobs.get(scheduleId);
+  await db
+    .update(workflowSchedules)
+    .set({ lastRunAt: now, nextRunAt: job?.nextRun() ?? null })
+    .where(eq(workflowSchedules.id, scheduleId));
 }
 
 // Hot-reload: called when a schedule is created/updated/deleted via API

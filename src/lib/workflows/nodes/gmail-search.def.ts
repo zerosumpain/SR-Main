@@ -3,6 +3,7 @@ import type { NodeDefinition } from '../types';
 export const gmailSearchDef: NodeDefinition = {
   type: 'gmail-search',
   category: 'integration',
+  idempotent: true,
   label: 'Gmail — Search Messages',
   description: 'Search Gmail using a query string. Returns matching message ids, and optionally fetches full message content.',
   defaultConfig: {

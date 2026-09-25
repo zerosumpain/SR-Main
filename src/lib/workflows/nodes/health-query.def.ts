@@ -4,6 +4,7 @@ export const healthQueryDef: NodeDefinition = {
   type: 'health-query',
   label: 'Health Query',
   category: 'integration',
+  idempotent: true,
   description: 'Query health data from Apple Watch, Whoop and other fitness sources.',
   configSchema: {
     type: 'object',

@@ -90,14 +90,11 @@ describe('codeExecuteExecutor', () => {
       exitCode: 1,
     });
 
-    const result = await codeExecuteExecutor.execute(
+    await expect(codeExecuteExecutor.execute(
       {},
       { language: 'python', code: 'bad code' },
       mockContext,
-    );
-
-    expect(result.output).toHaveProperty('error');
-    expect(result.output.exitCode).toBe(1);
+    )).rejects.toThrow('Exit code 1: syntax error');
   });
 
   it('has correct type', () => {

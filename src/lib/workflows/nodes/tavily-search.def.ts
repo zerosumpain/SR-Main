@@ -4,6 +4,7 @@ export const tavilySearchDef: NodeDefinition = {
   type: 'tavily-search',
   label: 'Tavily Search',
   category: 'integration',
+  idempotent: true,
   description: 'Search the web via Tavily. Returns ranked results with URL, title, content snippet, and optional AI-generated answer.',
   configSchema: {
     type: 'object',

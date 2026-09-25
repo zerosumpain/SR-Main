@@ -1,6 +1,7 @@
 import type { NodeExecutor, NodeResult, ExecutionContext } from '../types';
 import { executeSiteTool } from '$lib/workflows/site-tools/executor';
 import { interpolateTemplate } from './template';
+import { FatalError } from '../errors';
 
 export { healthQueryDef } from './health-query.def';
 
@@ -13,9 +14,7 @@ export const healthQueryExecutor: NodeExecutor = {
     _context: ExecutionContext,
   ): Promise<NodeResult> {
     const operation = config.operation as string | undefined;
-    if (!operation) {
-      return { output: { success: false, error: 'No operation configured' }, rowCount: 1 };
-    }
+    if (!operation) throw new FatalError('No operation configured');
 
     // Registered tool names are `health_<operation>` (see site-tools/tools/health.ts).
     // This used to build `site_health_<operation>`, which never resolved — every
@@ -46,7 +45,7 @@ export const healthQueryExecutor: NodeExecutor = {
       }
 
       default:
-        return { output: { success: false, error: `Unknown operation: ${operation}` }, rowCount: 1 };
+        throw new FatalError(`Unknown operation: ${operation}`);
     }
   },
 

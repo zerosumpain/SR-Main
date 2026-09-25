@@ -5,6 +5,7 @@ export const llmCallDef: NodeDefinition = {
   type: 'llm-call',
   label: 'LLM Call',
   category: 'core',
+  idempotent: true,
   description: 'Call an LLM. Leave the model empty to use the same default as jkai (configured in admin → model defaults). Set an OpenRouter model ID to override. System and user prompts support {{input.field}} templates.',
   configSchema: {
     type: 'object',

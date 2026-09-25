@@ -35,22 +35,14 @@ describe('loopExecutor', () => {
     expect(result.output).toEqual({ results: ['a', 'b', 'c'], count: 3 });
   });
 
-  it('returns error for non-array input', async () => {
-    const result = await loopExecutor.execute(
-      { items: 'not-an-array' },
-      { arrayPath: 'items' },
-      mockContext,
-    );
-    expect(result.output).toEqual({ error: 'Not an array', path: 'items' });
+  it('fails (fatally) on non-array input', async () => {
+    await expect(loopExecutor.execute({ items: 'not-an-array' }, { arrayPath: 'items' }, mockContext))
+      .rejects.toThrow('Not an array at path "items"');
   });
 
-  it('returns error when path does not exist', async () => {
-    const result = await loopExecutor.execute(
-      { foo: 'bar' },
-      { arrayPath: 'missing' },
-      mockContext,
-    );
-    expect(result.output).toEqual({ error: 'Not an array', path: 'missing' });
+  it('fails (fatally) when the path does not exist', async () => {
+    await expect(loopExecutor.execute({ foo: 'bar' }, { arrayPath: 'missing' }, mockContext))
+      .rejects.toThrow('Not an array at path "missing"');
   });
 
   it('handles nested arrayPath', async () => {

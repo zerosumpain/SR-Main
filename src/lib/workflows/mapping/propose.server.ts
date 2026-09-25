@@ -4,10 +4,11 @@
 // heuristic on any LLM failure. Never trusts raw LLM output: only real target
 // config keys are accepted.
 import { db } from '$lib/db';
-import { workflowNodes, workflowEdges, workflowRuns, nodeExecutions } from '$lib/db/schema';
+import { workflowRuns, nodeExecutions } from '$lib/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { registry } from '$lib/workflows';
-import type { JsonSchema, WorkflowNodeDef, WorkflowEdgeDef } from '$lib/workflows/types';
+import type { JsonSchema, WorkflowNodeDef } from '$lib/workflows/types';
+import { loadDefinition } from '$lib/workflows/start-run';
 import { resolveUpstreamSchema, schemaToVariablePaths } from '$lib/workflows/schema-propagation';
 import { computeUpstreamFields } from '$lib/canvas/upstream-fields';
 import { resilientChatCompletion } from '$lib/llm/workflow-gateway';
@@ -36,25 +37,9 @@ async function loadContext(
   sourceNodeId: string,
   targetNodeId: string,
 ): Promise<LoadedContext | null> {
-  const [nodeRows, edgeRows] = await Promise.all([
-    db.select().from(workflowNodes).where(eq(workflowNodes.workflowId, workflowId)),
-    db.select().from(workflowEdges).where(eq(workflowEdges.workflowId, workflowId)),
-  ]);
-
-  const nodes: WorkflowNodeDef[] = nodeRows.map((n) => ({
-    id: n.id,
-    type: n.type,
-    position: (n.position as { x: number; y: number }) ?? { x: 0, y: 0 },
-    config: (n.config as Record<string, unknown>) ?? {},
-    label: n.label ?? n.type,
-  }));
-  const edges: WorkflowEdgeDef[] = edgeRows.map((e) => ({
-    id: e.id,
-    sourceNodeId: e.sourceNodeId,
-    targetNodeId: e.targetNodeId,
-    sourceHandle: e.sourceHandle,
-    targetHandle: e.targetHandle,
-  }));
+  const graph = await loadDefinition(workflowId, { includeDisplayOnly: true });
+  if (!graph) return null;
+  const { nodes, edges } = graph;
 
   const source = nodes.find((n) => n.id === sourceNodeId);
   const target = nodes.find((n) => n.id === targetNodeId);

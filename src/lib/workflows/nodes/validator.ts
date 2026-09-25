@@ -154,6 +154,7 @@ export const validatorDef: NodeDefinition = {
   type: 'validator',
   label: 'Validator',
   category: 'agentic',
+  idempotent: true,
   description: 'Validate data against a JSON Schema or JS expression. Routes to pass/fail outputs.',
   configSchema: {
     type: 'object',

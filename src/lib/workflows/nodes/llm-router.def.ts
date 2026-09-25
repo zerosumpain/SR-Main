@@ -4,6 +4,7 @@ export const llmRouterDef: NodeDefinition = {
   type: 'llm-router',
   label: 'LLM Router',
   category: 'agentic',
+  idempotent: true,
   description:
     'LLM-powered semantic routing. Defines named output paths; the LLM picks which to follow.',
   configSchema: {

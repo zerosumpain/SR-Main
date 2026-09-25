@@ -120,9 +120,3 @@ export async function closeSession(): Promise<void> {
   }
   session = null;
 }
-
-/** Test seam. */
-export function __resetSessionForTests(): void {
-  session = null;
-  starting = null;
-}

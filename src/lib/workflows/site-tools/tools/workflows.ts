@@ -134,15 +134,10 @@ async function canvasScope(ctx?: { workflowId?: string | null; conversationId?: 
  * every edge that creates one.
  */
 async function fanInWarnings(workflowId: string): Promise<FanInCollision[]> {
-  const [nodes, edges] = await Promise.all([
-    db.select().from(workflowNodes).where(eq(workflowNodes.workflowId, workflowId)),
-    db.select().from(workflowEdges).where(eq(workflowEdges.workflowId, workflowId)),
-  ]);
-  return findFanInCollisions(
-    nodes as unknown as WorkflowNodeDef[],
-    edges as unknown as WorkflowEdgeDef[],
-    (type, config) => registry.getExecutor(type)?.getOutputSchema(config),
-  );
+  const { loadDefinition } = await import('$lib/workflows/start-run');
+  const graph = await loadDefinition(workflowId, { includeDisplayOnly: true });
+  if (!graph) return [];
+  return findFanInCollisions(graph.nodes, graph.edges, (type, config) => registry.getExecutor(type)?.getOutputSchema(config));
 }
 
 /**
@@ -732,38 +727,14 @@ register({
     // Final verification + summaryMarkdown. Re-read the persisted state so
     // what we show matches what got saved (not what the spec said — the spec
     // might have failed an insert here or there).
-    const persistedNodes = await db
-      .select()
-      .from(workflowNodes)
-      .where(eq(workflowNodes.workflowId, workflowId));
-    const persistedEdges = await db
-      .select()
-      .from(workflowEdges)
-      .where(eq(workflowEdges.workflowId, workflowId));
+    const { loadDefinition } = await import('$lib/workflows/start-run');
+    const persisted = await loadDefinition(workflowId, { includeDisplayOnly: true });
+    const persistedNodes = persisted?.nodes ?? [];
+    const persistedEdges = persisted?.edges ?? [];
     const { runWorkflowVerification } = await import('$lib/workflows/orchestrator');
-    const issues = runWorkflowVerification(
-      persistedNodes.map(n => ({
-        id: n.id,
-        type: n.type,
-        label: n.label ?? '',
-        config: (n.config ?? {}) as Record<string, unknown>,
-        position: (n.position ?? { x: 0, y: 0 }) as { x: number; y: number },
-      })),
-      persistedEdges.map(e => ({
-        id: e.id,
-        sourceNodeId: e.sourceNodeId,
-        targetNodeId: e.targetNodeId,
-        sourceHandle: e.sourceHandle ?? null,
-        targetHandle: e.targetHandle ?? null,
-      })),
-    ) as SummaryIssue[];
+    const issues = runWorkflowVerification(persistedNodes, persistedEdges) as SummaryIssue[];
 
-    const summaryNodes: SummaryNode[] = persistedNodes.map(n => ({
-      id: n.id,
-      type: n.type,
-      label: n.label ?? n.type,
-      config: (n.config ?? {}) as Record<string, unknown>,
-    }));
+    const summaryNodes: SummaryNode[] = persistedNodes;
     const summaryEdges: SummaryEdge[] = persistedEdges.map(e => ({
       sourceNodeId: e.sourceNodeId,
       targetNodeId: e.targetNodeId,
@@ -1826,60 +1797,17 @@ register({
     const selfHealing = args.selfHealing !== false;
     const awaitMs = typeof args.awaitMs === 'number' ? Math.min(Math.max(args.awaitMs, 0), 600_000) : 0;
 
-    const [workflow] = await db.select().from(workflows).where(eq(workflows.id, id)).limit(1);
-    if (!workflow) return { success: false, error: 'Workflow not found' };
-
-    const nodes = await db.select().from(workflowNodes).where(eq(workflowNodes.workflowId, id));
-    const edges = await db.select().from(workflowEdges).where(eq(workflowEdges.workflowId, id));
-
-    const { isDisplayOnlyType } = await import('$lib/workflows/types');
-    const runnableNodes = nodes.filter((n) => !isDisplayOnlyType(n.type));
-    const runnableEdges = edges.filter((e) => {
-      const src = runnableNodes.find((n) => n.id === e.sourceNodeId);
-      const tgt = runnableNodes.find((n) => n.id === e.targetNodeId);
-      return src && tgt;
-    });
-
-    const [run] = await db.insert(workflowRuns).values({
+    const { startRun } = await import('$lib/workflows/start-run');
+    const started = await startRun({
       workflowId: id,
-      status: 'running',
       trigger: 'manual',
-      startedAt: new Date(),
-    }).returning();
-
-    for (const node of runnableNodes) {
-      await db.insert(nodeExecutions).values({
-        runId: run.id,
-        nodeId: node.id,
-        status: 'pending',
-      });
-    }
-
-    const definition = {
-      id: workflow.id,
-      name: workflow.name,
-      nodes: runnableNodes.map((n) => ({
-        id: n.id,
-        type: n.type,
-        position: n.position as { x: number; y: number },
-        config: (n.config || {}) as Record<string, unknown>,
-        label: n.label,
-      })),
-      edges: runnableEdges.map((e) => ({
-        id: e.id,
-        sourceNodeId: e.sourceNodeId,
-        targetNodeId: e.targetNodeId,
-        sourceHandle: e.sourceHandle,
-        targetHandle: e.targetHandle,
-      })),
-    };
-
-    const { runWorkflowAndPersist } = await import('$lib/workflows/run-helpers');
-    runWorkflowAndPersist(definition, run.id, initialInput, {
-      workflowId: id,
+      input: initialInput,
       selfHealing,
+      watchdog: true,
       label: 'orchestrator-run',
     });
+    if (!started) return { success: false, error: 'Workflow not found' };
+    const run = { id: started.runId };
 
     if (awaitMs > 0) {
       const deadline = Date.now() + awaitMs;
@@ -2127,29 +2055,13 @@ register({
   handler: async (args) => {
     const workflowId = readWorkflowId(args, { allowBareId: true });
     if (!workflowId) return { success: false, error: missingIdError('workflow', 'workflowId') };
-    const [workflow] = await db.select().from(workflows).where(eq(workflows.id, workflowId)).limit(1);
-    if (!workflow) return { success: false, error: 'Workflow not found' };
-
-    const nodes = await db.select().from(workflowNodes).where(eq(workflowNodes.workflowId, workflowId));
-    const edges = await db.select().from(workflowEdges).where(eq(workflowEdges.workflowId, workflowId));
+    const { loadDefinition } = await import('$lib/workflows/start-run');
+    const graph = await loadDefinition(workflowId, { includeDisplayOnly: true });
+    if (!graph) return { success: false, error: 'Workflow not found' };
+    const { nodes: nodeDefs, edges: edgeDefs } = graph;
 
     const { registry } = await import('$lib/workflows');
     const { verifyWorkflow, formatIssues } = await import('$lib/workflows/orchestrator/verify');
-
-    const nodeDefs = nodes.map((n) => ({
-      id: n.id,
-      type: n.type,
-      label: n.label,
-      position: n.position as { x: number; y: number },
-      config: (n.config || {}) as Record<string, unknown>,
-    }));
-    const edgeDefs = edges.map((e) => ({
-      id: e.id,
-      sourceNodeId: e.sourceNodeId,
-      targetNodeId: e.targetNodeId,
-      sourceHandle: e.sourceHandle,
-      targetHandle: e.targetHandle,
-    }));
 
     const getOutputSchema = (type: string, config: Record<string, unknown>) => {
       const executor = registry.getExecutor(type);

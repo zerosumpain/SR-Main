@@ -95,8 +95,7 @@ describe('textParserExecutor — Regex mode', () => {
 
   it('returns error when no pattern is provided', async () => {
     const input = { response: 'some text' };
-    const result = await textParserExecutor.execute(input, { mode: 'regex' }, mockContext);
-    expect(result.output.error).toBeTruthy();
+    await expect(textParserExecutor.execute(input, { mode: 'regex' }, mockContext)).rejects.toThrow(/no regex pattern/);
   });
 });
 

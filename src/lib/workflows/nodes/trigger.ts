@@ -41,6 +41,7 @@ export const triggerDef: NodeDefinition = {
   type: 'trigger',
   label: 'Trigger',
   category: 'trigger',
+  idempotent: true,
   description:
     'Workflow entry point. Configure to fire manually, on a cron schedule, via a webhook, or when another workflow completes.',
   configSchema: {
