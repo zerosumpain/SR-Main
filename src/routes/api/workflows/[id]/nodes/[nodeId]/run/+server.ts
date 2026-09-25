@@ -2,7 +2,7 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { workflows, workflowNodes, workflowRuns, nodeExecutions } from '$lib/db/schema';
-import { and, eq, desc } from 'drizzle-orm';
+import { and, eq, desc, isNotNull, sql } from 'drizzle-orm';
 import type { WorkflowDefinition } from '$lib/workflows';
 import { isDisplayOnlyType } from '$lib/workflows/types';
 import { runWorkflowAndPersist } from '$lib/workflows/run-helpers';
@@ -15,10 +15,9 @@ import { runWorkflowAndPersist } from '$lib/workflows/run-helpers';
  * downstream nodes execute.
  *
  * Input semantics:
- *   - If this node has a completed execution in the most recent run, we
- *     seed initialInput with its previously-recorded inputData so
- *     deterministic nodes (scrape / llm-call / etc.) behave the same as
- *     they did in that pipeline run.
+ *   - If this node has a recorded execution (completed OR failed), we seed
+ *     initialInput with the latest one's inputData so deterministic nodes
+ *     (scrape / llm-call / etc.) behave the same as they did in that run.
  *   - Otherwise empty input — the node's config is the sole source of
  *     truth. Works for node types whose config fully specifies the work
  *     to do (site-mapper, stealth-scrape, etc.).
@@ -52,16 +51,21 @@ export const POST: RequestHandler = async ({ params, request }) => {
   // received". Useful when Re-Run happens from the inspector after a
   // failed run — the node gets another shot at the same input.
   if (!body || Object.keys(initialInput).length === 0) {
+    // Any status: a FAILED execution is the one Re-Run exists for. Filtering
+    // on 'completed' re-ran a failed node against an older successful input
+    // (or none). Failed executions record their input now (engine + finaliser).
+    // NULLS LAST: a Postgres DESC sort puts nulls first, and a row still
+    // running has no completedAt.
     const [latest] = await db
       .select({ inputData: nodeExecutions.inputData })
       .from(nodeExecutions)
       .where(
         and(
           eq(nodeExecutions.nodeId, node.id),
-          eq(nodeExecutions.status, 'completed'),
+          isNotNull(nodeExecutions.inputData),
         ),
       )
-      .orderBy(desc(nodeExecutions.completedAt))
+      .orderBy(sql`${nodeExecutions.completedAt} desc nulls last`, desc(nodeExecutions.startedAt))
       .limit(1);
     if (latest?.inputData && typeof latest.inputData === 'object') {
       initialInput = latest.inputData as Record<string, unknown>;
