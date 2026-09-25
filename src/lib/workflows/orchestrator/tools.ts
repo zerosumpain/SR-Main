@@ -165,9 +165,9 @@ function zodToJsonSchema(schema: z.ZodTypeAny): Record<string, unknown> {
     // `.catchall(...)` / `.passthrough()` mean "any other key too". Without this
     // an empty `properties` reads as an object that may hold NOTHING, and the
     // Codex default honoured it: every config arrived as `{}` (2026-09-25).
+    // (Zod 4 records `.passthrough()` as a catch-all too.)
     const catchall = (schema as z.ZodObject<any>)._def.catchall as z.ZodTypeAny | undefined;
-    const unknownKeys = (schema as z.ZodObject<any>)._def.unknownKeys as string | undefined;
-    if ((catchall && !(catchall instanceof z.ZodNever)) || unknownKeys === 'passthrough') {
+    if (catchall && !(catchall instanceof z.ZodNever)) {
       result.additionalProperties = true;
     }
     return result;
