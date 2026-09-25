@@ -254,6 +254,25 @@ export async function listFixProposals(
   return records.map((r) => ({ id: r.key ?? r.id, ...(r.data as unknown as FixProposalData) }));
 }
 
+/**
+ * Pending proposals per workflow, across every workflow in one query — the
+ * native list's "a fix is waiting" flag, without one query per canvas.
+ */
+export async function countPendingFixProposals(): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (!(await getCollectionBySlug(FIX_PROPOSALS_COLLECTION))) return out;
+  const { records } = await queryRecords(
+    FIX_PROPOSALS_COLLECTION,
+    { filters: [{ path: 'status', op: 'eq', value: 'pending' }], limit: 1000 },
+    SYSTEM_ACTOR,
+  );
+  for (const r of records) {
+    const workflowId = (r.data as unknown as FixProposalData).workflowId;
+    if (workflowId) out.set(workflowId, (out.get(workflowId) ?? 0) + 1);
+  }
+  return out;
+}
+
 async function loadPending(workflowId: string, proposalId: string): Promise<FixProposalData> {
   const data = await readProposal(proposalId);
   // A key from another workflow is "not found" here, never "forbidden" — the

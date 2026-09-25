@@ -33,6 +33,12 @@ import {
   SensitiveRefusalError,
 } from '$lib/canvas/mutate.server';
 import { applyAmendOps, AmendOpError, WorkflowNotFoundError, type AmendOp } from '$lib/canvas/amend.server';
+import {
+  AMEND_OPS_DESCRIPTION,
+  validateAmendOps,
+  validateNodeConfig,
+  validateNodeType,
+} from '$lib/canvas/amend-validate.server';
 
 /**
  * The recovery instruction that ships INSIDE the failure, not in a skill file.
@@ -1066,32 +1072,8 @@ register({
 // Update Tools — Nodes
 // ==========================================
 
-// Validate a node type string against the registry. Returns null if valid, or
-// an error message listing the valid types if not. Lazy-imports to avoid any
-// circular init between site-tools and the workflow registry.
-async function validateNodeType(type: string): Promise<string | null> {
-  const { registry } = await import('$lib/workflows');
-  if (registry.getDefinition(type)) return null;
-  const valid = registry.listDefinitions().map((d) => d.type).sort();
-  return `Unknown node type "${type}". Valid types: ${valid.join(', ')}. If you need a new integration, use create_node via workflow_create instead of inventing a type name.`;
-}
-
-/** Validate config against a node's configSchema + semantic rules. Returns null if OK, or an error string. */
-async function validateNodeConfig(type: string, config: Record<string, unknown>): Promise<string | null> {
-  const { registry } = await import('$lib/workflows');
-  const def = registry.getDefinition(type);
-  // Defer to the shared validator from the orchestrator — same checks on both
-  // entry points (unknown keys, unsupported templates, code-execute typos,
-  // per-operation semantic gaps).
-  const { validateNodeConfigPreSubmit } = await import('$lib/workflows/orchestrator/verify');
-  const err = validateNodeConfigPreSubmit(type, config, def);
-  if (err) return err;
-  const missingRequired = (def?.configSchema?.required || []).filter((k: string) => !(k in config));
-  if (missingRequired.length > 0) {
-    return `Missing required config keys for "${type}": ${missingRequired.join(', ')}`;
-  }
-  return null;
-}
+// Type and config validation lives in `$lib/canvas/amend-validate.server` so the
+// native lane's amend route applies exactly the checks these tools do.
 
 register({
   name: 'workflow_update_node',
@@ -1621,52 +1603,6 @@ register({
 // Update Tools — Atomic multi-step amend
 // ==========================================
 
-/**
- * The op shapes, spelled out in the description rather than in JSON Schema.
- *
- * A discriminated union of six op objects expands to a schema several times the
- * size of every other workflow tool's, and it is prefilled on every turn once
- * the model knows the tool exists. Prose costs a fraction of that and the
- * handler validates each op anyway — an invalid op comes back as a named
- * failure, which is the slot the model actually reads.
- */
-const AMEND_OPS_DESCRIPTION =
-  'Ordered list of edits, applied as ONE transaction. Each op is an object with an `op` key:\n' +
-  '• {op:"insert_between", sourceNodeId, targetNodeId, type, label, config?} — splice a new node into an EXISTING edge (the "put a delay before the WhatsApp send" case). Cuts the edge and rewires both halves.\n' +
-  '• {op:"add_node", type, label, config?, position?, ref?} — `ref:"delay"` names it so a later op can point at it as "#delay" before it has an id.\n' +
-  '• {op:"update_node", nodeId, config?, removeConfigKeys?, label?, type?} — config is MERGED; a null value drops the key.\n' +
-  '• {op:"remove_node", nodeId} — also removes every edge touching it.\n' +
-  '• {op:"add_edge", sourceNodeId, targetNodeId, sourceHandle?, targetHandle?}\n' +
-  '• {op:"remove_edge", edgeId}\n' +
-  'Node ids come from workflow_inspect. Any nodeId/sourceNodeId/targetNodeId may be "#ref" instead.';
-
-/**
- * The op kinds the executor implements — the screen an op has to pass before
- * the transaction opens.
- *
- * `set_schedule` and `update_edge` are the obvious guesses (the first was in an
- * earlier draft of this tool, the second is a standalone tool), and an op kind
- * nobody implemented used to be dropped in silence and counted as applied. An
- * amend either does everything asked or nothing, so an unrecognised op fails
- * the whole call.
- */
-const KNOWN_AMEND_OPS: ReadonlySet<string> = new Set<AmendOp['op']>([
-  'insert_between',
-  'add_node',
-  'update_node',
-  'remove_node',
-  'add_edge',
-  'remove_edge',
-]);
-
-/** Every op that carries a node type, so the registry check happens before the transaction opens. */
-function amendOpNodeSpec(op: AmendOp): { type: string; config: Record<string, unknown> } | null {
-  if (op.op === 'add_node' || op.op === 'insert_between') {
-    return { type: op.type, config: (op.config ?? {}) as Record<string, unknown> };
-  }
-  return null;
-}
-
 register({
   name: 'workflow_amend',
   description:
@@ -1696,38 +1632,12 @@ register({
     const workflowId = readWorkflowId(args, { allowBareId: true });
     if (!workflowId) return { success: false, error: missingIdError('workflow', 'workflowId') };
     const ops = (Array.isArray(args.ops) ? args.ops : []) as AmendOp[];
-    if (ops.length === 0) {
-      return { success: false, error: 'Pass at least one op. See the `ops` description for the six shapes.' };
-    }
-
     // Validate node types and configs against the live registry FIRST. A bad
     // type inside the transaction is a rollback and a round-trip; caught here
-    // it is one failure message naming the op that is wrong.
-    for (let i = 0; i < ops.length; i++) {
-      const op = ops[i];
-      const kind = (op as { op?: unknown } | null)?.op;
-      const where = `op ${i + 1} (${typeof kind === 'string' ? kind : 'no "op" key'})`;
-      if (typeof kind !== 'string' || !KNOWN_AMEND_OPS.has(kind)) {
-        return {
-          success: false,
-          error:
-            `${where}: unrecognised op. The only shapes are ${[...KNOWN_AMEND_OPS].join(', ')} — ` +
-            `see the \`ops\` description. Nothing was written; re-send the whole ops list with that op ` +
-            `expressed as one of those, or drop it.`,
-        };
-      }
-      const spec = amendOpNodeSpec(op);
-      if (spec) {
-        const typeErr = await validateNodeType(spec.type);
-        if (typeErr) return { success: false, error: `${where}: ${typeErr}` };
-        const configErr = await validateNodeConfig(spec.type, spec.config);
-        if (configErr) return { success: false, error: `${where}: ${configErr}` };
-      }
-      if (op.op === 'update_node' && typeof op.type === 'string') {
-        const typeErr = await validateNodeType(op.type);
-        if (typeErr) return { success: false, error: `${where}: ${typeErr}` };
-      }
-    }
+    // it is one failure message naming the op that is wrong. Shared with the
+    // native amend route, so the phone and the chat refuse the same ops.
+    const invalid = await validateAmendOps(ops);
+    if (invalid) return { success: false, error: invalid.error };
 
     let result;
     try {

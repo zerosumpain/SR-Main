@@ -62,6 +62,17 @@
 /api/native/notifications/routes
 /api/native/pair
 /api/native/today
+/api/native/workflows
+/api/native/workflows/[slug]
+/api/native/workflows/[slug]/amend
+/api/native/workflows/[slug]/ask
+/api/native/workflows/[slug]/fix-proposals
+/api/native/workflows/[slug]/fix-proposals/[id]
+/api/native/workflows/[slug]/run
+/api/native/workflows/[slug]/runs
+/api/native/workflows/[slug]/trigger
+/api/native/workflows/node-types
+/api/native/workflows/runs/[runId]
 /api/platform/tools/catalogue
 /api/platform/tools/invoke
 /api/platform/workflow-engine
