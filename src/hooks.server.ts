@@ -204,6 +204,7 @@ import { startIntelEngine, stopIntelEngine } from '$lib/jkai/intel/engine';
 import { runResumeSweep, RESUME_SWEEP_INTERVAL_MS } from '$lib/deepdive/resume';
 import { startRunWorker, stopRunWorker } from '$lib/workflows/run-worker';
 import { webWorkerOptions } from '$lib/workflows/policy-worker-mode';
+import { RETIRED_ROOMS } from '$lib/daydream/hub';
 if (!building) {
   const options = webWorkerOptions(runsService('background'));
   if (options) startRunWorker();
@@ -440,6 +441,10 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     // The household moved to its own top-level section, /home (2026-09-25).
     ['/jkai/voice', '/home/voice'],
     ['/jkai/daydreams/family', '/home/people'],
+    // The daydream rooms retired in P4a (2026-09-25) land on the one feed. A
+    // `?rate=` / `?open=` on an old feed link rides along and the feed turns
+    // it into its own `?note=`.
+    ...RETIRED_ROOMS.map((room): [string, string] => [`/jkai/daydreams/${room}`, '/jkai/daydreams']),
   ]).get(pathname);
   if (retiredJkaiPage) {
     const destination = new URL(retiredJkaiPage, event.url.origin);
@@ -547,19 +552,6 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     pathname === '/api/jkai/studio/image' ||
     pathname === '/api/jkai/studio/research'
   ) {
-    return resolve(event);
-  }
-
-  // /api/daydream/backfill POST is service-to-service: it pulls a month of
-  // Home Assistant history into the daydream trail and is triggered from a
-  // script, which has no user session. It self-authenticates via
-  // `Authorization: Bearer DAYDREAM_MAINTENANCE_SECRET` and ALSO accepts an
-  // owner session, so the button on /jkai/daydreams keeps working.
-  //
-  // Matched EXACTLY and POST-only, following the claude-changelog bypass above:
-  // a prefix here would hand the exemption to every future `/api/daydream/*`
-  // route, and `/api/daydream/thoughts` reads the owner's movements.
-  if (pathname === '/api/daydream/backfill' && event.request.method === 'POST') {
     return resolve(event);
   }
 

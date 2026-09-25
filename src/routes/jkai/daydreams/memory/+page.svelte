@@ -6,13 +6,15 @@
   //
   //   themes   the distilled lessons and values a ponder pass actually reads
   //   archive  the raw sentences underneath them, the receipts
-  //   rulings  the verdicts the reviewer reached, and whether each stuck
+  //
+  // A fourth surface, the reviewer's rulings, went with the reviewer in P4a
+  // (2026-09-25). Rulings it had already remembered stay in the archive.
   //
   // Both halves used to be fetched from an effect after the tab opened,
   // because the monolith's payload already carried sixteen loaders for eleven
   // tabs. A room is its own route now, so `+page.server.ts` calls the same
-  // server functions the API's `memories` and `rulings` handlers call and the
-  // page arrives populated. The actions still POST to the API.
+  // server function the API's `memories` handler called and the page arrives
+  // populated. The consolidate action still POSTs to the API.
   //
   // The room opens on a ROLLUP rather than on a wall of cards: the four
   // numbers that say whether the loop closes — how many themes reach a pack,
@@ -28,7 +30,6 @@
   import type { Facet, RollupCell } from '$lib/components/jkai/daydream/hub/types';
   import MemoryThemeCard from '$lib/components/jkai/daydream/rooms/MemoryThemeCard.svelte';
   import MemoryCard from '$lib/components/jkai/daydream/rooms/MemoryCard.svelte';
-  import MemoryRulingCard from '$lib/components/jkai/daydream/rooms/MemoryRulingCard.svelte';
   import {
     MEMORY_THEMES_PER_PACK,
     groupByCategory,
@@ -36,7 +37,7 @@
     memoryUse,
     type DaydreamMemory,
   } from '$lib/daydream/memories';
-  import { themeKindLabel, type RulingFilter } from '$lib/daydream/rooms/memory';
+  import { themeKindLabel } from '$lib/daydream/rooms/memory';
   import { postThought } from '$lib/daydream/feed-client';
   import type { PageData } from './$types';
 
@@ -44,7 +45,6 @@
 
   const memories = $derived(data.memories);
   const themes = $derived(data.themes);
-  const rulings = $derived(data.rulings);
   const lastConsolidation = $derived(data.lastConsolidation);
 
   function cap(s: string): string {
@@ -54,7 +54,6 @@
   // ── The four numbers ──────────────────────────────────────────────────────
   const awaiting = $derived(memories.filter((m) => m.consolidatedAt == null));
   const binding = $derived(memories.filter((m) => memoryUse(m).binding));
-  const unremembered = $derived(rulings.filter((r) => !r.memoryId));
   /** The themes a ponder pass can actually reach — the query orders by support,
    *  so the cap is the first N of the list rather than a separate flag. */
   const packIds = $derived(new Set(themes.slice(0, MEMORY_THEMES_PER_PACK).map((t) => t.id)));
@@ -126,26 +125,6 @@
       href: '#dd-memories',
     });
 
-    cells.push({
-      key: 'ruled',
-      label: 'Verdicts reached',
-      value: String(rulings.length),
-      tone: rulings.length ? 'steady' : 'quiet',
-      sub: 'claims a model went and checked against the sources',
-      href: '#dd-rulings',
-    });
-
-    cells.push({
-      key: 'unremembered',
-      label: 'Rulings without a memory',
-      value: String(unremembered.length),
-      tone: unremembered.length ? 'watch' : 'good',
-      sub: unremembered.length
-        ? 'these changed nothing: only a remembered ruling reaches the roll-up'
-        : 'every verdict reached the store the engine reads',
-      href: '#dd-rulings',
-    });
-
     return cells;
   });
 
@@ -185,18 +164,6 @@
       { id: 'note', label: 'You told it', count: n('note') },
     ];
   });
-
-  // ── Section D: the rulings, filtered ──────────────────────────────────────
-  let rulingWho = $state<RulingFilter>('all');
-  const rulingsVisible = $derived(
-    rulingWho === 'all' ? rulings : rulings.filter((r) => r.verdict === rulingWho),
-  );
-  const rulingFacets = $derived.by((): Facet[] => [
-    { id: 'all', label: 'All', count: rulings.length },
-    { id: 'refuted', label: 'Did not hold', count: rulings.filter((r) => r.verdict === 'refuted').length },
-    { id: 'verified', label: 'Held up', count: rulings.filter((r) => r.verdict === 'verified').length },
-    { id: 'uncertain', label: 'Could not tell', count: rulings.filter((r) => r.verdict === 'uncertain').length },
-  ]);
 
   /**
    * Scroll to the theme a `#memory-theme-…` fragment names.
@@ -427,57 +394,6 @@
         {/each}
       </div>
     {/each}
-  </div>
-</section>
-
-<!-- ── D / What it has ruled on ─────────────────────────────────────────── -->
-<section class="band sunken" id="dd-rulings">
-  <div class="inner">
-    <SectionHead
-      kicker="D / What it has ruled on"
-      title={['Things it', 'went and checked']}
-      strap="A model was given the claim, the evidence, and the ability to go and read the sources. Every verdict becomes a raw memory for tonight’s roll-up; an exact refutation also remains a binding rule, so the same disproven claim is not proposed under a new name."
-    />
-
-    <!-- The number that says whether the loop closes.
-         A verdict nobody remembered is one the engine will pay to reach
-         again: production ran to 66 rulings with one memory behind them,
-         and the same Canva misreading was proposed eight times under eight
-         names. This says so on the page rather than in a log. -->
-    {#if rulings.length && unremembered.length}
-      <div class="card t-watch">
-        <p class="card-body">
-          <strong>{unremembered.length} of {rulings.length}</strong> rulings have no memory behind
-          them yet. Only a remembered ruling can reach tonight’s consolidation, and a refutation
-          cannot become binding until that link exists. The review activity writes the missing ones ten at a time.
-        </p>
-      </div>
-    {/if}
-
-    {#if rulings.length === 0}
-      <div class="card t-quiet section-gap">
-        <p class="card-body">
-          Nothing has been ruled on yet. <strong>Queue to model</strong> on any card in the
-          <a class="link" href="/jkai/daydreams/feed">Feed</a> sends it to the reviewer — it reads
-          the sources, decides whether the claim is actually true, and writes what it concluded to
-          memory.
-        </p>
-      </div>
-    {:else}
-      <div class="controls">
-        <FacetBar
-          label="Verdict"
-          active={rulingWho}
-          facets={rulingFacets}
-          onpick={(id) => (rulingWho = id as RulingFilter)}
-        />
-      </div>
-      <div class="grid">
-        {#each rulingsVisible as r (r.id)}
-          <MemoryRulingCard ruling={r} />
-        {/each}
-      </div>
-    {/if}
   </div>
 </section>
 
