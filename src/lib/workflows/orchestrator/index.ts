@@ -8,7 +8,7 @@ import { buildToolUseSystemPrompt, buildCriticPrompt, buildRevisionPrompt, build
 import { buildNodeGrounding, buildSiteToolCatalog, type ExecutionExample } from './grounding';
 import { buildWorkspaceResources } from './workspace-grounding';
 import { openaiTools, toolSchemas } from './tools';
-import { processToolCall, assembleWorkflow, resetNodeCounter } from './loop';
+import { processToolCall, assembleWorkflow, resetNodeCounter, proseTurnOutcome } from './loop';
 import type { ToolCallDeps } from './loop';
 import { saveDynamicNode, validateExecutorSyntax, DYNAMIC_NODES_DIR } from './dynamic-nodes';
 import { verifyWorkflow, formatIssues } from './verify';
@@ -252,6 +252,7 @@ async function runToolLoop(
   let workflowDescription: string | undefined;
   let verifyAttempts = 0;
   let behaviouralVerifyAttempts = 0;
+  let proseNudged = false;
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     // Resilient generation call (B7): the $lib/llm workflow gateway owns 429
@@ -274,8 +275,14 @@ async function runToolLoop(
     const msg = choice.message;
 
     if (!msg.tool_calls || msg.tool_calls.length === 0) {
-      if (msg.content) {
-        messages.push({ role: 'assistant', content: msg.content });
+      const outcome = proseTurnOutcome(msg.content, { nodeCount: draft.nodes.size, nudged: proseNudged });
+      console.log(`[generator] round ${round}: prose reply, no tool call → ${outcome.kind} (model=${model}, nodes=${draft.nodes.size})`);
+      if (msg.content) messages.push({ role: 'assistant', content: msg.content });
+      if (outcome.kind === 'followUp') return { draft, name: workflowName, followUp: outcome.text };
+      if (outcome.kind === 'nudge') {
+        proseNudged = true;
+        messages.push({ role: 'user', content: outcome.message });
+        continue;
       }
       break;
     }
