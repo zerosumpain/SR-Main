@@ -54,8 +54,14 @@ describe('preanalyseAttachment', () => {
     expect(r).toMatchObject({ ok: true, cached: false });
     expect(r.text).toContain('red bicycle');
     expect(dbUpdate).toHaveBeenCalledOnce();
-    expect(setSpy.mock.calls[0][0]).toMatchObject({
-      metadata: { preanalysis: { v: 1, text: 'A red bicycle against a wall.' } },
+    // Merged into the column in SQL, not written whole, so the /drive link
+    // stamped on the same row is kept. The patch rides as the JSON parameter.
+    const { metadata } = setSpy.mock.calls[0][0] as { metadata: { queryChunks: unknown[] } };
+    const patch = metadata.queryChunks.find(
+      (c): c is string => typeof c === 'string' && c.includes('preanalysis'),
+    );
+    expect(JSON.parse(patch!)).toMatchObject({
+      preanalysis: { v: 1, text: 'A red bicycle against a wall.' },
     });
   });
 

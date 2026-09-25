@@ -115,12 +115,68 @@ export function messagesToResponsesInput(messages: ChatMessage[]): ResponsesInpu
       continue;
     }
 
-    const text = flattenContent(m.content);
-    if (!text.trim()) continue;
-    items.push({ role: 'user', content: [{ type: 'input_text', text }] });
+    const content = userContentParts(m.content);
+    if (!content.length) continue;
+    items.push({ role: 'user', content });
   }
 
   return items;
+}
+
+/**
+ * A user turn's content as Responses parts, keeping images and documents.
+ *
+ * This used to be `flattenContent`, which turned every image into the words
+ * "[image omitted]". So the site pre-analysed each photo into a paragraph of
+ * text and sent that instead, and a jkai thread about a photo was a thread
+ * about someone else's description of it: asked to measure a face, the model
+ * answered that it only had "an automatically generated textual description"
+ * (2026-09-25). Every Codex model lists `input_modalities: ["text","image"]`,
+ * and measured against this endpoint the same day, a data-URL `input_image`
+ * and an `input_file` PDF both come back read, not guessed at.
+ *
+ * Text parts stay one `input_text` per run of text, so a text-only turn is
+ * byte-identical to what it was before this existed (the cached prefix).
+ */
+export function userContentParts(content: unknown): ResponsesInputItem[] {
+  if (!Array.isArray(content)) {
+    const text = flattenContent(content);
+    return text.trim() ? [{ type: 'input_text', text }] : [];
+  }
+
+  const out: ResponsesInputItem[] = [];
+  let pending: unknown[] = [];
+  const flush = () => {
+    const text = flattenContent(pending);
+    pending = [];
+    if (text.trim()) out.push({ type: 'input_text', text });
+  };
+
+  for (const part of content) {
+    const p = part as {
+      type?: string;
+      image_url?: { url?: string } | string;
+      file?: { filename?: string; file_data?: string };
+    };
+    const imageUrl = typeof p?.image_url === 'string' ? p.image_url : p?.image_url?.url;
+    if (p?.type === 'image_url' && typeof imageUrl === 'string' && imageUrl) {
+      flush();
+      out.push({ type: 'input_image', image_url: imageUrl });
+      continue;
+    }
+    if (p?.type === 'file' && typeof p.file?.file_data === 'string' && p.file.file_data) {
+      flush();
+      out.push({
+        type: 'input_file',
+        filename: p.file.filename || 'document',
+        file_data: p.file.file_data,
+      });
+      continue;
+    }
+    pending.push(part);
+  }
+  flush();
+  return out;
 }
 
 /**

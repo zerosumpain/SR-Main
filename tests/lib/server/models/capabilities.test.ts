@@ -2,9 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { getModelCapabilities } from '$lib/server/models/capabilities';
 
 describe('getModelCapabilities', () => {
-  it('z-ai/glm-5 supports everything', () => {
+  it('z-ai/glm-5 is text-only, as the catalogue lists it', () => {
+    // It said ALL until 2026-09-25; OpenRouter 404s an image sent to it.
     expect(getModelCapabilities({ provider: 'openrouter', modelId: 'z-ai/glm-5' })).toEqual({
-      image: true, audio: true, video: true, pdf: true, documentText: true,
+      image: false, audio: false, video: false, pdf: false, documentText: true,
     });
   });
   it('z-ai/glm-4.5v is image-only', () => {
@@ -16,9 +17,9 @@ describe('getModelCapabilities', () => {
     expect(c.documentText).toBe(true);
   });
   it('legacy bare GLM ids map onto their z-ai/* capabilities', () => {
-    expect(getModelCapabilities({ provider: 'openrouter', modelId: 'glm-5.2' })).toEqual({
-      image: true, audio: true, video: true, pdf: true, documentText: true,
-    });
+    expect(getModelCapabilities({ provider: 'openrouter', modelId: 'glm-5.2' })).toEqual(
+      getModelCapabilities({ provider: 'openrouter', modelId: 'z-ai/glm-5.2' }),
+    );
   });
   it('openrouter vision models get image', () => {
     const c = getModelCapabilities({ provider: 'openrouter', modelId: 'anthropic/claude-3.5-sonnet' });

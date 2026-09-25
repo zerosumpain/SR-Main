@@ -37,14 +37,26 @@ Rules worth knowing before touching this:
   deploy: set `CODEX_BRIDGE_TRANSPORT=sdk` and restart the service.
 - **Codex still costs a round trip per tool call**, but ~1.4s, not ~10s. A long
   builder chain is no longer the crawl it was.
-- **Codex is text-only.** Anything that builds its own content parts must check
-  `getModelCapabilities()` first — the site default may now be a Codex model.
+- **Codex reads images and PDFs, not audio or video** (since 2026-09-25: the
+  Responses transport maps `image_url` → `input_image` and `file` → `input_file`;
+  the `sdk` rollback transport still drops them). Anything that builds its own
+  content parts must check `getModelCapabilities()` first. Only jpeg/png/webp/gif
+  and PDF travel natively (`nativeMimes`); HEIC and Office files are described first.
   **`/jkai` chat asks a different question**: `getChatInputCapabilities(ctx)`,
   which reports what the CHAT can accept rather than what the model can. Images,
   PDFs and audio are pre-analysed into text (`$lib/jkai/media/preanalyse`) when
   the model cannot read them natively, so the composer must not grey them out —
   applying the model gate there dropped every image John attached, twice. Video
   stays gated on the model, because nothing can extract text from it.
+- **A chat attachment is re-sent as a FILE on every later turn**
+  (`$lib/jkai/media/multimodal`), so a follow-up about a photo is answered from the
+  photo. On Codex this is newest first within `MEDIA_BUDGET_BYTES` (the bridge
+  refuses bodies over 32MB); only what overflows falls back to its description. A
+  round escalates to the thinking model only if that model can read every file.
+- **Each upload is mirrored to /drive and linked back** (`$lib/jkai/media/drive-link`
+  stamps `metadata.driveFileId`/`drivePath`); a thread's files move from the month
+  folder to `jkai/<title>/` when it is titled. `jkai-mirror.ts` itself is
+  duplicated in SR-Drive and hash-guarded — put chat-side logic in `drive-link`.
 - **Codex prices as `null`, never `0`** — no cash cost, but real quota spend.
 - The bridge lives in `packages/jkai-codex-bridge` (see its README). A merge to
   master deploys it via `scripts/ci-stage-sidecars.sh` in the release job;

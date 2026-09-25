@@ -10,11 +10,22 @@ export interface ModelCapabilities {
   video: boolean;
   pdf: boolean;
   documentText: boolean;
+  /**
+   * When set, only these MIME types travel as native parts; any other file of
+   * an allowed kind is pre-analysed to text. Unset means the kind flags decide
+   * alone. Codex needs it: its endpoint takes jpeg/png/webp/gif and PDF, and a
+   * HEIC photo or a .docx sent as a part fails the whole request.
+   */
+  nativeMimes?: readonly string[];
 }
 
 const ALL: ModelCapabilities = { image: true, audio: true, video: true, pdf: true, documentText: true };
 const IMAGE_ONLY: ModelCapabilities = { image: true, audio: false, video: false, pdf: false, documentText: true };
 const IMAGE_PDF: ModelCapabilities = { image: true, audio: false, video: false, pdf: true, documentText: true };
+const CODEX_CAPS: ModelCapabilities = {
+  ...IMAGE_PDF,
+  nativeMimes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'],
+};
 const TEXT_ONLY: ModelCapabilities = { image: false, audio: false, video: false, pdf: false, documentText: true };
 
 // STATIC FALLBACK ONLY — the live catalogue is the source of truth.
@@ -30,11 +41,14 @@ const TEXT_ONLY: ModelCapabilities = { image: false, audio: false, video: false,
 // the nightly refresh keeps current. These entries survive only to answer the
 // first few calls after boot, and to cover a model the catalogue has dropped.
 const OPENROUTER_CAPS: Record<string, ModelCapabilities> = {
-  // GLM family via OpenRouter z-ai/* slugs (multimodal parity with the old
-  // direct-z.ai capability map).
-  'z-ai/glm-5': ALL,
-  'z-ai/glm-5.2': ALL,
-  'z-ai/glm-5.1': ALL,
+  // GLM family via OpenRouter z-ai/* slugs. glm-5, 5.1 and 5.2 said ALL here
+  // ("parity with the old direct-z.ai map") while the catalogue lists them as
+  // `["text"]` and OpenRouter answers an image with 404 "No endpoints found
+  // that support image input". This map answers the first calls after a boot,
+  // so the overclaim sent a Codex thread's photo to glm-5.1 (2026-09-25).
+  'z-ai/glm-5': TEXT_ONLY,
+  'z-ai/glm-5.2': TEXT_ONLY,
+  'z-ai/glm-5.1': TEXT_ONLY,
   'z-ai/glm-5v-turbo': IMAGE_ONLY,
   'z-ai/glm-4.6v': IMAGE_ONLY,
   'z-ai/glm-4.5v': IMAGE_ONLY,
@@ -77,15 +91,18 @@ const OPENROUTER_CAPS: Record<string, ModelCapabilities> = {
  * when the model cannot read them natively (see `$lib/jkai/media/preanalyse`),
  * so the composer must not grey them out on a text-only model.
  *
- * This mattered in practice: John's chats run on `codex/gpt-5.6-terra`, which
- * maps to TEXT_ONLY, so every image he attached was marked incompatible and
- * dropped from the turn before it was ever sent.
+ * This mattered in practice: John's chats ran on `codex/gpt-5.6-terra`, which
+ * was TEXT_ONLY then, so every image he attached was marked incompatible and
+ * dropped from the turn before it was ever sent. (Codex reads images now; audio
+ * is the case that still leans on this.)
  *
  * Video is NOT included: there is no extraction path for it, so it stays gated
  * on what the model itself accepts.
  */
 export function getChatInputCapabilities(ctx: ModelContext): ModelCapabilities {
-  const native = getModelCapabilities(ctx);
+  // `nativeMimes` is about what travels as a part, which the composer does not
+  // decide; left on, it would read as "the chat only accepts these".
+  const { nativeMimes: _, ...native } = getModelCapabilities(ctx);
   return { ...native, image: true, pdf: true, audio: true, documentText: true };
 }
 
@@ -150,15 +167,26 @@ export function clearCapabilityCache(): void {
 }
 
 export function getModelCapabilities(ctx: ModelContext): ModelCapabilities {
-  // Codex serves text only THROUGH THIS GATEWAY. The SDK does accept images,
-  // but as `local_image` with a filesystem PATH — the site passes base64/URLs,
-  // so there is no route from an uploaded attachment to a Codex turn without
-  // staging it to disk. Verified 2026-08-20: sent an image and a PDF to
-  // codex/gpt-5.6-terra through getLLMClient and it answered "I can't access
-  // the image" / "No document was attached". Claiming support here would
-  // surface a picker option that fails. (Chat is different — it stages the
-  // bytes itself; see getChatInputCapabilities.)
-  if (ctx.provider === 'codex' || isCodexModelId(ctx.modelId)) return TEXT_ONLY;
+  // Codex reads images and PDFs, through the bridge's Responses transport.
+  //
+  // This said TEXT_ONLY until 2026-09-25, and it was true when written: the
+  // SDK transport took images only as `local_image` file PATHS, and on
+  // 2026-08-20 an image and a PDF sent through it came back "I can't access
+  // the image" / "No document was attached". The bridge has since moved to the
+  // Responses API, which takes a data-URL `input_image` and an `input_file`
+  // directly, and every Codex model lists `input_modalities: ["text","image"]`.
+  // Measured through the endpoint the same day: a test image and a PDF were
+  // both read back exactly.
+  //
+  // What TEXT_ONLY cost: every photo in a Codex chat was described by another
+  // model and only the description sent, so a thread about a picture could not
+  // look at it again ("I can't measure it from the description alone").
+  //
+  // Audio and video stay false, because the list does not claim them. Audio is
+  // still transcribed first. HEIC, Office files and the rest are described
+  // first too (`nativeMimes`): the endpoint takes only these five types. The `sdk` rollback transport cannot carry any of
+  // this; setting CODEX_BRIDGE_TRANSPORT=sdk puts images back to "[image omitted]".
+  if (ctx.provider === 'codex' || isCodexModelId(ctx.modelId)) return CODEX_CAPS;
   warmCatalogueCaps();
   const id = mapLegacyModelId(ctx.modelId);
   return catalogueCaps?.get(id) ?? OPENROUTER_CAPS[id] ?? TEXT_ONLY;

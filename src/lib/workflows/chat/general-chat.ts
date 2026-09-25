@@ -38,7 +38,7 @@ import { getCompiledPrompt, promptIdentity } from '$lib/workflows/prompts/loader
 import { inferToolsets } from '$lib/workflows/site-tools/keyword-classifier';
 import { notifySubscribers } from '$lib/workflows/chat/followup-queue';
 import type { JobEvent } from '$lib/workflows/chat/job-store';
-import { buildMultimodalContent, encodedSizeBytes } from '$lib/jkai/media/multimodal';
+import { buildMultimodalContent, encodedSizeBytes, planTurnMedia } from '$lib/jkai/media/multimodal';
 import { extractUrlsFromText, fetchUrlContent, isUrlFetchError } from '$lib/jkai/extract/url';
 import type { JkaiAttachment } from '$lib/db/schema';
 import type { HistoryMessage } from './conversation-history';
@@ -49,7 +49,6 @@ import { summarizeToolResult, summarizeRunningTool } from './tool-summary';
 import { extractReasoningDelta } from './reasoning-delta';
 import { extractPlan, awaitPlanApproval, isReadOnlyPlan } from './plan-phase';
 import { extractClarify, awaitClarifyAnswers } from './clarify-phase';
-import { getModelCapabilities } from '$lib/server/models/capabilities';
 import { renderSkillIndex } from '$lib/jkai/skills/registry';
 import { compressHistory, refreshCompression, renderCompressionSection } from './compress';
 import { carriedToolsets } from './carried-toolsets';
@@ -1092,16 +1091,19 @@ async function runGeneralChat(
     { role: 'system', content: systemContent },
   ];
 
-  // What this conversation's model can actually read. Anything it cannot is
-  // pre-analysed into text rather than sent as a part the provider will reject
-  // or quietly drop — this is the job the gateway used to do out of sight, and the
-  // reason attachments kept working on a text-only chat model.
-  const mediaCaps = getModelCapabilities(options.modelContext);
-
+  // What this conversation's model can read goes to it as files, on EVERY turn
+  // (a follow-up about a photo is answered from the photo); anything else is
+  // pre-analysed into text. See `planTurnMedia`.
   const recentHistory = compressed.messages;
+  const media = planTurnMedia(
+    [...recentHistory.map((h) => (h.role === 'user' ? h.attachments ?? [] : [])), input.attachments ?? []],
+    options.modelContext,
+  );
+  let turn = 0;
   for (const h of recentHistory) {
+    const caps = media.caps[turn++];
     if (h.role === 'user' && h.attachments && h.attachments.length > 0) {
-      const parts = await buildMultimodalContent(h.content, h.attachments, { caps: mediaCaps });
+      const parts = await buildMultimodalContent(h.content, h.attachments, { caps, label: true });
       messages.push({ role: 'user', content: parts as any });
     } else {
       messages.push({ role: h.role, content: h.content } as any);
@@ -1123,7 +1125,8 @@ async function runGeneralChat(
   messages.push({ role: 'user', content: `[Application note — not written by the user, and not visible to them.] Guidance for answering the next message:\n${turnNote}` });
 
   const userParts = await buildMultimodalContent(userMessage, input.attachments ?? [], {
-    caps: mediaCaps,
+    caps: media.caps[media.caps.length - 1],
+    label: true,
   });
   const maxTurnBytes = Number(process.env.JKAI_MAX_TURN_BYTES ?? 104857600);
   if (encodedSizeBytes(userParts) > maxTurnBytes) {
@@ -1347,7 +1350,8 @@ async function runGeneralChat(
     // in the logs.
     const escalates =
       !!thinkingCtx &&
-      (thinkingCtx.provider !== baseCtx.provider || thinkingCtx.modelId !== baseCtx.modelId);
+      (thinkingCtx.provider !== baseCtx.provider || thinkingCtx.modelId !== baseCtx.modelId) &&
+      media.canBeReadBy(thinkingCtx);
     const turnCtx = escalates && thinkingCtx ? thinkingCtx : baseCtx;
     const { client, model } = await getLLMClient(turnCtx);
     // Read off the context that will actually serve THIS round, not the

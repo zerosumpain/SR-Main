@@ -4,7 +4,7 @@ import { jkaiAttachments } from '$lib/db/schema';
 import { fileTypeFromBuffer } from 'file-type';
 import { saveBuffer } from '$lib/jkai/media/storage';
 import { kindFromMime, extensionForMime, isAllowedMime } from '$lib/jkai/media/mime';
-import { mirrorJkaiAttachmentToDrive } from '$lib/file-index/jkai-mirror';
+import { mirrorAndLink } from '$lib/jkai/media/drive-link';
 
 /**
  * Store one chat upload: sniff it, check it against the allow-list and its
@@ -99,12 +99,13 @@ export async function storeChatUpload(
   // included: it is as much a file "in the chat" as an upload, and leaving it
   // out meant the only copy lived in the jkai media store.
   // Best-effort — never blocks or fails the upload.
-  void mirrorJkaiAttachmentToDrive({
+  void mirrorAndLink({
     buf,
     originalName: file.name,
     mimeType: mime,
     conversationId,
     source,
+    attachmentId: row.id,
   });
 
   return row;
