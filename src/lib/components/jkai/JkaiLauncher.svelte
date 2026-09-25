@@ -61,7 +61,7 @@
     {
       section: 'Proactive',
       items: [
-        { code: 'DAY', label: 'Daydreams', href: '/jkai/daydreams/feed', desc: 'Briefings, watches and spare-cycle learning', keywords: 'daydream notice pattern idle location places suggestions monitor watch alert digest briefing improvement ledger' },
+        { code: 'DAY', label: 'Daydreams', href: '/jkai/daydreams', desc: 'What the spare-cycle loop noticed, plus watches', keywords: 'daydream notice pattern idle location places suggestions monitor watch alert digest briefing improvement ledger' },
       ],
     },
     {

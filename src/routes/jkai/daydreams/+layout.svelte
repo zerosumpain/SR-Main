@@ -52,30 +52,38 @@
   }
 
 
-  const hasRun = $derived(counts.engine.lastDetectAt != null);
+  // The cover reports the think loop and nothing else. It used to count places
+  // to name, rules to approve and the health of two dozen jobs — the engine the
+  // 2026-09-25 simplification retired — so a paused job read as a failure here.
+  const think = $derived(counts.think);
   const readout = $derived([
-    { label: 'Last looked', value: hasRun ? ago(counts.engine.lastDetectAt) : 'never' },
-    { label: 'Trail', value: `${counts.engine.trailSpanDays ?? 0} days` },
-    { label: 'Covered 24h', value: pct(counts.engine.coverage?.last24h) },
+    { label: 'Last cycle', value: think.lastCycleAt ? ago(think.lastCycleAt) : 'never' },
+    { label: 'Cadence', value: 'every 45 min' },
+    { label: 'Interrupts', value: 'up to 4 a day' },
   ]);
 
-  const needsTotal = $derived(counts.needsRating + counts.needsNaming + counts.proposedRules);
-  const healthyJobs = $derived(counts.jobs - counts.failingJobs);
   const coverTiles = $derived<DeckTile[]>([
-    {
-      key: 'needs',
-      label: 'Undecided',
-      value: String(needsTotal),
-      tone: needsTotal ? 'action' : 'good',
-      lit: needsTotal > 0,
-      sub: `${counts.needsNaming} to name · ${counts.proposedRules} to approve · ${counts.needsRating} to rate`,
-    },
     {
       key: 'noticed',
       label: 'Noticed, 7 days',
-      value: String(counts.thoughts7d),
+      value: String(think.week),
       tone: 'steady',
-      sub: `${counts.thoughtsAll} all time · ${counts.held} held back`,
+      sub: 'notes written, each citing what it read',
+    },
+    {
+      key: 'rate',
+      label: 'Waiting on you',
+      value: String(counts.notesToRate),
+      tone: counts.notesToRate ? 'action' : 'good',
+      lit: counts.notesToRate > 0,
+      sub: counts.notesToRate ? 'rate them — it learns from the verdicts' : 'every note rated',
+    },
+    {
+      key: 'useful',
+      label: 'Useful, 30 days',
+      value: think.rated30d ? pct(think.useful30d / think.rated30d) : '—',
+      tone: 'steady',
+      sub: `${think.useful30d} of ${think.rated30d} rated`,
     },
     {
       key: 'watches',
@@ -83,22 +91,6 @@
       value: String(counts.activeWatches),
       tone: counts.activeWatches ? 'steady' : 'quiet',
       sub: counts.activeWatches ? 'checked on their own schedules' : 'nothing being watched',
-    },
-    {
-      key: 'places',
-      label: 'Places named',
-      value: String(counts.namedPlaces),
-      suffix: `/${counts.places}`,
-      tone: counts.unnamedPlaces ? 'watch' : 'good',
-      sub: `${counts.unnamedPlaces} still unnamed`,
-    },
-    {
-      key: 'jobs',
-      label: 'Jobs healthy',
-      value: String(healthyJobs),
-      suffix: `/${counts.jobs}`,
-      tone: counts.failingJobs ? 'urgent' : 'good',
-      sub: counts.failingJobs ? `${counts.failingJobs} failing or paused` : 'every activity on schedule',
     },
   ]);
 </script>
@@ -108,8 +100,8 @@
 <DaydreamShell
   path="/jkai/daydreams"
   kicker="JKAI · Background intelligence"
-  title={['Notice quietly,', 'act with evidence']}
-  standfirst="Briefings, deliberate watches, household patterns and the system’s own learning share one evidence trail. It stays quiet until a crossing is worth it, and every claim shows what it rests on."
+  title={['Spare cycles,', 'one question each']}
+  standfirst="Every 45 minutes it takes one part of your life — health, home, mail, chat, diary, money or something to read — and looks into it with read-only tools. It writes at most two notes, each citing what it read. Up to four a day reach you; the rest wait here."
   {readout}
   live={data.enabled}
   liveBusy={togglingEnabled}
@@ -119,7 +111,7 @@
   footer={[
     'strangeramblings.com/jkai/daydreams',
     'Owner-gated · nothing here leaves the house',
-    `Threshold ${counts.threshold.value} · ${counts.threshold.feedbackCount} response${counts.threshold.feedbackCount === 1 ? '' : 's'}`,
+    `${think.useful30d} useful of ${think.rated30d} rated, 30 days`,
   ]}
 >
   {#snippet masthead()}

@@ -27,18 +27,25 @@ export interface HubCounts extends BadgeCounts {
   jobs: number;
   engine: EngineState;
   threshold: { value: number; feedbackCount: number };
+  /** Think notes only — what the cover deck reports since the P2 rebuild. */
+  think: { week: number; useful30d: number; rated30d: number; lastCycleAt: Date | null };
 }
 
 
 export async function loadHubCounts(opts: { activeWatches?: number } = {}): Promise<HubCounts> {
   const weekAgo = new Date(Date.now() - 7 * 86_400_000);
-  const [thoughtRows, placeRows, ruleRows, jobRows, engine, threshold] = await Promise.all([
+  const monthAgo = new Date(Date.now() - 30 * 86_400_000);
+  const [thoughtRows, placeRows, ruleRows, jobRows, engine, threshold, thinkRows] = await Promise.all([
     db
       .select({
         undecided: sql<number>`count(*) filter (where ${daydreamThoughts.status} = 'new')::int`,
         needsRating: sql<number>`count(*) filter (where ${daydreamThoughts.status} in ('delivered','seen','actioned') and ${daydreamThoughts.feedback} is null)::int`,
         unremembered: sql<number>`count(*) filter (where ${daydreamThoughts.reviewVerdict} is not null and ${daydreamThoughts.reviewMemoryId} is null)::int`,
         held: sql<number>`count(*) filter (where ${daydreamThoughts.status} = 'suppressed')::int`,
+        // Think notes the feed shows and nobody has ruled on. The held-back
+        // ones on the feed are those the daily cap or a route kept quiet
+        // (`think/notes.ts` isOnFeed) — refuted and echoed ones never show.
+        notesToRate: sql<number>`count(*) filter (where ${daydreamThoughts.kind} like 'think\\_%' and ${daydreamThoughts.feedback} is null and (${daydreamThoughts.status} in ('new','delivered','seen') or (${daydreamThoughts.status} = 'suppressed' and (${daydreamThoughts.suppressedReason} like 'feed_only%' or ${daydreamThoughts.suppressedReason} like 'notify:%' or ${daydreamThoughts.suppressedReason} like 'below_threshold%'))))::int`,
         week: sql<number>`count(*) filter (where ${daydreamThoughts.createdAt} >= ${weekAgo})::int`,
         all: sql<number>`count(*)::int`,
       })
@@ -64,12 +71,23 @@ export async function loadHubCounts(opts: { activeWatches?: number } = {}): Prom
       .where(sql`${heartbeatActions.name} like 'daydream-%'`),
     loadEngineState(),
     loadThreshold(),
+    db
+      .select({
+        week: sql<number>`count(*) filter (where ${daydreamThoughts.createdAt} >= ${weekAgo})::int`,
+        useful: sql<number>`count(*) filter (where ${daydreamThoughts.createdAt} >= ${monthAgo} and ${daydreamThoughts.feedback} = 'useful')::int`,
+        rated: sql<number>`count(*) filter (where ${daydreamThoughts.createdAt} >= ${monthAgo} and ${daydreamThoughts.feedback} is not null)::int`,
+        lastCycleAt: sql<Date | null>`(select ${heartbeatActions.lastRunAt} from ${heartbeatActions} where ${heartbeatActions.name} = 'daydream-think')`,
+      })
+      .from(daydreamThoughts)
+      .where(sql`${daydreamThoughts.kind} like 'think\\_%'`),
   ]);
+  const k = thinkRows[0];
   const t = thoughtRows[0];
   const p = placeRows[0];
   return {
     undecided: t?.undecided ?? 0,
     needsRating: t?.needsRating ?? 0,
+    notesToRate: t?.notesToRate ?? 0,
     unrememberedRulings: t?.unremembered ?? 0,
     needsNaming: p?.ask ?? 0,
     places: p?.total ?? 0,
@@ -84,6 +102,12 @@ export async function loadHubCounts(opts: { activeWatches?: number } = {}): Prom
     activeWatches: opts.activeWatches ?? 0,
     engine,
     threshold,
+    think: {
+      week: k?.week ?? 0,
+      useful30d: k?.useful ?? 0,
+      rated30d: k?.rated ?? 0,
+      lastCycleAt: k?.lastCycleAt ? new Date(k.lastCycleAt) : null,
+    },
   };
 }
 
@@ -93,6 +117,7 @@ export function emptyHubCounts(): HubCounts {
   return {
     undecided: 0,
     needsRating: 0,
+    notesToRate: 0,
     unrememberedRulings: 0,
     needsNaming: 0,
     places: 0,
@@ -115,5 +140,6 @@ export function emptyHubCounts(): HubCounts {
       summary: null,
     },
     threshold: { value: 0, feedbackCount: 0 },
+    think: { week: 0, useful30d: 0, rated30d: 0, lastCycleAt: null },
   };
 }

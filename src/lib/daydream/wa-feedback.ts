@@ -19,7 +19,7 @@
 //   • 12-hour window — a verdict should attach to what it was about; a reply
 //     a day later is ambiguous and is left to the page's buttons.
 
-import { and, desc, eq, gte, inArray, isNull } from 'drizzle-orm';
+import { and, desc, gte, inArray } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamThoughts } from '$lib/db/schema';
 
@@ -89,22 +89,71 @@ export interface WaFeedbackResult {
  * Owner-gating happens in the caller (the shared inbound intercept chain runs
  * only for the owner's number), so this concerns itself with shape and state.
  */
-/** The last thing it said on a phone-shaped channel, inside the window. */
+/** Channels a bare reply can be answering: the ones that reach a phone. A
+ *  think note raised through `notifyOwner` is stamped `push` whatever route
+ *  carried it (`think/run.ts`), which is why `push` is here. */
+export const REPLY_CHANNELS: readonly string[] = ['whatsapp', 'chat', 'push'];
+/** Statuses a delivered thought can be in and still be the one he means. */
+export const REPLY_STATUSES: readonly string[] = ['delivered', 'seen', 'expired', 'archived'];
+
+export interface ReplyCandidate {
+  id: string;
+  title: string;
+  kind: string;
+  channel: string | null;
+  status: string;
+  deliveredAt: Date | null;
+  feedback: string | null;
+  evidence: unknown;
+}
+
+/**
+ * PURE. The thought a bare reply is about: the most recently DELIVERED one on
+ * a phone-shaped channel inside the window, and — for a verdict — still
+ * unrated. No kind filter, deliberately: a think note and a ponder musing are
+ * answered the same way.
+ */
+export function replyTarget<R extends ReplyCandidate>(rows: R[], now: Date, opts: { unrated: boolean }): R | null {
+  const floor = now.getTime() - REPLY_WINDOW_HOURS * 3_600_000;
+  let best: R | null = null;
+  for (const r of rows) {
+    if (!r.deliveredAt || r.deliveredAt.getTime() < floor) continue;
+    if (!r.channel || !REPLY_CHANNELS.includes(r.channel)) continue;
+    if (!REPLY_STATUSES.includes(r.status)) continue;
+    if (opts.unrated && r.feedback) continue;
+    if (!best || r.deliveredAt.getTime() > best.deliveredAt!.getTime()) best = r;
+  }
+  return best;
+}
+
+/** Where a thought is read in full. Think notes live on the one feed. */
+export function thoughtLink(t: { id: string; kind: string }): string {
+  return t.kind.startsWith('think_')
+    ? `https://strangeramblings.com/jkai/daydreams?note=${encodeURIComponent(t.id)}`
+    : `https://strangeramblings.com/jkai/daydreams/feed?open=${t.id}`;
+}
+
+/** The last thing it said on a phone-shaped channel, inside the window. The
+ *  window is applied in SQL; `replyTarget` makes the choice. */
 async function lastDelivered(opts: { unrated: boolean }) {
-  const since = new Date(Date.now() - REPLY_WINDOW_HOURS * 3_600_000);
-  const clauses = [
-    inArray(daydreamThoughts.channel, ['whatsapp', 'chat', 'push']),
-    inArray(daydreamThoughts.status, ['delivered', 'seen', 'expired', 'archived']),
-    gte(daydreamThoughts.deliveredAt, since),
-  ];
-  if (opts.unrated) clauses.push(isNull(daydreamThoughts.feedback));
-  const [row] = await db
-    .select({ id: daydreamThoughts.id, title: daydreamThoughts.title, kind: daydreamThoughts.kind, evidence: daydreamThoughts.evidence })
+  const now = new Date();
+  const since = new Date(now.getTime() - REPLY_WINDOW_HOURS * 3_600_000);
+  const rows = await db
+    .select({
+      id: daydreamThoughts.id,
+      title: daydreamThoughts.title,
+      kind: daydreamThoughts.kind,
+      channel: daydreamThoughts.channel,
+      status: daydreamThoughts.status,
+      deliveredAt: daydreamThoughts.deliveredAt,
+      feedback: daydreamThoughts.feedback,
+      evidence: daydreamThoughts.evidence,
+    })
     .from(daydreamThoughts)
-    .where(and(...clauses))
+    .where(and(inArray(daydreamThoughts.channel, [...REPLY_CHANNELS]), gte(daydreamThoughts.deliveredAt, since)))
     .orderBy(desc(daydreamThoughts.deliveredAt))
-    .limit(1);
-  return row ?? null;
+    .limit(20);
+  return replyTarget(rows, now, opts);
 }
 
 export async function interceptDaydreamFeedback(text: string): Promise<WaFeedbackResult> {
@@ -134,11 +183,11 @@ export async function interceptDaydreamFeedback(text: string): Promise<WaFeedbac
       return {
         handled: true,
         reply: lines.length
-          ? `"${last.title.slice(0, 60)}" rests on:\n${lines.map((l) => `• ${l.slice(0, 160)}`).join('\n')}\n\nFull trail: https://strangeramblings.com/jkai/daydreams/feed?open=${last.id}`
-          : `"${last.title.slice(0, 60)}" cites nothing it can show you here — the drill has the reasoning: https://strangeramblings.com/jkai/daydreams/feed?open=${last.id}`,
+          ? `"${last.title.slice(0, 60)}" rests on:\n${lines.map((l) => `• ${l.slice(0, 160)}`).join('\n')}\n\nFull trail: ${thoughtLink(last)}`
+          : `"${last.title.slice(0, 60)}" cites nothing it can show you here — the drill has the reasoning: ${thoughtLink(last)}`,
       };
     } catch {
-      return { handled: true, reply: `Could not read the evidence just now. The drill has it: https://strangeramblings.com/jkai/daydreams/feed?open=${last.id}` };
+      return { handled: true, reply: `Could not read the evidence just now. The drill has it: ${thoughtLink(last)}` };
     }
   }
 

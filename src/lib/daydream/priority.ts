@@ -65,6 +65,16 @@ export function thoughtTone(t: {
   return 'steady';
 }
 
+/**
+ * A think note on the one feed. Simpler than `thoughtTone` because a note has
+ * no review and no place: it is waiting on a verdict, or it has one. Useful is
+ * good; not useful and never are finished business.
+ */
+export function noteTone(n: { verdict: string | null }): Tone {
+  if (!n.verdict) return 'action';
+  return n.verdict === 'useful' ? 'good' : 'quiet';
+}
+
 /** Where a thought sits in the reading order: unrated first, dead last. */
 export function thoughtRank(t: Parameters<typeof thoughtTone>[0]): number {
   return TONE_RANK[thoughtTone(t)];

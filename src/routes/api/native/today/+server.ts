@@ -7,6 +7,7 @@ import { getNativeHealthSummary } from '$lib/server/native-health';
 import { pendingForDevice, recentEvents } from '$lib/server/notify';
 import { loadNewsDesk } from '$lib/news/desk';
 import { connectorAttention } from '$lib/connectors/watch-store';
+import { loadTodayNotes } from '$lib/daydream/think/notes.server';
 
 /**
  * GET /api/native/today — the first screen, in one request.
@@ -24,7 +25,7 @@ import { connectorAttention } from '$lib/connectors/watch-store';
 export const GET: RequestHandler = withDevice(async ({ url }, identity) => {
   const fresh = url.searchParams.get('fresh') === '1';
 
-  const [healthResult, alertsResult, newsResult, threadResult, connectionsResult] = await Promise.allSettled([
+  const [healthResult, alertsResult, newsResult, threadResult, connectionsResult, daydreamResult] = await Promise.allSettled([
     getNativeHealthSummary({ fresh }),
     Promise.all([pendingForDevice(5), recentEvents(8)]),
     // `force: false` — the Today card takes whatever the desk last fetched.
@@ -42,6 +43,9 @@ export const GET: RequestHandler = withDevice(async ({ url }, identity) => {
       .limit(1),
     // The watcher's stored answer — the same set /api/native/connections lists.
     connectorAttention(),
+    // The Noticed card: the daydream loop's two newest notes from the last
+    // 48 hours that he has not turned down (`think/notes.ts`).
+    loadTodayNotes(),
   ]);
 
   const health = healthResult.status === 'fulfilled' ? healthResult.value : null;
@@ -49,9 +53,13 @@ export const GET: RequestHandler = withDevice(async ({ url }, identity) => {
   const news = newsResult.status === 'fulfilled' ? newsResult.value : null;
   const thread = threadResult.status === 'fulfilled' ? threadResult.value[0] : undefined;
   const connections = connectionsResult.status === 'fulfilled' ? connectionsResult.value : null;
+  const daydream = daydreamResult.status === 'fulfilled' ? { notes: daydreamResult.value } : null;
 
   if (healthResult.status === 'rejected') {
     console.error('[native] today: health unavailable', healthResult.reason);
+  }
+  if (daydreamResult.status === 'rejected') {
+    console.error('[native] today: daydream notes unavailable', daydreamResult.reason);
   }
 
   return {
@@ -97,6 +105,7 @@ export const GET: RequestHandler = withDevice(async ({ url }, identity) => {
     connections: connections
       ? { needsAttention: connections.items.length, items: connections.items.slice(0, 3) }
       : null,
+    daydream,
     lastThread: thread
       ? { id: thread.id, title: thread.title, updatedAt: thread.updatedAt.toISOString() }
       : null,

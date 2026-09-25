@@ -51,8 +51,16 @@ export interface BadgeCounts {
   proposedRules: number;
   /** Daydream heartbeat rows in trouble: failures counted or paused. */
   failingJobs: number;
+  /** Think notes on the feed he has not rated yet — the Noticed badge. */
+  notesToRate: number;
 }
 
+/**
+ * PURE. The rail — since the 2026-09-25 simplification (P2), the ONE feed of
+ * think notes plus the rooms housed here that are not daydream at all. The
+ * other daydream rooms still answer at their URLs until P4 deletes them, and
+ * `isRoom` still knows them, so an old link lands and highlights nothing.
+ */
 export function hubTabs(c: BadgeCounts): HubTab[] {
   const room = (id: RoomId, label: string, extra: Partial<HubTab> = {}): HubTab => ({
     id,
@@ -61,22 +69,22 @@ export function hubTabs(c: BadgeCounts): HubTab[] {
     ...extra,
   });
   return [
-    room('feed', 'Feed', { count: c.needsRating, tone: 'action' }),
-    room('memory', 'Memory', { count: c.unrememberedRulings, tone: 'watch' }),
-    room('briefing', 'Briefing'),
+    // The feed is the hub's own page now, not a room beneath it.
+    { id: 'feed', label: 'Noticed', href: HUB_BASE, count: c.notesToRate, tone: 'action' },
     room('watches', 'Watches', { count: c.activeWatches, tone: 'quiet' }),
-    room('family', 'Family'),
-    room('discoveries', 'Discoveries'),
-    room('calendar', 'Calendar'),
-    room('places', 'Places', { count: c.needsNaming, tone: 'action' }),
-    room('money', 'Money'),
-    room('engine', 'Engine', {
-      count: c.proposedRules || c.failingJobs,
-      tone: c.failingJobs ? 'watch' : 'action',
-    }),
     room('improvement', 'Improvement'),
     room('backlog', 'Backlog'),
   ];
+}
+
+/**
+ * Does this arrival at the bare path mean an OLD room? A `?tab=` link, or a
+ * notification's `?rate=` / `?open=` deep link into the old feed room, still
+ * goes where it always went. Everything else at the bare path is the feed.
+ */
+export function isLegacyLink(url: { searchParams: URLSearchParams }): boolean {
+  const q = url.searchParams;
+  return q.has('tab') || q.has('rate') || q.has('open');
 }
 
 /** Where an old `?tab=` link lands. Unknown tabs go to the feed; the rest of

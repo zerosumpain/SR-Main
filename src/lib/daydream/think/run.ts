@@ -28,19 +28,16 @@ import { DEFAULT_SUBJECT, errMsg } from '../types';
 import { buildProfileLines } from '../ponder/profile';
 import { TITLE_ECHO_WINDOW_DAYS } from '../refutations';
 import { localDay } from '../features/build';
-import { localDayStart } from '../budget';
 import { OUTCOMES, OUTCOME_ASK, questionAt, type Outcome, type Question } from './questions';
 import { MAX_TOOL_CALLS, RESEARCH_SITE_TOOLS, createToolbox, toolSetFor, type ToolSet } from './tools';
 import { MAX_NOTES, MAX_BODY_CHARS, parseReply, validateThinkOutput } from './audit';
+import { DAILY_RAISE_CAP, noteHref } from './notes';
+import { countRaisedToday } from './notes.server';
 
 /** Tool rounds at full budget. The activity passes fewer when the budget is
  *  thin — a round is a model call. */
 export const MAX_ROUNDS = 6;
 
-/** Notes a day that may interrupt him. Two a cycle over twenty-one waking
- *  cycles is forty-two WhatsApps; ponder's cap was four and that was the
- *  complaint's upper end, not its lower. The rest land on the feed. */
-export const DAILY_RAISE_CAP = 4;
 
 export interface ThinkResult {
   channel: Question['channel'];
@@ -275,7 +272,7 @@ export async function runThink(
       result.error = 'model did not return JSON';
       return result;
     }
-    const audit = validateThinkOutput(parsed, toolbox.cards, { allowedOutcomes: outcomesFor(set) });
+    const audit = validateThinkOutput(parsed, toolbox.cards, { allowedOutcomes: outcomesFor(set), channel: question.channel });
     result.rejected = audit.rejected;
     result.citationDrops = audit.citationDrops;
     result.notes.proposed = audit.notes.length;
@@ -317,17 +314,7 @@ export async function runThink(
         })
         .from(daydreamThoughts)
         .where(and(inArray(daydreamThoughts.dedupeKey, persisted.createdKeys), eq(daydreamThoughts.status, 'new')));
-      const [{ raisedToday }] = await db
-        .select({ raisedToday: sql<number>`count(*)::int` })
-        .from(daydreamThoughts)
-        .where(
-          and(
-            sql`${daydreamThoughts.kind} like 'think\\_%'`,
-            eq(daydreamThoughts.channel, 'push'),
-            gte(daydreamThoughts.deliveredAt, localDayStart(now)),
-          ),
-        );
-      let budget = DAILY_RAISE_CAP - raisedToday;
+      let budget = DAILY_RAISE_CAP - (await countRaisedToday(now));
       for (const row of rows) {
         if (budget <= 0) {
           // Over the day's cap: kept on the feed, never `new` (compose would
@@ -342,7 +329,7 @@ export async function runThink(
           category: 'daydream',
           title: row.title,
           body: row.narrative ?? row.title,
-          url: '/jkai/daydreams',
+          url: noteHref(row.id),
           dedupeKey: row.dedupeKey,
           data: { thoughtId: row.id, kind: row.kind },
         });

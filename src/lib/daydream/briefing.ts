@@ -9,14 +9,20 @@
 // carries: what it said, what it held for you, what it caught, what it
 // applied, what it learned — over the last LOCAL day, deterministic, every
 // fact with a link into the hub.
+//
+// What it SAID is the think loop's notes from the last 24 hours (spec
+// 2026-09-25, P2) — every note on the feed, raised or not, each linked to
+// itself on the one feed page. Ponder's musings are no longer listed.
 
-import { and, desc, eq, gte, inArray, isNotNull, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, isNotNull, lt, sql } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { db } from '$lib/db';
 import { daydreamCapabilities, daydreamLeads, daydreamMemoryThemes, daydreamPlaces, daydreamThoughts } from '$lib/db/schema';
 import { localDayStart } from './budget';
 import { errMsg } from './types';
 import { digestDay, gatherStats, type DigestStats } from './digest/build';
+import { loadFeedNotes } from './think/notes.server';
+import type { FeedNote } from './think/notes';
 
 export interface DaydreamBriefingFact {
   section: 'Daydreams';
@@ -50,6 +56,26 @@ export interface DaydreamBriefing {
 const FEED = '/jkai/daydreams/feed';
 const APPETITE = '/jkai/daydreams/improvement#appetite';
 const trim = (s: string, n = 90) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+/** Notes listed as facts, each its own linked line. */
+const NOTE_FACTS = 8;
+
+/**
+ * PURE. The think notes as briefing facts — one per note, each linked to
+ * itself on the feed — and at most five WhatsApp lines.
+ */
+export function noticedSection(notes: Array<Pick<FeedNote, 'title' | 'url' | 'raised' | 'channelLabel' | 'outcomeLabel'>>): {
+  facts: Array<{ label: string; value: string; href: string }>;
+  lines: string[];
+} {
+  const facts = notes.slice(0, NOTE_FACTS).map((n) => ({
+    label: n.raised ? 'Noticed, and told you' : 'Noticed, on the feed',
+    value: `“${trim(n.title, 80)}” — ${n.channelLabel} · ${n.outcomeLabel}`,
+    href: n.url,
+  }));
+  const lines = notes.slice(0, 4).map((n) => `• Noticed: ${trim(n.title, 70)}`);
+  if (notes.length > 4) lines.push(`  …and ${notes.length - 4} more on the feed`);
+  return { facts, lines };
+}
 
 /**
  * Assemble the section for the day that ENDED at the last local midnight —
@@ -63,19 +89,16 @@ export async function buildDaydreamBriefing(now = new Date()): Promise<DaydreamB
   const day = digestDay(now, 1);
   const inDay = (col: AnyPgColumn) => and(gte(col, dayStart), lt(col, dayEnd));
 
-  const [sent, held, refuted, applied, places, expired, themes, leads, wants, digest] = await Promise.all([
-    db
-      .select({ id: daydreamThoughts.id, title: daydreamThoughts.title, channel: daydreamThoughts.channel })
-      .from(daydreamThoughts)
-      .where(and(isNotNull(daydreamThoughts.deliveredAt), inDay(daydreamThoughts.deliveredAt)))
-      .orderBy(desc(daydreamThoughts.score))
-      .limit(6),
-    db
-      .select({ id: daydreamThoughts.id, title: daydreamThoughts.title })
-      .from(daydreamThoughts)
-      .where(and(eq(daydreamThoughts.suppressedReason, 'briefing_only'), eq(daydreamThoughts.reviewVerdict, 'verified'), inArray(daydreamThoughts.status, ['new', 'suppressed']), inDay(daydreamThoughts.updatedAt)))
-      .orderBy(desc(daydreamThoughts.score))
-      .limit(6),
+  const [notes, refuted, applied, places, expired, themes, leads, wants, digest] = await Promise.all([
+    // The last 24 hours, not the local day: the briefing lands at 07:00 and a
+    // note written at 06:30 is news, not tomorrow's. Muted kinds and notes he
+    // answered "never" stay out — he said he did not want to hear them.
+    loadFeedNotes({ days: 1, now })
+      .then((all) => all.filter((n) => !n.kindMuted && n.verdict !== 'never_kind'))
+      .catch((err) => {
+        console.warn(`[daydream] briefing notes read failed: ${errMsg(err)}`);
+        return [] as FeedNote[];
+      }),
     db
       .select({ id: daydreamThoughts.id, title: daydreamThoughts.title, why: daydreamThoughts.reviewReasoning })
       .from(daydreamThoughts)
@@ -132,16 +155,9 @@ export async function buildDaydreamBriefing(now = new Date()): Promise<DaydreamB
   const lines: string[] = [];
   const fact = (label: string, value: string, href: string | null) => facts.push({ section: 'Daydreams', label, value, source: 'daydream', href });
 
-  if (sent.length) {
-    fact('It said', sent.map((t) => `“${trim(t.title, 70)}”`).join(' · '), `${FEED}?s=sent`);
-    for (const t of sent.slice(0, 3)) lines.push(`• Said: ${trim(t.title, 70)}`);
-    if (sent.length > 3) lines.push(`  …and ${sent.length - 3} more`);
-  }
-  if (held.length) {
-    fact('For you, not sent', held.map((t) => `“${trim(t.title, 70)}”`).join(' · '), `${FEED}?s=held`);
-    for (const t of held.slice(0, 3)) lines.push(`• Held for you: ${trim(t.title, 70)}`);
-    if (held.length > 3) lines.push(`  …and ${held.length - 3} more held`);
-  }
+  const noticed = noticedSection(notes);
+  for (const f of noticed.facts) fact(f.label, f.value, f.href);
+  lines.push(...noticed.lines);
   if (refuted.length) {
     fact(
       'Caught before sending',
@@ -187,8 +203,8 @@ export async function buildDaydreamBriefing(now = new Date()): Promise<DaydreamB
   if (expiredN) fact('Filed itself', `${expiredN} verified, unrated for a week`, `${FEED}?s=filed`);
 
   const counts = {
-    sent: sent.length,
-    held: held.length,
+    sent: notes.filter((n) => n.raised).length,
+    held: notes.filter((n) => !n.raised).length,
     refuted: refuted.length,
     applied: applied.length,
     placesNamed: places.length,

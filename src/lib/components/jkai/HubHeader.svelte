@@ -149,7 +149,7 @@
     // The family prefix, matching SECTIONS in $lib/nav/site-nav — it 307s to the
     // feed, so the destination is unchanged, but the row now lights as `current`
     // on every daydream page instead of only on the feed.
-    { label: 'Daydreams', href: '/jkai/daydreams', meta: 'BRIEF · WATCH · LEARN' },
+    { label: 'Daydreams', href: '/jkai/daydreams', meta: 'NOTICE · WATCH · LEARN' },
     // Personal data. These were in the ⌘K launcher only, which made the
     // catalogue an endpoint nobody could find from the page they were on.
     // The count is the nudge: `CONNECT ACCOUNTS` until one is live.
