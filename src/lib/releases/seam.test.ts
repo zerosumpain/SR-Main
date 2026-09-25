@@ -11,7 +11,7 @@ import {
 import type { CadenceDay } from './public';
 
 function cadence(spec: [string, number, number][]): CadenceDay[] {
-  return spec.map(([date, count, shipped]) => ({ date, count, shipped }));
+  return spec.map(([date, count, shipped]) => ({ date, count, shipped, insertions: 0, deletions: 0 }));
 }
 
 describe('buildSeamField', () => {

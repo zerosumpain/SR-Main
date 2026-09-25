@@ -1,6 +1,6 @@
 import { SOURCE_FOOTPRINT } from 'virtual:sr-source-footprint';
 import { getReleaseShowcase } from '$lib/releases/public';
-import { getReleaseConsole, parseConsoleFilters, weeklyCadence } from '$lib/releases/console';
+import { getReleaseConsole, monthlyReleaseBuckets, parseConsoleFilters, weeklyCadence } from '$lib/releases/console';
 import { isOwnerRequest } from '$lib/server/owner';
 import { getReleaseSessions } from '$lib/releases/sessions.server';
 import type { PageServerLoad } from './$types';
@@ -26,6 +26,7 @@ import type { PageServerLoad } from './$types';
  */
 export const load: PageServerLoad = async (event) => {
   const filters = parseConsoleFilters(event.url);
+  const today = new Date().toISOString().slice(0, 10);
 
   if (await isOwnerRequest(event)) {
     const console_ = await getReleaseConsole(filters);
@@ -42,6 +43,7 @@ export const load: PageServerLoad = async (event) => {
       mode: 'owner' as const,
       ...console_,
       sessions,
+      today,
       sampleData: process.env.SHIPPED_PREVIEW_SAMPLE_DATA === '1',
     };
   }
@@ -55,6 +57,9 @@ export const load: PageServerLoad = async (event) => {
   const needle = filters.q.toLowerCase();
   const items = data.items.filter((i) => {
     if (filters.kind !== 'all' && i.kind !== filters.kind) return false;
+    const day = i.deployedAt.slice(0, 10);
+    if (filters.from && day < filters.from) return false;
+    if (filters.to && day > filters.to) return false;
     if (!needle) return true;
     return (
       i.title.toLowerCase().includes(needle) ||
@@ -76,13 +81,16 @@ export const load: PageServerLoad = async (event) => {
   return {
     mode: 'public' as const,
     sourceFootprint: SOURCE_FOOTPRINT,
+    today,
     totals: data.totals,
-    cadence: weeklyCadence(data.cadence),
+    cadence: weeklyCadence(data.cadence.filter((day) =>
+      (!filters.from || day.date >= filters.from) && (!filters.to || day.date <= filters.to))),
+    timeBuckets: monthlyReleaseBuckets(data.cadence),
     kindMix: [...mix.entries()]
       .map(([kind, count]) => ({ kind, count }))
       .sort((a, b) => b.count - a.count),
     kindOptions: data.kindMix.map((k) => String(k.kind)),
     items,
-    filters: { kind: filters.kind, q: filters.q },
+    filters: { kind: filters.kind, q: filters.q, from: filters.from, to: filters.to },
   };
 };

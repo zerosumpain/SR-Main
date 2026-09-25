@@ -12,7 +12,7 @@
  * stays a thin two-branch switch, and so the aggregation can be exercised
  * without rendering a page.
  */
-import { and, asc, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, ilike, inArray, lt, or, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { releases, releaseItems } from '$lib/db/schema';
 import type { CommitFact, FileFact, ReleaseItemKind, ReleaseStats } from './types';
@@ -24,16 +24,29 @@ export interface ConsoleFilters {
   impact: string;
   via: string;
   q: string;
+  from: string;
+  to: string;
   page: number;
 }
 
-/** The five URL params the console reads, normalised. Shared with the public branch. */
+function dateParam(value: string | null): string {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return '';
+  const day = new Date(`${value}T00:00:00Z`);
+  return Number.isNaN(day.getTime()) || day.toISOString().slice(0, 10) !== value ? '' : value;
+}
+
+/** URL filters shared by the owner and public reads. Dates are inclusive UTC days. */
 export function parseConsoleFilters(url: URL): ConsoleFilters {
+  let from = dateParam(url.searchParams.get('from'));
+  let to = dateParam(url.searchParams.get('to'));
+  if (from && to && from > to) [from, to] = [to, from];
   return {
     kind: url.searchParams.get('kind') || 'all',
     impact: url.searchParams.get('impact') || 'all',
     via: url.searchParams.get('via') || 'all',
     q: (url.searchParams.get('q') || '').trim(),
+    from,
+    to,
     page: Math.max(0, parseInt(url.searchParams.get('page') || '0', 10) || 0),
   };
 }
@@ -49,6 +62,13 @@ export interface CadenceWeek {
   week: string;
   deploys: number;
   shipped: number;
+  insertions: number;
+  deletions: number;
+}
+
+export interface ReleaseMonth {
+  month: string;
+  deploys: number;
 }
 
 export interface ConsoleItem {
@@ -104,6 +124,7 @@ export interface ConsolePayload {
   vias: { via: string; count: number }[];
   kindDist: { kind: string; count: number }[];
   cadence: CadenceWeek[];
+  timeBuckets: ReleaseMonth[];
   items: ConsoleRelease[];
   hasMore: boolean;
 }
@@ -131,9 +152,10 @@ export function weekKey(d: Date): string {
  * chart component instead of two.
  */
 export function weeklyCadence(
-  days: { date: string; count: number; shipped: number }[],
+  days: { date: string; count: number; shipped: number; insertions?: number; deletions?: number }[],
   keep = 40,
 ): CadenceWeek[] {
+  if (!days.length) return [];
   const by = new Map<string, CadenceWeek>();
   for (const d of days) {
     const key = weekKey(new Date(`${d.date}T00:00:00Z`));
@@ -141,18 +163,59 @@ export function weeklyCadence(
     if (row) {
       row.deploys += d.count;
       row.shipped += d.shipped;
+      row.insertions += d.insertions ?? 0;
+      row.deletions += d.deletions ?? 0;
     } else {
-      by.set(key, { week: key, deploys: d.count, shipped: d.shipped });
+      by.set(key, {
+        week: key, deploys: d.count, shipped: d.shipped,
+        insertions: d.insertions ?? 0, deletions: d.deletions ?? 0,
+      });
     }
   }
-  return [...by.values()].sort((a, b) => a.week.localeCompare(b.week)).slice(-keep);
+  const dates = days.map((day) => day.date).sort();
+  const cursor = new Date(`${dates[0]}T00:00:00Z`);
+  cursor.setUTCDate(cursor.getUTCDate() - ((cursor.getUTCDay() + 6) % 7));
+  const last = dates[dates.length - 1];
+  const weeks: CadenceWeek[] = [];
+  while (cursor.toISOString().slice(0, 10) <= last) {
+    const week = weekKey(cursor);
+    weeks.push(by.get(week) ?? { week, deploys: 0, shipped: 0, insertions: 0, deletions: 0 });
+    cursor.setUTCDate(cursor.getUTCDate() + 7);
+  }
+  return weeks.slice(-keep);
+}
+
+/** Fill empty months so a gap in deployments stays visible in the time filter. */
+export function monthlyReleaseBuckets(days: { date: string; count: number }[]): ReleaseMonth[] {
+  if (!days.length) return [];
+  const counts = new Map<string, number>();
+  for (const day of days) {
+    const month = day.date.slice(0, 7);
+    counts.set(month, (counts.get(month) ?? 0) + day.count);
+  }
+  const keys = [...counts.keys()].sort();
+  const cursor = new Date(`${keys[0]}-01T00:00:00Z`);
+  const last = keys[keys.length - 1];
+  const result: ReleaseMonth[] = [];
+  while (cursor.toISOString().slice(0, 7) <= last) {
+    const month = cursor.toISOString().slice(0, 7);
+    result.push({ month, deploys: counts.get(month) ?? 0 });
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+  return result;
 }
 
 export async function getReleaseConsole(filters: ConsoleFilters): Promise<ConsolePayload> {
-  const { kind, impact, via, q, page } = filters;
+  const { kind, impact, via, q, from, to, page } = filters;
 
   const clauses = [];
   if (via !== 'all') clauses.push(eq(releases.via, via));
+  if (from) clauses.push(gte(releases.deployedAt, new Date(`${from}T00:00:00Z`)));
+  if (to) {
+    const nextDay = new Date(`${to}T00:00:00Z`);
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+    clauses.push(lt(releases.deployedAt, nextDay));
+  }
   // kind/impact live on the items, so both filter the release by "has an item
   // matching". `kinds` is denormalised onto the release specifically so the kind
   // filter is an index-friendly containment test rather than a join.
@@ -177,7 +240,7 @@ export async function getReleaseConsole(filters: ConsoleFilters): Promise<Consol
   const where = clauses.length ? and(...clauses) : undefined;
 
   // ── aggregates over the whole (filtered) set ──
-  const [agg, itemDayRows, viaRows] = await Promise.all([
+  const [agg, itemDayRows, viaRows, monthRows] = await Promise.all([
     db
       .select({
         id: releases.id,
@@ -195,7 +258,7 @@ export async function getReleaseConsole(filters: ConsoleFilters): Promise<Consol
     // an `inArray` over 400-odd of them is a binding trap.
     db
       .select({
-        day: sql<string>`to_char(${releases.deployedAt}, 'YYYY-MM-DD')`,
+        day: sql<string>`to_char(${releases.deployedAt} at time zone 'UTC', 'YYYY-MM-DD')`,
         n: sql<number>`count(*)::int`,
       })
       .from(releaseItems)
@@ -207,6 +270,13 @@ export async function getReleaseConsole(filters: ConsoleFilters): Promise<Consol
       .from(releases)
       .groupBy(releases.via)
       .orderBy(sql`count(*) desc`),
+    db
+      .select({
+        month: sql<string>`to_char(${releases.deployedAt} at time zone 'UTC', 'YYYY-MM')`,
+        n: sql<number>`count(*)::int`,
+      })
+      .from(releases)
+      .groupBy(sql`1`),
   ]);
 
   let commits = 0;
@@ -217,6 +287,7 @@ export async function getReleaseConsole(filters: ConsoleFilters): Promise<Consol
   let failed = 0;
   const kindCounts: Record<string, number> = {};
   const deploysByDay = new Map<string, number>();
+  const churnByDay = new Map<string, { insertions: number; deletions: number }>();
   let minDate: string | null = null;
   let maxDate: string | null = null;
 
@@ -235,6 +306,10 @@ export async function getReleaseConsole(filters: ConsoleFilters): Promise<Consol
       if (minDate === null || iso < minDate) minDate = iso;
       if (maxDate === null || iso > maxDate) maxDate = iso;
       deploysByDay.set(iso, (deploysByDay.get(iso) ?? 0) + 1);
+      const churn = churnByDay.get(iso) ?? { insertions: 0, deletions: 0 };
+      churn.insertions += s.insertions || 0;
+      churn.deletions += s.deletions || 0;
+      churnByDay.set(iso, churn);
     }
   }
 
@@ -244,6 +319,8 @@ export async function getReleaseConsole(filters: ConsoleFilters): Promise<Consol
       date,
       count: deploysByDay.get(date) ?? 0,
       shipped: shippedByDay.get(date) ?? 0,
+      insertions: churnByDay.get(date)?.insertions ?? 0,
+      deletions: churnByDay.get(date)?.deletions ?? 0,
     })),
   );
 
@@ -329,6 +406,7 @@ export async function getReleaseConsole(filters: ConsoleFilters): Promise<Consol
     vias: viaRows.map((v) => ({ via: v.via, count: v.n })),
     kindDist,
     cadence,
+    timeBuckets: monthlyReleaseBuckets(monthRows.map((row) => ({ date: `${row.month}-01`, count: row.n }))),
     items,
     hasMore: rows.length === CONSOLE_PAGE_SIZE,
   };
