@@ -1,6 +1,8 @@
 import { readBuffer } from './storage';
 import type { JkaiAttachment } from '$lib/db/schema';
-import type { ModelCapabilities } from '$lib/server/models/capabilities';
+import { getModelCapabilities, type ModelCapabilities } from '$lib/server/models/capabilities';
+import type { ModelContext } from '$lib/server/models/types';
+import { coerceModelContext } from '$lib/constants/default-models';
 import { preanalyseAttachment, preanalysisPartText } from './preanalyse';
 
 export type ContentPart =
@@ -112,6 +114,43 @@ export function allocateMediaCaps(
     }
   }
   return out;
+}
+
+/** What one chat request sends as files, decided once per turn. */
+export interface TurnMedia {
+  /** Caps to build each turn's files with, in the order the turns were given. */
+  caps: ModelCapabilities[];
+  /**
+   * Whether another model could take this request as built. A round may only
+   * be escalated to the thinking model if it can: handed pixels it cannot
+   * read, OpenRouter 404s ("No endpoints found that support image input"),
+   * which is how a Codex thread failed when the thinking tier was glm-5.1.
+   */
+  canBeReadBy(ctx: ModelContext): boolean;
+}
+
+/**
+ * Plan a request's files: each turn's caps within the provider's budget, and
+ * which other models could take the result.
+ *
+ * `turns` is each turn's attachments, oldest first, the current message last.
+ * What the model cannot read is pre-analysed into text rather than sent as a
+ * part the provider will reject or quietly drop, the job the gateway once did
+ * out of sight.
+ */
+export function planTurnMedia(turns: JkaiAttachment[][], ctx: ModelContext): TurnMedia {
+  const budget = (c: ModelContext) => mediaBudgetFor(coerceModelContext(c).provider);
+  const caps = allocateMediaCaps(turns, getModelCapabilities(ctx), budget(ctx));
+  const files = nativeAttachments(turns, caps);
+  const bytes = files.reduce((n, a) => n + Math.ceil((a.sizeBytes * 4) / 3), 0);
+  return {
+    caps,
+    canBeReadBy(other) {
+      if (files.length === 0) return true;
+      const theirs = getModelCapabilities(other);
+      return files.every((a) => isNativeFor(a, theirs)) && bytes <= budget(other);
+    },
+  };
 }
 
 export async function buildMultimodalContent(
