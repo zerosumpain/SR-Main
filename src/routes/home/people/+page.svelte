@@ -5,13 +5,11 @@
   /**
    * The household room — /home/people. Moved out of /jkai/daydreams on
    * 2026-09-25 so the household's whereabouts live beside the rest of the home
-   * (the old URL 308s here); the reads are unchanged, and the per-person
-   * findings still come from the daydream sweep.
+   * (the old URL 308s here). The per-person findings section went with the
+   * daydream sweep and hypothesis proposer in P4a the same day.
    *
-   * Read off the trail, never asked for: where everyone is, what today looked
-   * like, and — since the family backfill gave four more people a year of
-   * history — what the sweep and the hypothesis proposer have made of each of
-   * them. The old tab opened on five cards each carrying a nested three-row
+   * Read off the trail, never asked for: where everyone is and what today
+   * looked like. The old tab opened on five cards each carrying a nested three-row
    * table, then a map, then an accordion of three more tables per person. It
    * opens on one rollup now: one even cell per head, and the day's arithmetic
    * in a single table underneath.
@@ -22,12 +20,10 @@
   import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
   import RollupGrid from '$lib/components/jkai/daydream/hub/RollupGrid.svelte';
   import type { RollupCell } from '$lib/components/jkai/daydream/hub/types';
-  import FamilyPerson from '$lib/components/jkai/daydream/rooms/FamilyPerson.svelte';
 
   let { data }: { data: PageData } = $props();
 
   const members = $derived(data.family.members);
-  const detail = $derived(data.family.detail);
 
   /** Over this many minutes without a fix and the answer is "we don't know",
    *  which is a different answer from "at home" and must not look like one. */
@@ -108,8 +104,7 @@
       sub: memberSub(m),
       tone: memberTone(m),
       corner: `${outFor(m.today.minutesOut)} out`,
-      href: `#p-${m.subject}`,
-    })),
+          })),
   );
 
   const away = $derived(members.filter((m) => m.ageMins != null && m.isHome === false).length);
@@ -126,7 +121,7 @@
   path="/home/people"
   kicker="Home · People"
   title={['Where everyone', 'is, and was']}
-  standfirst="Read off the family trail — Life360 through Home Assistant, sampled every two minutes and kept ninety days — never asked for. What the nightly sweep has made of each person sits underneath."
+  standfirst="Read off the family trail — Life360 through Home Assistant, sampled every two minutes and kept ninety days — never asked for."
   {summary}
   footer={['strangeramblings.com/home/people', 'Life360 via Home Assistant · 90-day trail', 'Owner-gated · the whole household, never shared']}
 >
@@ -172,7 +167,7 @@
           <tbody>
             {#each members as m (m.subject)}
               <tr>
-                <td class="cell-lead"><a class="link" href="#p-{m.subject}">{cap(m.subject)}</a></td>
+                <td class="cell-lead">{cap(m.subject)}</td>
                 <td class="cell-wrap">
                   {#if m.ageMins == null}
                     not tracked
@@ -199,28 +194,6 @@
           </tbody>
         </table>
       </div>
-    {/if}
-  </div>
-</section>
-
-<section class="band">
-  <div class="inner">
-    <SectionHead
-      kicker="C / Each person"
-      title={['What the sweep', 'found, per head']}
-      strap="Questions are proposed per person nightly, and the false-discovery correction is applied within that person — never across the household."
-    />
-
-    {#if !members.length}
-      <p class="lede">Nobody on the trail, so nothing has been asked about anybody.</p>
-    {:else}
-      {#each members as m (m.subject)}
-        <FamilyPerson
-          subject={m.subject}
-          detail={detail[m.subject]}
-          lastSeen={m.lastSeenAt ? stamp(m.lastSeenAt) : null}
-        />
-      {/each}
     {/if}
   </div>
 </section>

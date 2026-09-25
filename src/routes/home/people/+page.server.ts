@@ -1,13 +1,13 @@
 import type { PageServerLoad } from './$types';
 import { errMsg } from '$lib/daydream/types';
-import { loadFamily } from '$lib/daydream/ledger';
+import { loadFamily } from '$lib/home/family.server';
 
-// The household room loads one thing: the family ledger.
+// The household room loads one thing: where everyone is.
 type Family = Awaited<ReturnType<typeof loadFamily>>;
 
 // The same keys on the failure path, so `PageData` is one shape rather than a
 // union the markup has to narrow before it can read `detail`.
-const EMPTY: Family = { members: [], detail: {} };
+const EMPTY: Family = { members: [] };
 
 export const load: PageServerLoad = async () => {
   try {

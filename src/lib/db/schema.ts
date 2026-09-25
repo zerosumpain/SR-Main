@@ -5372,7 +5372,6 @@ export type NewCodegraphQuery = typeof codegraphQueries.$inferInsert;
  * assumed. Home Assistant runs on homeserv while the site runs on the VPS, so
  * "could not" is a real, recurring state, not a theoretical one.
  */
-// RETIRED 2026-09-25 (daydream P4a) — dumped and dropped in P4b
 export const daydreamTrail = pgTable(
   'daydream_trail',
   {
@@ -5437,7 +5436,6 @@ export type NewDaydreamTrailRow = typeof daydreamTrail.$inferInsert;
  * existing `places` category, and the memory id is recorded here so the two
  * can never drift apart.
  */
-// RETIRED 2026-09-25 (daydream P4a) — dumped and dropped in P4b
 export const daydreamPlaces = pgTable(
   'daydream_places',
   {

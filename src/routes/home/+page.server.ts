@@ -1,5 +1,5 @@
 import type { PageServerLoad } from './$types';
-import { loadFamily } from '$lib/daydream/ledger';
+import { loadFamily } from '$lib/home/family.server';
 import { emptyHouseSummary, houseSummary, searchUtterances } from '$lib/alexa/store.server';
 import { getHomeAssistantService } from '$lib/workflows/homeassistant/service';
 import { DEVICES_TEMPLATE, summariseDevices, type DevicesPayload } from '$lib/home/devices';
