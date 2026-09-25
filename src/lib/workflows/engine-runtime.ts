@@ -174,8 +174,11 @@ export function startReaper(): void {
   // `paused` by the deploy drain, resumes here. A short delay and a 30s
   // threshold are enough — a live process heartbeats every 10s — so a deploy
   // no longer waits five minutes to either resume or kill its runs.
+  const bootedAt = Date.now();
   setTimeout(() => {
     void reapStaleRuns(BOOT_STALE_MS).catch((e) => console.warn('[engine-runtime] boot reap failed:', e));
+    // Describe-it builds run in-process too; a deploy mid-build strands them.
+    void import('./build-from-prompt.server').then((m) => m.resumeInterruptedBuilds(bootedAt));
   }, BOOT_SWEEP_DELAY_MS).unref();
   setInterval(() => {
     void reapStaleRuns().catch((e) => console.warn('[engine-runtime] periodic reap failed:', e));

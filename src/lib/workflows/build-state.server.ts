@@ -86,6 +86,8 @@ export async function readBuildState(workflowId: string): Promise<BuildState> {
   return (await readBuildStates([workflowId])).get(workflowId) ?? NO_BUILD;
 }
 
+export interface BuildResumeInfo { prompt: string; title: string | null; attempt: number }
+
 /** Append a marker row. `content` is what the canvas chat panel shows. */
 export async function recordBuildState(
   workflowId: string,
@@ -93,11 +95,49 @@ export async function recordBuildState(
   content: string,
   error?: string,
   verification?: WorkflowVerification,
+  resume?: BuildResumeInfo,
 ): Promise<void> {
   await db.insert(orchestratorChats).values({
     workflowId,
     role: 'assistant',
     content,
-    metadata: { nativeBuild: { status, ...(error ? { error } : {}), ...(verification ? { verification } : {}) } },
+    metadata: { nativeBuild: { status, ...(error ? { error } : {}), ...(verification ? { verification } : {}), ...(resume ? { resume } : {}) } },
   });
+}
+
+export const MAX_BUILD_ATTEMPTS = 2;
+export const BUILD_RESUME_WINDOW_MS = 6 * 60 * 60 * 1000;
+
+export interface InterruptedBuild extends BuildResumeInfo { workflowId: string }
+
+/** A `building` marker written before this process booted is a build a deploy killed
+ *  (2026-09-25 09:50:58). Older markers carry the prompt only quoted in the chat line. */
+export function interruptedBuildFrom(
+  row: { workflowId: string | null; content: string; metadata: unknown; createdAt: Date },
+  bootedAt: number,
+  now = Date.now(),
+): InterruptedBuild | null {
+  const marker = (row.metadata as { nativeBuild?: { status?: unknown; resume?: Partial<BuildResumeInfo> } } | null)
+    ?.nativeBuild;
+  if (!row.workflowId || marker?.status !== 'building') return null;
+  const at = row.createdAt.getTime();
+  if (at >= bootedAt || now - at > BUILD_RESUME_WINDOW_MS) return null;
+  const quoted = /“([\s\S]+)”\s*$/.exec(row.content)?.[1];
+  const prompt = (typeof marker.resume?.prompt === 'string' && marker.resume.prompt) || quoted || '';
+  if (!prompt.trim()) return null;
+  const attempt = typeof marker.resume?.attempt === 'number' ? marker.resume.attempt : 1;
+  if (attempt >= MAX_BUILD_ATTEMPTS) return null;
+  const title = typeof marker.resume?.title === 'string' ? marker.resume.title : null;
+  return { workflowId: row.workflowId, prompt, title, attempt };
+}
+
+/** Every build the previous process left mid-flight, newest marker per canvas. */
+export async function findInterruptedBuilds(bootedAt: number, now = Date.now()): Promise<InterruptedBuild[]> {
+  const c = orchestratorChats;
+  const rows = await db
+    .selectDistinctOn([c.workflowId], { workflowId: c.workflowId, content: c.content, metadata: c.metadata, createdAt: c.createdAt })
+    .from(c)
+    .where(and(sql`${c.metadata} -> 'nativeBuild' IS NOT NULL`, sql`${c.createdAt} > ${new Date(now - BUILD_RESUME_WINDOW_MS)}`))
+    .orderBy(c.workflowId, desc(c.createdAt));
+  return rows.map((r) => interruptedBuildFrom(r, bootedAt, now)).filter((b): b is InterruptedBuild => b !== null);
 }
