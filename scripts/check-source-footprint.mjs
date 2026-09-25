@@ -47,7 +47,9 @@ const LIMITS = {
   // +200 on 2026-09-25 (canvas test runs, PR "wave 4b"): pins, test mode and
   // the model's proof run added ~440 lines and deleted ~350 lines of per-node
   // dry-run branches the engine now decides once; the rest is this.
-  workflows: 60_200,
+  // +50 on 2026-09-25 (Describe-it fixes #951 and this): resuming builds a
+  // deploy killed, and telling the generator today's date.
+  workflows: 60_250,
   panels: 26_000,
   tests: 210_000,
 };

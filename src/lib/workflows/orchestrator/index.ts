@@ -4,7 +4,7 @@ import { db } from '$lib/db';
 import { orchestratorChats, workflows, workflowNodes, workflowEdges, nodeExecutions } from '$lib/db/schema';
 import { getCompiledPrompt } from '$lib/workflows/prompts/loader';
 import { eq, asc, desc, and, isNotNull } from 'drizzle-orm';
-import { buildToolUseSystemPrompt, buildCriticPrompt, buildRevisionPrompt, buildModifySystemPrompt } from './prompts';
+import { buildToolUseSystemPrompt, buildCriticPrompt, buildRevisionPrompt, buildModifySystemPrompt, withNow } from './prompts';
 import { buildNodeGrounding, buildSiteToolCatalog, type ExecutionExample } from './grounding';
 import { buildWorkspaceResources } from './workspace-grounding';
 import { openaiTools, toolSchemas } from './tools';
@@ -245,7 +245,7 @@ async function runToolLoop(
   const messages: Array<any> = [
     { role: 'system', content: systemPrompt },
     ...conversationHistory,
-    { role: 'user', content: userMessage },
+    { role: 'user', content: withNow(userMessage) },
   ];
 
   let workflowName = 'Generated Workflow';

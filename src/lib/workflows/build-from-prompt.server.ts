@@ -12,6 +12,7 @@ import { recordBuildState } from './build-state.server';
 import { saveWorkflowTrigger } from './trigger-save.server';
 import { loadGraph } from './native/workflows.server';
 import { screenNativeOps } from './native/amend.server';
+import { withNow } from './orchestrator/prompts';
 
 /**
  * Describe-it: a workflow from a sentence, and a change to one from an
@@ -314,7 +315,7 @@ export async function proposeAmendOps(workflowId: string, instruction: string): 
   const model = (await resolveDefaultModel()).modelId;
   const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
     { role: 'system', content: askSystemPrompt(grounding) },
-    { role: 'user', content: `## Current workflow\n\n\`\`\`json\n${current}\n\`\`\`\n\n## Instruction\n\n${instruction}` },
+    { role: 'user', content: withNow(`## Current workflow\n\n\`\`\`json\n${current}\n\`\`\`\n\n## Instruction\n\n${instruction}`) },
   ];
   const nodeIds = new Set(nodes.map((n) => n.id));
   const edgeIds = new Set(edges.map((e) => e.id));
