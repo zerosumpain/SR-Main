@@ -84,6 +84,7 @@ async function persistNodeCompletion(
     outputData?: Record<string, unknown> | null;
     error?: string;
     usage?: Record<string, unknown>;
+    selectedHandle?: string | null;
   },
 ): Promise<void> {
   try {
@@ -95,6 +96,7 @@ async function persistNodeCompletion(
         ...(fields.inputData !== undefined ? { inputData: fields.inputData } : {}),
         ...(fields.outputData !== undefined ? { outputData: fields.outputData } : {}),
         ...(fields.error !== undefined ? { error: fields.error } : {}),
+        ...(fields.selectedHandle !== undefined ? { selectedHandle: fields.selectedHandle } : {}),
         completedAt: new Date(),
         ...(fields.usage ?? {}),
       })
@@ -129,6 +131,11 @@ export interface EngineResult {
    *  node_executions.started_at so duration (completed_at - started_at)
    *  can be computed. */
   nodeStartTimes: Map<string, Date>;
+  /** The handle each branching node selected (conditional, switch, approval,
+   *  an on-error `error` route…). Persisted to node_executions.selected_handle
+   *  so a resumed run can replay the routing decided before its pause. Nodes
+   *  that did not branch are absent. */
+  nodeSelectedHandles: Map<string, string>;
   error?: string;
   healingHistory?: UndoEntry[];
   /** Populated when the engine paused mid-run for human interaction. */
@@ -237,10 +244,36 @@ export class WorkflowEngine {
   }
 
   /**
+   * Block every outgoing edge of `nodeId` whose handle is not `handle`, and skip
+   * whatever that strands. Edges with no sourceHandle accept any handle — see
+   * the routing comment in executeInner.
+   */
+  private applySelectedHandle(
+    nodeId: string,
+    handle: string,
+    graph: WorkflowGraph,
+    skippedNodes: Set<string>,
+    blockedEdgeIds: Set<string>,
+  ): void {
+    const outgoingEdges = graph.edgesBySource.get(nodeId) || [];
+    for (const edge of outgoingEdges) {
+      if (edge.sourceHandle && edge.sourceHandle !== handle) {
+        blockedEdgeIds.add(edge.id);
+        this.markSkipped(edge.targetNodeId, graph, skippedNodes, blockedEdgeIds);
+      }
+    }
+  }
+
+  /**
    * Resume a paused run by pre-seeding node outputs for already-completed
    * nodes (including the resolved interactive-step node). The engine's
    * topological walker will skip any node whose output is already present
    * in nodeOutputs.
+   *
+   * `preSeededHandles` carries the branch each seeded node selected. A seeded
+   * node is never executed, so without these its routing would never be
+   * applied: every branch below a conditional decided before the pause — and
+   * both branches below the approval being resumed — would run.
    */
   async executeWithPreSeededOutputs(
     workflow: WorkflowDefinition,
@@ -248,8 +281,9 @@ export class WorkflowEngine {
     preSeededOutputs: Record<string, Record<string, unknown>>,
     workflowId?: string,
     options?: { selfHealing?: boolean; dryRun?: boolean },
+    preSeededHandles?: Record<string, string>,
   ): Promise<EngineResult> {
-    return this.execute(workflow, runId, {}, undefined, workflowId, options, preSeededOutputs);
+    return this.execute(workflow, runId, {}, undefined, workflowId, options, preSeededOutputs, preSeededHandles);
   }
 
   /**
@@ -269,6 +303,7 @@ export class WorkflowEngine {
     workflowId?: string,
     options?: { selfHealing?: boolean; dryRun?: boolean },
     preSeededOutputs?: Record<string, Record<string, unknown>>,
+    preSeededHandles?: Record<string, string>,
   ): Promise<EngineResult> {
     if (draining) {
       console.warn(`[engine] refusing run ${runId} — engine is draining for shutdown`);
@@ -279,6 +314,7 @@ export class WorkflowEngine {
         nodeErrors: new Map(),
         nodeUsage: new Map(),
         nodeStartTimes: new Map(),
+        nodeSelectedHandles: new Map(),
         error: 'Engine is shutting down (draining)',
         healingHistory: [],
       };
@@ -296,6 +332,7 @@ export class WorkflowEngine {
       workflowId,
       options,
       preSeededOutputs,
+      preSeededHandles,
     ).finally(() => {
       inFlightRuns.delete(runId);
       runAbortControllers.delete(runId);
@@ -313,12 +350,14 @@ export class WorkflowEngine {
     workflowId?: string,
     options?: { selfHealing?: boolean; dryRun?: boolean },
     preSeededOutputs?: Record<string, Record<string, unknown>>,
+    preSeededHandles?: Record<string, string>,
   ): Promise<EngineResult> {
     const nodeOutputs = new Map<string, Record<string, unknown>>();
     const nodeInputs = new Map<string, Record<string, unknown>>();
     const nodeErrors = new Map<string, string>();
     const nodeUsage = new Map<string, UsageRollup>();
     const nodeStartTimes = new Map<string, Date>();
+    const nodeSelectedHandles = new Map<string, string>();
     const skippedNodes = new Set<string>();
     const blockedEdgeIds = new Set<string>();
 
@@ -360,6 +399,18 @@ export class WorkflowEngine {
     try {
       const graph = buildGraph(workflow.nodes, workflow.edges);
       const levels = topologicalSort(graph);
+
+      // Resume path: replay the routing every seeded node decided before the
+      // pause. Seeded nodes are skipped by the walker below, so this is the
+      // only place their branch choice can take effect. Order does not matter —
+      // markSkipped re-evaluates a target each time one of its edges is blocked.
+      if (preSeededHandles) {
+        for (const [id, handle] of Object.entries(preSeededHandles)) {
+          if (!graph.nodeMap.has(id) || !nodeOutputs.has(id)) continue;
+          nodeSelectedHandles.set(id, handle);
+          this.applySelectedHandle(id, handle, graph, skippedNodes, blockedEdgeIds);
+        }
+      }
 
       // {{state.KEY}} pre-resolution: load the whole workflow store ONCE at run
       // start, but only if any node actually references `{{state...}}` (keeps
@@ -499,6 +550,7 @@ export class WorkflowEngine {
               inputData: nodeInputs.get(nodeId) ?? null,
               outputData: nodeOutputs.get(nodeId) ?? null,
               usage: u as Record<string, unknown> | undefined,
+              selectedHandle: nodeSelectedHandles.get(nodeId) ?? null,
             });
           };
           const finishNodeFailed = (error: string) => {
@@ -515,7 +567,10 @@ export class WorkflowEngine {
             void persistNodeCompletion(runId, nodeId, {
               status: 'failed',
               startedAt: nodeStartTimes.get(nodeId),
+              // The input it failed on, so a single-node re-run can retry it.
+              inputData: nodeInputs.get(nodeId) ?? null,
               error,
+              selectedHandle: nodeSelectedHandles.get(nodeId) ?? null,
               usage: nodeUsage.get(nodeId) as Record<string, unknown> | undefined,
             });
           };
@@ -639,13 +694,8 @@ export class WorkflowEngine {
             // validator, llm-router, error-handler) need explicit per-branch handle tagging.
             const selectedHandle = r.metadata?._selectedHandle as string | undefined;
             if (selectedHandle !== undefined) {
-              const outgoingEdges = graph.edgesBySource.get(nodeId) || [];
-              for (const edge of outgoingEdges) {
-                if (edge.sourceHandle && edge.sourceHandle !== selectedHandle) {
-                  blockedEdgeIds.add(edge.id);
-                  this.markSkipped(edge.targetNodeId, graph, skippedNodes, blockedEdgeIds);
-                }
-              }
+              nodeSelectedHandles.set(nodeId, selectedHandle);
+              this.applySelectedHandle(nodeId, selectedHandle, graph, skippedNodes, blockedEdgeIds);
             }
 
             finishNodeOk();
@@ -690,12 +740,8 @@ export class WorkflowEngine {
                 nodeErrors.set(nodeId, message);
                 nodeOutputs.set(nodeId, { _error: message });
                 emit('node_failed', nodeId, { error: message, _selectedHandle: 'error' });
-                for (const edge of outgoingEdges) {
-                  if (edge.sourceHandle && edge.sourceHandle !== 'error') {
-                    blockedEdgeIds.add(edge.id);
-                    this.markSkipped(edge.targetNodeId, graph, skippedNodes, blockedEdgeIds);
-                  }
-                }
+                nodeSelectedHandles.set(nodeId, 'error');
+                this.applySelectedHandle(nodeId, 'error', graph, skippedNodes, blockedEdgeIds);
                 finishNodeFailed(message);
                 return;
               }
@@ -725,6 +771,7 @@ export class WorkflowEngine {
             let healed = false;
             let currentError = message;
             let currentConfig = { ...nodeDef.config };
+            let lastUndoEntry: UndoEntry | null = null;
             const attempts: Array<{ diagnosis: string; fixApplied: string; resultError: string }> = [];
 
             console.log(`[healing] Starting self-healing for ${nodeId} (up to ${MAX_HEALING_ATTEMPTS} attempts)`);
@@ -819,15 +866,18 @@ export class WorkflowEngine {
                     originalConfig,
                     newConfig,
                     fixDescription: diagnosis.fix.description,
+                    nodeLabel: nodeDef.label,
+                    nodeType: nodeDef.type,
                   };
                   healingHistory.push(undoEntry);
+                  lastUndoEntry = undoEntry;
 
                   // Apply the healed config to the per-run local copy only.
                   // Do NOT mutate nodeDef.config — that object is the persistent
-                  // node definition (shared via graph.nodeMap) and gets written
-                  // back to workflow_nodes by the persister, which would silently
-                  // rewrite the user's saved workflow. The retry below executes
-                  // with `currentConfig`, so the heal is scoped to this run.
+                  // node definition (shared via graph.nodeMap). Nothing writes a
+                  // heal back to workflow_nodes any more: a heal whose retry
+                  // succeeds becomes a fix PROPOSAL (run-finalise →
+                  // fix-proposals.server) that the owner applies or dismisses.
                   currentConfig = newConfig;
 
                   emit('healing_fix_applied', nodeId, {
@@ -860,15 +910,15 @@ export class WorkflowEngine {
 
                   const retryHandle = retryResult.metadata?._selectedHandle as string | undefined;
                   if (retryHandle !== undefined) {
-                    const outEdges = graph.edgesBySource.get(nodeId) || [];
-                    for (const edge of outEdges) {
-                      if (edge.sourceHandle && edge.sourceHandle !== retryHandle) {
-                        blockedEdgeIds.add(edge.id);
-                        this.markSkipped(edge.targetNodeId, graph, skippedNodes, blockedEdgeIds);
-                      }
-                    }
+                    nodeSelectedHandles.set(nodeId, retryHandle);
+                    this.applySelectedHandle(nodeId, retryHandle, graph, skippedNodes, blockedEdgeIds);
                   }
 
+                  // Only a config the node actually ran green with is a fix.
+                  // `currentConfig` only ever moves when an entry is pushed, so
+                  // the latest entry's newConfig IS the config that just passed.
+                  // No entry at all means no config changed, so nothing to propose.
+                  if (lastUndoEntry) lastUndoEntry.retrySucceeded = true;
                   healed = true;
                   finishNodeOk();
                   await refreshStoreSnapshot(nodeDef.type);
@@ -970,7 +1020,7 @@ export class WorkflowEngine {
       this.activeBreakpoints.delete(runId);
       stopHeartbeat();
       releaseSlot();
-      return { status: finalStatus, nodeOutputs, nodeInputs, nodeErrors, nodeUsage, nodeStartTimes, healingHistory };
+      return { status: finalStatus, nodeOutputs, nodeInputs, nodeErrors, nodeUsage, nodeStartTimes, nodeSelectedHandles, healingHistory };
     } catch (err: unknown) {
       // Human-in-the-loop pause: the run halts cleanly (no failure).
       if (err instanceof PauseForHumanSignal) {
@@ -986,6 +1036,7 @@ export class WorkflowEngine {
           nodeErrors,
           nodeUsage,
           nodeStartTimes,
+          nodeSelectedHandles,
           healingHistory,
           pausedAtNodeId: err.nodeId,
         };
@@ -1011,7 +1062,7 @@ export class WorkflowEngine {
       this.activeBreakpoints.delete(runId);
       stopHeartbeat();
       releaseSlot();
-      return { status: 'failed', nodeOutputs, nodeInputs, nodeErrors, nodeUsage, nodeStartTimes, error: message, healingHistory };
+      return { status: 'failed', nodeOutputs, nodeInputs, nodeErrors, nodeUsage, nodeStartTimes, nodeSelectedHandles, error: message, healingHistory };
     }
   }
 }

@@ -20,6 +20,7 @@ import { eq } from 'drizzle-orm';
 import { engine } from '$lib/workflows';
 import type { WorkflowDefinition } from '$lib/workflows/types';
 import { getOwnerPhone } from './approval-notify';
+import { finaliseRun, failRun } from '$lib/workflows/run-finalise';
 
 export type WaMatchMode = 'prefix' | 'exact' | 'contains';
 
@@ -224,27 +225,13 @@ async function dispatchRun(workflowId: string, initialInput: Record<string, unkn
     return;
   }
 
+  const runStartedAt = Date.now();
   engine
     .execute(definition, runId, initialInput, undefined, workflowId)
-    .then(async (result) => {
-      await db
-        .update(workflowRuns)
-        .set({ status: result.status, completedAt: new Date(), error: result.error ?? null })
-        .where(eq(workflowRuns.id, runId));
-    })
-    .catch(async (err) => {
-      console.error(
-        `[whatsapp-dispatch] workflow execution error (runId=${runId}):`,
-        err instanceof Error ? err.message : err,
-      );
-      try {
-        await db
-          .update(workflowRuns)
-          .set({ status: 'failed', completedAt: new Date(), error: err instanceof Error ? err.message : String(err) })
-          .where(eq(workflowRuns.id, runId));
-      } catch {
-        /* swallow */
-      }
+    .then((result) => finaliseRun({ workflowId, runId, result, runStartedAt, label: 'whatsapp-dispatch' }))
+    .catch((err) => {
+      console.error(`[whatsapp-dispatch] workflow execution error (runId=${runId}):`, err instanceof Error ? err.message : err);
+      return failRun({ workflowId, runId, error: err, label: 'whatsapp-dispatch' });
     });
 }
 

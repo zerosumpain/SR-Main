@@ -14,6 +14,7 @@ import {
 import { assertPublicRequestBudget } from '$lib/server/public-request-guard';
 import { readLimitedText } from '$lib/server/service-auth';
 import { isOwnerEmail } from '$lib/server/access';
+import { finaliseRun, failRun } from '$lib/workflows/run-finalise';
 
 const seenSignatures = new Map<string, number>();
 
@@ -114,14 +115,14 @@ export const POST: RequestHandler = async (event) => {
     return json({ runId: run.id, status: 'accepted' }, { status: 202 });
   }
 
-  // Execute in background
-  engine.execute(definition, run.id, body, undefined, params.id).then(async (result) => {
-    await db.update(workflowRuns).set({
-      status: result.status,
-      completedAt: new Date(),
-      error: result.error || null,
-    }).where(eq(workflowRuns.id, run.id));
-  });
+  // Execute in background; the shared finaliser records pausedAtNodeId (so a
+  // webhook run that hits an approval can resume), node rows and the
+  // workflow_completed this path never used to emit.
+  const runStartedAt = Date.now();
+  engine
+    .execute(definition, run.id, body, undefined, params.id)
+    .then((result) => finaliseRun({ workflowId: params.id, runId: run.id, result, runStartedAt, label: 'webhook' }))
+    .catch((err) => failRun({ workflowId: params.id, runId: run.id, error: err, label: 'webhook' }));
 
   return json({ runId: run.id, status: 'accepted' }, { status: 202 });
 };

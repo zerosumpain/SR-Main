@@ -17,11 +17,12 @@ import {
   workflowInteractions,
 } from '$lib/db/schema';
 import { eq, and, isNull } from 'drizzle-orm';
-import { engine } from '$lib/workflows';
+import { engine, registry } from '$lib/workflows';
 import type { WorkflowDefinition } from '$lib/workflows';
 import { isDisplayOnlyType } from '$lib/workflows/types';
-import { emitObs } from '$lib/workflows/observability-bus';
 import { emitWorkflowEvent } from '$lib/workflows/events';
+import { buildResumeSeed } from './resume-seed';
+import { finaliseRun, failRun, upsertNodeExecution } from './run-finalise';
 
 export type ResolveInteractionReason =
   | 'not_pending'
@@ -172,44 +173,41 @@ export async function resumeRun(
     })),
   };
 
-  // 3. Load previously-completed node outputs from node_executions.
-  //    These are used to pre-seed the engine so it skips nodes whose
-  //    outputs are already known.
+  // 3. Load previously-completed node outputs AND the branch each one chose.
+  //    Seeded nodes never execute again, so their routing must be replayed from
+  //    what was recorded — otherwise every branch a conditional ruled out before
+  //    the pause runs anyway, and both branches below a resumed approval run.
   const executions = await db
     .select()
     .from(nodeExecutions)
     .where(eq(nodeExecutions.runId, runId));
 
-  // Build a map of already-completed outputs (excluding the paused node itself).
-  const seededOutputs: Record<string, Record<string, unknown>> = {};
-  for (const exec of executions) {
-    if (exec.status === 'completed' && exec.outputData && exec.nodeId !== pausedNodeId) {
-      seededOutputs[exec.nodeId] = exec.outputData as Record<string, unknown>;
-    }
-  }
-
-  // 4. Inject the resolved interaction output as the paused node's output.
+  // 4. The paused node's output comes from the human's resolution. A node that
+  //    knows how (approval) turns it into its real output + selected handle.
   //    resolvedNodeOutput may be keyed by nodeId or contain a single entry.
   const resolvedOutput = resolvedNodeOutput[pausedNodeId] ?? Object.values(resolvedNodeOutput)[0];
   if (!resolvedOutput) {
     throw new Error(`resumeRun: resolvedNodeOutput does not contain output for node ${pausedNodeId}`);
   }
-  seededOutputs[pausedNodeId] = resolvedOutput;
+  const pausedNode = definition.nodes.find((n) => n.id === pausedNodeId);
+  const pausedExec = executions.find((e) => e.nodeId === pausedNodeId);
+  const seed = buildResumeSeed({
+    executions,
+    pausedNodeId,
+    pausedNodeInput: (pausedExec?.inputData as Record<string, unknown> | null) ?? {},
+    resolved: resolvedOutput,
+    executor: pausedNode ? registry.getExecutor(pausedNode.type) : null,
+  });
+  const seededOutputs = seed.outputs;
+  const seededNodeIds = new Set(Object.keys(seededOutputs));
 
-  // Persist the resolved output for the paused node in node_executions.
-  await db
-    .update(nodeExecutions)
-    .set({
-      status: 'completed',
-      outputData: resolvedOutput,
-      completedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(nodeExecutions.runId, runId),
-        eq(nodeExecutions.nodeId, pausedNodeId),
-      ),
-    );
+  // Persist the paused node's resolved output (and branch) in node_executions.
+  await upsertNodeExecution(runId, pausedNodeId, {
+    status: 'completed',
+    outputData: seededOutputs[pausedNodeId],
+    selectedHandle: seed.handles[pausedNodeId] ?? null,
+    completedAt: new Date(),
+  });
 
   // 5. Set the run back to 'running' and clear pausedAtNodeId.
   await db
@@ -220,125 +218,24 @@ export async function resumeRun(
     })
     .where(eq(workflowRuns.id, runId));
 
-  // 6. Re-enter the engine with pre-seeded outputs.
-  //    The engine's topological walker will skip nodes whose outputs are
-  //    already in nodeOutputs (seeded via initialInput won't work directly —
-  //    we use a thin wrapper that pre-populates the engine's nodeOutputs map).
-  //
-  //    Strategy: We use the engine's PreSeeded execution mode by passing
-  //    seededOutputs as the initialInput, but the engine merges input from
-  //    upstream node outputs, not from initialInput, for non-root nodes.
-  //    Instead we rely on the engine skipping nodes whose outputs are already
-  //    in the seeded map via the `preSeededNodeOutputs` option.
-  //
-  //    The cleanest approach without engine refactoring: call engine.execute()
-  //    with the pre-seeded outputs injected via the PreSeeded helper below.
+  // 6. Re-enter the engine with the pre-seeded outputs and handles; the
+  //    topological walker skips every seeded node and re-applies its routing.
   const originalStartedAt = run.startedAt?.getTime() ?? Date.now();
 
   engine
-    .executeWithPreSeededOutputs(definition, runId, seededOutputs, workflowId)
-    .then(async (result) => {
-      const healingHistory = result.healingHistory || [];
-
-      try {
-        const isPaused = result.status === 'awaiting_human';
-        const completedAt = isPaused ? undefined : new Date();
-        await db
-          .update(workflowRuns)
-          .set({
-            status: result.status,
-            completedAt,
-            error: result.error || null,
-            healingHistory: healingHistory.length > 0 ? healingHistory : undefined,
-            ...(isPaused ? { pausedAtNodeId: result.pausedAtNodeId ?? null } : {}),
-          })
-          .where(eq(workflowRuns.id, runId));
-
-        if (completedAt && result.status === 'failed') {
-          emitObs('run.failed', {
-            workflowId,
-            runId,
-            error: result.error ?? 'run failed',
-            completedAt: completedAt.toISOString(),
-          });
-        } else if (completedAt && result.status !== 'awaiting_human') {
-          emitObs('run.completed', {
-            workflowId,
-            runId,
-            status: result.status as 'completed' | 'completed_with_errors',
-            completedAt: completedAt.toISOString(),
-            durationMs: completedAt.getTime() - originalStartedAt,
-          });
-        }
-
-        // Persist outputs for newly-executed nodes.
-        for (const [nodeId, output] of result.nodeOutputs) {
-          // Skip nodes that were pre-seeded (already persisted).
-          if (seededOutputs[nodeId]) continue;
-          const inputData = result.nodeInputs.get(nodeId);
-          const usage = result.nodeUsage.get(nodeId);
-          await db
-            .update(nodeExecutions)
-            .set({
-              status: 'completed',
-              startedAt: result.nodeStartTimes.get(nodeId) ?? undefined,
-              inputData: inputData ?? null,
-              outputData: output,
-              completedAt: new Date(),
-              ...(usage ?? {}),
-            })
-            .where(
-              and(
-                eq(nodeExecutions.runId, runId),
-                eq(nodeExecutions.nodeId, nodeId),
-              ),
-            );
-        }
-
-        for (const [nodeId, error] of result.nodeErrors) {
-          if (seededOutputs[nodeId]) continue;
-          const usage = result.nodeUsage.get(nodeId);
-          await db
-            .update(nodeExecutions)
-            .set({
-              status: 'failed',
-              startedAt: result.nodeStartTimes.get(nodeId) ?? undefined,
-              error,
-              completedAt: new Date(),
-              ...(usage ?? {}),
-            })
-            .where(
-              and(
-                eq(nodeExecutions.runId, runId),
-                eq(nodeExecutions.nodeId, nodeId),
-              ),
-            );
-        }
-      } catch (err) {
-        console.error(`[resume] Failed to persist resumed run results (runId=${runId})`, err);
-      }
-    })
-    .catch(async (err) => {
-      console.error(`[resume] Resumed workflow execution threw (runId=${runId})`, err);
-      const message = err instanceof Error ? err.message : String(err);
-      const failedAt = new Date();
-      try {
-        await db
-          .update(workflowRuns)
-          .set({
-            status: 'failed',
-            completedAt: failedAt,
-            error: message,
-          })
-          .where(eq(workflowRuns.id, runId));
-      } catch {
-        /* swallow */
-      }
-      emitObs('run.failed', {
+    .executeWithPreSeededOutputs(definition, runId, seededOutputs, workflowId, undefined, seed.handles)
+    .then((result) =>
+      finaliseRun({
         workflowId,
         runId,
-        error: message,
-        completedAt: failedAt.toISOString(),
-      });
+        result,
+        runStartedAt: originalStartedAt,
+        seededNodeIds,
+        label: 'resume',
+      }),
+    )
+    .catch((err) => {
+      console.error(`[resume] Resumed workflow execution threw (runId=${runId})`, err);
+      return failRun({ workflowId, runId, error: err, label: 'resume' });
     });
 }

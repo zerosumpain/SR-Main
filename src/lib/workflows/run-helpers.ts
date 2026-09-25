@@ -1,10 +1,11 @@
 import { db } from '$lib/db';
-import { workflowNodes, workflowRuns, nodeExecutions } from '$lib/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { workflowRuns } from '$lib/db/schema';
+import { eq } from 'drizzle-orm';
 import { engine } from '$lib/workflows';
 import type { WorkflowDefinition } from './types';
 import { emitWorkflowEvent, onWorkflowEvent } from './events';
 import { emitObs } from './observability-bus';
+import { finaliseRun } from './run-finalise';
 
 // Idle timeout — if NO workflow events are emitted for this long we assume
 // the engine has hung silently inside a node (LLM call with no streaming,
@@ -18,8 +19,8 @@ const RUN_HARD_TIMEOUT_MS = 15 * 60 * 1000; // 15 min
 /**
  * Fire a workflow run and persist its results when it resolves.
  *
- * Shared by /api/workflows/[id]/run and /api/workflows/[id]/chat so
- * both paths write node_executions + workflow_runs consistently.
+ * Shared by the chat route, the single-node re-run and the workflow tools; the settled
+ * result is written by `finaliseRun`, the same helper every start path uses.
  *
  * Returns immediately; the post-run DB writes happen in a detached
  * promise chain. Errors are logged.
@@ -114,88 +115,7 @@ export function runWorkflowAndPersist(
     .then(async (result) => {
       settled = true;
       clearAllWatchdogs();
-      const healingHistory = result.healingHistory || [];
-
-      try {
-        // For awaiting_human: don't set completedAt; persist pausedAtNodeId instead.
-        const isPaused = result.status === 'awaiting_human';
-        await db
-          .update(workflowRuns)
-          .set({
-            status: result.status,
-            completedAt: isPaused ? undefined : new Date(),
-            error: result.error || null,
-            healingHistory: healingHistory.length > 0 ? healingHistory : undefined,
-            ...(isPaused ? { pausedAtNodeId: result.pausedAtNodeId ?? null } : {}),
-          })
-          .where(eq(workflowRuns.id, runId));
-
-        if (result.status === 'completed' || result.status === 'completed_with_errors') {
-          try {
-            const { emit } = await import('$lib/workflows/event-bus');
-            emit('workflow_completed', { workflowId, runId, status: result.status });
-          } catch {
-            /* event bus is not critical */
-          }
-        }
-
-        for (const [nodeId, output] of result.nodeOutputs) {
-          const inputData = result.nodeInputs.get(nodeId);
-          const usage = result.nodeUsage.get(nodeId);
-          await db
-            .update(nodeExecutions)
-            .set({
-              status: 'completed',
-              startedAt: result.nodeStartTimes.get(nodeId) ?? undefined,
-              inputData: inputData ?? null,
-              outputData: output,
-              completedAt: new Date(),
-              ...(usage ?? {}),
-            })
-            .where(and(eq(nodeExecutions.runId, runId), eq(nodeExecutions.nodeId, nodeId)));
-        }
-
-        for (const [nodeId, error] of result.nodeErrors) {
-          const usage = result.nodeUsage.get(nodeId);
-          await db
-            .update(nodeExecutions)
-            .set({
-              status: 'failed',
-              startedAt: result.nodeStartTimes.get(nodeId) ?? undefined,
-              error,
-              completedAt: new Date(),
-              ...(usage ?? {}),
-            })
-            .where(and(eq(nodeExecutions.runId, runId), eq(nodeExecutions.nodeId, nodeId)));
-        }
-
-        for (const entry of healingHistory) {
-          await db
-            .update(workflowNodes)
-            .set({ config: entry.newConfig })
-            .where(eq(workflowNodes.id, entry.nodeId));
-        }
-      } catch (err) {
-        console.error(`[${label}] failed to persist run results (runId=${runId})`, err);
-      }
-
-      const completedAt = new Date();
-      if (result.status === 'failed') {
-        emitObs('run.failed', {
-          workflowId,
-          runId,
-          error: result.error ?? 'run failed',
-          completedAt: completedAt.toISOString(),
-        });
-      } else if (result.status !== 'awaiting_human') {
-        emitObs('run.completed', {
-          workflowId,
-          runId,
-          status: result.status as 'completed' | 'completed_with_errors',
-          completedAt: completedAt.toISOString(),
-          durationMs: completedAt.getTime() - runStartedAt,
-        });
-      }
+      await finaliseRun({ workflowId, runId, result, runStartedAt, label });
     })
     .catch(async (err) => {
       settled = true;

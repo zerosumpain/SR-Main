@@ -44,7 +44,10 @@ vi.mock('$lib/db', () => {
         captured.nodeExecUpdateWheres.push(predicate);
       }
       currentTable = null;
-      return Promise.resolve();
+      // The finaliser checks whether the UPDATE matched a pre-created row.
+      const p = Promise.resolve() as Promise<void> & { returning: () => Promise<Array<{ id: string }>> };
+      p.returning = async () => [{ id: 'row' }];
+      return p;
     }),
   };
   return { db: chain };
@@ -64,18 +67,19 @@ vi.mock('$lib/workflows', () => ({
         nodeInputs: new Map<string, unknown>(),
         nodeUsage: new Map<string, unknown>(),
         nodeStartTimes: new Map<string, Date>(),
+        nodeSelectedHandles: new Map<string, string>(),
       }),
     ),
   },
 }));
 
-vi.mock('$lib/workflows/event-bus', () => ({ emit: vi.fn() }));
+vi.mock('$lib/events/platform-bus', () => ({ emit: vi.fn() }));
 
 vi.mock('../../../src/lib/workflows/events', () => ({
   emitWorkflowEvent: vi.fn(),
   onWorkflowEvent: vi.fn(() => () => {}),
 }));
-vi.mock('../../../src/lib/workflows/observability-bus', () => ({
+vi.mock('$lib/workflows/observability-bus', () => ({
   emitObs: vi.fn(),
 }));
 

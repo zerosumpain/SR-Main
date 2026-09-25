@@ -1,7 +1,7 @@
 import type { NodeDefinition } from '../types';
 
 /**
- * Generic bridge onto the site-tool registry (~120 tools across 22 toolsets).
+ * Generic bridge onto the site-tool catalogue (every registered tool, via the executor seam).
  * Invokes ONE registered tool by name with templated JSON args and unwraps its
  * `{ success, data, error }` envelope. Destructive tools are gated behind an
  * approval node (config.allowDestructive + an upstream `approval` node); a small
@@ -38,7 +38,7 @@ export const siteToolDef: NodeDefinition = {
   defaultConfig: { toolName: '', args: {}, allowDestructive: false },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Tool result' }],
-  llmDescription: `Generic escape hatch onto the FULL site-tool registry (~120 tools across ~22 toolsets) for any capability that has no dedicated workflow node. Reach for this when the workflow needs a site capability such as:
+  llmDescription: `Generic escape hatch onto the FULL site-tool catalogue for any capability that has no dedicated workflow node. Reach for this when the workflow needs a site capability such as:
 - presentations / decks (presentation_build_from_spec, presentation_update_from_spec, presentation_list)
 - publishing a page (publish_page)
 - media generation (generate_image, generate_audio_tts, write_document)

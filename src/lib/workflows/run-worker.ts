@@ -15,11 +15,12 @@
 
 import { db } from '$lib/db';
 import { workflows, workflowNodes, workflowEdges, workflowRuns, nodeExecutions } from '$lib/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { engine } from '$lib/workflows';
 import type { WorkflowDefinition } from './types';
 import { isDisplayOnlyType } from './types';
 import { emitObs } from './observability-bus';
+import { finaliseRun } from './run-finalise';
 import {
   claimNext,
   renewLease,
@@ -99,76 +100,6 @@ async function ensureNodeExecutions(runId: string, def: WorkflowDefinition): Pro
   }
 }
 
-/** Persist a settled run result. Mirrors scheduler/run-route persistence. */
-async function persistResult(
-  claimed: ClaimedRun,
-  result: Awaited<ReturnType<typeof engine.execute>>,
-  runStartedAt: number,
-): Promise<void> {
-  const { id: runId, workflowId } = claimed;
-  const isPaused = result.status === 'awaiting_human';
-  const completedAt = isPaused ? undefined : new Date();
-  const healingHistory = result.healingHistory || [];
-
-  await db
-    .update(workflowRuns)
-    .set({
-      status: result.status,
-      completedAt,
-      error: result.error ?? null,
-      healingHistory: healingHistory.length > 0 ? healingHistory : undefined,
-      ...(isPaused ? { pausedAtNodeId: result.pausedAtNodeId ?? null } : {}),
-    })
-    .where(eq(workflowRuns.id, runId));
-
-  for (const [nodeId, output] of result.nodeOutputs) {
-    const inputData = result.nodeInputs.get(nodeId);
-    const usage = result.nodeUsage.get(nodeId);
-    await db
-      .update(nodeExecutions)
-      .set({
-        status: 'completed',
-        startedAt: result.nodeStartTimes.get(nodeId) ?? undefined,
-        inputData: inputData ?? null,
-        outputData: output,
-        completedAt: new Date(),
-        ...(usage ?? {}),
-      })
-      .where(and(eq(nodeExecutions.runId, runId), eq(nodeExecutions.nodeId, nodeId)));
-  }
-
-  for (const [nodeId, error] of result.nodeErrors) {
-    const usage = result.nodeUsage.get(nodeId);
-    await db
-      .update(nodeExecutions)
-      .set({
-        status: 'failed',
-        startedAt: result.nodeStartTimes.get(nodeId) ?? undefined,
-        error,
-        completedAt: new Date(),
-        ...(usage ?? {}),
-      })
-      .where(and(eq(nodeExecutions.runId, runId), eq(nodeExecutions.nodeId, nodeId)));
-  }
-
-  for (const entry of healingHistory) {
-    await db.update(workflowNodes).set({ config: entry.newConfig }).where(eq(workflowNodes.id, entry.nodeId));
-  }
-
-  const done = new Date();
-  if (result.status === 'failed') {
-    emitObs('run.failed', { workflowId, runId, error: result.error ?? 'run failed', completedAt: done.toISOString() });
-  } else if (!isPaused) {
-    emitObs('run.completed', {
-      workflowId,
-      runId,
-      status: result.status as 'completed' | 'completed_with_errors',
-      completedAt: done.toISOString(),
-      durationMs: done.getTime() - runStartedAt,
-    });
-  }
-}
-
 /** Execute one claimed run end-to-end with a lease-renewal heartbeat. */
 async function executeClaimed(claimed: ClaimedRun): Promise<void> {
   const { id: runId, workflowId } = claimed;
@@ -200,7 +131,10 @@ async function executeClaimed(claimed: ClaimedRun): Promise<void> {
     });
 
     const result = await engine.execute(def, runId, claimed.input ?? {}, undefined, workflowId, { selfHealing: true });
-    await persistResult(claimed, result, runStartedAt);
+    // Same finaliser as every in-process start path. Note: this process has its
+    // own platform bus, so the workflow_completed it emits reaches listeners in
+    // the WORKER process only — a durable cross-process event log is later work.
+    await finaliseRun({ workflowId, runId, result, runStartedAt, label: 'run-worker' });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[run-worker] run ${runId} threw:`, message);

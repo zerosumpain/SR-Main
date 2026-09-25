@@ -5,6 +5,7 @@
   import { env as publicEnv } from '$env/dynamic/public';
   import ChatMarkdown from '$lib/markdown/ChatMarkdown.svelte';
   import ScheduleBuilder from '$lib/canvas/trigger/ScheduleBuilder.svelte';
+  import FixProposalsBanner from '$lib/canvas/FixProposalsBanner.svelte';
   import InspectorBody from '$lib/canvas/InspectorBody.svelte';
   import { useIsMobile } from '$lib/canvas/use-mobile.svelte';
   import { portal } from '$lib/canvas/portal';
@@ -4216,6 +4217,14 @@
     </div>
   </div>
 
+  {#if canvas.workflowId}
+    <FixProposalsBanner
+      workflowId={canvas.workflowId}
+      {refreshKey}
+      onFocusNode={(id) => (selectedId = id)}
+    />
+  {/if}
+
   {#if findOpen}
     <div class="find-bar" role="search">
       <span class="find-icon" aria-hidden="true">⌕</span>
@@ -5944,7 +5953,7 @@
                         <div class="nm-heal nm-heal-ok">
                           <span class="nm-heal-hd">✓ Auto-fixed and recovered</span>
                           {#if menuHealing.fixDescription}<span class="nm-heal-fix">{menuHealing.fixDescription}</span>{/if}
-                          <span class="nm-heal-note">Saved config unchanged — the fix applied to this run only.</span>
+                          <span class="nm-heal-note">Saved config unchanged — the fix applied to this run only. Apply it permanently from the banner above the canvas.</span>
                         </div>
                       {/if}
                       <InspectorBody data={menuNode.outputData} />

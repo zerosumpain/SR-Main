@@ -2,11 +2,12 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { workflows, workflowNodes, workflowEdges, workflowRuns, nodeExecutions } from '$lib/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { engine } from '$lib/workflows';
 import type { WorkflowDefinition } from '$lib/workflows';
 import { isDisplayOnlyType } from '$lib/workflows/types';
 import { emitObs } from '$lib/workflows/observability-bus';
+import { finaliseRun, failRun } from '$lib/workflows/run-finalise';
 
 export const POST: RequestHandler = async ({ params, request }) => {
   const [workflow] = await db.select().from(workflows).where(eq(workflows.id, params.id));
@@ -88,84 +89,12 @@ export const POST: RequestHandler = async ({ params, request }) => {
     return json({ runId: run.id, status: 'pending' }, { status: 201 });
   }
 
-  // Execute in background — don't await
-  engine.execute(definition, run.id, initialInput, breakpoints, params.id, { selfHealing }).then(async (result) => {
-    const healingHistory = result.healingHistory || [];
-
-    // For awaiting_human: don't set completedAt; persist pausedAtNodeId instead.
-    const isPaused = result.status === 'awaiting_human';
-    const completedAt = isPaused ? undefined : new Date();
-    await db.update(workflowRuns).set({
-      status: result.status,
-      completedAt,
-      error: result.error || null,
-      healingHistory: healingHistory.length > 0 ? healingHistory : undefined,
-      ...(isPaused ? { pausedAtNodeId: result.pausedAtNodeId ?? null } : {}),
-    }).where(eq(workflowRuns.id, run.id));
-
-    if (completedAt && result.status === 'failed') {
-      emitObs('run.failed', {
-        workflowId: params.id,
-        runId: run.id,
-        error: result.error ?? 'run failed',
-        completedAt: completedAt.toISOString(),
-      });
-    } else if (completedAt && result.status !== 'awaiting_human') {
-      emitObs('run.completed', {
-        workflowId: params.id,
-        runId: run.id,
-        status: result.status as 'completed' | 'completed_with_errors',
-        completedAt: completedAt.toISOString(),
-        durationMs: completedAt.getTime() - runStartedAt,
-      });
-    }
-
-    // Emit workflow_completed event so event-triggered workflows can chain
-    if (result.status === 'completed' || result.status === 'completed_with_errors') {
-      try {
-        const { emit } = await import('$lib/workflows/event-bus');
-        emit('workflow_completed', { workflowId: params.id, runId: run.id, status: result.status });
-      } catch {
-        // event-bus not critical path
-      }
-    }
-
-    // Update node execution records
-    for (const [nodeId, output] of result.nodeOutputs) {
-      const inputData = result.nodeInputs.get(nodeId);
-      const usage = result.nodeUsage.get(nodeId);
-      await db.update(nodeExecutions).set({
-        status: 'completed',
-        startedAt: result.nodeStartTimes.get(nodeId) ?? undefined,
-        inputData: inputData ?? null,
-        outputData: output,
-        completedAt: new Date(),
-        ...(usage ?? {}),
-      }).where(
-        and(eq(nodeExecutions.runId, run.id), eq(nodeExecutions.nodeId, nodeId)),
-      );
-    }
-
-    for (const [nodeId, error] of result.nodeErrors) {
-      const usage = result.nodeUsage.get(nodeId);
-      await db.update(nodeExecutions).set({
-        status: 'failed',
-        startedAt: result.nodeStartTimes.get(nodeId) ?? undefined,
-        error,
-        completedAt: new Date(),
-        ...(usage ?? {}),
-      }).where(
-        and(eq(nodeExecutions.runId, run.id), eq(nodeExecutions.nodeId, nodeId)),
-      );
-    }
-
-    // Persist healed node configs to the workflow
-    for (const entry of healingHistory) {
-      await db.update(workflowNodes).set({
-        config: entry.newConfig,
-      }).where(eq(workflowNodes.id, entry.nodeId));
-    }
-  });
+  // Execute in background — don't await. The settled result is written by the
+  // shared finaliser (run status, node rows, fix proposals, workflow_completed).
+  engine
+    .execute(definition, run.id, initialInput, breakpoints, params.id, { selfHealing })
+    .then((result) => finaliseRun({ workflowId: params.id, runId: run.id, result, runStartedAt, label: 'run' }))
+    .catch((err) => failRun({ workflowId: params.id, runId: run.id, error: err, label: 'run' }));
 
   return json({ runId: run.id, status: 'running' }, { status: 201 });
 };

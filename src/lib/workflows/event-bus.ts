@@ -3,6 +3,7 @@ import { workflowSchedules, workflows, workflowRuns, workflowNodes, workflowEdge
 import { eq, and } from 'drizzle-orm';
 import { engine } from '$lib/workflows';
 import { onAll, type PlatformEvent } from '$lib/events/platform-bus';
+import { finaliseRun, failRun } from './run-finalise';
 
 /**
  * The dispatch half of the platform event channel: turn an event into a workflow
@@ -16,8 +17,26 @@ import { onAll, type PlatformEvent } from '$lib/events/platform-bus';
 export type { PlatformEvent, PlatformEventType } from '$lib/events/platform-bus';
 export { emit, on } from '$lib/events/platform-bus';
 
+/**
+ * How many `workflow_completed` hops one chain may take. Every run now emits
+ * `workflow_completed` — event-started ones included — so A→B→A pinned to each
+ * other would otherwise loop forever. The depth rides on the event payload.
+ */
+export const MAX_CHAIN_DEPTH = 5;
+
+function chainDepthOf(event: PlatformEvent): number {
+  const d = Number((event.payload as Record<string, unknown> | undefined)?.chainDepth ?? 0);
+  return Number.isFinite(d) && d > 0 ? d : 0;
+}
+
 // Internal: start any event-triggered workflows matching this event type
-async function handlePlatformEvent(event: PlatformEvent): Promise<void> {
+export async function handlePlatformEvent(event: PlatformEvent): Promise<void> {
+  const depth = chainDepthOf(event);
+  if (event.type === 'workflow_completed' && depth >= MAX_CHAIN_DEPTH) {
+    console.warn(`[event-bus] workflow_completed chain reached depth ${depth} — not starting further workflows`);
+    return;
+  }
+
   const schedules = await db
     .select()
     .from(workflowSchedules)
@@ -31,6 +50,12 @@ async function handlePlatformEvent(event: PlatformEvent): Promise<void> {
     if (sourceWorkflowId) {
       const payloadWfId = (event.payload as Record<string, unknown> | undefined)?.workflowId;
       if (payloadWfId !== sourceWorkflowId) return false;
+    }
+    // A workflow never triggers itself off its own completion: an unpinned
+    // workflow_completed trigger would otherwise re-run it forever.
+    if (event.type === 'workflow_completed') {
+      const payloadWfId = (event.payload as Record<string, unknown> | undefined)?.workflowId;
+      if (payloadWfId === s.workflowId) return false;
     }
     return true;
   });
@@ -76,15 +101,20 @@ async function handlePlatformEvent(event: PlatformEvent): Promise<void> {
       })),
     };
 
+    const runStartedAt = now.getTime();
     engine
       .execute(def, runId, { event: event.payload ?? {} }, undefined, schedule.workflowId)
-      .then(async (result) => {
-        await db
-          .update(workflowRuns)
-          .set({ status: result.status, completedAt: new Date(), error: result.error ?? null })
-          .where(eq(workflowRuns.id, runId));
-      })
-      .catch(console.error);
+      .then((result) =>
+        finaliseRun({
+          workflowId: schedule.workflowId,
+          runId,
+          result,
+          runStartedAt,
+          chainDepth: event.type === 'workflow_completed' ? depth + 1 : undefined,
+          label: 'event-bus',
+        }),
+      )
+      .catch((err) => failRun({ workflowId: schedule.workflowId, runId, error: err, label: 'event-bus' }));
   }
 }
 

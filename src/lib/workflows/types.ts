@@ -183,6 +183,17 @@ export interface NodeExecutor {
   ): Promise<NodeResult>;
   getInputSchema(config: Record<string, unknown>): JsonSchema;
   getOutputSchema(config: Record<string, unknown>): JsonSchema;
+  /**
+   * Turn a human's resolution of a paused node into that node's output — and,
+   * for a branching node, the handle it selected. Called by engine-resume when a
+   * run paused at this node is resumed. Without it the resolved form values are
+   * stored as the output verbatim and no branch is selected, which for a node
+   * with more than one outgoing handle (approval) means BOTH branches run.
+   */
+  resumeResult?(
+    resolved: Record<string, unknown>,
+    input: Record<string, unknown>,
+  ): { output: Record<string, unknown>; selectedHandle?: string };
 }
 
 export type WorkflowEventType =
@@ -309,6 +320,15 @@ export interface UndoEntry {
   originalConfig: Record<string, unknown>;
   newConfig: Record<string, unknown>;
   fixDescription: string;
+  /** The node's label and type when the heal happened — what a fix proposal shows. */
+  nodeLabel?: string;
+  nodeType?: string;
+  /**
+   * True on the ONE entry per node whose retry succeeded. Earlier attempts'
+   * entries stay in the history for the record but are not fixes: only a config
+   * the node actually ran green with may be proposed as a permanent change.
+   */
+  retrySucceeded?: boolean;
   rewireChanges?: {
     addedEdges: WorkflowEdgeDef[];
     removedEdgeIds: string[];
