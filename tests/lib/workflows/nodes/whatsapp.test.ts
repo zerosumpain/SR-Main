@@ -80,35 +80,6 @@ describe('whatsapp executor — basic + markdown', () => {
   });
 });
 
-describe('whatsapp executor — dryRun is send-free on every path', () => {
-  it('does not send text', async () => {
-    const r = await whatsappExecutor.execute({}, { to: '+123', message: 'hi' }, ctx({ dryRun: true }));
-    expect(r.output.simulated).toBe(true);
-    expect(mockSendMessage).not.toHaveBeenCalled();
-    expect(mockAppendAtomic).not.toHaveBeenCalled();
-  });
-
-  it('does not send media', async () => {
-    const r = await whatsappExecutor.execute(
-      {},
-      { to: '+123', mediaUrl: 'https://x.co/a.png', caption: 'c' },
-      ctx({ dryRun: true }),
-    );
-    expect(r.output.simulated).toBe(true);
-    expect(mockSendAttachment).not.toHaveBeenCalled();
-  });
-
-  it('does not send even with a suppression window set', async () => {
-    await whatsappExecutor.execute(
-      {},
-      { to: '+123', message: 'hi', suppressDuplicateWindowMins: 60 },
-      ctx({ dryRun: true }),
-    );
-    expect(mockSendMessage).not.toHaveBeenCalled();
-    expect(mockGetStoreValue).not.toHaveBeenCalled();
-  });
-});
-
 describe('whatsapp executor — chunking', () => {
   it('splits a >4096-char message into sequential sends', async () => {
     const para = 'y'.repeat(3000);
@@ -247,14 +218,4 @@ describe('whatsapp executor — a send that did not send is a FAILURE', () => {
     expect(r.output).toMatchObject({ sent: true, skipped: false, error: null });
   });
 
-  it('does not throw in dryRun even when the underlying send would fail', async () => {
-    mockSendMessage.mockResolvedValue({ sent: false, error: 'offline' });
-    const r = await whatsappExecutor.execute(
-      {},
-      { to: '+123', message: 'hi' },
-      ctx({ dryRun: true }),
-    );
-    expect(r.output).toMatchObject({ simulated: true });
-    expect(mockSendMessage).not.toHaveBeenCalled();
-  });
 });

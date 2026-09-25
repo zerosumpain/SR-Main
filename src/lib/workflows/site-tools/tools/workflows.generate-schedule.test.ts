@@ -69,6 +69,14 @@ vi.mock('$lib/workflows/orchestrator', () => ({
 
 vi.mock('$lib/workflows/orchestrator/verify', () => ({ formatIssues: () => '' }));
 
+// The tool proves the canvas with a TEST run before answering; mocked here.
+const proof = { lint: { errors: 0, warnings: 0, issues: [] }, passed: true, testRun: { runId: 'r1', status: 'completed', stubbed: ['Notify'], pinned: [] } };
+vi.mock('$lib/workflows/test-runs.server', () => ({
+  proveWorkflow: async () => proof,
+  proveWithRepair: async () => proof,
+  describeVerification: () => 'the test run completed',
+}));
+
 vi.mock('$lib/workflows/scheduler', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
   registerCronJob: vi.fn(),
@@ -87,6 +95,7 @@ describe('workflow_generate — new canvas with a cron trigger', () => {
       { emit: () => {} },
     );
     expect(res.success).toBe(true);
+    expect((res.data as { verification?: unknown }).verification).toBe(proof);
     expect(captured.scheduleInserts).toHaveLength(1);
     expect(captured.scheduleInserts[0]).toMatchObject({
       workflowId: 'wf-new',

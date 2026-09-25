@@ -5,6 +5,7 @@ const categoryOptions = NOTIFICATION_CATEGORIES.map((c) => ({ value: c.id, label
 
 export const notifyDef: NodeDefinition = {
   type: 'notify',
+  sideEffects: true,
   label: 'Notify me',
   category: 'integration',
   description: 'Tell the owner something under a notification category. The category\'s route (set on the phone) decides WhatsApp, iPhone, both or neither, and every raise is written to the notification ledger.',

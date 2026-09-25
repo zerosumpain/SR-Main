@@ -9,6 +9,7 @@ import type { NodeDefinition } from '../types';
  */
 export const delegateAgentDef: NodeDefinition = {
   type: 'delegate-agent',
+  sideEffects: true,
   label: 'Delegate to agent',
   category: 'agentic',
   description:

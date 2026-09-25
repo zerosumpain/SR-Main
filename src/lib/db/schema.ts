@@ -2100,6 +2100,13 @@ export const workflowRuns = pgTable('workflow_runs', {
   parentRunId: text('parent_run_id'),
   /** How many times crash/deploy recovery has resumed this run (capped at 1). */
   resumeCount: integer('resume_count').notNull().default(0),
+  /**
+   * 'test' = a run that proves a workflow without touching the world: pinned
+   * outputs replace their nodes, side-effecting nodes are stubbed, and nothing
+   * is announced (no workflow.completed, no notification, no fix proposal).
+   * Everything else — schedules, events, webhooks, the Run button — is 'live'.
+   */
+  mode: text('mode').notNull().default('live'),
 }, (t) => [
   // 44k rows and, until now, nothing but the primary key. Twenty-two call sites
   // filter by workflow_id and twenty-three order by started_at, so every one of

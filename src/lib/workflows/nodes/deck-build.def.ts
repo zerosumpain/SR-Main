@@ -4,11 +4,12 @@ import type { NodeDefinition } from '../types';
  * Publish workflow results as an sr. decks presentation. Wraps the NON-destructive
  * `presentation_build_from_spec` site tool (builds a NEW deck — never the
  * destructive update tool). The tool does all block/layout/fit validation and
- * mints a share link; this node reuses it rather than reimplementing. dryRun
- * never creates a deck.
+ * mints a share link; this node reuses it rather than reimplementing. A test
+ * run stubs it (no deck).
  */
 export const deckBuildDef: NodeDefinition = {
   type: 'deck-build',
+  sideEffects: true,
   label: 'Deck build (presentation)',
   category: 'integration',
   description:
@@ -75,7 +76,7 @@ export const deckBuildDef: NodeDefinition = {
     };
   },
   llmDescription:
-    "Publish workflow results as a presentation deck; send the returned url via whatsapp/email downstream. Wraps presentation_build_from_spec (builds a NEW /decks/<slug> deck — non-destructive; it does NOT overwrite existing decks). Config: `title` (template), optional `description`, `spec` (a JSON array of slides, or an object with a `slides` array — string leaves support {{input.*}} templates), `share` (return a share link, default true), `isPublic` (publish publicly, default false). Output: { deckId, slug, url, shareUrl?, slideCount, summaryMarkdown }. The url is absolute (https://strangeramblings.com/decks/<slug>) — feed url/shareUrl into a whatsapp or email node to deliver it. Each slide is a fixed 1280×720 page; the tool validates blocks/layout/fit and REJECTS an overfull spec (the node then errors with fit feedback). Build the slide blocks upstream (e.g. an llm-call that emits the JSON) or hand-write the spec. Under a dry run this node NEVER creates a deck — it returns a simulated { dryRun: true, slug, url }.",
+    "Publish workflow results as a presentation deck; send the returned url via whatsapp/email downstream. Wraps presentation_build_from_spec (builds a NEW /decks/<slug> deck — non-destructive; it does NOT overwrite existing decks). Config: `title` (template), optional `description`, `spec` (a JSON array of slides, or an object with a `slides` array — string leaves support {{input.*}} templates), `share` (return a share link, default true), `isPublic` (publish publicly, default false). Output: { deckId, slug, url, shareUrl?, slideCount, summaryMarkdown }. The url is absolute (https://strangeramblings.com/decks/<slug>) — feed url/shareUrl into a whatsapp or email node to deliver it. Each slide is a fixed 1280×720 page; the tool validates blocks/layout/fit and REJECTS an overfull spec (the node then errors with fit feedback). Build the slide blocks upstream (e.g. an llm-call that emits the JSON) or hand-write the spec. In a TEST run this node is stubbed and creates no deck.",
   llmExamples: [
     {
       title: 'Weekly Briefing — {{today}}',

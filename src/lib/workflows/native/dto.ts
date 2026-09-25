@@ -314,6 +314,7 @@ export interface RunRow {
   startedAt: Date | null;
   completedAt: Date | null;
   error: string | null;
+  mode?: string | null;
 }
 
 export interface RunSummaryDTO {
@@ -324,6 +325,8 @@ export interface RunSummaryDTO {
   completedAt: string | null;
   durationMs: number | null;
   error: string | null;
+  /** 'test' = a test run (pins applied, side effects stubbed); else 'live'. */
+  mode: 'live' | 'test';
 }
 
 export function runSummary(row: RunRow): RunSummaryDTO {
@@ -336,6 +339,7 @@ export function runSummary(row: RunRow): RunSummaryDTO {
     durationMs:
       row.startedAt && row.completedAt ? row.completedAt.getTime() - row.startedAt.getTime() : null,
     error: row.error ?? null,
+    mode: row.mode === 'test' ? 'test' : 'live',
   };
 }
 

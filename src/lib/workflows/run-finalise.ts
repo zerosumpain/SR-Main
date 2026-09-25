@@ -44,6 +44,8 @@ export interface FinaliseRunInput {
   label?: string;
   /** A sub-workflow child: settling it may release a parent waiting on it. */
   parentRunId?: string | null;
+  /** A test run: recorded like any run, but it proposes no fix and announces nothing. */
+  test?: boolean;
 }
 
 type NodeExecFields = Partial<typeof nodeExecutions.$inferInsert>;
@@ -137,7 +139,7 @@ export async function finaliseRun(input: FinaliseRunInput): Promise<void> {
   }
 
   // Never a write to workflow_nodes: a heal that worked is a proposal.
-  if (healingHistory.some((e) => e.retrySucceeded)) {
+  if (!input.test && healingHistory.some((e) => e.retrySucceeded)) {
     try {
       const { recordFixProposalsFromHealing } = await import('./fix-proposals.server');
       await recordFixProposalsFromHealing(workflowId, runId, healingHistory);
@@ -178,7 +180,7 @@ export async function finaliseRun(input: FinaliseRunInput): Promise<void> {
   // run is the event's origin, so it can never trigger itself.
   const chainDepth = input.chainDepth ?? runChainDepth(runId);
   if (!isPaused) clearRunChainDepth(runId);
-  if (result.status === 'completed' || result.status === 'completed_with_errors') {
+  if (!input.test && (result.status === 'completed' || result.status === 'completed_with_errors')) {
     emitPlatformEvent(
       'workflow.completed',
       { workflowId, runId, status: result.status },

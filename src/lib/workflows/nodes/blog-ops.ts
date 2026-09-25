@@ -54,9 +54,6 @@ export const blogCreateExecutor: NodeExecutor = {
     const args: Record<string, unknown> = { title, content };
     if (config.status) args.status = config.status;
     if (config.tags) args.tags = config.tags;
-    if (ctx.dryRun) {
-      return { output: { success: true, dryRun: true, data: { simulated: true, action: 'create', title } }, rowCount: 1 };
-    }
     const result = await executeSiteTool('site_blog_create', args);
     return { output: result, rowCount: 1 };
   },
@@ -77,9 +74,6 @@ export const blogUpdateExecutor: NodeExecutor = {
     if (config.content) args.content = interpolateTemplate((config.content as string), input);
     if (config.status) args.status = config.status;
     if (config.tags) args.tags = config.tags;
-    if (ctx.dryRun) {
-      return { output: { success: true, dryRun: true, data: { simulated: true, action: 'update', postId } }, rowCount: 1 };
-    }
     const result = await executeSiteTool('site_blog_update', args);
     return { output: result, rowCount: 1 };
   },

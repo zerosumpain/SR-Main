@@ -38,22 +38,6 @@ export const gmailReplyExecutor: NodeExecutor = {
     const bodyText = interp(String(config.bodyText ?? '')) || undefined;
     const bodyHtml = interp(String(config.bodyHtml ?? '')) || undefined;
 
-    if (context.dryRun) {
-      const accountId = Number(
-        (config.accountId as number | string | undefined) ??
-        (input.accountId as number | string | undefined) ??
-        0,
-      );
-      return {
-        output: {
-          simulated: true,
-          would_reply: { accountId, threadId, body: bodyHtml ?? bodyText ?? '' },
-        },
-        rowCount: 1,
-        logs: [`[dry-run] would reply to Gmail thread ${threadId ?? '(none)'} -> ${to}`],
-      };
-    }
-
     const acct = await loadAccount(config, input);
 
     const result = await gmailService.sendMessage(acct, {

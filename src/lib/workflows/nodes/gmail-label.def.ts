@@ -2,6 +2,7 @@ import type { NodeDefinition } from '../types';
 
 export const gmailLabelDef: NodeDefinition = {
   type: 'gmail-label',
+  sideEffects: true,
   category: 'integration',
   label: 'Gmail — Modify Labels',
   description: 'Add or remove Gmail labels on a message. Common uses: archive (remove INBOX), mark read (remove UNREAD), star (add STARRED).',

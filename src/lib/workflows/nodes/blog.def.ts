@@ -1,7 +1,9 @@
 import type { NodeDefinition } from '../types';
+import { opIn } from '../side-effects';
 
 export const blogDef: NodeDefinition = {
   type: 'blog',
+  sideEffects: opIn('operation', ['create', 'update'], 'list'),
   label: 'Blog (legacy)',
   category: 'integration',
   hidden: true,

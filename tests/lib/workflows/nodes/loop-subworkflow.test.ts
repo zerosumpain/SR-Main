@@ -196,18 +196,6 @@ describe('loop — subworkflow mode', () => {
     expect(mockRun).not.toHaveBeenCalled();
   });
 
-  it('dryRun does not invoke sub-workflows and reports wouldProcess', async () => {
-    const res = await loopExecutor.execute(
-      { rows: items(4) },
-      { mode: 'subworkflow', arrayPath: 'rows', subWorkflowId: 'sub-wf' },
-      makeContext({ dryRun: true }),
-    );
-
-    expect(res.output).toEqual({ results: [], dryRun: true, wouldProcess: 4 });
-    expect(mockLoad).not.toHaveBeenCalled();
-    expect(mockRun).not.toHaveBeenCalled();
-  });
-
   it('honours the abort signal mid-pool', async () => {
     const ac = new AbortController();
     let calls = 0;

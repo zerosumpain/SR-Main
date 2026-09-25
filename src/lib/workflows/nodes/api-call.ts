@@ -20,7 +20,7 @@ function parseJsonConfig(raw: unknown, input: Record<string, unknown>, label: st
  * `api-call` — friendly, catalogue-bound API access. Resolves the selected API
  * by key/name, composes the URL from its baseUrl + path/query, and delegates to
  * the shared SSRF-guarded core (`callCatalogApi`), which injects env-ref auth and
- * keeps every request within the API's baseUrl. dryRun never calls out.
+ * keeps every request within the API's baseUrl. A test run stubs a write (engine).
  */
 export const apiCallExecutor: NodeExecutor = {
   type: 'api-call',
@@ -43,16 +43,6 @@ export const apiCallExecutor: NodeExecutor = {
     if (method !== 'GET' && method !== 'HEAD') {
       const b = interpolateTemplate(String(config.body ?? ''), input).trim();
       body = b || undefined;
-    }
-
-    // DRY RUN: never call the API. Describe what WOULD run so wiring can be
-    // verified without side effects.
-    if (context.dryRun) {
-      return {
-        output: { success: true, dryRun: true, api, method, path, ...(query ? { query } : {}) },
-        rowCount: 1,
-        metadata: { dryRun: true },
-      };
     }
 
     // Lazy dynamic import — the site-tools registry pulls server-only domain
@@ -103,7 +93,6 @@ export const apiCallExecutor: NodeExecutor = {
         url: { type: 'string', description: 'The composed request URL' },
         json: { type: 'any', description: 'Parsed JSON response body (when the response is JSON)' },
         text: { type: 'string', description: 'Raw response text (when not JSON)' },
-        dryRun: { type: 'boolean', description: 'true only on a dry run (no request made)' },
       },
     };
   },

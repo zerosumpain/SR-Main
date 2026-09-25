@@ -149,7 +149,23 @@ export async function buildInBackground(workflowId: string, prompt: string, give
       );
     }
 
-    await recordBuildState(workflowId, 'done', generated.explanation || 'Built from your description.');
+    // Then prove it: a TEST run with side effects stubbed, one repair round if
+    // it fails. A build that does not pass says so — "built, but…".
+    const { proveWithRepair, describeVerification } = await import('./test-runs.server');
+    const verification = await proveWithRepair(workflowId);
+    if (!verification.passed) {
+      const error = `built, but ${describeVerification(verification)}`;
+      await recordBuildState(workflowId, 'failed', `The build finished but did not pass its test run: ${error}`, error, verification);
+      publishWorkflowUpdate({ workflowId, kind: 'build_complete', summary: 'Built — test run failed', ts: Date.now() });
+      return;
+    }
+    await recordBuildState(
+      workflowId,
+      'done',
+      `${generated.explanation || 'Built from your description.'}\n\nTest run: ${describeVerification(verification)}.`,
+      undefined,
+      verification,
+    );
     publishWorkflowUpdate({ workflowId, kind: 'build_complete', summary: 'Generated', ts: Date.now() });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

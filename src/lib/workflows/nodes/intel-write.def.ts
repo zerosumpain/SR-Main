@@ -2,6 +2,7 @@ import type { NodeDefinition } from '../types';
 
 export const intelWriteDef: NodeDefinition = {
   type: 'intel-write',
+  sideEffects: true,
   label: 'Intel Write',
   category: 'integration',
   description:

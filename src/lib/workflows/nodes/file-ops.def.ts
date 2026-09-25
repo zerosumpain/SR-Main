@@ -35,6 +35,7 @@ export const fileReadDef: NodeDefinition = {
 
 export const fileWriteDef: NodeDefinition = {
   type: 'file-write',
+  sideEffects: true,
   label: 'Write file',
   category: 'integration',
   description: 'Create or overwrite a file in the workflow store. Set `append: true` to append to an existing file instead.',
@@ -73,6 +74,7 @@ export const fileWriteDef: NodeDefinition = {
 
 export const fileDeleteDef: NodeDefinition = {
   type: 'file-delete',
+  sideEffects: true,
   label: 'Delete file',
   category: 'integration',
   description: 'Remove a file from the workflow file store. Idempotent — silently succeeds if the file is already gone.',

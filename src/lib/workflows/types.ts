@@ -128,6 +128,13 @@ export interface NodeDefinition {
    * anything that sends, writes, pays or starts something.
    */
   idempotent?: boolean;
+  /**
+   * Running it changes something outside the run: it sends, writes, books,
+   * builds or calls a service that does. A TEST run stubs such a node instead
+   * of executing it (engine, `side-effects.ts`). A function decides per config —
+   * an http-request GET reads, a POST writes.
+   */
+  sideEffects?: boolean | ((config: Record<string, unknown>) => boolean);
 }
 
 export interface NodeResult {
@@ -151,7 +158,8 @@ export interface ExecutionContext {
   runId: string;
   workflowId: string;
   workspaceDir: string;
-  /** When true, side-effecting nodes must short-circuit and return a simulated output. */
+  /** A test/verify run. The engine already stubs `sideEffects` nodes; a node's own
+   *  check still covers direct invocations (an llm-agent calling it as a tool). */
   dryRun: boolean;
   emit: (event: WorkflowEvent) => void;
   getNodeOutput: (nodeId: string) => Record<string, unknown> | undefined;

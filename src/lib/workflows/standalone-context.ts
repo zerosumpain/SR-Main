@@ -19,7 +19,7 @@ export interface StandaloneContext extends ExecutionContext {
 }
 
 export function standaloneContext(
-  options: { runId?: string; nodeId?: string; dryRun?: boolean; abortSignal?: AbortSignal } = {},
+  options: { runId?: string; nodeId?: string; abortSignal?: AbortSignal } = {},
 ): StandaloneContext {
   const runId = options.runId ?? `standalone-${crypto.randomUUID()}`;
   const events: WorkflowEvent[] = [];
@@ -28,7 +28,7 @@ export function standaloneContext(
     runId,
     workflowId: runId,
     workspaceDir: `/tmp/workflow-${runId}`,
-    dryRun: options.dryRun ?? false,
+    dryRun: false,
     emit: (event) => {
       events.push(event);
     },

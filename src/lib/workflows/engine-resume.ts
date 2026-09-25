@@ -150,6 +150,8 @@ export async function resumeRun(
     seed,
     runStartedAt: run.startedAt?.getTime(),
     label: 'resume',
+    // A paused test run resumes as one: still stubbed, still silent.
+    mode: run.mode === 'test' ? 'test' : 'live',
   });
 }
 
@@ -180,6 +182,7 @@ export async function recoverRun(runId: string, reason: string): Promise<'resume
   };
 
   if (run.resumeCount >= MAX_AUTO_RESUMES) return fail('already resumed once, not retrying');
+  if (run.mode === 'test') return fail('a test run is not resumed — start another');
   const definition = run.versionId ? await loadPinnedDefinition(run) : null;
   if (!definition) return fail('no pinned version to resume from');
 

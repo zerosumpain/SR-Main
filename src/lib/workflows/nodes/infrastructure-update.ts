@@ -36,7 +36,6 @@ export const infrastructureUpdateExecutor: NodeExecutor = {
   async execute(input: Record<string, unknown>, config: Record<string, unknown>, context: ExecutionContext): Promise<NodeResult> {
     const action = validateUpdateManifest(input, config.action);
     if (!hasApprovedUpstream(context)) throw new Error('infrastructure-update: an approval node must be wired upstream.');
-    if (context.dryRun) return { output: { action, simulated: true, verified: false }, rowCount: 1, logs: ['[dry-run] update action suppressed.'] };
     if (action === 'verify_only') return { output: { action, applied: false, verified: true, rollbackNeeded: false, message: 'No update operation is implemented; verification-only manifest completed.' }, rowCount: 1 };
     const health = await getHomeAssistantService().testConnection();
     return { output: { action, applied: false, verified: health.success, rollbackNeeded: !health.success, health: health.success ? health.data : undefined, failure: health.success ? undefined : health.error }, rowCount: 1 };

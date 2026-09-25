@@ -1,7 +1,9 @@
 import type { NodeDefinition } from '../types';
+import { opIn } from '../side-effects';
 
 export const jkaiDef: NodeDefinition = {
   type: 'jkai',
+  sideEffects: opIn('operation', ['start', 'control'], 'list'),
   label: 'JKAI',
   category: 'integration',
   description: 'Manage JKAI autonomous builds: start, check status, list, and control.',

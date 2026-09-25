@@ -634,3 +634,23 @@ export function formatReport(report: PassRateReport): string {
   }
   return lines.join('\n');
 }
+
+/**
+ * The model-proves-its-work contract: did any building tool's RESULT carry a
+ * `verification` block with a real test run (a runId)? Accepts the tool result
+ * object, or the chat loop's truncated progress copy (`{ _truncated, preview }`),
+ * which keeps `data.verification` because the tools put it first.
+ */
+export function verificationTestRuns(toolResults: unknown[]): string[] {
+  const runIds: string[] = [];
+  for (const r of toolResults) {
+    const o = r as { data?: { verification?: { testRun?: { runId?: unknown } } }; preview?: unknown } | null;
+    const id = o?.data?.verification?.testRun?.runId;
+    if (typeof id === 'string') runIds.push(id);
+    else if (typeof o?.preview === 'string') {
+      const m = /"verification":\{"lint":.*?"testRun":\{"runId":"([^"]+)"/.exec(o.preview);
+      if (m) runIds.push(m[1]);
+    }
+  }
+  return runIds;
+}

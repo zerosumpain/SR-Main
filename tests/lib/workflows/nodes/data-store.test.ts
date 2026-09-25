@@ -271,18 +271,6 @@ describe('dataStoreExecutor', () => {
     });
   });
 
-  describe('dry run', () => {
-    it('does not write for append', async () => {
-      const result = await dataStoreExecutor.execute(
-        { value: 'x' },
-        { operation: 'append', key: 'log' },
-        { ...mockContext, dryRun: true },
-      );
-      expect(mockExecute).not.toHaveBeenCalled();
-      expect(result.output.simulated).toBe(true);
-    });
-  });
-
   describe('operation aliases + validation', () => {
     it('maps read → get', async () => {
       mockWhere.mockResolvedValue([{ value: 1 }]);

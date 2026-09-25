@@ -91,7 +91,7 @@ export const siteToolExecutor: NodeExecutor = {
       throw new Error('site-tool: no toolName configured. Set the tool to invoke (e.g. "save_memory").');
     }
 
-    // Hard denylist — never invocable, regardless of dryRun / allowDestructive.
+    // Hard denylist — never invocable, regardless of allowDestructive (a test run never gets here — the engine stubs it).
     if (isDenylistedTool(toolName)) {
       throw new Error(
         `site-tool: "${toolName}" is denylisted from workflows (arbitrary-code / self-modification / irreversible-wipe surface) and can never be invoked from the canvas.`,
@@ -117,16 +117,6 @@ export const siteToolExecutor: NodeExecutor = {
     }
 
     const interpolatedArgs = interpolateArgs(config.args ?? {}, input) as Record<string, unknown>;
-
-    // DRY RUN: never invoke ANY tool. Return a simulated result describing what
-    // WOULD have run, so wiring can be verified without side effects.
-    if (context.dryRun) {
-      return {
-        output: { success: true, dryRun: true, wouldInvoke: toolName, args: interpolatedArgs, toolName },
-        rowCount: 1,
-        metadata: { dryRun: true },
-      };
-    }
 
     // Destructive gating.
     if (await isDestructiveTool(toolName)) {
@@ -183,7 +173,6 @@ export const siteToolExecutor: NodeExecutor = {
         success: { type: 'boolean' },
         toolName: { type: 'string' },
         data: { type: 'object', description: "The invoked tool's data envelope" },
-        dryRun: { type: 'boolean', description: 'true only on a dry run (no tool invoked)' },
       },
     };
   },

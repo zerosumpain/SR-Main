@@ -171,23 +171,6 @@ export const whatsappExecutor: NodeExecutor = {
       };
     }
 
-    // DRY RUN — send-free across EVERY path (text, media, suppression).
-    if (context.dryRun) {
-      return {
-        output: {
-          simulated: true,
-          would_send: {
-            to,
-            message: message || null,
-            media: mediaPath || mediaUrl || null,
-            caption: caption || null,
-          },
-        },
-        rowCount: 1,
-        logs: [`[dry-run] would send WhatsApp to ${to}${hasMedia ? ' with media' : ''}`],
-      };
-    }
-
     const service = getWhatsAppService();
 
     // ---- Media send -----------------------------------------------------

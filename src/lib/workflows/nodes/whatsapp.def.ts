@@ -3,6 +3,7 @@ import { NOTIFICATION_CATEGORIES } from '$lib/constants/notification-categories'
 
 export const whatsappDef: NodeDefinition = {
   type: 'whatsapp',
+  sideEffects: true,
   label: 'WhatsApp',
   category: 'integration',
   description: 'Send a WhatsApp message (Markdown-aware, auto-chunked, optional media). To/message fields support {{input.field}} templates.',

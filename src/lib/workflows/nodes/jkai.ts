@@ -28,16 +28,6 @@ export const jkaiExecutor: NodeExecutor = {
         const prompt = interpolateTemplate((config.prompt as string) || '', input);
         const title = interpolateTemplate((config.title as string) || '', input);
         if (!prompt) throw new FatalError('Prompt is required to start a build');
-        // DRY RUN: never spawn a real autonomous build (build_create calls
-        // orchestrator.startBuild). Return a simulated result so verify/dry-run
-        // can check wiring without side effects — mirrors blog/site-tool nodes.
-        if (context.dryRun) {
-          return {
-            output: { success: true, dryRun: true, wouldInvoke: 'build_create', args: title ? { prompt, title } : { prompt } },
-            rowCount: 1,
-            logs: [`[dry-run] would start a JKAI build: "${(title || prompt).slice(0, 60)}"`],
-          };
-        }
         const args: Record<string, unknown> = { prompt };
         if (title) args.title = title;
         const result = await executeSiteTool('build_create', args);
@@ -64,15 +54,6 @@ export const jkaiExecutor: NodeExecutor = {
         if (!rawAction) throw new FatalError('Action is required');
         // Back-compat: older canvases stored 'cancel' — build_control speaks 'stop'.
         const action = rawAction === 'cancel' ? 'stop' : rawAction;
-        // DRY RUN: never pause/resume/stop/publish a real build (build_control is
-        // destructive — publish ships to production). Simulate instead.
-        if (context.dryRun) {
-          return {
-            output: { success: true, dryRun: true, wouldInvoke: 'build_control', args: { id: buildId, action } },
-            rowCount: 1,
-            logs: [`[dry-run] would ${action} build ${buildId}`],
-          };
-        }
         const result = await executeSiteTool('build_control', { id: buildId, action });
         return { output: result, rowCount: 1 };
       }

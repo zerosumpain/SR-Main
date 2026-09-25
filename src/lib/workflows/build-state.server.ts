@@ -1,6 +1,7 @@
 import { and, desc, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { orchestratorChats } from '$lib/db/schema';
+import type { WorkflowVerification } from './test-runs.server';
 
 /**
  * Whether a canvas is being built from a description, and how the last build
@@ -21,6 +22,8 @@ export type BuildStatus = 'building' | 'done' | 'failed';
 export interface BuildState {
   building: boolean;
   buildError: string | null;
+  /** The finished build's lint + test-run proof, when it got that far. */
+  verification?: WorkflowVerification | null;
 }
 
 export const BUILD_STALE_MS = 20 * 60 * 1000;
@@ -31,7 +34,7 @@ export const STALE_BUILD_ERROR =
 export const NO_BUILD: BuildState = { building: false, buildError: null };
 
 export function buildStateFrom(
-  marker: { status?: unknown; error?: unknown } | null | undefined,
+  marker: { status?: unknown; error?: unknown; verification?: unknown } | null | undefined,
   createdAt: Date,
   now = Date.now(),
 ): BuildState {
@@ -41,13 +44,15 @@ export function buildStateFrom(
       ? { building: false, buildError: STALE_BUILD_ERROR }
       : { building: true, buildError: null };
   }
+  const verification = (marker.verification as WorkflowVerification | undefined) ?? null;
   if (marker.status === 'failed') {
     return {
       building: false,
       buildError: typeof marker.error === 'string' && marker.error ? marker.error : 'The build failed.',
+      ...(verification ? { verification } : {}),
     };
   }
-  return NO_BUILD;
+  return verification ? { ...NO_BUILD, verification } : NO_BUILD;
 }
 
 /** Build state for many workflows in one query. Absent → not built from a description. */
@@ -71,7 +76,7 @@ export async function readBuildStates(workflowIds: string[]): Promise<Map<string
   const now = Date.now();
   for (const r of rows) {
     if (!r.workflowId) continue;
-    const marker = (r.metadata as { nativeBuild?: { status?: unknown; error?: unknown } } | null)?.nativeBuild;
+    const marker = (r.metadata as { nativeBuild?: { status?: unknown; error?: unknown; verification?: unknown } } | null)?.nativeBuild;
     out.set(r.workflowId, buildStateFrom(marker, r.createdAt, now));
   }
   return out;
@@ -87,11 +92,12 @@ export async function recordBuildState(
   status: BuildStatus,
   content: string,
   error?: string,
+  verification?: WorkflowVerification,
 ): Promise<void> {
   await db.insert(orchestratorChats).values({
     workflowId,
     role: 'assistant',
     content,
-    metadata: { nativeBuild: { status, ...(error ? { error } : {}) } },
+    metadata: { nativeBuild: { status, ...(error ? { error } : {}), ...(verification ? { verification } : {}) } },
   });
 }

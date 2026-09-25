@@ -89,7 +89,8 @@ export async function runSubWorkflowDefinition(
     trigger: 'sub-workflow',
     input,
     parentRunId: context.runId,
-    dryRun: context.dryRun,
+    // A test run's child is a test run: stubbed, silent, never queued.
+    mode: context.dryRun ? 'test' : 'live',
     label: 'sub-workflow',
   });
   if (!started) throw new FatalError(`Sub-workflow not found: ${definition.id}`);

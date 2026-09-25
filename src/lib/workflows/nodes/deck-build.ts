@@ -63,26 +63,6 @@ export const deckBuildExecutor: NodeExecutor = {
     const isPublic = config.isPublic === true;
     const wantShare = config.share !== false;
 
-    // DRY RUN: never persist a deck. Return a simulated result so wiring can be
-    // verified without creating anything.
-    if (context.dryRun) {
-      const slug = slugify(title) || 'deck';
-      const baseUrl = (process.env.PUBLIC_SITE_URL || 'https://strangeramblings.com').replace(/\/+$/, '');
-      const url = `${baseUrl}/decks/${slug}`;
-      return {
-        output: {
-          dryRun: true,
-          deckId: 'dry-run',
-          slug,
-          url,
-          ...(wantShare ? { shareUrl: `${url}?t=dry-run` } : {}),
-          slideCount: slides.length,
-        },
-        rowCount: 1,
-        metadata: { dryRun: true },
-      };
-    }
-
     // Lazy dynamic import — the site-tools registry pulls server-only domain
     // modules and MUST NOT be imported at module-init time (circular-init hazard).
     const { getTool } = await import('$lib/workflows/site-tools/registry');
@@ -155,7 +135,6 @@ export const deckBuildExecutor: NodeExecutor = {
         shareUrl: { type: 'string', description: 'View-granting share link (when share=true)' },
         slideCount: { type: 'number' },
         summaryMarkdown: { type: 'string', description: 'Human-readable build summary from the tool' },
-        dryRun: { type: 'boolean', description: 'true only on a dry run (no deck created)' },
       },
     };
   },

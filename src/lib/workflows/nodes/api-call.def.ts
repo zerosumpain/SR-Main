@@ -14,6 +14,7 @@ const BODY_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
  */
 export const apiCallDef: NodeDefinition = {
   type: 'api-call',
+  sideEffects: (c) => String(c.method ?? 'GET').toUpperCase() !== 'GET',
   label: 'API call (catalogue)',
   category: 'integration',
   description:
@@ -124,7 +125,7 @@ export const apiCallDef: NodeDefinition = {
     'Config: `api` (catalogue key or name, e.g. "open-meteo", "companies-house"); `method` (GET read/pull · POST create/push · PUT replace · PATCH update · DELETE); `path` (appended to the API\'s baseUrl — may include a ?query; leave blank to hit the baseUrl); optional `query` (JSON object of params merged in) and `body` (JSON for write methods) and `headers` (JSON). `api`, `path`, `query`, `body`, `headers` all support {{input.field}} templates. ' +
     'The node resolves the API\'s baseUrl, composes the full URL, injects env-ref auth server-side, and SSRF-guards every hop; a request can never leave the catalogued baseUrl. ' +
     'Output: { success, api, status, url, json } (parsed JSON when the response is JSON, else { text }). On a non-2xx response or network error the node errors (honours the On-failure setting). ' +
-    'Prefer this over `http-request` whenever the target is (or should be) in the catalogue — you get vetted hosts, injected auth, and status tracking. Use `http-request` only for a truly ad-hoc URL. Under a dry run this node NEVER calls the API — it returns { dryRun: true, api, method, path }.',
+    'Prefer this over `http-request` whenever the target is (or should be) in the catalogue — you get vetted hosts, injected auth, and status tracking. Use `http-request` only for a truly ad-hoc URL. In a TEST run a write (non-GET) is stubbed, never sent; a GET runs.',
   llmExamples: [
     { api: 'open-meteo', method: 'GET', path: '/v1/forecast?latitude={{input.lat}}&longitude={{input.lon}}&current=temperature_2m' },
     { api: 'companies-house', method: 'GET', path: '/company/{{input.companyNumber}}' },

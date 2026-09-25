@@ -39,14 +39,6 @@ export const codeExecuteExecutor: NodeExecutor = {
 
     if (!code) throw new FatalError('No code provided');
 
-    if (context.dryRun) {
-      return {
-        output: { simulated: true, would_execute: { language, code } },
-        rowCount: 1,
-        logs: [`[dry-run] skipped-for-dry-run: would execute ${language} code (${code.length} chars)`],
-      };
-    }
-
     await ensureContainerRunning();
 
     const sandboxEnv = await collectSandboxEnv();

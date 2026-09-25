@@ -11,6 +11,7 @@
   import FixProposalsBanner from '$lib/canvas/FixProposalsBanner.svelte';
   import InspectorBody from '$lib/canvas/InspectorBody.svelte';
   import InspectorDock from '$lib/canvas/InspectorDock.svelte';
+  import TestRunDialog from '$lib/canvas/TestRunDialog.svelte';
   import CanvasPromptBar from '$lib/canvas/CanvasPromptBar.svelte';
   import AttentionBanner from '$lib/canvas/AttentionBanner.svelte';
   import BuildStateBanner from '$lib/canvas/BuildStateBanner.svelte';
@@ -173,6 +174,10 @@
   }
 
   const canvas = $derived(data.canvas);
+  // Pinned test data per node id (test runs only) + the Test run dialog.
+  const pins = $derived((data.pins ?? {}) as Record<string, { output: Record<string, unknown>; handle?: string | null; sourceRunId?: string | null; bytes?: number }>);
+  let testDialogOpen = $state(false);
+  let testRunOnScreen = $state(false);
   const NEW_PALETTE = publicEnv.PUBLIC_CANVAS_NEW_PALETTE !== 'false';
   type ResearchResultNodeComponent = (typeof import('$lib/canvas/intelligence/ResearchResultNode.svelte'))['default'];
   let ResearchResultNode = $state<ResearchResultNodeComponent | null>(null);
@@ -1493,7 +1498,8 @@
     pendingRun = null;
   }
 
-  async function runCanvas() {
+  /** `mode: 'test'` = a TEST run (pins, stubbed side effects); `fromNodeId` = run from here. */
+  async function runCanvas(opts?: { mode: 'test'; input?: Record<string, unknown>; allowSideEffects?: string[]; fromNodeId?: string }) {
     // Toolbar Run — a pure workflow execution. No chat message is
     // inserted; the chat panels are untouched. If a chat node is
     // wired into the graph it still runs (getting empty input), but
@@ -1511,6 +1517,7 @@
     nodeStartedAt = {};
     liveHealing = {};
     runMeta = { state: 'running' };
+    testRunOnScreen = opts?.mode === 'test';
     runStartedAt = Date.now();
     runSummary = null;
     pendingRun = null;
@@ -1518,7 +1525,7 @@
       const res = await fetch(`/api/workflows/${canvas.workflowId}/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: {} }),
+        body: JSON.stringify(opts ?? { input: {} }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -2054,6 +2061,7 @@
     startedAt: string | null;
     completedAt: string | null;
     error: string | null;
+    mode: string;
   };
   let runsOpen = $state(false);
   let runsLoading = $state(false);
@@ -2077,6 +2085,7 @@
         startedAt: typeof r.startedAt === 'string' ? r.startedAt : null,
         completedAt: typeof r.completedAt === 'string' ? r.completedAt : null,
         error: typeof r.error === 'string' ? r.error : null,
+        mode: String(r.mode ?? 'live'),
       }));
     } catch (err) {
       runsError = err instanceof Error ? err.message : String(err);
@@ -4179,7 +4188,7 @@
       {#if runMeta.state === 'running'}
         <button
           class="composer-pill run-btn running"
-          onclick={runCanvas}
+          onclick={() => runCanvas()}
           disabled
           title="Running…"
         >⟳ running…</button>
@@ -4191,10 +4200,16 @@
       {:else}
         <button
           class="composer-pill run-btn"
-          onclick={runCanvas}
+          onclick={() => runCanvas()}
           disabled={!canvas.workflowId}
           title="Fire the trigger. Does NOT touch chat."
         >▶ Run</button>
+        <button
+          class="composer-pill"
+          onclick={() => (testDialogOpen = true)}
+          disabled={!canvas.workflowId}
+          title="Run with a payload you choose: pinned steps use saved output, steps that send or write are stubbed"
+        >Test run</button>
       {/if}
       {#if runMeta.state === 'failed'}
         <span class="run-err" title={runMeta.error}>⚠ run failed</span>
@@ -5228,6 +5243,7 @@
             class:is-trigger={n.kind === 'trigger'}
             class:is-proposed={proposedIds.has(n.id)}
             class:flash={flashNodeId === n.id}
+            class:stubbed={(liveData[n.id]?.outputData as { _stubbed?: unknown } | undefined)?._stubbed === true}
             data-kind={n.kind}
             data-status={liveStatus[n.id] ?? n.status ?? 'idle'}
             style:left="{n.x}px"
@@ -5303,6 +5319,7 @@
                 {#if _memBadge}
                   <span class="wf-mem-badge" title="This node reads/writes persistent workflow memory">{_memBadge}</span>
                 {/if}
+                {#if pins[n.id]}<span class="wf-mem-badge wf-pin-badge" title="Pinned test data: a test run uses this output instead of running the step">PIN</span>{/if}
               </div>
             {/if}
             <div
@@ -5483,7 +5500,7 @@
               >
                 <span class="run-row-dot" data-status={r.status}></span>
                 <span class="run-row-main">
-                  <span class="run-row-top">{r.status} · {r.trigger}</span>
+                  <span class="run-row-top">{#if r.mode === 'test'}<span class="run-test-tag">TEST</span>{/if}{r.status} · {r.trigger}</span>
                   <span class="run-row-sub">
                     {r.startedAt ? new Date(r.startedAt).toLocaleString() : '—'} · {runDuration(r)}
                   </span>
@@ -5538,6 +5555,14 @@
   </div>
     <!-- Node inspector: docked beside the canvas (desktop) / bottom sheet
          (phone). Single click on a node opens it; double-click still does. -->
+    {#if testDialogOpen}
+      <TestRunDialog
+        workflowId={canvas.workflowId}
+        nodes={canvas.nodes}
+        onStart={(o) => { testDialogOpen = false; void runCanvas({ mode: 'test', ...o }); }}
+        onClose={() => (testDialogOpen = false)}
+      />
+    {/if}
     {#if menuNode}
       <InspectorDock
         node={menuNode}
@@ -5557,6 +5582,14 @@
         onLabelInput={setLabel}
         onSave={menuNode.kind === 'trigger' ? saveTrigger : saveNode}
         onClose={closeMenu}
+        test={canvas.workflowId ? {
+          workflowId: canvas.workflowId,
+          pin: pins[menuNode.id] ?? null,
+          outputData: menuNode.outputData,
+          runId: runsViewing ?? activeRunId,
+          onPinsChanged: () => void invalidateAll(),
+          onRunFromHere: (id: string) => void runCanvas({ mode: 'test', fromNodeId: id }),
+        } : undefined}
       >
         <!-- Kind-specific body -->
         <div class="nm-body">
@@ -5986,7 +6019,7 @@
             {#if pinnedOutput && pinnedOutput.nodeId !== menuNode.id}
               <section class="nm-sec nm-pinned">
                 <div class="nm-sec-hd">
-                  <span class="sr-label-tight">PINNED · {pinnedOutput.name}</span>
+                  <span class="sr-label-tight">COMPARE · {pinnedOutput.name}</span>
                   <button
                     class="nm-pin-btn"
                     onclick={() => (pinnedOutput = null)}
@@ -6019,13 +6052,13 @@
                 <span class="nm-sec-meta">pipes to ↓ downstream</span>
                 {#if menuNode.outputData !== undefined}
                   {#if pinnedOutput?.nodeId === menuNode.id}
-                    <button class="nm-pin-btn nm-pin-active" onclick={() => (pinnedOutput = null)} title="Unpin this output">pinned ✓</button>
+                    <button class="nm-pin-btn nm-pin-active" onclick={() => (pinnedOutput = null)} title="Unpin this output">comparing ✓</button>
                   {:else}
                     <button
                       class="nm-pin-btn"
                       onclick={() => (pinnedOutput = { nodeId: menuNode!.id, name: menuNode!.name, data: menuNode!.outputData })}
                       title="Pin this output, then open another node to compare side-by-side"
-                    >pin</button>
+                    >compare</button>
                   {/if}
                 {/if}
               </div>
@@ -6760,9 +6793,9 @@
           {/if}
         </span>
         <div class="run-summary-title" id="run-summary-title">
-          {#if runSummary.state === 'completed'}Run completed
-          {:else if runSummary.state === 'completed_with_errors'}Run completed with errors
-          {:else}Run failed
+          {#if runSummary.state === 'completed'}{testRunOnScreen ? 'Test run' : 'Run'} completed
+          {:else if runSummary.state === 'completed_with_errors'}{testRunOnScreen ? 'Test run' : 'Run'} completed with errors
+          {:else}{testRunOnScreen ? 'Test run' : 'Run'} failed
           {/if}
         </div>
         <button
@@ -7136,6 +7169,9 @@
   .run-row-dot[data-status='running'] { background: var(--accent, #c4570a); }
   .run-row-main { display: flex; flex-direction: column; min-width: 0; }
   .run-row-top { font-family: var(--font-mono); font-size: var(--fs-label); }
+  .run-test-tag { margin-right: 6px; padding: 0 4px; border: 1px dashed var(--warn); color: var(--text-primary); }
+  .wf-node.stubbed { border-style: dashed; border-color: var(--warn); }
+  .wf-mem-badge.wf-pin-badge { color: var(--bg); background: var(--accent-ink); border-color: var(--accent-ink); }
   .run-row-sub { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
 
   /* Find bar (⌘F) — floats below the toolbar, opaque per modal rules.

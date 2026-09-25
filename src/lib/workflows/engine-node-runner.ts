@@ -79,6 +79,10 @@ export function mergeUpstreamInput(
       Object.assign(mergedInput, upstream);
     }
   }
+  // A test-run marker belongs to the node that produced it, not to every node
+  // downstream that passes its input through ($from still has it).
+  delete mergedInput._pinned;
+  delete mergedInput._stubbed;
   hide(mergedInput, '$from', from);
   hide(mergedInput, '$ports', ports);
   return mergedInput;

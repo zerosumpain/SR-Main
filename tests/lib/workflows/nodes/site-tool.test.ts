@@ -127,17 +127,6 @@ describe('site-tool executor — gating matrix', () => {
     expect(result.output).toMatchObject({ success: true, toolName: 'whatsapp_send', data: { sent: true } });
   });
 
-  it('dryRun short-circuits ANY tool (even destructive) without invoking', async () => {
-    const result = await siteToolExecutor.execute(
-      {},
-      { toolName: 'whatsapp_send', args: { message: 'hi' }, allowDestructive: true },
-      makeCtx({ dryRun: true }),
-    );
-    expect(result.output).toMatchObject({ dryRun: true, wouldInvoke: 'whatsapp_send' });
-    expect(registryTools.whatsapp_send.handler).not.toHaveBeenCalled();
-    expect(registryTools.save_memory.handler).not.toHaveBeenCalled();
-  });
-
   it('success → unwraps { success, toolName, data }', async () => {
     const result = await siteToolExecutor.execute(
       {},

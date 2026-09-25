@@ -7,6 +7,7 @@ import type {
 import { interpolateTemplateStrict } from './template';
 import { resolveLLMClient, resolveMaxTokens } from './llm-helpers';
 import { isDenylistedTool } from './site-tool-denylist';
+import { hasSideEffects, stubOutput } from '../side-effects';
 import { withNodeTimeout, nodeTimeoutMs } from '../engine-runtime';
 import { executionContext, recordLLMCall, type LLMCallRecord } from '$lib/context/execution';
 
@@ -379,6 +380,9 @@ export const llmAgentExecutor: NodeExecutor = {
               if (toolSource === 'edges') {
                 const executor = registry.getExecutor(entry!.nodeType);
                 if (!executor) throw new Error(`No executor for type: ${entry!.nodeType}`);
+                // A test run stubs a side-effecting tool node here too, as the engine would.
+                const def = registry.getDefinition?.(entry!.nodeType);
+                if (context.dryRun && hasSideEffects(def, entry!.nodeConfig)) return stubOutput(def, entry!.nodeType, entry!.nodeConfig);
                 const r = await executor.execute(args, entry!.nodeConfig, context);
                 return r.output;
               }

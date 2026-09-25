@@ -57,7 +57,7 @@
   </section>
 {:else if buildError}
   <section class="bstate bstate--failed" role="alert">
-    <span class="bstate-hd">Build did not finish</span>
+    <span class="bstate-hd">{buildError.startsWith('built, but') ? 'Built — did not pass its test run' : 'Build did not finish'}</span>
     <span class="bstate-text">{buildError}</span>
     <span class="bstate-text bstate-muted">Say what to change in the prompt bar below, or add steps by hand.</span>
   </section>

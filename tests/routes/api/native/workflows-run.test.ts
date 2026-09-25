@@ -38,13 +38,20 @@ describe('POST /api/native/workflows/[slug]/run', () => {
   it('hands the workflow id and input to workflow_run and answers 202 { runId }', async () => {
     const res = await run(JSON.stringify({ input: { city: 'Leeds' } }));
     expect(res.status).toBe(202);
-    expect(await res.json()).toEqual({ runId: 'run-9' });
-    expect(executeSiteTool).toHaveBeenCalledWith('workflow_run', { id: 'wf-1', input: { city: 'Leeds' } });
+    expect(await res.json()).toEqual({ runId: 'run-9', mode: 'live' });
+    expect(executeSiteTool).toHaveBeenCalledWith('workflow_run', { id: 'wf-1', input: { city: 'Leeds' }, mode: 'live' });
   });
 
   it('runs with empty input when the body is empty', async () => {
     expect((await run(null)).status).toBe(202);
-    expect(executeSiteTool).toHaveBeenCalledWith('workflow_run', { id: 'wf-1', input: {} });
+    expect(executeSiteTool).toHaveBeenCalledWith('workflow_run', { id: 'wf-1', input: {}, mode: 'live' });
+  });
+
+  it("mode 'test' starts a TEST run; no input means the server picks a sample payload", async () => {
+    const res = await run(JSON.stringify({ mode: 'test' }));
+    expect(await res.json()).toEqual({ runId: 'run-9', mode: 'test' });
+    expect(executeSiteTool).toHaveBeenCalledWith('workflow_run', { id: 'wf-1', mode: 'test' });
+    expect((await run(JSON.stringify({ mode: 'dry' }))).status).toBe(400);
   });
 
   it('404s an unknown slug without starting anything, and 500s a run that did not start', async () => {

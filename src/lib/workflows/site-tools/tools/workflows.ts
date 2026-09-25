@@ -141,6 +141,43 @@ async function fanInWarnings(workflowId: string): Promise<FanInCollision[]> {
 }
 
 /**
+ * The model proves its work: lint the saved graph, then TEST-run it (side
+ * effects stubbed, 90s cap) and put the structured `verification` into the tool
+ * RESULT. A result that did not pass is `success:false` and says so in plain
+ * words — "built" is never reported on prose alone. `repair` allows ONE
+ * automatic fix round (the generator paths); `fromNodeId` proves only a new
+ * step and what follows it.
+ */
+async function withVerification(
+  workflowId: string,
+  data: Record<string, unknown>,
+  what: string,
+  opts: { repair?: boolean; fromNodeId?: string } = {},
+): Promise<{ success: boolean; data: Record<string, unknown>; error?: string }> {
+  const { proveWorkflow, proveWithRepair, describeVerification } = await import('$lib/workflows/test-runs.server');
+  let verification: Awaited<ReturnType<typeof proveWorkflow>> | null = null;
+  try {
+    verification = await (opts.repair ? proveWithRepair : proveWorkflow)(workflowId, { fromNodeId: opts.fromNodeId });
+  } catch (err) {
+    console.error(`[workflows] verification of ${workflowId} failed`, err);
+  }
+  if (!verification) {
+    return { success: false, data: { verification: null, ...data }, error: `${what}, but it could not be test-run. Say so; do not claim it works.` };
+  }
+  // First key: the chat's progress copy truncates at 2 KB and must keep it.
+  const out = { verification, ...data };
+  if (verification.passed) return { success: true, data: out };
+  return {
+    success: false,
+    data: out,
+    error:
+      `${what} and saved, but ${describeVerification(verification)}. ` +
+      `Fix it (workflow_update_node / workflow_amend) and tell the user plainly that it did not pass its test run — never that it works. ` +
+      `Stubbed steps were NOT run: say so if you mention them.`,
+  };
+}
+
+/**
  * Coerce the generator's `workflow.trigger` (set by the orchestrator's
  * set_trigger tool) into the three shapes we need:
  *   - the `workflows.trigger` JSON column
@@ -786,10 +823,7 @@ register({
       };
     }
 
-    return {
-      success: true,
-      data,
-    };
+    return withVerification(workflowId, data, `Workflow "${spec.name}" was built at ${url}`);
   },
 });
 
@@ -1207,7 +1241,9 @@ register({
       },
       ts: Date.now(),
     });
-    return { success: true, data: node };
+    // Prove the new step (and anything already after it), upstream seeded
+    // from the latest run — not the whole graph on every add.
+    return withVerification(workflowId, { ...node }, `Added "${node.label}"`, { fromNodeId: node.id });
   },
 });
 
@@ -1644,15 +1680,16 @@ register({
     // is invisible until an unrelated run fails.
     const collisions = await fanInWarnings(workflowId);
 
-    return {
-      success: true,
-      data: {
+    return withVerification(
+      workflowId,
+      {
         workflowId,
         applied: result.outcomes.length,
         outcomes: result.outcomes,
         ...(collisions.length > 0 ? { warnings: collisions.map((c) => c.message) } : {}),
       },
-    };
+      `Applied ${result.outcomes.length} edit(s)`,
+    );
   },
 });
 
@@ -1780,6 +1817,11 @@ register({
         type: 'boolean',
         description: 'If true (default), the engine attempts to auto-heal node config errors. Set false for strict test runs.',
       },
+      mode: {
+        type: 'string',
+        enum: ['live', 'test'],
+        description: "'test' = a TEST run: pinned steps use their saved output, steps that send/write/book are stubbed (not run), nothing is announced, and `input` defaults to a sample payload. Use it to try a workflow safely. Default 'live'.",
+      },
       awaitMs: {
         type: 'number',
         description: 'Max milliseconds to wait for completion (max 600000). When set, the call returns the full run result.',
@@ -1798,14 +1840,17 @@ register({
     const awaitMs = typeof args.awaitMs === 'number' ? Math.min(Math.max(args.awaitMs, 0), 600_000) : 0;
 
     const { startRun } = await import('$lib/workflows/start-run');
-    const started = await startRun({
-      workflowId: id,
-      trigger: 'manual',
-      input: initialInput,
-      selfHealing,
-      watchdog: true,
-      label: 'orchestrator-run',
-    });
+    const { startTestRun } = await import('$lib/workflows/test-runs.server');
+    const started = args.mode === 'test'
+      ? await startTestRun({ workflowId: id, input: args.input ? initialInput : undefined, label: 'orchestrator-test-run' })
+      : await startRun({
+          workflowId: id,
+          trigger: 'manual',
+          input: initialInput,
+          selfHealing,
+          watchdog: true,
+          label: 'orchestrator-run',
+        });
     if (!started) return { success: false, error: 'Workflow not found' };
     const run = { id: started.runId };
 
@@ -2304,6 +2349,7 @@ register({
       };
     }
 
-    return { success: true, data };
+    // The generator path gets ONE automatic repair round before it answers.
+    return withVerification(workflowId!, data, `Workflow "${workflow.name}" was generated at ${url}`, { repair: true });
   },
 });

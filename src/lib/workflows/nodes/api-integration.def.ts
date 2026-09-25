@@ -18,6 +18,7 @@ import type { NodeDefinition } from '../types';
  */
 export const apiIntegrationDef: NodeDefinition = {
   type: 'api-integration',
+  sideEffects: (c) => c.confirmWrite === true,
   label: 'API integration',
   category: 'integration',
   description:
@@ -84,7 +85,7 @@ export const apiIntegrationDef: NodeDefinition = {
     'Call a RECORDED API integration from the register (the named operations behind api_integration_list / /admin/ai/apis). Prefer this over `api-call` and `http-request` whenever an integration already exists for the data you need: the path, the auth and the response shape are already solved, and the node emits NAMED outputs. ' +
     'Config: `integration` (the integration key, e.g. "openrouter-credit-balance"); `params` (an object of that integration\'s parameter values — each supports {{input.field}} templates); `confirmWrite` (must be true for POST/PUT/PATCH/DELETE integrations). ' +
     'Output: { success, integration, status, url, json, values } where `values` holds the integration\'s named outputs — reference them downstream as {{input.values.<name>}} or, in a conditional, `input.values.<name>`. ' +
-    'Auth is resolved server-side from the owner\'s secret registry and only for hosts the owner bound that credential to; credential values never appear in the node output. Under a dry run the node NEVER calls the API. ' +
+    'Auth is resolved server-side from the owner\'s secret registry and only for hosts the owner bound that credential to; credential values never appear in the node output. In a TEST run a write (confirmWrite) is stubbed, never sent; a read runs. ' +
     'If no integration exists yet for the data you need, create one in chat first (api_register -> api_integration_save -> api_integration_test), then wire this node to it.',
   llmExamples: [
     { integration: 'openrouter-credit-balance', params: {} },

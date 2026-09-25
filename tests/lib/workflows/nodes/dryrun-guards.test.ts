@@ -1,102 +1,53 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { ExecutionContext } from '$lib/workflows/types';
+import { describe, it, expect } from 'vitest';
+import { getDefinition } from '$lib/workflows/registry-client';
+import { hasSideEffects } from '$lib/workflows/side-effects';
 
-// blog-ops routes through the site-tool executor; mock it so a dry run that
-// leaks past the guard would be caught (the mock throws if invoked).
-const mockExecuteSiteTool = vi.fn(async () => {
-  throw new Error('executeSiteTool must NOT run during a dry run');
-});
-vi.mock('$lib/workflows/site-tools/executor', () => ({
-  executeSiteTool: mockExecuteSiteTool,
-  isRegisteredTool: () => true,
-}));
+/**
+ * Test runs stub side effects in the ENGINE, from each definition's
+ * `sideEffects` — no longer node by node. The per-node `dryRun` branches this
+ * file used to guard are gone: three nodes (builder-canvas, file-build,
+ * apple-calendar) never had one, so a "dry" run really built, wrote and booked.
+ *
+ * This is the guard now: every way a node can send, write, book, build or
+ * spend is DECLARED, and every read is not (a test run should read for real).
+ * A new side-effecting node that forgets `sideEffects` would run for real in a
+ * test run — add it here when you add it.
+ */
 
-// file-ops mutates the DB + disk; make both throw so a leak past the guard
-// fails loudly instead of silently mutating.
-const throwDb = () => {
-  throw new Error('db must NOT be touched during a dry run');
-};
-vi.mock('$lib/db', () => ({
-  db: {
-    select: throwDb,
-    insert: throwDb,
-    update: throwDb,
-    delete: throwDb,
-    execute: throwDb,
-  },
-}));
-vi.mock('$lib/file-store/storage', () => ({
-  saveBuffer: async () => { throw new Error('saveBuffer during dry run'); },
-  appendBuffer: async () => { throw new Error('appendBuffer during dry run'); },
-  deleteFile: async () => { throw new Error('deleteFile during dry run'); },
-  readBuffer: async () => { throw new Error('readBuffer during dry run'); },
-  newDiskPath: () => '/tmp/x',
-}));
+const WRITES: Array<[string, Record<string, unknown>]> = [
+  ['whatsapp', {}], ['notify', {}], ['email', {}],
+  ['gmail-send', {}], ['gmail-reply', {}], ['gmail-label', {}],
+  ['intel-write', {}], ['deck-build', {}], ['builder-chat', {}], ['builder-pi', {}],
+  ['infrastructure-update', {}], ['delegate-agent', {}], ['site-tool', { toolName: 'save_memory' }],
+  ['file-write', {}], ['file-delete', {}], ['file-build', { persist: true }],
+  ['blog-create', {}], ['blog-update', {}], ['blog', { operation: 'create' }], ['blog', { operation: 'update' }],
+  ['deep-dive-start', {}], ['deep-dive-control', {}], ['deep-dive', { operation: 'start' }],
+  ['jkai', { operation: 'start' }], ['jkai', { operation: 'control' }],
+  ['home-assistant', { operation: 'call_service' }], ['home-assistant', { operation: 'fire_event' }],
+  ['apple-calendar', { operation: 'create' }], ['apple-calendar', { operation: 'update' }], ['apple-calendar', { operation: 'delete' }],
+  ['data-store', { operation: 'set' }], ['data-store', { operation: 'append' }], ['data-store', { operation: 'increment' }],
+  ['data-store', { operation: 'delete' }], ['database', { operation: 'insert' }], ['database', { operation: 'delete' }],
+  ['file-store', { operation: 'write' }], ['file-store', { operation: 'delete' }],
+  ['http-request', { method: 'POST' }], ['http-request', { method: 'delete' }],
+  ['api-call', { method: 'PATCH' }], ['api-integration', { confirmWrite: true }],
+];
 
-const { blogCreateExecutor, blogUpdateExecutor } = await import('$lib/workflows/nodes/blog-ops');
-const { fileWriteExecutor, fileDeleteExecutor } = await import('$lib/workflows/nodes/file-ops');
-const { jkaiExecutor } = await import('$lib/workflows/nodes/jkai');
+const READS: Array<[string, Record<string, unknown>]> = [
+  ['http-request', { method: 'GET' }], ['http-request', {}], ['api-call', { method: 'GET' }], ['api-integration', {}],
+  ['data-store', { operation: 'get' }], ['data-store', {}], ['database', { operation: 'query' }],
+  ['home-assistant', { operation: 'query_state' }], ['apple-calendar', { operation: 'list' }],
+  ['blog', { operation: 'list' }], ['jkai', { operation: 'status' }], ['file-read', {}], ['file-build', { persist: false }],
+  ['llm-call', {}], ['transform', {}], ['code-execute', {}], ['conditional', {}], ['tavily-search', {}], ['build-view', {}],
+];
 
-function ctx(dryRun: boolean): ExecutionContext {
-  return {
-    runId: 'r', workflowId: 'wf', workspaceDir: '/tmp', dryRun,
-    emit: () => {}, getNodeOutput: () => undefined, checkBreakpoint: async () => {},
-    abortSignal: new AbortController().signal,
-    getOutgoingEdges: () => [], getIncomingEdges: () => [], getNodeConfig: () => undefined,
-  } as ExecutionContext;
-}
-
-beforeEach(() => vi.clearAllMocks());
-
-describe('dryRun guards — blog ops', () => {
-  it('blog-create simulates without invoking the tool', async () => {
-    const r = await blogCreateExecutor.execute({}, { title: 'Hi', content: '<p>x</p>' }, ctx(true));
-    expect(r.output).toMatchObject({ success: true, dryRun: true });
-    expect(mockExecuteSiteTool).not.toHaveBeenCalled();
+describe('side effects are declared, so a test run stubs them', () => {
+  it.each(WRITES)('%s %j is a side effect', (type, config) => {
+    expect(getDefinition(type), `no definition for ${type}`).toBeDefined();
+    expect(hasSideEffects(getDefinition(type), config)).toBe(true);
   });
 
-  it('blog-update simulates without invoking the tool', async () => {
-    const r = await blogUpdateExecutor.execute({}, { postId: 'p1', status: 'published' }, ctx(true));
-    expect(r.output).toMatchObject({ success: true, dryRun: true });
-    expect(mockExecuteSiteTool).not.toHaveBeenCalled();
-  });
-});
-
-describe('dryRun guards — file ops', () => {
-  it('file-write simulates without touching db/disk', async () => {
-    const r = await fileWriteExecutor.execute({ content: 'x' }, { fileName: 'out.txt' }, ctx(true));
-    expect(r.output).toMatchObject({ ok: true, dryRun: true, name: 'out.txt' });
-  });
-
-  it('file-write append mode is also guarded', async () => {
-    const r = await fileWriteExecutor.execute({ content: 'x' }, { fileName: 'log.txt', append: true }, ctx(true));
-    expect(r.output).toMatchObject({ ok: true, dryRun: true, mode: 'append' });
-  });
-
-  it('file-delete simulates without touching db/disk', async () => {
-    const r = await fileDeleteExecutor.execute({}, { fileName: 'gone.csv' }, ctx(true));
-    expect(r.output).toMatchObject({ ok: true, dryRun: true, deleted: false, name: 'gone.csv' });
-  });
-});
-
-describe('dryRun guards — jkai builder ops', () => {
-  it('jkai start does NOT spawn a real build during a dry run', async () => {
-    const r = await jkaiExecutor.execute(
-      { topic: 'a timer' },
-      { operation: 'start', prompt: 'Build {{input.topic}}', title: 'Timer' },
-      ctx(true),
-    );
-    expect(r.output).toMatchObject({ success: true, dryRun: true, wouldInvoke: 'build_create' });
-    expect(mockExecuteSiteTool).not.toHaveBeenCalled();
-  });
-
-  it('jkai control (publish) does NOT publish to production during a dry run', async () => {
-    const r = await jkaiExecutor.execute(
-      {},
-      { operation: 'control', buildId: 'b1', action: 'publish' },
-      ctx(true),
-    );
-    expect(r.output).toMatchObject({ success: true, dryRun: true, wouldInvoke: 'build_control' });
-    expect(mockExecuteSiteTool).not.toHaveBeenCalled();
+  it.each(READS)('%s %j is not — a test run runs it for real', (type, config) => {
+    expect(getDefinition(type), `no definition for ${type}`).toBeDefined();
+    expect(hasSideEffects(getDefinition(type), config)).toBe(false);
   });
 });

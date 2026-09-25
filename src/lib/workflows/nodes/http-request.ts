@@ -221,18 +221,6 @@ export const httpRequestExecutor: NodeExecutor = {
 
     const pagination = readPagination(config);
 
-    if (context.dryRun) {
-      return {
-        output: {
-          simulated: true,
-          would_request: { method, url, headers, body: interpolatedBody || undefined },
-          ...(pagination ? { would_paginate: { mode: pagination.mode, maxPages: clampMaxPages(pagination.maxPages) } } : {}),
-        },
-        rowCount: 1,
-        logs: [`[dry-run] skipped-for-dry-run: would ${method} ${url}`],
-      };
-    }
-
     const fetchInit: RequestInit = { method, headers };
 
     if (interpolatedBody) {
@@ -281,6 +269,7 @@ export const httpRequestExecutor: NodeExecutor = {
 
 export const httpRequestDef: NodeDefinition = {
   type: 'http-request',
+  sideEffects: (c) => !['GET', 'HEAD'].includes(String(c.method ?? 'GET').toUpperCase()),
   label: 'HTTP Request',
   category: 'core',
   description: 'Make an HTTP request. URL, headers, and body support {{input.field}} template variables. Optional pagination auto-follows pages.',
