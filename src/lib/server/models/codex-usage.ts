@@ -75,12 +75,12 @@ function authPath(): string {
   return join(base, 'auth.json');
 }
 
-interface CodexAuth {
+export interface CodexAuth {
   accessToken: string;
   accountId: string | null;
 }
 
-async function readCodexAuth(): Promise<CodexAuth | null> {
+export async function readCodexAuth(): Promise<CodexAuth | null> {
   try {
     const raw = await readFile(authPath(), 'utf8');
     const parsed = JSON.parse(raw) as {
@@ -119,9 +119,12 @@ let clearanceCookie: string | null = null;
  * doesn't satisfy the edge, something has changed and hammering it is the wrong
  * answer — the caller degrades to the last good reading instead.
  */
-async function fetchThroughChallenge(headers: Record<string, string>): Promise<Response> {
+export async function fetchThroughChallenge(
+  headers: Record<string, string>,
+  url: string = USAGE_URL,
+): Promise<Response> {
   const send = (cookie: string | null) =>
-    fetch(USAGE_URL, {
+    fetch(url, {
       headers: cookie ? { ...headers, cookie } : headers,
       signal: AbortSignal.timeout(6_000),
     });
@@ -165,22 +168,28 @@ function toWindow(raw: RawWindow | null | undefined): CodexRateWindow | null {
   };
 }
 
+/** The headers every chatgpt.com/backend-api/codex call takes. Shared with the
+ *  model discovery in ./codex-discovery, which reads the model list the same
+ *  way this reads the quota. */
+export function codexBackendHeaders(auth: CodexAuth): Record<string, string> {
+  const headers: Record<string, string> = {
+    authorization: `Bearer ${auth.accessToken}`,
+    accept: 'application/json',
+    'user-agent': CODEX_CLI_UA,
+    originator: 'codex_cli_rs',
+  };
+  // Optional. Personal accounts answer without it; a workspace login needs it
+  // to pick which account's quota is being asked about.
+  if (auth.accountId) headers['chatgpt-account-id'] = auth.accountId;
+  return headers;
+}
+
 async function fetchUsage(): Promise<CodexUsage | null> {
   const auth = await readCodexAuth();
   if (!auth) return null;
 
   try {
-    const headers: Record<string, string> = {
-      authorization: `Bearer ${auth.accessToken}`,
-      accept: 'application/json',
-      'user-agent': CODEX_CLI_UA,
-      originator: 'codex_cli_rs',
-    };
-    // Optional. Personal accounts answer without it; a workspace login needs it
-    // to pick which account's quota is being asked about.
-    if (auth.accountId) headers['chatgpt-account-id'] = auth.accountId;
-
-    const res = await fetchThroughChallenge(headers);
+    const res = await fetchThroughChallenge(codexBackendHeaders(auth));
     if (!res.ok) {
       console.warn(
         res.status === 401

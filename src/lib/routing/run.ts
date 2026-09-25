@@ -4,6 +4,7 @@
 import { randomUUID } from 'crypto';
 import { ownerPhone } from '$lib/config/owner';
 import { refreshOpenRouterCatalogue } from '$lib/server/models/openrouter-catalogue';
+import { refreshCodexCatalogue } from '$lib/server/models/codex-discovery';
 import { selectModels } from './select';
 import {
   ensureRoutingCollections,
@@ -85,6 +86,20 @@ export async function runSelectionNow(opts?: {
         await refreshOpenRouterCatalogue();
       } catch (err) {
         console.warn('[routing] catalogue refresh failed, using stored rows:', errMsg(err));
+      }
+      // The Codex list too: new models the subscription can run are tested and
+      // offered, and the owner is told. Selection below never reads it, so a
+      // failure here costs nothing but a night's delay.
+      try {
+        const codex = await refreshCodexCatalogue();
+        if (codex.added.length || codex.rejected.length) {
+          console.log(
+            `[routing] codex discovery: added ${codex.added.map((m) => m.slug).join(', ') || 'none'}; ` +
+              `rejected ${codex.rejected.map((r) => r.slug).join(', ') || 'none'}`,
+          );
+        }
+      } catch (err) {
+        console.warn('[routing] codex discovery failed:', errMsg(err));
       }
     }
 

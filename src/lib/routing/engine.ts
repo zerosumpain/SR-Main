@@ -7,6 +7,7 @@ import os from 'os';
 import { getSetting } from '$lib/server/models/settings';
 import { runSelectionNow } from './run';
 import { ensureRoutingCollections } from './events';
+import { loadDiscoveredCodexModels } from '$lib/server/models/codex-discovery';
 import { CRON_EXPR, CRON_TZ, SETTINGS_ENABLED_KEY, errMsg } from './types';
 
 let cronJob: Cron | null = null;
@@ -23,6 +24,9 @@ export function startModelRouting(): void {
   void ensureRoutingCollections().catch((err) =>
     console.error('[routing] ensure collections failed:', errMsg(err)),
   );
+  // Registers discovered Codex models' reasoning ceilings before the first chat
+  // turn, so a request clamps to what the model took rather than to `xhigh`.
+  void loadDiscoveredCodexModels();
 
   const host = os.hostname();
   if (host === 'homeserv' && process.env.ROUTING_ALLOW_DEV !== '1') {

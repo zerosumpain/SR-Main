@@ -87,3 +87,33 @@ describe('site → Codex bridge, live', () => {
     expect(String(client.baseURL)).toContain('openrouter');
   });
 });
+
+/**
+ * Discovery's two live dependencies: the model list read as the latest client,
+ * and the probe that decides whether a listed model is offered. These are the
+ * answers measured by hand on 2026-09-25, so a change in how the API refuses a
+ * model shows up here rather than as a model silently never being offered.
+ */
+describe('Codex model discovery, live', () => {
+  it('reads the model list as the latest client', async (t) => {
+    const { fetchCodexCatalogue, latestCodexClientVersion } = await import('./codex-discovery');
+    const rows = await fetchCodexCatalogue(await latestCodexClientVersion());
+    if (!rows) return t.skip();
+    // gpt-6-sol needs client 0.155.0; asking as our pinned SDK would hide it.
+    expect(rows.map((r) => r.slug)).toContain('gpt-6-sol');
+  }, 30_000);
+
+  it('finds max on a model that takes it, xhigh on one that refuses it by name', async (t) => {
+    if (!bridgeReady) return t.skip();
+    const { probeCodexModel } = await import('./codex-discovery');
+    expect(await probeCodexModel('gpt-6-luna')).toEqual({ ok: true, effortCeiling: 'max' });
+    expect(await probeCodexModel('gpt-5.5')).toEqual({ ok: true, effortCeiling: 'xhigh' });
+  }, 240_000);
+
+  it('rejects a model the subscription cannot run', async (t) => {
+    if (!bridgeReady) return t.skip();
+    const { probeCodexModel } = await import('./codex-discovery');
+    const result = await probeCodexModel('gpt-6-terra');
+    expect(result.ok).toBe(false);
+  }, 120_000);
+});

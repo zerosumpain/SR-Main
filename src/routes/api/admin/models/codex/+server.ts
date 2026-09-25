@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { CODEX_MODELS, toCodexModelId } from '$lib/server/models/codex-catalogue';
+import { toCodexModelId } from '$lib/server/models/codex-catalogue';
+import { listCodexModels } from '$lib/server/models/codex-discovery';
 import { getCodexBridgeUrl, isCodexEnabled, setCodexEnabled } from '$lib/server/models/settings';
 
 /**
@@ -9,7 +10,8 @@ import { getCodexBridgeUrl, isCodexEnabled, setCodexEnabled } from '$lib/server/
  *
  * Deliberately NOT merged into /api/admin/models/openrouter: that route serves
  * the `openrouter_models` table with DB-side filtering, sorting, scoring and
- * pagination over ~340 rows. Codex is five rows from a static table with no
+ * pagination over ~340 rows. Codex is a handful of rows (the static table plus
+ * whatever the nightly discovery found, see codex-discovery) with no
  * prices and no benchmark indices, so unioning them in would mean faking
  * columns to satisfy the sort. Two sources, two endpoints, one merge in the UI.
  */
@@ -53,11 +55,11 @@ async function probeBridge(): Promise<BridgeHealth> {
 }
 
 export const GET: RequestHandler = async () => {
-  const [health, enabled] = await Promise.all([probeBridge(), isCodexEnabled()]);
+  const [health, enabled, models] = await Promise.all([probeBridge(), isCodexEnabled(), listCodexModels()]);
   return json({
     enabled,
     health,
-    rows: CODEX_MODELS.map((m) => ({
+    rows: models.map((m) => ({
       // The pickers persist this id, so it carries the provider prefix.
       id: toCodexModelId(m.slug),
       slug: m.slug,
@@ -65,6 +67,10 @@ export const GET: RequestHandler = async () => {
       description: m.description,
       proOnly: m.proOnly ?? false,
       retiresOn: m.retiresOn ?? null,
+      // The deepest reasoning effort this model accepted. The pickers register
+      // it so a discovered model's menu reaches `max` (see $lib/models/thinking).
+      effortCeiling: m.effortCeiling,
+      discovered: m.discovered,
       provider: 'codex' as const,
       // Explicit nulls rather than omitted keys: the picker renders "—" for
       // these and a missing key would read as a bug rather than as "Codex has
