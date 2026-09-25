@@ -22,12 +22,16 @@ describe('interruptedBuildFrom', () => {
       prompt: 'send me a funny / rude joke every hour to my whatsapp. Only run that till 6pm today',
       title: null,
       attempt: 1,
+      qa: [],
     });
   });
 
   it('prefers the stored prompt and title', () => {
     const r = row({ metadata: { nativeBuild: { status: 'building', resume: { prompt: 'full prompt', title: 'Jokes', attempt: 1 } } } });
     expect(interruptedBuildFrom(r, BOOT, NOW)).toMatchObject({ prompt: 'full prompt', title: 'Jokes', attempt: 1 });
+    const qa = [{ q: 'Which date?', a: 'today' }];
+    const answered = row({ metadata: { nativeBuild: { status: 'building', resume: { prompt: 'p', title: null, attempt: 1, qa } } } });
+    expect(interruptedBuildFrom(answered, BOOT, NOW)?.qa).toEqual(qa);
   });
 
   it('never touches a build THIS process started', () => {
@@ -42,6 +46,9 @@ describe('interruptedBuildFrom', () => {
   it('ignores finished, failed and ancient builds', () => {
     expect(interruptedBuildFrom(row({ metadata: { nativeBuild: { status: 'done' } } }), BOOT, NOW)).toBeNull();
     expect(interruptedBuildFrom(row({ metadata: { nativeBuild: { status: 'failed', error: 'x' } } }), BOOT, NOW)).toBeNull();
+    // A build waiting on the owner's answer was not killed — the sweep must not restart it.
+    const asking = { nativeBuild: { status: 'needs_input', question: 'Which city?', resume: { prompt: 'p', title: null, attempt: 1, qa: [] } } };
+    expect(interruptedBuildFrom(row({ metadata: asking }), BOOT, NOW)).toBeNull();
     expect(interruptedBuildFrom(row({ createdAt: new Date(NOW - BUILD_RESUME_WINDOW_MS - 1) }), BOOT, NOW)).toBeNull();
   });
 

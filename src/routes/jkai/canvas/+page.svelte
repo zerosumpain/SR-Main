@@ -78,8 +78,10 @@
 
   const groupedCanvases = $derived.by(() => {
     const now = Date.now();
-    const failing = canvases.filter((c) => c.latestRunStatus && FAILING_STATUSES.has(c.latestRunStatus));
-    const rest = canvases.filter((c) => !c.latestRunStatus || !FAILING_STATUSES.has(c.latestRunStatus));
+    // A Describe-it build waiting on a question needs the owner as much as a failure.
+    const needsOwner = (c: CanvasSummary) => !!c.buildQuestion || (!!c.latestRunStatus && FAILING_STATUSES.has(c.latestRunStatus));
+    const failing = canvases.filter(needsOwner);
+    const rest = canvases.filter((c) => !needsOwner(c));
     const bucketed = new Map<string, CanvasSummary[]>();
     for (const c of rest) {
       const bucket =
@@ -397,6 +399,9 @@
                       <span class="mini-lbl">last run</span>
                     </div>
                   </div>
+                  {#if c.buildQuestion}
+                    <div class="card-question" title={c.buildQuestion}>jkai has a question</div>
+                  {/if}
                   <div class="card-foot">
                     <span>last run {formatTime(c.latestRunAt)}</span>
                     <span>edited {formatTime(c.updatedAt)}</span>
@@ -1104,6 +1109,14 @@
   }
 
   /* Delete as discreet row-link in corner, matches /drive */
+  .card-question {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    padding: 4px 0 0;
+  }
   .row-link {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
