@@ -80,6 +80,7 @@ const TOOL_CHANNEL: Record<string, Channel> = {
   health_hub: 'health',
   health_series: 'health',
   health_timeline: 'health',
+  activities: 'health',
   ha_find: 'home',
   ha_query_state: 'home',
   ha_get_history: 'home',

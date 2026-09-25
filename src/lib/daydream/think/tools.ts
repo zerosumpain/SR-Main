@@ -48,7 +48,7 @@
 // `ponder/lookups.ts` was protecting, kept rather than traded away.
 
 import { createCorrelator, correlateDescription } from './correlate';
-import { HUB_SECTIONS, healthHubTool, healthSeriesDescription, healthSeriesTool } from './health';
+import { HUB_SECTIONS, activitiesTool, healthHubTool, healthSeriesDescription, healthSeriesTool } from './health';
 import { chatThreadsTool, diaryTool, mailFactsTool, spendTool } from './reads';
 import { isResearchChannel, type Channel } from './questions';
 import { errMsg } from '../types';
@@ -57,7 +57,7 @@ import { errMsg } from '../types';
 export const PRIVATE_SITE_TOOLS = ['ha_find', 'ha_query_state', 'ha_get_history', 'memory_search', 'health_timeline'] as const;
 
 /** Tools implemented here, over the owner's data. PRIVATE only. */
-export const LOCAL_TOOLS = ['health_hub', 'health_series', 'correlate', 'mail_facts', 'diary', 'spend', 'chat_threads'] as const;
+export const LOCAL_TOOLS = ['health_hub', 'health_series', 'correlate', 'mail_facts', 'diary', 'spend', 'chat_threads', 'activities'] as const;
 export type LocalTool = (typeof LOCAL_TOOLS)[number];
 
 /** Registered site tools a RESEARCH cycle may call. */
@@ -211,6 +211,15 @@ const LOCAL_DEFINITIONS: Record<LocalTool, () => ToolDefinition['function']> = {
       properties: { days: { type: 'number', description: 'Window in days, 1–60. Default 14.' } },
     },
   }),
+  activities: () => ({
+    name: 'activities',
+    description:
+      "Where he went and how he moved: workouts from Apple Health AND the outings the SR iPhone app caught in the background (source 'companion') — type, when, distance, duration, pace, heart rate. No coordinates. The daydream's only reading of location.",
+    parameters: {
+      type: 'object',
+      properties: { limit: { type: 'number', description: 'Most recent N, 5–60. Default 30.' } },
+    },
+  }),
 };
 
 function isLocal(name: string): name is LocalTool {
@@ -250,6 +259,8 @@ export function createToolbox(opts: { set: ToolSet; now: Date; day: string; subj
         return spendTool(args, opts.now);
       case 'chat_threads':
         return chatThreadsTool(args, opts.now);
+      case 'activities':
+        return activitiesTool(args);
     }
   }
 

@@ -69,6 +69,7 @@ describe('the two allow-lists', () => {
       'diary',
       'spend',
       'chat_threads',
+      'activities',
     ]);
     expect([...RESEARCH_TOOLS]).toEqual(['research_web_search', 'fetch_url']);
   });
