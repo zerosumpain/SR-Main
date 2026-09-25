@@ -65,4 +65,32 @@ export interface HAHistoryState {
   state: string;
   attributes?: Record<string, unknown>;
   last_changed?: string;
+  /** Moves on an attribute-only change too — a new track while already playing. */
+  last_updated?: string;
+}
+
+/**
+ * Everything else an Echo reports through Home Assistant (`alexa_signals`).
+ * Room sensors and the notification sensors are POLLED by HA every five
+ * minutes; `media` arrives only by Amazon's push feed, the same feed voice
+ * events ride, so when that feed is down media is silent too.
+ */
+export const SIGNAL_KINDS = ['temperature', 'illuminance', 'motion', 'alarm', 'timer', 'reminder', 'media'] as const;
+export type SignalKind = (typeof SIGNAL_KINDS)[number];
+
+export function isSignalKind(v: unknown): v is SignalKind {
+  return typeof v === 'string' && (SIGNAL_KINDS as readonly string[]).includes(v);
+}
+
+/** One change, ready to insert. */
+export interface ParsedSignal {
+  id: string;
+  entityId: string;
+  kind: SignalKind;
+  device: string;
+  room: string | null;
+  occurredAt: Date;
+  value: number | null;
+  text: string | null;
+  detail: Record<string, unknown> | null;
 }

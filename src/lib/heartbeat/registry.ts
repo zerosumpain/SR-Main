@@ -28,7 +28,7 @@ import { daydreamImprove } from './activities/daydream-improve';
 import { daydreamReview } from './activities/daydream-review';
 import { daydreamWeekly } from './activities/daydream-weekly';
 import { activitySync } from './activities/activity-sync';
-import { alexaVoiceSync, alexaVoiceTopics } from './activities/alexa-voice';
+import { alexaSignalsSync, alexaVoiceSync, alexaVoiceTopics } from './activities/alexa-voice';
 import { newsBrief } from './activities/news-brief';
 
 /**
@@ -68,6 +68,7 @@ const handlers: ActivityHandler[] = [
   daydreamWeekly,
   activitySync,
   alexaVoiceSync,
+  alexaSignalsSync,
   alexaVoiceTopics,
 ];
 

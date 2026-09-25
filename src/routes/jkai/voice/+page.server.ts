@@ -1,5 +1,5 @@
 import type { PageServerLoad } from './$types';
-import { emptyVoiceSummary, searchUtterances, voiceSummary } from '$lib/alexa/store.server';
+import { emptyHouseSummary, emptyVoiceSummary, houseSummary, searchUtterances, voiceSummary } from '$lib/alexa/store.server';
 import { errMsg } from '$lib/daydream/types';
 
 // Owner-gated by hooks — the whole /jkai area is owner-only, and this is the
@@ -23,9 +23,20 @@ function daysBetween(from: Date, to: Date): string[] {
   return [...out];
 }
 
+/** The House tab reads its own table; a failure there must not blank the voice log. */
+async function loadHouse(days: number) {
+  try {
+    return { house: await houseSummary({ days }), houseError: null as string | null };
+  } catch (err) {
+    console.error('[alexa] house signals load failed:', errMsg(err));
+    return { house: emptyHouseSummary(days), houseError: errMsg(err) };
+  }
+}
+
 export const load: PageServerLoad = async ({ url }) => {
   const asked = Number(url.searchParams.get('days'));
   const days = (WINDOWS as readonly number[]).includes(asked) ? asked : 30;
+  const house = loadHouse(days);
   try {
     const summary = await voiceSummary({ days });
     const rows = await searchUtterances({ from: new Date(summary.window.from), limit: LOG_ROWS });
@@ -34,7 +45,7 @@ export const load: PageServerLoad = async ({ url }) => {
       label: day,
       value: byDay.get(day) ?? 0,
     }));
-    return { days, windows: [...WINDOWS], summary, series, rows, logCap: LOG_ROWS, loadError: null as string | null };
+    return { days, windows: [...WINDOWS], summary, series, rows, logCap: LOG_ROWS, loadError: null as string | null, ...(await house) };
   } catch (err) {
     console.error('[alexa] voice page load failed:', errMsg(err));
     return {
@@ -45,6 +56,7 @@ export const load: PageServerLoad = async ({ url }) => {
       rows: [] as Awaited<ReturnType<typeof searchUtterances>>,
       logCap: LOG_ROWS,
       loadError: errMsg(err),
+      ...(await house),
     };
   }
 };

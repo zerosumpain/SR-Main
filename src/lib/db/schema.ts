@@ -7457,3 +7457,37 @@ export const alexaUtterances = pgTable(
 );
 
 export type AlexaUtterance = typeof alexaUtterances.$inferSelect;
+
+// Everything else the Echos report through Home Assistant, one row per change:
+// room temperature and light, motion, the next alarm / timer / reminder each
+// device holds, and what it is playing. Filled by `alexa-signals-sync` from HA
+// history, keyed `<entity>|<time of change>` like `alexa_utterances`, and only
+// a CHANGE is stored — HA's history also re-emits the same value on attribute
+// churn and at every window start.
+//
+// `value` carries the number (°C, lux); `text` the rest — 'on'/'off' for
+// motion, the ISO due time for alarm/timer/reminder (a row is a NEW due time;
+// HA cannot tell "cleared" from "offline", so clearing is not recorded), the
+// track title for media with artist and album in `detail`.
+export const alexaSignals = pgTable(
+  'alexa_signals',
+  {
+    id: text('id').primaryKey(),
+    entityId: text('entity_id').notNull(),
+    /** 'temperature' | 'illuminance' | 'motion' | 'alarm' | 'timer' | 'reminder' | 'media' */
+    kind: text('kind').notNull(),
+    device: text('device').notNull(),
+    room: text('room'),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+    value: doublePrecision('value'),
+    text: text('text'),
+    detail: jsonb('detail').$type<Record<string, unknown>>(),
+    firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('alexa_signals_kind_occurred_idx').on(t.kind, t.occurredAt),
+    index('alexa_signals_entity_occurred_idx').on(t.entityId, t.occurredAt),
+  ],
+);
+
+export type AlexaSignal = typeof alexaSignals.$inferSelect;

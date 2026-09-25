@@ -1,4 +1,4 @@
-import { syncVoiceHistory } from '$lib/alexa/ingest.server';
+import { syncSignalHistory, syncVoiceHistory } from '$lib/alexa/ingest.server';
 import { tagUtteranceTopics } from '$lib/alexa/topics.server';
 import type { ActivityHandler } from '../types';
 
@@ -23,6 +23,32 @@ export const alexaVoiceSync: ActivityHandler = {
     return {
       outcome: 'ok',
       summary: `${res.inserted} new of ${res.read} read across ${res.devices} devices`,
+      details: { ...res },
+    };
+  },
+};
+
+/**
+ * The Echos' other reports for /jkai/voice's House tab: room temperature, light
+ * and motion, alarm/timer/reminder changes, and what is playing. Its own
+ * activity rather than a second step in the voice sync, so a failure in one
+ * never costs the other its run. Unreachable HA is `skipped`, as above.
+ */
+export const alexaSignalsSync: ActivityHandler = {
+  name: 'alexa-signals-sync',
+  description:
+    "Copies the Echos' room sensors (temperature, light, motion), their next alarm/timer/reminder and what they are playing from Home Assistant into alexa_signals for /jkai/voice. Stores changes only; reads from the newest held row minus two hours.",
+  defaultCadenceSeconds: 300,
+  defaultEnabled: true,
+  async run() {
+    const { getHomeAssistantService } = await import('$lib/workflows/homeassistant/service');
+    const res = await syncSignalHistory(getHomeAssistantService());
+    if (!res.ok) {
+      return { outcome: 'skipped', summary: `not synced: ${res.error ?? 'unknown'}`.slice(0, 200), details: { ...res } };
+    }
+    return {
+      outcome: 'ok',
+      summary: `${res.inserted} changes from ${res.read} states across ${res.entities} entities`,
       details: { ...res },
     };
   },

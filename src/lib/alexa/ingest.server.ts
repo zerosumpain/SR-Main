@@ -8,10 +8,11 @@
 
 import { desc, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { alexaUtterances } from '$lib/db/schema';
+import { alexaSignals, alexaUtterances } from '$lib/db/schema';
 import { emit as emitPlatformEvent } from '$lib/events/platform-bus';
 import { isVoiceEventEntity, newSpeech, parseVoiceHistory, type LastHeard } from './parse';
-import type { ParsedUtterance } from './types';
+import { newSignals, parseSignalHistory, signalKind, type LastSignal } from './signals';
+import type { ParsedUtterance, SignalKind } from './types';
 
 /** Re-read this much before the newest row we hold. Rows are keyed, so it is free. */
 const OVERLAP_MS = 2 * 3_600_000;
@@ -45,7 +46,7 @@ export interface VoiceSyncResult {
 export interface VoiceSource {
   isConfigured(): boolean;
   queryAllStates(): Promise<HAResult>;
-  getHistory(entityId: string, start?: string): Promise<HAResult>;
+  getHistory(entityId: string, start?: string, end?: string): Promise<HAResult>;
   renderTemplate(template: string): Promise<HAResult>;
 }
 interface HAResult {
@@ -93,8 +94,11 @@ export async function syncVoiceHistory(service: VoiceSource, now = Date.now()): 
   const newest = latest?.at ? new Date(latest.at).getTime() : null;
   const since = new Date(Math.max(LOG_STARTS_AT, newest ? newest - OVERLAP_MS : now - FIRST_RUN_MS)).toISOString();
 
+  // `end` is NOT optional in practice: without it HA answers one day from
+  // `since`, so a house quiet for a day left every later run re-reading the
+  // same stale day and never reaching anything newer.
   const [history, rooms] = await Promise.all([
-    service.getHistory(ids.join(','), since),
+    service.getHistory(ids.join(','), since, new Date(now).toISOString()),
     roomsFor(service, ids),
   ]);
   if (!history.success) return { ...empty, devices: ids.length, since, error: history.error ?? 'history read failed' };
@@ -150,4 +154,84 @@ function announce(rows: readonly ParsedUtterance[], inserted: Set<string>, now: 
       { source: 'alexa-voice' },
     );
   }
+}
+
+// ── Everything else the Echos report ──────────────────────────────────────
+
+export interface SignalSyncResult {
+  ok: boolean;
+  error?: string;
+  entities: number;
+  read: number;
+  inserted: number;
+  byKind?: Partial<Record<SignalKind, number>>;
+  since: string | null;
+}
+
+/**
+ * The integration's own entity list, from HA. Names alone would also catch the
+ * TV's cast and DLNA media players, which are not Echos.
+ */
+async function alexaEntities(service: VoiceSource): Promise<string[] | null> {
+  const res = await service.renderTemplate(`{{ integration_entities('alexa_devices') | list | tojson }}`);
+  if (!res.success) return null;
+  const raw = (res.data as { result?: unknown } | undefined)?.result ?? res.data;
+  try {
+    const ids: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return Array.isArray(ids) ? ids.filter((i): i is string => typeof i === 'string') : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Copies room readings, alarm/timer/reminder changes and now-playing into
+ * `alexa_signals`. Same shape as the voice sync: read HA history from the
+ * newest row held minus an overlap, keep only changes, keyed rows make the
+ * overlap free.
+ */
+export async function syncSignalHistory(service: VoiceSource, now = Date.now()): Promise<SignalSyncResult> {
+  const empty: SignalSyncResult = { ok: false, entities: 0, read: 0, inserted: 0, since: null };
+  if (!service.isConfigured()) return { ...empty, error: 'home assistant not configured' };
+
+  const all = await alexaEntities(service);
+  if (!all) return { ...empty, error: 'could not list alexa_devices entities' };
+  const ids = all.filter((id) => signalKind(id) !== null).sort();
+  if (ids.length === 0) return { ...empty, error: 'no alexa_devices sensor or media entities' };
+
+  const [latest] = await db.select({ at: sql<Date | null>`max(${alexaSignals.occurredAt})` }).from(alexaSignals);
+  const newest = latest?.at ? new Date(latest.at).getTime() : null;
+  const since = new Date(newest ? newest - OVERLAP_MS : now - FIRST_RUN_MS).toISOString();
+
+  const [history, rooms] = await Promise.all([service.getHistory(ids.join(','), since, new Date(now).toISOString()), roomsFor(service, ids)]);
+  if (!history.success) return { ...empty, entities: ids.length, since, error: history.error ?? 'history read failed' };
+
+  const lastRows = await db
+    .selectDistinctOn([alexaSignals.entityId], {
+      entityId: alexaSignals.entityId,
+      text: alexaSignals.text,
+      value: alexaSignals.value,
+      detail: alexaSignals.detail,
+    })
+    .from(alexaSignals)
+    .orderBy(alexaSignals.entityId, desc(alexaSignals.occurredAt));
+  const last: Record<string, LastSignal> = Object.fromEntries(
+    lastRows.map((r) => [r.entityId, { text: r.text, value: r.value, artist: r.detail?.artist }]),
+  );
+
+  const parsed = parseSignalHistory(history.data, rooms);
+  const rows = newSignals(parsed, last);
+  let inserted = 0;
+  const byKind: Partial<Record<SignalKind, number>> = {};
+  // One statement per 500 rows: a first run reads a month of light readings.
+  for (let i = 0; i < rows.length; i += 500) {
+    const out = await db
+      .insert(alexaSignals)
+      .values(rows.slice(i, i + 500))
+      .onConflictDoNothing({ target: alexaSignals.id })
+      .returning({ kind: alexaSignals.kind });
+    inserted += out.length;
+    for (const r of out) byKind[r.kind as SignalKind] = (byKind[r.kind as SignalKind] ?? 0) + 1;
+  }
+  return { ok: true, entities: ids.length, read: parsed.length, inserted, byKind, since };
 }

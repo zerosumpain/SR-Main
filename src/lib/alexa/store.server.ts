@@ -3,9 +3,9 @@
 // Days and hours are Europe/London: the server runs UTC, and "what does the
 // house ask Alexa at bedtime" is a question about the house's clock.
 
-import { and, desc, eq, gte, ilike, isNull, lt, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gte, ilike, inArray, isNull, lt, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { alexaUtterances, type AlexaUtterance } from '$lib/db/schema';
+import { alexaSignals, alexaUtterances, type AlexaUtterance } from '$lib/db/schema';
 import { isVoiceTopic } from './types';
 
 const TZ = 'Europe/London';
@@ -214,4 +214,195 @@ export async function untaggedUtterances(limit: number): Promise<Pick<AlexaUtter
     .where(isNull(u.topic))
     .orderBy(u.occurredAt)
     .limit(limit);
+}
+
+// ── Everything else the Echos report (`alexa_signals`) ─────────────────────
+
+export interface SignalPoint {
+  at: string;
+  value: number;
+}
+
+export interface HouseSummary {
+  window: { from: string; to: string; days: number };
+  allTime: number;
+  firstAt: string | null;
+  lastAt: string | null;
+  /** Latest reading per room-sensor entity. */
+  now: { device: string; room: string | null; kind: 'temperature' | 'illuminance' | 'motion'; value: number | null; text: string | null; at: string }[];
+  /** Hourly mean per device, Europe/London hours; a missing hour is absent, not zero. */
+  temperature: { device: string; room: string | null; min: number; max: number; points: SignalPoint[] }[];
+  motion: { device: string; room: string | null; lastOnAt: string | null; onCount: number; byHour: number[] }[];
+  /** What each device is holding right now — only future times count. */
+  pending: { device: string; room: string | null; kind: 'alarm' | 'timer' | 'reminder'; dueAt: string; setAt: string }[];
+  /** Every alarm/timer/reminder that came into view in the window, newest first. */
+  scheduled: { device: string; room: string | null; kind: 'alarm' | 'timer' | 'reminder'; dueAt: string; setAt: string }[];
+  listening: {
+    plays: number;
+    recent: { device: string; room: string | null; title: string; artist: string | null; album: string | null; at: string }[];
+    topArtists: Count[];
+    byDevice: Count[];
+  };
+}
+
+export function emptyHouseSummary(days = 30): HouseSummary {
+  const to = new Date();
+  return {
+    window: { from: new Date(to.getTime() - days * 86_400_000).toISOString(), to: to.toISOString(), days },
+    allTime: 0,
+    firstAt: null,
+    lastAt: null,
+    now: [],
+    temperature: [],
+    motion: [],
+    pending: [],
+    scheduled: [],
+    listening: { plays: 0, recent: [], topArtists: [], byDevice: [] },
+  };
+}
+
+const iso = (d: Date | string | null | undefined): string | null => (d ? new Date(d).toISOString() : null);
+type NoticeKind = 'alarm' | 'timer' | 'reminder';
+const NOTICE_KINDS: NoticeKind[] = ['alarm', 'timer', 'reminder'];
+
+export async function houseSummary(opts: { days?: number } = {}): Promise<HouseSummary> {
+  const days = opts.days ?? 30;
+  const to = new Date();
+  const from = new Date(to.getTime() - days * 86_400_000);
+  const g = alexaSignals;
+  const inWindow = gte(g.occurredAt, from);
+  const local = sql`(${g.occurredAt} at time zone ${TZ})`;
+  const artist = sql<string | null>`${g.detail}->>'artist'`;
+
+  const [head, now, temps, motionRows, motionHours, latestNotice, scheduled, recent, artists, mediaDevices, plays] = await Promise.all([
+    db
+      .select({ allTime: sql<number>`count(*)::int`, firstAt: sql<Date | null>`min(${g.occurredAt})`, lastAt: sql<Date | null>`max(${g.occurredAt})` })
+      .from(g),
+    db
+      .selectDistinctOn([g.entityId], { device: g.device, room: g.room, kind: g.kind, value: g.value, text: g.text, at: g.occurredAt })
+      .from(g)
+      .where(inArray(g.kind, ['temperature', 'illuminance', 'motion']))
+      .orderBy(g.entityId, desc(g.occurredAt)),
+    db
+      .select({
+        device: g.device,
+        room: sql<string | null>`max(${g.room})`,
+        hour: sql<Date>`date_trunc('hour', ${local}) at time zone ${TZ}`,
+        value: sql<number>`round(avg(${g.value})::numeric, 1)::float8`,
+      })
+      .from(g)
+      .where(and(eq(g.kind, 'temperature'), inWindow))
+      .groupBy(g.device, sql`3`)
+      .orderBy(g.device, sql`3`),
+    db
+      .select({
+        device: g.device,
+        room: sql<string | null>`max(${g.room})`,
+        lastOnAt: sql<Date | null>`max(${g.occurredAt}) filter (where ${g.text} = 'on')`,
+        onCount: sql<number>`count(*) filter (where ${g.text} = 'on' and ${g.occurredAt} >= ${from})::int`,
+      })
+      .from(g)
+      .where(eq(g.kind, 'motion'))
+      .groupBy(g.device),
+    db
+      .select({ device: g.device, hour: sql<number>`extract(hour from ${local})::int`, n: sql<number>`count(*)::int` })
+      .from(g)
+      .where(and(eq(g.kind, 'motion'), eq(g.text, 'on'), inWindow))
+      .groupBy(g.device, sql`2`),
+    db
+      .selectDistinctOn([g.entityId], { device: g.device, room: g.room, kind: g.kind, text: g.text, at: g.occurredAt })
+      .from(g)
+      .where(inArray(g.kind, NOTICE_KINDS))
+      .orderBy(g.entityId, desc(g.occurredAt)),
+    db
+      .select({ device: g.device, room: g.room, kind: g.kind, text: g.text, at: g.occurredAt })
+      .from(g)
+      .where(and(inArray(g.kind, NOTICE_KINDS), inWindow, sql`${g.text} is not null`))
+      .orderBy(desc(g.occurredAt))
+      .limit(200),
+    db
+      .select({ device: g.device, room: g.room, title: g.text, detail: g.detail, at: g.occurredAt })
+      .from(g)
+      .where(and(eq(g.kind, 'media'), inWindow))
+      .orderBy(desc(g.occurredAt))
+      .limit(200),
+    db
+      .select({ key: artist, n: sql<number>`count(*)::int` })
+      .from(g)
+      .where(and(eq(g.kind, 'media'), inWindow, sql`${artist} is not null`))
+      .groupBy(sql`1`)
+      .orderBy(sql`2 desc`, sql`1`)
+      .limit(15),
+    db
+      .select({ key: g.device, n: sql<number>`count(*)::int` })
+      .from(g)
+      .where(and(eq(g.kind, 'media'), inWindow))
+      .groupBy(g.device)
+      .orderBy(sql`2 desc`),
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(g)
+      .where(and(eq(g.kind, 'media'), inWindow)),
+  ]);
+
+  const tempByDevice = new Map<string, HouseSummary['temperature'][number]>();
+  for (const r of temps) {
+    const t = tempByDevice.get(r.device) ?? { device: r.device, room: r.room, min: Infinity, max: -Infinity, points: [] };
+    const v = Number(r.value);
+    t.points.push({ at: new Date(r.hour).toISOString(), value: v });
+    t.min = Math.min(t.min, v);
+    t.max = Math.max(t.max, v);
+    tempByDevice.set(r.device, t);
+  }
+  const hoursByDevice = new Map<string, number[]>();
+  for (const r of motionHours) {
+    const h = hoursByDevice.get(r.device) ?? Array.from({ length: 24 }, () => 0);
+    h[Number(r.hour)] = Number(r.n);
+    hoursByDevice.set(r.device, h);
+  }
+  const nowMs = to.getTime();
+  const notice = (r: { device: string; room: string | null; kind: string; text: string | null; at: Date }) => ({
+    device: r.device,
+    room: r.room,
+    kind: r.kind as NoticeKind,
+    dueAt: r.text as string,
+    setAt: new Date(r.at).toISOString(),
+  });
+
+  const h = head[0];
+  return {
+    window: { from: from.toISOString(), to: to.toISOString(), days },
+    allTime: Number(h?.allTime ?? 0),
+    firstAt: iso(h?.firstAt),
+    lastAt: iso(h?.lastAt),
+    now: now
+      .map((r) => ({ ...r, kind: r.kind as 'temperature' | 'illuminance' | 'motion', at: new Date(r.at).toISOString() }))
+      .sort((a, b) => a.device.localeCompare(b.device) || a.kind.localeCompare(b.kind)),
+    temperature: [...tempByDevice.values()],
+    motion: motionRows.map((r) => ({
+      device: r.device,
+      room: r.room,
+      lastOnAt: iso(r.lastOnAt),
+      onCount: Number(r.onCount),
+      byHour: hoursByDevice.get(r.device) ?? Array.from({ length: 24 }, () => 0),
+    })),
+    pending: latestNotice
+      .filter((r) => r.text && Date.parse(r.text) > nowMs)
+      .map(notice)
+      .sort((a, b) => a.dueAt.localeCompare(b.dueAt)),
+    scheduled: scheduled.map(notice),
+    listening: {
+      plays: Number(plays[0]?.n ?? 0),
+      recent: recent.map((r) => ({
+        device: r.device,
+        room: r.room,
+        title: r.title ?? '',
+        artist: typeof r.detail?.artist === 'string' ? r.detail.artist : null,
+        album: typeof r.detail?.album === 'string' ? r.detail.album : null,
+        at: new Date(r.at).toISOString(),
+      })),
+      topArtists: counts(artists, ''),
+      byDevice: counts(mediaDevices, ''),
+    },
+  };
 }
