@@ -6,6 +6,13 @@ export { notifyDef } from './notify.def';
 
 const SEVERITIES = new Set(['info', 'warn', 'alert']);
 
+/** "Send to" — an explicit choice outranks the category's route. */
+const CHANNELS: Record<string, { whatsapp: boolean; native: boolean } | undefined> = {
+  whatsapp: { whatsapp: true, native: false },
+  iphone: { whatsapp: false, native: true },
+  both: { whatsapp: true, native: true },
+};
+
 export const notifyExecutor: NodeExecutor = {
   type: 'notify',
 
@@ -25,6 +32,7 @@ export const notifyExecutor: NodeExecutor = {
       dedupeKey: text('dedupeKey') || null,
       minIntervalSeconds: Number(config.minIntervalSeconds) || undefined,
       data: { workflowId: context.workflowId ?? null, runId: context.runId },
+      channels: CHANNELS[String(config.channel ?? 'route')],
     });
     if (result.reason === 'error') throw new Error('notify: the notification could not be raised');
     return { output: { ...deliveryReport(result), category }, rowCount: 1 };
