@@ -108,10 +108,10 @@ export async function describeImage(buf: Buffer, mimeType: string): Promise<stri
     );
     try {
       const fallback = await resolveDefaultModel();
-      // The site default is now allowed to be a Codex model, and Codex is
-      // text-only — it would accept the request and answer about the prompt
-      // while ignoring the image, producing a confident caption of nothing.
-      // Skip rather than fabricate: a null here is a non-fatal "no caption".
+      // A default that cannot see would accept the request and answer about
+      // the prompt while ignoring the image, producing a confident caption of
+      // nothing. (Codex was that case until it learned to read images,
+      // 2026-09-25.) Skip rather than fabricate: a null is a non-fatal "no caption".
       if (!getModelCapabilities(fallback).image) {
         console.warn(
           `[file-index] site default ${fallback.modelId} cannot accept images — skipping caption fallback`,
@@ -231,9 +231,8 @@ export async function describePdfBestEffort(buf: Buffer, filename: string): Prom
     );
     try {
       const fallback = await resolveDefaultModel();
-      // Same trap as the image path: the site default may be a Codex model,
-      // which is text-only and would answer confidently about a document it
-      // never saw. A null is an honest "no text"; a fabricated transcript of a
+      // Same trap as the image path: a default that cannot see would answer
+      // confidently about a document it never saw. A null is an honest "no text"; a fabricated transcript of a
       // financial statement is considerably worse than nothing.
       if (!getModelCapabilities(fallback).image) {
         console.warn(

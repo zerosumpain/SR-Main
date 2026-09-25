@@ -35,6 +35,8 @@ import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 import { JKAI_EXTENDED_TOOL } from '$lib/mcp/extended-tool';
 import { createTraceRecorder, compactStepsForMessage, type CompactToolStep } from '$lib/jkai/tool-trace';
 import { resolveChatTurnModel } from '$lib/server/models/workload-settings';
+import { isPlaceholderTitle } from '$lib/jkai/thread-title';
+import { refileConversationFiles } from '$lib/file-index/jkai-mirror';
 
 const MAX_MESSAGE_LEN = 20_000;
 
@@ -140,8 +142,8 @@ async function handleWithLoop(event: Parameters<RequestHandler>[0]): Promise<Res
     // Ask what this LANE can accept, not what the model can read. The composer
     // is served `getChatInputCapabilities` (see /api/jkai/conversations/[id]),
     // so gating here on the raw model truth meant the UI offered an upload it
-    // then rejected with a 400 — on `codex/*`, which is TEXT_ONLY and the
-    // pinned default, that is every image and every PDF. #427 built the
+    // then rejected with a 400 — on `codex/*`, TEXT_ONLY at the time and the
+    // pinned default, that was every image and every PDF. #427 built the
     // pre-analysis lane precisely so those work, and it lives downstream of
     // this guard in `generalChat`.
     //
@@ -490,12 +492,17 @@ async function handleWithLoop(event: Parameters<RequestHandler>[0]): Promise<Res
           }).returning({ id: orchestratorChats.id });
           assistantMsgId = ins.id;
 
-          // Update conversation title if first message, always update updatedAt
+          // Update conversation title if first message, always update updatedAt.
+          // "New thread" counts as no title: it is what the iPhone app opens
+          // every thread with, and those threads never got named.
           const [conv] = await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1);
-          if (conv && !conv.title) {
+          if (conv && isPlaceholderTitle(conv.title)) {
             await db.update(conversations)
               .set({ title: message.slice(0, 50), updatedAt: new Date() })
               .where(eq(conversations.id, conversationId));
+            // Files sent before the title existed were filed under the month;
+            // now the thread has a name, give them its folder in /drive.
+            void refileConversationFiles(conversationId);
           } else if (conv) {
             await db.update(conversations)
               .set({ updatedAt: new Date() })

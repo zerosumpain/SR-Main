@@ -47,6 +47,54 @@ describe('messagesToResponsesInput', () => {
     expect(items[1]).toEqual({ role: 'assistant', content: [{ type: 'output_text', text: 'hello' }] });
   });
 
+  it('keeps an image on a user turn as input_image, not the words "[image omitted]"', () => {
+    const url = 'data:image/jpeg;base64,/9j/AAAA';
+    const items = messagesToResponsesInput([
+      m('user', [
+        { type: 'text', text: 'What is wrong with this fella' },
+        { type: 'image_url', image_url: { url } },
+      ]),
+    ]);
+    expect(items).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'input_text', text: 'What is wrong with this fella' },
+          { type: 'input_image', image_url: url },
+        ],
+      },
+    ]);
+  });
+
+  it('keeps a PDF on a user turn as input_file with its name', () => {
+    const data = 'data:application/pdf;base64,JVBERi0x';
+    const items = messagesToResponsesInput([
+      m('user', [{ type: 'file', file: { filename: 'badge.pdf', file_data: data } }]),
+    ]);
+    expect(items[0]).toEqual({
+      role: 'user',
+      content: [{ type: 'input_file', filename: 'badge.pdf', file_data: data }],
+    });
+  });
+
+  it('sends a user turn with only an image, which has no text to keep it alive', () => {
+    const items = messagesToResponsesInput([
+      m('user', [{ type: 'image_url', image_url: { url: 'https://example.com/a.png' } }]),
+    ]);
+    expect(items).toHaveLength(1);
+  });
+
+  it('keeps a text-only part array as ONE input_text, as before', () => {
+    // A text turn must stay byte-identical, or every cached prefix breaks.
+    const items = messagesToResponsesInput([
+      m('user', [
+        { type: 'text', text: 'one' },
+        { type: 'text', text: 'two' },
+      ]),
+    ]);
+    expect(items[0]).toEqual({ role: 'user', content: [{ type: 'input_text', text: 'one\ntwo' }] });
+  });
+
   it('turns an assistant tool request into a function_call item', () => {
     const items = messagesToResponsesInput([
       m('assistant', '', {

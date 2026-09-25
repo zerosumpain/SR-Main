@@ -16,15 +16,19 @@ const MULTIMODAL = { provider: 'openrouter', modelId: 'z-ai/glm-5.1' } as const;
 beforeEach(() => clearCapabilityCache());
 
 describe('getModelCapabilities', () => {
-  it('still reports Codex as text-only — the picker must stay truthful about the model', () => {
-    expect(getModelCapabilities(CODEX).image).toBe(false);
+  it('reports Codex as reading images and PDFs — the Responses transport carries both', () => {
+    // It said text-only until 2026-09-25, so every photo in a Codex chat was
+    // replaced by another model's description of it. Measured that day through
+    // the bridge's endpoint: an input_image and an input_file PDF both read.
+    const caps = getModelCapabilities(CODEX);
+    expect(caps.image).toBe(true);
+    expect(caps.pdf).toBe(true);
   });
 
-  it('reports Codex as unable to take a document either', () => {
-    // Verified against the live bridge 2026-08-20: an image comes back "I can't
-    // access the image" and a PDF comes back "No document was attached". The
-    // model may well see; this transport cannot carry it.
-    expect(getModelCapabilities(CODEX).pdf).toBe(false);
+  it('does not claim audio or video for Codex, which the model list does not offer', () => {
+    const caps = getModelCapabilities(CODEX);
+    expect(caps.audio).toBe(false);
+    expect(caps.video).toBe(false);
   });
 
   it('falls back to the static map for a model the catalogue has never seen', () => {

@@ -1,6 +1,6 @@
 import { db } from '$lib/db';
 import { jkaiAttachments, type JkaiAttachment } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import {
   describeImage,
   describePdfBestEffort,
@@ -68,13 +68,15 @@ function cachedRecord(att: JkaiAttachment): PreanalysisRecord | null {
 }
 
 async function persist(att: JkaiAttachment, text: string): Promise<void> {
-  const meta = (att.metadata as Record<string, unknown> | null) ?? {};
-  const next = {
-    ...meta,
-    preanalysis: { v: PREANALYSIS_VERSION, text, at: new Date().toISOString() },
-  };
+  const patch = { preanalysis: { v: PREANALYSIS_VERSION, text, at: new Date().toISOString() } };
   try {
-    await db.update(jkaiAttachments).set({ metadata: next }).where(eq(jkaiAttachments.id, att.id));
+    // Merged in SQL, not spread from `att.metadata`: that copy is as old as the
+    // turn, and the /drive mirror stamps its link on this same column while
+    // the upload is still settling. Writing the stale copy back erased it.
+    await db
+      .update(jkaiAttachments)
+      .set({ metadata: sql`coalesce(${jkaiAttachments.metadata}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb` })
+      .where(eq(jkaiAttachments.id, att.id));
   } catch (err) {
     // A cache write failing must not cost the user their answer.
     console.warn(`[preanalyse] could not cache description for ${att.id}:`, err);

@@ -77,9 +77,10 @@ const OPENROUTER_CAPS: Record<string, ModelCapabilities> = {
  * when the model cannot read them natively (see `$lib/jkai/media/preanalyse`),
  * so the composer must not grey them out on a text-only model.
  *
- * This mattered in practice: John's chats run on `codex/gpt-5.6-terra`, which
- * maps to TEXT_ONLY, so every image he attached was marked incompatible and
- * dropped from the turn before it was ever sent.
+ * This mattered in practice: John's chats ran on `codex/gpt-5.6-terra`, which
+ * was TEXT_ONLY then, so every image he attached was marked incompatible and
+ * dropped from the turn before it was ever sent. (Codex reads images now; audio
+ * is the case that still leans on this.)
  *
  * Video is NOT included: there is no extraction path for it, so it stays gated
  * on what the model itself accepts.
@@ -150,15 +151,25 @@ export function clearCapabilityCache(): void {
 }
 
 export function getModelCapabilities(ctx: ModelContext): ModelCapabilities {
-  // Codex serves text only THROUGH THIS GATEWAY. The SDK does accept images,
-  // but as `local_image` with a filesystem PATH — the site passes base64/URLs,
-  // so there is no route from an uploaded attachment to a Codex turn without
-  // staging it to disk. Verified 2026-08-20: sent an image and a PDF to
-  // codex/gpt-5.6-terra through getLLMClient and it answered "I can't access
-  // the image" / "No document was attached". Claiming support here would
-  // surface a picker option that fails. (Chat is different — it stages the
-  // bytes itself; see getChatInputCapabilities.)
-  if (ctx.provider === 'codex' || isCodexModelId(ctx.modelId)) return TEXT_ONLY;
+  // Codex reads images and PDFs, through the bridge's Responses transport.
+  //
+  // This said TEXT_ONLY until 2026-09-25, and it was true when written: the
+  // SDK transport took images only as `local_image` file PATHS, and on
+  // 2026-08-20 an image and a PDF sent through it came back "I can't access
+  // the image" / "No document was attached". The bridge has since moved to the
+  // Responses API, which takes a data-URL `input_image` and an `input_file`
+  // directly, and every Codex model lists `input_modalities: ["text","image"]`.
+  // Measured through the endpoint the same day: a test image and a PDF were
+  // both read back exactly.
+  //
+  // What TEXT_ONLY cost: every photo in a Codex chat was described by another
+  // model and only the description sent, so a thread about a picture could not
+  // look at it again ("I can't measure it from the description alone").
+  //
+  // Audio and video stay false, because the list does not claim them. Audio is
+  // still transcribed first. The `sdk` rollback transport cannot carry any of
+  // this; setting CODEX_BRIDGE_TRANSPORT=sdk puts images back to "[image omitted]".
+  if (ctx.provider === 'codex' || isCodexModelId(ctx.modelId)) return IMAGE_PDF;
   warmCatalogueCaps();
   const id = mapLegacyModelId(ctx.modelId);
   return catalogueCaps?.get(id) ?? OPENROUTER_CAPS[id] ?? TEXT_ONLY;

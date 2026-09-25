@@ -105,6 +105,7 @@ export async function storeChatUpload(
     mimeType: mime,
     conversationId,
     source,
+    attachmentId: row.id,
   });
 
   return row;

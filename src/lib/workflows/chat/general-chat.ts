@@ -38,7 +38,7 @@ import { getCompiledPrompt, promptIdentity } from '$lib/workflows/prompts/loader
 import { inferToolsets } from '$lib/workflows/site-tools/keyword-classifier';
 import { notifySubscribers } from '$lib/workflows/chat/followup-queue';
 import type { JobEvent } from '$lib/workflows/chat/job-store';
-import { buildMultimodalContent, encodedSizeBytes } from '$lib/jkai/media/multimodal';
+import { allocateMediaCaps, buildMultimodalContent, encodedSizeBytes } from '$lib/jkai/media/multimodal';
 import { extractUrlsFromText, fetchUrlContent, isUrlFetchError } from '$lib/jkai/extract/url';
 import type { JkaiAttachment } from '$lib/db/schema';
 import type { HistoryMessage } from './conversation-history';
@@ -1099,9 +1099,19 @@ async function runGeneralChat(
   const mediaCaps = getModelCapabilities(options.modelContext);
 
   const recentHistory = compressed.messages;
-  for (const h of recentHistory) {
+  // Files the model can read go to it as files on EVERY turn, not only the one
+  // they arrived on — a follow-up about a photo has to be answered from the
+  // photo. Newest first, within a byte budget; see `allocateMediaCaps`.
+  const turnCaps = allocateMediaCaps(
+    [
+      ...recentHistory.map((h) => (h.role === 'user' ? h.attachments ?? [] : [])),
+      input.attachments ?? [],
+    ],
+    mediaCaps,
+  );
+  for (const [i, h] of recentHistory.entries()) {
     if (h.role === 'user' && h.attachments && h.attachments.length > 0) {
-      const parts = await buildMultimodalContent(h.content, h.attachments, { caps: mediaCaps });
+      const parts = await buildMultimodalContent(h.content, h.attachments, { caps: turnCaps[i] });
       messages.push({ role: 'user', content: parts as any });
     } else {
       messages.push({ role: h.role, content: h.content } as any);
@@ -1123,7 +1133,7 @@ async function runGeneralChat(
   messages.push({ role: 'user', content: `[Application note — not written by the user, and not visible to them.] Guidance for answering the next message:\n${turnNote}` });
 
   const userParts = await buildMultimodalContent(userMessage, input.attachments ?? [], {
-    caps: mediaCaps,
+    caps: turnCaps[turnCaps.length - 1],
   });
   const maxTurnBytes = Number(process.env.JKAI_MAX_TURN_BYTES ?? 104857600);
   if (encodedSizeBytes(userParts) > maxTurnBytes) {

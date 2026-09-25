@@ -67,8 +67,8 @@ export const DEFAULT_SELFIMPROVE_MODEL_ID = 'deepseek/deepseek-v4-flash';
 export const DEFAULT_DOCTOR_MODEL_ID = 'deepseek/deepseek-v4-flash';
 
 /**
- * Image captioning + OCR. MUST accept image input: the site default may be a
- * Codex model, which is text-only and would caption the prompt, not the file.
+ * Image captioning + OCR. MUST accept image input: a model that cannot see
+ * would caption the prompt, not the file.
  *
  * Was `openai/gpt-4o-mini`, which was wrong twice over. It **refused** to
  * transcribe roughly one document in three ("I'm unable to provide the
