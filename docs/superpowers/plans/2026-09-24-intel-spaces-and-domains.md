@@ -1022,9 +1022,11 @@ Then watch the master release run to `success` and confirm the deployed sha (mem
 
 - [ ] **Step 5: Verify live**
 
-On the VPS (read-only first):
-```bash
-ssh -i ~/.ssh/id_ed25519 johnk@157.180.19.38 'docker exec -i strange-rambling-app-db-1 psql -U app -d strange_rambling -Atc "select space_id, count(*) from intel_notes group by 1; select space_id, count(*) from intel_entities group by 1; select count(*) from gmail_accounts where principal_id = '"'"'owner'"'"'"'
+On the VPS, query the production database read-only (see the vps-ops skill for access) and check:
+```sql
+select space_id, count(*) from intel_notes group by 1;
+select space_id, count(*) from intel_entities group by 1;
+select count(*) from gmail_accounts where principal_id = 'owner';
 ```
 Expected: every row `owner`; counts equal the pre-deploy totals (5,807 notes on 2026-09-24 plus anything ingested since).
 Run the news backfill with the maintenance secret from the VPS (`x-maintenance-secret`, as the intel memory describes) → `{"newsSource":2}` or thereabouts.
@@ -1084,7 +1086,7 @@ Slice: daydream (`src/lib/daydream/**`), news (`correlate.server.ts`, `stats.ts`
 ### Task 15: Flip strict, ship A2
 
 - [ ] **Step 1:** `node scripts/check-intel-scope.mjs --strict` → ok with 0 baseline readers. Delete `scripts/intel-scope-baseline.json`'s contents to `[]` and change the gate line to `npm run gate:intel-scope -- --strict`.
-- [ ] **Step 2:** Add one sentence to the spec's Delivery section: "From A2 the gate runs `--strict`, so no PR can reintroduce an unscoped intel reader; that — not a runtime check — is what makes member data safe to write in PR B." Commit with the gate change.
+- [ ] **Step 2:** Add one sentence to the spec's Delivery section recording that from A2 the gate runs `--strict` as a per-file ratchet, and that PR B must still route member paths through `resolveRequestScope` and prove isolation with member-session tests — the gate alone is not the safeguard. Commit with the gate change.
 - [ ] **Step 3:** `./scripts/gate-remote.sh`, integration test locally, PR, wait for CI, merge explicitly, verify live exactly as Task 10 Step 5 (counts unchanged; `/jkai/intel`, `/jkai` chat, daydream page, a canvas with an intel node all still render with data).
 - [ ] **Step 4:** Update the memory section, then write the PR B plan against merged master.
 

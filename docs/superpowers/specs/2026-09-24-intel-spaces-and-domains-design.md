@@ -25,9 +25,7 @@ email / news / documents / home": news "keep" and chat captures both write
 | 3 | Domains | **Domain grouping now; Home Assistant ingest is a later phase.** Home is an empty domain until then. |
 | 4 | Phase 1 reach | **Member role + intel.** Members reach `/jkai/intel` read surfaces and connect their own Gmail. Chat, the app and the rest of the site stay owner-only. |
 
-Rejected: Postgres row-level security — it cannot be enforced for the app's
-connection in this deployment without changing how production connects, so
-scoping lives in code, where the gate can see it. Rejected: one Postgres schema per person (every Drizzle table object doubles; no
+Rejected: Postgres row-level security — scoping lives in code, where the leak gate and the tests can see it. Rejected: one Postgres schema per person (every Drizzle table object doubles; no
 precedent in the repo); a shared-entity graph filtered by contributor (summaries
 and aliases leak across people — ruled out by decision 1).
 
@@ -96,7 +94,7 @@ computed from my email can surface in someone else's graph.
 - `OWNER_INTEL_SCOPE = ['owner', 'household']` — used by every owner-only
   background consumer.
 - `scopeFromEvent(event)` — resolves the session email → principal → scope. The
-  LAN dev bypass resolves to the owner. **Never** accepts a space from the
+  LAN dev login resolves to the owner. **Never** accepts a space from the
   request; the UI's space chips can only *narrow* within the resolved scope.
 
 Every reader of intel data takes a scope and adds `space_id IN scope`:
@@ -168,8 +166,8 @@ A **Scope** rail section at the top of the left rail (above Search):
   `/admin/access` gains a role toggle; promoting creates the member's principal
   (idempotent on `external_ref`), demoting leaves their data in place.
 - `$lib/auth.ts` gains `isMemberAllowedPath(pathname)` — an **exact-path /
-  exact-pattern** list, never a prefix (see
-  `reference_gate_bypass_catalogue_is_prefix_vs_exact`):
+  exact-pattern** list, never a prefix (a prefix entry would open every
+  sibling path):
   - pages: `/jkai/intel`, `/jkai/intel/notes`, `/jkai/intel/notes/[id]`,
     `/jkai/intel/entities`, `/jkai/intel/entities/[id]`, `/jkai/intel/search`,
     `/jkai/intel/timeline`
