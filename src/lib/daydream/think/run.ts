@@ -28,6 +28,7 @@ import { DEFAULT_SUBJECT, errMsg } from '../types';
 import { buildProfileLines } from '../ponder/profile';
 import { TITLE_ECHO_WINDOW_DAYS } from '../refutations';
 import { localDay } from '../features/build';
+import { localDayStart } from '../budget';
 import { OUTCOMES, OUTCOME_ASK, questionAt, type Outcome, type Question } from './questions';
 import { MAX_TOOL_CALLS, RESEARCH_SITE_TOOLS, createToolbox, toolSetFor, type ToolSet } from './tools';
 import { MAX_NOTES, MAX_BODY_CHARS, parseReply, validateThinkOutput } from './audit';
@@ -35,6 +36,11 @@ import { MAX_NOTES, MAX_BODY_CHARS, parseReply, validateThinkOutput } from './au
 /** Tool rounds at full budget. The activity passes fewer when the budget is
  *  thin — a round is a model call. */
 export const MAX_ROUNDS = 6;
+
+/** Notes a day that may interrupt him. Two a cycle over twenty-one waking
+ *  cycles is forty-two WhatsApps; ponder's cap was four and that was the
+ *  complaint's upper end, not its lower. The rest land on the feed. */
+export const DAILY_RAISE_CAP = 4;
 
 export interface ThinkResult {
   channel: Question['channel'];
@@ -311,7 +317,27 @@ export async function runThink(
         })
         .from(daydreamThoughts)
         .where(and(inArray(daydreamThoughts.dedupeKey, persisted.createdKeys), eq(daydreamThoughts.status, 'new')));
+      const [{ raisedToday }] = await db
+        .select({ raisedToday: sql<number>`count(*)::int` })
+        .from(daydreamThoughts)
+        .where(
+          and(
+            sql`${daydreamThoughts.kind} like 'think\\_%'`,
+            eq(daydreamThoughts.channel, 'push'),
+            gte(daydreamThoughts.deliveredAt, localDayStart(now)),
+          ),
+        );
+      let budget = DAILY_RAISE_CAP - raisedToday;
       for (const row of rows) {
+        if (budget <= 0) {
+          // Over the day's cap: kept on the feed, never `new` (compose would
+          // send it) and never reviewed (`pendingReview` skips think kinds).
+          await db
+            .update(daydreamThoughts)
+            .set({ status: 'suppressed', channel: 'silent', suppressedReason: 'feed_only: daily cap', updatedAt: now })
+            .where(eq(daydreamThoughts.id, row.id));
+          continue;
+        }
         const sent = await notifyOwner({
           category: 'daydream',
           title: row.title,
@@ -320,7 +346,10 @@ export async function runThink(
           dedupeKey: row.dedupeKey,
           data: { thoughtId: row.id, kind: row.kind },
         });
-        if (sent.raised) result.notified++;
+        if (sent.raised) {
+          result.notified++;
+          budget--;
+        }
         // Stamped either way, as `deliver.ts` does: a note that went out is
         // `delivered` on `push`, and one the route held back is silent with the
         // reason — never left `new`, where compose would send it a second time.
