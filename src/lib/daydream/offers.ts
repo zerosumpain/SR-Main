@@ -22,6 +22,7 @@
 import { and, desc, eq, gte, isNotNull, lt, or, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamOffers, intelNotes } from '$lib/db/schema';
+import { OWNER_INTEL_SCOPE, spaceIn } from '$lib/jkai/intel/scope';
 import { getLLMClient } from '$lib/llm/client';
 import { resolveDaydreamModel } from './compose';
 import { errMsg } from './types';
@@ -210,6 +211,9 @@ export async function findOfferCandidates(limit = MAX_EXTRACT_PER_RUN): Promise<
     .where(
       and(
         eq(intelNotes.source, 'email'),
+        // The owner's mailbox: an offer is surfaced to him, never from a
+        // member's mail.
+        spaceIn(intelNotes.spaceId, OWNER_INTEL_SCOPE),
         // The ingest already classified these; re-running the classifier here
         // would be a second opinion nobody asked for.
         sql`${intelNotes.metadata}->>'emailKind' = 'bulk'`,

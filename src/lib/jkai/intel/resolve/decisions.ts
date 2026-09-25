@@ -12,9 +12,26 @@ import { loadEvidenceVersions, pairEvidenceVersion } from './evidence-version.se
 // upsert, so a human can overrule an earlier machine verdict and the pair still
 // holds exactly one answer.
 import { db, type DbExecutor } from '$lib/db';
-import { intelMatchDecisions } from '$lib/db/schema';
-import { eq, inArray, or, sql } from 'drizzle-orm';
+import { intelEntities, intelMatchDecisions } from '$lib/db/schema';
+import { and, eq, inArray, or, sql } from 'drizzle-orm';
 import { pairKeyOf } from './pair-key';
+import { OWNER_INTEL_SCOPE, OWNER_SPACE, spaceIn, type IntelScope } from '../scope';
+
+// Decisions carry no space column: a pair is two entities, and an entity has
+// one. So a decision's space is its entities', and every read here goes
+// through them — a pair outside the caller's space is not listed, and one
+// outside the caller's scope cannot be written or cleared.
+
+/** Throws unless both ids are entities (live or tombstoned) the scope can see. */
+async function assertPairInScope(aId: string, bId: string, scope: IntelScope): Promise<void> {
+  const rows = await db
+    .select({ id: intelEntities.id })
+    .from(intelEntities)
+    .where(and(inArray(intelEntities.id, [aId, bId]), spaceIn(intelEntities.spaceId, scope)));
+  for (const id of [aId, bId]) {
+    if (!rows.some((r) => r.id === id)) throw new Error(`entity ${id} not found`);
+  }
+}
 
 export type Verdict = 'same' | 'different' | 'unsure';
 export type DecidedBy = 'human' | 'llm' | 'auto';
@@ -62,13 +79,18 @@ export interface RecordDecisionInput {
  * no-op. Without that guard the nightly adjudication stage would quietly undo
  * the queue every night, which is the same class of bug as the client-side
  * dismiss it replaces — a decision that does not survive.
+ *
+ * `scope` is who is deciding: the ids come from a request, and a pair outside
+ * it is not found. The adjudicator passes the one space it is reading.
  */
-export async function recordDecision(input: RecordDecisionInput): Promise<void> {
+export async function recordDecision(input: RecordDecisionInput, scope: IntelScope = OWNER_INTEL_SCOPE): Promise<void> {
+  await assertPairInScope(input.aId, input.bId, scope);
   // Capture pre-decision records and graph features. Only human labels are evaluation truth.
+  // Both entities are in scope (above), and an edge takes its endpoints' space.
   const evidence = await db.execute(sql`SELECT e.id,e.name,e.type_id,t.name AS type_name,e.properties,e.aliases,e.summary,e.embedding::text,
-    (SELECT coalesce(jsonb_agg(DISTINCT CASE WHEN r.source_entity_id=e.id THEN r.target_entity_id ELSE r.source_entity_id END),'[]') FROM intel_relationships r WHERE r.source_entity_id=e.id OR r.target_entity_id=e.id) AS neighbours,
+    (SELECT coalesce(jsonb_agg(DISTINCT CASE WHEN r.source_entity_id=e.id THEN r.target_entity_id ELSE r.source_entity_id END),'[]') FROM intel_relationships r WHERE (r.source_entity_id=e.id OR r.target_entity_id=e.id) AND r.space_id=e.space_id) AS neighbours,
     (SELECT count(DISTINCT ne.note_id)::int FROM intel_note_entities ne WHERE ne.entity_id=e.id) AS note_count
-    FROM intel_entities e JOIN intel_entity_types t ON t.id=e.type_id WHERE e.id IN (${input.aId},${input.bId})`);
+    FROM intel_entities e JOIN intel_entity_types t ON t.id=e.type_id WHERE e.id IN (${input.aId},${input.bId}) AND ${spaceIn(sql`e.space_id`, scope)}`);
   await db.execute(sql`INSERT INTO intel_resolution_labels(pair_key,verdict,decided_by,features) VALUES (${pairKeyOf(input.aId,input.bId)},${input.verdict},${input.decidedBy},${JSON.stringify({ entities: evidence.rows, score: input.confidence, signals: input.signals ?? [], evidenceVersion: input.evidenceVersion, citations: input.citations ?? [] })}::jsonb)`);
 
   const key = pairKeyOf(input.aId, input.bId);
@@ -118,9 +140,19 @@ export async function recordDecision(input: RecordDecisionInput): Promise<void> 
     });
 }
 
-/** Every decision on record, keyed by pair. */
-export async function loadDecisions(): Promise<Map<string, MatchDecision>> {
-  const [rows, versions] = await Promise.all([db.select().from(intelMatchDecisions), loadEvidenceVersions()]);
+/**
+ * Every decision on record about one space's pairs, keyed by pair.
+ *
+ * Filtered on the `a` side alone: both sides of a pair are always one space
+ * (blocking, merging and `recordDecision` all refuse anything else), and a
+ * tombstone keeps its space, so a merged-away entity's verdicts still load.
+ */
+export async function loadDecisions(space: string = OWNER_SPACE): Promise<Map<string, MatchDecision>> {
+  const inSpace = db.select({ id: intelEntities.id }).from(intelEntities).where(eq(intelEntities.spaceId, space));
+  const [rows, versions] = await Promise.all([
+    db.select().from(intelMatchDecisions).where(inArray(intelMatchDecisions.aEntityId, inSpace)),
+    loadEvidenceVersions(space),
+  ]);
   return new Map(
     rows.map((r) => [
       r.pairKey,
@@ -144,8 +176,9 @@ export async function loadDecisions(): Promise<Map<string, MatchDecision>> {
   );
 }
 
-/** Drop a verdict entirely, putting the pair back in the queue. */
-export async function clearDecision(aId: string, bId: string): Promise<void> {
+/** Drop a verdict entirely, putting the pair back in the queue. Scoped as `recordDecision`. */
+export async function clearDecision(aId: string, bId: string, scope: IntelScope = OWNER_INTEL_SCOPE): Promise<void> {
+  await assertPairInScope(aId, bId, scope);
   await db.delete(intelMatchDecisions).where(inArray(intelMatchDecisions.pairKey, [pairKeyOf(aId, bId)]));
 }
 
@@ -160,6 +193,9 @@ export async function clearDecision(aId: string, bId: string): Promise<void> {
  * Self-pairs and collisions are dropped rather than merged — two verdicts about
  * the same pair after a rewrite is a contradiction, and the safest reading of a
  * contradiction is to ask again.
+ *
+ * No space predicate: it runs inside `mergeEntities`, after that has refused a
+ * pair from two spaces, so every verdict naming `mergedId` is its space's.
  */
 export async function repointDecisions(survivorId: string, mergedId: string, executor: DbExecutor = db): Promise<number> {
   const affected = await executor

@@ -24,6 +24,7 @@ import { ownerDecisions } from '../mail-decisions';
 import { listMailRules } from './store';
 import { MAX_ADMIT_SHARE, MAX_ADMITS_PER_WEEK } from './backtest';
 import { withActivity } from '$lib/context/activity';
+import { OWNER_INTEL_SCOPE, spaceIn, type IntelScope } from '../scope';
 
 export interface ProposalBatch {
   proposals: Array<Record<string, unknown>>;
@@ -40,8 +41,13 @@ const errMsg = (err: unknown) => (err instanceof Error ? err.message : String(er
  * threads: "you admitted 34 threads, 31 of which you had replied to" is
  * everything a rule-writer needs and gives away nothing about who wrote to whom
  * or what about.
+ *
+ * Every aggregate is over the queue in `scope` (the owner's by default): the
+ * rules are the owner's, and a member's sender domains are not the owner's to
+ * hand a model.
  */
-export async function gatherProposalContext(): Promise<string> {
+export async function gatherProposalContext(scope: IntelScope = OWNER_INTEL_SCOPE): Promise<string> {
+  const inScope = spaceIn(intelNotes.spaceId, scope);
   const decisions = await ownerDecisions();
   const admits = decisions.filter((d) => d.decision === 'admit');
   const rejects = decisions.filter((d) => d.decision === 'reject');
@@ -56,12 +62,12 @@ export async function gatherProposalContext(): Promise<string> {
       rejected: sql<number>`count(*) filter (where ${intelNotes.graphState} = 'rejected')::int`,
     })
     .from(intelNotes)
-    .where(eq(intelNotes.source, 'email'));
+    .where(and(eq(intelNotes.source, 'email'), inScope));
 
   const kinds = await db
     .select({ kind: sql<string>`coalesce(${intelNotes.metadata}->>'emailKind', 'unknown')`, n: sql<number>`count(*)::int` })
     .from(intelNotes)
-    .where(and(eq(intelNotes.source, 'email'), eq(intelNotes.graphState, 'pending')))
+    .where(and(eq(intelNotes.source, 'email'), eq(intelNotes.graphState, 'pending'), inScope))
     .groupBy(sql`coalesce(${intelNotes.metadata}->>'emailKind', 'unknown')`);
 
   // Top pending senders by volume — a domain name is not private in the way a
@@ -70,7 +76,7 @@ export async function gatherProposalContext(): Promise<string> {
   const senders = await db
     .select({ domain: sql<string>`coalesce(${intelNotes.metadata}->>'senderDomain', 'unknown')`, n: sql<number>`count(*)::int` })
     .from(intelNotes)
-    .where(and(eq(intelNotes.source, 'email'), eq(intelNotes.graphState, 'pending')))
+    .where(and(eq(intelNotes.source, 'email'), eq(intelNotes.graphState, 'pending'), inScope))
     .groupBy(sql`coalesce(${intelNotes.metadata}->>'senderDomain', 'unknown')`)
     .orderBy(sql`count(*) desc`)
     .limit(25);
@@ -86,7 +92,7 @@ export async function gatherProposalContext(): Promise<string> {
       watched: sql<number>`count(*) filter (where (${intelNotes.metadata}->'graphRelevance'->>'topWeight')::int >= 3)::int`,
     })
     .from(intelNotes)
-    .where(and(eq(intelNotes.source, 'email'), eq(intelNotes.graphState, 'pending')));
+    .where(and(eq(intelNotes.source, 'email'), eq(intelNotes.graphState, 'pending'), inScope));
 
   const existing = await listMailRules();
   const numeric = MAIL_FACT_KEYS.filter((f) => !STRING_MAIL_FACTS.has(f) && !BOOLEAN_MAIL_FACTS.has(f));
@@ -181,7 +187,10 @@ Output ONLY a JSON array of up to 3 rule objects. No prose, no code fence. If no
  * proposer that graded its own output would be the thing this design is
  * organised to avoid.
  */
-export async function proposeMailRules(maxProposals = 3): Promise<ProposalBatch> {
+export async function proposeMailRules(
+  maxProposals = 3,
+  scope: IntelScope = OWNER_INTEL_SCOPE,
+): Promise<ProposalBatch> {
   const result: ProposalBatch = { proposals: [], tokens: 0, error: null };
   try {
     const decisions = await ownerDecisions();
@@ -191,7 +200,7 @@ export async function proposeMailRules(maxProposals = 3): Promise<ProposalBatch>
       return result;
     }
 
-    const context = await gatherProposalContext();
+    const context = await gatherProposalContext(scope);
     const { client, model } = await getLLMClient(await resolveExtractionModel());
 
     // Tagged `extraction`, the role whose model it resolves above.

@@ -1,5 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import { hasJkaiServiceToken } from '$lib/server/invoke-auth';
+import { isOwnerScope } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 import type { RequestHandler } from './$types';
 
 /**
@@ -16,9 +18,14 @@ import type { RequestHandler } from './$types';
  * because "imported but never called" is not something the type checker or the
  * gate sees — the same hazard applies here, one hop further away.
  */
-export const POST: RequestHandler = async ({ request, locals }) => {
+export const POST: RequestHandler = async (event) => {
+	const { request, locals } = event;
 	const session = await locals.auth();
 	if (!hasJkaiServiceToken(request) && !session?.user) throw error(401, 'Unauthorized');
+	// Chat extraction writes notes into the OWNER's space (it takes no scope:
+	// chat threads are the owner's). Until it does, only the owner's scope may
+	// trigger it, or a member's thread would land in the owner's graph.
+	if (!isOwnerScope(await resolveRequestScope(event))) throw error(403, 'owner only');
 
 	const body = (await request.json().catch(() => null)) as
 		| { conversationId?: unknown; title?: unknown; force?: unknown }

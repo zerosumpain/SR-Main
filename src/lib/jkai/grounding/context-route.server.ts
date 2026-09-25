@@ -10,6 +10,7 @@ import { withActivity } from '$lib/context/activity';
 import { resolveContextRouterModel } from '$lib/server/models/workload-settings';
 import { thinkingRequestParams } from '$lib/models/thinking';
 import { canonicalName } from '$lib/jkai/intel/resolve/match';
+import { OWNER_INTEL_SCOPE } from '$lib/jkai/intel/scope';
 import type { RosterCluster } from '$lib/jkai/intel/context';
 import { fallbackRoute, parseRoute, renderRouterInput, ROUTER_SYSTEM, type ContextRoute } from './context-route';
 
@@ -85,6 +86,9 @@ const ANCHORS_PER_NAME = 2;
  * vector search always returns its nearest neighbours however far away they
  * are, while a name either matches an entity or it does not. Same lookup shape
  * as ingest's preview resolver. Ties go to the entity more notes mention.
+ *
+ * Chat's context is the owner's (a member scope gets no intel section at all),
+ * so anchors come from the owner's scope only.
  */
 export async function resolveAnchors(names: readonly string[]): Promise<Anchor[]> {
   if (!names.length) return [];
@@ -102,6 +106,7 @@ export async function resolveAnchors(names: readonly string[]): Promise<Anchor[]
     FROM intel_entities e
     LEFT JOIN intel_entity_types t ON t.id = e.type_id
     WHERE e.merged_into_id IS NULL
+      AND e.space_id = ANY(${pgTextArray(OWNER_INTEL_SCOPE)}::text[])
       AND (
         lower(e.name) = ANY(${pgTextArray(lower)}::text[])
         OR e.canonical_name = ANY(${pgTextArray(canonical)}::text[])

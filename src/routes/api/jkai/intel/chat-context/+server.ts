@@ -1,5 +1,6 @@
 import { json, error } from '@sveltejs/kit';
 import { hasJkaiServiceToken } from '$lib/server/invoke-auth';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 import type { RequestHandler } from './$types';
 
 /**
@@ -18,7 +19,8 @@ import type { RequestHandler } from './$types';
  * for knowledge alone and gets `grounding: ''`, which is what the in-process
  * caller already does with an empty id list.
  */
-export const POST: RequestHandler = async ({ request, locals }) => {
+export const POST: RequestHandler = async (event) => {
+	const { request, locals } = event;
 	const session = await locals.auth();
 	if (!hasJkaiServiceToken(request) && !session?.user) throw error(401, 'Unauthorized');
 
@@ -37,11 +39,15 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	// that merely imports the app's route tree.
 	const { buildKnowledgeContext, buildEntityGrounding } = await import('$lib/jkai/intel/context');
 
+	// Whose graph the turn is grounded in. Both builders default to the owner's,
+	// so passing nothing here would hand any caller the owner's knowledge.
+	const scope = await resolveRequestScope(event);
+
 	// Run together — they share a turn's latency budget and neither needs the
 	// other's answer.
 	const [knowledge, grounding] = await Promise.all([
-		userMessage ? buildKnowledgeContext(userMessage) : Promise.resolve(''),
-		entityIds.length ? buildEntityGrounding(entityIds) : Promise.resolve(''),
+		userMessage ? buildKnowledgeContext(userMessage, { scope }) : Promise.resolve(''),
+		entityIds.length ? buildEntityGrounding(entityIds, 'mentioned', scope) : Promise.resolve(''),
 	]);
 
 	return json({ knowledge, grounding });

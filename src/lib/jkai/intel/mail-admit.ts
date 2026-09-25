@@ -45,6 +45,7 @@ import {
 } from './gmail-ingest';
 import { recencyOf } from './staleness';
 import { recordMailDecision } from './mail-decisions';
+import { OWNER_INTEL_SCOPE, spaceIn, type IntelScope } from './scope';
 
 /** Attachments are evidence, not scratch — read-only to every workflow. */
 const PERMISSIONS: WorkflowFilePermissions = { read: true, write: false, append: false, delete: false };
@@ -119,6 +120,12 @@ export interface AdmitOptions {
    * would be far worse than a slow one.
    */
   budgetMs?: number;
+  /**
+   * Whose threads these may be. The ids come from a request or a rule; one
+   * outside the scope is `not-found`, never admitted, rejected or purged. The
+   * owner's by default — the queue and its rules are owner surfaces today.
+   */
+  scope?: IntelScope;
 }
 
 function slugForFile(text: string, max = 60): string {
@@ -239,7 +246,11 @@ export async function admitMailNotes(noteIds: string[], opts: AdmitOptions = {})
       spaceId: intelNotes.spaceId,
     })
     .from(intelNotes)
-    .where(and(inArray(intelNotes.id, noteIds), eq(intelNotes.source, 'email')));
+    .where(and(
+      inArray(intelNotes.id, noteIds),
+      eq(intelNotes.source, 'email'),
+      spaceIn(intelNotes.spaceId, opts.scope ?? OWNER_INTEL_SCOPE),
+    ));
 
   const found = new Map(notes.map((n) => [n.id, n]));
   for (const id of noteIds) {
@@ -468,10 +479,11 @@ export async function rejectMailNotes(noteIds: string[], opts: AdmitOptions = {}
   const out: RejectResult = { rejected: 0, items: [] };
   if (!noteIds.length) return out;
 
+  const scope = opts.scope ?? OWNER_INTEL_SCOPE;
   const notes = await db
     .select({ id: intelNotes.id, title: intelNotes.title, metadata: intelNotes.metadata, graphState: intelNotes.graphState })
     .from(intelNotes)
-    .where(and(inArray(intelNotes.id, noteIds), eq(intelNotes.source, 'email')));
+    .where(and(inArray(intelNotes.id, noteIds), eq(intelNotes.source, 'email'), spaceIn(intelNotes.spaceId, scope)));
   const found = new Set(notes.map((n) => n.id));
   for (const id of noteIds) {
     if (!found.has(id)) out.items.push({ noteId: id, status: 'not-found' });
@@ -482,10 +494,11 @@ export async function rejectMailNotes(noteIds: string[], opts: AdmitOptions = {}
   const wasAdmitted = notes.filter((n) => n.graphState === 'admitted').map((n) => n.id);
   if (wasAdmitted.length) {
     const { purgeMailFromGraph } = await import('./mail-purge');
-    await purgeMailFromGraph({ noteIds: wasAdmitted });
+    await purgeMailFromGraph({ noteIds: wasAdmitted, scope });
     for (const id of wasAdmitted) await removeMail(id);
   }
 
+  // `notes` is already the in-scope set, so updating by its ids stays in scope.
   await db
     .update(intelNotes)
     .set({ graphState: 'rejected', status: 'held', updatedAt: new Date() })
@@ -519,22 +532,25 @@ export async function rejectMailNotes(noteIds: string[], opts: AdmitOptions = {}
  * be wrong. Deliberately does NOT delete the original decision: the ledger is
  * the training data, and a reversal is a fact about it, not a reason to pretend
  * the first answer never happened.
+ *
+ * Only threads inside `scope` move; any other id is ignored.
  */
-export async function requeueMailNotes(noteIds: string[]): Promise<number> {
+export async function requeueMailNotes(noteIds: string[], scope: IntelScope = OWNER_INTEL_SCOPE): Promise<number> {
   if (!noteIds.length) return 0;
+  const inScope = spaceIn(intelNotes.spaceId, scope);
   const admitted = await db
     .select({ id: intelNotes.id })
     .from(intelNotes)
-    .where(and(inArray(intelNotes.id, noteIds), eq(intelNotes.graphState, 'admitted')));
+    .where(and(inArray(intelNotes.id, noteIds), eq(intelNotes.graphState, 'admitted'), inScope));
   if (admitted.length) {
     const { purgeMailFromGraph } = await import('./mail-purge');
-    await purgeMailFromGraph({ noteIds: admitted.map((r) => r.id) });
+    await purgeMailFromGraph({ noteIds: admitted.map((r) => r.id), scope });
     for (const row of admitted) await removeMail(row.id);
   }
   const result = await db
     .update(intelNotes)
     .set({ graphState: 'pending', status: 'held', updatedAt: new Date() })
-    .where(and(inArray(intelNotes.id, noteIds), eq(intelNotes.source, 'email')));
+    .where(and(inArray(intelNotes.id, noteIds), eq(intelNotes.source, 'email'), inScope));
   const count = (result as { rowCount?: number | null } | null)?.rowCount;
   return typeof count === 'number' ? count : noteIds.length;
 }

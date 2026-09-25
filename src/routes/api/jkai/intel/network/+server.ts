@@ -18,7 +18,7 @@ import { labelForView } from '$lib/jkai/intel/analytics/cluster-label';
 import { db } from '$lib/db';
 import { intelCategories, intelEntityTypes } from '$lib/db/schema';
 import { recencyOf, entityRelevance } from '$lib/jkai/intel/staleness';
-import { narrowScope } from '$lib/jkai/intel/scope';
+import { isOwnerScope, narrowScope } from '$lib/jkai/intel/scope';
 import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 import { domainCountsFromNodes } from '$lib/jkai/intel/domains';
 
@@ -86,20 +86,27 @@ export const GET: RequestHandler = async (event) => {
   /** Names the user typed, which no filter may override. */
   const clusterNames = new Map<number, string | null>();
   let ubiquitous: ReadonlySet<string> = new Set<string>();
-  try {
-    const roster = await reconcileFromAnalysis(analysis);
-    ubiquitous = roster.ubiquitous;
-    const byKey = new Map(roster.clusters.map((c) => [c.key, c]));
-    for (const [communityIndex, key] of roster.keyByIndex) {
-      const stored = byKey.get(key);
-      if (!stored) continue;
-      clusterByCommunity.set(communityIndex, { key, colourIndex: stored.colourIndex });
-      clusterLabels.set(communityIndex, stored.name ?? stored.autoLabel);
-      clusterNames.set(communityIndex, stored.name);
+  // Owner scope only. `reconcileFromAnalysis` REWRITES the one global roster,
+  // detected over the owner's graph; reconciling it against a member's analysis
+  // would overwrite the owner's clusters with the member's. Any other scope
+  // keeps the empty maps, so the client colours by community index exactly as
+  // it does when the roster is unavailable.
+  if (isOwnerScope(allowed)) {
+    try {
+      const roster = await reconcileFromAnalysis(analysis);
+      ubiquitous = roster.ubiquitous;
+      const byKey = new Map(roster.clusters.map((c) => [c.key, c]));
+      for (const [communityIndex, key] of roster.keyByIndex) {
+        const stored = byKey.get(key);
+        if (!stored) continue;
+        clusterByCommunity.set(communityIndex, { key, colourIndex: stored.colourIndex });
+        clusterLabels.set(communityIndex, stored.name ?? stored.autoLabel);
+        clusterNames.set(communityIndex, stored.name);
+      }
+    } catch (err) {
+      console.warn('[intel/network] cluster roster unavailable; colouring by community index', err);
+      clusterByCommunity = new Map();
     }
-  } catch (err) {
-    console.warn('[intel/network] cluster roster unavailable; colouring by community index', err);
-    clusterByCommunity = new Map();
   }
   // One clock for the whole response, so two nodes of identical age cannot come
   // back with different recency because the loop took a millisecond.

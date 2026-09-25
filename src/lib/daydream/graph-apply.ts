@@ -20,6 +20,7 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamThoughts, intelInsights } from '$lib/db/schema';
+import { OWNER_INTEL_SCOPE, spaceIn } from '$lib/jkai/intel/scope';
 import { errMsg } from './types';
 import { weaveThought, type WeaveOutcome } from './weave';
 
@@ -124,10 +125,12 @@ export async function syncInsightStatuses(limit = 50): Promise<number> {
     byInsight.set(id, [...(byInsight.get(id) ?? []), r.id]);
   }
   if (byInsight.size === 0) return 0;
+  // Daydream only ever bridges the owner's insights, so only the owner's
+  // verdict on one can retire its thought.
   const insights = await db
     .select({ id: intelInsights.id, status: intelInsights.status })
     .from(intelInsights)
-    .where(inArray(intelInsights.id, [...byInsight.keys()]));
+    .where(and(inArray(intelInsights.id, [...byInsight.keys()]), spaceIn(intelInsights.spaceId, OWNER_INTEL_SCOPE)));
   let archived = 0;
   for (const ins of insights) {
     if (ins.status !== 'dismissed' && ins.status !== 'actioned') continue;

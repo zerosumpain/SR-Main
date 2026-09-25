@@ -19,6 +19,12 @@ import {
   type LensFilters,
   type LensGrowth,
 } from './lenses';
+import { OWNER_INTEL_SCOPE, spaceIn, writeSpace, type IntelScope } from './scope';
+
+// Every function takes the reader's scope (default: the owner's). A lens is an
+// artefact: it is created in the reader's own space, and read, edited, deleted
+// and evaluated only inside the scope — an id or slug from another space is
+// simply not found.
 
 // ── CRUD (dynamic `$lib/db` import — see the file header) ────────────────────
 
@@ -73,50 +79,62 @@ function trimmed(value: unknown, max: number): string | null {
   return s || null;
 }
 
-export async function listLenses(): Promise<StoredLens[]> {
+export async function listLenses(scope: IntelScope = OWNER_INTEL_SCOPE): Promise<StoredLens[]> {
   const { db } = await import('$lib/db');
   const rows = await db
     .select()
     .from(intelLenses)
+    .where(spaceIn(intelLenses.spaceId, scope))
     .orderBy(desc(intelLenses.isDefault), asc(intelLenses.name))
     .limit(200);
   return rows.map(toStored);
 }
 
 /** Fetch by id or slug — a lens is addressed both ways (URL vs API). */
-export async function getLens(idOrSlug: string): Promise<StoredLens | null> {
+export async function getLens(idOrSlug: string, scope: IntelScope = OWNER_INTEL_SCOPE): Promise<StoredLens | null> {
   const { db } = await import('$lib/db');
   const key = String(idOrSlug ?? '').trim();
   if (!key) return null;
   const [row] = await db
     .select()
     .from(intelLenses)
-    .where(or(eq(intelLenses.id, key), eq(intelLenses.slug, key)))
+    .where(and(or(eq(intelLenses.id, key), eq(intelLenses.slug, key)), spaceIn(intelLenses.spaceId, scope)))
     .limit(1);
   return row ? toStored(row) : null;
 }
 
-/** Exactly one lens is the default; setting a new one clears the old. */
-async function clearOtherDefaults(exceptId: string | null): Promise<void> {
+/**
+ * Exactly one lens per space is the default; setting a new one clears the old.
+ * Only in the writer's own space — choosing a default must not reach into
+ * anyone else's lenses, the household's included.
+ */
+async function clearOtherDefaults(exceptId: string | null, scope: IntelScope): Promise<void> {
   const { db } = await import('$lib/db');
+  const inOwnSpace = eq(intelLenses.spaceId, writeSpace(scope));
   await db
     .update(intelLenses)
     .set({ isDefault: false, updatedAt: new Date() })
-    .where(exceptId ? and(eq(intelLenses.isDefault, true), sql`${intelLenses.id} <> ${exceptId}`) : eq(intelLenses.isDefault, true));
+    .where(
+      exceptId
+        ? and(eq(intelLenses.isDefault, true), sql`${intelLenses.id} <> ${exceptId}`, inOwnSpace)
+        : and(eq(intelLenses.isDefault, true), inOwnSpace),
+    );
 }
 
-export async function createLens(input: LensInput): Promise<StoredLens> {
+export async function createLens(input: LensInput, scope: IntelScope = OWNER_INTEL_SCOPE): Promise<StoredLens> {
   const { db } = await import('$lib/db');
   const name = trimmed(input.name, MAX_NAME_LENGTH);
   if (!name) throw new Error('name is required');
 
   const base = slugify(name);
+  // Slugs are globally unique today, so this looks across every space. The
+  // owner keeps bare slugs; prefixing a member's is PR B's.
   const taken = (
     await db.select({ slug: intelLenses.slug }).from(intelLenses).where(ilike(intelLenses.slug, `${base}%`))
   ).map((r) => r.slug);
 
   const isDefault = Boolean(input.isDefault);
-  if (isDefault) await clearOtherDefaults(null);
+  if (isDefault) await clearOtherDefaults(null, scope);
 
   const [row] = await db
     .insert(intelLenses)
@@ -128,13 +146,18 @@ export async function createLens(input: LensInput): Promise<StoredLens> {
       standingInstructions: trimmed(input.standingInstructions, MAX_INSTRUCTIONS_LENGTH),
       isDefault,
       cron: trimmed(input.cron, 120),
+      spaceId: writeSpace(scope),
     })
     .returning();
 
   return toStored(row);
 }
 
-export async function updateLens(id: string, patch: LensInput): Promise<StoredLens | null> {
+export async function updateLens(
+  id: string,
+  patch: LensInput,
+  scope: IntelScope = OWNER_INTEL_SCOPE,
+): Promise<StoredLens | null> {
   const { db } = await import('$lib/db');
   const values: Record<string, unknown> = { updatedAt: new Date() };
 
@@ -151,18 +174,22 @@ export async function updateLens(id: string, patch: LensInput): Promise<StoredLe
   if (patch.cron !== undefined) values.cron = trimmed(patch.cron, 120);
   if (patch.isDefault !== undefined) {
     values.isDefault = Boolean(patch.isDefault);
-    if (values.isDefault) await clearOtherDefaults(id);
+    if (values.isDefault) await clearOtherDefaults(id, scope);
   }
 
-  const [row] = await db.update(intelLenses).set(values).where(eq(intelLenses.id, id)).returning();
+  const [row] = await db
+    .update(intelLenses)
+    .set(values)
+    .where(and(eq(intelLenses.id, id), spaceIn(intelLenses.spaceId, scope)))
+    .returning();
   return row ? toStored(row) : null;
 }
 
-export async function deleteLens(id: string): Promise<boolean> {
+export async function deleteLens(id: string, scope: IntelScope = OWNER_INTEL_SCOPE): Promise<boolean> {
   const { db } = await import('$lib/db');
   const deleted = await db
     .delete(intelLenses)
-    .where(eq(intelLenses.id, id))
+    .where(and(eq(intelLenses.id, id), spaceIn(intelLenses.spaceId, scope)))
     .returning({ id: intelLenses.id });
   return deleted.length > 0;
 }
@@ -177,9 +204,12 @@ export async function deleteLens(id: string): Promise<boolean> {
  * loading the analysis when a community filter is actually set keeps the common
  * case a single query.
  */
-export async function lensEntityIds(filters: LensFilters): Promise<string[]> {
+export async function lensEntityIds(
+  filters: LensFilters,
+  scope: IntelScope = OWNER_INTEL_SCOPE,
+): Promise<string[]> {
   const { db } = await import('$lib/db');
-  const plan = buildLensFilter(filters);
+  const plan = buildLensFilter(filters, scope);
 
   const rows = await db
     .select({ id: intelEntities.id })
@@ -190,7 +220,7 @@ export async function lensEntityIds(filters: LensFilters): Promise<string[]> {
 
   if (plan.needsAnalysis) {
     const { getGraphAnalysis } = await import('./analytics/load');
-    const { community } = await getGraphAnalysis();
+    const { community } = await getGraphAnalysis(false, { scope });
     const wanted = new Set(plan.communityIds);
     ids = ids.filter((id) => {
       const c = community.membership.get(id);
@@ -218,12 +248,15 @@ export interface LensCheck extends LensGrowth {
  * watchlist owns what a delta means and how loudly to say it, and a module that
  * both measures and alarms cannot be re-run to check a number.
  */
-export async function runLensCheck(lensId: string): Promise<LensCheck | null> {
+export async function runLensCheck(
+  lensId: string,
+  scope: IntelScope = OWNER_INTEL_SCOPE,
+): Promise<LensCheck | null> {
   const { db } = await import('$lib/db');
-  const lens = await getLens(lensId);
+  const lens = await getLens(lensId, scope);
   if (!lens) return null;
 
-  const ids = await lensEntityIds(lens.filters);
+  const ids = await lensEntityIds(lens.filters, scope);
   const growth = lensGrowth(ids.length, lens.lastCount);
   const checkedAt = new Date();
 
@@ -231,7 +264,7 @@ export async function runLensCheck(lensId: string): Promise<LensCheck | null> {
     ? await db
         .select({ id: intelEntities.id, name: intelEntities.name })
         .from(intelEntities)
-        .where(inArray(intelEntities.id, ids.slice(0, MAX_FACET_VALUES * 10)))
+        .where(and(inArray(intelEntities.id, ids.slice(0, MAX_FACET_VALUES * 10)), spaceIn(intelEntities.spaceId, scope)))
         .orderBy(desc(intelEntities.createdAt))
         .limit(5)
     : [];
@@ -239,7 +272,7 @@ export async function runLensCheck(lensId: string): Promise<LensCheck | null> {
   await db
     .update(intelLenses)
     .set({ lastCount: growth.count, lastRunAt: checkedAt, updatedAt: checkedAt })
-    .where(eq(intelLenses.id, lens.id));
+    .where(and(eq(intelLenses.id, lens.id), spaceIn(intelLenses.spaceId, scope)));
 
   return { ...growth, lensId: lens.id, slug: lens.slug, name: lens.name, newest, checkedAt };
 }
@@ -255,18 +288,23 @@ export async function runLensCheck(lensId: string): Promise<LensCheck | null> {
  * should be a monitor.
  *
  * Returns only lenses whose result set actually GREW — no growth is not news.
+ *
+ * Runs the lenses in the scope's OWN space only, evaluated over the scope. A
+ * household lens has one `lastCount`, and two members' sweeps counting it over
+ * two different scopes would each read the other's number as growth. The
+ * nightly engine loops spaces (plan Task 14); until then this is the owner's.
  */
-export async function runDueLensChecks(): Promise<LensCheck[]> {
+export async function runDueLensChecks(scope: IntelScope = OWNER_INTEL_SCOPE): Promise<LensCheck[]> {
   const { db } = await import('$lib/db');
   const due = await db
     .select({ id: intelLenses.id })
     .from(intelLenses)
-    .where(isNotNull(intelLenses.cron));
+    .where(and(isNotNull(intelLenses.cron), eq(intelLenses.spaceId, writeSpace(scope))));
 
   const changes: LensCheck[] = [];
   for (const row of due) {
     try {
-      const check = await runLensCheck(row.id);
+      const check = await runLensCheck(row.id, scope);
       if (check?.grew) changes.push(check);
     } catch (err) {
       // One broken lens filter must not stop the rest.

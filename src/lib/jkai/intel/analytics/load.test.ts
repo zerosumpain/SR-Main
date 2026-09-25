@@ -46,6 +46,12 @@ describe('getGraphAnalysis scoping', () => {
     expect(edges.sql).toContain('r.suppressed IS NOT TRUE');
     expect(suppressed.sql).toContain('r.space_id = ANY(');
     expect(suppressed.sql).toContain('r.suppressed IS TRUE');
+    // Every aliased intel table, not only the edge: endpoints, survivors, note.
+    for (const alias of ['s', 'sm', 't', 'tm']) {
+      expect(edges.sql).toContain(`${alias}.space_id = ANY(`);
+      expect(suppressed.sql).toContain(`${alias}.space_id = ANY(`);
+    }
+    expect(edges.sql).toContain('n.space_id = ANY(');
     for (const q of qs) {
       // Bound as ONE array literal, never an expanded parameter list.
       expect(q.params).toContain('{"u_member","household"}');

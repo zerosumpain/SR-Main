@@ -7,11 +7,25 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import { retrieveMemories } from '$lib/jkai/memory/retrieve.server';
 import { writeMemory, forgetMemory, pinMemory } from '$lib/jkai/memory/service.server';
 import { setMemoryLinks, backfillMemoryLinks, memoryLinks } from '$lib/jkai/memory/graph.server';
+import { isOwnerScope, spaceIn, type IntelScope } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
-export const GET: RequestHandler = async ({ url }) => {
+// jkai memory is the OWNER's: memories carry no space, and the memory-entity
+// links and their backfill read the owner's graph (a memory library consumer,
+// owner by default). So the route is owner-only, and its own intel reads (the
+// entity picker, a correction's links) still carry the owner's scope.
+async function ownerScope(event: Parameters<RequestHandler>[0]): Promise<IntelScope> {
+  const scope = await resolveRequestScope(event);
+  if (!isOwnerScope(scope)) throw error(403, 'jkai memory is owner-only');
+  return scope;
+}
+
+export const GET: RequestHandler = async (event) => {
+  const { url } = event;
+  const scope = await ownerScope(event);
   if (url.searchParams.has('entities')) {
     const query = url.searchParams.get('entities') ?? '';
-    const result = await db.execute(sql`SELECT e.id,e.name,t.name AS type FROM intel_entities e JOIN intel_entity_types t ON t.id=e.type_id WHERE e.merged_into_id IS NULL AND e.name ILIKE ${`%${query}%`} ORDER BY e.name LIMIT 30`);
+    const result = await db.execute(sql`SELECT e.id,e.name,t.name AS type FROM intel_entities e JOIN intel_entity_types t ON t.id=e.type_id WHERE e.merged_into_id IS NULL AND ${spaceIn(sql`e.space_id`, scope)} AND e.name ILIKE ${`%${query}%`} ORDER BY e.name LIMIT 30`);
     return json({ entities: result.rows });
   }
   let memories = await retrieveMemories(url.searchParams.get('q') ?? '', undefined, 100, { asOf: url.searchParams.get('asOf') || undefined });
@@ -29,8 +43,9 @@ export const GET: RequestHandler = async ({ url }) => {
 };
 const input = z.object({ action: z.enum(['save','correct','forget','pin','link','backfill']), id: z.string().optional(), content: z.string().min(1).max(12000).optional(), category: z.string().optional(),
   pinned: z.boolean().optional(), entityIds: z.array(z.string()).max(20).optional(), validFrom: z.string().optional(), validUntil: z.string().optional() });
-export const POST: RequestHandler = async ({ request }) => {
-  const parsed = input.safeParse(await request.json());
+export const POST: RequestHandler = async (event) => {
+  const scope = await ownerScope(event);
+  const parsed = input.safeParse(await event.request.json());
   if (!parsed.success) throw error(400,'Invalid memory action');
   const body = parsed.data;
   try {
@@ -48,7 +63,7 @@ export const POST: RequestHandler = async ({ request }) => {
     if (body.action === 'link') await db.transaction(async tx => { await tx.execute(sql`select pg_advisory_xact_lock(hashtext('jkai-memory-write'))`); await setMemoryLinks(body.id!,body.entityIds ?? [],tx); });
     if (body.action === 'correct') {
       if (!body.content) throw new Error('Correction content is required');
-      const links = await db.execute(sql`SELECT coalesce(e.merged_into_id,e.id) id FROM jkai_memory_entities l JOIN intel_entities e ON e.id=l.entity_id WHERE l.memory_id=${body.id}`);
+      const links = await db.execute(sql`SELECT coalesce(e.merged_into_id,e.id) id FROM jkai_memory_entities l JOIN intel_entities e ON e.id=l.entity_id WHERE l.memory_id=${body.id} AND ${spaceIn(sql`e.space_id`, scope)}`);
       await writeMemory({ category: old.category, content: body.content, replacesId: old.id, entityIds: links.rows.map(r=>String(r.id)),
         provenance: { ...old.provenance, origin: 'user', assertion: 'stated', sourceId: `memory-editor:${crypto.randomUUID()}`, validFrom: body.validFrom ?? new Date().toISOString(), validUntil: body.validUntil } });
     }

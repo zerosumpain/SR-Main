@@ -526,7 +526,9 @@ export async function deleteDerivedIntel(
 
     const { deleteNoteCascade } = await import('./ingest');
     for (const note of notes) {
-      const cascade = await deleteNoteCascade(note.id);
+      // The note was found in `spaceId`, so that is the scope it is deleted in.
+      const cascade = await deleteNoteCascade(note.id, [spaceId]);
+      if (!cascade) continue;
       result.notesDeleted += 1;
       result.entitiesRemoved += cascade.removedEntities;
       result.relationshipsRemoved += cascade.removedRelationships;
@@ -675,6 +677,7 @@ export async function backfillIntelExtraction(opts: BackfillOptions = {}): Promi
      * committed is housekeeping, and only the second belongs here.
      *
      * The derived note is the record of that act, so joining on it IS the gate.
+     * Research is the owner's, so the gate is the owner's derived note.
      */
     const sessions = await db
       .select({ id: researchSessions.id })
@@ -684,6 +687,7 @@ export async function backfillIntelExtraction(opts: BackfillOptions = {}): Promi
         and(
           sql`${intelNotes.metadata}->>'autoKind' = 'research'`,
           sql`${intelNotes.metadata}->>'refId' = ${researchSessions.id}`,
+          eq(intelNotes.spaceId, OWNER_SPACE),
         ),
       )
       .where(and(isNotNull(researchSessions.report), eq(intelNotes.graphState, 'admitted')))

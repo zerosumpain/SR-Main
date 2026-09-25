@@ -9,6 +9,8 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { loadMailQueue, similarPending, backfillPendingEmbeddings } from '$lib/jkai/intel/mail-queue';
 import { admitMailNotes, rejectMailNotes, requeueMailNotes } from '$lib/jkai/intel/mail-admit';
+import { isOwnerScope } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
 /**
  * How long one admit request will work before handing the rest back.
@@ -37,15 +39,19 @@ function readIds(raw: unknown): string[] {
   return [...new Set(raw.map((v) => String(v ?? '').trim()).filter(Boolean))];
 }
 
-export const GET: RequestHandler = async () => {
-  const queue = await loadMailQueue();
+// Every action carries the request's scope: the queue, the similar-thread
+// lookup, relevance scoring and each admit / reject / requeue see only threads
+// in it, and an id outside it is `not-found`, never acted on.
+export const GET: RequestHandler = async (event) => {
+  const queue = await loadMailQueue(undefined, await resolveRequestScope(event));
   return json(queue);
 };
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async (event) => {
+  const scope = await resolveRequestScope(event);
   let body: Record<string, unknown>;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    body = (await event.request.json()) as Record<string, unknown>;
   } catch {
     return json({ error: 'Body must be JSON.' }, { status: 400 });
   }
@@ -58,6 +64,10 @@ export const POST: RequestHandler = async ({ request }) => {
     // Held threads captured before the gate existed carry a content hash, so
     // the sweep will never re-read them and they would stay unembedded — and
     // therefore invisible to "find more like this" — indefinitely.
+    //
+    // A whole-corpus backfill (embeddings are per row and global, spec §2)
+    // whose counts span every space, so it is the owner's to run.
+    if (!isOwnerScope(scope)) return json({ error: 'owner only' }, { status: 403 });
     return json(await backfillPendingEmbeddings());
   }
 
@@ -67,13 +77,13 @@ export const POST: RequestHandler = async ({ request }) => {
     // it must be re-runnable, because watching an entity or pinning one to a
     // dossier changes every score in the queue.
     const { scoreMailRelevance } = await import('$lib/jkai/intel/mail-relevance');
-    return json(await scoreMailRelevance({ states: ['pending', 'admitted'] }));
+    return json(await scoreMailRelevance({ states: ['pending', 'admitted'], scope }));
   }
 
   if (action === 'similar') {
     const [noteId] = noteIds;
     if (!noteId) return json({ error: 'similar needs one note id.' }, { status: 400 });
-    return json({ noteIds: await similarPending(noteId) });
+    return json({ noteIds: await similarPending(noteId, undefined, scope) });
   }
 
   if (!noteIds.length) return json({ error: 'No threads given.' }, { status: 400 });
@@ -85,6 +95,7 @@ export const POST: RequestHandler = async ({ request }) => {
         actor: 'owner',
         reason,
         budgetMs: ADMIT_BUDGET_MS,
+        scope,
       });
       // Everything the caller asked for that this request did not get to: what
       // the time budget deferred, plus anything past the hard cap.
@@ -97,11 +108,11 @@ export const POST: RequestHandler = async ({ request }) => {
       // No time budget: a rejection is one UPDATE and a ledger write, so a
       // thousand of them finish in well under the proxy's window.
       const batch = noteIds.slice(0, MAX_REJECT_PER_REQUEST);
-      const result = await rejectMailNotes(batch, { actor: 'owner', reason });
+      const result = await rejectMailNotes(batch, { actor: 'owner', reason, scope });
       return json({ ...result, remaining: noteIds.slice(MAX_REJECT_PER_REQUEST) });
     }
     if (action === 'requeue') {
-      return json({ requeued: await requeueMailNotes(noteIds.slice(0, MAX_REJECT_PER_REQUEST)) });
+      return json({ requeued: await requeueMailNotes(noteIds.slice(0, MAX_REJECT_PER_REQUEST), scope) });
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

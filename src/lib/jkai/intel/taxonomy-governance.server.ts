@@ -2,6 +2,12 @@ import { pgTextArray } from '$lib/db/sql-array';
 import { db, type DbExecutor } from '$lib/db';
 import { sql } from 'drizzle-orm';
 import { invalidateGraphAnalysis } from './analytics/load';
+import { OWNER_INTEL_SCOPE, spaceIn, type IntelScope } from './scope';
+
+// The taxonomy is ONE vocabulary shared by every space, so a merge moves every
+// space's members — leaving a member's entities on a retired type would strand
+// them. What is per space is what a person can SEE or PICK: the evidence
+// samples, and the hand-picked members of a reclassify.
 export type TaxonomyKind = 'type' | 'category';
 export type TaxonomyAction = 'merge' | 'broader' | 'related' | 'reclassify';
 type SavedRow = { table: string; id: string; field: string; before: unknown; after: unknown };
@@ -15,8 +21,19 @@ async function changeField(tx: DbExecutor, table: string, id: string, field: str
   await tx.execute(sql`UPDATE ${sql.raw(table)} SET ${sql.raw(field)} = ${json ? sql`${JSON.stringify(value)}::jsonb` : sql`${String(value)}`} WHERE id=${id}`);
 }
 
-/** Every operation records exact assignments; undo refuses to overwrite a later edit. */
-export async function changeTaxonomy(kind: TaxonomyKind, action: TaxonomyAction, fromId: string, intoId: string, memberIds?: string[]) {
+/**
+ * Every operation records exact assignments; undo refuses to overwrite a later edit.
+ * `scope` confines a reclassify's picked members: an id outside it fails the
+ * "no longer belong to the source" check rather than moving someone else's row.
+ */
+export async function changeTaxonomy(
+  kind: TaxonomyKind,
+  action: TaxonomyAction,
+  fromId: string,
+  intoId: string,
+  memberIds?: string[],
+  scope: IntelScope = OWNER_INTEL_SCOPE,
+) {
   if (!['type', 'category'].includes(kind) || !['merge', 'broader', 'related', 'reclassify'].includes(action)) throw new Error('Unknown taxonomy operation');
   if (!fromId || !intoId || fromId === intoId) throw new Error('Choose two distinct taxonomy entries');
   const result = await db.transaction(async tx => {
@@ -40,9 +57,12 @@ export async function changeTaxonomy(kind: TaxonomyKind, action: TaxonomyAction,
       linkId = String(link.rows[0].id);
     } else {
       if (action === 'reclassify' && (!memberIds?.length || memberIds.length > 200)) throw new Error('Select 1–200 members to reclassify');
+      const picked = action === 'reclassify'
+        ? sql`AND id=ANY(${pgTextArray(memberIds!)}::text[]) AND ${spaceIn(sql`space_id`, scope)}`
+        : sql``;
       const members = kind === 'type'
-        ? await tx.execute(sql`SELECT id, type_id AS value FROM intel_entities WHERE type_id=${fromId} ${action === 'reclassify' ? sql`AND id=ANY(${pgTextArray(memberIds!)}::text[])` : sql``} FOR UPDATE`)
-        : await tx.execute(sql`SELECT id, categories AS value FROM intel_notes WHERE categories ? ${String(from.slug)} ${action === 'reclassify' ? sql`AND id=ANY(${pgTextArray(memberIds!)}::text[])` : sql``} FOR UPDATE`);
+        ? await tx.execute(sql`SELECT id, type_id AS value FROM intel_entities WHERE type_id=${fromId} ${picked} FOR UPDATE`)
+        : await tx.execute(sql`SELECT id, categories AS value FROM intel_notes WHERE categories ? ${String(from.slug)} ${picked} FOR UPDATE`);
       if (action === 'reclassify' && members.rows.length !== new Set(memberIds).size) throw new Error('Selected members no longer belong to the source');
       for (const row of members.rows) {
         const after = kind === 'type' ? intoId : [...new Set((row.value as string[]).map(v => v === from.slug ? String(into.slug) : v))];
@@ -89,14 +109,18 @@ export async function undoTaxonomy(id: string) {
   invalidateGraphAnalysis();
 }
 
-export async function taxonomyEvidence(kind: TaxonomyKind, id: string) {
+/** Sample members of a type or category — names and excerpts, so scoped. */
+export async function taxonomyEvidence(kind: TaxonomyKind, id: string, scope: IntelScope = OWNER_INTEL_SCOPE) {
   const samples = kind === 'type'
-    ? await db.execute(sql`SELECT id, name AS title, summary AS excerpt FROM intel_entities WHERE type_id=${id} AND merged_into_id IS NULL ORDER BY updated_at DESC LIMIT 20`)
-    : await db.execute(sql`SELECT n.id, n.title, left(coalesce(n.processed_content,n.raw_content),320) AS excerpt FROM intel_notes n JOIN intel_categories c ON n.categories ? c.slug WHERE c.id=${id} ORDER BY n.created_at DESC LIMIT 20`);
+    ? await db.execute(sql`SELECT id, name AS title, summary AS excerpt FROM intel_entities WHERE type_id=${id} AND merged_into_id IS NULL AND ${spaceIn(sql`space_id`, scope)} ORDER BY updated_at DESC LIMIT 20`)
+    : await db.execute(sql`SELECT n.id, n.title, left(coalesce(n.processed_content,n.raw_content),320) AS excerpt FROM intel_notes n JOIN intel_categories c ON n.categories ? c.slug WHERE c.id=${id} AND ${spaceIn(sql`n.space_id`, scope)} ORDER BY n.created_at DESC LIMIT 20`);
   return samples.rows;
 }
 
-/** Nightly exact-equivalence cleanup; semantic and hierarchical proposals remain reviewable. */
+/**
+ * Nightly exact-equivalence cleanup; semantic and hierarchical proposals remain reviewable.
+ * Global like the vocabulary: usage counts span every space and no row is returned.
+ */
 export async function runTaxonomyQuality(limit = 5) {
   const { listTypesWithUsage, listCategoriesWithUsage, suggestTypeMerges, suggestCategoryMerges } = await import('./taxonomy');
   const [types,categories] = await Promise.all([listTypesWithUsage(),listCategoriesWithUsage()]);

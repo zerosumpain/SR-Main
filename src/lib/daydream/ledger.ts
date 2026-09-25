@@ -841,6 +841,7 @@ export async function loadFamily() {
 /** Money, in one read: what went out, what is live, what is coming. */
 export async function loadMoney() {
   const { daydreamSpend, daydreamOffers, intelTimelineEvents } = await import('$lib/db/schema');
+  const { OWNER_INTEL_SCOPE, spaceIn } = await import('$lib/jkai/intel/scope');
   const { getSetting } = await import('$lib/server/models/settings');
   const now = new Date();
   const floor30 = new Date(now.getTime() - 30 * 86_400_000).toISOString().slice(0, 10);
@@ -880,7 +881,12 @@ export async function loadMoney() {
         title: intelTimelineEvents.title,
       })
       .from(intelTimelineEvents)
-      .where(and(gte(intelTimelineEvents.date, today), sql`${intelTimelineEvents.date} <= ${horizon}`))
+      // The owner's dated events only: the money page is his.
+      .where(and(
+        gte(intelTimelineEvents.date, today),
+        sql`${intelTimelineEvents.date} <= ${horizon}`,
+        spaceIn(intelTimelineEvents.spaceId, OWNER_INTEL_SCOPE),
+      ))
       .orderBy(intelTimelineEvents.date)
       .limit(30),
     getSetting<boolean>('daydream.bank.enabled'),

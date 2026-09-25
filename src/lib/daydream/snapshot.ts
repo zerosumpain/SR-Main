@@ -24,6 +24,7 @@ import {
   jkaiMemories,
   researchSessions,
 } from '$lib/db/schema';
+import { OWNER_INTEL_SCOPE, spaceIn } from '$lib/jkai/intel/scope';
 import { coverageOf } from './cluster';
 import { isDaydreamFindingMemory, isDaydreamFindingTheme } from './memory-scope.server';
 import { DEFAULT_SUBJECT, FAMILY_SUBJECTS, LOCAL_TZ, POLL_INTERVAL_MINS, errMsg } from './types';
@@ -393,7 +394,12 @@ export async function buildSnapshot(
     const notes = await db
       .select({ id: intelNotes.id, title: intelNotes.title, observedAt: intelNotes.observedAt, createdAt: intelNotes.createdAt })
       .from(intelNotes)
-      .where(and(isNotNull(intelNotes.title), gte(sql`coalesce(${intelNotes.observedAt}, ${intelNotes.createdAt})`, interestSince)))
+      .where(and(
+        isNotNull(intelNotes.title),
+        gte(sql`coalesce(${intelNotes.observedAt}, ${intelNotes.createdAt})`, interestSince),
+        // The snapshot is the owner's day: a member's reading is not his interest.
+        spaceIn(intelNotes.spaceId, OWNER_INTEL_SCOPE),
+      ))
       .orderBy(desc(sql`coalesce(${intelNotes.observedAt}, ${intelNotes.createdAt})`))
       .limit(60);
     for (const n of notes) {
@@ -489,13 +495,21 @@ export async function buildSnapshot(
     const upcoming = await db
       .select(pick)
       .from(intelTimelineEvents)
-      .where(and(gte(intelTimelineEvents.date, today), sql`${intelTimelineEvents.date} <= ${horizon}`))
+      .where(and(
+        gte(intelTimelineEvents.date, today),
+        sql`${intelTimelineEvents.date} <= ${horizon}`,
+        spaceIn(intelTimelineEvents.spaceId, OWNER_INTEL_SCOPE),
+      ))
       .orderBy(intelTimelineEvents.date)
       .limit(40);
     const recent = await db
       .select(pick)
       .from(intelTimelineEvents)
-      .where(and(gte(intelTimelineEvents.date, recentFloor), sql`${intelTimelineEvents.date} < ${today}`))
+      .where(and(
+        gte(intelTimelineEvents.date, recentFloor),
+        sql`${intelTimelineEvents.date} < ${today}`,
+        spaceIn(intelTimelineEvents.spaceId, OWNER_INTEL_SCOPE),
+      ))
       .orderBy(desc(intelTimelineEvents.date))
       .limit(20);
     emailFacts = { available: true, upcoming, recent };

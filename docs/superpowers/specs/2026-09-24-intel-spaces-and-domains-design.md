@@ -25,10 +25,7 @@ email / news / documents / home": news "keep" and chat captures both write
 | 3 | Domains | **Domain grouping now; Home Assistant ingest is a later phase.** Home is an empty domain until then. |
 | 4 | Phase 1 reach | **Member role + intel.** Members reach `/jkai/intel` read surfaces and connect their own Gmail. Chat, the app and the rest of the site stay owner-only. |
 
-Rejected: Postgres row-level security with an owner-scope default — the
-production app role bypasses row-level security (checked 2026-09-24), so RLS
-cannot enforce this; making it work means a new DB role and an edit to the
-immutable production `.env`. Rejected: one Postgres schema per person (every Drizzle table object doubles; no
+Rejected: Postgres row-level security — scoping lives in code, where the leak gate and the tests can see it. Rejected: one Postgres schema per person (every Drizzle table object doubles; no
 precedent in the repo); a shared-entity graph filtered by contributor (summaries
 and aliases leak across people — ruled out by decision 1).
 
@@ -97,7 +94,7 @@ computed from my email can surface in someone else's graph.
 - `OWNER_INTEL_SCOPE = ['owner', 'household']` — used by every owner-only
   background consumer.
 - `scopeFromEvent(event)` — resolves the session email → principal → scope. The
-  LAN dev bypass resolves to the owner. **Never** accepts a space from the
+  LAN dev login resolves to the owner. **Never** accepts a space from the
   request; the UI's space chips can only *narrow* within the resolved scope.
 
 Every reader of intel data takes a scope and adds `space_id IN scope`:
@@ -169,8 +166,8 @@ A **Scope** rail section at the top of the left rail (above Search):
   `/admin/access` gains a role toggle; promoting creates the member's principal
   (idempotent on `external_ref`), demoting leaves their data in place.
 - `$lib/auth.ts` gains `isMemberAllowedPath(pathname)` — an **exact-path /
-  exact-pattern** list, never a prefix (see
-  `reference_gate_bypass_catalogue_is_prefix_vs_exact`):
+  exact-pattern** list, never a prefix (a prefix entry would open every
+  sibling path):
   - pages: `/jkai/intel`, `/jkai/intel/notes`, `/jkai/intel/notes/[id]`,
     `/jkai/intel/entities`, `/jkai/intel/entities/[id]`, `/jkai/intel/search`,
     `/jkai/intel/timeline`
@@ -211,9 +208,14 @@ readers (~100 files; 56 use raw SQL) so a new unscoped reader fails CI at once.
 nightly engine iterates spaces, and the guard flips to strict (baseline must be
 empty).
 
-PR B refuses to write a non-owner space while the baseline is non-empty — the
-member Gmail sweep checks it in code, so the ordering is enforced, not
-remembered.
+The strict gate is a ratchet, not a proof. It works per FILE — one scoped query
+makes a whole file pass — and `route-scope.test.ts` covers only the intel route
+trees plus a hand-kept list. A reader that reaches intel through a library
+default (`knowledge/search.ts`, the workflows `nodes/intelligence.ts`,
+`chat/general-chat.ts`) is invisible to both, and gets the OWNER scope. So PR B
+must route every member-reachable path through `resolveRequestScope`, and prove
+it with tests that a member session sees none of the owner's rows; the gate
+alone is not the safeguard.
 
 **PR B — members.** `allowed_user.role`, `drive_folder_settings.space_id`, the Gmail watcher skipping non-owner accounts (it dispatches workflows and pushes chat previews), household/user principals, member
 path allow-list, member Gmail, account-list filters, header tweaks.

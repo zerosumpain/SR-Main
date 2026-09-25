@@ -3,8 +3,10 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getGraphAnalysis } from '$lib/jkai/intel/analytics/load';
 import { findPaths } from '$lib/jkai/intel/analytics/paths';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async (event) => {
+  const { url } = event;
   const from = url.searchParams.get('from');
   const to = url.searchParams.get('to');
   if (!from || !to) throw error(400, 'from and to are required');
@@ -12,7 +14,9 @@ export const GET: RequestHandler = async ({ url }) => {
   const maxHops = Math.min(Math.max(Number(url.searchParams.get('maxHops') ?? 4), 1), 6);
   const limit = Math.min(Math.max(Number(url.searchParams.get('limit') ?? 3), 1), 6);
 
-  const { index } = await getGraphAnalysis();
+  // The reader's scoped graph: an endpoint outside it is the same 404 as an
+  // unknown one, and no path is routed through another space's entities.
+  const { index } = await getGraphAnalysis(false, { scope: await resolveRequestScope(event) });
   if (!index.byId.has(from)) throw error(404, 'unknown source entity');
   if (!index.byId.has(to)) throw error(404, 'unknown target entity');
 

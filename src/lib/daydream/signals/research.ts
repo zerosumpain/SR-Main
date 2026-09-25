@@ -10,6 +10,7 @@
 
 import { sql } from 'drizzle-orm';
 import { db } from '$lib/db';
+import { OWNER_INTEL_SCOPE, spaceIn } from '$lib/jkai/intel/scope';
 import { LOCAL_TZ } from '../types';
 import { registerSignals, setObservations, signalKey, type Reading, type SignalSpec } from './registry';
 
@@ -68,7 +69,10 @@ export async function buildResearchSignals(opts: { days?: number; now?: Date } =
       ]
         .filter(Boolean)
         .join(' and ');
-      const rows = (await db.execute(sql.raw(`select ${dayExpr} as day, ${valueExpr} as value from ${r.table} where ${where} group by 1`))).rows as Array<{ day: Date | string | null; value: number | string | null }>;
+      // An intel table is counted inside the owner's scope, like every graph
+      // series (see signals/graph.ts): these are correlated against his days.
+      const space = r.table.startsWith('intel_') ? sql` and ${spaceIn(sql.raw('space_id'), OWNER_INTEL_SCOPE)}` : sql``;
+      const rows = (await db.execute(sql`${sql.raw(`select ${dayExpr} as day, ${valueExpr} as value from ${r.table} where ${where}`)}${space} group by 1`)).rows as Array<{ day: Date | string | null; value: number | string | null }>;
       for (const row of rows) {
         if (!row.day || row.value == null) continue;
         const day = row.day instanceof Date ? row.day.toISOString().slice(0, 10) : String(row.day).slice(0, 10);

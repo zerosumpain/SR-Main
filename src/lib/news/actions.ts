@@ -1,8 +1,8 @@
-import { desc, sql } from 'drizzle-orm';
+import { and, desc, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { intelNotes, researchSessions } from '$lib/db/schema';
 import { createNote as createIntelNote, processNote } from '$lib/jkai/intel/ingest';
-import { OWNER_SPACE } from '$lib/jkai/intel/scope';
+import { OWNER_INTEL_SCOPE, OWNER_SPACE, spaceIn } from '$lib/jkai/intel/scope';
 import { saveNote } from '$lib/daydream/notebook/store';
 import { depthPreset } from '$lib/deepdive/depth';
 import { coerceScope } from '$lib/deepdive/scope';
@@ -28,7 +28,9 @@ export async function keepNewsInGraph(article: NewsArticle): Promise<{
   const [existing] = await db
     .select({ id: intelNotes.id })
     .from(intelNotes)
-    .where(sql`${intelNotes.metadata}->>'newsKey' = ${article.story.key}`)
+    // Kept means kept by the owner: another space's copy of the same story is
+    // not his, and linking to it would 404 for him anyway.
+    .where(and(sql`${intelNotes.metadata}->>'newsKey' = ${article.story.key}`, spaceIn(intelNotes.spaceId, OWNER_INTEL_SCOPE)))
     .orderBy(desc(intelNotes.createdAt))
     .limit(1);
   if (existing) {

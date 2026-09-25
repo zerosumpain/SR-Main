@@ -33,9 +33,17 @@
 // pre-registration is what makes a q-value mean anything over ~4 tests rather
 // than ~276. Widening the vocabulary would void it. Widening the registry
 // does not.
+//
+// ── The owner's graph only ─────────────────────────────────────────────────
+//
+// These series are correlated against the owner's sleep and spending, so they
+// count the owner's scope (his space and the household's) and nothing else. A
+// member's busy mailbox is neither his signal nor his to see, even as a count.
+// Every table here carries `space_id`; `OWNER_ONLY` is ANDed onto every query.
 
 import { sql } from 'drizzle-orm';
 import { db } from '$lib/db';
+import { OWNER_INTEL_SCOPE, spaceIn } from '$lib/jkai/intel/scope';
 import { LOCAL_TZ } from '../types';
 import { registerSignals, setObservations, signalKey, type Reading, type SignalSpec } from './registry';
 
@@ -110,6 +118,8 @@ const RATES: ReadonlyArray<RateSpec> = [
  * they have no history and start accruing days from today. That is honest —
  * the tables record no "was watched on" history to reconstruct one from, and
  * inventing a backfill for them would be inventing data.
+ *
+ * Each `sql` ends in a WHERE clause, so the space predicate is ANDed onto it.
  */
 const LEVELS: ReadonlyArray<{ id: string; label: string; sql: string }> = [
   {
@@ -146,6 +156,9 @@ export const GRAPH_SPECS: SignalSpec[] = [
  *  enough to be swept rather than waiting a fortnight to say anything. */
 export const GRAPH_BACKFILL_DAYS = 120;
 
+/** The one space predicate every query below carries. */
+const OWNER_ONLY = spaceIn(sql.raw('space_id'), OWNER_INTEL_SCOPE);
+
 const localDayOf = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: LOCAL_TZ }).format(d);
 
 /**
@@ -181,14 +194,13 @@ export async function buildGraphSignals(
     try {
       const rows = (
         await db.execute(
-          sql.raw(
+          sql`${sql.raw(
             `select to_char(${rate.column} at time zone '${LOCAL_TZ}', 'YYYY-MM-DD') as day,
                     count(*)::int as n
                from ${rate.table}
               where ${rate.column} >= now() - interval '${windowDays + 1} days'
-                ${rate.where ? `and ${rate.where}` : ''}
-              group by 1`,
-          ),
+                ${rate.where ? `and ${rate.where}` : ''}`,
+          )} and ${OWNER_ONLY} group by 1`,
         )
       ).rows as Array<{ day: string; n: number }>;
 
@@ -227,7 +239,7 @@ export async function buildGraphSignals(
   const today = localDayOf(now);
   for (const level of LEVELS) {
     try {
-      const rows = (await db.execute(sql.raw(level.sql))).rows as Array<{ n: number }>;
+      const rows = (await db.execute(sql`${sql.raw(level.sql)} and ${OWNER_ONLY}`)).rows as Array<{ n: number }>;
       const n = Number(rows[0]?.n ?? 0);
       if (Number.isFinite(n)) {
         byDay.get(today)?.push({ key: signalKey('graph', level.id), value: n });

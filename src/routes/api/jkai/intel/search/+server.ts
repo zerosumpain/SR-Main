@@ -2,10 +2,16 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { intelNotes, intelEntities, intelEntityTypes } from '$lib/db/schema';
-import { sql, isNull, or, ilike, eq } from 'drizzle-orm';
+import { sql, isNull, or, ilike, eq, and } from 'drizzle-orm';
 import { generateEmbedding } from '$lib/jkai/intel/embed';
+import { spaceIn } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async (event) => {
+  const { url } = event;
+  // All four queries — keyword and vector, notes and entities — carry the
+  // request's scope; the vector fallback is the one easiest to miss.
+  const scope = await resolveRequestScope(event);
   const q = url.searchParams.get('q')?.trim();
   if (!q || q.length < 2) return json({ notes: [], entities: [] });
 
@@ -24,10 +30,13 @@ export const GET: RequestHandler = async ({ url }) => {
       })
       .from(intelNotes)
       .where(
-        or(
-          ilike(intelNotes.title, pattern),
-          ilike(intelNotes.rawContent, pattern),
-          ilike(intelNotes.processedContent, pattern),
+        and(
+          spaceIn(intelNotes.spaceId, scope),
+          or(
+            ilike(intelNotes.title, pattern),
+            ilike(intelNotes.rawContent, pattern),
+            ilike(intelNotes.processedContent, pattern),
+          ),
         ),
       )
       .orderBy(sql`${intelNotes.createdAt} DESC`)
@@ -46,7 +55,7 @@ export const GET: RequestHandler = async ({ url }) => {
       .from(intelEntities)
       .innerJoin(intelEntityTypes, eq(intelEntities.typeId, intelEntityTypes.id))
       .where(
-        sql`${isNull(intelEntities.mergedIntoId)} AND (
+        sql`${isNull(intelEntities.mergedIntoId)} AND ${spaceIn(intelEntities.spaceId, scope)} AND (
           ${intelEntities.name} ILIKE ${pattern}
           OR ${intelEntities.summary} ILIKE ${pattern}
           OR ${intelEntities.properties}::text ILIKE ${pattern}
@@ -67,7 +76,7 @@ export const GET: RequestHandler = async ({ url }) => {
                substring(processed_content from 1 for 200) as snippet,
                embedding <=> ${vectorStr}::vector as distance
         FROM intel_notes
-        WHERE embedding IS NOT NULL
+        WHERE embedding IS NOT NULL AND ${spaceIn(sql`space_id`, scope)}
         ORDER BY distance ASC
         LIMIT 10
       `);
@@ -79,6 +88,7 @@ export const GET: RequestHandler = async ({ url }) => {
         FROM intel_entities e
         JOIN intel_entity_types et ON e.type_id = et.id
         WHERE e.embedding IS NOT NULL AND e.merged_into_id IS NULL
+          AND ${spaceIn(sql`e.space_id`, scope)}
         ORDER BY distance ASC
         LIMIT 10
       `);

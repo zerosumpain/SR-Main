@@ -2,8 +2,12 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { workflows, intelEntities, intelEntityTypes, intelRelationships } from '$lib/db/schema';
-import { eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
+import { OWNER_INTEL_SCOPE, spaceIn } from '$lib/jkai/intel/scope';
 
+// Owner scope, explicitly — not resolveRequestScope. A canvas is the owner's and
+// its nodes also run unattended (cron, webhooks), where there is no request
+// principal to resolve; its intel reads are the owner's graph either way.
 export const POST: RequestHandler = async ({ params, request }) => {
   const [wf] = await db
     .select({ id: workflows.id })
@@ -29,13 +33,14 @@ export const POST: RequestHandler = async ({ params, request }) => {
       summary: intelEntities.summary,
       connectionCount: sql<number>`(
         SELECT count(*) FROM intel_relationships
-        WHERE intel_relationships.source_entity_id = intel_entities.id
-           OR intel_relationships.target_entity_id = intel_entities.id
+        WHERE (intel_relationships.source_entity_id = intel_entities.id
+           OR intel_relationships.target_entity_id = intel_entities.id)
+          AND ${spaceIn(sql`intel_relationships.space_id`, OWNER_INTEL_SCOPE)}
       )::int`.as('connection_count'),
     })
     .from(intelEntities)
     .innerJoin(intelEntityTypes, eq(intelEntities.typeId, intelEntityTypes.id))
-    .where(inArray(intelEntities.id, entityIds));
+    .where(and(inArray(intelEntities.id, entityIds), spaceIn(intelEntities.spaceId, OWNER_INTEL_SCOPE)));
 
   const entityIdSet = new Set(entityIds);
 
@@ -50,7 +55,10 @@ export const POST: RequestHandler = async ({ params, request }) => {
     })
     .from(intelRelationships)
     .where(
-      inArray(intelRelationships.sourceEntityId, entityIds),
+      and(
+        inArray(intelRelationships.sourceEntityId, entityIds),
+        spaceIn(intelRelationships.spaceId, OWNER_INTEL_SCOPE),
+      ),
     );
 
   const edges = relationships.filter(

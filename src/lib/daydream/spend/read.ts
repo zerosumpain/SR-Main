@@ -13,6 +13,7 @@
 import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamSpend, intelNotes } from '$lib/db/schema';
+import { OWNER_INTEL_SCOPE, spaceIn } from '$lib/jkai/intel/scope';
 import { getLLMClient } from '$lib/llm/client';
 import { resolveDaydreamModel } from '../compose';
 import { DEFAULT_SUBJECT, LOCAL_TZ, errMsg } from '../types';
@@ -91,6 +92,8 @@ export async function extractSpend(
         and(
           eq(intelNotes.source, 'email'),
           gte(intelNotes.createdAt, since),
+          // The owner's receipts: a member's mail is not his spending.
+          spaceIn(intelNotes.spaceId, OWNER_INTEL_SCOPE),
           // Not already read. One row per source message, enforced by a unique
           // index as well — this is the cheap half.
           sql`not exists (select 1 from ${daydreamSpend} s where s.source_note_id = ${intelNotes.id})`,

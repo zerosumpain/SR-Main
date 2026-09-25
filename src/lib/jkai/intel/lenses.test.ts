@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { and, type SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import {
   activeLensFilterCount,
   buildLensFilter,
@@ -240,10 +242,10 @@ describe('matchesLens — combinations', () => {
 // ── buildLensFilter ──────────────────────────────────────────────────────────
 
 describe('buildLensFilter', () => {
-  it('always excludes merged entities, even with no filters', () => {
+  it('always excludes merged entities and other spaces, even with no filters', () => {
     const plan = buildLensFilter(EMPTY_LENS_FILTERS);
     expect(plan.empty).toBe(true);
-    expect(plan.conditions).toHaveLength(1);
+    expect(plan.conditions).toHaveLength(2);
     expect(plan.needsAnalysis).toBe(false);
   });
 
@@ -251,14 +253,26 @@ describe('buildLensFilter', () => {
     const plan = buildLensFilter(
       filters({ typeIds: ['org'], lens: 'personal', minConfidence: 0.4, query: 'x', sources: ['web'] }),
     );
-    // merged-guard + type + scope + confidence + query + sources
-    expect(plan.conditions).toHaveLength(6);
+    // merged-guard + space + type + lens + confidence + query + sources
+    expect(plan.conditions).toHaveLength(7);
     expect(plan.empty).toBe(false);
+  });
+
+  it("confines the entities AND the sources subquery's notes to the scope", () => {
+    const owner = new PgDialect().sqlToQuery(and(...buildLensFilter(filters({ sources: ['web'] })).conditions) as SQL);
+    expect(owner.sql).toMatch(/"intel_entities"\."space_id" = ANY/);
+    expect(owner.sql).toMatch(/n\.space_id = ANY/);
+    expect(owner.params).toContain('{"owner","household"}');
+    const theirs = new PgDialect().sqlToQuery(
+      and(...buildLensFilter(filters({ sources: ['web'] }), ['u_x', 'household']).conditions) as SQL,
+    );
+    expect(theirs.params).toContain('{"u_x","household"}');
+    expect(theirs.params).not.toContain('{"owner","household"}');
   });
 
   it('hands the community facet back separately rather than faking a WHERE clause', () => {
     const plan = buildLensFilter(filters({ communityIds: [2, 5] }));
-    expect(plan.conditions).toHaveLength(1);
+    expect(plan.conditions).toHaveLength(2);
     expect(plan.needsAnalysis).toBe(true);
     expect(plan.communityIds).toEqual([2, 5]);
   });

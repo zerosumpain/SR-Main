@@ -27,6 +27,7 @@ import {
   sources,
 } from '$lib/db/schema';
 import { buildThreadGraph } from '$lib/jkai/thread-graph.server';
+import { OWNER_INTEL_SCOPE, spaceIn } from '$lib/jkai/intel/scope';
 import type { ThreadGraph, ThreadGraphNode } from '$lib/jkai/thread-graph';
 import { entityIdOf, RAIL_DRAW_LIMIT } from '$lib/jkai/graph-layout';
 import { threadNodeClass } from './graph3d';
@@ -260,7 +261,9 @@ async function entityManifest(conversationId: string, graph: ThreadGraph, nodeId
     .select({ name: intelEntities.name, summary: intelEntities.summary, properties: intelEntities.properties, typeName: intelEntityTypes.name })
     .from(intelEntities)
     .innerJoin(intelEntityTypes, eq(intelEntityTypes.id, intelEntities.typeId))
-    .where(eq(intelEntities.id, entityId))
+    // The /jkai thread inspector is the owner's; an id from another space is
+    // not found, like a deleted one.
+    .where(and(eq(intelEntities.id, entityId), spaceIn(intelEntities.spaceId, OWNER_INTEL_SCOPE)))
     .limit(1);
   if (!node && !entity) return null;
 

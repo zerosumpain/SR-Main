@@ -12,11 +12,16 @@ import { intelCategories, intelNotes } from '$lib/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import { categorySlug } from '$lib/jkai/intel/source-policy';
 import { deleteCategory } from '$lib/jkai/intel/source-policy.server';
+import { isOwnerScope, spaceIn } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
 const MAX_NAME = 60;
 const MAX_DESCRIPTION = 400;
 
-export const GET: RequestHandler = async () => {
+// The categories themselves are a shared vocabulary; their usage counts are
+// rows, so those are counted over the reader's scope only.
+export const GET: RequestHandler = async (event) => {
+  const scope = await resolveRequestScope(event);
   const rows = await db.select().from(intelCategories).orderBy(intelCategories.name);
 
   // Usage is counted from the notes rather than the folders: a folder setting
@@ -24,6 +29,7 @@ export const GET: RequestHandler = async () => {
   const usage = await db.execute(sql`
     SELECT slug, COUNT(*)::int AS note_count
     FROM intel_notes, jsonb_array_elements_text(categories) AS slug
+    WHERE ${spaceIn(sql`intel_notes.space_id`, scope)}
     GROUP BY slug
   `);
   const counts = new Map<string, number>(
@@ -38,8 +44,14 @@ export const GET: RequestHandler = async () => {
   });
 };
 
-export const POST: RequestHandler = async ({ request }) => {
-  const body = await request.json().catch(() => ({}));
+// Writes are owner-only. A category labels one of the owner's Drive folders and
+// is stamped onto every note that folder produced, in every space it reached —
+// creating, renaming or deleting one changes the vocabulary everyone shares.
+export const POST: RequestHandler = async (event) => {
+  if (!isOwnerScope(await resolveRequestScope(event))) {
+    return json({ error: 'Forbidden' }, { status: 403 });
+  }
+  const body = await event.request.json().catch(() => ({}));
   const name = String(body.name ?? '').trim().slice(0, MAX_NAME);
   if (!name) return json({ error: 'name is required' }, { status: 400 });
 
@@ -76,8 +88,11 @@ export const POST: RequestHandler = async ({ request }) => {
   return json({ category: created });
 };
 
-export const DELETE: RequestHandler = async ({ url }) => {
-  const id = url.searchParams.get('id');
+export const DELETE: RequestHandler = async (event) => {
+  if (!isOwnerScope(await resolveRequestScope(event))) {
+    return json({ error: 'Forbidden' }, { status: 403 });
+  }
+  const id = event.url.searchParams.get('id');
   if (!id) return json({ error: 'id is required' }, { status: 400 });
   await deleteCategory(id);
   return json({ ok: true });

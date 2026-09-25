@@ -50,13 +50,14 @@
 // codebase and this is not a second one.
 import { createHash } from 'node:crypto';
 import sanitizeHtml from 'sanitize-html';
-import { desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
 import { gmailAccounts, type GmailAccount } from '$lib/db/schema';
 import { pgTextArray } from '$lib/db/sql-array';
 import { beginBatch } from '$lib/workflows/engine-runtime';
 import type { AutoExtractOutcome } from './auto-extract';
 import type { ExtractedEntity, ExtractedRelationship, ExtractionResult } from './extract';
 import { recencyOf, ROLLING_WINDOW_DAYS } from './staleness';
+import { OWNER_SPACE } from './scope';
 import {
   planAttachments,
   attachmentSection,
@@ -883,6 +884,9 @@ export async function storedHashes(refIds: string[], spaceId: string): Promise<M
   return out;
 }
 
+/** Why a sweep with nothing to read fails: the reason is its own fix. */
+export const NO_GMAIL_ACCOUNT_MESSAGE = 'No active Gmail account. Connect one at /admin/connections/gmail.';
+
 export async function resolveAccount(accountId?: number): Promise<GmailAccount> {
   const { db } = await import('$lib/db');
   if (accountId) {
@@ -896,10 +900,36 @@ export async function resolveAccount(accountId?: number): Promise<GmailAccount> 
     .where(eq(gmailAccounts.status, 'active'))
     .orderBy(desc(gmailAccounts.updatedAt))
     .limit(1);
-  if (!acct) {
-    throw new Error('No active Gmail account. Connect one at /admin/connections/gmail.');
-  }
+  if (!acct) throw new Error(NO_GMAIL_ACCOUNT_MESSAGE);
   return acct;
+}
+
+/**
+ * Which mailboxes the nightly rolling sweep reads: every ACTIVE account the
+ * owner connected.
+ *
+ * It used to read one — the most recently updated active account — which was
+ * right while there was only ever one mailbox and quietly wrong the moment a
+ * second was connected: the other went unswept with nothing to say so. An
+ * expired account is still left out, as it always was: the admin page already
+ * says it needs re-authenticating, and a nightly failure would only repeat that
+ * every night until someone did.
+ *
+ * The owner filter is PR A2's: a member's mailbox is theirs, and their sweep
+ * waits for PR B, which admits members and drops this clause. Exported as a
+ * predicate so a test can read its shape without a database.
+ */
+export function rollingAccountsWhere(): SQL {
+  return and(eq(gmailAccounts.status, 'active'), eq(gmailAccounts.principalId, OWNER_SPACE))!;
+}
+
+/**
+ * The accounts for `rollingAccountsWhere`, most recently updated first — the
+ * one the single-account sweep used to pick is still read first.
+ */
+export async function rollingSweepAccounts(): Promise<GmailAccount[]> {
+  const { db } = await import('$lib/db');
+  return db.select().from(gmailAccounts).where(rollingAccountsWhere()).orderBy(desc(gmailAccounts.updatedAt));
 }
 
 /** Thread ids matching a query, newest first (Gmail's own ordering). */
@@ -1592,7 +1622,9 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
     try {
       batch.beat('resolving duplicates');
       const { autoMergeDuplicates } = await import('./resolve/merge');
-      const sweep = await autoMergeDuplicates();
+      // In the mailbox's own space: that is where this sweep's entities landed,
+      // and resolution only ever compares entities inside one space.
+      const sweep = await autoMergeDuplicates(undefined, { space: acct.principalId });
       result.autoMerged = sweep.merged;
       if (sweep.merged) {
         console.log(`[intel:gmail] auto-merged ${sweep.merged} duplicate entities after the sweep`);

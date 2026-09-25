@@ -117,6 +117,15 @@ function parseVector(raw: unknown): number[] | null {
   return out.every((n) => Number.isFinite(n)) ? out : null;
 }
 
+/** An edge's endpoints and their merge survivors, each confined to `scope`. */
+function scopedEndpointJoins(scope: IntelScope) {
+  return sql`
+    LEFT JOIN intel_entities s  ON s.id  = r.source_entity_id AND ${spaceIn(sql`s.space_id`, scope)}
+    LEFT JOIN intel_entities sm ON sm.id = s.merged_into_id   AND ${spaceIn(sql`sm.space_id`, scope)}
+    LEFT JOIN intel_entities t  ON t.id  = r.target_entity_id AND ${spaceIn(sql`t.space_id`, scope)}
+    LEFT JOIN intel_entities tm ON tm.id = t.merged_into_id   AND ${spaceIn(sql`tm.space_id`, scope)}`;
+}
+
 async function loadSnapshot(includeArtefacts: boolean, scope: IntelScope): Promise<{
   snapshot: GraphSnapshot;
   suppressedPairs: Set<string>;
@@ -284,17 +293,17 @@ async function loadSnapshot(includeArtefacts: boolean, scope: IntelScope): Promi
       r.last_seen_at,
       n.source AS source_kind
     FROM intel_relationships r
-    LEFT JOIN intel_entities s  ON s.id  = r.source_entity_id
-    LEFT JOIN intel_entities sm ON sm.id = s.merged_into_id
-    LEFT JOIN intel_entities t  ON t.id  = r.target_entity_id
-    LEFT JOIN intel_entities tm ON tm.id = t.merged_into_id
-    LEFT JOIN intel_notes n     ON n.id  = r.source_note_id
+    ${scopedEndpointJoins(scope)}
+    LEFT JOIN intel_notes n     ON n.id  = r.source_note_id AND ${spaceIn(sql`n.space_id`, scope)}
     -- A suppressed edge was deleted deliberately with a reason. It must not
     -- reappear in the analysed graph, or "reject this link" would be cosmetic.
     --
-    -- Scoped on the edge alone. Its endpoints, and the survivors they were
-    -- merged into, are in the edge's space by construction: an edge takes its
-    -- note's space, and neither resolution nor merge crosses one.
+    -- The edge's endpoints, the survivors they were merged into and its note
+    -- are in the edge's space by construction (an edge takes its note's space,
+    -- and neither resolution nor merge crosses one). Every join is scoped
+    -- anyway, as in evidence-graph.ts: a reader must not depend on that staying
+    -- true to stay inside its scope. An out-of-scope endpoint leaves the raw id,
+    -- which names no node, so buildIndex drops the edge.
     WHERE r.suppressed IS NOT TRUE
       AND ${spaceIn(sql`r.space_id`, scope)}
   `);
@@ -334,10 +343,7 @@ async function loadSnapshot(includeArtefacts: boolean, scope: IntelScope): Promi
       COALESCE(sm.id, r.source_entity_id) AS source,
       COALESCE(tm.id, r.target_entity_id) AS target
     FROM intel_relationships r
-    LEFT JOIN intel_entities s  ON s.id  = r.source_entity_id
-    LEFT JOIN intel_entities sm ON sm.id = s.merged_into_id
-    LEFT JOIN intel_entities t  ON t.id  = r.target_entity_id
-    LEFT JOIN intel_entities tm ON tm.id = t.merged_into_id
+    ${scopedEndpointJoins(scope)}
     WHERE r.suppressed IS TRUE
       AND ${spaceIn(sql`r.space_id`, scope)}
   `);

@@ -1,6 +1,7 @@
-import { inArray, sql } from 'drizzle-orm';
+import { and, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { intelNotes } from '$lib/db/schema';
+import { OWNER_INTEL_SCOPE, spaceIn } from '$lib/jkai/intel/scope';
 import { countNewsFavourites } from './favourites';
 
 export interface NewsStats {
@@ -8,7 +9,11 @@ export interface NewsStats {
   favouriteCount: number;
 }
 
-/** Counts distinct news stories the owner has explicitly kept in Intel. */
+/**
+ * Counts distinct news stories the owner has explicitly kept in Intel. The
+ * desk is the owner's, so "kept" here and in `keptKeysFor` means kept into his
+ * scope — the same rule `keepNewsInGraph` uses to find an existing note.
+ */
 export async function getNewsStats(ownerKey: string): Promise<NewsStats> {
   try {
     const [[row], favouriteCount] = await Promise.all([
@@ -17,7 +22,7 @@ export async function getNewsStats(ownerKey: string): Promise<NewsStats> {
           count: sql<number>`count(distinct ${intelNotes.metadata}->>'newsKey')::int`,
         })
         .from(intelNotes)
-        .where(sql`${intelNotes.metadata}->>'newsKey' is not null`),
+        .where(and(sql`${intelNotes.metadata}->>'newsKey' is not null`, spaceIn(intelNotes.spaceId, OWNER_INTEL_SCOPE))),
       countNewsFavourites(ownerKey),
     ]);
     return { retainedCount: Number(row?.count ?? 0), favouriteCount };
@@ -41,7 +46,7 @@ export async function keptKeysFor(newsKeys: readonly string[]): Promise<Set<stri
     const rows = await db
       .select({ newsKey: sql<string>`${intelNotes.metadata}->>'newsKey'` })
       .from(intelNotes)
-      .where(inArray(sql`${intelNotes.metadata}->>'newsKey'`, [...newsKeys]));
+      .where(and(inArray(sql`${intelNotes.metadata}->>'newsKey'`, [...newsKeys]), spaceIn(intelNotes.spaceId, OWNER_INTEL_SCOPE)));
     return new Set(rows.map((row) => row.newsKey).filter(Boolean));
   } catch (err) {
     console.error('[news] could not load kept stories:', err instanceof Error ? err.message : err);

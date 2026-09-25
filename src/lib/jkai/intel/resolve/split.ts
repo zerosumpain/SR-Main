@@ -39,6 +39,8 @@ import { sql } from 'drizzle-orm';
 import { ensureCollection, upsertRecord, queryRecords, getRecordByKey } from '$lib/datastore';
 import type { PermissionSet } from '$lib/datastore';
 import { invalidateGraphAnalysis } from '../analytics/load';
+import { OWNER_INTEL_SCOPE, spaceIn, type IntelScope } from '../scope';
+import { pgTextArray } from '$lib/db/sql-array';
 
 export const SYSTEM_ACTOR = 'system';
 
@@ -118,13 +120,19 @@ export async function ensureSplitCollection(): Promise<void> {
  * corrupt every degree and centrality figure — the identical rule, and the
  * identical reason, as the merge path. Dropped rows are recorded in the ledger
  * with the endpoint they had, so `undoSplit` can put them back.
+ *
+ * `scope` is who is asking: the plan's ids come from a request (or the
+ * conflation sweep, which passes the one space it read), and an entity outside
+ * the scope is not found. Everything after that is the source entity's space —
+ * the target must share it and only its edges can move.
  */
-export async function splitEntity(plan: SplitPlan): Promise<SplitOutcome> {
+export async function splitEntity(plan: SplitPlan, scope: IntelScope = OWNER_INTEL_SCOPE): Promise<SplitOutcome> {
   if (!plan.relationshipIds.length) throw new Error('a split must move at least one relationship');
 
   const [from] = (
     await db.execute(sql`
-      SELECT id, name, first_seen_in, space_id FROM intel_entities WHERE id = ${plan.fromId}
+      SELECT id, name, first_seen_in, space_id FROM intel_entities
+      WHERE id = ${plan.fromId} AND ${spaceIn(sql`space_id`, scope)}
     `)
   ).rows as Array<{ id: string; name: string; first_seen_in: string | null; space_id: string }>;
   if (!from) throw new Error(`no such entity: ${plan.fromId}`);
@@ -133,7 +141,10 @@ export async function splitEntity(plan: SplitPlan): Promise<SplitOutcome> {
   let createdEntity = false;
   if ('entityId' in plan.to) {
     const [target] = (
-      await db.execute(sql`SELECT id, space_id FROM intel_entities WHERE id = ${plan.to.entityId}`)
+      await db.execute(sql`
+        SELECT id, space_id FROM intel_entities
+        WHERE id = ${plan.to.entityId} AND ${spaceIn(sql`space_id`, scope)}
+      `)
     ).rows as Array<{ id: string; space_id: string }>;
     if (!target) throw new Error(`no such entity: ${plan.to.entityId}`);
     // Moving edges onto another space's entity would be a merge across spaces.
@@ -161,7 +172,7 @@ export async function splitEntity(plan: SplitPlan): Promise<SplitOutcome> {
     await db.execute(sql`
       SELECT id, source_entity_id, target_entity_id, type, source_note_id
       FROM intel_relationships
-      WHERE id = ANY(${ids})
+      WHERE id = ANY(${ids}) AND space_id = ${from.space_id}
     `)
   ).rows as Array<{
     id: string;
@@ -202,6 +213,7 @@ export async function splitEntity(plan: SplitPlan): Promise<SplitOutcome> {
               AND target_entity_id = ${nextTarget}
               AND type = ${edge.type}
               AND id <> ${edge.id}
+              AND space_id = ${from.space_id}
             LIMIT 1
           `)
         ).rows.length > 0);
@@ -281,8 +293,13 @@ export async function splitEntity(plan: SplitPlan): Promise<SplitOutcome> {
  * honest about what cannot come back — the same admission `unmergeEntity` makes.
  * An entity created by the split is left in place, tombstone-free but edgeless;
  * deleting it here would take any edge added since with it.
+ *
+ * A split whose source entity is outside `scope` is not found.
  */
-export async function undoSplit(key: string): Promise<{ restored: number; dropped: number }> {
+export async function undoSplit(
+  key: string,
+  scope: IntelScope = OWNER_INTEL_SCOPE,
+): Promise<{ restored: number; dropped: number }> {
   await ensureSplitCollection();
   // By key, not a jsonb filter. `queryRecords` silently ignores an option it does
   // not know, so a mistyped filter does not fail — it returns the FIRST record in
@@ -291,7 +308,9 @@ export async function undoSplit(key: string): Promise<{ restored: number; droppe
   const record = row?.data as
     | { fromId: string; moved: MovedEdge[]; dropped: MovedEdge[]; undoneAt: string | null }
     | undefined;
-  if (!record) throw new Error(`no such split: ${key}`);
+  if (!record || !(await visibleIds([record.fromId], scope)).has(record.fromId)) {
+    throw new Error(`no such split: ${key}`);
+  }
   if (record.undoneAt) return { restored: 0, dropped: record.dropped?.length ?? 0 };
 
   let restored = 0;
@@ -315,8 +334,26 @@ export async function undoSplit(key: string): Promise<{ restored: number; droppe
   return { restored, dropped: record.dropped?.length ?? 0 };
 }
 
-/** Every split on record, newest first. */
-export async function listSplits(): Promise<
+/**
+ * Of these entity ids, the ones `scope` can see. Tombstones included: a split's
+ * source may have been merged away since, and its record is still its space's.
+ */
+async function visibleIds(ids: string[], scope: IntelScope): Promise<Set<string>> {
+  if (!ids.length) return new Set();
+  const { rows } = await db.execute(sql`
+    SELECT id FROM intel_entities
+    WHERE id = ANY(${pgTextArray(ids)}::text[]) AND ${spaceIn(sql`space_id`, scope)}
+  `);
+  return new Set((rows as Array<{ id: string }>).map((r) => String(r.id)));
+}
+
+/**
+ * Every split on record whose source entity `scope` can see, newest first.
+ *
+ * The ledger lives in the datastore, which has no space, so the filter goes
+ * through the entity each record names: a record is its source entity's space's.
+ */
+export async function listSplits(scope: IntelScope = OWNER_INTEL_SCOPE): Promise<
   Array<{ key: string; fromName: string; toId: string; reason: string; at: string; undoneAt: string | null }>
 > {
   await ensureSplitCollection();
@@ -325,5 +362,7 @@ export async function listSplits(): Promise<
     { limit: 200, sort: { path: 'at', dir: 'desc' } },
     SYSTEM_ACTOR,
   );
-  return records.map((r) => r.data as never);
+  const data = records.map((r) => r.data as { fromId?: string } & Record<string, unknown>);
+  const visible = await visibleIds([...new Set(data.map((d) => String(d.fromId ?? '')).filter(Boolean))], scope);
+  return data.filter((d) => visible.has(String(d.fromId ?? ''))) as never;
 }

@@ -20,6 +20,8 @@
 // and can never drift from what the API route reports.
 import type { ExtractedEntity, ExtractionResult } from './extract';
 import { pgTextArray } from '$lib/db/sql-array';
+import type { SQL } from 'drizzle-orm';
+import { OWNER_INTEL_SCOPE, type IntelScope } from './scope';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -461,17 +463,24 @@ export interface PreviewResult extends GraphDiff {
  * and must not pull thousands of rows to answer a question about twelve names.
  * Aliases are searched too, because that is how the writer resolves names — a
  * preview that missed an alias would report a new entity the write would merge.
+ *
+ * Every lookup is confined to ONE space, the one the write would land in
+ * (`writeSpace(scope)`): resolution never crosses a space, so a match in any
+ * other would be a preview of a write that cannot happen — and would hand the
+ * reader another space's entity names.
  */
-async function buildGraphLookup(extraction: ExtractionResult, text: string): Promise<GraphLookup> {
+async function buildGraphLookup(extraction: ExtractionResult, text: string, scope: IntelScope): Promise<GraphLookup> {
   const { db } = await import('$lib/db');
   const { sql } = await import('drizzle-orm');
   const { normaliseTypeName } = await import('./graph');
+  const { writeSpace, spaceIn } = await import('./scope');
+  const space = writeSpace(scope);
+  const inSpace = (column: SQL) => spaceIn(column, [space]);
 
   const names = [...new Set((extraction.entities ?? []).map((e) => (e.name ?? '').trim().toLowerCase()).filter(Boolean))];
   const ids = [...new Set((extraction.entities ?? []).map((e) => e.possibleMatchId).filter((v): v is string => Boolean(v)))];
 
   const { resolveMention } = await import('./resolve/ingestion.server');
-  const { OWNER_SPACE } = await import('./scope');
   const { groundMention } = await import('./resolve/policy');
   const resolutions = new Map<ExtractedEntity, Awaited<ReturnType<typeof resolveMention>>>();
   for (const entity of extraction.entities) {
@@ -480,8 +489,8 @@ async function buildGraphLookup(extraction: ExtractionResult, text: string): Pro
     if (!span) { resolutions.set(entity, {outcome:'unresolved',entity:null,reason:'No verifiable mention in source',ranked:[]}); continue; }
     const properties = {...entity.properties};
     if (typeof properties.email === 'string' && !span.excerpt.toLowerCase().includes(properties.email.toLowerCase())) delete properties.email;
-    // A preview has no note yet, so no space to inherit; pasted text is the owner's.
-    resolutions.set(entity, await resolveMention({...entity,properties,mention:{text:span.surface,context:span.excerpt}}, String(type.rows[0]?.id ?? 'unrecognised-type'), db, true, OWNER_SPACE));
+    // A preview has no note yet, so no space to inherit: pasted text is the reader's own.
+    resolutions.set(entity, await resolveMention({...entity,properties,mention:{text:span.surface,context:span.excerpt}}, String(type.rows[0]?.id ?? 'unrecognised-type'), db, true, space));
   }
   const byName = new Map<string, GraphEntityRef>();
   const byId = new Map<string, GraphEntityRef>();
@@ -492,6 +501,7 @@ async function buildGraphLookup(extraction: ExtractionResult, text: string): Pro
       FROM intel_entities e
       LEFT JOIN intel_entity_types t ON t.id = e.type_id
       WHERE e.merged_into_id IS NULL
+        AND ${inSpace(sql`e.space_id`)}
         AND (
           lower(e.name) = ANY(${pgTextArray(names)}::text[])
           OR e.id = ANY(${pgTextArray(ids)}::text[])
@@ -525,6 +535,7 @@ async function buildGraphLookup(extraction: ExtractionResult, text: string): Pro
       FROM intel_relationships
       WHERE source_entity_id = ANY(${pgTextArray(entityIds)}::text[])
         AND target_entity_id = ANY(${pgTextArray(entityIds)}::text[])
+        AND ${inSpace(sql`space_id`)}
       LIMIT 2000
     `);
     for (const raw of rows as Array<Record<string, unknown>>) {
@@ -558,6 +569,7 @@ async function buildGraphLookup(extraction: ExtractionResult, text: string): Pro
     const { rows } = await db.execute(sql`
       SELECT date, title FROM intel_timeline_events
       WHERE date = ANY(${pgTextArray(eventDates)}::text[]) AND title = ANY(${pgTextArray(eventTitles)}::text[])
+        AND ${inSpace(sql`space_id`)}
       LIMIT 500
     `);
     for (const raw of rows as Array<Record<string, unknown>>) {
@@ -581,8 +593,15 @@ async function buildGraphLookup(extraction: ExtractionResult, text: string): Pro
 /**
  * Run extraction over `text` and report what it WOULD change. Writes nothing —
  * no note row, no entity, no embedding, no alert.
+ *
+ * `scope` is the reader's; the diff is against their own space (see
+ * `buildGraphLookup`).
  */
-export async function previewExtraction(text: string, format = 'text'): Promise<PreviewResult> {
+export async function previewExtraction(
+  text: string,
+  format = 'text',
+  scope: IntelScope = OWNER_INTEL_SCOPE,
+): Promise<PreviewResult> {
   const trimmed = (text ?? '').trim();
   if (trimmed.length < MIN_PREVIEW_CHARS) {
     throw new Error(`text must be at least ${MIN_PREVIEW_CHARS} characters`);
@@ -593,7 +612,7 @@ export async function previewExtraction(text: string, format = 'text'): Promise<
 
   const { extractFromNote } = await import('./extract');
   const extraction = await extractFromNote(clipped, format);
-  const lookup = await buildGraphLookup(extraction, clipped);
+  const lookup = await buildGraphLookup(extraction, clipped, scope);
 
   return {
     ...diffAgainstGraph(extraction, lookup),

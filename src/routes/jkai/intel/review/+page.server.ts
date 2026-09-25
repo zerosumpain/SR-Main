@@ -16,6 +16,8 @@ import {
 } from '$lib/db/schema';
 import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { listAlerts, listEntityTypes } from '$lib/jkai/intel/queries';
+import { spaceIn } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
 /** Bounded so one enormous backlog cannot turn the page into a 20 MB payload. */
 const QUEUE_LIMIT = 250;
@@ -43,7 +45,13 @@ export interface TriageNeighbour {
   label: string;
 }
 
-export const load: PageServerLoad = async ({ url }) => {
+// Every query is the request's scope — the queue, its total, each entity's
+// evidence notes, its neighbours (both the edge and the entity at the far end)
+// and the counts that rank it — so the page never shows a row from another
+// space, even as a neighbour's name.
+export const load: PageServerLoad = async (event) => {
+  const { url } = event;
+  const scope = await resolveRequestScope(event);
   const orderParam = url.searchParams.get('order');
   const order: TriageOrder = ORDERS.includes(orderParam as TriageOrder)
     ? (orderParam as TriageOrder)
@@ -51,12 +59,15 @@ export const load: PageServerLoad = async ({ url }) => {
 
   const relCount = sql<number>`(
     select count(*) from intel_relationships
-    where intel_relationships.source_entity_id = intel_entities.id
-       or intel_relationships.target_entity_id = intel_entities.id
+    where (intel_relationships.source_entity_id = intel_entities.id
+       or intel_relationships.target_entity_id = intel_entities.id)
+      and ${spaceIn(sql`intel_relationships.space_id`, scope)}
   )::int`;
   const noteCount = sql<number>`(
     select count(*) from intel_note_entities
+    join intel_notes on intel_notes.id = intel_note_entities.note_id
     where intel_note_entities.entity_id = intel_entities.id
+      and ${spaceIn(sql`intel_notes.space_id`, scope)}
   )::int`;
 
   // `confidence` is a text column, so ordering by it directly is alphabetical —
@@ -96,15 +107,19 @@ export const load: PageServerLoad = async ({ url }) => {
       })
       .from(intelEntities)
       .innerJoin(intelEntityTypes, eq(intelEntities.typeId, intelEntityTypes.id))
-      .where(and(eq(intelEntities.confirmed, false), isNull(intelEntities.mergedIntoId)))
+      .where(
+        and(eq(intelEntities.confirmed, false), isNull(intelEntities.mergedIntoId), spaceIn(intelEntities.spaceId, scope)),
+      )
       .orderBy(...orderBy)
       .limit(QUEUE_LIMIT),
     db
       .select({ total: sql<number>`count(*)::int` })
       .from(intelEntities)
-      .where(and(eq(intelEntities.confirmed, false), isNull(intelEntities.mergedIntoId))),
+      .where(
+        and(eq(intelEntities.confirmed, false), isNull(intelEntities.mergedIntoId), spaceIn(intelEntities.spaceId, scope)),
+      ),
     listEntityTypes(),
-    listAlerts({ limit: 30 }),
+    listAlerts({ limit: 30, scope }),
   ]);
 
   const ids = rows.map((r) => r.id);
@@ -123,7 +138,7 @@ export const load: PageServerLoad = async ({ url }) => {
           })
           .from(intelNoteEntities)
           .innerJoin(intelNotes, eq(intelNoteEntities.noteId, intelNotes.id))
-          .where(inArray(intelNoteEntities.entityId, ids))
+          .where(and(inArray(intelNoteEntities.entityId, ids), spaceIn(intelNotes.spaceId, scope)))
           .orderBy(desc(intelNotes.createdAt)),
         db
           .select({
@@ -151,7 +166,13 @@ export const load: PageServerLoad = async ({ url }) => {
             ),
           )
           .innerJoin(intelEntityTypes, eq(intelEntities.typeId, intelEntityTypes.id))
-          .where(eq(intelRelationships.suppressed, false))
+          .where(
+            and(
+              eq(intelRelationships.suppressed, false),
+              spaceIn(intelRelationships.spaceId, scope),
+              spaceIn(intelEntities.spaceId, scope),
+            ),
+          )
           // Neighbours are context, not evidence — a hard cap keeps a hub
           // entity from turning this into the page's dominant payload.
           .limit(NEIGHBOUR_ROW_CAP),

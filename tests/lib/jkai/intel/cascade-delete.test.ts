@@ -8,6 +8,8 @@ const calls: Call[] = [];
  * Fake tx. Selects are served from a queue, in the order deleteNoteCascade
  * issues them:
  *
+ *   0. the note itself, inside the caller's scope        → `withTx` supplies it
+ *                                                         unless `visible: false`
  *   1. entities linked to this note                     → `candidates`
  *   2. those same entities linked to a DIFFERENT note   → `linkedElsewhere`
  *   3. merge tombstones pointing at the doomed set      → `aliases` (repeats
@@ -39,9 +41,10 @@ function makeTx(queue: unknown[][]) {
   };
 }
 
-const withTx = (queue: unknown[][]) => ({
+const withTx = (queue: unknown[][], { visible = true } = {}) => ({
   db: {
-    transaction: async (cb: (tx: unknown) => Promise<unknown>) => cb(makeTx(queue)),
+    transaction: async (cb: (tx: unknown) => Promise<unknown>) =>
+      cb(makeTx([visible ? [{ id: 'the-note' }] : [], ...queue])),
   },
 });
 
@@ -101,7 +104,7 @@ describe('deleteNoteCascade', () => {
     );
     const { deleteNoteCascade } = await import('$lib/jkai/intel/ingest');
     const result = await deleteNoteCascade('note-xyz');
-    expect(result.removedEntities).toBe(0);
+    expect(result?.removedEntities).toBe(0);
     expect(calls.map((c) => c.table)).toEqual(['intel_relationships', 'intel_notes']);
   });
 
@@ -109,7 +112,7 @@ describe('deleteNoteCascade', () => {
     vi.doMock('$lib/db', () => withTx([[], []]));
     const { deleteNoteCascade } = await import('$lib/jkai/intel/ingest');
     const result = await deleteNoteCascade('note-empty');
-    expect(result.removedEntities).toBe(0);
+    expect(result?.removedEntities).toBe(0);
     expect(calls.map((c) => c.table)).toEqual(['intel_relationships', 'intel_notes']);
   });
 
@@ -129,7 +132,7 @@ describe('deleteNoteCascade', () => {
     );
     const { deleteNoteCascade } = await import('$lib/jkai/intel/ingest');
     const result = await deleteNoteCascade('note-merged');
-    expect(result.removedEntities).toBe(3);
+    expect(result?.removedEntities).toBe(3);
   });
 
   it('removes insights that referenced a deleted entity, and leaves the others', async () => {
@@ -147,7 +150,7 @@ describe('deleteNoteCascade', () => {
     );
     const { deleteNoteCascade } = await import('$lib/jkai/intel/ingest');
     const result = await deleteNoteCascade('note-insight');
-    expect(result.removedInsights).toBe(1);
+    expect(result?.removedInsights).toBe(1);
     expect(calls.map((c) => c.table)).toEqual([
       'intel_relationships',
       'intel_notes',
@@ -162,10 +165,12 @@ describe('deleteNoteCascade', () => {
     vi.doMock('$lib/db', () => ({
       db: {
         transaction: async (cb: (tx: unknown) => Promise<unknown>) => {
+          let selects = 0;
           const tx = {
             select: () => ({
               from: (_table: unknown) => ({
-                where: async (_cond: unknown) => [],
+                // The first select is the scope check, which must find the note.
+                where: async (_cond: unknown) => (selects++ === 0 ? [{ id: 'note-null-driver' }] : []),
                 then: (resolve: (value: unknown) => unknown) => Promise.resolve([]).then(resolve),
               }),
             }),
@@ -179,7 +184,16 @@ describe('deleteNoteCascade', () => {
     }));
     const { deleteNoteCascade } = await import('$lib/jkai/intel/ingest');
     const result = await deleteNoteCascade('note-null-driver');
-    expect(result.removedRelationships).toBe(0);
-    expect(result.removedEntities).toBe(0);
+    expect(result?.removedRelationships).toBe(0);
+    expect(result?.removedEntities).toBe(0);
+  });
+
+  // The id comes from a request. A note in a space the caller cannot see is
+  // not found, and not one row of anybody's graph is touched.
+  it('returns null and deletes nothing when the note is outside the scope', async () => {
+    vi.doMock('$lib/db', () => withTx([entityRows(['theirs'])], { visible: false }));
+    const { deleteNoteCascade } = await import('$lib/jkai/intel/ingest');
+    expect(await deleteNoteCascade('note-elsewhere')).toBeNull();
+    expect(calls).toEqual([]);
   });
 });

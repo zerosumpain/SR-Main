@@ -5,6 +5,7 @@ import { getLLMClient } from '$lib/llm/client';
 import { resolveIntelAnalysisModel } from '$lib/server/models/workload-settings';
 import { currentSessionModel } from '$lib/context/chat';
 import { withActivity } from '$lib/context/activity';
+import { HOUSEHOLD_SPACE, spaceIn, type IntelScope } from './scope';
 
 interface SimilarNote {
   id: string;
@@ -29,7 +30,20 @@ interface EvaluatedConnection {
   relatedEntityIds: string[];
 }
 
-async function findSimilarNotes(noteId: string, limit = 10): Promise<SimilarNote[]> {
+/**
+ * What a note may be compared against: whatever the people who can see the
+ * note — and so its alerts — can already see. A member's note recalls from
+ * their space and the household's; a household note, which everyone sees,
+ * recalls from the household only, or its alert would quote the owner's notes
+ * to the whole house.
+ */
+export function recallScope(noteSpace: string): IntelScope {
+  return noteSpace === HOUSEHOLD_SPACE ? [HOUSEHOLD_SPACE] : [noteSpace, HOUSEHOLD_SPACE];
+}
+
+// The `(SELECT embedding FROM intel_notes WHERE id = …)` subqueries below read
+// the note being recalled FOR, by id — the note the scope was derived from.
+async function findSimilarNotes(noteId: string, scope: IntelScope, limit = 10): Promise<SimilarNote[]> {
   const rows = await db.execute(sql`
     SELECT n.id, n.title,
            substring(n.processed_content from 1 for 300) as snippet,
@@ -39,6 +53,7 @@ async function findSimilarNotes(noteId: string, limit = 10): Promise<SimilarNote
       -- Same reason as searchIntel: a note held at the mail gate is embedded so
       -- the queue can cluster it, not so it can be recalled as evidence.
       AND n.graph_state = 'admitted'
+      AND ${spaceIn(sql`n.space_id`, scope)}
       AND n.embedding IS NOT NULL
       AND (SELECT embedding FROM intel_notes WHERE id = ${noteId}) IS NOT NULL
     ORDER BY distance ASC
@@ -53,7 +68,7 @@ async function findSimilarNotes(noteId: string, limit = 10): Promise<SimilarNote
   }));
 }
 
-async function findSimilarEntities(noteId: string, limit = 10): Promise<SimilarEntity[]> {
+async function findSimilarEntities(noteId: string, scope: IntelScope, limit = 10): Promise<SimilarEntity[]> {
   const rows = await db.execute(sql`
     SELECT e.id, e.name, et.name as type_name, e.summary,
            e.embedding <=> (SELECT embedding FROM intel_notes WHERE id = ${noteId}) as distance
@@ -61,6 +76,7 @@ async function findSimilarEntities(noteId: string, limit = 10): Promise<SimilarE
     JOIN intel_entity_types et ON e.type_id = et.id
     WHERE e.embedding IS NOT NULL
       AND e.merged_into_id IS NULL
+      AND ${spaceIn(sql`e.space_id`, scope)}
       AND (SELECT embedding FROM intel_notes WHERE id = ${noteId}) IS NOT NULL
     ORDER BY distance ASC
     LIMIT ${limit}
@@ -165,9 +181,10 @@ export async function recallAndAlert(noteId: string): Promise<number> {
     const content = note.processedContent || note.rawContent;
     if (!content) return 0;
 
+    const scope = recallScope(note.spaceId);
     const [similarNotes, similarEntities] = await Promise.all([
-      findSimilarNotes(noteId),
-      findSimilarEntities(noteId),
+      findSimilarNotes(noteId, scope),
+      findSimilarEntities(noteId, scope),
     ]);
 
     if (similarNotes.length === 0 && similarEntities.length === 0) return 0;

@@ -10,15 +10,21 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { intelAlerts, intelEntities, intelEntityTypes } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { invalidateGraphAnalysis } from '$lib/jkai/intel/analytics/load';
 import { mergeEntities } from '$lib/jkai/intel/resolve/merge';
+import { spaceIn } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
+import { rethrowScoped } from '$lib/jkai/intel/not-found';
 
 /** Long enough to be a reason, short enough not to be an essay in a text column. */
 const MAX_REASON_LENGTH = 500;
 
-export const POST: RequestHandler = async ({ request }) => {
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+export const POST: RequestHandler = async (event) => {
+  // Every write carries the scope in its own WHERE: an alert or entity outside
+  // the reader's scope matches no row, so it is the same 404 as a missing one.
+  const scope = await resolveRequestScope(event);
+  const body = (await event.request.json().catch(() => ({}))) as Record<string, unknown>;
   const action = String(body.action ?? '');
 
   // Alert triage rides on the same endpoint so the inbox has one client helper.
@@ -32,7 +38,7 @@ export const POST: RequestHandler = async ({ request }) => {
     const [updated] = await db
       .update(intelAlerts)
       .set({ dismissed: true, dismissedReason: reason || null })
-      .where(eq(intelAlerts.id, alertId))
+      .where(and(eq(intelAlerts.id, alertId), spaceIn(intelAlerts.spaceId, scope)))
       .returning({ id: intelAlerts.id, dismissedReason: intelAlerts.dismissedReason });
     if (!updated) throw error(404, 'alert not found');
     return json({ ok: true, alert: updated });
@@ -40,12 +46,13 @@ export const POST: RequestHandler = async ({ request }) => {
 
   const entityId = String(body.entityId ?? '');
   if (!entityId) throw error(400, 'entityId is required');
+  const inScope = and(eq(intelEntities.id, entityId), spaceIn(intelEntities.spaceId, scope));
 
   if (action === 'confirm' || action === 'unconfirm') {
     const [updated] = await db
       .update(intelEntities)
       .set({ confirmed: action === 'confirm', updatedAt: new Date() })
-      .where(eq(intelEntities.id, entityId))
+      .where(inScope)
       .returning({ id: intelEntities.id, confirmed: intelEntities.confirmed });
     if (!updated) throw error(404, 'entity not found');
     return json({ ok: true, entity: updated });
@@ -55,7 +62,7 @@ export const POST: RequestHandler = async ({ request }) => {
     const [updated] = await db
       .update(intelEntities)
       .set({ watched: action === 'watch', updatedAt: new Date() })
-      .where(eq(intelEntities.id, entityId))
+      .where(inScope)
       .returning({ id: intelEntities.id, watched: intelEntities.watched });
     if (!updated) throw error(404, 'entity not found');
     return json({ ok: true, entity: updated });
@@ -74,7 +81,7 @@ export const POST: RequestHandler = async ({ request }) => {
     const [updated] = await db
       .update(intelEntities)
       .set({ typeId, updatedAt: new Date() })
-      .where(eq(intelEntities.id, entityId))
+      .where(inScope)
       .returning({ id: intelEntities.id, typeId: intelEntities.typeId });
     if (!updated) throw error(404, 'entity not found');
     invalidateGraphAnalysis();
@@ -87,16 +94,16 @@ export const POST: RequestHandler = async ({ request }) => {
     try {
       // The entity under review is always the loser: the survivor is the one
       // already in the graph with its edges and evidence attached.
-      return json({ ok: true, result: await mergeEntities(keepId, entityId, { method: 'manual' }) });
+      return json({ ok: true, result: await mergeEntities(keepId, entityId, { method: 'manual', scope }) });
     } catch (err) {
-      throw error(400, err instanceof Error ? err.message : 'merge failed');
+      rethrowScoped(err, 400, 'merge failed');
     }
   }
 
   if (action === 'reject') {
     const deleted = await db
       .delete(intelEntities)
-      .where(eq(intelEntities.id, entityId))
+      .where(inScope)
       .returning({ id: intelEntities.id });
     if (!deleted.length) throw error(404, 'entity not found');
     invalidateGraphAnalysis();

@@ -18,6 +18,8 @@ import {
   generateBrief,
   type BriefContext,
 } from '$lib/jkai/intel/brief';
+import type { IntelScope } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
 interface BriefRequest {
   entityIds: string[];
@@ -47,9 +49,14 @@ function parseRequest(source: {
   return { entityIds: [...new Set(ids)], dossierId, format };
 }
 
-async function contextFor(req: BriefRequest): Promise<BriefContext> {
+/**
+ * Assembled from the reader's scope only: a subject or dossier outside it
+ * resolves to nothing (the same 404 as a missing one), and a brief can never
+ * cite a note the reader could not open.
+ */
+async function contextFor(req: BriefRequest, scope: IntelScope): Promise<BriefContext> {
   if (req.dossierId) {
-    const context = await assembleDossierBriefContext(req.dossierId);
+    const context = await assembleDossierBriefContext(req.dossierId, scope);
     if (!context) throw error(404, 'dossier not found');
     if (!context.subjects.length) {
       throw error(400, 'this dossier has no entities pinned to it yet');
@@ -57,7 +64,7 @@ async function contextFor(req: BriefRequest): Promise<BriefContext> {
     return context;
   }
 
-  const context = await assembleBriefContext(req.entityIds);
+  const context = await assembleBriefContext(req.entityIds, { scope });
   if (!context.subjects.length) throw error(404, 'no such entity');
   return context;
 }
@@ -71,8 +78,8 @@ function filename(context: BriefContext): string {
   return `brief-${stem || 'intel'}-${context.generatedAt.slice(0, 10)}.md`;
 }
 
-async function respond(req: BriefRequest): Promise<Response> {
-  const context = await contextFor(req);
+async function respond(req: BriefRequest, scope: IntelScope): Promise<Response> {
+  const context = await contextFor(req, scope);
 
   let result;
   try {
@@ -113,12 +120,13 @@ async function respond(req: BriefRequest): Promise<Response> {
   });
 }
 
-export const POST: RequestHandler = async ({ request }) => {
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-  return respond(parseRequest(body));
+export const POST: RequestHandler = async (event) => {
+  const body = (await event.request.json().catch(() => ({}))) as Record<string, unknown>;
+  return respond(parseRequest(body), await resolveRequestScope(event));
 };
 
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async (event) => {
+  const { url } = event;
   return respond(
     parseRequest({
       entityId: url.searchParams.get('entityId') ?? undefined,
@@ -126,5 +134,6 @@ export const GET: RequestHandler = async ({ url }) => {
       dossierId: url.searchParams.get('dossierId') ?? undefined,
       format: url.searchParams.get('format') ?? undefined,
     }),
+    await resolveRequestScope(event),
   );
 };

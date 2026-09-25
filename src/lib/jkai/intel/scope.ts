@@ -40,3 +40,28 @@ export function narrowScope(allowed: IntelScope, requested: readonly string[]): 
 export function spaceIn(column: SQL | AnyColumn, scope: IntelScope): SQL {
   return sql`${column} = ANY(${pgTextArray(scope)}::text[])`;
 }
+
+/**
+ * The space a write lands in, for an artefact a reader creates (an insight, a
+ * lens, a watchlist entry) rather than a row derived from a note — those take
+ * the note's space instead. A reader's scope is always `[own, 'household']`,
+ * own first (see `resolveRequestScope`), so the head is the reader's own space:
+ * what they make is theirs, never silently shared with the household.
+ */
+export function writeSpace(scope: IntelScope): string {
+  const own = scope[0];
+  if (!own) throw new Error('writeSpace: empty scope — no space to write into');
+  return own;
+}
+
+/**
+ * True only for the owner's whole scope. Some operations are not reads of a
+ * scope at all: they sweep every space (cleanup's apply, the alias backfill),
+ * rewrite something every space shares (the entity-type vocabulary, the cluster
+ * roster), or run a whole-corpus backfill. A member's request must never run
+ * those, and neither may a view the owner has narrowed to one space — the
+ * operation would still reach the rest. Routes gate them on this.
+ */
+export function isOwnerScope(scope: IntelScope): boolean {
+  return scopeKey(scope) === scopeKey(OWNER_INTEL_SCOPE);
+}

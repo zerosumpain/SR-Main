@@ -23,6 +23,7 @@ import { factsFor } from '../mail-facts';
 import { admitMailNotes, rejectMailNotes } from '../mail-admit';
 import { decide } from './evaluate';
 import { activeMailRules } from './store';
+import { OWNER_INTEL_SCOPE, spaceIn, type IntelScope } from '../scope';
 
 /**
  * Threads one run may admit. Small on purpose — a rule's whole job is to save
@@ -54,8 +55,15 @@ export interface ApplyRulesResult {
  *
  * Newest first, matching the sweep and the queue: if a cap defers work, the
  * mail deferred should be the oldest, not an arbitrary page.
+ *
+ * The rules are the owner's, learned from the owner's decisions, so they run
+ * over the owner's queue (`scope`, owner by default) and nobody else's; the
+ * admit and reject calls carry the same scope.
  */
-export async function applyMailRules(now = Date.now()): Promise<ApplyRulesResult> {
+export async function applyMailRules(
+  now = Date.now(),
+  scope: IntelScope = OWNER_INTEL_SCOPE,
+): Promise<ApplyRulesResult> {
   const result: ApplyRulesResult = {
     ran: false,
     activeRules: 0,
@@ -82,7 +90,7 @@ export async function applyMailRules(now = Date.now()): Promise<ApplyRulesResult
       createdAt: intelNotes.createdAt,
     })
     .from(intelNotes)
-    .where(and(eq(intelNotes.source, 'email'), eq(intelNotes.graphState, 'pending')))
+    .where(and(eq(intelNotes.source, 'email'), eq(intelNotes.graphState, 'pending'), spaceIn(intelNotes.spaceId, scope)))
     .orderBy(desc(sql`coalesce(${intelNotes.observedAt}, ${intelNotes.createdAt})`));
 
   const toAdmit: Array<{ id: string; ruleKey: string }> = [];
@@ -115,13 +123,13 @@ export async function applyMailRules(now = Date.now()): Promise<ApplyRulesResult
   };
 
   for (const [ruleKey, ids] of groups(toReject)) {
-    const rejected = await rejectMailNotes(ids, { actor: 'rule', ruleKey });
+    const rejected = await rejectMailNotes(ids, { actor: 'rule', ruleKey, scope });
     result.rejected += rejected.rejected;
     result.byRule[ruleKey] = (result.byRule[ruleKey] ?? 0) + rejected.rejected;
   }
 
   for (const [ruleKey, ids] of groups(toAdmit)) {
-    const admitted = await admitMailNotes(ids, { actor: 'rule', ruleKey });
+    const admitted = await admitMailNotes(ids, { actor: 'rule', ruleKey, scope });
     result.admitted += admitted.admitted;
     result.failed += admitted.failed;
     result.byRule[ruleKey] = (result.byRule[ruleKey] ?? 0) + admitted.admitted;

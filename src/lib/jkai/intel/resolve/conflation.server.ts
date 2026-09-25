@@ -27,6 +27,7 @@ import {
   type SplitProposal,
 } from './conflation';
 import { withActivity } from '$lib/context/activity';
+import { OWNER_SPACE } from '../scope';
 
 export const SYSTEM_ACTOR = 'system';
 /** Pinned — renaming this re-asks the model about every entity it has judged. */
@@ -149,6 +150,23 @@ export function candidatesFromAnalysis(analysis: GraphAnalysis): {
   return { entities, p95ByType };
 }
 
+/**
+ * One space's candidates, from that space's analysed graph.
+ *
+ * Exactly ONE space, never household alongside: a split moves edges between
+ * two entities, and both must be the same person's — `splitEntity` refuses
+ * anything else, so a candidate the sweep could never repair is not worth a
+ * model call. The owner's by default; the nightly engine runs a sweep per space.
+ */
+export async function conflationCandidates(space: string = OWNER_SPACE): Promise<{
+  analysis: GraphAnalysis;
+  entities: CandidateEntity[];
+  p95ByType: Map<string, number>;
+}> {
+  const analysis = await getGraphAnalysis(false, { scope: [space] });
+  return { analysis, ...candidatesFromAnalysis(analysis) };
+}
+
 interface Verdict {
   entityId: string;
   entityName: string;
@@ -267,8 +285,9 @@ Some neighbours: ${neighbours.slice(0, 40).join(', ')}`,
  * checked against production before it was allowed to touch it.
  */
 export async function runConflationSweep(
-  opts: { apply?: boolean; record?: boolean; limit?: number } = {},
+  opts: { apply?: boolean; record?: boolean; limit?: number; space?: string } = {},
 ): Promise<ConflationSweepResult> {
+  const space = opts.space ?? OWNER_SPACE;
   // Applying is opt-in; recording is not. A dry run writes nothing, but a
   // propose-only sweep MUST record, or it re-asks the model about the same
   // entities every night for the life of the graph.
@@ -276,8 +295,7 @@ export async function runConflationSweep(
   const record = opts.record !== false;
   const budget = Math.max(1, Math.min(opts.limit ?? MAX_JUDGEMENTS_PER_SWEEP, 50));
 
-  const analysis = await getGraphAnalysis();
-  const { entities, p95ByType } = candidatesFromAnalysis(analysis);
+  const { analysis, entities, p95ByType } = await conflationCandidates(space);
   const shortlist = shortlistCandidates(entities, p95ByType);
   const verdicts = await loadVerdicts();
 
@@ -366,6 +384,7 @@ export async function runConflationSweep(
         await db.execute(sql`
           SELECT id, type FROM intel_relationships
           WHERE suppressed IS NOT TRUE
+            AND space_id = ${space}
             AND (source_entity_id = ${candidate.id} OR target_entity_id = ${candidate.id})
         `)
       ).rows as Array<{ id: string; type: string }>;
@@ -397,7 +416,7 @@ export async function runConflationSweep(
             to: { entityId: verdict.targetId },
             relationshipIds: moving,
             reason: `Conflation detected automatically, and proposed identically on ${previous?.lastProposal?.day} and ${today}: ${proposal.reason}`,
-          });
+          }, [space]);
           result.applied++;
           result.splits.push({
             entity: candidate.name,

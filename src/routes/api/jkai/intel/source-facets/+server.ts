@@ -36,6 +36,8 @@ import {
   SEED_ARTEFACT_NAMES,
 } from '$lib/jkai/intel/channel-artefacts';
 import { invalidateGraphAnalysis } from '$lib/jkai/intel/analytics/load';
+import { isOwnerScope } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
 interface Outcome {
   seededDomainRules: number;
@@ -221,16 +223,30 @@ async function run(dryRun: boolean): Promise<Outcome> {
 // look like loopback and the address half of that gate means nothing there.
 // The dry run reports the shape of the mailbox — sender domains and counts —
 // which is not something to hand out on the strength of one gate.
-export const GET: RequestHandler = async ({ request, locals }) => {
-  if (!(await isMaintenanceAuthorized(request, locals))) {
+//
+// Spaces: every pass is a whole-corpus backfill over every space's email notes,
+// driven by the owner's Gmail, and returns counters and seed names only. So the
+// passes stay unscoped and BOTH verbs are owner-only: `isMaintenanceAuthorized`
+// admits any signed-in session, and even the dry run's counts describe the whole
+// corpus rather than one reader's scope.
+async function ownerOnly(event: Parameters<RequestHandler>[0]): Promise<Response | null> {
+  if (!(await isMaintenanceAuthorized(event.request, event.locals))) {
     return json({ error: 'not authorised' }, { status: 403 });
   }
+  if (!isOwnerScope(await resolveRequestScope(event))) {
+    return json({ error: 'owner only' }, { status: 403 });
+  }
+  return null;
+}
+
+export const GET: RequestHandler = async (event) => {
+  const refused = await ownerOnly(event);
+  if (refused) return refused;
   return json({ dryRun: true, ...(await run(true)) });
 };
 
-export const POST: RequestHandler = async ({ request, locals }) => {
-  if (!(await isMaintenanceAuthorized(request, locals))) {
-    return json({ error: 'not authorised' }, { status: 403 });
-  }
+export const POST: RequestHandler = async (event) => {
+  const refused = await ownerOnly(event);
+  if (refused) return refused;
   return json({ dryRun: false, ...(await run(false)) });
 };

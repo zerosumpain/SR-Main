@@ -40,6 +40,7 @@ import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { intelNotes } from '$lib/db/schema';
 import { canonicalName, normaliseName } from './resolve/match';
+import { OWNER_INTEL_SCOPE, spaceIn, writeSpace, type IntelScope } from './scope';
 
 /** Shape written to `intel_notes.metadata.graphRelevance`. */
 export interface GraphRelevance {
@@ -279,15 +280,25 @@ const CHUNK = 400;
  * Three queries rather than correlated EXISTS: the two anchor sets are small
  * and read once, where an EXISTS per entity is 4,500 probes into two tables to
  * answer the same question.
+ *
+ * Only the entities `scope` can see. The matched names are STORED on the
+ * thread (`graphRelevance.names`) and shown on its queue row, so an entity from
+ * outside the scope would be written into somebody else's mail.
  */
-export async function loadAnchoredEntities(): Promise<AnchoredEntity[]> {
+export async function loadAnchoredEntities(scope: IntelScope = OWNER_INTEL_SCOPE): Promise<AnchoredEntity[]> {
   const [entities, dossiered, offEmail] = await Promise.all([
     db.execute(sql`
       SELECT e.id, e.name, e.aliases, e.watched, e.lens, e.corroboration, e.confidence_score
       FROM intel_entities e
       WHERE e.merged_into_id IS NULL AND e.name IS NOT NULL
+        AND ${spaceIn(sql`e.space_id`, scope)}
     `),
-    db.execute(sql`SELECT DISTINCT ref_id FROM intel_dossier_items WHERE kind = 'entity' AND ref_id IS NOT NULL`),
+    // Pinned in a dossier the scope can see — a pin is an act of the dossier's owner.
+    db.execute(sql`
+      SELECT DISTINCT i.ref_id FROM intel_dossier_items i
+      JOIN intel_dossiers d ON d.id = i.dossier_id
+      WHERE i.kind = 'entity' AND i.ref_id IS NOT NULL AND ${spaceIn(sql`d.space_id`, scope)}
+    `),
     db.execute(sql`
       SELECT DISTINCT ne.entity_id
       FROM intel_note_entities ne
@@ -298,6 +309,7 @@ export async function loadAnchoredEntities(): Promise<AnchoredEntity[]> {
       -- likely to be the owner's own material, so the plain inequality would
       -- exclude from the anchor set precisely the entities that most belong.
       WHERE n.source IS DISTINCT FROM 'email'
+        AND ${spaceIn(sql`n.space_id`, scope)}
     `),
   ]);
 
@@ -337,12 +349,24 @@ export async function loadAnchoredEntities(): Promise<AnchoredEntity[]> {
 /**
  * Nearest anchored entity vector for each of these notes.
  *
- * The kNN runs UNFILTERED and the anchor test is applied to the results, so the
- * probe stays index-shaped. A thread whose 25 nearest entities are all
- * email-derived scores 0, which is the honest answer rather than a reach down
- * the list for something that qualifies.
+ * The kNN is not filtered on the anchor set — the anchor test is applied to the
+ * results, so the probe stays index-shaped. A thread whose 25 nearest entities
+ * are all email-derived scores 0, which is the honest answer rather than a reach
+ * down the list for something that qualifies.
+ *
+ * It IS filtered on space, on both sides: a thread outside `scope` is not
+ * probed, and its neighbours are only entities in `scope`. The space predicate
+ * is a plain column filter the HNSW scan applies as it goes; with one space in
+ * production it costs nothing, and a small member space may see fewer than 25
+ * neighbours (recall, not a leak — the PR B note on HNSW and small spaces).
+ *
+ * Exported for the space test.
  */
-async function nearestAnchored(noteIds: string[], anchored: Set<string>): Promise<Map<string, number>> {
+export async function nearestAnchored(
+  noteIds: string[],
+  anchored: Set<string>,
+  scope: IntelScope = OWNER_INTEL_SCOPE,
+): Promise<Map<string, number>> {
   const out = new Map<string, number>();
   if (!noteIds.length) return out;
 
@@ -355,10 +379,12 @@ async function nearestAnchored(noteIds: string[], anchored: Set<string>): Promis
         SELECT o.id AS entity_id, (n.embedding <=> o.embedding) AS dist
         FROM intel_entities o
         WHERE o.merged_into_id IS NULL AND o.embedding IS NOT NULL
+          AND ${spaceIn(sql`o.space_id`, scope)}
         ORDER BY n.embedding <=> o.embedding
         LIMIT ${KNN_K}
       ) k
       WHERE n.id IN (${sql.join(noteIds.map((id) => sql`${id}`), sql`, `)})
+        AND ${spaceIn(sql`n.space_id`, scope)}
         AND n.embedding IS NOT NULL
     `);
   });
@@ -411,6 +437,14 @@ export interface ScoreOptions {
   states?: string[];
   limit?: number;
   now?: number;
+  /**
+   * The reader whose mail is scored. Their OWN space's threads (the head of the
+   * scope, `writeSpace`) are scored against every entity the scope can see.
+   * Not household threads: a score is stored on the thread and household mail
+   * is read by every member, so it must never carry one reader's entity names.
+   * The owner's by default.
+   */
+  scope?: IntelScope;
 }
 
 /**
@@ -438,7 +472,8 @@ export async function scoreMailRelevance(opts: ScoreOptions = {}): Promise<Score
     distribution: {},
   };
 
-  const anchored = await loadAnchoredEntities();
+  const scope = opts.scope ?? OWNER_INTEL_SCOPE;
+  const anchored = await loadAnchoredEntities(scope);
   out.entities = anchored.length;
   out.foreground = anchored.filter((e) => e.weight === 3).length;
   if (!anchored.length) {
@@ -456,7 +491,11 @@ export async function scoreMailRelevance(opts: ScoreOptions = {}): Promise<Score
       metadata: intelNotes.metadata,
     })
     .from(intelNotes)
-    .where(and(eq(intelNotes.source, 'email'), inArray(intelNotes.graphState, states)))
+    .where(and(
+      eq(intelNotes.source, 'email'),
+      inArray(intelNotes.graphState, states),
+      spaceIn(intelNotes.spaceId, [writeSpace(scope)]),
+    ))
     // Newest first, matching the sweep and the queue. A LIMIT with no ORDER BY
     // takes an arbitrary slice, so on a corpus past the limit a different set of
     // threads would be scored each night and some would never be scored at all —
@@ -504,7 +543,7 @@ export async function scoreMailRelevance(opts: ScoreOptions = {}): Promise<Score
     const chunk = inRange.slice(start, start + CHUNK);
     let nearest = new Map<string, number>();
     try {
-      nearest = await nearestAnchored(chunk.map((n) => n.id), anchoredIds);
+      nearest = await nearestAnchored(chunk.map((n) => n.id), anchoredIds, scope);
     } catch (err) {
       // The lexical half is the primary signal and does not need vectors. A
       // missing index or an unembedded corpus degrades the score; it must not

@@ -1,4 +1,5 @@
 import { loadDailyAlerts } from '$lib/jkai/intel/daily-alerts.server';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 import { db } from '$lib/db';
 import { conversations, orchestratorChats } from '$lib/db/schema';
 import { desc, eq } from 'drizzle-orm';
@@ -38,7 +39,8 @@ async function loadFreshBriefing(): Promise<{ id: string; title: string; markdow
   }
 }
 
-export const load: PageServerLoad = async ({ url }) => {
+export const load: PageServerLoad = async (event) => {
+  const { url } = event;
   /**
    * A question handed over from another surface — "Ask jkai about this" on a
    * research run. Read on the server so the composer is seeded when the page
@@ -71,7 +73,8 @@ export const load: PageServerLoad = async ({ url }) => {
       resolveChatAltOpenRouterModel(),
       getApprovalUiSettings(),
       loadFreshBriefing(),
-      loadDailyAlerts(),
+      // The reader's digest, not the owner default.
+      loadDailyAlerts(undefined, await resolveRequestScope(event)),
     ]);
 
   let whatsappThread: { id: string; phoneNumber: string; messages: any[] } | null = null;

@@ -264,6 +264,11 @@ async function updateEntitySummaries(entityIds: string[]): Promise<void> {
 
   // Context: the notes these entities appear in, fetched once for the batch
   // rather than once per entity.
+  //
+  // Only notes in the entity's OWN space. Resolution never links a note to an
+  // entity in another space, so this should never bite — but the summary is
+  // written onto the entity and read by everyone who can see it, so a stray
+  // link must not carry another person's prose into it.
   const excerpts = await db
     .select({
       entityId: intelNoteEntities.entityId,
@@ -272,7 +277,11 @@ async function updateEntitySummaries(entityIds: string[]): Promise<void> {
     })
     .from(intelNoteEntities)
     .innerJoin(intelNotes, eq(intelNoteEntities.noteId, intelNotes.id))
-    .where(inArray(intelNoteEntities.entityId, batch.map((e) => e.id)))
+    .innerJoin(intelEntities, eq(intelNoteEntities.entityId, intelEntities.id))
+    .where(and(
+      inArray(intelNoteEntities.entityId, batch.map((e) => e.id)),
+      eq(intelNotes.spaceId, intelEntities.spaceId),
+    ))
     .orderBy(desc(intelNotes.createdAt))
     .limit(batch.length * 3);
 
@@ -372,6 +381,10 @@ async function updateEntitySummaries(entityIds: string[]): Promise<void> {
  * (see the processedContent ordering note in ./auto-extract.ts) were left
  * summary-less, which also leaves their embeddings weaker — and those
  * embeddings are what candidate-based entity resolution now retrieves on.
+ *
+ * Every space in one pass: a summary is per row, like an embedding, and the
+ * batch reads each entity's evidence from its own space only (see
+ * `updateEntitySummaries`). Returns counts, never rows.
  */
 export async function backfillEntitySummaries(limit = 100): Promise<{ processed: number; remaining: number }> {
   const capped = Math.max(1, Math.min(limit, 500));
@@ -528,6 +541,10 @@ export async function persistExtraction(
     // A self-loop carries no information and breaks force layouts.
     if (sourceId === targetId) continue;
 
+    // No space predicate, and none needed: both endpoints were resolved inside
+    // the note's space (persistMention only ever matches or mints there), and an
+    // edge takes its endpoints' space, so (source, target, type) can only ever
+    // meet an edge in the same space.
     const [existing] = await db
       .select({
         id: intelRelationships.id,
@@ -591,6 +608,7 @@ export async function persistExtraction(
   for (const event of result.timelineEvents) {
     const entityId = event.linkedEntity ? entityIdMap.get(event.linkedEntity) ?? null : null;
 
+    // Keyed on the note, which has exactly one space — scoped by construction.
     const [duplicate] = await db
       .select({ id: intelTimelineEvents.id })
       .from(intelTimelineEvents)

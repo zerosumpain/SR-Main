@@ -16,19 +16,38 @@ import { buildClusterRoster, recalculateClusterRoster } from '$lib/jkai/intel/cl
 import { renameCluster, loadClusters, setClusterNarrative } from '$lib/jkai/intel/cluster-store';
 import { assembleClusterBriefContext, generateBrief } from '$lib/jkai/intel/brief';
 import type { StoredCluster } from '$lib/jkai/intel/analytics/cluster-identity';
+import { isOwnerScope, type IntelScope } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
-export const GET: RequestHandler = async ({ url }) => {
+/**
+ * The roster has no space: it is ONE list, detected over the owner's graph, and
+ * building it (every verb here) reconciles and rewrites that list. Its names and
+ * narratives are the owner's. So the route is owner-only — the same rule
+ * `describeClusters` applies in the chat context — rather than a member's
+ * request either reading the owner's neighbourhoods or overwriting the roster
+ * with their own. The owner's scope still goes into every analysis call.
+ */
+async function ownerScope(event: Parameters<RequestHandler>[0]): Promise<IntelScope> {
+  const scope = await resolveRequestScope(event);
+  if (!isOwnerScope(scope)) throw error(403, 'the cluster roster is owner-only');
+  return scope;
+}
+
+export const GET: RequestHandler = async (event) => {
+  const { url } = event;
+  const scope = await ownerScope(event);
   const requested = url.searchParams.get('resolution');
   const resolution = requested === null ? undefined : Number(requested);
   if (resolution !== undefined && (!Number.isFinite(resolution) || resolution <= 0)) {
     throw error(400, 'resolution must be a positive number');
   }
-  const analysis = await getGraphAnalysis();
+  const analysis = await getGraphAnalysis(false, { scope });
   return json(await buildClusterRoster(analysis, resolution));
 };
 
-export const POST: RequestHandler = async ({ request }) => {
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+export const POST: RequestHandler = async (event) => {
+  const scope = await ownerScope(event);
+  const body = (await event.request.json().catch(() => ({}))) as Record<string, unknown>;
   const action = String(body.action ?? '');
 
   if (action === 'recalculate') {
@@ -58,7 +77,7 @@ export const POST: RequestHandler = async ({ request }) => {
     const key = String(body.key ?? '').trim();
     if (!key) throw error(400, 'key is required');
 
-    const analysis = await getGraphAnalysis();
+    const analysis = await getGraphAnalysis(false, { scope });
     const roster = await buildClusterRoster(analysis);
     const view = roster.clusters.find((c) => c.key === key);
     if (!view) throw error(404, 'no such cluster');
@@ -92,7 +111,7 @@ export const POST: RequestHandler = async ({ request }) => {
       diversity: view.composition.diversity,
       span: view.span,
       bridges: view.bridges.map((b) => ({ name: b.name, reaches: b.reaches })),
-    });
+    }, scope);
 
     const result = await generateBrief(context);
     // Persisted against the membership it was written for, so the card can tell

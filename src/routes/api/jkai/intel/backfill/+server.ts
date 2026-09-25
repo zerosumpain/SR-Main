@@ -26,6 +26,8 @@ import { isMaintenanceAuthorized } from '$lib/server/maintenance-auth';
 import { backfillIntelExtraction, isAutoExtractEnabled, type AutoKind } from '$lib/jkai/intel/auto-extract';
 import { invalidateGraphAnalysis } from '$lib/jkai/intel/analytics/load';
 import { relabelKeptNews } from '$lib/news/relabel';
+import { isOwnerScope, spaceIn } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
 const VALID_KINDS: AutoKind[] = ['file', 'research', 'chat'];
 /** The corpus sweep in auto-extract.ts only knows about these two; `chat` has
@@ -33,16 +35,26 @@ const VALID_KINDS: AutoKind[] = ['file', 'research', 'chat'];
  *  unchanged hash, so it can't share the same loop). */
 const SWEEP_KINDS: AutoKind[] = ['file', 'research'];
 
-export const GET: RequestHandler = async ({ locals, request }) => {
+// Spaces, decided per query. GET's two intel counts are a read that feeds the
+// response, so they count the request's scope. Every POST pass is a
+// whole-corpus sweep (every space's notes, entities, tombstones and links) that
+// returns only counters, so the passes stay unscoped and POST is owner-only —
+// `isMaintenanceAuthorized` admits any signed-in session, and a member must not
+// be able to start a sweep over the owner's graph.
+export const GET: RequestHandler = async (event) => {
+  const { locals, request } = event;
   if (!(await isMaintenanceAuthorized(request, locals))) return json({ error: 'unauthorized' }, { status: 401 });
+  const scope = await resolveRequestScope(event);
 
   const { rows } = await db.execute(sql`
     SELECT
       (SELECT count(DISTINCT file_id) FROM file_embeddings) AS files,
       (SELECT count(*) FROM research_session WHERE report IS NOT NULL) AS research,
       (SELECT count(DISTINCT conversation_id) FROM orchestrator_chats WHERE role = 'assistant') AS chats,
-      (SELECT count(*) FROM intel_notes WHERE metadata->>'autoKind' IS NOT NULL) AS already_extracted,
-      (SELECT count(*) FROM intel_entities WHERE merged_into_id IS NULL) AS entities
+      (SELECT count(*) FROM intel_notes WHERE metadata->>'autoKind' IS NOT NULL
+         AND ${spaceIn(sql`intel_notes.space_id`, scope)}) AS already_extracted,
+      (SELECT count(*) FROM intel_entities WHERE merged_into_id IS NULL
+         AND ${spaceIn(sql`intel_entities.space_id`, scope)}) AS entities
   `);
   const r = (rows[0] ?? {}) as Record<string, unknown>;
   return json({
@@ -55,8 +67,10 @@ export const GET: RequestHandler = async ({ locals, request }) => {
   });
 };
 
-export const POST: RequestHandler = async ({ locals, request }) => {
+export const POST: RequestHandler = async (event) => {
+  const { locals, request } = event;
   if (!(await isMaintenanceAuthorized(request, locals))) return json({ error: 'unauthorized' }, { status: 401 });
+  if (!isOwnerScope(await resolveRequestScope(event))) return json({ error: 'owner only' }, { status: 403 });
 
   const body = (await request.json().catch(() => ({}))) as {
     kinds?: string[];

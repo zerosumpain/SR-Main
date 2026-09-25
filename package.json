@@ -52,7 +52,7 @@
     "gate:measure": "node scripts/check-measure.mjs",
     "gate:source-footprint": "node scripts/check-source-footprint.mjs",
     "gate:boundaries": "node scripts/check-module-boundaries.mjs",
-    "gate:intel-scope": "node scripts/check-intel-scope.mjs",
+    "gate:intel-scope": "node scripts/check-intel-scope.mjs --strict",
     "gate:schema-imports": "node scripts/check-schema-imports.mjs",
     "gate:schema-drift": "node scripts/check-schema-drift.mjs",
     "gate:app-registry": "node scripts/sync-app-registry.mjs --check",

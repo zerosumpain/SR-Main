@@ -1,6 +1,7 @@
 import { and, eq, gte, lt, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { intelNotes } from '$lib/db/schema';
+import { OWNER_INTEL_SCOPE, spaceIn } from '$lib/jkai/intel/scope';
 import { getSetting } from '$lib/server/models/settings';
 import {
   buildMailCandidates,
@@ -69,6 +70,10 @@ export const daydreamMail: ActivityHandler = {
       const windowStart = new Date(now.getTime() - cfg.windowDays * 86_400_000);
       const historyStart = new Date(now.getTime() - HISTORY_DAYS * 86_400_000);
       const observed = sql`coalesce(${intelNotes.observedAt}, ${intelNotes.createdAt})`;
+      // The owner's mailbox, both for the window and for the history that
+      // makes a sender familiar: a member's correspondence is neither his news
+      // nor evidence that a sender is known to him.
+      const ownerMail = spaceIn(intelNotes.spaceId, OWNER_INTEL_SCOPE);
 
       // ── The window under inspection ──
       const rows = await db
@@ -80,7 +85,7 @@ export const daydreamMail: ActivityHandler = {
           createdAt: intelNotes.createdAt,
         })
         .from(intelNotes)
-        .where(and(eq(intelNotes.source, 'email'), gte(observed, windowStart)))
+        .where(and(eq(intelNotes.source, 'email'), gte(observed, windowStart), ownerMail))
         .orderBy(observed)
         .limit(1500);
 
@@ -115,6 +120,7 @@ export const daydreamMail: ActivityHandler = {
             eq(intelNotes.source, 'email'),
             gte(observed, historyStart),
             lt(observed, windowStart),
+            ownerMail,
           ),
         )
         .limit(6000);

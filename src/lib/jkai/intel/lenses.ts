@@ -38,6 +38,7 @@
 import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { intelEntities, intelLenses, type IntelLens } from '$lib/db/schema';
 import { escapeLike } from './entity-query';
+import { OWNER_INTEL_SCOPE, spaceIn, type IntelScope } from './scope';
 
 // ── Shape ────────────────────────────────────────────────────────────────────
 
@@ -289,9 +290,12 @@ export interface LensFilterPlan {
  *
  * Merged entities are excluded unconditionally: an alias resolved into a
  * survivor is not a second entity, and counting it would inflate every lens.
+ * So are entities outside the reader's `scope` (the space ids it may see, not
+ * the `lens` facet above) — the plan carries the predicate so no caller that
+ * spreads `conditions` can forget it.
  */
-export function buildLensFilter(filters: LensFilters): LensFilterPlan {
-  const conditions: SQL[] = [isNull(intelEntities.mergedIntoId)];
+export function buildLensFilter(filters: LensFilters, scope: IntelScope = OWNER_INTEL_SCOPE): LensFilterPlan {
+  const conditions: SQL[] = [isNull(intelEntities.mergedIntoId), spaceIn(intelEntities.spaceId, scope)];
 
   if (filters.typeIds.length) {
     conditions.push(inArray(intelEntities.typeId, filters.typeIds));
@@ -327,7 +331,7 @@ export function buildLensFilter(filters: LensFilters): LensFilterPlan {
     conditions.push(sql`exists (
       select 1
       from intel_note_entities ne
-      join intel_notes n on n.id = ne.note_id
+      join intel_notes n on n.id = ne.note_id and ${spaceIn(sql`n.space_id`, scope)}
       where ne.entity_id = ${intelEntities.id} and n.source in (${list})
     )`);
   }

@@ -14,28 +14,61 @@ import {
   intelTimelineEvents,
 } from '$lib/db/schema';
 import { and, count, eq, isNull, sql } from 'drizzle-orm';
+import { spaceIn } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
-export const load: LayoutServerLoad = async () => {
+// Every badge counts the request's scope: a count is still a disclosure (how
+// much mail, how many dossiers) and the nav is on every intel page. The one
+// exception is `proposedTypes`, which counts the shared type vocabulary.
+export const load: LayoutServerLoad = async (event) => {
+  const scope = await resolveRequestScope(event);
   const [entities, notes, pending, alerts, dossiers, events, watched, heldMail] = await Promise.all([
-    db.select({ n: count() }).from(intelEntities).where(isNull(intelEntities.mergedIntoId)),
-    db.select({ n: count() }).from(intelNotes),
     db
       .select({ n: count() })
       .from(intelEntities)
-      .where(and(eq(intelEntities.confirmed, false), isNull(intelEntities.mergedIntoId))),
-    db.select({ n: count() }).from(intelAlerts).where(eq(intelAlerts.dismissed, false)),
-    db.select({ n: count() }).from(intelDossiers).where(eq(intelDossiers.status, 'open')),
-    db.select({ n: count() }).from(intelTimelineEvents),
+      .where(and(isNull(intelEntities.mergedIntoId), spaceIn(intelEntities.spaceId, scope))),
+    db.select({ n: count() }).from(intelNotes).where(spaceIn(intelNotes.spaceId, scope)),
     db
       .select({ n: count() })
       .from(intelEntities)
-      .where(and(eq(intelEntities.watched, true), isNull(intelEntities.mergedIntoId))),
+      .where(
+        and(
+          eq(intelEntities.confirmed, false),
+          isNull(intelEntities.mergedIntoId),
+          spaceIn(intelEntities.spaceId, scope),
+        ),
+      ),
+    db
+      .select({ n: count() })
+      .from(intelAlerts)
+      .where(and(eq(intelAlerts.dismissed, false), spaceIn(intelAlerts.spaceId, scope))),
+    db
+      .select({ n: count() })
+      .from(intelDossiers)
+      .where(and(eq(intelDossiers.status, 'open'), spaceIn(intelDossiers.spaceId, scope))),
+    db.select({ n: count() }).from(intelTimelineEvents).where(spaceIn(intelTimelineEvents.spaceId, scope)),
+    db
+      .select({ n: count() })
+      .from(intelEntities)
+      .where(
+        and(
+          eq(intelEntities.watched, true),
+          isNull(intelEntities.mergedIntoId),
+          spaceIn(intelEntities.spaceId, scope),
+        ),
+      ),
     // Email waiting at the graph gate. The one badge on this nav that is a
     // BACKLOG rather than a statistic, so it is the one worth warning on.
     db
       .select({ n: count() })
       .from(intelNotes)
-      .where(and(eq(intelNotes.source, 'email'), eq(intelNotes.graphState, 'pending'))),
+      .where(
+        and(
+          eq(intelNotes.source, 'email'),
+          eq(intelNotes.graphState, 'pending'),
+          spaceIn(intelNotes.spaceId, scope),
+        ),
+      ),
   ]);
 
   // Entities asserted by exactly one note with no relationships are the honest
@@ -44,9 +77,11 @@ export const load: LayoutServerLoad = async () => {
     SELECT COUNT(*)::int AS n
     FROM intel_entities e
     WHERE e.merged_into_id IS NULL
+      AND ${spaceIn(sql`e.space_id`, scope)}
       AND NOT EXISTS (
         SELECT 1 FROM intel_relationships r
-        WHERE r.source_entity_id = e.id OR r.target_entity_id = e.id
+        WHERE (r.source_entity_id = e.id OR r.target_entity_id = e.id)
+          AND ${spaceIn(sql`r.space_id`, scope)}
       )
   `).then((r) => r.rows as Array<{ n: number }>);
 

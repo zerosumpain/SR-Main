@@ -36,6 +36,7 @@ import {
   heartbeatActions,
   heartbeatPulses,
 } from '$lib/db/schema';
+import { OWNER_INTEL_SCOPE, spaceIn } from '$lib/jkai/intel/scope';
 import { MIN_PAIRS } from './stats/tests';
 import { SWEEP_METRICS } from './stats/sweep';
 
@@ -197,9 +198,12 @@ export async function loadProvenance(): Promise<{
         .where(gte(daydreamSpend.day, new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10)))
         .then((r) => r[0] ?? { n: 0, latest: null }),
 
+      // The insights daydream can bridge are the owner's, so that is the
+      // supply this link reports on.
       db
         .select({ n: sql<number>`count(*)::int` })
         .from(intelInsights)
+        .where(spaceIn(intelInsights.spaceId, OWNER_INTEL_SCOPE))
         .then((r) => r[0]?.n ?? 0),
 
       db

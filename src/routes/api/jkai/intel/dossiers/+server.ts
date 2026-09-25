@@ -11,7 +11,9 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { intelDossierItems, intelDossiers } from '$lib/db/schema';
-import { desc, eq, inArray, like, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, like, sql } from 'drizzle-orm';
+import { spaceIn, writeSpace } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
 // Deliberately NOT exported: a non-handler export from a +server.ts breaks the
 // route at runtime (see reference_sveltekit_server_exports).
@@ -55,6 +57,9 @@ function slugify(title: string): string {
  * `intel_dossiers.slug` is uniquely indexed, so two case files opened with the
  * same title would otherwise collide with a 500. One read of the neighbouring
  * slugs is enough to pick the next free suffix.
+ *
+ * Deliberately NOT scoped: the unique index spans every space, so a slug taken
+ * in another space is still taken. Only slugs come back, never a row's content.
  */
 async function freeSlug(title: string): Promise<string> {
   const base = slugify(title);
@@ -95,14 +100,16 @@ async function countsFor(dossierIds: string[]): Promise<Map<string, { items: num
   return out;
 }
 
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async (event) => {
+  const { url } = event;
+  const scope = await resolveRequestScope(event);
   const statusParam = url.searchParams.get('status');
   const status = statusParam === 'all' ? null : readStatus(statusParam);
 
   const rows = await db
     .select()
     .from(intelDossiers)
-    .where(status ? eq(intelDossiers.status, status) : undefined)
+    .where(and(spaceIn(intelDossiers.spaceId, scope), status ? eq(intelDossiers.status, status) : undefined))
     .orderBy(desc(intelDossiers.updatedAt))
     .limit(200);
 
@@ -124,8 +131,9 @@ export const GET: RequestHandler = async ({ url }) => {
   });
 };
 
-export const POST: RequestHandler = async ({ request }) => {
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+export const POST: RequestHandler = async (event) => {
+  const scope = await resolveRequestScope(event);
+  const body = (await event.request.json().catch(() => ({}))) as Record<string, unknown>;
 
   const title = String(body.title ?? '').trim().slice(0, MAX_TITLE);
   if (!title) throw error(400, 'title is required');
@@ -142,6 +150,8 @@ export const POST: RequestHandler = async ({ request }) => {
       lensId: body.lensId ? String(body.lensId) : null,
       status: readStatus(body.status, 'open') as string,
       openQuestions: readQuestions(body.openQuestions),
+      // A case file is the reader's own, never silently the household's.
+      spaceId: writeSpace(scope),
     })
     .returning();
 
@@ -152,8 +162,9 @@ export const POST: RequestHandler = async ({ request }) => {
  * Bulk close/park/reopen from the index, so tidying up a stale list is not
  * one round trip per case file.
  */
-export const PATCH: RequestHandler = async ({ request }) => {
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+export const PATCH: RequestHandler = async (event) => {
+  const scope = await resolveRequestScope(event);
+  const body = (await event.request.json().catch(() => ({}))) as Record<string, unknown>;
   const ids = (Array.isArray(body.ids) ? body.ids : []).map(String).filter(Boolean);
   if (!ids.length) throw error(400, 'ids is required');
 
@@ -163,7 +174,8 @@ export const PATCH: RequestHandler = async ({ request }) => {
   const updated = await db
     .update(intelDossiers)
     .set({ status, updatedAt: new Date() })
-    .where(inArray(intelDossiers.id, ids))
+    // An id outside the scope matches no row and is left out of `affected`.
+    .where(and(inArray(intelDossiers.id, ids), spaceIn(intelDossiers.spaceId, scope)))
     .returning({ id: intelDossiers.id });
 
   return json({ ok: true, affected: updated.length });

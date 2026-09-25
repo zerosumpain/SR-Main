@@ -12,6 +12,8 @@ import { mailIndexStats } from '$lib/mail-index/search';
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { intelNotes, intelEntities } from '$lib/db/schema';
+import { isOwnerScope, spaceIn, type IntelScope } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 
 /**
  * How much of the queue has been scored against the graph.
@@ -21,7 +23,7 @@ import { intelNotes, intelEntities } from '$lib/db/schema';
  * able from "names nothing" — so a topical rule quietly matching nothing looks
  * exactly like a topical rule with nothing to match.
  */
-async function relevanceCoverage() {
+async function relevanceCoverage(scope: IntelScope) {
   const [row] = await db
     .select({
       withHits: sql<number>`count(*) filter (where (${intelNotes.metadata}->'graphRelevance'->>'hits')::int > 0)::int`,
@@ -32,14 +34,18 @@ async function relevanceCoverage() {
       unscored: sql<number>`count(*) filter (where not (coalesce(${intelNotes.metadata}, '{}'::jsonb) ? 'graphRelevance'))::int`,
     })
     .from(intelNotes)
-    .where(and(eq(intelNotes.source, 'email'), eq(intelNotes.graphState, 'pending')));
+    .where(
+      and(eq(intelNotes.source, 'email'), eq(intelNotes.graphState, 'pending'), spaceIn(intelNotes.spaceId, scope)),
+    );
   // The owner's foreground, read straight from the graph: a topical rule keyed
   // on it matches nothing while this is 0, and that must be visible on the page
   // rather than inferred from a rule that never fires.
   const [fg] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(intelEntities)
-    .where(sql`${intelEntities.mergedIntoId} IS NULL AND (${intelEntities.watched} OR ${intelEntities.lens} IS NOT NULL)`);
+    .where(
+      sql`${intelEntities.mergedIntoId} IS NULL AND (${intelEntities.watched} OR ${intelEntities.lens} IS NOT NULL) AND ${spaceIn(intelEntities.spaceId, scope)}`,
+    );
   return {
     withHits: Number(row?.withHits) || 0,
     unscored: Number(row?.unscored) || 0,
@@ -48,13 +54,20 @@ async function relevanceCoverage() {
   };
 }
 
-export const load: PageServerLoad = async () => {
+// The queue and the relevance coverage are the request's scope. The admission
+// rules, the decision ledger and the mail index are the owner's alone (one
+// global list each, learned from and built over the owner's mailbox — see
+// /api/jkai/intel/mail/rules), so any other scope gets them empty.
+export const load: PageServerLoad = async (event) => {
+  const scope = await resolveRequestScope(event);
+  const owner = isOwnerScope(scope);
+  const noDecisions = { total: 0, admitted: 0, rejected: 0, byOwner: 0 };
   const [queue, rules, decisions, index, relevance] = await Promise.all([
-    loadMailQueue(),
-    listMailRules().catch(() => []),
-    tallyMailDecisions().catch(() => ({ total: 0, admitted: 0, rejected: 0, byOwner: 0 })),
-    mailIndexStats().catch(() => ({ threads: 0, chunks: 0 })),
-    relevanceCoverage().catch(() => ({ withHits: 0, unscored: 0, foregroundHits: 0, foreground: 0 })),
+    loadMailQueue(undefined, scope),
+    owner ? listMailRules().catch(() => []) : [],
+    owner ? tallyMailDecisions().catch(() => noDecisions) : noDecisions,
+    owner ? mailIndexStats(scope).catch(() => ({ threads: 0, chunks: 0 })) : { threads: 0, chunks: 0 },
+    relevanceCoverage(scope).catch(() => ({ withHits: 0, unscored: 0, foregroundHits: 0, foreground: 0 })),
   ]);
 
   return {

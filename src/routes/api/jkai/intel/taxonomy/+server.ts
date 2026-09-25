@@ -24,14 +24,23 @@ import {
   admitProposedType,
   rejectProposedType,
 } from '$lib/jkai/intel/resolve/merge';
+import { isOwnerScope } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
+
+// Spaces. The type and category vocabulary is shared by every space (spec §2),
+// and so are the usage counts, change history and suggestions GET returns —
+// counts and names of vocabulary, never row content. The one read that names
+// rows is `?evidence=`, which samples the request's scope. Every POST changes
+// (or, for `assess`, reasons over) the shared vocabulary, so POST is owner-only.
 
 async function loadDismissals(): Promise<Set<string>> {
   const rows = await db.select({ k: intelTypeSuggestionDismissals.pairKey }).from(intelTypeSuggestionDismissals);
   return new Set(rows.map((r) => r.k));
 }
 
-export const GET: RequestHandler = async ({ url }) => {
-  if (url.searchParams.has('evidence')) return json({ samples: await taxonomyEvidence(url.searchParams.get('kind') === 'category' ? 'category' : 'type', url.searchParams.get('evidence')!) });
+export const GET: RequestHandler = async (event) => {
+  const { url } = event;
+  if (url.searchParams.has('evidence')) return json({ samples: await taxonomyEvidence(url.searchParams.get('kind') === 'category' ? 'category' : 'type', url.searchParams.get('evidence')!, await resolveRequestScope(event)) });
   const history = await db.execute(sql`SELECT id, kind, action, from_id, into_id, created_at, undone_at FROM intel_taxonomy_changes ORDER BY created_at DESC LIMIT 30`);
   const links = await db.execute(sql`SELECT * FROM intel_taxonomy_links ORDER BY created_at DESC LIMIT 200`);
   const [types, categories, relationshipTypes, dismissed] = await Promise.all([
@@ -65,15 +74,17 @@ export const GET: RequestHandler = async ({ url }) => {
   });
 };
 
-export const POST: RequestHandler = async ({ request }) => {
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+export const POST: RequestHandler = async (event) => {
+  const scope = await resolveRequestScope(event);
+  if (!isOwnerScope(scope)) throw error(403, 'taxonomy changes are owner-only');
+  const body = (await event.request.json().catch(() => ({}))) as Record<string, unknown>;
   const action = String(body.action ?? '');
   if (action === 'assess') { const { assessTaxonomy } = await import('$lib/jkai/intel/taxonomy-assessment.server'); return json(await assessTaxonomy(body.kind === 'category' ? 'category' : 'type',String(body.fromId??''),String(body.intoId??''))); }
   if (action === 'undo') { await undoTaxonomy(String(body.id ?? '')); return json({ ok: true }); }
   if (action === 'relate' || action === 'reclassify') {
     const kind = body.kind === 'category' ? 'category' : 'type';
     const operation = action === 'reclassify' ? 'reclassify' : body.relation === 'broader' ? 'broader' : 'related';
-    return json({ ok: true, result: await changeTaxonomy(kind, operation, String(body.fromId ?? ''), String(body.intoId ?? ''), Array.isArray(body.memberIds) ? body.memberIds.map(String) : undefined) });
+    return json({ ok: true, result: await changeTaxonomy(kind, operation, String(body.fromId ?? ''), String(body.intoId ?? ''), Array.isArray(body.memberIds) ? body.memberIds.map(String) : undefined, scope) });
   }
 
   if (action === 'merge-types') {
