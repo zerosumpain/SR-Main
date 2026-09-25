@@ -10,13 +10,26 @@
 
 import { resolveCites } from '../cites';
 import type { Candidate } from '../snapshot-types';
-import { OUTCOMES, type Outcome } from './questions';
+import { OUTCOMES, type Channel, type Outcome } from './questions';
 import type { Card } from './tools';
 
 export const MAX_NOTES = 2;
 export const MAX_TITLE_CHARS = 90;
 export const MAX_BODY_CHARS = 700;
 export const MAX_ACTION_CHARS = 200;
+
+/**
+ * The evidence kind that records which QUESTION a note answered.
+ *
+ * A note's outcome is its kind (`think_<outcome>`), but the channel the cycle
+ * started from was recorded nowhere — and the phone draws a glyph by it, the
+ * Health tab filters on it, and the 30-day measure of the programme ("no
+ * channel over 30%") is counted in it. It rides in the evidence list because
+ * that is the typed-reference column the row already has; `refutations.ts`
+ * lists it as a kind that identifies nothing, so two notes that share only a
+ * channel are never taken for the same claim.
+ */
+export const QUESTION_EVIDENCE_KIND = 'think-question';
 
 export interface ThinkNote {
   outcome: Outcome;
@@ -49,7 +62,7 @@ export function slugOf(title: string): string {
 export function validateThinkOutput(
   parsed: unknown,
   cards: ReadonlyMap<string, Card>,
-  opts: { maxNotes?: number; allowedOutcomes?: readonly Outcome[] } = {},
+  opts: { maxNotes?: number; allowedOutcomes?: readonly Outcome[]; channel?: Channel } = {},
 ): ThinkAudit {
   const out: ThinkAudit = { notes: [], rejected: [], citationDrops: 0 };
   const maxNotes = opts.maxNotes ?? MAX_NOTES;
@@ -113,7 +126,12 @@ export function validateThinkOutput(
         // is what moves this down, per outcome, as he rates them.
         rawScore: 1,
         components: { audited: 1 },
-        evidence: cited.map((c) => ({ kind: 'think-card', id: c.ref, note: c.text.slice(0, 300) })),
+        evidence: [
+          ...cited.map((c) => ({ kind: 'think-card', id: c.ref, note: c.text.slice(0, 300) })),
+          ...(opts.channel
+            ? [{ kind: QUESTION_EVIDENCE_KIND, id: opts.channel, note: `${opts.channel} × ${outcome}` }]
+            : []),
+        ],
         dedupeKey: `think:${outcome}:${slug}`,
         proposedActions: [],
       },

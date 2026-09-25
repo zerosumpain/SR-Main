@@ -39,6 +39,10 @@ export async function loadHubCounts(opts: { activeWatches?: number } = {}): Prom
         needsRating: sql<number>`count(*) filter (where ${daydreamThoughts.status} in ('delivered','seen','actioned') and ${daydreamThoughts.feedback} is null)::int`,
         unremembered: sql<number>`count(*) filter (where ${daydreamThoughts.reviewVerdict} is not null and ${daydreamThoughts.reviewMemoryId} is null)::int`,
         held: sql<number>`count(*) filter (where ${daydreamThoughts.status} = 'suppressed')::int`,
+        // Think notes the feed shows and nobody has ruled on. The held-back
+        // ones on the feed are those the daily cap or a route kept quiet
+        // (`think/notes.ts` isOnFeed) — refuted and echoed ones never show.
+        notesToRate: sql<number>`count(*) filter (where ${daydreamThoughts.kind} like 'think\\_%' and ${daydreamThoughts.feedback} is null and (${daydreamThoughts.status} in ('new','delivered','seen') or (${daydreamThoughts.status} = 'suppressed' and (${daydreamThoughts.suppressedReason} like 'feed_only%' or ${daydreamThoughts.suppressedReason} like 'notify:%' or ${daydreamThoughts.suppressedReason} like 'below_threshold%'))))::int`,
         week: sql<number>`count(*) filter (where ${daydreamThoughts.createdAt} >= ${weekAgo})::int`,
         all: sql<number>`count(*)::int`,
       })
@@ -70,6 +74,7 @@ export async function loadHubCounts(opts: { activeWatches?: number } = {}): Prom
   return {
     undecided: t?.undecided ?? 0,
     needsRating: t?.needsRating ?? 0,
+    notesToRate: t?.notesToRate ?? 0,
     unrememberedRulings: t?.unremembered ?? 0,
     needsNaming: p?.ask ?? 0,
     places: p?.total ?? 0,
@@ -93,6 +98,7 @@ export function emptyHubCounts(): HubCounts {
   return {
     undecided: 0,
     needsRating: 0,
+    notesToRate: 0,
     unrememberedRulings: 0,
     needsNaming: 0,
     places: 0,

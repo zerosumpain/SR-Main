@@ -11,6 +11,7 @@ import {
   provenanceTone,
   bandTone,
   placeTone,
+  noteTone,
 } from './priority';
 
 describe('tone ordering', () => {
@@ -122,5 +123,14 @@ describe('reviewTone', () => {
     expect(reviewTone('verified')).toBe('good');
     expect(reviewTone('uncertain')).toBe('watch');
     expect(reviewTone(null)).toBe('quiet');
+  });
+});
+
+describe('noteTone', () => {
+  it('asks for a verdict until one is given, then files it', () => {
+    expect(noteTone({ verdict: null })).toBe('action');
+    expect(noteTone({ verdict: 'useful' })).toBe('good');
+    expect(noteTone({ verdict: 'not_useful' })).toBe('quiet');
+    expect(noteTone({ verdict: 'never_kind' })).toBe('quiet');
   });
 });

@@ -65,3 +65,47 @@ export function cadence(secs: number | null | undefined): string {
 export function pct(n: number | null | undefined): string {
   return n == null ? '—' : `${Math.round(n * 100)}%`;
 }
+
+const DAY_FMT = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' });
+const HEADING_FMT = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', weekday: 'short', day: 'numeric', month: 'short' });
+const CLOCK_FMT = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit' });
+
+/** The Europe/London calendar day, `YYYY-MM-DD`. */
+export function londonDay(v: Stamp): string {
+  const t = ms(v);
+  return t == null ? '' : DAY_FMT.format(new Date(t));
+}
+
+/** The time of day, Europe/London: `14:05`. */
+export function clock(v: Stamp): string {
+  const t = ms(v);
+  return t == null ? '' : CLOCK_FMT.format(new Date(t));
+}
+
+/**
+ * PURE. Items grouped by their London day, newest day first, each group in
+ * the order given. Groups by KEY rather than by consecutive runs, so an input
+ * that is not perfectly sorted still yields one group per day — a duplicate
+ * `{#each}` key kills the component (the editorial-UI trap).
+ */
+export function groupByDay<T extends { createdAt: string }>(
+  items: T[],
+  now: Date = new Date(),
+): Array<{ day: string; heading: string; items: T[] }> {
+  const today = londonDay(now);
+  const yesterday = londonDay(new Date(now.getTime() - 86_400_000));
+  const groups = new Map<string, T[]>();
+  for (const it of items) {
+    const day = londonDay(it.createdAt);
+    const list = groups.get(day);
+    if (list) list.push(it);
+    else groups.set(day, [it]);
+  }
+  return [...groups.entries()]
+    .sort(([a], [b]) => (a < b ? 1 : a > b ? -1 : 0))
+    .map(([day, list]) => ({
+      day,
+      heading: day === today ? 'Today' : day === yesterday ? 'Yesterday' : HEADING_FMT.format(new Date(list[0].createdAt)),
+      items: list,
+    }));
+}
