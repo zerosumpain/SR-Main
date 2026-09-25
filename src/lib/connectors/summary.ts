@@ -6,7 +6,7 @@
 // site, which would then pay several seconds of third-party latency on every
 // owner visit just to render a banner that is usually absent.
 //
-// So this reads stored state only: four indexed queries, no network. The
+// So this reads stored state only: five indexed queries, no network. The
 // asymmetry that makes it honest is that stored state is trustworthy in the
 // direction that matters here — `gmail_accounts.status` only says auth_expired
 // because a real refresh really failed, and `health_sync_state.status` only
@@ -20,6 +20,8 @@ import { db } from '$lib/db';
 import { appleHealthMetrics, gmailAccounts, healthSyncState, integrationCredentials } from '$lib/db/schema';
 import { inArray, ne, sql } from 'drizzle-orm';
 import { ownerGmailWhere } from '$lib/workflows/gmail/owner-accounts';
+import { confirmedMarks } from './watch-store';
+import { mergeBannerNames } from './watch-core';
 
 /** A sync is "stalled" once nothing has landed for this long. */
 const STALE_MS = 3 * 24 * 3600 * 1000;
@@ -37,7 +39,7 @@ export async function syncAttentionSummary(): Promise<SyncAttentionSummary> {
   const now = Date.now();
   const names: string[] = [];
 
-  const [gmailBad, healthRows, appleRow, credsBad] = await Promise.all([
+  const [gmailBad, healthRows, appleRow, credsBad, marks] = await Promise.all([
     db
       .select({ email: gmailAccounts.email })
       .from(gmailAccounts)
@@ -72,6 +74,9 @@ export async function syncAttentionSummary(): Promise<SyncAttentionSummary> {
       .from(integrationCredentials)
       .where(sql`${integrationCredentials.lastTestStatus} = 'failed'`)
       .catch(() => []),
+    // What the connector watcher is holding — the set it alerted on and the
+    // phone lists. Also stored state (its watermark rows), so still no network.
+    confirmedMarks(),
   ]);
 
   if (gmailBad.length) names.push('Gmail');
@@ -88,5 +93,8 @@ export async function syncAttentionSummary(): Promise<SyncAttentionSummary> {
 
   for (const c of credsBad) names.push(c.label);
 
-  return { count: names.length, names };
+  // Anything the watcher alerted on is on the banner too, so the banner, the
+  // phone and the notification never disagree about what is waiting on you.
+  const merged = mergeBannerNames(names, marks);
+  return { count: merged.length, names: merged };
 }

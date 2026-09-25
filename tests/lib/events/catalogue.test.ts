@@ -23,6 +23,8 @@ describe('event catalogue', () => {
     expect([...PLATFORM_EVENT_TYPES].sort()).toEqual(
       [
         'alexa.utterance',
+        'connector.broken',
+        'connector.recovered',
         'gmail.inbound',
         'health.summary_changed',
         'intel.alert',

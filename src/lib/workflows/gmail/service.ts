@@ -5,6 +5,7 @@ import { db } from '$lib/db';
 import { gmailAccounts, type GmailAccount } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { encryptToken, decryptToken } from './crypto';
+import { requestConnectorCheck } from '$lib/server/connector-check';
 import type { GmailMessage, GmailAttachmentRef, SendInput, SendResult } from './types';
 
 const CLOCK_SKEW_MS = 60_000; // refresh 60s before expiry
@@ -147,6 +148,10 @@ export class GmailService {
           updatedAt: new Date(),
         })
         .where(eq(gmailAccounts.id, account.id));
+      // Google refused the grant: have the connector watcher confirm it and
+      // tell the owner now, not at its next half-hourly check. Coalesced, so a
+      // burst of failing callers buys one probe.
+      if (code === 'invalid_grant') requestConnectorCheck('gmail invalid_grant');
       throw new Error(`Gmail token refresh failed: ${code}`);
     }
   }

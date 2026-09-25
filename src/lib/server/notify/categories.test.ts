@@ -43,6 +43,18 @@ describe('the notification catalogue', () => {
     expect(categoryOf('chat').native).toBe(true);
   });
 
+  it('tells you about connections that need you on both channels, reminding every 12 hours', () => {
+    // A lapsed sign-in is the one alert that is useless late: the 06:45-only
+    // WhatsApp it replaced let a Gmail token that died at 07:40 go 23 hours
+    // unnoticed. Phone AND WhatsApp, and the floor is the reminder cadence.
+    const connections = categoryOf('connections');
+    expect(connections.id).toBe('connections');
+    expect(connections.label).toBe('Connections that need you');
+    expect(connections.whatsapp).toBe(true);
+    expect(connections.native).toBe(true);
+    expect(connections.minIntervalSeconds).toBe(12 * 60 * 60);
+  });
+
   it('answers for a category it has never heard of rather than throwing', () => {
     // A caller raising an alert is already in the middle of something going
     // wrong. A typo in a category name must not become a second failure.

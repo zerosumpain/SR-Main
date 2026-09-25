@@ -10,6 +10,7 @@ import {
   stopDependencyMonitor,
 } from '$lib/dependencies/monitor.server';
 import { startHealthWatch, stopHealthWatch } from '$lib/server/notify/health-watch';
+import { startConnectorWatch, stopConnectorWatch } from '$lib/connectors/watch';
 // JKAI build orchestrator no longer boots in the SvelteKit web app — it runs
 // in the jkai-builder sidecar service (packages/jkai-builder/, system unit
 // jkai-builder.service). Build-control routes call it over the Unix socket
@@ -136,6 +137,12 @@ if (runsService('scheduler')) startDependencyMonitor();
 // the rate at which anybody is told anything.
 if (runsService('scheduler')) startHealthWatch();
 
+// Watch every connector and tell the owner (phone + WhatsApp, category
+// `connections`) when one needs re-authorising or is down, with a 12-hour
+// reminder while it stays that way. Replaced the 06:45 daily check, which let
+// a Gmail token that died at 07:40 go unnoticed for 23 hours.
+if (runsService('scheduler')) startConnectorWatch();
+
 // Start the JKAI orphan attachment sweep (runs immediately + hourly)
 if (runsService('background')) startOrphanSweep();
 
@@ -184,7 +191,6 @@ import { startVoiceDrift } from '$lib/voice/drift-engine';
 // two datastore collections at boot, and `daydream-doctor` is the schedule.
 import { startWorkflowDoctor, stopWorkflowDoctor } from '$lib/workflowdoctor/engine';
 import { startBriefingEngine, stopBriefingEngine } from '$lib/briefing/engine';
-import { startConnectorMonitor, stopConnectorMonitor } from '$lib/connectors/monitor';
 import { startModelRouting, stopModelRouting } from '$lib/routing/engine';
 // Nightly intel maintenance: confidence scores, watchlist diffs, live-query
 // lenses. Each of those had a batch half nothing was calling — a watchlist that
@@ -213,7 +219,6 @@ if (runsService('background')) {
   startVoiceDrift();
   startWorkflowDoctor();
   startBriefingEngine();
-  startConnectorMonitor();
   startModelRouting();
   startIntelEngine();
   /**
@@ -278,7 +283,7 @@ async function gracefulShutdown() {
     stopDriveIntelOutbox();
   stopWorkflowDoctor();
   stopBriefingEngine();
-  stopConnectorMonitor();
+  stopConnectorWatch();
   stopModelRouting();
   stopIntelEngine();
   process.exit(0);

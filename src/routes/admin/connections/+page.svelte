@@ -170,8 +170,9 @@
   </div>
 
   <p class="cn-note">
-    Checked at page load. A daily check at 06:45 WhatsApps you if anything is <strong>down</strong> —
-    degraded items show here but don't send alerts.
+    Checked at page load. A watcher re-checks every 30 minutes and tells you — on your phone and
+    WhatsApp — as soon as anything is <strong>down</strong> or needs signing in again, then reminds you
+    every 12 hours until it is fixed. Degraded items show here but don't send alerts.
   </p>
 
   <section class="nm-sec">

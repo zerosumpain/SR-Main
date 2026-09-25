@@ -48,6 +48,7 @@
 /api/native/chat/conversations/[id]
 /api/native/chat/conversations/[id]/messages
 /api/native/chat/conversations/[id]/model
+/api/native/connections
 /api/native/health/activities
 /api/native/health/activities/[id]
 /api/native/health/hub
