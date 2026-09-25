@@ -255,8 +255,8 @@
   {:else}
   <p class="lede">
     Every swept thread waits here. Nothing reaches the graph until you say so — or until a rule you approved
-    says so for you. Rejecting a thread does not delete it: daydreaming still reads your mail for vouchers,
-    receipts and interests exactly as before.
+    says so for you. Rejecting a thread does not delete it: daydreaming's mail tool still reads it exactly
+    as before.
   </p>
   {/if}
 

@@ -60,7 +60,7 @@
       <p class="detail-line">These thoughts cited this theme, so the link is recorded rather than guessed:</p>
       <div class="theme-links">
         {#each theme.influenced.slice(0, 8) as influence (influence.thoughtId)}
-          <a class="theme-link" href="/jkai/daydreams/feed?open={influence.thoughtId}">
+          <a class="theme-link" href="/jkai/daydreams?note={influence.thoughtId}">
             {influence.title} · {stamp(influence.createdAt)}
           </a>
         {/each}

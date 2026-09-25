@@ -1,32 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('$lib/daydream/ledger', () => ({
+vi.mock('$lib/daydream/thought-store', () => ({
+  recordFeedback: vi.fn(),
   snoozeThought: vi.fn(),
   unmuteKind: vi.fn(),
 }));
-vi.mock('$lib/daydream/thought-store', () => ({
-  loadTriageDeck: vi.fn(),
-  recordFeedback: vi.fn(),
-  recordTriageBatch: vi.fn(),
-}));
-vi.mock('$lib/daydream/places', () => ({
-  confirmPlace: vi.fn(),
-  describePlaceRhythm: vi.fn(),
-  ignorePlace: vi.fn(),
-  isPlaceKind: vi.fn(),
-  listNamingQueue: vi.fn(),
-}));
 vi.mock('$lib/daydream/types', () => ({
   errMsg: (error: unknown) => error instanceof Error ? error.message : String(error),
-}));
-vi.mock('$lib/daydream/hypotheses/store', () => ({
-  loadBoard: vi.fn(),
-  rateQuestion: vi.fn(),
-}));
-vi.mock('$lib/daydream/hypotheses/steer', () => ({
-  addSteer: vi.fn(),
-  listSteers: vi.fn(),
-  setSteerStatus: vi.fn(),
 }));
 
 const mocks = vi.hoisted(() => ({
@@ -40,7 +20,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('$lib/daydream/budget', () => ({ budgetStatus: mocks.budgetStatus }));
-vi.mock('$lib/daydream/compose', () => ({ resolveDaydreamModel: mocks.resolveDaydreamModel }));
+vi.mock('$lib/daydream/model', () => ({ resolveDaydreamModel: mocks.resolveDaydreamModel }));
 vi.mock('$lib/daydream/memory-consolidation.server', () => ({ runMemoryConsolidation: mocks.runMemoryConsolidation }));
 vi.mock('$lib/selfimprove/backlog', () => ({
   createBacklogItem: mocks.createBacklogItem,
@@ -85,6 +65,18 @@ function actionEvent(body: Record<string, unknown>) {
     }),
   } as never;
 }
+
+describe('the retired actions', () => {
+  // P4a (2026-09-25) cut the endpoint to the actions a kept page posts. Those
+  // that drove the deleted engine answer "unknown action", not a 500.
+  it('refuses an action whose engine was deleted', async () => {
+    for (const action of ['name_place', 'hypothesis_board', 'review_now', 'set_route', 'capability_decide']) {
+      const response = await POST(actionEvent({ action }));
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toEqual({ error: `unknown action: ${action}` });
+    }
+  });
+});
 
 describe('backlog feature management', () => {
   beforeEach(() => {

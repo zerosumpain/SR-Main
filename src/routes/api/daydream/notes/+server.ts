@@ -1,8 +1,8 @@
 // Owner-gated CRUD over the notebook, plus running a review by hand.
 //
 // NOT in PUBLIC_PATHS and must never be: a notebook is the most private thing
-// in daydreaming. Only `/api/daydream/observe` is listed there, as an exact
-// path, precisely so siblings like this stay behind the Auth.js gate.
+// in daydreaming. Nothing under `/api/daydream` is public since the trail's
+// push ingest (`/api/daydream/observe`) was deleted in P4a (2026-09-25).
 //
 // One route with an `action` discriminator, matching
 // `/api/daydream/thoughts` — every one of these is the same shape (the owner

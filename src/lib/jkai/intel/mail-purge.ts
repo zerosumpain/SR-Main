@@ -13,12 +13,11 @@
 //
 // It deletes the GRAPH ROWS read out of email notes. It does not delete the
 // NOTES. That distinction is the whole design, and it is not tidiness:
-// daydreaming reads `intel_notes WHERE source = 'email'` directly in three
-// places — voucher extraction (daydream/offers.ts), receipt extraction
-// (daydream/spend/read.ts) and interest terms (daydream/snapshot.ts). Deleting
-// the notes would silently kill the savings prompts, the spend series and a
-// third of the interest signal, and none of those failures would look like this
-// module's fault a fortnight later. The notes stay, drop to `graph_state =
+// daydreaming reads `intel_notes WHERE source = 'email'` directly — the think
+// loop's `mail_facts` tool (daydream/think/reads.ts). It used to be three
+// readers (offers, receipt extraction, interest terms); those went with the
+// retired engine in P4a (2026-09-25). Deleting the notes would silently blind
+// that tool, and the failure would not look like this module's fault. The notes stay, drop to `graph_state =
 // 'pending'`, and become the admission queue.
 //
 // ── What survives, and why ──────────────────────────────────────────────────

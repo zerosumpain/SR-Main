@@ -25,7 +25,7 @@ import {
 } from './thought-store';
 import { SETTINGS_MUTED_KINDS_KEY } from './types';
 import { TITLE_ECHO_SIMILARITY, titleSimilarity } from './refutations';
-import type { Candidate } from './snapshot-types';
+import type { Candidate } from './candidate';
 
 const PREFIX = 'itest_dd';
 let dbReady = false;

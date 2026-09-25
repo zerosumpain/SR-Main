@@ -358,22 +358,3 @@ describe('relevance reaches the weight', () => {
     expect(kindWeight(merged)).toBeGreaterThan(kindWeight(fb));
   });
 });
-
-describe('meanRelevance', () => {
-  it('is null with nothing rated, so the page can say so', async () => {
-    const { meanRelevance } = await import('./scoring');
-    expect(meanRelevance([])).toBeNull();
-  });
-
-  it('is the plain mean — undecayed, so it matches the cards beside it', async () => {
-    const { meanRelevance } = await import('./scoring');
-    const rows = [5, 4, 3].map((r) => ({ kind: 'k', relevance: r, relevanceAt: daysAgo(400) }));
-    expect(meanRelevance(rows)).toEqual({ mean: 4, n: 3 });
-  });
-
-  it('ignores anything outside the dial', async () => {
-    const { meanRelevance } = await import('./scoring');
-    const rows = [{ kind: 'k', relevance: 0, relevanceAt: NOW }];
-    expect(meanRelevance(rows)).toBeNull();
-  });
-});

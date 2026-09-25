@@ -192,12 +192,6 @@ export function coldStartThreshold(
   return Math.round(t * 1000) / 1000;
 }
 
-/** Effective, provenance- and age-weighted evidence behind the global bar. */
-export function effectiveFeedbackCount(rows: FeedbackRow[], now: Date): number {
-  const counts = tallyFeedback(rows, now);
-  return counts.useful + counts.notUseful;
-}
-
 /** A cold-start bar that responds to observed precision, not merely activity. */
 export function adaptiveThreshold(rows: FeedbackRow[], now: Date): number {
   const counts = tallyFeedback(rows, now);
@@ -336,20 +330,4 @@ export function tallyRelevance(
 /** Add two tallies. Trivial, and named so callers do not open the shape. */
 export function mergeCounts(a: WeightCounts, b: WeightCounts): WeightCounts {
   return { useful: a.useful + b.useful, notUseful: a.notUseful + b.notUseful, n: a.n + b.n };
-}
-
-/**
- * The mean rating for a kind, for the page.
- *
- * Unweighted and undecayed on purpose: this is a description of what he has
- * said, not an input to anything. Weighting it would make the number on the
- * card disagree with the ratings visible beside it.
- */
-export function meanRelevance(rows: RelevanceRow[]): { mean: number; n: number } | null {
-  const valid = rows.filter(
-    (r) => Number.isFinite(r.relevance) && r.relevance >= RELEVANCE_MIN && r.relevance <= RELEVANCE_MAX,
-  );
-  if (valid.length === 0) return null;
-  const sum = valid.reduce((acc, r) => acc + r.relevance, 0);
-  return { mean: Math.round((sum / valid.length) * 100) / 100, n: valid.length };
 }

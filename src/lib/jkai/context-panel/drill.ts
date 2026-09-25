@@ -15,8 +15,6 @@ export type DrillTarget =
   | { kind: 'research-run'; id: string }
   | { kind: 'thoughts'; filter: 'all' | 'new' | 'reviewed' }
   | { kind: 'thought'; id: string }
-  | { kind: 'places'; filter: 'all' | 'named' }
-  | { kind: 'place'; id: string }
   | { kind: 'memories'; filter: 'served' | 'relevant' | 'thread' | 'changed' }
   | { kind: 'memory'; id: string }
   /** The generic drill: a card, or one metric on it, under a given lens. */
@@ -50,12 +48,6 @@ export function parseDrillTarget(key: string): DrillTarget | null {
     }
     case 'thought':
       return rest.length === 1 && ID.test(rest[0]) ? { kind: 'thought', id: rest[0] } : null;
-    case 'places': {
-      const f = rest[0] ?? 'all';
-      return f === 'all' || f === 'named' ? { kind: 'places', filter: f } : null;
-    }
-    case 'place':
-      return rest.length === 1 && ID.test(rest[0]) ? { kind: 'place', id: rest[0] } : null;
     case 'memories': {
       const f = rest[0];
       return f === 'served' || f === 'relevant' || f === 'thread' || f === 'changed'
@@ -102,10 +94,6 @@ export function drillKey(target: DrillTarget): string {
       return target.filter === 'all' ? 'thoughts' : `thoughts:${target.filter}`;
     case 'thought':
       return `thought:${target.id}`;
-    case 'places':
-      return target.filter === 'all' ? 'places' : `places:${target.filter}`;
-    case 'place':
-      return `place:${target.id}`;
     case 'memories':
       return `memories:${target.filter}`;
     case 'memory':

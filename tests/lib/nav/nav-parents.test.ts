@@ -44,7 +44,8 @@ const ROUTE_SET = new Set<string>([
 
 describe('every back link points at a page that exists', () => {
   it('found the route tree', () => {
-    expect(ROUTE_SET.size).toBeGreaterThan(150);
+    // A sanity floor, lowered from 150 when daydream P4a deleted seven rooms.
+    expect(ROUTE_SET.size).toBeGreaterThan(130);
   });
 
   it('resolves the parent of every page that wears the bar', () => {

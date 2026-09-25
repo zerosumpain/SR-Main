@@ -7,7 +7,6 @@ import {
   FIVE_HOUR_SECONDS,
   localDayStart,
   pickWindows,
-  hasThinkingHeadroom,
   planDepth,
   windowStart,
   type BudgetStatus,
@@ -157,66 +156,5 @@ describe('planDepth — spend the headroom on precision, not volume', () => {
 
   it('keeps the caps at what the owner asked for', () => {
     expect(DAILY_WEEKLY_CAP_PCT).toBe(10);
-  });
-});
-
-describe('hasThinkingHeadroom', () => {
-  const full = (over: Partial<BudgetStatus> = {}): BudgetStatus => ({
-    applies: true,
-    reachable: true,
-    spentTodayWeeklyPct: 0,
-    spentThisWindowPct: 0,
-    dailyCapPct: 10,
-    fiveHourCapPct: 50,
-    remainingTodayPct: 10,
-    remainingWindowPct: 50,
-    pacedTargetPct: 0.4,
-    blocked: false,
-    blockedReason: null,
-    plan: DEPTH_PLANS.minimal,
-    ...over,
-  });
-
-  it('affords an extra pass when both caps are largely unspent', () => {
-    expect(hasThinkingHeadroom(full())).toBe(true);
-  });
-
-  it('affords one at breakfast, when the day is "ahead of pace" but nothing is spent', () => {
-    // The bug this replaced: overnight jobs spend from 02:30 against a paced
-    // target that only starts accruing at 07:00, so `plan.depth` resolved to
-    // `minimal` every morning and the second pass never ran before evening.
-    const morning = full({ plan: DEPTH_PLANS.minimal, pacedTargetPct: 0.4, spentTodayWeeklyPct: 0.9 });
-    expect(morning.plan.depth).toBe('minimal');
-    expect(hasThinkingHeadroom(morning)).toBe(true);
-  });
-
-  it('refuses once the day is mostly spent', () => {
-    expect(hasThinkingHeadroom(full({ remainingTodayPct: 2 }))).toBe(false);
-  });
-
-  it('refuses once the five-hour window is mostly spent', () => {
-    expect(hasThinkingHeadroom(full({ remainingWindowPct: 10 }))).toBe(false);
-  });
-
-  it('sits exactly on the share boundary', () => {
-    expect(hasThinkingHeadroom(full({ remainingTodayPct: 2.5, remainingWindowPct: 12.5 }))).toBe(true);
-    expect(hasThinkingHeadroom(full({ remainingTodayPct: 2.49 }))).toBe(false);
-  });
-
-  it('refuses on a non-Codex model — the spend is cash, not slack', () => {
-    expect(hasThinkingHeadroom(full({ applies: false }))).toBe(false);
-  });
-
-  it('refuses when the meter cannot be read — minimum, never a guess', () => {
-    expect(hasThinkingHeadroom(full({ reachable: false }))).toBe(false);
-  });
-
-  it('refuses when the budget is blocked', () => {
-    expect(hasThinkingHeadroom(full({ blocked: true, blockedReason: 'daily cap reached' }))).toBe(false);
-  });
-
-  it('refuses rather than dividing by a zero cap', () => {
-    expect(hasThinkingHeadroom(full({ dailyCapPct: 0 }))).toBe(false);
-    expect(hasThinkingHeadroom(full({ fiveHourCapPct: 0 }))).toBe(false);
   });
 });

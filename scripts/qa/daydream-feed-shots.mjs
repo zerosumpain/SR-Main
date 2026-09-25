@@ -5,7 +5,7 @@
 //
 // The /jkai layout scrolls inside `.jkai-body`, so `fullPage` captures only the
 // viewport: use a tall viewport, and measure overflow on the document AND
-// `.jkai-body` (see daydream-rooms-shots.mjs).
+// `.jkai-body`.
 import { chromium } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import os from 'node:os';
@@ -89,10 +89,11 @@ for (const size of sizes) {
   await vctx.close();
 }
 
-// Old links still land where they did.
+// Old links still land somewhere: a retired room (P4a) and an old `?tab=` go
+// to the feed, `?rate=` becomes the feed's own `?note=`, a living room loads.
 const ctx = await browser.newContext();
 const page = await ctx.newPage();
-for (const path of ['/jkai/daydreams?tab=places', '/jkai/daydreams?rate=abc', '/jkai/daydreams/memory']) {
+for (const path of ['/jkai/daydreams?tab=places', '/jkai/daydreams/places', '/jkai/daydreams/feed?rate=abc', '/jkai/daydreams?rate=abc', '/jkai/daydreams/memory']) {
   const res = await page.goto(`${base}${path}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
   results.push({ shot: path, status: res?.status(), landed: page.url().replace(base, '') });
 }

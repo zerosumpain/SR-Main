@@ -829,11 +829,8 @@ describe.skipIf(!process.env.DATABASE_URL)('owner-only consumers never see anoth
     expect(JSON.stringify(out)).not.toContain('Plimsworth');
   });
 
-  it('daydream offers, money and the deep-dive commit', async () => {
-    const { findOfferCandidates } = await import('$lib/daydream/offers');
-    expect((await findOfferCandidates(50)).some((c) => c.noteId === ids.mail)).toBe(false);
-    const { loadMoney } = await import('$lib/daydream/ledger');
-    expect((await loadMoney()).renewals.some((r) => r.id === ids.event)).toBe(false);
+  // Daydream offers and money went with the engine in P4a (2026-09-25).
+  it('the deep-dive commit', async () => {
     const { commitState } = await import('$lib/deepdive/graph-commit');
     expect((await commitState(ids.session)).committed).toBe(false);
   });

@@ -166,7 +166,6 @@ const BASELINE_CYCLES = [
   'builds <-> canvas',
   'canvas <-> workflows',
   'codegraph <-> jkai',
-  'daydream <-> heartbeat',
   'daydream <-> workflows',
   'deepdive <-> jkai',
   'deepdive <-> workflows',

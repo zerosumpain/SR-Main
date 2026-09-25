@@ -5372,6 +5372,7 @@ export type NewCodegraphQuery = typeof codegraphQueries.$inferInsert;
  * assumed. Home Assistant runs on homeserv while the site runs on the VPS, so
  * "could not" is a real, recurring state, not a theoretical one.
  */
+// RETIRED 2026-09-25 (daydream P4a) — dumped and dropped in P4b
 export const daydreamTrail = pgTable(
   'daydream_trail',
   {
@@ -5436,6 +5437,7 @@ export type NewDaydreamTrailRow = typeof daydreamTrail.$inferInsert;
  * existing `places` category, and the memory id is recorded here so the two
  * can never drift apart.
  */
+// RETIRED 2026-09-25 (daydream P4a) — dumped and dropped in P4b
 export const daydreamPlaces = pgTable(
   'daydream_places',
   {
@@ -5539,6 +5541,7 @@ export const daydreamPlaces = pgTable(
  * discovered sensor is silent for a fortnight rather than immediately
  * contributing noise to a false-discovery correction.
  */
+// RETIRED 2026-09-25 (daydream P4a) — dumped and dropped in P4b
 export const daydreamSignals = pgTable(
   'daydream_signals',
   {
@@ -5597,6 +5600,7 @@ export type DaydreamSignal = typeof daydreamSignals.$inferSelect;
  * deliberately, and it is what lets a correlation exclude a day it cannot see
  * rather than treating an outage as a measurement.
  */
+// RETIRED 2026-09-25 (daydream P4a) — dumped and dropped in P4b
 export const daydreamObservations = pgTable(
   'daydream_observations',
   {
@@ -5631,6 +5635,7 @@ export type DaydreamObservation = typeof daydreamObservations.$inferSelect;
  * and the proposer never — discovery had no consumer. One row per surviving
  * pair per sweep day; the pulse still carries the same summary.
  */
+// RETIRED 2026-09-25 (daydream P4a) — dumped and dropped in P4b
 export const daydreamSweepFindings = pgTable(
   'daydream_sweep_findings',
   {
@@ -5669,6 +5674,7 @@ export type DaydreamSweepFinding = typeof daydreamSweepFindings.$inferSelect;
  * of the fix in a closed vocabulary so the toolsmith builds the right thing
  * or correctly declines.
  */
+// RETIRED 2026-09-25 (daydream P4a) — dumped and dropped in P4b
 export const daydreamFaults = pgTable(
   'daydream_faults',
   {
@@ -5710,6 +5716,7 @@ export type DaydreamFault = typeof daydreamFaults.$inferSelect;
  * one row with `recurrence` five, not five rows — the failure that made every
  * "proposal" in the 19–29 Jul runs a dead string.
  */
+// RETIRED 2026-09-25 (daydream P4a) — dumped and dropped in P4b
 export const daydreamCapabilities = pgTable(
   'daydream_capabilities',
   {
@@ -5867,6 +5874,7 @@ export const daydreamDayFeatures = pgTable(
  * where the two are equal, or where the verdict was written by anything other
  * than `judge()`, has lost that property.
  */
+// RETIRED 2026-09-25 (daydream P4a) — dumped and dropped in P4b
 export const daydreamHypotheses = pgTable(
   'daydream_hypotheses',
   {
@@ -5924,6 +5932,7 @@ export const daydreamHypotheses = pgTable(
 );
 
 /** Immutable assessment snapshots; the hypothesis row holds only the latest result. */
+// RETIRED 2026-09-25 (daydream P4a) — dumped and dropped in P4b
 export const daydreamHypothesisAssessments = pgTable(
   'daydream_hypothesis_assessments',
   {
@@ -5959,6 +5968,7 @@ export const daydreamHypothesisAssessments = pgTable(
  * text from a chat box that could widen what a model may read is an injection
  * surface, and this one cannot, by construction.
  */
+// RETIRED 2026-09-25 (daydream P4a) — dumped and dropped in P4b
 export const daydreamSteers = pgTable(
   'daydream_steers',
   {
@@ -5994,6 +6004,7 @@ export type DaydreamSteer = typeof daydreamSteers.$inferSelect;
  * useful morning, and a digest that only appears when there is news is a digest
  * that cannot be trusted when it is silent.
  */
+// RETIRED 2026-09-25 (daydream P4a) — dumped and dropped in P4b
 export const daydreamDigests = pgTable(
   'daydream_digests',
   {
@@ -6094,6 +6105,7 @@ export const daydreamSpend = pgTable(
  * month of real verdicts would be inventing exactly the numbers this feature
  * exists to replace. They are set from measured behaviour, not guessed.
  */
+// RETIRED 2026-09-25 (daydream P4a) — dumped and dropped in P4b
 export const daydreamLeads = pgTable(
   'daydream_leads',
   {
@@ -6248,6 +6260,7 @@ export type NewDaydreamCalendarExclusion = typeof daydreamCalendarExclusions.$in
  * Deliberately append-only and pruned by age, not by interest. Keeping only
  * the steps that led somewhere would make the trace agree with the conclusion.
  */
+// RETIRED 2026-09-25 (daydream P4a) — dumped and dropped in P4b
 export const daydreamLeadSteps = pgTable(
   'daydream_lead_steps',
   {
@@ -6704,6 +6717,7 @@ export const daydreamNotebookAudio = pgTable(
 export type DaydreamNoteAudio = typeof daydreamNotebookAudio.$inferSelect;
 
 
+// RETIRED 2026-09-25 (daydream P4a) — dumped and dropped in P4b
 export const daydreamOffers = pgTable(
   'daydream_offers',
   {
@@ -6758,6 +6772,7 @@ export type NewDaydreamOffer = typeof daydreamOffers.$inferInsert;
  * proposal; the self-improvement engine auto-enables what it builds, and that
  * is defensible for a tool nobody is interrupted by. This one buzzes a phone.
  */
+// RETIRED 2026-09-25 (daydream P4a) — dumped and dropped in P4b
 export const daydreamRules = pgTable(
   'daydream_rules',
   {

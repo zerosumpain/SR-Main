@@ -29,7 +29,7 @@ const record = (over: Partial<BriefingDetail> = {}): BriefingData => ({
     facts: [
       { section: 'Location', label: 'Where', value: 'Home', source: 'life360' },
       { section: 'Location', label: 'Since', value: '2 Sep, 22:10', source: 'life360' },
-      { section: 'Daydreams', label: 'Said', value: '2 crossings', source: 'daydream', href: '/jkai/daydreams/feed' },
+      { section: 'Daydreams', label: 'Said', value: '2 crossings', source: 'daydream', href: '/jkai/daydreams' },
     ],
     gaps: [],
     sources: [
@@ -56,7 +56,7 @@ describe('briefing sections', () => {
     const rows = briefingFactRows(record().detail!.facts);
     expect(rows[0]).toMatchObject({ label: 'Where', href: null, mono: false });
     expect(rows[1]).toMatchObject({ label: 'Since', mono: true });
-    expect(rows[2].href).toBe('/jkai/daydreams/feed');
+    expect(rows[2].href).toBe('/jkai/daydreams');
   });
 
   it('builds one cell per section plus gaps and sources, prefixed with the day page', () => {

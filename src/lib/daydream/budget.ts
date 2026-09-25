@@ -64,31 +64,12 @@ export const WEEKLY_SECONDS = 604_800;
  * their spend was invisible to the caps.
  */
 export const SPENDING_ACTIONS = [
-  'daydream-compose',
-  // The appetite scan: one completion a day over the capability pack. Cheap
-  // next to the reviewer, and in this list from the day it shipped rather than
-  // three weeks later — that omission has already happened twice.
-  'daydream-appetite',
-  'daydream-offers',
-  'daydream-rulesmith',
-  'daydream-hypothesise',
-  'daydream-spend',
-  'daydream-ponder',
   // The think loop (spec 2026-09-25): a tool loop of up to six model calls a
-  // cycle, every 45 minutes. In this list from its first commit — the
-  // omission has happened twice before and the symptom is silence.
+  // cycle, every 45 minutes. Since P4a (2026-09-25) it is the only daydream
+  // activity left that spends against these caps — compose, ponder, the
+  // reviewer and the rest were deleted with the engine they ran.
   'daydream-think',
-  'daydream-weekly',
-  // The reviewer is xhigh reasoning with a tool loop, on every thought — the
-  // most expensive thing on this list by some distance. Omitting an action here
-  // has happened twice before (hypothesise and spend both ran outside the caps
-  // until 2026-08-27) and the symptom is silence: the quota drains and nothing
-  // reports why.
-  'daydream-review',
 ] as const;
-
-/** @deprecated kept so an older pulse reader still resolves. */
-export const COMPOSE_ACTION = 'daydream-compose';
 
 /**
  * Hours the owner is plausibly awake, used to pace the daily allowance.
@@ -253,46 +234,6 @@ export function planDepth(
   if (behind > pacedTargetPct * 0.5 && remainingTodayPct > 2) return DEPTH_PLANS.deep;
   if (behind > 0 && remainingTodayPct > 1) return DEPTH_PLANS.standard;
   return DEPTH_PLANS.minimal;
-}
-
-/**
- * How much of each cap has to be LEFT before an optional extra model call —
- * thinking rather than talking — is affordable. A share of the cap, not an
- * absolute percentage, so it still means the same thing if the caps move.
- */
-export const THINKING_HEADROOM_SHARE = 0.25;
-
-/**
- * Is there genuinely room to spend an extra call on thinking harder?
- *
- * ── Why this is not `plan.depth === 'deep'` ────────────────────────────────
- *
- * That was the first gate on the ponder adversary pass, and it was wrong.
- * `pickDepth` asks a PACING question — "are we behind where the day's burn
- * should be by now?" — and pacing runs against waking hours, 07:00 to 23:00.
- * The overnight jobs (improve at 02:30, rulesmith at 04:00, doctor at 05:00,
- * bank at 05:00) all spend BEFORE that window opens, against a paced target of
- * approximately zero. So at 07:00 the day is always "ahead of pace", every
- * morning cycle resolved to `minimal`, and the second pass only ever ran in
- * the evening. Measured 2026-09-17: ponder `deep` at 20:01, `minimal` at 06:00
- * and 06:39.
- *
- * Headroom is a different question from pace, and it is the right one here. An
- * extra call is affordable when a real slice of both caps is still unspent,
- * whatever time of day it is and whatever the overnight jobs did.
- *
- * Conservative in all three of the ways this file is conservative elsewhere:
- * a non-Codex model means the spend is cash rather than slack, so the answer
- * is no; an unreadable meter means minimum, never a guess; and a blocked
- * budget is obviously no.
- */
-export function hasThinkingHeadroom(s: BudgetStatus): boolean {
-  if (!s.applies || !s.reachable || s.blocked) return false;
-  if (s.dailyCapPct <= 0 || s.fiveHourCapPct <= 0) return false;
-  return (
-    s.remainingTodayPct >= s.dailyCapPct * THINKING_HEADROOM_SHARE &&
-    s.remainingWindowPct >= s.fiveHourCapPct * THINKING_HEADROOM_SHARE
-  );
 }
 
 /**

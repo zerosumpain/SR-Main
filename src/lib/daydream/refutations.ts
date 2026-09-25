@@ -38,7 +38,7 @@
 import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamThoughts } from '$lib/db/schema';
-import type { EvidenceRef } from './snapshot-types';
+import type { EvidenceRef } from './candidate';
 
 /**
  * Evidence kinds that identify nothing.

@@ -22,7 +22,8 @@
 // back to the current thought is still useful for display, but cannot establish
 // provenance by itself because superseding a note or ruling moves that link.
 
-/** Mirrors the theme cap in `ponder/pack.ts`; tested to prevent UI drift. */
+/** How many themes the memory room counts as "in the pack" — the cap the
+ *  retired ponder pass read (P4a, 2026-09-25); the room still shows it. */
 export const MEMORY_THEMES_PER_PACK = 20;
 
 export type MemoryOrigin = 'ruling' | 'note' | 'place';

@@ -12,8 +12,6 @@ describe('parseDrillTarget', () => {
       { kind: 'research-run', id: 'run_1' },
       { kind: 'thoughts', filter: 'reviewed' },
       { kind: 'thought', id: 't1' },
-      { kind: 'places', filter: 'named' },
-      { kind: 'place', id: 'p1' },
       { kind: 'memories', filter: 'served' },
       { kind: 'memory', id: 'm1' },
       { kind: 'card', lens: 'health', cardId: 'health-today', metric: null },

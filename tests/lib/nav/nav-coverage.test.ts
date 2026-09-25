@@ -126,7 +126,9 @@ describe('every page wears the shared top nav', () => {
   const pages = walk(ROUTES);
 
   it('finds the route tree', () => {
-    expect(pages.length).toBeGreaterThan(140);
+    // A sanity floor (the walk found a tree at all), lowered from 140 when
+    // daydream P4a deleted seven rooms (2026-09-25).
+    expect(pages.length).toBeGreaterThan(120);
   });
 
   it('leaves no page without chrome and without a documented reason', () => {

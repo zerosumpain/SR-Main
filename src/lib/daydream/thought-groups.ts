@@ -80,96 +80,12 @@ export function familyOf(kind: string): ThoughtFamily {
   return FAMILIES.patterns;
 }
 
-/**
- * The mono kicker a family wears on every line and cell.
- *
- * A MARK, not a colour. Colour on the hub is priority and is decided in one
- * place (`priority.ts`); a second colour axis for category would make every
- * card carry two hues and neither would be readable. Six short words in the
- * label face do the job the raw slug never did.
- */
-export const FAMILY_MARK: Record<string, string> = {
-  places: 'PLACE',
-  mail: 'MAIL',
-  musings: 'MUSE',
-  graph: 'GRAPH',
-  build: 'BUILD',
-  rules: 'RULE',
-  patterns: 'PATTERN',
-};
-
-export function familyMark(kind: string): string {
-  return FAMILY_MARK[familyOf(kind).id] ?? 'PATTERN';
-}
-
-/** The order families appear down the feed matrix — by what a reader acts on
- *  first, not by count. Counts change hourly; a matrix whose rows reorder
- *  hourly cannot be learned. */
-export const FAMILY_ORDER = ['musings', 'mail', 'places', 'graph', 'build', 'patterns', 'rules'] as const;
-
-/**
- * The four states a thought can be in from the reader's side.
- *
- * The engine has nine statuses; a reader has four questions — did it reach
- * me, is it waiting on me, did the engine hold it back, or is it dealt with.
- * `actioned` files with `archived`: a place question already answered is not
- * waiting on anyone.
- */
-export type FeedState = 'sent' | 'undecided' | 'held' | 'filed';
-
-export const FEED_STATES: Array<{ id: FeedState; label: string; statuses: string[] }> = [
-  { id: 'undecided', label: 'Undecided', statuses: ['new'] },
-  { id: 'sent', label: 'Sent', statuses: ['delivered', 'seen'] },
-  { id: 'held', label: 'Held', statuses: ['suppressed'] },
-  { id: 'filed', label: 'Filed', statuses: ['archived', 'dismissed', 'actioned', 'snoozed', 'expired'] },
-];
-
-export function feedStateOf(status: string): FeedState {
-  for (const s of FEED_STATES) if (s.statuses.includes(status)) return s.id;
-  // An unknown status is the one a reader most needs to see, not the one to hide.
-  return 'undecided';
-}
-
-export function statusesFor(state: FeedState): string[] {
-  return FEED_STATES.find((s) => s.id === state)?.statuses ?? [];
-}
-
 /** A reader's name for a kind — the family, plus whatever the suffix said. */
 export function kindLabel(kind: string): string {
   if (kind.startsWith('musing_')) return kind.slice(7).replace(/_/g, ' ');
   if (kind.startsWith('mail_')) return kind.slice(5).replace(/_/g, ' ');
   if (kind.startsWith('intel_')) return kind.slice(6).replace(/_/g, ' ');
   return kind.replace(/_/g, ' ');
-}
-
-export interface LikelihoodBand {
-  id: 'strong' | 'likely' | 'marginal' | 'held';
-  label: string;
-  /** What the band means in terms of the threshold, for a tooltip. */
-  meaning: string;
-}
-
-/**
- * How confident the engine was, RELATIVE TO ITS OWN BAR.
- *
- * Deliberately not fixed cut-offs on the raw score. The threshold is a moving
- * target — it opens at 0.75 and falls towards 0.45 as feedback accumulates —
- * so "0.7" means "held back" in a cold start and "comfortably through" later.
- * A band that ignored that would relabel every historical thought every time
- * the threshold moved.
- */
-export function likelihoodBand(score: number, threshold: number): LikelihoodBand {
-  const margin = score - threshold;
-  if (margin < 0) {
-    return { id: 'held', label: 'held back', meaning: `scored ${score.toFixed(2)}, below the ${threshold.toFixed(2)} bar` };
-  }
-  if (margin >= 0.15) {
-    return { id: 'strong', label: 'strong', meaning: `${score.toFixed(2)}, well clear of the ${threshold.toFixed(2)} bar` };
-  }
-  if (margin >= 0.05) {
-    return { id: 'likely', label: 'likely', meaning: `${score.toFixed(2)}, clear of the ${threshold.toFixed(2)} bar` };
-  }
-  return { id: 'marginal', label: 'marginal', meaning: `${score.toFixed(2)}, only just over the ${threshold.toFixed(2)} bar` };
 }
 
 /**

@@ -7,7 +7,7 @@ import {
   readQuotaMark,
   ZERO_SPEND,
 } from '$lib/daydream/budget';
-import { resolveDaydreamModel } from '$lib/daydream/compose';
+import { resolveDaydreamModel } from '$lib/daydream/model';
 import { SETTINGS_ENABLED_KEY, errMsg } from '$lib/daydream/types';
 import { executeNoteAction } from '$lib/daydream/notebook/actions';
 import { reviewNote } from '$lib/daydream/notebook/review';

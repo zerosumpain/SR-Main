@@ -15,7 +15,6 @@ import { db } from '$lib/db';
 import {
   agentActions,
   conversations,
-  daydreamPlaces,
   daydreamThoughts,
   facts,
   intelEntities,
@@ -554,7 +553,7 @@ async function thoughtsManifest(filter: 'all' | 'new' | 'reviewed', target: stri
     eyebrow: 'Daydream · thoughts',
     title: filter === 'new' ? 'Thoughts waiting to be seen' : filter === 'reviewed' ? 'Thoughts a reviewer has ruled on' : 'Emerging thoughts',
     subtitle: 'What the engine noticed, newest first.',
-    href: '/jkai/daydreams/feed',
+    href: '/jkai/daydreams',
     facts: [
       { label: 'New', value: String(Number(counts?.fresh ?? 0)), tone: Number(counts?.fresh ?? 0) ? 'warn' : 'default' },
       { label: 'Reviewed', value: String(Number(counts?.reviewed ?? 0)), tone: Number(counts?.reviewed ?? 0) ? 'good' : 'default' },
@@ -571,7 +570,7 @@ async function thoughtsManifest(filter: 'all' | 'new' | 'reviewed', target: stri
           label: t.title,
           meta: `${t.kind} · ${compactStatus(t.status)}${t.reviewVerdict ? ` · ${t.reviewVerdict}` : ''}`,
           note: `${Math.round(t.score * 100)} score`,
-          href: `/jkai/daydreams/feed?open=${t.id}`,
+          href: `/jkai/daydreams?note=${t.id}`,
           drill: drillKey({ kind: 'thought', id: t.id }),
           tone: thoughtTone(t),
           when: t.createdAt.toISOString(),
@@ -579,7 +578,7 @@ async function thoughtsManifest(filter: 'all' | 'new' | 'reviewed', target: stri
         empty: 'Nothing here yet.',
       },
     ],
-    actions: [link('feed', 'open the feed →', '/jkai/daydreams/feed')],
+    actions: [link('feed', 'open the feed →', '/jkai/daydreams')],
   });
 }
 
@@ -636,7 +635,7 @@ async function thoughtManifest(id: string, target: string, deps: DrillDeps): Pro
     eyebrow: `Daydream · ${t.kind.replaceAll('_', ' ')}`,
     title: t.title,
     subtitle: `${compactStatus(t.status)} · ${relativeStamp(t.createdAt.toISOString())}${t.feedback ? ` · you said ${t.feedback.replaceAll('_', ' ')}` : ''}`,
-    href: `/jkai/daydreams/feed?open=${id}`,
+    href: `/jkai/daydreams?note=${id}`,
     facts: [
       { label: 'Score', value: String(Math.round(t.score * 100)) },
       { label: 'Verdict', value: t.reviewVerdict ?? 'unreviewed', tone: t.reviewVerdict === 'refuted' ? 'bad' : t.reviewVerdict === 'verified' ? 'good' : 'default' },
@@ -645,10 +644,9 @@ async function thoughtManifest(id: string, target: string, deps: DrillDeps): Pro
     ],
     sections,
     actions: [
-      link('open', 'open in feed →', `/jkai/daydreams/feed?open=${id}`),
+      link('open', 'open in feed →', `/jkai/daydreams?note=${id}`),
       { id: 'useful', label: 'useful', kind: 'post', endpoint: api, body: { action: 'feedback', id, verdict: 'useful' } },
       { id: 'not-useful', label: 'not useful', kind: 'post', endpoint: api, body: { action: 'feedback', id, verdict: 'not_useful' } },
-      { id: 'review', label: 'review now', kind: 'post', endpoint: api, body: { action: 'review_now', id }, note: 'Sends a model to check the claim against the sources and remembers the ruling.' },
       { id: 'note', label: 'add a note', kind: 'prompt', endpoint: api, body: { action: 'add_note', thoughtId: id }, promptField: 'text', promptLabel: 'Your note on this thought', refresh: 'memory' },
       { id: 'snooze', label: 'snooze a week', kind: 'post', endpoint: api, body: { action: 'snooze', id, days: 7 } },
       { id: 'archive', label: 'archive', kind: 'confirm', endpoint: api, body: { action: 'archive', id }, tone: 'danger', note: 'Filed, not judged — it moves no kind weight.' },
@@ -656,116 +654,6 @@ async function thoughtManifest(id: string, target: string, deps: DrillDeps): Pro
     ],
   });
 }
-
-async function placesManifest(filter: 'all' | 'named', target: string): Promise<DrillManifest> {
-  const rows = await db
-    .select({ id: daydreamPlaces.id, label: daydreamPlaces.label, suggestedLabel: daydreamPlaces.suggestedLabel, kind: daydreamPlaces.kind, source: daydreamPlaces.source, visitCount: daydreamPlaces.visitCount, distinctDays: daydreamPlaces.distinctDays })
-    .from(daydreamPlaces)
-    .where(eq(daydreamPlaces.status, 'active'))
-    .orderBy(desc(daydreamPlaces.distinctDays))
-    .limit(30);
-  const named = rows.filter((p) => p.label);
-  const list = filter === 'named' ? named : rows;
-  return finish({
-    target,
-    kind: 'places',
-    eyebrow: 'Daydream · places',
-    title: filter === 'named' ? 'Places you have named' : 'Repeated places',
-    subtitle: 'Ranked by separate days anyone stayed there, not by household visit count.',
-    href: '/jkai/daydreams/places',
-    facts: [
-      { label: 'Named', value: String(named.length), tone: named.length ? 'good' : 'default' },
-      { label: 'Unnamed', value: String(rows.length - named.length), tone: rows.length - named.length ? 'warn' : 'default' },
-      { label: 'Listed', value: String(rows.length) },
-    ],
-    sections: [
-      {
-        kind: 'rows',
-        id: 'places',
-        title: `${list.length} place${list.length === 1 ? '' : 's'}`,
-        rows: list.map((p) => ({
-          id: p.id,
-          label: p.label ?? p.suggestedLabel ?? 'Unnamed place',
-          meta: `${p.kind} · ${p.source}`,
-          note: `${p.distinctDays} days · ${p.visitCount} visits`,
-          drill: drillKey({ kind: 'place', id: p.id }),
-          tone: p.label ? 'default' : 'warn',
-        })),
-        empty: 'No places yet.',
-      },
-    ],
-    actions: [link('places', 'open places →', '/jkai/daydreams/places')],
-  });
-}
-
-async function placeManifest(id: string, target: string): Promise<DrillManifest | null> {
-  const [p] = await db
-    .select({
-      id: daydreamPlaces.id,
-      label: daydreamPlaces.label,
-      kind: daydreamPlaces.kind,
-      source: daydreamPlaces.source,
-      memoryId: daydreamPlaces.memoryId,
-      suggestedLabel: daydreamPlaces.suggestedLabel,
-      suggestedKind: daydreamPlaces.suggestedKind,
-      suggestedAddress: daydreamPlaces.suggestedAddress,
-      visitCount: daydreamPlaces.visitCount,
-      distinctDays: daydreamPlaces.distinctDays,
-      radiusM: daydreamPlaces.radiusM,
-    })
-    .from(daydreamPlaces)
-    .where(eq(daydreamPlaces.id, id))
-    .limit(1);
-  if (!p) return null;
-  const api = '/api/daydream/thoughts';
-  const name = p.label ?? p.suggestedLabel ?? 'Unnamed place';
-  const sections: DrillSection[] = [];
-  if (!p.label && (p.suggestedLabel || p.suggestedAddress)) {
-    sections.push({ kind: 'prose', id: 'suggestion', title: 'The geocoder thinks', body: [p.suggestedLabel, p.suggestedAddress].filter(Boolean).join(' — '), tone: 'warn' });
-  }
-  if (p.memoryId) {
-    sections.push({
-      kind: 'rows',
-      id: 'memory',
-      title: 'Remembered as',
-      rows: [{ id: p.memoryId, label: 'The memory written when you named it', meta: 'memory', drill: drillKey({ kind: 'memory', id: p.memoryId }) }],
-    });
-  }
-  const actions: DrillAction[] = [link('places', 'open places →', '/jkai/daydreams/places')];
-  if (!p.label) {
-    actions.push({
-      id: 'name',
-      label: 'name this place',
-      kind: 'prompt',
-      endpoint: api,
-      body: { action: 'name_place', placeId: id, kind: p.suggestedKind ?? 'other' },
-      promptField: 'label',
-      promptLabel: 'What is this place called?',
-      promptDefault: p.suggestedLabel ?? '',
-      refresh: 'memory',
-    });
-    actions.push({ id: 'ignore', label: 'ignore', kind: 'confirm', endpoint: api, body: { action: 'ignore_place', placeId: id }, tone: 'danger', note: 'Stops asking about it.' });
-  }
-  actions.push(ask(`What do you know about ${name}?`, `Place: ${name} (${p.kind}, ${p.source}) — ${p.distinctDays} separate days, ${p.visitCount} visits`));
-  return finish({
-    target,
-    kind: 'place',
-    eyebrow: `Daydream · ${p.kind === 'unknown' ? 'place' : p.kind}`,
-    title: name,
-    subtitle: p.source === 'confirmed' ? 'You named it — quotable as fact.' : p.source === 'geocoded' ? 'A reverse lookup, not your word.' : 'Inferred from a pattern — only ever a question.',
-    href: '/jkai/daydreams/places',
-    facts: [
-      { label: 'Days', value: String(p.distinctDays) },
-      { label: 'Visits', value: String(p.visitCount) },
-      { label: 'Source', value: p.source, tone: p.source === 'confirmed' ? 'good' : 'warn' },
-      { label: 'Radius', value: `${Math.round(p.radiusM)} m` },
-    ],
-    sections,
-    actions,
-  });
-}
-
-// ── Memory ────────────────────────────────────────────────────────────────
 
 function memoryRowOf(r: ThreadMemoryRow): DrillRow {
   const stateTone: DrillRow['tone'] = memoryStateTone(r.state);
@@ -993,10 +881,6 @@ export async function composeDrill(conversationId: string, target: DrillTarget, 
       return thoughtsManifest(target.filter, key);
     case 'thought':
       return thoughtManifest(target.id, key, deps);
-    case 'places':
-      return placesManifest(target.filter, key);
-    case 'place':
-      return placeManifest(target.id, key);
     case 'memories':
       return memoriesManifest(conversationId, target.filter, key);
     case 'memory':

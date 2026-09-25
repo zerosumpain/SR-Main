@@ -14,8 +14,9 @@
 // only be answered by opening a database.
 //
 // This resolves each reference to its actual source: the email's subject,
-// sender and date; the place's name and rhythm; the tested hypothesis and its
-// verdict; the transaction; the memory. Where a real page exists for the
+// sender and date; the transaction; the memory. (Places, hypotheses and the
+// family trail went with the retired engine in P4a, 2026-09-25 — a ref to one
+// now reads as its note, or "no detail stored".) Where a real page exists for the
 // thing — an intel note, a graph entity — it returns the link.
 //
 // ── Two kinds of reference, and the difference matters ──────────────────────
@@ -43,15 +44,12 @@
 // scope. A ref to a row in another space resolves exactly like a deleted one:
 // "no longer there", never its title.
 
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import {
-  daydreamHypotheses,
   daydreamMemoryThemes,
   daydreamMemoryThemeSources,
-  daydreamPlaces,
   daydreamSpend,
-  daydreamTrail,
   intelEntities,
   intelEntityTypes,
   intelInsights,
@@ -60,7 +58,7 @@ import {
   jkaiMemories,
 } from '$lib/db/schema';
 import { OWNER_INTEL_SCOPE, spaceIn } from '$lib/jkai/intel/scope';
-import type { EvidenceRef } from './snapshot-types';
+import type { EvidenceRef } from './candidate';
 
 export interface GraphEntity {
   id: string;
@@ -170,15 +168,12 @@ export async function resolveEvidence(refs: EvidenceRef[]): Promise<ResolvedEvid
 
   await Promise.all([
     resolveEmails(idsOf('email'), fill),
-    resolvePlaces(idsOf('place'), fill),
     resolveSpend(idsOf('spend'), fill),
     resolveMemories(idsOf('memory'), fill),
     resolveMemoryThemes(idsOf('memory-theme'), fill),
-    resolveHypotheses(idsOf('hypothesis'), fill),
     resolveInsights(idsOf('intel'), fill),
     resolveEntities(idsOf('intel-entity'), fill),
     resolveInterests(idsOf('interest'), fill),
-    resolveFamily(idsOf('family'), fill),
   ]);
 
   // Anything left with no title beyond the fallback, and no note, is a
@@ -261,44 +256,6 @@ async function resolveEmails(ids: string[], fill: Fill): Promise<void> {
   }
 }
 
-async function resolvePlaces(ids: string[], fill: Fill): Promise<void> {
-  if (ids.length === 0) return;
-  const rows = await db
-    .select({
-      id: daydreamPlaces.id,
-      label: daydreamPlaces.label,
-      suggestedLabel: daydreamPlaces.suggestedLabel,
-      suggestedAddress: daydreamPlaces.suggestedAddress,
-      kind: daydreamPlaces.kind,
-      visitCount: daydreamPlaces.visitCount,
-      medianDwellMins: daydreamPlaces.medianDwellMins,
-      lastSeenAt: daydreamPlaces.lastSeenAt,
-      status: daydreamPlaces.status,
-    })
-    .from(daydreamPlaces)
-    .where(inArray(daydreamPlaces.id, ids));
-
-  const found = new Set(rows.map((r) => r.id));
-  for (const id of ids) if (!found.has(id)) fill('place', id, { missing: true, title: 'This place no longer exists', lines: ['Places are retired rather than deleted, so this is unusual.'] });
-
-  for (const r of rows) {
-    fill('place', r.id, {
-      title: r.label ?? r.suggestedLabel ?? 'An unnamed place',
-      lines: [
-        r.label ? 'You named this' : r.suggestedLabel ? `Geocoder suggests "${r.suggestedLabel}" — not confirmed` : 'Never named',
-        r.suggestedAddress ?? '',
-        `${r.visitCount} household visits, median stay ${r.medianDwellMins} min`,
-        `Kind: ${r.kind} · status: ${r.status}`,
-      ].filter(Boolean),
-      at: r.lastSeenAt?.toISOString() ?? null,
-      // Coordinates are deliberately NOT here. The Places tab has an
-      // owner-gated map action for that; a lat/lon must not ride a payload
-      // just because a card wanted to be informative.
-      href: `/jkai/daydreams/places`,
-    });
-  }
-}
-
 async function resolveSpend(ids: string[], fill: Fill): Promise<void> {
   const real = ids.filter((i) => i !== 'total');
   if (real.length === 0) return;
@@ -332,7 +289,7 @@ async function resolveSpend(ids: string[], fill: Fill): Promise<void> {
         r.currency !== 'GBP' ? `Currency: ${r.currency}` : '',
       ].filter(Boolean),
       at: `${r.day}T12:00:00Z`,
-      href: '/jkai/daydreams/money',
+      href: null,
     });
   }
 }
@@ -433,37 +390,6 @@ async function resolveMemoryThemes(ids: string[], fill: Fill): Promise<void> {
   }
 }
 
-async function resolveHypotheses(ids: string[], fill: Fill): Promise<void> {
-  if (ids.length === 0) return;
-  const rows = await db
-    .select({
-      id: daydreamHypotheses.id,
-      question: daydreamHypotheses.question,
-      verdict: daydreamHypotheses.verdict,
-      summary: daydreamHypotheses.summary,
-      subject: daydreamHypotheses.subject,
-      proposedAt: daydreamHypotheses.proposedAt,
-    })
-    .from(daydreamHypotheses)
-    .where(inArray(daydreamHypotheses.id, ids));
-
-  const found = new Set(rows.map((r) => r.id));
-  for (const id of ids) if (!found.has(id)) fill('hypothesis', id, { missing: true, title: 'This question is no longer on the board' });
-
-  for (const r of rows) {
-    fill('hypothesis', r.id, {
-      title: r.question,
-      lines: [
-        `Verdict: ${r.verdict ?? 'still open'}`,
-        r.summary ?? '',
-        `About: ${r.subject}`,
-      ].filter(Boolean),
-      at: r.proposedAt?.toISOString() ?? null,
-      href: '/jkai/daydreams/discoveries',
-    });
-  }
-}
-
 async function resolveInsights(ids: string[], fill: Fill): Promise<void> {
   if (ids.length === 0) return;
   const rows = await db
@@ -543,29 +469,6 @@ async function resolveInterests(ids: string[], fill: Fill): Promise<void> {
   }
 }
 
-async function resolveFamily(subjects: string[], fill: Fill): Promise<void> {
-  if (subjects.length === 0) return;
-  for (const subject of subjects) {
-    const [latest] = await db
-      .select({ ts: daydreamTrail.ts, isHome: daydreamTrail.isHome })
-      .from(daydreamTrail)
-      .where(eq(daydreamTrail.subject, subject))
-      .orderBy(desc(daydreamTrail.ts))
-      .limit(1);
-    fill('family', subject, {
-      title: subject.charAt(0).toUpperCase() + subject.slice(1),
-      lines: [
-        latest
-          ? `Last position fix ${latest.ts.toISOString().slice(0, 16).replace('T', ' ')}Z${latest.isHome === true ? ', at home' : latest.isHome === false ? ', out' : ''}`
-          : 'No position fixes recorded',
-      ],
-      at: latest?.ts.toISOString() ?? null,
-      href: '/home/people',
-      symbolic: true,
-    });
-  }
-}
-
 /** Batch entity lookup, skipping anything merged away. */
 async function namedEntities(ids: string[]): Promise<Map<string, GraphEntity>> {
   if (ids.length === 0) return new Map();
@@ -587,4 +490,10 @@ async function namedEntities(ids: string[]): Promise<Map<string, GraphEntity>> {
         { id: r.id, name: r.name, type: r.type, href: `/jkai/intel/entities/${r.id}` } as GraphEntity,
       ]),
   );
+}
+
+/** One resolved evidence row as a single line — the WhatsApp "why?" reply.
+ *  (Moved from the retired reviewer, `adjudicate.ts`, in P4a.) */
+export function evidenceLine(r: { kind: string; id: string; title: string; lines: string[]; missing: boolean }): string {
+  return `- [${r.kind}:${r.id}] ${r.title}${r.missing ? ' [THE ROW THIS NAMES IS GONE]' : ''}: ${r.lines.join(' ')}`.slice(0, 400);
 }

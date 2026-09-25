@@ -50,7 +50,7 @@
   {#if memory.thoughtTitle}
     {#if memory.thoughtId}
       <p class="note">
-        About: <a class="link" href="/jkai/daydreams/feed?open={memory.thoughtId}">“{memory.thoughtTitle}”</a>
+        About: <a class="link" href="/jkai/daydreams?note={memory.thoughtId}">“{memory.thoughtTitle}”</a>
       </p>
     {:else}
       <p class="note">About: “{memory.thoughtTitle}”</p>

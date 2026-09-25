@@ -39,7 +39,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
  * RAISING THIS NUMBER IS A DECISION, not a formality: every file added here is
  * a file no pull request will ever execute.
  */
-const INTEGRATION_FILES = 49;
+const INTEGRATION_FILES = 42;
 
 function tracked(pattern: string): string[] {
 	return execFileSync('git', ['ls-files', pattern], { cwd: ROOT, encoding: 'utf8' })

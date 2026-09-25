@@ -2,7 +2,6 @@ import { desc, eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import {
   conversations,
-  daydreamPlaces,
   daydreamThoughts,
   orchestratorChats,
   researchSessions,
@@ -180,11 +179,9 @@ async function healthCards(): Promise<ContextCard[]> {
 }
 
 async function daydreamCards(): Promise<ContextCard[]> {
-  const [thoughts, places, [counts]] = await Promise.all([
+  const [thoughts, [counts]] = await Promise.all([
     db.select({ id: daydreamThoughts.id, title: daydreamThoughts.title, kind: daydreamThoughts.kind, score: daydreamThoughts.score, status: daydreamThoughts.status, createdAt: daydreamThoughts.createdAt })
       .from(daydreamThoughts).orderBy(desc(daydreamThoughts.createdAt)).limit(6),
-    db.select({ id: daydreamPlaces.id, label: daydreamPlaces.label, suggestedLabel: daydreamPlaces.suggestedLabel, visitCount: daydreamPlaces.visitCount, distinctDays: daydreamPlaces.distinctDays })
-      .from(daydreamPlaces).where(eq(daydreamPlaces.status, 'active')).orderBy(desc(daydreamPlaces.visitCount)).limit(7),
     db.select({
       newThoughts: sql<number>`count(*) filter (where ${daydreamThoughts.status} = 'new')`,
       reviewed: sql<number>`count(*) filter (where ${daydreamThoughts.reviewVerdict} is not null)`,
@@ -195,31 +192,21 @@ async function daydreamCards(): Promise<ContextCard[]> {
       id: 'daydream-state',
       type: 'metrics',
       title: 'Daydream loop',
-      href: '/jkai/daydreams/feed',
+      href: '/jkai/daydreams',
       drill: drillKey({ kind: 'thoughts', filter: 'all' }),
       metrics: [
         { label: 'New thoughts', value: String(Number(counts?.newThoughts ?? 0)), tone: Number(counts?.newThoughts ?? 0) ? 'warn' : 'default', drill: drillKey({ kind: 'thoughts', filter: 'new' }) },
         { label: 'Reviewed', value: String(Number(counts?.reviewed ?? 0)), tone: Number(counts?.reviewed ?? 0) ? 'good' : 'default', drill: drillKey({ kind: 'thoughts', filter: 'reviewed' }) },
-        { label: 'Known places', value: String(places.filter((p) => p.label).length), drill: drillKey({ kind: 'places', filter: 'named' }) },
       ],
     },
     {
       id: 'daydream-thoughts',
       type: 'links',
       title: 'Emerging thoughts',
-      href: '/jkai/daydreams/feed',
+      href: '/jkai/daydreams',
       drill: drillKey({ kind: 'thoughts', filter: 'all' }),
-      // The feed opens a thought with `?open=`; `?thought=` was never read.
-      rows: thoughts.map((t) => ({ id: t.id, label: t.title, meta: `${t.kind} · ${compactStatus(t.status)}`, note: `${Math.round(t.score * 100)} score`, href: `/jkai/daydreams/feed?open=${t.id}`, drill: drillKey({ kind: 'thought', id: t.id }) })),
-    },
-    {
-      id: 'daydream-places',
-      type: 'bars',
-      title: 'Repeated places',
-      subtitle: 'Separate days, not household visit count',
-      href: '/jkai/daydreams/places',
-      drill: drillKey({ kind: 'places', filter: 'all' }),
-      rows: places.map((p) => ({ id: p.id, label: p.label ?? p.suggestedLabel ?? 'Unnamed place', value: p.distinctDays, display: `${p.distinctDays} days`, href: '/jkai/daydreams/places', drill: drillKey({ kind: 'place', id: p.id }) })),
+      // The feed opens a note with `?note=`.
+      rows: thoughts.map((t) => ({ id: t.id, label: t.title, meta: `${t.kind} · ${compactStatus(t.status)}`, note: `${Math.round(t.score * 100)} score`, href: `/jkai/daydreams?note=${t.id}`, drill: drillKey({ kind: 'thought', id: t.id }) })),
     },
   ];
 }

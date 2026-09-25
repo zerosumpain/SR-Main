@@ -1,12 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   CATEGORY_ORDER,
-  MEMORY_THEMES_PER_PACK,
   groupByCategory,
   groupThemesByKind,
   memoryUse,
 } from './memories';
-import { PACK_LIMITS } from './ponder/pack';
 
 describe('memoryUse', () => {
   it('explains that raw detail waits for consolidation', () => {
@@ -64,12 +62,6 @@ describe('groupByCategory', () => {
   it('keeps every row', () => {
     const rows = CATEGORY_ORDER.map((category) => ({ category }));
     expect(groupByCategory(rows).flatMap((g) => g.items)).toHaveLength(rows.length);
-  });
-});
-
-describe('MEMORY_THEMES_PER_PACK', () => {
-  it('agrees with the theme cap that the page describes', () => {
-    expect(MEMORY_THEMES_PER_PACK).toBe(PACK_LIMITS.memoryThemes);
   });
 });
 

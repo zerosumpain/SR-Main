@@ -126,11 +126,10 @@ export function replyTarget<R extends ReplyCandidate>(rows: R[], now: Date, opts
   return best;
 }
 
-/** Where a thought is read in full. Think notes live on the one feed. */
+/** Where a thought is read in full: the one feed. (The old feed room, where
+ *  every other kind used to open, was deleted in P4a.) */
 export function thoughtLink(t: { id: string; kind: string }): string {
-  return t.kind.startsWith('think_')
-    ? `https://strangeramblings.com/jkai/daydreams?note=${encodeURIComponent(t.id)}`
-    : `https://strangeramblings.com/jkai/daydreams/feed?open=${t.id}`;
+  return `https://strangeramblings.com/jkai/daydreams?note=${encodeURIComponent(t.id)}`;
 }
 
 /** The last thing it said on a phone-shaped channel, inside the window. The
@@ -176,8 +175,7 @@ export async function interceptDaydreamFeedback(text: string): Promise<WaFeedbac
     const last = await lastDelivered({ unrated: false });
     if (!last) return { handled: false };
     try {
-      const { resolveEvidence } = await import('./evidence');
-      const { evidenceLine } = await import('./adjudicate');
+      const { resolveEvidence, evidenceLine } = await import('./evidence');
       const resolved = await resolveEvidence((last.evidence ?? []) as never);
       const lines = resolved.slice(0, 6).map(evidenceLine);
       return {

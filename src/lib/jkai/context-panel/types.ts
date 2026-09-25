@@ -221,7 +221,7 @@ export const drillManifestSchema = z.object({
   kind: z.enum([
     'entity', 'entities', 'relations',
     'research-desk', 'research-run',
-    'thoughts', 'thought', 'places', 'place',
+    'thoughts', 'thought',
     'memory', 'memories',
     'card',
   ]),
