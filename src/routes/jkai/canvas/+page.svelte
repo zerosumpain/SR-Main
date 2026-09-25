@@ -76,12 +76,30 @@
   // built with — two literals would drift.
   const FAILING_BUCKET = '⚠ Needs attention';
 
+  // Find + trigger filter: with two dozen canvases, scanning buckets by eye
+  // was the only way to find one.
+  let query = $state('');
+  let triggerFilter = $state('all');
+  const triggerTypes = $derived([...new Set(canvases.map((c) => c.triggerType))].sort());
+  const visibleCanvases = $derived.by(() => {
+    const q = query.trim().toLowerCase();
+    return canvases.filter(
+      (c) =>
+        (triggerFilter === 'all' || c.triggerType === triggerFilter) &&
+        (!q || c.title.toLowerCase().includes(q) || c.slug.includes(q)),
+    );
+  });
+
+  function statusLabel(s: string) {
+    return s === 'completed_with_errors' ? 'errors' : s;
+  }
+
   const groupedCanvases = $derived.by(() => {
     const now = Date.now();
     // A Describe-it build waiting on a question needs the owner as much as a failure.
     const needsOwner = (c: CanvasSummary) => !!c.buildQuestion || (!!c.latestRunStatus && FAILING_STATUSES.has(c.latestRunStatus));
-    const failing = canvases.filter(needsOwner);
-    const rest = canvases.filter((c) => !needsOwner(c));
+    const failing = visibleCanvases.filter(needsOwner);
+    const rest = visibleCanvases.filter((c) => !needsOwner(c));
     const bucketed = new Map<string, CanvasSummary[]>();
     for (const c of rest) {
       const bucket =
@@ -350,12 +368,41 @@
         </select>
       </label>
       <span class="nm-sec-meta">
-        {canvases.length} {canvases.length === 1 ? 'canvas' : 'canvases'}
+        {visibleCanvases.length !== canvases.length ? `${visibleCanvases.length} of ` : ''}{canvases.length}
+        {canvases.length === 1 ? 'canvas' : 'canvases'}
       </span>
     </div>
 
+    {#if canvases.length > 0}
+      <div class="filter-bar">
+        <input
+          type="search"
+          class="nm-text-input filter-q"
+          placeholder="Find by title or slug"
+          aria-label="Find canvas"
+          bind:value={query}
+        />
+        <div class="chips" role="group" aria-label="Filter by trigger">
+          {#each ['all', ...triggerTypes] as t (t)}
+            <button
+              type="button"
+              class="chip"
+              class:on={triggerFilter === t}
+              aria-pressed={triggerFilter === t}
+              onclick={() => (triggerFilter = t)}>{t}</button
+            >
+          {/each}
+        </div>
+      </div>
+    {/if}
+
     {#if canvases.length === 0}
       <div class="empty">No canvases yet. Create one above.</div>
+    {:else if visibleCanvases.length === 0}
+      <div class="empty">
+        No canvas matches.
+        <button type="button" class="row-link" onclick={() => ((query = ''), (triggerFilter = 'all'))}>Clear filters</button>
+      </div>
     {:else}
       {#each groupedCanvases as group (group.name)}
         <div class="bucket" class:failing={group.name === FAILING_BUCKET}>
@@ -391,7 +438,7 @@
                       <span class="mini-val">
                         {#if c.latestRunStatus}
                           <span class="status-dot" data-status={c.latestRunStatus}></span>
-                          {c.latestRunStatus}
+                          {statusLabel(c.latestRunStatus)}
                         {:else}
                           <span class="mini-muted">—</span>
                         {/if}
@@ -408,6 +455,7 @@
                   </div>
                 </a>
                 <div class="card-actions">
+                  <a class="row-link" href={`/jkai/canvas/${c.slug}`}>Open</a>
                   <button
                     type="button"
                     class="row-link"
@@ -977,7 +1025,7 @@
     border-color: var(--accent-tint-35);
     background: var(--accent-tint-08);
   }
-  .bucket.failing .card-actions { background: transparent; }
+  .bucket.failing .card-actions { border-top-color: var(--accent-tint-35); }
 
   .card-link {
     flex: 1;
@@ -1108,7 +1156,6 @@
     .status-dot[data-status='running'] { animation: none; }
   }
 
-  /* Delete as discreet row-link in corner, matches /drive */
   .card-question {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
@@ -1132,24 +1179,59 @@
   .row-link:hover { color: var(--accent-hover); text-decoration: underline; }
   .row-link.danger { color: var(--error); }
   .row-link.danger:hover { color: var(--error-hover); }
+  /* Actions live in their own strip under the card rather than floating over
+     the title and trigger pill — the hover overlay hid both. Quiet until the
+     card is hovered or focused, but always there to read. */
   .card-actions {
-    position: absolute;
-    top: 0.75rem;
-    right: 0.85rem;
     display: flex;
-    gap: 10px;
+    gap: 14px;
     align-items: center;
-    opacity: 0;
-    transition: opacity 120ms ease;
-    /* Sits above the stretched card link so the actions stay clickable. */
-    z-index: 1;
-    background: var(--bg);
-    padding-left: 6px;
+    padding: 0.45rem 1rem 0.55rem;
+    border-top: 1px solid var(--line);
   }
-  .canvas-card:hover .card-actions,
-  .card-actions:focus-within { opacity: 1; }
-  /* Touch devices have no hover — keep the actions visible. */
-  @media (hover: none) {
-    .card-actions { opacity: 1; }
+  .card-actions .row-link { color: var(--text-muted); }
+  .card-actions .card-del { margin-left: auto; }
+  .canvas-card:hover .card-actions .row-link,
+  .card-actions:focus-within .row-link { color: var(--accent); }
+  .canvas-card:hover .card-actions .row-link.danger,
+  .card-actions:focus-within .row-link.danger { color: var(--error); }
+  .card-actions .row-link:hover { color: var(--accent-hover); }
+  .card-actions .row-link.danger:hover { color: var(--error-hover); }
+  .card-actions .row-link:disabled { opacity: 0.55; cursor: progress; }
+
+  /* ——— Find + trigger filter ——— */
+  .filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem 1rem;
+    margin-bottom: 1rem;
+  }
+  .filter-q {
+    flex: 1 1 220px;
+    width: auto;
+    background: var(--bg);
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .chip {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 4px 9px;
+    background: var(--bg);
+    color: var(--text-muted);
+    border: 1px solid var(--line-strong);
+    cursor: pointer;
+  }
+  .chip:hover { border-color: var(--text-primary); color: var(--text-primary); }
+  .chip.on {
+    background: var(--text-primary);
+    border-color: var(--text-primary);
+    color: var(--bg);
   }
 </style>
