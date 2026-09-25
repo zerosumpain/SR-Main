@@ -75,7 +75,9 @@ function triggerBody(trigger: { type: string; config?: Record<string, unknown> }
     }
     case 'event': {
       const eventType = str(cfg.eventType);
-      return eventType ? { kind: 'event', eventType, sourceWorkflowId: str(cfg.sourceWorkflowId), enabled: true } : null;
+      return eventType
+        ? { kind: 'event', eventType, sourceWorkflowId: str(cfg.sourceWorkflowId), filter: cfg.filter, enabled: true }
+        : null;
     }
     case 'webhook':
       return { kind: 'webhook', secret: str(cfg.secret), enabled: true };

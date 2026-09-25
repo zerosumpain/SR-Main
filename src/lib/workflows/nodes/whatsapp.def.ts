@@ -1,4 +1,5 @@
 import type { NodeDefinition } from '../types';
+import { NOTIFICATION_CATEGORIES } from '$lib/constants/notification-categories';
 
 export const whatsappDef: NodeDefinition = {
   type: 'whatsapp',
@@ -15,6 +16,7 @@ export const whatsappDef: NodeDefinition = {
       mediaPath: { type: 'string', description: 'Absolute path to a local file to send as an attachment (image/audio/video/document). Requires the WhatsApp worker. Supports {{input.field}}.' },
       mediaUrl: { type: 'string', description: 'URL of a file to download and send as an attachment. Supports {{input.field}}.' },
       caption: { type: 'string', description: 'Caption for the media attachment. Falls back to the message text. Supports {{input.field}}.' },
+      category: { type: 'string', description: 'Notification category used when the recipient is the owner (the send then goes through the routing table and also reaches the iPhone). Default system.' },
       suppressDuplicateWindowMins: { type: 'number', description: 'Last-line-of-defence idempotency: skip the send if an identical message was already sent to this recipient within this many minutes (hash-based). Default 0 = off. The dedupe node upstream remains the primary pattern.' },
     },
     required: ['to'],
@@ -73,6 +75,15 @@ export const whatsappDef: NodeDefinition = {
       section: 'OPTIONS',
     },
     {
+      key: 'category',
+      label: 'Category (owner only)',
+      type: 'dropdown',
+      options: NOTIFICATION_CATEGORIES.map((c) => ({ value: c.id, label: c.label })),
+      description: 'When the recipient is you, the message is routed by this notification category (WhatsApp and/or iPhone). Default: Everything else.',
+      section: 'OPTIONS',
+      advancedOnly: true,
+    },
+    {
       key: 'mediaPath',
       label: 'Media file path',
       type: 'template-textarea',
@@ -112,7 +123,7 @@ Behaviour:
 
 Downstream nodes read \`input.sent\`, \`input.messageId\`, \`input.messageIds\` (one per chunk), \`input.chunks\`, or \`input.error\`.
 
-Requires an active WhatsApp connection (the WhatsApp worker).`,
+A text message to the OWNER's own number is routed through the notification system under \`category\` (default system) — prefer a \`notify\` node for owner alerts. Requires an active WhatsApp connection (the WhatsApp worker).`,
   llmExamples: [
     { to: '+447700900123', message: 'Daily report: {{input.summary}}' },
     { to: '{{input.phone}}', message: '## Headlines\n{{input.digest}}', formatMarkdown: true },

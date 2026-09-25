@@ -46,7 +46,7 @@ vi.mock('$lib/db', () => {
 });
 
 const emitPlatform = vi.hoisted(() => vi.fn());
-vi.mock('$lib/events/platform-bus', () => ({ emit: emitPlatform }));
+vi.mock('$lib/events/platform-bus', () => ({ emit: emitPlatform, runChainDepth: () => 0, clearRunChainDepth: () => {} }));
 const emitObs = vi.hoisted(() => vi.fn());
 vi.mock('$lib/workflows/observability-bus', () => ({ emitObs }));
 const recordFixProposalsFromHealing = vi.hoisted(() => vi.fn(async () => 1));
@@ -101,16 +101,24 @@ describe('finaliseRun', () => {
     expect(runUpdate?.set.healingHistory).toEqual([heal]);
   });
 
-  it('emits workflow_completed for completed and completed_with_errors runs', async () => {
+  it('emits workflow.completed for completed and completed_with_errors runs, with the run as origin', async () => {
     await finaliseRun({ workflowId: 'wf', runId: 'r1', runStartedAt: Date.now(), result: result() });
     await finaliseRun({ workflowId: 'wf', runId: 'r2', runStartedAt: Date.now(), result: result({ status: 'completed_with_errors' }) });
-    expect(emitPlatform).toHaveBeenCalledWith('workflow_completed', { workflowId: 'wf', runId: 'r1', status: 'completed' });
-    expect(emitPlatform).toHaveBeenCalledWith('workflow_completed', { workflowId: 'wf', runId: 'r2', status: 'completed_with_errors' });
+    expect(emitPlatform).toHaveBeenCalledWith(
+      'workflow.completed',
+      { workflowId: 'wf', runId: 'r1', status: 'completed' },
+      expect.objectContaining({ originWorkflowId: 'wf', source: 'run-finalise' }),
+    );
+    expect(emitPlatform).toHaveBeenCalledWith(
+      'workflow.completed',
+      { workflowId: 'wf', runId: 'r2', status: 'completed_with_errors' },
+      expect.anything(),
+    );
   });
 
   it('carries the chain depth of an event-started run', async () => {
     await finaliseRun({ workflowId: 'wf', runId: 'r1', runStartedAt: Date.now(), result: result(), chainDepth: 2 });
-    expect(emitPlatform).toHaveBeenCalledWith('workflow_completed', expect.objectContaining({ chainDepth: 2 }));
+    expect(emitPlatform).toHaveBeenCalledWith('workflow.completed', expect.anything(), expect.objectContaining({ chainDepth: 2 }));
   });
 
   it('does not emit workflow_completed for a failed or paused run', async () => {
@@ -182,17 +190,29 @@ describe('every run start path uses finaliseRun', () => {
     'routes/api/workflows/[id]/run/+server.ts',
     'lib/workflows/run-worker.ts',
     'lib/workflows/scheduler.ts',
-    'lib/workflows/event-bus.ts',
+    'lib/workflows/start-run.ts',
     'routes/api/workflows/webhook/[id]/+server.ts',
+    'lib/workflows/engine-resume.ts',
+  ];
+  // Triggered starts (events, WhatsApp keywords, email) share start-run.ts,
+  // which finalises; they must not carry their own copy of a run start.
+  const TRIGGERED_PATHS = [
+    'lib/workflows/event-bus.ts',
     'lib/workflows/gmail/orchestrator-bridge.ts',
     'lib/workflows/whatsapp/workflow-dispatch.ts',
-    'lib/workflows/engine-resume.ts',
   ];
 
   it.each(START_PATHS)('%s calls finaliseRun and never rewrites workflow_nodes config', (rel) => {
     const src = fs.readFileSync(path.join(SRC, rel), 'utf8');
     expect(src).toMatch(/\bfinaliseRun\(/);
     expect(src).not.toMatch(/emit\(\s*'workflow_completed'/);
+    expect(src).not.toMatch(/\.update\(\s*workflowNodes\s*\)/);
+  });
+
+  it.each(TRIGGERED_PATHS)('%s starts runs through startTriggeredRun, not its own engine.execute', (rel) => {
+    const src = fs.readFileSync(path.join(SRC, rel), 'utf8');
+    expect(src).toMatch(/\bstartTriggeredRun\(/);
+    expect(src).not.toMatch(/engine\s*\.\s*execute\(/);
     expect(src).not.toMatch(/\.update\(\s*workflowNodes\s*\)/);
   });
 });

@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 let workflowRow: any;
 const workflowUpdates: any[] = [];
 const nodeUpdates: any[] = [];
+const scheduleInserts: any[] = [];
 
 vi.mock('$lib/db/schema', () => ({
   workflows: { __t: 'workflows' },
@@ -41,7 +42,10 @@ vi.mock('$lib/db', () => {
     }),
     delete: (_t: any) => ({ where: async () => undefined }),
     insert: (_t: any) => ({
-      values: (_v: any) => ({ returning: async () => [{ id: 'sch-1', config: {} }] }),
+      values: (v: any) => {
+        scheduleInserts.push(v);
+        return { returning: async () => [{ id: 'sch-1', config: {} }] };
+      },
     }),
   };
   return { db };
@@ -54,6 +58,7 @@ function makeEvent(body: any) {
 }
 
 beforeEach(() => {
+  scheduleInserts.length = 0;
   workflowUpdates.length = 0;
   nodeUpdates.length = 0;
   workflowRow = { id: 'wf-1', trigger: null };
@@ -125,5 +130,26 @@ describe('PUT /api/workflows/[id]/trigger — cron timezone', () => {
     const res = await PUT(makeEvent({ kind: 'cron', cron: '0 8 * * *', timezone: 'Mars/Olympus' }));
     expect(res.status).toBe(400);
     expect(workflowUpdates).toHaveLength(0);
+  });
+});
+
+describe('PUT trigger — event filters', () => {
+  it('stores the filter on the schedule, the column and the node, under the canonical type', async () => {
+    const filter = [{ key: 'text', op: 'contains', value: 'lights' }];
+    const res = await PUT(makeEvent({ kind: 'event', eventType: 'whatsapp.inbound', filter }));
+    expect(res.status).toBe(200);
+    expect(scheduleInserts[0]).toMatchObject({ type: 'event', config: { eventType: 'whatsapp.inbound', filter } });
+    expect(workflowUpdates[0].trigger).toMatchObject({ type: 'event', eventType: 'whatsapp.inbound', filter });
+    expect(nodeUpdates[0].config).toMatchObject({ kind: 'event', filter });
+  });
+
+  it('saves the old workflow_completed name as workflow.completed', async () => {
+    await PUT(makeEvent({ kind: 'event', eventType: 'workflow_completed' }));
+    expect(scheduleInserts[0].config.eventType).toBe('workflow.completed');
+  });
+
+  it('refuses an unknown event type and a malformed filter', async () => {
+    expect((await PUT(makeEvent({ kind: 'event', eventType: 'made.up' }))).status).toBe(400);
+    expect((await PUT(makeEvent({ kind: 'event', eventType: 'news.item', filter: 'titles=ai' }))).status).toBe(400);
   });
 });

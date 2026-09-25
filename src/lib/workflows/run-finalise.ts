@@ -1,7 +1,7 @@
 import { db } from '$lib/db';
 import { workflowRuns, nodeExecutions } from '$lib/db/schema';
 import { and, eq } from 'drizzle-orm';
-import { emit as emitPlatformEvent } from '$lib/events/platform-bus';
+import { emit as emitPlatformEvent, runChainDepth, clearRunChainDepth } from '$lib/events/platform-bus';
 import type { EngineResult } from './engine';
 import { emitObs } from './observability-bus';
 
@@ -160,18 +160,16 @@ export async function finaliseRun(input: FinaliseRunInput): Promise<void> {
     });
   }
 
-  // Last, so a subscriber reading node_executions sees this run's outputs.
+  // Last, so a subscriber reading node_executions sees this run's outputs. The
+  // run is the event's origin, so it can never trigger itself.
+  const chainDepth = input.chainDepth ?? runChainDepth(runId);
+  if (!isPaused) clearRunChainDepth(runId);
   if (result.status === 'completed' || result.status === 'completed_with_errors') {
-    try {
-      emitPlatformEvent('workflow_completed', {
-        workflowId,
-        runId,
-        status: result.status,
-        ...(input.chainDepth ? { chainDepth: input.chainDepth } : {}),
-      });
-    } catch (err) {
-      console.error(`[${label}] workflow_completed emit failed (runId=${runId})`, err);
-    }
+    emitPlatformEvent(
+      'workflow.completed',
+      { workflowId, runId, status: result.status },
+      { source: 'run-finalise', chainDepth, originWorkflowId: workflowId },
+    );
   }
 }
 

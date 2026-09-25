@@ -1,4 +1,6 @@
 import { Cron } from 'croner';
+import { eventEntry } from '$lib/events/catalogue';
+import { normaliseFilter, type FilterClause } from '$lib/events/filter';
 import type { BasicConfigField, JsonSchema, NodeDefinition } from '$lib/workflows/types';
 import { isDisplayOnlyType } from '$lib/workflows/types';
 import { DEFAULT_CRON_TZ } from '$lib/workflows/cron-timezone';
@@ -434,6 +436,10 @@ export interface TriggerDTO {
   enabled: boolean;
   description: string;
   nextRuns: string[];
+  /** kind 'event' only: a catalogue type (GET /api/native/workflows/event-types), else null. */
+  eventType: string | null;
+  /** kind 'event' only: the payload filter, all clauses must hold. */
+  filter: FilterClause[];
 }
 
 export interface TriggerInput {
@@ -514,25 +520,29 @@ export function triggerDTO(input: TriggerInput): TriggerDTO {
       enabled,
       description: enabled ? zoned : `Paused — ${zoned.charAt(0).toLowerCase()}${zoned.slice(1)}`,
       nextRuns: enabled && cron ? nextRuns(cron, timezone, 3, input.now) : [],
+      eventType: null,
+      filter: [],
     };
   }
 
   const nodeEnabled = node.enabled !== false;
   if (kind === 'event') {
-    const eventType = str(row.eventType) ?? str(rowConfig.eventType) ?? str(node.eventType);
     const schedule = input.schedules.find((s) => s.type === 'event');
+    const scheduleConfig = (schedule?.config ?? {}) as Record<string, unknown>;
+    const raw = str(scheduleConfig.eventType) ?? str(row.eventType) ?? str(rowConfig.eventType) ?? str(node.eventType);
+    const entry = raw ? eventEntry(raw) : null;
+    const parsed = normaliseFilter(scheduleConfig.filter ?? row.filter ?? node.filter);
+    const filter = parsed.ok ? parsed.filter : [];
+    const when = filter.map((c) => `${c.key} ${c.op === 'contains' ? 'contains' : 'is'} "${c.value}"`).join(' and ');
     return {
       kind,
       cron: null,
       timezone: null,
       enabled: !!schedule && schedule.enabled,
-      description:
-        eventType === 'workflow_completed'
-          ? 'Runs when another workflow finishes'
-          : eventType
-            ? `Runs on the "${eventType}" event`
-            : 'Runs on an event',
+      description: `${entry ? `Runs on: ${entry.label}` : raw ? `Runs on the "${raw}" event` : 'Runs on an event'}${when ? `, where ${when}` : ''}`,
       nextRuns: [],
+      eventType: entry?.type ?? raw,
+      filter,
     };
   }
 
@@ -550,5 +560,7 @@ export function triggerDTO(input: TriggerInput): TriggerDTO {
     enabled: nodeEnabled,
     description: description[kind],
     nextRuns: [],
+    eventType: null,
+    filter: [],
   };
 }

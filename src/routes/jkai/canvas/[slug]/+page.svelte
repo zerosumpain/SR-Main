@@ -5,6 +5,9 @@
   import { env as publicEnv } from '$env/dynamic/public';
   import ChatMarkdown from '$lib/markdown/ChatMarkdown.svelte';
   import ScheduleBuilder from '$lib/canvas/trigger/ScheduleBuilder.svelte';
+  import EventTriggerPicker from '$lib/canvas/trigger/EventTriggerPicker.svelte';
+  import { eventEntry } from '$lib/events/catalogue';
+  import type { FilterClause } from '$lib/events/filter';
   import FixProposalsBanner from '$lib/canvas/FixProposalsBanner.svelte';
   import InspectorBody from '$lib/canvas/InspectorBody.svelte';
   import { useIsMobile } from '$lib/canvas/use-mobile.svelte';
@@ -1167,8 +1170,8 @@
     }
     if (kind === 'webhook') return 'webhook';
     if (kind === 'event') {
-      const et = (cfg.eventType as string) || 'event';
-      return `on ${et}`;
+      const et = (cfg.eventType as string) || '';
+      return `on ${eventEntry(et)?.label.toLowerCase() ?? (et || 'event')}`;
     }
     return 'manual';
   }
@@ -3502,6 +3505,7 @@
         payload.eventType = (configDraft.eventType as string) || '';
         if (configDraft.sourceWorkflowId)
           payload.sourceWorkflowId = configDraft.sourceWorkflowId;
+        payload.filter = configDraft.filter ?? [];
       }
       const res = await fetch(`/api/workflows/${canvas.workflowId}/trigger`, {
         method: 'PUT',
@@ -5624,43 +5628,13 @@
                     </div>
                   </section>
                 {:else if kind === 'event'}
-                  <section class="nm-sec">
-                    <div class="nm-sec-hd">
-                      <span class="sr-label-tight">EVENT TYPE</span>
-                    </div>
-                    <select
-                      class="nm-text-input"
-                      value={(configDraft.eventType as string) ?? ''}
-                      onchange={(e) =>
-                        setConfigField('eventType', (e.target as HTMLSelectElement).value)}
-                    >
-                      <option value="">— pick an event —</option>
-                      <option value="workflow_completed">workflow_completed</option>
-                      <option value="whoop_recovery_updated">whoop_recovery_updated</option>
-                    </select>
-                  </section>
-                  {#if configDraft.eventType === 'workflow_completed'}
-                    <section class="nm-sec">
-                      <div class="nm-sec-hd">
-                        <span class="sr-label-tight">SOURCE CANVAS</span>
-                        <span class="nm-sec-meta">leave empty to fire on ANY workflow</span>
-                      </div>
-                      <select
-                        class="nm-text-input"
-                        value={(configDraft.sourceWorkflowId as string) ?? ''}
-                        onchange={(e) =>
-                          setConfigField(
-                            'sourceWorkflowId',
-                            (e.target as HTMLSelectElement).value,
-                          )}
-                      >
-                        <option value="">any canvas</option>
-                        {#each peerCanvases as c (c.workflowId)}
-                          <option value={c.workflowId}>{c.title} · /{c.slug}</option>
-                        {/each}
-                      </select>
-                    </section>
-                  {/if}
+                  <EventTriggerPicker
+                    eventType={(configDraft.eventType as string) ?? ''}
+                    sourceWorkflowId={(configDraft.sourceWorkflowId as string) ?? ''}
+                    filter={(configDraft.filter as FilterClause[]) ?? []}
+                    {peerCanvases}
+                    onChange={setConfigField}
+                  />
                 {/if}
 
                 <section class="nm-sec">

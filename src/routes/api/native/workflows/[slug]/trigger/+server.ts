@@ -4,29 +4,41 @@ import { withDevice } from '$lib/server/native-handler';
 import { saveWorkflowTrigger, validTimezone } from '$lib/workflows/trigger-save.server';
 import { findCanvas, loadWorkflowDetail } from '$lib/workflows/native/workflows.server';
 import { nextRuns } from '$lib/workflows/native/dto';
+import { isKnownEventType } from '$lib/events/catalogue';
+import { normaliseFilter } from '$lib/events/filter';
 
 /**
  * PUT /api/native/workflows/:slug/trigger
- *   { kind: 'manual' | 'cron', cron?, timezone?, enabled }
+ *   { kind: 'manual' | 'cron' | 'event', cron?, timezone?, eventType?, filter?, enabled }
  * → { trigger: TriggerDTO }
  *
  * Saved by `saveWorkflowTrigger` — the body of the canvas's own trigger PUT —
  * so the column, the schedule row, the trigger node and the live cron job move
- * together. Webhook and event triggers carry secrets and cross-workflow wiring
- * and stay on the web.
+ * together. Webhook triggers carry secrets and stay on the web.
+ *
+ * An event trigger names a type from GET /api/native/workflows/event-types and
+ * an optional payload filter `[{ key, op: 'equals'|'contains', value }]`. Pinning
+ * a source workflow for `workflow.completed` stays on the web.
  *
  * Pausing is `enabled: false`. The phone may leave `cron` out when it only
  * flips the switch; the stored expression is carried over.
  */
 export const PUT: RequestHandler = withDevice(async ({ params, request }) => {
-  let body: { kind?: unknown; cron?: unknown; timezone?: unknown; enabled?: unknown };
+  let body: { kind?: unknown; cron?: unknown; timezone?: unknown; enabled?: unknown; eventType?: unknown; filter?: unknown };
   try {
     body = ((await request.json()) ?? {}) as typeof body;
   } catch {
     return json({ error: 'Expected a JSON body.' }, { status: 400 });
   }
-  if (body.kind !== 'manual' && body.kind !== 'cron') {
-    return json({ error: 'Only a manual or scheduled start can be set from the phone.', field: 'kind' }, { status: 422 });
+  if (body.kind !== 'manual' && body.kind !== 'cron' && body.kind !== 'event') {
+    return json({ error: 'Only a manual, scheduled or event start can be set from the phone.', field: 'kind' }, { status: 422 });
+  }
+  if (body.kind === 'event') {
+    if (typeof body.eventType !== 'string' || !isKnownEventType(body.eventType)) {
+      return json({ error: 'Choose an event to start on.', field: 'eventType' }, { status: 422 });
+    }
+    const filter = normaliseFilter(body.filter);
+    if (!filter.ok) return json({ error: filter.error, field: 'filter' }, { status: 422 });
   }
   if (body.timezone !== undefined && body.timezone !== null && !validTimezone(body.timezone)) {
     return json({ error: 'That is not a timezone.', field: 'timezone' }, { status: 422 });
@@ -53,6 +65,8 @@ export const PUT: RequestHandler = withDevice(async ({ params, request }) => {
     kind: body.kind,
     cron,
     timezone,
+    eventType: body.eventType,
+    filter: body.filter,
     enabled: body.enabled !== false,
   });
   if (!saved.ok) {

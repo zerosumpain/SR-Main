@@ -1,15 +1,20 @@
 import { db } from '$lib/db';
-import { workflowSchedules, workflows, workflowRuns, workflowNodes, workflowEdges } from '$lib/db/schema';
+import { workflowSchedules } from '$lib/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { engine } from '$lib/workflows';
 import { onAll, type PlatformEvent } from '$lib/events/platform-bus';
-import { finaliseRun, failRun } from './run-finalise';
+import { scheduleMatchesEvent } from '$lib/events/filter';
+import { markDispatched } from '$lib/events/store';
+import { startTriggeredRun } from './start-run';
 
 /**
- * The dispatch half of the platform event channel: turn an event into a workflow
- * run. The emitter itself moved to `$lib/events/platform-bus`, because importing
- * `engine` from the workflows barrel to PUBLISH an event dragged the whole node
- * registry into every publisher's import closure.
+ * The dispatch half of the platform event channel: turn an event into workflow
+ * runs. Publishing lives in `$lib/events/platform-bus` (so a publisher never
+ * imports the engine), what an event IS lives in `$lib/events/catalogue`, and
+ * which schedules match — type, pinned source workflow, payload filter, and the
+ * never-trigger-yourself rule — is the pure `scheduleMatchesEvent`.
+ *
+ * Runs start through `startTriggeredRun`, the same path the whatsapp and gmail
+ * bridges use, and settle through `finaliseRun` like every other run.
  *
  * emit/on are re-exported so existing callers keep working; new publishers should
  * import from `$lib/events/platform-bus` directly and stay cheap.
@@ -18,22 +23,16 @@ export type { PlatformEvent, PlatformEventType } from '$lib/events/platform-bus'
 export { emit, on } from '$lib/events/platform-bus';
 
 /**
- * How many `workflow_completed` hops one chain may take. Every run now emits
- * `workflow_completed` — event-started ones included — so A→B→A pinned to each
- * other would otherwise loop forever. The depth rides on the event payload.
+ * How many event→run hops one chain may take. Every run emits
+ * `workflow.completed`, and a notify inside a run emits `notification.raised`,
+ * so A→B→A pinned to each other would otherwise loop forever.
  */
 export const MAX_CHAIN_DEPTH = 5;
 
-function chainDepthOf(event: PlatformEvent): number {
-  const d = Number((event.payload as Record<string, unknown> | undefined)?.chainDepth ?? 0);
-  return Number.isFinite(d) && d > 0 ? d : 0;
-}
-
-// Internal: start any event-triggered workflows matching this event type
 export async function handlePlatformEvent(event: PlatformEvent): Promise<void> {
-  const depth = chainDepthOf(event);
-  if (event.type === 'workflow_completed' && depth >= MAX_CHAIN_DEPTH) {
-    console.warn(`[event-bus] workflow_completed chain reached depth ${depth} — not starting further workflows`);
+  const depth = event.chainDepth ?? 0;
+  if (depth >= MAX_CHAIN_DEPTH) {
+    console.warn(`[event-bus] ${event.type} chain reached depth ${depth} — not starting further workflows`);
     return;
   }
 
@@ -42,83 +41,29 @@ export async function handlePlatformEvent(event: PlatformEvent): Promise<void> {
     .from(workflowSchedules)
     .where(and(eq(workflowSchedules.type, 'event'), eq(workflowSchedules.enabled, true)));
 
-  const matching = schedules.filter((s) => {
-    const config = s.config as Record<string, unknown>;
-    if (config.eventType !== event.type) return false;
-    // If a specific source workflow is pinned, only fire on that one.
-    const sourceWorkflowId = config.sourceWorkflowId as string | undefined;
-    if (sourceWorkflowId) {
-      const payloadWfId = (event.payload as Record<string, unknown> | undefined)?.workflowId;
-      if (payloadWfId !== sourceWorkflowId) return false;
+  const matchable = { ...event, chainDepth: depth, originWorkflowId: event.originWorkflowId ?? null };
+  for (const schedule of schedules) {
+    if (!scheduleMatchesEvent((schedule.config ?? {}) as Record<string, unknown>, schedule.workflowId, matchable)) continue;
+    try {
+      await startTriggeredRun(
+        schedule.workflowId,
+        { event: event.payload ?? {}, eventType: event.type, eventId: event.id ?? null },
+        { label: 'event-bus', chainDepth: depth + 1 },
+      );
+    } catch (err) {
+      console.error(`[event-bus] could not start ${schedule.workflowId} on ${event.type}:`, err instanceof Error ? err.message : err);
     }
-    // A workflow never triggers itself off its own completion: an unpinned
-    // workflow_completed trigger would otherwise re-run it forever.
-    if (event.type === 'workflow_completed') {
-      const payloadWfId = (event.payload as Record<string, unknown> | undefined)?.workflowId;
-      if (payloadWfId === s.workflowId) return false;
-    }
-    return true;
-  });
-
-  for (const schedule of matching) {
-    const [wf] = await db
-      .select()
-      .from(workflows)
-      .where(eq(workflows.id, schedule.workflowId))
-      .limit(1);
-    if (!wf) continue;
-
-    const runId = crypto.randomUUID();
-    const now = new Date();
-
-    await db.insert(workflowRuns).values({
-      id: runId,
-      workflowId: schedule.workflowId,
-      status: 'running',
-      trigger: 'event',
-      startedAt: now,
-    });
-
-    const nodes = await db.select().from(workflowNodes).where(eq(workflowNodes.workflowId, schedule.workflowId));
-    const edges = await db.select().from(workflowEdges).where(eq(workflowEdges.workflowId, schedule.workflowId));
-
-    const def = {
-      id: schedule.workflowId,
-      name: wf.name,
-      nodes: nodes.map((n) => ({
-        id: n.id,
-        type: n.type,
-        config: (n.config as Record<string, unknown>) ?? {},
-        label: n.label ?? n.type,
-        position: (n.position as { x: number; y: number }) ?? { x: 0, y: 0 },
-      })),
-      edges: edges.map((e) => ({
-        id: e.id,
-        sourceNodeId: e.sourceNodeId,
-        targetNodeId: e.targetNodeId,
-        sourceHandle: e.sourceHandle ?? undefined,
-        targetHandle: e.targetHandle ?? undefined,
-      })),
-    };
-
-    const runStartedAt = now.getTime();
-    engine
-      .execute(def, runId, { event: event.payload ?? {} }, undefined, schedule.workflowId)
-      .then((result) =>
-        finaliseRun({
-          workflowId: schedule.workflowId,
-          runId,
-          result,
-          runStartedAt,
-          chainDepth: event.type === 'workflow_completed' ? depth + 1 : undefined,
-          label: 'event-bus',
-        }),
-      )
-      .catch((err) => failRun({ workflowId: schedule.workflowId, runId, error: err, label: 'event-bus' }));
   }
+
+  // Stamp once the row exists — the write races delivery, so wait for it.
+  if (event.id && (await event.persisted)) await markDispatched(event.id);
 }
 
 // Register global listeners. This is a module side effect: importing this file is
 // what makes event-triggered workflows fire at all. hooks.server.ts reaches it via
 // $lib/jkai/workflow-deliveries, which imports `on` from here.
-onAll(handlePlatformEvent);
+onAll((event) => {
+  handlePlatformEvent(event).catch((err) =>
+    console.error(`[event-bus] dispatch of ${event.type} failed:`, err instanceof Error ? err.message : err),
+  );
+});

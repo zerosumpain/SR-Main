@@ -27,6 +27,7 @@ import { db } from '$lib/db';
 import { notificationWatermarks } from '$lib/db/schema';
 import { getNativeHealthSummary, type NativeHealthSummary } from '$lib/server/native-health';
 import { notifyOwner, pruneEvents } from './index';
+import { emit as emitPlatformEvent } from '$lib/events/platform-bus';
 
 const WATERMARK_ID = 'health';
 
@@ -109,10 +110,26 @@ export async function tick(): Promise<{ changed: boolean; raised: boolean }> {
     // Nothing to compare against on the very first reading.
     if (!previous) return { changed: true, raised: false };
 
+    const title = headline(summary);
+    const body = sentence(summary, (previous.snapshot ?? {}) as Record<string, unknown>);
+    // The event fires on every move; the notification below is still held to
+    // the category's three-hour floor. A workflow decides its own cadence.
+    emitPlatformEvent(
+      'health.summary_changed',
+      {
+        fingerprint: summary.fingerprint,
+        title,
+        body,
+        readiness: summary.readiness?.score ?? null,
+        figures: summary.figures.map((f) => ({ key: f.key, display: f.display, unit: f.unit, improving: f.improving })),
+      },
+      { source: 'health-watch' },
+    );
+
     const result = await notifyOwner({
       category: 'health',
-      title: headline(summary),
-      body: sentence(summary, (previous.snapshot ?? {}) as Record<string, unknown>),
+      title,
+      body,
       url: '/health',
       severity: 'info',
       // Scoped to the day, so the floor is per-day-per-category rather than

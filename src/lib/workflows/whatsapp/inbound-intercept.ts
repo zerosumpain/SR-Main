@@ -18,7 +18,10 @@
  *
  * Imports are lazy: approval-inbound / workflow-dispatch pull in engine-resume →
  * the eager node-registry barrel, which must not widen a caller's static graph.
+ * (The platform bus and the owner check are two tiny modules, so they are static.)
  */
+import { emit as emitPlatformEvent } from '$lib/events/platform-bus';
+import { isOwnerNumber } from '$lib/config/owner-number';
 
 export interface InboundInterceptResult {
   /** True = consumed (approval resolved or workflow dispatched); do NOT fall
@@ -32,6 +35,13 @@ export async function interceptOwnerInbound(
   from: string,
   text: string,
 ): Promise<InboundInterceptResult> {
+  // Every owner message is a `whatsapp.inbound` event, whatever consumes it
+  // below — an event trigger filtered on `text contains …` is the general form of
+  // the keyword dispatch. Nobody else's messages: a stranger must not start runs.
+  if (text?.trim() && isOwnerNumber(from)) {
+    emitPlatformEvent('whatsapp.inbound', { from, text }, { source: 'whatsapp-inbound' });
+  }
+
   // D2 — approval reply first (approve/deny/yes/no own these keywords).
   const { handleApprovalReply } = await import('./approval-inbound');
   const approval = await handleApprovalReply(from, text ?? '');

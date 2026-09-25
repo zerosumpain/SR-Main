@@ -9,7 +9,9 @@
 import { desc, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { alexaUtterances } from '$lib/db/schema';
+import { emit as emitPlatformEvent } from '$lib/events/platform-bus';
 import { isVoiceEventEntity, newSpeech, parseVoiceHistory, type LastHeard } from './parse';
+import type { ParsedUtterance } from './types';
 
 /** Re-read this much before the newest row we hold. Rows are keyed, so it is free. */
 const OVERLAP_MS = 2 * 3_600_000;
@@ -118,6 +120,34 @@ export async function syncVoiceHistory(service: VoiceSource, now = Date.now()): 
       .onConflictDoNothing({ target: alexaUtterances.id })
       .returning({ id: alexaUtterances.id });
     inserted = out.length;
+    announce(rows, new Set(out.map((r) => r.id)), now);
   }
   return { ok: true, devices: ids.length, read: parsed.length, replays: parsed.length - rows.length, inserted, since };
+}
+
+/** Only speech from the last half hour is an event; a backfill is history. */
+const EVENT_WINDOW_MS = 30 * 60 * 1000;
+const MAX_EVENTS_PER_SYNC = 20;
+
+/** One `alexa.utterance` per newly stored, recent utterance. */
+function announce(rows: readonly ParsedUtterance[], inserted: Set<string>, now: number): void {
+  const fresh = rows
+    .filter((r) => inserted.has(r.id) && now - r.occurredAt.getTime() <= EVENT_WINDOW_MS)
+    .slice(-MAX_EVENTS_PER_SYNC);
+  for (const r of fresh) {
+    emitPlatformEvent(
+      'alexa.utterance',
+      {
+        id: r.id,
+        device: r.device,
+        room: r.room,
+        command: r.command,
+        reply: r.reply,
+        intent: r.intent,
+        person: r.personName,
+        occurredAt: r.occurredAt.toISOString(),
+      },
+      { source: 'alexa-voice' },
+    );
+  }
 }

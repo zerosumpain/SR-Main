@@ -300,6 +300,30 @@ describe('trigger', () => {
     expect(describeCron('0 9 1 1 *')).toBe('On the schedule "0 9 1 1 *"');
   });
 
+  it('reads an event trigger from its schedule row, naming the event and its filter', () => {
+    const t = triggerDTO({
+      ...base,
+      row: { type: 'event', eventType: 'whatsapp.inbound' },
+      schedules: [
+        {
+          type: 'event',
+          config: { eventType: 'whatsapp.inbound', filter: [{ key: 'text', op: 'contains', value: 'lights' }] },
+          enabled: true,
+        },
+      ],
+    });
+    expect(t).toMatchObject({
+      kind: 'event',
+      enabled: true,
+      eventType: 'whatsapp.inbound',
+      filter: [{ key: 'text', op: 'contains', value: 'lights' }],
+      description: 'Runs on: WhatsApp message from you, where text contains "lights"',
+    });
+    // The old name reads back as the catalogue type.
+    expect(triggerDTO({ ...base, row: { type: 'event', eventType: 'workflow_completed' } }).eventType).toBe('workflow.completed');
+    expect(triggerDTO(base)).toMatchObject({ eventType: null, filter: [] });
+  });
+
   it('returns no next runs for an expression croner rejects', () => {
     expect(nextRuns('not a cron', 'Europe/London')).toEqual([]);
   });

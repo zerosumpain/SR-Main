@@ -7347,6 +7347,35 @@ export const notificationWatermarks = pgTable('notification_watermarks', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Every platform event, written down as it is emitted (`$lib/events`).
+ *
+ * The bus is an in-process EventEmitter, so before this an event existed only
+ * for the instant it was delivered: nothing could say what fired, when, or
+ * whether anything was listening. The row is written best-effort by `emit()`
+ * and stamped `dispatched_at` once the dispatcher has matched it against the
+ * event schedules — a row with it still null was emitted in a process with no
+ * dispatcher (the run worker) or while dispatch failed. Kept 30 days, pruned by
+ * the heartbeat engine's hourly housekeeping.
+ */
+export const platformEvents = pgTable('platform_events', {
+  id: uuid('id').primaryKey(),
+  /** A `$lib/events/catalogue` type. Text, not an enum: a new event is not a migration. */
+  type: text('type').notNull(),
+  payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
+  /** Where it was raised — a producer name, e.g. `run-finalise`, `notifyOwner`. */
+  source: text('source'),
+  /** How many event→workflow hops led here (see event-bus MAX_CHAIN_DEPTH). */
+  chainDepth: integer('chain_depth').notNull().default(0),
+  /** The workflow whose run raised it, when one did. */
+  originWorkflowId: text('origin_workflow_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  dispatchedAt: timestamp('dispatched_at', { withTimezone: true }),
+}, (t) => [
+  index('platform_events_created_idx').on(t.createdAt),
+  index('platform_events_type_created_idx').on(t.type, t.createdAt),
+]);
+
 // What the household said to Alexa, and what Alexa said back.
 //
 // Read from Home Assistant's `alexa_devices` voice event entities (one per

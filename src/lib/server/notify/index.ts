@@ -29,6 +29,7 @@ import { db } from '$lib/db';
 import { notificationEvents, notificationRoutes } from '$lib/db/schema';
 import { categoryOf, NOTIFICATION_CATEGORIES, type NotificationCategory } from './categories';
 import { notificationChannel } from './channels';
+import { emit as emitPlatformEvent } from '$lib/events/platform-bus';
 
 const SITE_URL = 'https://strangeramblings.com';
 
@@ -55,6 +56,13 @@ export interface NotifyInput {
    * not quietly undo a three-hour setting made on the phone.
    */
   minIntervalSeconds?: number;
+  /**
+   * The exact WhatsApp text, already formatted, in place of the default
+   * `*title*` + body + link. For a sender that composed its own message — the
+   * `whatsapp` workflow node routing an owner-bound send through here — so the
+   * owner receives what was written, not a re-wrapped copy of it.
+   */
+  whatsappText?: string;
 }
 
 export interface NotifyResult {
@@ -63,6 +71,8 @@ export interface NotifyResult {
   reason?: 'throttled' | 'duplicate' | 'error';
   id?: string;
   whatsapp?: boolean;
+  /** Which channels the category's route had open for this raise. */
+  routed?: { whatsapp: boolean; native: boolean };
 }
 
 /** The effective route for a category: the stored row, else the catalogue. */
@@ -218,7 +228,32 @@ export async function notifyOwner(input: NotifyInput): Promise<NotifyResult> {
     let whatsapp = false;
     if (route.whatsapp && !silent) whatsapp = await sendWhatsApp(input, row.id);
 
-    return { raised: !silent, id: row.id, whatsapp, reason: silent ? 'throttled' : undefined };
+    // A workflow can start on this. Emitted inside a run (a notify node), it
+    // carries that run as its origin, so the workflow cannot page itself in a loop.
+    if (!silent) {
+      emitPlatformEvent(
+        'notification.raised',
+        {
+          id: row.id,
+          category: route.category.id,
+          title: input.title,
+          body: input.body,
+          url: input.url ?? null,
+          severity: input.severity ?? 'info',
+          whatsapp,
+          native: route.native,
+        },
+        { source: 'notifyOwner' },
+      );
+    }
+
+    return {
+      raised: !silent,
+      id: row.id,
+      whatsapp,
+      routed: { whatsapp: route.whatsapp, native: route.native },
+      reason: silent ? 'throttled' : undefined,
+    };
   } catch (error) {
     console.error('[notify] raise failed', error);
     return { raised: false, reason: 'error' };
@@ -242,7 +277,7 @@ async function sendWhatsApp(input: NotifyInput, eventId: string): Promise<boolea
   const link = input.url
     ? `\n\n${input.url.startsWith('http') ? input.url : SITE_URL + input.url}`
     : '';
-  const sent = await send(`*${input.title}*\n\n${input.body}${link}`);
+  const sent = await send(input.whatsappText ?? `*${input.title}*\n\n${input.body}${link}`);
   if (!sent) {
     console.error(`[notify] the whatsapp channel did not take ${eventId}`);
     return false;
@@ -333,3 +368,4 @@ export async function pruneEvents(days = 90): Promise<void> {
 export { NOTIFICATION_CATEGORIES } from './categories';
 export { registerNotificationChannel, clearNotificationChannels } from './channels';
 export type { NotificationSender } from './channels';
+export { deliveryReport, type DeliveryReport } from './report';

@@ -55,6 +55,7 @@ import { gmailReplyDef } from './nodes/gmail-reply.def';
 import { gmailLabelDef } from './nodes/gmail-label.def';
 import { gmailSearchDef } from './nodes/gmail-search.def';
 import { tavilySearchDef } from './nodes/tavily-search.def';
+import { notifyDef } from './nodes/notify.def';
 import { intelWriteDef } from './nodes/intel-write.def';
 import { interactiveStepDef } from './nodes/interactive-step.def';
 // Client-safe `.def.ts` files (type-only imports) for nodes whose main `.ts`
@@ -140,6 +141,7 @@ const builtInDefinitions: NodeDefinition[] = [
   gmailLabelDef,
   gmailSearchDef,
   tavilySearchDef,
+  notifyDef,
   intelWriteDef,
   interactiveStepDef,
   // Reconciled with registered executors (see registry-parity.test.ts).

@@ -19,8 +19,12 @@ vi.mock('drizzle-orm', () => ({ eq: vi.fn() }));
 // out of this unit test.
 vi.mock('$lib/workflows/whatsapp/approval-notify', () => ({ getOwnerPhone: () => '+447359228511' }));
 
-const mockEngineExecute = vi.fn().mockResolvedValue({ status: 'completed', output: {}, error: null });
-vi.mock('$lib/workflows', () => ({ engine: { execute: (...a: unknown[]) => mockEngineExecute(...a) } }));
+// The run itself starts through the shared start path (start-run.ts, tested with
+// the event bus); here we only assert what this dispatcher hands it.
+const mockEngineExecute = vi.fn().mockResolvedValue('run-1');
+vi.mock('$lib/workflows/start-run', () => ({
+  startTriggeredRun: (workflowId: string, input: unknown, opts: unknown) => mockEngineExecute(workflowId, opts, input),
+}));
 
 // Mutable state the tests drive.
 const mockState = {
@@ -75,7 +79,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockState.triggerNodes = [];
   mockState.workflowsQueue = [];
-  mockEngineExecute.mockResolvedValue({ status: 'completed', output: {}, error: null });
+  mockEngineExecute.mockResolvedValue('run-1');
 });
 
 // ---------------------------------------------------------------------------
@@ -207,16 +211,13 @@ describe('dispatchWhatsAppWorkflow', () => {
 
   it('dispatches the matching workflow with the stripped message as input', async () => {
     mockState.triggerNodes = [{ id: 'n1', workflowId: 'wf1', config: { keyword: 'news' } }];
-    // findMatching exists-check + dispatchRun load.
-    mockState.workflowsQueue = [
-      [{ id: 'wf1', name: 'News Digest' }],
-      [{ id: 'wf1', name: 'News Digest' }],
-    ];
+    mockState.workflowsQueue = [[{ id: 'wf1', name: 'News Digest' }]];
 
     const res = await dispatchWhatsAppWorkflow(OWNER, 'news bitcoin');
     expect(res).toEqual({ dispatched: true, workflowName: 'News Digest' });
 
     expect(mockEngineExecute).toHaveBeenCalledTimes(1);
+    expect(mockEngineExecute.mock.calls[0][0]).toBe('wf1');
     const initialInput = mockEngineExecute.mock.calls[0][2];
     expect(initialInput).toEqual({
       message: 'bitcoin',
@@ -245,11 +246,9 @@ describe('dispatchWhatsAppWorkflow', () => {
       { id: 'n1', workflowId: 'wf1', config: { keyword: 'news' } },
       { id: 'n2', workflowId: 'wf2', config: { keyword: 'news' } },
     ];
-    // findMatching exists-check for both, then dispatchRun load for the chosen (first).
     mockState.workflowsQueue = [
       [{ id: 'wf1', name: 'First News' }],
       [{ id: 'wf2', name: 'Second News' }],
-      [{ id: 'wf1', name: 'First News' }],
     ];
 
     const res = await dispatchWhatsAppWorkflow(OWNER, 'news bitcoin');
