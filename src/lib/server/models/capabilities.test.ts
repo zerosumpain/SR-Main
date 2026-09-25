@@ -16,13 +16,15 @@ const MULTIMODAL = { provider: 'openrouter', modelId: 'google/gemini-2.5-flash' 
 beforeEach(() => clearCapabilityCache());
 
 describe('getModelCapabilities', () => {
-  it('reports Codex as reading images and PDFs — the Responses transport carries both', () => {
+  it('reports Codex as reading images — the Responses transport carries them', () => {
     // It said text-only until 2026-09-25, so every photo in a Codex chat was
     // replaced by another model's description of it. Measured that day through
     // the bridge's endpoint: an input_image and an input_file PDF both read.
     const caps = getModelCapabilities(CODEX);
     expect(caps.image).toBe(true);
-    expect(caps.pdf).toBe(true);
+    // PDFs are extracted to text: the endpoint's `input_file` path failed with
+    // a 401 for over an hour on 2026-09-25 while images worked.
+    expect(caps.pdf).toBe(false);
   });
 
   it('does not claim audio or video for Codex, which the model list does not offer', () => {
