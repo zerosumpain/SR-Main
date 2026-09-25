@@ -50,10 +50,26 @@
     onClose,
     children,
   }: Props = $props();
+
+  // Plain handle — only the backdrop's own handlers read it.
+  let backdropPressed = false;
 </script>
 
 {#if isMobile}
-  <button class="dock-backdrop" type="button" aria-label="Close inspector" onclick={onClose}></button>
+  <!-- Closes only on a press that STARTED here: the tap that opened the sheet
+       ends in a synthesised click that lands on this backdrop, and must not
+       shut it again. -->
+  <button
+    class="dock-backdrop"
+    type="button"
+    aria-label="Close inspector"
+    onpointerdown={() => (backdropPressed = true)}
+    onclick={(e) => {
+      // detail 0 = keyboard activation, which has no ghost-click problem.
+      if (backdropPressed || e.detail === 0) onClose();
+      backdropPressed = false;
+    }}
+  ></button>
 {/if}
 <div
   class="nm-inline dock"
