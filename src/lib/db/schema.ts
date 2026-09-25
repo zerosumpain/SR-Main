@@ -6302,6 +6302,15 @@ export const daydreamThoughts = pgTable(
   'daydream_thoughts',
   {
     id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    /**
+     * Who the thought is ABOUT. Every row so far is the owner's, hence the
+     * default; the column exists so notes are keyed by person from the day the
+     * think loop starts writing them (spec 2026-09-25, D4), rather than
+     * back-filled once a second person's rows already sit beside his with
+     * nothing to tell them apart. The same shape `daydream_day_features` and
+     * `daydream_spend` already carry.
+     */
+    subject: text('subject').notNull().default('john'),
     kind: text('kind').notNull(),
     title: text('title').notNull(),
     /** Deterministic, rule-generated. Always present, even when the model
