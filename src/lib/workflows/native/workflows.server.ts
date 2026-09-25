@@ -31,6 +31,12 @@ import {
   type TriggerDTO,
 } from './dto';
 import { categoryOfType } from './catalogue';
+import {
+  countPendingFixProposals,
+  listFixProposals,
+  toFixProposalDTO,
+  type FixProposalDTO,
+} from '$lib/workflows/fix-proposals.server';
 
 /**
  * The reads behind `/api/native/workflows`. Rows in, contract out — every
@@ -151,7 +157,7 @@ export async function listWorkflowCards(): Promise<WorkflowCardDTO[]> {
 
   // Grouped reads — one query per table, not per canvas (the loop listCanvases
   // replaced was 1 + 3N queries and slowed with every canvas added).
-  const [nodes, edges, schedules, lastRuns, builds] = await Promise.all([
+  const [nodes, edges, schedules, lastRuns, builds, pendingFixes] = await Promise.all([
     db
       .select({
         workflowId: workflowNodes.workflowId,
@@ -196,6 +202,8 @@ export async function listWorkflowCards(): Promise<WorkflowCardDTO[]> {
       .where(inArray(workflowRuns.workflowId, ids))
       .orderBy(workflowRuns.workflowId, sql`${workflowRuns.startedAt} DESC NULLS LAST`),
     readBuildStates(ids),
+    // A proposals store that cannot be read must not take the list down with it.
+    countPendingFixProposals().catch(() => new Map<string, number>()),
   ]);
 
   const group = <T extends { workflowId: string }>(items: T[]) => {
@@ -227,7 +235,7 @@ export async function listWorkflowCards(): Promise<WorkflowCardDTO[]> {
       trigger: triggerFor(row, graphNodes, graphEdges, schedulesBy.get(row.id) ?? []),
       nodeCount: graphNodes.filter((n) => isStepNode(n, graphEdges)).length,
       lastRun: run ? runSummary(run) : null,
-      ...attentionFor({ lastRun: run, buildError: build.buildError }),
+      ...attentionFor({ lastRun: run, buildError: build.buildError, pendingFixes: pendingFixes.get(row.id) ?? 0 }),
       updatedAt: row.updatedAt.toISOString(),
     };
   });
@@ -247,15 +255,6 @@ export interface StepDTO {
   form: FieldDTO[];
   next: Array<{ handle: string | null; targetId: string }>;
   legacy: boolean;
-}
-
-export interface FixProposalDTO {
-  id: string;
-  nodeId: string;
-  nodeLabel: string;
-  description: string;
-  createdAt: string;
-  runId: string;
 }
 
 export interface WorkflowDetailDTO {
@@ -306,7 +305,7 @@ export function stepFrom(node: GraphNode, edges: GraphEdge[]): StepDTO {
 }
 
 export async function loadWorkflowDetail(workflow: Workflow): Promise<WorkflowDetailDTO> {
-  const [{ nodes, edges }, schedules, runs, build] = await Promise.all([
+  const [{ nodes, edges }, schedules, runs, build, proposals] = await Promise.all([
     loadGraph(workflow.id),
     db
       .select({ type: workflowSchedules.type, config: workflowSchedules.config, enabled: workflowSchedules.enabled })
@@ -314,6 +313,7 @@ export async function loadWorkflowDetail(workflow: Workflow): Promise<WorkflowDe
       .where(eq(workflowSchedules.workflowId, workflow.id)),
     listRuns(workflow.id, 10),
     readBuildState(workflow.id),
+    listFixProposals(workflow.id),
   ]);
 
   const stepNodes = orderSteps(
@@ -335,10 +335,8 @@ export async function loadWorkflowDetail(workflow: Workflow): Promise<WorkflowDe
       .filter((e) => stepIds.has(e.sourceNodeId) && stepIds.has(e.targetNodeId))
       .map((e) => ({ id: e.id, source: e.sourceNodeId, target: e.targetNodeId, sourceHandle: e.sourceHandle ?? null })),
     recentRuns: runs,
-    // Fix proposals arrive with PR A's `$lib/workflows/fix-proposals.server`.
-    // Until then the list is honestly empty rather than absent, so the app's
-    // decoder is already the final one.
-    fixProposals: [],
+    // Pending self-heal fixes, in the same wire shape the canvas banner reads.
+    fixProposals: proposals.map(toFixProposalDTO),
   };
 }
 

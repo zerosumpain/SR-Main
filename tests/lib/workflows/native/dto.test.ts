@@ -318,3 +318,16 @@ describe('build state', () => {
     expect(buildStateFrom({ status: 'done' }, at)).toEqual({ building: false, buildError: null });
   });
 });
+
+describe('shared cron wording', () => {
+  it('is one function for the canvas ScheduleBuilder and the phone', async () => {
+    const shared = await import('$lib/workflows/cron-describe');
+    expect(describeCron).toBe(shared.describeCron);
+    // What the ScheduleBuilder compiles, read back in its own words.
+    expect(shared.describeCron('*/1 * * * *')).toBe('Every minute');
+    expect(shared.describeCron('0 */1 * * *')).toBe('Every hour');
+    expect(shared.describeCron('30 8 * * 1-5')).toBe('Every weekday at 08:30');
+    expect(shared.describeCron('0 9 * * 0,1,2,3,4,5,6')).toBe('Every day at 09:00');
+    expect(shared.describeCron('0 9 * * 0,6')).toBe('Every weekend at 09:00');
+  });
+});

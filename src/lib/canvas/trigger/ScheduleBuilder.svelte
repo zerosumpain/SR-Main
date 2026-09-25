@@ -10,6 +10,8 @@
   // $lib/workflows/cron-timezone (Europe/London unless the schedule names one),
   // and the server itself is UTC, so "server time" was an hour wrong all summer.
   import { DEFAULT_CRON_TZ } from '$lib/workflows/cron-timezone';
+  // One wording for a schedule sitewide — the iPhone's trigger card uses it too.
+  import { describeCron } from '$lib/workflows/cron-describe';
 
   let {
     value,
@@ -94,17 +96,6 @@
     onChange(compile({ ...st, freq: 'weekly', days }));
   }
 
-  function describe(s: State): string {
-    if (s.freq === 'minutes') return `Every ${clamp(s.n, 1, 59)} minute${s.n === 1 ? '' : 's'}`;
-    if (s.freq === 'hours') return `Every ${clamp(s.n, 1, 23)} hour${s.n === 1 ? '' : 's'}`;
-    if (s.freq === 'daily') return `Every day at ${s.time}`;
-    const labels = DOW.filter((d) => s.days.includes(d.v)).map((d) => d.label);
-    const when = labels.length === 0 ? 'no days selected' :
-      labels.length === 7 ? 'every day' :
-      JSON.stringify(s.days.sort((a, b) => a - b)) === JSON.stringify([1, 2, 3, 4, 5]) ? 'every weekday' :
-      labels.join(', ');
-    return `${when} at ${s.time}`;
-  }
 </script>
 
 <div class="sb">
@@ -147,7 +138,7 @@
     </div>
   {/if}
 
-  <p class="sb-preview">{describe(st)} <span class="sb-tz">· {timezone} time</span></p>
+  <p class="sb-preview">{describeCron(compile(st))} <span class="sb-tz">· {timezone} time</span></p>
 </div>
 
 <style>

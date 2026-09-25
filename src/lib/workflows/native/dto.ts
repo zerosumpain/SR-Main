@@ -2,6 +2,9 @@ import { Cron } from 'croner';
 import type { BasicConfigField, JsonSchema, NodeDefinition } from '$lib/workflows/types';
 import { isDisplayOnlyType } from '$lib/workflows/types';
 import { DEFAULT_CRON_TZ } from '$lib/workflows/cron-timezone';
+import { describeCron } from '$lib/workflows/cron-describe';
+
+export { describeCron };
 
 /**
  * The iPhone's view of a canvas workflow — contract v1 of
@@ -446,61 +449,6 @@ export interface TriggerInput {
   /** Resolve a schedule config's zone — `cronTimezone`, injected so this stays pure. */
   resolveZone: (config: unknown) => string;
   now?: Date;
-}
-
-const DOW = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
-function hhmm(h: string, m: string): string {
-  return `${h.padStart(2, '0')}:${m.padStart(2, '0')}`;
-}
-
-/**
- * A cron expression in plain English — the vocabulary the canvas
- * ScheduleBuilder writes ("Every day at 08:00", "Every 15 minutes"), extended
- * to the shapes the generator also emits. Anything else is quoted verbatim
- * rather than guessed at.
- */
-export function describeCron(expr: string): string {
-  const parts = expr.trim().split(/\s+/);
-  if (parts.length !== 5) return `On the schedule "${expr.trim()}"`;
-  const [m, h, dom, mon, dow] = parts;
-  const num = /^\d+$/;
-
-  if (dom === '*' && mon === '*' && dow === '*') {
-    if (m === '*' && h === '*') return 'Every minute';
-    const everyMin = /^\*\/(\d+)$/.exec(m);
-    if (everyMin && h === '*') {
-      const n = Number(everyMin[1]);
-      return n === 1 ? 'Every minute' : `Every ${n} minutes`;
-    }
-    const everyHr = /^\*\/(\d+)$/.exec(h);
-    if (num.test(m) && everyHr) {
-      const n = Number(everyHr[1]);
-      const at = m === '0' ? '' : ` at ${m.padStart(2, '0')} past`;
-      return n === 1 ? `Every hour${at}` : `Every ${n} hours${at}`;
-    }
-    if (num.test(m) && h === '*') {
-      return m === '0' ? 'Every hour, on the hour' : `Every hour at ${m.padStart(2, '0')} past`;
-    }
-  }
-
-  if (!num.test(m) || !/^\d+(,\d+)*$/.test(h)) return `On the schedule "${expr.trim()}"`;
-  const times = h.split(',').map((hour) => hhmm(hour, m));
-  const at = times.length === 1 ? times[0] : `${times.slice(0, -1).join(', ')} and ${times[times.length - 1]}`;
-
-  if (mon !== '*') return `On the schedule "${expr.trim()}"`;
-  if (dom !== '*') {
-    if (dow !== '*' || !num.test(dom)) return `On the schedule "${expr.trim()}"`;
-    return `On day ${dom} of every month at ${at}`;
-  }
-  if (dow === '*') return `Every day at ${at}`;
-  if (dow === '1-5') return `Every weekday at ${at}`;
-  if (dow === '0,6' || dow === '6,0' || dow === '6,7') return `Every weekend at ${at}`;
-  if (/^\d(,\d)*$/.test(dow)) {
-    const days = dow.split(',').map((d) => DOW[Number(d) % 7]);
-    return `Every ${days.join(', ')} at ${at}`;
-  }
-  return `On the schedule "${expr.trim()}"`;
 }
 
 /** The next `count` fire times of a cron in a zone, ISO. Empty on an expression croner rejects. */
