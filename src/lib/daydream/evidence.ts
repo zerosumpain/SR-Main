@@ -560,7 +560,7 @@ async function resolveFamily(subjects: string[], fill: Fill): Promise<void> {
           : 'No position fixes recorded',
       ],
       at: latest?.ts.toISOString() ?? null,
-      href: '/jkai/daydreams/family',
+      href: '/home/people',
       symbolic: true,
     });
   }

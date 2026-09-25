@@ -1,8 +1,12 @@
 <script lang="ts">
+  import HomeFrame from '$lib/components/home/HomeFrame.svelte';
   import LoadErrorCard from '$lib/components/jkai/daydream/hub/LoadErrorCard.svelte';
   import { stamp } from '$lib/daydream/format';
   /**
-   * The household room.
+   * The household room — /home/people. Moved out of /jkai/daydreams on
+   * 2026-09-25 so the household's whereabouts live beside the rest of the home
+   * (the old URL 308s here); the reads are unchanged, and the per-person
+   * findings still come from the daydream sweep.
    *
    * Read off the trail, never asked for: where everyone is, what today looked
    * like, and — since the family backfill gave four more people a year of
@@ -110,7 +114,22 @@
 
   const away = $derived(members.filter((m) => m.ageMins != null && m.isHome === false).length);
   const unknown = $derived(members.filter((m) => m.ageMins == null || m.ageMins > STALE_MINS).length);
+  const home = $derived(members.filter((m) => m.ageMins != null && m.isHome).length);
+  const summary = $derived([
+    { label: 'Home', value: String(home), sub: `of ${members.length}` },
+    { label: 'Out', value: String(away), sub: 'on the trail' },
+    { label: 'Unknown', value: String(unknown), sub: `no fix for ${STALE_MINS}m` },
+  ]);
 </script>
+
+<HomeFrame
+  path="/home/people"
+  kicker="Home · People"
+  title={['Where everyone', 'is, and was']}
+  standfirst="Read off the family trail — Life360 through Home Assistant, sampled every two minutes and kept ninety days — never asked for. What the nightly sweep has made of each person sits underneath."
+  {summary}
+  footer={['strangeramblings.com/home/people', 'Life360 via Home Assistant · 90-day trail', 'Owner-gated · the whole household, never shared']}
+>
 
 {#if data.loadError}
   <section class="band"><div class="inner"><LoadErrorCard kicker="The household did not load" message={data.loadError} /></div></section>
@@ -206,9 +225,11 @@
   </div>
 </section>
 
+</HomeFrame>
+
 <style>
   /* Room-specific only — `.band`, `.inner`, `.card`, `.tbl`, `.note`, `.lede`,
-     `.link`, `.btn`, `.cta` all come from the layout's `.ds-vocab`. */
+     `.link`, `.btn`, `.cta` all come from `.ds-vocab` (HomeFrame's DsVocab). */
   .today {
     margin-top: 22px;
   }

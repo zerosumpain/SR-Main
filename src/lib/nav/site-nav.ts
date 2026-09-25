@@ -127,6 +127,7 @@ export const SITE_ITEMS: NavItem[] = [
   { label: 'Decks', href: '/decks' },
   { label: 'Health', href: '/health' },
   { label: 'Shipped', href: '/releases', ownerOnly: true },
+  { label: 'Home', href: '/home', ownerOnly: true },
   // Owner-only from here. These used to render for everyone, so a signed-out
   // reader was offered four destinations that each 302 back to /login.
   { label: 'News', href: '/news', ownerOnly: true },
@@ -196,7 +197,6 @@ export const SECTIONS: NavSection[] = [
       { label: 'Calendar', href: '/jkai/daydreams/calendar' },
       { label: 'Places', href: '/jkai/daydreams/places' },
       { label: 'Money', href: '/jkai/daydreams/money' },
-      { label: 'Family', href: '/jkai/daydreams/family' },
       { label: 'Improvement', href: '/jkai/daydreams/improvement' },
       { label: 'Backlog', href: '/jkai/daydreams/backlog' },
       // The doctor moved under daydreams on 2026-09-04 and belongs to this
@@ -250,6 +250,26 @@ export const SECTIONS: NavSection[] = [
       { label: 'Routes', href: '/health/routes', ownerOnly: true },
       { label: 'Plan', href: '/health/plan', ownerOnly: true },
       { label: 'Record', href: '/health/record', ownerOnly: true },
+    ],
+  },
+  {
+    // The household: who is in (Life360 via Home Assistant), what the Echos
+    // heard and sense, and whether the house's integrations are healthy. The
+    // whole family's data, so owner-only top to bottom — nothing here is in
+    // PUBLIC_PATHS or the hook bypasses. Labelled "Home" by John's choice
+    // (2026-09-25) although the icon cell also means `/`: the section root has
+    // no back cell, and a child's "← Home" means this page, not the site root.
+    id: 'home',
+    label: 'Home',
+    rootHref: '/home',
+    ownerOnly: true,
+    match: (p) => under('/home', p),
+    items: [
+      { label: 'Now', href: '/home', ownerOnly: true, match: (p) => p === '/home' },
+      { label: 'People', href: '/home/people', ownerOnly: true },
+      { label: 'Voice', href: '/home/voice', ownerOnly: true },
+      { label: 'Echoes', href: '/home/echoes', ownerOnly: true },
+      { label: 'Devices', href: '/home/devices', ownerOnly: true },
     ],
   },
   {

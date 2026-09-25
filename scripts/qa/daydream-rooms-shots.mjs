@@ -15,7 +15,7 @@ const base = `http://localhost:${port}`;
 const out = process.env.OUT ?? 'scratch/shots';
 mkdirSync(out, { recursive: true });
 
-const rooms = ['feed', 'memory', 'briefing', 'watches', 'family', 'discoveries', 'calendar', 'places', 'money', 'engine', 'improvement'];
+const rooms = ['feed', 'memory', 'briefing', 'watches', 'discoveries', 'calendar', 'places', 'money', 'engine', 'improvement'];
 const sizes = [
   { name: 'desk', width: 1440, height: 3600 },
   { name: 'phone', width: 390, height: 2400 },

@@ -1,6 +1,6 @@
 /**
  * The `alexa` toolset — jkai's read-only window onto what the household says
- * to the Echos, and what Alexa said back (/jkai/voice).
+ * to the Echos, and what Alexa said back (/home/voice).
  *
  * Two tools: a summary for "how much / when / who / what about" questions and a
  * search for "what exactly was said". Both read `alexa_utterances`, which the

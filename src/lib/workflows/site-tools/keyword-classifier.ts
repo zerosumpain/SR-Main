@@ -17,7 +17,7 @@ const TOOLSET_PATTERNS: Array<{ toolset: string; pattern: RegExp }> = [
   { toolset: 'research', pattern: /research|investigate|deep\s*dive|look\s+into|find\s+out/i },
   { toolset: 'workflows', pattern: /workflow|automat|schedule|trigger|cron/i },
   { toolset: 'home', pattern: /light|temperature|thermostat|speaker|room|house|home|blind|curtain|switch(?:es)?|heat(?:ing)?|sensor|door|camera|ring|alexa|tado|hue|media\s*player|tv\b|bravia/i },
-  // What the household said to the Echos (/jkai/voice). `alexa` also loads
+  // What the household said to the Echos (/home/voice). `alexa` also loads
   // `home` above, which is right: "turn the kitchen Alexa down" is a device,
   // "what did Rory ask Alexa" is the log, and the model picks by tool name.
   // Alarms, timers and listening are the Echos' too (`alexa_home_signals`).
