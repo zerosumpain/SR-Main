@@ -21,6 +21,8 @@
       <a href="/blog" class="site-footer-link">Writing</a>
       <a href="/projects" class="site-footer-link">Projects</a>
     {/if}
+    <a href="/privacy" class="site-footer-link">Privacy</a>
+    <a href="/tos" class="site-footer-link">Terms</a>
   </nav>
 </footer>
 

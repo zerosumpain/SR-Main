@@ -10,6 +10,9 @@ const PUBLIC_PATHS = [
   '/login',
   '/auth-error',
   '/auth',
+  // Linked from Google's OAuth consent screen, which requires them to be public.
+  '/privacy',
+  '/tos',
   '/api/vitals/state',
   '/api/health/apple',
   '/api/jkai/proxy',
