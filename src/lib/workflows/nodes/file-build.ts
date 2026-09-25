@@ -10,17 +10,8 @@ import { eq } from 'drizzle-orm';
 import { saveBuffer, newDiskPath } from '$lib/file-store/storage';
 import { synthesize, ExtractError, type SynthesizeFormat, type SynthesizeSource } from '$lib/jkai/extract';
 import { fileBuildDef } from './file-build.def';
+import { getPath as resolvePath } from '../expressions';
 export { fileBuildDef } from './file-build.def';
-
-function resolvePath(obj: Record<string, unknown>, path: string): unknown {
-  const parts = path.split('.');
-  let current: unknown = obj;
-  for (const part of parts) {
-    if (current === null || current === undefined || typeof current !== 'object') return undefined;
-    current = (current as Record<string, unknown>)[part];
-  }
-  return current;
-}
 
 function coerceContent(raw: unknown, source: SynthesizeSource): string | Buffer {
   if (source === 'xlsx') {

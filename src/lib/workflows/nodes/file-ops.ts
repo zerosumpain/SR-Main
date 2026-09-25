@@ -9,17 +9,8 @@ import { eq, like } from 'drizzle-orm';
 import { readBuffer, saveBuffer, appendBuffer, deleteFile, newDiskPath } from '$lib/file-store/storage';
 import { queueDerivedIntelDelete } from '$lib/jkai/intel/auto-extract';
 import { fileReadDef, fileWriteDef, fileDeleteDef, fileListDef } from './file-ops.def';
+import { getPath as resolvePath } from '../expressions';
 export { fileReadDef, fileWriteDef, fileDeleteDef, fileListDef } from './file-ops.def';
-
-function resolvePath(obj: Record<string, unknown>, path: string): unknown {
-  const parts = path.split('.');
-  let current: unknown = obj;
-  for (const part of parts) {
-    if (current === null || current === undefined || typeof current !== 'object') return undefined;
-    current = (current as Record<string, unknown>)[part];
-  }
-  return current;
-}
 
 function permissionsFor(raw: unknown): WorkflowFilePermissions {
   const p = (raw ?? {}) as Partial<WorkflowFilePermissions>;

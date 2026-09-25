@@ -9,7 +9,7 @@
 
 import type { WorkflowNodeDef, WorkflowEdgeDef, JsonSchema, NodeDefinition } from '../types';
 import { resolveUpstreamSchema, schemaToVariablePaths } from '../schema-propagation';
-import { extractTemplateTokens, classifyTemplateToken } from '../state-templates';
+import { extractTemplateTokens, classifyTemplateToken, expressionRefs, parsePath, nodeSlug, EXPRESSION_SYNTAX } from '../expressions';
 import { validateWorkflowCompatibility } from '../mapping/compatibility';
 import { findFanInCollisions } from '../fan-in';
 
@@ -197,7 +197,7 @@ export function validateNodeConfigPreSubmit(
     if (typeof v !== 'string') continue;
     const bad = detectUnsupportedTemplateSyntax(v);
     if (bad) {
-      errors.push(`Field "${field.key}" uses ${bad}. Supported template syntax is {{input.field}}, {{state.KEY}}, {{today}} and {{now}} only. For loops or conditionals, add a transform node upstream that builds the string.`);
+      errors.push(`Field "${field.key}" uses ${bad}. Supported template syntax is ${EXPRESSION_SYNTAX} For loops or conditionals, add a transform node upstream that builds the string.`);
     }
   }
 
@@ -230,14 +230,17 @@ export function validateNodeConfigPreSubmit(
  */
 function extractInputRefs(text: string): string[] {
   const refs = new Set<string>();
-  // Template variables: {{input.field.path}}
-  for (const m of text.matchAll(/\{\{input\.([^}]+?)\}\}/g)) {
-    refs.add(m[1].trim());
+  // Template variables: {{input.field.path}}, incl. indexing, ?? and filters.
+  for (const inner of extractTemplateTokens(text)) {
+    for (const ref of expressionRefs(inner)) {
+      const [root, ...rest] = parsePath(ref);
+      if (root === 'input' && rest.length && !rest[0].startsWith('$')) refs.add(rest.join('.'));
+    }
   }
   // Bare JS references: input.field (not inside {{ }})
   for (const m of text.matchAll(/\binput\.([a-zA-Z_$][a-zA-Z0-9_.?]*)/g)) {
     // Strip optional chaining operator for path comparison
-    refs.add(m[1].replace(/\?/g, ''));
+    if (!m[1].startsWith('$')) refs.add(m[1].replace(/\?/g, ''));
   }
   return [...refs];
 }
@@ -513,6 +516,55 @@ function detectSiteToolApprovalGaps(
   return issues;
 }
 
+/** Every node that can reach `nodeId` along edges — the only nodes {{nodes.X}} may name. */
+function ancestorsOf(nodeId: string, edges: WorkflowEdgeDef[]): Set<string> {
+  const seen = new Set<string>();
+  const stack = [nodeId];
+  while (stack.length) {
+    const id = stack.pop()!;
+    for (const e of edges) {
+      if (e.targetNodeId === id && !seen.has(e.sourceNodeId)) { seen.add(e.sourceNodeId); stack.push(e.sourceNodeId); }
+    }
+  }
+  return seen;
+}
+
+/**
+ * {{nodes.X.field}}: X must be a node (id or label slug) upstream of this one —
+ * anything else is an ERROR, because at runtime it is always ''. An unknown
+ * field is a warning, and only when X declares an output schema to check against.
+ */
+function checkNodeRefs(
+  inner: string,
+  node: WorkflowNodeDef,
+  field: string,
+  nodes: WorkflowNodeDef[],
+  edges: WorkflowEdgeDef[],
+  getOutputSchema: OutputSchemaGetter,
+): VerificationIssue[] {
+  const issues: VerificationIssue[] = [];
+  const at = (issue: string, severity: 'error' | 'warning') => ({ nodeId: node.id, nodeLabel: node.label, field, issue, severity });
+  for (const ref of expressionRefs(inner)) {
+    const [root, name, ...rest] = parsePath(ref);
+    if (root !== 'nodes') continue;
+    const target = nodes.find((n) => n.id === name) ?? nodes.find((n) => n.label && nodeSlug(n.label) === name);
+    if (!target) {
+      issues.push(at(`{{${inner}}} names a node "${name ?? ''}" that does not exist. Use a node id or its label slug (${nodes.filter((n) => n.id !== node.id).slice(0, 8).map((n) => nodeSlug(n.label || n.id)).join(', ')}).`, 'error'));
+      continue;
+    }
+    if (!ancestorsOf(node.id, edges).has(target.id)) {
+      issues.push(at(`{{${inner}}} reads "${target.label}", which is not upstream of this node — it will not have run yet, so it substitutes to ''. Connect it upstream or reference a node that is.`, 'error'));
+      continue;
+    }
+    const path = rest[0] === 'output' ? rest.slice(1) : rest;
+    const props = getOutputSchema(target.type, target.config)?.properties;
+    if (path.length && props && Object.keys(props).length && !(path[0] in props) && !(rest[0] in props)) {
+      issues.push(at(`{{${inner}}}: "${target.label}" does not declare an output field "${path[0]}". It declares: ${Object.keys(props).slice(0, 15).join(', ')}.`, 'warning'));
+    }
+  }
+  return issues;
+}
+
 /**
  * Verify a workflow graph for data-shape issues.
  *
@@ -565,7 +617,7 @@ export function verifyWorkflow(
       if (bad) {
         issues.push({
           nodeId: node.id, nodeLabel: node.label, field: field.key,
-          issue: `Contains ${bad}. Supported template syntax is {{input.field}}, {{state.KEY}}, {{today}} and {{now}} only. Build the string in an upstream transform node instead.`,
+          issue: `Contains ${bad}. Supported template syntax is ${EXPRESSION_SYNTAX} Build anything more complex in an upstream transform node.`,
           severity: 'error',
         });
       }
@@ -591,19 +643,25 @@ export function verifyWorkflow(
     // {{now}} won't be substituted at runtime. Warn (don't block) — block/helper
     // syntax is already reported as an error above, so skip that class here.
     for (const [field, value] of Object.entries(node.config)) {
-      if (typeof value !== 'string') continue;
+      if (typeof value !== 'string' || def?.rawConfigKeys?.includes(field)) continue;
       const flagged = new Set<string>();
       for (const inner of extractTemplateTokens(value)) {
         if (flagged.has(inner)) continue;
-        if (classifyTemplateToken(inner) !== 'unknown') continue;
         flagged.add(inner);
-        issues.push({
-          nodeId: node.id,
-          nodeLabel: node.label,
-          field,
-          issue: `Unknown template variable {{${inner}}} — it will not be substituted. Supported: {{input.field}}, {{state.KEY}}, {{today}}, {{now}}.`,
-          severity: 'warning',
-        });
+        const kind = classifyTemplateToken(inner);
+        if (kind === 'nodes') {
+          issues.push(...checkNodeRefs(inner, node, field, nodes, edges, getOutputSchema));
+        } else if (kind === 'unknown' || inner.includes('||')) {
+          issues.push({
+            nodeId: node.id,
+            nodeLabel: node.label,
+            field,
+            issue: inner.includes('||') && kind !== 'unknown'
+              ? `{{${inner}}} uses ||, which templates do not support — it substitutes to an empty string. Use ?? for a fallback.`
+              : `Unknown template variable {{${inner}}} — it will not be substituted. Supported: {{input.*}}, {{nodes.<id>.*}}, {{trigger.*}}, {{state.KEY}}, {{today}}, {{now}}.`,
+            severity: 'warning',
+          });
+        }
       }
     }
 

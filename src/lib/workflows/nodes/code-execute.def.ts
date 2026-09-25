@@ -1,6 +1,7 @@
 import type { NodeDefinition } from '../types';
 
 export const codeExecuteDef: NodeDefinition = {
+  rawConfigKeys: ['code'],
   type: 'code-execute',
   label: 'Code Execute',
   category: 'core',

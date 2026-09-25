@@ -150,6 +150,7 @@ export const validatorExecutor: NodeExecutor = {
 };
 
 export const validatorDef: NodeDefinition = {
+  rawConfigKeys: ['expression'],
   type: 'validator',
   label: 'Validator',
   category: 'agentic',

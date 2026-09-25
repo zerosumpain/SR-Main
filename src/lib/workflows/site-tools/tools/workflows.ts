@@ -13,6 +13,7 @@ import {
 } from '$lib/db/schema';
 import { desc, eq, asc, and, like, inArray, gte } from 'drizzle-orm';
 import { formatTimestamp } from '../format-time';
+import { EXPRESSION_SYNTAX } from '$lib/workflows/expressions';
 import { slugify } from '$lib/canvas/slug';
 import { registerCronJob } from '$lib/workflows/scheduler';
 import { registry } from '$lib/workflows';
@@ -1389,6 +1390,7 @@ register({
       success: true,
       data: {
         nodes: described,
+        templateSyntax: EXPRESSION_SYNTAX,
         ...(unknown.length > 0
           ? {
               unknown,

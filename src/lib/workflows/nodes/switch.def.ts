@@ -31,6 +31,7 @@ export function switchHandles(config: Record<string, unknown>): string[] {
 }
 
 export const switchDef: NodeDefinition = {
+  rawConfigKeys: ['expression'],
   type: 'switch',
   label: 'Switch',
   category: 'control',

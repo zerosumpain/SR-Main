@@ -1,5 +1,6 @@
 import type { NodeExecutor, NodeResult, ExecutionContext, JsonSchema } from '../types';
 import { getStoreValue, addToSetAtomic, addToSetReturningNew } from './data-store';
+import { getPath as resolvePath } from '../expressions';
 
 export { dedupeDef } from './dedupe.def';
 
@@ -54,17 +55,6 @@ function normaliseMax(raw: unknown, fallback: number): number | null {
   if (raw === undefined || raw === null || raw === '') return fallback;
   const n = Number(raw);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
-}
-
-function resolvePath(obj: unknown, path: string): unknown {
-  if (!path) return undefined;
-  const parts = path.split('.');
-  let current: unknown = obj;
-  for (const part of parts) {
-    if (current === null || current === undefined || typeof current !== 'object') return undefined;
-    current = (current as Record<string, unknown>)[part];
-  }
-  return current;
 }
 
 /** Extract the unique id for an item. Returns undefined when none resolves. */

@@ -1,14 +1,9 @@
 import type { NodeExecutor, NodeDefinition, NodeResult, ExecutionContext } from '../types';
 import { interpolateTemplate, interpolateTemplateStrict } from './template';
+import { getPath } from '../expressions';
 
 /** Resolve a dot-path into a value (empty path returns the object itself). */
-function resolvePath(obj: unknown, path: string): unknown {
-  if (!path) return obj;
-  return path.split('.').reduce((acc: unknown, key) => {
-    if (acc && typeof acc === 'object') return (acc as Record<string, unknown>)[key];
-    return undefined;
-  }, obj);
-}
+const resolvePath = (obj: unknown, path: string): unknown => (path ? getPath(obj, path) : obj);
 
 /** Set/replace a single query parameter on an absolute URL. */
 function withQueryParam(rawUrl: string, param: string, value: string): string {

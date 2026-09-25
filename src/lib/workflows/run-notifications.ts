@@ -23,6 +23,7 @@ import { db } from '$lib/db';
 import { workflows, type WorkflowNotifications } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { markdownToWhatsApp } from './whatsapp/format';
+import { getPath as resolvePath } from './expressions';
 
 const SITE_URL = 'https://strangeramblings.com';
 const CANVAS_NAME_PREFIX = 'canvas:';
@@ -47,16 +48,6 @@ export interface NotifyRunOutcomeArgs {
 }
 
 /** Resolve a dot-path (e.g. "summary" or "result.text") against an object. */
-function resolvePath(obj: unknown, path: string): unknown {
-  if (!path) return undefined;
-  let current: unknown = obj;
-  for (const part of path.split('.')) {
-    if (current === null || current === undefined || typeof current !== 'object') return undefined;
-    current = (current as Record<string, unknown>)[part];
-  }
-  return current;
-}
-
 /** Coerce an arbitrary digest value to a short string. Objects/arrays are
  *  JSON-stringified; everything else is `String()`-cast. Truncated to `max`. */
 function stringifyDigest(value: unknown, max: number): string {

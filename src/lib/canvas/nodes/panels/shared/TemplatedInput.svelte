@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { getContext } from 'svelte';
+  import { TEMPLATE_FIELDS_CONTEXT, templateCandidates, filterTemplateCandidates } from '$lib/canvas/upstream-fields';
   // Single-line variant of TemplatedTextarea. Same `{{` -> dropdown UX,
   // wrapped around an <input type="text">. Used for short templated
   // fields like URLs and output paths.
@@ -41,22 +43,11 @@
     return { partial: between, openIdx };
   }
 
-  const filtered = $derived.by(() => {
-    if (partial === null) return [] as string[];
-    const fields = upstreamFields ?? [];
-    if (fields.length === 0) return [];
-    const needle = partial.trim().toLowerCase();
-    const stripped = needle.startsWith('input.') ? needle.slice('input.'.length) : needle;
-    const matches: string[] = [];
-    for (const f of fields) {
-      const lower = f.toLowerCase();
-      if (!stripped || lower.includes(stripped)) {
-        matches.push(f);
-        if (matches.length >= 8) break;
-      }
-    }
-    return matches;
-  });
+  // Bare run-data paths get their `input.` prefix; the canvas page adds each
+  // upstream node (`nodes.<slug>.*`) and the trigger through context.
+  const ctxFields = getContext<(() => string[]) | undefined>(TEMPLATE_FIELDS_CONTEXT);
+  const candidates = $derived(templateCandidates(upstreamFields ?? [], ctxFields?.() ?? []));
+  const filtered = $derived(partial === null ? [] : filterTemplateCandidates(candidates, partial));
 
   $effect(() => {
     if (highlight >= filtered.length) highlight = 0;
@@ -73,7 +64,7 @@
     const next = inp.value;
     caret = inp.selectionStart ?? next.length;
     onChange(next);
-    if ((upstreamFields ?? []).length === 0) {
+    if (candidates.length === 0) {
       close();
       return;
     }
@@ -127,7 +118,7 @@
   function handleSelectionChange(e: Event) {
     const inp = e.currentTarget as HTMLInputElement;
     caret = inp.selectionStart ?? caret;
-    if ((upstreamFields ?? []).length === 0) return;
+    if (candidates.length === 0) return;
     const found = findActivePartial(inp.value, caret);
     if (!found) {
       close();

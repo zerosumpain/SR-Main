@@ -91,6 +91,7 @@ describe('the daily-spend-summary canvas as it was broken', () => {
     expect(hit.message).toContain('Get accounts');
     expect(hit.message).toContain('Get cards');
     expect(hit.message).toContain('transform');
+    expect(hit.message).toContain('{{nodes.get-accounts.api}}');
     // The trap that cost real time: reaching for a merge node, which collapses
     // identically. The message has to say so.
     expect(hit.message).toContain('merge');

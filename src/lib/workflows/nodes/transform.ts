@@ -90,6 +90,7 @@ export const transformExecutor: NodeExecutor = {
 };
 
 export const transformDef: NodeDefinition = {
+  rawConfigKeys: ['expression'],
   type: 'transform',
   label: 'Transform',
   category: 'core',

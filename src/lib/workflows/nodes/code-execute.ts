@@ -1,4 +1,5 @@
 import type { NodeExecutor, NodeResult, ExecutionContext, JsonSchema } from '../types';
+import { withBranches } from '../engine-node-runner';
 import { ensureContainerRunning, execInContainer, writeFileInContainer } from '$lib/jkai/sandbox';
 import { loadKeys } from '$lib/llm/keys';
 import { getOpenRouterApiKey } from '$lib/server/models/settings';
@@ -50,7 +51,7 @@ export const codeExecuteExecutor: NodeExecutor = {
     await ensureContainerRunning();
 
     const sandboxEnv = await collectSandboxEnv();
-    const inputJson = JSON.stringify(input);
+    const inputJson = JSON.stringify(withBranches(input));
     let wrappedCode: string;
     let filename: string;
 

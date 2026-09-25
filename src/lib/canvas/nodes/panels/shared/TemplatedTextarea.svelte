@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { getContext } from 'svelte';
+  import { TEMPLATE_FIELDS_CONTEXT, templateCandidates, filterTemplateCandidates } from '$lib/canvas/upstream-fields';
   // A drop-in replacement for <textarea> that surfaces a mention-style
   // autocomplete dropdown of upstream field paths whenever the user types
   // `{{`. The user picks a field and we insert it (plus the matching `}}`)
@@ -83,25 +85,11 @@
     return { partial: between, openIdx };
   }
 
-  const filtered = $derived.by(() => {
-    if (partial === null) return [] as string[];
-    const fields = upstreamFields ?? [];
-    if (fields.length === 0) return [];
-    const needle = partial.trim().toLowerCase();
-    // Strip a leading `input.` so users searching for `query` still match
-    // `input.query` (the canonical form). The inserted text always uses
-    // the field path as stored in `upstreamFields`.
-    const stripped = needle.startsWith('input.') ? needle.slice('input.'.length) : needle;
-    const matches: string[] = [];
-    for (const f of fields) {
-      const lower = f.toLowerCase();
-      if (!stripped || lower.includes(stripped)) {
-        matches.push(f);
-        if (matches.length >= 8) break;
-      }
-    }
-    return matches;
-  });
+  // Bare run-data paths get their `input.` prefix; the canvas page adds each
+  // upstream node (`nodes.<slug>.*`) and the trigger through context.
+  const ctxFields = getContext<(() => string[]) | undefined>(TEMPLATE_FIELDS_CONTEXT);
+  const candidates = $derived(templateCandidates(upstreamFields ?? [], ctxFields?.() ?? []));
+  const filtered = $derived(partial === null ? [] : filterTemplateCandidates(candidates, partial));
 
   // Keep `highlight` valid as the filter list shrinks/grows.
   $effect(() => {
@@ -127,7 +115,7 @@
     const next = ta.value;
     caret = ta.selectionStart ?? next.length;
     onChange(next);
-    if ((upstreamFields ?? []).length === 0) {
+    if (candidates.length === 0) {
       close();
       return;
     }
@@ -193,7 +181,7 @@
     // popup either re-anchors or dismisses.
     const ta = e.currentTarget as HTMLTextAreaElement;
     caret = ta.selectionStart ?? caret;
-    if ((upstreamFields ?? []).length === 0) return;
+    if (candidates.length === 0) return;
     const found = findActivePartial(ta.value, caret);
     if (!found) {
       close();

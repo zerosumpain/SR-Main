@@ -6,6 +6,7 @@ import { workflowFiles, type WorkflowFilePermissions } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { readBuffer, saveBuffer, newDiskPath } from '$lib/file-store/storage';
 import { extractText, synthesize, ExtractError, type SynthesizeFormat, type SynthesizeSource } from '$lib/jkai/extract';
+import { getPath as resolvePath } from '../expressions';
 
 export { fileExtractDef } from './file-extract.def';
 
@@ -17,16 +18,6 @@ function permissionsFor(raw: unknown): WorkflowFilePermissions {
     append: !!p.append,
     delete: !!p.delete,
   };
-}
-
-function resolvePath(obj: Record<string, unknown>, path: string): unknown {
-  const parts = path.split('.');
-  let current: unknown = obj;
-  for (const part of parts) {
-    if (current === null || current === undefined || typeof current !== 'object') return undefined;
-    current = (current as Record<string, unknown>)[part];
-  }
-  return current;
 }
 
 function coerceContent(raw: unknown, source: SynthesizeSource): string | Buffer {

@@ -1,12 +1,10 @@
 import type { NodeExecutor, NodeResult, JsonSchema } from '../types';
 import { resolveLLMClient } from './llm-helpers';
+import { getPath } from '../expressions';
 
 export { stealthScrapeLlmDef } from './stealth-scrape-llm.def';
 
-function getByPath(obj: any, path: string): any {
-  const parts = path.replace(/\[(\d+)\]/g, '.$1').split('.').filter(Boolean);
-  return parts.reduce((acc, k) => (acc == null ? acc : acc[k]), obj);
-}
+const getByPath = (obj: unknown, path: string): any => (path ? getPath(obj, path) : obj);
 
 async function extractOne(
   client: any,

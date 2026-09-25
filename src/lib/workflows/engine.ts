@@ -30,15 +30,11 @@ import {
 import { db } from '$lib/db';
 import { nodeExecutions } from '$lib/db/schema';
 import { and, eq } from 'drizzle-orm';
-import { mergeUpstreamInput } from './engine-node-runner';
+import { mergeUpstreamInput, resolveNodeConfig } from './engine-node-runner';
 import { commitDeferredDedupeRecords } from './nodes/dedupe';
 import { loadStoreSnapshot } from './nodes/data-store';
 import { notifyRunOutcome } from './run-notifications';
-import {
-  resolveStateTemplatesDeep,
-  scanUnknownTemplateVars,
-  workflowUsesStateTemplates,
-} from './state-templates';
+import { workflowUsesStateTemplates } from './expressions';
 
 /**
  * Module-level run registry (shared across the singleton engine instance).
@@ -628,17 +624,15 @@ export class WorkflowEngine {
           const timeoutMs = nodeTimeoutMs(nodeDef.type, nodeDef.config?._timeoutMs);
           console.log(`[engine] node.start run=${runId} node=${nodeId} type=${nodeDef.type} timeout=${Math.round(timeoutMs / 1000)}s`);
 
-          // Engine-level template pre-resolution: {{state.KEY}} / {{today}} /
-          // {{now}} are substituted into a per-node config COPY (nodeDef.config
-          // is never mutated). {{input.*}} is intentionally left for the
-          // executor. Then scan the RESOLVED copy for {{...}} tokens that still
-          // won't substitute (missing input field, unknown state key, unknown
-          // namespace) and surface them as a non-fatal node_warning + _warnings.
-          const { config: resolvedConfig } = resolveStateTemplatesDeep(nodeDef.config, {
-            store: storeSnapshot,
-            now: new Date(),
-          });
-          const configWarnings = scanUnknownTemplateVars(resolvedConfig, mergedInput);
+          // Engine-level template resolution (expressions.ts): every {{...}} in
+          // our namespaces is resolved ONCE into a per-node config COPY
+          // (nodeDef.config is never mutated); unresolvable references become ''
+          // and a non-fatal node_warning + _warnings.
+          const resolveCfg = (cfg: Record<string, unknown>) =>
+            resolveNodeConfig(cfg, this.registry.getDefinition(nodeDef.type), mergedInput, {
+              graph, nodeOutputs, trigger: initialInput, store: storeSnapshot,
+            });
+          const { config: resolvedConfig, warnings: configWarnings } = resolveCfg(nodeDef.config);
           if (configWarnings.length > 0) {
             emit('node_warning', nodeId, { warnings: configWarnings });
           }
@@ -893,10 +887,7 @@ export class WorkflowEngine {
                 emit('node_started', nodeId);
                 try {
                   // Re-apply engine template resolution to the healed config.
-                  const { config: resolvedRetryConfig } = resolveStateTemplatesDeep(currentConfig, {
-                    store: storeSnapshot,
-                    now: new Date(),
-                  });
+                  const { config: resolvedRetryConfig } = resolveCfg(currentConfig);
                   const retryResult: NodeResult = await withNodeTimeout(
                     nodeId, nodeDef.type, timeoutMs, nodeController,
                     () => executionContext.run(execCtx, () =>

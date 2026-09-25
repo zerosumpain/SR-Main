@@ -75,6 +75,8 @@ export function declaredOutputKeys(
   return null;
 }
 
+import { nodeSlug } from './expressions';
+
 function describe(nodeLabel: string, keys: string[], sources: Array<{ label: string }>): string {
   const keyList = keys.map((k) => `"${k}"`).join(', ');
   const srcList = sources.map((s) => `"${s.label}"`).join(' and ');
@@ -82,9 +84,9 @@ function describe(nodeLabel: string, keys: string[], sources: Array<{ label: str
     `"${nodeLabel}" receives ${keyList} from more than one upstream node (${srcList}). ` +
     `Inputs are merged flat, so whichever finishes last overwrites the others and that data is ` +
     `lost before this node runs. Adding a "merge" node does not help — it merges the same way. ` +
-    `Put a small transform on each branch first to give it its own key ` +
-    `(e.g. \`return { accounts: input.json.results };\` on one and ` +
-    `\`return { cards: input.json.results };\` on the other), then read those keys here.`
+    `Reference {{nodes.<id>.${keys[0]}}} instead (e.g. {{nodes.${nodeSlug(sources[0].label)}.${keys[0]}}}) — ` +
+    `each upstream's output stays readable on its own there (input.$from.<id> in code) — ` +
+    `or put a small transform on each branch to give it its own key.`
   );
 }
 

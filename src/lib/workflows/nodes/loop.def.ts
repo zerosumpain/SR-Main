@@ -1,6 +1,7 @@
 import type { NodeDefinition } from '../types';
 
 export const loopDef: NodeDefinition = {
+  rawConfigKeys: ['expression'],
   type: 'loop',
   label: 'Loop',
   category: 'control',
