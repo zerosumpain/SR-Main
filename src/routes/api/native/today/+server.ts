@@ -6,13 +6,14 @@ import { withDevice } from '$lib/server/native-handler';
 import { getNativeHealthSummary } from '$lib/server/native-health';
 import { pendingForDevice, recentEvents } from '$lib/server/notify';
 import { loadNewsDesk } from '$lib/news/desk';
+import { connectorAttention } from '$lib/connectors/watch-store';
 
 /**
  * GET /api/native/today — the first screen, in one request.
  *
- * Four separate calls would be the tidy decomposition and the wrong one. This
+ * Five separate calls would be the tidy decomposition and the wrong one. This
  * is the screen the app opens on, over whatever the phone is connected to, and
- * four round trips on a train is four chances to show a spinner. They are
+ * five round trips on a train is five chances to show a spinner. They are
  * settled in parallel and each failure degrades its own card rather than the
  * screen: Health being down leaves three cards and a note, not an error page.
  *
@@ -23,7 +24,7 @@ import { loadNewsDesk } from '$lib/news/desk';
 export const GET: RequestHandler = withDevice(async ({ url }, identity) => {
   const fresh = url.searchParams.get('fresh') === '1';
 
-  const [healthResult, alertsResult, newsResult, threadResult] = await Promise.allSettled([
+  const [healthResult, alertsResult, newsResult, threadResult, connectionsResult] = await Promise.allSettled([
     getNativeHealthSummary({ fresh }),
     Promise.all([pendingForDevice(5), recentEvents(8)]),
     // `force: false` — the Today card takes whatever the desk last fetched.
@@ -39,12 +40,15 @@ export const GET: RequestHandler = withDevice(async ({ url }, identity) => {
       .from(conversations)
       .orderBy(desc(conversations.updatedAt))
       .limit(1),
+    // The watcher's stored answer — the same set /api/native/connections lists.
+    connectorAttention(),
   ]);
 
   const health = healthResult.status === 'fulfilled' ? healthResult.value : null;
   const alerts = alertsResult.status === 'fulfilled' ? alertsResult.value : null;
   const news = newsResult.status === 'fulfilled' ? newsResult.value : null;
   const thread = threadResult.status === 'fulfilled' ? threadResult.value[0] : undefined;
+  const connections = connectionsResult.status === 'fulfilled' ? connectionsResult.value : null;
 
   if (healthResult.status === 'rejected') {
     console.error('[native] today: health unavailable', healthResult.reason);
@@ -89,6 +93,9 @@ export const GET: RequestHandler = withDevice(async ({ url }, identity) => {
             heat: story.heat,
           })),
         }
+      : null,
+    connections: connections
+      ? { needsAttention: connections.items.length, items: connections.items.slice(0, 3) }
       : null,
     lastThread: thread
       ? { id: thread.id, title: thread.title, updatedAt: thread.updatedAt.toISOString() }

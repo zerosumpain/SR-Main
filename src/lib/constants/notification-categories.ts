@@ -95,6 +95,18 @@ export const NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
     minIntervalSeconds: 60 * 60,
   },
   {
+    id: 'connections',
+    label: 'Connections that need you',
+    description: 'An account that needs signing in again, or a service that stopped working.',
+    whatsapp: true,
+    native: true,
+    // The reminder cadence. The connector watcher checks every 30 minutes and
+    // tells you on the transition; while it stays broken, this floor — scoped
+    // per connector by the dedupe key — is what makes the next message a
+    // twice-daily reminder rather than a half-hourly nag.
+    minIntervalSeconds: 12 * 60 * 60,
+  },
+  {
     id: 'system',
     label: 'Everything else',
     description: 'Anything that has not been given a category of its own yet.',

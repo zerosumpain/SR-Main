@@ -50,7 +50,8 @@ export const daydreamDoctor: ActivityHandler = {
   defaultEnabled: true,
   // 05:00–05:55 Europe/London — the slot the croner used, and still the free
   // one: 02:30 improve, 04:00 model-routing, 04:15 intel, 06:30 briefing,
-  // 06:45 connector alert. The run is capped at its own `maxWallMs`, so a late
+  // (the 06:45 connector alert is gone — the connector watcher polls every
+  // 30 minutes now). The run is capped at its own `maxWallMs`, so a late
   // start inside this window still lands well before the briefing engine.
   defaultActiveHours: { start: '05:00', end: '05:55', tz: 'Europe/London' },
   defaultConfig: DEFAULTS as unknown as Record<string, unknown>,

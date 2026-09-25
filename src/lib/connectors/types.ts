@@ -93,9 +93,49 @@ export function sortReports(reports: ConnectorReport[]): ConnectorReport[] {
   );
 }
 
+/**
+ * Does this connector need the owner to do something?
+ *
+ * THE predicate. The connector watcher alerts on it, the phone's
+ * `/api/native/connections` lists it, and the homepage banner names everything
+ * the watcher holds under it — so the three can never disagree about what is
+ * waiting on you.
+ *
+ * `broken` only. `degraded` shows on the dashboard but never pages anyone (an
+ * alert that fires for everything gets ignored, which is how Gmail stayed
+ * `auth_expired` for days); `unconfigured` was never set up, so there is
+ * nothing to re-authorise; `dormant` is parked on purpose.
+ */
+export function needsOwner(report: Pick<ConnectorReport, 'status'>): boolean {
+  return report.status === 'broken';
+}
+
 /** Connectors that are broken — the set worth waking someone for. */
 export function brokenOf(reports: ConnectorReport[]): ConnectorReport[] {
-  return reports.filter((r) => r.status === 'broken');
+  return reports.filter(needsOwner);
+}
+
+/** Network noise, which must not read as a refused grant. */
+const TRANSIENT = /\b(ETIMEDOUT|ECONNRE\w*|ENOTFOUND|EAI_AGAIN|timed? ?out|unreachable|fetch failed|socket hang up)\b/i;
+/** What a provider says when it has stopped accepting the grant. */
+const REFUSED_GRANT = /invalid_grant|auth_expired|unauthori[sz]ed|\b401\b|expired or revoked|token refresh failed: 400/i;
+/** What a probe tells you to do when the fix is a fresh consent. */
+const RECONSENT_HINT = /re-?authoris|re-?authoriz|re-grant/i;
+
+/**
+ * Is this broken connector broken because its authorisation lapsed — the fix
+ * being "sign in again" — rather than because something is down?
+ *
+ * Decides one word of the alert: "needs re-authorising" versus "is down". A
+ * probe whose hint says reconnecting will NOT help (Whoop's inactive API
+ * application) does not match, and neither does a timeout dressed in a
+ * re-authorise hint — Gmail's probe offers the same hint for every failure.
+ */
+export function isAuthLapse(report: Pick<ConnectorReport, 'status' | 'detail' | 'fixHint'>): boolean {
+  if (!needsOwner(report)) return false;
+  if (REFUSED_GRANT.test(report.detail)) return true;
+  if (TRANSIENT.test(report.detail)) return false;
+  return RECONSENT_HINT.test(report.fixHint ?? '');
 }
 
 /**
