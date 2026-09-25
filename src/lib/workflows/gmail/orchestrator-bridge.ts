@@ -13,6 +13,7 @@ import type { WorkflowDefinition } from '$lib/workflows/types';
 import type { GmailMessageReceivedEvent, GmailAuthExpiredEvent } from '$lib/workflows/types';
 import { notifySubscribers } from '$lib/workflows/chat/followup-queue';
 import { gmailEventBus } from './watcher';
+import { finaliseRun, failRun } from '$lib/workflows/run-finalise';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -164,24 +165,13 @@ async function dispatchWorkflow(
     return;
   }
 
+  const runStartedAt = Date.now();
   engine
     .execute(definition, runId, initialInput, undefined, workflowId)
-    .then(async (result) => {
-      await db
-        .update(workflowRuns)
-        .set({ status: result.status, completedAt: new Date(), error: result.error ?? null })
-        .where(eq(workflowRuns.id, runId));
-    })
-    .catch(async (err) => {
+    .then((result) => finaliseRun({ workflowId, runId, result, runStartedAt, label: 'gmail-bridge' }))
+    .catch((err) => {
       console.error(`[gmail-bridge] workflow execution error (runId=${runId}):`, err instanceof Error ? err.message : err);
-      try {
-        await db
-          .update(workflowRuns)
-          .set({ status: 'failed', completedAt: new Date(), error: err instanceof Error ? err.message : String(err) })
-          .where(eq(workflowRuns.id, runId));
-      } catch {
-        /* swallow */
-      }
+      return failRun({ workflowId, runId, error: err, label: 'gmail-bridge' });
     });
 }
 

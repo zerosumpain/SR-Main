@@ -8,6 +8,7 @@ import { isDisplayOnlyType } from '$lib/workflows/types';
 import { emitObs } from '$lib/workflows/observability-bus';
 import { cronTimezone } from '$lib/workflows/cron-timezone';
 import { runsService } from './service-role';
+import { finaliseRun } from './run-finalise';
 
 // Tracks active Cron instances keyed by schedule ID
 const activeJobs = new Map<string, Cron>();
@@ -348,59 +349,10 @@ async function runScheduledWorkflow(workflowId: string, scheduleId: string): Pro
 
     const result = await engine.execute(definition, runId, {}, undefined, workflowId);
 
-    const completedAt = new Date();
-    await db
-      .update(workflowRuns)
-      .set({ status: result.status, completedAt, error: result.error ?? null })
-      .where(eq(workflowRuns.id, runId));
-
-    if (result.status === 'failed') {
-      emitObs('run.failed', {
-        workflowId,
-        runId,
-        error: result.error ?? 'run failed',
-        completedAt: completedAt.toISOString(),
-      });
-    } else if (result.status !== 'awaiting_human') {
-      emitObs('run.completed', {
-        workflowId,
-        runId,
-        status: result.status as 'completed' | 'completed_with_errors',
-        completedAt: completedAt.toISOString(),
-        durationMs: completedAt.getTime() - runStartedAt,
-      });
-    }
-
-    // Update node execution records with inputs/outputs/status
-    for (const [nodeId, output] of result.nodeOutputs) {
-      const inputData = result.nodeInputs.get(nodeId);
-      const usage = result.nodeUsage.get(nodeId);
-      await db
-        .update(nodeExecutions)
-        .set({
-          status: 'completed',
-          startedAt: result.nodeStartTimes.get(nodeId) ?? undefined,
-          inputData: inputData ?? null,
-          outputData: output,
-          completedAt: new Date(),
-          ...(usage ?? {}),
-        })
-        .where(and(eq(nodeExecutions.runId, runId), eq(nodeExecutions.nodeId, nodeId)));
-    }
-
-    for (const [nodeId, error] of result.nodeErrors) {
-      const usage = result.nodeUsage.get(nodeId);
-      await db
-        .update(nodeExecutions)
-        .set({
-          status: 'failed',
-          startedAt: result.nodeStartTimes.get(nodeId) ?? undefined,
-          error,
-          completedAt: new Date(),
-          ...(usage ?? {}),
-        })
-        .where(and(eq(nodeExecutions.runId, runId), eq(nodeExecutions.nodeId, nodeId)));
-    }
+    // Shared finaliser: run status (and pausedAtNodeId, so a scheduled run that
+    // hits an approval can be resumed), node rows, fix proposals, obs, and the
+    // workflow_completed a scheduled run never used to emit.
+    await finaliseRun({ workflowId, runId, result, runStartedAt, label: 'scheduler' });
 
     // Update lastRunAt/nextRunAt on the schedule
     const job = activeJobs.get(scheduleId);

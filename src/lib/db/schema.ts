@@ -2096,6 +2096,14 @@ export const nodeExecutions = pgTable('node_executions', {
   completedAt: timestamp('completed_at', { withTimezone: true }),
   error: text('error'),
   logs: jsonb('logs').default(sql`'[]'::jsonb`),
+  /**
+   * The output handle a branching node selected (conditional `true`, approval
+   * `rejected`, an on-error `error` route…). Null for a node that did not
+   * branch. engine-resume replays these for every node it seeds, because a
+   * seeded node never executes again and so could not otherwise re-apply its
+   * routing — a resumed approval used to run BOTH of its branches.
+   */
+  selectedHandle: text('selected_handle'),
   // LLM cost / token telemetry — populated by the gateway wrapper when a
   // node makes one or more LLM calls. Sum across calls within a single
   // node execution; per-call breakdown is not retained. Nullable: non-LLM

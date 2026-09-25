@@ -30,8 +30,31 @@ function decisionResult(input: Record<string, unknown>, approved: boolean): Node
   };
 }
 
+/** A resolution's decision: `formValues.approved` (what the resolve form and the
+ *  WhatsApp reply both send), else a top-level `approved`. Anything that is not
+ *  an explicit yes is a no — an approval gate must fail closed. */
+function resolvedDecision(resolved: Record<string, unknown>): boolean {
+  const form = resolved.formValues as Record<string, unknown> | undefined;
+  const raw = form && 'approved' in form ? form.approved : resolved.approved;
+  return raw === true || raw === 'true';
+}
+
 export const approvalExecutor: NodeExecutor = {
   type: 'approval',
+
+  /**
+   * The human half of the gate. The run paused here, so this node's output is
+   * built from the resolution rather than from execute(): the input passes
+   * through exactly as on the automated path, with the decision attached, and
+   * the matching handle is selected so ONLY that branch runs on resume.
+   */
+  resumeResult(resolved, input) {
+    const approved = resolvedDecision(resolved);
+    return {
+      output: { ...input, ...resolved, approved },
+      selectedHandle: approved ? 'approved' : 'rejected',
+    };
+  },
 
   async execute(
     input: Record<string, unknown>,
