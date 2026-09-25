@@ -22,9 +22,14 @@ export interface ModelCapabilities {
 const ALL: ModelCapabilities = { image: true, audio: true, video: true, pdf: true, documentText: true };
 const IMAGE_ONLY: ModelCapabilities = { image: true, audio: false, video: false, pdf: false, documentText: true };
 const IMAGE_PDF: ModelCapabilities = { image: true, audio: false, video: false, pdf: true, documentText: true };
+// Images only, not PDFs. `input_file` read a PDF on 2026-09-25 at 22:18, then
+// failed with a 401 ("Incorrect API key provided: sk-svcac…", OpenAI's own key)
+// for over an hour after images had recovered. A thread re-sends its files every
+// turn, so one PDF sent as a part would fail the whole thread for as long as
+// that path is down. Text extraction reads a PDF well and does not depend on it.
 const CODEX_CAPS: ModelCapabilities = {
-  ...IMAGE_PDF,
-  nativeMimes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'],
+  ...IMAGE_ONLY,
+  nativeMimes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
 };
 const TEXT_ONLY: ModelCapabilities = { image: false, audio: false, video: false, pdf: false, documentText: true };
 
@@ -167,7 +172,8 @@ export function clearCapabilityCache(): void {
 }
 
 export function getModelCapabilities(ctx: ModelContext): ModelCapabilities {
-  // Codex reads images and PDFs, through the bridge's Responses transport.
+  // Codex reads images, through the bridge's Responses transport (PDFs too,
+  // but they are extracted to text instead — see CODEX_CAPS).
   //
   // This said TEXT_ONLY until 2026-09-25, and it was true when written: the
   // SDK transport took images only as `local_image` file PATHS, and on

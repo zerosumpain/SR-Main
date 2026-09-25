@@ -96,13 +96,13 @@ describe('coerceModelContext keeps codex picks intact', () => {
 });
 
 describe('codex capabilities', () => {
-  it('reads images and PDFs, not audio or video', () => {
+  it('reads images, not PDFs, audio or video', () => {
     // Text-only until 2026-09-25, when the Responses transport started carrying
     // `input_image` and `input_file` (see capabilities.ts).
     const caps = getModelCapabilities({ provider: 'codex', modelId: 'codex/gpt-5.6-sol' });
-    expect(caps).toMatchObject({ image: true, audio: false, video: false, pdf: true, documentText: true });
-    // Only the types the endpoint takes travel as parts; HEIC and .docx are described first.
-    expect(caps.nativeMimes).toEqual(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf']);
+    expect(caps).toMatchObject({ image: true, audio: false, video: false, pdf: false, documentText: true });
+    // Only the image types the endpoint takes travel as parts; HEIC, PDF and .docx are read as text.
+    expect(caps.nativeMimes).toEqual(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
   });
 
   it('does tools and structured output and streaming; embeddings remain the gap', () => {

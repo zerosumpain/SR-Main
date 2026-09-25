@@ -37,11 +37,13 @@ Rules worth knowing before touching this:
   deploy: set `CODEX_BRIDGE_TRANSPORT=sdk` and restart the service.
 - **Codex still costs a round trip per tool call**, but ~1.4s, not ~10s. A long
   builder chain is no longer the crawl it was.
-- **Codex reads images and PDFs, not audio or video** (since 2026-09-25: the
-  Responses transport maps `image_url` → `input_image` and `file` → `input_file`;
-  the `sdk` rollback transport still drops them). Anything that builds its own
-  content parts must check `getModelCapabilities()` first. Only jpeg/png/webp/gif
-  and PDF travel natively (`nativeMimes`); HEIC and Office files are described first.
+- **Codex reads images, not PDFs, audio or video** (since 2026-09-25: the
+  Responses transport maps `image_url` → `input_image`; the `sdk` rollback
+  transport still drops them). Anything that builds its own content parts must
+  check `getModelCapabilities()` first. Only jpeg/png/webp/gif travel natively
+  (`nativeMimes`); HEIC is described first. PDFs are extracted to text on
+  purpose: `input_file` works, but failed with a 401 for over an hour while
+  images worked, and a thread re-sends its files every turn.
   **`/jkai` chat asks a different question**: `getChatInputCapabilities(ctx)`,
   which reports what the CHAT can accept rather than what the model can. Images,
   PDFs and audio are pre-analysed into text (`$lib/jkai/media/preanalyse`) when
