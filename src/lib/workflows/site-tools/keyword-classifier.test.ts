@@ -66,6 +66,8 @@ describe('inferToolsets', () => {
       'show me my voice history from this week',
       'which utterances did Alexa fail to answer?',
       'what do the kids ask the echos about at bedtime and what time is it busiest in the house',
+      'what alarms are set for tomorrow?',
+      'what has Rory been listening to this week',
     ])('activates on %j', (msg) => {
       expect(inferToolsets(msg)).toContain('alexa');
     });

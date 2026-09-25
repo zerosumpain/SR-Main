@@ -8,6 +8,10 @@
  * "nothing found" before the first row means not yet recorded, not silence —
  * every answer carries the log's own coverage to make that plain.
  *
+ * A third, `alexa_home_signals`, reads `alexa_signals` (filled by
+ * `alexa-signals-sync`): room temperature, light and motion, pending alarms,
+ * timers and reminders, and what the Echos played.
+ *
  * This is the whole family's speech, children included. The tools answer the
  * owner's questions; they never send it anywhere.
  */
@@ -138,5 +142,18 @@ register({
         caveats: CAVEATS,
       },
     };
+  },
+});
+
+register({
+  name: 'alexa_home_signals',
+  description:
+    'What the Echos sense and hold, beyond speech: the latest room temperature, light level and motion per device, hourly temperature over the window, when motion was last seen, alarms/timers/reminders pending right now and the ones that came up in the window, and what the Echos played (recent tracks, top artists, per device). Use for "how warm is the kitchen", "has there been movement in X", "what alarms are set", "what have the kids been listening to". Defaults to the last 7 days.',
+  parameters: { type: 'object', properties: { days: { type: 'number', description: 'Window length ending now, 1–366. Default 7.' } }, required: [] },
+  category: CATEGORY,
+  toolset: TOOLSET,
+  handler: async (args) => {
+    const { houseToolAnswer } = await import('$lib/alexa/store.server');
+    return { success: true, data: await houseToolAnswer(daysArg(args.days, 7)) };
   },
 });
