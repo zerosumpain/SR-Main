@@ -33,6 +33,7 @@ import { isUserActive } from '$lib/heartbeat/idle';
 import { SETTINGS_ENABLED_KEY, errMsg, type RunStatus } from '$lib/selfimprove/types';
 import { liveBuildLanes } from '../build-lanes';
 import type { ActivityHandler } from '../types';
+import { runRef } from '$lib/daydream/run-ref';
 
 const NAME = 'daydream-improve';
 
@@ -146,6 +147,8 @@ export const daydreamImprove: ActivityHandler = {
       costUsd: data.costUsd,
       details: {
         runId,
+        // Which ledger `runId` belongs to — read by `$lib/daydream/run-ref`.
+        runRef: runRef('improvement', runId),
         status: data.status,
         phases: data.phases,
         llmCalls: data.llmCalls,

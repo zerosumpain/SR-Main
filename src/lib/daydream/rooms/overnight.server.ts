@@ -18,6 +18,7 @@ import { and, desc, gte, like, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { heartbeatActions, heartbeatPulses } from '$lib/db/schema';
 import { errMsg } from '$lib/daydream/types';
+import { runRefHref } from '$lib/daydream/run-ref';
 
 /** One activity's turn in the window, folded from however many pulses it wrote. */
 export interface OvernightPass {
@@ -32,6 +33,12 @@ export interface OvernightPass {
   outcome: string;
   summary: string;
   costUsd: number;
+  /**
+   * The run record this pass produced (`improvement_runs` / `doctor_runs`),
+   * read from the pulse's `details.runRef`. Null for activities that keep no
+   * run record of their own.
+   */
+  href: string | null;
 }
 
 export interface Overnight {
@@ -98,6 +105,7 @@ export async function loadOvernight(windowHours = 6): Promise<Overnight> {
         summary: heartbeatPulses.summary,
         durationMs: heartbeatPulses.durationMs,
         costUsd: heartbeatPulses.costUsd,
+        details: heartbeatPulses.details,
       })
       .from(heartbeatPulses)
       .innerJoin(heartbeatActions, sql`${heartbeatActions.id} = ${heartbeatPulses.actionId}`)
@@ -120,11 +128,15 @@ export async function loadOvernight(windowHours = 6): Promise<Overnight> {
           outcome: r.outcome,
           summary: r.summary,
           costUsd: cost,
+          href: runRefHref(r.details, r.name),
         });
         continue;
       }
       prev.costUsd += cost;
       if (r.durationMs != null) prev.durationMs = r.durationMs;
+      // The run id arrives on the pulse that REPORTS the run, not the `fired`
+      // one that opened it, so take the latest pulse that names one.
+      prev.href = runRefHref(r.details, r.name) ?? prev.href;
       // Keep the first `at` (the pass started then) and the most informative
       // outcome. A later `fired` never overwrites an `ok` already recorded.
       if (r.outcome !== OPENING || prev.outcome === OPENING) {

@@ -48,7 +48,11 @@
       {#each night.passes as p (p.name)}
         <li class="nt-cell" class:dear={p.name === night.dearest} class:bad={p.outcome === 'error'}>
           <time class="nt-at" datetime={p.at}>{clock(p.at)}</time>
-          <p class="nt-name">{p.label}</p>
+          <!-- A pass that wrote a run record links to it: the pulse says a run
+               happened, the record says what each phase did. -->
+          <p class="nt-name">
+            {#if p.href}<a class="nt-link" href={p.href} title="Open this run's record">{p.label}</a>{:else}{p.label}{/if}
+          </p>
           <span class="nt-duration">{took(p.durationMs)}</span>
           <div class="nt-result"><span class="nt-outcome">{p.outcome}</span>
             {#if p.summary}<details><summary>Result</summary><p class="nt-fact">{p.summary}</p></details>{/if}
@@ -120,6 +124,14 @@
     text-transform: uppercase;
     color: var(--text-primary);
   }
+  .nt-link {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+  }
+  .nt-link:hover { color: var(--accent-ink); }
+  .nt-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .nt-fact {
     margin: 0;
     font-size: var(--fs-label);

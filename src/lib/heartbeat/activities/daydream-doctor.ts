@@ -5,6 +5,7 @@ import { runDoctorNow } from '$lib/workflowdoctor/run';
 import type { PhaseName, PhaseRecord } from '$lib/workflowdoctor/types';
 import { IDLE_WINDOW_MS, SETTINGS_ENABLED_KEY, errMsg } from '$lib/workflowdoctor/types';
 import type { ActivityHandler } from '../types';
+import { runRef } from '$lib/daydream/run-ref';
 
 const NAME = 'daydream-doctor';
 
@@ -113,6 +114,8 @@ export const daydreamDoctor: ActivityHandler = {
       costUsd: data.costUsd,
       details: {
         runId,
+        // Which ledger `runId` belongs to — read by `$lib/daydream/run-ref`.
+        runRef: runRef('doctor', runId),
         status: data.status,
         phases: data.phases,
         llmCalls: data.llmCalls,

@@ -100,3 +100,20 @@ paused `daydream-appetite` heartbeat row (P4b).
 | D7 | Think's counters when the loop throws | Keep partial counts / report zero | Zero rounds and tokens on that path | The loop returns totals, not a running tally. The `error` field is what that path reports; the ledger still has every call. | Yes |
 | D8 | Callers left alone | Adopt all / two | `workflows/nodes/llm-agent.ts` (owned by SR-Workflows in `docs/module-ownership.json`, would drift), `blog/assistant/runner.ts` (an async generator that streams; later), every single-shot caller | | Yes |
 | D9 | The activity-tag registry check | Callers wrap `withActivity` themselves / extend the check | Extend `workloads.test.ts` | Moving the literal into an option hid `'daydream'` from the scan that catches tag typos. The scan now also reads `activity: '…'` in any file calling `runToolLoop(`, and `tool-loop.ts` joins the documented dynamic-tag exceptions. No existing assertion changed. | Yes |
+
+### PR-F decisions
+
+The read-side run ledger. `heartbeat_pulses` stays the canonical "a scheduled
+run happened" row; each pulse from `daydream-improve` / `daydream-doctor` now
+names the run record it produced (`details.runRef = { kind, id }`, beside the
+`runId` it already carried), and the overnight timeline links each pass to it.
+Reader and type in `src/lib/daydream/run-ref.ts`.
+
+| # | Decision | Options | Chosen | Why | Reversible? |
+|---|---|---|---|---|---|
+| F1 | Where a run is recorded | Fold `improvement_runs`/`doctor_runs` into pulse details / new `runs` table / read-side link | Read-side link | Pulses are pruned at 14 days (`audit.ts`); run records are updated live per phase and polled by `/api/admin/improvement/runs`; a manual "Run now" writes no pulse; six readers would change. A `runs` table is a schema change, five writers and a backfill. The join already existed as `details.runId`. | Yes |
+| F2 | Where `RunRef` + the reader live | `$lib/heartbeat/types.ts` / `$lib/daydream/run-ref.ts` | `$lib/daydream/run-ref.ts` | The reader's consumer is `daydream/rooms/overnight.server.ts`. `heartbeat -> daydream` is an existing edge (25 imports); putting the reader in heartbeat adds `daydream -> heartbeat`, a new mutual pair the boundary gate rejects. The module imports nothing, so both sides use it. | Yes |
+| F3 | Pulses written before this PR | Ignore / infer | Infer the kind from the activity name (`daydream-improve` → improvement, `daydream-doctor` → doctor) when only `runId` is present | Every pulse in the 14-day window is that shape on deploy day. The fallback is dead weight after two weeks and harmless. | Yes |
+| F4 | What a link points at | A new run page / the existing ledgers | `/jkai/daydreams/improvement#run-<id>` and `/jkai/daydreams/doctor#run-<id>` | No per-run URL existed; each run is a row on its ledger. Both ledgers keep runs under a collapsed "Technical detail" toggle, so each page gained `id="run-<id>"` on the row and, on load and on `hashchange`, opens the toggle and the row the fragment names. `hashchange` because the timeline sits on the improvement page itself and a same-page hash link never remounts. A run no longer in the page's list (doctor shows 30) lands on the page top. | Yes |
+| F5 | Builds | Mirror a pulse per build / leave | Leave | Builds have their own scheduler and their own run row; there is no pulse to link from, and a mirror would be a second writer for the same fact. | Yes |
+| F6 | Which pulse of a pass carries the link | First / latest that names a run | Latest that names one | The `fired` pulse that opens a pass has no run id yet; the reporting pulse does. | Yes |
