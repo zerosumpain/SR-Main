@@ -494,7 +494,11 @@
     letter-spacing: 0.14em;
     text-transform: uppercase;
   }
+  /* A footer line is often a URL — one unbreakable token that, at 390px with
+     this tracking, ran 20px past the edge of /jkai/develop/improvement. */
   .ds-foot-strip p {
     margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 </style>
