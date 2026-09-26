@@ -36,7 +36,7 @@ vi.mock('$lib/db', () => {
         q._hit = mentions(cond, WA_CONV);
         return q;
       },
-      limit: () => (q._hit ? [{ id: WA_CONV, phone: '+440000000000' }] : []),
+      limit: () => (q._hit ? [{ id: WA_CONV, phone: '+440000000000', principalId: 'owner' }] : []),
     };
     // `upsertCallback` reads existing rows with .where().limit() too; an empty
     // result there means "insert", which is the path under test.

@@ -1,5 +1,5 @@
 import { db } from '$lib/db';
-import { orchestratorChats, heartbeatPulses } from '$lib/db/schema';
+import { orchestratorChats, heartbeatPulses, conversations } from '$lib/db/schema';
 import { and, desc, eq, gt, isNotNull, sql } from 'drizzle-orm';
 import { listChatJobs } from '$lib/workflows/chat/activity';
 import { runHeartbeatTurn, postHeartbeatNote } from '../llm';
@@ -143,9 +143,13 @@ export const chatContinuation: ActivityHandler = {
         createdAt: orchestratorChats.createdAt,
       })
       .from(orchestratorChats)
+      // The owner's threads only: a member's thread is never continued by a
+      // background turn that would run with the owner's tools and memory.
+      .innerJoin(conversations, eq(conversations.id, orchestratorChats.conversationId))
       .where(
         and(
           isNotNull(orchestratorChats.conversationId),
+          eq(conversations.principalId, 'owner'),
           gt(orchestratorChats.createdAt, new Date(now - 24 * 3600_000)),
         ),
       )

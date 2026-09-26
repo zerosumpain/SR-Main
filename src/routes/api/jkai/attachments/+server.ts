@@ -1,10 +1,13 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { storeChatUpload } from '$lib/jkai/media/upload';
+import { chatAccess, requireConversation } from '$lib/jkai/chat-access.server';
 
 const ALLOWED_SOURCES = new Set(['web', 'generated']);
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async (event) => {
+  const { request } = event;
+  const access = await chatAccess(event);
   const form = await request.formData();
   const conversationId = form.get('conversationId') as string | null;
   const sourceField = (form.get('source') as string | null) || 'web';
@@ -16,5 +19,10 @@ export const POST: RequestHandler = async ({ request }) => {
     ? (sourceField as 'web' | 'generated')
     : 'web';
 
-  return json(await storeChatUpload(form.get('file'), conversationId, source));
+  // A member uploads into their OWN thread only (404 for one they cannot read,
+  // 403 for one they can but may not post in), and the row is stamped theirs.
+  // The owner's path is unchanged: an upload may name a thread before it lands.
+  if (access.level !== 'owner' && conversationId) await requireConversation(event, conversationId, 'post');
+
+  return json(await storeChatUpload(form.get('file'), conversationId, source, access.own));
 };

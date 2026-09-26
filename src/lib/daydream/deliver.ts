@@ -374,15 +374,16 @@ export function feedbackLine(thoughtId: string): string {
   return `[Useful? Rate it](/jkai/daydreams/feed?rate=${thoughtId})`;
 }
 
-/** The conversation a chat note would land in — the most recently touched one.
- *  Null when there is none, which makes the chat channel simply unavailable
- *  rather than an error to report. */
+/** The conversation a chat note would land in — the owner's most recently
+ *  touched one (never a member's thread). Null when there is none, which makes
+ *  the chat channel simply unavailable rather than an error to report. */
 export async function latestConversationId(): Promise<string | null> {
   try {
     const { conversations } = await import('$lib/db/schema');
     const [row] = await db
       .select({ id: conversations.id })
       .from(conversations)
+      .where(eq(conversations.principalId, 'owner'))
       .orderBy(desc(conversations.updatedAt))
       .limit(1);
     return row?.id ?? null;

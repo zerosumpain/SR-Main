@@ -1,5 +1,5 @@
 import type { RequestHandler } from './$types';
-import { desc } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { conversations } from '$lib/db/schema';
 import { withDevice } from '$lib/server/native-handler';
@@ -39,6 +39,8 @@ export const GET: RequestHandler = withDevice(async ({ url }, identity) => {
         updatedAt: conversations.updatedAt,
       })
       .from(conversations)
+      // The owner's latest thread — never a member's.
+      .where(eq(conversations.principalId, 'owner'))
       .orderBy(desc(conversations.updatedAt))
       .limit(1),
     // The watcher's stored answer — the same set /api/native/connections lists.

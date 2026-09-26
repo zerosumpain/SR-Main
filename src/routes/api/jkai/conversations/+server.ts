@@ -8,15 +8,20 @@ import { resolveChatTurnModel } from '$lib/server/models/workload-settings';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
 import { modelSupportsThinking } from '$lib/server/models/capabilities';
 import type { ModelContext } from '$lib/server/models/types';
+import { chatAccess, conversationListScope } from '$lib/jkai/chat-access.server';
 
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async (event) => {
+	const { url } = event;
+	// The owner's hub lists the owner's own threads, as it always has; a member
+	// lists what they may read.
+	const scope = conversationListScope(await chatAccess(event));
 	const limit = Number(url.searchParams.get('limit') ?? undefined);
 	// A search reaches the whole archive and answers in one un-paged set, so it
 	// short-circuits the cursor path entirely: a cursor describes a position in
 	// the recency ordering, which the relevance ordering does not share.
 	const q = (url.searchParams.get('q') ?? '').trim();
 	if (q) {
-		return json(await searchConversationList({ q, limit: Number.isFinite(limit) ? limit : undefined }));
+		return json(await searchConversationList({ q, limit: Number.isFinite(limit) ? limit : undefined, scope }));
 	}
 	const beforeRaw = url.searchParams.get('before');
 	const beforeId = url.searchParams.get('beforeId');
@@ -34,13 +39,24 @@ export const GET: RequestHandler = async ({ url }) => {
 		cursor: before && beforeId && pinnedRaw
 			? { before, beforeId, pinned: pinnedRaw === '1' }
 			: undefined,
+		scope,
 	});
 	return json(page);
 };
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async (event) => {
+	const { request } = event;
+	const access = await chatAccess(event);
+	const isOwner = access.level === 'owner';
 	const body = await request.json();
-	const { title, source, whatsappPhoneNumber, modelProvider, modelId } = body;
+	const { title } = body;
+	// A member's thread is a plain web thread on the site's chat model: no model
+	// pick (the owner's spend), no WhatsApp binding (the owner's number), and
+	// no thinking level (the owner's last pick).
+	const source = isOwner ? body.source : 'web';
+	const whatsappPhoneNumber = isOwner ? body.whatsappPhoneNumber : null;
+	const modelProvider = isOwner ? body.modelProvider : undefined;
+	const modelId = isOwner ? body.modelId : undefined;
 
 	// Resolve model: body override > the `chat` workload (which itself follows
 	// the site default until pinned — see $lib/models/workloads).
@@ -63,7 +79,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	// the "default" is simply the last pick, not a separate setting to maintain.
 	// Null when nothing has been chosen yet, which sends no reasoning field at
 	// all and leaves the provider's own default in charge.
-	const thinkingLevel = await resolveDefaultThinkingLevel();
+	const thinkingLevel = isOwner ? await resolveDefaultThinkingLevel() : null;
 
 	const [conv] = await db
 		.insert(conversations)
@@ -76,6 +92,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			modelPinnedByUser: pinnedByUser,
 			thinkingLevel,
 			priceSnapshot,
+			principalId: access.own,
 		})
 		.returning();
 

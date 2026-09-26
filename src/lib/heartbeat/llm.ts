@@ -8,6 +8,7 @@ import { coerceModelContext } from '$lib/constants/default-models';
 import type { ModelContext } from '$lib/server/models/types';
 import { notifySubscribers } from '$lib/workflows/chat/followup-queue';
 import { normaliseConversationId } from '$lib/jkai/conversation-id';
+import { assertOwnerThread } from '$lib/jkai/owner-threads';
 
 export interface RunHeartbeatTurnOpts {
   conversationId: string;
@@ -63,6 +64,9 @@ async function heartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<HeartbeatTurnR
   const conversationId = normaliseConversationId(opts.conversationId);
   const [conv] = await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1);
   if (!conv) throw new Error(`conversation ${conversationId} not found`);
+  // A heartbeat turn runs with the owner's tools and memory: never in a
+  // member's thread, whoever scheduled it.
+  if (conv.principalId !== 'owner') throw new Error(`conversation ${conversationId} is not the owner's — heartbeat turn refused`);
 
   const ctx = opts.model ?? (
     conv.modelProvider && conv.modelId
@@ -233,6 +237,8 @@ export async function postHeartbeatNote(opts: {
   // FK violation on insert, and the SSE registry is keyed on the bare uuid too,
   // so the note would miss both the durable and the live channel.
   const conversationId = normaliseConversationId(opts.conversationId);
+  // Background notes land in the owner's threads only.
+  await assertOwnerThread(conversationId, 'heartbeat note');
   const [row] = await db
     .insert(orchestratorChats)
     .values({

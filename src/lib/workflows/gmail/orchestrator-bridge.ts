@@ -1,6 +1,6 @@
 import { db } from '$lib/db';
 import { workflows, workflowNodes, orchestratorChats, conversations } from '$lib/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { and, eq, desc } from 'drizzle-orm';
 import { emit as emitPlatformEvent } from '$lib/events/platform-bus';
 import type { GmailMessageReceivedEvent, GmailAuthExpiredEvent } from '$lib/workflows/types';
 import { notifySubscribers } from '$lib/workflows/chat/followup-queue';
@@ -16,16 +16,26 @@ import { startTriggeredRun } from '$lib/workflows/start-run';
  * and fan it out over the SSE stream so the live /jkai chat UI receives it.
  * If no active conversation exists the notification is silently dropped.
  */
+/**
+ * The thread a Gmail notification lands in: the owner's most recently active
+ * web thread. Never a member's — their thread is theirs, and the owner's mail
+ * has no business in it.
+ */
+export async function gmailNotificationTarget(): Promise<string | null> {
+  const [conv] = await db
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(and(eq(conversations.source, 'web'), eq(conversations.principalId, 'owner')))
+    .orderBy(desc(conversations.updatedAt))
+    .limit(1);
+  return conv?.id ?? null;
+}
+
 async function pushChatNotification(content: string): Promise<void> {
   try {
-    const [conv] = await db
-      .select({ id: conversations.id })
-      .from(conversations)
-      .where(eq(conversations.source, 'web'))
-      .orderBy(desc(conversations.updatedAt))
-      .limit(1);
-
-    if (!conv) return;
+    const convId = await gmailNotificationTarget();
+    if (!convId) return;
+    const conv = { id: convId };
 
     await db.insert(orchestratorChats).values({
       conversationId: conv.id,

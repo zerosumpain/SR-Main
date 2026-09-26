@@ -12,6 +12,10 @@ import {
   clearJobQueued,
   whenJobSettles,
   respondToWaiter,
+  cancelAllRunning,
+  cancelAllRunningFor,
+  listRunningJobsByConversation,
+  getJob,
 } from './job-store';
 import type { JobEvent } from './job-store';
 
@@ -322,5 +326,58 @@ describe('whenJobSettles — serialising a queued turn behind a running one', ()
 
     cancelJob(ahead.jobId);
     cancelJob(behind.jobId);
+  });
+});
+
+describe('jobs per principal — a member sees and cancels only their own', () => {
+  it('stamps the principal, defaulting to the owner', () => {
+    const owner = createJob('owner turn', { conversationId: 'c-own' });
+    const member = createJob('member turn', { conversationId: 'c-mem', principalId: 'u_a' });
+    expect(owner.job.scope.principalId).toBe('owner');
+    expect(member.job.scope.principalId).toBe('u_a');
+    expect(listJobs().find((j) => j.id === owner.jobId)?.principalId).toBe('owner');
+    cancelJob(owner.jobId);
+    cancelJob(member.jobId);
+  });
+
+  it('filters listJobs and the running-by-conversation map by principal', () => {
+    const owner = createJob('owner turn', { conversationId: 'c-own' });
+    const member = createJob('member turn', { conversationId: 'c-mem', principalId: 'u_list' });
+
+    // Other tests may leave owner jobs running, so the owner side is checked by
+    // membership; the member's view must be exactly their own.
+    expect(listJobs({ principalId: 'u_list' }).map((j) => j.id)).toEqual([member.jobId]);
+    const ownerIds = listJobs({ principalId: 'owner' }).map((j) => j.id);
+    expect(ownerIds).toContain(owner.jobId);
+    expect(ownerIds).not.toContain(member.jobId);
+    const all = listJobs().map((j) => j.id);
+    expect(all).toEqual(expect.arrayContaining([owner.jobId, member.jobId]));
+
+    expect([...listRunningJobsByConversation({ principalId: 'u_list' })]).toEqual([['c-mem', member.jobId]]);
+    expect(listRunningJobsByConversation().get('c-own')).toBe(owner.jobId);
+    expect(listRunningJobsByConversation({ principalId: 'owner' }).has('c-mem')).toBe(false);
+    cancelJob(owner.jobId);
+    cancelJob(member.jobId);
+  });
+
+  it('cancelAllRunningFor cancels only that principal', () => {
+    const owner = createJob('owner turn', { conversationId: 'c-own' });
+    const a = createJob('member a', { conversationId: 'c-a', principalId: 'u_cancel_a' });
+    const b = createJob('member b', { conversationId: 'c-b', principalId: 'u_cancel_b' });
+
+    expect(cancelAllRunningFor('u_cancel_a')).toBe(1);
+    expect(getJob(a.jobId)?.status).toBe('cancelled');
+    expect(getJob(owner.jobId)?.status).toBe('running');
+    expect(getJob(b.jobId)?.status).toBe('running');
+    cancelJob(owner.jobId);
+    cancelJob(b.jobId);
+  });
+
+  it("the owner's cancelAllRunning still cancels every job", () => {
+    const owner = createJob('owner turn', { conversationId: 'c-own' });
+    const a = createJob('member a', { conversationId: 'c-a', principalId: 'u_a' });
+    cancelAllRunning('Cancelled by user');
+    expect(getJob(owner.jobId)?.status).toBe('cancelled');
+    expect(getJob(a.jobId)?.status).toBe('cancelled');
   });
 });

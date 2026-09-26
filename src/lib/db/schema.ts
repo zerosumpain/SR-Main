@@ -2274,6 +2274,14 @@ export const conversations = pgTable('jkai_conversations', {
   title: text('title'),
   source: text('source').notNull().default('web'), // 'web' | 'whatsapp-continuation'
   whatsappPhoneNumber: text('whatsapp_phone_number'),
+  /**
+   * Whose thread: 'owner' (every thread before access groups) or a member's
+   * `u_…`. Messages, traces and evidence follow their thread. Every background
+   * reader filters to 'owner' (a member's words never feed the owner's memory,
+   * intel, briefing or WhatsApp); routes resolve it through
+   * $lib/jkai/chat-access.server.
+   */
+  principalId: text('principal_id').notNull().default('owner'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   lastMemoryReview: timestamp('last_memory_review', { withTimezone: true }),
@@ -2420,6 +2428,8 @@ export const jkaiAttachments = pgTable('jkai_attachments', {
   diskPath: text('disk_path').notNull(),
   duration: doublePrecision('duration'),
   metadata: jsonb('metadata'),
+  /** Whose upload — its own column because an upload can precede its thread. */
+  principalId: text('principal_id').notNull().default('owner'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   // History pagination hydrates attachments by message id for each bounded

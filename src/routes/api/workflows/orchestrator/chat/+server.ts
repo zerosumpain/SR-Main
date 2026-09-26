@@ -5,7 +5,7 @@ import { generalChat } from '$lib/workflows/chat/general-chat';
 import { db } from '$lib/db';
 import { workflowNodes, workflows, orchestratorChats, conversations, jkaiAttachments, jkaiToolTraces } from '$lib/db/schema';
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import { createJob, getJob, cancelJob, cancelAllRunning, cancelForScope, cleanOldJobs, deleteJob, listJobs, publishJobEvent, respondToWaiter, getRunningJobIdForConversation, markJobQueued, clearJobQueued, whenJobSettles } from '$lib/workflows/chat/job-store';
+import { createJob, getJob, cancelJob, cancelAllRunning, cancelAllRunningFor, cancelForScope, cleanOldJobs, deleteJob, listJobs, publishJobEvent, respondToWaiter, getRunningJobIdForConversation, markJobQueued, clearJobQueued, whenJobSettles } from '$lib/workflows/chat/job-store';
 import type { OrchestratorJob, JobEvent } from '$lib/workflows/chat/job-store';
 import { loadConversationHistory } from '$lib/workflows/chat/conversation-history';
 import { extractEphemeralSidecar, type StoredToolStep } from '$lib/workflows/chat/ephemeral-sidecar';
@@ -27,8 +27,11 @@ import type { TurnStamp } from '$lib/jkai/turn-stamp';
 import { collectWorkflowRefs, finishWorkflowRefs, type WorkflowChipRef } from '$lib/jkai/workflow-refs';
 import { recordDurableLLMCall } from '$lib/llm/usage-log';
 import { maybeExtractThreadConcepts } from '$lib/jkai/intel/chat-extract';
-import { isOwnerScope } from '$lib/jkai/intel/scope';
+import { isOwnerScope, type IntelScope } from '$lib/jkai/intel/scope';
 import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
+import { chatAccess, requireConversation, requireOwnJob, reserveChatTurn } from '$lib/jkai/chat-access.server';
+import { memberRestriction } from '$lib/jkai/member-chat/policy';
+import { viewerOf, viewerHolds } from '$lib/server/viewer';
 // The leaf, not `meta-tool`: that module implements the operations and so
 // reads the tool catalogue, which would put all 175 tool modules back on this
 // endpoint's runtime graph for the sake of one schema.
@@ -48,15 +51,27 @@ export const POST: RequestHandler = async (event) => handleWithLoop(event);
 
 async function handleWithLoop(event: Parameters<RequestHandler>[0]): Promise<Response> {
   const { request } = event;
+  // Who is asking. The owner — and the owner-grade lanes with no session (a
+  // paired phone, the service token) — get exactly what this endpoint always
+  // did. Anyone else is a member: their own thread only, no canvas, their own
+  // files, a metered turn and a closed tool list (spec: access groups, jkai chat).
+  const access = await chatAccess(event);
+  const isOwner = access.level === 'owner';
   // Whose graph grounds this turn. `@entity` grounding takes the scope. The
   // chat loop's own intel section and the thread extraction do not: both are
   // the owner's graph (general-chat builds the section with the owner default,
   // and chat extraction writes into the owner's space). So for any other scope
   // those two are off, rather than a member's turn reading or writing the
-  // owner's graph.
-  const intelScope = await resolveRequestScope(event);
-  const ownerIntel = isOwnerScope(intelScope);
+  // owner's graph. A member holding no intel level has no graph to ground in —
+  // `resolveRequestScope` would 403 them, and a chat turn must not.
+  let intelScope: IntelScope | null = null;
+  if (isOwner || viewerHolds(await viewerOf(event), 'jkai.intel:self')) {
+    intelScope = await resolveRequestScope(event);
+  }
+  const ownerIntel = intelScope !== null && isOwnerScope(intelScope);
   const body = await request.json();
+  // A member's turn is always a visible bubble in their own thread.
+  if (!isOwner && body && typeof body === 'object') (body as { silent?: boolean }).silent = false;
   const { message, workflowId, conversationId: rawConversationId, attachmentIds, useIntelContext, chatNodeId, intelEntityIds, silent } = body as {
     message: string;
     workflowId?: string;
@@ -72,6 +87,23 @@ async function handleWithLoop(event: Parameters<RequestHandler>[0]): Promise<Res
     /** Entity ids named with @entity in the composer. */
     intelEntityIds?: string[];
   };
+
+  if (!isOwner) {
+    // Canvas chat is the owner's: a chat node drives his workflows.
+    if (workflowId || chatNodeId) {
+      return json({ error: 'workflowId and chatNodeId are not available' }, { status: 400 });
+    }
+    if (!rawConversationId || typeof rawConversationId !== 'string') {
+      return json({ error: 'conversationId is required' }, { status: 400 });
+    }
+  }
+  // You post only in your OWN thread — the owner included. A member's thread is
+  // theirs to talk in; an owner turn there would run with the owner's tools and
+  // memory over their words. 404 for a thread the caller cannot read, 403 for
+  // one they can read but do not own.
+  if (rawConversationId) {
+    await requireConversation(event, rawConversationId, 'post');
+  }
 
   // Canvas chat: when a chat node is the source, ensure it has a pinned
   // conversation so prior messages on this canvas reload correctly. Each
@@ -133,9 +165,16 @@ async function handleWithLoop(event: Parameters<RequestHandler>[0]): Promise<Res
     if (attachmentRows.length !== attachmentIds.length) {
       return json({ error: 'one or more attachmentIds not found' }, { status: 404 });
     }
+    // A member attaches only their own uploads — someone else's file is, to
+    // them, a file that does not exist.
+    if (!isOwner && attachmentRows.some((a) => a.principalId !== access.own)) {
+      return json({ error: 'one or more attachmentIds not found' }, { status: 404 });
+    }
 
     let ctx: ModelContext = await resolveChatTurnModel();
-    if (conversationId) {
+    // A member's turn always runs on the chat default (below), so that is the
+    // model their files are checked against.
+    if (conversationId && isOwner) {
       const [conv] = await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1);
       if (conv) ctx = coerceModelContext({ provider: conv.modelProvider, modelId: conv.modelId });
     }
@@ -159,6 +198,11 @@ async function handleWithLoop(event: Parameters<RequestHandler>[0]): Promise<Res
     }
   }
 
+  // A member's turn is metered: take it now, after every validation and before
+  // anything with a side effect, so a refused request neither costs a turn nor
+  // cancels the one already running in their thread.
+  if (!isOwner) await reserveChatTurn(access);
+
   // Cancel any stale running jobs in THIS conversation/workflow before
   // starting a new one. Previously this cancelled all in-flight jobs
   // globally, which killed work in other canvases on concurrent requests.
@@ -173,7 +217,8 @@ async function handleWithLoop(event: Parameters<RequestHandler>[0]): Promise<Res
   // Prepended to the outbound message only; the persisted user bubble stays
   // exactly what was typed.
   let outbound = message;
-  if (Array.isArray(intelEntityIds) && intelEntityIds.length) {
+  // No scope, no grounding: a member without an intel level has no graph.
+  if (intelScope && Array.isArray(intelEntityIds) && intelEntityIds.length) {
     try {
       const { buildEntityGrounding } = await import('$lib/jkai/intel/context');
       const grounding = await buildEntityGrounding(intelEntityIds.slice(0, 5), 'mentioned', intelScope);
@@ -195,7 +240,7 @@ async function handleWithLoop(event: Parameters<RequestHandler>[0]): Promise<Res
   // executor, and two of its turns on one conversation are never wanted.
   const queuedBehindJobId = conversationId ? getRunningJobIdForConversation(conversationId) : null;
 
-  const { jobId, job } = createJob(outbound, { workflowId, conversationId, chatNodeId, engine: 'loop' });
+  const { jobId, job } = createJob(outbound, { workflowId, conversationId, chatNodeId, engine: 'loop', principalId: access.own });
   const { abortController } = job;
 
   if (queuedBehindJobId) {
@@ -290,7 +335,11 @@ async function handleWithLoop(event: Parameters<RequestHandler>[0]): Promise<Res
         let thinkingLevel: ThinkingLevel | null = null;
         // Resolved model is internal info (provider:modelId) — kept out of the
         // user-visible stream. Re-enable as a debug status if you need it back.
-        if (conversationId) {
+        // A member's thread carries no model of its own that they chose: the
+        // picker is the owner's, and so are the cost of a pinned model and the
+        // thinking budget. Their turn runs on the chat default, whatever the row
+        // says.
+        if (conversationId && isOwner) {
           const [conv] = await db
             .select()
             .from(conversations)
@@ -361,6 +410,9 @@ async function handleWithLoop(event: Parameters<RequestHandler>[0]): Promise<Res
           thinkingLevel,
           priceSnapshot,
           useIntelContext: ownerIntel && useIntelContext !== false,
+          // The member's closed tool list and persona. Undefined for the owner,
+          // whose turn is exactly what it always was.
+          restriction: isOwner ? undefined : memberRestriction(access.own),
         });
 
         if (abortController.signal.aborted) throw new Error('Job cancelled');
@@ -502,7 +554,9 @@ async function handleWithLoop(event: Parameters<RequestHandler>[0]): Promise<Res
               .where(eq(conversations.id, conversationId));
             // Files sent before the title existed were filed under the month;
             // now the thread has a name, give them its folder in /drive.
-            void refileConversationFiles(conversationId);
+            // Only the owner's: /drive is his, and a member's uploads are not
+            // mirrored into it.
+            if (isOwner) void refileConversationFiles(conversationId);
           } else if (conv) {
             await db.update(conversations)
               .set({ updatedAt: new Date() })
@@ -671,13 +725,17 @@ async function handleWithLoop(event: Parameters<RequestHandler>[0]): Promise<Res
 }
 
 // GET: poll job status OR list active jobs
-export const GET: RequestHandler = async ({ url }) => {
-  const jobId = url.searchParams.get('jobId');
+export const GET: RequestHandler = async (event) => {
+  const jobId = event.url.searchParams.get('jobId');
+  const access = await chatAccess(event);
 
   if (!jobId) {
-    return json({ jobs: listJobs() });
+    // The owner sees every job; a member only their own.
+    return json({ jobs: access.level === 'owner' ? listJobs() : listJobs({ principalId: access.own }) });
   }
 
+  // Before anything reads — or `deleteJob` reaps — the job: someone else's is a 404.
+  if (access.level !== 'owner') await requireOwnJob(event, jobId);
   const job = getJob(jobId);
   if (!job) {
     return json({ error: 'Job not found' }, { status: 404 });
@@ -699,13 +757,19 @@ export const GET: RequestHandler = async ({ url }) => {
 };
 
 // DELETE: cancel a running job
-export const DELETE: RequestHandler = async ({ url }) => {
-  const jobId = url.searchParams.get('jobId');
+export const DELETE: RequestHandler = async (event) => {
+  const jobId = event.url.searchParams.get('jobId');
+  const access = await chatAccess(event);
 
   if (!jobId) {
-    cancelAllRunning('Cancelled by user');
+    // "Cancel everything" means everything only for the owner; a member's
+    // reaches their own turns and nobody else's.
+    if (access.level === 'owner') cancelAllRunning('Cancelled by user');
+    else cancelAllRunningFor(access.own, 'Cancelled by user');
     return json({ cancelled: true });
   }
+
+  if (access.level !== 'owner') await requireOwnJob(event, jobId);
 
   if (cancelJob(jobId)) {
     return json({ cancelled: true });
@@ -718,9 +782,14 @@ export const DELETE: RequestHandler = async ({ url }) => {
 // PATCH: resolve a pending user-input waiter (plan_ack / confirm_ack / clarify_ack).
 // The orchestrator coroutine registers waiters via createWaiter(jobId, key) and
 // suspends until the user sends their decision through this endpoint.
-export const PATCH: RequestHandler = async ({ request, url }) => {
+export const PATCH: RequestHandler = async (event) => {
+  const { request, url } = event;
   const jobId = url.searchParams.get('jobId');
   if (!jobId) return json({ error: 'jobId required' }, { status: 400 });
+  // Answering someone else's plan, question or credential request is as much
+  // theirs as reading it: a 404 before any waiter is touched.
+  const access = await chatAccess(event);
+  if (access.level !== 'owner') await requireOwnJob(event, jobId);
   const job = getJob(jobId);
   if (!job) return json({ error: 'job not found' }, { status: 404 });
 

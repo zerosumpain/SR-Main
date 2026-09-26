@@ -12,19 +12,37 @@
 // downstream.
 import type { RequestHandler } from './$types';
 import { subscribeToConversation } from '$lib/workflows/chat/followup-queue';
+import { and, inArray } from 'drizzle-orm';
+import { db } from '$lib/db';
+import { conversations } from '$lib/db/schema';
+import { chatAccess } from '$lib/jkai/chat-access.server';
+import { readable } from '$lib/server/area-scope';
 
 const MAX_CONVERSATIONS = 8;
 
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async (event) => {
+  const { url } = event;
+  const access = await chatAccess(event);
   const single = url.searchParams.get('conversationId');
   const multi = url.searchParams.get('conversationIds');
-  const ids = [
+  let ids = [
     ...new Set(
       (multi ? multi.split(',') : single ? [single] : [])
         .map((s) => s.trim())
         .filter(Boolean),
     ),
   ].slice(0, MAX_CONVERSATIONS);
+
+  // A member hears only threads they may read. The owner's path is unchanged —
+  // it subscribes to ids before their rows land (a brand-new tab).
+  if (access.level !== 'owner' && ids.length > 0) {
+    const allowed = await db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(and(inArray(conversations.id, ids), readable(conversations.principalId, access)));
+    const ok = new Set(allowed.map((r) => r.id));
+    ids = ids.filter((id) => ok.has(id));
+  }
 
   if (ids.length === 0) {
     return new Response('conversationId or conversationIds required', { status: 400 });

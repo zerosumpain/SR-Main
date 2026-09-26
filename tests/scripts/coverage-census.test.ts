@@ -4,7 +4,7 @@
  * Two things were quietly untrue:
  *
  *   - nightly.yml said it runs "the eight *.integration.test.ts files the merge
- *     gate has never once executed". There are 53. The number was right when it
+ *     gate has never once executed". There are 55. The number was right when it
  *     was written and nothing has re-counted since, so a class of test grew by
  *     5x with no one deciding that was fine. Intel spaces added the last two,
  *     src/lib/jkai/intel/spaces.integration.test.ts and
@@ -22,7 +22,9 @@
  *     src/lib/deepdive/research-access.integration.test.ts: real sessions of
  *     three owners through the real research guard. P4 added
  *     src/lib/daydream/notebook/notes-access.integration.test.ts: the notebook
- *     and /home, the same way.
+ *     and /home, the same way. P5 added src/lib/jkai/owner-thread-isolation and
+ *     conversation-scope: a member's thread never reaches the owner's
+ *     background readers, and the thread routes scope to the reader.
  *
  *   - tests/e2e/ holds two Playwright specs and package.json has a `test:e2e`
  *     script, but NO workflow invokes it. The lane was written because
@@ -48,7 +50,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
  * RAISING THIS NUMBER IS A DECISION, not a formality: every file added here is
  * a file no pull request will ever execute.
  */
-const INTEGRATION_FILES = 53;
+const INTEGRATION_FILES = 55;
 
 function tracked(pattern: string): string[] {
 	return execFileSync('git', ['ls-files', pattern], { cwd: ROOT, encoding: 'utf8' })

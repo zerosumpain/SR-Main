@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import type { ToolTrace } from '$lib/jkai/tool-trace';
 import { loadTraceRow } from '$lib/jkai/tool-trace.server';
+import { requireChatOwner } from '$lib/jkai/chat-access.server';
 
 // One turn's recorded tool-call chain, as JSON. Owner-gated by hooks, like the
 // rest of /api/jkai.
@@ -12,7 +13,10 @@ import { loadTraceRow } from '$lib/jkai/tool-trace.server';
 // published through the hub bus: a `web_extract` result can be the better part
 // of a page of text, and pushing that into shared client state on every token
 // of every turn to serve a click that usually never comes is the wrong trade.
-export const GET: RequestHandler = async ({ params }) => {
+export const GET: RequestHandler = async (event) => {
+  const { params } = event;
+  // Owner-only: a trace is the owner's operational view.
+  await requireChatOwner(event);
   const row = await loadTraceRow(params.traceId);
   if (!row) return json({ error: 'No tool trace for that turn' }, { status: 404 });
 

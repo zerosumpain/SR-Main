@@ -47,8 +47,13 @@ export const load: LayoutServerLoad = async (event) => {
   // first of those they hold.
   const viewer = await viewerOf(event).catch(() => null);
   if (viewer?.kind === 'member') {
-    const jkai = reachablePages(viewer.grants).filter((p) => p.startsWith('/jkai/'));
-    const memberHome = jkai.includes('/jkai/intel') ? '/jkai/intel' : (jkai[0] ?? '/');
+    // `/jkai` itself counts: with chat open to them, the hub's own page is theirs.
+    const jkai = reachablePages(viewer.grants).filter((p) => p === '/jkai' || p.startsWith('/jkai/'));
+    const memberHome = jkai.includes('/jkai/intel')
+      ? '/jkai/intel'
+      : jkai.includes('/jkai')
+        ? '/jkai'
+        : (jkai[0] ?? '/');
     return { deploy: getDeployVersion(), member: true as const, memberHome, hub: MEMBER_HUB };
   }
   // Midnight in the database's timezone, the same boundary the spend ledger

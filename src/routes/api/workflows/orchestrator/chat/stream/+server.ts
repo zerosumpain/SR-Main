@@ -2,10 +2,18 @@
 // Mirrors the pattern used by `/api/jkai/events` but keyed by jobId.
 import type { RequestHandler } from './$types';
 import { subscribeJob, getJob } from '$lib/workflows/chat/job-store';
+import { chatAccess, requireOwnJob } from '$lib/jkai/chat-access.server';
 
-export const GET: RequestHandler = async ({ url, request }) => {
+export const GET: RequestHandler = async (event) => {
+  const { url, request } = event;
   const jobId = url.searchParams.get('jobId');
   if (!jobId) return new Response('jobId required', { status: 400 });
+
+  // Someone else's turn is a 404, decided BEFORE `subscribeJob` — which replays
+  // the buffer, so checking after it would already have streamed their words.
+  // The owner and the paired phone (no session: owner access) stream as before.
+  const access = await chatAccess(event);
+  if (access.level !== 'owner') await requireOwnJob(event, jobId);
 
   // Resume point. The browser's own EventSource reconnect sends the last `id:`
   // it saw back as `Last-Event-ID`; a manual reopen (the gap detector in

@@ -206,6 +206,9 @@ function execContextFrom(context: InvokeContext, emit: (text: string) => void): 
 		workflowId: context.workflowId,
 		jobId: context.jobId,
 		allowedTools: context.allowedTools,
+		// Whose turn: a member's call must arrive as a member's, or the
+		// executor's fail-closed check (no allow-list ⇒ refuse) never fires.
+		principalId: context.principalId,
 		modelContext: modelId
 			? coerceModelContext({
 					provider: typeof raw?.provider === 'string' ? raw.provider : undefined,

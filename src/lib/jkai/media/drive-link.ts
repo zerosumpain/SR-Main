@@ -4,6 +4,7 @@ import { db } from '$lib/db';
 import { jkaiAttachments, workflowFiles } from '$lib/db/schema';
 import { jkaiDriveFolder, mirrorJkaiAttachmentToDrive } from '$lib/file-index/jkai-mirror';
 import { isPlaceholderTitle } from '$lib/jkai/thread-title';
+import { isMemberThread } from '$lib/jkai/owner-threads';
 
 /**
  * The link between a chat attachment and its copy in /drive.
@@ -26,6 +27,21 @@ export async function mirrorAndLink(
   opts: Parameters<typeof mirrorJkaiAttachmentToDrive>[0] & { attachmentId: string },
 ): Promise<string | null> {
   const { attachmentId, ...mirror } = opts;
+  // /drive is the owner's: a member's file (or one in a member's thread) is
+  // never mirrored into it. The upload path already skips this for members;
+  // this is the belt to that brace.
+  try {
+    const [att] = await db
+      .select({ principalId: jkaiAttachments.principalId })
+      .from(jkaiAttachments)
+      .where(eq(jkaiAttachments.id, attachmentId))
+      .limit(1);
+    if (att && att.principalId !== 'owner') return null;
+    if (await isMemberThread(mirror.conversationId)) return null;
+  } catch (err) {
+    console.warn(`[drive-link] owner check failed for ${attachmentId}: ${(err as Error).message}`);
+    return null;
+  }
   const fileId = await mirrorJkaiAttachmentToDrive(mirror);
   if (!fileId) return null;
   try {
@@ -88,6 +104,8 @@ export async function refileConversationFiles(conversationId: string): Promise<n
   let folder: string;
   let atts: Array<{ id: string; metadata: unknown }>;
   try {
+    // Only the owner's threads have files in /drive to move.
+    if (await isMemberThread(conversationId)) return 0;
     folder = await jkaiDriveFolder(conversationId);
     // Still untitled (or titled like a month): nowhere better to put them.
     if (isFallbackPath(`${folder}x`)) return 0;

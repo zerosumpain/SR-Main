@@ -7,6 +7,7 @@ import { db } from '$lib/db';
 import { and, desc, eq, gte, isNull, sql } from 'drizzle-orm';
 import { researchSessions, orchestratorChats, jkaiMemories } from '$lib/db/schema';
 import { getRecordByKey, DatastoreError } from '$lib/datastore';
+import { inOwnerThread } from '$lib/jkai/owner-threads';
 import { getBriefingProfile } from '$lib/server/briefing-profile';
 
 export interface BriefingSignals {
@@ -86,7 +87,14 @@ export async function gatherBriefingSignals(): Promise<BriefingSignals> {
     const rows = await db
       .select({ content: orchestratorChats.content })
       .from(orchestratorChats)
-      .where(and(eq(orchestratorChats.role, 'user'), gte(orchestratorChats.createdAt, since)))
+      // His questions only — never a member's thread.
+      .where(
+        and(
+          eq(orchestratorChats.role, 'user'),
+          gte(orchestratorChats.createdAt, since),
+          inOwnerThread(orchestratorChats.conversationId),
+        ),
+      )
       .orderBy(desc(orchestratorChats.createdAt))
       .limit(30);
     recentQuestions = rows.map((r) => (r.content || '').slice(0, 200)).filter(Boolean);

@@ -4,10 +4,16 @@ import { db } from '$lib/db';
 import { jkaiAttachments } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { readBuffer, deleteByDiskPath } from '$lib/jkai/media/storage';
+import { chatAccess } from '$lib/jkai/chat-access.server';
+import { canRead, canWrite } from '$lib/server/area-scope';
 
-export const GET: RequestHandler = async ({ params }) => {
+// A file is its uploader's: one the reader may not see is a 404, exactly like
+// one that does not exist.
+export const GET: RequestHandler = async (event) => {
+  const { params } = event;
+  const access = await chatAccess(event);
   const [row] = await db.select().from(jkaiAttachments).where(eq(jkaiAttachments.id, params.id!)).limit(1);
-  if (!row) throw error(404, 'attachment not found');
+  if (!row || !canRead(row.principalId, access)) throw error(404, 'attachment not found');
   let buf: Buffer;
   try {
     buf = await readBuffer(row.diskPath);
@@ -25,9 +31,12 @@ export const GET: RequestHandler = async ({ params }) => {
   });
 };
 
-export const DELETE: RequestHandler = async ({ params }) => {
+export const DELETE: RequestHandler = async (event) => {
+  const { params } = event;
+  const access = await chatAccess(event);
   const [row] = await db.select().from(jkaiAttachments).where(eq(jkaiAttachments.id, params.id!)).limit(1);
-  if (!row) throw error(404, 'attachment not found');
+  if (!row || !canRead(row.principalId, access)) throw error(404, 'attachment not found');
+  if (!canWrite(row.principalId, access)) throw error(403, 'Forbidden');
   await deleteByDiskPath(row.diskPath);
   await db.delete(jkaiAttachments).where(eq(jkaiAttachments.id, row.id));
   return json({ deleted: true });

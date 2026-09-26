@@ -13,6 +13,14 @@ export interface ToolExecContext {
   buildId?: string;
   iterationId?: string;
   allowedTools?: string[];
+  /**
+   * Whose turn this call serves: 'owner', or a member's `u_…`. Absent means the
+   * owner, as it did before access groups. A non-owner principal with no
+   * `allowedTools` is refused by `executeTool` — a member's call must always
+   * carry its closed list (see `$lib/jkai/member-chat/policy`), so a path that
+   * forgets to set one fails closed instead of running with the owner's reach.
+   */
+  principalId?: string;
   depth?: number;
   signal?: AbortSignal;
   deadline?: number;

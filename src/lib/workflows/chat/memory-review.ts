@@ -50,6 +50,8 @@ export async function reviewConversation(conversationId: string, opts: { strict?
     .limit(1);
 
   if (!conv) return fail('No such conversation');
+  // Memories are the owner's: a member's thread is never mined for them.
+  if (conv.principalId !== 'owner') return fail('Not the owner\'s conversation — memory review refused');
 
   // Get messages since last review
   const conditions = [eq(orchestratorChats.conversationId, conversationId)];
@@ -158,7 +160,8 @@ async function runMemoryReview(): Promise<void> {
 
   try {
     const allConvs = await db.select({ id: conversations.id, lastMemoryReview: conversations.lastMemoryReview })
-      .from(conversations);
+      .from(conversations)
+      .where(eq(conversations.principalId, 'owner'));
 
     for (const conv of allConvs) {
       // Get the latest message timestamp

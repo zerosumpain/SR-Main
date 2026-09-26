@@ -115,6 +115,10 @@ function cancelPending(jobId: string): void {
 
 function handleEvent(jobId: string, event: JobEvent): void {
   const job = getJob(jobId);
+  // Only the owner's turns escalate. This pings the OWNER's phone with a deep
+  // link into the thread; a member's plan, question or finished reply is not
+  // his to be woken for, and the summary would carry their words to him.
+  if ((job?.scope.principalId ?? 'owner') !== 'owner') return;
   const conversationId = job?.scope.conversationId ?? null;
 
   switch (event.type) {

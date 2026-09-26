@@ -14,9 +14,9 @@ vi.mock('$lib/server/native-health', () => ({ getNativeHealthSummary: async () =
 vi.mock('$lib/server/notify', () => ({ pendingForDevice: async () => [], recentEvents: async () => [] }));
 vi.mock('$lib/news/desk', () => ({ loadNewsDesk: async () => { throw new Error('news down'); } }));
 vi.mock('$lib/connectors/watch-store', () => ({ connectorAttention: async () => ({ items: [], checkedAt: null }) }));
-vi.mock('$lib/db/schema', () => ({ conversations: { id: 'id', title: 'title', updatedAt: 'updatedAt' } }));
+vi.mock('$lib/db/schema', () => ({ conversations: { id: 'id', title: 'title', updatedAt: 'updatedAt', principalId: 'principalId' } }));
 vi.mock('$lib/db', () => {
-  const chain = { select: () => chain, from: () => chain, orderBy: () => chain, limit: async () => [] };
+  const chain = { select: () => chain, from: () => chain, where: () => chain, orderBy: () => chain, limit: async () => [] };
   return { db: chain };
 });
 

@@ -179,6 +179,10 @@ export async function executeTool(
   ctx?: import('./registry-internal').ToolExecContext,
 ): Promise<ToolResult> {
   ctx = ctx ?? currentExecution();
+  // Fail closed for a member: a non-owner call with no scope at all is a caller
+  // that forgot to set one, not a caller entitled to everything. Nested calls
+  // (ephemeral and custom tools) inherit both fields through `currentExecution`.
+  if (ctx?.principalId && ctx.principalId !== 'owner' && !ctx.allowedTools) return { success: false, error: `Tool ${name} is outside this caller's capability scope` };
   if (ctx?.allowedTools && !ctx.allowedTools.includes(name)) return { success: false, error: `Tool ${name} is outside this caller's capability scope` };
   if (ctx?.signal?.aborted || (ctx?.deadline && Date.now() > ctx.deadline)) return { success: false, error: 'Invocation cancelled or expired' };
   if ((ctx?.depth ?? 0) > 5) return { success: false, error: 'Nested capability depth exceeded' };

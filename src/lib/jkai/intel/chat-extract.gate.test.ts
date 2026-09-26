@@ -23,7 +23,7 @@ vi.mock('$lib/db', () => {
 });
 
 vi.mock('$lib/db/schema', () => ({
-  conversations: { id: 'id', intelEnabled: 'intel_enabled' },
+  conversations: { id: 'id', intelEnabled: 'intel_enabled', principalId: 'principal_id' },
   orchestratorChats: { conversationId: 'conversation_id', role: 'role', content: 'content', metadata: 'metadata', createdAt: 'created_at' },
 }));
 
@@ -50,13 +50,13 @@ beforeEach(() => {
 
 describe('maybeExtractThreadConcepts — the per-thread opt-out', () => {
   it('extracts when the thread is feeding intel', async () => {
-    selectResult.rows = [[{ intelEnabled: true }], TRANSCRIPT];
+    selectResult.rows = [[{ intelEnabled: true, principalId: 'owner' }], TRANSCRIPT];
     await maybeExtractThreadConcepts('c1', 'a thread');
     expect(extractIntoIntel).toHaveBeenCalledTimes(1);
   });
 
   it('does not call the extractor when the thread has opted out', async () => {
-    selectResult.rows = [[{ intelEnabled: false }], TRANSCRIPT];
+    selectResult.rows = [[{ intelEnabled: false, principalId: 'owner' }], TRANSCRIPT];
     await maybeExtractThreadConcepts('c1', 'a thread');
     expect(extractIntoIntel).not.toHaveBeenCalled();
     // And no "linking…" indicator, which would sit there forever.
@@ -64,9 +64,16 @@ describe('maybeExtractThreadConcepts — the per-thread opt-out', () => {
   });
 
   it('still refuses on a forced backfill — a sweep must not undo the choice', async () => {
-    selectResult.rows = [[{ intelEnabled: false }], TRANSCRIPT];
+    selectResult.rows = [[{ intelEnabled: false, principalId: 'owner' }], TRANSCRIPT];
     await maybeExtractThreadConcepts('c1', 'a thread', { force: true });
     expect(extractIntoIntel).not.toHaveBeenCalled();
+  });
+
+  it("never extracts from a member's thread, forced or not", async () => {
+    selectResult.rows = [[{ intelEnabled: true, principalId: 'u_member' }], TRANSCRIPT];
+    expect(await maybeExtractThreadConcepts('c1', 'a thread', { force: true })).toBeUndefined();
+    expect(extractIntoIntel).not.toHaveBeenCalled();
+    expect(publishConversationSignal).not.toHaveBeenCalled();
   });
 
   it('extracts when the conversation row is missing rather than failing closed', async () => {

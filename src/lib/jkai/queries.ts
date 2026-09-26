@@ -1,6 +1,6 @@
 import { db } from '$lib/db';
 import { conversations, jkaiAttachments, jkaiBuilds, orchestratorChats } from '$lib/db/schema';
-import { and, desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, lt, or, sql, type SQL } from 'drizzle-orm';
 
 /** How much of a thread's last message the rail carries. See the note on the
  *  `lastMessage` subquery below — the rail renders 44 characters of it. */
@@ -43,12 +43,21 @@ const CONVERSATION_CARD = {
   )`.as('last_message'),
 };
 
+/**
+ * Whose threads a list shows. Defaults to the owner's own — what every list
+ * showed before members had threads; a request-scoped caller passes
+ * `conversationListScope(access)` from `$lib/jkai/chat-access.server`.
+ */
+const OWNER_THREADS = (): SQL => eq(conversations.principalId, 'owner');
+
 export async function getConversationList({
   limit = CONVERSATION_PAGE_SIZE,
   cursor,
+  scope = OWNER_THREADS(),
 }: {
   limit?: number;
   cursor?: { pinned: boolean; before: Date; beforeId: string };
+  scope?: SQL;
 } = {}) {
   const boundedLimit = Math.max(1, Math.min(200, Math.trunc(limit)));
   const samePinBucket = cursor
@@ -71,7 +80,7 @@ export async function getConversationList({
   const rows = await db
     .select(CONVERSATION_CARD)
     .from(conversations)
-    .where(cursorFilter)
+    .where(and(scope, cursorFilter))
     .orderBy(desc(conversations.pinned), desc(conversations.updatedAt), desc(conversations.id))
     .limit(boundedLimit + 1);
 
@@ -137,9 +146,11 @@ const TOOL_STEPS = sql`jkai_tool_traces tt
 export async function searchConversationList({
   q,
   limit = CONVERSATION_SEARCH_LIMIT,
+  scope = OWNER_THREADS(),
 }: {
   q: string;
   limit?: number;
+  scope?: SQL;
 }) {
   const term = q.trim();
   // A single character matches most of the archive, which is not an answer.
@@ -188,7 +199,7 @@ export async function searchConversationList({
       )`.as('matched_tools'),
     })
     .from(conversations)
-    .where(or(matchesTitle, matchesModel, matchesSource, matchesMessage, matchesTool))
+    .where(and(scope, or(matchesTitle, matchesModel, matchesSource, matchesMessage, matchesTool)))
     // Title hits lead — they are what someone is usually reaching for — then
     // plain recency. Pinning deliberately does NOT lead here: a search is
     // already a deliberate pick, so promoting pins would bury the answer.

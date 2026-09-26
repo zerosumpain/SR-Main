@@ -1,14 +1,20 @@
 import { Readability } from '@mozilla/readability';
 import { loadJsdom } from '$lib/server/jsdom';
-import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
+import { guardedPublicFetch, type GuardedFetchResult } from '$lib/server/safe-fetch';
+import { STATUS_CODES } from 'node:http';
 
 const USER_AGENT =
 	'Mozilla/5.0 (compatible; JkaiChatBot/1.0; +https://strangeramblings.com)';
 
-const FETCH_TIMEOUT_MS = 10_000;
+// The whole download, not just the headers: guardedPublicFetch times the body
+// too, so this is the old 10 s header wait plus room for a slow page to finish.
+const FETCH_TIMEOUT_MS = 20_000;
 const MAX_BYTES = 2 * 1024 * 1024; // 2 MB raw HTML cap
 const MAX_TEXT_CHARS = 50_000; // ~12k tokens after extraction
+// Every hop is re-validated and re-pinned by guardedPublicFetch. Plain fetch()
+// followed up to 20; real pages (http→https→www→locale, a shortener or two)
+// settle well inside this.
+const MAX_REDIRECTS = 5;
 
 export interface UrlFetchResult {
 	url: string;
@@ -122,70 +128,36 @@ export function extractUrlsFromText(text: string, max = 3): string[] {
 	return out;
 }
 
-function isPrivateIP(ip: string): boolean {
-	const v = isIP(ip);
-	if (v === 4) {
-		const parts = ip.split('.').map(Number);
-		const [a, b] = parts;
-		if (a === 10) return true;
-		if (a === 127) return true;
-		if (a === 0) return true;
-		if (a === 169 && b === 254) return true; // link-local
-		if (a === 172 && b >= 16 && b <= 31) return true;
-		if (a === 192 && b === 168) return true;
-		if (a >= 224) return true; // multicast / reserved
-		return false;
-	}
-	if (v === 6) {
-		const lower = ip.toLowerCase();
-		if (lower === '::1' || lower === '::') return true;
-		if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // ULA
-		if (lower.startsWith('fe80')) return true; // link-local
-		if (lower.startsWith('::ffff:')) {
-			// IPv4-mapped — unwrap and re-check
-			return isPrivateIP(lower.slice('::ffff:'.length));
-		}
-		return false;
-	}
-	return false;
+function contentKind(contentType: string): { isHtml: boolean; isPlainText: boolean } {
+	const isHtml = contentType.includes('text/html') || contentType.includes('application/xhtml');
+	return { isHtml, isPlainText: contentType.startsWith('text/') && !isHtml };
 }
 
-async function assertPublicHost(hostname: string): Promise<void> {
-	const lower = hostname.toLowerCase();
-	if (lower === 'localhost' || lower.endsWith('.localhost')) {
-		throw { kind: 'blocked_host', message: `Refusing to fetch localhost (${hostname})` } satisfies UrlFetchError;
+/**
+ * Map a guardedPublicFetch failure onto the `UrlFetchError` shapes callers
+ * already render. The guard reports refusals as `Error('ssrf_blocked: …')`;
+ * a DNS failure was always `invalid_url` here, so it stays that.
+ */
+function toUrlFetchError(err: unknown): UrlFetchError {
+	if (isUrlFetchError(err)) return err;
+	const e = err as { name?: string; message?: string } | null;
+	if (e?.name === 'AbortError' || e?.name === 'TimeoutError') {
+		return { kind: 'timeout', message: `Fetch timed out after ${FETCH_TIMEOUT_MS}ms` };
 	}
-	// .internal / .local / .lan / Tailscale magic-DNS are private namespaces
-	if (/\.(internal|local|lan|home|intranet)$/i.test(lower) || lower.endsWith('.ts.net')) {
-		throw { kind: 'blocked_host', message: `Refusing to fetch private namespace (${hostname})` } satisfies UrlFetchError;
+	const message = e?.message ?? 'Network error';
+	if (message.startsWith('ssrf_blocked:')) {
+		const reason = message.slice('ssrf_blocked:'.length).trim();
+		const text = reason.charAt(0).toUpperCase() + reason.slice(1);
+		if (/^(dns lookup failed|no dns records)/i.test(reason)) return { kind: 'invalid_url', message: text };
+		return { kind: 'blocked_host', message: text };
 	}
-	// If it's already a literal IP, validate directly
-	if (isIP(hostname)) {
-		if (isPrivateIP(hostname)) {
-			throw { kind: 'blocked_host', message: `Refusing to fetch private IP (${hostname})` } satisfies UrlFetchError;
-		}
-		return;
-	}
-	// Otherwise resolve and check every record
-	let records: Array<{ address: string; family: number }>;
-	try {
-		records = await lookup(hostname, { all: true });
-	} catch {
-		throw { kind: 'invalid_url', message: `DNS lookup failed for ${hostname}` } satisfies UrlFetchError;
-	}
-	if (records.length === 0) {
-		throw { kind: 'invalid_url', message: `No DNS records for ${hostname}` } satisfies UrlFetchError;
-	}
-	for (const { address } of records) {
-		if (isPrivateIP(address)) {
-			throw { kind: 'blocked_host', message: `${hostname} resolves to private IP ${address}` } satisfies UrlFetchError;
-		}
-	}
+	return { kind: 'network', message };
 }
 
 /**
  * Fetch a URL and extract its readable contents. Public-internet only — refuses
- * localhost, private IPs, and link-local hosts (SSRF guard). Throws a
+ * localhost, private / link-local / CGNAT (Tailscale) addresses on every
+ * redirect hop, via `$lib/server/safe-fetch` (SSRF guard). Throws a
  * `UrlFetchError`-shaped object on failure so callers can render specific
  * messages.
  */
@@ -203,54 +175,45 @@ export async function fetchUrlContent(rawUrl: string): Promise<UrlFetchResult> {
 		} satisfies UrlFetchError;
 	}
 
-	await assertPublicHost(parsed.hostname);
-
-	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-
-	let res: Response;
+	// SSRF: guardedPublicFetch refuses private / loopback / link-local / CGNAT
+	// hosts, pins the socket to the address it validated (no DNS-rebind window),
+	// and re-validates every redirect hop BEFORE requesting it — plain
+	// `redirect: 'follow'` fetched intermediate hops blind and checked only the
+	// final host. The body is stream-capped at MAX_BYTES so a hostile 1 GB page
+	// can't OOM the server, and skipped entirely for an error status or a type
+	// we would refuse anyway.
+	let res: GuardedFetchResult;
 	try {
-		res = await fetch(parsed.toString(), {
+		res = await guardedPublicFetch(parsed.toString(), {
 			headers: {
 				'User-Agent': USER_AGENT,
 				Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
 				'Accept-Language': 'en-US,en;q=0.5',
 			},
-			signal: controller.signal,
-			redirect: 'follow',
+			timeoutMs: FETCH_TIMEOUT_MS,
+			maxBytes: MAX_BYTES,
+			maxRedirects: MAX_REDIRECTS,
+			readBody: (status, headers) => {
+				if (status < 200 || status > 299) return false;
+				const { isHtml, isPlainText } = contentKind((headers.get('content-type') ?? '').toLowerCase());
+				return isHtml || isPlainText;
+			},
 		});
-	} catch (err: any) {
-		clearTimeout(timer);
-		if (err?.name === 'AbortError') {
-			throw { kind: 'timeout', message: `Fetch timed out after ${FETCH_TIMEOUT_MS}ms` } satisfies UrlFetchError;
-		}
-		throw { kind: 'network', message: err?.message ?? 'Network error' } satisfies UrlFetchError;
+	} catch (err) {
+		throw toUrlFetchError(err);
 	}
-	clearTimeout(timer);
 
 	if (!res.ok) {
 		throw {
 			kind: 'http_error',
 			status: res.status,
-			message: `HTTP ${res.status} ${res.statusText}`,
+			message: `HTTP ${res.status} ${STATUS_CODES[res.status] ?? ''}`.trimEnd(),
 		} satisfies UrlFetchError;
 	}
 
-	// After redirects, re-validate the final host (defence in depth against
-	// open redirects landing on internal services).
-	const finalUrl = res.url || parsed.toString();
-	try {
-		const finalParsed = new URL(finalUrl);
-		if (finalParsed.hostname !== parsed.hostname) {
-			await assertPublicHost(finalParsed.hostname);
-		}
-	} catch (err: any) {
-		if (err?.kind) throw err;
-	}
-
+	const finalUrl = res.finalUrl;
 	const contentType = (res.headers.get('content-type') ?? '').toLowerCase();
-	const isHtml = contentType.includes('text/html') || contentType.includes('application/xhtml');
-	const isPlainText = contentType.startsWith('text/') && !isHtml;
+	const { isHtml, isPlainText } = contentKind(contentType);
 
 	if (!isHtml && !isPlainText) {
 		throw {
@@ -260,39 +223,8 @@ export async function fetchUrlContent(rawUrl: string): Promise<UrlFetchResult> {
 		} satisfies UrlFetchError;
 	}
 
-	// Stream-cap the body so a hostile 1 GB page can't OOM the server.
-	const reader = res.body?.getReader();
-	const chunks: Uint8Array[] = [];
-	let total = 0;
-	let truncated = false;
-	if (reader) {
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			if (value) {
-				total += value.byteLength;
-				if (total > MAX_BYTES) {
-					truncated = true;
-					try {
-						await reader.cancel();
-					} catch {
-						/* ignore */
-					}
-					break;
-				}
-				chunks.push(value);
-			}
-		}
-	} else {
-		const buf = Buffer.from(await res.arrayBuffer());
-		if (buf.byteLength > MAX_BYTES) {
-			truncated = true;
-			chunks.push(buf.subarray(0, MAX_BYTES));
-		} else {
-			chunks.push(buf);
-		}
-	}
-	const body = Buffer.concat(chunks.map((c) => Buffer.from(c))).toString('utf8');
+	const truncated = res.truncated;
+	const body = Buffer.from(res.body).toString('utf8');
 
 	if (isPlainText) {
 		const trimmed = body.trim();

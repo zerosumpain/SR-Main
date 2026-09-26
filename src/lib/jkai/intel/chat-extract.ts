@@ -12,7 +12,7 @@
 
 import { db } from '$lib/db';
 import { conversations, orchestratorChats } from '$lib/db/schema';
-import { asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { createHash } from 'node:crypto';
 import { extractIntoIntel, type AutoExtractOutcome } from './auto-extract';
 import { OWNER_SPACE } from './scope';
@@ -114,11 +114,15 @@ export async function maybeExtractThreadConcepts(
     // thread out of intel", which is exactly what a backfill would otherwise do
     // the next time the extractor changes.
     const [conv] = await db
-      .select({ intelEnabled: conversations.intelEnabled })
+      .select({ intelEnabled: conversations.intelEnabled, principalId: conversations.principalId })
       .from(conversations)
       .where(eq(conversations.id, conversationId))
       .limit(1);
     if (conv && conv.intelEnabled === false) return;
+    // Intel is the owner's graph: a member's thread never feeds it — not from
+    // the chat route, not from /api/jkai/intel/extract-thread, not from the
+    // backfill. This is the one chokepoint all three pass through.
+    if (conv && conv.principalId !== 'owner') return;
 
     const rows = await db
       .select({
@@ -243,10 +247,13 @@ export async function backfillThreadConcepts(
     .select({ id: conversations.id, title: conversations.title })
     .from(conversations)
     .where(
-      sql`EXISTS (
+      and(
+        eq(conversations.principalId, 'owner'),
+        sql`EXISTS (
         SELECT 1 FROM orchestrator_chats c
         WHERE c.conversation_id = ${conversations.id} AND c.role = 'assistant'
       )`,
+      ),
     )
     .orderBy(desc(conversations.updatedAt))
     .limit(workLimit * 3);

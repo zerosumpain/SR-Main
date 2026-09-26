@@ -62,7 +62,7 @@ async function resolveConversation(
   }
   const id = normaliseConversationId(raw);
   const [row] = await db
-    .select({ id: conversations.id, phone: conversations.whatsappPhoneNumber })
+    .select({ id: conversations.id, phone: conversations.whatsappPhoneNumber, principalId: conversations.principalId })
     .from(conversations)
     .where(eq(conversations.id, id))
     .limit(1);
@@ -73,6 +73,11 @@ async function resolveConversation(
         `No conversation ${id} exists, so a callback delivered there would fail at fire time ` +
         `with nobody watching. Omit conversation_id and it defaults to the current chat.`,
     };
+  }
+  // A callback fires as the owner (tools, memory, a full orchestrator turn):
+  // never into a member's thread.
+  if (row.principalId !== 'owner') {
+    return { ok: false, error: 'Scheduled callbacks can only deliver into the owner\'s own threads.' };
   }
   return { ok: true, id: row.id, whatsappPhoneNumber: row.phone };
 }

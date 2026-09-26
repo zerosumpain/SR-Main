@@ -15,7 +15,7 @@ vi.mock('$lib/db', () => ({
     }),
   },
 }));
-vi.mock('$lib/db/schema', () => ({ jkaiAttachments: {} }));
+vi.mock('$lib/db/schema', () => ({ jkaiAttachments: {}, conversations: {}, accessUsage: {} }));
 vi.mock('$lib/file-index/jkai-mirror', () => ({ mirrorJkaiAttachmentToDrive: vi.fn() }));
 vi.mock('$lib/server/native-auth', () => ({
   identifyDevice: async () => (paired ? { id: 'dev-1', ownerEmail: 'owner@example.com' } : null),
