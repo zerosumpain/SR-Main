@@ -184,7 +184,7 @@
       {#if !data.canPair}
         <p>Ask John to add you to Family Circle — this step unlocks as soon as he does.</p>
       {:else}
-        <p>Open the app, tap <strong>Pair</strong>, and point your camera at the code.</p>
+        <p>In the app, open <strong>Settings → Connections → Pair by QR code</strong> and point the camera at this.</p>
         {#if pair && left > 0}
           <div class="qr">
             <img src={pair.qr} alt="Pairing code for the SR app" width="260" height="260" />
@@ -273,8 +273,8 @@
       <section class="w-card" data-step="chat">
         <div class="w-card-hd"><span class="w-num">04</span><h2>Chat &amp; news</h2></div>
         <p>
-          A second pairing, with this site, for the app's chat and news tabs. In the app: Settings → Pair with the
-          site.
+          A second pairing, with this site, for the app's chat and news tabs. In the app: Settings → Connections →
+          Scan the chat &amp; news code.
         </p>
         {#if sitePair}
           <div class="qr"><img src={sitePair.qr} alt="Chat and news pairing code" width="260" height="260" /></div>

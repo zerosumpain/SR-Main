@@ -154,8 +154,8 @@
       <span class="sr-label-tight">Pair your phone · chat &amp; news</span>
     </div>
     <p class="muted">
-      A one-time code for the SR app's chat and news tabs, good for ten minutes. In the app: Settings → Pair with
-      the site, then scan. Health &amp; location pairing is on <a href="/welcome">/welcome</a>.
+      A one-time code for the SR app's chat and news tabs, good for ten minutes. In the app: Settings → Connections →
+      Scan the chat &amp; news code. Health &amp; location pairing is on <a href="/welcome">/welcome</a>.
     </p>
     {#if pairError}<p class="result-bad" role="alert">{pairError}</p>{/if}
     {#if pairing}
