@@ -19,12 +19,15 @@ function chain(fields: Record<string, unknown>) {
 }
 vi.mock('$lib/db', () => ({ db: { select: (fields: Record<string, unknown>) => chain(fields) } }));
 
-const { activeLabels, railJourney, visitsFromFixes, loadMovementStats, placeTimeByPerson } = await import('./movement');
+const { activeLabels, railJourney, visitsFromFixes, loadMovementStats, loadPersonMovement, placeTimeByPerson } =
+  await import('./movement');
 
 describe('railJourney', () => {
   it('accepts a fast, straight run of fixes and refuses a slow or a turning one', () => {
-    const straight = [0, 1, 2, 3].map((i) => ({ lat: northOf(i * 2000), lon: LON, speedKmh: 110 }));
+    const straight = [0, 1, 2, 3].map((i) => ({ lat: northOf(i * 2000), lon: LON, speedKmh: 130 }));
     expect(railJourney(straight)).toBe(true);
+    // A dual carriageway: dead straight, but no train holds only 65 km/h.
+    expect(railJourney(straight.map((f) => ({ ...f, speedKmh: 65 })))).toBe(false);
     expect(railJourney(straight.map((f) => ({ ...f, speedKmh: 40 })))).toBe(false);
     const zigzag = straight.map((f, i) => ({ ...f, lon: LON + (i % 2 ? 0.03 : 0) }));
     expect(railJourney(zigzag)).toBe(false);
@@ -71,6 +74,55 @@ describe('loadMovementStats', () => {
     expect(stats.byMode.foot.count).toBe(1);
     expect(stats.timeOut).toHaveLength(30);
     expect(JSON.stringify(stats)).not.toMatch(/"(lat|lon)"|51\.0|-1\.0/);
+  });
+});
+
+describe('loadPersonMovement — commuting', () => {
+  // SYNTHETIC: two vehicle journeys seeded here, not read from any real trail.
+  it('lists a straight fast run as a train and a winding one as a car, with routes, leaving the stats coordinate-free', async () => {
+    const now = new Date('2026-10-28T12:00:00Z');
+    trailRows.length = 0;
+    const still = (startMs: number, n: number, lat: number, lon: number, placeId: string | null) => {
+      for (let i = 0; i < n; i++) {
+        trailRows.push({ ts: new Date(startMs + i * 120_000), lat, lon, speedKmh: 0, mode: 'still', placeId });
+      }
+    };
+    // Home, then 60 km due north at 150 km/h (one fix a minute), then a stay.
+    const t0 = Date.parse('2026-10-27T07:00:00Z');
+    still(t0, 15, LAT, LON, 'p-home');
+    const trainStart = t0 + 14 * 120_000;
+    for (let i = 1; i <= 24; i++) {
+      trailRows.push({ ts: new Date(trainStart + i * 60_000), lat: northOf(i * 2500), lon: LON, speedKmh: 150, mode: 'vehicle', placeId: null });
+    }
+    const trainEnd = trainStart + 24 * 60_000;
+    still(trainEnd + 60_000, 15, northOf(24 * 2500), LON, null);
+    // Later: a zig-zag drive at 40 km/h.
+    const t1 = Date.parse('2026-10-27T15:00:00Z');
+    still(t1, 15, LAT, LON, 'p-home');
+    const carStart = t1 + 14 * 120_000;
+    for (let i = 1; i <= 20; i++) {
+      trailRows.push({
+        ts: new Date(carStart + i * 60_000),
+        lat: northOf(i * 500),
+        lon: LON + (i % 2 ? 0.006 : 0),
+        speedKmh: 40,
+        mode: 'vehicle',
+        placeId: null,
+      });
+    }
+    still(carStart + 21 * 60_000, 15, northOf(20 * 500), LON, null);
+
+    const { stats, commuting } = await loadPersonMovement('alex', { days: 30, now });
+    expect(commuting.map((c) => [c.mode, c.fromLabel, c.toLabel])).toEqual([
+      ['car', 'Home', null],
+      ['rail', 'Home', null],
+    ]);
+    for (const c of commuting) {
+      expect(c.route.length).toBeGreaterThan(10);
+      expect(c.route.length).toBeLessThanOrEqual(120);
+    }
+    expect(stats.byMode.car.count + stats.byMode.rail.count).toBe(2);
+    expect(JSON.stringify(stats)).not.toMatch(/"(lat|lon|route)"|51\.0|-1\.0/);
   });
 });
 

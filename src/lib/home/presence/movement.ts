@@ -2,12 +2,15 @@
 //
 // The loader behind `movementStats`: one person's trail for a window, cut into
 // journeys and visits by the same segmenters the rest of presence uses, with
-// place names attached. Returns the stats only — no coordinate leaves here.
+// place names attached. The stats carry no coordinate; `loadPersonMovement`
+// adds the person's drives and train rides with thinned routes (`commuting.ts`),
+// for the one page that draws them behind the same gate.
 
 import { and, asc, eq, gte, inArray, isNotNull, lte, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamPlaces, daydreamTrail } from '$lib/db/schema';
 import { looksLikeRail, segmentVisits } from './cluster';
+import { commutingJourneys, type Commute } from './commuting';
 import { segmentJourneys, type Journey, type JourneyFix } from './journeys';
 import {
   DEFAULT_WINDOW_DAYS,
@@ -26,7 +29,23 @@ import { MIN_DWELL_MINS, RAIL_MIN_FIXES, VISIT_MAX_GAP_MINS, activeLabels, type 
  * consecutive fixes that `looksLikeRail` accepts. Advisory, as the mode always
  * is — a straight motorway passes too.
  */
+/**
+ * A train must also have HELD a speed no road allows (UK limit 70 mph = 113 km/h)
+ * across a tenth of its fixes. Measured 2026-09-26: a dual-carriageway drive at
+ * ~65 km/h, one fix a minute, passed the straight-line test both ways. Same rule
+ * as SR-Health's `TRAIN_SUSTAINED_KMH` (src/lib/trails/companion.ts) — keep them
+ * in step. Cost, named: a slow stopping train reads as a drive.
+ */
+export const TRAIN_SUSTAINED_KMH = 115;
+
+function sustainedKmh(fixes: Array<{ speedKmh: number | null }>): number {
+  const speeds = fixes.map((f) => f.speedKmh ?? 0).sort((a, b) => b - a);
+  if (!speeds.length) return 0;
+  return speeds[Math.max(0, Math.ceil(speeds.length * 0.1) - 1)];
+}
+
 export function railJourney(fixes: Array<{ lat: number; lon: number; speedKmh: number | null }>): boolean {
+  if (sustainedKmh(fixes) < TRAIN_SUSTAINED_KMH) return false;
   for (let i = RAIL_MIN_FIXES; i <= fixes.length; i++) {
     if (looksLikeRail(fixes.slice(i - RAIL_MIN_FIXES, i))) return true;
   }
@@ -96,6 +115,18 @@ export async function loadMovementStats(
   subject: string,
   opts: { days?: number; now?: Date } = {},
 ): Promise<MovementStats> {
+  return (await loadPersonMovement(subject, opts)).stats;
+}
+
+/**
+ * One trail read, two answers: the coordinate-free stats, and the car and rail
+ * journeys with their routes. The caller owns the visibility decision — only
+ * /home/people/[subject] calls this, after `mayOpenPerson`.
+ */
+export async function loadPersonMovement(
+  subject: string,
+  opts: { days?: number; now?: Date } = {},
+): Promise<{ stats: MovementStats; commuting: Commute[] }> {
   const now = opts.now ?? new Date();
   const days = opts.days ?? DEFAULT_WINDOW_DAYS;
   // A day's lead-in so a stay already under way when the window opens is seen.
@@ -136,18 +167,30 @@ export async function loadMovementStats(
 
   const journeys = segmentJourneys(fixes);
   const rail = new Set<Journey>();
+  // The fixes along every vehicle or rail journey: the rail test reads them,
+  // and so does the commuting route. Nothing else is ever kept.
+  const alongOf = new Map<Journey, JourneyFix[]>();
   for (const j of journeys) {
-    if (j.dominantMode !== 'vehicle') continue;
+    if (j.dominantMode !== 'vehicle' && j.dominantMode !== 'rail') continue;
     const along = fixes.filter((f) => f.ts >= j.startedAt && f.ts <= j.endedAt);
+    alongOf.set(j, along);
+    if (j.dominantMode !== 'vehicle') continue;
     if (railJourney(along.map((f) => ({ lat: f.lat, lon: f.lon, speedKmh: f.speedKmh ?? null })))) rail.add(j);
   }
+  const isRail = (j: Journey) => rail.has(j);
+  const visits = visitsFromFixes(fixes, labelOf);
 
-  return movementStats(journeys, visitsFromFixes(fixes, labelOf), {
-    days,
-    now,
-    homePlaceId: home,
-    isRail: (j) => rail.has(j),
-  });
+  return {
+    stats: movementStats(journeys, visits, { days, now, homePlaceId: home, isRail }),
+    commuting: commutingJourneys(journeys, {
+      now,
+      days,
+      isRail,
+      labelOf,
+      visits,
+      fixesOf: (j) => alongOf.get(j) ?? [],
+    }),
+  };
 }
 
 /**

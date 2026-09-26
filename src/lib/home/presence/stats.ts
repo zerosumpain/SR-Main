@@ -333,7 +333,7 @@ const LINK_MS = TRIP_LINK_MINS * 60_000;
 
 /** The visit the journey left from: the last one begun before it started,
  *  ending no more than 20 minutes before. */
-function visitBefore(j: Journey, visits: StatsVisit[]): StatsVisit | null {
+export function visitBefore(j: Journey, visits: StatsVisit[]): StatsVisit | null {
   let best: StatsVisit | null = null;
   for (const v of visits) {
     if (v.from > j.startedAt) continue;
@@ -345,7 +345,7 @@ function visitBefore(j: Journey, visits: StatsVisit[]): StatsVisit | null {
 
 /** The visit the journey arrived at: the first one ending after it ended,
  *  starting no more than 20 minutes after. */
-function visitAfter(j: Journey, visits: StatsVisit[]): StatsVisit | null {
+export function visitAfter(j: Journey, visits: StatsVisit[]): StatsVisit | null {
   let best: StatsVisit | null = null;
   for (const v of visits) {
     if (v.to < j.endedAt) continue;
