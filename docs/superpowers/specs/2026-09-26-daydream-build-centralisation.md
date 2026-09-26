@@ -101,6 +101,26 @@ paused `daydream-appetite` heartbeat row (P4b).
 | D8 | Callers left alone | Adopt all / two | `workflows/nodes/llm-agent.ts` (owned by SR-Workflows in `docs/module-ownership.json`, would drift), `blog/assistant/runner.ts` (an async generator that streams; later), every single-shot caller | | Yes |
 | D9 | The activity-tag registry check | Callers wrap `withActivity` themselves / extend the check | Extend `workloads.test.ts` | Moving the literal into an option hid `'daydream'` from the scan that catches tag typos. The scan now also reads `activity: '…'` in any file calling `runToolLoop(`, and `tool-loop.ts` joins the documented dynamic-tag exceptions. No existing assertion changed. | Yes |
 
+### PR-E decisions
+
+One spend-guard vocabulary in `src/lib/costs/guard.ts` (types only):
+`SpendGuard<U>` with `check(): Promise<GuardVerdict>` and `record(u)`. Guards are
+scoped at construction, so `check()` takes no arguments. The policies stay where
+they were; what is shared is the verdict.
+
+| # | Decision | Options | Chosen | Why | Reversible? |
+|---|---|---|---|---|---|
+| E1 | The two per-run cash budgets | Keep both / merge | Merge into `createRunBudget({ caps, activity, resolveModel, temperature, parse? })` in `src/lib/costs/run-budget.server.ts` | `workflowdoctor/run.ts` was a clone of `selfimprove/run.ts`'s budget that drifted. The merge takes the doctor's provider-correct pricing (`priceFor(resolved provider)`) and self-improve's `usage.cost`-first order. Both `run.ts` files re-export `Budget`, `BudgetExceededError` and `LlmCallOpts`, so no phase module changed. | Yes |
+| E2 | JSON parsing inside the merged budget | One parser / per-pipeline | Optional `parse`, strict `JSON.parse` by default | Self-improve always parsed loosely; the doctor parsed strictly on purpose (`coerceDiagnosis` owns its loose recovery). An option added to the approved signature to keep both behaviours exactly. | Yes |
+| E3 | `Budget` vs the guard methods | `Budget extends SpendGuard` / separate | Phases get `Budget` (unchanged shape); `createRunBudget` returns `RunBudget = Budget & SpendGuard` | Extending made every hand-rolled phase fake in the tests (propose, toolsmith) fail the typecheck. Phases only call, count and read the clock. | Yes |
+| E4 | Where run spend is counted | Read back from the ledger / in memory | In memory | `recordDurableLLMCall` is fire-and-forget; reading it back mid-run would race and under-count. | Yes |
+| E5 | Codex quota boilerplate | Leave per activity / adapter | `quotaGuard({ action, isCodexModel })` in `daydream/budget.ts`: `check()` wraps `budgetStatus` (verdict carries `status`), `begin()`/`end()` wrap `readQuotaMark` + `attributeSpend`. Adopted by memory, notebook and think; appetite left alone (PR-C deletes it) | `action` is typed to `SPENDING_ACTIONS`, so an unlisted activity cannot build a guard. Every preserved rule (10%/day, 50% of the 5h window, `limitReached`, weekly ≥98%, non-Codex never blocked, unreadable meter → minimal and NOT blocked, cache cleared before each read) lives unchanged in `budgetStatus`/`readQuotaMark`. | Yes |
+| E6 | memory + notebook outside the caps | Bug / intended | Bug: added to `SPENDING_ACTIONS` | Both read the meter and wrote `details.quota` but were never summed, the third time this omission happened. `budget.test.ts` now scans `heartbeat/activities/*.ts` and fails when a file using `readQuotaMark` or `quotaGuard` has a `NAME` not in the list. | Yes |
+| E7 | improve + doctor and the Codex caps | Add / leave out | Leave out | Per-run cash caps via `createRunBudget`, run overnight; counting them would starve the day loop. Reversible by adding them to `SPENDING_ACTIONS`. | Yes |
+| E8 | Build budget | Rewrite / adapter | `buildGuard(build)` + pure `toGuardVerdict` in `jkai/budget.ts`: `canProceed→allowed`, `sleepMs→retryAfterMs`, `shouldComplete→terminal`; `remaining` lists only the caps that are set | `checkBudget` and the orchestrator call sites are untouched. `record()` is a no-op: the orchestrator's iteration rows are the record. | Yes |
+| E9 | Tests | Rewrite / move | Moved the budget-cap cases out of `selfimprove/run.test.ts` and `workflowdoctor/run.test.ts` into `costs/run-budget.test.ts` unchanged, plus new pricing/parse/guard cases | Both copies of each assertion now test the one implementation. | Yes |
+| E10 | Activity-tag registry check | Callers wrap themselves / extend the check | Extend `workloads.test.ts` (as D9): the literal scan also reads `activity: '…'` in files calling `createRunBudget(`, and `run-budget.server.ts` joins the documented dynamic-tag exceptions | Moving `'selfimprove'`/`'doctor'` into an option would otherwise hide them from the typo scan. | Yes |
+
 ### PR-F decisions
 
 The read-side run ledger. `heartbeat_pulses` stays the canonical "a scheduled

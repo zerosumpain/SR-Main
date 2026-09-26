@@ -3,6 +3,7 @@ import { jkaiIterations } from '$lib/db/schema';
 import { eq, and, gte } from 'drizzle-orm';
 import type { BudgetConfig, BudgetCheckResult } from './types';
 import type { JkaiBuild } from '$lib/db/schema';
+import type { GuardVerdict, SpendGuard } from '$lib/costs/guard';
 
 /**
  * How long until the rolling window has room again, and how to say so.
@@ -128,4 +129,53 @@ export async function checkBudget(build: JkaiBuild): Promise<BudgetCheckResult> 
   }
 
   return { canProceed: true };
+}
+
+/**
+ * `checkBudget`'s answer in the shared SpendGuard vocabulary. A pure mapping —
+ * the build policy above is unchanged:
+ *
+ *   canProceed     → allowed
+ *   sleepMs        → retryAfterMs   (a rolling-window cooldown, capped at 5 min)
+ *   shouldComplete → terminal       (a lifetime cap: stop, don't wait)
+ */
+export function toGuardVerdict(result: BudgetCheckResult, build?: JkaiBuild): GuardVerdict {
+  const verdict: GuardVerdict = {
+    allowed: result.canProceed,
+    reason: result.reason ?? null,
+    remaining: build ? remainingFor(build) : {},
+  };
+  if (result.sleepMs !== undefined) verdict.retryAfterMs = result.sleepMs;
+  if (result.shouldComplete !== undefined) verdict.terminal = result.shouldComplete;
+  return verdict;
+}
+
+/** Headroom on the lifetime caps that are set. A missing key is uncapped, so it is omitted. */
+function remainingFor(build: JkaiBuild): Record<string, number> {
+  const config = (build.budgetConfig ?? {}) as BudgetConfig;
+  const out: Record<string, number> = {};
+  if (config.maxIterations) out.iterations = Math.max(0, config.maxIterations - build.iterationsCompleted);
+  if (config.maxTotalMinutes) out.minutes = Math.max(0, config.maxTotalMinutes - build.activeMinutesUsed);
+  if (config.maxCostUsd) {
+    const spent = Number.parseFloat(String(build.costUsd ?? '0'));
+    if (Number.isFinite(spent)) out.costUsd = Math.max(0, config.maxCostUsd - spent);
+  }
+  return out;
+}
+
+/**
+ * A build's budget as a SpendGuard. Spend is recorded by the orchestrator as
+ * `jkai_iterations` rows and the build's own counters, which `check()` reads
+ * back — so `record()` has nothing to add and is a no-op.
+ *
+ * The orchestrator still calls `checkBudget` directly; this is the adapter for
+ * code that wants to read every guard the same way.
+ */
+export function buildGuard(build: JkaiBuild): SpendGuard<void> {
+  return {
+    async check() {
+      return toGuardVerdict(await checkBudget(build), build);
+    },
+    record() {},
+  };
 }

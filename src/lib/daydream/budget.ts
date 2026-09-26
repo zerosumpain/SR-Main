@@ -41,6 +41,7 @@
 import { and, eq, gte, inArray } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { heartbeatActions, heartbeatPulses } from '$lib/db/schema';
+import type { GuardVerdict, SpendGuard } from '$lib/costs/guard';
 import { LOCAL_TZ, localDayStart } from './types';
 
 /** Owner's caps. Percentage POINTS of each window, not of what remains. */
@@ -83,6 +84,17 @@ export const SPENDING_ACTIONS = [
   // omission has happened twice before and the symptom is silence.
   'daydream-think',
   'daydream-weekly',
+  // Memory consolidation and the notebook reader both called budgetStatus and
+  // wrote `details.quota` from their first commits, and neither was listed
+  // here until 2026-09-26 — the third time an omission hid spend from the caps.
+  // A structural test (budget.test.ts) now fails the build when an activity
+  // reads the quota meter without being named in this list.
+  'daydream-memory',
+  'daydream-notebook',
+  // NOT here, deliberately: daydream-improve and daydream-doctor. Both carry a
+  // per-run CASH cap (createRunBudget in $lib/costs), run overnight, and
+  // counting them against these percentage caps would starve the day loop of
+  // the allowance they spent at 03:00. Reversible by adding them (2026-09-26).
   // The reviewer is xhigh reasoning with a tool loop, on every thought — the
   // most expensive thing on this list by some distance. Omitting an action here
   // has happened twice before (hypothesise and spend both ran outside the caps
@@ -90,6 +102,8 @@ export const SPENDING_ACTIONS = [
   // reports why.
   'daydream-review',
 ] as const;
+
+export type SpendingAction = (typeof SPENDING_ACTIONS)[number];
 
 /**
  * Hours the owner is plausibly awake, used to pace the daily allowance.
@@ -418,4 +432,79 @@ export function attributeSpend(
     weeklyPct: Math.max(0, round3(after.weeklyPct - before.weeklyPct)),
     fiveHourPct: Math.max(0, round3(after.fiveHourPct - before.fiveHourPct)),
   };
+}
+
+// ── The activity-facing guard ────────────────────────────────────────────────
+
+export interface QuotaVerdict extends GuardVerdict {
+  /** The full picture, for `details.budget` and the depth plan. */
+  status: BudgetStatus;
+}
+
+export interface QuotaGuard extends SpendGuard<QuotaSpend> {
+  readonly action: SpendingAction;
+  check(): Promise<QuotaVerdict>;
+  /** Mark the meter before the work. A no-op on a non-Codex model. */
+  begin(): Promise<void>;
+  /**
+   * Mark it after, record the delta and return it — for the pulse's
+   * `details.quota`, which is what `spentSince` reads back to enforce the caps.
+   */
+  end(): Promise<QuotaSpend>;
+  /** Everything recorded on this guard so far. */
+  readonly spent: QuotaSpend;
+}
+
+/**
+ * The before/after boilerplate every spending activity carried, in one place.
+ *
+ * `action` is typed to SPENDING_ACTIONS, so an activity that is not in the list
+ * cannot construct a guard at all — the omission that hid three activities'
+ * spend from the caps becomes a type error.
+ *
+ * Recording here is in-memory only: the durable record of daydream spend is
+ * the heartbeat pulse, and the caller must still put `end()`'s result on
+ * `details.quota`.
+ */
+export function quotaGuard(opts: {
+  action: SpendingAction;
+  isCodexModel: boolean;
+  now?: Date;
+}): QuotaGuard {
+  let before: QuotaSpend | null = null;
+  const spent: QuotaSpend = { ...ZERO_SPEND };
+
+  const guard: QuotaGuard = {
+    action: opts.action,
+    spent,
+    async check() {
+      const status = await budgetStatus({ now: opts.now, isCodexModel: opts.isCodexModel });
+      return {
+        allowed: !status.blocked,
+        reason: status.blockedReason,
+        remaining: {
+          todayPct: status.remainingTodayPct,
+          windowPct: status.remainingWindowPct,
+        },
+        // The windows roll: a blocked tick is retried on the next one.
+        terminal: false,
+        status,
+      };
+    },
+    record(u) {
+      spent.weeklyPct = round3(spent.weeklyPct + u.weeklyPct);
+      spent.fiveHourPct = round3(spent.fiveHourPct + u.fiveHourPct);
+    },
+    async begin() {
+      before = opts.isCodexModel ? await readQuotaMark() : null;
+    },
+    async end() {
+      if (!opts.isCodexModel) return { ...ZERO_SPEND };
+      const after = await readQuotaMark();
+      const delta = attributeSpend(before, after);
+      guard.record(delta);
+      return delta;
+    },
+  };
+  return guard;
 }

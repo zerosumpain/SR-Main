@@ -19,7 +19,7 @@ vi.mock('drizzle-orm', () => ({
   gte: () => ({}),
 }));
 
-import { checkBudget } from './budget';
+import { buildGuard, checkBudget, toGuardVerdict } from './budget';
 
 const build = (over: Record<string, unknown> = {}) =>
   ({
@@ -94,5 +94,35 @@ describe('checkBudget', () => {
     // ceiling has to sit above one iteration or the first one ends the hour.
     rows.current = [{ tokensUsed: 1_100_000, durationMs: 0, status: 'completed', createdAt: new Date() }];
     expect((await checkBudget(build({ budgetConfig: { maxTokensPerHour: 3_000_000 } }))).canProceed).toBe(true);
+  });
+});
+
+describe('buildGuard — the SpendGuard view of checkBudget', () => {
+  it('maps a pass to allowed, with headroom only on the caps that are set', async () => {
+    const v = await buildGuard(build({ budgetConfig: { maxIterations: 5 } })).check();
+    expect(v).toEqual({ allowed: true, reason: null, remaining: { iterations: 4 } });
+  });
+
+  it('maps shouldComplete to a terminal refusal', async () => {
+    const v = await buildGuard(build({ iterationsCompleted: 5, budgetConfig: { maxIterations: 5 } })).check();
+    expect(v.allowed).toBe(false);
+    expect(v.terminal).toBe(true);
+    expect(v.reason).toMatch(/max iterations/);
+    expect(v.remaining.iterations).toBe(0);
+  });
+
+  it('maps a cooldown sleep to retryAfterMs, not terminal', () => {
+    const v = toGuardVerdict({ canProceed: false, sleepMs: 300_000, reason: 'cooling' });
+    expect(v).toEqual({ allowed: false, reason: 'cooling', remaining: {}, retryAfterMs: 300_000 });
+    expect(v.terminal).toBeUndefined();
+  });
+
+  it('carries the 5-minute cooldown cap through from checkBudget', async () => {
+    const now = Date.now();
+    rows.current = [{ createdAt: new Date(now - 10 * 60_000), tokensUsed: 5_000_000, durationMs: 0 }];
+    const v = await buildGuard(build({ budgetConfig: { maxTokensPerHour: 1_000_000 } })).check();
+    expect(v.allowed).toBe(false);
+    expect(v.retryAfterMs).toBeLessThanOrEqual(5 * 60_000);
+    expect(v.terminal).toBeUndefined();
   });
 });

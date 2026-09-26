@@ -112,9 +112,11 @@ describe('activity tags match the registry', () => {
       }
       // `runToolLoop({ activity: '<id>' })` is a withActivity by another name:
       // the loop wraps itself in it. Same registry, same check.
-      if (src.includes('runToolLoop(')) {
+      // `createRunBudget({ activity: '<id>' })` likewise ($lib/costs).
+      for (const fn of ['runToolLoop(', 'createRunBudget(']) {
+        if (!src.includes(fn)) continue;
         for (const m of src.matchAll(/\bactivity:\s*'([^']+)'/g)) {
-          if (!ids.has(m[1])) bad.push(`${file}: runToolLoop activity '${m[1]}'`);
+          if (!ids.has(m[1])) bad.push(`${file}: ${fn.slice(0, -1)} activity '${m[1]}'`);
         }
       }
     }
@@ -148,9 +150,15 @@ describe('activity tags match the registry', () => {
       }
       return out;
     };
-    // `llm/tool-loop.ts` passes its caller's `activity` straight through; the
-    // literal is checked at the call site by the registry scan above.
-    const allowed = new Set(['src/lib/heartbeat/engine.ts', 'src/lib/deepdive/worker.ts', 'src/lib/llm/tool-loop.ts']);
+    // `llm/tool-loop.ts` and `costs/run-budget.server.ts` pass their caller's
+    // `activity` straight through; the literal is checked at the call site by
+    // the registry scan above.
+    const allowed = new Set([
+      'src/lib/heartbeat/engine.ts',
+      'src/lib/deepdive/worker.ts',
+      'src/lib/llm/tool-loop.ts',
+      'src/lib/costs/run-budget.server.ts',
+    ]);
     const dynamic: string[] = [];
     for (const file of walk('src')) {
       const src = readFileSync(file, 'utf8');

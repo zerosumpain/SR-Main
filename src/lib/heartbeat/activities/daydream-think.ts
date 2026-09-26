@@ -1,13 +1,7 @@
 import { getSetting } from '$lib/server/models/settings';
 import { isUserActive } from '$lib/heartbeat/idle';
 import { listChatJobs } from '$lib/workflows/chat/activity';
-import {
-  attributeSpend,
-  budgetStatus,
-  readQuotaMark,
-  ZERO_SPEND,
-  type Depth,
-} from '$lib/daydream/budget';
+import { quotaGuard, type Depth } from '$lib/daydream/budget';
 import { resolveDaydreamModel } from '$lib/daydream/model';
 import { runThink, MAX_ROUNDS } from '$lib/daydream/think/run';
 import { SETTINGS_ENABLED_KEY, errMsg } from '$lib/daydream/types';
@@ -99,21 +93,21 @@ export const daydreamThink: ActivityHandler = {
     }
 
     const model = await resolveDaydreamModel();
-    const isCodexModel = model.provider === 'codex';
-    const budget = await budgetStatus({ now, isCodexModel });
-    if (budget.blocked) {
-      return { outcome: 'skipped', summary: `budget: ${budget.blockedReason}`, details: { budget } };
+    const guard = quotaGuard({ action: NAME, isCodexModel: model.provider === 'codex', now });
+    const verdict = await guard.check();
+    const budget = verdict.status;
+    if (!verdict.allowed) {
+      return { outcome: 'skipped', summary: `budget: ${verdict.reason}`, details: { budget } };
     }
 
-    const before = isCodexModel ? await readQuotaMark() : null;
+    await guard.begin();
     let result;
     try {
       result = await runThink({ now, maxRounds: ROUNDS_BY_DEPTH[budget.plan.depth] });
     } catch (err) {
       return { outcome: 'error', summary: errMsg(err) };
     }
-    const after = isCodexModel ? await readQuotaMark() : null;
-    const quota = isCodexModel ? attributeSpend(before, after) : { ...ZERO_SPEND };
+    const quota = await guard.end();
 
     let queued = { added: 0, merged: 0 };
     try {

@@ -62,7 +62,6 @@ import { SETTINGS_AUTOAPPLY_KEY, SETTINGS_BREAKER_KEY, findingKey } from './type
 import type { DoctorRunData } from './types';
 import {
   runDoctorNow,
-  createBudget,
   buildCandidates,
   BudgetExceededError,
   acquireRunLock,
@@ -254,25 +253,6 @@ describe('run lock (overlap guard)', () => {
     expect(acquireRunLock()).toBe(true);
     await expect(runDoctorNow({ trigger: 'manual' })).rejects.toThrow(/already in progress/);
     releaseRunLock();
-  });
-});
-
-describe('budget caps', () => {
-  it('throws BudgetExceededError once the call cap is hit, before any network', async () => {
-    const b = createBudget({ maxLlmCalls: 0 });
-    await expect(b.call([{ role: 'user', content: 'hi' }])).rejects.toBeInstanceOf(BudgetExceededError);
-    expect(b.exceeded).toBe(true);
-    expect(b.llmCalls).toBe(0);
-  });
-
-  it('throws BudgetExceededError once the cost cap is hit', async () => {
-    const b = createBudget({ maxCostUsd: 0 });
-    await expect(b.call([{ role: 'user', content: 'hi' }])).rejects.toBeInstanceOf(BudgetExceededError);
-  });
-
-  it('reports the wall clock left', () => {
-    expect(createBudget({ maxWallMs: 5000 }).timeLeftMs()).toBeGreaterThan(0);
-    expect(createBudget({ maxWallMs: 0 }).timeLeftMs()).toBe(0);
   });
 });
 
