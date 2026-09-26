@@ -307,6 +307,8 @@ function settle(room: Room, now: number): void {
  * Returns whether anything changed.
  */
 export function advance(room: Room, now: number, rng: Rng): boolean {
+  // A clock that is not a number would make every deadline "due".
+  if (!Number.isFinite(now)) return false;
   let changed = false;
   for (let guard = 0; guard < 20; guard++) {
     const due = deadline(room);

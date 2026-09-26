@@ -5,6 +5,11 @@ import { gamePlayers, playerFor } from '$lib/games/players.server';
 import { asHttp, createGame, invitesFor, roomsFor } from '$lib/games/rooms.server';
 import { isDifficulty, MAX_PLAYERS } from '$lib/games/tap-duel';
 import { isGameId } from '$lib/games/catalogue';
+import { reserveUsage } from '$lib/jkai/chat-access.server';
+import { areaAccess } from '$lib/server/area-scope';
+
+/** Quiz Nights a member may start per rolling 24 h — each is one model call. */
+const QUIZ_DAILY = 10;
 
 /**
  * GET /api/native/games — the lobby: who I am, who I can invite, what I am
@@ -26,8 +31,11 @@ export const GET: RequestHandler = withNativeAccess('games', async (_event, iden
   };
 });
 
-/** POST /api/native/games — start a game: `{ game: 'tap-duel' | 'wordle-race', difficulty, invite: [playerId] }`. */
-export const POST: RequestHandler = withNativeAccess('games', async (event, identity) => {
+/**
+ * POST /api/native/games — start a game: `{ game, difficulty, invite: [playerId] }`,
+ * plus `topic` (optional) and `audience` (kids | family | adults) for Quiz Night.
+ */
+export const POST: RequestHandler = withNativeAccess('games', async (event, identity, role) => {
   const body = (await event.request.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body) return json({ error: 'Body must be JSON' }, { status: 400 });
   const game = body.game;
@@ -45,6 +53,15 @@ export const POST: RequestHandler = withNativeAccess('games', async (event, iden
   });
 
   const difficulty = body.difficulty;
-  const room = asHttp(() => createGame({ game, host: { id: me.id, name: me.name }, invite, difficulty }));
+  if (game === 'quiz-night' && role === 'member') {
+    await reserveUsage(
+      await areaAccess(event, 'games'),
+      'games-quiz',
+      QUIZ_DAILY,
+      `That is ${QUIZ_DAILY} quizzes today — the limit. Try Tap Duel or Wordle Race.`,
+    );
+  }
+  const options = { topic: body.topic, audience: body.audience };
+  const room = asHttp(() => createGame({ game, host: { id: me.id, name: me.name }, invite, difficulty, options }));
   return json({ room }, { status: 201 });
 });

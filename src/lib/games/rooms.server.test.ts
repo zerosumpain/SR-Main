@@ -1,4 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// The quiz writer calls the model; here it hands back a fixed set after a tick.
+vi.mock('./quiz-night.server', () => ({
+  writeQuiz: async (room: import('./quiz-night').Room) => {
+    await Promise.resolve();
+    const { ready } = await import('./quiz-night');
+    ready(
+      room,
+      {
+        title: 'Test',
+        questions: Array.from({ length: 6 }, (_, i) => ({
+          prompt: `Question ${i}?`,
+          options: ['a', 'b', 'c', 'd'],
+          answerIndex: 1,
+          explain: null,
+        })),
+      },
+      Date.now(),
+    );
+  },
+}));
 import { _resetRooms, act, asHttp, createGame, invitesFor, roomFor, roomsFor, subscribe } from './rooms.server';
 import { COUNTDOWN_MS, LOBBY_MS, RESULT_MS, type WireRoom } from './tap-duel';
 
@@ -122,5 +143,21 @@ describe('rooms', () => {
     // Sam sees John's colours, not his letters.
     const seenBySam = roomFor(id, 'p_sam') as unknown as typeof after;
     expect(seenBySam.players.find((p) => p.id === 'p_john')!.rows[0].word).toBeNull();
+  });
+
+  it('writes a quiz while the lobby waits, then plays it', async () => {
+    const created = createGame({ game: 'quiz-night', host: john, invite: [sam], difficulty: 'easy', options: { audience: 'kids' } });
+    expect((created as unknown as { prep: string }).prep).toBe('writing');
+    const seen: Array<{ phase: string; prep: string }> = [];
+    subscribe(created.id, 'p_sam', (r) => seen.push(r as unknown as { phase: string; prep: string }), () => {});
+    expect(() => asHttp(() => act(created.id, 'p_john', 'start'))).toThrow(expect.objectContaining({ status: 409 }));
+    await vi.waitFor(() => expect(seen.at(-1)!.prep).toBe('ready'));
+    act(created.id, 'p_sam', 'join');
+    act(created.id, 'p_john', 'start');
+    vi.advanceTimersByTime(COUNTDOWN_MS);
+    expect(seen.at(-1)!.phase).toBe('question');
+    act(created.id, 'p_john', 'answer', { question: 0, choice: 1 });
+    act(created.id, 'p_sam', 'answer', { question: 0, choice: 2 });
+    expect(seen.at(-1)!.phase).toBe('reveal');
   });
 });

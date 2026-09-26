@@ -89,6 +89,7 @@ export function createGame(input: {
   host: { id: string; name: string };
   invite: { id: string; name: string }[];
   difficulty: Difficulty;
+  options?: Record<string, unknown>;
 }): WireRoom {
   // A finished game waits ten minutes for "Play again"; it is not one the host is still running.
   const open = [...rooms.values()].filter((l) => l.room.phase !== 'closed' && l.room.phase !== 'finished');
@@ -103,12 +104,21 @@ export function createGame(input: {
     host: input.host,
     invite: input.invite,
     difficulty: input.difficulty,
+    options: input.options,
     now,
   });
   const live: Live = { room, rules, emitter: new EventEmitter(), timer: null };
   live.emitter.setMaxListeners(20);
   rooms.set(room.id, live);
   settle(live, true);
+  if (rules.prepare) {
+    void rules
+      .prepare(room)
+      .catch((err) => console.error(`[games] ${room.id}: prepare failed`, err))
+      .finally(() => {
+        if (rooms.get(room.id) === live) settle(live, true);
+      });
+  }
   return rules.toWire(room, input.host.id, now);
 }
 

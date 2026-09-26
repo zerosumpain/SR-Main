@@ -7,9 +7,11 @@
 
 import * as tapDuel from './tap-duel';
 import * as wordleRace from './wordle-race';
+import * as quizNight from './quiz-night';
+import { writeQuiz } from './quiz-night.server';
 import type { Difficulty, PlayerStatus, Rng } from './tap-duel';
 
-export const GAME_IDS = ['tap-duel', 'wordle-race'] as const;
+export const GAME_IDS = ['tap-duel', 'wordle-race', 'quiz-night'] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
 export function isGameId(value: unknown): value is GameId {
@@ -37,8 +39,16 @@ export interface GameRules {
     host: { id: string; name: string };
     invite: { id: string; name: string }[];
     difficulty: Difficulty;
+    /** Game-specific choices from the create request (Quiz Night: topic, audience). */
+    options?: Record<string, unknown>;
     now: number;
   }): RoomBase;
+  /**
+   * Work a room needs before it can start, run once after it is created —
+   * Quiz Night writes its questions here. It settles the room itself and must
+   * not throw; the registry tells the room's phones when it resolves.
+   */
+  prepare?(room: RoomBase): Promise<void>;
   join(room: RoomBase, playerId: string, now: number): void;
   decline(room: RoomBase, playerId: string, now: number): void;
   leave(room: RoomBase, playerId: string, now: number): void;
@@ -70,6 +80,14 @@ export const GAMES: Record<GameId, GameRules> = {
     ...wordleRace,
     moves: {
       guess: (room, playerId, body, now) => wordleRace.guess(room as wordleRace.Room, playerId, { word: body.word }, now),
+    },
+  },
+  'quiz-night': {
+    ...quizNight,
+    prepare: (room) => writeQuiz(room as quizNight.Room),
+    moves: {
+      answer: (room, playerId, body, now) =>
+        quizNight.answer(room as quizNight.Room, playerId, { question: num(body.question) ?? -1, choice: num(body.choice) ?? -1 }, now),
     },
   },
 };
