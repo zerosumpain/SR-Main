@@ -19,7 +19,6 @@ vi.mock('$lib/datastore', () => ({
 // Phase modules + seeds are mocked — run.ts orchestration is what's under test.
 vi.mock('./analyze', () => ({ gatherSignals: vi.fn(), learnInsights: vi.fn() }));
 vi.mock('./discover', () => ({ discoverApis: vi.fn() }));
-vi.mock('./toolsmith', () => ({ buildTool: vi.fn() }));
 vi.mock('./repair', () => ({ repairTools: vi.fn() }));
 vi.mock('./propose', () => ({ proposeFeatures: vi.fn() }));
 vi.mock('./optimise', () => ({ optimiseCalls: vi.fn() }));
@@ -34,7 +33,6 @@ vi.mock('./seed-apis', () => ({
 import { upsertRecord } from '$lib/datastore';
 import { gatherSignals, learnInsights } from './analyze';
 import { discoverApis } from './discover';
-import { buildTool } from './toolsmith';
 import { repairTools } from './repair';
 import { proposeFeatures } from './propose';
 import { optimiseCalls } from './optimise';
@@ -75,7 +73,6 @@ beforeEach(() => {
     actions: [{ kind: 'insight', detail: 'ok' }],
   } as never);
   vi.mocked(discoverApis).mockResolvedValue([] as never);
-  vi.mocked(buildTool).mockResolvedValue([] as never);
   vi.mocked(repairTools).mockResolvedValue([] as never);
   vi.mocked(proposeFeatures).mockResolvedValue([] as never);
   vi.mocked(optimiseCalls).mockResolvedValue([] as never);
@@ -131,7 +128,9 @@ describe('runImprovementNow — gating & status', () => {
     expect(gatherSignals).toHaveBeenCalled();
     expect(learnInsights).toHaveBeenCalled();
     expect(discoverApis).toHaveBeenCalled();
-    expect(buildTool).toHaveBeenCalled();
+    // The toolsmith was retired (D3): its phase stays in the record, skipped,
+    // so every run keeps the same shape.
+    expect(lastPersisted().data.phases.build.status).toBe('skipped');
     // Repair and propose are the phases that make a night productive when there
     // is nothing new worth building — they must run, not just exist.
     expect(repairTools).toHaveBeenCalled();
@@ -141,13 +140,13 @@ describe('runImprovementNow — gating & status', () => {
     expect(getImprovementStatus().running).toBe(false);
   });
 
-  it('still runs repair when build fails — a bad build must not sink the night', async () => {
-    vi.mocked(buildTool).mockRejectedValueOnce(new Error('author failed'));
+  it('still runs propose when repair fails — a bad phase must not sink the night', async () => {
+    vi.mocked(repairTools).mockRejectedValueOnce(new Error('author failed'));
     await runImprovementNow({ trigger: 'manual' });
-    expect(repairTools).toHaveBeenCalled();
+    expect(proposeFeatures).toHaveBeenCalled();
     const data = lastPersisted().data;
-    expect(data.phases.build.status).toBe('failed');
-    expect(data.phases.repair.status).toBe('ok');
+    expect(data.phases.repair.status).toBe('failed');
+    expect(data.phases.propose.status).toBe('ok');
     expect(data.status).toBe('partial');
   });
 
@@ -155,8 +154,8 @@ describe('runImprovementNow — gating & status', () => {
     vi.mocked(discoverApis).mockRejectedValueOnce(new Error('boom'));
     const { runId } = await runImprovementNow({ trigger: 'manual' });
     expect(runId).toBeTruthy();
-    // build still ran after discover failed
-    expect(buildTool).toHaveBeenCalled();
+    // repair still ran after discover failed
+    expect(repairTools).toHaveBeenCalled();
     expect(finalizeAndNotify).toHaveBeenCalled();
     const data = lastPersisted().data;
     expect(data.status).toBe('partial');
@@ -167,9 +166,9 @@ describe('runImprovementNow — gating & status', () => {
     vi.mocked(learnInsights).mockRejectedValueOnce(new BudgetExceededError('budget exceeded'));
     const { runId } = await runImprovementNow({ trigger: 'manual' });
     expect(runId).toBeTruthy();
-    // discover/build are skipped after a budget stop
+    // discover/repair are skipped after a budget stop
     expect(discoverApis).not.toHaveBeenCalled();
-    expect(buildTool).not.toHaveBeenCalled();
+    expect(repairTools).not.toHaveBeenCalled();
     expect(lastPersisted().data.status).toBe('budget_exceeded');
   });
 });

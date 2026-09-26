@@ -25,14 +25,11 @@ import {
 import { ensureSystemCollections } from './seed-apis';
 import { gatherSignals, learnInsights, type GatheredSignals } from './analyze';
 import { discoverApis } from './discover';
-import { buildTool } from './toolsmith';
 import { repairTools } from './repair';
 import { proposeFeatures } from './propose';
 import { optimiseCalls } from './optimise';
 import { finalizeAndNotify } from './report';
 import type { QuestionInsights } from './types';
-import { faultNeeds } from '$lib/daydream/faults';
-import { capabilityNeeds } from '$lib/daydream/appetite/intake';
 import { hasOpenNewDataWork, listBacklog } from './backlog';
 import { getSetting } from '$lib/server/models/settings';
 
@@ -280,7 +277,15 @@ export async function runImprovementNow(
       console.error('[selfimprove] new-data check failed:', errMsg(err));
     }
 
-    const phases: Array<[Exclude<PhaseName, 'report'>, () => Promise<RunAction[]>]> = [
+    // The toolsmith that authored runtime tools unattended was retired by D3
+    // (spec 2026-09-25): an idea for a tool is a backlog item like any other
+    // and reaches the repo builder once the owner accepts its brief. `build`
+    // stays in the record, skipped, so `improvement_runs` keeps one shape
+    // across the change — a missing `PhaseName` would leave a hole every
+    // dashboard would have to special-case.
+    data.phases.build = { status: 'skipped', detail: 'retired — tool ideas reach the build lane through the backlog' };
+
+    const phases: Array<[Exclude<PhaseName, 'report' | 'build'>, () => Promise<RunAction[]>]> = [
       [
         'gather',
         async () => {
@@ -322,21 +327,15 @@ export async function runImprovementNow(
                 `${o.title}: ${o.need} Consumer: ${o.consumer}. Value: ${o.value}` +
                 (o.integrationHint ? ` Suggested integration: ${o.integrationHint}` : ''),
             );
-          // The appetite ledger FIRST: a fault's connector is a source that
-          // broke, a lead's is one that never existed, and the owner's
-          // instruction is that the second outranks the first.
-          return discoverApis(state.insights, budget, [
-            ...(await capabilityNeeds().catch(() => [])),
-            ...(await faultNeeds().catch(() => [])),
-            ...portfolioNeeds,
-          ]);
+          // The appetite and fault ledgers used to prepend their needs here;
+          // both were retired by D3 (2026-09-26), so the search is the
+          // learn phase's own portfolio opportunities.
+          return discoverApis(state.insights, budget, portfolioNeeds);
         },
       ],
-      ['build', async () => buildTool(state.insights, state.signals, budget, runId)],
-      // Repair runs AFTER build so a night that ships nothing new still has a
-      // chance to fix something that already exists. A source that has broken
-      // is still a source that stopped bringing data in, so repair keeps its
-      // slot under the 2026-09-04 reordering.
+      // Repair keeps the runtime tools that already exist working (chat still
+      // loads them). A source that has broken is still a source that stopped
+      // bringing data in, so repair keeps its slot.
       ['repair', async () => repairTools(budget, runId)],
       // Propose now runs BEFORE optimise, which is the reordering that demotes
       // efficiency. It is also no longer the expensive phase it was: it hands

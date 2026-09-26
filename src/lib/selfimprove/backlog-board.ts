@@ -62,7 +62,7 @@ export interface BoardCard {
   kinds: string[];
   updatedAt: string;
   flags: CardFlag[];
-  /** Whether ANY move is possible. A capability lead is ruled in Appetite. */
+  /** Whether ANY move is possible. */
   actionable: boolean;
   /** Deliverables this card stands for. One, at the deliverable level. */
   total: number;
@@ -312,10 +312,7 @@ export function planMove(card: BoardCard, to: WorkStage): PlannedMove {
       action: null,
       slugs: [],
       lands: null,
-      reason:
-        members.length && members.every((i) => i.source === 'capability')
-          ? 'These are capability leads — rule on them in Appetite, which carries their evidence.'
-          : `Nothing here can be ${action === 'park' ? 'parked' : 'restored'}.`,
+      reason: `Nothing here can be ${action === 'park' ? 'parked' : 'restored'}.`,
     };
   }
   const lands = stageAfter(card, new Set(slugs), to);

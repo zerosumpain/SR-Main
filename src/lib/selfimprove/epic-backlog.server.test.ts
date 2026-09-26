@@ -11,7 +11,6 @@ vi.mock('./backlog', () => ({ MAX_ATTEMPTS: 4,
 vi.mock('./epics', () => ({ listEpics: vi.fn(async () => h.epics) }));
 vi.mock('./seed-apis', () => ({ ensureSystemCollections: vi.fn() }));
 vi.mock('./context', () => ({ loadCustomToolHealth: vi.fn(async () => []) }));
-vi.mock('$lib/daydream/appetite/store', () => ({ listCapabilities: vi.fn(async () => []) }));
 vi.mock('$lib/datastore', () => ({
   getRecordByKey: vi.fn(async (_: string, slug: string) => ({ data: h.epics.find((e) => e.slug === slug) })),
   upsertRecord: vi.fn(async (collection: string, record: { data: EpicData | BacklogItemData }) => {

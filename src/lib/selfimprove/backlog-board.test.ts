@@ -232,21 +232,6 @@ describe('planMove', () => {
     expect(planMove(card, 'parked').reason).toContain('erase the fact that it shipped');
   });
 
-  it('says so when the epic holds only capability leads', () => {
-    const card = toCards(
-      [
-        epic({
-          stage: 'proposed',
-          deliverables: [work({ id: 'capability:x', source: 'capability', backlogStatus: null, stage: 'proposed' })],
-        }),
-      ],
-      'epic',
-    )[0];
-    const plan = planMove(card, 'parked');
-    expect(plan.ok).toBe(false);
-    expect(plan.reason).toContain('Appetite');
-  });
-
   it('names the deliverable rather than a count at the deliverable level', () => {
     const card = toCards([epic({ deliverables: [work({ title: 'A thing' })] })], 'deliverable')[0];
     expect(planMove(card, 'parked').reason).toBe('Parked “A thing”.');

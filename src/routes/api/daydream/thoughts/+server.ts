@@ -112,36 +112,6 @@ export const POST: RequestHandler = async ({ request }) => {
         return json({ ok: true });
       }
 
-      /**
-       * The owner ruling on what the engine would like to build.
-       *
-       * `accept` does NOT build anything — it moves the lead to `queued`, and
-       * the next self-improvement run picks queued leads up under its own
-       * switches. Keeping the tap and the spend apart is deliberate: a button
-       * that starts a repo build costs real money, and the thing that decides
-       * to spend it should be the engine's own budgeted phase, not a click.
-       *
-       * `decline` is permanent by design. `upsertCapability` refuses to
-       * re-open a declined row, so a no stays a no — the proposer cannot
-       * re-litigate its own refusals the way the 19–29 Jul runs re-proposed
-       * "news digest" every night for ten nights.
-       */
-      case 'capability_decide': {
-        const slug = str('slug');
-        const decision = str('decision');
-        if (!slug) return json({ error: 'slug is required' }, { status: 400 });
-        if (decision !== 'accept' && decision !== 'decline') {
-          return json({ error: 'decision must be accept or decline' }, { status: 400 });
-        }
-        const { setCapabilityStatus } = await import('$lib/daydream/appetite/store');
-        const moved = await setCapabilityStatus(slug, decision === 'accept' ? 'queued' : 'declined', {
-          by: 'owner',
-          outcome: decision === 'accept' ? 'Accepted — waiting for a build slot.' : 'Declined by the owner.',
-        });
-        if (!moved) return json({ error: 'no such capability' }, { status: 404 });
-        return json({ ok: true, slug, status: decision === 'accept' ? 'queued' : 'declined' });
-      }
-
       // ── The queue board (2026-09-04) ───────────────────────────────────
       //
       // Owner edits on `improvement_backlog`, all keyed by slug. They exist
@@ -149,10 +119,11 @@ export const POST: RequestHandler = async ({ request }) => {
       // on priority 2: the engine could add to the pile and nothing could
       // sort, merge or close it.
       //
-      // None of them spends anything. Accepting work queues it for a slot the
-      // lane still gates — a repo build can cost £2 and
-      // `daydream.appetite.autobuild` is deliberately inverted, so a drag on a
-      // board must never be what starts one.
+      // None of them spends anything directly. The owner's tap for a costly
+      // lane is SAVING AN ACCEPTED BRIEF (`backlog_update` with `grooming`,
+      // which stamps `grooming.acceptedAt`); the nightly propose phase then
+      // dispatches at most one tapped build a night. A drag on a board must
+      // never be what starts one.
 
       /**
        * Groom a draft with JKAI's configured default model. This is read-only:

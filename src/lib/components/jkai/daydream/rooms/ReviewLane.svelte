@@ -239,9 +239,9 @@
 
   <p class="note">
     A merge keeps both requirements and retires the duplicate row; a retirement parks a row
-    against something already live. Neither deletes anything — a parked row still counts as
-    evidence in the appetite scan, and restoring one also pins it apart so the next intake
-    pass cannot fold it back in.
+    against something already live. Neither deletes anything — a parked row stays on the
+    ledger as a record, and restoring one also pins it apart so the next intake pass cannot
+    fold it back in.
   </p>
 {/if}
 

@@ -19,6 +19,7 @@ import {
   asData,
   errMsg,
   slugifyIdea,
+  type BacklogCitation,
   type BacklogItemData,
   type BacklogNote,
   type BacklogStatus,
@@ -27,23 +28,24 @@ import {
 // for why it cannot live in `./types`.
 import { BACKLOG_KINDS, IDEA_SOURCES, type BacklogKind, type IdeaSource } from './board';
 import { MAX_BACKLOG_NOTES, acceptGrooming, normaliseNote } from './grooming';
+import { findSameIdea } from './same-idea';
 
-/** An idea as proposed by a phase, before it becomes a record. */
+/** An idea as proposed by a producer, before it becomes a record. */
 export interface IdeaInput {
   title: string;
   detail: string;
   kind: BacklogItemData['kind'];
   priority?: number;
-  /** The appetite-ledger row this came from, when it came from one. */
-  capabilitySlug?: string;
   /** Which channel this arrived through. Set by the CALL SITE — never read out
    *  of a model's answer, which is why `coercePlan` whitelists its fields. */
   source?: IdeaSource;
+  /** What asked, when it has an identity (`thought:<id>`, `doctor:<finding>`).
+   *  Recorded on the item's citations so a merge still says who wanted it. */
+  ref?: string;
 }
 
-/** The lanes that bring new data into the building. Kept here because
- *  `pickWork` reserves slots for them and the reservation must not depend on
- *  importing the daydream vocabulary into the self-improvement engine. */
+/** The lanes that bring new data into the building. Read by the run to decide
+ *  whether call-efficiency may start a fresh experiment tonight. */
 const NEW_DATA_KINDS: ReadonlyArray<BacklogItemData['kind']> = ['source', 'watch'];
 
 /**
@@ -118,14 +120,17 @@ function stampSettled(next: BacklogItemData, at: string): BacklogItemData {
 /**
  * How many genuinely new ideas may enter the backlog in one night.
  *
- * There is no global cap today and there are four call sites — `analyze.ts`,
- * `toolsmith.ts` twice, and the trace-analyse route — so each one is polite in
- * isolation and the total is whatever they happen to add up to. Measured over
+ * There was no global cap and there were four call sites — `analyze.ts`, the
+ * (since retired) toolsmith twice, and the trace-analyse route — so each one
+ * was polite in isolation and the total was whatever they added up to. Since
+ * D3 the producers are the nightly question-miner, the think loop's build
+ * notes, the workflow doctor's escalations and the trace route. Measured over
  * the fortnight to 2026-08-16 that was 77 added against 14 built; by 2026-08-30
  * the open pile had gone from 148 to **324** and was still climbing.
  *
  * The cap belongs here rather than at the call sites precisely because there
- * are four of them and a fifth is one PR away. Twelve is a little under the
+ * are several of them and another is one PR away. Merges (`intakeIdeas`) never
+ * count against it — a restatement adds nothing to the pile. Twelve is a little under the
  * observed nightly intake, so the pile stops growing without the engine
  * suddenly proposing nothing.
  */
@@ -158,94 +163,272 @@ function coerceSource(source: unknown): IdeaSource {
 }
 
 /**
- * Merge ideas into the backlog. Existing slugs are left alone (their attempt
- * history is worth more than a re-description); genuinely new ones are added,
- * up to `MAX_NEW_IDEAS_PER_NIGHT`. Returns the slugs actually created, for the
- * run's action list.
+ * How far back a SETTLED item still absorbs a restatement.
  *
- * **Existence is checked by KEY, never against a list.** It used to build a Map
- * from `listBacklog()`, which was capped at 200 rows — so for any idea whose
- * slug had fallen outside that window, `existing.has(slug)` was false and the
- * item was written fresh: `attempts: 0`, `status: 'open'`, `createdAt: now`,
- * silently erasing its history and resurrecting work that was already shipped
- * or abandoned. Nothing had fired yet on 2026-08-30 (no shipped row sat at zero
- * attempts) because being worked on lifts a row back up the `updatedAt` sort
- * and holds it inside the window — but 210 of 410 rows were already outside it,
- * and the pile grows. A per-slug lookup is exact, cannot be outgrown, and costs
- * one indexed read per idea against a list that is capped just above.
+ * An open item absorbs one at any age — that is the pile the dedup exists to
+ * protect. A shipped or parked item absorbs one for a month: long enough that
+ * tomorrow's doctor run or think cycle does not re-queue what was just built
+ * or just declined, short enough that a genuinely new ask about an old theme
+ * is not swallowed by a row nobody has looked at since spring.
  */
-export async function addIdeas(ideas: IdeaInput[]): Promise<string[]> {
-  if (ideas.length === 0) return [];
-  const added: string[] = [];
+export const RECENT_SETTLED_DAYS = 30;
+
+/** Citations kept per item. Newest arrivals win; an item asked for by more
+ *  producers than this is not in doubt. */
+export const MAX_CITATIONS = 20;
+
+/** What one intake call did, per idea. */
+export interface IntakeResult {
+  /** Slugs written as new items. */
+  added: string[];
+  /** Ideas that named an item already queued, and were recorded on it. */
+  merged: Array<{ title: string; into: string; exact: boolean }>;
+  /** New ideas dropped by `MAX_NEW_IDEAS_PER_NIGHT`. */
+  capped: number;
+  /** What happened to each input, in input order. `skipped` is an empty title
+   *  or a datastore that could not be read (fail-closed). */
+  outcomes: Array<'added' | 'merged' | 'capped' | 'skipped'>;
+}
+
+/**
+ * Record one producer's arrival on a citation list. Same source and ref (or
+ * the same wording when there is no ref) is the same asker, arriving again:
+ * its count moves, nothing is appended. PURE.
+ */
+export function mergeCitation(
+  existing: readonly BacklogCitation[] | undefined,
+  arrival: { source: IdeaSource; ref?: string; title?: string },
+  at: string,
+): BacklogCitation[] {
+  const list = [...(existing ?? [])];
+  const key = (c: { source: string; ref?: string; title?: string }) => `${c.source}|${c.ref ?? c.title ?? ''}`;
+  const k = key(arrival);
+  const i = list.findIndex((c) => key(c) === k);
+  if (i >= 0) {
+    list[i] = { ...list[i], lastAt: at, count: (list[i].count ?? 1) + 1 };
+    return list;
+  }
+  const c: BacklogCitation = { source: arrival.source, firstAt: at, lastAt: at, count: 1 };
+  if (arrival.ref) c.ref = arrival.ref.slice(0, 200);
+  if (arrival.title) c.title = arrival.title.slice(0, 200);
+  list.push(c);
+  return list.slice(-MAX_CITATIONS);
+}
+
+/**
+ * The queued item a new idea is a restatement of, or null. PURE.
+ *
+ * Candidates are every item still open, plus anything settled inside
+ * `RECENT_SETTLED_DAYS` (shipped: already built; parked or folded: already
+ * declined). A folded item hands the arrival on to its survivor, which is
+ * where the owner said that idea now lives.
+ *
+ * **A producer's own distinct identities are never merged with each other.**
+ * Two doctor findings on neighbouring nodes of one workflow ("Fix Morning
+ * briefing / Read the diary" and "… / Read the calendar") score 0.70 on
+ * titles and are still two fixes; two think notes the think loop kept apart
+ * have already been judged different claims by `liveEchoOf`. So when the
+ * arrival carries a `ref`, an item cited by the SAME source under a DIFFERENT
+ * ref is not its twin. Across producers, and for arrivals with no identity,
+ * the title rule decides.
+ */
+export function findIntakeTwin(
+  title: string,
+  items: readonly BacklogItemData[],
+  now = Date.now(),
+  arrival?: { source: IdeaSource; ref?: string },
+): BacklogItemData | null {
+  const since = now - RECENT_SETTLED_DAYS * 86_400_000;
+  const ownSibling = (i: BacklogItemData) => {
+    if (!arrival?.ref) return false;
+    const mine = (i.citations ?? []).filter((c) => c.source === arrival.source && c.ref);
+    return mine.length > 0 && !mine.some((c) => c.ref === arrival.ref);
+  };
+  const live = items.filter((i) => {
+    if (ownSibling(i)) return false;
+    if (i.status === 'open') return true;
+    const t = Date.parse(i.settledAt ?? i.updatedAt ?? '');
+    return Number.isFinite(t) && t >= since;
+  });
+  const twin = findSameIdea(title, live);
+  if (twin?.foldedInto) return items.find((i) => i.slug === twin.foldedInto) ?? twin;
+  return twin;
+}
+
+/**
+ * The single intake queue (D3, spec 2026-09-25): every producer's ideas enter
+ * here.
+ *
+ * Three outcomes per idea:
+ *  - **exact** — an item with this slug already exists. Left alone as before
+ *    (its attempt history is worth more than a re-description), but the
+ *    arrival is now recorded on its `citations`.
+ *  - **merged** — a near-identical title is open, or settled recently
+ *    (`findIntakeTwin`). Recorded on that item; nothing new is queued. This is
+ *    what stops the think loop, the doctor and the question-miner queueing one
+ *    idea three times, and so paying for it three times.
+ *  - **added** — genuinely new, up to `MAX_NEW_IDEAS_PER_NIGHT`.
+ *
+ * A merge never moves the item's `updatedAt`: the burndown dates a drained row
+ * by it, and a shipped item re-asked for is not a newly drained one.
+ *
+ * **Existence is still checked by KEY, never against a list alone.** It used
+ * to build a Map from `listBacklog()` when that was capped at 200 rows, so an
+ * idea whose slug had fallen outside the window was written fresh — erasing
+ * its history and resurrecting shipped work. The list now pages, and is used
+ * for the similarity pass; the per-slug read stays the authority for exact
+ * existence and still fails CLOSED.
+ */
+export async function intakeIdeas(ideas: IdeaInput[]): Promise<IntakeResult> {
+  const result: IntakeResult = { added: [], merged: [], capped: 0, outcomes: [] };
+  if (ideas.length === 0) return result;
   const now = new Date().toISOString();
+  const all = await listBacklog();
 
   // The cap has to count what the OTHER call sites already added, or it is a
-  // per-call limit wearing a per-night name and four callers make it 48. A
-  // rolling 24 hours rather than a calendar day: the run starts at 02:30 local
-  // and nothing useful happens at a midnight boundary, so a window that cannot
-  // be straddled is simpler than one that can.
+  // per-call limit wearing a per-night name. A rolling 24 hours rather than a
+  // calendar day: nothing useful happens at a midnight boundary.
   const since = Date.now() - 24 * 60 * 60 * 1000;
-  const recent = (await listBacklog()).filter((i) => {
+  const recent = all.filter((i) => {
     const t = Date.parse(i.createdAt ?? '');
     return Number.isFinite(t) && t >= since;
   }).length;
   const budget = MAX_NEW_IDEAS_PER_NIGHT - recent;
-  if (budget <= 0) {
-    console.log(`[selfimprove] backlog intake capped — ${recent} idea(s) already added in the last 24h`);
-    return [];
-  }
 
   for (const idea of ideas) {
-    if (added.length >= budget) break;
-    const title = (idea.title ?? '').trim();
-    if (!title) continue;
-    const slug = slugifyIdea(title);
-    if (!slug) continue;
-    if (await backlogItemExists(slug)) continue;
-    const item: BacklogItemData = {
-      slug,
-      title: title.slice(0, 200),
-      detail: (idea.detail ?? '').slice(0, 2000),
-      kind: coerceKind(idea.kind),
-      status: 'open',
-      priority: Math.min(5, Math.max(1, Math.round(idea.priority ?? 3))),
-      attempts: 0,
-      createdAt: now,
-      updatedAt: now,
-    };
-    if (idea.capabilitySlug) item.capabilitySlug = idea.capabilitySlug.slice(0, 200);
-    item.source = coerceSource(idea.source);
-    try {
-      await put(item);
-      added.push(slug);
-    } catch (err) {
-      console.error('[selfimprove] addIdeas upsert failed:', errMsg(err));
-    }
+    result.outcomes.push(await intakeOne(idea, all, budget, result, now));
   }
-  if (added.length) {
+  if (result.capped) {
+    console.log(`[selfimprove] backlog intake capped — ${result.capped} new idea(s) dropped, ${recent} already added in the last 24h`);
+  }
+  if (result.added.length) {
     const { groomAfterIntake } = await import('$lib/workflows/backlog-grooming.server');
     await groomAfterIntake();
   }
-  return added;
+  return result;
+}
+
+/** One idea through the three outcomes. `all` grows with each addition so
+ *  later ideas in the same call compare against it. */
+async function intakeOne(
+  idea: IdeaInput,
+  all: BacklogItemData[],
+  budget: number,
+  result: IntakeResult,
+  now: string,
+): Promise<IntakeResult['outcomes'][number]> {
+  const title = (idea.title ?? '').trim();
+  if (!title) return 'skipped';
+  const slug = slugifyIdea(title);
+  if (!slug) return 'skipped';
+  const source = coerceSource(idea.source);
+  const arrival = { source, ref: idea.ref, title };
+
+  // Exact: the record by key, fail-closed.
+  const existing = await readForIntake(slug);
+  if (existing === 'unknown') return 'skipped';
+  if (existing) {
+    await cite(existing, arrival, now);
+    result.merged.push({ title, into: existing.slug, exact: true });
+    return 'merged';
+  }
+
+  // Near-identical: the same idea under other words.
+  const twin = findIntakeTwin(title, all, Date.now(), arrival);
+  if (twin) {
+    const fresh = await readForIntake(twin.slug);
+    if (!fresh || fresh === 'unknown') return 'skipped';
+    const next = await cite(fresh, arrival, now);
+    if (next) Object.assign(twin, next);
+    result.merged.push({ title, into: twin.slug, exact: false });
+    return 'merged';
+  }
+
+  if (result.added.length >= budget) {
+    result.capped++;
+    return 'capped';
+  }
+  const item: BacklogItemData = {
+    slug,
+    title: title.slice(0, 200),
+    detail: (idea.detail ?? '').slice(0, 2000),
+    kind: coerceKind(idea.kind),
+    status: 'open',
+    priority: Math.min(5, Math.max(1, Math.round(idea.priority ?? 3))),
+    attempts: 0,
+    source,
+    citations: mergeCitation(undefined, arrival, now),
+    createdAt: now,
+    updatedAt: now,
+  };
+  try {
+    await put(item);
+    result.added.push(slug);
+    all.push(item);
+    return 'added';
+  } catch (err) {
+    console.error('[selfimprove] intake upsert failed:', errMsg(err));
+    return 'skipped';
+  }
 }
 
 /**
- * Does a backlog item with this slug already exist?
- *
- * Fails CLOSED — an unreadable datastore answers "yes, it exists", so a
- * transient error skips the write rather than overwriting a record it could
- * not read. Losing one night's idea is recoverable; erasing an item's attempt
- * history is not.
+ * The historical entry point: intake, answering only with the slugs created.
+ * Kept because the run's action list and the trace route read exactly that.
  */
-async function backlogItemExists(slug: string): Promise<boolean> {
+export async function addIdeas(ideas: IdeaInput[]): Promise<string[]> {
+  return (await intakeIdeas(ideas)).added;
+}
+
+/** Append an arrival to an item's citations. Soft: a merge that cannot be
+ *  recorded must not cost the producer its run. */
+async function cite(
+  item: BacklogItemData,
+  arrival: { source: IdeaSource; ref?: string; title?: string },
+  at: string,
+): Promise<BacklogItemData | null> {
+  const next: BacklogItemData = { ...item, citations: mergeCitation(item.citations, arrival, at) };
   try {
-    return (await getRecordByKey(COLLECTIONS.backlog, slug, SYSTEM_ACTOR)) != null;
+    await put(next);
+    return next;
+  } catch (err) {
+    console.error('[selfimprove] intake citation failed:', errMsg(err));
+    return null;
+  }
+}
+
+/**
+ * The item with this slug, `null` when there is none, or `'unknown'` when the
+ * datastore could not say.
+ *
+ * Fails CLOSED — an unreadable datastore is `'unknown'` and the caller skips
+ * the idea rather than overwriting a record it could not read. Losing one
+ * night's idea is recoverable; erasing an item's attempt history is not.
+ */
+async function readForIntake(slug: string): Promise<BacklogItemData | null | 'unknown'> {
+  try {
+    const rec = await getRecordByKey(COLLECTIONS.backlog, slug, SYSTEM_ACTOR);
+    return rec ? (rec.data as unknown as BacklogItemData) : null;
   } catch (err) {
     const code = (err as { code?: string } | null)?.code;
-    if (code === 'not_found') return false;
-    console.error('[selfimprove] backlogItemExists failed:', errMsg(err));
-    return true;
+    if (code === 'not_found') return null;
+    console.error('[selfimprove] intake read failed:', errMsg(err));
+    return 'unknown';
   }
+}
+
+/**
+ * Has the owner said yes to spending on this item?
+ *
+ * The owner's tap for the costly lanes (a repo build, a watch) is an ACCEPTED
+ * brief: `grooming.acceptedAt` is stamped only when a person saves the groomed
+ * brief from the backlog editor (`acceptGrooming`, reached from the two owner
+ * routes and nothing unattended). It replaced the appetite ledger's
+ * `decidedBy: 'owner'` when that ledger was retired (D3, 2026-09-26). A board
+ * stage is not a tap: `stageFor` calls every untried open row "accepted".
+ */
+export function isOwnerAccepted(item: Pick<BacklogItemData, 'grooming'>): boolean {
+  return Boolean(item.grooming?.acceptedAt);
 }
 
 /** Attempts after which an idea is left alone — it is almost certainly not
@@ -277,12 +460,13 @@ const RETRY_SHARE = 1 / 3;
 
 export function pickWork(
   items: BacklogItemData[],
-  kind: BacklogItemData['kind'],
+  kind: BacklogItemData['kind'] | ReadonlyArray<BacklogItemData['kind']>,
   limit: number,
 ): BacklogItemData[] {
   if (limit <= 0) return [];
+  const kinds: ReadonlyArray<BacklogItemData['kind']> = typeof kind === 'string' ? [kind] : kind;
   const open = items.filter(
-    (i) => i.status === 'open' && !i.buildRef && i.kind === kind && i.attempts < MAX_ATTEMPTS,
+    (i) => i.status === 'open' && !i.buildRef && kinds.includes(i.kind) && i.attempts < MAX_ATTEMPTS,
   );
   const rank = (a: BacklogItemData, b: BacklogItemData) =>
     a.priority - b.priority || (a.updatedAt ?? '').localeCompare(b.updatedAt ?? '');
@@ -312,56 +496,6 @@ export function pickWork(
   if (picked.length < limit) {
     const seen = new Set(picked.map((i) => i.slug));
     for (const i of [...untried, ...retries]) {
-      if (picked.length >= limit) break;
-      if (!seen.has(i.slug)) {
-        picked.push(i);
-        seen.add(i.slug);
-      }
-    }
-  }
-  return picked.slice(0, limit);
-}
-
-/**
- * How many of the toolsmith's slots are held for work that brings new data in.
- *
- * The owner's instruction (2026-09-04) is a bias toward new data over
- * efficiency, and a bias that lives only in a prompt is a bias the first busy
- * night discards. This is the half of it that is arithmetic: when any `source`
- * or `watch` item is open, half the night's tool slots are reserved for the
- * tools those lanes need, and the general queue takes what is left.
- *
- * Half rather than all, for the reason `RETRY_SHARE` is a third rather than a
- * half: a rule that starves one class entirely is the bug that rule replaced.
- */
-export const NEW_DATA_SHARE = 1 / 2;
-
-/**
- * Pick the toolsmith's work, with `source` items given first refusal.
- *
- * `pickWork` ranks within one kind; this ranks across the two kinds the
- * toolsmith can actually build. `watch` is deliberately NOT here — a monitor
- * is a generated workflow, not a runtime tool, and it has its own lane in the
- * propose phase. Mixing it in would hand the author an idea it cannot make.
- *
- * A `source` item authors a tool too: the source is found and registered by
- * the discover phase, and what remains is the no-argument numeric reader that
- * turns it into a daily signal. Reserving slots for those is the arithmetic
- * half of the owner's bias toward new data — an ordering alone is discarded by
- * the first night with more work than slots.
- */
-export function pickToolWork(items: BacklogItemData[], limit: number): BacklogItemData[] {
-  if (limit <= 0) return [];
-  const sources = pickWork(items, 'source', limit);
-  const tools = pickWork(items, 'tool', limit);
-  if (sources.length === 0) return tools;
-  const reserved = Math.max(1, Math.min(sources.length, Math.floor(limit * NEW_DATA_SHARE)));
-  const picked = [...sources.slice(0, reserved), ...tools.slice(0, limit - reserved)];
-  // Backfill, same as `pickWork`: if one side was short the other takes the
-  // spare slots rather than the run doing less work than its cap allows.
-  if (picked.length < limit) {
-    const seen = new Set(picked.map((i) => i.slug));
-    for (const i of [...sources, ...tools]) {
       if (picked.length >= limit) break;
       if (!seen.has(i.slug)) {
         picked.push(i);
@@ -566,7 +700,7 @@ function clampPriority(n: unknown): number {
  * Read one item or fail loudly.
  *
  * `getRecordByKey` THROWS a `not_found` DatastoreError rather than returning
- * null — `backlogItemExists` above relies on exactly that — so this turns it
+ * null — `readForIntake` above relies on exactly that — so this turns it
  * into a message a person clicking a button can read.
  */
 async function mustGet(slug: string): Promise<BacklogItemData> {
@@ -771,6 +905,22 @@ export async function foldItems(slugs: string[], into?: string): Promise<FoldRes
   });
 
   return { survivor: survivor.slug, folded: losers.map((l) => l.slug) };
+}
+
+/**
+ * Point an item at a build that already exists, without counting an attempt.
+ *
+ * `createChangeRequest` hands back the open build for the same idea rather
+ * than starting a second one; nothing new was tried, so the retry budget and
+ * `lastError` stay exactly as they were. Best-effort.
+ */
+export async function recordBuildRef(item: BacklogItemData, buildRef: string, runId?: string): Promise<void> {
+  const next: BacklogItemData = { ...item, buildRef, lastAttemptRunId: runId ?? item.lastAttemptRunId, updatedAt: new Date().toISOString() };
+  try {
+    await put(next);
+  } catch (err) {
+    console.error('[selfimprove] recordBuildRef failed:', errMsg(err));
+  }
 }
 
 /** Record the outcome of an attempt against an item. Best-effort. */

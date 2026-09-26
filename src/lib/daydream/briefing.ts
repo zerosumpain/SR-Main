@@ -13,10 +13,10 @@
 // 2026-09-25, P2) — every note on the feed, raised or not, each linked to
 // itself on the one feed page. Ponder's musings are no longer listed.
 
-import { and, desc, eq, gte, lt } from 'drizzle-orm';
+import { and, gte, lt } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { db } from '$lib/db';
-import { daydreamCapabilities, daydreamMemoryThemes } from '$lib/db/schema';
+import { daydreamMemoryThemes } from '$lib/db/schema';
 import { localDayStart } from './budget';
 import { errMsg } from './types';
 import { loadFeedNotes } from './think/notes.server';
@@ -52,7 +52,8 @@ function localDay(now: Date, daysAgo: number): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
 }
 
-const APPETITE = '/jkai/daydreams/improvement#appetite';
+/** Where a build idea waits for the owner's tap since D3 (2026-09-26). */
+const BACKLOG = '/jkai/daydreams/backlog';
 const trim = (s: string, n = 90) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 /** Notes listed as facts, each its own linked line. */
 const NOTE_FACTS = 8;
@@ -87,7 +88,7 @@ export async function buildDaydreamBriefing(now = new Date()): Promise<DaydreamB
   const day = localDay(now, 1);
   const inDay = (col: AnyPgColumn) => and(gte(col, dayStart), lt(col, dayEnd));
 
-  const [notes, themes, wants] = await Promise.all([
+  const [notes, themes] = await Promise.all([
     // The last 24 hours, not the local day: the briefing lands at 07:00 and a
     // note written at 06:30 is news, not tomorrow's. Muted kinds and notes he
     // answered "never" stay out — he said he did not want to hear them.
@@ -102,20 +103,14 @@ export async function buildDaydreamBriefing(now = new Date()): Promise<DaydreamB
       .from(daydreamMemoryThemes)
       .where(inDay(daydreamMemoryThemes.createdAt))
       .limit(5),
-    // What the engine would like to build, straight off the appetite ledger.
-    // "Here is what I think the site is missing" is the one line of this
-    // section he asked for by name.
-    db
-      .select({ slug: daydreamCapabilities.slug, title: daydreamCapabilities.title, kind: daydreamCapabilities.kind })
-      .from(daydreamCapabilities)
-      .where(and(eq(daydreamCapabilities.status, 'proposed'), inDay(daydreamCapabilities.lastSeenAt)))
-      .orderBy(desc(daydreamCapabilities.score))
-      .limit(4)
-      .catch((err) => {
-        console.warn(`[daydream] briefing appetite read failed: ${errMsg(err)}`);
-        return [] as Array<{ slug: string; title: string; kind: string }>;
-      }),
   ]);
+
+  // What the engine would like to build: the think loop's `build` notes from
+  // the same 24 hours. The appetite ledger this line used to read was retired
+  // by D3; a build note is now what proposes a build, and it lands on the
+  // improvement backlog for the owner's tap. "Here is what I think the site is
+  // missing" is the one line of this section he asked for by name.
+  const wants = notes.filter((n) => n.outcome === 'build' && !n.turnedDown);
 
   const facts: DaydreamBriefingFact[] = [];
   const lines: string[] = [];
@@ -131,11 +126,11 @@ export async function buildDaydreamBriefing(now = new Date()): Promise<DaydreamB
   if (wants.length) {
     fact(
       'Would like to build',
-      wants.map((w) => `${trim(w.title, 60)} (${w.kind.replace(/_/g, ' ')})`).join(' · '),
-      APPETITE,
+      wants.map((w) => trim(w.title, 60)).join(' · '),
+      BACKLOG,
     );
     lines.push(`• Would like to build: ${wants.slice(0, 2).map((w) => trim(w.title, 55)).join('; ')}`);
-    if (wants.length > 2) lines.push(`  …and ${wants.length - 2} more on the appetite ledger`);
+    if (wants.length > 2) lines.push(`  …and ${wants.length - 2} more on the backlog`);
   }
   const counts = {
     sent: notes.filter((n) => n.raised).length,

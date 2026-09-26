@@ -53,7 +53,9 @@ export function buildEpicBacklog(items: WorkItem[], saved: EpicData[] = []): Bac
     if (key) groups.set(key, [...(groups.get(key) ?? []), item]);
     else pending.push(item);
   }
-  // A linked capability may become a backlog deliverable: retain its epic identity.
+  // Saved epics written before D3 (2026-09-26) may list a retired capability lead
+  // (`capability:<slug>`) whose backlog row carries `capabilitySlug`: retain
+  // that epic identity.
   for (const item of pending) {
     const inherited = item.capabilitySlug ? membership.get(`capability:${item.capabilitySlug}`) : null;
     const foldedParent = item.foldedInto ? items.find((i) => i.slug === item.foldedInto) : null;

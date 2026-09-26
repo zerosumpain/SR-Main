@@ -105,6 +105,16 @@ export async function loadFeedNote(id: string): Promise<FeedNote | null> {
   return toFeedNote(row, await mutedKinds());
 }
 
+/** Think rows by dedupe key — the keys `persistCandidates` reports as newly
+ *  created. Read AFTER the cycle, so each row carries the status it ended on. */
+export async function loadThinkRowsByKeys(keys: readonly string[]): Promise<ThinkRow[]> {
+  if (keys.length === 0) return [];
+  return db
+    .select(ROW_COLUMNS)
+    .from(daydreamThoughts)
+    .where(and(THINK_KIND, inArray(daydreamThoughts.dedupeKey, [...keys])));
+}
+
 /** The kind of a think note, or null when the id is not one. The native
  *  feedback endpoint's 404. */
 export async function thinkNoteKind(id: string): Promise<string | null> {

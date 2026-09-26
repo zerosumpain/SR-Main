@@ -62,19 +62,25 @@ export const IDEA_SOURCES = [
   'owner',
   /** Mined from the questions the owner actually asked. */
   'question',
-  /** A `daydream_faults` row: daydreaming tried something and could not. */
+  /** A `think_build` note the daydream think loop wrote (D3, 2026-09-26). */
+  'think',
+  /** RETIRED 2026-09-26 (D3). A `daydream_faults` row: daydreaming tried
+   *  something and could not. Kept because historical rows carry it. */
   'fault',
-  /** A workflow-doctor finding that needed repo code, escalated as a fault. */
+  /** A workflow-doctor finding that needed repo code. Escalated straight into
+   *  the backlog since D3; before that, through the fault ledger. */
   'doctor',
   /** A measurement nothing writes — a hypothesis with zero pairs. */
   'starved',
   /** A shipped tool erroring or never being called. */
   'health',
-  /** The appetite ledger: a capability the site has never had. */
+  /** RETIRED 2026-09-26 (D3). The appetite ledger: a capability the site has
+   *  never had. Kept because historical rows carry it. */
   'appetite',
   /** The engine's own proposal about itself. Never built by a lane. */
   'engine',
-  /** The toolsmith's own idea, had while authoring something else. */
+  /** RETIRED 2026-09-26 (D3). The toolsmith's own idea, had while authoring
+   *  something else. Kept because historical rows carry it. */
   'toolsmith',
   /** A chat turn the owner analysed and sent to the engine. */
   'trace',
@@ -161,32 +167,32 @@ export type WorkLane = (typeof WORK_LANES)[number];
 /**
  * Which builder takes a backlog item.
  *
- * Mirrors `laneFor` in `$lib/daydream/appetite/spec.ts` for the capability
- * kinds, and extends it to the two backlog-only kinds. Kept here rather than
- * imported because the two vocabularies are not the same set — `engine` is a
- * backlog kind with no lane at all, and pretending it maps onto `feature`
- * would queue work no builder can do.
+ * Since D3 (2026-09-26) there are two builders: the repo change-request lane,
+ * which takes anything needing code once the owner has accepted its brief, and
+ * the monitor generator for watches. The toolsmith and catalogue lanes were
+ * retired with the toolsmith; `tool` and `source` items now go to `build`.
+ * `WORK_LANES` keeps the retired values so a stored filter still parses.
+ * `engine` is a backlog kind with no lane at all — pretending it maps onto
+ * `feature` would queue work no builder can do.
  */
 export function laneForKind(kind: string): WorkLane {
   switch (kind) {
-    case 'source':
-    case 'data_source':
-      return 'catalogue';
     case 'watch':
       return 'monitor';
-    case 'feature':
-    case 'news_source':
-      return 'build';
     case 'engine':
       return 'engine';
+    case 'feature':
+    case 'news_source':
+    case 'source':
+    case 'data_source':
     case 'tool':
     default:
-      return 'toolsmith';
+      return 'build';
   }
 }
 
 /** Lanes whose output brings new data into the building — the 2026-09-04 bias,
- *  restated for display. The arithmetic half lives in `pickToolWork`. */
+ *  restated for display. */
 export function bringsNewData(kind: string): boolean {
   return kind === 'source' || kind === 'data_source' || kind === 'watch' || kind === 'news_source';
 }
@@ -204,13 +210,14 @@ export function bringsNewData(kind: string): boolean {
 export const SOURCE_LABEL: Readonly<Record<IdeaSource, { label: string; from: string }>> = {
   owner: { label: 'Added by you', from: 'entered directly in the backlog room' },
   question: { label: 'Questions you asked', from: 'unmet needs and under-served intents' },
-  fault: { label: 'Faults raised', from: 'daydreaming tried and could not' },
+  think: { label: 'Think loop', from: 'a build note the daydream think loop wrote' },
+  fault: { label: 'Faults raised', from: 'the retired fault ledger — daydreaming tried and could not' },
   doctor: { label: 'Doctor escalations', from: 'a broken canvas needing repo code' },
   starved: { label: 'Starved measurements', from: 'a metric nothing writes' },
   health: { label: 'Tool health', from: 'shipped tools erroring or never called' },
-  appetite: { label: 'Inventory gaps', from: 'a capability the site has never had' },
+  appetite: { label: 'Inventory gaps', from: 'the retired appetite scan — a capability the site never had' },
   engine: { label: 'About the engine', from: 'its own proposals, never built by a lane' },
-  toolsmith: { label: 'The toolsmith', from: 'asides had while authoring' },
+  toolsmith: { label: 'The toolsmith', from: 'the retired toolsmith — asides had while authoring' },
   trace: { label: 'A turn you sent', from: 'a chat trace analysed by hand' },
   unattributed: { label: 'Before this was recorded', from: 'queued before the channel was stamped' },
 };
@@ -229,9 +236,9 @@ export type BacklogKind = (typeof BACKLOG_KINDS)[number];
  * alone. Both filters exist because both questions get asked.
  */
 export const KIND_META: Readonly<Record<BacklogKind, { label: string; cost: string }>> = {
-  tool: { label: 'Tool', cost: 'authored and smoke-tested in one night' },
+  tool: { label: 'Tool', cost: 'a repo build once you accept its brief' },
   feature: { label: 'Feature', cost: 'a repo build — the expensive lane' },
-  source: { label: 'Source', cost: 'catalogued and probed; brings new data' },
+  source: { label: 'Source', cost: 'a repo build once you accept its brief; brings new data' },
   watch: { label: 'Watch', cost: 'one workflow on a schedule' },
   engine: { label: 'Engine', cost: 'about Daydream itself; never auto-built' },
 };
@@ -243,9 +250,10 @@ export function kindLabel(kind: string): string {
 }
 
 export interface WorkItem {
-  /** Unique across both sources — `backlog:<slug>` or `capability:<slug>`. */
+  /** `backlog:<slug>`. Capability leads (`capability:<slug>`) were retired
+   *  with the appetite ledger in D3 (2026-09-26). */
   id: string;
-  source: 'backlog' | 'capability';
+  source: 'backlog';
   slug: string;
   title: string;
   detail: string;
@@ -263,7 +271,7 @@ export interface WorkItem {
    * `stage === 'live'` is not "this shipped". A caller that used it as one
    * counted four shipped-but-uncalled tools as open work and dropped the
    * "already shipped on this theme" line, suppressing the exact finding the
-   * room exists to show. `null` on a capability lead, which has no backlog row.
+   * room exists to show. Nullable for historical reasons.
    */
   backlogStatus: 'open' | 'shipped' | 'abandoned' | null;
   priority: number;
@@ -294,15 +302,15 @@ export interface WorkItem {
    * Which channel it arrived through.
    *
    * NOT `source`, which is already taken and means which LEDGER this row is
-   * from — `backlog` or `capability`. Two different questions, and reusing the
-   * name silently overwrote the older one.
+   * from (always `backlog` since the appetite ledger was retired). Two
+   * different questions, and reusing the name silently overwrote the older one.
    *
-   * `unattributed` for rows queued before the stamp existed; `null` for a
-   * capability lead, which IS a channel rather than something arriving through
-   * one.
+   * `unattributed` for rows queued before the stamp existed. Nullable only
+   * because capability leads (retired in D3) once carried `null`.
    */
   intake: IdeaSource | null;
-  /** Capability leads only. */
+  /** Always null since capability leads were retired (D3); kept so a card
+   *  renderer need not special-case the field. */
   score: number | null;
   evidence: string[];
   /** How many notes a person has left on it, and when the last one landed.
@@ -316,31 +324,12 @@ export interface WorkItem {
    *  record means it settled before the field existed — see `settleDate`. */
   settledAt: string | null;
   /** Whether the owner may reprioritise / move / park it from the board.
-   *  Capability leads are ruled on the appetite board, which carries their
-   *  evidence and score decomposition, so the board does not duplicate that. */
+   *  Always true since capability leads (read-only here) were retired in D3. */
   actionable: boolean;
-}
-
-/** What a capability lead looks like to this module. Structural, so the pure
- *  half of `$lib/daydream/appetite/view` need not be imported. */
-export interface BoardCapability {
-  slug: string;
-  kind: string;
-  title: string;
-  need: string;
-  status: string;
-  score: number;
-  lane: string | null;
-  outcome: string | null;
-  outcomeRef: string | null;
-  backlogSlug: string | null;
-  evidence: string[];
-  lastSeenAt: string;
 }
 
 export interface BoardInput {
   backlog: BacklogItemData[];
-  capabilities: BoardCapability[];
   tools: ToolHealth[];
   /** `MAX_ATTEMPTS` from `backlog.ts`. Injected, never copied. */
   attemptCeiling: number;
@@ -497,29 +486,11 @@ export function stageFor(item: BacklogItemData, ctx: StageContext): WorkStage {
   return 'accepted';
 }
 
-/** Which stage a capability lead is in. The ledger's own vocabulary, mapped. */
-export function stageForCapability(status: string): WorkStage {
-  switch (status) {
-    case 'proposed':
-      return 'proposed';
-    case 'queued':
-      return 'accepted';
-    case 'building':
-      return 'building';
-    case 'shipped':
-      return 'live';
-    case 'declined':
-    default:
-      return 'parked';
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Assembly
 // ---------------------------------------------------------------------------
 
-/** Where an outcome reference points, when its shape says. Mirrors
- *  `outcomeHrefFor` in the appetite view for the two refs both can carry. */
+/** Where an outcome reference points, when its shape says. */
 export function artifactHref(ref: string | null): string | null {
   if (!ref) return null;
   if (/^https?:\/\//i.test(ref)) return ref;
@@ -558,8 +529,7 @@ export function buildBoard(input: BoardInput): BoardView {
   const backlog = input.backlog ?? [];
   // Removal keeps a tombstone in the datastore so a nightly proposal cannot
   // resurrect the same slug. It is intentionally absent from every board
-  // count and card, while still participating in the claimed-capability check
-  // below so its appetite lead does not reappear under a second identity.
+  // count and card.
   const visibleBacklog = backlog.filter((b) => !b.removedAt);
   const tools = input.tools ?? [];
   const epicLabels = input.epicLabels ?? {};
@@ -646,56 +616,6 @@ export function buildBoard(input: BoardInput): BoardView {
       lastNoteAt: b.notes?.length ? (b.notes[b.notes.length - 1].at ?? null) : null,
       settledAt: b.status === 'open' ? null : (b.settledAt ?? null),
       actionable: true,
-    });
-  }
-
-  // Capability leads that have not yet become a backlog item. One that HAS is
-  // already on the board as its backlog row; showing both would double-count
-  // the same work, which is the failure the whole join exists to avoid.
-  const backlogSlugs = new Set(backlog.map((b) => b.slug));
-  const claimed = new Set(
-    backlog.map((b) => b.capabilitySlug).filter((s): s is string => Boolean(s)),
-  );
-  for (const c of input.capabilities ?? []) {
-    if (claimed.has(c.slug)) continue;
-    if (c.backlogSlug && backlogSlugs.has(c.backlogSlug)) continue;
-    items.push({
-      id: `capability:${c.slug}`,
-      source: 'capability',
-      slug: c.slug,
-      title: c.title,
-      detail: c.need,
-      grooming: null,
-      kind: c.kind,
-      lane: laneForKind(c.kind),
-      stage: stageForCapability(c.status),
-      backlogStatus: null,
-      priority: 3,
-      attempts: 0,
-      attemptCeiling: ceiling,
-      createdAt: c.lastSeenAt,
-      updatedAt: c.lastSeenAt,
-      lastError: null,
-      artifact: c.outcomeRef,
-      artifactHref: artifactHref(c.outcomeRef),
-      calls: null,
-      errorRate: null,
-      newData: bringsNewData(c.kind),
-      alreadyServed: false,
-      servedBy: null,
-      foldedCount: 0,
-      foldedInto: null,
-      parkedReason: null,
-      epicSlug: `cap:${c.slug}`,
-      epicLabel: epicLabelFor(`cap:${c.slug}`, epicLabels),
-      capabilitySlug: c.slug,
-      intake: null,
-      score: c.score,
-      evidence: c.evidence ?? [],
-      noteCount: 0,
-      lastNoteAt: null,
-      settledAt: null,
-      actionable: false,
     });
   }
 
@@ -845,7 +765,7 @@ export type BoardFlag =
 export interface BoardFilter {
   lanes: ReadonlyArray<WorkLane>;
   flags: ReadonlyArray<BoardFlag>;
-  /** Intake channels. A capability lead has none, so it never matches one. */
+  /** Intake channels. */
   sources: ReadonlyArray<IdeaSource>;
   /** The CATEGORY — tool, feature, source, watch, engine. Not the lane: two
    *  kinds share the `build` lane, so lane cannot answer "only features". */
@@ -898,7 +818,7 @@ export function matchesFilter(item: WorkItem, filter: Partial<BoardFilter>): boo
     if (flag === 'served' && !item.alreadyServed) return false;
     if (flag === 'failed' && !item.lastError) return false;
     // Open AND never attempted. Counting every `attempts: 0` row would include
-    // capability leads and anything abandoned before a first try, and the chip
+    // anything abandoned before a first try, and the chip
     // would then disagree with the "never once attempted" tile inches above it.
     if (flag === 'untried' && (item.attempts !== 0 || isSettled(item.stage))) return false;
     if (flag === 'folded' && !item.foldedCount) return false;
@@ -1118,9 +1038,6 @@ function parse(iso: string | null | undefined): number | null {
  * rule `summarise` and `summariseInflow` follow. Counted after the trim, every
  * point left of the cap would be missing its settled rows and the curve would
  * slope the wrong way.
- *
- * Capability leads are excluded: they live in the appetite ledger, are ruled on
- * elsewhere, and were never in this queue to burn down.
  */
 export function summariseBurndown(
   items: WorkItem[],

@@ -159,7 +159,7 @@ export type DoctorActionKind =
   | 'schedule_quarantined'
   | 'proposal'
   /**
-   * A finding handed to the daydream fault ledger because it needs repo code.
+   * A finding queued on the improvement backlog because it needs repo code.
    *
    * Its own kind, not a `proposal`: `proposalsOpened` counts what the doctor
    * has written down for a human to read, and an escalation is what it handed

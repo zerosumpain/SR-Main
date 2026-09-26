@@ -30,8 +30,6 @@ import {
 import type { Budget } from './run';
 import { addIdeas } from './backlog';
 import { collectHealthFaults } from '$lib/daydream/health-quality';
-import { collectFaultIdeas } from '$lib/daydream/faults';
-import { collectCapabilityIdeas } from '$lib/daydream/appetite/intake';
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_MESSAGES = 300;
@@ -264,15 +262,6 @@ export function coerceInsights(json: unknown, period: string): QuestionInsights 
 }
 
 /** LEARN: one gateway call → insights, upserted to `latest` + `weekly:<YYYY-WW>`. */
-/**
- * The fault kinds the workflow doctor raises.
- *
- * Its findings arrive as ordinary `daydream_faults` rows — that fold is the
- * design, one door into the engine rather than a second wire — so the kind is
- * the only thing that still says where they came from.
- */
-const DOCTOR_FAULT_KINDS: ReadonlyArray<string> = ['workflow_dead_node', 'workflow_failing'];
-
 export async function learnInsights(
   signals: GatheredSignals,
   budget: Budget,
@@ -388,36 +377,12 @@ export async function learnInsights(
   } catch (err) {
     console.error('[selfimprove] health fault collection failed:', errMsg(err));
   }
-  // The APPETITE LEDGER, first of all.
-  //
-  // The order of these four collections is the engine's priority, and until
-  // 2026-09-04 it ran fault → starvation → health → questions: every driver a
-  // repair of something that already existed. The owner's instruction is that
-  // capability should outrank efficiency, so the leads go in ahead of the
-  // faults — an accepted lead ahead of a proposed one, and inside each group
-  // the lanes that bring new data in first (`collectCapabilityIdeas`).
-  //
-  // This is only half the bias. The other half is `pickWithNewDataFirst`,
-  // which reserves build slots — an ordering alone is discarded by the first
-  // night with more work than slots.
-  let capabilityIdeas: Awaited<ReturnType<typeof collectCapabilityIdeas>> = [];
-  try {
-    capabilityIdeas = await collectCapabilityIdeas();
-  } catch (err) {
-    console.error('[selfimprove] appetite ledger read failed:', errMsg(err));
-  }
-
-  // The fault ledger, next. Every site where daydreaming could not do
-  // something writes here with the shape of the fix; nothing else in this
-  // pass says as precisely what to build. (The starvation and engine-proposal
-  // feeds went with the daydream engine, P4 of the 2026-09-25 simplification.)
-  let faultIdeas: Awaited<ReturnType<typeof collectFaultIdeas>> = [];
-  try {
-    faultIdeas = await collectFaultIdeas();
-  } catch (err) {
-    console.error('[selfimprove] fault ledger read failed:', errMsg(err));
-  }
-  for (const s of [...capabilityIdeas, ...faultIdeas, ...healthFaults]) {
+  // The appetite ledger and the fault ledger used to be read here, ahead of
+  // everything else. Both were retired by D3 (spec 2026-09-25): the think
+  // loop's build notes and the workflow doctor's escalations now write to the
+  // backlog THEMSELVES, through the same `intakeIdeas` door as this phase, so
+  // there is one queue and one dedup rather than a ledger per producer.
+  for (const s of healthFaults) {
     actions.push({
       kind: 'insight',
       detail: `${s.title} — ${s.evidence}`,
@@ -433,28 +398,10 @@ export async function learnInsights(
   }
 
   try {
-    // Every group is stamped with the channel it arrived through. This is the
-    // only place four of the nine channels are distinguishable at all — once
-    // they are all `IdeaInput`s in one array, a fault and a question look
-    // identical. The doctor's escalations are the interesting split: they
-    // reach `collectFaultIdeas` as ordinary `daydream_faults` rows (that fold
-    // IS the design), so `faultKind` is what tells them apart.
+    // Every group is stamped with the channel it arrived through — the only
+    // place the channels are distinguishable at all, since once they are all
+    // `IdeaInput`s in one array a health fault and a question look identical.
     const added = await addIdeas([
-      ...capabilityIdeas.map((s) => ({
-        title: s.title,
-        detail: s.detail,
-        kind: s.kind,
-        priority: s.priority,
-        capabilitySlug: s.capabilitySlug,
-        source: 'appetite' as const,
-      })),
-      ...faultIdeas.map((s) => ({
-        title: s.title,
-        detail: s.detail,
-        kind: s.kind,
-        priority: s.priority,
-        source: DOCTOR_FAULT_KINDS.includes(s.faultKind) ? ('doctor' as const) : ('fault' as const),
-      })),
       ...healthFaults.map((s) => ({
         title: s.title,
         detail: s.detail,

@@ -38,9 +38,8 @@ function requirementsCovered(request: string, existing: string): boolean {
 /** Related work can share a brief; retiring work additionally requires coverage. */
 export function suggestBacklogGrooming(items: WorkItem[], tools: ToolHealth[] = [], overrides: ReadonlySet<string> = new Set()): GroomingSuggestion[] {
   const waiting = items.filter((i) => !overrides.has(i.id) && !i.foldedInto && i.attempts === 0 &&
-    ((i.source === 'backlog' && i.backlogStatus === 'open' && i.stage === 'accepted') ||
-      (i.source === 'capability' && i.stage === 'proposed')))
-    .sort((a, b) => Number(b.source === 'backlog') - Number(a.source === 'backlog') || a.priority - b.priority || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+    i.backlogStatus === 'open' && i.stage === 'accepted')
+    .sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
   const live = items.filter((i) => i.stage === 'live' && !i.foldedInto);
   const out: GroomingSuggestion[] = [];
   const score = (a: string, b: string) => {
@@ -57,7 +56,7 @@ export function suggestBacklogGrooming(items: WorkItem[], tools: ToolHealth[] = 
         id: `tool:${t.name}`, title: t.name.replace(/_/g, ' '), text: `${t.name.replace(/_/g, ' ')} ${t.description ?? ''}`,
         detail: t.description ?? '', href: '/jkai/daydreams/improvement', kind: 'covered' as const,
         evidence: `Existing tool: ${t.runCount - t.errorCount} successful calls recorded.` })) : []),
-      ...waiting.slice(0, index).filter((i) => (item.source === 'capability' || i.source === 'backlog') && i.kind === item.kind && !out.some((s) => s.itemId === i.id)).map((i) => ({
+      ...waiting.slice(0, index).filter((i) => i.kind === item.kind && !out.some((s) => s.itemId === i.id)).map((i) => ({
         id: i.id, title: i.title, text: i.title, detail: i.detail, href: null,
         kind: 'merge' as const, evidence: 'Another queued deliverable covers a similar request.' })),
     ].map((c) => ({ ...c, score: score(item.title, c.text) })).filter((c) => c.score > 0)

@@ -89,7 +89,7 @@ register({
     }
 
     try {
-      const { buildId, issueNumber, issueUrl } = await createChangeRequest({
+      const { buildId, issueNumber, issueUrl, reused } = await createChangeRequest({
         title,
         request,
         labels: Array.isArray(args.labels)
@@ -109,7 +109,10 @@ register({
           issueUrl,
           buildId,
           buildUrl: `https://strangeramblings.com/jkai/builds/${buildId}`,
-          note: 'The build will open a pull request closing this issue. It will not merge protected-path changes.',
+          note: reused
+            ? 'A change request for this is already open, so no new issue or build was started — this is the existing one.'
+            : 'The build will open a pull request closing this issue. It will not merge protected-path changes.',
+          ...(reused ? { reused: true } : {}),
         },
       };
     } catch (err) {

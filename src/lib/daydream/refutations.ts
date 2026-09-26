@@ -172,31 +172,12 @@ export async function loadRefutedClaims(limit = 60): Promise<RefutedClaim[]> {
 // two musing kinds), because nothing compared a candidate with anything but
 // refuted rows. Same containment rule, applied to what is live.
 
-/**
- * Trigram similarity of two titles, 0..1 (Jaccard over character trigrams
- * of the lower-cased letters and digits). In code rather than `pg_trgm` so
- * it costs one query for the live rows and no round trip per candidate, and
- * so the threshold is testable.
- */
-export function titleSimilarity(a: string, b: string): number {
-  const grams = (t: string): Set<string> => {
-    const clean = ` ${t.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()} `;
-    const out = new Set<string>();
-    for (let i = 0; i + 3 <= clean.length; i++) out.add(clean.slice(i, i + 3));
-    return out;
-  };
-  const ga = grams(a);
-  const gb = grams(b);
-  if (ga.size === 0 || gb.size === 0) return 0;
-  let shared = 0;
-  for (const g of ga) if (gb.has(g)) shared++;
-  return shared / (ga.size + gb.size - shared);
-}
-
-/** Two musings whose titles read as one claim. 0.6 is where "A clear window
- *  before school resumes" and "A clear window before the school term" meet
- *  and "A clear window" and "A clear diary" do not. */
-export const TITLE_ECHO_SIMILARITY = 0.6;
+// `titleSimilarity` and `TITLE_ECHO_SIMILARITY` live in the pure
+// `$lib/utils/title-similarity` so the improvement backlog and the change-request lane
+// can share the one definition of "reads as the same claim" without importing
+// `$lib/db`. Re-exported here so existing callers keep their import.
+import { TITLE_ECHO_SIMILARITY, titleSimilarity } from '$lib/utils/title-similarity';
+export { TITLE_ECHO_SIMILARITY, titleSimilarity };
 export const TITLE_ECHO_WINDOW_DAYS = 7;
 export const LIVE_CLAIM_WINDOW_DAYS = 30;
 

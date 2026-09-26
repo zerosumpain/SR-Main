@@ -50,12 +50,15 @@ import {
   addBacklogNote,
   addIdeas,
   createBacklogItem,
+  findIntakeTwin,
+  intakeIdeas,
+  isOwnerAccepted,
+  mergeCitation,
   foldItems,
   hasOpenNewDataWork,
   listBacklog,
   markAttempt,
   pickFoldSurvivor,
-  pickToolWork,
   pickWork,
   removeBacklogItem,
   removeBacklogNote,
@@ -66,6 +69,7 @@ import {
   setPriorityMany,
   updateBacklogItem,
   MAX_NEW_IDEAS_PER_NIGHT,
+  RECENT_SETTLED_DAYS,
 } from './backlog';
 import { MAX_BACKLOG_NOTES } from './grooming';
 import type { BacklogItemData } from './types';
@@ -84,6 +88,10 @@ function item(over: Partial<BacklogItemData>): BacklogItemData {
     ...over,
   };
 }
+
+/** Titles that share nothing but a word, so the intake's near-duplicate rule
+ *  (trigram similarity) cannot fold them together — 0.31 at worst across 40. */
+const distinct = (prefix: string, n: number) => `${prefix} ${((n + 1) * 2654435761 % 4294967296).toString(36)}`;
 
 beforeEach(() => {
   h.records = [];
@@ -285,7 +293,7 @@ describe('the 200-row window that hid half the backlog', () => {
 describe('intake cap', () => {
   it('stops one call adding more than a night allows', async () => {
     const ideas = Array.from({ length: 40 }, (_, n) => ({
-      title: `Idea number ${n}`,
+      title: distinct('Idea', n),
       detail: 'd',
       kind: 'tool' as const,
     }));
@@ -293,11 +301,11 @@ describe('intake cap', () => {
   });
 
   it('counts what the other call sites already added', async () => {
-    // There are four callers — analyze, toolsmith twice, and the trace-analyse
-    // route — so a per-CALL cap would be four times the number it claims.
+    // There are several callers — analyze, the think loop, the doctor and the
+    // trace-analyse route — so a per-CALL cap would be a multiple of its claim.
     await addIdeas(
       Array.from({ length: MAX_NEW_IDEAS_PER_NIGHT }, (_, n) => ({
-        title: `First batch ${n}`,
+        title: distinct('First batch', n),
         detail: 'd',
         kind: 'tool' as const,
       })),
@@ -318,42 +326,14 @@ describe('intake cap', () => {
   });
 });
 
-// The lanes that arrived with the appetite ledger, 2026-09-04. The bias toward
-// new data is half an ordering and half arithmetic; this is the arithmetic.
+// The kinds that arrived with the appetite ledger, 2026-09-04. The toolsmith's
+// source-slot reservation (`pickToolWork`) went with the toolsmith (D3); the
+// new-data check that demotes call efficiency, and the kinds, remain.
 describe('the new-data lanes', () => {
   const src = (slug: string, over: Partial<BacklogItemData> = {}) =>
     item({ slug, kind: 'source', priority: 1, ...over });
   const tool = (slug: string, over: Partial<BacklogItemData> = {}) =>
     item({ slug, kind: 'tool', priority: 2, ...over });
-
-  it('holds half the toolsmith’s slots for sources when any is open', () => {
-    const picked = pickToolWork(
-      [src('s1'), src('s2'), src('s3'), tool('t1'), tool('t2'), tool('t3')],
-      4,
-    );
-    expect(picked.filter((i) => i.kind === 'source')).toHaveLength(2);
-    expect(picked.filter((i) => i.kind === 'tool')).toHaveLength(2);
-  });
-
-  it('reserves at least one slot even when the share rounds to zero', () => {
-    const picked = pickToolWork([src('s1'), tool('t1')], 1);
-    expect(picked.map((i) => i.slug)).toEqual(['s1']);
-  });
-
-  it('gives the whole night to tools when no source is waiting', () => {
-    const picked = pickToolWork([tool('t1'), tool('t2')], 4);
-    expect(picked.map((i) => i.slug)).toEqual(['t1', 't2']);
-  });
-
-  it('backfills rather than doing less work than the cap allows', () => {
-    const picked = pickToolWork([src('s1'), tool('t1'), tool('t2'), tool('t3')], 4);
-    expect(picked).toHaveLength(4);
-  });
-
-  it('never hands the toolsmith a watch — a monitor is not a runtime tool', () => {
-    const picked = pickToolWork([item({ slug: 'w1', kind: 'watch' }), tool('t1')], 4);
-    expect(picked.map((i) => i.slug)).toEqual(['t1']);
-  });
 
   it('reports open new-data work, which is what demotes call efficiency', () => {
     expect(hasOpenNewDataWork([tool('t1')])).toBe(false);
@@ -366,15 +346,146 @@ describe('the new-data lanes', () => {
 
   it('keeps the new kinds through a write, and coerces an unknown one to tool', async () => {
     await addIdeas([
-      { title: 'A rail feed', detail: 'd', kind: 'source', capabilitySlug: 'data_source:rail' },
+      { title: 'A rail feed', detail: 'd', kind: 'source' },
       { title: 'A watch on something', detail: 'd', kind: 'watch' },
       { title: 'Something odd', detail: 'd', kind: 'dashboard' as unknown as BacklogItemData['kind'] },
     ]);
     const back = await listBacklog();
     expect(back.find((i) => i.slug === 'a-rail-feed')?.kind).toBe('source');
-    expect(back.find((i) => i.slug === 'a-rail-feed')?.capabilitySlug).toBe('data_source:rail');
     expect(back.find((i) => i.slug === 'a-watch-on-something')?.kind).toBe('watch');
     expect(back.find((i) => i.slug === 'something-odd')?.kind).toBe('tool');
+  });
+
+  it('picks across several kinds at once for the repo lane', () => {
+    const picked = pickWork([src('s1'), tool('t1'), item({ slug: 'f1', kind: 'feature', priority: 1 }), item({ slug: 'w1', kind: 'watch' })], ['feature', 'tool', 'source'], 5);
+    expect(picked.map((i) => i.slug).sort()).toEqual(['f1', 's1', 't1']);
+  });
+});
+
+// ── D3: the single intake queue ─────────────────────────────────────────────
+
+describe('intakeIdeas — one idea from two producers is one item', () => {
+  const byKey = (key: string) => h.records.find((r) => r.key === key)?.data as BacklogItemData | undefined;
+
+  it('merges a near-identical title from another producer and records who asked', async () => {
+    await intakeIdeas([{ title: 'Show train delays on the homepage', detail: 'd', kind: 'feature', source: 'question' }]);
+    const res = await intakeIdeas([
+      { title: 'Show my train delays on the home page', detail: 'other words', kind: 'feature', source: 'think', ref: 'thought:t1' },
+    ]);
+    expect(res.added).toEqual([]);
+    expect(res.merged).toEqual([{ title: 'Show my train delays on the home page', into: 'show-train-delays-on-the-homepage', exact: false }]);
+    expect(res.outcomes).toEqual(['merged']);
+    expect(h.records).toHaveLength(1);
+    const cites = byKey('show-train-delays-on-the-homepage')?.citations ?? [];
+    expect(cites.map((c) => c.source)).toEqual(['question', 'think']);
+    expect(cites[1]).toMatchObject({ ref: 'thought:t1', title: 'Show my train delays on the home page', count: 1 });
+  });
+
+  it('cites an exact slug match instead of silently dropping it, and keeps its history', async () => {
+    await intakeIdeas([{ title: 'Current time', detail: 'd', kind: 'tool', source: 'question' }]);
+    await markAttempt(byKey('current-time')!, { status: 'open', error: 'HTTP 405' });
+    const res = await intakeIdeas([{ title: 'Current time', detail: 'x', kind: 'tool', source: 'doctor', ref: 'doctor:w/n/k' }]);
+    expect(res.merged[0]).toMatchObject({ into: 'current-time', exact: true });
+    const after = byKey('current-time')!;
+    expect(after.attempts).toBe(1);
+    expect(after.lastError).toBe('HTTP 405');
+    expect(after.citations?.map((c) => c.source)).toEqual(['question', 'doctor']);
+  });
+
+  it('counts a repeat arrival from the same asker rather than listing it twice', async () => {
+    const idea = { title: 'Fix Morning briefing / the run (unclassified)', detail: 'd', kind: 'feature' as const, source: 'doctor' as const, ref: 'doctor:w1/run/unclassified' };
+    await intakeIdeas([idea]);
+    await intakeIdeas([idea]);
+    await intakeIdeas([idea]);
+    const c = byKey('fix-morning-briefing-the-run-unclassified')?.citations ?? [];
+    expect(c).toHaveLength(1);
+    expect(c[0].count).toBe(3);
+  });
+
+  it('never merges one producer’s distinct findings into each other', async () => {
+    const res = await intakeIdeas([
+      { title: 'Fix Morning briefing / Read the diary (dead-node-type)', detail: 'd', kind: 'feature', source: 'doctor', ref: 'doctor:w1/n1/dead-node-type' },
+      { title: 'Fix Morning briefing / Read the calendar (dead-node-type)', detail: 'd', kind: 'feature', source: 'doctor', ref: 'doctor:w1/n2/dead-node-type' },
+    ]);
+    expect(res.outcomes).toEqual(['added', 'added']);
+  });
+
+  it('merges within one call — the second of two restatements lands on the first', async () => {
+    const res = await intakeIdeas([
+      { title: 'Show train delays on the homepage', detail: 'd', kind: 'feature', source: 'question' },
+      { title: 'Show my train delays on the home page', detail: 'd', kind: 'feature', source: 'question' },
+    ]);
+    expect(res.outcomes).toEqual(['added', 'merged']);
+  });
+
+  it('does not count a merge against the nightly cap, and still merges when the cap is spent', async () => {
+    await intakeIdeas([{ title: 'Show train delays on the homepage', detail: 'd', kind: 'feature' }]);
+    await intakeIdeas(Array.from({ length: MAX_NEW_IDEAS_PER_NIGHT }, (_, n) => ({ title: distinct('Filler', n), detail: 'd', kind: 'tool' as const })));
+    const res = await intakeIdeas([
+      { title: 'Show my train delays on the home page', detail: 'd', kind: 'feature', source: 'think', ref: 'thought:t9' },
+      { title: 'Something entirely unrelated', detail: 'd', kind: 'feature', source: 'think', ref: 'thought:t10' },
+    ]);
+    expect(res.outcomes).toEqual(['merged', 'capped']);
+    expect(res.capped).toBe(1);
+  });
+
+  it('never moves a merged item’s updatedAt — the burndown dates a drained row by it', async () => {
+    const stamp = '2026-09-01T00:00:00.000Z';
+    h.records = [{ key: 'show-train-delays-on-the-homepage', data: item({ slug: 'show-train-delays-on-the-homepage', title: 'Show train delays on the homepage', status: 'shipped', settledAt: new Date().toISOString(), updatedAt: stamp }) }];
+    await intakeIdeas([{ title: 'Show my train delays on the home page', detail: 'd', kind: 'feature', source: 'think' }]);
+    expect(byKey('show-train-delays-on-the-homepage')?.updatedAt).toBe(stamp);
+    expect(h.records).toHaveLength(1);
+  });
+
+  it('skips the idea when the datastore cannot answer (fail-closed)', async () => {
+    h.keyReadFails = true;
+    const res = await intakeIdeas([{ title: 'Anything', detail: 'd', kind: 'tool' }]);
+    expect(res.outcomes).toEqual(['skipped']);
+  });
+});
+
+describe('findIntakeTwin', () => {
+  const now = Date.parse('2026-09-26T12:00:00Z');
+  const daysAgo = (d: number) => new Date(now - d * 86_400_000).toISOString();
+
+  it('matches an open item at any age', () => {
+    const open = item({ slug: 'a', title: 'Show train delays on the homepage', createdAt: daysAgo(400), updatedAt: daysAgo(400) });
+    expect(findIntakeTwin('Show my train delays on the home page', [open], now)?.slug).toBe('a');
+  });
+
+  it('matches a settled item only inside the recent window', () => {
+    const recent = item({ slug: 'r', title: 'Show train delays on the homepage', status: 'shipped', settledAt: daysAgo(RECENT_SETTLED_DAYS - 1) });
+    const stale = item({ slug: 's', title: 'Show train delays on the homepage', status: 'abandoned', settledAt: daysAgo(RECENT_SETTLED_DAYS + 1) });
+    expect(findIntakeTwin('Show my train delays on the home page', [recent], now)?.slug).toBe('r');
+    expect(findIntakeTwin('Show my train delays on the home page', [stale], now)).toBeNull();
+  });
+
+  it('follows a fold to its survivor', () => {
+    const survivor = item({ slug: 'keep', title: 'Rail delay alerts' });
+    const loser = item({ slug: 'lost', title: 'Show train delays on the homepage', status: 'abandoned', foldedInto: 'keep', settledAt: daysAgo(1) });
+    expect(findIntakeTwin('Show my train delays on the home page', [survivor, loser], now)?.slug).toBe('keep');
+  });
+
+  it('does not match a different idea', () => {
+    expect(findIntakeTwin('A mortgage rate watch', [item({ title: 'Show train delays on the homepage' })], now)).toBeNull();
+  });
+});
+
+describe('mergeCitation', () => {
+  it('appends a new asker and counts a returning one', () => {
+    const one = mergeCitation(undefined, { source: 'think', ref: 'thought:1' }, 't1');
+    const two = mergeCitation(one, { source: 'doctor', ref: 'doctor:x' }, 't2');
+    const three = mergeCitation(two, { source: 'think', ref: 'thought:1' }, 't3');
+    expect(three).toHaveLength(2);
+    expect(three[0]).toMatchObject({ source: 'think', firstAt: 't1', lastAt: 't3', count: 2 });
+  });
+});
+
+describe('isOwnerAccepted — the owner’s tap', () => {
+  it('is an accepted brief, and nothing else', () => {
+    expect(isOwnerAccepted(item({}))).toBe(false);
+    expect(isOwnerAccepted(item({ grooming: { acceptedAt: '2026-09-26' } as BacklogItemData['grooming'] }))).toBe(true);
+    expect(isOwnerAccepted(item({ grooming: { groomedAt: '2026-09-26' } as BacklogItemData['grooming'] }))).toBe(false);
   });
 });
 

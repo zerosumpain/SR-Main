@@ -56,7 +56,7 @@ const FAILED_STATUSES: ReadonlySet<RunStatus> = new Set<RunStatus>(['failed']);
 export const daydreamImprove: ActivityHandler = {
   name: NAME,
   description:
-    'The self-improvement run: reads the appetite ledger first, then the fault ledger, then recent questions; grows the API catalogue; authors and repairs runtime tools behind verify.ts; hands anything needing repo code to the autonomous builder as a change request and anything needing a schedule to the monitor generator; and only then measures tool-call efficiency. One improvement_runs record per night. Skips when the owner has been active in the last hour.',
+    'The self-improvement run: mines recent questions into the improvement backlog (the one intake queue, shared with the think loop and the workflow doctor); grows the API catalogue; repairs existing runtime tools behind verify.ts; hands backlog items whose brief the owner accepted to the autonomous builder as a change request (or to the monitor generator for a watch); and only then measures tool-call efficiency. One improvement_runs record per night. Skips when the owner has been active in the last hour.',
   // Daily. The window below is what actually decides when it lands; the cadence
   // only stops it running twice in one night.
   defaultCadenceSeconds: 86_400,
