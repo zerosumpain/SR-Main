@@ -13,7 +13,7 @@
 // because this is read on every request rather than cached.
 
 import { randomBytes } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { activityPrincipals, allowedUser, gmailAccounts, householdMember } from '$lib/db/schema';
 
@@ -71,8 +71,11 @@ export async function householdSubjectFor(email: string | null | undefined): Pro
   const [row] = await db
     .select({ subject: householdMember.subject })
     .from(allowedUser)
-    .innerJoin(householdMember, eq(householdMember.email, allowedUser.email))
-    .where(and(eq(allowedUser.email, e), eq(allowedUser.role, 'household')))
+    // lower() on both sides: both columns are meant to hold lower-cased
+    // email, but a row written by hand (or before normalising on write) must
+    // not quietly lock its person out — or match on case alone.
+    .innerJoin(householdMember, sql`lower(${householdMember.email}) = lower(${allowedUser.email})`)
+    .where(and(sql`lower(${allowedUser.email}) = ${e}`, eq(allowedUser.role, 'household')))
     .limit(1);
   return row?.subject ?? null;
 }

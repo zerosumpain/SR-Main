@@ -100,6 +100,7 @@
   }
 
   function memberSub(m: Member): string {
+    if (m.notSharing && m.sharingUnknown) return 'Sharing unknown: the app’s sharing list could not be read.';
     if (m.notSharing) return 'Not sharing their location.';
     if (m.ageMins == null) return 'No position on the trail. Unknown is not the same answer as home.';
     const bits: string[] = [];
@@ -204,7 +205,9 @@
                   {/if}
                 </td>
                 <td class="cell-wrap">
-                  {#if m.notSharing}
+                  {#if m.notSharing && m.sharingUnknown}
+                    sharing unknown
+                  {:else if m.notSharing}
                     not sharing
                   {:else if m.ageMins == null}
                     not tracked

@@ -294,7 +294,9 @@ describe('notSharingSubjects', () => {
     expect([...out]).toEqual(['a']);
   });
 
-  it('is empty when no users list has been stored yet', () => {
-    expect(notSharingSubjects([member('a')], null).size).toBe(0);
+  it('fails closed with no users list: every companion member is not sharing', () => {
+    const members = [member('a'), member('l', { source: 'life360' })];
+    expect([...notSharingSubjects(members, null)]).toEqual(['a']);
+    expect([...notSharingSubjects(members, undefined)]).toEqual(['a']);
   });
 });

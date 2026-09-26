@@ -219,11 +219,20 @@ export async function ingestCompanion(
 /**
  * Companion-source members whose pilot user has sharing off. Such a person is
  * shown as not sharing, never as wherever their last fix happened to be. PURE.
+ *
+ * Fails CLOSED: with no users list (never stored, or unreadable — the caller
+ * passes null for both) nobody can be shown to have sharing ON, so every
+ * companion-source member counts as not sharing. The old reading of null as
+ * "nobody has sharing off" put a person who had switched it off back on the
+ * page the moment the settings read failed.
  */
 export function notSharingSubjects(
   members: readonly HouseholdMember[],
   users: readonly HouseholdUser[] | null | undefined,
 ): Set<string> {
+  if (!Array.isArray(users)) {
+    return new Set(members.filter((m) => m.source === 'companion').map((m) => m.subject));
+  }
   const off = new Set(
     (users ?? []).filter((u) => u && u.sharing === false).map((u) => String(u.email).toLowerCase()),
   );

@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
 
 // A tiny in-memory stand-in for the three drizzle chains members.ts uses, so
 // the seed path is tested without the shared dev database.
@@ -8,6 +10,7 @@ const state = vi.hoisted(() => ({
   conflictIgnored: 0,
   updates: [] as Array<Record<string, unknown>>,
   settings: new Map<string, unknown>(),
+  lastWhere: null as unknown,
 }));
 
 vi.mock('$lib/server/models/settings', () => ({
@@ -21,7 +24,10 @@ vi.mock('$lib/db', () => {
   const select = () => ({
     from: () => {
       const q = {
-        where: () => q,
+        where: (cond: unknown) => {
+          state.lastWhere = cond;
+          return q;
+        },
         orderBy: () => q,
         limit: () => q,
         then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) =>
@@ -60,6 +66,7 @@ import {
   isLife360Subject,
   lifeSubjects,
   listMembers,
+  memberByEmail,
   seedMembers,
   updateMember,
   type HouseholdMember,
@@ -190,5 +197,22 @@ describe('updateMember', () => {
   it('turns a blank email into null', async () => {
     await updateMember('a', { email: '  ' });
     expect(state.updates[0].email).toBeNull();
+  });
+});
+
+describe('memberByEmail — case-insensitive', () => {
+  it('compares lower(email) with the lower-cased address', async () => {
+    state.rows = [{ ...m('sam', { email: 'sam@example.test', source: 'companion' }) }];
+    const found = await memberByEmail('  Sam@Example.TEST ');
+    expect(found?.subject).toBe('sam');
+    const q = new PgDialect().sqlToQuery(state.lastWhere as SQL);
+    expect(q.sql).toBe('lower("household_member"."email") = $1');
+    expect(q.params).toEqual(['sam@example.test']);
+  });
+
+  it('asks nothing for a blank address', async () => {
+    state.lastWhere = null;
+    expect(await memberByEmail('  ')).toBeNull();
+    expect(state.lastWhere).toBeNull();
   });
 });

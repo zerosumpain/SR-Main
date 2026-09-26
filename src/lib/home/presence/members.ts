@@ -10,7 +10,7 @@
 // 'none' writes nothing. A person on 'companion' who turns sharing off is shown
 // as not sharing, never silently picked up from Life360 instead.
 
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { householdMember, type HouseholdMemberAlerts } from '$lib/db/schema';
 import { getSetting, setSetting } from '$lib/server/models/settings';
@@ -98,7 +98,7 @@ export async function listMembers(): Promise<HouseholdMember[]> {
   if ((await getSetting<boolean>(MEMBERS_SEEDED_KEY)) === true) return rows;
   await db
     .insert(householdMember)
-    .values(seedMembers())
+    .values(seedMembers().map((m) => ({ ...m, email: normaliseEmail(m.email) })))
     .onConflictDoNothing();
   await setSetting(MEMBERS_SEEDED_KEY, true);
   return selectAll();
@@ -116,7 +116,13 @@ export function isLife360Subject(members: readonly HouseholdMember[], subject: s
 export async function memberByEmail(email: string): Promise<HouseholdMember | null> {
   const e = normaliseEmail(email);
   if (!e) return null;
-  const [row] = await db.select().from(householdMember).where(eq(householdMember.email, e)).limit(1);
+  // lower() on the column too: `updateMember` and the seed lower-case on
+  // write, but a row written any other way must still match.
+  const [row] = await db
+    .select()
+    .from(householdMember)
+    .where(sql`lower(${householdMember.email}) = ${e}`)
+    .limit(1);
   return row ? toMember(row as Record<string, unknown>) : null;
 }
 

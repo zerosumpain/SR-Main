@@ -27,6 +27,12 @@ export interface HouseholdPresence {
    * as where they are. Absent for everyone else.
    */
   notSharing?: boolean;
+  /**
+   * Set with `notSharing` when the pilot's users list could not be read, so
+   * whether they share is unknown and they are treated as not sharing. The
+   * owner's page says "unknown"; a household viewer just sees not sharing.
+   */
+  sharingUnknown?: boolean;
   today: {
     firstOutMins: number | null;
     minutesOut: number;
@@ -39,12 +45,15 @@ export interface HouseholdPresence {
  * The household list and who has sharing off. Degrades to the seed list and
  * nobody-not-sharing on a failed read: the page must still load.
  */
-async function householdRoster(): Promise<{ subjects: string[]; notSharing: Set<string> }> {
+async function householdRoster(): Promise<{ subjects: string[]; notSharing: Set<string>; unknown: boolean }> {
   let members: HouseholdMember[];
   try {
     members = await listMembers();
   } catch {
-    return { subjects: FAMILY_SUBJECTS.map((f) => f.subject), notSharing: new Set() };
+    // Who is on the app is unknown too, so nobody can be shown as sharing:
+    // fail closed, as for an unreadable users list below.
+    const subjects = FAMILY_SUBJECTS.map((f) => f.subject);
+    return { subjects, notSharing: new Set(subjects), unknown: true };
   }
   let users = null;
   try {
@@ -52,7 +61,13 @@ async function householdRoster(): Promise<{ subjects: string[]; notSharing: Set<
   } catch {
     users = null;
   }
-  return { subjects: members.map((m) => m.subject), notSharing: notSharingSubjects(members, users) };
+  // No list (unset or unreadable) ⇒ every companion member reads as not
+  // sharing (`notSharingSubjects` fails closed).
+  return {
+    subjects: members.map((m) => m.subject),
+    notSharing: notSharingSubjects(members, users),
+    unknown: users === null,
+  };
 }
 
 /**
@@ -65,7 +80,7 @@ async function householdRoster(): Promise<{ subjects: string[]; notSharing: Set<
 export async function loadHousehold(): Promise<{ members: HouseholdPresence[] }> {
   const now = new Date();
   const dayStart = localDayStart(now);
-  const { subjects, notSharing } = await householdRoster();
+  const { subjects, notSharing, unknown } = await householdRoster();
   if (subjects.length === 0) return { members: [] };
 
   // Three queries for the whole household, not three per person. The old
@@ -129,7 +144,7 @@ export async function loadHousehold(): Promise<{ members: HouseholdPresence[] }>
     const firstOut = asDate(today?.first_out);
     return {
       subject,
-      ...(notSharing.has(subject) ? { notSharing: true } : {}),
+      ...(notSharing.has(subject) ? { notSharing: true, ...(unknown ? { sharingUnknown: true } : {}) } : {}),
       isHome: latest?.is_home ?? null,
       placeLabel: latest?.place_id ? (labelBy.get(latest.place_id) ?? null) : null,
       distanceHomeKm: latest?.distance_home_km == null ? null : Number(latest.distance_home_km),
