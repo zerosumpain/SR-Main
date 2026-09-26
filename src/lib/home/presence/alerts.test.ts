@@ -8,6 +8,7 @@ const {
   mayAttempt,
   partitionMovers,
   executeWhatsApp,
+  WHATSAPP_SEND_TIMEOUT_MS,
   silencedMovers,
   alertText,
   buildPilotEvents,
@@ -300,6 +301,23 @@ describe('WhatsApp attempts across runs', () => {
     await run(send);
     await run(send);
     expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives up on a send that hangs, as unknown: never retried', async () => {
+    vi.useFakeTimers();
+    try {
+      const { run, row } = harness();
+      const send = vi.fn(() => new Promise<{ sent: boolean }>(() => {}));
+      const pending = run(send);
+      await vi.advanceTimersByTimeAsync(WHATSAPP_SEND_TIMEOUT_MS + 1);
+      const out = await pending;
+      expect(out.failed).toEqual(['…002']);
+      expect(row.whatsappTried).toEqual({ alex: { attempts: 1, failed: 0 } });
+      await run(send);
+      expect(send).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('does not send when the attempt cannot be recorded first', async () => {

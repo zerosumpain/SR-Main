@@ -41,11 +41,38 @@ describe('detectCrossings', () => {
     expect(detectCrossings(none(), north(400), [wide]).events).toEqual([{ placeId: 'p1', kind: 'arrive' }]);
   });
 
-  it('leaves only beyond radius + 50 m', () => {
+  it('leaves only beyond radius + 50 m, with the whole accuracy circle out there', () => {
     const inside = { inside: new Set(['p1']) };
     expect(detectCrossings(inside, north(140), [PLACE]).events).toEqual([]);
     expect([...detectCrossings(inside, north(140), [PLACE]).inside]).toEqual(['p1']);
-    expect(detectCrossings(inside, north(160), [PLACE]).events).toEqual([{ placeId: 'p1', kind: 'leave' }]);
+    // 160 m out with a 10 m circle: the near edge is 150 m, not past the band.
+    expect(detectCrossings(inside, north(160), [PLACE]).events).toEqual([]);
+    expect(detectCrossings(inside, north(161), [PLACE]).events).toEqual([{ placeId: 'p1', kind: 'leave' }]);
+    // No accuracy given: the fix itself must be past the band.
+    expect(detectCrossings(inside, north(151, null), [PLACE]).events).toEqual([{ placeId: 'p1', kind: 'leave' }]);
+  });
+
+  it('does not flap on indoor drift: an 80 m circle on a 50 m place raises nothing', () => {
+    const small: CrossingPlace = { ...PLACE, radiusM: 50 };
+    // Sitting indoors; the phone wanders 20–170 m with an 80 m circle.
+    const drift = [20, 110, 40, 150, 60, 170, 30].map((m, i) => north(m, 80, i + 2, i + 1));
+    const r = stepCrossings({ inside: ['p1'], lastId: 1, watched: ['p1'], lastTsMs: 0 }, drift, [small]);
+    expect(r.events).toEqual([]);
+    expect(r.state?.inside).toEqual(['p1']);
+  });
+
+  it('does not arrive from a fix moving at rail speed, but still leaves', () => {
+    const at = (m: number, speedKmh: number | null, mode: string | null) => ({ ...north(m), speedKmh, mode });
+    expect(detectCrossings(none(), at(20, 120, 'rail'), [PLACE]).events).toEqual([]);
+    expect(detectCrossings(none(), at(20, 90, 'vehicle'), [PLACE]).events).toEqual([]);
+    expect([...detectCrossings(none(), at(20, 95, null), [PLACE]).inside]).toEqual([]);
+    // A car at 50 km/h, or a walker, still arrives.
+    expect(detectCrossings(none(), at(20, 50, 'vehicle'), [PLACE]).events).toEqual([{ placeId: 'p1', kind: 'arrive' }]);
+    expect(detectCrossings(none(), at(20, 4, 'walking'), [PLACE]).events).toEqual([{ placeId: 'p1', kind: 'arrive' }]);
+    // Leaving on a train is still leaving.
+    expect(detectCrossings({ inside: new Set(['p1']) }, at(900, 120, 'rail'), [PLACE]).events).toEqual([
+      { placeId: 'p1', kind: 'leave' },
+    ]);
   });
 
   it('drops an unwatched place from the state without a leave', () => {
@@ -92,6 +119,27 @@ describe('stepCrossings', () => {
     expect(r.events).toEqual([]);
     expect(r.state?.inside).toEqual(['p1']);
     expect(r.state?.watched).toEqual(['p1']);
+  });
+
+  it('seeds a newly watched place from the first USABLE fix, not the first fix', () => {
+    const s: InsideState = { inside: [], lastId: 1, watched: [], lastTsMs: 0 };
+    // Flagged while they sit in it. The first fix is a 900 m circle, which
+    // cannot say "inside"; seeding from it would make the next good fix an
+    // arrival at a place they never left.
+    const r = stepCrossings(s, [north(10, 900, 2), north(20, 10, 3, 1)], [PLACE]);
+    expect(r.events).toEqual([]);
+    expect(r.state?.inside).toEqual(['p1']);
+  });
+
+  it('leaves a newly flagged place unwatched while no fix can seed it', () => {
+    const s: InsideState = { inside: [], lastId: 1, watched: [], lastTsMs: 0 };
+    const r = stepCrossings(s, [north(10, 900, 2)], [PLACE]);
+    expect(r.events).toEqual([]);
+    expect(r.state?.watched).toEqual([]);
+    // Next run: a good fix inside seeds it quietly, as a flag-while-there should.
+    const next = stepCrossings(r.state, [north(10, 10, 3, 1)], [PLACE]);
+    expect(next.events).toEqual([]);
+    expect(next.state?.inside).toEqual(['p1']);
   });
 
   it('steps over a fix too imprecise to say anything, in or out', () => {

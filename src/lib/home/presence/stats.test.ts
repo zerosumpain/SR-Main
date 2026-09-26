@@ -184,7 +184,7 @@ describe('time out', () => {
 
   it('counts the gap between two stays at home when a journey began in it', () => {
     const s = movementStats(
-      [journey('2026-10-27T09:05:00Z', 15, 3, 'walking'), journey('2026-10-27T11:40:00Z', 15, 3, 'walking')],
+      [journey('2026-10-27T09:00:00Z', 15, 3, 'walking'), journey('2026-10-27T11:40:00Z', 15, 3, 'walking')],
       [
         visit(HOME, 'Home', '2026-10-26T20:00:00Z', '2026-10-27T09:00:00Z'),
         visit('p-shop', 'Shop', '2026-10-27T09:25:00Z', '2026-10-27T11:30:00Z'),
@@ -219,7 +219,7 @@ describe('time out', () => {
 
   it('runs an outing still under way to now, with no return yet', () => {
     const s = movementStats(
-      [journey('2026-10-28T10:05:00Z', 15, 3, 'walking')],
+      [journey('2026-10-28T10:00:00Z', 15, 3, 'walking')],
       [visit(HOME, 'Home', '2026-10-27T20:00:00Z', '2026-10-28T10:00:00Z')],
       { ...OPTS, homePlaceId: HOME },
     );
@@ -229,7 +229,7 @@ describe('time out', () => {
   it('splits an outing across midnight on the local clock (BST)', () => {
     // Out 22:00 BST on the 20th (21:00 UTC), back 01:00 BST on the 21st.
     const s = movementStats(
-      [journey('2026-10-20T21:05:00Z', 15, 3, 'vehicle')],
+      [journey('2026-10-20T21:00:00Z', 15, 3, 'vehicle')],
       [
         visit(HOME, 'Home', '2026-10-20T08:00:00Z', '2026-10-20T21:00:00Z'),
         visit(HOME, 'Home', '2026-10-21T00:00:00Z', '2026-10-21T08:00:00Z'),
@@ -254,7 +254,7 @@ describe('time out', () => {
     // 25 Oct 2026 began at 23:00 UTC on the 24th (BST) and is 25 hours long.
     // Out from 23:00 UTC on the 24th (00:00 local, the 25th) to 01:00 UTC.
     const autumn = movementStats(
-      [journey('2026-10-24T23:05:00Z', 15, 3, 'walking')],
+      [journey('2026-10-24T23:00:00Z', 15, 3, 'walking')],
       [
         visit(HOME, 'Home', '2026-10-24T18:00:00Z', '2026-10-24T23:00:00Z'),
         visit(HOME, 'Home', '2026-10-25T01:00:00Z', '2026-10-25T08:00:00Z'),
@@ -271,7 +271,7 @@ describe('time out', () => {
 
     // 29 Mar 2026 began at 00:00 UTC (GMT). Out 23:30–00:30 UTC across it.
     const spring = movementStats(
-      [journey('2026-03-28T23:35:00Z', 15, 3, 'walking')],
+      [journey('2026-03-28T23:30:00Z', 15, 3, 'walking')],
       [
         visit(HOME, 'Home', '2026-03-28T18:00:00Z', '2026-03-28T23:30:00Z'),
         visit(HOME, 'Home', '2026-03-29T00:30:00Z', '2026-03-29T08:00:00Z'),
@@ -290,6 +290,59 @@ describe('time out', () => {
       firstOut: null,
       lastIn: '00:30',
     });
+  });
+
+  it('starts an outing at the departure, not the last home fix before a silent night', () => {
+    // Home until 22:00 on the 26th, then the phone says nothing all night. A
+    // brief stay at home 07:30–07:36 is too short to be a visit, so there is
+    // no home stay to leave from; the walk out starts at 07:38. GMT: local = UTC.
+    const s = movementStats(
+      [journey('2026-10-27T07:38:00Z', 20, 2, 'walking')],
+      [
+        visit(HOME, 'Home', '2026-10-26T18:00:00Z', '2026-10-26T22:00:00Z'),
+        visit('p-shop', 'Shop', '2026-10-27T08:00:00Z', '2026-10-27T08:40:00Z'),
+        visit(HOME, 'Home', '2026-10-27T09:00:00Z', '2026-10-27T20:00:00Z'),
+      ],
+      { ...OPTS, homePlaceId: HOME },
+    );
+    expect(s.timeOut.find((d) => d.date === '2026-10-26')).toEqual({
+      date: '2026-10-26',
+      minutesOut: 0,
+      firstOut: null,
+      lastIn: null,
+    });
+    expect(s.timeOut.find((d) => d.date === '2026-10-27')).toEqual({
+      date: '2026-10-27',
+      minutesOut: 82,
+      firstOut: '07:38',
+      lastIn: '09:00',
+    });
+  });
+
+  it('counts an outing already under way when the window opens, from its first journey', () => {
+    // Window: 3 days back from NOW (the 25th, 12:00). Out before any stay at
+    // home in the window; the first journey is on the 26th at 10:00.
+    const s = movementStats(
+      [journey('2026-10-26T10:00:00Z', 60, 40, 'vehicle'), journey('2026-10-24T09:00:00Z', 60, 40, 'vehicle')],
+      [visit(HOME, 'Home', '2026-10-26T13:00:00Z', '2026-10-28T12:00:00Z')],
+      { days: 3, now: NOW, homePlaceId: HOME },
+    );
+    expect(s.timeOut.find((d) => d.date === '2026-10-26')).toEqual({
+      date: '2026-10-26',
+      minutesOut: 180,
+      firstOut: '10:00',
+      lastIn: '13:00',
+    });
+    expect(s.timeOut.reduce((n, d) => n + d.minutesOut, 0)).toBe(180);
+  });
+
+  it('counts a window with journeys but no stay at home as out from the first journey', () => {
+    const s = movementStats([journey('2026-10-28T09:00:00Z', 30, 5, 'vehicle')], [], {
+      days: 2,
+      now: NOW,
+      homePlaceId: HOME,
+    });
+    expect(s.timeOut.at(-1)).toEqual({ date: '2026-10-28', minutesOut: 180, firstOut: '09:00', lastIn: null });
   });
 
   it('is empty without a home place', () => {

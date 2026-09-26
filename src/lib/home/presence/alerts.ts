@@ -384,6 +384,8 @@ async function newFixes(subject: string, state: InsideState | null): Promise<Tra
     lon: daydreamTrail.lon,
     accuracyM: daydreamTrail.accuracyM,
     ts: daydreamTrail.ts,
+    speedKmh: daydreamTrail.speedKmh,
+    mode: daydreamTrail.mode,
   };
   const positioned = and(eq(daydreamTrail.subject, subject), isNotNull(daydreamTrail.lat), ne(daydreamTrail.source, 'gap'));
   const rows = state
@@ -397,7 +399,15 @@ async function newFixes(subject: string, state: InsideState | null): Promise<Tra
       // By ts, which (subject, ts) indexes; a late row with a higher id but an
       // older ts is then stepped over by `lastTsMs`.
       await db.select(cols).from(daydreamTrail).where(positioned).orderBy(desc(daydreamTrail.ts)).limit(1);
-  return rows.map((r) => ({ id: r.id, lat: r.lat as number, lon: r.lon as number, accuracyM: r.accuracyM, ts: r.ts }));
+  return rows.map((r) => ({
+    id: r.id,
+    lat: r.lat as number,
+    lon: r.lon as number,
+    accuracyM: r.accuracyM,
+    ts: r.ts,
+    speedKmh: r.speedKmh,
+    mode: r.mode,
+  }));
 }
 
 export interface CrossingsResult {
@@ -487,6 +497,11 @@ export interface DeliveryResult {
   whatsappFailed: string[];
 }
 
+/** A send still unanswered after this long is given up on as UNKNOWN: it may
+ *  have gone, so it is never retried. Without it one hung socket stalls the
+ *  whole run behind it. */
+export const WHATSAPP_SEND_TIMEOUT_MS = 20_000;
+
 export type WhatsAppSend = (to: string, text: string) => Promise<{ sent: boolean; error?: string }>;
 
 /** Where attempts and outcomes are written. The database in production. */
@@ -531,11 +546,18 @@ export async function executeWhatsApp(
     // Another run (or a stale plan) got there first, or it is already done.
     if (!claimed) continue;
     let ok: boolean | null;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      ok = (await sendWhatsApp(s.number, s.text)).sent === true;
+      const timedOut = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('WhatsApp send timed out')), WHATSAPP_SEND_TIMEOUT_MS);
+      });
+      ok = (await Promise.race([sendWhatsApp(s.number, s.text), timedOut])).sent === true;
     } catch {
-      // Unknown: it may have gone. Left as an unresolved attempt.
+      // Unknown (a throw or a timeout): it may have gone. Left as an
+      // unresolved attempt, which is never retried.
       ok = null;
+    } finally {
+      clearTimeout(timer);
     }
     (ok ? out.sent : out.failed).push(maskNumber(s.number));
     try {

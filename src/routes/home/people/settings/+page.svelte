@@ -104,7 +104,7 @@
                     name="whatsapp"
                     type="tel"
                     value={m.whatsapp ?? ''}
-                    placeholder="+44…"
+                    placeholder="07… or +44…"
                     autocomplete="off"
                   />
                 </label>

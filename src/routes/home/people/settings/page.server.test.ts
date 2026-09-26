@@ -97,7 +97,7 @@ describe('/home/people/settings — save', () => {
           displayName: 'Sam',
           email: 'sam@example.test',
           source: 'life360',
-          whatsapp: '+440000000000',
+          whatsapp: '440000000000',
           alerts: { follow: ['alex'], whatsapp: true },
         },
       ],
@@ -120,6 +120,34 @@ describe('/home/people/settings — save', () => {
     await actions.save(eventFor('owner@example.test', { ...base, source: 'none' }));
     expect(h.updates).toHaveLength(3);
     expect(h.settings).toEqual([]);
+  });
+
+  it('stores a WhatsApp number as E.164 digits, whatever way it was typed', async () => {
+    const typed: Array<[string, string]> = [
+      ['07000 000000', '447000000000'],
+      ['+44 7000-000000', '447000000000'],
+      ['447000000000', '447000000000'],
+      ['0044 7000 000000', '447000000000'],
+      ['+1 (555) 010-0000', '15550100000'],
+    ];
+    for (const [whatsapp, stored] of typed) {
+      h.updates = [];
+      const res = await actions.save(eventFor('owner@example.test', { ...base, whatsapp }));
+      expect(res).toEqual({ saved: 'sam' });
+      expect(h.updates[0][1].whatsapp).toBe(stored);
+    }
+  });
+
+  it('refuses a number that cannot be an international one, with a form error', async () => {
+    for (const whatsapp of ['12', 'call me', '+0700000000', '44abc0000000', '4470000000000000', '+']) {
+      const res = (await actions.save(eventFor('owner@example.test', { ...base, whatsapp }))) as {
+        status: number;
+        data: { error: string };
+      };
+      expect(res.status).toBe(400);
+      expect(res.data.error).toMatch(/WhatsApp number/);
+    }
+    expect(h.updates).toEqual([]);
   });
 
   it('rejects a bad number, source or missing app email', async () => {

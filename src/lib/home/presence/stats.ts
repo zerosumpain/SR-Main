@@ -341,10 +341,11 @@ function commonTrips(
 
 /**
  * Minutes away from home per local day, with the first departure and the last
- * return. An outing is the gap between one stay at home and the next — but
- * only where a journey actually began inside it: a phone that went quiet
+ * return. An outing lies in the gap between one stay at home and the next —
+ * but only where a journey actually began inside it: a phone that went quiet
  * overnight splits a stay at home into two, and the hole between them is not
- * time out. An outing still under way runs to `now`.
+ * time out. It runs from that first journey's start to the next stay at home,
+ * or to `now` while still under way.
  */
 function timeOut(
   journeys: Journey[],
@@ -356,14 +357,29 @@ function timeOut(
     .filter((v) => v.placeId === homePlaceId)
     .sort((a, b) => a.from.getTime() - b.from.getTime());
 
-  const outings: Array<{ from: Date; to: Date; returned: boolean }> = [];
-  const movedDuring = (a: Date, b: Date) => journeys.some((j) => j.startedAt >= a && j.startedAt < b);
+  // Every gap between stays at home, plus the one before the first stay in the
+  // window (someone already out when it opens) — or, with no stay at home in
+  // the window at all, the whole window.
+  const windowStart = new Date(opts.now.getTime() - opts.days * 86_400_000);
+  const gaps: Array<{ a: Date; b: Date; returned: boolean }> = [
+    { a: windowStart, b: home[0]?.from ?? opts.now, returned: home.length > 0 },
+  ];
   for (let i = 0; i < home.length; i++) {
-    const left = home[i].to;
     const back = home[i + 1]?.from ?? null;
-    const until = back ?? opts.now;
-    if (until <= left || !movedDuring(left, until)) continue;
-    outings.push({ from: left, to: until, returned: back != null });
+    gaps.push({ a: home[i].to, b: back ?? opts.now, returned: back != null });
+  }
+
+  // `journeys` is sorted by start, so the first match is the departure. The
+  // outing starts THERE, not at the last home fix: after a silent night the
+  // last home fix is the evening before (a brief stay at home in the morning
+  // is too short to be a visit), and that is not when they went out.
+  const outings: Array<{ from: Date; to: Date; returned: boolean }> = [];
+  for (const { a, b, returned } of gaps) {
+    if (b <= a) continue;
+    const first = journeys.find((j) => j.startedAt >= a && j.startedAt < b);
+    if (!first) continue;
+    const from = first.startedAt > a ? first.startedAt : a;
+    outings.push({ from, to: b, returned });
   }
 
   const today = localDate(opts.now);

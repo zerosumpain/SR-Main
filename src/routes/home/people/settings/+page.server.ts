@@ -32,7 +32,23 @@ export const load: PageServerLoad = async (event) => {
 };
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const NUMBER = /^\+?[0-9]{7,15}$/;
+/** E.164 without the `+`: a country code (never 0) and 8–15 digits in all. */
+const E164 = /^[1-9][0-9]{7,14}$/;
+
+/**
+ * A typed WhatsApp number as the digits WhatsApp addresses, or null when it
+ * cannot be one. The household is in the UK, so a national `07…` becomes
+ * `447…`; `+` and the `00` international prefix are dropped. Stored this way
+ * because the send turns the digits straight into a JID, and a JID built from
+ * `07…` is a number that does not exist: WhatsApp drops it without an error.
+ */
+function normaliseWhatsApp(typed: string): string | null {
+  let n = typed.replace(/[\s().-]/g, '');
+  if (n.startsWith('+')) n = n.slice(1);
+  else if (n.startsWith('00')) n = n.slice(2);
+  else if (n.startsWith('0')) n = `44${n.slice(1)}`;
+  return E164.test(n) ? n : null;
+}
 
 function isSource(v: string): v is MemberSource {
   return (MEMBER_SOURCES as readonly string[]).includes(v);
@@ -59,8 +75,14 @@ export const actions: Actions = {
     if (source === 'companion' && !email) {
       return fail(400, { error: 'Someone on the app needs the email they sign in with.', subject });
     }
-    const number = String(form.get('whatsapp') ?? '').replace(/[\s()-]/g, '');
-    if (number && !NUMBER.test(number)) return fail(400, { error: 'A WhatsApp number is 7–15 digits, with an optional +.', subject });
+    const typed = String(form.get('whatsapp') ?? '').trim();
+    const number = typed ? normaliseWhatsApp(typed) : null;
+    if (typed && !number) {
+      return fail(400, {
+        error: 'That WhatsApp number does not look right. Use 07… for a UK mobile, or + and the country code.',
+        subject,
+      });
+    }
 
     const others = new Set(members.filter((m) => m.subject !== subject).map((m) => m.subject));
     const followAll = form.get('followAll') === 'on';
