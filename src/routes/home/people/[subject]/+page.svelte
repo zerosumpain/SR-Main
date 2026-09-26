@@ -96,8 +96,18 @@
   const PW = 600;
   const PH = 150;
   const PL = 44; // room for the y labels
-  const PB = 22; // room for the x labels
   const PT = 10;
+  /** Rendered width of each chart, so tick text can be sized in viewBox units
+   *  that come out at 12px on screen — a 600-wide viewBox on a phone would
+   *  otherwise shrink it to under 7px. Plain layout readings, drawn only. */
+  let paceW = $state(0);
+  let outW = $state(0);
+  const TICK_PX = 12;
+  const MAX_CHART_W = 720;
+  const tickUnits = (viewW: number, shownW: number) =>
+    shownW > 0 ? (TICK_PX * viewW) / Math.min(shownW, MAX_CHART_W) : TICK_PX;
+  const paceTick = $derived(tickUnits(PW, paceW));
+  const PB = $derived(paceTick + 10); // room for the x labels
   const weekly = $derived(stats?.walkingPace?.weekly ?? []);
   const paceRange = $derived.by(() => {
     const v = weekly.map((w) => w.medianMps * 3.6);
@@ -114,6 +124,8 @@
   const BAR_W = 14;
   const GAP = 4;
   const CH = 120;
+  const OW = $derived(outDays.length * (BAR_W + GAP) + 30);
+  const outTick = $derived(tickUnits(OW, outW));
   const outMax = $derived(Math.max(60, ...outDays.map((d) => d.minutesOut)));
   const outCeilHours = $derived(Math.ceil(outMax / 60));
   const lastWeek = $derived([...outDays].slice(-7).reverse());
@@ -152,12 +164,12 @@
         />
         {#if stats.walkingPace}
           <StatDeck tiles={paceTiles} min={200} />
-          <div class="chart">
+          <div class="chart" bind:clientWidth={paceW} style="--tick: {paceTick}px">
             <p class="field-label">Median pace by week (weeks start Monday)</p>
-            <svg class="pace" viewBox="0 0 {PW} {PH}" role="img" aria-label="Median walking pace by week, in km/h">
+            <svg class="pace" viewBox="0 0 {PW} {PH}" role="img" aria-label="Median walking pace by week, in km/h. The same figures follow as a table.">
               {#each [paceRange.lo, paceRange.hi] as v (v)}
                 <line x1={PL} x2={PW} y1={paceY(v / 3.6)} y2={paceY(v / 3.6)} class="grid" />
-                <text x={PL - 8} y={paceY(v / 3.6) + 4} text-anchor="end" class="tick">{v}</text>
+                <text x={PL - 8} y={paceY(v / 3.6) + paceTick / 3} text-anchor="end" class="tick">{v}</text>
               {/each}
               {#if weekly.length > 1}<path d={pacePath} class="line" />{/if}
               {#each weekly as w, i (w.weekStart)}
@@ -169,6 +181,15 @@
                 </g>
               {/each}
             </svg>
+            <table class="vh">
+              <caption>Median walking pace by week</caption>
+              <thead><tr><th scope="col">Week starting</th><th scope="col">Median pace (km/h)</th><th scope="col">Walks</th></tr></thead>
+              <tbody>
+                {#each weekly as w (w.weekStart)}
+                  <tr><th scope="row">{shortLabel(w.weekStart)}</th><td>{kmh(w.medianMps)}</td><td>{w.n}</td></tr>
+                {/each}
+              </tbody>
+            </table>
           </div>
         {:else}
           <p class="lede">No walk in the window was long enough, and at walking speed, to give a pace.</p>
@@ -224,18 +245,18 @@
           strap="From leaving home to getting back, counted only when a journey began in between — a phone that went quiet at home overnight is not time out. Times are the house’s clock."
         />
         {#if outDays.length}
-          <div class="chart">
+          <div class="chart" bind:clientWidth={outW} style="--tick: {outTick}px">
             <p class="field-label">Hours out per day, last {outDays.length} days</p>
             <svg
               class="out"
-              viewBox="0 0 {outDays.length * (BAR_W + GAP) + 30} {CH + 20}"
+              viewBox="0 {-outTick / 2} {OW} {CH + outTick * 1.6 + 8}"
               role="img"
-              aria-label="Hours away from home per day"
+              aria-label="Hours away from home per day. Every day follows as a table."
             >
-              <line x1="30" x2={outDays.length * (BAR_W + GAP) + 30} y1="4" y2="4" class="grid" />
-              <text x="24" y="8" text-anchor="end" class="tick">{outCeilHours}h</text>
-              <line x1="30" x2={outDays.length * (BAR_W + GAP) + 30} y1={CH} y2={CH} class="base" />
-              <text x="24" y={CH + 4} text-anchor="end" class="tick">0</text>
+              <line x1="30" x2={OW} y1="4" y2="4" class="grid" />
+              <text x="26" y={4 + outTick / 3} text-anchor="end" class="tick">{outCeilHours}h</text>
+              <line x1="30" x2={OW} y1={CH} y2={CH} class="base" />
+              <text x="26" y={CH + outTick / 3} text-anchor="end" class="tick">0</text>
               {#each outDays as d, i (d.date)}
                 {@const bh = d.minutesOut ? Math.max(2, (d.minutesOut / (outCeilHours * 60)) * (CH - 4)) : 0}
                 <g>
@@ -245,11 +266,25 @@
                     <rect x={30 + i * (BAR_W + GAP) + GAP / 2} y={CH - bh} width={BAR_W} height={bh} rx="2" class="bar" />
                   {/if}
                   {#if (outDays.length - 1 - i) % 7 === 0}
-                    <text x={30 + i * (BAR_W + GAP) + (BAR_W + GAP) / 2} y={CH + 16} text-anchor="middle" class="tick">{shortLabel(d.date)}</text>
+                    <text x={30 + i * (BAR_W + GAP) + (BAR_W + GAP) / 2} y={CH + outTick + 4} text-anchor="middle" class="tick">{shortLabel(d.date)}</text>
                   {/if}
                 </g>
               {/each}
             </svg>
+            <table class="vh">
+              <caption>Time away from home, every day</caption>
+              <thead><tr><th scope="col">Day</th><th scope="col">Time out</th><th scope="col">First out</th><th scope="col">Last in</th></tr></thead>
+              <tbody>
+                {#each outDays as d (d.date)}
+                  <tr>
+                    <th scope="row">{dayLabel(d.date)}</th>
+                    <td>{d.minutesOut ? dur(d.minutesOut * 60) : 'none'}</td>
+                    <td>{d.firstOut ?? 'none'}</td>
+                    <td>{d.lastIn ?? 'none'}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
           </div>
 
           <div class="tbl-wrap week">
@@ -287,6 +322,7 @@
      come from `.ds-vocab` (HomeFrame's DsVocab). Marks follow /home/voice's
      hour chart: petrol ink, accent on hover, recessive axes. */
   .chart {
+    position: relative;
     margin-top: clamp(20px, 2.4vw, 32px);
   }
   .week {
@@ -332,7 +368,22 @@
   }
   .tick {
     font-family: var(--font-mono);
-    font-size: 12px;
+    /* viewBox units sized from the chart's rendered width: 12px on screen. */
+    font-size: var(--tick, 12px);
     fill: var(--text-muted);
+  }
+  /* Present to a screen reader, invisible on screen: the charts' figures as
+     tables (the aria-label alone carries no numbers). */
+  .vh {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
   }
 </style>

@@ -12,7 +12,7 @@
 // stated as fact.
 
 import type { Journey } from './journeys';
-import { LOCAL_TZ } from './types';
+import { LOCAL_TZ, localDayStart } from './types';
 
 export const MODE_BUCKETS = ['foot', 'car', 'rail', 'other'] as const;
 export type ModeBucket = (typeof MODE_BUCKETS)[number];
@@ -55,7 +55,8 @@ export interface CommonTrip {
   fromLabel: string;
   toLabel: string;
   count: number;
-  /** Median departure, local clock. */
+  /** Median departure, local clock — a circular median, so a trip that
+   *  leaves either side of midnight reads near midnight. */
   usualDeparture: string;
   medianSeconds: number;
   mode: ModeBucket;
@@ -172,12 +173,30 @@ export function hhmm(minuteOfDay: number): string {
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
 
-/** The instant a local date begins. Found by walking back from local noon, so
- *  it is right on the 23- and 25-hour days too. */
+/** The instant a local date begins. Noon UTC always falls on that local
+ *  date in Europe/London, and `localDayStart` is right on the 23- and 25-hour
+ *  days. */
 function localMidnight(date: string): Date {
-  const noon = new Date(`${date}T12:00:00Z`);
-  const { minuteOfDay } = localParts(noon);
-  return new Date(noon.getTime() - minuteOfDay * 60_000);
+  return localDayStart(new Date(`${date}T12:00:00Z`));
+}
+
+/**
+ * The median of clock times, on a clock rather than a line: 23:50 and 00:10
+ * have a median near midnight, not near noon. The minutes are cut open at the
+ * widest empty stretch of the day, laid out from there, and the ordinary
+ * median is taken.
+ */
+export function circularMedianMinute(minutes: number[]): number {
+  const sorted = [...minutes].map((m) => ((m % 1440) + 1440) % 1440).sort((a, b) => a - b);
+  let cut = 0; // index of the first minute after the widest gap
+  let widest = -1;
+  for (let i = 0; i < sorted.length; i++) {
+    const prev = i === 0 ? sorted[sorted.length - 1] - 1440 : sorted[i - 1];
+    const gap = sorted[i] - prev;
+    if (gap > widest) ((widest = gap), (cut = i));
+  }
+  const unrolled = sorted.map((m, i) => (i < cut ? m + 1440 : m));
+  return ((quantile(unrolled, 0.5) % 1440) + 1440) % 1440;
 }
 
 // ── The stats ────────────────────────────────────────────────────────────────
@@ -312,7 +331,7 @@ function commonTrips(
       fromLabel: g.fromLabel,
       toLabel: g.toLabel,
       count: g.journeys.length,
-      usualDeparture: hhmm(quantile(g.journeys.map((j) => localParts(j.startedAt).minuteOfDay), 0.5)),
+      usualDeparture: hhmm(circularMedianMinute(g.journeys.map((j) => localParts(j.startedAt).minuteOfDay))),
       medianSeconds: Math.round(quantile(g.journeys.map(seconds), 0.5)),
       mode,
     });

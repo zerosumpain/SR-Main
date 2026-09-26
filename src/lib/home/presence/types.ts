@@ -302,8 +302,31 @@ export function errMsg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/** Minutes the zone's wall clock runs ahead of UTC at an instant (60 under BST). */
+export function tzOffsetMins(at: Date, tz = LOCAL_TZ): number {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(at);
+  const num = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
+  const wall = Date.UTC(num('year'), num('month') - 1, num('day'), num('hour') % 24, num('minute'), num('second'));
+  return Math.round((wall - Math.floor(at.getTime() / 1000) * 1000) / 60_000);
+}
+
 /** The instant the owner's local day began. Never `setUTCHours(0)` — under BST
- *  that is an hour into the previous day. */
+ *  that is an hour into the previous day.
+ *
+ *  Subtracting the wall-clock time since midnight is not enough on its own: on
+ *  the two clock-change days the offset at midnight differs from the offset
+ *  now, and the answer would be an hour off (25 Oct 2026 began at 23:00 UTC on
+ *  the 24th, not 00:00). So the candidate is corrected once by the difference
+ *  between the offset now and the offset at the candidate. */
 export function localDayStart(now: Date, tz = LOCAL_TZ): Date {
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: tz,
@@ -314,5 +337,7 @@ export function localDayStart(now: Date, tz = LOCAL_TZ): Date {
   }).formatToParts(now);
   const num = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
   const secs = (num('hour') % 24) * 3600 + num('minute') * 60 + num('second');
-  return new Date(now.getTime() - secs * 1000);
+  const candidate = new Date(now.getTime() - secs * 1000);
+  const drift = tzOffsetMins(now, tz) - tzOffsetMins(candidate, tz);
+  return new Date(candidate.getTime() + drift * 60_000);
 }

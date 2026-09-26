@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Journey } from './journeys';
 import type { MovementMode } from './types';
-import { localWeekStart, modeBucket, movementStats, type StatsVisit } from './stats';
+import { circularMedianMinute, hhmm, localWeekStart, modeBucket, movementStats, type StatsVisit } from './stats';
 
 // Journeys are built directly — the segmenter has its own tests. No
 // coordinates are needed here at all.
@@ -144,6 +144,21 @@ describe('common trips', () => {
     ]);
   });
 
+  it('takes the usual departure on a clock: 23:50, 00:00 and 00:10 is midnight, not noon', () => {
+    expect(hhmm(circularMedianMinute([23 * 60 + 50, 10, 0]))).toBe('00:00');
+    expect(hhmm(circularMedianMinute([23 * 60 + 50, 10]))).toBe('00:00');
+    expect(hhmm(circularMedianMinute([7 * 60, 8 * 60, 9 * 60]))).toBe('08:00');
+
+    // Through movementStats: GMT days, so UTC equals local.
+    const trips = [
+      commute('2026-10-26', '23:50', 20),
+      commute('2026-10-27', '00:05', 20),
+      commute('2026-10-27', '23:55', 20),
+    ];
+    const [t] = movementStats(trips.map((x) => x.j), trips.flatMap((x) => x.v), OPTS).commonTrips;
+    expect(t.usualDeparture).toBe('23:55');
+  });
+
   it('needs three: two occurrences are not a trip', () => {
     const a = commute('2026-10-20', '07:10', 20);
     const b = commute('2026-10-21', '07:20', 30);
@@ -232,6 +247,48 @@ describe('time out', () => {
       minutesOut: 60,
       firstOut: null,
       lastIn: '01:00',
+    });
+  });
+
+  it('cuts days at true local midnight on both clock-change days', () => {
+    // 25 Oct 2026 began at 23:00 UTC on the 24th (BST) and is 25 hours long.
+    // Out from 23:00 UTC on the 24th (00:00 local, the 25th) to 01:00 UTC.
+    const autumn = movementStats(
+      [journey('2026-10-24T23:05:00Z', 15, 3, 'walking')],
+      [
+        visit(HOME, 'Home', '2026-10-24T18:00:00Z', '2026-10-24T23:00:00Z'),
+        visit(HOME, 'Home', '2026-10-25T01:00:00Z', '2026-10-25T08:00:00Z'),
+      ],
+      { ...OPTS, homePlaceId: HOME },
+    );
+    expect(autumn.timeOut.find((d) => d.date === '2026-10-24')?.minutesOut).toBe(0);
+    expect(autumn.timeOut.find((d) => d.date === '2026-10-25')).toEqual({
+      date: '2026-10-25',
+      minutesOut: 120,
+      firstOut: '00:00',
+      lastIn: '01:00',
+    });
+
+    // 29 Mar 2026 began at 00:00 UTC (GMT). Out 23:30–00:30 UTC across it.
+    const spring = movementStats(
+      [journey('2026-03-28T23:35:00Z', 15, 3, 'walking')],
+      [
+        visit(HOME, 'Home', '2026-03-28T18:00:00Z', '2026-03-28T23:30:00Z'),
+        visit(HOME, 'Home', '2026-03-29T00:30:00Z', '2026-03-29T08:00:00Z'),
+      ],
+      { days: 5, now: new Date('2026-03-30T12:00:00Z'), homePlaceId: HOME },
+    );
+    expect(spring.timeOut.find((d) => d.date === '2026-03-28')).toEqual({
+      date: '2026-03-28',
+      minutesOut: 30,
+      firstOut: '23:30',
+      lastIn: null,
+    });
+    expect(spring.timeOut.find((d) => d.date === '2026-03-29')).toEqual({
+      date: '2026-03-29',
+      minutesOut: 30,
+      firstOut: null,
+      lastIn: '00:30',
     });
   });
 
