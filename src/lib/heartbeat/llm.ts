@@ -2,6 +2,7 @@ import { db } from '$lib/db';
 import { conversations, orchestratorChats } from '$lib/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { getLLMClient } from '$lib/llm/client';
+import { runToolLoop } from '$lib/llm/tool-loop';
 import { resolveHeartbeatModel } from '$lib/server/models/workload-settings';
 import { withActivity } from '$lib/context/activity';
 import { coerceModelContext } from '$lib/constants/default-models';
@@ -121,7 +122,6 @@ async function heartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<HeartbeatTurnR
   // heartbeat agent turns shouldn't go on a tool shopping spree; they should
   // act on what was asked. (Formerly a single 'system' toolset.)
   let toolDefs: Array<{ type: 'function'; function: { name: string; description: string; parameters: unknown } }> | undefined;
-  let toolsCalled: string[] = [];
   if (opts.toolsEnabled) {
     const { getToolsetDefinitions } = await import('$lib/workflows/site-tools/llm-tools');
     toolDefs = [
@@ -138,56 +138,30 @@ async function heartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<HeartbeatTurnR
     } catch { /* home toolset may not exist in dev */ }
   }
 
-  let promptTokens = 0;
-  let completionTokens = 0;
-  let finalReply = '';
-
-  for (let round = 0; round < (opts.toolsEnabled ? MAX_TOOL_ROUNDS : 1); round++) {
-    const response = await client.chat.completions.create({
-      model,
-      messages: messages as any,
-      temperature: 0.5,
-      max_tokens: opts.maxTokens ?? 600,
-      ...(toolDefs && toolDefs.length > 0 ? { tools: toolDefs as any } : {}),
-    });
-
-    promptTokens += response.usage?.prompt_tokens ?? 0;
-    completionTokens += response.usage?.completion_tokens ?? 0;
-
-    const choice = response.choices[0];
-    const msg = choice?.message;
-    if (!msg) break;
-
-    const toolCalls = (msg as { tool_calls?: Array<{ id: string; function?: { name: string; arguments: string } }> }).tool_calls;
-    if (toolCalls && toolCalls.length > 0 && opts.toolsEnabled) {
-      // Push the assistant message with tool_calls and execute each.
-      messages.push({
-        role: 'assistant',
-        content: msg.content ?? '',
-        tool_calls: toolCalls,
-      });
+  // No `activity` here: `runHeartbeatTurn` already wraps the whole turn, and a
+  // second wrap would only shadow it with the same tag.
+  const loop = await runToolLoop({
+    client,
+    model,
+    messages,
+    tools: toolDefs,
+    maxRounds: opts.toolsEnabled ? MAX_TOOL_ROUNDS : 1,
+    temperature: 0.5,
+    maxTokens: opts.maxTokens ?? 600,
+    forceFinal: false,
+    execute: async (tc) => {
       const { executeSiteTool, isRegisteredTool } = await import('$lib/workflows/site-tools/executor');
-      for (const tc of toolCalls) {
-        const fnName = tc.function?.name ?? '';
-        toolsCalled.push(fnName);
-        let parsed: Record<string, unknown> = {};
-        try { parsed = JSON.parse(tc.function?.arguments ?? '{}'); } catch { /* keep empty */ }
-        let result: unknown = { error: 'tool not registered' };
-        if (await isRegisteredTool(fnName)) {
-          result = await executeSiteTool(fnName, parsed, { emit: () => {}, conversationId: conversationId });
-        }
-        messages.push({
-          role: 'tool',
-          tool_call_id: tc.id,
-          content: JSON.stringify(result).slice(0, 4000),
-        });
+      let result: unknown = { error: 'tool not registered' };
+      if (await isRegisteredTool(tc.name)) {
+        result = await executeSiteTool(tc.name, tc.args, { emit: () => {}, conversationId: conversationId });
       }
-      continue; // next round — let the LLM produce a final summary
-    }
-
-    finalReply = (msg.content ?? '').trim();
-    break;
-  }
+      return JSON.stringify(result).slice(0, 4000);
+    },
+  });
+  const finalReply = loop.reply;
+  const promptTokens = loop.usage.prompt;
+  const completionTokens = loop.usage.completion;
+  const toolsCalled = loop.calls.map((c) => c.name);
 
   const [asstMsg] = await db
     .insert(orchestratorChats)
