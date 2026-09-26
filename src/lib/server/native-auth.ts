@@ -33,6 +33,13 @@ import { nativeCredentials } from '$lib/db/schema';
  * A device token is therefore exactly as privileged as the browser session that
  * created it and no more, which is what makes "pair my phone" a safe thing for
  * the owner to do and a useless thing for anybody else to steal a QR of.
+ *
+ * A MEMBER (a non-owner holding news or chat, `$lib/server/grants`) can hold a
+ * device too, since the member device lane. Their code is never minted from a
+ * request: only the household push mints one, for a member who asked from the
+ * app (`$lib/home/presence/app-view`). The row still carries just an email, and
+ * everything the member may do is re-derived from that email's grants on every
+ * request (`withNativeAccess`), so a demotion takes effect on the next call.
  */
 
 /** A device token below this length is not a credential. Matches `invoke-auth`. */
@@ -116,6 +123,33 @@ export async function createPairingCode(
     expiresAt,
   });
   return { code, expiresAt };
+}
+
+/**
+ * Is this pairing code still redeemable — unexpired, unrevoked, not yet spent?
+ *
+ * For the one caller that holds a code in memory between uses: the household
+ * push (`$lib/home/presence/app-view`) re-sends a member's code every cycle
+ * rather than minting a fresh one, and a code the phone has already redeemed
+ * (its row deleted by `redeemPairingCode`) must stop being re-sent the moment
+ * it is spent, not when its clock runs out.
+ */
+export async function isPairingCodeLive(code: string): Promise<boolean> {
+  const presented = code.trim();
+  if (!presented) return false;
+  const [row] = await db
+    .select({ id: nativeCredentials.id })
+    .from(nativeCredentials)
+    .where(
+      and(
+        eq(nativeCredentials.tokenHash, sha256(presented)),
+        eq(nativeCredentials.kind, 'pair'),
+        gt(nativeCredentials.expiresAt, new Date()),
+        isNull(nativeCredentials.revokedAt),
+      ),
+    )
+    .limit(1);
+  return !!row;
 }
 
 /**

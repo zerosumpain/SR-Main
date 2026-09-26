@@ -3,7 +3,8 @@ import { desc, eq, inArray, sql } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { conversations, openrouterModels, orchestratorChats } from '$lib/db/schema';
-import { withDevice } from '$lib/server/native-handler';
+import { withNativeAccess } from '$lib/server/native-handler';
+import { requireConversation } from '$lib/jkai/chat-access.server';
 import { coerceModelContext } from '$lib/constants/default-models';
 import { modelSupportsThinking } from '$lib/server/models/capabilities';
 import { resolveChatTurnModel } from '$lib/server/models/workload-settings';
@@ -34,7 +35,15 @@ const RECENT_MODELS = 6;
 
 type Choice = { provider: 'openrouter' | 'codex'; modelId: string; label: string; group: 'default' | 'codex' | 'recent' };
 
-export const GET: RequestHandler = withDevice(async ({ params }) => {
+/**
+ * A MEMBER gets the same shape with nothing to choose: `locked`, no choices, no
+ * thinking levels. The model is the owner's spend and a thinking level would
+ * write the owner's default (the PATCH refuses both), and the "recent" group is
+ * a list of the models the OWNER runs, which is his to know, not theirs.
+ */
+export const GET: RequestHandler = withNativeAccess('jkai.chat', async (event, _identity, role) => {
+  const { params } = event;
+  if (role === 'member') return memberModel(event, params.id);
   const [conv] = await db
     .select({
       modelProvider: conversations.modelProvider,
@@ -116,3 +125,28 @@ export const GET: RequestHandler = withDevice(async ({ params }) => {
     choices,
   };
 });
+
+async function memberModel(event: { locals: App.Locals }, id: string) {
+  const { conversation } = await requireConversation(event, id, 'read');
+  const current = coerceModelContext({ provider: conversation.modelProvider, modelId: conversation.modelId });
+  let label = current.modelId;
+  if (current.provider === 'openrouter') {
+    const [row] = await db
+      .select({ name: openrouterModels.name })
+      .from(openrouterModels)
+      .where(eq(openrouterModels.id, current.modelId))
+      .limit(1);
+    label = row?.name ?? label;
+  } else if (current.provider === 'codex') {
+    const codexModels = await listCodexModels();
+    label = codexModels.find((m) => m.slug === toCodexSlug(current.modelId))?.name ?? label;
+  }
+  return {
+    current: { provider: current.provider, modelId: current.modelId, label },
+    locked: true,
+    thinkingLevel: conversation.thinkingLevel ?? null,
+    supportsThinking: false,
+    levels: [],
+    choices: [] as Choice[],
+  };
+}

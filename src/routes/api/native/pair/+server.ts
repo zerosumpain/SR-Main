@@ -2,6 +2,8 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { redeemPairingCode } from '$lib/server/native-auth';
 import { isOwnerEmail } from '$lib/server/native-handler';
+import { loadMember } from '$lib/server/grants';
+import { satisfies } from '$lib/access/catalogue';
 import { rateLimit } from '$lib/server/rate-limit';
 
 /**
@@ -13,8 +15,9 @@ import { rateLimit } from '$lib/server/rate-limit';
  *
  *  * the code is single-use and deleted on redemption (`redeemPairingCode`);
  *  * it expires in ten minutes, and minting a new one kills the old;
- *  * the owner allow-list is re-checked, so a code minted by an address that
- *    has since left the list buys nothing;
+ *  * the holder is re-checked, so a code minted by an address that has since
+ *    left the list — or by a member who has since lost news and chat — buys
+ *    nothing (`mayHoldDevice`);
  *  * and the whole endpoint is rate-limited by client address, because it is the
  *    only unauthenticated write on the site and 256 bits of entropy deserve a
  *    ceiling on guesses anyway.
@@ -53,7 +56,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
   if (!redeemed) {
     return json({ error: 'That pairing code is not valid.' }, { status: 401 });
   }
-  if (!isOwnerEmail(redeemed.ownerEmail)) {
+  if (!(await mayHoldDevice(redeemed.ownerEmail))) {
     return json({ error: 'That pairing code is not valid.' }, { status: 401 });
   }
 
@@ -62,3 +65,26 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
     expiresAt: redeemed.expiresAt.toISOString(),
   });
 };
+
+/**
+ * Who a redeemed code may become a device for: the owner, or a member who holds
+ * news or chat right now — the two areas the app opens to members.
+ *
+ * A member's code is only ever minted by the household push, for a member who
+ * held one of those when it was minted; this asks again at redemption because
+ * ten minutes is long enough for the owner to take it away. A lookup that fails
+ * is a refusal. (The device row is written before this runs, as it always was
+ * for the owner check: an email that fails here fails `withNativeAccess` on
+ * every later request too, so the token opens nothing, and it is never handed
+ * over anyway.)
+ */
+async function mayHoldDevice(email: string): Promise<boolean> {
+  if (isOwnerEmail(email)) return true;
+  try {
+    const member = await loadMember(email);
+    return !!member && (satisfies(member.grants, 'news:self') || satisfies(member.grants, 'jkai.chat:self'));
+  } catch (err) {
+    console.error('[native] pair: member lookup failed:', err);
+    return false;
+  }
+}

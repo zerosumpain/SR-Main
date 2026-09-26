@@ -1,6 +1,12 @@
 import { isHttpError, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { withDevice } from '$lib/server/native-handler';
+import { withNativeAccess } from '$lib/server/native-handler';
+import {
+  MEMBER_DAILY_UPLOADS,
+  MEMBER_UPLOAD_KINDS,
+  requireConversation,
+  reserveUsage,
+} from '$lib/jkai/chat-access.server';
 import { storeChatUpload } from '$lib/jkai/media/upload';
 
 /**
@@ -17,8 +23,14 @@ import { storeChatUpload } from '$lib/jkai/media/upload';
  * - A refusal comes back as `{ error }` with its status. `withDevice` would
  *   flatten a thrown 413 into "Something went wrong", and "too large" is the
  *   one thing the phone can actually act on.
+ *
+ * A MEMBER uploads under the web's member rule: into a named thread of their
+ * OWN (404 for one they cannot see, 403 for one they may only read), a kind to
+ * read rather than run (`MEMBER_UPLOAD_KINDS`), stamped with their principal,
+ * and metered against the same daily ledger as their browser.
  */
-export const POST: RequestHandler = withDevice(async ({ request, url }) => {
+export const POST: RequestHandler = withNativeAccess('jkai.chat', async (event, _identity, role) => {
+  const { request, url } = event;
   // The file IS the body, not a multipart form, and that is not a style
   // choice. SvelteKit refuses any form-encoded POST whose `Origin` header does
   // not match the site ("Cross-site POST form submissions are forbidden", 403)
@@ -37,7 +49,15 @@ export const POST: RequestHandler = withDevice(async ({ request, url }) => {
   });
 
   try {
-    const row = await storeChatUpload(file, conversationId, 'web');
+    let row;
+    if (role === 'member') {
+      if (!conversationId) return json({ error: 'Upload into a conversation.' }, { status: 400 });
+      const { access } = await requireConversation(event, conversationId, 'post');
+      await reserveUsage(access, 'upload', MEMBER_DAILY_UPLOADS, `That is ${MEMBER_DAILY_UPLOADS} files today — the limit.`);
+      row = await storeChatUpload(file, conversationId, 'web', access.own, MEMBER_UPLOAD_KINDS);
+    } else {
+      row = await storeChatUpload(file, conversationId, 'web');
+    }
     // The transcript's attachment shape, not the table's: the phone decodes
     // this with the same type as an attachment on a loaded message.
     return json({

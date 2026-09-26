@@ -130,3 +130,12 @@ export const MEMBER_UPLOAD_KINDS: ReadonlySet<string> = new Set(['image', 'pdf',
 export const MEMBER_DAILY_THREADS = 30;
 /** Member chat turns running at once. */
 export const MEMBER_CONCURRENT_TURNS = 2;
+
+/**
+ * What a non-owner may change on their own thread: its name and its pin.
+ * Everything else is refused — `thinkingLevel` also writes the GLOBAL default
+ * for the next new thread, sharing mints a public link, `intelEnabled` is the
+ * owner's graph, and the model is the owner's spend. Shared by the web PATCH
+ * and the iPhone's, so the two cannot disagree about it.
+ */
+export const MEMBER_PATCHABLE: ReadonlySet<string> = new Set(['title', 'pinned']);

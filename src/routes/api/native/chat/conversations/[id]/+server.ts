@@ -1,9 +1,10 @@
 import type { RequestHandler } from './$types';
-import { json } from '@sveltejs/kit';
+import { error, json } from '@sveltejs/kit';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { conversations, orchestratorChats } from '$lib/db/schema';
-import { withDevice } from '$lib/server/native-handler';
+import { withNativeAccess } from '$lib/server/native-handler';
+import { MEMBER_PATCHABLE, requireConversation } from '$lib/jkai/chat-access.server';
 import { isThinkingLevel } from '$lib/models/thinking';
 import { setDefaultThinkingLevel } from '$lib/server/models/settings';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
@@ -27,8 +28,16 @@ import { snapshotPrice } from '$lib/server/models/price-snapshot';
  * DELETE is here even though it is destructive, because a thread list with no
  * way to clear the accidental one-word thread is a list that only grows. The
  * app puts it behind a long press and a confirmation rather than a swipe.
+ *
+ * A MEMBER gets the web's member rule and nothing wider: a thread they may
+ * write (404 for one they cannot see, 403 for one they can only read), and only
+ * `MEMBER_PATCHABLE` — the name and the pin. The model and the thinking level
+ * are refused outright rather than ignored: the model is the owner's spend,
+ * and a thinking level here also writes the GLOBAL default for the owner's
+ * next thread.
  */
-export const PATCH: RequestHandler = withDevice(async ({ params, request }) => {
+export const PATCH: RequestHandler = withNativeAccess('jkai.chat', async (event, _identity, role) => {
+  const { params, request } = event;
   let body: unknown;
   try {
     body = await request.json();
@@ -43,11 +52,27 @@ export const PATCH: RequestHandler = withDevice(async ({ params, request }) => {
     modelId?: unknown;
   };
 
+  if (role === 'member') {
+    const { conversation, access } = await requireConversation(event, params.id, 'write');
+    const keys = Object.keys(payload);
+    const refused = keys.filter((k) => !MEMBER_PATCHABLE.has(k));
+    if (refused.length > 0 || keys.length === 0) {
+      throw error(403, `Only the title and pin can be changed (refused: ${refused.join(', ') || 'nothing to change'})`);
+    }
+    // As on the web: the pin orders its OWNER's list, so an admin may rename
+    // someone else's thread but not rearrange their list.
+    if ('pinned' in payload && conversation.principalId !== access.own) {
+      throw error(403, "Only the thread's own member can pin it");
+    }
+  }
+
   if ('modelProvider' in payload || 'modelId' in payload) {
     return changeModel(params.id, payload.modelProvider, payload.modelId);
   }
 
   const set: { title?: string | null; pinned?: boolean; thinkingLevel?: string | null } = {};
+  // Unreachable for a member (refused above); kept owner-only by that, not by
+  // this branch.
   if ('thinkingLevel' in payload) {
     // As on the web: anything that is not a known level means "back to the
     // provider default", and the pick becomes the default for the next thread.
@@ -104,7 +129,11 @@ async function changeModel(id: string, provider: unknown, modelId: unknown): Pro
   return json({ ok: true, ...row });
 }
 
-export const DELETE: RequestHandler = withDevice(async ({ params }) => {
+// A member deletes a thread they may WRITE — their own, or any member's at
+// `admin` — exactly as the web DELETE decides it.
+export const DELETE: RequestHandler = withNativeAccess('jkai.chat', async (event, _identity, role) => {
+  const { params } = event;
+  if (role === 'member') await requireConversation(event, params.id, 'write');
   const [row] = await db
     .delete(conversations)
     .where(eq(conversations.id, params.id))

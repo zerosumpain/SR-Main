@@ -9,15 +9,7 @@ import { setDefaultThinkingLevel } from '$lib/server/models/settings';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
 import { coerceModelContext } from '$lib/constants/default-models';
 import { isThinkingLevel, supportsThinking } from '$lib/models/thinking';
-import { requireConversation } from '$lib/jkai/chat-access.server';
-
-/**
- * What a non-owner may change on their own thread: its name and its pin.
- * Everything else is refused — `thinkingLevel` also writes the GLOBAL default
- * for the next new thread, sharing mints a public link, `intelEnabled` is the
- * owner's graph, and the model is the owner's spend.
- */
-const MEMBER_PATCHABLE = new Set(['title', 'pinned']);
+import { MEMBER_PATCHABLE, requireConversation } from '$lib/jkai/chat-access.server';
 
 export const GET: RequestHandler = async (event) => {
 	const { params } = event;

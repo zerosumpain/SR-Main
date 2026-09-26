@@ -2,7 +2,8 @@ import type { RequestHandler } from './$types';
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/db';
 import { conversations } from '$lib/db/schema';
-import { clampLimit, withDevice } from '$lib/server/native-handler';
+import { clampLimit, withNativeAccess } from '$lib/server/native-handler';
+import { chatAccess, conversationListScope, MEMBER_DAILY_THREADS, reserveUsage } from '$lib/jkai/chat-access.server';
 import { getConversationList, searchConversationList } from '$lib/jkai/queries';
 import { resolveDefaultThinkingLevel } from '$lib/server/models/settings';
 import { resolveChatTurnModel } from '$lib/server/models/workload-settings';
@@ -20,8 +21,14 @@ import { snapshotPrice } from '$lib/server/models/price-snapshot';
  * Cost is the interesting omission. It is on the web card because the desk has
  * a spend view to reconcile it against; on a phone it would be a number with no
  * frame, which is the failure mode /health names for a header figure.
+ *
+ * Which threads: `conversationListScope`, the web list's own rule — the owner's
+ * threads for the owner (what this always listed), what `readable` gives a
+ * member. Search takes the same scope, so it cannot reach round the list.
  */
-export const GET: RequestHandler = withDevice(async ({ url }) => {
+export const GET: RequestHandler = withNativeAccess('jkai.chat', async (event) => {
+  const { url } = event;
+  const scope = conversationListScope(await chatAccess(event));
   const limit = clampLimit(url.searchParams.get('limit'), 40, 200);
 
   // A search reaches the whole archive and answers in one un-paged set — a
@@ -29,7 +36,7 @@ export const GET: RequestHandler = withDevice(async ({ url }) => {
   // ordering does not share. Same short-circuit as the web endpoint.
   const q = (url.searchParams.get('q') ?? '').trim();
   if (q) {
-    const found = await searchConversationList({ q, limit });
+    const found = await searchConversationList({ q, limit, scope });
     return { conversations: found.items.map(card), cursor: null, hasMore: false, query: q };
   }
 
@@ -54,6 +61,7 @@ export const GET: RequestHandler = withDevice(async ({ url }) => {
       before && beforeId && pinnedRaw
         ? { before, beforeId, pinned: pinnedRaw === '1' }
         : undefined,
+    scope,
   });
 
   return {
@@ -96,8 +104,17 @@ function card(row: ConversationRow) {
  * the site default until pinned, and `modelPinnedByUser` is false to say that
  * choosing nothing is not a choice. Pinning a model from a phone would stamp a
  * price snapshot the person never saw.
+ *
+ * A member's thread is the web's member thread: stamped with their principal,
+ * no thinking level (that is the owner's last pick, not theirs), and metered —
+ * `MEMBER_DAILY_THREADS` a day, the same ledger the browser draws on.
  */
-export const POST: RequestHandler = withDevice(async ({ request }) => {
+export const POST: RequestHandler = withNativeAccess('jkai.chat', async (event, _identity, role) => {
+  const { request } = event;
+  const access = await chatAccess(event);
+  if (role === 'member') {
+    await reserveUsage(access, 'thread', MEMBER_DAILY_THREADS, `That is ${MEMBER_DAILY_THREADS} new conversations today — the limit.`);
+  }
   let body: unknown = {};
   try {
     body = await request.json();
@@ -121,8 +138,11 @@ export const POST: RequestHandler = withDevice(async ({ request }) => {
       modelProvider: ctx.provider,
       modelId: ctx.modelId,
       modelPinnedByUser: false,
-      thinkingLevel: await resolveDefaultThinkingLevel(),
+      thinkingLevel: role === 'owner' ? await resolveDefaultThinkingLevel() : null,
       priceSnapshot: await snapshotPrice(ctx),
+      // 'owner' for the owner, which is the column default this insert used to
+      // leave it to; the member's own principal otherwise.
+      principalId: access.own,
     })
     .returning();
 

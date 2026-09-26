@@ -1,12 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { withDevice } from '$lib/server/native-handler';
-import {
-  commissionNewsResearch,
-  keepNewsInGraph,
-  linkNewsInNote,
-  newsActionArticle,
-} from '$lib/news/actions';
+import { withNativeAccess } from '$lib/server/native-handler';
+import { runScopedNewsAction } from '$lib/news/actions.server';
 import { isNewsSource } from '$lib/constants/news-sources';
 import { getNewsStory, isNewsStoryId } from '$lib/news/sources';
 import { toggleNewsFavourite } from '$lib/news/favourites';
@@ -18,16 +13,25 @@ import { toggleNewsFavourite } from '$lib/news/favourites';
  * `/api/news/actions`, not a subset: the whole point of a row action is that the
  * thing you do on the train is the thing that is there at the desk. It is a
  * separate FILE only because identity arrives differently — a paired device
- * rather than a browser session — and `newsOwnerKey(locals)` cannot see one.
+ * rather than a browser session.
+ *
+ * Keep, note and research run through `runScopedNewsAction`, the web door's own
+ * code, so a member's phone gets exactly what a member's browser gets: the
+ * area's grant or a 403, their own space / notebook / run, and the daily
+ * research cap. (This file used to call the libraries with their owner
+ * defaults, which was only safe while the owner was the one thing that could
+ * pair.) The owner's result is unchanged: the seam reads his sessionless
+ * request as the owner and hands back the owner's scope.
  *
  * The error path deliberately diverges from the web endpoint's. That one
  * forwards `err.message.slice(0, 240)` so the desk can show what the graph or
  * the research commissioner actually said; here it would put internal detail on
- * a phone that has no way to act on it, so `withDevice` flattens it to one
- * sentence and logs the rest.
+ * a phone that has no way to act on it, so the wrapper flattens it to one
+ * sentence and logs the rest. A REFUSAL (403, the cap's 429) is not flattened:
+ * that sentence is written for a person.
  */
-export const POST: RequestHandler = withDevice(async ({ request }, identity) => {
-  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+export const POST: RequestHandler = withNativeAccess('news', async (event, identity) => {
+  const body = (await event.request.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body) return json({ error: 'Body must be JSON' }, { status: 400 });
 
   const action = typeof body.action === 'string' ? body.action : '';
@@ -42,9 +46,5 @@ export const POST: RequestHandler = withDevice(async ({ request }, identity) => 
     return json(await toggleNewsFavourite(identity.ownerEmail, story));
   }
 
-  const article = await newsActionArticle(source, id);
-  if (action === 'graph') return json(await keepNewsInGraph(article), { status: 201 });
-  if (action === 'note') return json(await linkNewsInNote(article), { status: 201 });
-  if (action === 'research') return json(await commissionNewsResearch(article), { status: 201 });
-  return json({ error: 'Unknown news action' }, { status: 400 });
+  return json(await runScopedNewsAction(event, action, source, id), { status: 201 });
 });
