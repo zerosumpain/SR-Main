@@ -179,3 +179,204 @@ export function pilotFailureText(reason: PilotFailure): string {
       return 'The app server is unreachable right now.';
   }
 }
+
+// ── Phase 2 (Contract F): what /welcome and /home/people call now the pilot's
+// own dashboard is gone. Same lane, same token, same family scope.
+
+/** What `household/data/delete` reports it removed. */
+export interface PilotDeleted {
+  /** Table → rows removed; empty when the pilot answered only `{ok:true}`. */
+  counts: Record<string, number>;
+}
+
+/**
+ * Wipe everything the phone uploaded for this person — health, tombstones,
+ * locations, alerts, the device and pair credentials — and turn sharing off.
+ * Exactly what the old dashboard's "Delete my data" did, asked for by the site
+ * on their behalf. 404 = no account in the owner's family.
+ */
+export async function deletePilotData(email: string, fetchImpl: typeof fetch = fetch): Promise<PilotResult<PilotDeleted>> {
+  const r = await call('POST', '/api/apple/household/data/delete', { email: email.trim().toLowerCase() }, fetchImpl);
+  if (!r.ok) return r;
+  const b = (r.value ?? {}) as Record<string, unknown>;
+  const counts: Record<string, number> = {};
+  if (b.deleted && typeof b.deleted === 'object') {
+    for (const [k, v] of Object.entries(b.deleted as Record<string, unknown>)) {
+      if (typeof v === 'number' && Number.isFinite(v)) counts[k] = v;
+    }
+  } else if (b.ok !== true) {
+    // Neither shape the contract allows: do not report a deletion nobody confirmed.
+    return { ok: false, reason: 'bad-response' };
+  }
+  return { ok: true, value: { counts } };
+}
+
+/**
+ * A recorded fix, as the pilot sends it: a tuple, lng first as GeoJSON has it.
+ * `[lng, lat, epochSeconds, accuracyMetres, moving (0|1), speedMetresPerSecond]`
+ */
+export type DayPoint = [number, number, number, number, number, number];
+
+export interface DayActivity {
+  kind: 'journey' | 'stop';
+  /** Inclusive point indices. */
+  first: number;
+  last: number;
+  /** Epoch seconds. */
+  from: number;
+  to: number;
+  seconds: number;
+  metres: number | null;
+  fixes: number;
+}
+
+export interface DayTrack {
+  /** The window, epoch seconds. */
+  from: number;
+  to: number;
+  points: DayPoint[];
+  /** Inclusive [first, last] index pairs of continuous recording. */
+  segments: Array<[number, number]>;
+  activities: DayActivity[];
+  totals: { fixes: number; metres: number; movingSeconds: number; journeys: number };
+  /** Longer than this between two fixes and the phone was asleep. */
+  gapSeconds: number;
+  retentionDays: number | null;
+  truncated: boolean;
+}
+
+export interface DayTimeline {
+  heartRate: { seconds: number; bins: Array<[number, number]> };
+  restingHeartRate: { value: number; at: string } | null;
+  steps: Array<{ value: number; start: string; end: string }>;
+  workouts: Array<{ activity: string; start: string; end: string; seconds: number; distance: number | null }>;
+  sleep: Array<{ stage: string; start: string; end: string }>;
+}
+
+export interface PilotDay {
+  track: DayTrack;
+  timeline: DayTimeline;
+}
+
+const num = (v: unknown, fallback = 0): number => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
+const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+const isIso = (v: unknown): v is string => typeof v === 'string' && Number.isFinite(Date.parse(v));
+
+function toPoint(v: unknown): DayPoint | null {
+  if (!Array.isArray(v) || v.length < 3) return null;
+  const [lng, lat, at, acc, moving, speed] = v as unknown[];
+  if (typeof lng !== 'number' || typeof lat !== 'number' || typeof at !== 'number') return null;
+  if (!Number.isFinite(lng) || !Number.isFinite(lat) || !Number.isFinite(at)) return null;
+  return [lng, lat, at, num(acc), moving ? 1 : 0, num(speed)];
+}
+
+/**
+ * The pilot's track payload (the shape `GET /api/apple/track?date=` answers),
+ * read defensively: a malformed point is dropped, and so is any segment or
+ * activity whose indices do not land inside what was kept. PURE.
+ */
+export function toDayTrack(raw: unknown, window: { from: number; to: number }): DayTrack {
+  const b = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const rawPoints = list(b.points);
+  const points = rawPoints.map(toPoint).filter((p): p is DayPoint => p !== null);
+  // Indices refer to the pilot's list; if anything was dropped they no longer
+  // line up, so segments and activities are rebuilt by the page instead.
+  const aligned = points.length === rawPoints.length;
+  const inRange = (i: unknown): i is number => Number.isInteger(i) && (i as number) >= 0 && (i as number) < points.length;
+  const segments = aligned
+    ? list(b.segments).filter(
+        (s): s is [number, number] => Array.isArray(s) && inRange(s[0]) && inRange(s[1]) && s[0] <= s[1],
+      )
+    : [];
+  const activities: DayActivity[] = [];
+  if (aligned) {
+    for (const a of list(b.activities) as Array<Record<string, unknown> | null>) {
+      if (!a || (a.kind !== 'journey' && a.kind !== 'stop') || !inRange(a.first) || !inRange(a.last)) continue;
+      activities.push({
+        kind: a.kind,
+        first: a.first,
+        last: a.last,
+        from: num(a.from, points[a.first][2]),
+        to: num(a.to, points[a.last][2]),
+        seconds: num(a.seconds),
+        metres: typeof a.metres === 'number' ? a.metres : null,
+        fixes: num(a.fixes),
+      });
+    }
+  }
+  const t = (b.totals && typeof b.totals === 'object' ? b.totals : {}) as Record<string, unknown>;
+  return {
+    from: num(b.from, window.from),
+    to: num(b.to, window.to),
+    points,
+    segments,
+    activities,
+    totals: {
+      fixes: num(t.fixes, points.length),
+      metres: num(t.metres),
+      movingSeconds: num(t.movingSeconds),
+      journeys: num(t.journeys, activities.filter((a) => a.kind === 'journey').length),
+    },
+    gapSeconds: num(b.gapSeconds, 600) || 600,
+    retentionDays: typeof b.retentionDays === 'number' ? b.retentionDays : null,
+    truncated: b.truncated === true,
+  };
+}
+
+/** The pilot's timeline payload (the shape `GET /api/apple/timeline` answers), read defensively. PURE. */
+export function toDayTimeline(raw: unknown): DayTimeline {
+  const b = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const hr = (b.heartRate && typeof b.heartRate === 'object' ? b.heartRate : {}) as Record<string, unknown>;
+  const bins = list(hr.bins).filter(
+    (x): x is [number, number] =>
+      Array.isArray(x) && typeof x[0] === 'number' && typeof x[1] === 'number' && Number.isFinite(x[0]) && Number.isFinite(x[1]),
+  );
+  const rest = (b.restingHeartRate ?? null) as Record<string, unknown> | null;
+  const spans = (v: unknown) =>
+    (list(v) as Array<Record<string, unknown> | null>).filter(
+      (s): s is Record<string, unknown> & { start: string; end: string } => !!s && isIso(s.start) && isIso(s.end),
+    );
+  return {
+    heartRate: { seconds: Math.max(1, num(hr.seconds, 300)), bins },
+    restingHeartRate: rest && typeof rest.value === 'number' && isIso(rest.at) ? { value: rest.value, at: rest.at } : null,
+    steps: spans(b.steps)
+      .filter((s) => typeof s.value === 'number')
+      .map((s) => ({ value: s.value as number, start: s.start, end: s.end })),
+    workouts: spans(b.workouts).map((w) => ({
+      activity: str(w.activity) ?? 'Workout',
+      start: w.start,
+      end: w.end,
+      seconds: num(w.seconds, (Date.parse(w.end) - Date.parse(w.start)) / 1000),
+      distance: typeof w.distance === 'number' ? w.distance : null,
+    })),
+    sleep: spans(b.sleep).map((s) => ({ stage: str(s.stage) ?? 'asleep', start: s.start, end: s.end })),
+  };
+}
+
+/** A day window, epoch seconds, plus the browser's `getTimezoneOffset()`. */
+export interface DayWindow {
+  from: number;
+  to: number;
+  /** Minutes BEHIND UTC, as the browser reports it: British Summer Time is -60. */
+  tz: number;
+}
+
+/**
+ * One person's day as the old Movement tab drew it: the track (fixes,
+ * continuous-recording segments, journeys and stops) and the health laid
+ * against it (heart rate binned, sleep, workouts, step records). 404 = no
+ * account in the owner's family.
+ */
+export async function pilotDay(email: string, window: DayWindow, fetchImpl: typeof fetch = fetch): Promise<PilotResult<PilotDay>> {
+  const q = new URLSearchParams({
+    email: email.trim().toLowerCase(),
+    from: new Date(window.from * 1000).toISOString(),
+    to: new Date(window.to * 1000).toISOString(),
+    tz: String(window.tz),
+  });
+  const r = await call('GET', `/api/apple/household/day?${q}`, undefined, fetchImpl);
+  if (!r.ok) return r;
+  const b = (r.value ?? {}) as Record<string, unknown>;
+  if (!b.track || typeof b.track !== 'object') return { ok: false, reason: 'bad-response' };
+  return { ok: true, value: { track: toDayTrack(b.track, window), timeline: toDayTimeline(b.timeline) } };
+}

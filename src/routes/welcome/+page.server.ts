@@ -9,6 +9,7 @@ import { isOwnerRequest } from '$lib/server/owner';
 import { clientIp, hashIp } from '$lib/server/public-request-rate-limit';
 import { viewerHolds, viewerOf } from '$lib/server/viewer';
 import { loadCompanionUsers } from '$lib/home/presence/companion';
+import { deleteMyUploadedData } from '$lib/home/presence/delete-my-data';
 import {
   pilotFailureText,
   pilotPairCode,
@@ -69,12 +70,12 @@ export const load: PageServerLoad = async (event) => {
   // Signed in: whatever the invite cookie carried has done its work.
   event.cookies.delete(INVITE_COOKIE, { path: '/' });
 
-  let sharing: boolean | null = null;
-  if (here.canPair) {
-    const users = await loadCompanionUsers().catch(() => null);
-    const me = users?.find((u) => u.email.toLowerCase() === here.email);
-    sharing = me ? me.sharing : null;
-  }
+  // The pilot's users list as the household ingest last saw it. Being on it
+  // is what "has an app account" means here: it gates "Your data", which is
+  // offered to anyone signed in with an account, pairing rights or not.
+  const users = await loadCompanionUsers().catch(() => null);
+  const me = users?.find((u) => u.email.toLowerCase() === here.email) ?? null;
+  const sharing: boolean | null = here.canPair && me ? me.sharing : null;
   return {
     signedIn: true as const,
     name: here.name,
@@ -82,6 +83,7 @@ export const load: PageServerLoad = async (event) => {
     isOwner: here.isOwner,
     canPair: here.canPair,
     sharing,
+    hasAppAccount: me !== null,
     testflightUrl: testflightUrl(),
   };
 };
@@ -146,5 +148,20 @@ export const actions: Actions = {
     const r = await setPilotSharing(here.email, enabled);
     if (!r.ok) return fail(502, { sharingError: pilotFailureText(r.reason) });
     return { sharing: r.value.sharing };
+  },
+
+  /**
+   * "Your data": delete what the app uploaded, on the app server AND this
+   * site's copy of their movement. Their own data only — the email is the
+   * session's, never the form's. Needs no pairing rights: anyone may delete
+   * what is theirs.
+   */
+  deleteData: async (event) => {
+    const here = await whoIsHere(event);
+    if (!here) return fail(401, { deleteError: 'Sign in first.' });
+    const form = await event.request.formData();
+    const r = await deleteMyUploadedData(here.email, form.get('confirm'));
+    if (!r.ok) return fail(r.status, { deleteError: r.error });
+    return { deleted: { trailRows: r.trailRows, pilot: r.pilot } };
   },
 };

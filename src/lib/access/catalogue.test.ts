@@ -136,3 +136,17 @@ describe('reachablePages — what the nav offers a member', () => {
     expect(requiredFor('/drive', 'GET')).toBeNull();
   });
 });
+
+describe('"Your day" — the one family:circle API', () => {
+  it('opens GET to family:circle and no other verb', () => {
+    expect(requiredFor('/api/home/people/my-day', 'GET')).toBe('family:circle');
+    expect(requiredFor('/api/home/people/my-day', 'HEAD')).toBe('family:circle');
+    expect(requiredFor('/api/home/people/my-day', 'POST')).toBeNull();
+    expect(requiredFor('/api/home/people/my-day', 'DELETE')).toBeNull();
+    expect(routeIdsFor('family:circle')).toContain('/api/home/people/my-day');
+  });
+
+  it('the route exists in this repository', () => {
+    expect(existsSync('src/routes/api/home/people/my-day/+server.ts')).toBe(true);
+  });
+});

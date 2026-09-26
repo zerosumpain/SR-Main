@@ -1,7 +1,7 @@
 <script lang="ts">
   // Where the sharing household is, on a map — the Family Circle's view.
   //
-  // Tiles are plain <img> elements, as on /apple-app's map, not a WebGL library:
+  // Tiles are plain <img> elements, as on the pilot's retired dashboard map, not a WebGL library:
   // the site CSP already allows https images, a map library would need
   // connect-src and blob: workers, and a still picture of five dots does not
   // need one. Each tile sends only the ORIGIN as referrer, which the URL-

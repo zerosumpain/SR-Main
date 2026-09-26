@@ -1,5 +1,6 @@
 <script lang="ts">
   import CommuteMap from '$lib/components/home/CommuteMap.svelte';
+  import YourDay from '$lib/components/home/YourDay.svelte';
   import HomeFrame from '$lib/components/home/HomeFrame.svelte';
   import LoadErrorCard from '$lib/components/jkai/daydream/hub/LoadErrorCard.svelte';
   import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
@@ -206,6 +207,20 @@
 >
   {#if data.loadError}
     <section class="band"><div class="inner"><LoadErrorCard kicker="The trail did not load" message={data.loadError} /></div></section>
+  {/if}
+
+  {#if data.yourDay}
+    <!-- Only on the viewer's own page; nothing is fetched until it is opened. -->
+    <section class="band" data-section="your-day">
+      <div class="inner">
+        <SectionHead
+          kicker="Yours / Your day"
+          title={['A day,', 'minute by minute']}
+          strap="From your iPhone: where you went, and your heart rate, sleep and workouts laid under it."
+        />
+        <YourDay />
+      </div>
+    </section>
   {/if}
 
   {#if stats}

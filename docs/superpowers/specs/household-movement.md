@@ -186,7 +186,7 @@ site changes.
    `household`, and pilot `create-user EMAIL NAME <owner family>`.
 2. Add them as a TestFlight tester. External testers need one Beta App Review of the
    build; internal testers need an App Store Connect seat.
-3. They sign in on the site, open `/apple-app`, pair the phone, and answer the two
+3. They sign in on the site, open `/welcome`, pair the phone, and answer the two
    onboarding questions (location sharing; Health, default off).
 4. Owner switches their `source` to `companion` once `/home/people` shows their
    fixes.

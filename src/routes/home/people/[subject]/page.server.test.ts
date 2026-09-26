@@ -7,6 +7,7 @@ const guardianOf = new Map<string, string[]>();
 
 vi.mock('$lib/server/access', () => ({
   isOwnerEmail: (email: string | null | undefined) => (email ?? '').toLowerCase() === 'owner@example.test',
+  getOwnerEmails: () => ['owner@example.test'],
 }));
 vi.mock('$lib/server/members', () => ({
   householdSubjectFor: async (email: string) => householdSubjects.get(email) ?? null,
@@ -68,7 +69,7 @@ const { load } = await import('./+page.server');
 
 /** The load, typed as the object it returns (never `void` here: every path returns or throws). */
 const loaded = async (email: string | null, subject: string) =>
-  (await load(eventFor(email, subject))) as { stats: unknown; commuting: unknown };
+  (await load(eventFor(email, subject))) as { stats: unknown; commuting: unknown; yourDay: boolean };
 
 function eventFor(email: string | null, subject: string) {
   return {
@@ -87,8 +88,9 @@ beforeEach(() => {
   loadMovementStats.mockImplementation(async () => ({ stats: STATS, commuting: COMMUTING }));
 });
 
-const page = (subject: string, displayName: string) => ({
+const page = (subject: string, displayName: string, yourDay = false) => ({
   subject,
+  yourDay,
   displayName,
   days: 30,
   stats: STATS,
@@ -98,7 +100,7 @@ const page = (subject: string, displayName: string) => ({
 
 describe('/home/people/[subject] load — the guard', () => {
   it('lets a household viewer open their own page', async () => {
-    expect(await load(eventFor('sam@example.test', 'sam'))).toEqual(page('sam', 'Sam'));
+    expect(await load(eventFor('sam@example.test', 'sam'))).toEqual(page('sam', 'Sam', true));
     expect(loadMovementStats).toHaveBeenCalledWith('sam', { days: 30 });
   });
 
@@ -162,5 +164,26 @@ describe('/home/people/[subject] load — commuting visibility', () => {
     await expect(load(eventFor('guest@example.test', 'alex'))).rejects.toMatchObject({ status: 403 });
     await expect(load(eventFor(null, 'alex'))).rejects.toMatchObject({ status: 403 });
     expect(loadPersonMovement).not.toHaveBeenCalled();
+  });
+});
+
+describe('/home/people/[subject] load — "Your day" is offered on your own page only', () => {
+  it('offers it to a circle member on their own page', async () => {
+    expect((await loaded('sam@example.test', 'sam')).yourDay).toBe(true);
+  });
+
+  it('does not offer it to a guardian on a ward’s page — the day is read from the viewer’s own phone', async () => {
+    guardianOf.set('sam@example.test', ['alex']);
+    expect((await loaded('sam@example.test', 'alex')).yourDay).toBe(false);
+  });
+
+  it('shows the owner nothing of it on someone else’s page, and offers it on their own', async () => {
+    // The owner's email is on no household row: no page is theirs.
+    expect((await loaded('owner@example.test', 'alex')).yourDay).toBe(false);
+    expect((await loaded('owner@example.test', 'sam')).yourDay).toBe(false);
+    // Once it is on Alex's row, Alex's page is the owner's own.
+    householdSubjects.set('owner@example.test', 'alex');
+    expect((await loaded('owner@example.test', 'alex')).yourDay).toBe(true);
+    expect((await loaded('owner@example.test', 'sam')).yourDay).toBe(false);
   });
 });
