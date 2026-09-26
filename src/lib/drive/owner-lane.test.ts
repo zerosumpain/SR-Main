@@ -24,6 +24,7 @@ const OWNER_LANE = [
   'src/routes/api/decks/media/drive/+server.ts',
   'src/lib/jkai/media/drive-link.ts',
   'src/lib/jkai/intel/source-policy.server.ts',
+  'src/lib/file-index/store.ts',
 ] as const;
 
 /** Writers that take a name from a workflow's config: each refuses the member root. */
@@ -48,3 +49,10 @@ describe("the owner lane reads and writes the owner's files only", () => {
     expect(readFileSync('src/lib/file-index/search.ts', 'utf8')).toMatch(/principal_id = 'owner'/);
   });
 });
+
+describe('the intel backfill sweep reads owner files only', () => {
+  it('filters principal_id in its raw SQL', () => {
+    expect(readFileSync('src/lib/jkai/intel/auto-extract.ts', 'utf8')).toMatch(/f\.principal_id = 'owner'/);
+  });
+});
+
