@@ -129,3 +129,13 @@ describe('dedupe', () => {
     expect(eventId('sam', 'p1', 'arrive', at)).toBe(`sam:p1:arrive:${at.getTime() / 1000}`);
   });
 });
+
+describe('stepCrossings — someone with no position yet', () => {
+  it('initialises quietly from an unplaced state, keeping the newer high-water id', () => {
+    const unplaced: InsideState = { inside: [], lastId: 40, watched: ['p1'], lastTsMs: 0, unplaced: true };
+    const r = stepCrossings(unplaced, [north(300, 10, 41), north(10, 10, 42, 1)], [PLACE]);
+    expect(r.events).toEqual([]);
+    expect(r.state).toMatchObject({ inside: ['p1'], lastId: 42 });
+    expect(r.state?.unplaced).toBeUndefined();
+  });
+});

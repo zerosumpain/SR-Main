@@ -116,6 +116,10 @@ export interface InsideState {
    *  switches to it) is stepped over: walking back in time would make
    *  crossings that never happened. */
   lastTsMs: number;
+  /** Set for someone who had no position when first looked at. Their first
+   *  fix is then treated like a first run (state only, nothing raised): it
+   *  is where they are, not somewhere they have just arrived. */
+  unplaced?: boolean;
 }
 
 export interface TrailFix extends CrossingFix {
@@ -126,8 +130,8 @@ export interface TrailFix extends CrossingFix {
  * Walk a person's new fixes, oldest first, from their stored state. PURE.
  *
  * With NO stored state (the first run for this person, including the first
- * run after a deploy) it only initialises: the state is taken from the newest
- * fix and nothing is raised. Otherwise every deploy would tell the household
+ * run after a deploy), or an `unplaced` one, it only initialises: the state is
+ * taken from the newest fix and nothing is raised. Otherwise every deploy would tell the household
  * that everyone had just arrived home.
  */
 export function stepCrossings(
@@ -136,12 +140,17 @@ export function stepCrossings(
   places: readonly CrossingPlace[],
 ): { events: Array<Crossing & { at: Date }>; state: InsideState | null } {
   if (fixes.length === 0) return { events: [], state };
-  if (!state) {
-    const newest = fixes[fixes.length - 1];
+  if (!state || state.unplaced) {
+    const newest = fixes.reduce((a, b) => (b.ts.getTime() >= a.ts.getTime() ? b : a));
     const { inside } = detectCrossings({ inside: new Set() }, newest, places);
     return {
       events: [],
-      state: { inside: [...inside], lastId: newest.id, watched: places.map((p) => p.id), lastTsMs: newest.ts.getTime() },
+      state: {
+        inside: [...inside],
+        lastId: Math.max(state?.lastId ?? 0, ...fixes.map((f) => f.id)),
+        watched: places.map((p) => p.id),
+        lastTsMs: newest.ts.getTime(),
+      },
     };
   }
   const events: Array<Crossing & { at: Date }> = [];

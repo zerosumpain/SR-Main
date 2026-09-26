@@ -81,24 +81,34 @@ export const actions: Actions = {
       },
     };
 
+    let memberSaved = false;
     try {
       await updateMember(subject, patch);
+      memberSaved = true;
+      // The companion pull steps its cursor past fixes it could not map to a
+      // person on the app, so someone switched to the app now would never get
+      // the history the pilot already holds. Re-read the pilot's window from
+      // the start; the pull's per-person newest-fix check keeps it idempotent.
+      if (source === 'companion' && current.source !== 'companion') {
+        await setSetting(COMPANION_CURSOR_KEY, '');
+      }
     } catch (err) {
       const msg = errMsg(err);
       console.error('[home/people/settings] save failed:', msg.replace(/\+?\d{7,}/g, '[number]'));
       if (/household_member_email_idx|duplicate key/i.test(msg)) {
         return fail(400, { error: 'Someone else already has that email.', subject });
       }
+      if (memberSaved) {
+        // The member row is saved; only the cursor reset failed. Say so,
+        // rather than "did not save" over a change that did.
+        return fail(500, {
+          error: 'Saved, but the app’s earlier fixes for them will not be re-read. Set them back to Life360 and to the app again to retry.',
+          subject,
+        });
+      }
       return fail(500, { error: 'That did not save. Try again.', subject });
     }
 
-    // The companion pull steps its cursor past fixes it could not map to a
-    // person on the app, so someone switched to the app now would never get
-    // the history the pilot already holds. Re-read the pilot's window from
-    // the start; the pull's per-person newest-fix check keeps it idempotent.
-    if (source === 'companion' && current.source !== 'companion') {
-      await setSetting(COMPANION_CURSOR_KEY, '');
-    }
     return { saved: subject };
   },
 };

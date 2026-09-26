@@ -62,7 +62,6 @@
           {#each places as p (p.id)}
             <form class="card place" method="POST" action="?/save" use:enhance={keep}>
               <input type="hidden" name="placeId" value={p.id} />
-              {#if p.isHome}<input type="hidden" name="alerts" value="on" />{/if}
               <p class="card-kicker">
                 {p.isHome ? 'home' : kindLabel(p.kind)} · {p.visitCount} visits{#if p.radiusPinned} · radius set by you{/if}
               </p>

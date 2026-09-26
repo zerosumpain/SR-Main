@@ -5,6 +5,8 @@ vi.mock('$lib/db', () => ({ db: {} }));
 vi.mock('$lib/server/models/settings', () => ({ getSetting: async () => null, setSetting: async () => {} }));
 
 const {
+  executeWhatsApp,
+  silencedMovers,
   alertText,
   buildPilotEvents,
   isDeliverable,
@@ -116,18 +118,39 @@ describe('WhatsApp', () => {
     ]);
   });
 
-  it('sends one message per recipient, mover and place in 30 minutes', () => {
-    const leave = ev('e2', { kind: 'leave', at: new Date(AT.getTime() + 20 * 60_000) });
+  it('sends one message per recipient, mover, place and kind in 30 minutes', () => {
+    const again = ev('e2', { at: new Date(AT.getTime() + 20 * 60_000) });
     const later = ev('e3', { at: new Date(AT.getTime() + 45 * 60_000) });
     const now = new Date(AT.getTime() + 50 * 60_000);
-    // One run sees all three: the leave falls inside the arrival's floor.
-    expect(planWhatsApp([ev('e1'), leave, later], PLACES, members, now).map((s) => s.eventId)).toEqual(['e1', 'e3']);
+    // One run sees all three: the second arrival falls inside the first's floor.
+    expect(planWhatsApp([ev('e1'), again, later], PLACES, members, now).map((s) => s.eventId)).toEqual(['e1', 'e3']);
+  });
+
+  it('still sends "left" straight after "arrived": the floor is per kind', () => {
+    const leave = ev('e2', { kind: 'leave', at: new Date(AT.getTime() + 5 * 60_000) });
+    const sends = planWhatsApp([ev('e1', { whatsappSent: ['alex'] }), leave], PLACES, members, NOW);
+    expect(sends.map((s) => [s.eventId, s.text])).toEqual([['e2', 'Sam left School at 17:57']]);
   });
 
   it('takes the floor from what was already sent on an earlier run', () => {
-    const leave = ev('e2', { kind: 'leave', at: new Date(AT.getTime() + 20 * 60_000) });
+    const again = ev('e2', { at: new Date(AT.getTime() + 20 * 60_000) });
     const sent = ev('e1', { whatsappSent: ['alex'] });
-    expect(planWhatsApp([sent, leave], PLACES, members, NOW)).toEqual([]);
+    expect(planWhatsApp([sent, again], PLACES, members, NOW)).toEqual([]);
+  });
+
+  it('counts an attempt with no recorded outcome as possibly delivered, for the floor too', () => {
+    const again = ev('e2', { at: new Date(AT.getTime() + 20 * 60_000) });
+    const unsure = ev('e1', { whatsappTried: { alex: { attempts: 1, failed: 0 } } });
+    expect(planWhatsApp([unsure, again], PLACES, members, NOW)).toEqual([]);
+  });
+
+  it('allows a retry after one definite failure, never after two attempts', () => {
+    expect(planWhatsApp([ev('e1', { whatsappTried: { alex: { attempts: 1, failed: 1 } } })], PLACES, members, NOW)).toHaveLength(1);
+    expect(planWhatsApp([ev('e1', { whatsappTried: { alex: { attempts: 2, failed: 2 } } })], PLACES, members, NOW)).toEqual([]);
+  });
+
+  it('sends nothing about a mover who is silenced', () => {
+    expect(planWhatsApp([ev('e1')], PLACES, members, NOW, new Set(['sam']))).toEqual([]);
   });
 
   it('retries a failed send, but not one already made', () => {
@@ -204,5 +227,104 @@ describe('postToPilot', () => {
     const res = await postToPilot([pilotEv('e1')], f as unknown as typeof fetch);
     expect(res?.accepted).toEqual([]);
     expect(res?.error).toContain('ECONNREFUSED');
+  });
+});
+
+describe('WhatsApp attempts across runs', () => {
+  const members = [
+    member('sam'),
+    member('alex', { whatsapp: '+440000000002', alerts: { whatsapp: true } }),
+  ];
+
+  /** An in-memory event row the store writes to, the way the database would. */
+  function harness(opts: { sentThrows?: boolean } = {}) {
+    const row = ev('e1');
+    row.whatsappTried = {};
+    const bump = (r: string, f: 'attempts' | 'failed') => {
+      const t = row.whatsappTried![r] ?? { attempts: 0, failed: 0 };
+      row.whatsappTried![r] = { ...t, [f]: t[f] + 1 };
+    };
+    const store = {
+      attempt: async (_: string, r: string) => bump(r, 'attempts'),
+      failed: async (_: string, r: string) => bump(r, 'failed'),
+      sent: async (_: string, r: string) => {
+        if (opts.sentThrows) throw new Error('connection reset');
+        row.whatsappSent = [...row.whatsappSent, r];
+      },
+    };
+    const run = (send: (to: string, text: string) => Promise<{ sent: boolean }>) =>
+      executeWhatsApp(planWhatsApp([row], PLACES, members, NOW), send, store);
+    return { row, run };
+  }
+
+  it('stops after two definite failures: no third attempt', async () => {
+    const { run } = harness();
+    const send = vi.fn(async () => ({ sent: false }));
+    await run(send);
+    await run(send);
+    await run(send);
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it('never resends when recording a delivered send fails', async () => {
+    const { run } = harness({ sentThrows: true });
+    const send = vi.fn(async () => ({ sent: true }));
+    const first = await run(send);
+    expect(first.sent).toEqual(['…002']);
+    await run(send);
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it('never resends after a send that threw (it may have gone)', async () => {
+    const { run } = harness();
+    const send = vi.fn(async () => {
+      throw new Error('timeout');
+    });
+    await run(send);
+    await run(send);
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not send when the attempt cannot be recorded first', async () => {
+    const send = vi.fn(async () => ({ sent: true }));
+    const store = {
+      attempt: async () => {
+        throw new Error('db down');
+      },
+      failed: async () => {},
+      sent: async () => {},
+    };
+    const out = await executeWhatsApp(planWhatsApp([ev('e1')], PLACES, members, NOW), send, store);
+    expect(send).not.toHaveBeenCalled();
+    expect(out.failed).toEqual(['…002']);
+  });
+});
+
+describe('silenced movers', () => {
+  const members = [
+    member('sam'),
+    member('alex'),
+    member('robin', { source: 'none' }),
+    member('kit', { source: 'life360' }),
+  ];
+  const users = [
+    { email: 'sam@example.test', name: 'Sam', sharing: true },
+    { email: 'alex@example.test', name: 'Alex', sharing: false },
+  ];
+
+  it('silences someone on none, not sharing, or gone from the household', () => {
+    const s = silencedMovers([ev('e1', { subject: 'ghost' })], members, users);
+    expect([...s].sort()).toEqual(['alex', 'ghost', 'robin']);
+  });
+
+  it('fails closed on an unknown users list: every app member is silenced', () => {
+    expect(silencedMovers([], members, null).has('sam')).toBe(true);
+    expect(silencedMovers([], members, null).has('kit')).toBe(false);
+  });
+
+  it('marks a silenced mover\'s events done without sending them to the app', () => {
+    const { send, nobody } = buildPilotEvents([ev('e1')], PLACES, [member('sam'), member('alex')], new Set(['sam']));
+    expect(send).toEqual([]);
+    expect(nobody).toEqual(['e1']);
   });
 });

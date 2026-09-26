@@ -103,4 +103,9 @@ describe('/home/people/places — save', () => {
     };
     expect(res.status).toBe(404);
   });
+
+  it('leaves home\'s stored alert flag untouched: home is watched regardless', async () => {
+    await actions.save(eventFor('owner@example.test', { placeId: 'home', label: '', radiusM: '120', whatsappAlerts: 'on' }));
+    expect(h.updates).toEqual([['home', { whatsappAlerts: true }]]);
+  });
 });

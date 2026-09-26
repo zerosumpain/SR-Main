@@ -11,11 +11,13 @@ const h = vi.hoisted(() => ({
   members: [] as Array<Record<string, unknown>>,
   updates: [] as Array<[string, Record<string, unknown>]>,
   settings: [] as Array<[string, unknown]>,
+  settingsFail: false,
 }));
 
 vi.mock('$lib/server/models/settings', () => ({
   getSetting: async () => null,
   setSetting: async (k: string, v: unknown) => {
+    if (h.settingsFail) throw new Error('settings write failed');
     h.settings.push([k, v]);
   },
 }));
@@ -60,6 +62,7 @@ beforeEach(() => {
   h.members = [member('sam', 'life360'), member('alex', 'companion'), member('robin', 'life360')];
   h.updates = [];
   h.settings = [];
+  h.settingsFail = false;
 });
 
 describe('/home/people/settings — owner only', () => {
@@ -130,5 +133,16 @@ describe('/home/people/settings — save', () => {
       expect(res.status).toBe(400);
     }
     expect(h.updates).toEqual([]);
+  });
+
+  it('reports a failed cursor reset after the member saved, rather than throwing', async () => {
+    h.settingsFail = true;
+    const res = (await actions.save(eventFor('owner@example.test', { ...base, source: 'companion' }))) as {
+      status: number;
+      data: { error: string };
+    };
+    expect(h.updates).toHaveLength(1);
+    expect(res.status).toBe(500);
+    expect(res.data.error).toMatch(/^Saved, but/);
   });
 });

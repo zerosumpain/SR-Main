@@ -56,8 +56,9 @@ export const actions: Actions = {
 
     const whatsappAlerts = on(form, 'whatsappAlerts');
     // WhatsApp rides on an alert: a place nobody watches raises nothing to
-    // send. Home is always watched.
-    const alerts = on(form, 'alerts') || (whatsappAlerts && !place.isHome);
+    // send. Home is watched by the code whatever its flag says, so its stored
+    // flag is left exactly as it is.
+    const alerts = place.isHome ? undefined : on(form, 'alerts') || whatsappAlerts;
 
     try {
       if (label && label !== place.label) {
@@ -65,7 +66,7 @@ export const actions: Actions = {
         await confirmPlace(place.id, label, isPlaceKind(place.kind) ? place.kind : 'other');
       }
       await updatePlaceAlerts(place.id, {
-        alerts,
+        ...(alerts === undefined ? {} : { alerts }),
         whatsappAlerts,
         ...(radiusM !== Math.round(place.radiusM) ? { radiusM } : {}),
       });

@@ -5629,7 +5629,7 @@ export type NewHouseholdMemberRow = typeof householdMember.$inferInsert;
  * crossing twice is a no-op. `placeId` is deliberately not a foreign key: a
  * place can be merged or retired, and the history of who went where must not
  * go with it. `whatsappSent` lists the SUBJECTS a WhatsApp went to, never
- * their numbers.
+ * their numbers; `whatsappTried` caps the attempts per recipient.
  */
 export const householdEvent = pgTable(
   'household_event',
@@ -5644,6 +5644,14 @@ export const householdEvent = pgTable(
     /** When the pilot accepted it. Null = not yet delivered to the app. */
     forwardedAt: timestamp('forwarded_at', { withTimezone: true }),
     whatsappSent: jsonb('whatsapp_sent').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    /** Per recipient SUBJECT: WhatsApp attempts made, and how many of them
+     *  came back as a definite failure. Written BEFORE each send, so a send
+     *  whose outcome was never recorded (a timeout, a crash, a failed write
+     *  after it went) counts as possibly delivered and is not repeated. */
+    whatsappTried: jsonb('whatsapp_tried')
+      .$type<Record<string, { attempts: number; failed: number }>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
