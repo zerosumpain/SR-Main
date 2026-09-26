@@ -187,14 +187,14 @@ describe.skipIf(!process.env.DATABASE_URL)('research is scoped to the reader', (
     for (const r of made) expect((r.body as { principalId: string }).principalId).toBe(A);
 
     // Deleting them hands no slot back: the ledger, not the runs, is counted.
-    const ids = made.map((r) => (r.body as { id: string }).id);
-    const del = await run(() => api.DELETE(event(A_EMAIL, { method: 'DELETE', body: { ids } })));
+    const runIds = made.map((r) => (r.body as { id: string }).id);
+    const del = await run(() => api.DELETE(event(A_EMAIL, { method: 'DELETE', body: { ids: runIds } })));
     expect(del.body).toMatchObject({ deleted: 5 });
     const again = await run(() => api.POST(event(A_EMAIL, { body: { topic: `after delete ${TAG}`, depth: 'brief' } })));
     expect(again.status).toBe(429);
 
     const child = await run(() =>
-      api.POST(event(B_EMAIL, { body: { topic: `child ${TAG}`, depth: 'scan', parentSessionId: ids[0] ?? ids.owner } })),
+      api.POST(event(B_EMAIL, { body: { topic: `child ${TAG}`, depth: 'scan', parentSessionId: ids.owner } })),
     );
     expect(child.status).toBe(404);
   });
