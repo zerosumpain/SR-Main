@@ -1,10 +1,10 @@
 // src/lib/selfimprove/report.ts
 //
 // REPORT phase. Builds the human-readable run report, persists the final
-// `improvement_runs` record, and sends a short (<=600 char) WhatsApp summary to
-// the owner via the existing `whatsapp_send` site tool.
+// `improvement_runs` record, and sends a short (<=600 char) summary to the owner
+// through `notifyOwner` (category `build`, WhatsApp + phone by default).
 
-import { ownerPhone } from '$lib/config/owner';
+import { notifyOwner } from '$lib/server/notify';
 import { upsertRecord } from '$lib/datastore';
 import {
   COLLECTIONS,
@@ -119,18 +119,29 @@ export function buildWhatsappSummary(data: ImprovementRunData): string {
 
 /**
  * Finalise a run: stamp the report text, persist the record, and (best-effort)
- * notify over WhatsApp. Persistence errors propagate so the caller can mark the
- * report phase failed; the WhatsApp send never throws.
+ * tell the owner. Persistence errors propagate so the caller can mark the
+ * report phase failed; the notification never throws.
+ *
+ * Through `notifyOwner` on the `build` category (WhatsApp + phone by default)
+ * rather than a direct `whatsapp_send`, so it lands in the notification ledger
+ * and obeys the owner's routing; `whatsappText` keeps the WhatsApp message the
+ * exact summary it always was.
  */
 export async function finalizeAndNotify(runId: string, data: ImprovementRunData): Promise<void> {
   data.report = buildReportText(data);
   await upsertRecord(COLLECTIONS.improvementRuns, { key: runId, data: asData(data) }, SYSTEM_ACTOR);
 
   try {
-    const to = ownerPhone();
-    if (!to) throw new Error('WORKFLOW_NOTIFY_PHONE is not set');
-    const { executeTool } = await import('$lib/workflows/site-tools/registry');
-    await executeTool('whatsapp_send', { to, message: buildWhatsappSummary(data) });
+    const summary = buildWhatsappSummary(data);
+    const res = await notifyOwner({
+      category: 'build',
+      title: 'Self-improve',
+      body: summary,
+      url: new URL(ADMIN_LINK).pathname,
+      whatsappText: summary,
+      dedupeKey: `selfimprove:${runId}`,
+    });
+    if (!res.whatsapp) console.error('[selfimprove] whatsapp summary not delivered:', res.reason ?? 'not routed or not delivered');
   } catch (err) {
     console.error('[selfimprove] whatsapp summary failed:', errMsg(err));
   }

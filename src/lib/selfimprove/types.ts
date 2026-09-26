@@ -79,9 +79,6 @@ export const SETTINGS_AUTOBUILD_KEY = 'daydream.appetite.autobuild';
 // rather than kept as documentation: two of them were being printed on two
 // pages as the live schedule, which is exactly how a dashboard starts lying.
 
-/** Skip a nightly run if the user chatted within this window (idle gate). */
-export const IDLE_WINDOW_MS = 60 * 60 * 1000; // 60 min
-
 /**
  * Hard budget caps for one run — the SAFETY ceiling, not the workload dial.
  *

@@ -31,11 +31,6 @@ vi.mock('$lib/datastore', () => ({
   upsertRecord: vi.fn().mockResolvedValue({ id: 'run1' }),
 }));
 
-// The idle gate is selfimprove's, reused rather than duplicated — mocked here so
-// the doctor's unit tests do not import that pipeline's module graph.
-vi.mock('$lib/selfimprove/run', () => ({
-  isUserActive: vi.fn(async () => h.userRows.length > 0),
-}));
 
 vi.mock('$lib/server/models/settings', () => ({ getSetting: vi.fn().mockResolvedValue(null) }));
 
@@ -308,8 +303,8 @@ describe('buildCandidates', () => {
 
 describe('runDoctorNow — gating & status', () => {
   it('aborts a cron run when the user is active at start (no phases run)', async () => {
-    h.userRows = [{ id: 'm1' }];
-    const { runId } = await runDoctorNow({ trigger: 'cron' });
+    // The idle gate is injected by the heartbeat (`$lib/heartbeat/idle`).
+    const { runId } = await runDoctorNow({ trigger: 'cron', isUserActive: async () => true });
     expect(runId).toBeTruthy();
     expect(triageNow).not.toHaveBeenCalled();
     expect(lintWorkflows).not.toHaveBeenCalled();

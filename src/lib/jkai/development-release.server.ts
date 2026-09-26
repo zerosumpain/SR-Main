@@ -11,7 +11,7 @@
  * So the release takes the one thing that IS meaningful — the candidate's diff
  * against its own base — and replays it onto a fresh clone of master in the
  * builder's own shell, where `FORGE_GITHUB_TOKEN` exists. That is the same
- * token, the same remote and the same `openPrViaRestApi` the change-request
+ * token, the same remote and the same `openPullRequest` ($lib/github/pr) the change-request
  * lane has used since the Forge, so nothing new gets a credential.
  *
  * What this module deliberately cannot do:
@@ -35,6 +35,12 @@ import { loadDelivery, mutateDelivery } from './development-state.server';
 import { workspaceBroker } from './development-workspace.server';
 import { criterionResult, releaseBlocker } from './development';
 import { SR_MAIN_GIT_TARGET } from './git-targets';
+import { openPullRequest, repoSlugFromUrl } from '$lib/github/pr';
+import { redactGitHubSecrets } from '$lib/github/redact';
+
+/** `owner/repo` of the target, derived rather than restated so the release and
+ *  the change-request lane cannot disagree about where the site lives. */
+const REPO = repoSlugFromUrl(SR_MAIN_GIT_TARGET.repoUrl);
 
 /** Big enough for a real feature, small enough that a runaway diff is refused. */
 const MAX_PATCH_BYTES = 4_000_000;
@@ -54,25 +60,7 @@ export function releaseBranchFor(buildId: string, revision: string): string {
 }
 
 function tokenRemote(token: string): string {
-  return `https://x-access-token:${token}@github.com/zerosumpain/SR-Main.git`;
-}
-
-/**
- * Never let the token reach a log line, a build event or an error message.
- *
- * Stripping the literal string is not enough. `execInSandbox` runs
- * `bash -c "echo '<base64 of the whole command>' | base64 -d | bash"`, and on
- * failure returns `err.stderr || err.message` — so when a command dies without
- * writing to stderr (a timeout, an exceeded buffer) what comes back is Node's
- * own message, which quotes that envelope. The token is inside it, base64
- * encoded, where a search for the literal string will never find it.
- *
- * So: drop the envelope, drop any long base64 run, then drop the literal.
- */
-export function redactCommandOutput(text: string, token: string | undefined): string {
-  const withoutEnvelope = text.replace(/Command failed:[^\n]*/g, 'The command failed.');
-  const withoutBase64 = withoutEnvelope.replace(/[A-Za-z0-9+/]{80,}={0,2}/g, '[…]');
-  return token ? withoutBase64.split(token).join('***') : withoutBase64;
+  return `https://x-access-token:${token}@github.com/${REPO}.git`;
 }
 
 export function prBody(input: { outcome: string; criteria: Array<{ text: string; verdict: string; evidence: string }>; gateEvidence: string; buildId: string; independent: boolean }): string {
@@ -143,7 +131,7 @@ export async function releaseDevelopment(buildId: string, expectedRevision: numb
         `git checkout -b ${branch} 2>&1`,
       300_000,
     );
-    if (prepared.exitCode !== 0) throw new Error(redactCommandOutput(`Could not prepare a master clone: ${prepared.stdout}\n${prepared.stderr}`, token).slice(0, 1200));
+    if (prepared.exitCode !== 0) throw new Error(redactGitHubSecrets(`Could not prepare a master clone: ${prepared.stdout}\n${prepared.stderr}`, token).slice(0, 1200));
 
     const applied = await execInSandbox(
       `cd ${root}/repo && git apply --index --whitespace=nowarn ${patchPath} 2>&1`,
@@ -152,7 +140,7 @@ export async function releaseDevelopment(buildId: string, expectedRevision: numb
     if (applied.exitCode !== 0) {
       throw new Error(
         `The candidate does not apply to current master, so it needs a rebase before release. ` +
-          `Master has moved since this feature branched. git said: ${redactCommandOutput(applied.stdout + applied.stderr, token).slice(0, 800)}`,
+          `Master has moved since this feature branched. git said: ${redactGitHubSecrets(applied.stdout + applied.stderr, token).slice(0, 800)}`,
       );
     }
 
@@ -163,7 +151,7 @@ export async function releaseDevelopment(buildId: string, expectedRevision: numb
         `git push ${tokenRemote(token)} ${branch} 2>&1`,
       300_000,
     );
-    if (committed.exitCode !== 0) throw new Error(redactCommandOutput(`Could not push the release branch: ${committed.stdout}\n${committed.stderr}`, token).slice(0, 1200));
+    if (committed.exitCode !== 0) throw new Error(redactGitHubSecrets(`Could not push the release branch: ${committed.stdout}\n${committed.stderr}`, token).slice(0, 1200));
 
     const independent = state.criteria.some(c => c.assessment?.independent);
     const body = prBody({
@@ -183,7 +171,9 @@ export async function releaseDevelopment(buildId: string, expectedRevision: numb
     // `pull_request.draft == false`, so a draft waits for a person to mark it
     // ready however green it goes.
     const draft = state.releasePolicy !== 'production';
-    const { prUrl, prNumber } = await openPullRequest({ title, head: branch, body, token, draft });
+    const pr = await openPullRequest({ repo: REPO, title, head: branch, base: SR_MAIN_GIT_TARGET.baseBranch, body, token, draft, userAgent: 'jkai-develop' });
+    const prUrl = pr.url;
+    const prNumber = pr.number;
     await mutateDelivery(buildId, 'release_pr_open', s => ({ ...s, stage: 'pr_open',
       release: { ...(s.release ?? { revision: candidate }), revision: candidate, branch, prUrl, prNumber, ci: 'pending',
         detail: draft ? 'Draft pull request open. Mark it ready on GitHub when you want CI to consider merging it.' : 'Pull request open. CI decides whether it merges.' } }));
@@ -191,37 +181,11 @@ export async function releaseDevelopment(buildId: string, expectedRevision: numb
     await emitLog(buildId, 'system', `Release proposed: ${prUrl}. Merging is CI's decision, not the builder's.`);
     return { prUrl, branch };
   } catch (error) {
-    const message = redactCommandOutput(error instanceof Error ? error.message : 'Release failed.', token).slice(0, 1500);
+    const message = redactGitHubSecrets(error instanceof Error ? error.message : 'Release failed.', token).slice(0, 1500);
     await mutateDelivery(buildId, 'release_failed', s => ({ ...s, release: { ...(s.release ?? { revision: candidate }), revision: candidate, branch, blocker: message, detail: 'The batch and the candidate are unchanged.' } }));
     await emitLog(buildId, 'error', `Release did not proceed: ${message}`);
     throw new Error(message);
   }
-}
-
-/** Open the pull request, or recover the one that already exists for this head. */
-async function openPullRequest(args: { title: string; head: string; body: string; token: string; draft: boolean }): Promise<{ prUrl: string; prNumber: number }> {
-  const headers = {
-    Authorization: `Bearer ${args.token}`,
-    Accept: 'application/vnd.github+json',
-    'Content-Type': 'application/json',
-    'User-Agent': 'jkai-develop',
-  };
-  const created = await fetch('https://api.github.com/repos/zerosumpain/SR-Main/pulls', {
-    method: 'POST', headers,
-    body: JSON.stringify({ title: args.title, head: args.head, base: SR_MAIN_GIT_TARGET.baseBranch, body: args.body, draft: args.draft }),
-  });
-  if (created.ok) {
-    const json = (await created.json()) as { html_url?: string; number?: number };
-    if (json.html_url && json.number) return { prUrl: json.html_url, prNumber: json.number };
-    throw new Error('GitHub accepted the pull request but returned no url.');
-  }
-  if (created.status === 422) {
-    const existing = await fetch(`https://api.github.com/repos/zerosumpain/SR-Main/pulls?head=zerosumpain:${args.head}&state=open`, { headers });
-    const list = (await existing.json().catch(() => [])) as Array<{ html_url?: string; number?: number }>;
-    const match = list.find(p => p.html_url && p.number);
-    if (match) return { prUrl: match.html_url!, prNumber: match.number! };
-  }
-  throw new Error(`GitHub refused the pull request (${created.status}): ${(await created.text().catch(() => '')).slice(0, 400)}`);
 }
 
 /**
@@ -239,7 +203,7 @@ export async function watchDevelopmentRelease(buildId: string): Promise<'pending
   const token = process.env.FORGE_GITHUB_TOKEN;
   if (!token) return 'pending';
   const headers = { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'User-Agent': 'jkai-develop' };
-  const response = await fetch(`https://api.github.com/repos/zerosumpain/SR-Main/pulls/${release.prNumber}`, { headers });
+  const response = await fetch(`https://api.github.com/repos/${REPO}/pulls/${release.prNumber}`, { headers });
   if (!response.ok) return 'pending';
   const pr = (await response.json()) as { merged?: boolean; merge_commit_sha?: string; state?: string; merged_at?: string };
   if (!pr.merged) {
@@ -279,7 +243,7 @@ export async function watchDevelopmentRelease(buildId: string): Promise<'pending
  */
 async function commitContains(base: string, head: string, headers: Record<string, string>): Promise<boolean> {
   try {
-    const response = await fetch(`https://api.github.com/repos/zerosumpain/SR-Main/compare/${base}...${head}`, { headers, signal: AbortSignal.timeout(15_000) });
+    const response = await fetch(`https://api.github.com/repos/${REPO}/compare/${base}...${head}`, { headers, signal: AbortSignal.timeout(15_000) });
     if (!response.ok) return false;
     const json = (await response.json()) as { status?: string };
     return json.status === 'ahead' || json.status === 'identical';

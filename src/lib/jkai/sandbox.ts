@@ -4,6 +4,8 @@ import os from 'os';
 import { join } from 'path';
 import { promisify } from 'util';
 import { emitLog } from './log-emitter';
+import { openPullRequest, repoSlugFromUrl } from '$lib/github/pr';
+import { redactGitHubSecrets } from '$lib/github/redact';
 
 const execAsync = promisify(exec);
 
@@ -648,14 +650,20 @@ export async function publishViaGit(
   // Preferred path: REST API via Node `fetch` with the token. This keeps the
   // token out of the shell/logs entirely and works without `gh`.
   if (token) {
-    const prUrl = await openPrViaRestApi(buildId, repoSlug, {
+    const pr = await openPullRequest({
+      repo: repoSlug,
       title: prTitle,
       head: branch,
       base: cfg.baseBranch,
       body: bodyText,
       token,
       draft: opts.draft === true,
+      userAgent: 'jkai-forge',
     });
+    if (pr.reused) {
+      await emitLog(buildId, 'system', `publishViaGit: PR already exists for ${branch} — reusing it.`);
+    }
+    const prUrl = pr.url;
     await emitLog(buildId, 'system', `publishViaGit: PR ready → ${prUrl}`);
     return { branch, prUrl };
   }
@@ -688,74 +696,6 @@ export async function publishViaGit(
 }
 
 /**
- * Open a GitHub PR via the REST API using a token. Runs Node-side (`fetch`),
- * never the shell, so the token never touches a command line or a log. Handles
- * the 422 "A pull request already exists" case idempotently by fetching the
- * existing PR for `head` and returning its `html_url`.
- */
-async function openPrViaRestApi(
-  buildId: string,
-  repoSlug: string,
-  args: { title: string; head: string; base: string; body: string; token: string; draft?: boolean },
-): Promise<string> {
-  const { title, head, base, body, token, draft } = args;
-  const headers = {
-    Authorization: `Bearer ${token}`,
-    Accept: 'application/vnd.github+json',
-    'Content-Type': 'application/json',
-    'User-Agent': 'jkai-forge',
-  };
-
-  const createRes = await fetch(`https://api.github.com/repos/${repoSlug}/pulls`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ title, head, base, body, draft: draft === true }),
-  });
-
-  if (createRes.ok) {
-    const json: any = await createRes.json().catch(() => ({}));
-    if (typeof json.html_url === 'string') return json.html_url;
-    throw new Error('GitHub PR API returned 2xx but no html_url');
-  }
-
-  // 422 "already exists" → re-runs are idempotent; recover the existing PR url.
-  if (createRes.status === 422) {
-    const errJson: any = await createRes.json().catch(() => ({}));
-    const alreadyExists = JSON.stringify(errJson).toLowerCase().includes('pull request already exists');
-    if (alreadyExists) {
-      // owner is the slug's first segment; GitHub's `head` filter wants `owner:branch`.
-      const owner = repoSlug.split('/')[0];
-      const listUrl =
-        `https://api.github.com/repos/${repoSlug}/pulls` +
-        `?head=${encodeURIComponent(`${owner}:${head}`)}&base=${encodeURIComponent(base)}&state=open`;
-      const listRes = await fetch(listUrl, { headers });
-      if (listRes.ok) {
-        const prs: any = await listRes.json().catch(() => []);
-        if (Array.isArray(prs) && prs.length > 0 && typeof prs[0].html_url === 'string') {
-          await emitLog(
-            buildId,
-            'system',
-            `publishViaGit: PR already exists for ${head} — reusing it.`,
-          );
-          return prs[0].html_url;
-        }
-      }
-    }
-    throw new Error(`GitHub PR API 422: ${JSON.stringify(errJson).slice(0, 1000)}`);
-  }
-
-  const text = await createRes.text().catch(() => '');
-  throw new Error(`GitHub PR API ${createRes.status}: ${text.slice(0, 1000)}`);
-}
-
-/** Derive an `owner/repo` slug from an SSH or HTTPS git URL. */
-export function repoSlugFromUrl(repoUrl: string): string {
-  // git@github.com:owner/repo.git  |  https://github.com/owner/repo.git
-  const m = repoUrl.match(/[:/]([^/:]+\/[^/]+?)(?:\.git)?$/);
-  return m ? m[1] : repoUrl;
-}
-
-/**
  * Build a token-authenticated HTTPS clone/push URL from any GitHub repo URL
  * (SSH or HTTPS). Used only when FORGE_GITHUB_TOKEN is set — lets clone/push
  * work on hosts (the VPS) that lack `gh` and can't reach the repo over SSH.
@@ -773,9 +713,9 @@ function tokenlessRemoteUrl(repoUrl: string): string {
   return `git@github.com:${slug}.git`;
 }
 
-/** Scrub any `x-access-token:<token>@` credentials out of text before logging/storing. */
+/** Scrub GitHub credentials out of text before logging/storing. */
 function redactToken(text: string): string {
-  return text.replace(/x-access-token:[^@\s]+@/g, 'x-access-token:***@');
+  return redactGitHubSecrets(text, process.env.FORGE_GITHUB_TOKEN);
 }
 
 /** True when a `gh` CLI is on PATH in the sandbox/host. Cached per-process. */

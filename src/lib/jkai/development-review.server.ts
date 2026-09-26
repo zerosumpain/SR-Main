@@ -106,7 +106,7 @@ export async function reviewDevelopmentCriteria(buildId: string, expectedRevisio
     const browserEvidence = inspection.evidence.slice(0, 20);
     const assessor = await developmentAssessor(build.modelId);
     const { client, model } = await getLLMClient(coerceModelContext(assessor));
-    const response = await withActivity('selfimprove', () => client.chat.completions.create({
+    const response = await withActivity('development-assessor', () => client.chat.completions.create({
       model, temperature: 0.2, max_tokens: 6000,
       messages: [
         { role: 'system', content: ASSESS_SYSTEM },
@@ -140,7 +140,7 @@ export async function vetoDevelopmentRelease(buildId: string, expectedRevision: 
   const inspection = await workspaceBroker('inspect', buildId, { revision: candidate });
   const assessor = await developmentAssessor(build.modelId);
   const { client, model } = await getLLMClient(coerceModelContext(assessor));
-  const response = await withActivity('selfimprove', () => client.chat.completions.create({
+  const response = await withActivity('development-assessor', () => client.chat.completions.create({
     model, temperature: 0.2, max_tokens: 1500,
     messages: [
       { role: 'system', content: VETO_SYSTEM },

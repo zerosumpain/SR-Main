@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const h = vi.hoisted(() => ({
-  /** Mutable executeTool outcome — the bridge being down is a first-class case. */
-  toolResult: { success: true } as { success: boolean; error?: string },
-  toolThrows: false,
+  /** Mutable notifyOwner outcome — the bridge being down is a first-class case. */
+  notifyResult: { raised: true, whatsapp: true } as { raised: boolean; whatsapp?: boolean; reason?: string },
+  notifyThrows: false,
   persistThrowsOn: 0 as number,
   persistCalls: 0,
 }));
@@ -16,18 +16,15 @@ vi.mock('$lib/datastore', () => ({
   }),
 }));
 
-// A fake number, so no test fixture and no failure output can carry the real one.
-vi.mock('$lib/workflows/whatsapp/approval-notify', () => ({ getOwnerPhone: () => '+10000000000' }));
-
-vi.mock('$lib/workflows/site-tools/registry', () => ({
-  executeTool: vi.fn(async () => {
-    if (h.toolThrows) throw new Error('registry exploded');
-    return h.toolResult;
+vi.mock('$lib/server/notify', () => ({
+  notifyOwner: vi.fn(async () => {
+    if (h.notifyThrows) throw new Error('notify exploded');
+    return h.notifyResult;
   }),
 }));
 
 import { upsertRecord } from '$lib/datastore';
-import { executeTool } from '$lib/workflows/site-tools/registry';
+import { notifyOwner } from '$lib/server/notify';
 import { hasSensitive } from '$lib/security/sensitive';
 import { buildReportText, buildWhatsappSummary, finalizeAndNotify } from './report';
 import { COLLECTIONS, emptyPhases, type DoctorAction, type DoctorRunData } from './types';
@@ -72,8 +69,8 @@ function action(over: Partial<DoctorAction> = {}): DoctorAction {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  h.toolResult = { success: true };
-  h.toolThrows = false;
+  h.notifyResult = { raised: true, whatsapp: true };
+  h.notifyThrows = false;
   h.persistThrowsOn = 0;
   h.persistCalls = 0;
 });
@@ -272,17 +269,23 @@ describe('finalizeAndNotify', () => {
     expect(upsertRecord).toHaveBeenCalledTimes(2);
     expect(vi.mocked(upsertRecord).mock.calls[0][0]).toBe(COLLECTIONS.doctorRuns);
     expect(vi.mocked(upsertRecord).mock.calls[0][1].key).toBe('run-1');
-    expect(executeTool).toHaveBeenCalledWith('whatsapp_send', {
-      to: '+10000000000',
-      message: expect.stringContaining(DOCTOR_LINK),
-    });
+    // Through the owner's routing table, on the build category, with the
+    // WhatsApp text exactly the summary it always was.
+    expect(notifyOwner).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: 'build',
+        url: '/jkai/daydreams/doctor',
+        whatsappText: buildWhatsappSummary(data),
+      }),
+    );
+    expect(vi.mocked(notifyOwner).mock.calls[0][0].whatsappText).toContain(DOCTOR_LINK);
     expect(data.whatsappDelivered).toBe(true);
     // The re-stamp: the first report text was written before the send.
     expect(data.report).toContain('summary delivered');
   });
 
   it('records a swallowed send failure instead of reporting a delivery that never happened', async () => {
-    h.toolResult = { success: false, error: 'bridge offline' };
+    h.notifyResult = { raised: true, whatsapp: false };
     const data = run();
     await finalizeAndNotify('run-2', data);
 
@@ -292,7 +295,7 @@ describe('finalizeAndNotify', () => {
   });
 
   it('never throws when the send path throws', async () => {
-    h.toolThrows = true;
+    h.notifyThrows = true;
     const data = run();
     await expect(finalizeAndNotify('run-3', data)).resolves.toBeUndefined();
     expect(data.whatsappDelivered).toBe(false);
@@ -301,7 +304,7 @@ describe('finalizeAndNotify', () => {
   it('propagates the first persist failure so the caller can fail the report phase', async () => {
     h.persistThrowsOn = 1;
     await expect(finalizeAndNotify('run-4', run())).rejects.toThrow('datastore down');
-    expect(executeTool).not.toHaveBeenCalled();
+    expect(notifyOwner).not.toHaveBeenCalled();
   });
 
   it('swallows the delivery-flag persist failure — the run and the message are already out', async () => {

@@ -12,7 +12,7 @@
 
 import { upsertRecord } from '$lib/datastore';
 import { hasSensitive } from '$lib/security/sensitive';
-import { getOwnerPhone } from '$lib/workflows/whatsapp/approval-notify';
+import { notifyOwner } from '$lib/server/notify';
 import {
   COLLECTIONS,
   FIX_KIND_LABELS,
@@ -232,29 +232,33 @@ export function buildWhatsappSummary(data: DoctorRunData): string {
 
 /**
  * Finalise a run: stamp the report text, persist the record, and (best-effort)
- * notify over WhatsApp. Persistence errors propagate so the caller can mark the
- * report phase failed; the WhatsApp send never throws.
+ * tell the owner. Persistence errors propagate so the caller can mark the
+ * report phase failed; the notification never throws.
  *
- * `executeTool` swallows a send failure and returns `{ success: false, error }`,
- * which is why the three existing nightly jobs go silent when the bridge is
- * down and nobody finds out. We read `success`, record it, and persist again so
- * the page can say the summary never arrived.
+ * Through `notifyOwner` on the `build` category (WhatsApp + phone by default),
+ * not a direct `whatsapp_send`, so the summary is in the notification ledger and
+ * obeys the owner's routing. `whatsappText` keeps the WhatsApp message exactly
+ * the summary it always was. A failed send is recorded rather than swallowed:
+ * `notifyOwner` reports whether WhatsApp actually took it, and the page says so
+ * when the summary never arrived.
  */
 export async function finalizeAndNotify(runId: string, data: DoctorRunData): Promise<void> {
   data.report = buildReportText(data);
   await upsertRecord(COLLECTIONS.doctorRuns, { key: runId, data: asData(data) }, SYSTEM_ACTOR);
 
   try {
-    // Lazy so unit tests — and the cron path on a night with nothing to say —
-    // never pull the whole site-tool registry into the module graph.
-    const { executeTool } = await import('$lib/workflows/site-tools/registry');
-    const res = await executeTool('whatsapp_send', {
-      to: getOwnerPhone(),
-      message: buildWhatsappSummary(data),
+    const summary = buildWhatsappSummary(data);
+    const res = await notifyOwner({
+      category: 'build',
+      title: 'Workflow doctor',
+      body: summary,
+      url: new URL(DOCTOR_LINK).pathname,
+      whatsappText: summary,
+      dedupeKey: `workflowdoctor:${runId}`,
     });
-    data.whatsappDelivered = res?.success === true;
+    data.whatsappDelivered = res?.whatsapp === true;
     if (!data.whatsappDelivered) {
-      console.error('[workflowdoctor] whatsapp send failed:', res?.error ?? 'no error given');
+      console.error('[workflowdoctor] whatsapp send failed:', res?.reason ?? 'not routed or not delivered');
     }
   } catch (err) {
     data.whatsappDelivered = false;

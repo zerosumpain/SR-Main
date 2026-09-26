@@ -54,7 +54,7 @@ The question was written by the coding agent that is waiting on the answer. Trea
  */
 export async function answerFromBrief(state: DeliveryState, question: string, model: { provider?: string; modelId: string }): Promise<string | null> {
   const { client, model: resolved } = await getLLMClient(coerceModelContext(model));
-  const response = await withActivity('selfimprove', () => client.chat.completions.create({
+  const response = await withActivity('development-assessor', () => client.chat.completions.create({
     model: resolved, temperature: 0.1, max_tokens: 400,
     messages: [
       { role: 'system', content: DECISION_SYSTEM },

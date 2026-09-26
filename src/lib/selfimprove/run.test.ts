@@ -44,7 +44,6 @@ import {
   runImprovementNow,
   createBudget,
   BudgetExceededError,
-  isUserActive,
   acquireRunLock,
   releaseRunLock,
   getImprovementStatus,
@@ -82,17 +81,6 @@ beforeEach(() => {
   vi.mocked(optimiseCalls).mockResolvedValue([] as never);
 });
 
-describe('isUserActive (idle gate)', () => {
-  it('returns true when a recent user message exists', async () => {
-    h.userRows = [{ id: 'm1' }];
-    expect(await isUserActive()).toBe(true);
-  });
-  it('returns false when there is no recent user message', async () => {
-    h.userRows = [];
-    expect(await isUserActive()).toBe(false);
-  });
-});
-
 describe('run lock (overlap guard)', () => {
   it('acquires once and refuses a second concurrent acquire', () => {
     expect(acquireRunLock()).toBe(true);
@@ -124,12 +112,17 @@ describe('budget caps', () => {
 
 describe('runImprovementNow — gating & status', () => {
   it('aborts a cron run when the user is active at start (no phases run)', async () => {
-    h.userRows = [{ id: 'm1' }];
-    const { runId } = await runImprovementNow({ trigger: 'cron' });
+    const { runId } = await runImprovementNow({ trigger: 'cron', isUserActive: async () => true });
     expect(runId).toBeTruthy();
     expect(learnInsights).not.toHaveBeenCalled();
     expect(lastPersisted().data.status).toBe('aborted_user_active');
     expect(getImprovementStatus().running).toBe(false);
+  });
+
+  it('fails CLOSED when a cron run is given no idle gate', async () => {
+    await runImprovementNow({ trigger: 'cron' });
+    expect(learnInsights).not.toHaveBeenCalled();
+    expect(lastPersisted().data.status).toBe('aborted_user_active');
   });
 
   it('completes a manual run end-to-end and reports', async () => {

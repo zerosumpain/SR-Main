@@ -14,7 +14,7 @@
 // practice and costs nothing.
 
 import { getSetting } from '$lib/server/models/settings';
-import { isUserActive } from '$lib/selfimprove/run';
+import { isUserActive } from '$lib/heartbeat/idle';
 import { listChatJobs } from '$lib/workflows/chat/activity';
 import { attributeSpend, budgetStatus, readQuotaMark, ZERO_SPEND } from '$lib/daydream/budget';
 import { pendingReview, recordReview, reviewThought } from '$lib/daydream/adjudicate';

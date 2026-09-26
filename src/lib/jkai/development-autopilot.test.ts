@@ -158,25 +158,6 @@ describe('the release branch names its candidate', () => {
   });
 });
 
-describe('nothing carries the token out of a failed command', () => {
-  it('drops the base64 envelope that redacting the literal string cannot reach', async () => {
-    const { redactCommandOutput } = await import('./development-release.server');
-    const token = 'ghp_secretvalue';
-    const envelope = Buffer.from(`git clone https://x-access-token:${token}@github.com/o/r`).toString('base64');
-    const message = `Command failed: bash -c "echo '${envelope}' | base64 -d | bash"\nfatal: could not read Username`;
-    const safe = redactCommandOutput(message, token);
-    expect(safe).not.toContain(token);
-    expect(safe).not.toContain(envelope);
-    expect(safe).toContain('could not read Username');
-  });
-
-  it('still strips the literal token when it appears on its own', () => {
-    return import('./development-release.server').then(({ redactCommandOutput }) => {
-      expect(redactCommandOutput('remote: https://x-access-token:tok123@github.com', 'tok123')).not.toContain('tok123');
-    });
-  });
-});
-
 describe('an owner verdict judges what was on screen', () => {
   it('holds only while the candidate is the revision it judged', () => {
     const previewed = 'a'.repeat(40);

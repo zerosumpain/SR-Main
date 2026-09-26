@@ -28,7 +28,8 @@
 
 import os from 'os';
 import { getSetting } from '$lib/server/models/settings';
-import { runImprovementNow, isUserActive } from '$lib/selfimprove/run';
+import { runImprovementNow } from '$lib/selfimprove/run';
+import { isUserActive } from '$lib/heartbeat/idle';
 import { SETTINGS_ENABLED_KEY, errMsg, type RunStatus } from '$lib/selfimprove/types';
 import { liveBuildLanes } from '../build-lanes';
 import type { ActivityHandler } from '../types';
@@ -100,7 +101,7 @@ export const daydreamImprove: ActivityHandler = {
       // autonomous repo build behind `/jkai/builds`, and the monitor
       // generator. Injected here because `$lib/heartbeat -> $lib/jkai` is a
       // one-way edge and `$lib/selfimprove -> $lib/jkai` would be a cycle.
-      ({ runId, data } = await runImprovementNow({ trigger: 'cron', lanes: liveBuildLanes() }));
+      ({ runId, data } = await runImprovementNow({ trigger: 'cron', lanes: liveBuildLanes(), isUserActive: () => isUserActive() }));
     } catch (err) {
       // The overlap guard throws when a manual "Run now" is already going.
       // That is a skip, not a fault: nothing is broken and the failure budget

@@ -7,11 +7,16 @@
 // container has neither a git checkout nor the gh CLI (verified 2026-07-29), so
 // the only way the nightly engine can open a PR from prod is over HTTPS.
 //
-// Scope is deliberately narrow: one hard-coded repo (same reasoning as
-// issues.ts), commits only ever land on a NEW branch, and nothing here can
-// merge. The engine proposes; the owner disposes.
+// Scope is deliberately narrow: `openDraftPr` writes to one hard-coded repo
+// (same reasoning as issues.ts), commits only ever land on a NEW branch, and
+// nothing here can merge. The engine proposes; the owner disposes.
+//
+// `openPullRequest` is the one PR opener for the whole app: the jkai lanes
+// (Forge `publishViaGit`, develop release) push their branch with git and then
+// call it with their own repo and token.
 
 import { REPO_SLUG, githubToken } from './issues';
+import { redactGitHubSecrets } from './redact';
 
 const API = 'https://api.github.com';
 
@@ -61,18 +66,98 @@ export async function listPrFiles(prNumber: number): Promise<string[]> {
   return paths;
 }
 
-function headers(): Record<string, string> {
+function headers(token: string = githubToken(), userAgent = 'jkai-selfimprove'): Record<string, string> {
   return {
-    Authorization: `Bearer ${githubToken()}`,
+    Authorization: `Bearer ${token}`,
     Accept: 'application/vnd.github+json',
     'Content-Type': 'application/json',
-    'User-Agent': 'jkai-selfimprove',
+    'User-Agent': userAgent,
     'X-GitHub-Api-Version': '2022-11-28',
   };
 }
 
-function redact(text: string): string {
-  return text.replace(/\b(gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b/g, '<redacted>');
+/** Derive an `owner/repo` slug from an SSH or HTTPS git URL. */
+export function repoSlugFromUrl(repoUrl: string): string {
+  // git@github.com:owner/repo.git  |  https://github.com/owner/repo.git
+  const m = repoUrl.match(/[:/]([^/:]+\/[^/]+?)(?:\.git)?$/);
+  return m ? m[1] : repoUrl;
+}
+
+export interface OpenPullRequestArgs {
+  /** `owner/repo`. Defaults to this site's repo. */
+  repo?: string;
+  /** Branch that already exists on the remote. */
+  head: string;
+  base: string;
+  title: string;
+  body: string;
+  draft?: boolean;
+  /** Defaults to `githubToken()`. The jkai lanes pass FORGE_GITHUB_TOKEN. */
+  token?: string;
+  /** Distinguishes the callers in GitHub's audit log. */
+  userAgent?: string;
+}
+
+export interface PullRequestRef {
+  number: number;
+  url: string;
+  /** True when GitHub said one already existed for this head and we reused it. */
+  reused: boolean;
+}
+
+/**
+ * Open a pull request for a branch that is already pushed — the ONE
+ * implementation every lane uses (selfimprove via `openDraftPr`, the Forge's
+ * `publishViaGit`, and the develop lane's release).
+ *
+ * Runs Node-side over `fetch`, so the token never touches a command line.
+ * Idempotent: a 422 for a head that already has an open pull request against
+ * `base` returns that pull request (`reused: true`) instead of failing, so a
+ * re-run after a crash between push and PR does not need a person. Never merges.
+ */
+export async function openPullRequest(args: OpenPullRequestArgs): Promise<PullRequestRef> {
+  const repo = args.repo ?? REPO_SLUG;
+  const token = args.token ?? githubToken();
+  if (!token) throw new Error('GitHub is not configured (no token in env)');
+  const h = headers(token, args.userAgent);
+
+  const created = await fetch(`${API}/repos/${repo}/pulls`, {
+    method: 'POST',
+    headers: h,
+    body: JSON.stringify({
+      title: args.title.slice(0, 250),
+      head: args.head,
+      base: args.base,
+      body: args.body,
+      draft: args.draft === true,
+    }),
+  });
+
+  if (created.ok) {
+    const json = (await created.json().catch(() => ({}))) as { html_url?: unknown; number?: unknown };
+    if (typeof json.html_url === 'string' && typeof json.number === 'number') {
+      return { number: json.number, url: json.html_url, reused: false };
+    }
+    throw new Error('GitHub accepted the pull request but returned no url.');
+  }
+
+  const text = await created.text().catch(() => '');
+  if (created.status === 422) {
+    // GitHub's `head` filter wants `owner:branch`.
+    const owner = repo.split('/')[0];
+    const listUrl =
+      `${API}/repos/${repo}/pulls` +
+      `?head=${encodeURIComponent(`${owner}:${args.head}`)}&base=${encodeURIComponent(args.base)}&state=open`;
+    const existing = await fetch(listUrl, { headers: h }).catch(() => null);
+    if (existing?.ok) {
+      const list = (await existing.json().catch(() => [])) as Array<{ html_url?: unknown; number?: unknown }>;
+      const match = Array.isArray(list)
+        ? list.find((p) => typeof p.html_url === 'string' && typeof p.number === 'number')
+        : undefined;
+      if (match) return { number: match.number as number, url: match.html_url as string, reused: true };
+    }
+  }
+  throw new Error(redactGitHubSecrets(`GitHub refused the pull request (${created.status}): ${text.slice(0, 1000)}`, token));
 }
 
 async function gh<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -80,7 +165,7 @@ async function gh<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API}${path}`, { ...init, headers: headers() });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(redact(`GitHub ${init.method ?? 'GET'} ${path} failed: ${res.status} ${body.slice(0, 400)}`));
+    throw new Error(redactGitHubSecrets(`GitHub ${init.method ?? 'GET'} ${path} failed: ${res.status} ${body.slice(0, 400)}`));
   }
   return (await res.json()) as T;
 }
@@ -156,16 +241,14 @@ export async function openDraftPr(args: {
     body: JSON.stringify({ ref: `refs/heads/${args.branch}`, sha: commit.sha }),
   });
 
-  const pr = await gh<{ number: number; html_url: string }>(`/repos/${REPO_SLUG}/pulls`, {
-    method: 'POST',
-    body: JSON.stringify({
-      title: args.title.slice(0, 250),
-      body: args.body,
-      head: args.branch,
-      base,
-      draft: true,
-    }),
+  const pr = await openPullRequest({
+    repo: REPO_SLUG,
+    title: args.title,
+    body: args.body,
+    head: args.branch,
+    base,
+    draft: true,
   });
 
-  return { number: pr.number, url: pr.html_url, branch: args.branch };
+  return { number: pr.number, url: pr.url, branch: args.branch };
 }
