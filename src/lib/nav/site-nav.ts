@@ -198,12 +198,8 @@ export const SECTIONS: NavSection[] = [
       { label: 'Places', href: '/jkai/daydreams/places' },
       { label: 'Money', href: '/jkai/daydreams/money' },
       { label: 'Improvement', href: '/jkai/daydreams/improvement' },
-      { label: 'Backlog', href: '/jkai/daydreams/backlog' },
-      // The doctor moved under daydreams on 2026-09-04 and belongs to this
-      // list, not to the jkai row above it. Left there it lit two cells on
-      // its own page — `under('/jkai/daydreams', …)` is true for every child —
-      // which `nav-parents`' one-cell invariant catches.
-      { label: 'Doctor', href: '/jkai/daydreams/doctor' },
+      // Backlog and Doctor left for the build process on 2026-09-26: they live
+      // at /jkai/develop/{backlog,doctor} and light the Develop cell.
     ],
   },
   {
@@ -217,9 +213,9 @@ export const SECTIONS: NavSection[] = [
       { label: 'Canvas', href: '/jkai/canvas' },
       { label: 'Intel', href: '/jkai/intel' },
       { label: 'Codegraph', href: '/jkai/codegraph' },
-      // One cell for the whole development family. /jkai/builds is a
-      // redirect stub and /jkai/builds/<id> is the archive console, so both
-      // light this cell rather than leaving the bar blank on a console page.
+      // One cell for the whole development family — the portfolio, its
+      // backlog and doctor rooms, the /jkai/builds redirect stub and the
+      // /jkai/builds/<id> archive console all light it.
       {
         label: 'Develop',
         href: '/jkai/develop',
