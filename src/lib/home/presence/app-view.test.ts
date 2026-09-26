@@ -289,7 +289,7 @@ describe('pushAppViews', () => {
     const owner = body.views[1].view;
     expect(owner.people.find((p) => p.subject === 'john')?.self).toBe(true);
     expect(owner.access).toEqual({
-      owner: true, chat: true, news: true, research: true, notes: true, intel: true, family: true, sitePair: null,
+      owner: true, chat: true, news: true, research: true, notes: true, intel: true, games: true, family: true, sitePair: null,
     });
     // Somebody with no site access and no household row: nobody, no places, nothing offered.
     const stranger = body.views[0].view;
@@ -306,7 +306,7 @@ describe('pushAppViews', () => {
     // family:circle alone is not the family: she has no household row, so
     // `peopleViewerForEmail` (stood in for here) says no, and so does the flag.
     expect(body.views[0].view.access).toEqual({
-      owner: false, chat: true, news: true, research: false, notes: false, intel: false, family: false, sitePair: null,
+      owner: false, chat: true, news: true, research: false, notes: false, intel: false, games: false, family: false, sitePair: null,
     });
   });
 

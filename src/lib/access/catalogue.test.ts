@@ -105,10 +105,10 @@ describe('the catalogue itself', () => {
     expect(AREAS.map((a) => a.id).sort()).toEqual([...AREA_IDS].sort());
   });
 
-  it('seeds Family Circle and Family Admin, admin holding the circle too', () => {
+  it('seeds Family Circle and Family Admin, admin holding the circle too, both playing games', () => {
     const byId = Object.fromEntries(BUILT_IN_GROUPS.map((g) => [g.id, g.grants]));
-    expect(byId['family-circle']).toEqual(['family:circle']);
-    expect(byId['family-admin']).toEqual(['family:circle', 'family:admin']);
+    expect(byId['family-circle']).toEqual(['family:circle', 'games:self']);
+    expect(byId['family-admin']).toEqual(['family:circle', 'family:admin', 'games:self']);
     for (const g of BUILT_IN_GROUPS) expect(parsePermissions(g.grants)).toEqual([...g.grants]);
   });
 });
