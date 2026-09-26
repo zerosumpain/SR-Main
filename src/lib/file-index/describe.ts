@@ -50,11 +50,7 @@ const PDF_OCR_PROMPT =
   'If a passage is genuinely illegible, write [illegible] rather than guessing. ' +
   'Return only the transcript.';
 
-const AUDIO_PROMPT =
-  'Transcribe the spoken words in this audio verbatim. If music or non-speech sounds dominate, ' +
-  'briefly describe them instead. Return only the transcript/description, no preamble.';
-
-/** Map a common audio MIME type to the format string the input_audio API expects. */
+/** Map a common audio MIME type to the file extension speech-to-text expects. */
 function audioFormat(mime: string): string | null {
   const m = (mime || '').toLowerCase();
   if (m.includes('mpeg') || m.includes('mp3')) return 'mp3';
@@ -250,9 +246,24 @@ export async function describePdfBestEffort(buf: Buffer, filename: string): Prom
 }
 
 /**
- * Best-effort transcription of an audio file into searchable text via a
- * multimodal chat model. Returns null (skip, non-fatal) on any failure, an
- * unsupported format, or an oversized file.
+ * The speech-to-text model — the same one /jkai/notes records through
+ * (`$lib/jkai/extract/audio`). gpt-4o-transcribe over whisper-1 (2026-09-26):
+ * on one clip whisper-1 heard "on Monday" as "Anmandi", gpt-4o-transcribe was
+ * word-perfect, and it billed $0.000195 against whisper-1's $0.0003.
+ */
+const TRANSCRIBE_MODEL = 'gpt-4o-transcribe';
+
+/**
+ * Best-effort transcription of an audio file into searchable text, through the
+ * gateway's speech-to-text endpoint. Returns null (skip, non-fatal) on any
+ * failure, an unsupported format, or an oversized file.
+ *
+ * Until 2026-09-26 this asked a multimodal CHAT model to transcribe, with an
+ * `input_audio` part. Its fallback, google/gemini-2.0-flash-001, was retired on
+ * OpenRouter, and every @files audio file, intel recording and chat voice note
+ * came back empty — while /jkai/notes, on speech-to-text, kept working. A chat
+ * model was the wrong tool anyway: it paraphrases, and speech-to-text costs
+ * fractions of a penny a note.
  */
 export async function transcribeAudioBestEffort(buf: Buffer, mimeType: string): Promise<string | null> {
   if (buf.byteLength > MAX_AUDIO_BYTES) return null;
@@ -260,27 +271,12 @@ export async function transcribeAudioBestEffort(buf: Buffer, mimeType: string): 
   if (!format) return null;
 
   try {
-    // The `audio` workload rather than a module constant, so this is settable
-    // from the model picker; its save guard requires audio input.
-    const { client, model } = await getLLMClient(await resolveAudioModel());
+    const { client } = await getLLMClient(await resolveAudioModel());
+    const file = new File([new Uint8Array(buf)], `audio.${format}`, { type: mimeType || 'audio/mpeg' });
     const response = await withActivity('audio', () =>
-      client.chat.completions.create({
-        model,
-        max_tokens: 4096,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: AUDIO_PROMPT },
-              // OpenRouter multimodal audio content part.
-              { type: 'input_audio', input_audio: { data: buf.toString('base64'), format } },
-            ],
-          },
-        ],
-      } as never),
+      client.audio.transcriptions.create({ model: TRANSCRIBE_MODEL, file }),
     );
-    const text = (response as { choices: Array<{ message?: { content?: string } }> })
-      .choices[0]?.message?.content?.trim();
+    const text = response.text?.trim();
     return text ? text : null;
   } catch (err) {
     console.warn(`[file-index] audio transcription failed (${(err as Error).message}); skipping`);

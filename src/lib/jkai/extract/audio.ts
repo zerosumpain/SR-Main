@@ -50,7 +50,8 @@ export async function extractAudio(
     const file = new File([new Uint8Array(buffer)], filename || 'audio.bin', { type: mimeType || 'audio/mpeg' });
     const response = await withActivity('audio', () =>
       client.audio.transcriptions.create({
-        model: 'whisper-1',
+        // Same model as the file index (`TRANSCRIBE_MODEL` in describe.ts).
+        model: 'gpt-4o-transcribe',
         file,
         ...(options?.language ? { language: options.language } : {}),
       }),
@@ -65,6 +66,6 @@ export async function extractAudio(
       },
     };
   } catch (err) {
-    throw new ExtractError('E_TRANSCRIBE_FAILED', 'Whisper transcription failed', err);
+    throw new ExtractError('E_TRANSCRIBE_FAILED', 'Speech-to-text transcription failed', err);
   }
 }
