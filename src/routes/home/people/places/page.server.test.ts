@@ -162,6 +162,11 @@ describe('/home/people/places — remove', () => {
     expect(h.ignored).toEqual([]);
   });
 
+  it('saves close tracking on its own switch, whatever alerts say', async () => {
+    await actions.notify(eventFor('owner@example.test', { placeId: 'school', trackOnLeave: 'on' }));
+    expect(h.updates[0][1]).toMatchObject({ alerts: false, trackOnLeave: true });
+  });
+
   it('refuses a place that is not on the panel', async () => {
     const res = (await actions.remove(eventFor('owner@example.test', { placeId: 'elsewhere' }))) as { status: number };
     expect(res.status).toBe(404);
@@ -325,7 +330,7 @@ describe('/home/people/places — notify', () => {
       eventFor('owner@example.test', { placeId: 'school', alerts: 'on', alertArrive: 'on', whatsappAlerts: 'on' }),
     );
     expect(res).toEqual({ notified: 'school' });
-    expect(h.updates).toEqual([['school', { alerts: true, alertArrive: true, alertLeave: false, whatsappAlerts: true }]]);
+    expect(h.updates).toEqual([['school', { alerts: true, alertArrive: true, alertLeave: false, whatsappAlerts: true, trackOnLeave: false }]]);
   });
 
   it('never turns alerts on for WhatsApp: WhatsApp without the master switch is dropped', async () => {
@@ -337,8 +342,8 @@ describe('/home/people/places — notify', () => {
     await actions.notify(eventFor('owner@example.test', { placeId: 'home', alertLeave: 'on' }));
     await actions.notify(eventFor('owner@example.test', { placeId: 'home', alerts: 'on', alertArrive: 'on', alertLeave: 'on' }));
     expect(h.updates).toEqual([
-      ['home', { alerts: false, alertArrive: false, alertLeave: true, whatsappAlerts: false }],
-      ['home', { alerts: true, alertArrive: true, alertLeave: true, whatsappAlerts: false }],
+      ['home', { alerts: false, alertArrive: false, alertLeave: true, whatsappAlerts: false, trackOnLeave: false }],
+      ['home', { alerts: true, alertArrive: true, alertLeave: true, whatsappAlerts: false, trackOnLeave: false }],
     ]);
   });
 

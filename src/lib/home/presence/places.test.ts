@@ -80,3 +80,13 @@ describe('isPlaceKind', () => {
     expect(isPlaceKind(null)).toBe(false);
   });
 });
+
+describe('effectiveTrackOnLeave', () => {
+  it('is on for an undecided home and off for any other undecided place; a decision stands', async () => {
+    const { effectiveTrackOnLeave } = await import('./places');
+    expect(effectiveTrackOnLeave(null, true)).toBe(true);
+    expect(effectiveTrackOnLeave(null, false)).toBe(false);
+    expect(effectiveTrackOnLeave(false, true)).toBe(false);
+    expect(effectiveTrackOnLeave(true, false)).toBe(true);
+  });
+});

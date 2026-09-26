@@ -732,8 +732,15 @@ export interface PanelPlace {
   alertArrive: boolean;
   alertLeave: boolean;
   whatsappAlerts: boolean;
+  /** Effective: an undecided home is on, an undecided place off. */
+  trackOnLeave: boolean;
   visitCount: number;
   isHome: boolean;
+}
+
+/** An undecided flag is on for home only. PURE. */
+export function effectiveTrackOnLeave(stored: boolean | null | undefined, isHome: boolean): boolean {
+  return stored ?? isHome;
 }
 
 /**
@@ -755,6 +762,7 @@ export async function listPanelPlaces(): Promise<PanelPlace[]> {
       alertArrive: daydreamPlaces.alertArrive,
       alertLeave: daydreamPlaces.alertLeave,
       whatsappAlerts: daydreamPlaces.whatsappAlerts,
+      trackOnLeave: daydreamPlaces.trackOnLeave,
       visitCount: daydreamPlaces.visitCount,
     })
     .from(daydreamPlaces)
@@ -765,7 +773,11 @@ export async function listPanelPlaces(): Promise<PanelPlace[]> {
       ),
     )
     .orderBy(sql`${daydreamPlaces.visitCount} desc`, asc(daydreamPlaces.label));
-  const out = rows.map((r) => ({ ...r, isHome: r.id === home?.id }));
+  const out = rows.map((r) => ({
+    ...r,
+    isHome: r.id === home?.id,
+    trackOnLeave: effectiveTrackOnLeave(r.trackOnLeave, r.id === home?.id),
+  }));
   return [...out.filter((p) => p.isHome), ...out.filter((p) => !p.isHome)];
 }
 
@@ -775,13 +787,21 @@ export async function listPanelPlaces(): Promise<PanelPlace[]> {
  */
 export async function updatePlaceAlerts(
   placeId: string,
-  patch: { alerts?: boolean; alertArrive?: boolean; alertLeave?: boolean; whatsappAlerts?: boolean; radiusM?: number },
+  patch: {
+    alerts?: boolean;
+    alertArrive?: boolean;
+    alertLeave?: boolean;
+    whatsappAlerts?: boolean;
+    trackOnLeave?: boolean;
+    radiusM?: number;
+  },
 ): Promise<{ id: string } | null> {
   const set: Record<string, unknown> = { updatedAt: new Date() };
   if (patch.alerts !== undefined) set.alerts = patch.alerts;
   if (patch.alertArrive !== undefined) set.alertArrive = patch.alertArrive;
   if (patch.alertLeave !== undefined) set.alertLeave = patch.alertLeave;
   if (patch.whatsappAlerts !== undefined) set.whatsappAlerts = patch.whatsappAlerts;
+  if (patch.trackOnLeave !== undefined) set.trackOnLeave = patch.trackOnLeave;
   if (patch.radiusM !== undefined) {
     if (!Number.isFinite(patch.radiusM) || patch.radiusM < RADIUS_MIN_M || patch.radiusM > RADIUS_MAX_M) {
       throw new Error(`radius must be ${RADIUS_MIN_M}–${RADIUS_MAX_M} m`);

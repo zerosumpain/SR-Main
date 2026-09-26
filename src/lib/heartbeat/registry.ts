@@ -4,6 +4,7 @@ import { conversationCheckin } from './activities/conversation-checkin';
 import { buildProgressCheck } from './activities/build-progress-check';
 import { workflowReview } from './activities/workflow-review';
 import { homeObserve } from './activities/home-observe';
+import { householdLive } from './activities/household-live';
 import { daydreamFeatures } from './activities/daydream-features';
 import { daydreamDigest } from './activities/daydream-digest';
 import { daydreamExplore } from './activities/daydream-explore';
@@ -44,6 +45,7 @@ const handlers: ActivityHandler[] = [
   buildProgressCheck,
   workflowReview,
   homeObserve,
+  householdLive,
   daydreamFeatures,
   daydreamDigest,
   daydreamExplore,

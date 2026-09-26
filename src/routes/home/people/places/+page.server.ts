@@ -246,6 +246,9 @@ export const actions: Actions = {
         alertArrive: on(form, 'alertArrive'),
         alertLeave: on(form, 'alertLeave'),
         whatsappAlerts,
+        // Independent of the alerts switch: close tracking is about the
+        // phone's GPS, not about who hears of the crossing.
+        trackOnLeave: on(form, 'trackOnLeave'),
       });
     } catch (err) {
       console.error('[home/people/places] notify failed:', errMsg(err));

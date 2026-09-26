@@ -26,6 +26,7 @@ import { db } from '$lib/db';
 import { daydreamPlaces, daydreamTrail } from '$lib/db/schema';
 import { companionToken, companionUrl, loadCompanionUsers, type HouseholdUser } from './companion';
 import { distanceM } from './geo';
+import { listPanelPlaces } from './places';
 import { livePositions, loadHousehold, type LivePosition } from './household';
 import type { HouseholdMember } from './members';
 import { nowStatus, nowSub, type NowStatus } from './now';
@@ -77,8 +78,29 @@ export interface AppPerson {
 
 export interface AppHouseholdView {
   generatedAt: string;
-  viewer: 'owner' | 'household';
+  /** 'none': a household member on the app who may not see the household
+   *  (no Family Circle). They get no people — only the places to watch. */
+  viewer: 'owner' | 'household' | 'none';
   people: AppPerson[];
+  /** Places whose leaving switches the phone to close tracking. */
+  watch?: WatchedPlace[];
+}
+
+/** A place the phone registers as a geofence (see `trackOnLeave`). */
+export interface WatchedPlace {
+  id: string;
+  label: string;
+  lat: number;
+  lon: number;
+  radiusM: number;
+}
+
+/** The places flagged for close tracking, home included unless switched off. */
+export async function loadWatchedPlaces(): Promise<WatchedPlace[]> {
+  const places = await listPanelPlaces();
+  return places
+    .filter((p) => p.trackOnLeave)
+    .map((p) => ({ id: p.id, label: p.label ?? (p.isHome ? 'Home' : 'A place'), lat: p.lat, lon: p.lon, radiusM: p.radiusM }));
 }
 
 const r5 = (n: number) => Math.round(n * 1e5) / 1e5;
@@ -185,6 +207,10 @@ export function buildAppView(input: {
   return { generatedAt: now.toISOString(), viewer: viewer.kind, people };
 }
 
+function withWatch(view: AppHouseholdView, watch: WatchedPlace[] | undefined): AppHouseholdView {
+  return watch ? { ...view, watch } : view;
+}
+
 /** Today's trail for these subjects, oldest first. */
 async function loadTodayTrails(subjects: readonly string[], dayStart: Date): Promise<Map<string, TrailPoint[]>> {
   const out = new Map<string, TrailPoint[]>();
@@ -252,15 +278,26 @@ export async function pushAppViews(
   if (!users) return null;
 
   const viewers: Array<{ email: string; viewer: PeopleViewer }> = [];
+  // Household members on the app who may not see the household still get
+  // the watched places: close tracking is about their own phone.
+  const watchOnly: string[] = [];
   let refused = 0;
+  const memberEmails = new Set(members.map((m) => m.email).filter((e): e is string => !!e));
   for (const u of users) {
     const email = String(u.email ?? '').trim().toLowerCase();
     const viewer = email ? await peopleViewerForEmail(email) : null;
     if (viewer) viewers.push({ email, viewer });
-    else refused++;
+    else {
+      refused++;
+      if (memberEmails.has(email)) watchOnly.push(email);
+    }
   }
+  const watch = await loadWatchedPlaces().catch(() => undefined);
 
   const views: Array<{ email: string; view: AppHouseholdView }> = [];
+  for (const email of watchOnly) {
+    views.push({ email, view: { generatedAt: now.toISOString(), viewer: 'none', people: [], watch } });
+  }
   if (viewers.length) {
     const dayStart = localDayStart(now);
     const [{ members: presence }, positions] = await Promise.all([loadHousehold(), livePositions().catch(() => [])]);
@@ -273,7 +310,7 @@ export async function pushAppViews(
     for (const v of scopedBy) {
       views.push({
         email: v.email,
-        view: buildAppView({
+        view: withWatch(buildAppView({
           viewer: v.viewer,
           self: members.find((m) => m.email === v.email)?.subject ?? null,
           scoped: v.scoped,
@@ -283,7 +320,7 @@ export async function pushAppViews(
           labels,
           dayStart,
           now,
-        }),
+        }), watch),
       });
     }
   }

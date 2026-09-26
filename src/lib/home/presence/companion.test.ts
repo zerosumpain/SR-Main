@@ -249,6 +249,25 @@ describe('ingestCompanion', () => {
     expect(h.recorded.map((r) => r.subject)).toEqual(['a', 'b']);
   });
 
+  it('keeps one fix per person every five seconds from a close-tracking phone', async () => {
+    const at = (sec: number) => new Date(Date.parse('2026-09-26T08:00:00Z') + sec * 1000).toISOString();
+    const f = vi.fn(async () =>
+      pageResponse({
+        cursor: 'p1',
+        more: false,
+        users: [],
+        // A fix a second for ten seconds, and another person's fix between.
+        fixes: [
+          ...Array.from({ length: 11 }, (_, i) => fix('a@example.test', `a${i}`, { recorded: at(i) })),
+          fix('b@example.test', 'b0', { recorded: at(1) }),
+        ],
+      }),
+    );
+    const res = await ingestCompanion([member('a'), member('b')], f as unknown as typeof fetch);
+    expect(res).toMatchObject({ written: 4, thinned: 8 });
+    expect(h.recorded.filter((r) => r.subject === 'a')).toHaveLength(3); // 0 s, 5 s, 10 s
+  });
+
   it('drops fixes for unknown emails and for members not on the companion source', async () => {
     const f = vi.fn(async () =>
       pageResponse({
