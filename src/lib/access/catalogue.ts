@@ -66,9 +66,13 @@ export const AREAS: readonly AreaInfo[] = [
   {
     id: 'drive',
     label: 'Drive',
-    blurb: 'The file store.',
+    blurb: 'The file store: their own folder, and the household one.',
     open: false,
-    levels: { self: 'Own files', all: "Also read everyone's and household files", admin: 'Also edit them' },
+    levels: {
+      self: 'Own files; read household files',
+      all: "Also read every member's files",
+      admin: 'Also edit them',
+    },
   },
   {
     id: 'home',
@@ -354,6 +358,18 @@ const ROUTES: Record<string, Partial<Record<Method, Permission>>> = {
   '/api/news/actions': { POST: 'news:self' },
 };
 
+/**
+ * Pages another application serves, and the least permission that opens them —
+ * for the nav only. `/drive` is SR-Drive's: it enforces its own access, so the
+ * hook here never consults this map and `requiredFor` never returns from it
+ * (nor does `catalogueRouteIds`, whose ids must exist in THIS repository). A
+ * member is offered the page only once their grant is held, which for a closed
+ * area is never — `effectivePermissions` drops it.
+ */
+export const EXTERNAL_PAGES: Readonly<Record<string, Permission>> = {
+  '/drive': 'drive:self',
+};
+
 /** The permission a route + verb needs, or null when only the owner may reach it. */
 export function requiredFor(routeId: string | null | undefined, method: string): Permission | null {
   if (!routeId) return null;
@@ -372,15 +388,19 @@ export function routeIdsFor(area: AreaId | FamilyPermission): string[] {
 
 /**
  * The pages (not APIs, not `[param]` routes) these grants open, for the nav:
- * a member is offered exactly the destinations they can reach. Sorted, so the
- * nav's "first page under a cell" is stable.
+ * a member is offered exactly the destinations they can reach, here or in
+ * another application (`EXTERNAL_PAGES`). Sorted, so the nav's "first page
+ * under a cell" is stable.
  */
 export function reachablePages(grants: Iterable<Permission>): string[] {
   const held = [...grants];
-  return Object.entries(ROUTES)
+  const here = Object.entries(ROUTES)
     .filter(([id, verbs]) => !id.startsWith('/api/') && !id.includes('[') && verbs.GET && satisfies(held, verbs.GET))
-    .map(([id]) => id)
-    .sort();
+    .map(([id]) => id);
+  const elsewhere = Object.entries(EXTERNAL_PAGES)
+    .filter(([, need]) => satisfies(held, need))
+    .map(([id]) => id);
+  return [...here, ...elsewhere].sort();
 }
 
 /** Every route id the catalogue opens to anyone. */

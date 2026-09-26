@@ -48,7 +48,7 @@ export async function mirrorAndLink(
     const [file] = await db
       .select({ name: workflowFiles.name })
       .from(workflowFiles)
-      .where(eq(workflowFiles.id, fileId))
+      .where(and(eq(workflowFiles.principalId, 'owner'), eq(workflowFiles.id, fileId)))
       .limit(1);
     if (file) await stampDriveLink(attachmentId, fileId, file.name);
   } catch (err) {
@@ -128,7 +128,9 @@ export async function refileConversationFiles(conversationId: string): Promise<n
   const files = await db
     .select({ id: workflowFiles.id, name: workflowFiles.name })
     .from(workflowFiles)
-    .where(inArray(workflowFiles.id, [...byFile.keys()]))
+    // Owner files only: a member's live under members/<id>/ (see
+    // $lib/drive/namespace) and are never an owner thread's to refile.
+    .where(and(eq(workflowFiles.principalId, 'owner'), inArray(workflowFiles.id, [...byFile.keys()])))
     .catch(() => [] as Array<{ id: string; name: string }>);
 
   let moved = 0;
@@ -137,6 +139,8 @@ export async function refileConversationFiles(conversationId: string): Promise<n
     const base = f.name.slice(f.name.lastIndexOf('/') + 1);
     try {
       let name = `${folder}${base}`.slice(0, 200);
+      // Every principal's names: the unique index on `name` is global. (A
+      // jkai/ name can never be a member's, which live under members/.)
       const [clash] = await db
         .select({ id: workflowFiles.id })
         .from(workflowFiles)
@@ -149,7 +153,10 @@ export async function refileConversationFiles(conversationId: string): Promise<n
       // `name` is only the /drive path; the bytes stay where `diskPath` says.
       // `updated_at` is left alone, as /drive's own move does: a move is not an
       // edit, and "last added" sorts on it.
-      await db.update(workflowFiles).set({ name }).where(eq(workflowFiles.id, f.id));
+      await db
+        .update(workflowFiles)
+        .set({ name })
+        .where(and(eq(workflowFiles.principalId, 'owner'), eq(workflowFiles.id, f.id)));
       await stampDriveLink(byFile.get(f.id)!, f.id, name);
       moved++;
     } catch (err) {

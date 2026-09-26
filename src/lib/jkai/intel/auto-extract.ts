@@ -634,6 +634,8 @@ export async function backfillIntelExtraction(opts: BackfillOptions = {}): Promi
       FROM workflow_files f
       JOIN file_embeddings e ON e.file_id = f.id
       WHERE f.content_hash IS NOT NULL
+        -- The owner's files only: a member's file never feeds the owner's graph.
+        AND f.principal_id = 'owner'
       GROUP BY f.id, f.name, f.content_hash
       ORDER BY f.id
       LIMIT ${SCAN_CEILING}

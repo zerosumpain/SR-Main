@@ -6,8 +6,9 @@ import type { NodeExecutor, NodeResult, ExecutionContext, JsonSchema } from '../
 import { interpolateTemplate } from './template';
 import { db } from '$lib/db';
 import { workflowFiles, type WorkflowFilePermissions } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { readBuffer, saveBuffer, newDiskPath } from '$lib/file-store/storage';
+import { isReservedForOwnerLane } from '$lib/drive/namespace';
 import { extractText, ExtractError } from '$lib/jkai/extract';
 import { fileTextExtractDef } from './file-text-extract.def';
 export { fileTextExtractDef } from './file-text-extract.def';
@@ -30,12 +31,15 @@ function toBool(v: unknown): boolean {
 
 async function writeWorkflowFile(name: string, buffer: Buffer, mimeType: string): Promise<{ id: string; name: string }> {
   const cleanName = name.replace(/^\/+/, '').slice(0, 200);
-  const [existing] = await db.select().from(workflowFiles).where(eq(workflowFiles.name, cleanName));
+  // Workflows write the owner's files only; members/<id>/ is theirs ($lib/drive/namespace).
+  if (isReservedForOwnerLane(cleanName)) throw new Error(`file-text-extract: "${cleanName}" is in the members' area of the drive, which workflows cannot touch`);
+  const owner = eq(workflowFiles.principalId, 'owner');
+  const [existing] = await db.select().from(workflowFiles).where(and(owner, eq(workflowFiles.name, cleanName)));
   if (existing) {
     await saveBuffer(existing.diskPath, buffer);
     await db.update(workflowFiles)
       .set({ sizeBytes: buffer.byteLength, mimeType, updatedAt: new Date() })
-      .where(eq(workflowFiles.id, existing.id));
+      .where(and(owner, eq(workflowFiles.id, existing.id)));
     return { id: existing.id, name: existing.name };
   }
   const diskPath = newDiskPath(cleanName);
@@ -56,7 +60,7 @@ export const fileTextExtractExecutor: NodeExecutor = {
     const fileName = interpolateTemplate((config.fileName as string) || '', input).trim();
     if (!fileName) throw new Error('file-text-extract: fileName is required');
 
-    const [existing] = await db.select().from(workflowFiles).where(eq(workflowFiles.name, fileName));
+    const [existing] = await db.select().from(workflowFiles).where(and(eq(workflowFiles.principalId, 'owner'), eq(workflowFiles.name, fileName)));
     if (!existing) throw new Error(`file-text-extract: file not found: ${fileName}`);
     const perms = permissionsFor(existing.permissions);
     if (!perms.read) throw new Error(`file-text-extract: read permission denied on ${fileName}`);

@@ -3653,6 +3653,14 @@ export const workflowFiles = pgTable(
     uploadedBy: text('uploaded_by'),                 // email of uploader, nullable for system-generated
     contentHash: text('content_hash'),               // sha256 hex of the current bytes; gates re-embedding (null = never embedded)
     indexError: text('index_error'),                 // why the last index attempt produced no text; null once it succeeds
+    /**
+     * Whose file this is: 'owner' (John's — every file before access groups)
+     * or a member's `u_…`. A member's files live under the `members/<id>/`
+     * name prefix, and this always equals `principalForName(name)` — see
+     * $lib/drive/namespace. Every owner-lane reader (agent tools, workflow
+     * nodes, search, intel) filters to 'owner'.
+     */
+    principalId: text('principal_id').notNull().default('owner'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

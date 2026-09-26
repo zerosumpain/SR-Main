@@ -25,7 +25,7 @@ const DEFAULT_TOP_K = 8;
 const DEFAULT_MIN_SIM = 0.2;
 const MAX_PASSAGE_CHARS = 1200;
 
-/** Semantic search over all indexed /drive file content. Returns ranked passages. */
+/** Semantic search over the owner's indexed /drive file content. Returns ranked passages. */
 export async function searchFiles(query: string, options: FileSearchOptions = {}): Promise<FileSearchHit[]> {
   const q = (query || '').trim();
   if (!q) return [];
@@ -53,7 +53,13 @@ export async function searchFiles(query: string, options: FileSearchOptions = {}
       distance,
     })
     .from(fileEmbeddings)
-    .where(sql`${fileEmbeddings.embedding} <=> ${literal}::vector <= ${maxDistance}`)
+    // The owner's files only. A member's live under members/<id>/ with their own
+    // principal_id (see $lib/drive/namespace) and are never searched by this,
+    // which the owner's agent tools and knowledge search call.
+    .where(
+      sql`${fileEmbeddings.embedding} <=> ${literal}::vector <= ${maxDistance}
+        and exists (select 1 from workflow_files wf where wf.id = ${fileEmbeddings.fileId} and wf.principal_id = 'owner')`,
+    )
     .orderBy(distance)
     .limit(topK);
 

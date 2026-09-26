@@ -12,10 +12,14 @@ import {
 } from '$lib/file-store/storage';
 import { queueDerivedIntelDelete } from '$lib/jkai/intel/auto-extract';
 import { getPath as resolvePath } from '../expressions';
+import { isReservedForOwnerLane } from '$lib/drive/namespace';
 
 export { fileStoreDef } from './file-store.def';
 
 type Operation = 'read' | 'write' | 'append' | 'delete' | 'list';
+
+/** Workflows run as the owner: the owner's files only, never members/<id>/ ($lib/drive/namespace). */
+const OWNER_FILE = eq(workflowFiles.principalId, 'owner');
 
 function permissionsFor(raw: unknown): WorkflowFilePermissions {
   const p = (raw ?? {}) as Partial<WorkflowFilePermissions>;
@@ -67,8 +71,8 @@ export const fileStoreExecutor: NodeExecutor = {
         ? await db
             .select()
             .from(workflowFiles)
-            .where(like(workflowFiles.name, `${prefix}%`))
-        : await db.select().from(workflowFiles);
+            .where(and(OWNER_FILE, like(workflowFiles.name, `${prefix}%`)))
+        : await db.select().from(workflowFiles).where(OWNER_FILE);
       const files = rows.map((r) => ({
         id: r.id,
         name: r.name,
@@ -87,7 +91,11 @@ export const fileStoreExecutor: NodeExecutor = {
       throw new Error('file-store: fileName is required for ' + operation);
     }
 
-    const [existing] = await db.select().from(workflowFiles).where(eq(workflowFiles.name, fileName));
+    if (isReservedForOwnerLane(fileName)) throw new Error(`file-store: "${fileName}" is in the members' area of the drive, which workflows cannot touch`);
+    const [existing] = await db
+      .select()
+      .from(workflowFiles)
+      .where(and(OWNER_FILE, eq(workflowFiles.name, fileName)));
     const perms = existing ? permissionsFor(existing.permissions) : null;
 
     if (operation === 'read') {
@@ -117,7 +125,7 @@ export const fileStoreExecutor: NodeExecutor = {
         throw new Error(`file-store: delete permission denied on ${fileName}`);
       }
       await deleteFile(existing.diskPath);
-      await db.delete(workflowFiles).where(eq(workflowFiles.id, existing.id));
+      await db.delete(workflowFiles).where(and(OWNER_FILE, eq(workflowFiles.id, existing.id)));
       // Derived intel has no FK to the file — remove what this document put in
       // the graph, or the entities outlive their only source.
       queueDerivedIntelDelete('file', existing.id);
@@ -141,7 +149,7 @@ export const fileStoreExecutor: NodeExecutor = {
         await db
           .update(workflowFiles)
           .set({ sizeBytes: buf.byteLength, updatedAt: new Date() })
-          .where(eq(workflowFiles.id, existing.id));
+          .where(and(OWNER_FILE, eq(workflowFiles.id, existing.id)));
         return { output: { ok: true, name: fileName, sizeBytes: buf.byteLength, created: false }, rowCount: 1 };
       }
 
@@ -176,7 +184,7 @@ export const fileStoreExecutor: NodeExecutor = {
       await db
         .update(workflowFiles)
         .set({ sizeBytes: newSize, updatedAt: new Date() })
-        .where(eq(workflowFiles.id, existing.id));
+        .where(and(OWNER_FILE, eq(workflowFiles.id, existing.id)));
       return { output: { ok: true, name: fileName, sizeBytes: newSize, appendedBytes: buf.byteLength }, rowCount: 1 };
     }
 

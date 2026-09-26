@@ -25,6 +25,7 @@ import { driveIntelOutbox } from '$lib/db/schema';
  * The kinds:
  *
  *   file-changed   a file was created, renamed or re-indexed  -> queueIntelExtraction
+ *                  (the owner's files only; a member's is skipped)
  *   file-deleted   a file went away                           -> deleteDerivedIntel
  *   policy-resync  a folder's files need their policy applied -> syncSourcePolicy
  *
@@ -60,7 +61,9 @@ async function handle(row: { kind: string; ref: string; payload: unknown }): Pro
   if (row.kind === 'file-deleted') {
     // AWAITED, not queued, and the counts are kept: /drive shows what went with
     // the file, and reads them back off this row. deleteDerivedIntel is the same
-    // function the route used to call in-process.
+    // function the route used to call in-process. The row is gone by now, so
+    // whose it was cannot be read — and need not be: a member's file never had
+    // intel derived (file-changed skips it), so this deletes nothing for one.
     const { deleteDerivedIntel } = await import('./auto-extract');
     return await deleteDerivedIntel('file', row.ref);
   }
@@ -79,7 +82,11 @@ async function handle(row: { kind: string; ref: string; payload: unknown }): Pro
     // route its files to household (./source-space); the file's current name
     // says which.
     const { spaceForDriveFile } = await import('./source-policy.server');
-    queueIntelExtraction({ ...payload, spaceId: await spaceForDriveFile(row.ref) } as never);
+    const spaceId = await spaceForDriveFile(row.ref);
+    // A member's file (members/<id>/…): nothing of theirs goes into the owner's
+    // graph. Recorded on the row, so a skipped file is visible, not silent.
+    if (spaceId === null) return { skipped: 'member-file' };
+    queueIntelExtraction({ ...payload, spaceId } as never);
     return null;
   }
   throw new Error(`unknown drive-intel kind: ${row.kind}`);

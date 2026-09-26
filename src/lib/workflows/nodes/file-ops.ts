@@ -5,12 +5,20 @@ import type { NodeExecutor, NodeResult, ExecutionContext, JsonSchema } from '../
 import { interpolateTemplate } from './template';
 import { db } from '$lib/db';
 import { workflowFiles, type WorkflowFilePermissions } from '$lib/db/schema';
-import { eq, like } from 'drizzle-orm';
+import { and, eq, like } from 'drizzle-orm';
 import { readBuffer, saveBuffer, appendBuffer, deleteFile, newDiskPath } from '$lib/file-store/storage';
 import { queueDerivedIntelDelete } from '$lib/jkai/intel/auto-extract';
 import { fileReadDef, fileWriteDef, fileDeleteDef, fileListDef } from './file-ops.def';
 import { getPath as resolvePath } from '../expressions';
+import { isReservedForOwnerLane } from '$lib/drive/namespace';
 export { fileReadDef, fileWriteDef, fileDeleteDef, fileListDef } from './file-ops.def';
+
+// Workflows run as the owner: the owner's files only. A member's live under
+// members/<id>/ with their own principal_id (see $lib/drive/namespace).
+const OWNER_FILE = eq(workflowFiles.principalId, 'owner');
+function refuseReserved(node: string, fileName: string): void {
+  if (isReservedForOwnerLane(fileName)) throw new Error(`${node}: "${fileName}" is in the members' area of the drive, which workflows cannot touch`);
+}
 
 function permissionsFor(raw: unknown): WorkflowFilePermissions {
   const p = (raw ?? {}) as Partial<WorkflowFilePermissions>;
@@ -49,8 +57,9 @@ export const fileReadExecutor: NodeExecutor = {
   async execute(input, config, _ctx: ExecutionContext): Promise<NodeResult> {
     const fileName = interpolateTemplate((config.fileName as string) || '', input).trim();
     if (!fileName) throw new Error('file-read: fileName is required');
+    refuseReserved('file-read', fileName);
     const encoding = (config.encoding as 'utf8' | 'base64') || 'utf8';
-    const [existing] = await db.select().from(workflowFiles).where(eq(workflowFiles.name, fileName));
+    const [existing] = await db.select().from(workflowFiles).where(and(OWNER_FILE, eq(workflowFiles.name, fileName)));
     if (!existing) throw new Error(`file-read: file not found: ${fileName}`);
     const perms = permissionsFor(existing.permissions);
     if (!perms.read) throw new Error(`file-read: read permission denied on ${fileName}`);
@@ -90,6 +99,7 @@ export const fileWriteExecutor: NodeExecutor = {
   async execute(input, config, ctx: ExecutionContext): Promise<NodeResult> {
     const fileName = interpolateTemplate((config.fileName as string) || '', input).trim();
     if (!fileName) throw new Error('file-write: fileName is required');
+    refuseReserved('file-write', fileName);
     const encoding = (config.encoding as 'utf8' | 'base64') || 'utf8';
     const append = !!config.append;
     const contentPath = config.contentPath as string | undefined;
@@ -98,7 +108,7 @@ export const fileWriteExecutor: NodeExecutor = {
       : input.content !== undefined ? input.content : input;
     const buf = coerceToBuffer(raw, encoding);
 
-    const [existing] = await db.select().from(workflowFiles).where(eq(workflowFiles.name, fileName));
+    const [existing] = await db.select().from(workflowFiles).where(and(OWNER_FILE, eq(workflowFiles.name, fileName)));
     const perms = existing ? permissionsFor(existing.permissions) : null;
 
     if (append) {
@@ -107,7 +117,7 @@ export const fileWriteExecutor: NodeExecutor = {
       const newSize = await appendBuffer(existing.diskPath, buf);
       await db.update(workflowFiles)
         .set({ sizeBytes: newSize, updatedAt: new Date() })
-        .where(eq(workflowFiles.id, existing.id));
+        .where(and(OWNER_FILE, eq(workflowFiles.id, existing.id)));
       return { output: { ok: true, name: fileName, sizeBytes: newSize, appendedBytes: buf.byteLength, mode: 'append' }, rowCount: 1 };
     }
 
@@ -116,7 +126,7 @@ export const fileWriteExecutor: NodeExecutor = {
       await saveBuffer(existing.diskPath, buf);
       await db.update(workflowFiles)
         .set({ sizeBytes: buf.byteLength, updatedAt: new Date() })
-        .where(eq(workflowFiles.id, existing.id));
+        .where(and(OWNER_FILE, eq(workflowFiles.id, existing.id)));
       return { output: { ok: true, name: fileName, sizeBytes: buf.byteLength, created: false }, rowCount: 1 };
     }
 
@@ -155,12 +165,13 @@ export const fileDeleteExecutor: NodeExecutor = {
   async execute(input, config, ctx: ExecutionContext): Promise<NodeResult> {
     const fileName = interpolateTemplate((config.fileName as string) || '', input).trim();
     if (!fileName) throw new Error('file-delete: fileName is required');
-    const [existing] = await db.select().from(workflowFiles).where(eq(workflowFiles.name, fileName));
+    refuseReserved('file-delete', fileName);
+    const [existing] = await db.select().from(workflowFiles).where(and(OWNER_FILE, eq(workflowFiles.name, fileName)));
     if (!existing) return { output: { ok: true, deleted: false, reason: 'not-found', name: fileName }, rowCount: 1 };
     const perms = permissionsFor(existing.permissions);
     if (!perms.delete) throw new Error(`file-delete: delete permission denied on ${fileName}`);
     await deleteFile(existing.diskPath);
-    await db.delete(workflowFiles).where(eq(workflowFiles.id, existing.id));
+    await db.delete(workflowFiles).where(and(OWNER_FILE, eq(workflowFiles.id, existing.id)));
     // Derived intel has no FK to the file — remove what this document put in
     // the graph, or the entities outlive their only source.
     queueDerivedIntelDelete('file', existing.id);
@@ -187,8 +198,8 @@ export const fileListExecutor: NodeExecutor = {
   async execute(_input, config, _ctx: ExecutionContext): Promise<NodeResult> {
     const prefix = (config.prefix as string | undefined) || '';
     const rows = prefix
-      ? await db.select().from(workflowFiles).where(like(workflowFiles.name, `${prefix}%`))
-      : await db.select().from(workflowFiles);
+      ? await db.select().from(workflowFiles).where(and(OWNER_FILE, like(workflowFiles.name, `${prefix}%`)))
+      : await db.select().from(workflowFiles).where(OWNER_FILE);
     const files = rows.map((r) => ({
       id: r.id,
       name: r.name,

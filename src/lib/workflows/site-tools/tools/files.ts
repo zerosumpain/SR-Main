@@ -1,7 +1,7 @@
 import { register } from '../registry-internal';
 import { db } from '$lib/db';
 import { workflowFiles } from '$lib/db/schema';
-import { eq, like, desc } from 'drizzle-orm';
+import { and, eq, like, desc } from 'drizzle-orm';
 import { readBuffer } from '$lib/file-store/storage';
 import { extractText, ExtractError, kindFromMime } from '$lib/jkai/extract';
 import { searchFiles } from '$lib/file-index/search';
@@ -32,9 +32,12 @@ register({
       description: workflowFiles.description,
       updatedAt: workflowFiles.updatedAt,
     }).from(workflowFiles);
+    // The owner's files only: a member's live under members/<id>/ with their
+    // own principal_id, and the agent is John's (see $lib/drive/namespace).
+    const owner = eq(workflowFiles.principalId, 'owner');
     const rows = prefix
-      ? await base.where(like(workflowFiles.name, `${prefix}%`)).orderBy(desc(workflowFiles.updatedAt)).limit(limit)
-      : await base.orderBy(desc(workflowFiles.updatedAt)).limit(limit);
+      ? await base.where(and(owner, like(workflowFiles.name, `${prefix}%`))).orderBy(desc(workflowFiles.updatedAt)).limit(limit)
+      : await base.where(owner).orderBy(desc(workflowFiles.updatedAt)).limit(limit);
     return { success: true, data: { files: rows, count: rows.length } };
   },
 });
@@ -58,9 +61,10 @@ register({
     const name = typeof args.name === 'string' ? args.name : null;
     if (!id && !name) return { success: false, error: 'either id or name is required' };
 
+    const owner = eq(workflowFiles.principalId, 'owner');
     const [row] = id
-      ? await db.select().from(workflowFiles).where(eq(workflowFiles.id, id))
-      : await db.select().from(workflowFiles).where(eq(workflowFiles.name, name as string));
+      ? await db.select().from(workflowFiles).where(and(owner, eq(workflowFiles.id, id)))
+      : await db.select().from(workflowFiles).where(and(owner, eq(workflowFiles.name, name as string)));
     if (!row) return { success: false, error: 'file not found' };
 
     const perms = (row.permissions ?? {}) as { read?: boolean };

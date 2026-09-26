@@ -16,46 +16,15 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { accessGroup, activityPrincipals, allowedUser } from '$lib/db/schema';
-import {
-  BUILT_IN_GROUPS,
-  isOpenPermission,
-  levelOf,
-  parsePermissions,
-  type Permission,
-} from '$lib/access/catalogue';
+import { BUILT_IN_GROUPS, levelOf, parsePermissions, type Permission } from '$lib/access/catalogue';
+import { asList, effectivePermissions } from '$lib/access/effective';
 import { disableMemberGmail, ensureMemberPrincipal } from './members';
 
 export type AccessGroupRow = typeof accessGroup.$inferSelect;
 
-/** A jsonb list as stored, or empty: a hand-edited `{}` or `"x"` must not throw. */
-export function asList(value: unknown): readonly unknown[] {
-  return Array.isArray(value) ? value : [];
-}
-
-/**
- * The permissions a user holds.
- *
- * `role = 'member'` / `'household'` are the pre-groups ways of saying "their
- * own intel space" / "the family circle", kept so a row written before this
- * shipped keeps meaning what it meant.
- * `setUserAccess` resets it, so once the owner has saved a user from the new
- * page their groups and grants are the only source.
- */
-export function effectivePermissions(
-  user: { role: string; groups: unknown; grants: unknown },
-  groups: ReadonlyMap<string, unknown>,
-): Set<Permission> {
-  const out = new Set<Permission>(parsePermissions(asList(user.grants)));
-  for (const id of asList(user.groups)) {
-    if (typeof id !== 'string') continue;
-    for (const p of parsePermissions(asList(groups.get(id)))) out.add(p);
-  }
-  if (user.role === 'member') out.add('jkai.intel:self');
-  if (user.role === 'household') out.add('family:circle');
-  // Stored but not held until its area opens (see `isOpenPermission`).
-  for (const p of out) if (!isOpenPermission(p)) out.delete(p);
-  return out;
-}
+// Pure, and moved to $lib/access/effective so SR-Drive can resolve a member's
+// permissions from the same rows without this file's server imports.
+export { asList, effectivePermissions };
 
 /** Group ids a user may be put in: the stored list, known groups only, once each. */
 function cleanGroupIds(ids: readonly unknown[], known: ReadonlySet<string>): string[] {

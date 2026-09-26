@@ -6,11 +6,12 @@ import type { NodeExecutor, NodeResult, ExecutionContext, JsonSchema } from '../
 import { interpolateTemplate } from './template';
 import { db } from '$lib/db';
 import { workflowFiles } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { saveBuffer, newDiskPath } from '$lib/file-store/storage';
 import { synthesize, ExtractError, type SynthesizeFormat, type SynthesizeSource } from '$lib/jkai/extract';
 import { fileBuildDef } from './file-build.def';
 import { getPath as resolvePath } from '../expressions';
+import { isReservedForOwnerLane } from '$lib/drive/namespace';
 export { fileBuildDef } from './file-build.def';
 
 function coerceContent(raw: unknown, source: SynthesizeSource): string | Buffer {
@@ -34,12 +35,15 @@ function toBool(v: unknown): boolean {
 
 async function writeWorkflowFile(name: string, buffer: Buffer, mimeType: string): Promise<{ id: string; name: string }> {
   const cleanName = name.replace(/^\/+/, '').slice(0, 200);
-  const [existing] = await db.select().from(workflowFiles).where(eq(workflowFiles.name, cleanName));
+  // Workflows write the owner's files only; members/<id>/ is theirs ($lib/drive/namespace).
+  if (isReservedForOwnerLane(cleanName)) throw new Error(`file-build: "${cleanName}" is in the members' area of the drive, which workflows cannot touch`);
+  const owner = eq(workflowFiles.principalId, 'owner');
+  const [existing] = await db.select().from(workflowFiles).where(and(owner, eq(workflowFiles.name, cleanName)));
   if (existing) {
     await saveBuffer(existing.diskPath, buffer);
     await db.update(workflowFiles)
       .set({ sizeBytes: buffer.byteLength, mimeType, updatedAt: new Date() })
-      .where(eq(workflowFiles.id, existing.id));
+      .where(and(owner, eq(workflowFiles.id, existing.id)));
     return { id: existing.id, name: existing.name };
   }
   const diskPath = newDiskPath(cleanName);

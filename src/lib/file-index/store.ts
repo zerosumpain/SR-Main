@@ -13,7 +13,7 @@
 // leave stale vectors, and the unique(fileId,chunkOrd) index can never be hit by
 // a losing racer.
 
-import { eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { workflowFiles, fileEmbeddings, type NewFileEmbedding } from '$lib/db/schema';
 import { readBuffer } from '$lib/file-store/storage';
@@ -179,7 +179,10 @@ export async function indexFile(fileId: string): Promise<IndexResult> {
   // in the graph. Categories inherited from the folder tree ride along so the
   // Intel graph filter can select on them.
   const policy = await policyForFileName(row.name);
-  if (policy && !policy.included) {
+  if (row.principalId !== 'owner') {
+    // A member's file is theirs: it never feeds the owner's intel graph.
+    console.log(`[file-index] ${row.name} is a member's file — skipping intel extraction`);
+  } else if (policy && !policy.included) {
     console.log(`[file-index] ${row.name} is in an ER-excluded folder — skipping intel extraction`);
   } else {
     queueIntelExtraction({
@@ -226,10 +229,14 @@ export type BackfillResult = { scanned: number; indexed: number; skipped: number
  * that skipped the reindex hook). Runs sequentially to bound gateway load.
  */
 export async function backfillMissing(full = false): Promise<BackfillResult> {
+  // The owner's files: members' files are indexed by SR-Drive, if at all.
   const base = db
     .select({ id: workflowFiles.id, mimeType: workflowFiles.mimeType, name: workflowFiles.name })
     .from(workflowFiles);
-  const candidates = await (full ? base : base.where(isNull(workflowFiles.contentHash))).limit(BACKFILL_LIMIT + 1);
+  const owned = eq(workflowFiles.principalId, 'owner');
+  const candidates = await (full ? base.where(owned) : base.where(and(owned, isNull(workflowFiles.contentHash)))).limit(
+    BACKFILL_LIMIT + 1,
+  );
   const truncated = candidates.length > BACKFILL_LIMIT;
   const batch = truncated ? candidates.slice(0, BACKFILL_LIMIT) : candidates;
 

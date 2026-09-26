@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 /**
- * 38 modules in this repository are also held, byte for byte, by an extracted
+ * 47 modules in this repository are also held, byte for byte, by an extracted
  * application. Each was duplicated rather than moved, for a reason recorded in
  * shared-with-extracted.json.
  *
@@ -59,12 +59,15 @@ describe('modules shared with the extracted applications', () => {
     // Adding a duplicate without listing it here is how the two copies start
     // disagreeing with nothing to notice.
     expect(Object.keys(manifest.files).sort()).toEqual([
+      'src/lib/access/catalogue.ts',
+      'src/lib/access/effective.ts',
       'src/lib/components/SiteHeader.svelte',
       'src/lib/config/owner.ts',
       'src/lib/constants/apple-health-scale.ts',
       'src/lib/constants/planner-sports.ts',
       'src/lib/datastore/audit.ts',
       'src/lib/datastore/permissions.ts',
+      'src/lib/drive/namespace.ts',
       'src/lib/file-index/content.ts',
       'src/lib/file-index/describe.ts',
       'src/lib/file-index/embed.ts',
@@ -88,10 +91,12 @@ describe('modules shared with the extracted applications', () => {
       'src/lib/llm/usage-log.ts',
       'src/lib/llm/usage-meter.ts',
       'src/lib/nav/page-path.ts',
+      'src/lib/nav/reach.ts',
       'src/lib/nav/site-nav.ts',
       'src/lib/secrets/crypto.ts',
       'src/lib/server/access-util.ts',
       'src/lib/server/access.ts',
+      'src/lib/server/area-predicates.ts',
       'src/lib/server/health-context-contract.ts',
       'src/lib/server/health-hub-contract.ts',
       'src/lib/server/health-signals-contract.ts',

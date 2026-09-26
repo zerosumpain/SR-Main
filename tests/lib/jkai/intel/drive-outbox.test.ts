@@ -29,7 +29,7 @@ const queueDerivedIntelDelete = vi.fn();
 const deleteDerivedIntel = vi.fn(async () => ({ notesDeleted: 0, entitiesRemoved: 0, relationshipsRemoved: 0 }));
 const syncSourcePolicy = vi.fn(async () => ({ scanned: 0 }));
 // A folder can route a file to household; the drain must carry what it resolves.
-const spaceForDriveFile = vi.fn(async () => 'household');
+const spaceForDriveFile = vi.fn(async (): Promise<string | null> => 'household');
 vi.mock('../../../../src/lib/jkai/intel/auto-extract', () => ({ queueIntelExtraction, queueDerivedIntelDelete, deleteDerivedIntel }));
 vi.mock('../../../../src/lib/jkai/intel/source-policy.server', () => ({ syncSourcePolicy, spaceForDriveFile }));
 
@@ -116,5 +116,21 @@ describe('the counts a deletion reports', () => {
     await drainDriveIntelOutbox();
     const stored = updates.find((u) => 'result' in u);
     expect(stored?.result).toBeNull();
+  });
+});
+
+describe("a member's file", () => {
+  it('never reaches the owner\'s graph: no extraction is queued, and the skip is recorded', async () => {
+    const { enqueueDriveIntel, drainDriveIntelOutbox } = await mod();
+    // spaceForDriveFile answers null for a file whose principal is not the owner.
+    spaceForDriveFile.mockResolvedValueOnce(null);
+    await enqueueDriveIntel('file-changed', 'file-m', { kind: 'file', refId: 'file-m' });
+
+    const result = await drainDriveIntelOutbox();
+
+    expect(spaceForDriveFile).toHaveBeenCalledWith('file-m');
+    expect(queueIntelExtraction).not.toHaveBeenCalled();
+    expect(result).toEqual({ processed: 1, failed: 0 });
+    expect(updates.find((u) => 'result' in u)?.result).toEqual({ skipped: 'member-file' });
   });
 });
