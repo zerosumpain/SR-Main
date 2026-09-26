@@ -98,6 +98,7 @@
           SR-Main is measured from this build.
         {/if}
         The deployment chart below currently records SR-Main releases only.
+        Shared source copied into more than one repository is counted in each repository's row.
       </p>
     </div>
 

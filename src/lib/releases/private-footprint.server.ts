@@ -14,12 +14,13 @@ export function withPrivateFootprint(
 ): Footprint {
   const snapshot: unknown = JSON.parse(readFileSync(sourcePath, 'utf8'));
   if (!snapshot || typeof snapshot !== 'object' || !('repositories' in snapshot) ||
-      !Array.isArray(snapshot.repositories) || snapshot.repositories.length !== 7 ||
+      !Array.isArray(snapshot.repositories) || snapshot.repositories.length < 7 ||
       !('measuredAt' in snapshot) || typeof snapshot.measuredAt !== 'string') {
-    throw new Error('Private site footprint must contain seven revision-pinned repositories');
+    throw new Error('Private site footprint must contain the revision-pinned service repositories');
   }
 
   const repositories: Repository[] = [...publicFootprint.repositories];
+  const ids = new Set(repositories.map((repository) => repository.id));
   for (const value of snapshot.repositories) {
     if (!value || typeof value !== 'object' ||
         !['id', 'name', 'url', 'role', 'revision', 'measuredAt', 'source'].every(
@@ -30,6 +31,8 @@ export function withPrivateFootprint(
           Number.isSafeInteger(value[key].files) && value[key].files >= 0)) {
       throw new Error('Invalid private site footprint repository');
     }
+    if (ids.has(value.id)) throw new Error(`Duplicate private site footprint repository: ${value.id}`);
+    ids.add(value.id);
     repositories.push(value as Repository);
   }
 

@@ -28,7 +28,7 @@ describe('private site footprint', () => {
     const path = join(temp, 'footprint.json');
     writeFileSync(path, JSON.stringify({
       measuredAt: '2026-09-26',
-      repositories: Array.from({ length: 7 }, (_, index) => ({
+      repositories: Array.from({ length: 10 }, (_, index) => ({
         id: `private-${index}`, name: `Private ${index}`, url: 'https://example.com',
         role: 'Service', revision: 'def', measuredAt: '2026-09-26', source: 'revision snapshot',
         code: { lines: 4, files: 1 }, documentation: { lines: 5, files: 1 },
@@ -37,10 +37,10 @@ describe('private site footprint', () => {
     }));
 
     const owner = withPrivateFootprint(main, path);
-    expect(owner.repositories).toHaveLength(8);
-    expect(owner.categories.code.lines).toBe(38);
-    expect(owner.categories.documentation.lines).toBe(37);
-    expect(owner.categories.tests.lines).toBe(45);
+    expect(owner.repositories).toHaveLength(11);
+    expect(owner.categories.code.lines).toBe(50);
+    expect(owner.categories.documentation.lines).toBe(52);
+    expect(owner.categories.tests.lines).toBe(63);
     expect(main.repositories).toHaveLength(1);
     expect(main.categories.code.lines).toBe(10);
   });
