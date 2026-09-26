@@ -89,6 +89,21 @@
   const stages = $derived(showEmpty ? [...WORK_STAGES] : WORK_STAGES.filter((s) => counts.all[s] > 0));
   const hidden = $derived(WORK_STAGES.length - stages.length);
 
+  /** The board never scrolls sideways. As many columns as fit at
+   *  `MIN_COL` px go on a row, and the stages are spread evenly over the rows
+   *  that takes — seven stages at five-a-row reads as 4 + 3, not 5 + 2.
+   *  Zero width (SSR, before measure) draws every column on one row. */
+  const MIN_COL = 230;
+  const GAP = 12;
+  let boardWidth = $state(0);
+  const perRow = $derived.by(() => {
+    const n = Math.max(stages.length, 1);
+    if (!boardWidth) return n;
+    const fit = Math.max(1, Math.floor((boardWidth + GAP) / (MIN_COL + GAP)));
+    if (fit >= n) return n;
+    return Math.ceil(n / Math.ceil(n / fit));
+  });
+
   /** Every count on a chip is over the WHOLE board, never the filtered set — a
    *  chip whose number shrank as you pressed its neighbour would be describing
    *  a population it does not name. */
@@ -327,8 +342,8 @@
     </p>
   </div>
 {:else}
-  <div class="qb-scroll">
-    <div class="qb" style="--cols:{stages.length}">
+  <div class="qb-wrap" bind:clientWidth={boardWidth}>
+    <div class="qb" style="--cols:{perRow}">
       {#each stages as stage (stage)}
         {@const cards = visible.filter((c) => c.stage === stage)}
         {@const cap = expanded.includes(stage) ? cards.length : COLUMN_CAP}
@@ -594,17 +609,19 @@
   }
 
   /* ── the board ────────────────────────────────────────────────────────── */
-  .qb-scroll {
-    overflow-x: auto;
+  .qb-wrap {
     margin-top: 18px;
     padding-bottom: 12px;
+    min-width: 0;
   }
+  /* `minmax(0, 1fr)`, never a px floor: a floor is what pushed the board past
+     the page edge. `perRow` in the script decides how many columns share a
+     row, so a track never gets narrower than MIN_COL anyway. */
   .qb {
     display: grid;
-    grid-template-columns: repeat(var(--cols), minmax(268px, 1fr));
+    grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
     gap: 12px;
     align-items: start;
-    min-width: min-content;
   }
 
   .col {
@@ -814,9 +831,6 @@
   }
 
   @media (max-width: 720px) {
-    .qb {
-      grid-template-columns: minmax(258px, 1fr);
-    }
     .col-body {
       max-height: none;
     }

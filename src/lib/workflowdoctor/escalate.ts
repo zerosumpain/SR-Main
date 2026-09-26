@@ -32,7 +32,7 @@ import { AUTO_APPLY_KINDS, errMsg, type DoctorFindingData, type FixKind } from '
 
 /**
  * Fixes that need a person with a card, an account or a password. Real, and
- * already on `/jkai/daydreams/doctor` as findings — but not buildable, so
+ * already on `/jkai/develop/doctor` as findings — but not buildable, so
  * they never enter the backlog.
  */
 const HUMAN_ONLY: ReadonlyArray<FixKind> = [

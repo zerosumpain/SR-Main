@@ -1,13 +1,16 @@
 <script lang="ts">
   import type { PageData } from './$types';
   import { invalidateAll } from '$app/navigation';
+  import DaydreamShell from '$lib/components/jkai/daydream/hub/DaydreamShell.svelte';
+  import DsVocab from '$lib/components/jkai/daydream/hub/DsVocab.svelte';
   import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
   import StatDeck from '$lib/components/jkai/daydream/hub/StatDeck.svelte';
   import type { DeckTile } from '$lib/components/jkai/daydream/hub/types';
-  import QueueBoard from '$lib/components/jkai/daydream/rooms/QueueBoard.svelte';
-  import ReviewLane from '$lib/components/jkai/daydream/rooms/ReviewLane.svelte';
-  import BurndownChart from '$lib/components/jkai/daydream/rooms/BurndownChart.svelte';
-  import { postThought } from '$lib/daydream/feed-client';
+  import QueueBoard from '$lib/components/builds/backlog/QueueBoard.svelte';
+  import ReviewLane from '$lib/components/builds/backlog/ReviewLane.svelte';
+  import BurndownChart from '$lib/components/builds/backlog/BurndownChart.svelte';
+  import { postBacklog } from '$lib/builds/backlog-client';
+  import { developRoomRail } from '$lib/builds/develop-nav';
 
   let { data }: { data: PageData } = $props();
 
@@ -22,7 +25,7 @@
   async function act(body: Record<string, unknown>, key: string) {
     busy = key;
     actionError = null;
-    const result = await postThought(body);
+    const result = await postBacklog(body);
     if (!result.ok) actionError = result.error ?? 'that did not work';
     // A bulk action can partially succeed. Reload on both paths, so no card can
     // claim the pre-action state after nineteen of twenty writes landed.
@@ -80,17 +83,40 @@
   ]);
 </script>
 
-<svelte:head><title>Daydream backlog — JKAI</title></svelte:head>
+<svelte:head><title>Build backlog — JKAI</title></svelte:head>
+
+<!-- The board takes the whole width: a kanban squeezed into a reading measure
+     was the reason it scrolled sideways. `.wide` lifts the vocabulary's 1500px
+     cap for this page only. -->
+<DaydreamShell
+  path="/jkai/develop/backlog"
+  kicker="JKAI · Build process · Backlog"
+  title={['Everything queued', 'to build next']}
+  standfirst="One queue for every idea the site has about itself — the think loop's build notes, the workflow doctor's escalations, the questions you ask and what you add yourself — deduped as it arrives. Nothing costly is built until you accept its brief."
+  readout={[
+    { label: 'Open', value: String(totals.open) },
+    { label: 'Epics', value: String(data.epics.length) },
+    { label: 'To review', value: String(pending) },
+  ]}
+  tabs={developRoomRail()}
+  active="backlog"
+  footer={[
+    'strangeramblings.com/jkai/develop/backlog',
+    'proposed → accepted → building → verifying → live',
+    'at most one tapped build and one watch a night',
+  ]}
+>
+<DsVocab>
 
 <section class="band">
-  <div class="inner">
+  <div class="inner wide">
     <SectionHead
-      kicker="A / The backlog"
+      kicker="A / The board"
       title={['Everything it wants', 'to do next']}
       strap="Every feature the engine is holding, grouped into the areas they belong to and ordered the way it will reach for them. Switch the board between epics and the deliverables inside them, review a card’s brief to accept it (only accepted briefs get built), drag one to park it, and open any card to name it, rank it or take it out."
     />
 
-    <p><a href="/jkai/develop">Commission and review a whole-site feature →</a></p>
+    <p><a href="/jkai/develop">Commission and review a whole-site feature →</a> · <a href="/jkai/develop/doctor">What the doctor escalated →</a></p>
 
     {#if data.error}
       <div class="card t-urgent">
@@ -128,3 +154,13 @@
     </div>
   </section>
 {/if}
+</DsVocab>
+</DaydreamShell>
+
+<style>
+  /* Full width for the board band only; the review lane and the burndown keep
+     the vocabulary's measure. */
+  .band > .inner.wide {
+    max-width: none;
+  }
+</style>

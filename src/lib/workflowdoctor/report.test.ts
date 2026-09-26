@@ -29,7 +29,7 @@ import { hasSensitive } from '$lib/security/sensitive';
 import { buildReportText, buildWhatsappSummary, finalizeAndNotify } from './report';
 import { COLLECTIONS, emptyPhases, type DoctorAction, type DoctorRunData } from './types';
 
-const DOCTOR_LINK = 'https://strangeramblings.com/jkai/daydreams/doctor';
+const DOCTOR_LINK = 'https://strangeramblings.com/jkai/develop/doctor';
 
 /** A real-shaped OpenRouter key (sk-or-v1- + 40) and an Ofcom fictional UK number. */
 const FAKE_KEY = `sk-or-v1-${'a1b2c3d4e5'.repeat(4)}`;
@@ -274,7 +274,7 @@ describe('finalizeAndNotify', () => {
     expect(notifyOwner).toHaveBeenCalledWith(
       expect.objectContaining({
         category: 'build',
-        url: '/jkai/daydreams/doctor',
+        url: '/jkai/develop/doctor',
         whatsappText: buildWhatsappSummary(data),
       }),
     );

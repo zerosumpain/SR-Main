@@ -53,7 +53,7 @@ function localDay(now: Date, daysAgo: number): string {
 }
 
 /** Where a build idea waits for the owner's tap since D3 (2026-09-26). */
-const BACKLOG = '/jkai/daydreams/backlog';
+const BACKLOG = '/jkai/develop/backlog';
 const trim = (s: string, n = 90) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 /** Notes listed as facts, each its own linked line. */
 const NOTE_FACTS = 8;

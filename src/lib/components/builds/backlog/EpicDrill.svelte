@@ -221,7 +221,7 @@
         <button type="button" class="cta sm" onclick={() => (adding = true)}>+ Add deliverable</button>
       </div>
 
-      <div class="tbl-wrap">
+      <div class="tbl-wrap led-wrap">
         <table class="tbl">
           <colgroup>
             <col style="width: 104px" />
@@ -506,11 +506,42 @@
 
   .tbl {
     /* Fixed, with the colgroup above: `auto` lets the widest brief in the
-       ledger push the action column off its track and over the text. And a
-       floor under the measure, so a narrow panel scrolls the ledger sideways
-       rather than squeezing four tracks into a word each. */
+       ledger push the action column off its track and over the text. Below
+       760px each row becomes a card (the container query below) rather than
+       squeezing four tracks into a word each or scrolling sideways. */
     table-layout: fixed;
-    min-width: 760px;
+  }
+  .led-wrap {
+    container-type: inline-size;
+    overflow-x: visible;
+  }
+  @container (max-width: 759px) {
+    .tbl colgroup,
+    .tbl thead {
+      display: none;
+    }
+    .tbl,
+    .tbl tbody {
+      display: block;
+    }
+    .tbl tbody tr {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 6px;
+      padding: 12px 4px;
+    }
+    .tbl tbody tr > :global(td) {
+      display: block;
+      padding: 0;
+      border: 0;
+      min-width: 0;
+    }
+    .why {
+      min-width: 0;
+    }
+    .act-stack {
+      justify-content: flex-start;
+    }
   }
   .tbl :global(td) {
     vertical-align: top;

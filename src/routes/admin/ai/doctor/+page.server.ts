@@ -16,7 +16,7 @@ import {
 } from '$lib/workflowdoctor/types';
 
 // The doctor's CONTROL surface — switches, "Run now", and the undo list. The
-// narrative report lives at /jkai/daydreams/doctor; this page is deliberately the boring
+// narrative report lives at /jkai/develop/doctor; this page is deliberately the boring
 // one. Owner-gated in hooks.server.ts (page + /api/admin/*), so there is no auth
 // code here. Reads go through $lib/datastore as the `owner` actor; every
 // mutation goes out through /api/admin/doctor/*, matching the improvement admin
