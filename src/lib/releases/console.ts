@@ -15,6 +15,7 @@
 import { and, asc, desc, eq, gte, ilike, inArray, lt, or, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { releases, releaseItems } from '$lib/db/schema';
+import { correctedFacts, correctedStats } from './corrected-facts';
 import type { CommitFact, FileFact, ReleaseItemKind, ReleaseStats } from './types';
 
 export const CONSOLE_PAGE_SIZE = 25;
@@ -104,6 +105,7 @@ export interface ConsoleRelease {
   files: FileFact[];
   items: ConsoleItem[];
   itemCount: number;
+  corrected: boolean;
 }
 
 export interface ConsoleTotals {
@@ -244,6 +246,7 @@ export async function getReleaseConsole(filters: ConsoleFilters): Promise<Consol
     db
       .select({
         id: releases.id,
+        sha: releases.sha,
         deployedAt: releases.deployedAt,
         via: releases.via,
         stats: releases.stats,
@@ -292,8 +295,8 @@ export async function getReleaseConsole(filters: ConsoleFilters): Promise<Consol
   let maxDate: string | null = null;
 
   for (const r of agg) {
-    const s =
-      (r.stats as { commits?: number; files?: number; insertions?: number; deletions?: number }) || {};
+    const s = correctedStats(r.sha,
+      (r.stats as ReleaseStats) ?? { commits: 0, files: 0, insertions: 0, deletions: 0, prs: [] });
     commits += s.commits || 0;
     files += s.files || 0;
     insertions += s.insertions || 0;
@@ -350,45 +353,57 @@ export async function getReleaseConsole(filters: ConsoleFilters): Promise<Consol
 
   // jsonb columns arrive as `unknown`; resolve every cast here so the page
   // template stays free of them.
-  const items: ConsoleRelease[] = rows.map((r) => ({
-    id: r.id,
-    version: r.version,
-    sha: r.sha,
-    shortSha: r.shortSha,
-    prevSha: r.prevSha,
-    via: r.via,
-    deployedAt: r.deployedAt,
-    title: r.title,
-    summary: r.summary,
-    summaryStatus: r.summaryStatus,
-    summaryError: r.summaryError,
-    summaryModel: r.summaryModel,
-    kinds: ((r.kinds as string[]) || []) as ReleaseItemKind[],
-    stats: (r.stats as ReleaseStats) ?? { commits: 0, files: 0, insertions: 0, deletions: 0, prs: [] },
-    // Commit bodies are only read inside the detail modal; trimming them here
-    // keeps a 25-release page from shipping ~1MB of prose.
-    commits: ((r.commits as CommitFact[]) || []).map((c) => ({
-      ...c,
-      body: c.body && c.body.length > 600 ? c.body.slice(0, 600) + '…' : c.body,
-    })),
-    files: ((r.files as FileFact[]) || []) as FileFact[],
-    items: (itemsByRelease[r.id] || [])
-      .filter((it) => (kind === 'all' || it.kind === kind) && (impact === 'all' || it.impact === impact))
-      .map((it) => ({
-        id: it.id,
-        kind: it.kind as ReleaseItemKind,
-        impact: it.impact,
-        title: it.title,
-        summary: it.summary,
-        confidence: it.confidence,
-        includes: (it.includes as string[]) || [],
-        excludes: (it.excludes as string[]) || [],
-        surfaces: (it.surfaces as string[]) || [],
-        files: (it.files as string[]) || [],
-        commits: (it.commits as string[]) || [],
+  const items: ConsoleRelease[] = rows.map((r) => {
+    const facts = correctedFacts(
+      r.sha,
+      r.prevSha,
+      (r.commits as CommitFact[]) ?? [],
+      (r.files as FileFact[]) ?? [],
+    );
+    return {
+      id: r.id,
+      version: r.version,
+      sha: r.sha,
+      shortSha: r.shortSha,
+      prevSha: facts.prevSha,
+      via: r.via,
+      deployedAt: r.deployedAt,
+      title: r.title,
+      summary: r.summary,
+      summaryStatus: r.summaryStatus,
+      summaryError: r.summaryError,
+      summaryModel: r.summaryModel,
+      kinds: ((r.kinds as string[]) || []) as ReleaseItemKind[],
+      stats: correctedStats(
+        r.sha,
+        (r.stats as ReleaseStats) ?? { commits: 0, files: 0, insertions: 0, deletions: 0, prs: [] },
+      ),
+      // Commit bodies are only read inside the detail modal; trimming them here
+      // keeps a 25-release page from shipping ~1MB of prose.
+      commits: facts.commits.map((c) => ({
+        ...c,
+        body: c.body && c.body.length > 600 ? c.body.slice(0, 600) + '…' : c.body,
       })),
-    itemCount: (itemsByRelease[r.id] || []).length,
-  }));
+      files: facts.files,
+      items: (itemsByRelease[r.id] || [])
+        .filter((it) => (kind === 'all' || it.kind === kind) && (impact === 'all' || it.impact === impact))
+        .map((it) => ({
+          id: it.id,
+          kind: it.kind as ReleaseItemKind,
+          impact: it.impact,
+          title: it.title,
+          summary: it.summary,
+          confidence: it.confidence,
+          includes: (it.includes as string[]) || [],
+          excludes: (it.excludes as string[]) || [],
+          surfaces: (it.surfaces as string[]) || [],
+          files: (it.files as string[]) || [],
+          commits: (it.commits as string[]) || [],
+        })),
+      itemCount: (itemsByRelease[r.id] || []).length,
+      corrected: facts.corrected,
+    };
+  });
 
   return {
     filters,

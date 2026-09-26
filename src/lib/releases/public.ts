@@ -22,7 +22,8 @@ import { db } from '$lib/db';
 import { releases, releaseItems, projectVisibility } from '$lib/db/schema';
 import { desc, sql } from 'drizzle-orm';
 import { isItemPublic, redactItem } from './public-filter';
-import type { ReleaseItemKind } from './types';
+import { correctedStats } from './corrected-facts';
+import type { ReleaseItemKind, ReleaseStats } from './types';
 
 /** Release data only changes when a deploy lands, so this can be generous. */
 const CACHE_MS = 5 * 60_000;
@@ -127,29 +128,16 @@ const EMPTY: ShowcasePayload = {
 };
 
 async function compute(): Promise<ShowcasePayload> {
-  const [statRows, dayRows, itemRows, vis] = await Promise.all([
-    // Aggregate in Postgres, not in Node — the admin page sums 418 rows in JS
-    // because it also needs them for filtering; this view needs only the totals.
+  const [statRows, itemRows, vis] = await Promise.all([
+    // Keep the release boundary beside its stats so a known empty-tree import
+    // can be repaired before either the headline or the weekly chart sums it.
     db
       .select({
-        n: sql<number>`count(*)::int`,
-        commits: sql<number>`coalesce(sum((${releases.stats}->>'commits')::int), 0)::int`,
-        files: sql<number>`coalesce(sum((${releases.stats}->>'files')::int), 0)::int`,
-        insertions: sql<number>`coalesce(sum((${releases.stats}->>'insertions')::int), 0)::int`,
-        deletions: sql<number>`coalesce(sum((${releases.stats}->>'deletions')::int), 0)::int`,
-        first: sql<string | null>`min(${releases.deployedAt})`,
-        last: sql<string | null>`max(${releases.deployedAt})`,
+        sha: releases.sha,
+        stats: releases.stats,
+        deployedAt: releases.deployedAt,
       })
       .from(releases),
-    db
-      .select({
-        day: sql<string>`to_char(${releases.deployedAt} at time zone 'UTC', 'YYYY-MM-DD')`,
-        n: sql<number>`count(*)::int`,
-        insertions: sql<number>`coalesce(sum((${releases.stats}->>'insertions')::int), 0)::int`,
-        deletions: sql<number>`coalesce(sum((${releases.stats}->>'deletions')::int), 0)::int`,
-      })
-      .from(releases)
-      .groupBy(sql`1`),
     // Every summarised item, newest first. 1,056 rows of short text is a single
     // cheap read, and the safety filter has to run in Node anyway — it depends
     // on the visibility map and on prose matching.
@@ -170,9 +158,26 @@ async function compute(): Promise<ShowcasePayload> {
     visibilityMap(),
   ]);
 
-  const s = statRows[0];
-  const first = s?.first ? new Date(s.first) : null;
-  const last = s?.last ? new Date(s.last) : null;
+  let first: Date | null = null;
+  let last: Date | null = null;
+  const totals = { commits: 0, files: 0, insertions: 0, deletions: 0 };
+  const dayCounts = new Map<string, { count: number; insertions: number; deletions: number }>();
+  for (const row of statRows) {
+    const at = new Date(row.deployedAt);
+    if (!first || at < first) first = at;
+    if (!last || at > last) last = at;
+    const stats = correctedStats(row.sha, row.stats as ReleaseStats);
+    totals.commits += stats.commits ?? 0;
+    totals.files += stats.files ?? 0;
+    totals.insertions += stats.insertions ?? 0;
+    totals.deletions += stats.deletions ?? 0;
+    const day = at.toISOString().slice(0, 10);
+    const bucket = dayCounts.get(day) ?? { count: 0, insertions: 0, deletions: 0 };
+    bucket.count++;
+    bucket.insertions += stats.insertions ?? 0;
+    bucket.deletions += stats.deletions ?? 0;
+    dayCounts.set(day, bucket);
+  }
 
   const safe = itemRows.filter((r) =>
     isItemPublic({ ...r, surfaces: (r.surfaces as string[]) ?? [] }, vis),
@@ -180,10 +185,6 @@ async function compute(): Promise<ShowcasePayload> {
 
   const kindCounts = new Map<string, number>();
   for (const r of safe) kindCounts.set(r.kind, (kindCounts.get(r.kind) ?? 0) + 1);
-
-  const dayCounts = new Map(dayRows.map((d) => [d.day, {
-    count: d.n, insertions: d.insertions, deletions: d.deletions,
-  }]));
 
   // Capabilities per day, counted from the SAFE set only — so the lower comb
   // never implies work the page is not allowed to describe.
@@ -195,11 +196,8 @@ async function compute(): Promise<ShowcasePayload> {
 
   return {
     totals: {
-      releases: s?.n ?? 0,
-      commits: s?.commits ?? 0,
-      files: s?.files ?? 0,
-      insertions: s?.insertions ?? 0,
-      deletions: s?.deletions ?? 0,
+      releases: statRows.length,
+      ...totals,
       shipped: safe.length,
       firstDeploy: first ? first.toISOString() : null,
       lastDeploy: last ? last.toISOString() : null,

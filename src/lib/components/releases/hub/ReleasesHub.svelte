@@ -77,7 +77,11 @@
 
   // ——— A ————————————————————————————————————————————————————————————
   const tiles = $derived.by((): Tile[] => {
-    const source: Tile = { label: 'Current source lines', value: fmt(data.sourceFootprint.lines), note: `${fmt(data.sourceFootprint.files)} source files · this build` };
+    const source: Tile = {
+      label: data.mode === 'owner' ? 'Site code lines' : 'SR-Main code lines',
+      value: fmt(data.sourceFootprint.categories.code.lines),
+      note: data.mode === 'owner' ? `${data.sourceFootprint.repositories.length} repositories · see breakdown below` : 'current site build',
+    };
     if (data.mode === 'owner') {
       const t = data.totals;
       return [
@@ -117,8 +121,8 @@
 
   const cadenceStrap = $derived(
     data.mode === 'owner'
-      ? 'Switch between deploy activity and code added or removed by week. The chart follows the filters above; code counts come from each release’s recorded diff stats.'
-      : 'Switch between deploy activity and code added or removed by week. Deploy and code counts cover all recorded releases; capabilities count only what this page can describe.',
+      ? 'Switch between deploy activity and lines added or removed by week. Select a week or kind to filter the release log. Changes here cover SR-Main releases.'
+      : 'Switch between deploy activity and lines added or removed by week. Select a week or kind to filter the log; capabilities count only what this page can describe.',
   );
 
   // ——— C ————————————————————————————————————————————————————————————
@@ -210,9 +214,10 @@
     {kindMix}
     shippedLabel={owner ? 'Entries' : 'Capabilities'}
     strap={cadenceStrap}
+    filters={data.filters}
   />
 
-  <section class="c">
+  <section class="c" id="release-log">
     <div class="c-inner">
       <SectionHead
         kicker={logKicker}
