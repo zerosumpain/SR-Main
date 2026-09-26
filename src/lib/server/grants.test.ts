@@ -13,10 +13,10 @@ const groups = new Map<string, readonly unknown[]>([
 describe('effectivePermissions', () => {
   it('is the union of the groups and the one-off grants', () => {
     const got = effectivePermissions(
-      { role: 'guest', groups: ['family-circle', 'readers'], grants: ['jkai.notes:self'] },
+      { role: 'guest', groups: ['family-circle', 'readers'], grants: ['jkai.intel:self'] },
       groups,
     );
-    expect([...got].sort()).toEqual(['family:circle', 'jkai.notes:self', 'news:self', 'research:all']);
+    expect([...got].sort()).toEqual(['family:circle', 'jkai.intel:self', 'news:self', 'research:all']);
   });
 
   it('ignores a group that no longer exists and permissions no code defines', () => {
@@ -26,6 +26,12 @@ describe('effectivePermissions', () => {
 
   it('reads a pre-groups member row as their own intel space', () => {
     expect([...effectivePermissions({ role: 'member', groups: [], grants: [] }, groups)]).toEqual(['jkai.intel:self']);
+  });
+
+  it('holds nothing in an area that has not opened yet, whatever is stored', () => {
+    // jkai.notes and jkai.chat open in later phases.
+    const got = effectivePermissions({ role: 'guest', groups: [], grants: ['jkai.notes:admin', 'jkai.chat:self', 'research:self'] }, groups);
+    expect([...got]).toEqual(['research:self']);
   });
 
   it('gives a guest with nothing nothing', () => {

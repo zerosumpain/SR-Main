@@ -1,16 +1,12 @@
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { narrativeItems, facts, sources, researchSessions } from '$lib/db/schema';
+import { narrativeItems, facts, sources } from '$lib/db/schema';
 import { eq, asc } from 'drizzle-orm';
+import { requireResearchSession } from '$lib/deepdive/session-access.server';
 
-export const GET: RequestHandler = async ({ params }) => {
-  const [session] = await db
-    .select({ topic: researchSessions.topic })
-    .from(researchSessions)
-    .where(eq(researchSessions.id, params.id))
-    .limit(1);
-
-  if (!session) return new Response('Session not found', { status: 404 });
+export const GET: RequestHandler = async (event) => {
+  const { params } = event;
+  const { session } = await requireResearchSession(event, params.id, 'read');
 
   const items = await db
     .select()

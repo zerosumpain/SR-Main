@@ -3,8 +3,11 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { narrativeItems } from '$lib/db/schema';
 import { eq, asc } from 'drizzle-orm';
+import { requireResearchSession } from '$lib/deepdive/session-access.server';
 
-export const GET: RequestHandler = async ({ params }) => {
+export const GET: RequestHandler = async (event) => {
+  const { params } = event;
+  await requireResearchSession(event, params.id, 'read');
   const items = await db
     .select()
     .from(narrativeItems)
@@ -14,7 +17,9 @@ export const GET: RequestHandler = async ({ params }) => {
   return json(items);
 };
 
-export const POST: RequestHandler = async ({ params, request }) => {
+export const POST: RequestHandler = async (event) => {
+  const { params, request } = event;
+  await requireResearchSession(event, params.id, 'write');
   const body = await request.json();
   const items = body.items as { factId: string | null; annotation: string | null; sortOrder: number }[];
 

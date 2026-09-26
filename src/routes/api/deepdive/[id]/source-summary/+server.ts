@@ -14,12 +14,13 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { researchSessions, sources, facts } from '$lib/db/schema';
+import { sources, facts } from '$lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { chatCompletion } from '$lib/deepdive/ai';
 import { buildSourceSummaryPrompt, buildPageTextSummaryPrompt } from '$lib/deepdive/source-summary-prompt';
 import { fetchPageText } from '$lib/deepdive/fetch-page-text';
 import type { FetchPageTextMethod } from '$lib/deepdive/fetch-page-text';
+import { requireResearchSession } from '$lib/deepdive/session-access.server';
 
 // ——— in-memory cache ———
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
@@ -54,8 +55,10 @@ function setCached(sessionId: string, sourceId: string, summary: string, method:
   });
 }
 
-export const POST: RequestHandler = async ({ params, request }) => {
+export const POST: RequestHandler = async (event) => {
+  const { params, request } = event;
   const sessionId = params.id;
+  await requireResearchSession(event, sessionId, 'read');
 
   // Parse body
   let body: { sourceId?: string };
@@ -68,17 +71,6 @@ export const POST: RequestHandler = async ({ params, request }) => {
   const sourceId = body?.sourceId;
   if (!sourceId || typeof sourceId !== 'string') {
     return json({ error: 'sourceId is required' }, { status: 400 });
-  }
-
-  // Verify session exists
-  const [session] = await db
-    .select({ id: researchSessions.id })
-    .from(researchSessions)
-    .where(eq(researchSessions.id, sessionId))
-    .limit(1);
-
-  if (!session) {
-    return json({ error: 'Session not found' }, { status: 404 });
   }
 
   // Cache hit?

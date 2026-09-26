@@ -1,20 +1,14 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { researchSessions, synthesisRuns } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { synthesisRuns } from '$lib/db/schema';
 import { runSynthesis } from '$lib/deepdive/synthesis';
 import type { SynthesisScope } from '$lib/deepdive/synthesis-scope';
+import { requireResearchSession } from '$lib/deepdive/session-access.server';
 
-export const POST: RequestHandler = async ({ params, request }) => {
-  const [session] = await db
-    .select({ id: researchSessions.id })
-    .from(researchSessions)
-    .where(eq(researchSessions.id, params.id));
-
-  if (!session) {
-    return json({ error: 'Session not found' }, { status: 404 });
-  }
+export const POST: RequestHandler = async (event) => {
+  const { params, request } = event;
+  await requireResearchSession(event, params.id, 'write');
 
   const body = await request.json().catch(() => ({}));
   const rawScope = (body?.scope ?? {}) as SynthesisScope;

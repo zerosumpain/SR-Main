@@ -4,8 +4,10 @@ import { isNewsSource, isNewsStoryId } from '$lib/news/sources';
 import { readNewsStory } from '$lib/news/reader';
 import { isNewsFavourite, newsOwnerKey } from '$lib/news/favourites';
 import { recordRead } from '$lib/news/store';
+import { newsCapabilities } from '$lib/news/capabilities.server';
 
-export const load: PageServerLoad = async ({ params, url, locals }) => {
+export const load: PageServerLoad = async (event) => {
+  const { params, url, locals } = event;
   if (!isNewsSource(params.source) || !isNewsStoryId(params.source, params.id)) {
     throw error(404, 'News story not found');
   }
@@ -18,6 +20,7 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
     return {
       article,
       isFavourite: await isNewsFavourite(ownerKey, article.story.key),
+      can: await newsCapabilities(event),
     };
   } catch (err) {
     console.error('[news] story load failed:', err);

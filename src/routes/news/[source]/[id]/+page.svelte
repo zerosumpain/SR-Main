@@ -168,11 +168,13 @@
         <h2 id="action-title">WHAT SHOULD LAST?</h2>
         <p>Nothing is kept until you choose it.</p>
       </div>
+      {#if data.can.graph}
       <button class="action primary" type="button" disabled={busy !== null} onclick={() => runAction('graph')}>
         <span class="action-code">KG</span>
         <span><strong>{busy === 'graph' ? 'Keeping…' : 'Keep in knowledge graph'}</strong><small>Store the source and extract entities</small></span>
         <span aria-hidden="true">→</span>
       </button>
+      {/if}
       <button
         class="action favourite"
         class:selected={favourite}
@@ -196,21 +198,27 @@
         </span>
         <span aria-hidden="true">→</span>
       </button>
+      {#if data.can.research}
       <button class="action" type="button" disabled={busy !== null} onclick={() => runAction('research')}>
         <span class="action-code">RS</span>
         <span><strong>{busy === 'research' ? 'Commissioning…' : 'Commission research'}</strong><small>Start a sourced brief from this story</small></span>
         <span aria-hidden="true">→</span>
       </button>
+      {/if}
+      {#if data.can.note}
       <button class="action" type="button" disabled={busy !== null} onclick={() => runAction('note')}>
         <span class="action-code">NT</span>
         <span><strong>{busy === 'note' ? 'Linking…' : 'Link in a note'}</strong><small>Open a new News notebook entry</small></span>
         <span aria-hidden="true">→</span>
       </button>
+      {/if}
+      {#if data.can.ask}
       <a class="action" href={askHref()}>
         <span class="action-code">AI</span>
         <span><strong>Ask JKAI</strong><small>Carry it into a fresh conversation</small></span>
         <span aria-hidden="true">→</span>
       </a>
+      {/if}
       <button class="action quiet" type="button" onclick={copyLink}>
         <span class="action-code">↗</span>
         <span><strong>Copy article link</strong><small>Use it anywhere else on the site</small></span>

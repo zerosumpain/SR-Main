@@ -14,10 +14,12 @@ export interface NewsStats {
  * desk is the owner's, so "kept" here and in `keptKeysFor` means kept into his
  * scope — the same rule `keepNewsInGraph` uses to find an existing note.
  */
-export async function getNewsStats(ownerKey: string): Promise<NewsStats> {
+export async function getNewsStats(ownerKey: string, opts: { retained?: boolean } = {}): Promise<NewsStats> {
   try {
     const [[row], favouriteCount] = await Promise.all([
-      db
+      opts.retained === false
+        ? Promise.resolve([{ count: 0 }])
+        : db
         .select({
           count: sql<number>`count(distinct ${intelNotes.metadata}->>'newsKey')::int`,
         })

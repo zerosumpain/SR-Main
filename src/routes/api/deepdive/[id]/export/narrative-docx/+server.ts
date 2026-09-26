@@ -1,7 +1,10 @@
 import type { RequestHandler } from './$types';
 import { generateNarrativeReport } from '$lib/deepdive/docx-export';
+import { requireResearchSession } from '$lib/deepdive/session-access.server';
 
-export const GET: RequestHandler = async ({ params }) => {
+export const GET: RequestHandler = async (event) => {
+  const { params } = event;
+  await requireResearchSession(event, params.id, 'read');
   const result = await generateNarrativeReport(params.id);
 
   if (!result) {

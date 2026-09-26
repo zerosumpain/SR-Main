@@ -20,11 +20,14 @@
     depth,
     hasReport,
     shareToken = null,
+    canCommit = true,
   }: {
     sessionId: string;
     depth: string;
     hasReport: boolean;
     shareToken?: string | null;
+    /** False for a member: committing merges into the owner's durable graph. */
+    canCommit?: boolean;
   } = $props();
 
   let busy = $state<string | null>(null);
@@ -47,6 +50,7 @@
   } | null>(null);
 
   onMount(async () => {
+    if (!canCommit) return;
     try {
       const res = await fetch(`/api/research/${sessionId}/to-intel`);
       if (res.ok) graph = await res.json();
@@ -119,7 +123,7 @@
     <!-- The session's graph is its own until this is pressed. Nothing merges
          research into the durable graph automatically any more, so this button
          is the only door. -->
-    {#if hasReport}
+    {#if hasReport && canCommit}
       {#if confirmingCommit}
         <span class="confirm">
           Merges into the knowledge graph everything else reads.

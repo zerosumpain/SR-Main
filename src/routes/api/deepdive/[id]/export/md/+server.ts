@@ -1,8 +1,6 @@
 import type { RequestHandler } from './$types';
-import { db } from '$lib/db';
-import { researchSessions } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
 import { generateReportMarkdown } from '$lib/deepdive/docx-export';
+import { requireResearchSession } from '$lib/deepdive/session-access.server';
 
 function slugify(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
@@ -12,14 +10,9 @@ function slugify(text: string): string {
  * GET /api/deepdive/[id]/export/md
  * Serves the auto research report as a markdown download.
  */
-export const GET: RequestHandler = async ({ params }) => {
-  const [session] = await db
-    .select({ topic: researchSessions.topic })
-    .from(researchSessions)
-    .where(eq(researchSessions.id, params.id))
-    .limit(1);
-
-  if (!session) return new Response('Session not found', { status: 404 });
+export const GET: RequestHandler = async (event) => {
+  const { params } = event;
+  const { session } = await requireResearchSession(event, params.id, 'read');
 
   let md: string;
   try {

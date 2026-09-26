@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { eq, and } from 'drizzle-orm';
 import { parsePositionPatch, tableForArtefactType } from '$lib/deepdive/position-patch';
+import { requireResearchSession } from '$lib/deepdive/session-access.server';
 
 /**
  * PATCH /api/deepdive/[id]/artefacts/[artefactId]/position
@@ -13,10 +14,13 @@ import { parsePositionPatch, tableForArtefactType } from '$lib/deepdive/position
  * Body: { artefactType:'source'|'fact'|'entity', position:{x:number,y:number},
  *         pinned?:boolean, deskState?:string, deskCategory?:string|null }
  *
- * Auth: enforced by the /api/* hook — no per-handler recheck. Desk stays private.
+ * Auth: the caller must be able to change the session (requireResearchSession
+ * 'write'), and the UPDATE is scoped to that session id.
  * Mirrors the canvas drag-persist pattern (jkai/canvas/[slug]/+page.svelte onNodePointerUp).
  */
-export const PATCH: RequestHandler = async ({ params, request }) => {
+export const PATCH: RequestHandler = async (event) => {
+  const { params, request } = event;
+  await requireResearchSession(event, params.id, 'write');
   let body: unknown;
   try {
     body = await request.json();

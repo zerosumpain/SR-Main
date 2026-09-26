@@ -1078,6 +1078,13 @@ export const researchSessions = pgTable('research_session', {
   shareToken: text('share_token').unique(),
   parentSessionId: text('parent_session_id'),
   seedContext: jsonb('seed_context'),
+  /**
+   * Whose run this is: 'owner' (John's — every run before access groups),
+   * 'household', or a member's `u_…`. Children (sources, facts, entities…)
+   * follow their session. Read through $lib/server/area-scope; see
+   * $lib/deepdive/session-access.server.
+   */
+  principalId: text('principal_id').notNull().default('owner'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   completedAt: timestamp('completed_at', { withTimezone: true }),
 

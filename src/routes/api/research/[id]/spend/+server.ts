@@ -22,8 +22,11 @@ import { db } from '$lib/db';
 import { agentActions, researchSessions } from '$lib/db/schema';
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { tavilyAccountUsage } from '$lib/deepdive/tavily-usage';
+import { requireResearchSession } from '$lib/deepdive/session-access.server';
 
-export const GET: RequestHandler = async ({ params, url }) => {
+export const GET: RequestHandler = async (event) => {
+  const { params, url } = event;
+  const { access } = await requireResearchSession(event, params.id, 'read');
   const [session] = await db
     .select({
       id: researchSessions.id,
@@ -72,7 +75,9 @@ export const GET: RequestHandler = async ({ params, url }) => {
 
   // The account-wide number is a separate request to Tavily, so it is opt-in:
   // the live poll does not need it every five seconds.
-  const account = url.searchParams.get('account') === '1' ? await tavilyAccountUsage() : null;
+  // The Tavily account is John's, whoever's run this is: only he sees it.
+  const account =
+    url.searchParams.get('account') === '1' && access.level === 'owner' ? await tavilyAccountUsage() : null;
 
   return json({
     status: session.status,

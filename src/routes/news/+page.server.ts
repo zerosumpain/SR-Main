@@ -2,6 +2,7 @@ import type { PageServerLoad } from './$types';
 import { newsOwnerKey } from '$lib/news/favourites';
 import { loadNewsDesk, parseNewsSort, parseNewsView } from '$lib/news/desk';
 import { normalizeNewsLimit } from '$lib/news/sources';
+import { newsCapabilities } from '$lib/news/capabilities.server';
 
 // The desk itself lives in `$lib/news/desk` — the iPhone app is a second reader
 // of it, and the two must keep printing the same counts. This loader is now
@@ -12,13 +13,17 @@ import { normalizeNewsLimit } from '$lib/news/sources';
 // and the postbuild `analyse` step fails the build on anything else. Import it
 // from `$lib/news/desk`.
 
-export const load: PageServerLoad = async ({ url, locals }) => {
+export const load: PageServerLoad = async (event) => {
+  const { url, locals } = event;
   const view = parseNewsView(url.searchParams.get('view'));
-  return loadNewsDesk({
+  const can = await newsCapabilities(event);
+  const desk = await loadNewsDesk({
     view,
     sort: parseNewsSort(url.searchParams.get('sort'), view),
     limit: normalizeNewsLimit(url.searchParams.get('limit')),
     force: url.searchParams.has('fresh'),
     ownerKey: await newsOwnerKey(locals),
+    ownerData: can.ownerData,
   });
+  return { ...desk, can };
 };

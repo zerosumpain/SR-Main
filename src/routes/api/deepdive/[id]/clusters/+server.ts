@@ -1,10 +1,11 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { researchSessions, facts } from '$lib/db/schema';
+import { facts } from '$lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { toVectorLiteral } from '$lib/deepdive/vector';
 import { greedyCluster, type ClusterAssignment, type ClusterItem } from '$lib/deepdive/cluster-facts';
+import { requireResearchSession } from '$lib/deepdive/session-access.server';
 
 // Cosine-similarity threshold for two facts to be "the same cluster".
 // Reuses the `1 - (e <=> e)` idiom from credibility.ts; tuned slightly tighter
@@ -29,21 +30,14 @@ function cacheKey(sessionId: string, factCount: number): string {
 	return `${sessionId}:${factCount}`;
 }
 
-export const GET: RequestHandler = async ({ params, url }) => {
+export const GET: RequestHandler = async (event) => {
+	const { params, url } = event;
 	const sessionId = params.id;
+	await requireResearchSession(event, sessionId, 'read');
 	const by = url.searchParams.get('by') ?? 'similarity';
 
 	if (by !== 'similarity') {
 		return json({ error: `Unsupported clustering dimension: ${by}` }, { status: 400 });
-	}
-
-	// 404-guard the session (mirrors synthesize/+server.ts).
-	const [session] = await db
-		.select({ id: researchSessions.id })
-		.from(researchSessions)
-		.where(eq(researchSessions.id, sessionId));
-	if (!session) {
-		return json({ error: 'Session not found' }, { status: 404 });
 	}
 
 	// Load all clusterable facts (non-counterfactual, embedded).

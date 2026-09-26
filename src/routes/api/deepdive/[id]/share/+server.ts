@@ -4,16 +4,11 @@ import { db } from '$lib/db';
 import { researchSessions } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
+import { requireResearchSession } from '$lib/deepdive/session-access.server';
 
-export const POST: RequestHandler = async ({ params }) => {
-  const [session] = await db
-    .select({ id: researchSessions.id, shareToken: researchSessions.shareToken })
-    .from(researchSessions)
-    .where(eq(researchSessions.id, params.id));
-
-  if (!session) {
-    return json({ error: 'Session not found' }, { status: 404 });
-  }
+export const POST: RequestHandler = async (event) => {
+  const { params } = event;
+  const { session } = await requireResearchSession(event, params.id, 'write');
 
   if (session.shareToken) {
     return json({ token: session.shareToken });
@@ -28,7 +23,9 @@ export const POST: RequestHandler = async ({ params }) => {
   return json({ token });
 };
 
-export const DELETE: RequestHandler = async ({ params }) => {
+export const DELETE: RequestHandler = async (event) => {
+  const { params } = event;
+  await requireResearchSession(event, params.id, 'write');
   await db
     .update(researchSessions)
     .set({ shareToken: null })

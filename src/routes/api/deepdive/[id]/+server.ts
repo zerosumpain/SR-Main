@@ -4,16 +4,11 @@ import { db } from '$lib/db';
 import { researchSessions, facts, entities, sources, relationships, entityMentions, narrativeItems, globalEntityLinks, synthesisRuns } from '$lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { requestStop, requestSkipPhase } from '$lib/deepdive/worker';
+import { requireResearchSession } from '$lib/deepdive/session-access.server';
 
-export const GET: RequestHandler = async ({ params }) => {
-  const [session] = await db
-    .select()
-    .from(researchSessions)
-    .where(eq(researchSessions.id, params.id));
-
-  if (!session) {
-    return json({ error: 'Session not found' }, { status: 404 });
-  }
+export const GET: RequestHandler = async (event) => {
+  const { params } = event;
+  const { session } = await requireResearchSession(event, params.id, 'read');
 
   // Get full counts
   const [factCount] = await db
@@ -47,7 +42,9 @@ export const GET: RequestHandler = async ({ params }) => {
   });
 };
 
-export const PATCH: RequestHandler = async ({ params, request }) => {
+export const PATCH: RequestHandler = async (event) => {
+  const { params, request } = event;
+  await requireResearchSession(event, params.id, 'write');
   const body = await request.json();
 
   if (body.action === 'stop') {
@@ -63,15 +60,9 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
   return json({ error: 'Unknown action' }, { status: 400 });
 };
 
-export const DELETE: RequestHandler = async ({ params }) => {
-  const [session] = await db
-    .select({ id: researchSessions.id })
-    .from(researchSessions)
-    .where(eq(researchSessions.id, params.id));
-
-  if (!session) {
-    return json({ error: 'Session not found' }, { status: 404 });
-  }
+export const DELETE: RequestHandler = async (event) => {
+  const { params } = event;
+  await requireResearchSession(event, params.id, 'write');
 
   await db.transaction(async (tx) => {
     // 0. Null out parentSessionId on any child (explore-further) sessions so

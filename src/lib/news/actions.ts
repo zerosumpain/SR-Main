@@ -2,7 +2,7 @@ import { and, desc, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { intelNotes, researchSessions } from '$lib/db/schema';
 import { createNote as createIntelNote, processNote } from '$lib/jkai/intel/ingest';
-import { OWNER_INTEL_SCOPE, OWNER_SPACE, spaceIn } from '$lib/jkai/intel/scope';
+import { OWNER_INTEL_SCOPE, OWNER_SPACE, spaceIn, type IntelScope } from '$lib/jkai/intel/scope';
 import { saveNote } from '$lib/daydream/notebook/store';
 import { depthPreset } from '$lib/deepdive/depth';
 import { coerceScope } from '$lib/deepdive/scope';
@@ -20,7 +20,12 @@ function provenance(article: NewsArticle): string {
   ].join('\n');
 }
 
-export async function keepNewsInGraph(article: NewsArticle): Promise<{
+export async function keepNewsInGraph(
+  article: NewsArticle,
+  // Whose graph: the owner's by default (the phone lane, the owner's desk); a
+  // member's request passes their own scope and space.
+  into: { scope: IntelScope; spaceId: string } = { scope: OWNER_INTEL_SCOPE, spaceId: OWNER_SPACE },
+): Promise<{
   id: string;
   href: string;
   existing: boolean;
@@ -28,9 +33,9 @@ export async function keepNewsInGraph(article: NewsArticle): Promise<{
   const [existing] = await db
     .select({ id: intelNotes.id })
     .from(intelNotes)
-    // Kept means kept by the owner: another space's copy of the same story is
-    // not his, and linking to it would 404 for him anyway.
-    .where(and(sql`${intelNotes.metadata}->>'newsKey' = ${article.story.key}`, spaceIn(intelNotes.spaceId, OWNER_INTEL_SCOPE)))
+    // Kept means kept by THIS reader: another space's copy of the same story is
+    // not theirs, and linking to it would 404 for them anyway.
+    .where(and(sql`${intelNotes.metadata}->>'newsKey' = ${article.story.key}`, spaceIn(intelNotes.spaceId, into.scope)))
     .orderBy(desc(intelNotes.createdAt))
     .limit(1);
   if (existing) {
@@ -58,7 +63,7 @@ export async function keepNewsInGraph(article: NewsArticle): Promise<{
       discussionUrl: article.story.discussionUrl,
       publishedAt: article.story.publishedAt,
     },
-    spaceId: OWNER_SPACE,
+    spaceId: into.spaceId,
   });
   void processNote(id).catch((err) => console.error(`[news] graph processing failed for ${id}:`, err));
   return { id, href: `/jkai/intel/notes/${id}`, existing: false };
@@ -82,7 +87,11 @@ export async function linkNewsInNote(article: NewsArticle): Promise<{ id: string
   return { id: note.id, href: `/jkai/notes?open=${note.id}` };
 }
 
-export async function commissionNewsResearch(article: NewsArticle): Promise<{
+export async function commissionNewsResearch(
+  article: NewsArticle,
+  /** Whose run: the owner's unless a member commissioned it (research_session.principal_id). */
+  principalId = 'owner',
+): Promise<{
   id: string;
   href: string;
 }> {
@@ -102,6 +111,7 @@ export async function commissionNewsResearch(article: NewsArticle): Promise<{
       budgetMs: preset.budgetMs,
       config: preset.config,
       status: 'draft',
+      principalId,
       seedContext: {
         kind: 'news',
         title: story.title,

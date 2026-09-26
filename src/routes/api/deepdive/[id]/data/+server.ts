@@ -2,7 +2,6 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import {
-  researchSessions,
   facts,
   entities,
   sources,
@@ -10,22 +9,16 @@ import {
   entityMentions,
 } from '$lib/db/schema';
 import { eq, sql } from 'drizzle-orm';
+import { requireResearchSession } from '$lib/deepdive/session-access.server';
 
 /**
  * GET /api/deepdive/[id]/data
  * Returns facts, entities, sources, relationships and the report for a session.
  * Used by the ResearchDesk hydrate-then-stream contract (desk + embedded canvas node).
  */
-export const GET: RequestHandler = async ({ params }) => {
-  const [session] = await db
-    .select({ id: researchSessions.id, report: researchSessions.report })
-    .from(researchSessions)
-    .where(eq(researchSessions.id, params.id))
-    .limit(1);
-
-  if (!session) {
-    return json({ error: 'Session not found' }, { status: 404 });
-  }
+export const GET: RequestHandler = async (event) => {
+  const { params } = event;
+  const { session } = await requireResearchSession(event, params.id, 'read');
 
   const report = (session.report ?? {}) as Record<string, unknown>;
   const entityCentrality = (report?.entity_centrality ?? {}) as Record<string, number>;

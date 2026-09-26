@@ -121,8 +121,15 @@ export async function loadNewsDesk(opts: {
   limit: number;
   force: boolean;
   ownerKey: string;
+  /**
+   * False for anyone but the owner: correlations read his research, intel and
+   * memory, and "kept" / retained counts read his intel space. A member's desk
+   * is the wire plus their own favourites and reads.
+   */
+  ownerData?: boolean;
 }): Promise<NewsDesk> {
   const { view, sort, force, ownerKey } = opts;
+  const ownerData = opts.ownerData ?? true;
   const limit = normalizeNewsLimit(opts.limit);
 
   const feedPromise: Promise<NewsFeed> =
@@ -146,14 +153,17 @@ export async function loadNewsDesk(opts: {
       : // `for-you` reorders the top wire rather than fetching its own.
         getNewsFeed(view === 'for-you' ? 'top' : (view as NewsWireView), { force, limit });
 
-  const [feed, stats] = await Promise.all([feedPromise, getNewsStats(ownerKey)]);
+  const [feed, stats] = await Promise.all([
+    feedPromise,
+    ownerData ? getNewsStats(ownerKey) : getNewsStats(ownerKey, { retained: false }),
+  ]);
 
   // All best-effort decoration on a desk that must render without any of it.
   const keys = feed.stories.map((story) => story.key);
   const [correlated, readKeys, keptKeys, newSince] = await Promise.all([
-    correlationsFor(feed),
+    ownerData ? correlationsFor(feed) : Promise.resolve({ correlations: {}, anchorCount: 0 }),
     readKeysFor(ownerKey, keys),
-    keptKeysFor(keys),
+    ownerData ? keptKeysFor(keys) : Promise.resolve(new Set<string>()),
     // A saved list has no arrival time of its own — every row got there because
     // the owner put it there, so "new since you looked" is not a question about it.
     view === 'favourites'

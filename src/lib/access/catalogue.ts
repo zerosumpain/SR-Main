@@ -53,14 +53,14 @@ export const AREAS: readonly AreaInfo[] = [
     id: 'news',
     label: 'News',
     blurb: 'The news desk.',
-    open: false,
+    open: true,
     levels: { self: 'Read the desk; own saved stories', all: 'Same as self', admin: 'Same as self' },
   },
   {
     id: 'research',
     label: 'Research',
-    blurb: 'Deep research runs.',
-    open: false,
+    blurb: 'Deep research runs, up to brief depth and 5 a day.',
+    open: true,
     levels: { self: 'Run and read own research', all: "Also read everyone's", admin: "Also edit everyone's" },
   },
   {
@@ -169,6 +169,19 @@ export function parsePermissions(values: readonly unknown[] | null | undefined):
   return out;
 }
 
+/**
+ * True when the permission's area (or family permission) is open. A grant for
+ * an area that has not opened yet is stored but never held: code that checks a
+ * capability — "may this reader file a note?" — must not find a door the
+ * catalogue has not opened (see `effectivePermissions`).
+ */
+export function isOpenPermission(p: Permission): boolean {
+  const family = FAMILY.find((f) => f.id === p);
+  if (family) return family.open;
+  const area = AREAS.find((a) => p.startsWith(`${a.id}:`));
+  return area?.open ?? false;
+}
+
 function split(p: Permission): { area: string; level: Level | null } {
   if (FAMILY_SET.has(p)) return { area: p, level: null };
   const at = p.lastIndexOf(':');
@@ -248,6 +261,47 @@ const ROUTES: Record<string, Partial<Record<Method, Permission>>> = {
   // person page that opens for them.
   '/home/people': { GET: 'family:circle' },
   '/home/people/[subject]': { GET: 'family:circle' },
+
+  // ── research — runs a member may read, start and change. Every route here
+  // resolves the session through `requireResearchSession` (or the list through
+  // `readable`), which decides own / household / everyone's and read / write;
+  // so the gate asks only for the area, at `self`. Left out, owner-only: the
+  // two that write into John's own stores (to-drive, to-intel), the legacy
+  // `/api/deepdive` root and `/api/quickanswer`, maintenance re-indexing, the
+  // Tavily key admin and the image proxy.
+  '/research': { GET: 'research:self' },
+  '/research/[id]': { GET: 'research:self' },
+  '/research/[id]/desk': { GET: 'research:self' },
+  '/api/research': { GET: 'research:self', POST: 'research:self', DELETE: 'research:self' },
+  '/api/research/[id]/stream': { GET: 'research:self' },
+  '/api/research/[id]/control': { POST: 'research:self' },
+  '/api/research/[id]/spend': { GET: 'research:self' },
+  '/api/research/[id]/network': { GET: 'research:self' },
+  '/api/research/source/[id]': { GET: 'research:self' },
+  '/api/deepdive/[id]': { GET: 'research:self', PATCH: 'research:self', DELETE: 'research:self' },
+  '/api/deepdive/[id]/data': { GET: 'research:self' },
+  '/api/deepdive/[id]/clusters': { GET: 'research:self' },
+  '/api/deepdive/[id]/report': { GET: 'research:self' },
+  '/api/deepdive/[id]/stream': { GET: 'research:self' },
+  '/api/deepdive/[id]/export/docx': { GET: 'research:self' },
+  '/api/deepdive/[id]/export/md': { GET: 'research:self' },
+  '/api/deepdive/[id]/export/narrative-docx': { GET: 'research:self' },
+  '/api/deepdive/[id]/export/narrative-md': { GET: 'research:self' },
+  '/api/deepdive/[id]/chat': { POST: 'research:self' },
+  '/api/deepdive/[id]/report/custom': { POST: 'research:self' },
+  '/api/deepdive/[id]/report/regenerate': { POST: 'research:self' },
+  '/api/deepdive/[id]/synthesize': { POST: 'research:self' },
+  '/api/deepdive/[id]/source-summary': { POST: 'research:self' },
+  '/api/deepdive/[id]/explore': { POST: 'research:self' },
+  '/api/deepdive/[id]/narrative': { GET: 'research:self', POST: 'research:self' },
+  '/api/deepdive/[id]/artefacts/[artefactId]/position': { PATCH: 'research:self' },
+  '/api/deepdive/[id]/share': { POST: 'research:self', DELETE: 'research:self' },
+
+  // ── news — the desk and a story. Each action checks the grant it needs
+  // (graph: jkai.intel, research: research) inside the handler.
+  '/news': { GET: 'news:self' },
+  '/news/[source]/[id]': { GET: 'news:self' },
+  '/api/news/actions': { POST: 'news:self' },
 };
 
 /** The permission a route + verb needs, or null when only the owner may reach it. */

@@ -20,7 +20,7 @@
 // lives here, in code, and every route that reads an area's rows calls it.
 
 import { error } from '@sveltejs/kit';
-import { eq, inArray, ne, sql, type SQL } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import type { AnyColumn } from 'drizzle-orm';
 import { levelOf, type AreaId, type Level } from '$lib/access/catalogue';
 import { viewerOf } from './viewer';
@@ -45,15 +45,15 @@ export async function areaAccess(event: { locals: App.Locals }, area: AreaId): P
 /** The rows a reader may see. */
 export function readable(column: SQL | AnyColumn, access: AreaAccess): SQL {
   if (access.level === 'owner') return sql`true`;
-  if (access.level === 'self') return inArray(column, [access.own, HOUSEHOLD_PRINCIPAL]);
-  return ne(column, OWNER_PRINCIPAL);
+  if (access.level === 'self') return sql`${column} in (${access.own}, ${HOUSEHOLD_PRINCIPAL})`;
+  return sql`${column} <> ${OWNER_PRINCIPAL}`;
 }
 
 /** The rows a reader may change. */
 export function writable(column: SQL | AnyColumn, access: AreaAccess): SQL {
   if (access.level === 'owner') return sql`true`;
-  if (access.level === 'admin') return ne(column, OWNER_PRINCIPAL);
-  return eq(column, access.own);
+  if (access.level === 'admin') return sql`${column} <> ${OWNER_PRINCIPAL}`;
+  return sql`${column} = ${access.own}`;
 }
 
 /** `readable`, for one row already in hand. */

@@ -11,7 +11,8 @@
  *  - **stop** — wind down and write the report from what has been gathered. This
  *    is the existing behaviour, and it is terminal.
  *
- * Owner-gated by the hook: nothing under /api/research is on the public list.
+ * The hook opens it to `research` holders; `requireResearchSession` then
+ * decides whether this caller may change this run.
  */
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
@@ -21,10 +22,13 @@ import { and, eq } from 'drizzle-orm';
 import { requestPause, requestStop, isRunning } from '$lib/deepdive/worker';
 import { resumeSession } from '$lib/deepdive/resume';
 import { resumePhase } from '$lib/deepdive/phase-order';
+import { requireResearchSession } from '$lib/deepdive/session-access.server';
 
 const TERMINAL = ['complete', 'failed'];
 
-export const POST: RequestHandler = async ({ params, request }) => {
+export const POST: RequestHandler = async (event) => {
+  const { params, request } = event;
+  await requireResearchSession(event, params.id, 'write');
   const body = await request.json().catch(() => ({}) as Record<string, unknown>);
   const action = typeof body.action === 'string' ? body.action : '';
 
