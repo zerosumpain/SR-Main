@@ -5,10 +5,6 @@
     "Each was duplicated rather than moved, and each for a reason recorded in the",
     "extraction that did it:",
     "",
-    "  polyline / activity-meta / track / tile-math — Main and Health both use",
-    "    these route geometry primitives. If the copies diverge, distance and",
-    "    activity calculations can silently disagree.",
-    "",
     "  file-store/storage — the boundary linter classifies it PLATFORM and",
     "    thirteen non-Drive modules import it, including the public hero video.",
     "    Both copies point at one WORKFLOW_FILES_ROOT.",
@@ -49,15 +45,15 @@
     "    store.ts is deliberately NOT here: Drive's copy hands Intelligence a row",
     "    instead of importing its engine, which is the whole point of that boundary.",
     "",
-    "  health-sync/* — the Strava and WHOOP INGEST lane, which is ours and stays.",
+    "  health-sync/* — the WHOOP ingest lane, which is ours and stays.",
     "    It moved out of $lib/health so that tree can be deleted wholesale once the",
-    "    dashboard half is gone. SR-Health holds the same five, because /api/health/",
-    "    sync and the two OAuth callbacks are routed to it, so BOTH applications",
+    "    dashboard half is gone. SR-Health holds the same four, because /api/health/",
+    "    sync and the WHOOP OAuth callback are routed to it, so BOTH applications",
     "    refresh the same tokens and write the same tables.",
     "    Concurrency is already handled — readOrRefreshToken takes",
     "    pg_advisory_xact_lock and re-reads inside the transaction. Divergence is",
     "    not: `refreshToken: newTokens.refresh_token || token.refreshToken` is",
-    "    WHOOP's rotation, and if one repo changes that line both connectors die",
+    "    WHOOP's rotation, and if one repo changes that line the connector can fail",
     "    with nothing red anywhere.",
     "    scheduler.ts is NOT here. It is ours alone — the timer must run exactly",
     "    once — and SR-Health's copy is dead code being deleted rather than guarded.",
@@ -157,22 +153,6 @@
     "would notice: each is right against its own copy."
   ],
   "files": {
-    "src/lib/health/polyline.ts": {
-      "peer": "zerosumpain/SR-Health",
-      "sha256": "6eba23563bd5a4930e17bfd43b7ba62c83f420abcea3a544c784c7bef4ef0d3a"
-    },
-    "src/lib/trails/activity-meta.ts": {
-      "peer": "zerosumpain/SR-Health",
-      "sha256": "fdbabe248a443423156ae679e736a5b617d24d17a31ba721de472ca64b12f6eb"
-    },
-    "src/lib/trails/track.ts": {
-      "peer": "zerosumpain/SR-Health",
-      "sha256": "f141e4e61651b8d81c7a402de211f702b553f3450ebd2e8dc39fc441f6fc6511"
-    },
-    "src/lib/trails/field/tile-math.ts": {
-      "peer": "zerosumpain/SR-Health",
-      "sha256": "32c32a35e119aadd66eddc3990bfdf9ccd4348d87f3169aed6ef560377abd0fb"
-    },
     "src/lib/file-store/storage.ts": {
       "peer": "zerosumpain/SR-Drive",
       "sha256": "2b7fd0bc4394e0cb56e8fccd043c3488e85e807f296c680e7539358aafb8f02b"
@@ -235,7 +215,7 @@
     },
     "src/lib/health-sync/tokens.ts": {
       "peer": "zerosumpain/SR-Health",
-      "sha256": "b934040169513b5365f554c90e4ac32ae0b0f385bf6059075c2f2606a3dbe0e1"
+      "sha256": "0475e5e36a6b505f60911e97920a9327db3c5f514c5d7a8b9b4358c4c523aea2"
     },
     "src/lib/health-sync/whoop.ts": {
       "peer": "zerosumpain/SR-Health",
@@ -243,7 +223,7 @@
     },
     "src/lib/health-sync/types.ts": {
       "peer": "zerosumpain/SR-Health",
-      "sha256": "1feede049ab05608dba807129bc370e25389c416bf9fe9e562baef031bb9140e"
+      "sha256": "7c2059960956335d5536ac70d05a8280f8237f600cc91b70ebee6c8d5b116197"
     },
     "src/lib/constants/planner-sports.ts": {
       "peer": "zerosumpain/SR-Health",

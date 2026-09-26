@@ -3,10 +3,9 @@ import { oauthTokens } from '$lib/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import { refreshWhoopToken } from './whoop';
 
-// Strava was removed on 2026-09-13. Its oauth_tokens rows and its 671
-// strava_activities stay in the database; nothing refreshes them any more, and
-// narrowing the type is what makes asking for one impossible rather than merely
-// unwise.
+// Strava ingestion was removed on 2026-09-13. Retire its oauth_tokens rows
+// separately; its 671 historical strava_activities remain readable. Narrowing
+// this type also prevents callers from requesting a retired Strava token.
 type HealthService = 'whoop';
 const pendingTokens = new Map<HealthService, Promise<string | null>>();
 

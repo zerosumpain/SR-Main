@@ -50,12 +50,8 @@ export async function syncAttentionSummary(): Promise<SyncAttentionSummary> {
     // `apple_health` is permanently months stale — it is written by a pull-sync
     // job that no longer runs, while the webhook keeps delivering.
     //
-    // `strava` was removed entirely on 2026-09-13 — it had been dormant since
-    // Strava put its API behind a paid subscription. Its health_sync_state row
-    // is left in the database rather than deleted, so this filter still has to
-    // exclude it: nothing updates that row any more, and it would otherwise
-    // name a dead connector in the banner every day, which is exactly how a
-    // banner stops being read.
+    // Strava sync was removed on 2026-09-13. Its old health_sync_state row
+    // may exist until the retirement migration runs, so include only WHOOP.
     db
       .select({
         service: healthSyncState.service,

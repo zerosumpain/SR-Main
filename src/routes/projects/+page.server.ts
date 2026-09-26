@@ -3,6 +3,7 @@ import { jkaiBuilds, projectVisibility } from '$lib/db/schema';
 import { isNotNull, or, desc } from 'drizzle-orm';
 import { resolveVisibilityMap, isProjectPublic, isProjectSlug } from '$lib/projects/visibility';
 import { isOwnerEmail } from '$lib/server/access';
+import { OWNER_ONLY_CARDS } from './owner-cards.server';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async (event) => {
@@ -74,5 +75,5 @@ export const load: PageServerLoad = async (event) => {
   }));
   const projects = authenticated ? withVis : withVis.filter((p) => p.isPublic);
 
-  return { projects, authenticated, visibility };
+  return { projects, authenticated, visibility, ownerCards: authenticated ? OWNER_ONLY_CARDS : [] };
 };

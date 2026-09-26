@@ -23,7 +23,6 @@ export interface SyncResult {
 }
 
 export interface SyncResponse {
-  strava?: SyncResult;
   whoop?: SyncResult;
   apple?: SyncResult;
   timestamp: string;

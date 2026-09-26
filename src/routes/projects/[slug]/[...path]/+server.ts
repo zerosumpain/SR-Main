@@ -57,6 +57,9 @@ async function tryFile(filePath: string): Promise<{ handle: FileHandle; mime: st
 }
 
 export const GET: RequestHandler = async ({ params, url, locals, cookies }) => {
+  // The dedicated Local Plan Navigator service owns this slug. If ingress is
+  // missing, fail closed instead of serving Main's stale runtime bundle.
+  if (params.slug === 'local-plan-navigator') return new Response('Not found', { status: 404 });
   const requestedPath = params.path || '';
 
   // Visibility gate: a private project (and all its assets) 404s for the public.

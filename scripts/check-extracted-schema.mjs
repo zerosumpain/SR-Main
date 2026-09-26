@@ -15,6 +15,12 @@ export function checkExtractedSchema(manifest, source) {
     .matchAll(/^export\s+const\s+\w+\s*=\s*pgTable\(\s*['"]([^'"]+)['"]/gm)].map((m) => m[1]));
   if (!tables.size) errors.push('No Main table declarations found');
   for (const module of manifest.modules.filter((m) => m.id !== 'main')) {
+    if (module.database === 'none') {
+      if (!Array.isArray(module.requiredTables) || module.requiredTables.length) {
+        errors.push(`${module.id}: database-free application declares tables`);
+      }
+      continue;
+    }
     if (!Array.isArray(module.requiredTables) || !module.requiredTables.length) {
       errors.push(`${module.id}: required table set is empty`);
       continue;
@@ -33,7 +39,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     const source = readFileSync(resolve(root, 'src/lib/db/schema.ts'), 'utf8');
     const errors = checkExtractedSchema(manifest, source);
     if (errors.length) throw new Error(errors.join('\n'));
-    console.log('Extracted-app table retention: passed (Policy, Health, Drive).');
+    console.log('Extracted-app table retention: passed for registered applications.');
   } catch (error) {
     console.error(`Extracted-app table retention failed:\n${error.message}`);
     process.exitCode = 1;

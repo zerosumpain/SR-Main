@@ -17,4 +17,16 @@
 
 import type { ProjectCard } from './cards';
 
-export const OWNER_ONLY_CARDS: ProjectCard[] = [];
+export const OWNER_ONLY_CARDS: ProjectCard[] = [
+  {
+    key: 'local-plan-navigator',
+    href: '/projects/local-plan-navigator',
+    label: 'Open the Local Plan Navigator',
+    kind: 'Prototype',
+    tag: 'Owner only · Planning',
+    title: 'Local Plan Navigator — Thirty Months, Three Gateways, One Map',
+    blurb: 'A GOV.UK-style prototype for navigating England\'s local plan process, with stage maps, a timeline planner, checklists, cited search and model-assisted answers.',
+    chips: 'GOV.UK Frontend · 2026 Regulations · NPPF · in-browser model',
+    ownerOnly: true,
+  },
+];
