@@ -13,6 +13,11 @@
    * family"), in which directions (arrive, leave), and whether by WhatsApp as
    * well. Home is always watched; its direction switches still apply.
    *
+   * A place that is no longer wanted can be removed from its editor (never
+   * home): it is set aside, not deleted, so its alerts stop and the nightly
+   * refresh does not suggest it again. The editor also says who spends how
+   * long there — streamed after the page, so the map never waits for it.
+   *
    * The list is the whole page without the map: every place can be selected,
    * renamed, resized and switched from it by keyboard. Owner only; the load
    * and every action check.
@@ -44,7 +49,9 @@
   let placing = $state(false);
   /** Adding a place needs a working map: it is placed by clicking one. */
   let mapStatus = $state<'loading' | 'ready' | 'unavailable'>('loading');
-  let mapView = $state<{ centre: () => { lat: number; lon: number } | null } | null>(null);
+  let mapView = $state<{ centre: () => { lat: number; lon: number } | null; fitAll: () => void } | null>(null);
+  /** The place whose "Remove place" is asking for a yes. */
+  let confirmRemove = $state<string | null>(null);
 
   const selected = $derived(places.find((p) => p.id === selectedId) ?? null);
 
@@ -70,6 +77,7 @@
 
   function select(id: string) {
     placing = false;
+    confirmRemove = null;
     if (selectedId === id) return;
     const p = places.find((x) => x.id === id);
     selectedId = p ? id : null;
@@ -77,6 +85,7 @@
   }
 
   function closeEditor() {
+    confirmRemove = null;
     selectedId = null;
     draft = null;
     placing = false;
@@ -143,6 +152,30 @@
     }
   };
 
+  /** A removed place leaves the list on the refreshed load; the editor goes
+   *  with it (the selection effect above would clear it anyway). */
+  const afterRemove: SubmitFunction = () => async ({ result, update }) => {
+    await update({ reset: false });
+    if (result.type === 'success') closeEditor();
+  };
+
+  /** Keyboard focus onto the confirm's safe answer as it appears. */
+  function focusOnMount(node: HTMLElement) {
+    node.focus();
+  }
+
+  const REMOVE_NOTE = 'Its alerts stop and it will not be suggested again.';
+
+  /** Minutes as a length of time: 45m, 5h 20m, then whole hours. */
+  function dur(mins: number): string {
+    if (mins < 60) return `${mins}m`;
+    if (mins < 24 * 60) {
+      const m = mins % 60;
+      return m ? `${Math.floor(mins / 60)}h ${m}m` : `${mins / 60}h`;
+    }
+    return `${Math.round(mins / 60)}h`;
+  }
+
   function submitOnChange(e: Event & { currentTarget: HTMLInputElement }) {
     e.currentTarget.form?.requestSubmit();
   }
@@ -154,7 +187,7 @@
   path="/home/people/places"
   kicker="Home · People · Places"
   title={['Where an arrival', 'is worth a message']}
-  standfirst="The places that tell the household when someone arrives or leaves. Home always does. A place with WhatsApp on also sends a message to anyone who has asked for them, at most one every half hour per person and place."
+  standfirst="Who hears when someone comes or goes."
   {summary}
   footer={['strangeramblings.com/home/people/places', 'Arrive and leave alerts', 'Owner only']}
 >
@@ -162,13 +195,15 @@
     <section class="band"><div class="inner"><LoadErrorCard kicker="The places did not load" message={data.loadError} /></div></section>
   {/if}
 
-  <section class="band">
+  <section class="band places-band">
     <div class="inner">
+      <div class="head">
       <SectionHead
         kicker="A / Places"
         title={['Named places,', 'and home']}
-        strap="Select a place on the map or in the list. Drag its centre to move it and the square handle to set the radius, 50 to 2,000 m. Someone arrives on the first fix inside the edge and leaves on the first one more than 50 m outside it."
+        strap="Select a place on the map or in the list. Drag its centre to move it and the square handle to set the radius, 50 to 2,000 m."
       />
+      </div>
 
       <div class="places-layout">
         <div class="map-col">
@@ -209,6 +244,12 @@
           <div class="list-head">
             {#if mapStatus === 'unavailable'}
               <p class="map-note">Map unavailable — places can still be edited in the list.</p>
+            {/if}
+            {#if form && 'removed' in form && form.removed}
+              <p class="map-note good" role="status">Removed {form.removedLabel ?? 'the place'}.</p>
+            {/if}
+            {#if mapStatus === 'ready'}
+              <button class="btn" type="button" onclick={() => mapView?.fitAll()}>Show all places</button>
             {/if}
             <button
               class="btn"
@@ -365,6 +406,60 @@
                         <noscript><button class="btn" type="submit">Save alerts</button></noscript>
                         {#if form && 'notified' in form && form.notified === p.id}<span class="note good inline">Saved.</span>{/if}
                       </form>
+
+                      <div class="time-here">
+                        <p class="field-label">Time here, last {data.placeTimeDays} days</p>
+                        {#await data.placeTime}
+                          <p class="map-note">Reading the trail…</p>
+                        {:then byPlace}
+                          {@const rows = byPlace ? (byPlace[p.id] ?? []) : null}
+                          {#if rows === null}
+                            <p class="map-note">The time here could not be worked out just now.</p>
+                          {:else if !rows.length}
+                            <p class="map-note">Nobody has stayed here in that time.</p>
+                          {:else}
+                            <div class="tbl-wrap">
+                              <table class="tbl compact">
+                                <thead>
+                                  <tr>
+                                    <th scope="col">Person</th>
+                                    <th scope="col" class="right">Time</th>
+                                    <th scope="col" class="right">Visits</th>
+                                    <th scope="col" class="right">Usually arrives</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {#each rows as r (r.subject)}
+                                    <tr>
+                                      <td class="cell-lead">{r.displayName}</td>
+                                      <td class="right num">{dur(r.minutes)}</td>
+                                      <td class="right num">{r.visits}</td>
+                                      <td class="right num">{r.usualArrival ?? '—'}</td>
+                                    </tr>
+                                  {/each}
+                                </tbody>
+                              </table>
+                            </div>
+                          {/if}
+                        {/await}
+                      </div>
+
+                      {#if !p.isHome}
+                        {#if confirmRemove === p.id}
+                          <form class="confirm" method="POST" action="?/remove" use:enhance={afterRemove}>
+                            <input type="hidden" name="placeId" value={p.id} />
+                            <p id="remove-{p.id}">Remove <em>{p.label ?? 'this place'}</em>? {REMOVE_NOTE}</p>
+                            <div class="card-actions">
+                              <button class="cta sm" type="submit" aria-describedby="remove-{p.id}">Remove</button>
+                              <button class="btn" type="button" use:focusOnMount onclick={() => (confirmRemove = null)}>Keep</button>
+                            </div>
+                          </form>
+                        {:else}
+                          <div class="card-actions">
+                            <button class="btn" type="button" onclick={() => (confirmRemove = p.id)}>Remove place</button>
+                          </div>
+                        {/if}
+                      {/if}
                       {#if formError && formError.placeId === p.id}<p class="err" role="alert">{formError.error}</p>{/if}
                     </div>
                   {/if}
@@ -373,6 +468,12 @@
             </ul>
           {/if}
           {#if formError && !formError.placeId && !creating}<p class="err" role="alert">{formError.error}</p>{/if}
+          <p class="rules">
+            <span class="phone-only">Select a place on the map or in the list; drag its centre to move it and the square handle to set the radius, 50 to 2,000 m.</span>
+            Someone arrives on the first fix inside a place’s edge and leaves on the first one more than 50 m outside it. Home
+            always tells the household; a place with WhatsApp on also messages anyone who asked, at most once every half hour
+            per person and place.
+          </p>
         </div>
       </div>
     </div>
@@ -383,6 +484,38 @@
   /* Room-specific only — `.card`, `.text-input`, `.field-label`, `.actions`,
      `.card-actions`, `.cta`, `.btn`, `.note`, `.err` come from HomeFrame's
      DsVocab. */
+  /* On a phone the map has to start near the top, so the section's masthead
+     is kept for the outline and screen readers but not drawn: the hero has
+     just said what the page is, and the how-to sits under the list. */
+  @media (max-width: 719px) {
+    .head {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+    .head + .places-layout {
+      margin-top: 0;
+    }
+    .band.places-band {
+      padding-top: 8px;
+    }
+  }
+  @media (min-width: 720px) {
+    .phone-only {
+      display: none;
+    }
+  }
+  .rules {
+    margin: 16px 0 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    line-height: 1.65;
+    color: var(--text-secondary);
+  }
   .places-layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -508,12 +641,6 @@
   .field .field-label {
     margin-bottom: 6px;
   }
-  /* DsVocab gives `.text-input` `flex: 1 1 220px` for a row of controls; in
-     this column label that basis is a HEIGHT, and made every input 220px
-     tall. */
-  .field .text-input {
-    flex: 0 0 auto;
-  }
   .field.radius {
     flex: 0 1 130px;
   }
@@ -557,5 +684,31 @@
   }
   .inline {
     margin: 0;
+  }
+  .map-note.good {
+    color: var(--success);
+  }
+  .time-here {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .time-here .field-label,
+  .time-here .map-note {
+    margin: 0;
+  }
+  .confirm {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--line-strong);
+    border-left: 3px solid var(--warn);
+    background: var(--surface-elevated);
+  }
+  .confirm p {
+    margin: 0;
+    font-size: var(--fs-body-sm, 0.95rem);
+    color: var(--text-primary);
   }
 </style>
