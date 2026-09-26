@@ -53,7 +53,9 @@ export const POST: RequestHandler = async (event) => {
       const scope = await resolveRequestScope(event, 'own');
       return json(await keepNewsInGraph(article, { scope, spaceId: writeSpace(scope) }), { status: 201 });
     }
-    return json(await linkNewsInNote(article), { status: 201 });
+    // Into the caller's own notebook — never the owner's for a member.
+    const notes = await areaAccess(event, 'jkai.notes');
+    return json(await linkNewsInNote(article, notes.own), { status: 201 });
   } catch (err) {
     // A refusal (the research cap, a scope check) is an answer, not a failure.
     if (isHttpError(err)) return json({ error: err.body.message }, { status: err.status });

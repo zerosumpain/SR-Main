@@ -50,8 +50,8 @@
     footer?: string[];
     /**
      * Whether the site bar offers "one level up". False for a household
-     * viewer on /home/people: its parent, /home, is owner-only and would
-     * bounce them to the front page.
+     * viewer on /home/people: its parent, /home, needs the `home` area, and
+     * without it the link would bounce them to the front page.
      */
     navBack?: boolean;
     children: Snippet;

@@ -463,7 +463,7 @@ export async function recentActions(limit = 20) {
     })
     .from(daydreamNotebookActions)
     .innerJoin(daydreamNotebook, eq(daydreamNotebook.id, daydreamNotebookActions.noteId))
-    .where(eq(daydreamNotebookActions.status, 'done'))
+    .where(and(eq(daydreamNotebookActions.status, 'done'), OWNER_NOTES))
     .orderBy(desc(daydreamNotebookActions.executedAt))
     .limit(limit);
 }

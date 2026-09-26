@@ -1,6 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { getHomeAssistantService } from '$lib/workflows/homeassistant/service';
-import { DEVICES_TEMPLATE, summariseDevices, type DevicesPayload, type DevicesSummary } from '$lib/home/devices';
+import { DEVICES_TEMPLATE, houseOnly, summariseDevices, type DevicesPayload, type DevicesSummary } from '$lib/home/devices';
 import { errMsg } from '$lib/daydream/types';
 import { areaAccess } from '$lib/server/area-scope';
 
@@ -18,7 +18,7 @@ const EMPTY: DevicesSummary = {
 };
 
 export const load: PageServerLoad = async (event) => {
-  await areaAccess(event, 'home');
+  const owner = (await areaAccess(event, 'home')).level === 'owner';
   const readAt = new Date().toISOString();
   const service = getHomeAssistantService();
   if (!service.isConfigured()) {
@@ -29,7 +29,9 @@ export const load: PageServerLoad = async (event) => {
     if (!res.success) throw new Error(res.error ?? 'template call failed');
     const raw = (res.data as { result?: unknown } | undefined)?.result ?? res.data;
     const payload = (typeof raw === 'string' ? JSON.parse(raw) : raw) as DevicesPayload;
-    return { devices: summariseDevices(payload), readAt, loadError: null as string | null };
+    const summary = summariseDevices(payload);
+    // A person's phone is not the house's kit: only the owner sees it here.
+    return { devices: owner ? summary : houseOnly(summary), readAt, loadError: null as string | null };
   } catch (err) {
     console.error('[home] devices load failed:', errMsg(err));
     return { devices: EMPTY, readAt, loadError: `Home Assistant did not answer: ${errMsg(err)}` };

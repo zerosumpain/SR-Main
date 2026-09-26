@@ -17,6 +17,16 @@ vi.mock('$lib/daydream/notebook/review', () => ({
 vi.mock('$lib/daydream/notebook/cards', () => ({
   weaveNote: vi.fn(async () => { throw new Error('tripwire: a weave ran'); }),
 }));
+// A story to file, without fetching one.
+vi.mock('$lib/news/reader', () => ({
+  readNewsStory: vi.fn(async () => ({
+    story: {
+      key: 'hn:1', source: 'hacker-news', id: '1', title: 'A story', url: 'https://example.test/story',
+      discussionUrl: 'https://example.test/d', sourceLabel: 'Hacker News', score: 1, commentCount: 0,
+    },
+    content: '',
+  })),
+}));
 vi.mock('$lib/alexa/store.server', () => ({
   voiceSummary: vi.fn(async () => ({})),
   searchUtterances: vi.fn(async () => []),
@@ -75,7 +85,7 @@ const leaks = (body: unknown) =>
 describe.skipIf(!process.env.DATABASE_URL)('the notebook is scoped to the reader', () => {
   beforeAll(async () => {
     await db.insert(allowedUser).values([
-      { email: A_EMAIL, grants: ['jkai.notes:self'], note: 'notes-access.integration' },
+      { email: A_EMAIL, grants: ['jkai.notes:self', 'news:self'], note: 'notes-access.integration' },
       { email: B_EMAIL, grants: ['jkai.notes:all'], note: 'notes-access.integration' },
       { email: H_EMAIL, grants: ['home:self'], note: 'notes-access.integration' },
     ]);
@@ -145,6 +155,17 @@ describe.skipIf(!process.env.DATABASE_URL)('the notebook is scoped to the reader
     expect((res.body as { note: { principalId: string } }).note.principalId).toBe(A);
   });
 
+  it("filing a news story as a note lands in the member's notebook, not the owner's", async () => {
+    const api = await import('../../../routes/api/news/actions/+server');
+    const res = await run(() => api.POST(event(A_EMAIL, { body: { action: 'note', source: 'hacker-news', id: '1' } })));
+    expect(res.status).toBe(201);
+    const [row] = await db
+      .select({ principalId: daydreamNotebook.principalId })
+      .from(daydreamNotebook)
+      .where(eq(daydreamNotebook.id, (res.body as { id: string }).id));
+    expect(row.principalId).toBe(A);
+  });
+
   it("an `all` reader reads A's note but cannot change it", async () => {
     const api = await import('../../../routes/api/daydream/notes/+server');
     const read = await run(() => api.POST(event(B_EMAIL, { body: { action: 'get', id: ids.mine } })));
@@ -159,11 +180,13 @@ describe.skipIf(!process.env.DATABASE_URL)('the notebook is scoped to the reader
     expect((await run(() => rec.DELETE(event(A_EMAIL, { params: { id: ids.ownerRecording } })))).status).toBe(404);
   });
 
-  it('home:self reaches the house but not the voice log', async () => {
+  it('home:self reaches the house but not the Echo readings or the voice log', async () => {
     const voice = await import('../../../routes/home/voice/+page.server');
     expect((await run(() => voice.load(event(H_EMAIL)))).status).toBe(403);
     const echoes = await import('../../../routes/home/echoes/+page.server');
-    expect((await run(() => echoes.load(event(H_EMAIL)))).status).toBe(200);
+    expect((await run(() => echoes.load(event(H_EMAIL)))).status).toBe(403);
+    const devices = await import('../../../routes/home/devices/+page.server');
+    expect((await run(() => devices.load(event(H_EMAIL)))).status).toBe(200);
     // Notes are not theirs to reach at all.
     const api = await import('../../../routes/api/daydream/notes/+server');
     expect((await run(() => api.GET(event(H_EMAIL)))).status).toBe(403);

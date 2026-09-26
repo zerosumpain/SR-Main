@@ -73,11 +73,11 @@ export const AREAS: readonly AreaInfo[] = [
   {
     id: 'home',
     label: 'Home',
-    blurb: 'The household dashboard, devices and Echo readings; the voice log at all.',
+    blurb: 'The household dashboard and devices; Echo readings and the voice log at all.',
     open: true,
     levels: {
-      self: 'The house: dashboard, devices, Echoes',
-      all: "Also the voice log — everyone's speech",
+      self: 'The house: dashboard and devices',
+      all: "Also the Echo readings and voice log — the household's routine and speech",
       admin: 'Same as all',
     },
   },
@@ -319,11 +319,12 @@ const ROUTES: Record<string, Partial<Record<Method, Permission>>> = {
   '/api/daydream/notes/audio/[id]': { GET: 'jkai.notes:self', DELETE: 'jkai.notes:self' },
 
   // ── home — the house, not a person. People are /home/people's (family:circle),
-  // and the dashboard's people card follows that rule. The voice log is the
-  // whole household's speech, so it opens at `all`, never `self`.
+  // and the dashboard's people card follows that rule. The Echo readings
+  // (per-room motion, alarms, what played) and the voice log are the
+  // household's routine and speech, so they open at `all`, never `self`.
   '/home': { GET: 'home:self' },
   '/home/devices': { GET: 'home:self' },
-  '/home/echoes': { GET: 'home:self' },
+  '/home/echoes': { GET: 'home:all' },
   '/home/voice': { GET: 'home:all' },
 
   '/news': { GET: 'news:self' },

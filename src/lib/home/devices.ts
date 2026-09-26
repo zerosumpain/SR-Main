@@ -38,6 +38,34 @@ export interface BatteryReading {
   entityId: string;
   name: string;
   level: number;
+  /**
+   * A person's phone rather than the house's kit (Life360, the HA companion
+   * app, a device tracker). Its level is where-they-are-adjacent data that
+   * /home/people deliberately scopes, so only the owner sees it here
+   * (`houseOnly`).
+   */
+  personal: boolean;
+}
+
+/** Integrations whose batteries are a person's phone, not the house's kit. */
+const PERSONAL_DOMAINS = new Set(['life360', 'mobile_app']);
+
+/**
+ * The summary with every person's phone taken out — for anyone but the owner:
+ * their batteries, and the people integrations themselves (whose unavailable
+ * entities are named after the person).
+ */
+export function houseOnly(summary: DevicesSummary): DevicesSummary {
+  const integrations = summary.integrations.filter((i) => !PERSONAL_DOMAINS.has(i.domain));
+  const counts: Record<Verdict, number> = { down: 0, degraded: 0, watch: 0, ok: 0, off: 0 };
+  for (const i of integrations) counts[i.verdict]++;
+  return {
+    integrations,
+    batteries: summary.batteries.filter((b) => !b.personal),
+    counts,
+    entities: integrations.reduce((n, i) => n + i.entities, 0),
+    unavailable: integrations.reduce((n, i) => n + i.unavailable, 0),
+  };
 }
 
 export interface DevicesSummary {
@@ -133,11 +161,14 @@ export function summariseDevices(payload: DevicesPayload): DevicesSummary {
 
   const batteries: BatteryReading[] = [];
   for (const r of payload.rows ?? []) {
-    const [, entityId, state, , deviceClass, attrLevel, name] = r;
+    const [entryId, entityId, state, , deviceClass, attrLevel, name] = r;
     const raw = attrLevel ?? (deviceClass === 'battery' ? state : null);
     const level = raw == null ? NaN : Number(raw);
     if (!Number.isFinite(level)) continue;
-    batteries.push({ entityId, name: name || entityId, level: Math.round(level) });
+    const domain = payload.entries?.[entryId]?.[0] ?? '';
+    const personal =
+      PERSONAL_DOMAINS.has(domain) || entityId.startsWith('device_tracker.') || entityId.startsWith('person.');
+    batteries.push({ entityId, name: name || entityId, level: Math.round(level), personal });
   }
   batteries.sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
 

@@ -2,7 +2,7 @@ import type { PageServerLoad } from './$types';
 import { loadFamily } from '$lib/daydream/ledger';
 import { emptyHouseSummary, houseSummary, searchUtterances } from '$lib/alexa/store.server';
 import { getHomeAssistantService } from '$lib/workflows/homeassistant/service';
-import { DEVICES_TEMPLATE, summariseDevices, type DevicesPayload } from '$lib/home/devices';
+import { DEVICES_TEMPLATE, houseOnly, summariseDevices, type DevicesPayload } from '$lib/home/devices';
 import { errMsg } from '$lib/daydream/types';
 import { loadHousehold } from '$lib/home/presence/household';
 import { peopleViewerOf, scopeHousehold } from '$lib/home/presence/viewer';
@@ -45,13 +45,14 @@ async function people(event: Parameters<PageServerLoad>[0]) {
 
 export const load: PageServerLoad = async (event) => {
   const access = await areaAccess(event, 'home');
-  // The voice log is everyone's speech: `home:all` and up, as /home/voice.
+  // The voice log is everyone's speech, and the Echo readings the household's
+  // routine: `home:all` and up, as /home/voice and /home/echoes.
   const hearsVoice = access.level !== 'self';
   const [family, house, said, devs] = await Promise.all([
     settle('family', people(event)),
-    settle('echoes', houseSummary({ days: 1 })),
+    hearsVoice ? settle('echoes', houseSummary({ days: 1 })) : Promise.resolve({ value: null, error: null }),
     hearsVoice ? settle('voice', searchUtterances({ limit: 6 })) : Promise.resolve({ value: null, error: null }),
-    settle('devices', devices()),
+    settle('devices', devices().then((d) => (access.level === 'owner' ? d : houseOnly(d)))),
   ]);
   return {
     members: family.value ?? [],
@@ -63,6 +64,7 @@ export const load: PageServerLoad = async (event) => {
     said: said.value ?? [],
     saidError: said.error,
     showVoice: hearsVoice,
+    showEchoes: hearsVoice,
     devices: devs.value,
     devicesError: devs.error,
   };

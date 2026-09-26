@@ -123,6 +123,8 @@ export const POST: RequestHandler = async (event) => {
         if (access.level !== 'owner') return json({ error: 'Reviews are the owner’s.' }, { status: 403 });
         const note = await getNote(id);
         if (!note) return json({ error: 'no such note' }, { status: 404 });
+        // Of the owner's own notes only: a review's actions run as the owner.
+        if (note.principalId !== 'owner') return json({ error: 'Only your own notes are reviewed.' }, { status: 403 });
 
         const { reviewNote } = await import('$lib/daydream/notebook/review');
         const { executeNoteAction } = await import('$lib/daydream/notebook/actions');
@@ -167,6 +169,10 @@ export const POST: RequestHandler = async (event) => {
         if (!id) return json({ error: 'id is required' }, { status: 400 });
         // Weaving extracts into the owner's intel space.
         if (access.level !== 'owner') return json({ error: 'Weaving is the owner’s.' }, { status: 403 });
+        // Of the owner's own notes only: weaving writes into the owner's intel space.
+        const woven = await getNote(id);
+        if (!woven) return json({ error: 'no such note' }, { status: 404 });
+        if (woven.principalId !== 'owner') return json({ error: 'Only your own notes are woven.' }, { status: 403 });
         const { weaveNote } = await import('$lib/daydream/notebook/cards');
         return json({ ok: true, weave: await weaveNote(id) });
       }

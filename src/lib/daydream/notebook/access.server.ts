@@ -18,8 +18,16 @@ export async function notesAccess(event: { locals: App.Locals }): Promise<AreaAc
   return areaAccess(event, 'jkai.notes');
 }
 
-/** The notes this caller may see, for `listNotes({ visible })` / `listFolders(visible)`. */
+/**
+ * The notes a notebook PAGE lists, for `listNotes({ visible })` /
+ * `listFolders(visible)`. The owner's notebook is the owner's own notes —
+ * members' notes are theirs, and listing them there would put them under the
+ * review and weave buttons, which feed the owner's intel graph and background
+ * passes. A
+ * member sees what `readable` gives them.
+ */
 export function visibleNotes(access: AreaAccess) {
+  if (access.level === 'owner') return eq(daydreamNotebook.principalId, 'owner');
   return readable(daydreamNotebook.principalId, access);
 }
 

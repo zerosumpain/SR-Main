@@ -102,7 +102,9 @@
 
   const summary = $derived([
     ...(data.showPeople ? [{ label: 'In', value: `${inCount}/${data.members.length || 5}`, sub: 'of the household' }] : []),
-    { label: 'Indoors', value: temp?.value != null ? `${temp.value}°` : '—', sub: temp ? temp.room ?? temp.device : 'no reading' },
+    ...(data.showEchoes
+      ? [{ label: 'Indoors', value: temp?.value != null ? `${temp.value}°` : '—', sub: temp ? temp.room ?? temp.device : 'no reading' }]
+      : []),
     { label: 'Needs a look', value: dv ? String(broken.length) : '—', sub: dv ? 'integrations' : 'HA unreachable' },
   ]);
 </script>
@@ -129,6 +131,7 @@
   </section>
   {/if}
 
+  {#if data.showEchoes}
   <section class="band sunken">
     <div class="inner">
       <SectionHead kicker="B / Echoes" title={['What the Echoes', 'read']} strap="Room sensors, the next alarm or timer set on any Echo, and the last track played today." />
@@ -140,6 +143,7 @@
       <p class="more"><a class="link" href="/home/echoes">Temperature history, schedule and listening →</a></p>
     </div>
   </section>
+  {/if}
 
   {#if data.showVoice}
   <section class="band">
