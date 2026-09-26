@@ -84,8 +84,8 @@ export const AREAS: readonly AreaInfo[] = [
   {
     id: 'jkai.chat',
     label: 'jkai · chat',
-    blurb: 'Chat with jkai on a restricted tool list.',
-    open: false,
+    blurb: 'Chat with jkai: web search, news and charts only — none of your data or tools. 50 messages a day.',
+    open: true,
     levels: { self: 'Own threads', all: "Also read everyone's", admin: "Also manage everyone's" },
   },
   {
@@ -303,6 +303,28 @@ const ROUTES: Record<string, Partial<Record<Method, Permission>>> = {
 
   // ── news — the desk and a story. Each action checks the grant it needs
   // (graph: jkai.intel, research: research) inside the handler.
+  // ── jkai.chat — their own threads, on a closed tool list. Every route
+  // resolves the thread or job through $lib/jkai/chat-access.server (post in
+  // your own thread only); the turn itself runs restricted (member-chat
+  // policy). Never opened: the context rail and drill, thread graph and memory,
+  // traces, routing and the canvas chat history (chat-route-access.test).
+  '/jkai': { GET: 'jkai.chat:self' },
+  '/api/jkai/conversations': { GET: 'jkai.chat:self', POST: 'jkai.chat:self' },
+  '/api/jkai/conversations/[id]': { GET: 'jkai.chat:self', PATCH: 'jkai.chat:self', DELETE: 'jkai.chat:self' },
+  '/api/jkai/conversations/[id]/messages': { GET: 'jkai.chat:self' },
+  '/api/jkai/attachments': { POST: 'jkai.chat:self' },
+  '/api/jkai/attachments/[id]': { GET: 'jkai.chat:self', DELETE: 'jkai.chat:self' },
+  '/api/jkai/events': { GET: 'jkai.chat:self' },
+  '/api/workflows/orchestrator/chat': {
+    GET: 'jkai.chat:self',
+    POST: 'jkai.chat:self',
+    PATCH: 'jkai.chat:self',
+    DELETE: 'jkai.chat:self',
+  },
+  '/api/workflows/orchestrator/chat/stream': { GET: 'jkai.chat:self' },
+  '/api/workflows/orchestrator/chat/active': { GET: 'jkai.chat:self' },
+  '/api/workflows/orchestrator/chat/presence': { POST: 'jkai.chat:self' },
+
   // ── jkai.knowledge — recall. The search reads only what the caller's other
   // grants already open (their intel scope, their readable research), never
   // the owner's files, memory, datastore or activity. The page sits in the

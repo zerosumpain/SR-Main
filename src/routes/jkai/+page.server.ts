@@ -9,6 +9,9 @@ import { resolveDefaultModel, resolveChatAltOpenRouterModel, getApprovalUiSettin
 import { getCollectionBySlug, queryRecords } from '$lib/datastore';
 import { BRIEFINGS_COLLECTION } from '$lib/constants/briefing';
 import type { BriefingData } from '$lib/briefing/types';
+import type { DailyAlertsSummary } from '$lib/constants/daily-alerts';
+import { chatAccess, conversationListScope } from '$lib/jkai/chat-access.server';
+import { viewerHolds, viewerOf } from '$lib/server/viewer';
 
 /** How long a briefing counts as "today's" and is worth surfacing on the chat page. */
 const BRIEFING_FRESH_MS = 20 * 60 * 60 * 1000;
@@ -54,6 +57,12 @@ export const load: PageServerLoad = async (event) => {
    * on its own it would send an empty message.
    */
   const pendingSend = pendingQuestion.length > 0 && url.searchParams.get('send') === '1';
+
+  // A member's hub (access groups, jkai.chat): their own threads and nothing of
+  // the owner's — no WhatsApp thread, no briefing, no model settings, and the
+  // daily alerts only from their own intel space if they hold one.
+  const access = await chatAccess(event);
+  if (access.level !== 'owner') return memberHub(event, access, pendingQuestion, pendingSend);
 
   // These four are independent of each other, so they go out together rather
   // than in series. The load previously awaited the conversation list, then the
@@ -122,5 +131,42 @@ export const load: PageServerLoad = async (event) => {
     approvalUi,
     freshBriefing,
     dailyAlerts,
+    member: false as const,
   };
 };
+
+const NO_ALERTS = (): DailyAlertsSummary => {
+  const now = new Date().toISOString();
+  return { status: 'empty', since: now, asOf: now, total: 0, high: 0, items: [] };
+};
+
+async function memberHub(
+  event: Parameters<PageServerLoad>[0],
+  access: Awaited<ReturnType<typeof chatAccess>>,
+  pendingQuestion: string,
+  pendingSend: boolean,
+) {
+  const viewer = await viewerOf(event);
+  const [conversationPage, dailyAlerts] = await Promise.all([
+    getConversationList({ scope: conversationListScope(access) }),
+    viewerHolds(viewer, 'jkai.intel:self')
+      ? loadDailyAlerts(undefined, await resolveRequestScope(event)).catch(NO_ALERTS)
+      : Promise.resolve(NO_ALERTS()),
+  ]);
+  return {
+    pendingQuestion,
+    pendingSend,
+    conversations: conversationPage.items,
+    conversationsHasMore: conversationPage.hasMore,
+    conversationCursor: conversationPage.cursor,
+    whatsappThread: null,
+    // The model is the site default, chosen server-side for every member turn;
+    // the picker is hidden and the owner's settings are not sent.
+    defaultChatModel: { provider: 'openrouter' as const, modelId: '' },
+    chatAltOpenRouterModel: null,
+    approvalUi: await getApprovalUiSettings(),
+    freshBriefing: null,
+    dailyAlerts,
+    member: true as const,
+  };
+}
