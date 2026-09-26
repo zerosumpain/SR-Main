@@ -35,6 +35,30 @@ export function nowStatus(m: NowFields, staleMins = STALE_MINS): NowStatus {
   return m.isHome ? 'home' : 'out';
 }
 
+/** An older location is still a known place, without claiming it is current. */
+export function nowLabel(m: NowFields): string {
+  const status = nowStatus(m);
+  if (status === 'unknown') return m.ageMins == null ? 'no location' : 'last known';
+  return status;
+}
+
+/** Reading the app server is not a new GPS confirmation from the phone. */
+export function feedCheckText(
+  check: { source: 'companion' | 'life360'; checkedAt: Date | string | null } | undefined,
+  now: Date,
+): string | null {
+  if (!check) return null;
+  const label = check.source === 'companion' ? 'App feed' : 'HA feed';
+  const at = check.checkedAt == null ? NaN : new Date(check.checkedAt).getTime();
+  if (!Number.isFinite(at)) return `${label} check unavailable`;
+  const seconds = Math.max(0, Math.floor((now.getTime() - at) / 1000));
+  const age = seconds < 5 ? 'just now'
+    : seconds < 60 ? `${seconds}s ago`
+    : seconds < 3600 ? `${Math.floor(seconds / 60)}m ago`
+    : since(Math.floor(seconds / 60));
+  return `${label} checked ${age}`;
+}
+
 export interface NowCounts {
   home: number;
   out: number;
@@ -77,7 +101,7 @@ function where(m: NowFields): string | null {
 }
 
 /**
- * The line under a card's status. A fresh fix: "At Elton Parade · seen 3m
+ * The line under a card's status. A fresh fix: "At Elton Parade · location 3m
  * ago". A stale one says it is the LAST place, not the current one: "Last at
  * Elton Parade · 47m ago".
  */
@@ -86,15 +110,15 @@ export function nowSub(m: NowFields, staleMins = STALE_MINS): string {
   if (status === 'off') {
     return m.sharingUnknown ? 'Sharing unknown: the app’s sharing list could not be read.' : 'Not sharing their location.';
   }
-  if (m.ageMins == null) return 'No position on the trail.';
+  if (m.ageMins == null) return 'No location received.';
   const place = where(m);
   const km = place != null && !m.placeLabel && !m.isHome;
   if (status === 'unknown') {
-    if (place == null) return `Last fix ${since(m.ageMins)}`;
-    return `Last ${km ? '' : 'at '}${place} · ${since(m.ageMins)}`;
+    if (place == null) return `Location ${since(m.ageMins)}`;
+    return `Last ${km ? '' : 'at '}${place} · location ${since(m.ageMins)}`;
   }
-  if (place == null) return `Seen ${since(m.ageMins)}`;
-  return `${km ? cap(place) : `At ${place}`} · seen ${since(m.ageMins)}`;
+  if (place == null) return `Location ${since(m.ageMins)}`;
+  return `${km ? cap(place) : `At ${place}`} · location ${since(m.ageMins)}`;
 }
 
 function cap(s: string): string {
