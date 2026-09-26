@@ -81,6 +81,8 @@
       "migrationAuthor": "zerosumpain/SR-Main",
       "schemaExecutor": "zerosumpain/SR-Main",
       "requiredTables": [
+        "access_group",
+        "activity_principals",
         "agent_actions",
         "agent_tasks",
         "allowed_user",
@@ -99,7 +101,6 @@
         "relationship",
         "research_session",
         "source",
-        "webdav_credentials",
         "workflow_files"
       ]
     },
