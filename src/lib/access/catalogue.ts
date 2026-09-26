@@ -2,7 +2,7 @@
 // routes each one opens.
 //
 // Permissions live in CODE; who holds them lives in the database
-// (`allowed_user.groups/grants` + `access_group`, see $lib/server/access).
+// (`allowed_user.groups/grants` jsonb + `access_group`, see $lib/server/access).
 // That split is the point: a string in a row that no code defines grants
 // nothing (`parsePermissions` drops it), and a route no entry here names stays
 // owner-only, so new code is closed until someone lists it.
