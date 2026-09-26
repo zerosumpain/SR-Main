@@ -23,7 +23,7 @@ describe('rooms', () => {
     expect(invitesFor('p_john')).toEqual([]);
 
     const seen: WireRoom[] = [];
-    const off = subscribe(id, 'p_sam', (r) => seen.push(r), () => {});
+    const off = subscribe(id, 'p_sam', (r) => seen.push(r as WireRoom), () => {});
     expect(seen.at(-1)!.phase).toBe('lobby');
 
     act(id, 'p_sam', 'join');
@@ -53,7 +53,7 @@ describe('rooms', () => {
     const { id } = createGame({ game: 'tap-duel', host: john, invite: [], difficulty: 'hard' });
     act(id, 'p_john', 'start');
     vi.advanceTimersByTime(COUNTDOWN_MS);
-    const r = roomFor(id, 'p_john');
+    const r = roomFor(id, 'p_john') as WireRoom;
     vi.advanceTimersByTime(r.round!.closesAt - Date.now());
     expect(roomFor(id, 'p_john').phase).toBe('result');
   });
@@ -85,9 +85,9 @@ describe('rooms', () => {
     act(id, 'p_john', 'start');
     vi.advanceTimersByTime(COUNTDOWN_MS);
     const seen: WireRoom[] = [];
-    subscribe(id, 'p_sam', (r) => seen.push(r), () => {});
+    subscribe(id, 'p_sam', (r) => seen.push(r as WireRoom), () => {});
     // The window has shut but its timer has not run yet.
-    vi.setSystemTime(roomFor(id, 'p_john').round!.closesAt + 5);
+    vi.setSystemTime((roomFor(id, 'p_john') as WireRoom).round!.closesAt + 5);
     expect(() => act(id, 'p_john', 'tap', { round: 1, reactionMs: 300 })).toThrow(/round is over/);
     expect(seen.at(-1)!.phase).toBe('result');
   });

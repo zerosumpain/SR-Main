@@ -27,7 +27,6 @@ export interface RoomBase {
   phaseEndsAt: number | null;
 }
 
-type Verb = (room: RoomBase, playerId: string, now: number) => void;
 type Move = (room: RoomBase, playerId: string, body: Record<string, unknown>, now: number) => void;
 
 // Method syntax on purpose: each module's functions take its own Room, and
@@ -40,11 +39,11 @@ export interface GameRules {
     difficulty: Difficulty;
     now: number;
   }): RoomBase;
-  join: Verb;
-  decline: Verb;
-  leave: Verb;
-  start: Verb;
-  again: Verb;
+  join(room: RoomBase, playerId: string, now: number): void;
+  decline(room: RoomBase, playerId: string, now: number): void;
+  leave(room: RoomBase, playerId: string, now: number): void;
+  start(room: RoomBase, playerId: string, now: number): void;
+  again(room: RoomBase, playerId: string, now: number): void;
   advance(room: RoomBase, now: number, rng: Rng): boolean;
   deadline(room: RoomBase): number | null;
   toWire(room: RoomBase, meId: string, now: number): { id: string; phase: string; serverNow: number };
