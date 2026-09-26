@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fixFromEntityState } from './observe';
+import { batteryFromSource, fixFromEntityState } from './observe';
 
 const NOW = new Date('2026-08-27T10:00:00Z');
 
@@ -42,5 +42,25 @@ describe('fixFromEntityState', () => {
       NOW,
     );
     expect('fix' in res && res.fix.readingAgeS).toBe(3600);
+  });
+});
+
+describe('batteryFromSource', () => {
+  const tracker = (level: unknown) => ({ entity_id: 'device_tracker.life360_sam', attributes: { battery_level: level } });
+  const person = { entity_id: 'person.sam', attributes: { source: 'device_tracker.life360_sam', latitude: 51, longitude: -1 } };
+
+  it('reads the battery off the tracker the person follows — the person entity has none', () => {
+    const byId = new Map([['device_tracker.life360_sam', tracker(80)]]);
+    expect(batteryFromSource(person, byId)).toBe(80);
+  });
+
+  it('is null with no source, a missing tracker, or a level that is not a number', () => {
+    expect(batteryFromSource({ attributes: {} }, new Map())).toBeNull();
+    expect(batteryFromSource(person, new Map())).toBeNull();
+    expect(batteryFromSource(person, new Map([['device_tracker.life360_sam', tracker('80')]]))).toBeNull();
+  });
+
+  it('clamps to a whole percentage', () => {
+    expect(batteryFromSource(person, new Map([['device_tracker.life360_sam', tracker(99.6)]]))).toBe(100);
   });
 });
