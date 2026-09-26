@@ -1,7 +1,7 @@
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { narrativeItems, facts, sources } from '$lib/db/schema';
-import { eq, asc } from 'drizzle-orm';
+import { and, eq, asc } from 'drizzle-orm';
 import { requireResearchSession } from '$lib/deepdive/session-access.server';
 
 export const GET: RequestHandler = async (event) => {
@@ -30,7 +30,8 @@ export const GET: RequestHandler = async (event) => {
       const [fact] = await db
         .select({ content: facts.content, confidence: facts.confidence, sourceId: facts.sourceId })
         .from(facts)
-        .where(eq(facts.id, item.factId))
+        // This run's facts only, whatever a stored item claims.
+        .where(and(eq(facts.id, item.factId), eq(facts.sessionId, params.id)))
         .limit(1);
 
       if (fact) {

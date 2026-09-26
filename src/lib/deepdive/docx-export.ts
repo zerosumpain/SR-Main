@@ -481,7 +481,8 @@ export async function generateNarrativeReport(
       const [fact] = await db
         .select()
         .from(facts)
-        .where(eq(facts.id, item.factId))
+        // This run's facts only, whatever a stored item claims.
+        .where(and(eq(facts.id, item.factId), eq(facts.sessionId, sessionId)))
         .limit(1);
 
       if (fact) {

@@ -22,13 +22,14 @@ import { and, eq } from 'drizzle-orm';
 import { requestPause, requestStop, isRunning } from '$lib/deepdive/worker';
 import { resumeSession } from '$lib/deepdive/resume';
 import { resumePhase } from '$lib/deepdive/phase-order';
-import { requireResearchSession } from '$lib/deepdive/session-access.server';
+import { requireResearchSession, reserveResearchStart } from '$lib/deepdive/session-access.server';
+import { coerceDepth } from '$lib/deepdive/depth';
 
 const TERMINAL = ['complete', 'failed'];
 
 export const POST: RequestHandler = async (event) => {
   const { params, request } = event;
-  await requireResearchSession(event, params.id, 'write');
+  const { access } = await requireResearchSession(event, params.id, 'write');
   const body = await request.json().catch(() => ({}) as Record<string, unknown>);
   const action = typeof body.action === 'string' ? body.action : '';
 
@@ -90,6 +91,9 @@ export const POST: RequestHandler = async (event) => {
     if (session.status === 'complete') {
       return json({ error: 'This run already finished.' }, { status: 409 });
     }
+    // A resume restarts spend on the run's full budget: for a member it takes
+    // a slot like a new run (the owner is never counted).
+    await reserveResearchStart(access, coerceDepth(session.depth));
     const outcome = await resumeSession(params.id);
     if (!outcome.ok) return json({ error: outcome.reason ?? 'Could not resume.' }, { status: 409 });
     return json({ ok: true, status: outcome.phase, phase: outcome.phase });

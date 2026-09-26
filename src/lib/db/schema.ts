@@ -1702,6 +1702,23 @@ export const allowedUser = pgTable('allowed_user', {
 });
 
 /**
+ * What members spent, one row per metered act (a research run started or
+ * resumed, a chat turn): the ledger the caps count. Separate from the rows the
+ * act produced on purpose — deleting a run must not hand its slot back.
+ */
+export const accessUsage = pgTable(
+  'access_usage',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    principalId: text('principal_id').notNull(),
+    /** 'research' | 'chat'. */
+    kind: text('kind').notNull(),
+    at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ byPrincipal: index('access_usage_principal_kind_at_idx').on(t.principalId, t.kind, t.at) }),
+);
+
+/**
  * Named bundles of permissions, edited at /admin/access. `grants` holds
  * catalogue strings ($lib/access/catalogue); built-ins are seeded on first read
  * and can be edited but not deleted.

@@ -32,6 +32,8 @@ vi.mock('$lib/deepdive/session-access.server', async () => {
       if (!sessionRows.length) throw error(404, 'Session not found');
       return { session: sessionRows[0], access: { level: 'owner', own: 'owner' } };
     }),
+    // The owner is never metered.
+    reserveResearchStart: vi.fn(async () => {}),
   };
 });
 

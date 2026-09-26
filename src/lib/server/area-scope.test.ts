@@ -10,7 +10,7 @@ vi.mock('$lib/db', () => ({ db: {} }));
 
 const { areaAccess, readable, writable, canRead, canWrite, OWNER_ACCESS } = await import('./area-scope');
 
-const col = sql.identifier('principal_id');
+const col = sql`${sql.identifier('principal_id')}`;
 const render = (s: SQL) => {
   const { sql: text, params } = new PgDialect().sqlToQuery(s);
   return { sql: text, params };

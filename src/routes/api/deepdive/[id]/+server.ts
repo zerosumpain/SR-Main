@@ -4,6 +4,7 @@ import { db } from '$lib/db';
 import { researchSessions, facts, entities, sources, relationships, entityMentions, narrativeItems, globalEntityLinks, synthesisRuns } from '$lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { requestStop, requestSkipPhase } from '$lib/deepdive/worker';
+import { writable } from '$lib/server/area-scope';
 import { requireResearchSession } from '$lib/deepdive/session-access.server';
 
 export const GET: RequestHandler = async (event) => {
@@ -62,16 +63,18 @@ export const PATCH: RequestHandler = async (event) => {
 
 export const DELETE: RequestHandler = async (event) => {
   const { params } = event;
-  await requireResearchSession(event, params.id, 'write');
+  const { access } = await requireResearchSession(event, params.id, 'write');
 
   await db.transaction(async (tx) => {
     // 0. Null out parentSessionId on any child (explore-further) sessions so
     //    they are not orphaned. parentSessionId has no FK constraint in schema
     //    so this is purely data hygiene, not required for the DELETE to succeed.
+    //    Only children the caller may change: the owner's explore of a member's
+    //    run keeps its lineage pointer rather than being edited by the member.
     await tx
       .update(researchSessions)
       .set({ parentSessionId: null })
-      .where(eq(researchSessions.parentSessionId, params.id));
+      .where(and(eq(researchSessions.parentSessionId, params.id), writable(researchSessions.principalId, access)));
 
     // 1. narrative items (references session + facts)
     await tx.delete(narrativeItems).where(eq(narrativeItems.sessionId, params.id));

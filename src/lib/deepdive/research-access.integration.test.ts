@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { activityPrincipals, allowedUser, researchSessions, sources } from '$lib/db/schema';
+import { accessUsage, activityPrincipals, allowedUser, researchSessions, sources } from '$lib/db/schema';
 
 // The P3 proof: real sessions owned by the owner, member A (research:self) and
 // household; real member rows resolved by the real seam; the real handlers.
@@ -100,6 +100,7 @@ describe.skipIf(!process.env.DATABASE_URL)('research is scoped to the reader', (
 
   afterAll(async () => {
     const principals = [A, B, C];
+    await db.delete(accessUsage).where(inArray(accessUsage.principalId, principals));
     await db.delete(sources).where(eq(sources.sessionId, ids.owner ?? ''));
     await db.delete(researchSessions).where(inArray(researchSessions.principalId, principals));
     await db.delete(researchSessions).where(inArray(researchSessions.id, [ids.owner, ids.mine, ids.shared].filter(Boolean)));
@@ -171,29 +172,39 @@ describe.skipIf(!process.env.DATABASE_URL)('research is scoped to the reader', (
     expect((await run(() => page.load(event(C_EMAIL)))).status).toBe(403);
   });
 
-  it('creates: stamps the member, refuses investigation, and caps the day', async () => {
+  it('creates: stamps the member, refuses investigation, and caps the day — in parallel too', async () => {
     const api = await import('../../routes/api/research/+server');
     const deep = await run(() => api.POST(event(A_EMAIL, { body: { topic: `deep ${TAG}`, depth: 'investigation' } })));
     expect(deep.status).toBe(403);
 
-    // A already owns one run from today (the seeded one).
-    for (let i = 0; i < 4; i++) {
-      const res = await run(() => api.POST(event(A_EMAIL, { body: { topic: `brief ${i} ${TAG}`, depth: 'brief' } })));
-      expect(res.status, `run ${i}`).toBe(201);
-      expect((res.body as { principalId: string }).principalId).toBe(A);
-    }
-    const sixth = await run(() => api.POST(event(A_EMAIL, { body: { topic: `one too many ${TAG}`, depth: 'brief' } })));
-    expect(sixth.status).toBe(429);
+    // Eight at once: the advisory lock lets exactly five through.
+    const all = await Promise.all(
+      Array.from({ length: 8 }, (_, i) => run(() => api.POST(event(A_EMAIL, { body: { topic: `brief ${i} ${TAG}`, depth: 'brief' } })))),
+    );
+    const made = all.filter((r) => r.status === 201);
+    expect(made.length).toBe(5);
+    expect(all.filter((r) => r.status === 429).length).toBe(3);
+    for (const r of made) expect((r.body as { principalId: string }).principalId).toBe(A);
+
+    // Deleting them hands no slot back: the ledger, not the runs, is counted.
+    const ids = made.map((r) => (r.body as { id: string }).id);
+    const del = await run(() => api.DELETE(event(A_EMAIL, { method: 'DELETE', body: { ids } })));
+    expect(del.body).toMatchObject({ deleted: 5 });
+    const again = await run(() => api.POST(event(A_EMAIL, { body: { topic: `after delete ${TAG}`, depth: 'brief' } })));
+    expect(again.status).toBe(429);
 
     const child = await run(() =>
-      api.POST(event(B_EMAIL, { body: { topic: `child ${TAG}`, depth: 'scan', parentSessionId: ids.owner } })),
+      api.POST(event(B_EMAIL, { body: { topic: `child ${TAG}`, depth: 'scan', parentSessionId: ids[0] ?? ids.owner } })),
     );
     expect(child.status).toBe(404);
+  });
 
-    const rows = await db
-      .select({ n: researchSessions.id })
-      .from(researchSessions)
-      .where(and(eq(researchSessions.principalId, A)));
-    expect(rows.length).toBe(5);
+  it("a member's seed context cannot carry the intel-commission flag", async () => {
+    const api = await import('../../routes/api/research/+server');
+    const res = await run(() =>
+      api.POST(event(B_EMAIL, { body: { topic: `seeded ${TAG}`, depth: 'scan', seedContext: { fromIntel: true, note: 'x' } } })),
+    );
+    expect(res.status).toBe(201);
+    expect((res.body as { seedContext: Record<string, unknown> }).seedContext).toEqual({ note: 'x' });
   });
 });

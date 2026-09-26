@@ -1,8 +1,8 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { narrativeItems } from '$lib/db/schema';
-import { eq, asc } from 'drizzle-orm';
+import { facts, narrativeItems } from '$lib/db/schema';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import { requireResearchSession } from '$lib/deepdive/session-access.server';
 
 export const GET: RequestHandler = async (event) => {
@@ -27,6 +27,17 @@ export const POST: RequestHandler = async (event) => {
     return json({ error: 'items array required' }, { status: 400 });
   }
 
+  // A narrative item may cite only this run's facts: an id from another run
+  // would print that run's fact in this one's export.
+  const cited = [...new Set(items.map((i) => i.factId).filter((f): f is string => typeof f === 'string' && !!f))];
+  const own = cited.length
+    ? new Set(
+        (await db.select({ id: facts.id }).from(facts).where(and(eq(facts.sessionId, params.id), inArray(facts.id, cited)))).map(
+          (r) => r.id,
+        ),
+      )
+    : new Set<string>();
+
   // Full replace: delete existing, insert new
   await db.delete(narrativeItems).where(eq(narrativeItems.sessionId, params.id));
 
@@ -34,7 +45,7 @@ export const POST: RequestHandler = async (event) => {
     await db.insert(narrativeItems).values(
       items.map((item, i) => ({
         sessionId: params.id,
-        factId: item.factId || null,
+        factId: item.factId && own.has(item.factId) ? item.factId : null,
         sortOrder: item.sortOrder ?? i,
         annotation: item.annotation || null,
       })),

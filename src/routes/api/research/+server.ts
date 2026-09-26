@@ -17,7 +17,19 @@ import { coerceGrounding } from '$lib/deepdive/grounding';
 import { startResearch } from '$lib/deepdive/worker';
 import { depthTimings } from '$lib/deepdive/timings';
 import { areaAccess, readable, writable } from '$lib/server/area-scope';
-import { assertMayStartResearch } from '$lib/deepdive/session-access.server';
+import { reserveResearchStart } from '$lib/deepdive/session-access.server';
+
+/**
+ * The seed context as stored. A member's is taken as given, minus `fromIntel`:
+ * that flag is `/api/jkai/intel/commission`'s, and a run carrying it commits
+ * into the owner's intel graph when it finishes.
+ */
+function seedFor(raw: unknown, owner: boolean): object | null {
+  if (!raw || typeof raw !== 'object') return null;
+  if (owner) return raw;
+  const { fromIntel: _dropped, ...rest } = raw as Record<string, unknown>;
+  return rest;
+}
 
 export const POST: RequestHandler = async (event) => {
   const { request } = event;
@@ -46,7 +58,7 @@ export const POST: RequestHandler = async (event) => {
   const grounding = depth === 'instant' ? coerceGrounding(body.grounding) : 'off';
 
   // A member's run is capped (depth, runs a day); the owner's never is.
-  await assertMayStartResearch(access, depth);
+  await reserveResearchStart(access, depth);
   // A child must belong to a parent the caller can read — otherwise `explore`'s
   // lineage would hang a member's run off John's.
   const parentSessionId = typeof body.parentSessionId === 'string' ? body.parentSessionId : null;
@@ -86,7 +98,7 @@ export const POST: RequestHandler = async (event) => {
       plan: (body.plan as object | undefined) ?? null,
       status: 'draft',
       parentSessionId,
-      seedContext: (body.seedContext as object | undefined) ?? null,
+      seedContext: seedFor(body.seedContext, access.level === 'owner'),
       principalId: access.own,
     })
     .returning();

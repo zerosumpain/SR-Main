@@ -8,7 +8,7 @@ import { jsonCompletion } from '$lib/deepdive/ai';
 import { DEFAULT_CONFIG } from '$lib/deepdive/types';
 import type { SeedContext } from '$lib/deepdive/types';
 import { depthPreset, type ResearchDepth } from '$lib/deepdive/depth';
-import { requireResearchSession, assertMayStartResearch } from '$lib/deepdive/session-access.server';
+import { requireResearchSession, reserveResearchStart } from '$lib/deepdive/session-access.server';
 
 /**
  * The depth an explore child runs at. The insert never named one, so the row
@@ -27,7 +27,7 @@ export const POST: RequestHandler = async (event) => {
   const owner = access.level === 'owner';
   const depth = exploreDepth(owner);
   // Before any LLM goal-planning is spent on a run the caller may not start.
-  await assertMayStartResearch(access, depth);
+  await reserveResearchStart(access, depth);
 
   const body = await request.json();
   const { type, itemId, additionalContext } = body as {
@@ -112,7 +112,11 @@ export const POST: RequestHandler = async (event) => {
       if (clusterFactIds.length > 0) {
         const clusterFacts = await Promise.all(
           clusterFactIds.map(async (fid: string) => {
-            const [f] = await db.select({ content: facts.content }).from(facts).where(eq(facts.id, fid)).limit(1);
+            const [f] = await db
+              .select({ content: facts.content })
+              .from(facts)
+              .where(and(eq(facts.id, fid), eq(facts.sessionId, params.id)))
+              .limit(1);
             return f?.content;
           }),
         );

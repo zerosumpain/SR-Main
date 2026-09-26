@@ -535,7 +535,9 @@ async function runResearchPhases(sessionId: string): Promise<void> {
     // The exception is research the INTEL GRAPH ITSELF commissioned. Asking the
     // graph to go and find something out is the request to commit; a commission
     // whose answer never came back would be a feature that does nothing.
-    if (isCommissionedByIntel(session.seedContext)) {
+    // Only the owner's runs: the commit writes into the owner's intel space, and a
+    // member's request could carry any seed context it liked.
+    if (isCommissionedByIntel(session.seedContext) && session.principalId === 'owner') {
       try {
         if (!budget.expired()) {
           const { commitSessionGraph } = await import('./graph-commit');

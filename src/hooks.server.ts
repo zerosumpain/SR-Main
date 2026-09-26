@@ -79,6 +79,11 @@ const RATE_LIMITS: Array<{ pattern: RegExp; capacity: number; refillPerSecond: n
   // below only fires on non-GET requests, so a GET entry would be dead code.
   // Cost is bounded by: auth gate + 1h in-process cache + 5s fetch timeout + SSRF guard.
   { pattern: /^\/api\/deepdive(\/|$)/, capacity: 5, refillPerSecond: 5 / 60 }, // 5/min
+  // Starting a run (and, for members, the metered acts under it) — the same
+  // ceiling as the legacy tree, so the newer door is not the cheaper one.
+  { pattern: /^\/api\/research(\/|$)/, capacity: 5, refillPerSecond: 5 / 60 }, // 5/min
+  // Keep-in-graph extracts with a model; research starts a run.
+  { pattern: /^\/api\/news\/actions$/, capacity: 10, refillPerSecond: 10 / 60 }, // 10/min
   { pattern: /^\/api\/quickanswer(\/|$)/, capacity: 10, refillPerSecond: 10 / 60 }, // 10/min
   { pattern: /^\/api\/workflows\/orchestrator(\/|$)/, capacity: 10, refillPerSecond: 10 / 60 },
   { pattern: /^\/api\/workflows\/webhook(\/|$)/, capacity: 20, refillPerSecond: 20 / 60 },

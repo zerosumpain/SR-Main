@@ -12,7 +12,7 @@ import { newsCapabilities } from '$lib/news/capabilities.server';
 import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
 import { writeSpace } from '$lib/jkai/intel/scope';
 import { areaAccess } from '$lib/server/area-scope';
-import { assertMayStartResearch } from '$lib/deepdive/session-access.server';
+import { reserveResearchStart } from '$lib/deepdive/session-access.server';
 
 export const POST: RequestHandler = async (event) => {
   const { request, locals } = event;
@@ -44,7 +44,7 @@ export const POST: RequestHandler = async (event) => {
     }
     if (action === 'research') {
       const access = await areaAccess(event, 'research');
-      await assertMayStartResearch(access, 'brief');
+      await reserveResearchStart(access, 'brief');
       const article = await newsActionArticle(source, id);
       return json(await commissionNewsResearch(article, access.own), { status: 201 });
     }
