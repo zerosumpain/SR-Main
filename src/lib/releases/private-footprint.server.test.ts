@@ -36,8 +36,10 @@ describe('private site footprint', () => {
       })),
     }));
 
-    const owner = withPrivateFootprint(main, path);
+    const owner = withPrivateFootprint(main, path, 'promoted-master-commit');
     expect(owner.repositories).toHaveLength(11);
+    expect(owner.repositories[0].revision).toBe('promoted-master-commit');
+    expect(main.repositories[0].revision).toBe('abc');
     expect(owner.categories.code.lines).toBe(50);
     expect(owner.categories.documentation.lines).toBe(52);
     expect(owner.categories.tests.lines).toBe(63);

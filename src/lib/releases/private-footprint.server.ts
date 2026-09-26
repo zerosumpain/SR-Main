@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { SOURCE_FOOTPRINT } from 'virtual:sr-source-footprint';
+import { getDeployVersion } from '$lib/server/deploy-version';
 
 type Footprint = typeof SOURCE_FOOTPRINT;
 type Repository = Footprint['repositories'][number];
@@ -11,6 +12,7 @@ const CATEGORIES: Category[] = ['code', 'documentation', 'tests'];
 export function withPrivateFootprint(
   publicFootprint: Footprint,
   sourcePath = process.env.SITE_FOOTPRINT_PATH || join(process.cwd(), 'data/site-footprint.json'),
+  mainRevision = getDeployVersion().sha,
 ): Footprint {
   const snapshot: unknown = JSON.parse(readFileSync(sourcePath, 'utf8'));
   if (!snapshot || typeof snapshot !== 'object' || !('repositories' in snapshot) ||
@@ -19,7 +21,13 @@ export function withPrivateFootprint(
     throw new Error('Private site footprint must contain the revision-pinned service repositories');
   }
 
-  const repositories: Repository[] = [...publicFootprint.repositories];
+  // A certified build may be promoted from a PR merge ref. The release stamp
+  // names the durable master commit that actually serves this build.
+  const repositories: Repository[] = publicFootprint.repositories.map((repository) =>
+    repository.id === 'main' && mainRevision
+      ? { ...repository, revision: mainRevision }
+      : repository,
+  );
   const ids = new Set(repositories.map((repository) => repository.id));
   for (const value of snapshot.repositories) {
     if (!value || typeof value !== 'object' ||
