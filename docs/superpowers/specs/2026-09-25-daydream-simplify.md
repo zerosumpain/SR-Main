@@ -181,6 +181,46 @@ hourly with "no handler registered" since. Nothing outside daydream reads
 | **P3** | `activities` tool; observe/places + orphan Landgrab rows paused (Landgrab is gone — see D1 revised). | a cycle can cite an `activities` card; no trail writes |
 | **P4** | Deletion: modules, jobs, rooms, API actions; dump + drop tables; redirects. | build + gate green; room URLs 308; line count |
 
+### P4b — the table drop (measured 2026-09-26, read-only)
+
+P4a (#1000) and PR-C (#1002) deleted the code. Of the 25 `daydream_*` tables,
+Main's code (src, scripts, packages, tests; export name and SQL name, `grep -a`)
+no longer touches **12**: `sweep_findings`, `steers`, `lead_steps`, `offers`,
+`rules`, `hypothesis_assessments`, `observations`, `digests`, `leads`,
+`faults`, `capabilities`, `hypotheses` (the last two only in comments and a
+2026-09-06 one-off migration script). `signals` (read by `selfimprove/analyze`
+and `loop-health`) and `calendar_exclusions` (read by `daydream/calendar/store`)
+are still read and stay, as do trail, places, thoughts, notebook ×3, memory
+consolidation ×3, `day_features` and `spend`.
+
+**Extracted apps.** SR-Jkai-Core and SR-Workflows each carry a pre-P4a copy of
+`$lib/daydream`. An import-graph walk from their routes, hooks and scripts finds
+live readers of six of the twelve: `observations` + `signals`
+(`signals/registry`, `stats/sweep`), `digests` + `hypotheses` (`digest/build`,
+`evidence`), `leads` + `capabilities` (`briefing`, Jkai-Core's
+`appetite/store`), `faults` (`faults.ts`). Those six are **not dropped** —
+dropping them would turn a stale copy into a runtime error. The other six are read
+only by unreachable files (Jkai-Core's `ledger`, `offers`, `provenance`,
+`rules/store`, `hypotheses/test`) or only by their own `schema.ts`.
+
+**The gate.** Every one of the 25 tables is in `requiredTables` for both
+`jkai-core` and `workflows` in `docs/module-ownership.json`, which
+`scripts/check-extracted-schema.mjs` enforces in `gate-structural.sh` **and**
+`ci-release.sh`. That file is generated from SR-Infra
+`registry/operations.json` (`check-estate.mjs --write-ownership`), whose own
+audit also demands each app's `schema.ts` declare exactly its
+`requiredTables`. So even the six droppable tables cannot leave Main's
+`schema.ts` without, in order: an SR-Infra registry edit, the two extracted
+apps dropping their declarations (and Jkai-Core its dead modules), then the
+regenerated ownership file here.
+
+| # | Decision | Options | Chosen | Why | Reversible? |
+|---|---|---|---|---|---|
+| P1 | What P4b drops now | Drop the six unread tables with a hand-edited ownership file / keep them declared until the registry moves | Keep declared | Hand-editing a generated file passes Main's gate but contradicts SR-Infra; the next `--write-ownership` puts them back and Main's gate then fails the release. A red release gate costs more than ~5.5 MB of dead rows. | Yes |
+| P2 | Which tables the eventual drop covers | All 12 unread / the 6 with no reachable reader anywhere | The 6: `sweep_findings` (6,268 rows), `lead_steps` (4,372), `hypothesis_assessments` (763), `offers` (28), `rules` (2), `steers` (0) | The other six are still reachable in extracted apps. They go when those apps prune their daydream copies. | Dump makes it recoverable |
+| P3 | Heartbeat rows for deleted activities | Keep paused / delete now | Delete now, after a CSV backup (runbook stage 1) | Decision 6 of the centralisation spec deferred this to P4b. 19 `system-scan` rows have no handler on master (17 daydream + `geo-territory`, `landgrab-weekly`); `seed.ts` seeds from the registry so they are not re-created. Pulses cascade. | CSV backup |
+| P4 | Where the push risk sits | — | Drops-only | Prod holds 222 tables = schema.ts's 218 + the 4 `tablesFilter` exclusions; removing declarations yields drops and no creates, so no rename prompt. | — |
+
 ## Success, measured 30 days after P2
 
 - No channel over 30% of notes; health ≥ 15%; chat and home each ≥ 8%.
