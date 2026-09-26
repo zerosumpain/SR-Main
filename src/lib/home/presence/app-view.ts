@@ -32,6 +32,7 @@ import { and, asc, gte, inArray, isNotNull } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamPlaces, daydreamTrail } from '$lib/db/schema';
 import { companionToken, companionUrl, loadCompanionUsers, type HouseholdUser } from './companion';
+import { inferMode } from './cluster';
 import { distanceM } from './geo';
 import { listPanelPlaces } from './places';
 import { livePositions, loadHousehold, type LivePosition } from './household';
@@ -71,6 +72,26 @@ export interface AppToday {
   trail: [number, number, number][];
 }
 
+/**
+ * Somebody on the move right now: how, and how fast. The phone names WHERE
+ * from `position` (a reverse geocode on the device), so no street name is
+ * computed or stored here.
+ */
+export interface AppMoving {
+  /** The coarse speed band — `inferMode`'s, never stated as fact. */
+  mode: 'walking' | 'active' | 'vehicle';
+  speedKmh: number;
+  /** The earliest fix of the moving stretch in the window, ISO. */
+  since: string;
+}
+
+/** How far back "moving now" looks. */
+export const MOVING_WINDOW_S = 10 * 60;
+/** The newest fix must be at most this old, or it is where they WERE moving. */
+export const MOVING_FRESH_S = 5 * 60;
+/** Straight-line distance the window must cover: GPS wander at a desk is ~50 m. */
+export const MOVING_MIN_DISPLACEMENT_M = 150;
+
 export interface AppPerson {
   subject: string;
   name: string;
@@ -82,6 +103,9 @@ export interface AppPerson {
   batteryPct: number | null;
   lastSeenAt: string | null;
   position: { lat: number; lon: number; at: string } | null;
+  /** On the move now, or null. Everyone sharing gets it: it says no more
+   *  than a pin that moves on every refresh already does. */
+  moving: AppMoving | null;
   today: AppToday | null;
 }
 
@@ -186,6 +210,44 @@ export function summariseTrail(
   };
 }
 
+/**
+ * Whether the last few minutes of fixes are somebody moving. PURE.
+ *
+ * Moving means: the newest usable fix is fresh, the window's first and last
+ * fixes are MOVING_MIN_DISPLACEMENT_M apart in a straight line (so pacing a
+ * kitchen or GPS drift is still), and the average speed along the path is
+ * past `still`. Speed is path distance over time, gaps and absurd jumps
+ * excluded the way `summariseTrail` excludes them.
+ */
+export function movingFrom(points: readonly TrailPoint[], now: Date): AppMoving | null {
+  const from = now.getTime() - MOVING_WINDOW_S * 1000;
+  const usable = points.filter(
+    (p) => p.ts.getTime() >= from && (p.accuracyM == null || p.accuracyM <= MAX_USABLE_ACCURACY_M),
+  );
+  if (usable.length < 2) return null;
+  const first = usable[0];
+  const last = usable[usable.length - 1];
+  if (now.getTime() - last.ts.getTime() > MOVING_FRESH_S * 1000) return null;
+  if (distanceM(first.lat, first.lon, last.lat, last.lon) < MOVING_MIN_DISPLACEMENT_M) return null;
+  let metres = 0;
+  let seconds = 0;
+  for (let i = 1; i < usable.length; i++) {
+    const a = usable[i - 1];
+    const b = usable[i];
+    const dt = (b.ts.getTime() - a.ts.getTime()) / 1000;
+    if (dt <= 0 || dt > TRAIL_GAP_S) continue;
+    const d = distanceM(a.lat, a.lon, b.lat, b.lon);
+    if ((d / dt) * 3.6 >= ABSURD_SPEED_KMH) continue;
+    metres += d;
+    seconds += dt;
+  }
+  if (seconds < 60) return null;
+  const kmh = (metres / seconds) * 3.6;
+  const mode = inferMode(kmh);
+  if (mode !== 'walking' && mode !== 'active' && mode !== 'vehicle') return null;
+  return { mode, speedKmh: Math.round(kmh), since: first.ts.toISOString() };
+}
+
 /** Whose trails a viewer's view carries: exactly the cards whose day they may see. PURE. */
 export function trailSubjects(scoped: readonly ScopedPresence[]): string[] {
   return scoped.filter((m) => m.today != null && !m.notSharing).map((m) => m.subject);
@@ -203,11 +265,14 @@ export function buildAppView(input: {
   names: ReadonlyMap<string, string>;
   positions: readonly LivePosition[];
   trails: ReadonlyMap<string, readonly TrailPoint[]>;
+  /** The last MOVING_WINDOW_S of fixes for everyone sharing, for `moving`. */
+  recent?: ReadonlyMap<string, readonly TrailPoint[]>;
   labels: ReadonlyMap<string, string | null>;
   dayStart: Date;
   now: Date;
 }): AppPeopleView {
   const { viewer, scoped, names, positions, trails, labels, dayStart, now } = input;
+  const recent = input.recent ?? new Map<string, readonly TrailPoint[]>();
   const posBy = new Map(positions.map((p) => [p.subject, p]));
   const selfSubject = viewer.kind === 'household' ? viewer.subject : input.self;
   const people = scoped.map((m): AppPerson => {
@@ -222,6 +287,7 @@ export function buildAppView(input: {
       batteryPct: m.notSharing ? null : m.batteryPct,
       lastSeenAt: m.notSharing || !m.lastSeenAt ? null : m.lastSeenAt.toISOString(),
       position: pos ? { lat: pos.lat, lon: pos.lon, at: pos.at } : null,
+      moving: pos ? movingFrom(recent.get(m.subject) ?? [], now) : null,
       today: m.today != null && !m.notSharing ? summariseTrail(trails.get(m.subject) ?? [], labels, firstOutAt) : null,
     };
   });
@@ -318,7 +384,7 @@ async function sitePairFor(
   }
 }
 
-/** Today's trail for these subjects, oldest first. */
+/** The trail since `dayStart` for these subjects, oldest first. */
 async function loadTodayTrails(subjects: readonly string[], dayStart: Date): Promise<Map<string, TrailPoint[]>> {
   const out = new Map<string, TrailPoint[]>();
   if (subjects.length === 0) return out;
@@ -426,6 +492,12 @@ export async function pushAppViews(
     const scopedBy = viewers.map((v) => ({ ...v, scoped: scopeHousehold(presence, v.viewer) }));
     const wanted = [...new Set(scopedBy.flatMap((v) => trailSubjects(v.scoped)))];
     const trails = await loadTodayTrails(wanted, dayStart);
+    // Everyone with a pin, whoever may see their day: moving-or-not is a
+    // property of the live position, not of the day's history.
+    const recent = await loadTodayTrails(
+      positions.map((p) => p.subject),
+      new Date(now.getTime() - MOVING_WINDOW_S * 1000),
+    ).catch(() => new Map<string, TrailPoint[]>());
     const placeIds = [...new Set([...trails.values()].flat().map((p) => p.placeId).filter((x): x is string => !!x))];
     const labels = await loadLabels(placeIds);
     const names = new Map(members.map((m) => [m.subject, m.displayName]));
@@ -440,6 +512,7 @@ export async function pushAppViews(
           names,
           positions,
           trails,
+          recent,
           labels,
           dayStart,
           now,

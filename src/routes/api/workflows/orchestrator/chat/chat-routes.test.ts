@@ -139,7 +139,7 @@ vi.mock('$lib/jkai/tool-trace', () => ({
   createTraceRecorder: () => ({ observe() {}, hasSteps: () => false, snapshot: () => ({}) }),
   compactStepsForMessage: () => [],
 }));
-vi.mock('$lib/jkai/thread-title', () => ({ isPlaceholderTitle: (t: unknown) => !t }));
+vi.mock('$lib/jkai/thread-title', () => ({ isPlaceholderTitle: (t: unknown) => !t, titleFromMessage: (m: string) => m.slice(0, 50) }));
 const refileConversationFiles = vi.fn(async () => {});
 vi.mock('$lib/jkai/media/drive-link', () => ({ refileConversationFiles: () => refileConversationFiles() }));
 

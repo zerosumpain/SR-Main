@@ -60,7 +60,7 @@ vi.mock('./viewer', async (orig) => {
   return { ...real, peopleViewerForEmail: async (email: string) => h.viewers.get(email) ?? null };
 });
 
-const { buildAppView, summariseTrail, thin, trailSubjects, pushAppViews, resetSitePairCache, sitePairWanted } = await import(
+const { buildAppView, movingFrom, summariseTrail, thin, trailSubjects, pushAppViews, resetSitePairCache, sitePairWanted } = await import(
   './app-view'
 );
 const { scopeHousehold } = await import('./viewer');
@@ -162,6 +162,39 @@ describe('summariseTrail', () => {
   });
 });
 
+describe('movingFrom', () => {
+  // NOW is 09:05Z = minute 605 from DAY_START. 0.001° of latitude is ~111 m.
+  const walk = [pt(597, 51, 0), pt(599, 51.0015, 0), pt(601, 51.003, 0), pt(603, 51.0045, 0), pt(604, 51.005, 0)];
+
+  it('reads a steady walk as walking, with its speed and when the stretch began', () => {
+    const m = movingFrom(walk, NOW);
+    expect(m).toMatchObject({ mode: 'walking', since: at(597).toISOString() });
+    expect(m!.speedKmh).toBeGreaterThanOrEqual(3);
+    expect(m!.speedKmh).toBeLessThanOrEqual(6);
+  });
+
+  it('reads a drive as a vehicle', () => {
+    const drive = [pt(600, 51, 0), pt(601, 51.01, 0), pt(602, 51.02, 0), pt(603, 51.03, 0), pt(604, 51.04, 0)];
+    expect(movingFrom(drive, NOW)?.mode).toBe('vehicle');
+  });
+
+  it('is still for drift at a desk, however many fixes', () => {
+    const desk = [596, 597, 598, 599, 600, 601, 602, 603, 604].map((m, i) => pt(m, 51 + (i % 2) * 0.0004, 0));
+    expect(movingFrom(desk, NOW)).toBeNull();
+  });
+
+  it('is null when the newest fix is stale — that is where they WERE moving', () => {
+    expect(movingFrom(walk.map((p) => ({ ...p, ts: new Date(p.ts.getTime() - 7 * 60_000) })), NOW)).toBeNull();
+  });
+
+  it('ignores fixes outside the window and ones too inaccurate to use', () => {
+    const old = [pt(500, 50, 0), pt(604, 51, 0), pt(604.5, 51.0001, 0)];
+    expect(movingFrom(old, NOW)).toBeNull();
+    const vague = walk.map((p) => ({ ...p, accuracyM: 400 }));
+    expect(movingFrom(vague, NOW)).toBeNull();
+  });
+});
+
 describe('buildAppView', () => {
   const household = [presence('john'), presence('sam'), { ...presence('kit'), notSharing: true }];
   const positions = [
@@ -187,7 +220,20 @@ describe('buildAppView', () => {
     expect(john.today).toBeNull();
     expect(john.position).toEqual({ lat: 51.5, lon: -0.1, at: '2026-09-26T09:00:00.000Z' });
     expect(john.batteryPct).toBe(71);
-    expect(kit).toMatchObject({ status: 'off', position: null, batteryPct: null, lastSeenAt: null, today: null });
+    expect(kit).toMatchObject({ status: 'off', position: null, batteryPct: null, lastSeenAt: null, today: null, moving: null });
+  });
+
+  it('says who is moving from the recent fixes, for anyone with a pin, never for someone not sharing', () => {
+    const viewer = { kind: 'household' as const, subject: 'sam', wards: [] };
+    const drive = (lat: number) => [pt(601, lat, 0), pt(602, lat + 0.01, 0), pt(603, lat + 0.02, 0), pt(604, lat + 0.03, 0)];
+    const recent = new Map([['john', drive(51)], ['kit', drive(52)]]);
+    const view = buildAppView({ ...base, recent, viewer, self: null, scoped: scopeHousehold(household, viewer) });
+    const by = new Map(view.people.map((p) => [p.subject, p]));
+    // John's day is not Sam's to see, but that he is driving is on the map anyway.
+    expect(by.get('john')?.today).toBeNull();
+    expect(by.get('john')?.moving?.mode).toBe('vehicle');
+    expect(by.get('sam')?.moving).toBeNull();
+    expect(by.get('kit')?.moving).toBeNull();
   });
 
   it('gives the owner every sharing person’s day, and marks their own card', () => {

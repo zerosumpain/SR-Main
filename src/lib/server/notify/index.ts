@@ -357,6 +357,18 @@ export async function recentEvents(limit = 50) {
     .limit(Math.min(Math.max(limit, 1), 200));
 }
 
+/** Mark these read — one alert opened on the phone, not the whole inbox. */
+export async function markRead(ids: string[]): Promise<number> {
+  const valid = ids.filter((id) => UUID.test(id));
+  if (valid.length === 0) return 0;
+  const rows = await db
+    .update(notificationEvents)
+    .set({ readAt: new Date() })
+    .where(and(isNull(notificationEvents.readAt), inArray(notificationEvents.id, valid)))
+    .returning({ id: notificationEvents.id });
+  return rows.length;
+}
+
 export async function markAllRead(): Promise<void> {
   await db
     .update(notificationEvents)

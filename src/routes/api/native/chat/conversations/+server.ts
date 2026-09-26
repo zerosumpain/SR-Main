@@ -62,6 +62,9 @@ export const GET: RequestHandler = withNativeAccess('jkai.chat', async (event) =
         ? { before, beforeId, pinned: pinnedRaw === '1' }
         : undefined,
     scope,
+    // The phone opens a thread before anything is typed; one left that way
+    // is not a conversation, and must not be a row. The web list is unchanged.
+    hideEmpty: true,
   });
 
   return {
