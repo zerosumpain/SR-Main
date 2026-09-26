@@ -2,9 +2,10 @@ import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { withNativeAccess } from '$lib/server/native-handler';
 import { gamePlayers, playerFor } from '$lib/games/players.server';
-import { asHttp, createGame, invitesFor, roomsFor } from '$lib/games/rooms.server';
+import { asHttp, canCreate, createGame, invitesFor, roomsFor } from '$lib/games/rooms.server';
 import { isDifficulty, MAX_PLAYERS } from '$lib/games/tap-duel';
 import { isGameId } from '$lib/games/catalogue';
+import { cleanTopic, isAudience, isClean } from '$lib/games/quiz-night';
 import { reserveUsage } from '$lib/jkai/chat-access.server';
 import { areaAccess } from '$lib/server/area-scope';
 
@@ -53,6 +54,14 @@ export const POST: RequestHandler = withNativeAccess('games', async (event, iden
   });
 
   const difficulty = body.difficulty;
+  // Every refusal BEFORE the cap is charged: a quiz that was never going to
+  // start must not cost a member one of their ten.
+  asHttp(() => canCreate(me.id));
+  if (game === 'quiz-night') {
+    const topic = cleanTopic(body.topic);
+    const audience = isAudience(body.audience) ? body.audience : 'family';
+    if (topic && !isClean(topic, audience)) error(400, 'Pick a different topic.');
+  }
   if (game === 'quiz-night' && role === 'member') {
     await reserveUsage(
       await areaAccess(event, 'games'),

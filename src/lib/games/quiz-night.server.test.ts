@@ -50,9 +50,14 @@ describe('writeQuiz', () => {
     expect(r.questions).toHaveLength(10);
     expect(r.title).toBe('Oceans');
     expect(create).toHaveBeenCalledOnce();
-    const body = (create.mock.calls[0] as unknown[])[0] as Record<string, unknown>;
+    const [body, opts] = create.mock.calls[0] as unknown as [
+      { response_format: unknown; messages: { content: string }[] },
+      { signal?: AbortSignal; maxRetries?: number },
+    ];
     expect(body.response_format).toEqual({ type: 'json_object' });
-    expect(JSON.stringify(body.messages)).toContain('<<oceans>>');
+    expect(body.messages[1].content).toContain('"oceans"');
+    expect(opts.signal).toBeInstanceOf(AbortSignal);
+    expect(opts.maxRetries).toBe(1);
   });
 
   it('asks again once when the first reply is unusable', async () => {

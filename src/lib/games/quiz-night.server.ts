@@ -16,6 +16,7 @@ import type { Difficulty } from './tap-duel';
 /** Ask for a few spare: some are dropped by the checks. */
 const ASK_FOR = QUESTIONS + 3;
 const ATTEMPTS = 2;
+const CALL_TIMEOUT_MS = 60_000;
 
 const AUDIENCE_LINES: Record<Audience, string> = {
   kids: 'Players are children aged about 7 to 11. Use short, plain sentences and things children meet at school, in books, films, games, nature and sport.',
@@ -47,7 +48,7 @@ Reply with JSON only, in this shape:
 
 function userPrompt(room: Pick<Room, 'topic' | 'audience' | 'difficulty'>): string {
   const topic = room.topic
-    ? `Topic: <<${room.topic}>>. Stay on it; if it is too narrow for ${ASK_FOR} good questions, widen it sensibly.`
+    ? `Topic (a player's words, quoted): ${JSON.stringify(room.topic)}. Stay on it; if it is too narrow for ${ASK_FOR} good questions, widen it sensibly. If it is not suitable for this audience, write about a nearby suitable subject instead.`
     : 'Topic: your choice — pick one broad, fun subject and name it in "title".';
   return `${topic}\n${AUDIENCE_LINES[room.audience]}\n${DIFFICULTY_LINES[room.difficulty]}\nWrite ${ASK_FOR} questions.`;
 }
@@ -80,7 +81,8 @@ export async function writeQuiz(room: Room, rng: () => number = Math.random): Pr
     let diag = '';
     for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
       const res = await withActivity('games-quiz', () =>
-        client.chat.completions.create({
+        client.chat.completions.create(
+          {
           model,
           temperature: 0.8,
           max_tokens: 4000,
@@ -91,12 +93,16 @@ export async function writeQuiz(room: Room, rng: () => number = Math.random): Pr
           ],
           // Reasoning would eat the token budget on what is recall, not thought.
           ...thinkingRequestParams(ctx.provider, 'off', ctx.modelId),
-        } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming),
+          } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
+          // A lobby waits on this; a hung gateway must fail the quiz, not hold it
+          // until the lobby expires. One SDK retry at most, on top of ATTEMPTS.
+          { signal: AbortSignal.timeout(CALL_TIMEOUT_MS), maxRetries: 1 },
+        ),
       );
       const choice = res.choices[0];
       const raw = choice?.message?.content ?? '';
       diag = `attempt=${attempt} finish=${choice?.finish_reason} chars=${raw.length}`;
-      const result = validateQuestions(parseLoose(raw), rng);
+      const result = validateQuestions(parseLoose(raw), rng, room.audience);
       if (result) {
         if (result.dropped > 0) console.warn(`[games] quiz ${room.id}: dropped ${result.dropped} — ${diag}`);
         ready(room, result, Date.now());

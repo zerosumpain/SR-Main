@@ -175,3 +175,10 @@ settings); `again` answers 409.
   "standings": null | [{"id","name","score","correct","avgMs"}],
   "winnerIds": [], "serverNow": 1790000000000 }
 ```
+
+Review changes (same day): scores move only at the reveal (a jump would give an answer away);
+every create refusal is checked before a member's quiz cap is charged; the topic is refused (400)
+if it fails the block list and is quoted as JSON to the model; the block list has a stricter
+`kids` layer and undoes l33t/asterisk dodges; each model call has a 60 s timeout. Every invite in
+`GET /api/native/games` gains `about` — one line, e.g. `"The Solar System · for kids"`, null for
+games with nothing to say.

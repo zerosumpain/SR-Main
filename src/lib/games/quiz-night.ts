@@ -91,12 +91,23 @@ export function isAudience(value: unknown): value is Audience {
 /** A topic as the host typed it, made safe to quote to the model: one line, bounded, or null. */
 export function cleanTopic(value: unknown): string | null {
   if (typeof value !== 'string') return null;
-  const t = value.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, TOPIC_MAX);
+  const t = value
+    .replace(/[\u0000-\u001f\u007f<>{}"`\\]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, TOPIC_MAX);
   return t.length >= 2 ? t : null;
 }
 
 function player(id: string, name: string, status: PlayerStatus): Player {
   return { id, name, status, score: 0, picks: [] };
+}
+
+const AUDIENCE_LABEL: Record<Audience, string> = { kids: 'for kids', family: 'for the family', adults: 'for adults' };
+
+/** "The Solar System · for kids" — what an invite banner says the quiz is. */
+export function about(room: Room): string {
+  return `${room.title ?? 'jkai picks the topic'} · ${AUDIENCE_LABEL[room.audience]}`;
 }
 
 export function joined(room: Room): Player[] {
@@ -119,13 +130,14 @@ export function createRoom(input: {
 }): Room {
   const invited = input.invite.filter((p, i, all) => p.id !== input.host.id && all.findIndex((q) => q.id === p.id) === i);
   if (invited.length > MAX_PLAYERS - 1) throw new GameError(400, `Up to ${MAX_PLAYERS} players.`);
-  const audience = input.options?.audience;
+  const audience = isAudience(input.options?.audience) ? input.options.audience : 'family';
   const topic = cleanTopic(input.options?.topic);
+  if (topic && !isClean(topic, audience)) throw new GameError(400, 'Pick a different topic.');
   return {
     id: input.id,
     game: 'quiz-night',
     difficulty: input.difficulty,
-    audience: isAudience(audience) ? audience : 'family',
+    audience,
     topic,
     title: topic,
     hostId: input.host.id,
@@ -237,8 +249,9 @@ export function answer(room: Room, playerId: string, input: { question: number; 
   const timeMs = TIME_MS[room.difficulty];
   const ms = Math.max(0, Math.min(timeMs, now - (room.questionStartsAt ?? now)));
   const pts = input.choice === q.answerIndex ? points(ms, timeMs) : 0;
+  // Scored at the reveal, not now: a score that jumped the moment Mum answered
+  // would tell everyone else she was right.
   p.picks.push({ question: room.index, choice: input.choice, ms, points: pts });
-  p.score += pts;
   room.updatedAt = now;
   revealIfAnswered(room, now);
 }
@@ -248,6 +261,9 @@ function revealIfAnswered(room: Room, now: number): void {
 }
 
 function reveal(room: Room, now: number): void {
+  for (const p of room.players) {
+    for (const x of p.picks) if (x.question === room.index) p.score += x.points;
+  }
   room.phase = 'reveal';
   room.phaseEndsAt = now + REVEAL_MS;
   room.updatedAt = now;
@@ -332,25 +348,47 @@ export function winners(list: Standing[]): string[] {
 // ── Checking what the model wrote ──────────────────────────────────────────
 
 /**
- * Words that have no place in a family quiz, matched as whole words in any
- * question, option or explanation. The prompt asks for family-safe content;
- * this is the check that does not take the model's word for it. A question
- * that trips it is dropped, not repaired.
+ * Words that have no place in a family quiz, matched as whole words (after
+ * undoing the common l33t and asterisk dodges) in any question, option,
+ * explanation or title. The prompt asks for family-safe content; this is the
+ * check that does not take the model's word for it. A question that trips it is
+ * dropped, not repaired. Stems are deliberately narrow: a "birds" quiz must not
+ * lose cockatoo, a books quiz Moby-Dick, a science quiz the sextant.
  */
-const BLOCKED = new RegExp(
-  '\\b(' +
-    [
-      'sex\\w*', 'porn\\w*', 'nude\\w*', 'naked', 'erotic\\w*', 'orgasm\\w*', 'genital\\w*', 'penis\\w*', 'vagina\\w*',
-      'fuck\\w*', 'shit\\w*', 'cunt\\w*', 'bitch\\w*', 'bastard\\w*', 'whore\\w*', 'slut\\w*', 'dick', 'cock\\w*',
-      'rape\\w*', 'raping', 'molest\\w*', 'suicide\\w*', 'self-harm', 'overdos\\w*', 'cocaine', 'heroin', 'meth',
-      'nazi\\w*', 'genocide', 'torture\\w*', 'behead\\w*', 'dismember\\w*', 'gore',
-    ].join('|') +
-    ')\\b',
-  'i',
-);
+const BLOCKED_ALL = [
+  'sex', 'sexy', 'sexual\\w*', 'porn\\w*', 'nude', 'nudes', 'naked', 'erotic\\w*', 'orgasm\\w*', 'genital\\w*',
+  'penis\\w*', 'vagina\\w*', 'boob\\w*', 'horny',
+  'fuck\\w*', 'shit', 'shite', 'shitty', 'bullshit', 'cunt\\w*', 'bitch\\w*', 'bastard\\w*', 'whore\\w*', 'slut\\w*',
+  'cock', 'cocks', 'wank\\w*', 'twat\\w*', 'bollock\\w*', 'arse', 'arsehole\\w*', 'asshole\\w*', 'piss', 'pissed',
+  'nigg\\w*', 'faggot\\w*', 'fag', 'fags', 'dyke\\w*', 'tranny', 'retard\\w*', 'spastic\\w*', 'paki\\w*', 'chink\\w*',
+  'kike\\w*', 'gypo\\w*', 'pikey\\w*',
+  'rape\\w*', 'raping', 'rapist\\w*', 'molest\\w*', 'paedo\\w*', 'pedo\\w*', 'suicid\\w*', 'self-harm\\w*',
+  'overdos\\w*', 'cocaine', 'heroin', 'meth', 'nazi\\w*', 'genocid\\w*', 'torture\\w*', 'behead\\w*', 'dismember\\w*',
+];
 
-export function isClean(text: string): boolean {
-  return !BLOCKED.test(text);
+/** On top of the above when the audience is children. */
+const BLOCKED_KIDS = [
+  'murder\\w*', 'serial killers?', 'massacre\\w*', 'holocaust', 'auschwitz', 'terroris\\w*', 'bomb', 'bombs',
+  'bombing\\w*', 'bomber', 'stabbed', 'stabbing\\w*', 'executed', 'execution\\w*', 'hanged', 'hanging', 'kidnap\\w*',
+  'corpse\\w*', 'drugs?', 'cannabis', 'marijuana', 'lsd', 'ecstasy', 'alcohol\\w*', 'vodka', 'whisky', 'whiskey',
+  'beer\\w*', 'wine', 'wines', 'gin', 'rum', 'drunk\\w*', 'cigarette\\w*', 'smoking', 'vape\\w*', 'gambl\\w*',
+  'casino\\w*', 'horror', 'demon\\w*',
+];
+
+const wordRe = (words: string[]) => new RegExp(`\\b(${words.join('|')})\\b`, 'i');
+const RE_ALL = wordRe(BLOCKED_ALL);
+const RE_KIDS = wordRe(BLOCKED_KIDS);
+
+/** Undo the dodges a block list is usually beaten with: f*ck, s3x, sh!t. */
+function unmask(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[*!@$0134]/g, (c) => ({ '*': 'u', '!': 'i', '@': 'a', $: 's', '0': 'o', '1': 'i', '3': 'e', '4': 'a' })[c] ?? c);
+}
+
+export function isClean(text: string, audience: Audience = 'family'): boolean {
+  const forms = [text, unmask(text), unmask(text).replace(/u/g, 'i')];
+  return forms.every((t) => !RE_ALL.test(t) && (audience !== 'kids' || !RE_KIDS.test(t)));
 }
 
 const QuestionSchema = z.object({
@@ -374,6 +412,7 @@ const BatchSchema = z.object({
 export function validateQuestions(
   raw: unknown,
   rng: Rng,
+  audience: Audience = 'family',
 ): { title: string | null; questions: Question[]; dropped: number } | null {
   const batch = BatchSchema.safeParse(raw);
   if (!batch.success) return null;
@@ -390,7 +429,7 @@ export function validateQuestions(
     const explain = q.data.explain?.trim() || null;
     const key = prompt.toLowerCase().replace(/\W+/g, ' ').trim();
     const distinct = new Set(options.map((o) => o.toLowerCase())).size === OPTIONS;
-    const clean = [prompt, ...options, explain ?? ''].every(isClean);
+    const clean = [prompt, ...options, explain ?? ''].every((t) => isClean(t, audience));
     if (!distinct || !clean || seen.has(key)) {
       dropped++;
       continue;
@@ -406,7 +445,7 @@ export function validateQuestions(
   }
   if (out.length < MIN_QUESTIONS) return null;
   const title = batch.data.title?.trim() || null;
-  return { title: title && isClean(title) ? title : null, questions: out, dropped };
+  return { title: title && isClean(title, audience) ? title : null, questions: out, dropped };
 }
 
 // ── What a phone sees ──────────────────────────────────────────────────────

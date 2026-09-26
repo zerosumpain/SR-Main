@@ -49,6 +49,8 @@ export interface GameRules {
    * not throw; the registry tells the room's phones when it resolves.
    */
   prepare?(room: RoomBase): Promise<void>;
+  /** One line for an invite banner saying what this game is about, or null. */
+  about?(room: RoomBase): string | null;
   join(room: RoomBase, playerId: string, now: number): void;
   decline(room: RoomBase, playerId: string, now: number): void;
   leave(room: RoomBase, playerId: string, now: number): void;
