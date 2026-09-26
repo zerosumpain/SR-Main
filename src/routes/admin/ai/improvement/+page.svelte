@@ -287,7 +287,7 @@
   >
     {#snippet actions()}
       {#if running}<span class="nm-pill" data-state="running">running</span>{/if}
-      <a class="nm-btn-ghost" href="/jkai/daydreams/improvement">Explore the ledger →</a>
+      <a class="nm-btn-ghost" href="/jkai/develop/improvement">Explore the ledger →</a>
     {/snippet}
   </PageHeader>
 

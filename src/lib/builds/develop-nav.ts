@@ -1,9 +1,10 @@
 // src/lib/builds/develop-nav.ts
 //
 // The build process's rooms beyond the portfolio. The backlog (what is queued
-// to build) and the workflow doctor (what broke overnight and what it did about
-// it) moved here from /jkai/daydreams on 2026-09-26: both are the build loop's
-// intake and repair, and `intakeIdeas` already fed one queue from all of them.
+// to build), improvement (what the nightly run built and whether it is used)
+// and the workflow doctor (what broke overnight and what it did about it)
+// moved here from /jkai/daydreams on 2026-09-26: they are the build loop's
+// intake, output and repair, and `intakeIdeas` feeds one queue from all three.
 //
 // PURE — the develop page imports it into the browser. Structurally the shell's
 // `ShellTab`, declared here so the domain layer never imports a UI module.
@@ -11,7 +12,7 @@
 export const DEVELOP_BASE = '/jkai/develop';
 
 export interface DevelopRoomTab {
-  id: 'backlog' | 'doctor';
+  id: 'backlog' | 'improvement' | 'doctor';
   label: string;
   href: string;
   count?: number;
@@ -22,6 +23,7 @@ export interface DevelopRoomTab {
 export function developRooms(): DevelopRoomTab[] {
   return [
     { id: 'backlog', label: 'Backlog', href: `${DEVELOP_BASE}/backlog` },
+    { id: 'improvement', label: 'Improvement', href: `${DEVELOP_BASE}/improvement` },
     { id: 'doctor', label: 'Doctor', href: `${DEVELOP_BASE}/doctor` },
   ];
 }

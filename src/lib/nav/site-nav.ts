@@ -197,9 +197,9 @@ export const SECTIONS: NavSection[] = [
       { label: 'Calendar', href: '/jkai/daydreams/calendar' },
       { label: 'Places', href: '/jkai/daydreams/places' },
       { label: 'Money', href: '/jkai/daydreams/money' },
-      { label: 'Improvement', href: '/jkai/daydreams/improvement' },
-      // Backlog and Doctor left for the build process on 2026-09-26: they live
-      // at /jkai/develop/{backlog,doctor} and light the Develop cell.
+      // Improvement, Backlog and Doctor left for the build process on
+      // 2026-09-26: they live at /jkai/develop/{improvement,backlog,doctor}
+      // and light the Develop cell.
     ],
   },
   {
@@ -214,7 +214,7 @@ export const SECTIONS: NavSection[] = [
       { label: 'Intel', href: '/jkai/intel' },
       { label: 'Codegraph', href: '/jkai/codegraph' },
       // One cell for the whole development family — the portfolio, its
-      // backlog and doctor rooms, the /jkai/builds redirect stub and the
+      // backlog, improvement and doctor rooms, the /jkai/builds redirect stub and the
       // /jkai/builds/<id> archive console all light it.
       {
         label: 'Develop',

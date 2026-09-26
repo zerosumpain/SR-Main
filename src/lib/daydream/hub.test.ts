@@ -7,7 +7,7 @@ describe('hubTabs', () => {
 
   it('is the one feed plus the rooms that are not daydream, each a real route', () => {
     const tabs = hubTabs(base);
-    expect(tabs.map((t) => t.id)).toEqual(['feed', 'watches', 'improvement']);
+    expect(tabs.map((t) => t.id)).toEqual(['feed', 'watches']);
     expect(tabs[0].href).toBe('/jkai/daydreams');
     for (const t of tabs.slice(1)) expect(t.href).toBe(`/jkai/daydreams/${t.id}`);
     for (const t of tabs) expect(isRoom(t.id)).toBe(true);
@@ -20,7 +20,7 @@ describe('hubTabs', () => {
   });
 
   it('the retired rooms are not rooms any more (their URLs are 308 stubs)', () => {
-    for (const r of ['memory', 'places', 'engine', 'family', 'discoveries', 'money', 'calendar', 'backlog', 'doctor']) expect(isRoom(r)).toBe(false);
+    for (const r of ['memory', 'places', 'engine', 'family', 'discoveries', 'money', 'calendar', 'backlog', 'doctor', 'improvement']) expect(isRoom(r)).toBe(false);
   });
 });
 
@@ -38,6 +38,7 @@ describe('legacyTabTarget', () => {
   it('maps ?tab= to a room still housed here and keeps the rest of the query', () => {
     expect(legacyTabTarget(new URL('https://x/jkai/daydreams?tab=watches'))).toBe('/jkai/daydreams/watches');
     expect(legacyTabTarget(new URL('https://x/jkai/daydreams?tab=backlog&x=1'))).toBe('/jkai/develop/backlog?x=1');
+    expect(legacyTabTarget(new URL('https://x/jkai/daydreams?tab=improvement'))).toBe('/jkai/develop/improvement');
   });
   it('lands retired, unknown or missing tabs and old ?rate=/?open= links on the bare feed, never on a legacy link', () => {
     expect(legacyTabTarget(new URL('https://x/jkai/daydreams?tab=places#place-p1'))).toBe('/jkai/daydreams');

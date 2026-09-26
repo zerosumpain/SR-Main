@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Overnight } from '$lib/daydream/rooms/overnight.server';
+  import type { Overnight } from '$lib/builds/overnight.server';
   import { usd } from './engine-format';
 
   let { night, budget = null }: { night: Overnight; budget?: string | null } = $props();

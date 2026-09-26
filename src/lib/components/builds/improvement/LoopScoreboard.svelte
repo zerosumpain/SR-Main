@@ -9,7 +9,7 @@
   // Every figure is a row count. `null` means "could not tell", which renders
   // as a dash rather than a zero: "no tools have been called" and "we could not
   // read it" are different answers and only one is a reason to go and look.
-  import type { LoopHealth } from '$lib/daydream/loop-health';
+  import type { LoopHealth } from '$lib/builds/loop-health';
 
   let { health, verdict }: {
     health: LoopHealth;

@@ -45,7 +45,7 @@ const KIND_BY_ACTIVITY: Record<string, RunKind> = {
  * its ledger, anchored `#run-<id>`.
  */
 const LEDGER: Record<RunKind, string> = {
-  improvement: '/jkai/daydreams/improvement',
+  improvement: '/jkai/develop/improvement',
   doctor: '/jkai/develop/doctor',
 };
 

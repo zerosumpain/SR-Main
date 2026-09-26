@@ -21,8 +21,8 @@ export interface HubTab {
  *  page; the rest are not daydream at all and are only housed here. The old
  *  engine rooms (memory, places, money, engine, discoveries, calendar, feed)
  *  are 308 stubs to the feed since P4 of the 2026-09-25 simplification; the
- *  backlog and the doctor moved to the build process, /jkai/develop. */
-export const ROOMS = ['feed', 'watches', 'improvement'] as const;
+ *  backlog, improvement and the doctor moved to the build process, /jkai/develop. */
+export const ROOMS = ['feed', 'watches'] as const;
 export type RoomId = (typeof ROOMS)[number];
 
 export function isRoom(s: string | null | undefined): s is RoomId {
@@ -50,7 +50,6 @@ export function hubTabs(c: BadgeCounts): HubTab[] {
     // The feed is the hub's own page now, not a room beneath it.
     { id: 'feed', label: 'Noticed', href: HUB_BASE, count: c.notesToRate, tone: 'action' },
     room('watches', 'Watches', { count: c.activeWatches, tone: 'quiet' }),
-    room('improvement', 'Improvement'),
   ];
 }
 
@@ -76,10 +75,10 @@ export function legacyTabTarget(url: { searchParams: URLSearchParams }): string 
   const qs = q.toString();
   // No fragment: a server `load` may not read `url.hash` (SvelteKit throws),
   // and it does not need to — the browser carries it across a 3xx.
-  // The backlog left the hub for /jkai/develop; an old `?tab=backlog` follows it.
+  // The backlog and improvement left the hub for /jkai/develop; old tabs follow.
   const path =
-    tab === 'backlog'
-      ? '/jkai/develop/backlog'
+    tab === 'backlog' || tab === 'improvement'
+      ? `/jkai/develop/${tab}`
       : isRoom(tab) && tab !== 'feed'
         ? `${HUB_BASE}/${tab}`
         : HUB_BASE;
