@@ -29,7 +29,7 @@ vi.mock('$lib/db', () => ({ db: {} }));
 const guardianOf = new Map<string, string[]>([['sam', ['kit']]]);
 vi.mock('./members', () => ({ wardsOf: async (subject: string) => guardianOf.get(subject) ?? [] }));
 
-const { peopleViewerOf, personLinks, scopeHousehold } = await import('./viewer');
+const { peopleViewerOf, peopleViewerForEmail, personLinks, scopeHousehold } = await import('./viewer');
 type Presence = import('./household').HouseholdPresence;
 
 function eventFor(email: string | null) {
@@ -97,6 +97,32 @@ function card(subject: string, extra: Partial<Presence> = {}): Presence {
     ...extra,
   };
 }
+
+describe('peopleViewerForEmail — the same rule, for the app', () => {
+  it('owner by the allow-list, without a household lookup', async () => {
+    lookupFails = true;
+    expect(await peopleViewerForEmail(' Owner@Example.test ')).toEqual({ kind: 'owner' });
+  });
+
+  it('a Family Circle member with a household row gets their subject, and wards only with Family Admin', async () => {
+    memberGrants.set('sam@example.test', ['family:circle']);
+    householdSubjects.set('sam@example.test', 'sam');
+    expect(await peopleViewerForEmail('sam@example.test')).toEqual({ kind: 'household', subject: 'sam', wards: [] });
+    memberGrants.set('sam@example.test', ['family:circle', 'family:admin']);
+    expect(await peopleViewerForEmail('sam@example.test')).toEqual({ kind: 'household', subject: 'sam', wards: ['kit'] });
+  });
+
+  it('null without the grant, without a household row, for a blank email, or when a lookup fails', async () => {
+    householdSubjects.set('sam@example.test', 'sam');
+    expect(await peopleViewerForEmail('sam@example.test')).toBeNull();
+    memberGrants.set('pat@example.test', ['family:circle']);
+    expect(await peopleViewerForEmail('pat@example.test')).toBeNull();
+    expect(await peopleViewerForEmail('  ')).toBeNull();
+    memberGrants.set('sam@example.test', ['family:circle']);
+    lookupFails = true;
+    expect(await peopleViewerForEmail('sam@example.test')).toBeNull();
+  });
+});
 
 describe('scopeHousehold', () => {
   const members = [card('alex'), card('sam'), card('robin', { notSharing: true })];
