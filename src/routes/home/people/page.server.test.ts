@@ -83,7 +83,7 @@ describe('/home/people load — D2 scoping', () => {
 
   it("gives a household viewer no daydream detail and no one else's day", async () => {
     const data = await run('sam@example.test');
-    expect(data.viewer).toEqual({ kind: 'household', subject: 'sam' });
+    expect(data.viewer).toEqual({ kind: 'household', subject: 'sam', wards: [] });
     expect(loadFamily).not.toHaveBeenCalled();
     expect(data.family.detail).toEqual({});
 

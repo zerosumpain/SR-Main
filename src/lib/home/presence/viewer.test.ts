@@ -25,6 +25,9 @@ vi.mock('$lib/server/grants', () => ({
   },
 }));
 vi.mock('$lib/db', () => ({ db: {} }));
+// Who each subject is guardian of, as household_member.guardian_of holds it.
+const guardianOf = new Map<string, string[]>([['sam', ['kit']]]);
+vi.mock('./members', () => ({ wardsOf: async (subject: string) => guardianOf.get(subject) ?? [] }));
 
 const { peopleViewerOf, personLinks, scopeHousehold } = await import('./viewer');
 type Presence = import('./household').HouseholdPresence;
@@ -52,7 +55,7 @@ describe('peopleViewerOf', () => {
   it('family:circle + a household_member row ⇒ their subject', async () => {
     memberGrants.set('sam@example.test', ['family:circle']);
     householdSubjects.set('sam@example.test', 'sam');
-    expect(await peopleViewerOf(eventFor('Sam@Example.test'))).toEqual({ kind: 'household', subject: 'sam' });
+    expect(await peopleViewerOf(eventFor('Sam@Example.test'))).toEqual({ kind: 'household', subject: 'sam', wards: [] });
   });
 
   it('family:circle with no household_member row has nobody to be ⇒ null', async () => {
@@ -158,3 +161,32 @@ describe('personLinks', () => {
     expect(personLinks(['alex'], { kind: 'household', subject: 'sam' })).toEqual({});
   });
 });
+
+describe('Family Admin — a guardian sees their wards as their own', () => {
+  it('resolves wards only for a family:admin holder', async () => {
+    householdSubjects.set('sam@example.test', 'sam');
+    memberGrants.set('sam@example.test', ['family:circle']);
+    expect(await peopleViewerOf(eventFor('sam@example.test'))).toEqual({ kind: 'household', subject: 'sam', wards: [] });
+  });
+
+  it('a family:admin holder gets the wards their row names', async () => {
+    householdSubjects.set('sam@example.test', 'sam');
+    memberGrants.set('sam@example.test', ['family:circle', 'family:admin']);
+    expect(await peopleViewerOf(eventFor('sam@example.test'))).toEqual({ kind: 'household', subject: 'sam', wards: ['kit'] });
+  });
+
+  it("opens a ward's person page and card, and nobody else's", () => {
+    const viewer = { kind: 'household', subject: 'sam', wards: ['kit'] } as const;
+    expect(personLinks(['sam', 'kit', 'alex'], viewer)).toEqual({ sam: '/home/people/sam', kit: '/home/people/kit' });
+    const out = scopeHousehold([card('kit'), card('alex')], viewer);
+    expect(out.find((m) => m.subject === 'kit')?.today).not.toBeNull();
+    expect(out.find((m) => m.subject === 'alex')?.today).toBeNull();
+  });
+
+  it('a ward who is not sharing stays not sharing, guardian or not', () => {
+    const viewer = { kind: 'household', subject: 'sam', wards: ['kit'] } as const;
+    const [kit] = scopeHousehold([card('kit', { notSharing: true })], viewer);
+    expect(kit).toMatchObject({ notSharing: true, today: null, isHome: null });
+  });
+});
+

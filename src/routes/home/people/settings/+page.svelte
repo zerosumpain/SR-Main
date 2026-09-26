@@ -134,6 +134,20 @@
                 <p class="note">With “everyone” off, only the people ticked. None ticked means no alerts at all.</p>
               </fieldset>
 
+              <fieldset class="follow">
+                <legend class="field-label">Guardian of</legend>
+                {#each others as o (o.subject)}
+                  <label class="toggle">
+                    <input type="checkbox" name="guardianOf" value={o.subject} checked={m.guardianOf.includes(o.subject)} />
+                    <span>{o.displayName}</span>
+                  </label>
+                {/each}
+                <p class="note">
+                  Their kids. With Family Admin at /admin/access, they see each ticked person's day and journeys as
+                  their own. Without it, this does nothing.
+                </p>
+              </fieldset>
+
               <div class="card-actions">
                 <button class="cta sm" type="submit">Save</button>
                 {#if form && 'saved' in form && form.saved === m.subject}<span class="note good inline">Saved.</span>{/if}
