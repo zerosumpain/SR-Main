@@ -7,15 +7,16 @@ vi.mock('$lib/db', () => ({ db: { execute: h.execute } }));
 const { loadFeedChecks } = await import('./feed-checks');
 
 // Temporary tables on one connection exercise the real query without changing
-// the cumulative preview's household or activity history.
-describe.skipIf(process.env.PEOPLE_LOCAL_TESTS !== '1')('feed checks against local PostgreSQL', () => {
+// the cumulative preview's household or activity history. CI supplies the
+// same disposable PostgreSQL as the rest of the merge-gate tests.
+describe.skipIf(!process.env.DATABASE_URL)('feed checks against test PostgreSQL', () => {
   let pool: Pool;
   let client: PoolClient;
   const stamp = new Date(Date.now() - 60_000);
   beforeAll(async () => {
     const url = new URL(process.env.DATABASE_URL ?? '');
-    if (url.hostname !== '127.0.0.1' || url.port !== '15445' || url.pathname !== '/workflows_jkai_local') {
-      throw new Error('Requires the isolated local household preview database');
+    if (!['127.0.0.1', 'localhost'].includes(url.hostname) || !['/strange_rambling', '/workflows_jkai_local'].includes(url.pathname)) {
+      throw new Error('Requires a loopback test database');
     }
     pool = new Pool({ connectionString: url.toString() });
     client = await pool.connect();
