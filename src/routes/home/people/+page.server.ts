@@ -2,6 +2,7 @@ import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { errMsg } from '$lib/home/presence/types';
 import { livePositions, loadHousehold, type LivePosition } from '$lib/home/presence/household';
+import { loadFeedChecks, type FeedCheck } from '$lib/home/presence/feed-checks';
 import {
   peopleViewerOf,
   personLinks,
@@ -36,6 +37,7 @@ export const load: PageServerLoad = async (event) => {
   // lock, and the one that decides WHAT they get. Nothing is read before it.
   const viewer: PeopleViewer | null = await peopleViewerOf(event);
   if (!viewer) error(403, 'Forbidden');
+  event.depends('home:people');
 
   // The map: every SHARING person's last fix (`livePositions` drops anyone not
   // sharing). The owner and any household viewer — that is what the Family
@@ -48,12 +50,17 @@ export const load: PageServerLoad = async (event) => {
   try {
     const { members } = await loadHousehold();
     const family: Family = { members: scopeHousehold(members, viewer) };
-    return { family, viewer, links: linksFor(family, viewer), loadError: null as string | null, positions };
+    const feedChecks = await loadFeedChecks(family.members.filter((m) => !m.notSharing).map((m) => m.subject))
+      .catch((err) => {
+        console.error('[home/people] feed checks failed:', errMsg(err));
+        return {} as Record<string, FeedCheck>;
+      });
+    return { family, viewer, links: linksFor(family, viewer), loadError: null as string | null, positions, feedChecks, loadedAt: new Date() };
   } catch (err) {
     console.error('[home/people] household load failed:', errMsg(err));
     // The error text can name tables and queries: the owner gets it, a
     // household viewer gets the fact of the failure.
     const loadError = viewer.kind === 'owner' ? errMsg(err) : 'The household could not be read just now.';
-    return { family: EMPTY(), viewer, links: {} as Record<string, string>, loadError, positions };
+    return { family: EMPTY(), viewer, links: {} as Record<string, string>, loadError, positions, feedChecks: {} as Record<string, FeedCheck>, loadedAt: new Date() };
   }
 };

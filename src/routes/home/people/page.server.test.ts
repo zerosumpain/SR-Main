@@ -46,6 +46,9 @@ vi.mock('$lib/daydream/ledger', () => {
   throw new Error('/home/people must not import the daydream ledger');
 });
 
+const loadFeedChecks = vi.fn(async () => ({ alex: { source: 'companion', checkedAt: new Date('2026-09-26T10:00:00Z') } }));
+vi.mock('$lib/home/presence/feed-checks', () => ({ loadFeedChecks }));
+
 const { load } = await import('./+page.server');
 
 function eventFor(email: string | null) {
@@ -53,6 +56,7 @@ function eventFor(email: string | null) {
     locals: { auth: async () => (email ? { user: { email } } : null) } as unknown as App.Locals,
     getClientAddress: () => '203.0.113.9',
     params: {},
+    depends: vi.fn(),
   } as unknown as Parameters<typeof load>[0];
 }
 
@@ -62,6 +66,7 @@ interface PeopleData {
   viewer: import('$lib/home/presence/viewer').PeopleViewer;
   links: Record<string, string>;
   loadError: string | null;
+  feedChecks: Record<string, unknown>;
 }
 async function run(email: string | null): Promise<PeopleData> {
   return (await load(eventFor(email))) as PeopleData;
@@ -72,6 +77,7 @@ beforeEach(() => {
   householdSubjects.set('sam@example.test', 'sam');
   loadHousehold.mockClear();
   livePositions.mockClear();
+  loadFeedChecks.mockClear();
 });
 
 describe('/home/people load — D2 scoping', () => {
@@ -176,3 +182,24 @@ describe('the household map', () => {
   });
 });
 
+
+
+describe('feed check scoping', () => {
+  it('only reads feed times for authorised sharing subjects', async () => {
+    const data = await run('sam@example.test');
+    expect(loadFeedChecks).toHaveBeenCalledWith(['alex', 'sam']);
+    expect(data.feedChecks).toHaveProperty('alex');
+    expect(data.feedChecks).not.toHaveProperty('robin');
+  });
+  it('never reads feed status for a refused visitor', async () => {
+    await expect(run(null)).rejects.toMatchObject({ status: 403 });
+    expect(loadFeedChecks).not.toHaveBeenCalled();
+  });
+  it('keeps the locations when the feed status read fails', async () => {
+    loadFeedChecks.mockRejectedValueOnce(new Error('feed status unavailable'));
+    const data = await run('sam@example.test');
+    expect(data.family.members).toHaveLength(3);
+    expect(data.feedChecks).toEqual({});
+    expect(data.loadError).toBeNull();
+  });
+});

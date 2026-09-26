@@ -78,6 +78,7 @@
     {c.value}{#if c.suffix}<span class="rg-suffix">{c.suffix}</span>{/if}
   </p>
   {#if c.sub}<p class="rg-sub">{c.sub}</p>{/if}
+  {#if c.detail}<p class="rg-detail">{c.detail}</p>{/if}
   {#if c.spark && c.spark.length > 1}
     <svg class="rg-spark" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true">
       <path d={path(c.spark)} fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke" />
@@ -232,5 +233,12 @@
     height: 24px;
     color: var(--tone);
     opacity: 0.8;
+  }
+
+  .rg-detail {
+    margin: 0;
+    font-size: var(--fs-label-xs);
+    line-height: 1.4;
+    color: var(--text-muted);
   }
 </style>

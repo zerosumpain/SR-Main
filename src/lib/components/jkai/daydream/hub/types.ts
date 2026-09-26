@@ -55,6 +55,8 @@ export interface RollupCell {
   /** One line under the figure; clamps at two. */
   sub?: string | null;
   tone?: Tone;
+  /** Optional additional context, kept visible rather than clamped. */
+  detail?: string | null;
   /** Small mono text in the top-right corner — a delta, a stage, a unit. */
   corner?: string | null;
   /** A short series drawn as a sparkline along the bottom of the cell. */

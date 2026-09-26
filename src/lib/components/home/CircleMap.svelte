@@ -112,7 +112,7 @@
   }
 </script>
 
-<div class="circle-map" bind:clientWidth={width} style:height="{height}px" role="img" aria-label="Where the household is now">
+<div class="circle-map" bind:clientWidth={width} style:height="{height}px" role="img" aria-label="The household’s latest reported locations">
   {#each tiles as t (t.key)}
     <img
       class="tile"
@@ -130,7 +130,7 @@
     <div class="dot" class:home={d.isHome} style:left="{d.x}px" style:top="{d.y}px">
       <span class="pin" aria-hidden="true"></span>
       <span class="name">{d.label}</span>
-      <span class="when">{ago(d.at)}</span>
+      <span class="when">Location {ago(d.at)}</span>
     </div>
   {/each}
   {#if !positions.length}

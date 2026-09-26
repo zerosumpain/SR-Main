@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
+  import { invalidate } from '$app/navigation';
   import HomeFrame from '$lib/components/home/HomeFrame.svelte';
   import LoadErrorCard from '$lib/components/jkai/daydream/hub/LoadErrorCard.svelte';
   /**
@@ -22,14 +24,39 @@
   import RollupGrid from '$lib/components/jkai/daydream/hub/RollupGrid.svelte';
   import type { RollupCell } from '$lib/components/jkai/daydream/hub/types';
   import CircleMap from '$lib/components/home/CircleMap.svelte';
-  import { STALE_MINS, nowCounts, nowStatus, nowSub, type NowStatus } from '$lib/home/presence/now';
+  import { feedCheckText, nowCounts, nowLabel, nowStatus, nowSub, type NowStatus } from '$lib/home/presence/now';
 
   let { data }: { data: PageData } = $props();
 
-  const members = $derived(data.family.members);
+  let clock = $state<Date | null>(null);
+  const now = $derived(clock ?? new Date(data.loadedAt));
+  const members = $derived(data.family.members.map((m) => ({
+    ...m,
+    ageMins: m.lastSeenAt ? Math.max(0, Math.round((now.getTime() - new Date(m.lastSeenAt).getTime()) / 60_000)) : null,
+  })));
   const isOwner = $derived(data.viewer.kind === 'owner');
   /** Person pages this viewer may open, decided in the load. */
   const links = $derived<Record<string, string>>(data.links);
+
+  onMount(() => {
+    clock = new Date();
+    const clockTimer = setInterval(() => { clock = new Date(); }, 1_000);
+    let refreshing = false;
+    const refresh = async () => {
+      if (document.hidden || refreshing) return;
+      refreshing = true;
+      try { await invalidate('home:people'); }
+      catch { /* Keep the last successful read and its original timestamps. */ }
+      finally { refreshing = false; }
+    };
+    const timer = setInterval(refresh, 30_000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      clearInterval(timer);
+      clearInterval(clockTimer);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  });
 
   function cap(sub: string): string {
     return sub.charAt(0).toUpperCase() + sub.slice(1);
@@ -58,7 +85,6 @@
   type Member = PageData['family']['members'][number];
 
   const TONE: Record<NowStatus, Tone> = { home: 'good', out: 'steady', unknown: 'watch', off: 'quiet' };
-  const VALUE: Record<NowStatus, string> = { home: 'home', out: 'out', unknown: 'unknown', off: 'off' };
 
   function stampOf(m: Member): string | null {
     if (!m.lastSeenAt) return null;
@@ -73,9 +99,10 @@
       return {
         key: m.subject,
         label: cap(m.subject),
-        value: VALUE[status],
+        value: nowLabel(m),
         sub: nowSub(m),
-        tone: TONE[status],
+        detail: m.notSharing ? null : feedCheckText(data.feedChecks[m.subject], now),
+        tone: status === 'unknown' && m.ageMins != null ? 'steady' : TONE[status],
         corner: m.today && m.today.minutesOut > 0 ? `${outFor(m.today.minutesOut)} out` : null,
         // The person's own page, where the load says this viewer may open it:
         // the owner anyone's, a household viewer their own and their wards'.
@@ -86,10 +113,12 @@
   );
 
   const counts = $derived(nowCounts(members));
+  const noLocation = $derived(members.filter((m) => !m.notSharing && m.ageMins == null).length);
   const summary = $derived([
     { label: 'Home', value: String(counts.home), sub: `of ${counts.sharing} sharing` },
-    { label: 'Out', value: String(counts.out), sub: 'fresh fix' },
-    { label: 'Unknown', value: String(counts.unknown), sub: `no fix for ${STALE_MINS}m` },
+    { label: 'Out', value: String(counts.out), sub: 'recent location' },
+    { label: 'Last known', value: String(counts.unknown - noLocation), sub: 'earlier location' },
+    { label: 'No location', value: String(noLocation), sub: 'none received' },
   ]);
 </script>
 
@@ -98,7 +127,7 @@
   kicker="Home · People"
   title={['Where everyone', 'is, and was']}
   standfirst={isOwner
-    ? 'Read off the family trail — Life360 through Home Assistant and the app, every two minutes, kept ninety days.'
+    ? 'The family’s latest locations — app uploads checked every 30 seconds, Life360 through Home Assistant every two minutes, kept ninety days.'
     : 'Where everyone who shares their location is now; your own day is on your own page.'}
   {summary}
   navBack={isOwner}
@@ -116,7 +145,7 @@
     <SectionHead
       kicker="A / Now"
       title={['Everyone,', 'right now']}
-      strap="A card goes amber when the last fix is over half an hour old: an unknown position is not the same answer as home."
+      strap="Feed checks and location times are shown separately. An older location stays labelled last known; a feed check alone does not confirm that the phone is still there."
     />
 
     {#if isOwner}
@@ -156,6 +185,11 @@
     margin-bottom: 18px;
   }
 
+  .now-cards :global(.rg-sub) {
+    display: block;
+    overflow: visible;
+  }
+
   /* Below 720px each card is one list row — name and status on a line, the
      sub under it — instead of a 118px tile per person. RollupGrid is shared,
      so the row shape is asked for here, under this page's wrapper only. */
@@ -170,7 +204,8 @@
       grid-template-columns: minmax(0, 1fr) auto;
       grid-template-areas:
         'top value'
-        'sub sub';
+        'sub sub'
+        'detail detail';
       align-items: baseline;
       gap: 2px 12px;
       min-height: 0;
@@ -187,8 +222,9 @@
     }
     .now-cards :global(.rg-sub) {
       grid-area: sub;
-      -webkit-line-clamp: 1;
-      line-clamp: 1;
+    }
+    .now-cards :global(.rg-detail) {
+      grid-area: detail;
     }
   }
 </style>

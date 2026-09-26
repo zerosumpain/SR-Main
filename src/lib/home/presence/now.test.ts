@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { STALE_MINS, nowCounts, nowStatus, nowSub, since, type NowFields } from './now';
+import { STALE_MINS, feedCheckText, nowCounts, nowLabel, nowStatus, nowSub, since, type NowFields } from './now';
 
 const card = (extra: Partial<NowFields> = {}): NowFields => ({
   isHome: true,
@@ -61,25 +61,25 @@ describe('nowCounts', () => {
 
 describe('nowSub', () => {
   it('says where and how fresh on a fresh fix', () => {
-    expect(nowSub(card())).toBe('At Elton Parade · seen just now');
-    expect(nowSub(card({ placeLabel: null }))).toBe('At home · seen just now');
+    expect(nowSub(card())).toBe('At Elton Parade · location just now');
+    expect(nowSub(card({ placeLabel: null }))).toBe('At home · location just now');
     expect(nowSub(card({ isHome: false, placeLabel: null, distanceHomeKm: 2.5, ageMins: 12 }))).toBe(
-      '2.5 km from home · seen 12m ago',
+      '2.5 km from home · location 12m ago',
     );
   });
 
   it('says LAST on a stale fix', () => {
-    expect(nowSub(card({ ageMins: 47 }))).toBe('Last at Elton Parade · 47m ago');
+    expect(nowSub(card({ ageMins: 47 }))).toBe('Last at Elton Parade · location 47m ago');
     expect(nowSub(card({ ageMins: 180, isHome: false, placeLabel: null, distanceHomeKm: 4 }))).toBe(
-      'Last 4 km from home · 3h ago',
+      'Last 4 km from home · location 3h ago',
     );
-    expect(nowSub(card({ ageMins: 90, isHome: false, placeLabel: null, distanceHomeKm: null }))).toBe('Last fix 2h ago');
+    expect(nowSub(card({ ageMins: 90, isHome: false, placeLabel: null, distanceHomeKm: null }))).toBe('Location 2h ago');
   });
 
   it('says nothing about position for someone not sharing', () => {
     expect(nowSub(card({ notSharing: true }))).toBe('Not sharing their location.');
     expect(nowSub(card({ notSharing: true, sharingUnknown: true }))).toMatch(/^Sharing unknown/);
-    expect(nowSub(card({ ageMins: null }))).toBe('No position on the trail.');
+    expect(nowSub(card({ ageMins: null }))).toBe('No location received.');
   });
 });
 
@@ -90,5 +90,28 @@ describe('since', () => {
     expect(since(47)).toBe('47m ago');
     expect(since(150)).toBe('3h ago');
     expect(since(60 * 50)).toBe('2d ago');
+  });
+});
+
+
+describe('location and feed freshness remain separate', () => {
+  const now = new Date('2026-09-26T21:00:00Z');
+  it('keeps an older position visible without calling the person unknown or claiming a new location', () => {
+    const m = card({ ageMins: 180 });
+    expect(nowLabel(m)).toBe('last known');
+    expect(nowSub(m)).toBe('Last at Elton Parade · location 3h ago');
+    expect(feedCheckText({ source: 'companion', checkedAt: '2026-09-26T20:59:40Z' }, now)).toBe('App feed checked 20s ago');
+    expect(nowStatus(m)).toBe('unknown'); // A server check never refreshes the GPS age.
+  });
+  it('distinguishes an absent location and sharing off from an older location', () => {
+    expect(nowLabel(card({ ageMins: null }))).toBe('no location');
+    expect(nowLabel(card({ notSharing: true, ageMins: 180 }))).toBe('off');
+    expect(nowLabel(card())).toBe('home');
+  });
+  it('does not describe an old or missing source check as just now', () => {
+    expect(feedCheckText({ source: 'companion', checkedAt: '2026-09-26T20:58:00Z' }, now)).toBe('App feed checked 2m ago');
+    expect(feedCheckText({ source: 'life360', checkedAt: null }, now)).toBe('HA feed check unavailable');
+    expect(feedCheckText({ source: 'companion', checkedAt: 'invalid' }, now)).toBe('App feed check unavailable');
+    expect(feedCheckText(undefined, now)).toBeNull();
   });
 });
