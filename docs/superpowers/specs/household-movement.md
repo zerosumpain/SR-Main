@@ -222,3 +222,15 @@ calls the new endpoints.
 
 A live map; driving-behaviour scoring; crash detection; battery alerts; place
 suggestions pushed to members; members editing places.
+
+## Decision Log (autonomous run, 2026-09-26)
+
+| Fork | Chosen | Why | Reversible? |
+|---|---|---|---|
+| Restore /home/people now or wait for P1 | Un-paused `daydream-observe` + `daydream-places` on prod (05:29 UTC); trail writing again for all five | The page had been frozen 9 h; the handlers were still registered | Yes, one status flip |
+| Rename the heartbeat activities to `home-*` | No: files move, NAMES stay | A rename seeds new rows and orphans the old ones ("no handler") | Yes |
+| Rename the trail/places tables | No | drizzle push prompts on a rename and a TTY prompt exits 0 unapplied | n/a |
+| Reuse SR-Health's service token for the household lane | No: own token | Each consumer revocable alone; the SR-Health token must keep opening only its endpoints | Yes |
+| Member alerts via SR-Main's native notification queue | No: per-user queue on the pilot | The native lane and `notification_events` are owner-only; members already hold a pilot credential | Yes |
+| Life360 fallback when a companion phone goes quiet | None | Silence is normal (a still phone is suspended); a fallback would also defeat "I chose not to share" | Yes |
+| Plan detail | Interfaces + test cases per task, code written by implementers against named precedents | Two repos, ~15 files; precedent-led is faster and matches house style | n/a |
