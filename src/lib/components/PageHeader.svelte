@@ -25,6 +25,7 @@
   import type { Snippet } from 'svelte';
   import { getContext, onMount } from 'svelte';
   import { currentIsOwner } from '$lib/nav/page-path';
+  import { currentReach } from '$lib/nav/reach';
   import SiteHeader from './SiteHeader.svelte';
   import { roundPulse } from '$lib/vitals/state';
   import type { VitalsStore } from '$lib/vitals/store.svelte';
@@ -51,6 +52,7 @@
   const sectionTitle = $derived(title && !WORDMARK.test(title.trim()) ? title : undefined);
 
   const isOwner = $derived(currentIsOwner());
+  const reach = $derived(currentReach());
 
   const store = getContext<VitalsStore>('vitals');
   let mounted = $state(false);
@@ -69,7 +71,7 @@
   });
 </script>
 
-<SiteHeader title={sectionTitle} {items} {isOwner} {meta} {before}>
+<SiteHeader title={sectionTitle} {items} {isOwner} {reach} {meta} {before}>
   {#snippet right()}
     {#if live}
       <div class="hdr-live" aria-label="Live signal">

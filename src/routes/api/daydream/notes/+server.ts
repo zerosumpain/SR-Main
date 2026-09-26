@@ -1,4 +1,8 @@
-// Owner-gated CRUD over the notebook, plus running a review by hand.
+// CRUD over the notebook, plus running a review by hand. The owner, and
+// members holding `jkai.notes` (the catalogue): every note is resolved through
+// `requireNote`, so a member reaches their own notebook and never the owner's.
+// Review and weave are the owner's — both spend on models unattended-style and
+// weave writes into the owner's intel space.
 //
 // NOT in PUBLIC_PATHS and must never be: a notebook is the most private thing
 // in daydreaming. Only `/api/daydream/observe` is listed there, as an exact
@@ -9,7 +13,7 @@
 // operating on his own notebook) and splitting them across six routes would
 // multiply the surface without adding a distinction.
 
-import { json } from '@sveltejs/kit';
+import { isHttpError, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { errMsg } from '$lib/daydream/types';
 import {
@@ -22,10 +26,12 @@ import {
   clearSupporting,
   listRecordings,
 } from '$lib/daydream/notebook/store';
+import { notesAccess, requireNote, visibleNotes } from '$lib/daydream/notebook/access.server';
 
-export const GET: RequestHandler = async () => {
+export const GET: RequestHandler = async (event) => {
+  const visible = visibleNotes(await notesAccess(event));
   try {
-    const [notes, folders] = await Promise.all([listNotes(), listFolders()]);
+    const [notes, folders] = await Promise.all([listNotes({ visible }), listFolders(visible)]);
     return json({ notes, folders });
   } catch (err) {
     console.error('[notebook] list failed:', errMsg(err));
@@ -33,7 +39,9 @@ export const GET: RequestHandler = async () => {
   }
 };
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async (event) => {
+  const { request } = event;
+  const access = await notesAccess(event);
   let body: Record<string, unknown>;
   try {
     body = (await request.json()) as Record<string, unknown>;
@@ -48,10 +56,13 @@ export const POST: RequestHandler = async ({ request }) => {
   try {
     switch (action) {
       case 'save': {
+        // An edit is of a note the caller may change; a new note is theirs.
+        if (id) await requireNote(event, id, 'write');
         // Every field optional: the editor autosaves a title-only note, and a
         // folder change must not have to resend the body.
         const note = await saveNote({
           id: id || undefined,
+          principalId: access.own,
           title: str('title'),
           body: str('body'),
           folder: str('folder'),
@@ -66,8 +77,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
       case 'get': {
         if (!id) return json({ error: 'id is required' }, { status: 400 });
-        const note = await getNote(id);
-        if (!note) return json({ error: 'no such note' }, { status: 404 });
+        const { note } = await requireNote(event, id, 'read');
         // Recordings ride along with the note rather than costing a second
         // round trip — the same reasoning that ships full bodies in the list.
         const [actions, recordings] = await Promise.all([listActions(id), listRecordings(id)]);
@@ -76,6 +86,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
       case 'delete': {
         if (!id) return json({ error: 'id is required' }, { status: 400 });
+        await requireNote(event, id, 'write');
         // The FK cascades the recording rows; their bytes live in the media
         // store and would otherwise be orphaned there for ever.
         const { orphanedDiskPaths } = await deleteNote(id);
@@ -96,6 +107,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
       case 'clear_supporting': {
         if (!id) return json({ error: 'id is required' }, { status: 400 });
+        await requireNote(event, id, 'write');
         await clearSupporting(id);
         return json({ ok: true, note: await getNote(id) });
       }
@@ -108,8 +120,11 @@ export const POST: RequestHandler = async ({ request }) => {
       // it would be on a heartbeat tick.
       case 'review_now': {
         if (!id) return json({ error: 'id is required' }, { status: 400 });
+        if (access.level !== 'owner') return json({ error: 'Reviews are the owner’s.' }, { status: 403 });
         const note = await getNote(id);
         if (!note) return json({ error: 'no such note' }, { status: 404 });
+        // Of the owner's own notes only: a review's actions run as the owner.
+        if (note.principalId !== 'owner') return json({ error: 'Only your own notes are reviewed.' }, { status: 403 });
 
         const { reviewNote } = await import('$lib/daydream/notebook/review');
         const { executeNoteAction } = await import('$lib/daydream/notebook/actions');
@@ -152,6 +167,12 @@ export const POST: RequestHandler = async ({ request }) => {
 
       case 'weave': {
         if (!id) return json({ error: 'id is required' }, { status: 400 });
+        // Weaving extracts into the owner's intel space.
+        if (access.level !== 'owner') return json({ error: 'Weaving is the owner’s.' }, { status: 403 });
+        // Of the owner's own notes only: weaving writes into the owner's intel space.
+        const woven = await getNote(id);
+        if (!woven) return json({ error: 'no such note' }, { status: 404 });
+        if (woven.principalId !== 'owner') return json({ error: 'Only your own notes are woven.' }, { status: 403 });
         const { weaveNote } = await import('$lib/daydream/notebook/cards');
         return json({ ok: true, weave: await weaveNote(id) });
       }
@@ -160,6 +181,8 @@ export const POST: RequestHandler = async ({ request }) => {
         return json({ error: `unknown action: ${action || '(none)'}` }, { status: 400 });
     }
   } catch (err) {
+    // A refusal from the guard is an answer, not a failure.
+    if (isHttpError(err)) return json({ error: err.body.message }, { status: err.status });
     console.error(`[notebook] action ${action} failed:`, errMsg(err));
     return json({ error: errMsg(err) }, { status: 400 });
   }

@@ -8,7 +8,7 @@
 // clearable. `appendSupporting` is therefore the only write the review path can
 // reach, and it cannot touch the body even by accident.
 
-import { and, asc, desc, eq, isNull, lt, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, lt, ne, or, sql, type SQL } from 'drizzle-orm';
 import { createHash } from 'node:crypto';
 import { db } from '$lib/db';
 import { daydreamNotebook, daydreamNotebookActions, daydreamNotebookAudio } from '$lib/db/schema';
@@ -20,6 +20,8 @@ export const MAX_FOLDER = 80;
 
 export interface NoteRow {
   id: string;
+  /** Whose note — 'owner', 'household' or a member's `u_…`. */
+  principalId: string;
   title: string;
   body: string;
   folder: string;
@@ -65,6 +67,7 @@ const iso = (d: Date | null) => (d ? d.toISOString() : null);
 function toRow(r: typeof daydreamNotebook.$inferSelect): NoteRow {
   return {
     id: r.id,
+    principalId: r.principalId,
     title: r.title,
     body: r.body,
     folder: r.folder,
@@ -81,12 +84,25 @@ function toRow(r: typeof daydreamNotebook.$inferSelect): NoteRow {
   };
 }
 
+/**
+ * Whose notes a reader sees when the caller says nothing: the owner's. Every
+ * unattended reader (the review and weave passes, ponder, think, steer) is
+ * reading on the owner's behalf and must never pick up a member's notebook;
+ * a route serving a member passes `readable(...)` from $lib/server/area-scope.
+ */
+const OWNER_NOTES = eq(daydreamNotebook.principalId, 'owner');
+
 /** Every note, newest first, pinned to the top. Archived only on request. */
-export async function listNotes(opts: { includeArchived?: boolean } = {}): Promise<NoteRow[]> {
+export async function listNotes(opts: { includeArchived?: boolean; visible?: SQL } = {}): Promise<NoteRow[]> {
   const rows = await db
     .select()
     .from(daydreamNotebook)
-    .where(opts.includeArchived ? sql`true` : eq(daydreamNotebook.status, 'active'))
+    .where(
+      and(
+        opts.visible ?? OWNER_NOTES,
+        opts.includeArchived ? sql`true` : eq(daydreamNotebook.status, 'active'),
+      ),
+    )
     .orderBy(desc(daydreamNotebook.pinned), desc(daydreamNotebook.updatedAt))
     .limit(500);
   return rows.map(toRow);
@@ -98,11 +114,11 @@ export async function getNote(id: string): Promise<NoteRow | null> {
 }
 
 /** The folders in use. No table, no management screen — see the schema note. */
-export async function listFolders(): Promise<string[]> {
+export async function listFolders(visible: SQL = OWNER_NOTES): Promise<string[]> {
   const rows = await db
     .selectDistinct({ folder: daydreamNotebook.folder })
     .from(daydreamNotebook)
-    .where(and(ne(daydreamNotebook.folder, ''), eq(daydreamNotebook.status, 'active')))
+    .where(and(visible, ne(daydreamNotebook.folder, ''), eq(daydreamNotebook.status, 'active')))
     .orderBy(asc(daydreamNotebook.folder));
   return rows.map((r) => r.folder);
 }
@@ -115,6 +131,8 @@ export interface SaveInput {
   tags?: string[];
   pinned?: boolean;
   status?: string;
+  /** On create only: whose note it is. Defaults to the owner's. */
+  principalId?: string;
 }
 
 /**
@@ -144,6 +162,7 @@ export async function saveNote(input: SaveInput): Promise<NoteRow> {
     if (!r) throw new Error(`no such note: ${input.id}`);
     return toRow(r);
   }
+  patch.principalId = input.principalId ?? 'owner';
   const [r] = await db.insert(daydreamNotebook).values(patch as never).returning();
   return toRow(r);
 }
@@ -332,6 +351,7 @@ export async function notesNeedingReview(limit: number): Promise<NoteRow[]> {
     .from(daydreamNotebook)
     .where(
       and(
+        OWNER_NOTES,
         eq(daydreamNotebook.status, 'active'),
         sql`length(${daydreamNotebook.body}) >= 40`,
       ),
@@ -443,7 +463,7 @@ export async function recentActions(limit = 20) {
     })
     .from(daydreamNotebookActions)
     .innerJoin(daydreamNotebook, eq(daydreamNotebook.id, daydreamNotebookActions.noteId))
-    .where(eq(daydreamNotebookActions.status, 'done'))
+    .where(and(eq(daydreamNotebookActions.status, 'done'), OWNER_NOTES))
     .orderBy(desc(daydreamNotebookActions.executedAt))
     .limit(limit);
 }
@@ -465,6 +485,7 @@ export async function notesNeedingWeave(limit: number): Promise<NoteRow[]> {
     .from(daydreamNotebook)
     .where(
       and(
+        OWNER_NOTES,
         eq(daydreamNotebook.status, 'active'),
         sql`length(${daydreamNotebook.body}) >= 200`,
         or(

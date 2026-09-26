@@ -73,9 +73,13 @@ export const AREAS: readonly AreaInfo[] = [
   {
     id: 'home',
     label: 'Home',
-    blurb: 'The household dashboard, devices, echoes and voice.',
-    open: false,
-    levels: { self: 'Read', all: 'Same as self', admin: 'Same as self' },
+    blurb: 'The household dashboard and devices; Echo readings and the voice log at all.',
+    open: true,
+    levels: {
+      self: 'The house: dashboard and devices',
+      all: "Also the Echo readings and voice log — the household's routine and speech",
+      admin: 'Same as all',
+    },
   },
   {
     id: 'jkai.chat',
@@ -87,8 +91,8 @@ export const AREAS: readonly AreaInfo[] = [
   {
     id: 'jkai.notes',
     label: 'jkai · notes',
-    blurb: 'The notebook.',
-    open: false,
+    blurb: 'The notebook, with voice notes. Reviews and weaving stay yours.',
+    open: true,
     levels: { self: 'Own notebook', all: "Also read everyone's", admin: "Also edit everyone's" },
   },
   {
@@ -105,9 +109,9 @@ export const AREAS: readonly AreaInfo[] = [
   {
     id: 'jkai.knowledge',
     label: 'jkai · recall',
-    blurb: 'Search across what they can already read.',
-    open: false,
-    levels: { self: 'Own material', all: 'Follows their other grants', admin: 'Same as all' },
+    blurb: 'One search across their intel and research. The page lives in the intel workbench, so give intel too.',
+    open: true,
+    levels: { self: 'What their other grants let them read', all: 'Same as self', admin: 'Same as self' },
   },
 ];
 
@@ -299,6 +303,30 @@ const ROUTES: Record<string, Partial<Record<Method, Permission>>> = {
 
   // ── news — the desk and a story. Each action checks the grant it needs
   // (graph: jkai.intel, research: research) inside the handler.
+  // ── jkai.knowledge — recall. The search reads only what the caller's other
+  // grants already open (their intel scope, their readable research), never
+  // the owner's files, memory, datastore or activity. The page sits in the
+  // intel workbench, whose layout still needs an intel level.
+  '/jkai/intel/search': { GET: 'jkai.knowledge:self' },
+  '/api/jkai/knowledge/search': { POST: 'jkai.knowledge:self' },
+
+  // ── jkai.notes — the notebook. Every route resolves notes through
+  // $lib/daydream/notebook/access.server (own / household / everyone's, read /
+  // write); review and weave refuse anyone but the owner inside the handler.
+  '/jkai/notes': { GET: 'jkai.notes:self' },
+  '/api/daydream/notes': { GET: 'jkai.notes:self', POST: 'jkai.notes:self' },
+  '/api/daydream/notes/audio': { POST: 'jkai.notes:self' },
+  '/api/daydream/notes/audio/[id]': { GET: 'jkai.notes:self', DELETE: 'jkai.notes:self' },
+
+  // ── home — the house, not a person. People are /home/people's (family:circle),
+  // and the dashboard's people card follows that rule. The Echo readings
+  // (per-room motion, alarms, what played) and the voice log are the
+  // household's routine and speech, so they open at `all`, never `self`.
+  '/home': { GET: 'home:self' },
+  '/home/devices': { GET: 'home:self' },
+  '/home/echoes': { GET: 'home:all' },
+  '/home/voice': { GET: 'home:all' },
+
   '/news': { GET: 'news:self' },
   '/news/[source]/[id]': { GET: 'news:self' },
   '/api/news/actions': { POST: 'news:self' },
@@ -318,6 +346,19 @@ export function routeIdsFor(area: AreaId | FamilyPermission): string[] {
   return Object.entries(ROUTES)
     .filter(([, verbs]) => Object.values(verbs).some((p) => p && split(p).area === area))
     .map(([id]) => id);
+}
+
+/**
+ * The pages (not APIs, not `[param]` routes) these grants open, for the nav:
+ * a member is offered exactly the destinations they can reach. Sorted, so the
+ * nav's "first page under a cell" is stable.
+ */
+export function reachablePages(grants: Iterable<Permission>): string[] {
+  const held = [...grants];
+  return Object.entries(ROUTES)
+    .filter(([id, verbs]) => !id.startsWith('/api/') && !id.includes('[') && verbs.GET && satisfies(held, verbs.GET))
+    .map(([id]) => id)
+    .sort();
 }
 
 /** Every route id the catalogue opens to anyone. */

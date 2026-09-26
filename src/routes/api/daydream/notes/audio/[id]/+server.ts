@@ -1,8 +1,9 @@
 // Serve and delete one voice recording.
 //
-// Owner-gated by hooks, like every sibling under `/api/daydream/notes`. A
-// notebook recording is the owner speaking privately; it must never become
-// anonymously readable, so this route stays out of PUBLIC_PATHS.
+// Reached through its note (`requireRecording`): the owner, or a `jkai.notes`
+// member for a recording on a note they may read (delete: change). A notebook
+// recording is someone speaking privately; it must never become anonymously
+// readable, so this route stays out of PUBLIC_PATHS.
 //
 // Modelled on `/api/jkai/attachments/[id]`, which does the same two jobs for
 // chat attachments — same headers, same 410 when the row outlives its bytes.
@@ -11,8 +12,11 @@ import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { readBuffer, deleteByDiskPath } from '$lib/jkai/media/storage';
 import { getRecordingWithPath, deleteRecording } from '$lib/daydream/notebook/store';
+import { requireRecording } from '$lib/daydream/notebook/access.server';
 
-export const GET: RequestHandler = async ({ params }) => {
+export const GET: RequestHandler = async (event) => {
+  const { params } = event;
+  await requireRecording(event, params.id!, 'read');
   const found = await getRecordingWithPath(params.id!);
   if (!found) throw error(404, 'recording not found');
   let buf: Buffer;
@@ -33,7 +37,9 @@ export const GET: RequestHandler = async ({ params }) => {
   });
 };
 
-export const DELETE: RequestHandler = async ({ params }) => {
+export const DELETE: RequestHandler = async (event) => {
+  const { params } = event;
+  await requireRecording(event, params.id!, 'write');
   const found = await getRecordingWithPath(params.id!);
   if (!found) throw error(404, 'recording not found');
   // Bytes first: a failure here leaves a row pointing at a file that is still

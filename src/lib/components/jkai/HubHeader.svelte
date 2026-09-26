@@ -23,6 +23,7 @@
     activitySourceCount = 0,
     buildVersion = 'development',
     member = false,
+    memberHome = '/jkai/intel',
   }: {
     tokensToday: number;
     spendTodayUsd: number;
@@ -47,6 +48,8 @@
      * would lead out of intel into chat.
      */
     member?: boolean;
+    /** Where a member's hub starts: the first jkai surface their permissions open. */
+    memberHome?: string;
   } = $props();
 
   /**
@@ -105,8 +108,12 @@
    */
   const backTo = $derived.by(() => {
     if (member) {
-      // Up to their graph from any intel page, and no further.
-      return page.url.pathname === '/jkai/intel' ? null : { href: '/jkai/intel', label: 'Intel' };
+      // Up to the root of the surface they are in, and no further: /jkai
+      // itself is not theirs.
+      const path = page.url.pathname;
+      const root = path.startsWith('/jkai/notes') ? '/jkai/notes' : path.startsWith('/jkai/intel') ? '/jkai/intel' : memberHome;
+      if (path === root) return root === memberHome ? null : { href: memberHome, label: 'Back' };
+      return { href: root, label: root === '/jkai/notes' ? 'Notes' : 'Intel' };
     }
     if (pageMenu?.back) return pageMenu.back;
     const path = page.url.pathname;
@@ -241,7 +248,7 @@
       <span class="hdr-divider" aria-hidden="true"></span>
       <!-- `.brand` is the site-wide mark: it supplies the accent `>` via
            ::before, so the word is all this needs to carry. -->
-      <a class="brand" href={member ? '/jkai/intel' : '/jkai'} title="jkai">jkai</a>
+      <a class="brand" href={member ? memberHome : '/jkai'} title="jkai">jkai</a>
       <span class="hdr-divider" aria-hidden="true"></span>
       {#if !member}
       <div class="strip-slot">

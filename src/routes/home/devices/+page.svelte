@@ -44,7 +44,7 @@
   title={['Is the house', 'working?']}
   standfirst="Every Home Assistant integration, graded by whether it is running and how much of it answers, worst first — and every battery HA can see. Read live each time the page loads."
   {summary}
-  footer={['strangeramblings.com/home/devices', `Read from Home Assistant ${ago(data.readAt)}`, 'Owner-gated']}
+  footer={['strangeramblings.com/home/devices', `Read from Home Assistant ${ago(data.readAt)}`, 'The owner, and people given Home access']}
 >
   {#if data.loadError}
     <section class="band"><div class="inner"><LoadErrorCard kicker="Home Assistant could not be read" message={data.loadError} /></div></section>

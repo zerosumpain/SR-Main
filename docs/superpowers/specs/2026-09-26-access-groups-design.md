@@ -298,3 +298,13 @@ Super-Admin-only jkai features; per-user model choice; a cash budget per user.
 | `scopeFor` seam timing | Ships in P3, not P1 | No consumer in P1; dead code on arrival | n/a |
 | Grants that are not open yet | Shown disabled in the UI | A tickable grant that opens nothing is a silent lie | Yes |
 | Grants in the gateway assertion for Drive | No: Drive looks them up by email | The gateway has no DB access by design, and a JWT claim would be stale until the session refreshed | Yes |
+| Research cap unit | A ledger (`access_usage`) of metered acts — start, explore, resume, regenerate — taken under a per-principal advisory lock | Counting runs let a member delete runs to refund slots, and parallel requests all read "0 used" (P3 review) | Yes |
+| Member explore depth | `brief`, with that tier's budget | Explore children were implicitly `investigation`, which the cap forbids; brief keeps explore usable | Yes |
+| Research the owner's own stores | `to-drive`, `to-intel` stay owner-only; a member's run never auto-commits into owner intel (`fromIntel` stripped, worker checks `principalId`) | Both write into John's stores | Yes |
+| Closed-area grants | Stored but never held (`isOpenPermission` in `effectivePermissions`) | The API accepts any valid string; a capability check (news "note") must not find a door the catalogue has not opened | Yes |
+| Home levels | `self` = the house (dashboard, devices, Echoes); `all` = + the voice log | The voice log is everyone's speech, children's included — not a person's own material | Yes |
+| Notebook readers | Every store reader defaults to the owner's notes; routes pass the viewer's scope | Ponder, think, steer and the review/weave heartbeat read on John's behalf and must never pick up a member's notebook | Yes |
+| Review and weave for members | Owner only | Both spend unattended-style and weave writes into John's intel space | Yes |
+| Recall for members | Their intel scope + readable research only; never files, memory, datastore, activity | Those four are John's alone; Drive opens in P6 | Yes |
+| Recall page | Stays in the intel workbench; give intel with recall | Moving it out of the intel layout is a redesign, not a permission | Yes |
+

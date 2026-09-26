@@ -16,6 +16,7 @@ import { fileTypeFromBuffer } from 'file-type';
 import { saveBuffer } from '$lib/jkai/media/storage';
 import { extractAudio } from '$lib/jkai/extract/audio';
 import { errMsg } from '$lib/daydream/types';
+import { notesAccess, requireNote } from '$lib/daydream/notebook/access.server';
 import {
   addRecording,
   appendTranscriptToBody,
@@ -32,7 +33,9 @@ import {
 /** The chat composer's audio ceiling. A dictated note is minutes, not hours. */
 const MAX_AUDIO_BYTES = 50 * 1024 * 1024;
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async (event) => {
+  const { request } = event;
+  const access = await notesAccess(event);
   let form: FormData;
   try {
     form = await request.formData();
@@ -66,9 +69,10 @@ export const POST: RequestHandler = async ({ request }) => {
   // and titled below, once there are words to title it with.
   let targetId = noteId;
   if (targetId) {
-    if (!(await getNote(targetId))) throw error(404, 'no such note');
+    // Appending to a note is changing it.
+    await requireNote(event, targetId, 'write');
   } else {
-    const created = await saveNote({ title: '', body: '', folder: folder || undefined });
+    const created = await saveNote({ title: '', body: '', folder: folder || undefined, principalId: access.own });
     targetId = created.id;
   }
 

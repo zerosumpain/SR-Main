@@ -388,9 +388,25 @@ export function isItemActive(item: NavItem, path: string): boolean {
   return under(item.href, path);
 }
 
-/** Drop owner-only cells for a signed-out visitor. */
-export function visibleItems(items: NavItem[], isOwner: boolean): NavItem[] {
-  return isOwner ? items : items.filter((i) => !i.ownerOnly);
+/**
+ * Drop owner-only cells for anyone but the owner — except the ones in
+ * `reach`: the pages a signed-in member's permissions open (computed server-side
+ * from the access catalogue; empty for a signed-out visitor and wherever the
+ * caller does not pass it). An owner-only cell they can reach links to the
+ * first page under it they can: `/jkai` is not theirs, but `/jkai/notes` may be.
+ */
+export function visibleItems(items: NavItem[], isOwner: boolean, reach: readonly string[] = []): NavItem[] {
+  if (isOwner) return items;
+  const out: NavItem[] = [];
+  for (const i of items) {
+    if (!i.ownerOnly) out.push(i);
+    else if (reach.includes(i.href)) out.push(i);
+    else {
+      const inside = reach.find((r) => under(i.href, r));
+      if (inside) out.push({ ...i, href: inside });
+    }
+  }
+  return out;
 }
 
 /**
@@ -402,9 +418,13 @@ export function visibleItems(items: NavItem[], isOwner: boolean): NavItem[] {
  * `/jkai/shared/<token>`, the one public surface under /jkai, and would offer a
  * share-link recipient nine cells that each bounce off the auth gate.
  */
-function sectionItems(section: NavSection, isOwner: boolean): NavItem[] {
-  if (section.ownerOnly && !isOwner) return [];
-  return visibleItems(section.items, isOwner);
+function sectionItems(section: NavSection, isOwner: boolean, reach: readonly string[] = []): NavItem[] {
+  if (section.ownerOnly && !isOwner) {
+    // A member sees exactly the cells they can reach, never a rewritten one:
+    // inside a section every cell is already a page of its own.
+    return section.items.filter((i) => reach.includes(i.href));
+  }
+  return visibleItems(section.items, isOwner, reach);
 }
 
 /**
@@ -412,10 +432,10 @@ function sectionItems(section: NavSection, isOwner: boolean): NavItem[] {
  * when the section has no children, which is what keeps a second strip off the
  * pages that would only ever show one cell.
  */
-export function subnavFor(path: string, isOwner = true): NavItem[] {
+export function subnavFor(path: string, isOwner = true, reach: readonly string[] = []): NavItem[] {
   const section = activeSection(path);
   if (!section) return [];
-  return sectionItems(section, isOwner);
+  return sectionItems(section, isOwner, reach);
 }
 
 /**
@@ -428,10 +448,10 @@ export function subnavFor(path: string, isOwner = true): NavItem[] {
  * rendered an empty band on `/`, `/blog`, `/projects`, `/decks` and
  * `/releases` — every top-level page on the site.
  */
-export function navCellsFor(path: string, isOwner = true): NavItem[] {
-  const own = subnavFor(path, isOwner);
+export function navCellsFor(path: string, isOwner = true, reach: readonly string[] = []): NavItem[] {
+  const own = subnavFor(path, isOwner, reach);
   if (own.length) return own;
-  return visibleItems(SITE_ITEMS, isOwner);
+  return visibleItems(SITE_ITEMS, isOwner, reach);
 }
 
 /**

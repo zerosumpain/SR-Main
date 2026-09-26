@@ -8,7 +8,8 @@ import { getSetting, resolveDefaultModel } from '$lib/server/models/settings';
 import { getOpenRouterCredits } from '$lib/server/models/openrouter-credits';
 import { getCodexUsage } from '$lib/server/models/codex-usage';
 import { getDeployVersion } from '$lib/server/deploy-version';
-import { isMemberRequest } from '$lib/server/viewer';
+import { viewerOf } from '$lib/server/viewer';
+import { reachablePages } from '$lib/access/catalogue';
 
 /** What the header shows a member: nothing. Spend, credit, the Codex quota and
  *  the workflow counts are the owner's operational data, not theirs. */
@@ -41,9 +42,14 @@ const DAILY_BUDGET_SETTING_KEY = 'jkai.dailyBudgetUsd';
  *  is client state and arrives via $lib/jkai/hub-bus. */
 export const load: LayoutServerLoad = async (event) => {
   // Auth is handled centrally by hooks.server.ts. A member reaches /jkai only
-  // for their intel space (isMemberAllowedRoute), and this load runs under it.
-  if (await isMemberRequest(event)) {
-    return { deploy: getDeployVersion(), member: true as const, hub: MEMBER_HUB };
+  // for the surfaces their permissions open (intel, notes, recall — the access
+  // catalogue), and this load runs under them. Their "home" in the hub is the
+  // first of those they hold.
+  const viewer = await viewerOf(event).catch(() => null);
+  if (viewer?.kind === 'member') {
+    const jkai = reachablePages(viewer.grants).filter((p) => p.startsWith('/jkai/'));
+    const memberHome = jkai.includes('/jkai/intel') ? '/jkai/intel' : (jkai[0] ?? '/');
+    return { deploy: getDeployVersion(), member: true as const, memberHome, hub: MEMBER_HUB };
   }
   // Midnight in the database's timezone, the same boundary the spend ledger
   // uses — this was a rolling 24 hours while everything beside it in the header
@@ -124,6 +130,7 @@ export const load: LayoutServerLoad = async (event) => {
   return {
     deploy: getDeployVersion(),
     member: false as const,
+    memberHome: undefined as string | undefined,
     hub: {
       tokensToday: today?.tokens ?? 0,
       spendTodayUsd: today?.spendUsd ?? 0,

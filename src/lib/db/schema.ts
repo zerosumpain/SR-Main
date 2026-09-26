@@ -6718,6 +6718,10 @@ export const daydreamNotebook = pgTable(
      *  and must not be conflated with null. */
     folder: text('folder').notNull().default(''),
     tags: jsonb('tags').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    /** Whose note: 'owner' (every note before access groups), 'household', or a
+     *  member's `u_…`. Every reader defaults to the owner's; a route passes the
+     *  viewer's scope ($lib/daydream/notebook/access.server). */
+    principalId: text('principal_id').notNull().default('owner'),
     /** 'active' | 'archived'. Archiving hides it from the notebook and stops it
      *  being reviewed; it is never deleted by the engine. */
     status: text('status').notNull().default('active'),

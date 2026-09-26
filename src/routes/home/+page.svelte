@@ -101,8 +101,10 @@
   const broken = $derived(dv ? dv.integrations.filter((i) => i.verdict === 'down' || i.verdict === 'degraded') : []);
 
   const summary = $derived([
-    { label: 'In', value: `${inCount}/${data.members.length || 5}`, sub: 'of the household' },
-    { label: 'Indoors', value: temp?.value != null ? `${temp.value}°` : '—', sub: temp ? temp.room ?? temp.device : 'no reading' },
+    ...(data.showPeople ? [{ label: 'In', value: `${inCount}/${data.members.length || 5}`, sub: 'of the household' }] : []),
+    ...(data.showEchoes
+      ? [{ label: 'Indoors', value: temp?.value != null ? `${temp.value}°` : '—', sub: temp ? temp.room ?? temp.device : 'no reading' }]
+      : []),
     { label: 'Needs a look', value: dv ? String(broken.length) : '—', sub: dv ? 'integrations' : 'HA unreachable' },
   ]);
 </script>
@@ -113,8 +115,9 @@
   title={['The house,', 'right now']}
   standfirst="Who is in, what the Echoes read and heard, and whether Home Assistant is healthy — a slice of each page under Home, each one a way in."
   {summary}
-  footer={['strangeramblings.com/home', 'Life360, Alexa and Home Assistant', 'Owner-gated · the whole household, never shared']}
+  footer={['strangeramblings.com/home', 'Life360, Alexa and Home Assistant', 'The owner, and people given Home access']}
 >
+  {#if data.showPeople}
   <section class="band">
     <div class="inner">
       <SectionHead kicker="A / People" title={['Who is', 'in']} strap="From the family trail — Life360 through Home Assistant, every two minutes." />
@@ -126,7 +129,9 @@
       <p class="more"><a class="link" href="/home/people">Today's movements and each person's patterns →</a></p>
     </div>
   </section>
+  {/if}
 
+  {#if data.showEchoes}
   <section class="band sunken">
     <div class="inner">
       <SectionHead kicker="B / Echoes" title={['What the Echoes', 'read']} strap="Room sensors, the next alarm or timer set on any Echo, and the last track played today." />
@@ -138,7 +143,9 @@
       <p class="more"><a class="link" href="/home/echoes">Temperature history, schedule and listening →</a></p>
     </div>
   </section>
+  {/if}
 
+  {#if data.showVoice}
   <section class="band">
     <div class="inner">
       <SectionHead kicker="C / Voice" title={['Lately', 'said']} strap="The newest things said to an Echo, and what Alexa said back." />
@@ -165,6 +172,7 @@
       <p class="more"><a class="link" href="/home/voice">The whole log, by room, person and topic →</a></p>
     </div>
   </section>
+  {/if}
 
   <section class="band sunken">
     <div class="inner">

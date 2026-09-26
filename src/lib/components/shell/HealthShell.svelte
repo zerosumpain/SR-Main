@@ -26,6 +26,7 @@
   import type { Snippet } from 'svelte';
   import SiteHeader from '$lib/components/SiteHeader.svelte';
   import { currentIsOwner, currentPath } from '$lib/nav/page-path';
+  import { currentReach } from '$lib/nav/reach';
   import { isItemActive, parentHref, parentLabel, subnavFor } from '$lib/nav/site-nav';
 
   interface NavLink {
@@ -114,6 +115,7 @@
 
   const here = $derived(currentPath());
   const isOwner = $derived(currentIsOwner());
+  const reach = $derived(currentReach());
 
   // `undefined` means "not passed" and takes the manifest's answer; an explicit
   // `null` still suppresses the link. Defaulting the prop to `null` would have
@@ -127,7 +129,7 @@
 
   const navLinks = $derived.by((): NavLink[] => {
     if (nav !== undefined) return nav;
-    return subnavFor(here, isOwner).map((item) => ({
+    return subnavFor(here, isOwner, reach).map((item) => ({
       href: item.href,
       label: item.label,
       current: isItemActive(item, here),
@@ -140,7 +142,7 @@
   <div class="hs-grain" aria-hidden="true"></div>
 
   {#if unifiedNav}
-    <SiteHeader {isOwner} showBack={navBack} />
+    <SiteHeader {isOwner} {reach} showBack={navBack} />
   {:else}
     <header class="hs-head">
       <div class="hs-head-left">

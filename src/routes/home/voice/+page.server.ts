@@ -1,9 +1,12 @@
+import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { emptyVoiceSummary, searchUtterances, voiceSummary } from '$lib/alexa/store.server';
 import { errMsg } from '$lib/daydream/types';
+import { areaAccess } from '$lib/server/area-scope';
 
-// Owner-gated by hooks — nothing under /home is a public path, and this is the
-// whole household's speech, the children's included. Was /jkai/voice.
+// The whole household's speech, the children's included — so it is not a
+// person's own material at any level: the catalogue opens it at `home:all`,
+// never `home:self`. Was /jkai/voice.
 //
 // The log ships the newest LOG_ROWS rows of the window and the page filters
 // them in the browser: a family talks to Alexa a few dozen times a day, so a
@@ -23,7 +26,10 @@ function daysBetween(from: Date, to: Date): string[] {
   return [...out];
 }
 
-export const load: PageServerLoad = async ({ url }) => {
+export const load: PageServerLoad = async (event) => {
+  const { url } = event;
+  // The hook opens this at home:all; this is the second lock.
+  if ((await areaAccess(event, 'home')).level === 'self') error(403, 'Forbidden');
   const asked = Number(url.searchParams.get('days'));
   const days = (WINDOWS as readonly number[]).includes(asked) ? asked : 30;
   try {

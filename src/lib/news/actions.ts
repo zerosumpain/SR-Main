@@ -69,9 +69,14 @@ export async function keepNewsInGraph(
   return { id, href: `/jkai/intel/notes/${id}`, existing: false };
 }
 
-export async function linkNewsInNote(article: NewsArticle): Promise<{ id: string; href: string }> {
+export async function linkNewsInNote(
+  article: NewsArticle,
+  /** Whose notebook: the owner's unless a member filed it. */
+  principalId = 'owner',
+): Promise<{ id: string; href: string }> {
   const { story } = article;
   const note = await saveNote({
+    principalId,
     title: story.title,
     folder: 'News',
     tags: ['news', story.source],
