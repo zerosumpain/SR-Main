@@ -34,10 +34,12 @@ export interface HouseholdMember {
   haPersonEntity: string | null;
   whatsapp: string | null;
   alerts: HouseholdMemberAlerts;
+  /** Subjects this person is a guardian of (see the schema). Absent = none. */
+  guardianOf?: string[];
 }
 
 export type MemberPatch = Partial<
-  Pick<HouseholdMember, 'email' | 'displayName' | 'source' | 'haPersonEntity' | 'whatsapp' | 'alerts'>
+  Pick<HouseholdMember, 'email' | 'displayName' | 'source' | 'haPersonEntity' | 'whatsapp' | 'alerts' | 'guardianOf'>
 >;
 
 function isMemberSource(v: unknown): v is MemberSource {
@@ -65,7 +67,20 @@ function toMember(row: Record<string, unknown>): HouseholdMember {
     haPersonEntity: (row.haPersonEntity as string | null) ?? null,
     whatsapp: (row.whatsapp as string | null) ?? null,
     alerts,
+    guardianOf: Array.isArray(row.guardianOf) ? (row.guardianOf as unknown[]).filter((s): s is string => typeof s === 'string') : [],
   };
+}
+
+/**
+ * The subjects a person is guardian of — never themselves, and only people
+ * still in the household. Read for a `family:admin` viewer.
+ */
+export async function wardsOf(subject: string): Promise<string[]> {
+  const members = await selectAll();
+  const me = members.find((m) => m.subject === subject);
+  if (!me) return [];
+  const known = new Set(members.map((m) => m.subject));
+  return (me.guardianOf ?? []).filter((s) => s !== subject && known.has(s));
 }
 
 /** The rows an empty table is seeded with: today's household, all on Life360. */
@@ -78,6 +93,7 @@ export function seedMembers(): HouseholdMember[] {
     haPersonEntity: f.entity,
     whatsapp: null,
     alerts: {},
+    guardianOf: [],
   }));
 }
 

@@ -91,7 +91,13 @@ export const actions: Actions = {
       .map(String)
       .filter((s) => others.has(s));
 
+    const guardianOf = form
+      .getAll('guardianOf')
+      .map(String)
+      .filter((s) => others.has(s));
+
     const patch: MemberPatch = {
+      guardianOf,
       displayName,
       email: email || null,
       source,

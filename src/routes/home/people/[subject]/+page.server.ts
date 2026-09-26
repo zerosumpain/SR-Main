@@ -1,12 +1,13 @@
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { listMembers } from '$lib/home/presence/members';
-import { peopleViewerOf } from '$lib/home/presence/viewer';
+import { mayOpenPerson, peopleViewerOf } from '$lib/home/presence/viewer';
 import { loadMovementStats } from '$lib/home/presence/movement';
 import { DEFAULT_WINDOW_DAYS, type MovementStats } from '$lib/home/presence/stats';
 
 // One person's page under /home/people. The owner may open anyone's; a
-// household viewer only their own (spec D2). The stats this page carries
+// household viewer only their own (spec D2), and a Family Admin their wards'
+// too (access groups: `family:admin` + household_member.guardian_of). The stats this page carries
 // are one person's journeys, and a journey starts at somebody's front door.
 //
 // The order matters: a household viewer asking for anyone but themselves is
@@ -18,7 +19,7 @@ export const load: PageServerLoad = async (event) => {
   if (!viewer) error(403, 'Forbidden');
 
   const subject = event.params.subject;
-  if (viewer.kind === 'household' && subject !== viewer.subject) error(403, 'Forbidden');
+  if (!mayOpenPerson(viewer, subject)) error(403, 'Forbidden');
 
   const member = (await listMembers()).find((m) => m.subject === subject);
   if (!member) error(404, 'Not found');

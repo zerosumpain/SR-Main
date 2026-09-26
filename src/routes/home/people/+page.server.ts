@@ -2,7 +2,7 @@ import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { errMsg } from '$lib/daydream/types';
 import { loadFamily } from '$lib/daydream/ledger';
-import { loadHousehold } from '$lib/home/presence/household';
+import { livePositions, loadHousehold, type LivePosition } from '$lib/home/presence/household';
 import {
   peopleViewerOf,
   personLinks,
@@ -41,24 +41,32 @@ export const load: PageServerLoad = async (event) => {
   const viewer: PeopleViewer | null = await peopleViewerOf(event);
   if (!viewer) error(403, 'Forbidden');
 
+  // The map: every SHARING person's last fix. The owner and any household
+  // viewer — that is what the Family Circle is for. A failed read draws no map
+  // and costs nothing else on the page.
+  const positions: LivePosition[] = await livePositions().catch((err) => {
+    console.error('[home/people] positions failed:', errMsg(err));
+    return [];
+  });
+
   if (viewer.kind === 'owner') {
     try {
       const family: Family = await loadFamily();
-      return { family, viewer, links: linksFor(family, viewer), loadError: null as string | null };
+      return { family, viewer, links: linksFor(family, viewer), loadError: null as string | null, positions };
     } catch (err) {
       console.error('[daydream] family load failed:', errMsg(err));
-      return { family: EMPTY(), viewer, links: {} as Record<string, string>, loadError: errMsg(err) };
+      return { family: EMPTY(), viewer, links: {} as Record<string, string>, loadError: errMsg(err), positions };
     }
   }
 
   try {
     const { members } = await loadHousehold();
     const family: Family = { members: scopeHousehold(members, viewer), detail: {} };
-    return { family, viewer, links: linksFor(family, viewer), loadError: null as string | null };
+    return { family, viewer, links: linksFor(family, viewer), loadError: null as string | null, positions };
   } catch (err) {
     console.error('[home/people] household load failed:', errMsg(err));
     // The error text can name tables and queries; a household viewer gets the
     // fact of the failure, not the detail.
-    return { family: EMPTY(), viewer, links: {} as Record<string, string>, loadError: 'The household could not be read just now.' };
+    return { family: EMPTY(), viewer, links: {} as Record<string, string>, loadError: 'The household could not be read just now.', positions };
   }
 };

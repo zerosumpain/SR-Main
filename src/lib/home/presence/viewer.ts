@@ -15,11 +15,17 @@
 //   chosen not to share.
 
 import { householdSubjectFor } from '$lib/server/members';
+import { wardsOf } from './members';
 import { isOwnerRequest, type OwnerCheckEvent } from '$lib/server/owner';
 import { viewerHolds, viewerOf } from '$lib/server/viewer';
 import type { HouseholdPresence } from './household';
 
-export type PeopleViewer = { kind: 'owner' } | { kind: 'household'; subject: string };
+/**
+ * `wards`: the people this household viewer is a guardian of — non-empty only
+ * for a `family:admin` holder whose household_member row names them. A ward's
+ * day and person page are open to their guardian as their own are.
+ */
+export type PeopleViewer = { kind: 'owner' } | { kind: 'household'; subject: string; wards?: readonly string[] };
 
 /**
  * The viewer of a /home/people route, or null for anyone else — the route
@@ -34,7 +40,9 @@ export async function peopleViewerOf(event: OwnerCheckEvent): Promise<PeopleView
     const viewer = await viewerOf(event);
     if (viewer.kind !== 'member' || !viewerHolds(viewer, 'family:circle')) return null;
     const subject = await householdSubjectFor(viewer.email);
-    return subject ? { kind: 'household', subject } : null;
+    if (!subject) return null;
+    const wards = viewerHolds(viewer, 'family:admin') ? await wardsOf(subject) : [];
+    return { kind: 'household', subject, wards };
   } catch (err) {
     console.error('[home/people] viewer lookup failed:', err);
     return null;
@@ -77,7 +85,7 @@ export function scopeHousehold(members: readonly HouseholdPresence[], viewer: Pe
         today: null,
       };
     }
-    const own = m.subject === viewer.subject;
+    const own = m.subject === viewer.subject || (viewer.wards ?? []).includes(m.subject);
     return {
       subject: m.subject,
       isHome: m.isHome,
@@ -97,7 +105,12 @@ export function scopeHousehold(members: readonly HouseholdPresence[], viewer: Pe
  * guard on /home/people/[subject], so a card never offers a link that page
  * would refuse.
  */
+/** Whether a viewer may open this person's page: the owner anyone's, anyone else their own and their wards'. PURE. */
+export function mayOpenPerson(viewer: PeopleViewer, subject: string): boolean {
+  return viewer.kind === 'owner' || subject === viewer.subject || (viewer.wards ?? []).includes(subject);
+}
+
 export function personLinks(subjects: readonly string[], viewer: PeopleViewer): Record<string, string> {
-  const open = viewer.kind === 'owner' ? subjects : subjects.filter((s) => s === viewer.subject);
+  const open = viewer.kind === 'owner' ? subjects : subjects.filter((s) => mayOpenPerson(viewer, s));
   return Object.fromEntries(open.map((s) => [s, `/home/people/${encodeURIComponent(s)}`]));
 }

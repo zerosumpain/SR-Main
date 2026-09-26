@@ -125,8 +125,8 @@ export const FAMILY: readonly { id: FamilyPermission; label: string; blurb: stri
   {
     id: 'family:admin',
     label: 'Family admin',
-    blurb: "See their own and their kids' location history.",
-    open: false,
+    blurb: "See their own and their kids' location history. Set who their kids are on /home/people/settings.",
+    open: true,
   },
 ];
 

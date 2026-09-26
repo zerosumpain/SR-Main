@@ -94,6 +94,7 @@ describe('/home/people/settings — save', () => {
       [
         'sam',
         {
+          guardianOf: [],
           displayName: 'Sam',
           email: 'sam@example.test',
           source: 'life360',

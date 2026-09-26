@@ -5610,6 +5610,13 @@ export const householdMember = pgTable(
     haPersonEntity: text('ha_person_entity'),
     whatsapp: text('whatsapp'),
     alerts: jsonb('alerts').$type<HouseholdMemberAlerts>().notNull().default(sql`'{}'::jsonb`),
+    /**
+     * Subjects this person is a guardian of — their kids. Set by the owner on
+     * /home/people/settings. Read only for a viewer holding `family:admin`
+     * (access groups): they see their wards' days and person pages as their
+     * own. Holding the permission without a ward here shows nothing more.
+     */
+    guardianOf: jsonb('guardian_of').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
