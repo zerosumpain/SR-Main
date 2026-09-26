@@ -4,10 +4,10 @@ import { eq, sql } from 'drizzle-orm';
 import {
   describeImage,
   describePdfBestEffort,
-  transcribeAudioBestEffort,
   looksLikeRefusal,
   looksDegenerate,
 } from '$lib/file-index/describe';
+import { extractAudio } from '$lib/jkai/extract/audio';
 
 /**
  * Turn an attachment a model cannot natively read into text it can.
@@ -119,7 +119,11 @@ export async function preanalyseAttachment(
     } else if (att.kind === 'pdf') {
       raw = await describePdfBestEffort(buf, att.originalName ?? 'file.pdf');
     } else if (att.kind === 'audio') {
-      raw = await transcribeAudioBestEffort(buf, att.mimeType);
+      // The notebook's transcriber (speech-to-text), not the file index's
+      // (`transcribeAudioBestEffort`, which asks a CHAT model to transcribe and
+      // whose fallback, gemini-2.0-flash-001, OpenRouter retired — every chat
+      // voice note came back "could not be read" while /jkai/notes worked).
+      raw = (await extractAudio(buf, att.mimeType, att.originalName ?? 'voice-note.m4a')).text;
     } else {
       // Video has no extraction path, and text/document never needed one.
       return {
