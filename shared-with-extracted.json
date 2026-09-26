@@ -142,7 +142,19 @@
     "SR-JKAI is NOT named. It holds all three, but only on move/routes-wip — its",
     "master has no src/lib/nav at all. A peer is somewhere a change can GO, and an",
     "unmerged branch is not that. When that branch lands, re-sync the three files",
-    "against this repository and add the peer here."
+    "against this repository and add the peer here.",
+    "",
+    "THE ACCESS KIT — who a member is, held by SR-Drive for its members.",
+    "",
+    "SR-Drive decides for itself what a signed-in member may do on /drive, from the",
+    "same allowed_user and access_group rows this repository writes. So it holds",
+    "the catalogue (what a permission means and whether its area is open),",
+    "effective.ts (groups + one-off grants -> the permissions held), the row",
+    "predicates (area-predicates: own / household / everyone's, read vs write), the",
+    "member namespace (drive/namespace: members/<id>/ and principal_id), and",
+    "nav/reach (which pages the bar offers). Diverge on any of these and the two",
+    "applications disagree about what a member may read, which no test in either",
+    "would notice: each is right against its own copy."
   ],
   "files": {
     "src/lib/health/polyline.ts": {
@@ -215,7 +227,7 @@
     },
     "src/lib/file-index/search.ts": {
       "peer": "zerosumpain/SR-Drive",
-      "sha256": "8fe57aeab1ccaa8320fc4ebf72f9f616ed10581b9e9ba451f280a3c7372ded5f"
+      "sha256": "903f54d493bd1abed2c25d20256e096c54b581be0714c7cdc4da669d6bbb3b7f"
     },
     "src/lib/health-sync/sync-service.ts": {
       "peer": "zerosumpain/SR-Health",
@@ -355,6 +367,26 @@
         "zerosumpain/SR-Policy-Analysis"
       ],
       "sha256": "0500e5eed1ecfed42cfa3dacd09799ba73b28df69faddcacebcd7423d88f89c7"
+    },
+    "src/lib/access/catalogue.ts": {
+      "peer": "zerosumpain/SR-Drive",
+      "sha256": "ba02fd156efbbfaf6d1ba7f48220bf978f87c3221745bf426c6b0bc9a021c865"
+    },
+    "src/lib/access/effective.ts": {
+      "peer": "zerosumpain/SR-Drive",
+      "sha256": "224a23e52fafc16ddb49fca77f0bb8f9dd8dfb74fe4b40aa696f50541b8c8f83"
+    },
+    "src/lib/server/area-predicates.ts": {
+      "peer": "zerosumpain/SR-Drive",
+      "sha256": "7f239f135877a2be4f1920244f78d1fa20723a52235896c44afdeb22c3103172"
+    },
+    "src/lib/drive/namespace.ts": {
+      "peer": "zerosumpain/SR-Drive",
+      "sha256": "e3d0643ea67c56adb5b16a253ce3513272926557cd283637457d35681a406953"
+    },
+    "src/lib/nav/reach.ts": {
+      "peer": "zerosumpain/SR-Drive",
+      "sha256": "33ef10438ebf9daabaa5aa5c436bacf830a9b9a64002a26f1aa32d6f6b94e069"
     }
   }
 }

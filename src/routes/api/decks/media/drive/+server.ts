@@ -5,7 +5,7 @@
 // same posture as provider imports.
 
 import { json } from '@sveltejs/kit';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { workflowFiles } from '$lib/db/schema';
 import { storeUpload } from '$lib/decks/image-sources.server';
@@ -41,7 +41,13 @@ function effectiveMime(name: string, mimeType: string | null): string | null {
 }
 
 export const GET: RequestHandler = async () => {
-  const rows = await db.select().from(workflowFiles).orderBy(desc(workflowFiles.updatedAt));
+  // The owner's files only: a member's (members/<id>/…, see $lib/drive/namespace)
+  // are not the owner's to publish into a public deck.
+  const rows = await db
+    .select()
+    .from(workflowFiles)
+    .where(eq(workflowFiles.principalId, 'owner'))
+    .orderBy(desc(workflowFiles.updatedAt));
   const files = rows.flatMap((r) => {
     const mime = effectiveMime(r.name, r.mimeType);
     if (!mime || !COMPAT_MIME[mime]) return [];
@@ -68,7 +74,10 @@ export const POST: RequestHandler = async ({ request }) => {
     return json({ error: 'fileId required' }, { status: 400 });
   }
 
-  const [row] = await db.select().from(workflowFiles).where(eq(workflowFiles.id, body.fileId));
+  const [row] = await db
+    .select()
+    .from(workflowFiles)
+    .where(and(eq(workflowFiles.principalId, 'owner'), eq(workflowFiles.id, body.fileId)));
   if (!row) return json({ error: 'Unknown file' }, { status: 404 });
   const mime = effectiveMime(row.name, row.mimeType);
   if (!mime) return json({ error: `"${row.name}" is not a deck-compatible image or video` }, { status: 400 });

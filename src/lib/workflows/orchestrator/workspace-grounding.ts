@@ -193,6 +193,8 @@ async function buildFileStoreSection(workflowId?: string | null): Promise<string
     const rows = await db
       .select({ name: workflowFiles.name, mimeType: workflowFiles.mimeType })
       .from(workflowFiles)
+      // The owner's files: a member's (members/<id>/…) are not a workflow's to use.
+      .where(eq(workflowFiles.principalId, 'owner'))
       .orderBy(asc(workflowFiles.name))
       .limit(MAX_FILES);
 

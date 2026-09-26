@@ -125,4 +125,14 @@ describe('reachablePages — what the nav offers a member', () => {
     expect(reachablePages(['home:self'])).toEqual(['/home', '/home/devices']);
     expect(reachablePages(['home:all'])).toEqual(['/home', '/home/devices', '/home/echoes', '/home/voice']);
   });
+
+  it("offers another application's page, but never names it as a route here", async () => {
+    const { reachablePages, EXTERNAL_PAGES } = await import('./catalogue');
+    expect(EXTERNAL_PAGES['/drive']).toBe('drive:self');
+    expect(reachablePages(['drive:self'])).toContain('/drive');
+    expect(reachablePages(['drive:admin'])).toContain('/drive');
+    expect(reachablePages(['research:self'])).not.toContain('/drive');
+    expect(catalogueRouteIds()).not.toContain('/drive');
+    expect(requiredFor('/drive', 'GET')).toBeNull();
+  });
 });
