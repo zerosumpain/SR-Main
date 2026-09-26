@@ -52,7 +52,7 @@ export async function groomDevelopmentBrief(
 ) {
   const { client, model } = await getLLMClient(await resolveDefaultModel());
   const navigation = [...SITE_ITEMS, ...SECTIONS.flatMap(s => s.items)].map(({ label, href, ownerOnly }) => ({ label, href, ownerOnly }));
-  const response = await withActivity('selfimprove', () => client.chat.completions.create({
+  const response = await withActivity('builder', () => client.chat.completions.create({
     model, messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: JSON.stringify({
       earlierAnswers: turns.slice(-12).map(t => ({ questions: t.questions.slice(0, 3000), answer: t.answer.slice(0, 5000) })),
       codeContext: codeContext.slice(0, 8000),

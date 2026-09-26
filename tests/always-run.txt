@@ -13,6 +13,7 @@ src/lib/daydream/think/tools.test.ts
 src/lib/deepdive/route-access.test.ts
 src/lib/drive/owner-lane.test.ts
 src/lib/estate/estate.test.ts
+src/lib/jkai/build-spend-attribution.test.ts
 src/lib/jkai/explainer-kit.test.ts
 src/lib/jkai/jkai-tools-extension.test.ts
 src/lib/jkai/pi-runner.invocation.test.ts
