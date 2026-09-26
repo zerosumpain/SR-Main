@@ -103,3 +103,38 @@ must not imply otherwise. Real push is a later delivery adapter (needs an APNs k
 
 Errors are `{error}` with a status: 404 unknown/expired room, 403 not in the room / not host,
 409 wrong phase (e.g. tap for a closed round).
+
+## Game 2 — Family Wordle Race (added 2026-09-26)
+
+Same rooms, invites, lobby verbs and stream; `POST /api/native/games {game:'wordle-race', …}`.
+Everyone gets the same secret; 6 guesses; the game ends when everyone has solved or run out, or
+at the time limit. Solved first, then fewest guesses, then fastest. Other players' rows travel as
+colours only — the social hook — and everything is revealed when the game finishes.
+
+| Difficulty | Secret from | Time | Hard mode |
+|---|---|---|---|
+| easy | 500 commonest | 5 min | no |
+| medium | 1,000 commonest | 4 min | no |
+| hard | all 1,405 | 3 min | greens stay put, found letters stay in (with their counts) |
+
+Move: `POST /api/native/games/[id] {action:'guess', word}`. 400 for a non-word / wrong length /
+hard-mode breach (the sentence is for the player: "Not in the word list.", "2nd letter must be
+R.") — a refused guess costs nothing. 409 once solved, out, or out of time.
+
+```jsonc
+{ "id":"g_…", "game":"wordle-race", "difficulty":"easy|medium|hard",
+  "phase":"lobby|countdown|playing|finished|closed",
+  "hostId":"p_…", "meId":"p_…",
+  "wordLength":5, "maxGuesses":6, "timeLimitMs":300000, "hardMode":false,
+  "startedAt": 1790000000000,            // null before play
+  "phaseEndsAt": 1790000000000,          // lobby expiry, countdown end, TIME LIMIT while playing, finished expiry
+  "players":[{ "id":"p_…","name":"Sam","status":"joined","isHost":false,
+               "guessCount":2,"solved":false,"done":false,"solveMs":null,
+               "rows":[{"word":null,"marks":["absent","present","correct","absent","absent"]}] }],
+               // word is the letters for ME always, for others only once finished
+  "keyboard": {"a":"absent","r":"present","e":"correct"},   // my best mark per letter
+  "secret": null,                        // the word once finished
+  "standings": null | [{"id":"p_…","name":"Sam","solved":true,"guesses":4,"solveMs":83000}],
+  "winnerIds": [],
+  "serverNow": 1790000000000 }
+```

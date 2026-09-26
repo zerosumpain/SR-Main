@@ -4,6 +4,7 @@ import { withNativeAccess } from '$lib/server/native-handler';
 import { gamePlayers, playerFor } from '$lib/games/players.server';
 import { asHttp, createGame, invitesFor, roomsFor } from '$lib/games/rooms.server';
 import { isDifficulty, MAX_PLAYERS } from '$lib/games/tap-duel';
+import { isGameId } from '$lib/games/catalogue';
 
 /**
  * GET /api/native/games — the lobby: who I am, who I can invite, what I am
@@ -25,11 +26,12 @@ export const GET: RequestHandler = withNativeAccess('games', async (_event, iden
   };
 });
 
-/** POST /api/native/games — start a game: `{ game, difficulty, invite: [playerId] }`. */
+/** POST /api/native/games — start a game: `{ game: 'tap-duel' | 'wordle-race', difficulty, invite: [playerId] }`. */
 export const POST: RequestHandler = withNativeAccess('games', async (event, identity) => {
   const body = (await event.request.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body) return json({ error: 'Body must be JSON' }, { status: 400 });
-  if (body.game !== 'tap-duel') error(400, 'Unknown game.');
+  const game = body.game;
+  if (!isGameId(game)) error(400, 'Unknown game.');
   if (!isDifficulty(body.difficulty)) error(400, 'Pick easy, medium or hard.');
   const ids = Array.isArray(body.invite) ? body.invite.filter((x): x is string => typeof x === 'string') : [];
   if (ids.length > MAX_PLAYERS - 1) error(400, `Up to ${MAX_PLAYERS} players.`);
@@ -43,6 +45,6 @@ export const POST: RequestHandler = withNativeAccess('games', async (event, iden
   });
 
   const difficulty = body.difficulty;
-  const room = asHttp(() => createGame({ host: { id: me.id, name: me.name }, invite, difficulty }));
+  const room = asHttp(() => createGame({ game, host: { id: me.id, name: me.name }, invite, difficulty }));
   return json({ room }, { status: 201 });
 });
