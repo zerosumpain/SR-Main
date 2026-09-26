@@ -31,6 +31,14 @@ it('removes repository file inventories from the report excerpt', () => {
 });
 
 import { featurePreviewUrl } from './development-progress';
+it('does not present an expired preview grant as a ready site', () => {
+ const state = newDelivery('example', 'Platform');
+ state.preview = { url: `https://preview.test/?__sr_grant=${btoa(JSON.stringify({ expires: 1000 }))}.signature`, status: 'ready', detail: 'Saved ready state' };
+ const position = developmentPosition({ totalTokens: 0, outputTokens: 0, iterations: [] }, state, { status: 'paused' });
+ expect(position.ready).toBe(false);
+ expect(position.label).toBe('Preview access expired');
+ expect(position.previewReason).toContain('refresh access');
+});
 it('opens the requested feature route while retaining the signed preview grant', () => {
  expect(featurePreviewUrl('https://preview.test/?__sr_grant=example','/travel/rome')).toBe('https://preview.test/travel/rome?__sr_grant=example');
  expect(featurePreviewUrl('https://preview.test/?__sr_grant=example','//outside.test/path')).toBe('https://preview.test/?__sr_grant=example');

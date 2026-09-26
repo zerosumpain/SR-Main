@@ -2,6 +2,7 @@ import { criterionResult } from '$lib/jkai/development';
 import type { DeliveryState } from '$lib/constants/development';
 import type { RepoVerificationEvent, RepoVerificationPhase } from '$lib/verification/repo';
 import type { Tone } from '$lib/daydream/priority';
+import { previewAccess } from './preview-access';
 export type IterationProgress = { id: string; number: number; status: string; goals: string | null; evaluation: string | null;
   nextSteps: string | null; tokensUsed: number; outputTokens: number; durationMs: number | null; createdAt: string | Date };
 export type DevelopmentProgress = { totalTokens: number; outputTokens: number; iterations: IterationProgress[]; verification?: Partial<Record<RepoVerificationPhase, RepoVerificationEvent>>; stage?: { stage: string; message?: string; iteration?: number } | null; testFailure?: { content: string; createdAt: string | Date } | null };
@@ -19,16 +20,17 @@ export function developmentPosition(progress: DevelopmentProgress, state: Delive
   const checking = build.status === 'running' && (progress.stage?.stage === 'running_tests' || checks.some(check => check.status === 'running'));
   const stopped = build.outcome === 'stopped_by_user' || (build.status === 'completed' && progress.stage?.message === 'Stopped by user');
   const verified = !!state.candidate && state.gate?.passed === true && state.gate.revision === state.candidate;
-  const ready = !!state.preview.url && ['ready', 'starting'].includes(state.preview.status);
+  const expired = previewAccess(state.preview.url).expired;
+  const ready = !!state.preview.url && !expired && ['ready', 'starting'].includes(state.preview.status);
   const busy = ['running', 'queued'].includes(build.status);
   const work = progress.iterations.some(i => i.tokensUsed > 0) || !!state.candidate;
   const working = ready && state.preview.kind === 'working';
   const inspection = ready && !verified && !working;
-  const label = state.acceptedAt ? 'Accepted into batch' : state.decisions.some(d => !d.answer) ? 'Your decision is needed' : ready ? working ? `Working preview ${state.preview.number ?? 1}${busy ? ' · iterating' : ' available'}` : inspection ? 'Inspection preview available' : 'Release candidate ready for review' : state.preview.status === 'starting' ? 'Preparing isolated preview' : stopped ? 'Stopped · no verified delivery' : checking ? 'Checking the implementation' : failed ? busy ? 'Working through failed checks' : 'Blocked by repository checks' : build.status === 'failed' ? 'Build failed · review the evidence' : busy ? 'Implementation in progress' : 'No verified preview yet';
+  const label = state.acceptedAt ? 'Accepted into batch' : state.decisions.some(d => !d.answer) ? 'Your decision is needed' : ready ? working ? `Working preview ${state.preview.number ?? 1}${busy ? ' · iterating' : ' available'}` : inspection ? 'Inspection preview available' : 'Release candidate ready for review' : state.preview.status === 'starting' ? 'Preparing isolated preview' : expired ? 'Preview access expired' : stopped ? 'Stopped · no verified delivery' : checking ? 'Checking the implementation' : failed ? busy ? 'Working through failed checks' : 'Blocked by repository checks' : build.status === 'failed' ? 'Build failed · review the evidence' : busy ? 'Implementation in progress' : 'No verified preview yet';
   return { label, failed, checking, stopped, verified, ready, inspection, working, busy, work,
     canInspect: work && !busy && !state.acceptedAt && state.preview.status !== 'starting',
     checksLabel: verified ? 'Passed' : checking ? 'Running' : failed ? 'Failed' : 'Not verified',
-    previewReason: state.preview.status === 'failed' ? state.preview.detail : failed ? 'Repository checks failed. Inspect saved work before commissioning more iterations.' : busy ? 'The worker is building the first useful page. A working preview will appear automatically after its browser checks pass.' : 'No verified candidate has been prepared. An inspection preview does not approve this work.',
+    previewReason: expired ? 'The saved access link has expired. Open Preview and refresh access to test this build again.' : state.preview.status === 'failed' ? state.preview.detail : failed ? 'Repository checks failed. Inspect saved work before commissioning more iterations.' : busy ? 'The worker is building the first useful page. A working preview will appear automatically after its browser checks pass.' : 'No verified candidate has been prepared. An inspection preview does not approve this work.',
   };
 }
 export function assessmentExcerpt(text: string | null, limit = 650) {

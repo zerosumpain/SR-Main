@@ -19,7 +19,7 @@ assert.equal(page.status, 200, 'Owner development page must load');
 // document fails on a change that is purely visual. Stripping tags and
 // collapsing whitespace keeps this a check that the page rendered.
 const rendered = (await page.text()).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
-assert.ok(rendered.includes('What should the site do next?'), 'The owner development page must render its headline');
+assert.ok(rendered.includes('What should we build?'), 'The owner development page must render its headline');
 // The archive is the other half of the merged journey: it carries the record of
 // every earlier build and the only route from a finished build to a /projects
 // card. A develop page that renders without it has lost the backlog.
@@ -27,7 +27,7 @@ assert.ok(rendered.includes('Archive'), 'The development page must offer the bui
 // /jkai/builds and /jkai/builds/new are 308 stubs now. Absolute URLs to the
 // old list are in notifications and bookmarks, so the redirect is part of the
 // contract, not a convenience.
-for (const path of ['/jkai/builds', '/jkai/builds/new']) {
+for (const path of ['/jkai/build', '/jkai/builds', '/jkai/builds/new']) {
   const retired = await fetch(`http://127.0.0.1:4173${path}`, { headers, redirect: 'manual' });
   assert.equal(retired.status, 308, `${path} must redirect to the development journey`);
   assert.ok(retired.headers.get('location')?.startsWith('/jkai/develop'), `${path} must land on /jkai/develop`);
