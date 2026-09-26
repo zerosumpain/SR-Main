@@ -4,12 +4,15 @@
   // neither showed whether anything it built was ever used. On the day the
   // merge started: 33 tools shipped in a fortnight, none ever called.
   import type { PageData } from './$types';
+  import DaydreamShell from '$lib/components/jkai/daydream/hub/DaydreamShell.svelte';
+  import DsVocab from '$lib/components/jkai/daydream/hub/DsVocab.svelte';
   import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
-  import NightTimeline from '$lib/components/jkai/daydream/rooms/NightTimeline.svelte';
-  import LoopScoreboard from '$lib/components/jkai/daydream/LoopScoreboard.svelte';
+  import NightTimeline from '$lib/components/builds/improvement/NightTimeline.svelte';
+  import LoopScoreboard from '$lib/components/builds/improvement/LoopScoreboard.svelte';
+  import { developRoomRail } from '$lib/builds/develop-nav';
   import RollupGrid from '$lib/components/jkai/daydream/hub/RollupGrid.svelte';
   import type { RollupCell } from '$lib/components/jkai/daydream/hub/types';
-  import ImprovementPanel from '$lib/components/jkai/daydream/ImprovementPanel.svelte';
+  import ImprovementPanel from '$lib/components/builds/improvement/ImprovementPanel.svelte';
 
   let { data }: { data: PageData } = $props();
 
@@ -78,8 +81,30 @@
 
 </script>
 
+<svelte:head><title>Improvement — JKAI</title></svelte:head>
+
+<DaydreamShell
+  path="/jkai/develop/improvement"
+  kicker="JKAI · Build process · Improvement"
+  title={['What it built', 'overnight']}
+  standfirst="The nightly self-improvement run: what fired in the window and what it cost, whether anything it built is being used, and the loop from an idea arriving on the backlog to something shipped."
+  readout={[
+    { label: 'Ideas in, 7d', value: String(story.intake.week) },
+    { label: 'Waiting for you', value: String(story.awaitingTap) },
+    { label: 'Queued', value: String(story.backlog.open) },
+  ]}
+  tabs={developRoomRail()}
+  active="improvement"
+  footer={[
+    'strangeramblings.com/jkai/develop/improvement',
+    'ideas → your tap → build → verify → live',
+    'switches and budget live in /admin/ai/improvement',
+  ]}
+>
+<DsVocab>
 <nav class="improvement-actions" aria-label="Improvement actions">
   <a class="cta" href="/jkai/develop/doctor">Open Doctor →</a>
+  <a class="btn" href="/admin/ai/improvement">Controls →</a>
   <a class="btn" href="/jkai/develop/backlog">Epic backlog →</a>
 </nav>
 
@@ -127,6 +152,8 @@
     {/if}
   </div>
 </section>
+</DsVocab>
+</DaydreamShell>
 
 <style>
   .improvement-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 18px clamp(20px, 3vw, 44px); border-bottom: 1px solid var(--line); background: var(--surface-rail); }

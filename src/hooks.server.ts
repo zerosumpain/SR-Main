@@ -450,7 +450,7 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   const retiredJkaiPage = new Map<string, string>([
     ['/jkai/briefing', '/jkai/daydreams/briefing'],
     ['/jkai/monitors', '/jkai/daydreams/watches'],
-    ['/jkai/improvement', '/jkai/daydreams/improvement'],
+    ['/jkai/improvement', '/jkai/develop/improvement'],
     ['/jkai/doctor', '/jkai/develop/doctor'],
     ['/jkai/prompts', '/jkai/agents?tab=prompts'],
     ['/jkai/research', '/research'],

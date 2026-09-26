@@ -1,4 +1,4 @@
-// src/lib/daydream/rooms/overnight.server.ts
+// src/lib/builds/overnight.server.ts (moved from $lib/daydream/rooms with the improvement room, 2026-09-26)
 //
 // The night, as a run of passes.
 //

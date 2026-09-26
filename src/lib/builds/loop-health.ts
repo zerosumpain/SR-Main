@@ -1,4 +1,4 @@
-// src/lib/daydream/loop-health.ts
+// src/lib/builds/loop-health.ts (moved from $lib/daydream with the improvement room, 2026-09-26)
 //
 // Is the loop closing?
 //
@@ -21,7 +21,7 @@
 import { sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { customTools, daydreamSignals } from '$lib/db/schema';
-import { errMsg } from './types';
+import { errMsg } from '$lib/daydream/types';
 
 export interface LoopHealth {
   tools: {

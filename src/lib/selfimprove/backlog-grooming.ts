@@ -54,7 +54,7 @@ export function suggestBacklogGrooming(items: WorkItem[], tools: ToolHealth[] = 
         href: i.artifactHref, kind: 'covered' as const, evidence: 'A matching deliverable is recorded as live.' })) : []),
       ...(!repair ? tools.filter((t) => t.enabled && t.runCount > t.errorCount && t.errorCount / t.runCount < 0.25).map((t) => ({
         id: `tool:${t.name}`, title: t.name.replace(/_/g, ' '), text: `${t.name.replace(/_/g, ' ')} ${t.description ?? ''}`,
-        detail: t.description ?? '', href: '/jkai/daydreams/improvement', kind: 'covered' as const,
+        detail: t.description ?? '', href: '/jkai/develop/improvement', kind: 'covered' as const,
         evidence: `Existing tool: ${t.runCount - t.errorCount} successful calls recorded.` })) : []),
       ...waiting.slice(0, index).filter((i) => i.kind === item.kind && !out.some((s) => s.itemId === i.id)).map((i) => ({
         id: i.id, title: i.title, text: i.title, detail: i.detail, href: null,
