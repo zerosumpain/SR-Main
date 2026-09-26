@@ -1,7 +1,6 @@
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { errMsg } from '$lib/daydream/types';
-import { loadFamily } from '$lib/daydream/ledger';
+import { errMsg } from '$lib/home/presence/types';
 import { livePositions, loadHousehold, type LivePosition } from '$lib/home/presence/household';
 import {
   peopleViewerOf,
@@ -11,22 +10,19 @@ import {
   type ScopedPresence,
 } from '$lib/home/presence/viewer';
 
-// The household room. The owner loads the family ledger — the live cards plus
-// what the daydream sweep has made of each person. A household viewer loads
-// the live cards only, scoped by `scopeHousehold`: the sweep's hypotheses and
-// thoughts are the owner's notes, and someone else's day is theirs.
+// The household room. Everyone who may open it — the owner and a household
+// viewer — loads the same live cards through the same path, and
+// `scopeHousehold` decides what each receives: the owner every card
+// untouched; a household viewer everyone's live status, their own day, and
+// nothing of anyone not sharing.
 //
 // Scoping is decided HERE and nowhere else (spec D2). The page cannot be
 // trusted to hide anything: whatever this returns is in the browser.
-type Detail = Awaited<ReturnType<typeof loadFamily>>['detail'];
 interface Family {
   members: ScopedPresence[];
-  detail: Detail;
 }
 
-// The same keys on the failure path, so `PageData` is one shape rather than a
-// union the markup has to narrow before it can read `detail`.
-const EMPTY = (): Family => ({ members: [], detail: {} });
+const EMPTY = (): Family => ({ members: [] });
 
 /** Person pages this viewer may open — the page links only these. */
 const linksFor = (family: Family, viewer: PeopleViewer): Record<string, string> =>
@@ -37,36 +33,27 @@ const linksFor = (family: Family, viewer: PeopleViewer): Record<string, string> 
 
 export const load: PageServerLoad = async (event) => {
   // The hook already turned away anyone who is neither; this is the second
-  // lock, and the one that decides WHAT they get.
+  // lock, and the one that decides WHAT they get. Nothing is read before it.
   const viewer: PeopleViewer | null = await peopleViewerOf(event);
   if (!viewer) error(403, 'Forbidden');
 
-  // The map: every SHARING person's last fix. The owner and any household
-  // viewer — that is what the Family Circle is for. A failed read draws no map
-  // and costs nothing else on the page.
+  // The map: every SHARING person's last fix (`livePositions` drops anyone not
+  // sharing). The owner and any household viewer — that is what the Family
+  // Circle is for. A failed read draws no map and costs nothing else.
   const positions: LivePosition[] = await livePositions().catch((err) => {
     console.error('[home/people] positions failed:', errMsg(err));
     return [];
   });
 
-  if (viewer.kind === 'owner') {
-    try {
-      const family: Family = await loadFamily();
-      return { family, viewer, links: linksFor(family, viewer), loadError: null as string | null, positions };
-    } catch (err) {
-      console.error('[daydream] family load failed:', errMsg(err));
-      return { family: EMPTY(), viewer, links: {} as Record<string, string>, loadError: errMsg(err), positions };
-    }
-  }
-
   try {
     const { members } = await loadHousehold();
-    const family: Family = { members: scopeHousehold(members, viewer), detail: {} };
+    const family: Family = { members: scopeHousehold(members, viewer) };
     return { family, viewer, links: linksFor(family, viewer), loadError: null as string | null, positions };
   } catch (err) {
     console.error('[home/people] household load failed:', errMsg(err));
-    // The error text can name tables and queries; a household viewer gets the
-    // fact of the failure, not the detail.
-    return { family: EMPTY(), viewer, links: {} as Record<string, string>, loadError: 'The household could not be read just now.', positions };
+    // The error text can name tables and queries: the owner gets it, a
+    // household viewer gets the fact of the failure.
+    const loadError = viewer.kind === 'owner' ? errMsg(err) : 'The household could not be read just now.';
+    return { family: EMPTY(), viewer, links: {} as Record<string, string>, loadError, positions };
   }
 };

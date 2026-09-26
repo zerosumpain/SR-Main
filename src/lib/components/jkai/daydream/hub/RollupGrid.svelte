@@ -52,15 +52,15 @@
 <div class="rg" class:dense style="--rg-min: {min}px">
   {#each cells as c (c.key)}
     {#if c.href}
-      <a class="rg-cell t-{c.tone ?? 'steady'}" class:active={c.active} href={c.href}>
+      <a class="rg-cell t-{c.tone ?? 'steady'}" class:active={c.active} href={c.href} title={c.title ?? undefined}>
         {@render body(c)}
       </a>
     {:else if c.onclick}
-      <button type="button" class="rg-cell t-{c.tone ?? 'steady'}" class:active={c.active} onclick={c.onclick}>
+      <button type="button" class="rg-cell t-{c.tone ?? 'steady'}" class:active={c.active} onclick={c.onclick} title={c.title ?? undefined}>
         {@render body(c)}
       </button>
     {:else}
-      <div class="rg-cell t-{c.tone ?? 'steady'} still" class:active={c.active}>
+      <div class="rg-cell t-{c.tone ?? 'steady'} still" class:active={c.active} title={c.title ?? undefined}>
         {@render body(c)}
       </div>
     {/if}
