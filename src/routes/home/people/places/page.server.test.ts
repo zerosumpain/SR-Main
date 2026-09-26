@@ -11,6 +11,8 @@ const h = vi.hoisted(() => ({
   places: [] as Array<Record<string, unknown>>,
   updates: [] as Array<[string, Record<string, unknown>]>,
   renames: [] as Array<[string, string, string]>,
+  named: [] as Array<[string, string, string]>,
+  log: [] as string[],
   moves: [] as Array<[string, Record<string, unknown>]>,
   creates: [] as Array<Record<string, unknown>>,
   ignored: [] as string[],
@@ -38,16 +40,24 @@ vi.mock('$lib/home/presence/places', () => ({
   PLACE_KINDS: ['home', 'school', 'gym', 'other', 'unknown'],
   isPlaceKind: (v: unknown) => typeof v === 'string' && ['home', 'school', 'gym', 'other', 'unknown'].includes(v),
   listPanelPlaces: async () => h.places,
+  namePlace: async (id: string, label: string, kind: string) => {
+    h.log.push('name');
+    h.named.push([id, label, kind]);
+    return { id };
+  },
   confirmPlace: async (id: string, label: string, kind: string) => {
-    if (h.failRename) throw new Error('memory store down');
+    h.log.push('memory');
+    if (h.failRename) throw new Error('Cannot replace a memory in another scope');
     h.renames.push([id, label, kind]);
     return { memoryId: 'm', thoughtsResolved: 0 };
   },
   updatePlaceAlerts: async (id: string, patch: Record<string, unknown>) => {
+    h.log.push('row');
     h.updates.push([id, patch]);
     return { id };
   },
   updatePlaceGeometry: async (id: string, geo: Record<string, unknown>) => {
+    h.log.push('row');
     h.moves.push([id, geo]);
     return { id };
   },
@@ -82,6 +92,8 @@ beforeEach(() => {
   ];
   h.updates = [];
   h.renames = [];
+  h.named = [];
+  h.log = [];
   h.moves = [];
   h.creates = [];
   h.ignored = [];
@@ -163,6 +175,49 @@ describe('/home/people/places — save (name and edge)', () => {
     expect(res).toEqual({ saved: 'school' });
     expect(h.renames).toEqual([['school', 'Big School', 'school']]);
     expect(h.updates).toEqual([['school', { radiusM: 300 }]]);
+  });
+
+  it('saves the row BEFORE touching memory', async () => {
+    await actions.save(eventFor('owner@example.test', { placeId: 'school', label: 'Big School', radiusM: '300' }));
+    expect(h.log).toEqual(['row', 'name', 'memory']);
+    expect(h.named).toEqual([['school', 'Big School', 'school']]);
+  });
+
+  it('never touches memory for a radius-only or centre-only save', async () => {
+    await actions.save(eventFor('owner@example.test', { placeId: 'school', label: 'School', radiusM: '300' }));
+    await actions.save(
+      eventFor('owner@example.test', { placeId: 'school', label: 'School', radiusM: '150', lat: '51.501', lon: '-0.1' }),
+    );
+    expect(h.renames).toEqual([]);
+    expect(h.named).toEqual([]);
+    expect(h.log).toEqual(['row', 'row']);
+  });
+
+  it('renames through confirmPlace when only the kind changed', async () => {
+    const res = await actions.save(eventFor('owner@example.test', { placeId: 'school', label: 'School', kind: 'gym', radiusM: '150' }));
+    expect(res).toEqual({ saved: 'school' });
+    expect(h.renames).toEqual([['school', 'School', 'gym']]);
+  });
+
+  it('is not a rename when a stored kind outside the picker meets a radius-only save', async () => {
+    h.places[1] = { ...h.places[1], kind: 'unknown' };
+    await actions.save(eventFor('owner@example.test', { placeId: 'school', label: 'School', kind: 'unknown', radiusM: '300' }));
+    await actions.save(eventFor('owner@example.test', { placeId: 'school', label: 'School', radiusM: '300' }));
+    expect(h.renames).toEqual([]);
+  });
+
+  it('keeps the kind when the form sends none, or sends "unknown"', async () => {
+    await actions.save(eventFor('owner@example.test', { placeId: 'school', label: 'New', radiusM: '150' }));
+    await actions.save(eventFor('owner@example.test', { placeId: 'school', label: 'Newer', kind: 'unknown', radiusM: '150' }));
+    expect(h.renames.map((r) => r[2])).toEqual(['school', 'school']);
+  });
+
+  it('still saves when the memory write fails, with a soft note (not "try again")', async () => {
+    h.failRename = true;
+    const res = await actions.save(eventFor('owner@example.test', { placeId: 'school', label: 'Big School', radiusM: '300' }));
+    expect(res).toEqual({ saved: 'school', note: "Saved; couldn't update jkai's memory of this place." });
+    expect(h.updates).toEqual([['school', { radiusM: 300 }]]);
+    expect(h.named).toEqual([['school', 'Big School', 'school']]);
   });
 
   it('writes nothing when neither name nor radius changed', async () => {
@@ -273,19 +328,18 @@ describe('/home/people/places — notify', () => {
     expect(h.updates).toEqual([['school', { alerts: true, alertArrive: true, alertLeave: false, whatsappAlerts: true }]]);
   });
 
-  it('keeps alerts on while WhatsApp is on, even with the master box absent (the page disables it then)', async () => {
-    await actions.notify(eventFor('owner@example.test', { placeId: 'school', whatsappAlerts: 'on' }));
-    expect(h.updates[0][1]).toMatchObject({ alerts: true, whatsappAlerts: true });
-  });
-
-  it('turns alerts on with WhatsApp, since WhatsApp rides on an alert', async () => {
+  it('never turns alerts on for WhatsApp: WhatsApp without the master switch is dropped', async () => {
     await actions.notify(eventFor('owner@example.test', { placeId: 'school', whatsappAlerts: 'on', alertArrive: 'on', alertLeave: 'on' }));
-    expect(h.updates[0][1]).toMatchObject({ alerts: true, whatsappAlerts: true });
+    expect(h.updates[0][1]).toMatchObject({ alerts: false, whatsappAlerts: false });
   });
 
-  it("leaves home's stored alert flag untouched: home is watched regardless", async () => {
-    await actions.notify(eventFor('owner@example.test', { placeId: 'home', alertLeave: 'on', whatsappAlerts: 'on' }));
-    expect(h.updates).toEqual([['home', { alertArrive: false, alertLeave: true, whatsappAlerts: true }]]);
+  it('treats home like any place: off unless its switch is on', async () => {
+    await actions.notify(eventFor('owner@example.test', { placeId: 'home', alertLeave: 'on' }));
+    await actions.notify(eventFor('owner@example.test', { placeId: 'home', alerts: 'on', alertArrive: 'on', alertLeave: 'on' }));
+    expect(h.updates).toEqual([
+      ['home', { alerts: false, alertArrive: false, alertLeave: true, whatsappAlerts: false }],
+      ['home', { alerts: true, alertArrive: true, alertLeave: true, whatsappAlerts: false }],
+    ]);
   });
 
   it('refuses a place that is not on the panel', async () => {
