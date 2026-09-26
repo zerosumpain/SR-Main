@@ -160,4 +160,35 @@ describe('rooms', () => {
     act(created.id, 'p_sam', 'answer', { question: 0, choice: 2 });
     expect(seen.at(-1)!.phase).toBe('reveal');
   });
+
+  it('hosts Anagram Blitz, Maths Sprint and Sequence Memory through the same verbs', () => {
+    type Wire = Record<string, any>;
+    const play = (game: 'anagram-blitz' | 'maths-sprint' | 'sequence-memory') => {
+      const { id } = createGame({ game, host: john, invite: [], difficulty: 'easy' });
+      act(id, 'p_john', 'start');
+      vi.advanceTimersByTime(COUNTDOWN_MS);
+      return { id, room: () => roomFor(id, 'p_john') as unknown as Wire };
+    };
+
+    const anagram = play('anagram-blitz');
+    expect(anagram.room().phase).toBe('playing');
+    expect(anagram.room().letters).toHaveLength(7);
+    expect(() => asHttp(() => act(anagram.id, 'p_john', 'word', { word: 'zzz' }))).toThrow(
+      expect.objectContaining({ status: 400 }),
+    );
+
+    const maths = play('maths-sprint');
+    const problem = maths.room().me.problem as { index: number; text: string };
+    // The phone only ever gets the text; work the answer out the way a player would.
+    const value = Function(`return (${problem.text.replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-')})`)() as number;
+    const after = act(maths.id, 'p_john', 'answer', { index: problem.index, value }) as unknown as Wire;
+    expect(after.me.score).toBe(1);
+    expect(after.me.problem.index).toBe(problem.index + 1);
+
+    const seq = play('sequence-memory');
+    const round = seq.room().round as { number: number; steps: { tile: number }[] };
+    const survived = act(seq.id, 'p_john', 'attempt', { round: round.number, taps: round.steps.map((x) => x.tile) }) as unknown as Wire;
+    expect(['result', 'show']).toContain(survived.phase);
+    expect(survived.players[0].alive).toBe(true);
+  });
 });

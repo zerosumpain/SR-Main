@@ -8,10 +8,20 @@
 import * as tapDuel from './tap-duel';
 import * as wordleRace from './wordle-race';
 import * as quizNight from './quiz-night';
+import * as anagramBlitz from './anagram-blitz';
+import * as mathsSprint from './maths-sprint';
+import * as sequenceMemory from './sequence-memory';
 import { writeQuiz } from './quiz-night.server';
 import type { Difficulty, PlayerStatus, Rng } from './tap-duel';
 
-export const GAME_IDS = ['tap-duel', 'wordle-race', 'quiz-night'] as const;
+export const GAME_IDS = [
+  'tap-duel',
+  'wordle-race',
+  'quiz-night',
+  'anagram-blitz',
+  'maths-sprint',
+  'sequence-memory',
+] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
 export function isGameId(value: unknown): value is GameId {
@@ -90,6 +100,27 @@ export const GAMES: Record<GameId, GameRules> = {
     moves: {
       answer: (room, playerId, body, now) =>
         quizNight.answer(room as quizNight.Room, playerId, { question: num(body.question) ?? -1, choice: num(body.choice) ?? -1 }, now),
+    },
+  },
+  'anagram-blitz': {
+    ...anagramBlitz,
+    moves: {
+      word: (room, playerId, body, now) => anagramBlitz.word(room as anagramBlitz.Room, playerId, { word: body.word }, now),
+    },
+  },
+  'maths-sprint': {
+    ...mathsSprint,
+    moves: {
+      // Raw on purpose: `answer` types its own fields (409 for a stale index, 400 for a non-integer).
+      answer: (room, playerId, body, now) =>
+        mathsSprint.answer(room as mathsSprint.Room, playerId, { index: body.index, value: body.value }, now),
+    },
+  },
+  'sequence-memory': {
+    ...sequenceMemory,
+    moves: {
+      attempt: (room, playerId, body, now) =>
+        sequenceMemory.attempt(room as sequenceMemory.Room, playerId, { round: num(body.round) ?? -1, taps: body.taps }, now),
     },
   },
 };
