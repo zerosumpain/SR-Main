@@ -10,6 +10,7 @@ const h = vi.hoisted(() => ({
   alertCalls: [] as string[],
 }));
 
+
 vi.mock('$lib/home/presence/alerts', () => ({
   runCrossings: async () => {
     h.alertCalls.push('crossings');
@@ -44,6 +45,7 @@ vi.mock('$lib/home/presence/observe', () => ({
   recordGap: async () => {},
 }));
 
+// household-live owns the companion pull now; observe must never make it.
 vi.mock('$lib/home/presence/companion', () => ({
   ingestCompanion: async () => {
     h.companionCalls++;
@@ -78,12 +80,11 @@ beforeEach(() => {
 });
 
 describe('home-observe', () => {
-  it('polls Home Assistant only for life360 members, then pulls the companion lane', async () => {
+  it('polls Home Assistant only for life360 members, and leaves the companion lane to household-live', async () => {
     h.members = [member('p', 'life360'), member('q', 'companion'), member('r', 'none')];
-    const res = await homeObserve.run(ctx);
+    await homeObserve.run(ctx);
     expect(h.polled).toEqual(['p=person.p']);
-    expect(h.companionCalls).toBe(1);
-    expect(res.summary).toContain('companion: 2 written, 1 unmapped');
+    expect(h.companionCalls).toBe(0);
   });
 
   it('polls nobody and skips companion when the members read fails, without an error outcome', async () => {
@@ -110,12 +111,11 @@ describe('home-observe', () => {
     expect(h.polled).toEqual(['p=person.p']);
   });
 
-  it('still pulls companion fixes while the push stream lets the poll stand down', async () => {
+  it('stands the poll down while the push stream is fresh', async () => {
     h.pushFresh = true;
     h.members = [member('john', 'life360'), member('q', 'companion')];
     const res = await homeObserve.run(ctx);
     expect(h.polled).toEqual([]);
-    expect(h.companionCalls).toBe(1);
     expect(res.summary).toContain('push stream fresh');
   });
 

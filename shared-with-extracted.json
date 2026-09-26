@@ -338,7 +338,7 @@
     },
     "src/lib/access/catalogue.ts": {
       "peer": "zerosumpain/SR-Drive",
-      "sha256": "b7e456fa44645aec1210c09f60e314ad5162d603d0fabe2647164e799d7b8965"
+      "sha256": "e497942ee45ab170e65def1502dfa50265aeb148d1f47aafd7ae2b4685ef5ce5"
     },
     "src/lib/access/effective.ts": {
       "peer": "zerosumpain/SR-Drive",

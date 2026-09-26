@@ -16,8 +16,10 @@
 
 import { householdSubjectFor } from '$lib/server/members';
 import { wardsOf } from './members';
+import { isOwnerEmail } from '$lib/server/access';
+import { loadMember } from '$lib/server/grants';
 import { isOwnerRequest, type OwnerCheckEvent } from '$lib/server/owner';
-import { viewerHolds, viewerOf } from '$lib/server/viewer';
+import { viewerHolds, viewerOf, type Viewer } from '$lib/server/viewer';
 import type { HouseholdPresence } from './household';
 
 /**
@@ -37,12 +39,37 @@ export type PeopleViewer = { kind: 'owner' } | { kind: 'household'; subject: str
 export async function peopleViewerOf(event: OwnerCheckEvent): Promise<PeopleViewer | null> {
   if (await isOwnerRequest(event)) return { kind: 'owner' };
   try {
-    const viewer = await viewerOf(event);
-    if (viewer.kind !== 'member' || !viewerHolds(viewer, 'family:circle')) return null;
-    const subject = await householdSubjectFor(viewer.email);
-    if (!subject) return null;
-    const wards = viewerHolds(viewer, 'family:admin') ? await wardsOf(subject) : [];
-    return { kind: 'household', subject, wards };
+    return await householdViewer(await viewerOf(event));
+  } catch (err) {
+    console.error('[home/people] viewer lookup failed:', err);
+    return null;
+  }
+}
+
+/** The member half of both lookups: a Family Circle holder with a household row. */
+async function householdViewer(viewer: Viewer): Promise<PeopleViewer | null> {
+  if (viewer.kind !== 'member' || !viewerHolds(viewer, 'family:circle')) return null;
+  const subject = await householdSubjectFor(viewer.email);
+  if (!subject) return null;
+  const wards = viewerHolds(viewer, 'family:admin') ? await wardsOf(subject) : [];
+  return { kind: 'household', subject, wards };
+}
+
+/**
+ * The same answer for somebody who is not making a request — the iPhone app,
+ * whose view SR-Main builds and pushes to the pilot (`app-view.ts`). Same
+ * rules as the page, from the email alone: the owner by the allow-list, a
+ * member by their grants. There is no dev LAN bypass here: no request, no
+ * address. A lookup that fails reads as null, like the page.
+ */
+export async function peopleViewerForEmail(email: string | null | undefined): Promise<PeopleViewer | null> {
+  const e = (email ?? '').trim().toLowerCase();
+  if (!e) return null;
+  if (isOwnerEmail(e)) return { kind: 'owner' };
+  try {
+    const member = await loadMember(e);
+    if (!member) return null;
+    return await householdViewer({ kind: 'member', principalId: member.principalId, email: e, grants: member.grants });
   } catch (err) {
     console.error('[home/people] viewer lookup failed:', err);
     return null;

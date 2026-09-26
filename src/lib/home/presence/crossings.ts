@@ -23,6 +23,10 @@
 // both on by default). That gates the EVENT only: whether someone is inside is
 // tracked exactly as before, so turning "when they leave" off and on again
 // never invents a crossing that did not happen.
+//
+// The same holds for the master switch (`alerts`). Home is watched whatever
+// it says, so who is in stays known, but it raises nothing unless its switch
+// is on, like every other place. No place notifies by default.
 
 import { metresBetween } from './cluster';
 import { MAX_USABLE_ACCURACY_M } from './types';
@@ -42,18 +46,24 @@ export interface CrossingPlace {
   lat: number;
   lon: number;
   radiusM: number;
+  /** The master switch. False = watched (inside is tracked) but silent in
+   *  both directions. Absent = on: only flagged places are passed in, apart
+   *  from home, which always carries its flag. */
+  alerts?: boolean;
   /** Raise an event on arriving here. Absent = on (the column default). */
   alertArrive?: boolean;
   /** Raise an event on leaving here. Absent = on. */
   alertLeave?: boolean;
 }
 
-/** Whether a place announces crossings in this direction. An unknown place
- *  (or one without the flags) announces both, as the columns default. PURE. */
+/** Whether a place announces crossings in this direction: never with its
+ *  master switch off; otherwise an unknown place (or one without the flags)
+ *  announces both, as the columns default. PURE. */
 export function raisesCrossing(
-  place: Pick<CrossingPlace, 'alertArrive' | 'alertLeave'> | undefined,
+  place: Pick<CrossingPlace, 'alerts' | 'alertArrive' | 'alertLeave'> | undefined,
   kind: CrossingKind,
 ): boolean {
+  if (place?.alerts === false) return false;
   return (kind === 'arrive' ? place?.alertArrive : place?.alertLeave) !== false;
 }
 

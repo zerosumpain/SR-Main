@@ -20,8 +20,8 @@
 // (subject + place_id), not from this table.
 
 import { writeMemory } from '$lib/jkai/memory/service.server';
-import { and, asc, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
-import { db } from '$lib/db';
+import { and, asc, eq, gte, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
+import { db, type DbExecutor } from '$lib/db';
 import { daydreamPlaces, daydreamTrail, jkaiMemories } from '$lib/db/schema';
 import { clusterPointsYielding, clusterRadiusM, median, metresBetween, segmentVisits } from './cluster';
 import { RADIUS_MAX_M, RADIUS_MIN_M, validPlaceGeometry } from './geo';
@@ -472,6 +472,42 @@ export function isPlaceKind(v: unknown): v is PlaceKind {
   return typeof v === 'string' && (PLACE_KINDS as readonly string[]).includes(v);
 }
 
+type MemoryScope = 'personal' | 'daydream' | 'agent';
+
+/** The scope a memory row lives in, read the way writeMemory reads it. */
+export function memoryScope(row: {
+  daydreamOrigin?: string | null;
+  provenance?: { scope?: MemoryScope } | null;
+}): MemoryScope {
+  return row.provenance?.scope ?? (row.daydreamOrigin ? 'daydream' : 'personal');
+}
+
+/** A memory row, only while it is still current (not superseded or forgotten). */
+async function currentMemory(tx: DbExecutor, id: string) {
+  const [row] = await tx
+    .select({ id: jkaiMemories.id, daydreamOrigin: jkaiMemories.daydreamOrigin, provenance: jkaiMemories.provenance })
+    .from(jkaiMemories)
+    .where(and(eq(jkaiMemories.id, id), isNull(jkaiMemories.supersededBy)))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * The owner's name and kind for a place, on the place row alone. The panel
+ * writes this BEFORE confirmPlace, so a failure to update jkai's memory never
+ * loses the name he typed.
+ */
+export async function namePlace(placeId: string, label: string, kind: PlaceKind): Promise<{ id: string } | null> {
+  const clean = label.trim().slice(0, 200);
+  if (!clean) throw new Error('a place needs a name');
+  const [row] = await db
+    .update(daydreamPlaces)
+    .set({ label: clean, kind, source: 'confirmed', updatedAt: new Date() })
+    .where(eq(daydreamPlaces.id, placeId))
+    .returning({ id: daydreamPlaces.id });
+  return row ?? null;
+}
+
 /**
  * Record what a place actually is.
  *
@@ -507,9 +543,29 @@ export async function confirmPlace(
     const rhythm = describePlaceRhythm(place);
     const content = `${clean} (${kind}) — a place John visits: ${rhythm}.`;
 
-    const memory = await writeMemory({ category: 'places', content, daydreamOrigin: 'place', replacesId: place.memoryId,
-      sourceConversationId: opts.conversationId ?? null,
-      provenance: { origin: 'daydream-place', sourceId: placeId, assertion: 'stated' } }, tx);
+    // The replacement goes in the SAME scope as the memory it replaces:
+    // writeMemory refuses to supersede across scopes, and most places' names
+    // were written as personal memories while this wrote 'daydream' — so every
+    // rename of those failed ("Cannot replace a memory in another scope").
+    const old = place.memoryId ? await currentMemory(tx, place.memoryId) : null;
+    const scope = old ? memoryScope(old) : 'personal';
+    const memory = await writeMemory(
+      {
+        category: 'places',
+        content,
+        ...(scope === 'daydream' ? { daydreamOrigin: 'place' as const } : {}),
+        // A superseded or missing old memory cannot be replaced; write afresh.
+        replacesId: old ? old.id : null,
+        sourceConversationId: opts.conversationId ?? null,
+        provenance: {
+          origin: 'daydream-place',
+          sourceId: placeId,
+          assertion: 'stated',
+          ...(scope === 'daydream' ? {} : { scope }),
+        },
+      },
+      tx,
+    );
 
     await tx
       .update(daydreamPlaces)
@@ -676,8 +732,15 @@ export interface PanelPlace {
   alertArrive: boolean;
   alertLeave: boolean;
   whatsappAlerts: boolean;
+  /** Effective: an undecided home is on, an undecided place off. */
+  trackOnLeave: boolean;
   visitCount: number;
   isHome: boolean;
+}
+
+/** An undecided flag is on for home only. PURE. */
+export function effectiveTrackOnLeave(stored: boolean | null | undefined, isHome: boolean): boolean {
+  return stored ?? isHome;
 }
 
 /**
@@ -699,6 +762,7 @@ export async function listPanelPlaces(): Promise<PanelPlace[]> {
       alertArrive: daydreamPlaces.alertArrive,
       alertLeave: daydreamPlaces.alertLeave,
       whatsappAlerts: daydreamPlaces.whatsappAlerts,
+      trackOnLeave: daydreamPlaces.trackOnLeave,
       visitCount: daydreamPlaces.visitCount,
     })
     .from(daydreamPlaces)
@@ -709,7 +773,11 @@ export async function listPanelPlaces(): Promise<PanelPlace[]> {
       ),
     )
     .orderBy(sql`${daydreamPlaces.visitCount} desc`, asc(daydreamPlaces.label));
-  const out = rows.map((r) => ({ ...r, isHome: r.id === home?.id }));
+  const out = rows.map((r) => ({
+    ...r,
+    isHome: r.id === home?.id,
+    trackOnLeave: effectiveTrackOnLeave(r.trackOnLeave, r.id === home?.id),
+  }));
   return [...out.filter((p) => p.isHome), ...out.filter((p) => !p.isHome)];
 }
 
@@ -719,13 +787,21 @@ export async function listPanelPlaces(): Promise<PanelPlace[]> {
  */
 export async function updatePlaceAlerts(
   placeId: string,
-  patch: { alerts?: boolean; alertArrive?: boolean; alertLeave?: boolean; whatsappAlerts?: boolean; radiusM?: number },
+  patch: {
+    alerts?: boolean;
+    alertArrive?: boolean;
+    alertLeave?: boolean;
+    whatsappAlerts?: boolean;
+    trackOnLeave?: boolean;
+    radiusM?: number;
+  },
 ): Promise<{ id: string } | null> {
   const set: Record<string, unknown> = { updatedAt: new Date() };
   if (patch.alerts !== undefined) set.alerts = patch.alerts;
   if (patch.alertArrive !== undefined) set.alertArrive = patch.alertArrive;
   if (patch.alertLeave !== undefined) set.alertLeave = patch.alertLeave;
   if (patch.whatsappAlerts !== undefined) set.whatsappAlerts = patch.whatsappAlerts;
+  if (patch.trackOnLeave !== undefined) set.trackOnLeave = patch.trackOnLeave;
   if (patch.radiusM !== undefined) {
     if (!Number.isFinite(patch.radiusM) || patch.radiusM < RADIUS_MIN_M || patch.radiusM > RADIUS_MAX_M) {
       throw new Error(`radius must be ${RADIUS_MIN_M}–${RADIUS_MAX_M} m`);

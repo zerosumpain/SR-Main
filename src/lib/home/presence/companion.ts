@@ -25,6 +25,14 @@ export const COMPANION_USERS_KEY = 'home.presence.companionUsers';
 /** Pages pulled per run at most; the rest waits two minutes for the next run. */
 export const COMPANION_MAX_PAGES = 10;
 const PAGE_LIMIT = 500;
+/**
+ * The trail keeps at most one app fix per person in this many seconds. While
+ * someone is out the phone records about one a second (close tracking); the
+ * pilot keeps every one for the owner's own map, and the household trail —
+ * which crossings, places and stats all scan — keeps a line that still draws
+ * every street without growing ~3,600 rows an hour per person.
+ */
+export const TRAIL_MIN_SPACING_S = 5;
 const TIMEOUT_MS = 15_000;
 
 export interface HouseholdUser {
@@ -45,6 +53,8 @@ export interface HouseholdFix {
   /** m/s; -1 or null when the phone did not know. */
   speed: number | null;
   moving: boolean;
+  /** Whole percent, from a phone new enough to send it; null otherwise. */
+  battery?: number | null;
 }
 
 export interface HouseholdPage {
@@ -65,17 +75,19 @@ export interface CompanionResult {
   /** Fixes at or before the newest companion fix already in the trail for
    *  that person: a page re-read after a failure, or a late upload. */
   skipped: number;
+  /** Fixes closer than TRAIL_MIN_SPACING_S to the last one kept. */
+  thinned?: number;
   /** True when the page cap stopped the run with more waiting. */
   more: boolean;
   /** Set when a fetch or a write failed; the cursor stays on the failed page. */
   error?: string;
 }
 
-function companionUrl(): string {
+export function companionUrl(): string {
   return (process.env.COMPANION_URL || COMPANION_DEFAULT_URL).replace(/\/+$/, '');
 }
 
-function companionToken(): string | null {
+export function companionToken(): string | null {
   const t = process.env.COMPANION_HOUSEHOLD_TOKEN?.trim();
   return t ? t : null;
 }
@@ -124,6 +136,8 @@ export function toIncomingFix(f: HouseholdFix): IncomingFix {
     accuracyM: typeof f.accuracy === 'number' && Number.isFinite(f.accuracy) ? f.accuracy : null,
     at: f.recorded,
     speedKmh: speed == null ? null : Math.round(speed * 3.6 * 10) / 10,
+    batteryPct:
+      typeof f.battery === 'number' && Number.isInteger(f.battery) && f.battery >= 0 && f.battery <= 100 ? f.battery : null,
   };
 }
 
@@ -196,6 +210,10 @@ export async function ingestCompanion(
       const newest = latest.get(subject);
       if (newest && recordedMs <= newest.getTime()) {
         result.skipped++;
+        continue;
+      }
+      if (newest && recordedMs - newest.getTime() < TRAIL_MIN_SPACING_S * 1000) {
+        result.thinned = (result.thinned ?? 0) + 1;
         continue;
       }
       try {

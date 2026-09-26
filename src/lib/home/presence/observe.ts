@@ -341,6 +341,24 @@ export function fixFromEntityState(
   };
 }
 
+/**
+ * The battery of the tracker a `person.*` entity is following. PURE.
+ *
+ * A person entity carries position but NO battery: `battery_level` lives on
+ * the device tracker it is built from (`device_tracker.life360_<name>`),
+ * which the person names in its `source` attribute. Reading only the person
+ * wrote a null battery on every poll row from the day the trail began.
+ */
+export function batteryFromSource(
+  person: HaEntityState,
+  byId: ReadonlyMap<string, HaEntityState>,
+): number | null {
+  const source = person.attributes?.source;
+  if (typeof source !== 'string') return null;
+  const level = byId.get(source)?.attributes?.battery_level;
+  return typeof level === 'number' && Number.isFinite(level) ? Math.max(0, Math.min(100, Math.round(level))) : null;
+}
+
 export async function pollHomeAssistant(
   personEntity = 'person.john',
 ): Promise<{ fix: IncomingFix } | { error: string }> {
@@ -385,10 +403,11 @@ export async function pollAllSubjects(
     const now = new Date();
     for (const s of subjects) {
       const state = byId.get(s.entity);
-      out.set(
-        s.subject,
-        state ? fixFromEntityState(state, s.entity, now) : { error: `${s.entity} not found in HA` },
-      );
+      const res = state ? fixFromEntityState(state, s.entity, now) : { error: `${s.entity} not found in HA` };
+      if (state && 'fix' in res && res.fix.batteryPct == null) {
+        res.fix.batteryPct = batteryFromSource(state, byId);
+      }
+      out.set(s.subject, res);
     }
   } catch (err) {
     const error = errMsg(err);

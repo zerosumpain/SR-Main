@@ -10,7 +10,6 @@ import {
   errMsg,
   type SubjectEntity,
 } from '$lib/home/presence/types';
-import { ingestCompanion, type CompanionResult } from '$lib/home/presence/companion';
 import { lifeSubjects, listMembers, type HouseholdMember } from '$lib/home/presence/members';
 import { deliverAlerts, runCrossings } from '$lib/home/presence/alerts';
 import type { ActivityHandler } from '../types';
@@ -54,7 +53,7 @@ const DEFAULTS: Required<Omit<ObserveConfig, 'subjects'>> = {
 export const homeObserve: ActivityHandler = {
   name: NAME,
   description:
-    'Poll floor for the household trail. Records where every Life360 member is in one Home Assistant round trip — the push stream only covers John — with an explicit per-subject gap row when it looks and cannot see, then pulls the iPhone app\'s fixes from the pilot for companion members, then raises arrive/leave alerts to the people who follow them. No LLM.',
+    'Poll floor for the household trail. Records where every Life360 member is in one Home Assistant round trip — the push stream only covers John — with an explicit per-subject gap row when it looks and cannot see, then raises arrive/leave alerts to the people who follow them (the iPhone app\'s fixes arrive through household-live). No LLM.',
   // Same constant coverage divides by. Written once so they cannot drift.
   defaultCadenceSeconds: OBSERVE_CADENCE_SECONDS,
   defaultEnabled: true,
@@ -145,27 +144,9 @@ export const homeObserve: ActivityHandler = {
       }
     }
 
-    // The iPhone app, through the pilot's household lane. Skipped silently
-    // when no token is configured. A failure here is reported, not an error
-    // outcome: the pilot being unreachable is as ordinary as HA being so, and
-    // the cursor stays put so nothing is lost. No gap rows either — silence is
-    // normal for a phone (a still phone is suspended), so it proves nothing.
-    let companion: CompanionResult | null = null;
-    try {
-      companion = await ingestCompanion(members);
-    } catch (err) {
-      companion = { pages: 0, written: 0, dropped: 0, rejected: 0, skipped: 0, more: false, error: errMsg(err) };
-    }
-    if (companion) {
-      details.companion = companion;
-      const c = [`${companion.written} written`];
-      if (companion.dropped) c.push(`${companion.dropped} unmapped`);
-      if (companion.rejected) c.push(`${companion.rejected} rejected`);
-      if (companion.skipped) c.push(`${companion.skipped} already written`);
-      if (companion.more) c.push('more waiting');
-      if (companion.error) c.push(`failed: ${companion.error.slice(0, 80)}`);
-      bits.push(`companion: ${c.join(', ')}`);
-    }
+    // The iPhone app's fixes are pulled by `household-live` every 30 s, not
+    // here: two activities pulling one cursor would write every fix twice.
+    // The crossings below still see them — they read the trail, whoever wrote it.
 
     // Arrivals and departures, from every trail row written since the last
     // run — this run's poll and app fixes, and the push stream's, which never

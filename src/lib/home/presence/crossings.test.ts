@@ -222,3 +222,35 @@ describe('direction — alert on arrive, on leave, or both', () => {
     expect(raisesCrossing(undefined, 'arrive')).toBe(true);
   });
 });
+
+describe('the master switch', () => {
+  // Home is watched with its switch off: who is in is still tracked, but it
+  // announces nothing. No place notifies by default.
+  const silentHome: CrossingPlace = { ...PLACE, alerts: false };
+
+  it('raises nothing in either direction with alerts off', () => {
+    expect(raisesCrossing(silentHome, 'arrive')).toBe(false);
+    expect(raisesCrossing(silentHome, 'leave')).toBe(false);
+    expect(raisesCrossing({ ...PLACE, alerts: true }, 'arrive')).toBe(true);
+  });
+
+  it('still tracks who is inside a silent place', () => {
+    const arrive = detectCrossings(none(), north(20), [silentHome]);
+    expect(arrive.events).toEqual([]);
+    expect([...arrive.inside]).toEqual(['p1']);
+    const leave = detectCrossings({ inside: new Set(['p1']) }, north(900), [silentHome]);
+    expect(leave.events).toEqual([]);
+    expect(leave.inside.size).toBe(0);
+  });
+
+  it('walks a visit home with alerts off: no events, state moves', () => {
+    const s: InsideState = { inside: [], lastId: 0, watched: ['p1'], lastTsMs: 0 };
+    const walk = [300, 20, 30, 400].map((m, i) => north(m, 10, i + 1, i));
+    const mid = stepCrossings(s, walk.slice(0, 2), [silentHome]);
+    expect(mid.events).toEqual([]);
+    expect(mid.state?.inside).toEqual(['p1']);
+    const end = stepCrossings(mid.state, walk.slice(2), [silentHome]);
+    expect(end.events).toEqual([]);
+    expect(end.state?.inside).toEqual([]);
+  });
+});

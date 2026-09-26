@@ -5585,6 +5585,13 @@ export const daydreamPlaces = pgTable(
     alertArrive: boolean('alert_arrive').notNull().default(true),
     alertLeave: boolean('alert_leave').notNull().default(true),
     /**
+     * Whether leaving this place switches the iPhone app to close tracking —
+     * a fix a second until the phone has been still for five minutes. NULL
+     * means "not decided": on for home, off everywhere else, so home is
+     * watched from the day this shipped without a data migration.
+     */
+    trackOnLeave: boolean('track_on_leave'),
+    /**
      * True once the owner has set this place's GEOMETRY by hand — moved,
      * resized or created it on the places map, or typed a radius. The places
      * refresh then keeps `lat`, `lon` and `radiusM` as they are and never
