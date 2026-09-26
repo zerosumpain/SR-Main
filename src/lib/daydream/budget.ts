@@ -41,7 +41,7 @@
 import { and, eq, gte, inArray } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { heartbeatActions, heartbeatPulses } from '$lib/db/schema';
-import { LOCAL_TZ } from './types';
+import { LOCAL_TZ, localDayStart } from './types';
 
 /** Owner's caps. Percentage POINTS of each window, not of what remains. */
 export const DAILY_WEEKLY_CAP_PCT = 10;
@@ -155,20 +155,9 @@ export function localHourOf(now: Date, tz = LOCAL_TZ): number {
   return Number(hh) % 24;
 }
 
-/** The instant the owner's local day began. Never `setUTCHours(0)` — under BST
- *  that is an hour into the previous day. */
-export function localDayStart(now: Date, tz = LOCAL_TZ): Date {
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: tz,
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).formatToParts(now);
-  const num = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
-  const secs = (num('hour') % 24) * 3600 + num('minute') * 60 + num('second');
-  return new Date(now.getTime() - secs * 1000);
-}
+// Moved to $lib/home/presence/types (location left daydream); re-exported so
+// existing importers keep working.
+export { localDayStart };
 
 /**
  * How far through the paced day we are, 0..1.

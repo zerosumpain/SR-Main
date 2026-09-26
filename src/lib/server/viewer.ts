@@ -1,4 +1,5 @@
-// Who is asking: the owner, a member, a signed-in guest, or nobody.
+// Who is asking: the owner, a member, a household viewer, a signed-in guest,
+// or nobody.
 //
 // One answer per request, cached on `locals`, shared by the hook's member gate,
 // `resolveRequestScope` and the layouts that trim the chrome for a member. The
@@ -6,11 +7,13 @@
 // same rule `isOwnerEmail` gives the hook), so only a non-owner session pays
 // for the member lookup.
 import { isOwnerEmail } from './access';
-import { memberPrincipalFor } from './members';
+import { householdSubjectFor, memberPrincipalFor } from './members';
 
 export type Viewer =
   | { kind: 'owner' }
   | { kind: 'member'; principalId: string; email: string }
+  /** Role 'household' with a household_member row: `subject` is who they are on the trail. */
+  | { kind: 'household'; subject: string; email: string }
   | { kind: 'guest'; email: string }
   | { kind: 'anonymous' };
 
@@ -20,7 +23,11 @@ async function resolveViewer(locals: App.Locals): Promise<Viewer> {
   if (!email) return { kind: 'anonymous' };
   if (isOwnerEmail(email)) return { kind: 'owner' };
   const principalId = await memberPrincipalFor(email);
-  return principalId ? { kind: 'member', principalId, email } : { kind: 'guest', email };
+  if (principalId) return { kind: 'member', principalId, email };
+  // The roles are one column, so a member is never also household; asked
+  // second, a member's request costs no extra read.
+  const subject = await householdSubjectFor(email);
+  return subject ? { kind: 'household', subject, email } : { kind: 'guest', email };
 }
 
 export function viewerOf(event: { locals: App.Locals }): Promise<Viewer> {

@@ -33,6 +33,7 @@
     active = null,
     ontab,
     footer = [],
+    navBack = true,
     children,
   }: {
     /** Rendered after `strangeramblings.com`, e.g. `/home/voice`. */
@@ -47,11 +48,17 @@
     active?: string | null;
     ontab?: (id: string) => void;
     footer?: string[];
+    /**
+     * Whether the site bar offers "one level up". False for a household
+     * viewer on /home/people: its parent, /home, is owner-only and would
+     * bounce them to the front page.
+     */
+    navBack?: boolean;
     children: Snippet;
   } = $props();
 </script>
 
-<HealthShell {path} unifiedNav {footer}>
+<HealthShell {path} unifiedNav {navBack} {footer}>
   <div class="home-page">
     <section class="home-lede">
       <div class="lede-inner" class:solo={summary.length === 0}>

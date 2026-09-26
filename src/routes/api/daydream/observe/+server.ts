@@ -17,6 +17,7 @@ import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
 import { recordFix } from '$lib/daydream/observe';
 import { DEFAULT_SUBJECT, INGEST_SECRET_ENV, errMsg } from '$lib/daydream/types';
+import { isLife360Subject, listMembers } from '$lib/home/presence/members';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -87,6 +88,26 @@ export const POST: RequestHandler = async ({ request }) => {
     );
   }
 
+  const subject =
+    typeof body.subject === 'string' && body.subject.trim() ? body.subject.trim() : DEFAULT_SUBJECT;
+
+  // Consent: Home Assistant may only write the trail of a household member
+  // whose source is 'life360'. Someone on the iPhone app (who may have sharing
+  // off) or on 'none' gets nothing from here. If the members table cannot be
+  // read we do not know who consented, so nothing is written. Both answer 200
+  // with `ignored`, because the caller is an HA automation and a 4xx/5xx would
+  // only make it retry something that must not land.
+  let allowed = false;
+  try {
+    allowed = isLife360Subject(await listMembers(), subject);
+  } catch (err) {
+    console.error('[daydream] push ingest could not read household members:', errMsg(err));
+    return json({ ok: true, ignored: true, reason: 'members unavailable' }, { headers: CORS_HEADERS });
+  }
+  if (!allowed) {
+    return json({ ok: true, ignored: true, reason: 'not tracked from Home Assistant' }, { headers: CORS_HEADERS });
+  }
+
   try {
     const fix = await recordFix(
       {
@@ -99,7 +120,7 @@ export const POST: RequestHandler = async ({ request }) => {
         readingAgeS: num(body.readingAgeS),
       },
       'push',
-      typeof body.subject === 'string' && body.subject.trim() ? body.subject.trim() : DEFAULT_SUBJECT,
+      subject,
     );
 
     // Deliberately terse: the caller is an HA automation, not a person, and
