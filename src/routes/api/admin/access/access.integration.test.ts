@@ -3,6 +3,12 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { accessGroup, activityPrincipals, allowedUser } from '$lib/db/schema';
 
+/** Family Circle's grants as THIS database holds them: the seed runs once, so an older database has an older set. */
+async function circleGrants(): Promise<string[]> {
+  const [row] = await db.select({ grants: accessGroup.grants }).from(accessGroup).where(eq(accessGroup.id, 'family-circle'));
+  return [...(row?.grants ?? [])];
+}
+
 // The /admin/access API end to end against the real tables. Touches only rows
 // it creates (named with this run's tag) and deletes them after.
 
@@ -52,7 +58,7 @@ describe.skipIf(!process.env.DATABASE_URL)('/api/admin/access', () => {
     expect(patched.status).toBe(200);
     expect(patched.body.saved).toMatchObject({ groups: ['family-circle'], grants: ['jkai.intel:all'] });
     const after = patched.body.people.find((p: any) => p.email === EMAIL);
-    expect([...after.effective].sort()).toEqual(['family:circle', 'jkai.intel:all']);
+    expect([...after.effective].sort()).toEqual([...new Set([...(await circleGrants()), 'jkai.intel:all'])].sort());
   });
 
   it('refuses a malformed PATCH and an unknown person', async () => {
