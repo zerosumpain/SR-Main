@@ -34,8 +34,8 @@ export interface HouseholdMember {
   haPersonEntity: string | null;
   whatsapp: string | null;
   alerts: HouseholdMemberAlerts;
-  /** Subjects this person is a guardian of (see the schema). */
-  guardianOf: string[];
+  /** Subjects this person is a guardian of (see the schema). Absent = none. */
+  guardianOf?: string[];
 }
 
 export type MemberPatch = Partial<
@@ -80,7 +80,7 @@ export async function wardsOf(subject: string): Promise<string[]> {
   const me = members.find((m) => m.subject === subject);
   if (!me) return [];
   const known = new Set(members.map((m) => m.subject));
-  return me.guardianOf.filter((s) => s !== subject && known.has(s));
+  return (me.guardianOf ?? []).filter((s) => s !== subject && known.has(s));
 }
 
 /** The rows an empty table is seeded with: today's household, all on Life360. */

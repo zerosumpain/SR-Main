@@ -138,7 +138,7 @@
                 <legend class="field-label">Guardian of</legend>
                 {#each others as o (o.subject)}
                   <label class="toggle">
-                    <input type="checkbox" name="guardianOf" value={o.subject} checked={m.guardianOf.includes(o.subject)} />
+                    <input type="checkbox" name="guardianOf" value={o.subject} checked={(m.guardianOf ?? []).includes(o.subject)} />
                     <span>{o.displayName}</span>
                   </label>
                 {/each}
