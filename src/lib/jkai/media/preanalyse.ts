@@ -68,6 +68,19 @@ function cachedRecord(att: JkaiAttachment): PreanalysisRecord | null {
 }
 
 async function persist(att: JkaiAttachment, text: string): Promise<void> {
+  await persistById(att.id, text);
+}
+
+/**
+ * Record text for an attachment that arrived already read — a voice note the
+ * iPhone transcribed on the device. The turn then reads this instead of
+ * sending the audio to a transcription model, exactly as a cache hit would.
+ */
+export async function recordPreanalysis(id: string, text: string): Promise<void> {
+  await persistById(id, text);
+}
+
+async function persistById(id: string, text: string): Promise<void> {
   const patch = { preanalysis: { v: PREANALYSIS_VERSION, text, at: new Date().toISOString() } };
   try {
     // Merged in SQL, not spread from `att.metadata`: that copy is as old as the
@@ -76,10 +89,10 @@ async function persist(att: JkaiAttachment, text: string): Promise<void> {
     await db
       .update(jkaiAttachments)
       .set({ metadata: sql`coalesce(${jkaiAttachments.metadata}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb` })
-      .where(eq(jkaiAttachments.id, att.id));
+      .where(eq(jkaiAttachments.id, id));
   } catch (err) {
     // A cache write failing must not cost the user their answer.
-    console.warn(`[preanalyse] could not cache description for ${att.id}:`, err);
+    console.warn(`[preanalyse] could not cache description for ${id}:`, err);
   }
 }
 

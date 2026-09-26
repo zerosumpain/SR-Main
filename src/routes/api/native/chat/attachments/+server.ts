@@ -8,6 +8,10 @@ import {
   reserveUsage,
 } from '$lib/jkai/chat-access.server';
 import { storeChatUpload } from '$lib/jkai/media/upload';
+import { recordPreanalysis } from '$lib/jkai/media/preanalyse';
+
+/** Longest on-device transcript kept: a few minutes of speech, well inside a URL. */
+const MAX_TRANSCRIPT_CHARS = 6000;
 
 /**
  * POST /api/native/chat/attachments — a photo or a document from the phone.
@@ -28,6 +32,11 @@ import { storeChatUpload } from '$lib/jkai/media/upload';
  * OWN (404 for one they cannot see, 403 for one they may only read), a kind to
  * read rather than run (`MEMBER_UPLOAD_KINDS`), stamped with their principal,
  * and metered against the same daily ledger as their browser.
+ *
+ * `transcript` (query) is a voice note already transcribed ON THE PHONE. It is
+ * stored as the audio's pre-analysis, so the turn reads it instead of calling
+ * a transcription model: the phone sends the words as the message, and the
+ * audio rides along for playback and /drive. Ignored for anything not audio.
  */
 export const POST: RequestHandler = withNativeAccess('jkai.chat', async (event, _identity, role) => {
   const { request, url } = event;
@@ -57,6 +66,15 @@ export const POST: RequestHandler = withNativeAccess('jkai.chat', async (event, 
       row = await storeChatUpload(file, conversationId, 'web', access.own, MEMBER_UPLOAD_KINDS);
     } else {
       row = await storeChatUpload(file, conversationId, 'web');
+    }
+    const transcript = (url.searchParams.get('transcript') ?? '').trim().slice(0, MAX_TRANSCRIPT_CHARS);
+    if (transcript && row.kind === 'audio') {
+      // Pointed at the message rather than repeated: the phone sends these
+      // same words as the turn's text, and the model need read them once.
+      await recordPreanalysis(
+        row.id,
+        `Transcribed on the iPhone; the words are this turn's message:\n${transcript}`,
+      );
     }
     // The transcript's attachment shape, not the table's: the phone decodes
     // this with the same type as an attachment on a loaded message.
