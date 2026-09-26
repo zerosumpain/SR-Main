@@ -89,6 +89,16 @@ describe('loadHousehold — sharing fails closed', () => {
     expect(members.find((m) => m.subject === 'sam')!.notSharing).toBeUndefined();
   });
 
+  it('with the list read but the member absent from it, they are not sharing (and not "unknown")', async () => {
+    state.users = [{ email: 'someone-else@example.test', name: 'X', sharing: true }];
+    const { members } = await loadHousehold();
+    const sam = members.find((m) => m.subject === 'sam')!;
+    expect(sam.notSharing).toBe(true);
+    expect(sam.sharingUnknown).toBeUndefined();
+    const scoped = scopeHousehold(members, { kind: 'household', subject: 'alex' }).find((m) => m.subject === 'sam')!;
+    for (const k of POSITION) expect(scoped[k], k).toBeNull();
+  });
+
   for (const [label, arrange] of [
     ['the users list is null', () => (state.users = null)],
     ['the users list read throws', () => (state.usersThrow = true)],

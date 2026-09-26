@@ -294,6 +294,16 @@ describe('notSharingSubjects', () => {
     expect([...out]).toEqual(['a']);
   });
 
+  it('counts a companion member absent from a read list as not sharing', () => {
+    const out = notSharingSubjects(
+      [member('a'), member('b'), member('n', { email: null }), member('l', { source: 'life360' })],
+      [{ email: ' B@Example.test ', name: 'B', sharing: true }],
+    );
+    expect([...out].sort()).toEqual(['a', 'n']);
+    // An empty list that WAS read is still an answer: nobody is sharing.
+    expect([...notSharingSubjects([member('a')], [])]).toEqual(['a']);
+  });
+
   it('fails closed with no users list: every companion member is not sharing', () => {
     const members = [member('a'), member('l', { source: 'life360' })];
     expect([...notSharingSubjects(members, null)]).toEqual(['a']);

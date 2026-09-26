@@ -217,8 +217,10 @@ export async function ingestCompanion(
 }
 
 /**
- * Companion-source members whose pilot user has sharing off. Such a person is
- * shown as not sharing, never as wherever their last fix happened to be. PURE.
+ * Companion-source members not known to be sharing: their pilot user has
+ * sharing off, or they are not in the pilot's users list at all. Such a person
+ * is shown as not sharing, never as wherever their last fix happened to be.
+ * PURE.
  *
  * Fails CLOSED: with no users list (never stored, or unreadable — the caller
  * passes null for both) nobody can be shown to have sharing ON, so every
@@ -233,12 +235,17 @@ export function notSharingSubjects(
   if (!Array.isArray(users)) {
     return new Set(members.filter((m) => m.source === 'companion').map((m) => m.subject));
   }
-  const off = new Set(
-    (users ?? []).filter((u) => u && u.sharing === false).map((u) => String(u.email).toLowerCase()),
+  // Sharing is shown only on a positive answer: a user row with sharing on.
+  // Anyone on 'companion' who is absent from the list (or has no email to
+  // look them up by) counts as not sharing, or their last fix — possibly an
+  // old Life360 row — would be shown as live status.
+  const on = new Set(
+    users.filter((u) => u && u.sharing === true).map((u) => String(u.email).trim().toLowerCase()),
   );
   const out = new Set<string>();
   for (const m of members) {
-    if (m.source === 'companion' && m.email && off.has(m.email.toLowerCase())) out.add(m.subject);
+    if (m.source !== 'companion') continue;
+    if (!m.email || !on.has(m.email.trim().toLowerCase())) out.add(m.subject);
   }
   return out;
 }
