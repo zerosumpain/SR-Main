@@ -5561,6 +5561,10 @@ export const daydreamPlaces = pgTable(
     /** Whether a crossing here is ALSO sent by WhatsApp to followers who have
      *  a number and WhatsApp on. Defined places only, owner-set. */
     whatsappAlerts: boolean('whatsapp_alerts').notNull().default(false),
+    /** True once the owner has set `radiusM` by hand on the places panel.
+     *  The places refresh re-derives the radius from member spread on every
+     *  pass, which would quietly undo the owner's number without this. */
+    radiusPinned: boolean('radius_pinned').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -5614,6 +5618,42 @@ export const householdMember = pgTable(
 
 export type HouseholdMemberRow = typeof householdMember.$inferSelect;
 export type NewHouseholdMemberRow = typeof householdMember.$inferInsert;
+
+/**
+ * One arrival at or departure from a place, per person (household movement,
+ * spec section 6). Written by `home-observe` as it reads new trail fixes;
+ * forwarded to the companion pilot's per-user alert queue (`forwardedAt`) and,
+ * for WhatsApp-flagged places, sent by WhatsApp to followers who asked for it.
+ *
+ * `id` is `${subject}:${placeId}:${kind}:${epochSeconds}`, so writing the same
+ * crossing twice is a no-op. `placeId` is deliberately not a foreign key: a
+ * place can be merged or retired, and the history of who went where must not
+ * go with it. `whatsappSent` lists the SUBJECTS a WhatsApp went to, never
+ * their numbers.
+ */
+export const householdEvent = pgTable(
+  'household_event',
+  {
+    id: text('id').primaryKey(),
+    subject: text('subject').notNull(),
+    placeId: text('place_id').notNull(),
+    /** 'arrive' | 'leave' */
+    kind: text('kind').notNull(),
+    /** When the crossing fix was taken, not when the row was written. */
+    at: timestamp('at', { withTimezone: true }).notNull(),
+    /** When the pilot accepted it. Null = not yet delivered to the app. */
+    forwardedAt: timestamp('forwarded_at', { withTimezone: true }),
+    whatsappSent: jsonb('whatsapp_sent').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('household_event_subject_place_at_idx').on(t.subject, t.placeId, t.at),
+    index('household_event_at_idx').on(t.at),
+  ],
+);
+
+export type HouseholdEventRow = typeof householdEvent.$inferSelect;
+export type NewHouseholdEventRow = typeof householdEvent.$inferInsert;
 
 /**
  * Every series daydream has ever discovered, whatever produced it.

@@ -242,9 +242,14 @@ export async function refreshPlaces(opts: { windowDays?: number } = {}): Promise
       // retirement is a judgement about the evidence, so it has to be
       // revisable when the evidence changes. An `ignored` place stays ignored:
       // that one is the owner's.
+      //
+      // A radius the owner set on the places panel is theirs too: it decides
+      // where an arrival alert fires, and re-deriving it from member spread
+      // every pass would quietly move that edge back.
+      const refreshed = matched.radiusPinned ? { ...stats, radiusM: matched.radiusM } : stats;
       await db
         .update(daydreamPlaces)
-        .set(matched.status === 'transit' ? { ...stats, status: 'active' } : stats)
+        .set(matched.status === 'transit' ? { ...refreshed, status: 'active' } : refreshed)
         .where(eq(daydreamPlaces.id, matched.id));
       placeId = matched.id;
       result.updated++;
@@ -287,6 +292,14 @@ export async function refreshPlaces(opts: { windowDays?: number } = {}): Promise
   return result;
 }
 
+export interface HomePlace {
+  id: string;
+  lat: number;
+  lon: number;
+  radiusM: number;
+  label: string | null;
+}
+
 /**
  * Which place is home.
  *
@@ -305,9 +318,15 @@ export async function refreshPlaces(opts: { windowDays?: number } = {}): Promise
  * Most lived-in wins — visits first, then dwell. Whatever else is called home,
  * the one you sleep at has the numbers.
  */
-export async function getHomePlace(): Promise<{ lat: number; lon: number } | null> {
+export async function getHomePlace(): Promise<HomePlace | null> {
   const [home] = await db
-    .select({ lat: daydreamPlaces.lat, lon: daydreamPlaces.lon })
+    .select({
+      id: daydreamPlaces.id,
+      lat: daydreamPlaces.lat,
+      lon: daydreamPlaces.lon,
+      radiusM: daydreamPlaces.radiusM,
+      label: daydreamPlaces.label,
+    })
     .from(daydreamPlaces)
     .where(and(eq(daydreamPlaces.kind, 'home'), eq(daydreamPlaces.status, 'active')))
     .orderBy(
