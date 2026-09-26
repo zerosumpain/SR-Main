@@ -107,7 +107,15 @@ describe('toIncomingFix', () => {
       accuracyM: 10,
       at: '2026-09-26T08:00:00Z',
       speedKmh: 7.2,
+      batteryPct: null,
     });
+  });
+
+  it('carries a whole-percent battery, and drops anything that cannot be one', () => {
+    expect(toIncomingFix({ ...fix('a@example.test', '1'), battery: 64 }).batteryPct).toBe(64);
+    for (const bad of [101, -1, 50.5, null, undefined]) {
+      expect(toIncomingFix({ ...fix('a@example.test', '1'), battery: bad }).batteryPct).toBeNull();
+    }
   });
 
   it('reads a negative or missing speed as unknown', () => {

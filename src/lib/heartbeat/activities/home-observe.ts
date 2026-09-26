@@ -13,6 +13,7 @@ import {
 import { ingestCompanion, type CompanionResult } from '$lib/home/presence/companion';
 import { lifeSubjects, listMembers, type HouseholdMember } from '$lib/home/presence/members';
 import { deliverAlerts, runCrossings } from '$lib/home/presence/alerts';
+import { pushAppViews } from '$lib/home/presence/app-view';
 import type { ActivityHandler } from '../types';
 
 // The name is the heartbeat_actions row's identity: it stays 'daydream-observe'
@@ -54,7 +55,7 @@ const DEFAULTS: Required<Omit<ObserveConfig, 'subjects'>> = {
 export const homeObserve: ActivityHandler = {
   name: NAME,
   description:
-    'Poll floor for the household trail. Records where every Life360 member is in one Home Assistant round trip — the push stream only covers John — with an explicit per-subject gap row when it looks and cannot see, then pulls the iPhone app\'s fixes from the pilot for companion members, then raises arrive/leave alerts to the people who follow them. No LLM.',
+    'Poll floor for the household trail. Records where every Life360 member is in one Home Assistant round trip — the push stream only covers John — with an explicit per-subject gap row when it looks and cannot see, then pulls the iPhone app\'s fixes from the pilot for companion members, then raises arrive/leave alerts to the people who follow them, then files each app user\'s Family view on the pilot. No LLM.',
   // Same constant coverage divides by. Written once so they cannot drift.
   defaultCadenceSeconds: OBSERVE_CADENCE_SECONDS,
   defaultEnabled: true,
@@ -197,6 +198,23 @@ export const homeObserve: ActivityHandler = {
     } catch (err) {
       details.alertsError = errMsg(err).slice(0, 200);
       bits.push(`alerts failed: ${errMsg(err).slice(0, 80)}`);
+    }
+
+    // Last, so the views carry this run's fixes: each app user's Family tab,
+    // scoped for them and filed on the pilot. Never fails the run — a phone
+    // shows the previous view, with its age, until the next one lands.
+    try {
+      const views = await pushAppViews(members);
+      if (views) {
+        details.appViews = views;
+        const v = [`${views.stored} stored`];
+        if (views.refused) v.push(`${views.refused} not in the Family Circle`);
+        if (views.error) v.push(`failed: ${views.error.slice(0, 80)}`);
+        bits.push(`app views: ${v.join(', ')}`);
+      }
+    } catch (err) {
+      details.appViewsError = errMsg(err).slice(0, 200);
+      bits.push(`app views failed: ${errMsg(err).slice(0, 80)}`);
     }
 
     if (fixes.length) bits.push(`fixes: ${fixes.join(', ')}`);

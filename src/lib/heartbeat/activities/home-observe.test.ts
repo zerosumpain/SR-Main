@@ -8,6 +8,15 @@ const h = vi.hoisted(() => ({
   pushFresh: false,
   alertsFail: false,
   alertCalls: [] as string[],
+  viewsFail: false,
+}));
+
+vi.mock('$lib/home/presence/app-view', () => ({
+  pushAppViews: async () => {
+    h.alertCalls.push('views');
+    if (h.viewsFail) throw new Error('pilot down');
+    return { stored: 2, refused: 1 };
+  },
 }));
 
 vi.mock('$lib/home/presence/alerts', () => ({
@@ -75,6 +84,7 @@ beforeEach(() => {
   h.pushFresh = false;
   h.alertsFail = false;
   h.alertCalls = [];
+  h.viewsFail = false;
 });
 
 describe('home-observe', () => {
@@ -122,7 +132,7 @@ describe('home-observe', () => {
   it('raises crossings after the fixes are written, then delivers them', async () => {
     h.members = [member('p', 'life360'), member('q', 'companion')];
     const res = await homeObserve.run(ctx);
-    expect(h.alertCalls).toEqual(['crossings', 'deliver']);
+    expect(h.alertCalls).toEqual(['crossings', 'deliver', 'views']);
     expect(res.summary).toContain('crossings: 1 new');
     expect(res.summary).toContain('alerts: 1 to the app, WhatsApp to …000');
   });
@@ -134,5 +144,15 @@ describe('home-observe', () => {
     expect(res.outcome).toBe('ok');
     expect(res.summary).toContain('crossings failed');
     expect(res.summary).toContain('alerts failed');
+  });
+
+  it('files the app views last, and a failure there never fails the run', async () => {
+    h.members = [member('p', 'life360')];
+    const ok = await homeObserve.run(ctx);
+    expect(ok.summary).toContain('app views: 2 stored, 1 not in the Family Circle');
+    h.viewsFail = true;
+    const failed = await homeObserve.run(ctx);
+    expect(failed.outcome).toBe('ok');
+    expect(failed.summary).toContain('app views failed: pilot down');
   });
 });

@@ -45,6 +45,8 @@ export interface HouseholdFix {
   /** m/s; -1 or null when the phone did not know. */
   speed: number | null;
   moving: boolean;
+  /** Whole percent, from a phone new enough to send it; null otherwise. */
+  battery?: number | null;
 }
 
 export interface HouseholdPage {
@@ -71,11 +73,11 @@ export interface CompanionResult {
   error?: string;
 }
 
-function companionUrl(): string {
+export function companionUrl(): string {
   return (process.env.COMPANION_URL || COMPANION_DEFAULT_URL).replace(/\/+$/, '');
 }
 
-function companionToken(): string | null {
+export function companionToken(): string | null {
   const t = process.env.COMPANION_HOUSEHOLD_TOKEN?.trim();
   return t ? t : null;
 }
@@ -124,6 +126,8 @@ export function toIncomingFix(f: HouseholdFix): IncomingFix {
     accuracyM: typeof f.accuracy === 'number' && Number.isFinite(f.accuracy) ? f.accuracy : null,
     at: f.recorded,
     speedKmh: speed == null ? null : Math.round(speed * 3.6 * 10) / 10,
+    batteryPct:
+      typeof f.battery === 'number' && Number.isInteger(f.battery) && f.battery >= 0 && f.battery <= 100 ? f.battery : null,
   };
 }
 
