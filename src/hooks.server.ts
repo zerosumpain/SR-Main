@@ -13,7 +13,8 @@ import { startConnectorWatch, stopConnectorWatch } from '$lib/connectors/watch';
 // JKAI build orchestrator no longer boots in the SvelteKit web app — it runs
 // in the jkai-builder sidecar service (packages/jkai-builder/, system unit
 // jkai-builder.service). Build-control routes call it over the Unix socket
-// via $lib/jkai/builder-client. Phase 3 of docs/plans/jkai-build-rewrite.md.
+// via $lib/jkai/builder-client. Phase 3 of jkai-build-rewrite.md in the Drive
+// archive linked from docs/README.md.
 import { startOrphanSweep } from '$lib/jkai/media/sweep';
 // Side-effect import: every integration adapter registers itself on load.
 // The barrel is maintained by the node-builder codegen.

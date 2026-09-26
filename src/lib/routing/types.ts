@@ -1,7 +1,8 @@
 // Query-Adaptive Model Routing — shared constants + types. Mirrors the
 // briefing/self-improve harness (cron/tz, kill switch, datastore collections,
 // the owner's phone, now $lib/config/owner). See
-// docs/superpowers/specs/2026-07-20-query-adaptive-model-routing-design.md
+// 2026-07-20-query-adaptive-model-routing-design.md in the Drive archive linked
+// from docs/README.md.
 import { ownerPhone } from '$lib/config/owner';
 import type { ModelContext } from '$lib/server/models/types';
 

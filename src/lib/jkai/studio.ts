@@ -7,7 +7,8 @@
  *
  * A Studio build turns a challenge statement into a multi-chapter interactive
  * explainer published at /projects/<slug>/. See
- * docs/superpowers/specs/2026-08-10-jkai-studio-explainer-builds-design.md
+ * 2026-08-10-jkai-studio-explainer-builds-design.md in the Drive archive linked
+ * from docs/README.md.
  */
 import { db } from '$lib/db';
 import { jkaiBuilds } from '$lib/db/schema';

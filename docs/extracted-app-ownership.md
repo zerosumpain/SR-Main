@@ -1,8 +1,9 @@
 # Extracted application ownership
 
 `docs/module-ownership.json` is generated from SR-Infra's `registry/apps.json`
-and `registry/operations.json`. It now records Main, Policy Analysis, Health and
-Drive. Edit the source registries and regenerate the mirror with SR-Infra's
+and `registry/operations.json`. Consult those registries for the complete current
+application and worker inventory. Edit them and regenerate the mirror with
+SR-Infra's
 `scripts/check-estate.mjs --checkouts <local-map.json> --write-ownership`.
 
 Main still automatically reconciles the shared schema during deployment.

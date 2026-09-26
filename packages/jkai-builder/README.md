@@ -2,7 +2,7 @@
 
 Sidecar service that owns the JKAI build orchestrator loop, separated from the
 SvelteKit web app so deploys of `strange-rambling-svelte` don't kill in-flight
-builds. See [`docs/plans/jkai-build-rewrite.md`](../../docs/plans/jkai-build-rewrite.md)
+builds. See `jkai-build-rewrite.md` in the [Drive archive](../../docs/README.md#historical-archive)
 for the full architecture and phasing.
 
 ## Phase 1 — current state
@@ -74,4 +74,4 @@ that meant every deploy killed every running build. The builder runs as its
 own systemd unit; web restarts no longer affect it.
 
 The full architectural rationale and the 8-phase migration plan live in
-[`docs/plans/jkai-build-rewrite.md`](../../docs/plans/jkai-build-rewrite.md).
+`jkai-build-rewrite.md` in the [Drive archive](../../docs/README.md#historical-archive).

@@ -91,7 +91,7 @@
   // Blog assistant. Restored 2026-08-19 — commit 708ab5a9 deleted the mount
   // on 2026-05-07 while resolving a stash-pop conflict, and the later admin
   // consolidation moved this page with it already gone. See
-  // docs/plans/2026-08-19-writing-voice-system.md.
+  // 2026-08-19-writing-voice-system.md in the Drive archive linked by docs/README.md.
   // ---------------------------------------------------------------------
 
   const proposalStore = createProposalStore();
