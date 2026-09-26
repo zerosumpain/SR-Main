@@ -4,7 +4,11 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 // which scope each kind of request gets. The database half — that a real member
 // row resolves to its principal — is members.integration.test.ts.
 const memberPrincipalFor = vi.fn<(email: string | null | undefined) => Promise<string | null>>();
-vi.mock('$lib/server/members', () => ({ memberPrincipalFor: (e: string) => memberPrincipalFor(e) }));
+const householdSubjectFor = vi.fn<(email: string | null | undefined) => Promise<string | null>>();
+vi.mock('$lib/server/members', () => ({
+  memberPrincipalFor: (e: string) => memberPrincipalFor(e),
+  householdSubjectFor: (e: string) => householdSubjectFor(e),
+}));
 vi.mock('$lib/server/access', () => ({ isOwnerEmail: (e: string | null | undefined) => e === 'owner@example.com' }));
 vi.mock('$lib/db', () => ({ db: {} }));
 
@@ -19,6 +23,8 @@ describe('resolveRequestScope', () => {
   beforeEach(() => {
     memberPrincipalFor.mockReset();
     memberPrincipalFor.mockResolvedValue(null);
+    householdSubjectFor.mockReset();
+    householdSubjectFor.mockResolvedValue(null);
   });
 
   it("gives the owner the owner's scope without asking the database", async () => {
@@ -37,6 +43,11 @@ describe('resolveRequestScope', () => {
 
   it('refuses a signed-in guest outright, whatever the hook decided', async () => {
     await expect(resolveRequestScope(event('guest@example.com'))).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('refuses a household viewer: they have no intel space', async () => {
+    householdSubjectFor.mockResolvedValue('sam');
+    await expect(resolveRequestScope(event('sam@example.com'))).rejects.toMatchObject({ status: 403 });
   });
 
   it('asks once per request', async () => {

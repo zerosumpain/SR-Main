@@ -154,3 +154,31 @@ export function isMemberAllowedRoute(routeId: string | null | undefined, method:
 export function memberRouteIds(): string[] {
   return Object.keys(MEMBER_ROUTES);
 }
+
+// What a HOUSEHOLD viewer (an `allowed_user` row with role 'household' whose
+// email is on a `household_member` row — see $lib/server/viewer) may reach:
+// the People room and their own page under it. Nothing else under /home —
+// voice, echoes and devices stay owner-only — and no API.
+//
+// Keyed on the route id and per verb, exactly like MEMBER_ROUTES and for the
+// same reasons. Reaching the route is not seeing everything on it: both loads
+// scope their payload to the viewer (`peopleViewerOf`, `scopeHousehold`) —
+// the production database role bypasses RLS, so the load is the only place
+// scoping can live.
+const HOUSEHOLD_ROUTES: Record<string, readonly string[]> = {
+  '/home/people': ['GET'],
+  '/home/people/[subject]': ['GET'],
+};
+
+export function isHouseholdAllowedRoute(routeId: string | null | undefined, method: string): boolean {
+  if (!routeId) return false;
+  const methods = HOUSEHOLD_ROUTES[routeId];
+  if (!methods) return false;
+  const m = method.toUpperCase();
+  return methods.includes(m) || (m === 'HEAD' && methods.includes('GET'));
+}
+
+/** The household route ids, for the test that proves each one exists. */
+export function householdRouteIds(): string[] {
+  return Object.keys(HOUSEHOLD_ROUTES);
+}

@@ -16,6 +16,11 @@
    * opens on one rollup now: one even cell per head, and the day's arithmetic
    * in a single table underneath.
    *
+   * Two viewers (2026-09-26): the owner, and a household member signed in with
+   * the 'household' role. What each receives is decided in the load
+   * (`scopeHousehold`), not here — for a household viewer another person's
+   * `today` is null, a person not sharing carries no position at all, and
+   * `detail` is empty. This page only has to draw those gaps honestly.
    */
   import type { PageData } from './$types';
   import type { Tone } from '$lib/daydream/priority';
@@ -28,6 +33,9 @@
 
   const members = $derived(data.family.members);
   const detail = $derived(data.family.detail);
+  const isOwner = $derived(data.viewer.kind === 'owner');
+  /** The household viewer's own subject; null for the owner. */
+  const self = $derived(data.viewer.kind === 'household' ? data.viewer.subject : null);
 
   /** Over this many minutes without a fix and the answer is "we don't know",
    *  which is a different answer from "at home" and must not look like one. */
@@ -80,17 +88,19 @@
   type Member = PageData['family']['members'][number];
 
   function memberTone(m: Member): Tone {
-    if (m.ageMins == null) return 'quiet';
+    if (m.notSharing || m.ageMins == null) return 'quiet';
     if (m.ageMins > STALE_MINS) return 'watch';
     return m.isHome ? 'good' : 'steady';
   }
 
   function memberValue(m: Member): string {
+    if (m.notSharing) return 'off';
     if (m.ageMins == null) return '—';
     return m.isHome ? 'home' : 'out';
   }
 
   function memberSub(m: Member): string {
+    if (m.notSharing) return 'Not sharing their location.';
     if (m.ageMins == null) return 'No position on the trail. Unknown is not the same answer as home.';
     const bits: string[] = [];
     if (m.placeLabel) bits.push(`At ${m.placeLabel}`);
@@ -107,13 +117,18 @@
       value: memberValue(m),
       sub: memberSub(m),
       tone: memberTone(m),
-      corner: `${outFor(m.today.minutesOut)} out`,
-      href: `#p-${m.subject}`,
+      corner: m.today ? `${outFor(m.today.minutesOut)} out` : null,
+      // The owner jumps to the person's findings below; a household viewer
+      // to their own page, and nowhere for anyone else's.
+      href: isOwner ? `#p-${m.subject}` : m.subject === self ? `/home/people/${m.subject}` : null,
     })),
   );
 
+  const notSharing = $derived(members.filter((m) => m.notSharing).length);
   const away = $derived(members.filter((m) => m.ageMins != null && m.isHome === false).length);
-  const unknown = $derived(members.filter((m) => m.ageMins == null || m.ageMins > STALE_MINS).length);
+  const unknown = $derived(
+    members.filter((m) => !m.notSharing && (m.ageMins == null || m.ageMins > STALE_MINS)).length,
+  );
   const home = $derived(members.filter((m) => m.ageMins != null && m.isHome).length);
   const summary = $derived([
     { label: 'Home', value: String(home), sub: `of ${members.length}` },
@@ -126,9 +141,14 @@
   path="/home/people"
   kicker="Home · People"
   title={['Where everyone', 'is, and was']}
-  standfirst="Read off the family trail — Life360 through Home Assistant, sampled every two minutes and kept ninety days — never asked for. What the nightly sweep has made of each person sits underneath."
+  standfirst={isOwner
+    ? 'Read off the family trail — Life360 through Home Assistant, sampled every two minutes and kept ninety days — never asked for. What the nightly sweep has made of each person sits underneath.'
+    : 'Where everyone who shares their location is now. Your own day is in full; everyone else’s is theirs.'}
   {summary}
-  footer={['strangeramblings.com/home/people', 'Life360 via Home Assistant · 90-day trail', 'Owner-gated · the whole household, never shared']}
+  navBack={isOwner}
+  footer={isOwner
+    ? ['strangeramblings.com/home/people', 'Life360 via Home Assistant · 90-day trail', 'Owner-gated · the whole household, never shared']
+    : ['strangeramblings.com/home/people', 'The household · live status only', 'Your day is shown to you and the owner']}
 >
 
 {#if data.loadError}
@@ -149,8 +169,10 @@
       <RollupGrid {cells} min={210} />
 
       <p class="note">
-        {members.length} on the trail · {away} out · {unknown} without a fresh fix. The figure in
-        each corner is how long they have been away from home today.
+        {members.length} on the trail · {away} out · {unknown} without a fresh fix{#if notSharing}
+          · {notSharing} not sharing{/if}. The figure in
+        each corner is how long they have been away from home today{#if !isOwner}, shown on your own
+          card only{/if}.
       </p>
 
       <!-- The day's arithmetic, once. It used to be a three-row table nested
@@ -172,9 +194,19 @@
           <tbody>
             {#each members as m (m.subject)}
               <tr>
-                <td class="cell-lead"><a class="link" href="#p-{m.subject}">{cap(m.subject)}</a></td>
+                <td class="cell-lead">
+                  {#if isOwner}
+                    <a class="link" href="#p-{m.subject}">{cap(m.subject)}</a>
+                  {:else if m.subject === self}
+                    <a class="link" href="/home/people/{m.subject}">{cap(m.subject)}</a>
+                  {:else}
+                    {cap(m.subject)}
+                  {/if}
+                </td>
                 <td class="cell-wrap">
-                  {#if m.ageMins == null}
+                  {#if m.notSharing}
+                    not sharing
+                  {:else if m.ageMins == null}
                     not tracked
                   {:else if m.isHome}
                     at home
@@ -186,14 +218,21 @@
                     out
                   {/if}
                 </td>
-                <td class="right num">{clock(m.today.firstOutMins)}</td>
-                <td class="right num">{outFor(m.today.minutesOut)}</td>
-                <td class="right num">{m.today.placesVisited}</td>
-                <td class="right num">{m.today.fixes}</td>
+                {#if m.today}
+                  <td class="right num">{clock(m.today.firstOutMins)}</td>
+                  <td class="right num">{outFor(m.today.minutesOut)}</td>
+                  <td class="right num">{m.today.placesVisited}</td>
+                  <td class="right num">{m.today.fixes}</td>
+                {:else}
+                  <td class="right num">—</td>
+                  <td class="right num">—</td>
+                  <td class="right num">—</td>
+                  <td class="right num">—</td>
+                {/if}
                 <td class="right num" class:bad={m.batteryPct != null && m.batteryPct <= 25}>
                   {m.batteryPct == null ? '—' : `${m.batteryPct}%`}
                 </td>
-                <td class="right nowrap">{stamp(m.lastSeenAt)}</td>
+                <td class="right nowrap">{m.lastSeenAt ? stamp(m.lastSeenAt) : '—'}</td>
               </tr>
             {/each}
           </tbody>
@@ -203,6 +242,9 @@
   </div>
 </section>
 
+<!-- The sweep's findings are the owner's notes; a household viewer's load
+     carries none, and the section is not drawn for them. -->
+{#if isOwner}
 <section class="band">
   <div class="inner">
     <SectionHead
@@ -224,6 +266,7 @@
     {/if}
   </div>
 </section>
+{/if}
 
 </HomeFrame>
 

@@ -89,7 +89,7 @@ export const PATCH: RequestHandler = async ({ request }) => {
   }
   const email = (typeof body.email === 'string' ? body.email : '').trim().toLowerCase();
   if (!email) return json({ error: 'Missing email' }, { status: 400 });
-  if (!isAllowedRole(body.role)) return json({ error: "role must be 'guest' or 'member'" }, { status: 400 });
+  if (!isAllowedRole(body.role)) return json({ error: "role must be 'guest', 'member' or 'household'" }, { status: 400 });
   if (!(await setMemberRole(email, body.role))) return json({ error: 'Not on the allow-list' }, { status: 404 });
   return json({ ok: true, guests: await listGuests() });
 };

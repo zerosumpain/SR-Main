@@ -1677,9 +1677,11 @@ export const allowedUser = pgTable('allowed_user', {
   note: text('note'), // optional label, e.g. "partner", "colleague"
   addedBy: text('added_by'), // owner email that granted access
   /**
-   * 'guest' | 'member'. A guest signs in and sees public pages; a member also
-   * reaches their own intel space (see $lib/server/members and
-   * isMemberAllowedPath in $lib/auth). Owners are never in this table.
+   * 'guest' | 'member' | 'household'. A guest signs in and sees public pages;
+   * a member also reaches their own intel space (see $lib/server/members and
+   * isMemberAllowedRoute in $lib/auth); a household viewer reaches
+   * /home/people and their own page (isHouseholdAllowedRoute). Owners are
+   * never in this table.
    */
   role: text('role').notNull().default('guest'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

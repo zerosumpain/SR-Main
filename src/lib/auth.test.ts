@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync } from 'node:fs';
-import { isPublicPath, isGuestAllowedPath, isMemberAllowedRoute, memberRouteIds } from './auth';
+import {
+  isPublicPath,
+  isGuestAllowedPath,
+  isMemberAllowedRoute,
+  memberRouteIds,
+  isHouseholdAllowedRoute,
+  householdRouteIds,
+} from './auth';
 
 describe('isPublicPath', () => {
   it('allows known public pages and APIs', () => {
@@ -96,6 +103,65 @@ describe('isMemberAllowedRoute — a member reaches their own intel space and no
     for (const id of memberRouteIds()) {
       const file = id.startsWith('/api/') ? '+server.ts' : '+page.svelte';
       expect(existsSync(`src/routes${id}/${file}`), id).toBe(true);
+    }
+  });
+});
+
+describe('isHouseholdAllowedRoute — a household viewer reaches People and nothing else', () => {
+  it('opens /home/people and one person under it, GET and HEAD only', () => {
+    expect(isHouseholdAllowedRoute('/home/people', 'GET')).toBe(true);
+    expect(isHouseholdAllowedRoute('/home/people/[subject]', 'GET')).toBe(true);
+    expect(isHouseholdAllowedRoute('/home/people', 'HEAD')).toBe(true);
+    expect(isHouseholdAllowedRoute('/home/people', 'get')).toBe(true);
+    for (const m of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+      expect(isHouseholdAllowedRoute('/home/people', m), m).toBe(false);
+      expect(isHouseholdAllowedRoute('/home/people/[subject]', m), m).toBe(false);
+    }
+  });
+
+  it("refuses the other rooms of /home, the owner's surfaces and a member's", () => {
+    for (const id of [
+      '/home',
+      '/home/voice',
+      '/home/echoes',
+      '/home/devices',
+      '/home/people/[subject]/edit',
+      '/jkai',
+      '/jkai/intel',
+      '/admin',
+      '/admin/access',
+      '/health/activities',
+      '/api/home/people',
+    ]) {
+      expect(isHouseholdAllowedRoute(id, 'GET'), id).toBe(false);
+    }
+    expect(isHouseholdAllowedRoute(null, 'GET')).toBe(false);
+    expect(isHouseholdAllowedRoute(undefined, 'GET')).toBe(false);
+  });
+
+  it('matches route ids, not pathnames', () => {
+    // A concrete path is not a route id: `/home/people/sam` only ever reaches
+    // the gate as `/home/people/[subject]`.
+    expect(isHouseholdAllowedRoute('/home/people/sam', 'GET')).toBe(false);
+  });
+
+  it('is kept apart from the member list', () => {
+    for (const id of householdRouteIds()) expect(isMemberAllowedRoute(id, 'GET'), id).toBe(false);
+    for (const id of memberRouteIds()) expect(isHouseholdAllowedRoute(id, 'GET'), id).toBe(false);
+  });
+
+  it('opens none of it to guests or the public', () => {
+    for (const p of ['/home/people', '/home/people/sam']) {
+      expect(isPublicPath(p), p).toBe(false);
+      expect(isGuestAllowedPath(p), p).toBe(false);
+    }
+  });
+
+  it('lists only routes that exist', () => {
+    expect(householdRouteIds().sort()).toEqual(['/home/people', '/home/people/[subject]']);
+    for (const id of householdRouteIds()) {
+      expect(existsSync(`src/routes${id}/+page.svelte`), id).toBe(true);
+      expect(existsSync(`src/routes${id}/+page.server.ts`), id).toBe(true);
     }
   });
 });
