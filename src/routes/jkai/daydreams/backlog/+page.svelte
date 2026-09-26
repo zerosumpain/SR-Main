@@ -87,7 +87,7 @@
     <SectionHead
       kicker="A / The backlog"
       title={['Everything it wants', 'to do next']}
-      strap="Every feature the engine is holding, grouped into the areas they belong to and ordered the way it will reach for them. Switch the board between epics and the deliverables inside them, drag a card to accept or park it, and open any card to name it, rank it or take it out."
+      strap="Every feature the engine is holding, grouped into the areas they belong to and ordered the way it will reach for them. Switch the board between epics and the deliverables inside them, review a card’s brief to accept it (only accepted briefs get built), drag one to park it, and open any card to name it, rank it or take it out."
     />
 
     <p><a href="/jkai/develop">Commission and review a whole-site feature →</a></p>

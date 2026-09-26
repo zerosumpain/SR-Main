@@ -425,7 +425,8 @@ async function readForIntake(slug: string): Promise<BacklogItemData | null | 'un
  * brief from the backlog editor (`acceptGrooming`, reached from the two owner
  * routes and nothing unattended). It replaced the appetite ledger's
  * `decidedBy: 'owner'` when that ledger was retired (D3, 2026-09-26). A board
- * stage is not a tap: `stageFor` calls every untried open row "accepted".
+ * stage is DERIVED from this, never the other way: `stageFor` labels an untried
+ * row Accepted only when this is true (`isTapped` in `board.ts`), else Proposed.
  */
 export function isOwnerAccepted(item: Pick<BacklogItemData, 'grooming'>): boolean {
   return Boolean(item.grooming?.acceptedAt);

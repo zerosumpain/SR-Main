@@ -72,6 +72,7 @@ import {
   RECENT_SETTLED_DAYS,
 } from './backlog';
 import { MAX_BACKLOG_NOTES } from './grooming';
+import { isTapped } from './board';
 import type { BacklogItemData } from './types';
 
 function item(over: Partial<BacklogItemData>): BacklogItemData {
@@ -482,6 +483,13 @@ describe('mergeCitation', () => {
 });
 
 describe('isOwnerAccepted — the owner’s tap', () => {
+  it('is the same test the board labels Accepted with', () => {
+    for (const grooming of [undefined, {}, { acceptedAt: '' }, { acceptedAt: '2026-09-26' }]) {
+      const row = item({ grooming: grooming as BacklogItemData['grooming'] });
+      expect(isTapped(row)).toBe(isOwnerAccepted(row));
+    }
+  });
+
   it('is an accepted brief, and nothing else', () => {
     expect(isOwnerAccepted(item({}))).toBe(false);
     expect(isOwnerAccepted(item({ grooming: { acceptedAt: '2026-09-26' } as BacklogItemData['grooming'] }))).toBe(true);

@@ -19,6 +19,7 @@ import {
   settleDate,
   sortItems,
   summariseBurndown,
+  isTapped,
   type WorkItem,
 } from './board';
 import type { BacklogItemData } from './types';
@@ -53,8 +54,27 @@ function tool(over: Partial<ToolHealth> = {}): ToolHealth {
 }
 
 describe('stageFor', () => {
-  it('puts an untried open idea in accepted', () => {
-    expect(stageFor(item(), { attemptCeiling: CEILING })).toBe('accepted');
+  // Until D3 (2026-09-26) every untried open row read "Accepted". The tap is
+  // now an accepted brief and only tapped rows are built, so an untapped row
+  // is Proposed and only a row with `grooming.acceptedAt` is Accepted.
+  it('puts an untried open idea nobody has tapped in proposed', () => {
+    expect(stageFor(item(), { attemptCeiling: CEILING })).toBe('proposed');
+  });
+
+  it('puts an untried open idea with an accepted brief in accepted', () => {
+    const tapped = item({ grooming: { acceptedAt: '2026-09-26T08:00:00.000Z' } as BacklogItemData['grooming'] });
+    expect(stageFor(tapped, { attemptCeiling: CEILING })).toBe('accepted');
+  });
+
+  it('treats a groomed brief that was never accepted as untapped', () => {
+    const draft = item({ grooming: {} as BacklogItemData['grooming'] });
+    expect(isTapped(draft)).toBe(false);
+    expect(stageFor(draft, { attemptCeiling: CEILING })).toBe('proposed');
+  });
+
+  it('keeps a tapped item in building once it has been attempted', () => {
+    const tapped = item({ attempts: 1, grooming: { acceptedAt: '2026-09-26' } as BacklogItemData['grooming'] });
+    expect(stageFor(tapped, { attemptCeiling: CEILING })).toBe('building');
   });
 
   it('puts an idea with attempts left in building', () => {
@@ -206,7 +226,7 @@ describe('buildBoard', () => {
       ),
     ];
     const board = buildBoard({ backlog, tools: [], attemptCeiling: CEILING, settledLimit: 2 });
-    expect(board.items.filter((i) => i.stage === 'accepted')).toHaveLength(5);
+    expect(board.items.filter((i) => i.stage === 'proposed')).toHaveLength(5);
     expect(board.items.filter((i) => i.stage === 'live')).toHaveLength(2);
     // Totals describe the whole population, never the trimmed one — a number
     // on the page must not quietly name a smaller set than it says.
@@ -404,7 +424,7 @@ describe('sortForBoard', () => {
       tools: [],
       attemptCeiling: CEILING,
     });
-    const open = sortForBoard(board.items.filter((i) => i.stage === 'accepted'));
+    const open = sortForBoard(board.items.filter((i) => i.stage === 'proposed'));
     expect(open.map((i) => i.slug)).toEqual(['dupe', 'fresh', 'p5']);
   });
 });
@@ -464,7 +484,7 @@ describe('tool matching is confined to shipped ideas', () => {
     const shipped = board.items.find((i) => i.slug === 'shipped-one');
     expect(open?.artifact).toBeNull();
     expect(open?.calls).toBeNull();
-    expect(open?.stage).toBe('accepted');
+    expect(open?.stage).toBe('proposed');
     expect(shipped?.artifact).toBe('reverse_geocode');
     expect(shipped?.stage).toBe('verifying');
     expect(board.totals.neverCalled).toBe(1);
