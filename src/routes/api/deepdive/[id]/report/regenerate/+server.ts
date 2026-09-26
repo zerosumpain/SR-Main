@@ -1,9 +1,8 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { db } from '$lib/db';
-import { researchSessions } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
 import { runPostProcessing } from '$lib/deepdive/postprocess';
+import { requireResearchSession, reserveResearchStart } from '$lib/deepdive/session-access.server';
+import { coerceDepth } from '$lib/deepdive/depth';
 
 // Sessions with a regenerate currently in flight. Guards against overlapping
 // runs (e.g. a poll-cap-then-manual-retry) double-dispatching runPostProcessing
@@ -16,21 +15,16 @@ const inFlight = new Set<string>();
  * so the report reflects current facts (incl. post-load synthesis).
  * Fire-and-forget; progress is visible via the existing SSE status/log stream.
  */
-export const POST: RequestHandler = async ({ params }) => {
-  const [session] = await db
-    .select()
-    .from(researchSessions)
-    .where(eq(researchSessions.id, params.id))
-    .limit(1);
-
-  if (!session) {
-    return json({ error: 'Session not found' }, { status: 404 });
-  }
+export const POST: RequestHandler = async (event) => {
+  const { params } = event;
+  const { session, access } = await requireResearchSession(event, params.id, 'write');
 
   // Already regenerating this session — don't start a second concurrent run.
   if (inFlight.has(params.id)) {
     return json({ ok: true, alreadyRunning: true }, { status: 202 });
   }
+  // A whole post-processing pass: metered for a member like a run.
+  await reserveResearchStart(access, coerceDepth(session.depth));
   inFlight.add(params.id);
 
   // Fire-and-forget — do NOT await (mirrors startResearch / runSynthesis kickoff).

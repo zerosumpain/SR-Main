@@ -12,6 +12,8 @@ suite('DELETE /api/deepdive/[id] (integration)', () => {
   function makeEvent(id: string) {
     return {
       params: { id },
+      // No session reads as anonymous, which the research guard treats as the owner.
+      locals: { auth: async () => null },
       request: new Request(`http://localhost/api/deepdive/${id}`, { method: 'DELETE' }),
     } as unknown as Parameters<typeof DELETE_handler>[0];
   }
@@ -27,8 +29,9 @@ suite('DELETE /api/deepdive/[id] (integration)', () => {
   });
 
   it('returns 404 for a non-existent session', async () => {
-    const res = await DELETE_handler(makeEvent('00000000-0000-0000-0000-000000000000'));
-    expect(res.status).toBe(404);
+    await expect(DELETE_handler(makeEvent('00000000-0000-0000-0000-000000000000'))).rejects.toMatchObject({
+      status: 404,
+    });
   });
 
   it('deletes a session and all its child rows, nulls child session parentSessionId', async () => {

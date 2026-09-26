@@ -7,7 +7,7 @@
 import type { RequestHandler } from './$types';
 import { error } from '@sveltejs/kit';
 import { db } from '$lib/db';
-import { researchSessions, facts, sources, entities } from '$lib/db/schema';
+import { facts, sources, entities } from '$lib/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import { streamCompletion, generateEmbedding } from '$lib/deepdive/ai';
 import { toVectorLiteral } from '$lib/deepdive/vector';
@@ -19,17 +19,13 @@ import {
   type SourceMeta,
 } from '$lib/deepdive/chat-context';
 import type { ResearchReport } from '$lib/deepdive/types';
+import { requireResearchSession } from '$lib/deepdive/session-access.server';
 
 const RETRIEVAL_LIMIT = 14; // slightly larger than chat — cover the full brief
 
-export const POST: RequestHandler = async ({ params, request }) => {
-  const [session] = await db
-    .select({ id: researchSessions.id, topic: researchSessions.topic, report: researchSessions.report })
-    .from(researchSessions)
-    .where(eq(researchSessions.id, params.id))
-    .limit(1);
-
-  if (!session) throw error(404, 'Session not found');
+export const POST: RequestHandler = async (event) => {
+  const { params, request } = event;
+  const { session } = await requireResearchSession(event, params.id, 'read');
 
   const body = await request.json().catch(() => ({}));
   const brief = String(body?.brief ?? '').slice(0, 2000).trim();

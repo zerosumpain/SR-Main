@@ -22,8 +22,11 @@ import { buildIndex, components } from '$lib/jkai/intel/analytics/model';
 import { computeCentrality, brokerageScore } from '$lib/jkai/intel/analytics/centrality';
 import { detectCommunities } from '$lib/jkai/intel/analytics/community';
 import { buildSessionSnapshot } from '$lib/deepdive/session-graph';
+import { requireResearchSession } from '$lib/deepdive/session-access.server';
 
-export const GET: RequestHandler = async ({ params }) => {
+export const GET: RequestHandler = async (event) => {
+  const { params } = event;
+  await requireResearchSession(event, params.id, 'read');
   const [session] = await db
     .select({ id: researchSessions.id, report: researchSessions.report })
     .from(researchSessions)

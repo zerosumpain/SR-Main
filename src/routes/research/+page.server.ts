@@ -5,10 +5,12 @@ import { desc } from 'drizzle-orm';
 import { RESEARCH_DEPTHS, depthPreset } from '$lib/deepdive/depth';
 import { depthTimings } from '$lib/deepdive/timings';
 import { STALE_AFTER_MS } from '$lib/deepdive/resume';
+import { areaAccess, readable } from '$lib/server/area-scope';
 
 const TERMINAL = new Set(['complete', 'failed', 'paused', 'draft']);
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async (event) => {
+  const access = await areaAccess(event, 'research');
   const runs = await db
     .select({
       id: researchSessions.id,
@@ -20,6 +22,7 @@ export const load: PageServerLoad = async () => {
       heartbeatAt: researchSessions.heartbeatAt,
     })
     .from(researchSessions)
+    .where(readable(researchSessions.principalId, access))
     .orderBy(desc(researchSessions.createdAt))
     .limit(40);
 

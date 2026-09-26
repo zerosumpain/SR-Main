@@ -10,14 +10,30 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { researchSessions } from '$lib/db/schema';
-import { desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { coerceDepth, depthPreset } from '$lib/deepdive/depth';
 import { coerceScope } from '$lib/deepdive/scope';
 import { coerceGrounding } from '$lib/deepdive/grounding';
 import { startResearch } from '$lib/deepdive/worker';
 import { depthTimings } from '$lib/deepdive/timings';
+import { areaAccess, readable, writable } from '$lib/server/area-scope';
+import { reserveResearchStart } from '$lib/deepdive/session-access.server';
 
-export const POST: RequestHandler = async ({ request }) => {
+/**
+ * The seed context as stored. A member's is taken as given, minus `fromIntel`:
+ * that flag is `/api/jkai/intel/commission`'s, and a run carrying it commits
+ * into the owner's intel graph when it finishes.
+ */
+function seedFor(raw: unknown, owner: boolean): object | null {
+  if (!raw || typeof raw !== 'object') return null;
+  if (owner) return raw;
+  const { fromIntel: _dropped, ...rest } = raw as Record<string, unknown>;
+  return rest;
+}
+
+export const POST: RequestHandler = async (event) => {
+  const { request } = event;
+  const access = await areaAccess(event, 'research');
   let body: Record<string, unknown>;
   try {
     body = await request.json();
@@ -40,6 +56,20 @@ export const POST: RequestHandler = async ({ request }) => {
    * search bill on top of the one the tier already runs.
    */
   const grounding = depth === 'instant' ? coerceGrounding(body.grounding) : 'off';
+
+  // A member's run is capped (depth, runs a day); the owner's never is.
+  await reserveResearchStart(access, depth);
+  // A child must belong to a parent the caller can read — otherwise `explore`'s
+  // lineage would hang a member's run off John's.
+  const parentSessionId = typeof body.parentSessionId === 'string' ? body.parentSessionId : null;
+  if (parentSessionId && access.level !== 'owner') {
+    const [parent] = await db
+      .select({ id: researchSessions.id })
+      .from(researchSessions)
+      .where(and(eq(researchSessions.id, parentSessionId), readable(researchSessions.principalId, access)))
+      .limit(1);
+    if (!parent) return json({ error: 'Parent session not found' }, { status: 404 });
+  }
 
   const goals = Array.isArray(body.goals)
     ? (body.goals as unknown[]).filter((g): g is string => typeof g === 'string' && !!g.trim())
@@ -67,8 +97,9 @@ export const POST: RequestHandler = async ({ request }) => {
       config: preset.config,
       plan: (body.plan as object | undefined) ?? null,
       status: 'draft',
-      parentSessionId: typeof body.parentSessionId === 'string' ? body.parentSessionId : null,
-      seedContext: (body.seedContext as object | undefined) ?? null,
+      parentSessionId,
+      seedContext: seedFor(body.seedContext, access.level === 'owner'),
+      principalId: access.own,
     })
     .returning();
 
@@ -84,7 +115,9 @@ export const POST: RequestHandler = async ({ request }) => {
  * this take" deserves an answer from this machine's own history rather than a
  * number someone typed into a blurb.
  */
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async (event) => {
+  const { url } = event;
+  const access = await areaAccess(event, 'research');
   const limit = Math.min(100, Number(url.searchParams.get('limit') ?? 50) || 50);
 
   const runs = await db
@@ -98,19 +131,25 @@ export const GET: RequestHandler = async ({ url }) => {
       completedAt: researchSessions.completedAt,
     })
     .from(researchSessions)
+    .where(readable(researchSessions.principalId, access))
     .orderBy(desc(researchSessions.createdAt))
     .limit(limit);
 
   return json({ runs, timings: await depthTimings() });
 };
 
-/** Bulk delete, used by the launcher's history list. */
-export const DELETE: RequestHandler = async ({ request }) => {
+/** Bulk delete, used by the launcher's history list. Only runs the caller may change. */
+export const DELETE: RequestHandler = async (event) => {
+  const { request } = event;
+  const access = await areaAccess(event, 'research');
   const body = await request.json().catch(() => ({}) as Record<string, unknown>);
   const ids = Array.isArray(body.ids)
     ? (body.ids as unknown[]).filter((i): i is string => typeof i === 'string')
     : [];
   if (!ids.length) return json({ error: 'No ids given' }, { status: 400 });
-  await db.delete(researchSessions).where(inArray(researchSessions.id, ids));
-  return json({ deleted: ids.length });
+  const deleted = await db
+    .delete(researchSessions)
+    .where(and(inArray(researchSessions.id, ids), writable(researchSessions.principalId, access)))
+    .returning({ id: researchSessions.id });
+  return json({ deleted: deleted.length });
 };

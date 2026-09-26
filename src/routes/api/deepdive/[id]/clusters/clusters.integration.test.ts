@@ -29,6 +29,8 @@ suite('GET /api/deepdive/[id]/clusters (integration)', () => {
 	function makeEvent(id: string, by = 'similarity') {
 		return {
 			params: { id },
+			// No session reads as anonymous, which the research guard treats as the owner.
+			locals: { auth: async () => null },
 			url: new URL(`http://localhost/api/deepdive/${id}/clusters?by=${by}`),
 		} as unknown as Parameters<typeof GET_handler>[0];
 	}
@@ -84,8 +86,9 @@ suite('GET /api/deepdive/[id]/clusters (integration)', () => {
 	});
 
 	it('returns 404 for a non-existent session', async () => {
-		const res = await GET_handler(makeEvent('00000000-0000-0000-0000-000000000000'));
-		expect(res.status).toBe(404);
+		await expect(GET_handler(makeEvent('00000000-0000-0000-0000-000000000000'))).rejects.toMatchObject({
+			status: 404,
+		});
 	});
 
 	it('rejects unsupported `by` dimensions with 400', async () => {

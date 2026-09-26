@@ -477,12 +477,15 @@
                thing that came out empty. -->
           {#if finished}
             <aside class="col-rail">
-              <AskJkaiPanel context={askContext} pending={pendingQuestion} />
+              {#if data.ownerTools}
+                <AskJkaiPanel context={askContext} pending={pendingQuestion} />
+              {/if}
               <ActionsRow
                 sessionId={data.session.id}
                 depth={data.session.depth}
                 hasReport={!!summary}
                 shareToken={data.session.shareToken}
+                canCommit={data.ownerTools}
               />
             </aside>
           {/if}
@@ -554,9 +557,9 @@
                 sources={data.sources}
                 filterKind={sourceFilter}
                 onClearFilter={() => (sourceFilter = null)}
-                sessionId={data.session.id}
+                sessionId={data.ownerTools ? data.session.id : undefined}
                 savedSourceIds={data.savedSourceIds}
-                driveFolder={data.driveFolder}
+                driveFolder={data.ownerTools ? data.driveFolder : null}
               />
             {/if}
           </div>

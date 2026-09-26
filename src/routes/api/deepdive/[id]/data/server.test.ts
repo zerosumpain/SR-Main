@@ -67,6 +67,18 @@ vi.mock('$lib/db', () => {
   return { db };
 });
 
+// The access guard is covered by its own tests; here it resolves the row the
+// test provides as the owner, and 404s (throws) exactly as the guard does.
+vi.mock('$lib/deepdive/session-access.server', async () => {
+  const { error } = await import('@sveltejs/kit');
+  return {
+    requireResearchSession: vi.fn(async () => {
+      if (!sessionRow) throw error(404, 'Session not found');
+      return { session: sessionRow, access: { level: 'owner', own: 'owner' } };
+    }),
+  };
+});
+
 import { GET } from './+server';
 
 function makeEvent(id: string) {
@@ -95,7 +107,6 @@ describe('GET /api/deepdive/[id]/data', () => {
 
   it('404s when the session is missing', async () => {
     sessionRow = null;
-    const res = await GET(makeEvent('nope'));
-    expect(res.status).toBe(404);
+    await expect(GET(makeEvent('nope'))).rejects.toMatchObject({ status: 404 });
   });
 });

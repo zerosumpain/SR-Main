@@ -18,6 +18,7 @@ import { researchSessions, sources, facts, entities, relationships } from '$lib/
 import { eq, and, count } from 'drizzle-orm';
 import { getEmitter, startResearch, isRunning } from '$lib/deepdive/worker';
 import type { SSEEvent } from '$lib/deepdive/types';
+import { requireResearchSession } from '$lib/deepdive/session-access.server';
 
 const KEEPALIVE_MS = 15_000;
 
@@ -49,8 +50,10 @@ async function currentStats(sessionId: string) {
   };
 }
 
-export const GET: RequestHandler = async ({ params }) => {
+export const GET: RequestHandler = async (event) => {
+  const { params } = event;
   const sessionId = params.id;
+  await requireResearchSession(event, sessionId, 'read');
 
   const [session] = await db
     .select()

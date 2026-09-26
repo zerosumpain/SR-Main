@@ -2,30 +2,39 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { researchSessions, facts, entities } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { startResearch } from '$lib/deepdive/worker';
 import { jsonCompletion } from '$lib/deepdive/ai';
 import { DEFAULT_CONFIG } from '$lib/deepdive/types';
 import type { SeedContext } from '$lib/deepdive/types';
+import { depthPreset, type ResearchDepth } from '$lib/deepdive/depth';
+import { requireResearchSession, reserveResearchStart } from '$lib/deepdive/session-access.server';
 
-export const POST: RequestHandler = async ({ params, request }) => {
+/**
+ * The depth an explore child runs at. The insert never named one, so the row
+ * took the column default ('investigation') and the worker ran that tier — the
+ * owner's explores still do. A member's run at `brief`, the deepest tier their
+ * access allows, with that tier's budget and config. Written explicitly so the
+ * cap check and the row cannot drift apart.
+ */
+function exploreDepth(owner: boolean): ResearchDepth {
+  return owner ? 'investigation' : 'brief';
+}
+
+export const POST: RequestHandler = async (event) => {
+  const { params, request } = event;
+  const { session: parentSession, access } = await requireResearchSession(event, params.id, 'read');
+  const owner = access.level === 'owner';
+  const depth = exploreDepth(owner);
+  // Before any LLM goal-planning is spent on a run the caller may not start.
+  await reserveResearchStart(access, depth);
+
   const body = await request.json();
   const { type, itemId, additionalContext } = body as {
     type: 'fact' | 'entity' | 'cluster' | 'gap' | 'hypothesis';
     itemId?: string;
     additionalContext?: string;
   };
-
-  // Load parent session
-  const [parentSession] = await db
-    .select()
-    .from(researchSessions)
-    .where(eq(researchSessions.id, params.id))
-    .limit(1);
-
-  if (!parentSession) {
-    return json({ error: 'Parent session not found' }, { status: 404 });
-  }
 
   const parentGoals = (parentSession.goals ?? []) as string[];
   const parentReport = parentSession.report as any;
@@ -41,7 +50,11 @@ export const POST: RequestHandler = async ({ params, request }) => {
   switch (type) {
     case 'fact': {
       if (!itemId) return json({ error: 'itemId required for fact exploration' }, { status: 400 });
-      const [fact] = await db.select().from(facts).where(eq(facts.id, itemId)).limit(1);
+      const [fact] = await db
+        .select()
+        .from(facts)
+        .where(and(eq(facts.id, itemId), eq(facts.sessionId, params.id)))
+        .limit(1);
       if (!fact) return json({ error: 'Fact not found' }, { status: 404 });
 
       topic = `Deep dive: ${fact.content.slice(0, 100)}`;
@@ -62,7 +75,11 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
     case 'entity': {
       if (!itemId) return json({ error: 'itemId required for entity exploration' }, { status: 400 });
-      const [entity] = await db.select().from(entities).where(eq(entities.id, itemId)).limit(1);
+      const [entity] = await db
+        .select()
+        .from(entities)
+        .where(and(eq(entities.id, itemId), eq(entities.sessionId, params.id)))
+        .limit(1);
       if (!entity) return json({ error: 'Entity not found' }, { status: 404 });
 
       topic = `Deep dive: ${entity.name}`;
@@ -95,7 +112,11 @@ export const POST: RequestHandler = async ({ params, request }) => {
       if (clusterFactIds.length > 0) {
         const clusterFacts = await Promise.all(
           clusterFactIds.map(async (fid: string) => {
-            const [f] = await db.select({ content: facts.content }).from(facts).where(eq(facts.id, fid)).limit(1);
+            const [f] = await db
+              .select({ content: facts.content })
+              .from(facts)
+              .where(and(eq(facts.id, fid), eq(facts.sessionId, params.id)))
+              .limit(1);
             return f?.content;
           }),
         );
@@ -165,7 +186,11 @@ export const POST: RequestHandler = async ({ params, request }) => {
       goals,
       parentSessionId: params.id,
       seedContext,
-      config: { ...DEFAULT_CONFIG },
+      ...(owner
+        ? { config: { ...DEFAULT_CONFIG } }
+        : { config: depthPreset(depth).config, budgetMs: depthPreset(depth).budgetMs }),
+      depth,
+      principalId: access.own,
     })
     .returning();
 

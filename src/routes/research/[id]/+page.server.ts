@@ -3,6 +3,7 @@ import { db } from '$lib/db';
 import { researchSessions, sources, entities, relationships, facts } from '$lib/db/schema';
 import { eq, desc, and, count, inArray } from 'drizzle-orm';
 import { redirect } from '@sveltejs/kit';
+import { areaAccess, readable } from '$lib/server/area-scope';
 import { depthPreset, coerceDepth } from '$lib/deepdive/depth';
 import { coerceScope, describeScope } from '$lib/deepdive/scope';
 import { loadFrontier } from '$lib/deepdive/frontier';
@@ -10,11 +11,14 @@ import { rankSources, mediaMix } from '$lib/deepdive/media-type';
 import { driveFileStem, existingStems, researchFolder } from '$lib/deepdive/to-drive';
 import { coerceGrounding, groundingOption, isGrounded } from '$lib/deepdive/grounding';
 
-export const load: PageServerLoad = async ({ params }) => {
+export const load: PageServerLoad = async (event) => {
+  const { params } = event;
+  const access = await areaAccess(event, 'research');
   const [session] = await db
     .select()
     .from(researchSessions)
-    .where(eq(researchSessions.id, params.id))
+    // A run the caller may not read looks exactly like one that does not exist.
+    .where(and(eq(researchSessions.id, params.id), readable(researchSessions.principalId, access)))
     .limit(1);
 
   if (!session) throw redirect(302, '/research');
@@ -71,8 +75,12 @@ export const load: PageServerLoad = async ({ params }) => {
    * true state — a "Keep in Drive" button that turns into "In Drive" a second
    * after the page settles reads as the page changing its mind.
    */
+  // Drive and the durable graph are the owner's own stores: a member's page
+  // neither looks in them nor offers to write there (to-drive / to-intel stay
+  // owner-only in the catalogue).
+  const ownerTools = access.level === 'owner';
   const driveFolder = researchFolder(session.topic);
-  const storedStems = await existingStems(driveFolder);
+  const storedStems = ownerTools ? await existingStems(driveFolder) : new Set<string>();
   const savedSourceIds = srcRows
     .filter((s) => storedStems.has(driveFileStem(driveFolder, s)))
     .map((s) => s.id);
@@ -192,6 +200,7 @@ export const load: PageServerLoad = async ({ params }) => {
     },
     driveFolder,
     savedSourceIds,
+    ownerTools,
     // The report has carried gaps, hypotheses, contradictions, clusters,
     // diversity and centrality on every completed investigation for months with
     // nothing rendering them.

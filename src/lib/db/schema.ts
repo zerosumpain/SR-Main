@@ -1078,6 +1078,13 @@ export const researchSessions = pgTable('research_session', {
   shareToken: text('share_token').unique(),
   parentSessionId: text('parent_session_id'),
   seedContext: jsonb('seed_context'),
+  /**
+   * Whose run this is: 'owner' (John's — every run before access groups),
+   * 'household', or a member's `u_…`. Children (sources, facts, entities…)
+   * follow their session. Read through $lib/server/area-scope; see
+   * $lib/deepdive/session-access.server.
+   */
+  principalId: text('principal_id').notNull().default('owner'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   completedAt: timestamp('completed_at', { withTimezone: true }),
 
@@ -1693,6 +1700,23 @@ export const allowedUser = pgTable('allowed_user', {
   grants: jsonb('grants').$type<string[]>().notNull().default([]),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * What members spent, one row per metered act (a research run started or
+ * resumed, a chat turn): the ledger the caps count. Separate from the rows the
+ * act produced on purpose — deleting a run must not hand its slot back.
+ */
+export const accessUsage = pgTable(
+  'access_usage',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    principalId: text('principal_id').notNull(),
+    /** 'research' | 'chat'. */
+    kind: text('kind').notNull(),
+    at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ byPrincipal: index('access_usage_principal_kind_at_idx').on(t.principalId, t.kind, t.at) }),
+);
 
 /**
  * Named bundles of permissions, edited at /admin/access. `grants` holds

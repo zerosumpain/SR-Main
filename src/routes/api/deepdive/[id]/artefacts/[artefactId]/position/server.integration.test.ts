@@ -19,6 +19,8 @@ suite('PATCH artefact position (integration)', () => {
   function makeEvent(id: string, artefactId: string, body: unknown) {
     return {
       params: { id, artefactId },
+      // No session reads as anonymous, which the research guard treats as the owner.
+      locals: { auth: async () => null },
       request: new Request('http://localhost/patch', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -166,6 +168,7 @@ suite('PATCH artefact position (integration)', () => {
   it('returns 400 on a malformed (non-JSON) body', async () => {
     const event = {
       params: { id: sessionId, artefactId: factId },
+      locals: { auth: async () => null },
       request: new Request('http://localhost/patch', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },

@@ -4,14 +4,15 @@
 // no persisted full-text column — so we reassemble it here (ordered by chunkOrd,
 // de-overlapped) and return it with the source's title/url/domain + session topic.
 //
-// Owner-gated by default: the whole authed area (incl. /api/*) is owner-only at the
-// hooks layer, and this route is on no public/guest allow-list. Research is private.
+// Opened to `research` holders by the catalogue; `requireSourceSession` scopes it to
+// runs the caller may read. Research is private.
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { sources, sourceChunks, researchSessions } from '$lib/db/schema';
 import { eq, asc } from 'drizzle-orm';
 import { OVERLAP_CHARS } from '$lib/rag/types';
+import { requireSourceSession } from '$lib/deepdive/session-access.server';
 
 // Bound the reassembled payload — sources are already capped at index time, but a
 // belt-and-braces cap keeps the response small and the {@html} render snappy.
@@ -49,9 +50,13 @@ function reassemble(chunks: Array<{ text: string }>): string {
   return full;
 }
 
-export const GET: RequestHandler = async ({ params }) => {
+export const GET: RequestHandler = async (event) => {
+  const { params } = event;
   const id = params.id;
   if (!id) return json({ error: 'id required' }, { status: 400 });
+  // Through the session it belongs to: a source of a run the caller cannot
+  // read is a 404 like any other.
+  await requireSourceSession(event, id);
 
   const [src] = await db
     .select({

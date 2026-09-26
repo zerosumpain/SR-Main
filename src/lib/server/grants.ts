@@ -18,6 +18,7 @@ import { db } from '$lib/db';
 import { accessGroup, activityPrincipals, allowedUser } from '$lib/db/schema';
 import {
   BUILT_IN_GROUPS,
+  isOpenPermission,
   levelOf,
   parsePermissions,
   type Permission,
@@ -51,6 +52,8 @@ export function effectivePermissions(
   }
   if (user.role === 'member') out.add('jkai.intel:self');
   if (user.role === 'household') out.add('family:circle');
+  // Stored but not held until its area opens (see `isOpenPermission`).
+  for (const p of out) if (!isOpenPermission(p)) out.delete(p);
   return out;
 }
 

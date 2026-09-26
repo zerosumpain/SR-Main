@@ -1,9 +1,12 @@
 import type { RequestHandler } from './$types';
 import { getEmitter } from '$lib/deepdive/worker';
 import type { SSEEvent } from '$lib/deepdive/types';
+import { requireResearchSession } from '$lib/deepdive/session-access.server';
 
-export const GET: RequestHandler = async ({ params }) => {
+export const GET: RequestHandler = async (event) => {
+  const { params } = event;
   const sessionId = params.id;
+  await requireResearchSession(event, sessionId, 'read');
   const emitter = getEmitter(sessionId);
 
   const stream = new ReadableStream({

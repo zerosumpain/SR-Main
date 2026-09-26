@@ -9,6 +9,7 @@ src/lib/access/catalogue.test.ts
 src/lib/auth.test.ts
 src/lib/costs/ledger.test.ts
 src/lib/daydream/think/tools.test.ts
+src/lib/deepdive/route-access.test.ts
 src/lib/estate/estate.test.ts
 src/lib/jkai/explainer-kit.test.ts
 src/lib/jkai/intel/chat-extract.wiring.test.ts
