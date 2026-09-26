@@ -13,7 +13,22 @@ const h = vi.hoisted(() => ({
   renames: [] as Array<[string, string, string]>,
   moves: [] as Array<[string, Record<string, unknown>]>,
   creates: [] as Array<Record<string, unknown>>,
+  ignored: [] as string[],
+  placeTimeCalls: [] as unknown[],
   failRename: false,
+}));
+
+vi.mock('$lib/home/presence/members', () => ({
+  listMembers: async () => [
+    { subject: 'alex', displayName: 'Alex' },
+    { subject: 'sam', displayName: 'Sam' },
+  ],
+}));
+vi.mock('$lib/home/presence/movement', () => ({
+  placeTimeByPerson: async (people: unknown, opts: unknown) => {
+    h.placeTimeCalls.push([people, opts]);
+    return { school: [{ subject: 'sam', displayName: 'Sam', minutes: 90, share: 0.002, visits: 2, usualArrival: '08:40' }] };
+  },
 }));
 
 vi.mock('$lib/home/presence/places', () => ({
@@ -35,6 +50,9 @@ vi.mock('$lib/home/presence/places', () => ({
   updatePlaceGeometry: async (id: string, geo: Record<string, unknown>) => {
     h.moves.push([id, geo]);
     return { id };
+  },
+  ignorePlace: async (id: string) => {
+    h.ignored.push(id);
   },
   createPlace: async (input: Record<string, unknown>) => {
     h.creates.push(input);
@@ -65,6 +83,8 @@ beforeEach(() => {
   h.renames = [];
   h.moves = [];
   h.creates = [];
+  h.ignored = [];
+  h.placeTimeCalls = [];
   h.failRename = false;
 });
 
@@ -84,15 +104,55 @@ describe('/home/people/places — owner only', () => {
       ['move', geo],
       ['create', { label: 'Club', kind: 'gym', lat: '51.5', lon: '-0.1', radiusM: '150' }],
       ['notify', { placeId: 'school', alerts: 'on', alertArrive: 'on' }],
+      ['remove', { placeId: 'school' }],
     ] as const) {
       const res = (await actions[name](eventFor('sam@example.test', fields))) as { status: number };
       expect(res.status).toBe(403);
     }
-    expect([h.updates, h.moves, h.creates, h.renames]).toEqual([[], [], [], []]);
+    expect([h.updates, h.moves, h.creates, h.renames, h.ignored]).toEqual([[], [], [], [], []]);
   });
 
-  it('refuses a non-owner load', async () => {
+  it('refuses a non-owner load, and never reads anyone’s place time for it', async () => {
     await expect(load(eventFor(null) as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({ status: 403 });
+    await expect(load(eventFor('sam@example.test') as unknown as Parameters<typeof load>[0])).rejects.toMatchObject({ status: 403 });
+    expect(h.placeTimeCalls).toEqual([]);
+  });
+
+  it('streams the owner the time per place for every member', async () => {
+    const data = (await load(eventFor('owner@example.test') as unknown as Parameters<typeof load>[0])) as {
+      placeTime: Promise<unknown>;
+    };
+    expect(data.placeTime).toBeInstanceOf(Promise);
+    expect(await data.placeTime).toMatchObject({ school: [{ subject: 'sam', minutes: 90 }] });
+    expect(h.placeTimeCalls).toEqual([
+      [
+        [
+          { subject: 'alex', displayName: 'Alex' },
+          { subject: 'sam', displayName: 'Sam' },
+        ],
+        { days: 30 },
+      ],
+    ]);
+  });
+});
+
+describe('/home/people/places — remove', () => {
+  it('ignores the place (no hard delete) and says which', async () => {
+    const res = await actions.remove(eventFor('owner@example.test', { placeId: 'school' }));
+    expect(res).toEqual({ removed: 'school', removedLabel: 'School' });
+    expect(h.ignored).toEqual(['school']);
+  });
+
+  it('refuses home with a 400', async () => {
+    const res = (await actions.remove(eventFor('owner@example.test', { placeId: 'home' }))) as { status: number };
+    expect(res.status).toBe(400);
+    expect(h.ignored).toEqual([]);
+  });
+
+  it('refuses a place that is not on the panel', async () => {
+    const res = (await actions.remove(eventFor('owner@example.test', { placeId: 'elsewhere' }))) as { status: number };
+    expect(res.status).toBe(404);
+    expect(h.ignored).toEqual([]);
   });
 });
 
