@@ -305,7 +305,8 @@
       "executionOwner": "Local Plan Navigator static pages and ask API",
       "migrationAuthor": "zerosumpain/local-plan-navigator",
       "schemaExecutor": "zerosumpain/local-plan-navigator",
-      "requiredTables": []
+      "requiredTables": [],
+      "database": "none"
     },
     {
       "id": "main",

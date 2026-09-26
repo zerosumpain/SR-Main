@@ -28,6 +28,14 @@ test('omitting an app or its required tables fails closed', () => {
   assert.match(checkExtractedSchema({ version: 1, modules: [] }, schema).join('\n'), /version 2/);
 });
 
+test('database-free extracted applications require an explicit empty table set', () => {
+  const data = manifest();
+  data.modules.push({ id: 'local-plan-navigator', database: 'none', requiredTables: [] });
+  assert.deepEqual(checkExtractedSchema(data, schema), []);
+  data.modules.at(-1).requiredTables = ['shared'];
+  assert.ok(checkExtractedSchema(data, schema).includes('local-plan-navigator: database-free application declares tables'));
+});
+
 test('CLI exits unsuccessfully before a release can proceed with a removed table', (t) => {
   const root = mkdtempSync(join(tmpdir(), 'sr-table-retention-'));
   t.after(() => rmSync(root, { recursive: true }));
