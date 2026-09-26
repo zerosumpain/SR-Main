@@ -22,7 +22,7 @@ export interface HubTab {
  *  engine rooms (memory, places, money, engine, discoveries, calendar, feed)
  *  are 308 stubs to the feed since P4 of the 2026-09-25 simplification; the
  *  backlog, improvement and the doctor moved to the build process, /jkai/develop. */
-export const ROOMS = ['feed', 'watches'] as const;
+export const ROOMS = ['feed', 'watches', 'briefing'] as const;
 export type RoomId = (typeof ROOMS)[number];
 
 export function isRoom(s: string | null | undefined): s is RoomId {
@@ -50,6 +50,9 @@ export function hubTabs(c: BadgeCounts): HubTab[] {
     // The feed is the hub's own page now, not a room beneath it.
     { id: 'feed', label: 'Noticed', href: HUB_BASE, count: c.notesToRate, tone: 'action' },
     room('watches', 'Watches', { count: c.activeWatches, tone: 'quiet' }),
+    // The 07:00 digest's room. Without a tab of its own the rail fell back to
+    // lighting Noticed while you read it.
+    room('briefing', 'Briefing'),
   ];
 }
 
