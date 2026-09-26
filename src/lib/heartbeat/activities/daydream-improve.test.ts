@@ -11,11 +11,14 @@ vi.mock('os', () => ({ default: { hostname: () => h.host } }));
 vi.mock('$lib/server/models/settings', () => ({ getSetting: vi.fn() }));
 vi.mock('$lib/selfimprove/run', () => ({
   runImprovementNow: vi.fn(),
+}));
+vi.mock('$lib/heartbeat/idle', () => ({
   isUserActive: vi.fn(),
 }));
 
 import { getSetting } from '$lib/server/models/settings';
-import { runImprovementNow, isUserActive } from '$lib/selfimprove/run';
+import { runImprovementNow } from '$lib/selfimprove/run';
+import { isUserActive } from '$lib/heartbeat/idle';
 import { daydreamImprove } from './daydream-improve';
 
 function ctx(config: Record<string, unknown> = {}) {
@@ -101,6 +104,14 @@ describe('the gates carried over from the croner', () => {
     const r = await daydreamImprove.run(ctx());
     expect(r.outcome).toBe('skipped');
     expect(runImprovementNow).not.toHaveBeenCalled();
+  });
+
+  it('hands the run the heartbeat idle gate, so it can stop mid-run when the owner shows up', async () => {
+    await daydreamImprove.run(ctx());
+    const opts = vi.mocked(runImprovementNow).mock.calls[0][0]!;
+    expect(opts.trigger).toBe('cron');
+    vi.mocked(isUserActive).mockResolvedValue(true as never);
+    expect(await opts.isUserActive!()).toBe(true);
   });
 });
 

@@ -1,6 +1,6 @@
 import os from 'os';
 import { getSetting } from '$lib/server/models/settings';
-import { isUserActive } from '$lib/selfimprove/run';
+import { isUserActive } from '$lib/heartbeat/idle';
 import { runDoctorNow } from '$lib/workflowdoctor/run';
 import type { PhaseName, PhaseRecord } from '$lib/workflowdoctor/types';
 import { IDLE_WINDOW_MS, SETTINGS_ENABLED_KEY, errMsg } from '$lib/workflowdoctor/types';
@@ -78,7 +78,7 @@ export const daydreamDoctor: ActivityHandler = {
     let runId: string;
     let data;
     try {
-      ({ runId, data } = await runDoctorNow({ trigger: 'cron' }));
+      ({ runId, data } = await runDoctorNow({ trigger: 'cron', isUserActive }));
     } catch (err) {
       // The overlap guard and the advisory lock both throw when another
       // instance is already in the lane. That is a skip, not a fault.

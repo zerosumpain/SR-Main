@@ -5,7 +5,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // `daydream-improve`, and is covered by that activity's own test.
 vi.mock('./run', () => ({
   runImprovementNow: vi.fn(),
-  isUserActive: vi.fn().mockResolvedValue(false),
 }));
 vi.mock('$lib/server/models/settings', () => ({ getSetting: vi.fn().mockResolvedValue(null) }));
 

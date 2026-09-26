@@ -7,15 +7,11 @@
 // `aborted_user_active` if the user shows up mid-run (cron only), and `failed`
 // only on a top-level surprise.
 
-import { db } from '$lib/db';
-import { orchestratorChats } from '$lib/db/schema';
-import { and, eq, gte } from 'drizzle-orm';
 import { withActivity } from '$lib/context/activity';
 import { upsertRecord } from '$lib/datastore';
 import {
   BUDGET_CAPS,
   COLLECTIONS,
-  IDLE_WINDOW_MS,
   SETTINGS_AUTOBUILD_KEY,
   SYSTEM_ACTOR,
   asData,
@@ -149,7 +145,7 @@ export function createBudget(caps: Partial<Caps> = {}): Budget {
 }
 
 // ---------------------------------------------------------------------------
-// Run lock + status + idle gate
+// Run lock + status
 // ---------------------------------------------------------------------------
 
 let running = false;
@@ -168,25 +164,6 @@ export function acquireRunLock(): boolean {
 
 export function releaseRunLock(): void {
   running = false;
-}
-
-/** True if the user chatted (orchestrator_chats role=user) within `withinMs`. */
-export async function isUserActive(withinMs: number = IDLE_WINDOW_MS): Promise<boolean> {
-  try {
-    const since = new Date(Date.now() - withinMs);
-    const rows = await db
-      .select({ id: orchestratorChats.id })
-      .from(orchestratorChats)
-      .where(and(eq(orchestratorChats.role, 'user'), gte(orchestratorChats.createdAt, since)))
-      .limit(1);
-    return rows.length > 0;
-  } catch (err) {
-    // Fail CLOSED: if we cannot tell whether the user is active, assume they are
-    // and skip the run. A DB hiccup must never cause the nightly loop to spend
-    // LLM budget while the user is in fact using the site.
-    console.error('[selfimprove] idle check failed — treating user as active:', errMsg(err));
-    return true;
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -221,9 +198,18 @@ export async function runImprovementNow(
      * had, which is what a dev host or a test should get.
      */
     lanes?: BuildLanes;
+    /**
+     * The idle gate, consulted only on a cron run (at the start and between
+     * phases). Injected rather than imported: it lives in `$lib/heartbeat/idle`,
+     * and the heartbeat imports this module, so importing it back would close a
+     * module cycle. A cron run with no gate fails CLOSED — it reads as "user
+     * active" and skips, the same answer the gate gives when it cannot tell.
+     */
+    isUserActive?: () => Promise<boolean>;
   },
 ): Promise<{ runId: string; data: ImprovementRunData }> {
   const trigger = opts?.trigger ?? 'manual';
+  const isUserActive = opts?.isUserActive ?? (async () => true);
   if (!acquireRunLock()) {
     throw new Error('a self-improvement run is already in progress');
   }

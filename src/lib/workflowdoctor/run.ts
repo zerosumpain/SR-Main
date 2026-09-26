@@ -19,7 +19,6 @@
 import { getSetting } from '$lib/server/models/settings';
 import { withActivity } from '$lib/context/activity';
 import { upsertRecord } from '$lib/datastore';
-import { isUserActive } from '$lib/selfimprove/run';
 import { releaseAdvisoryLock, tryAdvisoryLock } from '$lib/workflows/leader-lock';
 import type { VerificationIssue } from '$lib/workflows/orchestrator/verify';
 import {
@@ -450,9 +449,19 @@ async function readSwitches(): Promise<{ autoApply: boolean; breaker: boolean }>
  * has just written would be a second query racing the first.
  */
 export async function runDoctorNow(
-  opts?: { trigger?: 'manual' | 'cron' },
+  opts?: {
+    trigger?: 'manual' | 'cron';
+    /**
+     * The idle gate (`$lib/heartbeat/idle`), consulted only on a cron run at the
+     * start and between phases. Injected rather than imported: the heartbeat
+     * imports this module, so importing it back would close a module cycle. A
+     * cron run with no gate fails CLOSED — it reads as "user active" and skips.
+     */
+    isUserActive?: (withinMs: number) => Promise<boolean>;
+  },
 ): Promise<{ runId: string; data: DoctorRunData }> {
   const trigger = opts?.trigger ?? 'manual';
+  const isUserActive = opts?.isUserActive ?? (async () => true);
   if (!acquireRunLock()) {
     throw new Error('a workflow doctor run is already in progress');
   }

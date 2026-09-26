@@ -1,5 +1,5 @@
 import { getSetting } from '$lib/server/models/settings';
-import { isUserActive } from '$lib/selfimprove/run';
+import { isUserActive } from '$lib/heartbeat/idle';
 import { listChatJobs } from '$lib/workflows/chat/activity';
 import {
   attributeSpend,
