@@ -182,3 +182,61 @@ if it fails the block list and is quoted as JSON to the model; the block list ha
 `kids` layer and undoes l33t/asterisk dodges; each model call has a 60 s timeout. Every invite in
 `GET /api/native/games` gains `about` — one line, e.g. `"The Solar System · for kids"`, null for
 games with nothing to say.
+
+## Games 4–6 (added 2026-09-26)
+
+Same rooms, invites, lobby verbs and stream for all three; `again` resets to a lobby.
+
+### Anagram Blitz — `game:'anagram-blitz'`
+Same 7 shuffled letters for everyone (from a 7-letter seed). Find 3–7 letter words (4+ on hard);
+3→1, 4→2, 5→4, 6→6, 7→10 points; at the finish a word only one player found scores double
+(not solo). Time: easy 150 s, medium 120 s, hard 90 s; ends on the clock only.
+Move `{action:'word', word}` — 400 "Use only the letters you have." / "Words need at least N
+letters…" / "Not in the word list." (free); 409 "You already have that one." / time's up.
+```jsonc
+{ "game":"anagram-blitz", "phase":"lobby|countdown|playing|finished|closed",
+  "letterCount":7, "minLength":3, "points":{"3":1,"4":2,"5":4,"6":6,"7":10},
+  "timeLimitMs":150000, "startedAt":…, "phaseEndsAt":…,   // the limit while playing
+  "letters":["t","r","e","n","i","a","p"],               // null before play
+  "players":[{"id","name","status","isHost","wordCount":3,"score":7,
+              "words": null | [{"word":"paint","points":4,"unique":null}]}],  // mine always; everyone's at finish
+  "seed": null, "found": null | [{"word","points","finderIds":[…],"unique":true}],
+  "missed": null | ["pertain", …],
+  "standings": null | [{"id","name","score","words","longest"}], "winnerIds": [], "serverNow":… }
+```
+
+### Quick Maths Sprint — `game:'maths-sprint'`
+60 s; one dealt sequence of 200 problems, same order for everyone, each at their own pace,
+getting harder within the band (easy + − ≤20, medium + − ≤100 and × to 10, hard + − ≤1000,
+× to 12, exact ÷, `a × b ± c`). Right +1 and next; every 5th in a row +1 bonus; wrong = a miss,
+streak reset, SAME problem stays. Text uses ` + `, ` − ` (U+2212), ` × `, ` ÷ `.
+Move `{action:'answer', index:<my current>, value:<int>}` — 400 non-integer (free), 409 stale index.
+```jsonc
+{ "game":"maths-sprint", "phase":"lobby|countdown|playing|finished|closed",
+  "timeLimitMs":60000, "problemCount":200, "streakBonus":5, "startedAt":…, "phaseEndsAt":…,
+  "players":[{"id","name","status","isHost","score":8,"answered":7}],
+  "me": null | {"problem": null | {"index":3,"text":"7 × 8"}, "score","correct","misses","streak","bestStreak"},
+  "standings": null | [{"id","name","score","correct","misses","bestStreak"}], "winnerIds": [],
+  "recaps": null | [{"playerId","problems":[{"index","text","answer","solved","wrongTries"}]}],
+  "serverNow":… }
+```
+
+### Sequence Memory — `game:'sequence-memory'`
+Simon-style on 4 / 6 / 9 tiles. Round n plays the first 2+n steps of one growing sequence. `show`
+phase: the whole round's flashes are sent AHEAD with server times (step 700/550/400 ms, gap 150,
+first flash 1 s after dealing) so phones flash in sync; `input`: window 2 s + 800 ms × length.
+Each alive player submits once: `{action:'attempt', round, taps:[tile,…]}` (accepted from dealing;
+a short attempt counts as wrong so a phone can submit on its first mistake). Wrong/missing ⇒ out.
+2 s `result`. Ends when nobody is alive or at length 20; last standing win (ties share); solo =
+best length.
+```jsonc
+{ "game":"sequence-memory", "phase":"lobby|countdown|show|input|result|finished|closed",
+  "tiles":4, "startLength":3, "maxLength":20, "phaseEndsAt":…,
+  "players":[{"id","name","status","isHost","playing":true,"alive":true,"best":5,"roundsSurvived":3,"outRound":null}],
+  "round": null | {"number":1,"length":3,"showAt":…,"stepMs":700,"gapMs":150,
+     "steps": [{"tile":2,"at":…,"ms":700}] /* NULL during input */,
+     "inputAt":…,"windowMs":4400,"inputEndsAt":…,"closesAt":…,
+     "answeredIds":[…], "attempts": null | [{"playerId","taps":[…]|null,"correct":true}],
+     "survivorIds": null | […]},
+  "standings": null | [{"id","name","best","roundsSurvived","outRound"}], "winnerIds": [], "serverNow":… }
+```
