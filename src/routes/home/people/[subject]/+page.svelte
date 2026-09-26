@@ -43,7 +43,7 @@
   const MODE_SUB = {
     foot: 'walking speed',
     car: 'vehicle speed, not a straight fast line',
-    rail: 'fast and straight — or a motorway',
+    rail: 'faster and straighter than any road',
     other: 'running or cycling pace, or unclear',
   } as const;
 
@@ -314,7 +314,7 @@
         <SectionHead
           kicker="C / Commuting"
           title={['Drives', 'and trains']}
-          strap="Newest first; select one for its route. Read from speed, so a motorway can pass for a train."
+          strap="Newest first; select one for its route. Read from speed, so a slow train can pass for a car."
         />
         {#if commutes.length}
           <ul class="commutes">

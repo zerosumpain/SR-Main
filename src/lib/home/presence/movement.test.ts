@@ -24,8 +24,10 @@ const { activeLabels, railJourney, visitsFromFixes, loadMovementStats, loadPerso
 
 describe('railJourney', () => {
   it('accepts a fast, straight run of fixes and refuses a slow or a turning one', () => {
-    const straight = [0, 1, 2, 3].map((i) => ({ lat: northOf(i * 2000), lon: LON, speedKmh: 110 }));
+    const straight = [0, 1, 2, 3].map((i) => ({ lat: northOf(i * 2000), lon: LON, speedKmh: 130 }));
     expect(railJourney(straight)).toBe(true);
+    // A dual carriageway: dead straight, but no train holds only 65 km/h.
+    expect(railJourney(straight.map((f) => ({ ...f, speedKmh: 65 })))).toBe(false);
     expect(railJourney(straight.map((f) => ({ ...f, speedKmh: 40 })))).toBe(false);
     const zigzag = straight.map((f, i) => ({ ...f, lon: LON + (i % 2 ? 0.03 : 0) }));
     expect(railJourney(zigzag)).toBe(false);
@@ -85,15 +87,15 @@ describe('loadPersonMovement — commuting', () => {
         trailRows.push({ ts: new Date(startMs + i * 120_000), lat, lon, speedKmh: 0, mode: 'still', placeId });
       }
     };
-    // Home, then 40 km due north at 100 km/h (one fix a minute), then a stay.
+    // Home, then 60 km due north at 150 km/h (one fix a minute), then a stay.
     const t0 = Date.parse('2026-10-27T07:00:00Z');
     still(t0, 15, LAT, LON, 'p-home');
     const trainStart = t0 + 14 * 120_000;
     for (let i = 1; i <= 24; i++) {
-      trailRows.push({ ts: new Date(trainStart + i * 60_000), lat: northOf(i * 1667), lon: LON, speedKmh: 100, mode: 'vehicle', placeId: null });
+      trailRows.push({ ts: new Date(trainStart + i * 60_000), lat: northOf(i * 2500), lon: LON, speedKmh: 150, mode: 'vehicle', placeId: null });
     }
     const trainEnd = trainStart + 24 * 60_000;
-    still(trainEnd + 60_000, 15, northOf(24 * 1667), LON, null);
+    still(trainEnd + 60_000, 15, northOf(24 * 2500), LON, null);
     // Later: a zig-zag drive at 40 km/h.
     const t1 = Date.parse('2026-10-27T15:00:00Z');
     still(t1, 15, LAT, LON, 'p-home');

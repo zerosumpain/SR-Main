@@ -29,7 +29,23 @@ import { MIN_DWELL_MINS, RAIL_MIN_FIXES, VISIT_MAX_GAP_MINS, activeLabels, type 
  * consecutive fixes that `looksLikeRail` accepts. Advisory, as the mode always
  * is — a straight motorway passes too.
  */
+/**
+ * A train must also have HELD a speed no road allows (UK limit 70 mph = 113 km/h)
+ * across a tenth of its fixes. Measured 2026-09-26: a dual-carriageway drive at
+ * ~65 km/h, one fix a minute, passed the straight-line test both ways. Same rule
+ * as SR-Health's `TRAIN_SUSTAINED_KMH` (src/lib/trails/companion.ts) — keep them
+ * in step. Cost, named: a slow stopping train reads as a drive.
+ */
+export const TRAIN_SUSTAINED_KMH = 115;
+
+function sustainedKmh(fixes: Array<{ speedKmh: number | null }>): number {
+  const speeds = fixes.map((f) => f.speedKmh ?? 0).sort((a, b) => b - a);
+  if (!speeds.length) return 0;
+  return speeds[Math.max(0, Math.ceil(speeds.length * 0.1) - 1)];
+}
+
 export function railJourney(fixes: Array<{ lat: number; lon: number; speedKmh: number | null }>): boolean {
+  if (sustainedKmh(fixes) < TRAIN_SUSTAINED_KMH) return false;
   for (let i = RAIL_MIN_FIXES; i <= fixes.length; i++) {
     if (looksLikeRail(fixes.slice(i - RAIL_MIN_FIXES, i))) return true;
   }
