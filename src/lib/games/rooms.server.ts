@@ -57,11 +57,13 @@ function settle(live: Live, changed: boolean): void {
   const now = Date.now();
   if (advance(live.room, now, Math.random)) changed = true;
   if (changed) emit(live);
+  const { room } = live;
+  if (room.phase === 'closed' && live.timer && !changed) return;
   if (live.timer) clearTimeout(live.timer);
   live.timer = null;
 
-  const { room } = live;
   if (room.phase === 'closed') {
+    // Nothing reopens a closed room (`act` refuses it), so this is armed once.
     live.timer = setTimeout(() => forget(room.id), CLOSED_KEEP_MS);
     live.timer.unref?.();
     return;
@@ -96,7 +98,8 @@ export function createGame(input: {
   invite: { id: string; name: string }[];
   difficulty: Difficulty;
 }): WireRoom {
-  const open = [...rooms.values()].filter((l) => l.room.phase !== 'closed');
+  // A finished game waits ten minutes for "Play again"; it is not one the host is still running.
+  const open = [...rooms.values()].filter((l) => l.room.phase !== 'closed' && l.room.phase !== 'finished');
   if (open.length >= MAX_ROOMS) throw new GameError(409, 'Too many games running. Try again shortly.');
   if (open.filter((l) => l.room.hostId === input.host.id).length >= MAX_OPEN_PER_HOST) {
     throw new GameError(409, 'Finish one of your games first.');
@@ -125,9 +128,32 @@ export function act(
   const live = get(id);
   const now = Date.now();
   // Catch the room up first: a tap that lands after the window closed must be
-  // judged against the closed round, not a timer that has not fired yet.
-  advance(live.room, now, Math.random);
+  // judged against the closed round, not a timer that has not fired yet. What
+  // that moved is sent whether or not the action itself is then refused —
+  // otherwise the round's result goes to nobody.
+  const moved = advance(live.room, now, Math.random);
   const { room } = live;
+  if (room.phase === 'closed') {
+    settle(live, moved);
+    throw new GameError(409, 'That game has finished.');
+  }
+  try {
+    apply(room, playerId, action, input, now);
+  } catch (err) {
+    settle(live, moved);
+    throw err;
+  }
+  settle(live, true);
+  return toWire(room, playerId, Date.now());
+}
+
+function apply(
+  room: Room,
+  playerId: string,
+  action: Action,
+  input: { round?: number; reactionMs?: number | null; early?: boolean },
+  now: number,
+): void {
   switch (action) {
     case 'join':
       join(room, playerId, now);
@@ -153,8 +179,6 @@ export function act(
       );
       break;
   }
-  settle(live, true);
-  return toWire(room, playerId, Date.now());
 }
 
 /** Lobbies this player is invited to and has not answered. */

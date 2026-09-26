@@ -79,6 +79,27 @@ describe('rooms', () => {
     expect(() => roomFor(id, 'p_john')).toThrow(/finished/);
   });
 
+  it('still tells the room about a round that shut under a late, refused tap', () => {
+    const { id } = createGame({ host: john, invite: [sam], difficulty: 'easy' });
+    act(id, 'p_sam', 'join');
+    act(id, 'p_john', 'start');
+    vi.advanceTimersByTime(COUNTDOWN_MS);
+    const seen: WireRoom[] = [];
+    subscribe(id, 'p_sam', (r) => seen.push(r), () => {});
+    // The window has shut but its timer has not run yet.
+    vi.setSystemTime(roomFor(id, 'p_john').round!.closesAt + 5);
+    expect(() => act(id, 'p_john', 'tap', { round: 1, reactionMs: 300 })).toThrow(/round is over/);
+    expect(seen.at(-1)!.phase).toBe('result');
+  });
+
+  it('refuses every action on a closed room, so nothing keeps it alive', () => {
+    const { id } = createGame({ host: john, invite: [sam], difficulty: 'easy' });
+    vi.advanceTimersByTime(LOBBY_MS);
+    expect(() => asHttp(() => act(id, 'p_john', 'leave'))).toThrow(expect.objectContaining({ status: 409 }));
+    vi.advanceTimersByTime(60_000);
+    expect(() => roomFor(id, 'p_john')).toThrow(/finished/);
+  });
+
   it('caps how many games one host can hold open', () => {
     for (let i = 0; i < 3; i++) createGame({ host: john, invite: [], difficulty: 'easy' });
     expect(() => createGame({ host: john, invite: [], difficulty: 'easy' })).toThrow(/Finish one/);

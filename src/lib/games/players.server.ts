@@ -2,10 +2,12 @@
 // `games:self`. A person with no paired phone could not open an invite, so they
 // are not offered one.
 //
-// A player's id is a hash of their email, so the phone never carries anyone
-// else's address and the id stays the same across rooms.
+// A player's id is a keyed hash of their email, so the phone never carries
+// anyone else's address, a guessed address cannot be tested against it, and the
+// id stays the same across rooms.
 
-import { createHash } from 'node:crypto';
+import { createHmac } from 'node:crypto';
+import { env } from '$env/dynamic/private';
 import { satisfies } from '$lib/access/catalogue';
 import { isOwnerEmail } from '$lib/server/access';
 import { loadMember } from '$lib/server/grants';
@@ -19,7 +21,8 @@ export interface GamePlayer {
 }
 
 export function playerId(email: string): string {
-  return 'p_' + createHash('sha256').update(email.trim().toLowerCase()).digest('hex').slice(0, 12);
+  const key = env.AUTH_SECRET || 'sr-games';
+  return 'p_' + createHmac('sha256', key).update(email.trim().toLowerCase()).digest('hex').slice(0, 12);
 }
 
 function nameFromEmail(email: string): string {
@@ -42,7 +45,7 @@ export async function gamePlayers(now = Date.now()): Promise<GamePlayer[]> {
 
   const names = new Map<string, string>();
   for (const m of await listMembers().catch(() => [])) {
-    if (m.email) names.set(m.email, m.displayName);
+    if (m.email) names.set(m.email.trim().toLowerCase(), m.displayName);
   }
 
   const players: GamePlayer[] = [];
@@ -64,7 +67,7 @@ export async function playerFor(email: string): Promise<GamePlayer> {
   const known = (await gamePlayers()).find((p) => p.email === e);
   if (known) return known;
   const member = await listMembers()
-    .then((all) => all.find((m) => m.email === e))
+    .then((all) => all.find((m) => m.email?.trim().toLowerCase() === e))
     .catch(() => undefined);
   return { id: playerId(e), email: e, name: member?.displayName ?? nameFromEmail(e) };
 }
