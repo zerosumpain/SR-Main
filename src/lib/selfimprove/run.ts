@@ -7,7 +7,11 @@
 // `aborted_user_active` if the user shows up mid-run (cron only), and `failed`
 // only on a top-level surprise.
 
-import { withActivity } from '$lib/context/activity';
+import {
+  BudgetExceededError,
+  createRunBudget,
+  type Budget,
+} from '$lib/costs/run-budget.server';
 import { upsertRecord } from '$lib/datastore';
 import {
   BUDGET_CAPS,
@@ -17,6 +21,7 @@ import {
   asData,
   emptyPhases,
   errMsg,
+  parseJsonLoose,
   type BuildLanes,
   type ImprovementRunData,
   type PhaseName,
@@ -34,111 +39,31 @@ import { hasOpenNewDataWork, listBacklog } from './backlog';
 import { getSetting } from '$lib/server/models/settings';
 
 // ---------------------------------------------------------------------------
-// Budget
+// Budget — the shared per-run cash guard in $lib/costs. Re-exported so the
+// phase modules keep importing `Budget` from './run'.
 // ---------------------------------------------------------------------------
 
-export class BudgetExceededError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'BudgetExceededError';
-  }
-}
+export {
+  BudgetExceededError,
+  type Budget,
+  type LlmCallOpts,
+} from '$lib/costs/run-budget.server';
 
-export interface LlmCallOpts {
-  maxTokens?: number;
-  temperature?: number;
-}
-
-export interface Budget {
-  llmCalls: number;
-  tokensIn: number;
-  tokensOut: number;
-  costUsd: number;
-  exceeded: boolean;
-  /** One gateway completion, budget-checked BEFORE the call. Throws
-   *  BudgetExceededError once a hard cap is reached. Returns raw + parsed JSON. */
-  call(
-    messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
-    opts?: LlmCallOpts,
-  ): Promise<{ content: string; json: unknown }>;
-  /**
-   * Wall-clock remaining. The build/repair/propose phases loop internally, so
-   * they need to self-limit — the between-phase check alone would let one long
-   * loop eat the whole night.
-   */
-  timeLeftMs(): number;
-}
-
-type Caps = { maxLlmCalls: number; maxCostUsd: number; maxWallMs: number };
-
-/** Create a fresh budget counter. Caps are overridable for tests. */
-export function createBudget(caps: Partial<Caps> = {}): Budget {
-  const maxLlmCalls = caps.maxLlmCalls ?? BUDGET_CAPS.maxLlmCalls;
-  const maxCostUsd = caps.maxCostUsd ?? BUDGET_CAPS.maxCostUsd;
-  const maxWallMs = caps.maxWallMs ?? BUDGET_CAPS.maxWallMs;
-  const startedAt = Date.now();
-
-  const budget: Budget = {
-    llmCalls: 0,
-    tokensIn: 0,
-    tokensOut: 0,
-    costUsd: 0,
-    exceeded: false,
-    timeLeftMs() {
-      return Math.max(0, maxWallMs - (Date.now() - startedAt));
-    },
-    async call(messages, opts) {
-      if (budget.llmCalls >= maxLlmCalls || budget.costUsd >= maxCostUsd) {
-        budget.exceeded = true;
-        throw new BudgetExceededError(
-          `budget exceeded (calls=${budget.llmCalls}/${maxLlmCalls}, cost=$${budget.costUsd.toFixed(3)}/$${maxCostUsd})`,
-        );
-      }
-      // Lazy imports keep the module light for tests that never reach the gateway.
-      const { getLLMClient } = await import('$lib/llm/client');
-      const { priceFor, computeCost } = await import('$lib/llm/pricing');
-
-      // Still pinned off the chat default — this pipeline writes code that
-      // ships unattended, so the model that authors it should not move because
-      // the chat default moved. What changed is that the pin is now a SETTING
-      // (`jkai.selfimprove.model`, falling back to SELFIMPROVE_MODEL) instead of
-      // a constant, so it can be seen and changed from the model picker rather
-      // than only by editing this file.
-      const { resolveSelfimproveModel } = await import('$lib/server/models/workload-settings');
-      const { client, model } = await getLLMClient(await resolveSelfimproveModel());
-      // max_tokens >= 3000 so GLM reasoning tokens don't truncate the answer
-      // (feedback_glm_reasoning_tokens). No response_format — we parse loosely.
-      const resp = await withActivity('selfimprove', () =>
-        client.chat.completions.create({
-          model,
-          messages,
-          max_tokens: Math.max(opts?.maxTokens ?? 3000, 3000),
-          temperature: opts?.temperature ?? 0.3,
-        }),
-      );
-
-      budget.llmCalls++;
-      const usage = resp.usage;
-      if (usage) {
-        const tin = usage.prompt_tokens ?? 0;
-        const tout = usage.completion_tokens ?? 0;
-        budget.tokensIn += tin;
-        budget.tokensOut += tout;
-        // The provider's own `usage.cost` first, the catalogue price second —
-        // the same order the ledger uses. The catalogue has no row for the
-        // flash model this runs on, so before this every night's cost was a
-        // fabricated zero on the pulse and the run record (seen 2026-09-03).
-        const reported = (usage as { cost?: unknown }).cost;
-        const pricing = priceFor('openrouter', resp.model || model);
-        if (typeof reported === 'number' && Number.isFinite(reported)) budget.costUsd += reported;
-        else if (pricing) budget.costUsd += computeCost(pricing, tin, tout);
-      }
-      const content = resp.choices?.[0]?.message?.content ?? '';
-      const { parseJsonLoose } = await import('./types');
-      return { content, json: parseJsonLoose(content) };
-    },
-  };
-  return budget;
+/**
+ * Still pinned off the chat default — this pipeline writes code that ships
+ * unattended, so the model that authors it should not move because the chat
+ * default moved. The pin is a SETTING (`jkai.selfimprove.model`, falling back
+ * to SELFIMPROVE_MODEL) so it can be changed from the model picker.
+ */
+function createSelfimproveBudget(): Budget {
+  return createRunBudget({
+    caps: BUDGET_CAPS,
+    activity: 'selfimprove',
+    resolveModel: async () =>
+      (await import('$lib/server/models/workload-settings')).resolveSelfimproveModel(),
+    temperature: 0.3,
+    parse: parseJsonLoose,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -214,7 +139,7 @@ export async function runImprovementNow(
   const runId = crypto.randomUUID();
   lastRunId = runId;
   const startedAt = new Date();
-  const budget = createBudget();
+  const budget = createSelfimproveBudget();
   const data: ImprovementRunData = {
     status: 'running',
     trigger,

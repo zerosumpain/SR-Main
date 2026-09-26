@@ -1,10 +1,5 @@
 import { getSetting } from '$lib/server/models/settings';
-import {
-  attributeSpend,
-  budgetStatus,
-  readQuotaMark,
-  ZERO_SPEND,
-} from '$lib/daydream/budget';
+import { quotaGuard } from '$lib/daydream/budget';
 import { resolveDaydreamModel } from '$lib/daydream/model';
 import { runMemoryConsolidation } from '$lib/daydream/memory-consolidation.server';
 import { SETTINGS_ENABLED_KEY } from '$lib/daydream/types';
@@ -35,16 +30,15 @@ export const daydreamMemory: ActivityHandler = {
     if (enabled === false) return { outcome: 'skipped', summary: 'daydreaming disabled' };
 
     const model = await resolveDaydreamModel();
-    const isCodexModel = model.provider === 'codex';
-    const budget = await budgetStatus({ now, isCodexModel });
-    if (budget.blocked) {
-      return { outcome: 'skipped', summary: `budget: ${budget.blockedReason}`, details: { budget } };
+    const guard = quotaGuard({ action: NAME, isCodexModel: model.provider === 'codex', now });
+    const verdict = await guard.check();
+    if (!verdict.allowed) {
+      return { outcome: 'skipped', summary: `budget: ${verdict.reason}`, details: { budget: verdict.status } };
     }
 
-    const before = isCodexModel ? await readQuotaMark() : null;
+    await guard.begin();
     const result = await runMemoryConsolidation({ now });
-    const after = isCodexModel ? await readQuotaMark() : null;
-    const quota = isCodexModel ? attributeSpend(before, after) : { ...ZERO_SPEND };
+    const quota = await guard.end();
 
     if (result.status === 'failed') {
       return {

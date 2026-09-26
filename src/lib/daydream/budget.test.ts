@@ -1,4 +1,27 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+
+// Only the quotaGuard cases reach these; the pure-function cases never do.
+const q = vi.hoisted(() => ({
+  usage: [] as Array<unknown>,
+  clears: 0,
+  pulses: [] as Array<{ details: unknown }>,
+}));
+vi.mock('$lib/server/models/codex-usage', () => ({
+  getCodexUsage: async () => q.usage.shift() ?? null,
+  clearCodexUsageCache: () => {
+    q.clears++;
+  },
+}));
+vi.mock('$lib/db', () => {
+  const b: Record<string, unknown> = {};
+  b.from = () => b;
+  b.innerJoin = () => b;
+  b.where = () => Promise.resolve(q.pulses);
+  return { db: { select: () => b } };
+});
+
 import {
   attributeSpend,
   dayProgress,
@@ -9,6 +32,8 @@ import {
   pickWindows,
   hasThinkingHeadroom,
   planDepth,
+  quotaGuard,
+  SPENDING_ACTIONS,
   windowStart,
   type BudgetStatus,
 } from './budget';
@@ -218,5 +243,92 @@ describe('hasThinkingHeadroom', () => {
   it('refuses rather than dividing by a zero cap', () => {
     expect(hasThinkingHeadroom(full({ dailyCapPct: 0 }))).toBe(false);
     expect(hasThinkingHeadroom(full({ fiveHourCapPct: 0 }))).toBe(false);
+  });
+});
+
+function usage(fiveHour: number, weekly: number, extra: Record<string, unknown> = {}) {
+  return {
+    limitReached: false,
+    windows: [
+      { usedPercent: fiveHour, windowSeconds: 18_000, resetAt: null },
+      { usedPercent: weekly, windowSeconds: 604_800, resetAt: null },
+    ],
+    ...extra,
+  };
+}
+
+describe('quotaGuard', () => {
+  beforeEach(() => {
+    q.usage = [];
+    q.clears = 0;
+    q.pulses = [];
+  });
+
+  it('never blocks a non-Codex model and attributes it no quota', async () => {
+    const g = quotaGuard({ action: 'daydream-think', isCodexModel: false });
+    const v = await g.check();
+    expect(v.allowed).toBe(true);
+    expect(v.status.applies).toBe(false);
+    await g.begin();
+    expect(await g.end()).toEqual({ weeklyPct: 0, fiveHourPct: 0 });
+    expect(q.clears).toBe(0);
+  });
+
+  it('fails SOFT on an unreadable meter: allowed, at minimal depth', async () => {
+    const v = await quotaGuard({ action: 'daydream-think', isCodexModel: true }).check();
+    expect(v.allowed).toBe(true);
+    expect(v.status.reachable).toBe(false);
+    expect(v.status.plan.depth).toBe('minimal');
+  });
+
+  it('blocks, non-terminally, when the subscription window is exhausted', async () => {
+    q.usage = [usage(10, 10, { limitReached: true })];
+    const v = await quotaGuard({ action: 'daydream-memory', isCodexModel: true }).check();
+    expect(v.allowed).toBe(false);
+    expect(v.terminal).toBe(false);
+    expect(v.reason).toMatch(/exhausted/);
+  });
+
+  it('blocks on the daily cap from pulses already spent', async () => {
+    q.usage = [usage(10, 10)];
+    q.pulses = [{ details: { quota: { weeklyPct: DAILY_WEEKLY_CAP_PCT, fiveHourPct: 1 } } }];
+    const v = await quotaGuard({ action: 'daydream-notebook', isCodexModel: true }).check();
+    expect(v.allowed).toBe(false);
+    expect(v.reason).toMatch(/daily cap/);
+    expect(v.remaining.todayPct).toBe(0);
+  });
+
+  it('attributes the before/after delta, clearing the usage cache before each read', async () => {
+    q.usage = [usage(20, 30), usage(22.5, 30.4)];
+    const g = quotaGuard({ action: 'daydream-think', isCodexModel: true });
+    await g.begin();
+    const spend = await g.end();
+    expect(spend).toEqual({ weeklyPct: 0.4, fiveHourPct: 2.5 });
+    expect(g.spent).toEqual(spend);
+    expect(q.clears).toBe(2);
+  });
+});
+
+describe('SPENDING_ACTIONS covers every activity that reads the quota meter', () => {
+  // The omission has happened three times (hypothesise + spend, then memory +
+  // notebook) and the symptom is silence: the activity spends Codex quota the
+  // caps never see. So the list is checked against the code, not memory.
+  const dir = join(process.cwd(), 'src/lib/heartbeat/activities');
+  const files = readdirSync(dir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'));
+  const spenders = files
+    .map((f) => ({ f, src: readFileSync(join(dir, f), 'utf8') }))
+    .filter(({ src }) => /\b(readQuotaMark|quotaGuard)\b/.test(src));
+
+  it('finds the spenders it is guarding (the scan is not vacuous)', () => {
+    expect(spenders.map((s) => s.f)).toEqual(
+      expect.arrayContaining(['daydream-memory.ts', 'daydream-notebook.ts', 'daydream-think.ts']),
+    );
+  });
+
+  it.each(spenders.map((s) => [s.f, s.src] as const))('%s is named in SPENDING_ACTIONS', (_f, src) => {
+    const name =
+      src.match(/const NAME = '([^']+)'/)?.[1] ?? src.match(/\bname:\s*'([^']+)'/)?.[1] ?? null;
+    expect(name).not.toBeNull();
+    expect(SPENDING_ACTIONS as readonly string[]).toContain(name);
   });
 });

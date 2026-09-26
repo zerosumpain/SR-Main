@@ -40,7 +40,6 @@ import { finalizeAndNotify } from './report';
 import { ensureSystemCollections } from './seed-apis';
 import {
   runImprovementNow,
-  createBudget,
   BudgetExceededError,
   acquireRunLock,
   releaseRunLock,
@@ -91,19 +90,6 @@ describe('run lock (overlap guard)', () => {
     expect(acquireRunLock()).toBe(true);
     await expect(runImprovementNow({ trigger: 'manual' })).rejects.toThrow(/already in progress/);
     releaseRunLock();
-  });
-});
-
-describe('budget caps', () => {
-  it('throws BudgetExceededError once the call cap is hit', async () => {
-    const b = createBudget({ maxLlmCalls: 0 });
-    await expect(b.call([{ role: 'user', content: 'hi' }])).rejects.toBeInstanceOf(BudgetExceededError);
-    expect(b.exceeded).toBe(true);
-  });
-
-  it('throws BudgetExceededError once the cost cap is hit', async () => {
-    const b = createBudget({ maxCostUsd: 0 });
-    await expect(b.call([{ role: 'user', content: 'hi' }])).rejects.toBeInstanceOf(BudgetExceededError);
   });
 });
 

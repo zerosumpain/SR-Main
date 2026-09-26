@@ -1,12 +1,7 @@
 import { getSetting } from '$lib/server/models/settings';
 import { isUserActive } from '$lib/heartbeat/idle';
 import { listChatJobs } from '$lib/workflows/chat/activity';
-import {
-  attributeSpend,
-  budgetStatus,
-  readQuotaMark,
-  ZERO_SPEND,
-} from '$lib/daydream/budget';
+import { quotaGuard } from '$lib/daydream/budget';
 import { resolveDaydreamModel } from '$lib/daydream/model';
 import { SETTINGS_ENABLED_KEY, errMsg } from '$lib/daydream/types';
 import { executeNoteAction } from '$lib/daydream/notebook/actions';
@@ -107,13 +102,13 @@ export const daydreamNotebook: ActivityHandler = {
     }
 
     const model = await resolveDaydreamModel();
-    const isCodexModel = model.provider === 'codex';
-    const budget = await budgetStatus({ now, isCodexModel });
-    if (budget.blocked) {
-      return { outcome: 'skipped', summary: `budget: ${budget.blockedReason}`, details: { budget } };
+    const guard = quotaGuard({ action: NAME, isCodexModel: model.provider === 'codex', now });
+    const verdict = await guard.check();
+    if (!verdict.allowed) {
+      return { outcome: 'skipped', summary: `budget: ${verdict.reason}`, details: { budget: verdict.status } };
     }
 
-    const before = isCodexModel ? await readQuotaMark() : null;
+    await guard.begin();
     let promptTokens = 0;
     let completionTokens = 0;
     let reviewed = 0;
@@ -192,8 +187,7 @@ export const daydreamNotebook: ActivityHandler = {
       }
     }
 
-    const after = isCodexModel ? await readQuotaMark() : null;
-    const quota = isCodexModel ? attributeSpend(before, after) : { ...ZERO_SPEND };
+    const quota = await guard.end();
 
     const bits = [
       `${reviewed}/${due.length} notes read`,
