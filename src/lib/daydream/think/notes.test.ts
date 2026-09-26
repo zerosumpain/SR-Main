@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  buildIdeaFromNote,
   inScope,
   isForPhone,
   isOnFeed,
@@ -191,5 +192,33 @@ describe('input', () => {
     expect(parseFeedbackBody({ id: 'x', verdict: 'never_kind' }).ok).toBe(false);
     expect(parseFeedbackBody({ id: 'x', verdict: 'toString' }).ok).toBe(false);
     expect(parseFeedbackBody({ id: 'x' }).ok).toBe(false);
+  });
+});
+
+describe('buildIdeaFromNote — a build note becomes a backlog idea (D3)', () => {
+  const build = (over: Partial<ThinkRow> = {}) =>
+    row({ id: 'b-7', kind: 'think_build', title: 'A rail delay card on Today', narrative: 'Three late trains this week.\n\nNext: build it.', ...over });
+
+  it('carries the title, the audited sentence, and a citation back to the note', () => {
+    const idea = buildIdeaFromNote(build());
+    expect(idea).toEqual({
+      title: 'A rail delay card on Today',
+      detail: expect.stringContaining('Three late trains this week.'),
+      ref: 'thought:b-7',
+    });
+    expect(idea!.detail).toContain(noteHref('b-7'));
+  });
+
+  it('is only for build notes', () => {
+    expect(buildIdeaFromNote(row())).toBeNull();
+  });
+
+  it('keeps a note held back only by the daily cap — it is still a proposal', () => {
+    expect(buildIdeaFromNote(build({ status: 'suppressed', suppressedReason: 'feed_only: daily cap' }))).not.toBeNull();
+  });
+
+  it('refuses a note resting on refuted rows, or one the owner turned down', () => {
+    expect(buildIdeaFromNote(build({ status: 'suppressed', suppressedReason: 'already_refuted (x)' }))).toBeNull();
+    expect(buildIdeaFromNote(build({ status: 'dismissed' }))).toBeNull();
   });
 });

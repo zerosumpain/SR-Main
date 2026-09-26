@@ -11,7 +11,38 @@ import {
 import { resolveDaydreamModel } from '$lib/daydream/model';
 import { runThink, MAX_ROUNDS } from '$lib/daydream/think/run';
 import { SETTINGS_ENABLED_KEY, errMsg } from '$lib/daydream/types';
+import { buildIdeaFromNote } from '$lib/daydream/think/notes';
 import type { ActivityHandler } from '../types';
+
+/**
+ * New `build` notes → the improvement backlog, the single intake queue (D3,
+ * spec 2026-09-25). Wired HERE rather than in `think/run.ts`: `$lib/selfimprove`
+ * imports `$lib/daydream`, so daydream cannot import the backlog back, and the
+ * heartbeat already imports both. Soft — a backlog that cannot be written must
+ * not cost the cycle that wrote the note; the note is still on the feed.
+ */
+export async function queueBuildNotes(createdKeys: readonly string[]): Promise<{ added: number; merged: number }> {
+  if (createdKeys.length === 0) return { added: 0, merged: 0 };
+  const { loadThinkRowsByKeys } = await import('$lib/daydream/think/notes.server');
+  const ideas = (await loadThinkRowsByKeys(createdKeys))
+    .map(buildIdeaFromNote)
+    .filter((i): i is NonNullable<typeof i> => i !== null);
+  if (ideas.length === 0) return { added: 0, merged: 0 };
+  const { intakeIdeas } = await import('$lib/selfimprove/backlog');
+  const res = await intakeIdeas(
+    ideas.map((i) => ({
+      title: i.title,
+      detail: i.detail,
+      // Repo code: a think note proposes functionality, and the build lane is
+      // the only builder left. It still waits for the owner's accepted brief.
+      kind: 'feature' as const,
+      priority: 2,
+      source: 'think' as const,
+      ref: i.ref,
+    })),
+  );
+  return { added: res.added.length, merged: res.merged.length };
+}
 
 const NAME = 'daydream-think';
 
@@ -33,8 +64,9 @@ const ROUNDS_BY_DEPTH: Record<Depth, number> = { minimal: 3, standard: 5, deep: 
  * Every 45 minutes of quiet in waking hours, the clock picks a channel × outcome
  * pair (`think/questions.ts`), the model investigates it with ONE of two
  * read-only tool sets (`think/tools.ts`), and whatever survives the citation
- * audit goes to the owner through `notifyOwner`. Runs beside ponder until P2
- * retires it (spec 2026-09-25).
+ * audit goes to the owner through `notifyOwner`. A `build` note is also queued
+ * on the improvement backlog (`queueBuildNotes`), where it waits for the
+ * owner's tap like every other idea.
  *
  * Spends the same Codex caps as ponder and the composer — which is why it is in
  * `SPENDING_ACTIONS` and why `details.quota` below is load-bearing.
@@ -83,6 +115,13 @@ export const daydreamThink: ActivityHandler = {
     const after = isCodexModel ? await readQuotaMark() : null;
     const quota = isCodexModel ? attributeSpend(before, after) : { ...ZERO_SPEND };
 
+    let queued = { added: 0, merged: 0 };
+    try {
+      queued = await queueBuildNotes(result.notes.createdKeys ?? []);
+    } catch (err) {
+      console.error(`[daydream] build notes not queued: ${errMsg(err)}`);
+    }
+
     const n = result.notes;
     const bits = [
       // The question leads, so a week of pulses shows the rotation turning.
@@ -92,6 +131,9 @@ export const daydreamThink: ActivityHandler = {
       // unseen for a month.
       `${n.proposed} note${n.proposed === 1 ? '' : 's'} (${n.created} new${n.merged ? `, ${n.merged} merged` : ''}${n.updated ? `, ${n.updated} refreshed` : ''}${n.suppressed ? `, ${n.suppressed} held` : ''}${n.muted ? `, ${n.muted} muted` : ''})`,
       ...(result.notified ? [`${result.notified} sent`] : []),
+      ...(queued.added || queued.merged
+        ? [`backlog +${queued.added}${queued.merged ? ` (${queued.merged} merged)` : ''}`]
+        : []),
       // The fabrication meter. Always reported — a quiet audit is a claim.
       `audit dropped ${result.rejected.length}`,
     ];
@@ -106,6 +148,7 @@ export const daydreamThink: ActivityHandler = {
         depth: budget.plan.depth,
         model: model.modelId,
         ...result,
+        backlog: queued,
       },
     };
   },

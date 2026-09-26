@@ -15,13 +15,17 @@
 import { normaliseConversationId } from '$lib/jkai/conversation-id';
 import { db } from '$lib/db';
 import { jkaiBuilds } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, or, sql } from 'drizzle-orm';
 import { builderClient } from '$lib/jkai/builder-client';
 import { resolveBuilderModel } from '$lib/server/models/workload-settings';
 import type { ModelContext } from '$lib/server/models/types';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
 import { SR_MAIN_GIT_TARGET } from '$lib/jkai/git-targets';
 import { createIssue, commentOnIssue, githubConfigured, REPO_SLUG } from '$lib/github/issues';
+// The same rule as the backlog's `isSameIdea` (`$lib/selfimprove/same-idea`),
+// imported from underneath both: `$lib/selfimprove` and `$lib/daydream`
+// already import `$lib/jkai`.
+import { TITLE_ECHO_SIMILARITY, titleSimilarity } from '$lib/utils/title-similarity';
 
 export const CHANGE_REQUEST_BUDGET = {
   maxIterations: 25,
@@ -69,6 +73,106 @@ export interface ChangeRequestResult {
   buildId: string;
   issueNumber: number;
   issueUrl: string;
+  /** True when an open change request for the same idea was handed back
+   *  instead of opening a new issue and starting a new build. */
+  reused?: boolean;
+}
+
+// ── Dedup ─────────────────────────────────────────────────────────────────
+//
+// Every call used to open a new issue and start a new build, at up to £2
+// each, so the same idea asked twice — by the nightly engine on two nights, by
+// chat and the engine, or by two producers that phrased it differently — was
+// built twice. Since D3 (spec 2026-09-25) an ask first looks for a change
+// request that is still live for the same idea, and returns it.
+
+/** Build statuses that are still doing (or about to do) the work. */
+export const OPEN_BUILD_STATUSES = ['pending', 'running', 'paused'] as const;
+
+/** How long a finished build whose outcome is an open PR still counts as the
+ *  answer to its ask. The outcome does not change when the PR merges, so this
+ *  is a window rather than a state: two weeks covers review, and a re-ask
+ *  after that is a new request. */
+export const OPEN_PR_WINDOW_DAYS = 14;
+
+/** What the dedup reads from a `jkai_builds` row. */
+export interface ChangeRequestRow {
+  id: string;
+  title: string | null;
+  status: string;
+  outcome: string | null;
+  gitTargetConfig: unknown;
+  createdAt: Date;
+}
+
+/** The ask's own title, as recorded. Builds from before this stored only the
+ *  display title, `Change request #n: <first 60 chars>`. */
+function askTitle(row: ChangeRequestRow): string {
+  const cfg = (row.gitTargetConfig ?? {}) as { requestTitle?: unknown };
+  if (typeof cfg.requestTitle === 'string' && cfg.requestTitle) return cfg.requestTitle;
+  return (row.title ?? '').replace(/^Change request #\d+:\s*/, '');
+}
+
+/**
+ * The live change request this ask would duplicate, or null. PURE.
+ *
+ * Live means still building, or finished with a PR inside
+ * `OPEN_PR_WINDOW_DAYS`. A backlog slug is the exact identity and wins; a
+ * near-identical title (the backlog's `isSameIdea` rule) catches the same idea
+ * asked through chat or under other words.
+ */
+export function matchOpenChangeRequest(
+  rows: readonly ChangeRequestRow[],
+  ask: { title: string; backlogSlug?: string },
+  now = Date.now(),
+): ChangeRequestRow | null {
+  const since = now - OPEN_PR_WINDOW_DAYS * 86_400_000;
+  const live = rows.filter(
+    (r) =>
+      (OPEN_BUILD_STATUSES as readonly string[]).includes(r.status) ||
+      (r.outcome === 'pr_open' && r.createdAt.getTime() >= since),
+  );
+  if (ask.backlogSlug) {
+    const bySlug = live.find((r) => ((r.gitTargetConfig ?? {}) as { backlogSlug?: unknown }).backlogSlug === ask.backlogSlug);
+    if (bySlug) return bySlug;
+  }
+  return live.find((r) => titleSimilarity(ask.title, askTitle(r)) >= TITLE_ECHO_SIMILARITY) ?? null;
+}
+
+/** Read the live change requests and match. Soft on a read failure: a lookup
+ *  that cannot run must not block the owner's ask — it degrades to the old
+ *  behaviour of opening a new one. */
+async function findOpenChangeRequest(ask: { title: string; backlogSlug?: string }): Promise<ChangeRequestRow | null> {
+  try {
+    const since = new Date(Date.now() - OPEN_PR_WINDOW_DAYS * 86_400_000);
+    const rows = await db
+      .select({
+        id: jkaiBuilds.id,
+        title: jkaiBuilds.title,
+        status: jkaiBuilds.status,
+        outcome: jkaiBuilds.outcome,
+        gitTargetConfig: jkaiBuilds.gitTargetConfig,
+        createdAt: jkaiBuilds.createdAt,
+      })
+      .from(jkaiBuilds)
+      .where(
+        and(
+          // Not in the column's declared enum (the insert below casts), so
+          // compared as SQL rather than through the typed `eq`.
+          sql`${jkaiBuilds.origin} = 'change-request'`,
+          or(
+            inArray(jkaiBuilds.status, [...OPEN_BUILD_STATUSES]),
+            and(eq(jkaiBuilds.outcome, 'pr_open'), gte(jkaiBuilds.createdAt, since)),
+          ),
+        ),
+      )
+      .orderBy(desc(jkaiBuilds.createdAt))
+      .limit(200);
+    return matchOpenChangeRequest(rows as ChangeRequestRow[], ask);
+  } catch (err) {
+    console.warn(`[change-request] dedup lookup failed, opening a new one: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
 }
 
 /**
@@ -92,6 +196,7 @@ export async function createChangeRequest({
   labels,
   conversationId,
   modelContext,
+  backlogSlug,
 }: {
   title: string;
   request: string;
@@ -99,7 +204,22 @@ export async function createChangeRequest({
   conversationId?: string;
   /** The chat session's pinned model, when the asking thread had one. */
   modelContext?: ModelContext;
+  /** The improvement-backlog item this implements, when it came from one.
+   *  Stored on the build so a second ask for the same item finds it. */
+  backlogSlug?: string;
 }): Promise<ChangeRequestResult> {
+  // The same idea already live? Hand it back rather than paying twice.
+  const open = await findOpenChangeRequest({ title, backlogSlug });
+  if (open) {
+    const issueNumber = Number(((open.gitTargetConfig ?? {}) as { issueNumber?: unknown }).issueNumber) || 0;
+    return {
+      buildId: open.id,
+      issueNumber,
+      issueUrl: issueNumber ? `https://github.com/${REPO_SLUG}/issues/${issueNumber}` : '',
+      reused: true,
+    };
+  }
+
   if (!githubConfigured()) {
     throw new Error(
       'GitHub is not configured — set GITHUB_API_TOKEN (fine-grained PAT scoped to ' +
@@ -181,7 +301,14 @@ export async function createChangeRequest({
       title: `Change request #${issue.number}: ${title.slice(0, 60)}`,
       prompt,
       origin: 'change-request',
-      gitTargetConfig: { ...SR_MAIN_GIT_TARGET, issueNumber: issue.number },
+      // `requestTitle` and `backlogSlug` are what the dedup above matches on;
+      // the display title is truncated and prefixed.
+      gitTargetConfig: {
+        ...SR_MAIN_GIT_TARGET,
+        issueNumber: issue.number,
+        requestTitle: title.slice(0, 200),
+        ...(backlogSlug ? { backlogSlug } : {}),
+      },
       // This IS the SR site, so the warm-brutalist design linter applies here
       // (unlike the Forge, whose game repo owns its own checks).
       enforceDesignSystem: true,

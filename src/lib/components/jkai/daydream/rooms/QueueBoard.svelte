@@ -321,8 +321,8 @@
 {#if all.length === 0}
   <div class="card t-quiet">
     <p class="card-body">
-      Nothing in the queue. Ideas arrive from the questions you ask, the faults daydreaming
-      raises, measurements nothing writes, and the appetite scan.
+      Nothing in the queue. Ideas arrive from the think loop's build notes, the workflow
+      doctor's escalations, the questions you ask (mined nightly), and what you add yourself.
     </p>
   </div>
 {:else}

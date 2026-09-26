@@ -295,19 +295,6 @@
                         onclick={() => act({ action: 'backlog_park', slug: item.slug, parked: item.backlogStatus !== 'abandoned', reason: 'Parked from the epic ledger' }, `row:${item.id}`)}
                       >{item.backlogStatus === 'abandoned' ? 'Restore' : 'Park'}</button>
                     {/if}
-                  {:else if item.source === 'capability' && item.stage === 'proposed'}
-                    <button
-                      type="button"
-                      class="cta sm"
-                      disabled={rowBusy}
-                      onclick={() => act({ action: 'capability_decide', slug: item.slug, decision: 'accept' }, `row:${item.id}`)}
-                    >Accept</button>
-                    <button
-                      type="button"
-                      class="btn sm"
-                      disabled={rowBusy}
-                      onclick={() => act({ action: 'capability_decide', slug: item.slug, decision: 'decline' }, `row:${item.id}`)}
-                    >Decline</button>
                   {:else if item.foldedInto}
                     <button type="button" class="btn sm" onclick={() => (editing = `backlog:${item.foldedInto}`)}>
                       Open delivery

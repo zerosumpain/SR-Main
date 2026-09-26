@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs';
 import {
   buildBoard,
   stageFor,
-  stageForCapability,
   canMove,
   laneForKind,
   bringsNewData,
@@ -20,7 +19,6 @@ import {
   settleDate,
   sortItems,
   summariseBurndown,
-  type BoardCapability,
   type WorkItem,
 } from './board';
 import type { BacklogItemData } from './types';
@@ -107,20 +105,6 @@ describe('stageFor at the attempt ceiling', () => {
   });
 });
 
-describe('stageForCapability', () => {
-  it('maps the ledger vocabulary onto the board', () => {
-    expect(stageForCapability('proposed')).toBe('proposed');
-    expect(stageForCapability('queued')).toBe('accepted');
-    expect(stageForCapability('building')).toBe('building');
-    expect(stageForCapability('shipped')).toBe('live');
-    expect(stageForCapability('declined')).toBe('parked');
-  });
-
-  it('parks an unrecognised status rather than guessing a live one', () => {
-    expect(stageForCapability('something-new')).toBe('parked');
-  });
-});
-
 describe('canMove', () => {
   it('lets the owner accept and park', () => {
     expect(canMove('proposed', 'accepted')).toBe(true);
@@ -149,9 +133,12 @@ describe('canMove', () => {
 
 describe('laneForKind and the new-data bias', () => {
   it('routes each kind to the builder that can actually make it', () => {
-    expect(laneForKind('tool')).toBe('toolsmith');
-    expect(laneForKind('source')).toBe('catalogue');
-    expect(laneForKind('data_source')).toBe('catalogue');
+    // The toolsmith and catalogue lanes were retired in D3: a tool or a source
+    // is repo code now, built by the change-request lane once its brief is
+    // accepted.
+    expect(laneForKind('tool')).toBe('build');
+    expect(laneForKind('source')).toBe('build');
+    expect(laneForKind('data_source')).toBe('build');
     expect(laneForKind('watch')).toBe('monitor');
     expect(laneForKind('feature')).toBe('build');
     // A news source is a hardcoded union in the repo, so it is a code change.
@@ -172,7 +159,6 @@ describe('buildBoard', () => {
   it('joins a tool onto the idea it serves and reads its calls', () => {
     const board = buildBoard({
       backlog: [item({ slug: 'paypal-transaction-history', title: 'PayPal transaction history tool', status: 'shipped' })],
-      capabilities: [],
       tools: [tool({ name: 'paypal_transactions_recent', description: 'Recent PayPal transaction history', runCount: 16, errorCount: 2 })],
       attemptCeiling: CEILING,
     });
@@ -189,7 +175,6 @@ describe('buildBoard', () => {
         item({ slug: 'shipped-one', title: 'Subscription renewal calendar reminders', status: 'shipped' }),
         item({ slug: 'open-one', title: 'Subscription renewal calendar for upcoming charges' }),
       ],
-      capabilities: [],
       tools: [],
       attemptCeiling: CEILING,
     });
@@ -207,60 +192,10 @@ describe('buildBoard', () => {
         item({ slug: 'a', title: 'Live GOV.UK content search API', status: 'shipped' }),
         item({ slug: 'b', title: 'Live OpenRouter balance API' }),
       ],
-      capabilities: [],
       tools: [],
       attemptCeiling: CEILING,
     });
     expect(board.items.find((i) => i.slug === 'b')?.alreadyServed).toBe(false);
-  });
-
-  it('never double-counts a capability that already has a backlog item', () => {
-    const cap: BoardCapability = {
-      slug: 'data_source:met-office',
-      kind: 'data_source',
-      title: 'Met Office feed',
-      need: 'no weather series',
-      status: 'queued',
-      score: 0.55,
-      lane: 'source',
-      outcome: null,
-      outcomeRef: null,
-      backlogSlug: 'met-office-feed',
-      evidence: ['a question you asked'],
-      lastSeenAt: '2026-09-04T00:00:00.000Z',
-    };
-    const board = buildBoard({
-      backlog: [item({ slug: 'met-office-feed', title: 'Met Office feed', capabilitySlug: 'data_source:met-office' })],
-      capabilities: [cap],
-      tools: [],
-      attemptCeiling: CEILING,
-    });
-    expect(board.items).toHaveLength(1);
-    expect(board.items[0].source).toBe('backlog');
-  });
-
-  it('shows a capability lead that no lane has picked up yet', () => {
-    const cap: BoardCapability = {
-      slug: 'watch:ebay-deals',
-      kind: 'watch',
-      title: 'Watch eBay saved searches',
-      need: 'deals go unnoticed',
-      status: 'proposed',
-      score: 0.61,
-      lane: 'watch',
-      outcome: null,
-      outcomeRef: null,
-      backlogSlug: null,
-      evidence: ['a question you asked'],
-      lastSeenAt: '2026-09-04T00:00:00.000Z',
-    };
-    const board = buildBoard({ backlog: [], capabilities: [cap], tools: [], attemptCeiling: CEILING });
-    expect(board.items).toHaveLength(1);
-    expect(board.items[0].stage).toBe('proposed');
-    expect(board.items[0].newData).toBe(true);
-    // Ruling on a lead happens on the appetite board, which carries its score
-    // decomposition and citations; the queue board must not duplicate that.
-    expect(board.items[0].actionable).toBe(false);
   });
 
   it('keeps every open item when settled work is trimmed', () => {
@@ -270,7 +205,7 @@ describe('buildBoard', () => {
         item({ slug: `done-${n}`, title: `Done ${n}`, status: 'shipped', updatedAt: `2026-08-0${n + 1}T00:00:00.000Z` }),
       ),
     ];
-    const board = buildBoard({ backlog, capabilities: [], tools: [], attemptCeiling: CEILING, settledLimit: 2 });
+    const board = buildBoard({ backlog, tools: [], attemptCeiling: CEILING, settledLimit: 2 });
     expect(board.items.filter((i) => i.stage === 'accepted')).toHaveLength(5);
     expect(board.items.filter((i) => i.stage === 'live')).toHaveLength(2);
     // Totals describe the whole population, never the trimmed one — a number
@@ -285,7 +220,6 @@ describe('buildBoard', () => {
         item({ slug: 'visible', title: 'Visible' }),
         item({ slug: 'removed', title: 'Removed', status: 'abandoned', removedAt: '2026-09-04T12:00:00.000Z' }),
       ],
-      capabilities: [],
       tools: [],
       attemptCeiling: CEILING,
     });
@@ -359,7 +293,6 @@ describe('epic grouping keys', () => {
   it('prefers an owner-set epic', () => {
     const board = buildBoard({
       backlog: [item({ slug: 'a', title: 'A', epicSlug: 'epic:money' })],
-      capabilities: [],
       tools: [],
       attemptCeiling: CEILING,
     });
@@ -370,7 +303,6 @@ describe('epic grouping keys', () => {
   it('falls back to the capability slug when no epic was set by hand', () => {
     const board = buildBoard({
       backlog: [item({ slug: 'a', title: 'A', capabilitySlug: 'data_source:met-office' })],
-      capabilities: [],
       tools: [],
       attemptCeiling: CEILING,
     });
@@ -380,7 +312,6 @@ describe('epic grouping keys', () => {
   it('uses the theme label the owner accepted, not the slug digest', () => {
     const board = buildBoard({
       backlog: [item({ slug: 'a', title: 'A', epicSlug: 'epic:3-1d9swp2' })],
-      capabilities: [],
       tools: [],
       attemptCeiling: CEILING,
       epicLabels: { 'epic:3-1d9swp2': 'Live OpenRouter balance' },
@@ -393,7 +324,6 @@ describe('epic grouping keys', () => {
   it('falls back to the slug when no label was recorded', () => {
     const board = buildBoard({
       backlog: [item({ slug: 'a', title: 'A', epicSlug: 'epic:3-1d9swp2' })],
-      capabilities: [],
       tools: [],
       attemptCeiling: CEILING,
     });
@@ -403,7 +333,6 @@ describe('epic grouping keys', () => {
   it('leaves an unlinked item unfiled rather than inventing a group', () => {
     const board = buildBoard({
       backlog: [item({ slug: 'a', title: 'A' })],
-      capabilities: [],
       tools: [],
       attemptCeiling: CEILING,
     });
@@ -415,11 +344,10 @@ describe('epic grouping keys', () => {
 describe('filtering', () => {
   const base = buildBoard({
     backlog: [
-      item({ slug: 'src', title: 'Met Office feed', kind: 'source' }),
+      item({ slug: 'src', title: 'Met Office feed', kind: 'watch' }),
       item({ slug: 'failed', title: 'Delivery tracking', lastError: 'HTTP 405', attempts: 1 }),
       item({ slug: 'plain', title: 'Something else' }),
     ],
-    capabilities: [],
     tools: [],
     attemptCeiling: CEILING,
   }).items;
@@ -429,7 +357,7 @@ describe('filtering', () => {
   });
 
   it('filters by lane', () => {
-    expect(applyFilter(base, { ...EMPTY_FILTER, lanes: ['catalogue'] })).toHaveLength(1);
+    expect(applyFilter(base, { ...EMPTY_FILTER, lanes: ['monitor'] })).toHaveLength(1);
   });
 
   it('filters by query across title and detail', () => {
@@ -443,8 +371,7 @@ describe('filtering', () => {
       readiness: { score: 84, status: 'ready' },
     } as BacklogItemData['grooming'];
     const board = buildBoard({
-      backlog: [item({ slug: 'groomed', title: 'Modal polish', grooming })],
-      capabilities: [], tools: [], attemptCeiling: CEILING,
+      backlog: [item({ slug: 'groomed', title: 'Modal polish', grooming })], tools: [], attemptCeiling: CEILING,
     });
     expect(board.items[0].grooming).toBe(grooming);
     expect(applyFilter(board.items, { ...EMPTY_FILTER, query: 'keyboard-only' })).toHaveLength(1);
@@ -474,7 +401,6 @@ describe('sortForBoard', () => {
         item({ slug: 'dupe', title: 'Subscription renewal calendar for upcoming charges', priority: 2 }),
         item({ slug: 'fresh', title: 'A brand new unrelated notion', priority: 2 }),
       ],
-      capabilities: [],
       tools: [],
       attemptCeiling: CEILING,
     });
@@ -529,7 +455,6 @@ describe('tool matching is confined to shipped ideas', () => {
         item({ slug: 'open-one', title: 'Reliable reverse geocode and nearby places' }),
         item({ slug: 'shipped-one', title: 'Reverse geocode nearby places lookup', status: 'shipped' }),
       ],
-      capabilities: [],
       tools: [
         tool({ name: 'reverse_geocode', description: 'reverse geocode nearby places lookup', runCount: 0, errorCount: 0 }),
       ],
@@ -547,35 +472,19 @@ describe('tool matching is confined to shipped ideas', () => {
 });
 
 describe('the untried flag agrees with the untried tile', () => {
-  it('counts only open work, not leads or things abandoned before a try', () => {
+  it('counts only open work, not things abandoned before a try', () => {
     const board = buildBoard({
       backlog: [
         item({ slug: 'fresh', title: 'A fresh idea' }),
         item({ slug: 'dropped', title: 'An abandoned idea', status: 'abandoned' }),
-      ],
-      capabilities: [
-        {
-          slug: 'watch:x',
-          kind: 'watch',
-          title: 'A lead',
-          need: 'n',
-          status: 'proposed',
-          score: 0.6,
-          lane: 'watch',
-          outcome: null,
-          outcomeRef: null,
-          backlogSlug: null,
-          evidence: [],
-          lastSeenAt: '2026-09-04T00:00:00.000Z',
-        },
       ],
       tools: [],
       attemptCeiling: CEILING,
     });
     const untried = applyFilter(board.items, { ...EMPTY_FILTER, flags: ['untried'] });
     // The abandoned row is excluded — it was never tried, but it is also not
-    // waiting for anything. The lead counts: it is open work with no attempts.
-    expect(untried.map((i) => i.slug).sort()).toEqual(['fresh', 'watch:x']);
+    // waiting for anything.
+    expect(untried.map((i) => i.slug).sort()).toEqual(['fresh']);
     expect(untried.some((i) => i.slug === 'dropped')).toBe(false);
     // The chip and the tile sit inches apart on the same screen, so they must
     // count the same population. Before this they did not.
@@ -594,7 +503,6 @@ describe('intake channels', () => {
         // Written before the field existed. This is 455 rows on production.
         item({ slug: 'old', title: 'Old' }),
       ],
-      capabilities: [],
       tools: [],
       attemptCeiling: CEILING,
     });
@@ -604,32 +512,12 @@ describe('intake channels', () => {
     expect(by.get('old')?.intake).toBe('unattributed');
   });
 
-  // A capability lead IS a channel; it did not arrive through one.
-  it('gives a capability lead no channel at all', () => {
-    const board = buildBoard({
-      backlog: [],
-      capabilities: [
-        {
-          slug: 'watch:x', kind: 'watch', title: 'A lead', need: 'n', status: 'proposed',
-          score: 0.6, lane: 'watch', outcome: null, outcomeRef: null, backlogSlug: null,
-          evidence: [], lastSeenAt: '2026-09-04T00:00:00.000Z',
-        },
-      ],
-      tools: [],
-      attemptCeiling: CEILING,
-    });
-    expect(board.items[0].intake).toBeNull();
-    // And it never matches a channel filter, rather than matching all of them.
-    expect(applyFilter(board.items, { ...EMPTY_FILTER, sources: ['appetite'] })).toHaveLength(0);
-  });
-
   it('filters the board by channel', () => {
     const board = buildBoard({
       backlog: [
         item({ slug: 'a', title: 'A', source: 'question' }),
         item({ slug: 'b', title: 'B', source: 'fault' }),
       ],
-      capabilities: [],
       tools: [],
       attemptCeiling: CEILING,
     });
@@ -638,7 +526,7 @@ describe('intake channels', () => {
   });
 
   it('names every channel in the closed set', () => {
-    for (const s of ['owner', 'question', 'fault', 'doctor', 'starved', 'health', 'appetite', 'engine', 'toolsmith', 'trace', 'unattributed'] as const) {
+    for (const s of ['owner', 'question', 'think', 'fault', 'doctor', 'starved', 'health', 'appetite', 'engine', 'toolsmith', 'trace', 'unattributed'] as const) {
       expect(SOURCE_LABEL[s].label.length).toBeGreaterThan(0);
       expect(SOURCE_LABEL[s].from.length).toBeGreaterThan(0);
     }
@@ -658,7 +546,6 @@ describe('summariseInflow', () => {
         // Settled inside the window — one drained against three in.
         item({ slug: 'd1', title: 'D1', source: 'question', status: 'abandoned', createdAt: daysAgo(80), updatedAt: daysAgo(1) }),
       ],
-      capabilities: [],
       tools: [],
       attemptCeiling: CEILING,
     });
@@ -675,16 +562,14 @@ describe('summariseInflow', () => {
 
   it('reports no ratio rather than dividing by nothing', () => {
     const board = buildBoard({
-      backlog: [item({ slug: 'a', title: 'A', source: 'question', createdAt: daysAgo(1) })],
-      capabilities: [], tools: [], attemptCeiling: CEILING,
+      backlog: [item({ slug: 'a', title: 'A', source: 'question', createdAt: daysAgo(1) })], tools: [], attemptCeiling: CEILING,
     });
     expect(summariseInflow(board.items, 30, NOW).ratio).toBeNull();
   });
 
   it('omits a channel nothing arrived through, rather than listing a zero', () => {
     const board = buildBoard({
-      backlog: [item({ slug: 'a', title: 'A', source: 'question' })],
-      capabilities: [], tools: [], attemptCeiling: CEILING,
+      backlog: [item({ slug: 'a', title: 'A', source: 'question' })], tools: [], attemptCeiling: CEILING,
     });
     const flow = summariseInflow(board.items, 30, NOW);
     expect(flow.channels.map((c) => c.source)).toEqual(['question']);
@@ -696,30 +581,13 @@ describe('summariseInflow', () => {
       backlog: [
         ...Array.from({ length: 20 }, (_, n) => item({ slug: `old${n}`, title: `Old ${n}`, createdAt: daysAgo(1) })),
         item({ slug: 'q', title: 'Q', source: 'question', createdAt: daysAgo(1) }),
-      ],
-      capabilities: [], tools: [], attemptCeiling: CEILING,
+      ], tools: [], attemptCeiling: CEILING,
     });
     const flow = summariseInflow(board.items, 30, NOW);
     expect(flow.channels[flow.channels.length - 1].source).toBe('unattributed');
     expect(flow.unattributed).toBe(20);
   });
 
-  it('leaves capability leads out of the flow arithmetic entirely', () => {
-    const board = buildBoard({
-      backlog: [item({ slug: 'a', title: 'A', source: 'question', createdAt: daysAgo(1) })],
-      capabilities: [
-        {
-          slug: 'watch:x', kind: 'watch', title: 'A lead', need: 'n', status: 'proposed',
-          score: 0.6, lane: 'watch', outcome: null, outcomeRef: null, backlogSlug: null,
-          evidence: [], lastSeenAt: '2026-09-04T00:00:00.000Z',
-        },
-      ],
-      tools: [], attemptCeiling: CEILING,
-    });
-    const flow = summariseInflow(board.items, 30, NOW);
-    expect(flow.intake).toBe(1);
-    expect(flow.standing).toBe(1);
-  });
 });
 
 // ── The purity this module depends on ─────────────────────────────────────
@@ -769,7 +637,7 @@ describe('inflow is computed over the whole population', () => {
       ),
       item({ slug: 'open1', title: 'Open one', source: 'question', createdAt: daysAgo(1) }),
     ];
-    const board = buildBoard({ backlog, capabilities: [], tools: [], attemptCeiling: CEILING, settledLimit: 2 });
+    const board = buildBoard({ backlog, tools: [], attemptCeiling: CEILING, settledLimit: 2 });
     // The board itself is trimmed…
     expect(board.items.filter((i) => i.backlogStatus === 'shipped')).toHaveLength(2);
     // …and the inflow is not.
@@ -780,8 +648,7 @@ describe('inflow is computed over the whole population', () => {
 
   it('is carried on the view rather than left to the component', () => {
     const board = buildBoard({
-      backlog: [item({ slug: 'a', title: 'A', source: 'fault' })],
-      capabilities: [], tools: [], attemptCeiling: CEILING,
+      backlog: [item({ slug: 'a', title: 'A', source: 'fault' })], tools: [], attemptCeiling: CEILING,
     });
     expect(board.inflow.channels.map((c) => c.source)).toEqual(['fault']);
   });
@@ -807,8 +674,7 @@ describe('drained counts what actually settled', () => {
           createdAt: daysAgo(20),
           updatedAt: daysAgo(1),
         }),
-      ],
-      capabilities: [], tools: [], attemptCeiling: CEILING,
+      ], tools: [], attemptCeiling: CEILING,
     });
     // It derives to `parked` on the board, which is right — it is out of tries.
     expect(board.items[0].stage).toBe('parked');
@@ -823,8 +689,7 @@ describe('drained counts what actually settled', () => {
     const board = buildBoard({
       backlog: [
         item({ slug: 'gone', title: 'Parked', source: 'question', status: 'abandoned', createdAt: daysAgo(20), updatedAt: daysAgo(1) }),
-      ],
-      capabilities: [], tools: [], attemptCeiling: CEILING,
+      ], tools: [], attemptCeiling: CEILING,
     });
     const flow = summariseInflow(board.items, 30, NOW);
     expect(flow.drained).toBe(1);
@@ -848,8 +713,7 @@ describe('coerceIntake', () => {
 
   it('is applied on read, so an off-vocabulary row still lands in a cell', () => {
     const board = buildBoard({
-      backlog: [item({ slug: 'a', title: 'A', source: 'renamed-channel' as never })],
-      capabilities: [], tools: [], attemptCeiling: CEILING,
+      backlog: [item({ slug: 'a', title: 'A', source: 'renamed-channel' as never })], tools: [], attemptCeiling: CEILING,
     });
     expect(board.items[0].intake).toBe('unattributed');
     const total = board.inflow.channels.reduce((n, c) => n + c.total, 0);
@@ -1158,18 +1022,6 @@ describe('summariseBurndown', () => {
     expect(view.dated).toEqual({ recorded: 1, inferred: 1 });
   });
 
-  it('leaves capability leads out — they were never in this queue', () => {
-    const view = summariseBurndown(
-      [
-        wi({ slug: 'q' }),
-        wi({ slug: 'lead', source: 'capability', backlogStatus: null, intake: null, actionable: false }),
-      ],
-      5,
-      NOW,
-    );
-    expect(view.openNow).toBe(1);
-  });
-
   it('drops a row whose creation date cannot be read rather than placing it', () => {
     const view = summariseBurndown([wi({ slug: 'bad', createdAt: 'not a date' }), wi({ slug: 'ok' })], 5, NOW);
     expect(view.openNow).toBe(1);
@@ -1197,7 +1049,6 @@ describe('buildBoard burndown', () => {
 
     const board = buildBoard({
       backlog: [...settled, ...open],
-      capabilities: [],
       tools: [],
       attemptCeiling: CEILING,
       settledLimit: 2,

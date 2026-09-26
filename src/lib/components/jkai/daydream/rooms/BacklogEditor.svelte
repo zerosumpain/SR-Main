@@ -123,9 +123,9 @@
   }
 
   const KIND_HELP: Readonly<Record<BacklogKind, string>> = {
-    tool: 'A small runtime capability the toolsmith can author and smoke-test.',
+    tool: 'A small capability built as repo code once you accept its brief.',
     feature: 'A repository change handed to the gated autonomous build engine.',
-    source: 'A data source to discover, register and sample.',
+    source: 'A data source to wire in as repo code once you accept its brief.',
     watch: 'A scheduled monitor that can notify when something changes.',
     engine: 'A change to Daydream itself; recorded here but never auto-built.',
   };
@@ -376,21 +376,6 @@
   {/snippet}
 
 {#snippet editorContent()}
-  {#if !actionable && item}
-    <div class="readonly">
-      <p class="eyebrow">Capability lead</p>
-      <h2>{item.title}</h2>
-      <p>{item.detail || 'No detail was recorded.'}</p>
-      {#if item.evidence.length}
-        <div class="context-card"><strong>Why it was raised</strong><p>{item.evidence.join(' · ')}</p></div>
-      {/if}
-      <p class="helper">
-        This lead is not a backlog record yet. Rule on it in
-        <a class="link" href="/jkai/daydreams/improvement#appetite">Improvement → Appetite</a>;
-        once accepted, it becomes editable and groomable here.
-      </p>
-    </div>
-  {:else}
     <nav class="journey" class:with-discuss={!creating} aria-label="Feature editor steps">
       <button type="button" class:active={step === 'brief'} onclick={() => go('brief')}>
         <span>1</span><b>Definition</b><small>Frame the need</small>
@@ -751,7 +736,7 @@
               <div><dt>Identifier</dt><dd><code>{item.slug}</code></dd></div>
               <div><dt>State</dt><dd>{STAGE_META[item.stage].label} · {STAGE_META[item.stage].question}</dd></div>
               <div><dt>Route</dt><dd>{kind} → {item.lane} lane</dd></div>
-              <div><dt>Arrived through</dt><dd>{item.intake ?? 'capability ledger'}</dd></div>
+              <div><dt>Arrived through</dt><dd>{item.intake ?? 'unattributed'}</dd></div>
               <div><dt>Attempts</dt><dd>{item.attempts} of {item.attemptCeiling}</dd></div>
               <div><dt>Last touched</dt><dd>{ago(item.updatedAt)}</dd></div>
             </dl>
@@ -778,8 +763,6 @@
         {/if}
       </section>
     {/if}
-  {/if}
-
 {/snippet}
 
   {#snippet foot()}
@@ -908,8 +891,6 @@
   .journey small { font-size: var(--fs-label-xs); color: var(--text-ghost); }
 
   .step-pane { min-height: 420px; }
-  .eyebrow { margin: 0 0 5px; color: var(--accent-ink); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: .14em; text-transform: uppercase; }
-  .readonly h2 { margin: 0; font-family: var(--font-display); font-size: clamp(1.55rem, 2.7vw, 2.35rem); line-height: 1.05; color: var(--text-primary); }
   /* No 860px column any more. The panel is set to the /health measure and the
      brief uses it, the same way the contract on step 4 does. */
   .brief-pane { display: flex; flex-direction: column; gap: clamp(18px, 2.2vw, 26px); }
@@ -1048,8 +1029,6 @@
   .clean-button:disabled { cursor: wait; opacity: .55; }
   .footer-actions { display: flex; width: 100%; align-items: center; gap: 8px; flex-wrap: wrap; }
   .footer-spacer { flex: 1; }
-  .readonly { max-width: 740px; margin: 10px auto; }
-  .readonly > p:not(.eyebrow) { color: var(--text-secondary); line-height: 1.6; }
   .context-card { margin: 18px 0; padding: 13px; border-left: 3px solid var(--accent); background: var(--bg-section); }
   .context-card p { margin: 5px 0 0; color: var(--text-secondary); }
   .helper { padding-top: 14px; border-top: 1px solid var(--line-hair); }

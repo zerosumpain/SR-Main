@@ -41,7 +41,7 @@ export type { BuildLanes, LaneResult } from '$lib/selfimprove/types';
  */
 export function liveBuildLanes(): BuildLanes {
   return {
-    async changeRequest({ title, request }) {
+    async changeRequest({ title, request, backlogSlug }) {
       const { createChangeRequest } = await import('$lib/jkai/change-request');
       const res = await createChangeRequest({
         title: title.slice(0, 120),
@@ -50,10 +50,13 @@ export function liveBuildLanes(): BuildLanes {
         // preserves the requester's words.
         request,
         labels: ['self-improvement'],
+        // The backlog item's identity, so a second ask for it finds this build.
+        backlogSlug,
       });
       return {
         ref: `build:${res.buildId}`,
-        label: `issue #${res.issueNumber} → build ${res.buildId.slice(0, 8)}`,
+        label: `${res.reused ? 'existing ' : ''}issue #${res.issueNumber} → build ${res.buildId.slice(0, 8)}`,
+        ...(res.reused ? { reused: true } : {}),
       };
     },
 

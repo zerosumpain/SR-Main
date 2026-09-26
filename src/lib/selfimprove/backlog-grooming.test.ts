@@ -7,7 +7,7 @@ const row = (slug: string, title: string, extra: Partial<BacklogItemData> = {}):
   slug, title, detail: title, kind: 'feature', status: 'open', priority: 3, attempts: 0,
   createdAt: '2026-09-01', updatedAt: '2026-09-01', ...extra,
 });
-const board = (rows: BacklogItemData[]) => buildBoard({ backlog: rows, capabilities: [], tools: [], attemptCeiling: 4, settledLimit: null }).items;
+const board = (rows: BacklogItemData[]) => buildBoard({ backlog: rows, tools: [], attemptCeiling: 4, settledLimit: null }).items;
 describe('automatic grooming suggestions', () => {
   it('suggests a stable surviving request instead of circular merges', () => {
     const items = board(['a', 'b', 'c'].map((id) => row(id, 'Apple calendar event reminders')));

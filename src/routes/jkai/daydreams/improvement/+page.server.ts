@@ -6,12 +6,15 @@ import { errMsg } from '$lib/daydream/types';
 import { loadLoopHealth, loopVerdict } from '$lib/daydream/loop-health';
 import { MIN_PAIRS } from '$lib/daydream/stats/tests';
 import { loadImprovementDashboard } from '$lib/dashboard/improvement.server';
-import { EMPTY_APPETITE, toLead, type AppetiteView } from '$lib/daydream/appetite/view';
 import { loadOvernight } from '$lib/daydream/rooms/overnight.server';
 
-/** The loop, end to end: faults raised → ideas → tools built → thoughts. */
+/** The loop, end to end: ideas in → waiting for a tap → queued → built → notes. */
 export interface LoopStory {
-  faults: { open: number; closed: number; total: number; byWants: Record<string, number> };
+  /** Backlog items created in the last 7 days, by the channel they came in on. */
+  intake: { week: number; byChannel: Record<string, number> };
+  /** Open repo-build and watch items with no accepted brief — the owner's tap
+   *  is what lets the nightly run spend on them. */
+  awaitingTap: number;
   backlog: { open: number; engine: number; shipped: number };
   toolsBuilt: number;
   thoughts7d: number;
@@ -28,24 +31,28 @@ async function countThoughts7d(): Promise<number> {
 
 async function loadLoopStory(loop: Awaited<ReturnType<typeof loadLoopHealth>>): Promise<LoopStory> {
   const empty: LoopStory = {
-    faults: { open: 0, closed: 0, total: 0, byWants: {} },
+    intake: { week: 0, byChannel: {} },
+    awaitingTap: 0,
     backlog: { open: 0, engine: 0, shipped: 0 },
     toolsBuilt: loop.tools.shippedRecently,
     thoughts7d: 0,
     error: null,
   };
   try {
-    const [{ faultCounts }, { listBacklog }] = await Promise.all([
-      import('$lib/daydream/faults'),
-      import('$lib/selfimprove/backlog'),
-    ]);
-    const [faults, backlog, thoughts7d] = await Promise.all([faultCounts(), listBacklog(), countThoughts7d()]);
+    const { listBacklog, isOwnerAccepted } = await import('$lib/selfimprove/backlog');
+    const [backlog, thoughts7d] = await Promise.all([listBacklog(undefined, { strict: true }), countThoughts7d()]);
+    const weekAgo = Date.now() - 7 * 86_400_000;
+    const week = backlog.filter((b) => Date.parse(b.createdAt ?? '') >= weekAgo);
+    const byChannel: Record<string, number> = {};
+    for (const b of week) byChannel[b.source ?? 'unattributed'] = (byChannel[b.source ?? 'unattributed'] ?? 0) + 1;
+    const open = backlog.filter((b) => b.status === 'open' && !b.removedAt);
     return {
       ...empty,
-      faults,
+      intake: { week: week.length, byChannel },
+      awaitingTap: open.filter((b) => b.kind !== 'engine' && !b.buildRef && !isOwnerAccepted(b)).length,
       backlog: {
-        open: backlog.filter((b) => b.status === 'open').length,
-        engine: backlog.filter((b) => b.status === 'open' && b.kind === 'engine').length,
+        open: open.length,
+        engine: open.filter((b) => b.kind === 'engine').length,
         shipped: backlog.filter((b) => b.status === 'shipped').length,
       },
       thoughts7d,
@@ -53,32 +60,6 @@ async function loadLoopStory(loop: Awaited<ReturnType<typeof loadLoopHealth>>): 
   } catch (err) {
     console.error('[daydream] loop story failed:', errMsg(err));
     return { ...empty, error: errMsg(err) };
-  }
-}
-
-/**
- * The appetite ledger, for the room.
- *
- * Loaded here rather than in a `$lib` view module because the row shape comes
- * from the database and the card shape may not: a `.svelte` file importing
- * anything that reaches `$lib/db` fails the build. `toLead` is the pure half
- * and lives next to the vocabulary it uses.
- */
-async function loadAppetite(): Promise<AppetiteView> {
-  try {
-    const [{ listCapabilities, capabilityCounts }] = await Promise.all([import('$lib/daydream/appetite/store')]);
-    const [rows, counts] = await Promise.all([listCapabilities({ limit: 40 }), capabilityCounts()]);
-    return {
-      leads: rows.map(toLead),
-      counts: { total: counts.total, byStatus: counts.byStatus, byKind: counts.byKind },
-      newDataOpen: rows.filter(
-        (r) => (r.status === 'proposed' || r.status === 'queued') && (r.kind === 'data_source' || r.kind === 'news_source' || r.kind === 'watch'),
-      ).length,
-      error: null,
-    };
-  } catch (err) {
-    console.error('[daydream] appetite load failed:', errMsg(err));
-    return { ...EMPTY_APPETITE, error: errMsg(err) };
   }
 }
 
@@ -90,12 +71,11 @@ export const load: PageServerLoad = async () => {
       return null;
     }),
   ]);
-  const [story, appetite, night] = await Promise.all([
+  const [story, night] = await Promise.all([
     loadLoopStory(loop),
-    loadAppetite(),
     // What actually ran, from the pulse ledger. Its own catch, because a night
     // that cannot be read must not take the whole room down with it.
     loadOvernight(),
   ]);
-  return { loop, loopVerdict: loopVerdict(loop), improvement, story, appetite, night };
+  return { loop, loopVerdict: loopVerdict(loop), improvement, story, night };
 };

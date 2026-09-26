@@ -10,54 +10,41 @@
   import RollupGrid from '$lib/components/jkai/daydream/hub/RollupGrid.svelte';
   import type { RollupCell } from '$lib/components/jkai/daydream/hub/types';
   import ImprovementPanel from '$lib/components/jkai/daydream/ImprovementPanel.svelte';
-  import AppetiteBoard from '$lib/components/jkai/daydream/rooms/AppetiteBoard.svelte';
-  import { postThought } from '$lib/daydream/feed-client';
-  import { invalidateAll } from '$app/navigation';
 
   let { data }: { data: PageData } = $props();
 
-  let busy = $state<string | null>(null);
-  let actionError = $state<string | null>(null);
-
-  async function act(body: Record<string, unknown>, key: string) {
-    busy = key;
-    actionError = null;
-    const r = await postThought(body);
-    if (!r.ok) actionError = r.error ?? 'that did not work';
-    // Refresh either way. A bulk edit can PARTLY succeed — twenty items parked
-    // with one refused because it had already shipped — and skipping the reload
-    // on failure would leave the board showing the nineteen as unchanged.
-    await invalidateAll();
-    busy = null;
-    return r.ok;
-  }
-
-  // The loop as six even cells, in the order the work flows. A zero is a
+  // The loop as five even cells, in the order the work flows. A zero is a
   // fact and stays quiet; the first non-zero stage after a zero is where the
   // loop is currently stuck.
   const story = $derived(data.story);
-  // Five stages in the order the work flows. Appetite leads it because that
-  // is the reordering: until 2026-09-04 every driver here was a repair of
-  // something that already existed, and the first cell was a fault.
+  // Since D3 (2026-09-26) every
+  // producer — the think loop's build notes, the workflow doctor, the nightly
+  // question-miner, the owner — writes to ONE backlog, deduped at intake, and
+  // nothing costly is built until the owner accepts an item's brief.
+  const channelLine = $derived(
+    Object.entries(story.intake.byChannel)
+      .sort((a, b) => b[1] - a[1])
+      .map(([c, n]) => `${n} ${c}`)
+      .join(' · '),
+  );
   const cells = $derived<RollupCell[]>([
     {
-      key: 'appetite',
+      key: 'intake',
       mark: '1',
-      label: 'Capabilities wanted',
-      value: String(data.appetite.counts.byStatus.proposed ?? 0),
-      suffix: data.appetite.counts.total ? `/${data.appetite.counts.total}` : null,
-      sub: `${data.appetite.newDataOpen} of them bring new data in`,
-      tone: (data.appetite.counts.byStatus.proposed ?? 0) ? 'action' : 'quiet',
-      href: '#appetite',
+      label: 'Ideas in, 7 days',
+      value: String(story.intake.week),
+      sub: channelLine || 'nothing new queued this week',
+      tone: story.intake.week ? 'steady' : 'quiet',
+      href: '/jkai/daydreams/backlog',
     },
     {
-      key: 'faults',
+      key: 'tap',
       mark: '2',
-      label: 'Faults raised',
-      value: String(story.faults.open),
-      suffix: story.faults.total ? `/${story.faults.total}` : null,
-      sub: Object.entries(story.faults.byWants).map(([w, n]) => `${n} ${w.replace('_', ' ')}`).join(' · ') || 'nothing daydream could not do',
-      tone: story.faults.open ? 'action' : 'quiet',
+      label: 'Waiting for your tap',
+      value: String(story.awaitingTap),
+      sub: 'a build or watch starts only once you accept its brief',
+      tone: story.awaitingTap ? 'action' : 'quiet',
+      href: '/jkai/daydreams/backlog',
     },
     {
       key: 'ideas',
@@ -121,24 +108,13 @@
   </div>
 </section>
 
-<section class="band improvement-room" id="appetite">
-  <div class="inner">
-    <SectionHead
-      kicker="C / Appetite"
-      title={['What it would like', 'to be able to do']}
-      strap="Each evening the engine reads the types of question you have been asking, an inventory of every source, API, toolset, watch, feed and schedule the site can already reach, and the faults where it came up short — then names capabilities the site does not have. Every proposal cites the evidence that produced it or it is dropped unread. Accepting one queues it; it does not spend anything until a build slot opens."
-    />
-    {#if actionError}<p class="err">{actionError}</p>{/if}
-    <AppetiteBoard view={data.appetite} {busy} {act} />
-  </div>
-</section>
 
 <section class="band improvement-room">
   <div class="inner">
     <SectionHead
-      kicker="D / The loop, end to end"
-      title={['What it could not do,', 'and what that built']}
-      strap="Five stages in the order the work flows: a capability the appetite scan wants, a fault daydreaming raises, an idea self-improve queues, a tool it ships, a note the think loop writes. The first zero after a non-zero is where the loop is stuck."
+      kicker="C / The loop, end to end"
+      title={['What it was asked for,', 'and what that built']}
+      strap="Five stages in the order the work flows: ideas arriving on the one backlog (think-loop build notes, doctor escalations, questions you asked, your own entries), the ones waiting for your tap, the queue, the tools it keeps running, the notes the think loop writes. The first zero after a non-zero is where the loop is stuck."
     />
     {#if story.error}<p class="err">{story.error}</p>{/if}
     <RollupGrid {cells} min={190} />

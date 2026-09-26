@@ -61,11 +61,14 @@ export const SETTINGS_ENABLED_KEY = 'selfimprove.enabled';
  *
  * Same semantics and the same reason as `workflowdoctor.autoapply` — an
  * unattended path that spends money or writes to a live schedule must never
- * enable itself by default. With this off the engine still finds capabilities,
- * queues them, registers data sources and ships runtime tools (both of which
- * already have live verification gates and cost pennies); what it will not do
- * is dispatch a repo build or create a watch until the owner has accepted the
- * lead on the Improvement room.
+ * enable itself by default. With this off the engine still queues ideas and
+ * registers data sources; what it will not do is dispatch a repo build or
+ * create a watch until the owner has accepted the item's brief in the backlog
+ * room (`isOwnerAccepted`).
+ *
+ * The key keeps its `daydream.appetite.` name although the appetite ledger was
+ * retired (D3, 2026-09-26): it is a stored setting, and renaming it would
+ * silently turn an explicit `true` back into the default off.
  *
  * With it on, `WORK_CAPS.maxChangeRequests` and `maxWatches` are the ceiling:
  * one of each a night.
@@ -511,6 +514,19 @@ export interface BacklogNote {
 import type { IdeaSource } from './board';
 export type { IdeaSource } from './board';
 
+/** One producer's request for a backlog idea. See `BacklogItemData.citations`. */
+export interface BacklogCitation {
+  source: IdeaSource;
+  /** What asked, when it has an identity: `thought:<id>`, `doctor:<finding>`. */
+  ref?: string;
+  /** The producer's own wording, which may differ from the item's title. */
+  title?: string;
+  /** First and latest arrival, and how many times it has arrived. */
+  firstAt: string;
+  lastAt: string;
+  count: number;
+}
+
 /** Shape of an `improvement_backlog` record's `data`. */
 export interface BacklogItemData {
   /** Retained requirements from consolidated stories, appended to every build brief. */
@@ -546,12 +562,25 @@ export interface BacklogItemData {
   prUrl?: string;
   /** Dispatch receipt, not evidence of delivery. Prevents duplicate builds. */
   buildRef?: string;
-  /** The `daydream_capabilities` row this came from, so the lane can report
-   *  back what the idea became. Absent on fault- and question-mined ideas. */
+  /** The `daydream_capabilities` row this came from. Historical: the appetite
+   *  ledger was retired by D3 (2026-09-26) and nothing writes this any more,
+   *  but rows queued before then still carry it and the board groups by it. */
   capabilitySlug?: string;
-  /** Which channel it arrived through. Absent on rows written before the
+  /** Which channel it FIRST arrived through. Absent on rows written before the
    *  field existed, which read `unattributed` and are never guessed at. */
   source?: IdeaSource;
+  /**
+   * Every producer that has asked for this idea, including the first.
+   *
+   * D3 made the backlog the single intake queue, so the same idea now arrives
+   * from several doors — a think-loop build note, a workflow-doctor escalation,
+   * the nightly question-miner. A near-identical arrival is MERGED here rather
+   * than queued as a second item (`intakeIdeas`), which keeps one record, one
+   * attempt history and at most one build per idea while still saying who
+   * wanted it and how often. Additive JSON; no migration. Absent on rows
+   * written before the field existed.
+   */
+  citations?: BacklogCitation[];
 
   /** Accepted, structured build brief. Additive JSON; no datastore migration. */
   grooming?: BacklogGroomingData;
@@ -685,17 +714,20 @@ export interface EpicData {
  * hand the run fakes and assert what it dispatched without a GitHub token.
  */
 export interface LaneResult {
-  /** Stable reference for the appetite ledger — `build:<id>` or
-   *  `monitor:<workflowId>`. */
+  /** Stable reference to what the lane made — `build:<id>` or
+   *  `monitor:<workflowId>`. Stored on the item as `buildRef`. */
   ref: string;
   /** What to show the owner. */
   label: string;
+  /** The lane handed back work that already existed for this idea (an open
+   *  change request) instead of starting more. Nothing new was spent. */
+  reused?: boolean;
 }
 
 export interface BuildLanes {
   /** Open an issue and start a gated repo build. Absent when GitHub is not
    *  configured; the propose phase then falls back to a draft PR. */
-  changeRequest?: (input: { title: string; request: string }) => Promise<LaneResult>;
+  changeRequest?: (input: { title: string; request: string; backlogSlug?: string }) => Promise<LaneResult>;
   /** Turn a description into a recurring, scheduled monitor. */
   createWatch?: (input: { description: string }) => Promise<LaneResult>;
 }

@@ -7,7 +7,6 @@ import { homeObserve } from './activities/home-observe';
 import { householdLive } from './activities/household-live';
 import { daydreamFeatures } from './activities/daydream-features';
 import { homePlaces } from './activities/home-places';
-import { daydreamAppetite } from './activities/daydream-appetite';
 import { daydreamBank } from './activities/daydream-bank';
 import { daydreamDoctor } from './activities/daydream-doctor';
 import { daydreamNotebook } from './activities/daydream-notebook';
@@ -33,7 +32,6 @@ const handlers: ActivityHandler[] = [
   householdLive,
   daydreamFeatures,
   homePlaces,
-  daydreamAppetite,
   daydreamBank,
   daydreamDoctor,
   daydreamNotebook,

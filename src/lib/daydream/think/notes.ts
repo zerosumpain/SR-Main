@@ -183,6 +183,43 @@ export function isForPhone(row: Pick<ThinkRow, 'kind' | 'status' | 'suppressedRe
   return isOnFeed(row) && row.feedback !== 'never_kind' && !muted.has(row.kind);
 }
 
+// ── Build notes → the improvement backlog ──────────────────────────────────
+
+/** A think note proposing something to build, as the plain idea the
+ *  improvement backlog takes. Declared here, structurally, because
+ *  `$lib/selfimprove` imports `$lib/daydream` and the reverse import would
+ *  close a module cycle — the heartbeat activity does the wiring. */
+export interface BuildNoteIdea {
+  title: string;
+  detail: string;
+  /** `thought:<id>` — the citation the backlog item carries back to the note. */
+  ref: string;
+}
+
+/**
+ * The backlog idea a think note stands for, or null. PURE.
+ *
+ * Only `think_build` notes, and only ones the feed shows: a note held back
+ * because it echoed a refuted claim, or one the owner turned down, is not a
+ * proposal anyone should build. Before D3 (spec 2026-09-25) a build note just
+ * sat on the feed and nothing called the backlog; now each one becomes a
+ * backlog item citing the note (or a citation on the item it restates).
+ */
+export function buildIdeaFromNote(
+  row: Pick<ThinkRow, 'id' | 'kind' | 'title' | 'narrative' | 'explanation' | 'status' | 'suppressedReason'>,
+): BuildNoteIdea | null {
+  if (row.kind !== 'think_build') return null;
+  if (!isOnFeed(row) || row.status === 'dismissed') return null;
+  const title = (row.title ?? '').trim();
+  if (!title) return null;
+  const body = (row.narrative ?? row.explanation ?? '').trim();
+  return {
+    title: title.slice(0, 200),
+    detail: `${body}\n\nProposed by the daydream think loop: ${noteHref(row.id)}`.trim().slice(0, 2000),
+    ref: `thought:${row.id}`,
+  };
+}
+
 /** How long a note stays on the Today card. */
 export const TODAY_WINDOW_HOURS = 48;
 /** How many notes the Today card carries. */

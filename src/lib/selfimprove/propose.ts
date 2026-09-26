@@ -34,23 +34,36 @@
 // ── Who is allowed to spend ─────────────────────────────────────────────────
 //
 // A change-request build can cost £2, roughly ten times a whole night here, so
-// the gate is explicit (owner decision, 2026-09-04):
+// the gate is explicit (owner decision, 2026-09-04, re-pointed by D3):
 //
-//   * an item whose appetite lead the owner ACCEPTED on the Improvement room
-//     is dispatched — that acceptance is the tap; or
+//   * an item whose brief the owner ACCEPTED in the backlog room is dispatched
+//     — saving the accepted brief is the tap (`isOwnerAccepted`); or
 //   * `daydream.appetite.autobuild` is explicitly true, in which case the
 //     engine may dispatch on its own, one change request and one watch a night.
 //
-// Everything else is queued and reported, exactly as before.
+// Only tapped items are PICKED. Picking first and checking the tap second let
+// the highest-priority untapped items hold every slot, so a tapped item lower
+// down was never reached. Everything else waits, and the run reports how many.
+//
+// ── One intake, one build per idea ──────────────────────────────────────────
+//
+// Every producer now writes to the backlog (D3), so this phase is the only
+// thing that turns an idea into a repo build. The backlog slug travels with
+// the ask, and `createChangeRequest` hands back an open build for the same
+// slug or title rather than opening a second issue and a second £2 build.
 
 import { errMsg, WORK_CAPS, type BuildLanes, type RunAction } from './types';
 import type { Budget } from './run';
 import { buildContextPack, renderContext } from './context';
-import { listBacklog, markAttempt, pickWork } from './backlog';
+import { isOwnerAccepted, listBacklog, markAttempt, pickWork, recordBuildRef } from './backlog';
 import { openDraftPr, pathAllowed, prConfigured, type FileChange } from '$lib/github/pr';
 import type { BacklogItemData } from './types';
-import { markCapability, ownerAcceptedCapabilities } from '$lib/daydream/appetite/intake';
 import { renderBacklogBrief } from './grooming';
+
+/** The kinds the repo builder takes. `tool` and `source` joined `feature` when
+ *  the toolsmith was retired (D3): a tool is now repo code, built on a branch
+ *  behind the gate, not authored unattended into the runtime. */
+export const REPO_BUILD_KINDS: ReadonlyArray<BacklogItemData['kind']> = ['feature', 'tool', 'source'];
 
 interface ProposedChange {
   title: string;
@@ -164,9 +177,7 @@ export function changeRequestBody(item: BacklogItemData, runId: string): string 
     '',
     '## Where this came from',
     '',
-    item.capabilitySlug
-      ? `The daydream appetite ledger (\`${item.capabilitySlug}\`) — the engine proposed this capability against an inventory of what the site can already reach, and it was accepted.`
-      : `The self-improvement backlog (\`${item.slug}\`), from the nightly analysis of questions asked and gaps the engine hit.`,
+    `The improvement backlog (\`${item.slug}\`)${item.source ? `, first raised through the \`${item.source}\` channel` : ''}${(item.citations?.length ?? 0) > 1 ? ` and asked for by ${item.citations!.length} producers since` : ''}. The owner accepted the brief above.`,
     `Dispatched by self-improvement run \`${runId}\`.`,
     '',
     '## What is being asked for',
@@ -182,7 +193,8 @@ export function changeRequestBody(item: BacklogItemData, runId: string): string 
 
 export interface ProposeOpts {
   lanes?: BuildLanes;
-  /** `daydream.appetite.autobuild` — may the engine dispatch without a tap? */
+  /** `daydream.appetite.autobuild` — may the engine dispatch without a tap?
+   *  (The key predates D3; see `SETTINGS_AUTOBUILD_KEY`.) */
   autobuild?: boolean;
 }
 
@@ -198,36 +210,31 @@ export async function proposeFeatures(
 
   const backlog = await listBacklog();
 
-  // Which items the owner has explicitly said yes to. An empty set is the
-  // normal case and simply means nothing is dispatched unattended.
-  let accepted = new Set<string>();
-  try {
-    accepted = await ownerAcceptedCapabilities();
-  } catch (err) {
-    console.error('[selfimprove] owner-accepted leads unread:', errMsg(err));
-  }
-  const tapped = (item: BacklogItemData) => !!item.capabilitySlug && accepted.has(item.capabilitySlug);
+  // Which items may spend. The owner's accepted brief is the tap; autobuild
+  // is the explicit, default-off exception.
+  const mayDispatch = (item: BacklogItemData) => autobuild || isOwnerAccepted(item);
+  const tapped = backlog.filter(mayDispatch);
+  const reportWaiting = (kinds: ReadonlyArray<BacklogItemData['kind']>, what: string) => {
+    const waiting = pickWork(backlog.filter((i) => !mayDispatch(i)), kinds, Number.MAX_SAFE_INTEGER).length;
+    if (waiting) {
+      actions.push({
+        kind: 'proposal',
+        detail: `${waiting} ${what} waiting for a tap — accept its brief in the backlog room (or set daydream.appetite.autobuild)`,
+      });
+    }
+  };
 
   // ── Watches ───────────────────────────────────────────────────────────────
-  const watchWork = pickWork(backlog, 'watch', WORK_CAPS.maxWatches);
+  const watchWork = pickWork(tapped, 'watch', WORK_CAPS.maxWatches);
+  reportWaiting(['watch'], 'watch(es)');
   for (const item of watchWork) {
     if (!lanes.createWatch) {
       actions.push({ kind: 'proposal', detail: `${item.slug}: no watch lane on this host` });
       continue;
     }
-    if (!tapped(item) && !autobuild) {
-      actions.push({
-        kind: 'proposal',
-        detail: `${item.slug}: waiting for a tap — a watch fires on a schedule and can notify, so it is not dispatched unattended (set daydream.appetite.autobuild to change that)`,
-      });
-      continue;
-    }
     try {
       const res = await lanes.createWatch({ description: renderBacklogBrief(item).slice(0, 1000) });
       await markAttempt(item, { status: 'shipped', runId });
-      if (item.capabilitySlug) {
-        await markCapability(item.capabilitySlug, 'shipped', `Created as a ${res.label}.`, res.ref);
-      }
       actions.push({
         kind: 'watch_created',
         detail: `${res.label} — for "${item.title}"`,
@@ -247,7 +254,8 @@ export async function proposeFeatures(
   }
 
   // ── Repo changes ──────────────────────────────────────────────────────────
-  const featureWork = pickWork(backlog, 'feature', Math.max(WORK_CAPS.maxPullRequests, WORK_CAPS.maxChangeRequests));
+  reportWaiting(REPO_BUILD_KINDS, 'repo build(s)');
+  const featureWork = pickWork(tapped, REPO_BUILD_KINDS, Math.max(WORK_CAPS.maxPullRequests, WORK_CAPS.maxChangeRequests));
   if (featureWork.length === 0) return actions;
 
   let dispatched = 0;
@@ -259,23 +267,21 @@ export async function proposeFeatures(
     // The build lane first: it is the only one of the two that produces code
     // anybody has run.
     if (lanes.changeRequest && dispatched < WORK_CAPS.maxChangeRequests) {
-      if (!tapped(item) && !autobuild) {
-        actions.push({
-          kind: 'proposal',
-          detail: `${item.slug}: waiting for a tap — a repo build costs up to £2 and opens a PR to review (set daydream.appetite.autobuild to change that)`,
-        });
-        continue;
-      }
       try {
         const res = await lanes.changeRequest({
           title: item.title,
           request: changeRequestBody(item, runId),
+          backlogSlug: item.slug,
         });
+        if (res.reused) {
+          // The same idea already has an open build: point at it, spend
+          // nothing, and leave tonight's slot for the next tapped item.
+          await recordBuildRef(item, res.ref, runId);
+          actions.push({ kind: 'proposal', detail: `${item.slug}: already building — ${res.label}` });
+          continue;
+        }
         dispatched++;
         await markAttempt(item, { status: 'open', runId, buildRef: res.ref });
-        if (item.capabilitySlug) {
-          await markCapability(item.capabilitySlug, 'building', `Handed to the builder — ${res.label}.`, res.ref);
-        }
         actions.push({
           kind: 'change_requested',
           detail: `${res.label} — "${item.title}"`,
@@ -294,6 +300,8 @@ export async function proposeFeatures(
       }
       continue;
     }
+    // The nightly cap is spent; the rest wait for tomorrow.
+    if (lanes.changeRequest) break;
 
     // ── Fallback: the blind draft PR ────────────────────────────────────────
     //
@@ -327,9 +335,6 @@ export async function proposeFeatures(
       });
 
       await markAttempt(item, { status: 'shipped', runId, prUrl: pr.url });
-      if (item.capabilitySlug) {
-        await markCapability(item.capabilitySlug, 'building', `Draft PR #${pr.number} opened (unrun).`, pr.url);
-      }
       actions.push({
         kind: 'pr_opened',
         detail: `#${pr.number} ${change.title} — ${pr.url} (${change.files.length} file(s), draft)`,

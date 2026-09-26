@@ -22,7 +22,7 @@ export interface DoctorRollup {
   fixedLastNight: number;
   /** Schedules the breaker stopped, last night. */
   quarantinedLastNight: number;
-  /** Findings handed to the fault ledger for a code change, last night. */
+  /** Findings queued on the backlog for a code change, last night. */
   escalatedLastNight: number;
   lastRunAt: string | null;
   lastRunStatus: string | null;
