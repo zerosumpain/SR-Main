@@ -7364,7 +7364,8 @@ export const policyArtefacts = pgTable('policy_artefacts', {
  * Provenance links between artefacts of one analysis.
  *
  * THERE ARE NO COMPOSITE FOREIGN KEYS HERE, AND THAT IS DELIBERATE — see
- * `docs/superpowers/specs/policy-analysis-personas-and-simulation.md`.
+ * `policy-analysis-personas-and-simulation.md` in the Drive archive linked by
+ * `docs/README.md`.
  *
  * `policy_provenance_from_fk` and `_to_fk` used to point (analysis_id, from_id)
  * and (analysis_id, to_id) at `policy_artefacts`' composite primary key. On

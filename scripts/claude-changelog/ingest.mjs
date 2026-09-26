@@ -2,7 +2,8 @@
 //
 // Scans local Claude Code transcripts, parses the changed ones, and POSTs the
 // payloads to the VPS ingest endpoint (homeserv cannot write prod DB directly —
-// see docs/superpowers/specs/claude-code-changelog.md). A small state file skips
+// see claude-code-changelog.md in the Drive archive linked by docs/README.md).
+// A small state file skips
 // unchanged transcripts so we don't re-parse ~287 MB every run.
 //
 // Usage:

@@ -1,42 +1,34 @@
-# sv
+# Strange Ramblings — SR-Main
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+The SvelteKit application behind [Strange Ramblings](https://strangeramblings.com).
+Main owns the site shell, authentication, shared schema, and the application
+surfaces that have not moved to an independently released repository.
 
-## Creating a project
+## Working here
 
-If you're seeing this, you've probably already done this step. Congrats!
-
-```sh
-# create a new project
-npx sv create my-app
-```
-
-To recreate this project with the same configuration:
+Use an isolated local database and local credentials. The cumulative development
+stack and its endpoints are documented in `/home/john/docker/local/README.md`.
 
 ```sh
-# recreate this project
-npx sv@0.12.8 create --template minimal --types ts --no-install strange_rambling_svelte
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
+npm ci
 npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+npm run validate:change
 ```
 
-## Building
+`validate:change` chooses the appropriate checks for a change. See the
+[deployment runbook](docs/deployment-runbook.md) for release checks and
+`npm run deploy:status` for the revision currently served by the site.
 
-To create a production version of your app:
+## Documentation and ownership
 
-```sh
-npm run build
-```
+- [Current documentation](docs/README.md): operational guides, active contracts,
+  and the historical archive in the site's owner Drive.
+- [Extracted application ownership](docs/extracted-app-ownership.md): schema and
+  cross-repository responsibilities.
+- [Agent guidance](CLAUDE.md): development constraints and domain conventions.
+- [Field Study System](field-study-system/INSTRUCTIONS.md): the page-authoring
+  procedure for research projects.
 
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+Before changing an extracted feature, consult `docs/module-ownership.json` and
+SR-Infra's application registry. Removing Main's old routes does not remove
+shared schema obligations. Releases use the existing CI process.

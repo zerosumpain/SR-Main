@@ -1,6 +1,7 @@
 // Single source of truth for the admin information architecture.
 // The top-nav renders ADMIN_SECTIONS; each section's sub-nav renders its items.
-// Route moves (see docs/plans/admin-consolidation.md) mean old /admin/* URLs are
+// Route moves (admin-consolidation.md in the archive linked by docs/README.md)
+// mean old /admin/* URLs are
 // 308-redirected to their new homes via ADMIN_ROUTE_REDIRECTS (used in hooks.server.ts).
 
 export type AdminNavItem = {

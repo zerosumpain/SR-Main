@@ -9,7 +9,8 @@ import { resolveCapabilities } from '$lib/jkai/grounding/capabilities';
 //
 // Why a meta-tool: with 130+ tools the MCP manifest pushes ~28k tokens into
 // every agent prompt before the user message is even seen. Phase 3 of the
-// prefill-reduction plan (docs/plans/2026-05-27-jkai-prefill-reduction.md).
+// prefill-reduction plan (2026-05-27-jkai-prefill-reduction.md in the Drive
+// archive linked from docs/README.md).
 
 // Loaded on demand: importing the registry statically pulls all 52 tool
 // modules, and JKAI_EXTENDED_TOOL below is a plain definition that the chat
