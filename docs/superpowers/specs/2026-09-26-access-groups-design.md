@@ -62,7 +62,7 @@ This spec is in a public repo: it names no person's email, address or number.
 | `home` | the `/home` dashboard, devices, echoes, voice (read) | = self (none of it is per-person) | = self (no writes exist) |
 | `jkai.chat` | own threads, restricted tools | + read everyone's threads | + manage them |
 | `jkai.notes` | own notebook | + read everyone's | + edit everyone's |
-| `jkai.intel` | own space + household (today's member) | + every member's space | = all (intel's writes are owner machinery) |
+| `jkai.intel` | own space + household (today's member) | + read every member's space | + triage everyone's held mail |
 | `jkai.knowledge` | recall over what they may read | follows the other grants | = all |
 
 Plus two special permissions with no levels: **`family:circle`** and **`family:admin`**.
@@ -172,14 +172,17 @@ open area by link.
 
 | Phase | Ships | Opens |
 |---|---|---|
-| **P1** | catalogue, `access_group`, `groups`/`grants` columns, `viewerOf` grants, `grantMayReach`, `scopeFor` seam, intel `all`, `/admin/access` UI, member → `jkai.intel:self` | intel (as today, plus `all`) |
-| **P2** | household `household` role → `family:circle` in the catalogue; Family Admin: guardian→child link, own + kids' journeys/history; circle map of live positions | `/home/people` |
+| **P1** | catalogue, `access_group`, `groups`/`grants` columns, `viewerOf` grants, catalogue gate in the hook, intel `all`/`admin`, `/admin/access` UI, member → `jkai.intel:self`, household role → `family:circle` | intel (as today, plus `all`), `/home/people` for Family Circle |
+| **P2** | Family Admin: guardian→child link, own + kids' journeys/history; circle map of live positions | `/home/people/[subject]` for wards, the map |
 | **P3** | News + Research: `research_session.principal_id`, both research route trees scoped, run cap; news reads keyed on the viewer | `/news`, `/research` |
 | **P4** | Home (dashboard minus people unless circle), jkai notes + knowledge scoping | `/home`, `/jkai/notes`, recall |
 | **P5** | jkai chat: `principal_id` on threads, a fixed safe tool list, member scope in context | `/jkai` chat |
 | **P6** | Drive: `workflow_files.principal_id`, SR-Drive's hook reads grants from the shared DB, listings filtered; nav kit to peers | `/drive` |
 
 Each phase is its own PR, merged and verified live before the next begins.
+
+The `scopeFor` seam (§4) ships with P3, its first consumer: shipped alone in P1 it would be
+code with no caller.
 
 ## Area notes (from the code, 2026-09-26)
 
@@ -287,6 +290,11 @@ Super-Admin-only jkai features; per-user model choice; a cash budget per user.
 | Areas with no per-person data (news, home) | `self` = `all` = `admin` in effect | Nothing of anyone else's to read and nothing to administer; the levels stay for a later feature | Yes |
 | Daydreams in the jkai subset | Left out | Being cut from 67k to ~10k lines; wiring grants into code about to be deleted is waste | Yes |
 | £1/day spend cap | Replaced by a run cap (depth ≤ brief, 5/day) for research; chat's cap decided in P5 | No cash-cap mechanism exists and Codex prices as null (quota, not cash); a run count is enforceable today | Yes |
-| Household role | Household ships first; P2 converts it to `family:circle` | Agreed with the household session; avoids two PRs rewriting the same hook | n/a |
+| Household role | Household shipped first (#973); P1 converted it to `family:circle` on rebase | Agreed with the household session; avoids two PRs rewriting the same hook | n/a |
+| `householdSubjectFor` | Identity only (a `household_member` row by email); permission is `family:circle` in `peopleViewerOf` | One source for "may look"; a row is who you are, a grant is what you may do | Yes |
+| Intel `all` and writes | `all` reads every member's space, writes only its own (`resolveRequestScope(event, 'write')`); `admin` writes across | John's Q1: all = read everyone's, admin = edit everyone's. Mail triage was the one member-reachable write | Yes |
+| Group storage type | jsonb `string[]`, not Postgres `text[]` | The house style (`tags`, `enabled_toolsets`); SR-Drive's trimmed schema copies it as-is | Yes |
+| Legacy `role` column | Kept and honoured (`member` → intel self, `household` → circle); reset to `guest` on first save at /admin/access | No data migration needed on deploy; nobody loses access mid-deploy | Yes |
+| `scopeFor` seam timing | Ships in P3, not P1 | No consumer in P1; dead code on arrival | n/a |
 | Grants that are not open yet | Shown disabled in the UI | A tickable grant that opens nothing is a silent lie | Yes |
 | Grants in the gateway assertion for Drive | No: Drive looks them up by email | The gateway has no DB access by design, and a JWT claim would be stale until the session refreshed | Yes |

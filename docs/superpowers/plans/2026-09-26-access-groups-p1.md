@@ -93,5 +93,5 @@ export async function deleteGroup(id: string): Promise<'deleted' | 'built-in' | 
 
 - [ ] `./scripts/gate-remote.sh --build` green.
 - [ ] Code-review subagent; apply findings.
-- [ ] Rebase onto the household merge (convert `household` role → `family:circle` in the catalogue; `viewerOf` household kind folds into member-with-`family:circle`) — **only if it has merged by then; otherwise ship and let household rebase.**
+- [x] Rebase onto the household merge (#973) and convert `household` role → `family:circle` in the catalogue; `viewerOf` household kind folds into member-with-`family:circle`.
 - [ ] PR → CI green → squash merge → master run green → `.deploy-sha` matches → verify `/admin/access` renders the groups section (signed-in check via grep of the built server chunk for `access_group` + an anonymous 302), and `select * from access_group` on prod shows the two built-ins after the first page load.
