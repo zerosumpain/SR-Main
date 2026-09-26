@@ -6,6 +6,21 @@ const h = vi.hoisted(() => ({
   polled: [] as string[],
   companionCalls: 0,
   pushFresh: false,
+  alertsFail: false,
+  alertCalls: [] as string[],
+}));
+
+vi.mock('$lib/home/presence/alerts', () => ({
+  runCrossings: async () => {
+    h.alertCalls.push('crossings');
+    if (h.alertsFail) throw new Error('events table missing');
+    return { written: 1, deduped: 0, initialised: [], errors: [] };
+  },
+  deliverAlerts: async () => {
+    h.alertCalls.push('deliver');
+    if (h.alertsFail) throw new Error('pilot down');
+    return { forwarded: 1, unfollowed: 0, whatsappSent: ['…000'], whatsappFailed: [] };
+  },
 }));
 
 vi.mock('$lib/home/presence/members', async (orig) => {
@@ -58,6 +73,8 @@ beforeEach(() => {
   h.polled = [];
   h.companionCalls = 0;
   h.pushFresh = false;
+  h.alertsFail = false;
+  h.alertCalls = [];
 });
 
 describe('home-observe', () => {
@@ -100,5 +117,22 @@ describe('home-observe', () => {
     expect(h.polled).toEqual([]);
     expect(h.companionCalls).toBe(1);
     expect(res.summary).toContain('push stream fresh');
+  });
+
+  it('raises crossings after the fixes are written, then delivers them', async () => {
+    h.members = [member('p', 'life360'), member('q', 'companion')];
+    const res = await homeObserve.run(ctx);
+    expect(h.alertCalls).toEqual(['crossings', 'deliver']);
+    expect(res.summary).toContain('crossings: 1 new');
+    expect(res.summary).toContain('alerts: 1 to the app, WhatsApp to …000');
+  });
+
+  it('never fails the run when crossings or delivery throw', async () => {
+    h.alertsFail = true;
+    h.members = [member('p', 'life360')];
+    const res = await homeObserve.run(ctx);
+    expect(res.outcome).toBe('ok');
+    expect(res.summary).toContain('crossings failed');
+    expect(res.summary).toContain('alerts failed');
   });
 });

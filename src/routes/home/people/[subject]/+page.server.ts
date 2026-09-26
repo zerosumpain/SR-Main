@@ -2,14 +2,17 @@ import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { listMembers } from '$lib/home/presence/members';
 import { peopleViewerOf } from '$lib/home/presence/viewer';
+import { loadMovementStats } from '$lib/home/presence/movement';
+import { DEFAULT_WINDOW_DAYS, type MovementStats } from '$lib/home/presence/stats';
 
 // One person's page under /home/people. The owner may open anyone's; a
-// household viewer only their own (spec D2). The stats this page will carry
+// household viewer only their own (spec D2). The stats this page carries
 // are one person's journeys, and a journey starts at somebody's front door.
 //
 // The order matters: a household viewer asking for anyone but themselves is
 // refused BEFORE the subject is looked up, so they get the same 403 whether
 // or not that person exists — the page cannot be used to list the household.
+// Only once both checks pass is the trail read at all.
 export const load: PageServerLoad = async (event) => {
   const viewer = await peopleViewerOf(event);
   if (!viewer) error(403, 'Forbidden');
@@ -20,5 +23,16 @@ export const load: PageServerLoad = async (event) => {
   const member = (await listMembers()).find((m) => m.subject === subject);
   if (!member) error(404, 'Not found');
 
-  return { subject: member.subject, displayName: member.displayName };
+  // The stats are coordinate-free by construction: counts, distances, clock
+  // times and the NAMES of places. A failed read still draws the page.
+  let stats: MovementStats | null = null;
+  let loadError: string | null = null;
+  try {
+    stats = await loadMovementStats(member.subject, { days: DEFAULT_WINDOW_DAYS });
+  } catch (err) {
+    console.error('[home/people] movement stats failed:', err);
+    loadError = 'The trail could not be read just now.';
+  }
+
+  return { subject: member.subject, displayName: member.displayName, days: DEFAULT_WINDOW_DAYS, stats, loadError };
 };

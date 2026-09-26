@@ -242,9 +242,14 @@ export async function refreshPlaces(opts: { windowDays?: number } = {}): Promise
       // retirement is a judgement about the evidence, so it has to be
       // revisable when the evidence changes. An `ignored` place stays ignored:
       // that one is the owner's.
+      //
+      // A radius the owner set on the places panel is theirs too: it decides
+      // where an arrival alert fires, and re-deriving it from member spread
+      // every pass would quietly move that edge back.
+      const refreshed = matched.radiusPinned ? { ...stats, radiusM: matched.radiusM } : stats;
       await db
         .update(daydreamPlaces)
-        .set(matched.status === 'transit' ? { ...stats, status: 'active' } : stats)
+        .set(matched.status === 'transit' ? { ...refreshed, status: 'active' } : refreshed)
         .where(eq(daydreamPlaces.id, matched.id));
       placeId = matched.id;
       result.updated++;
@@ -287,6 +292,14 @@ export async function refreshPlaces(opts: { windowDays?: number } = {}): Promise
   return result;
 }
 
+export interface HomePlace {
+  id: string;
+  lat: number;
+  lon: number;
+  radiusM: number;
+  label: string | null;
+}
+
 /**
  * Which place is home.
  *
@@ -305,9 +318,15 @@ export async function refreshPlaces(opts: { windowDays?: number } = {}): Promise
  * Most lived-in wins — visits first, then dwell. Whatever else is called home,
  * the one you sleep at has the numbers.
  */
-export async function getHomePlace(): Promise<{ lat: number; lon: number } | null> {
+export async function getHomePlace(): Promise<HomePlace | null> {
   const [home] = await db
-    .select({ lat: daydreamPlaces.lat, lon: daydreamPlaces.lon })
+    .select({
+      id: daydreamPlaces.id,
+      lat: daydreamPlaces.lat,
+      lon: daydreamPlaces.lon,
+      radiusM: daydreamPlaces.radiusM,
+      label: daydreamPlaces.label,
+    })
     .from(daydreamPlaces)
     .where(and(eq(daydreamPlaces.kind, 'home'), eq(daydreamPlaces.status, 'active')))
     .orderBy(
@@ -605,4 +624,77 @@ export async function getPlaceVisits(placeId: string, limit = 12): Promise<Place
       dayName: dayFmt.format(v.startedAt),
       timeLabel: timeFmt.format(v.startedAt),
     }));
+}
+
+// ── The owner's places panel (/home/people/places) ──────────────────────────
+
+/** The radius the owner may set by hand, in metres. */
+export const RADIUS_MIN_M = 50;
+export const RADIUS_MAX_M = 2000;
+
+export interface PanelPlace {
+  id: string;
+  label: string | null;
+  kind: string;
+  radiusM: number;
+  radiusPinned: boolean;
+  alerts: boolean;
+  whatsappAlerts: boolean;
+  visitCount: number;
+  isHome: boolean;
+}
+
+/**
+ * Every named, active place, and home whether named or not — the places a
+ * crossing alert can be set on. Home first, then the most visited.
+ */
+export async function listPanelPlaces(): Promise<PanelPlace[]> {
+  const home = await getHomePlace();
+  const rows = await db
+    .select({
+      id: daydreamPlaces.id,
+      label: daydreamPlaces.label,
+      kind: daydreamPlaces.kind,
+      radiusM: daydreamPlaces.radiusM,
+      radiusPinned: daydreamPlaces.radiusPinned,
+      alerts: daydreamPlaces.alerts,
+      whatsappAlerts: daydreamPlaces.whatsappAlerts,
+      visitCount: daydreamPlaces.visitCount,
+    })
+    .from(daydreamPlaces)
+    .where(
+      and(
+        eq(daydreamPlaces.status, 'active'),
+        home ? sql`(${daydreamPlaces.label} is not null or ${daydreamPlaces.id} = ${home.id})` : isNotNull(daydreamPlaces.label),
+      ),
+    )
+    .orderBy(sql`${daydreamPlaces.visitCount} desc`, asc(daydreamPlaces.label));
+  const out = rows.map((r) => ({ ...r, isHome: r.id === home?.id }));
+  return [...out.filter((p) => p.isHome), ...out.filter((p) => !p.isHome)];
+}
+
+/**
+ * The owner's alert settings for one place. A radius set here is PINNED, so
+ * the places refresh stops re-deriving it. Null when there is no such place.
+ */
+export async function updatePlaceAlerts(
+  placeId: string,
+  patch: { alerts?: boolean; whatsappAlerts?: boolean; radiusM?: number },
+): Promise<{ id: string } | null> {
+  const set: Record<string, unknown> = { updatedAt: new Date() };
+  if (patch.alerts !== undefined) set.alerts = patch.alerts;
+  if (patch.whatsappAlerts !== undefined) set.whatsappAlerts = patch.whatsappAlerts;
+  if (patch.radiusM !== undefined) {
+    if (!Number.isFinite(patch.radiusM) || patch.radiusM < RADIUS_MIN_M || patch.radiusM > RADIUS_MAX_M) {
+      throw new Error(`radius must be ${RADIUS_MIN_M}–${RADIUS_MAX_M} m`);
+    }
+    set.radiusM = patch.radiusM;
+    set.radiusPinned = true;
+  }
+  const [row] = await db
+    .update(daydreamPlaces)
+    .set(set)
+    .where(eq(daydreamPlaces.id, placeId))
+    .returning({ id: daydreamPlaces.id });
+  return row ?? null;
 }

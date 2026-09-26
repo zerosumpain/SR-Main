@@ -34,8 +34,8 @@
   const members = $derived(data.family.members);
   const detail = $derived(data.family.detail);
   const isOwner = $derived(data.viewer.kind === 'owner');
-  /** The household viewer's own subject; null for the owner. */
-  const self = $derived(data.viewer.kind === 'household' ? data.viewer.subject : null);
+  /** Person pages this viewer may open, decided in the load. */
+  const links = $derived<Record<string, string>>(data.links);
 
   /** Over this many minutes without a fix and the answer is "we don't know",
    *  which is a different answer from "at home" and must not look like one. */
@@ -119,9 +119,9 @@
       sub: memberSub(m),
       tone: memberTone(m),
       corner: m.today ? `${outFor(m.today.minutesOut)} out` : null,
-      // The owner jumps to the person's findings below; a household viewer
-      // to their own page, and nowhere for anyone else's.
-      href: isOwner ? `#p-${m.subject}` : m.subject === self ? `/home/people/${m.subject}` : null,
+      // The person's own page, where the load says this viewer may open it:
+      // the owner anyone's, a household viewer only their own.
+      href: links[m.subject] ?? null,
     })),
   );
 
@@ -164,6 +164,15 @@
       strap="Read off the trail, not asked for. A cell goes amber when the last fix is over half an hour old — an unknown position and a position at home are not the same answer."
     />
 
+    {#if isOwner}
+      <!-- Owner-only settings. Neither route is a household route, so the hook
+           refuses anyone else; the links are drawn for the owner only. -->
+      <p class="actions owner-links">
+        <a class="btn sm" href="/home/people/places">Places and alerts</a>
+        <a class="btn sm" href="/home/people/settings">Household settings</a>
+      </p>
+    {/if}
+
     {#if !members.length}
       <p class="lede">Nobody is on the trail.</p>
     {:else}
@@ -196,10 +205,8 @@
             {#each members as m (m.subject)}
               <tr>
                 <td class="cell-lead">
-                  {#if isOwner}
-                    <a class="link" href="#p-{m.subject}">{cap(m.subject)}</a>
-                  {:else if m.subject === self}
-                    <a class="link" href="/home/people/{m.subject}">{cap(m.subject)}</a>
+                  {#if links[m.subject]}
+                    <a class="link" href={links[m.subject]}>{cap(m.subject)}</a>
                   {:else}
                     {cap(m.subject)}
                   {/if}
@@ -278,5 +285,8 @@
      `.link`, `.btn`, `.cta` all come from `.ds-vocab` (HomeFrame's DsVocab). */
   .today {
     margin-top: 22px;
+  }
+  .owner-links {
+    margin: 0 0 18px;
   }
 </style>

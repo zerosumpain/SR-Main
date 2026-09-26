@@ -58,6 +58,7 @@ type Scoped = import('$lib/home/presence/viewer').ScopedPresence;
 interface PeopleData {
   family: { members: Scoped[]; detail: Record<string, unknown> };
   viewer: import('$lib/home/presence/viewer').PeopleViewer;
+  links: Record<string, string>;
   loadError: string | null;
 }
 async function run(email: string | null): Promise<PeopleData> {
@@ -106,6 +107,15 @@ describe('/home/people load — D2 scoping', () => {
     for (const k of ['isHome', 'placeLabel', 'distanceHomeKm', 'batteryPct', 'ageMins', 'lastSeenAt', 'today'] as const) {
       expect(robin[k], k).toBeNull();
     }
+  });
+
+  it('links the owner to every person page, a household viewer to their own only', async () => {
+    expect((await run('owner@example.test')).links).toEqual({
+      alex: '/home/people/alex',
+      sam: '/home/people/sam',
+      robin: '/home/people/robin',
+    });
+    expect((await run('sam@example.test')).links).toEqual({ sam: '/home/people/sam' });
   });
 
   it('refuses a guest and a signed-out visitor', async () => {

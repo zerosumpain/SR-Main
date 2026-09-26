@@ -90,3 +90,14 @@ export function scopeHousehold(members: readonly HouseholdPresence[], viewer: Pe
     };
   });
 }
+
+/**
+ * Which person pages a viewer may open, as subject → href. PURE. The owner may
+ * open anyone's; a household viewer only their own. Decided here, beside the
+ * guard on /home/people/[subject], so a card never offers a link that page
+ * would refuse.
+ */
+export function personLinks(subjects: readonly string[], viewer: PeopleViewer): Record<string, string> {
+  const open = viewer.kind === 'owner' ? subjects : subjects.filter((s) => s === viewer.subject);
+  return Object.fromEntries(open.map((s) => [s, `/home/people/${encodeURIComponent(s)}`]));
+}
