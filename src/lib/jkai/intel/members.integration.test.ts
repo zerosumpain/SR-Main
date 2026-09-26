@@ -173,7 +173,7 @@ describe.skipIf(!process.env.DATABASE_URL)('a member session sees only its own s
     expect(scope.slice(0, 2)).toEqual([READER, 'household']);
     expect(scope).toContain(PRINCIPAL);
     expect(scope).not.toContain('owner');
-    expect([...(await resolveRequestScope(event(READER_EMAIL), 'write'))]).toEqual([READER, 'household']);
+    expect([...(await resolveRequestScope(event(READER_EMAIL), 'own'))]).toEqual([READER, 'household']);
 
     const network = await import('../../../routes/api/jkai/intel/network/+server');
     const res = await run(() => network.GET(event(READER_EMAIL, { url: 'http://test.local/api/jkai/intel/network' })));

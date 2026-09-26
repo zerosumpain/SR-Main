@@ -44,12 +44,12 @@ function readIds(raw: unknown): string[] {
 // lookup, relevance scoring and each admit / reject / requeue see only threads
 // in it, and an id outside it is `not-found`, never acted on.
 export const GET: RequestHandler = async (event) => {
-  const queue = await loadMailQueue(undefined, await resolveRequestScope(event));
+  const queue = await loadMailQueue(undefined, await resolveRequestScope(event, 'own'));
   return json(queue);
 };
 
 export const POST: RequestHandler = async (event) => {
-  const scope = await resolveRequestScope(event, 'write');
+  const scope = await resolveRequestScope(event, 'own');
   let body: Record<string, unknown>;
   try {
     body = (await event.request.json()) as Record<string, unknown>;

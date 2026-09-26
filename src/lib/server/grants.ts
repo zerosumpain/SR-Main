@@ -26,6 +26,11 @@ import { disableMemberGmail, ensureMemberPrincipal } from './members';
 
 export type AccessGroupRow = typeof accessGroup.$inferSelect;
 
+/** A jsonb list as stored, or empty: a hand-edited `{}` or `"x"` must not throw. */
+export function asList(value: unknown): readonly unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
 /**
  * The permissions a user holds.
  *
@@ -36,13 +41,13 @@ export type AccessGroupRow = typeof accessGroup.$inferSelect;
  * page their groups and grants are the only source.
  */
 export function effectivePermissions(
-  user: { role: string; groups: readonly unknown[] | null; grants: readonly unknown[] | null },
-  groups: ReadonlyMap<string, readonly unknown[]>,
+  user: { role: string; groups: unknown; grants: unknown },
+  groups: ReadonlyMap<string, unknown>,
 ): Set<Permission> {
-  const out = new Set<Permission>(parsePermissions(user.grants));
-  for (const id of user.groups ?? []) {
+  const out = new Set<Permission>(parsePermissions(asList(user.grants)));
+  for (const id of asList(user.groups)) {
     if (typeof id !== 'string') continue;
-    for (const p of parsePermissions(groups.get(id))) out.add(p);
+    for (const p of parsePermissions(asList(groups.get(id)))) out.add(p);
   }
   if (user.role === 'member') out.add('jkai.intel:self');
   if (user.role === 'household') out.add('family:circle');
@@ -81,20 +86,24 @@ export async function listGroups(): Promise<AccessGroupRow[]> {
   return db.select().from(accessGroup).orderBy(sql`${accessGroup.builtIn} desc, ${accessGroup.label}`);
 }
 
-async function groupGrants(ids: readonly unknown[]): Promise<Map<string, string[]>> {
-  const wanted = ids.filter((id): id is string => typeof id === 'string');
+async function groupGrants(stored: unknown): Promise<Map<string, unknown>> {
+  const wanted = asList(stored).filter((id): id is string => typeof id === 'string');
   if (wanted.length === 0) return new Map();
   const rows = await db
     .select({ id: accessGroup.id, grants: accessGroup.grants })
     .from(accessGroup)
     .where(inArray(accessGroup.id, wanted));
-  return new Map(rows.map((r) => [r.id, r.grants ?? []]));
+  return new Map(rows.map((r) => [r.id, r.grants]));
 }
 
 /**
  * A member — a signed-in non-owner holding at least one permission — or null
  * for a guest. Read on every request (through `viewerOf`, once per request),
  * never cached across requests, so revoking is immediate.
+ *
+ * Someone who holds something but has no principal yet — a pre-groups
+ * `role='household'` row, which never needed one, or a row edited by hand —
+ * gets one here, once. Refusing them instead would take access away on deploy.
  */
 export async function loadMember(
   email: string | null | undefined,
@@ -115,9 +124,11 @@ export async function loadMember(
     )
     .where(eq(allowedUser.email, e))
     .limit(1);
-  if (!row?.principalId) return null;
-  const grants = effectivePermissions(row, await groupGrants(row.groups ?? []));
-  return grants.size > 0 ? { principalId: row.principalId, grants } : null;
+  if (!row) return null;
+  const grants = effectivePermissions(row, await groupGrants(row.groups));
+  if (grants.size === 0) return null;
+  const principalId = row.principalId ?? (await ensureMemberPrincipal(e, e));
+  return { principalId, grants };
 }
 
 /**
@@ -140,7 +151,7 @@ export async function setUserAccess(
   const grants = parsePermissions(access.grants);
   const effective = effectivePermissions(
     { role: 'guest', groups, grants },
-    new Map(all.map((g) => [g.id, g.grants ?? []])),
+    new Map(all.map((g) => [g.id, g.grants])),
   );
 
   if (effective.size > 0) await ensureMemberPrincipal(e, user.note?.trim() || e);
@@ -159,7 +170,7 @@ export async function setUserAccess(
 async function reconcileUsers(emails: readonly string[]): Promise<void> {
   if (emails.length === 0) return;
   const all = await listGroups();
-  const byId = new Map(all.map((g) => [g.id, g.grants ?? []]));
+  const byId = new Map(all.map((g) => [g.id, g.grants]));
   const users = await db.select().from(allowedUser).where(inArray(allowedUser.email, [...emails]));
   for (const user of users) {
     const effective = effectivePermissions(user, byId);

@@ -41,12 +41,12 @@ describe('resolveRequestScope', () => {
   it("gives an `all` reader every member's space, never the owner's, and writes only their own", async () => {
     loadMember.mockResolvedValue(member('jkai.intel:all'));
     expect([...(await resolveRequestScope(event('kid@example.com')))]).toEqual(['u_abc', 'household', 'u_other']);
-    expect([...(await resolveRequestScope(event('kid2@example.com'), 'write'))]).toEqual(['u_abc', 'household']);
+    expect([...(await resolveRequestScope(event('kid2@example.com'), 'own'))]).toEqual(['u_abc', 'household']);
   });
 
   it('lets an `admin` act across every member space', async () => {
     loadMember.mockResolvedValue(member('jkai.intel:admin'));
-    expect([...(await resolveRequestScope(event('kid@example.com'), 'write'))]).toEqual(['u_abc', 'household', 'u_other']);
+    expect([...(await resolveRequestScope(event('kid@example.com'), 'own'))]).toEqual(['u_abc', 'household', 'u_other']);
   });
 
   it('refuses a member who holds no intel level', async () => {

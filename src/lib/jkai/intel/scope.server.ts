@@ -36,8 +36,10 @@ async function otherUserSpaces(principalId: string): Promise<string[]> {
  *                       (chat-context, extract-thread, daily-alerts), or the
  *                       dev-only LAN bypass. Refusing it here would 403 every
  *                       one of those.
- *   intent 'write'      a member at `all` gets their `self` scope: they read
- *                       everyone's, they change only their own.
+ *   intent 'own'        a member at `all` gets their `self` scope. For writes
+ *                       and for the held-mail queue: `all` reads everyone's
+ *                       graph, but triage — and mail nobody has admitted yet —
+ *                       stays each person's own unless they hold `admin`.
  *   any other session   403, whatever the hook decided. A guest never reaches
  *                       an intel route through the hook; if a gate regression
  *                       ever let one through, it gets nothing rather than the
@@ -45,15 +47,15 @@ async function otherUserSpaces(principalId: string): Promise<string[]> {
  */
 export async function resolveRequestScope(
   event: { locals: App.Locals },
-  intent: 'read' | 'write' = 'read',
+  intent: 'read' | 'own' = 'read',
 ): Promise<IntelScope> {
   const viewer = await viewerOf(event);
   if (viewer.kind === 'owner' || viewer.kind === 'anonymous') return OWNER_INTEL_SCOPE;
   if (viewer.kind === 'member') {
     const level = levelOf(viewer.grants, 'jkai.intel');
-    // `all` READS every member's space but changes only its own; only `admin`
-    // acts across them.
-    if (level === 'self' || (level === 'all' && intent === 'write')) return scopeForPrincipal(viewer.principalId);
+    // `all` READS every member's space, but acts on — and sees the held,
+    // un-admitted mail of — only its own; only `admin` does either across them.
+    if (level === 'self' || (level === 'all' && intent === 'own')) return scopeForPrincipal(viewer.principalId);
     if (level) return scopeForPrincipal(viewer.principalId, await otherUserSpaces(viewer.principalId));
   }
   throw error(403, 'Forbidden');

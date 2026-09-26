@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { accessGroup, activityPrincipals, allowedUser, gmailAccounts } from '$lib/db/schema';
 import { deleteGroup, listGroups, loadMember, saveGroup, setUserAccess } from './grants';
+import { loadAccessPage } from './access-page';
 
 // Real rows, real resolution. Touches only rows it creates (named with this
 // run's tag) and deletes them after; no cleanup, purge or sweep path runs.
@@ -10,6 +11,8 @@ import { deleteGroup, listGroups, loadMember, saveGroup, setUserAccess } from '.
 const TAG = `g${Math.random().toString(36).slice(2, 10)}`;
 const A = `a-${TAG}@example.test`;
 const B = `b-${TAG}@example.test`;
+const H = `h-${TAG}@example.test`;
+const J = `j-${TAG}@example.test`;
 const created = { groups: [] as string[] };
 
 describe.skipIf(!process.env.DATABASE_URL)('grants resolve from groups and one-off grants', () => {
@@ -17,6 +20,9 @@ describe.skipIf(!process.env.DATABASE_URL)('grants resolve from groups and one-o
     await db.insert(allowedUser).values([
       { email: A, note: 'grants.integration' },
       { email: B, note: 'grants.integration' },
+      // A pre-groups household viewer: the role, and no principal (it never needed one).
+      { email: H, role: 'household', note: 'grants.integration' },
+      { email: J, note: 'grants.integration' },
     ]);
   });
 
@@ -24,11 +30,11 @@ describe.skipIf(!process.env.DATABASE_URL)('grants resolve from groups and one-o
     const principals = await db
       .select({ id: activityPrincipals.id })
       .from(activityPrincipals)
-      .where(and(eq(activityPrincipals.kind, 'user'), inArray(activityPrincipals.externalRef, [A, B])));
+      .where(and(eq(activityPrincipals.kind, 'user'), inArray(activityPrincipals.externalRef, [A, B, H, J])));
     const ids = principals.map((p) => p.id);
     if (ids.length) await db.delete(gmailAccounts).where(inArray(gmailAccounts.principalId, ids));
     if (ids.length) await db.delete(activityPrincipals).where(inArray(activityPrincipals.id, ids));
-    await db.delete(allowedUser).where(inArray(allowedUser.email, [A, B]));
+    await db.delete(allowedUser).where(inArray(allowedUser.email, [A, B, H, J]));
     if (created.groups.length) await db.delete(accessGroup).where(inArray(accessGroup.id, created.groups));
   });
 
@@ -95,6 +101,20 @@ describe.skipIf(!process.env.DATABASE_URL)('grants resolve from groups and one-o
     expect(row.groups).toEqual(['family-circle']);
     expect(await deleteGroup('family-circle')).toBe('built-in');
     expect(await deleteGroup(`missing-${TAG}`)).toBe('missing');
+  });
+
+  it('a pre-groups household row with no principal keeps the circle, and gets a principal', async () => {
+    const member = await loadMember(H);
+    expect([...(member?.grants ?? [])]).toEqual(['family:circle']);
+    expect(member?.principalId).toMatch(/^u_/);
+    expect((await loadMember(H))?.principalId).toBe(member?.principalId);
+  });
+
+  it('a hand-mangled jsonb row grants nothing and breaks nothing', async () => {
+    await db.execute(sql`update allowed_user set groups = '{"x":1}'::jsonb, grants = '"jkai.intel:admin"'::jsonb where email = ${J}`);
+    expect(await loadMember(J)).toBeNull();
+    const page = await loadAccessPage();
+    expect(page.people.find((p) => p.email === J)).toMatchObject({ groups: [], grants: [], effective: [] });
   });
 
   it('refuses a second group with the same name', async () => {

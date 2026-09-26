@@ -6,7 +6,7 @@ import { db } from '$lib/db';
 import { allowedUser } from '$lib/db/schema';
 import { parsePermissions, type Permission } from '$lib/access/catalogue';
 import { getOwnerEmails } from './access';
-import { effectivePermissions, listGroups } from './grants';
+import { asList, effectivePermissions, listGroups } from './grants';
 
 export interface AccessPerson {
   email: string;
@@ -42,7 +42,7 @@ export async function loadAccessPage(): Promise<{
     listGroups(),
     db.select().from(allowedUser).orderBy(desc(allowedUser.createdAt)),
   ]);
-  const byId = new Map(groups.map((g) => [g.id, g.grants ?? []]));
+  const byId = new Map(groups.map((g) => [g.id, g.grants]));
   const known = new Set(byId.keys());
 
   const people: AccessPerson[] = rows.map((r) => ({
@@ -50,8 +50,8 @@ export async function loadAccessPage(): Promise<{
     note: r.note,
     addedBy: r.addedBy,
     createdAt: r.createdAt,
-    groups: (r.groups ?? []).filter((g): g is string => typeof g === 'string' && known.has(g)),
-    grants: parsePermissions(r.grants),
+    groups: asList(r.groups).filter((g): g is string => typeof g === 'string' && known.has(g)),
+    grants: parsePermissions(asList(r.grants)),
     effective: [...effectivePermissions(r, byId)],
     legacyRole: r.role === 'member' || r.role === 'household' ? r.role : null,
   }));
@@ -63,7 +63,7 @@ export async function loadAccessPage(): Promise<{
       id: g.id,
       label: g.label,
       description: g.description,
-      grants: parsePermissions(g.grants),
+      grants: parsePermissions(asList(g.grants)),
       builtIn: g.builtIn,
       members: people.filter((p) => p.groups.includes(g.id)).length,
     })),
