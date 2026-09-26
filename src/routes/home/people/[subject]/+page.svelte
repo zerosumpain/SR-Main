@@ -314,7 +314,7 @@
         <SectionHead
           kicker="C / Commuting"
           title={['Drives', 'and trains']}
-          strap="The last {data.days} days’ car and train journeys, newest first. Train or car is read from speed and a straight line, so a motorway can pass for a train. Select one to see its route."
+          strap="Newest first; select one for its route. Read from speed, so a motorway can pass for a train."
         />
         {#if commutes.length}
           <ul class="commutes">
