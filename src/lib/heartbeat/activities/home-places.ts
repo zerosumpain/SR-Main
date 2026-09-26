@@ -1,7 +1,6 @@
 import { pruneTrail } from '$lib/home/presence/observe';
 import { refreshPlaces } from '$lib/home/presence/places';
 import { TRAIL_RETENTION_DAYS } from '$lib/home/presence/types';
-import { reconcileNamedPlaceThoughts } from '$lib/daydream/place-thoughts';
 import type { ActivityHandler } from '../types';
 
 // The name is the heartbeat_actions row's identity: it stays 'daydream-places'
@@ -49,18 +48,10 @@ export const homePlaces: ActivityHandler = {
     const refresh = await refreshPlaces({ windowDays: cfg.windowDays });
     const pruned = cfg.prune ? await pruneTrail(cfg.retentionDays) : 0;
 
-    // Close any question left standing about a place that has since been named.
-    // Runs on every refresh rather than only when a name is typed, because the
-    // trigger in `confirmPlace` only covers the one path that calls it.
-    const reconciled = await reconcileNamedPlaceThoughts();
-
     if (refresh.fixes === 0) {
       return {
         outcome: 'ok',
-        summary: reconciled
-          ? `no fixes in the window yet; closed ${reconciled} stale question${reconciled === 1 ? '' : 's'}`
-          : 'no fixes in the window yet',
-        details: { reconciled },
+        summary: 'no fixes in the window yet',
       };
     }
 
@@ -72,9 +63,8 @@ export const homePlaces: ActivityHandler = {
         // Retirements are named rather than folded into "below the bar": this
         // is the engine reclassifying somewhere it had previously called a
         // place, and a count that quietly shrinks is the thing to avoid.
-        (refresh.retired ? `, ${refresh.retired} retired as transit` : '') +
-        (reconciled ? `; closed ${reconciled} stale question${reconciled === 1 ? '' : 's'}` : ''),
-      details: { ...refresh, pruned, reconciled },
+        (refresh.retired ? `, ${refresh.retired} retired as transit` : ''),
+      details: { ...refresh, pruned },
     };
   },
 };

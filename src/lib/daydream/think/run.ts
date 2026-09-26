@@ -25,7 +25,7 @@ import { notifyOwner } from '$lib/server/notify';
 import { resolveDaydreamModel } from '../model';
 import { persistCandidates, type PersistResult } from '../thought-store';
 import { DEFAULT_SUBJECT, errMsg } from '../types';
-import { buildProfileLines } from '../ponder/profile';
+import { buildProfileLines } from './profile';
 import { TITLE_ECHO_WINDOW_DAYS } from '../refutations';
 import { localDay } from '../features/build';
 import { OUTCOMES, OUTCOME_ASK, questionAt, type Outcome, type Question } from './questions';

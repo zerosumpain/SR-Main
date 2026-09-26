@@ -62,6 +62,11 @@ export const WEEKLY_SECONDS = 604_800;
  * calls a model must be here AND write its quota delta to `details.quota`;
  * daydream-hypothesise and daydream-spend were missing until 2026-08-27 and
  * their spend was invisible to the caps.
+ *
+ * The retired actions (compose, offers, rulesmith, hypothesise, spend, ponder,
+ * weekly, review — P4 of the 2026-09-25 simplification) stay listed: their
+ * pulses from before the pause still sit inside the weekly window, and a cap
+ * that forgot them would let the survivors spend that allowance twice.
  */
 export const SPENDING_ACTIONS = [
   'daydream-compose',
@@ -86,9 +91,6 @@ export const SPENDING_ACTIONS = [
   // reports why.
   'daydream-review',
 ] as const;
-
-/** @deprecated kept so an older pulse reader still resolves. */
-export const COMPOSE_ACTION = 'daydream-compose';
 
 /**
  * Hours the owner is plausibly awake, used to pace the daily allowance.

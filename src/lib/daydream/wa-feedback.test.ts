@@ -1,7 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { matchFeedbackReply, replyTarget, thoughtLink, type ReplyCandidate } from './wa-feedback';
-import { chooseChannel } from './deliver';
-import { isLocalSunday, phraseWeek, weekFactLines, type WeekFacts } from './digest/weekly';
 
 describe('matchFeedbackReply — the closed phrase list', () => {
   it('matches the vocabulary, whole and case-insensitive', () => {
@@ -49,7 +47,7 @@ describe('replyTarget — which thought a bare verdict answers', () => {
     expect(replyTarget([think({ deliveredAt: hoursAgo(4) }), musing], now, { unrated: true })?.id).toBe('musing');
   });
 
-  it('skips one already rated for a verdict, not for a relevance rating', () => {
+  it('skips one already rated for a verdict', () => {
     const rated = think({ feedback: 'useful' });
     expect(replyTarget([rated], now, { unrated: true })).toBeNull();
     expect(replyTarget([rated], now, { unrated: false })?.id).toBe('think-1');
@@ -61,123 +59,8 @@ describe('replyTarget — which thought a bare verdict answers', () => {
     expect(replyTarget([think({ deliveredAt: null })], now, { unrated: true })).toBeNull();
   });
 
-  it('links a think note to the one feed, and anything else to the old room', () => {
+  it('links a think note to itself on the one feed, and anything older to the feed (its room is gone)', () => {
     expect(thoughtLink({ id: 'think-1', kind: 'think_correlate' })).toBe('https://strangeramblings.com/jkai/daydreams?note=think-1');
-    expect(thoughtLink({ id: 'm-1', kind: 'musing_health' })).toBe('https://strangeramblings.com/jkai/daydreams/feed?open=m-1');
-  });
-});
-
-describe('matchRelevanceReply / isWhyReply', () => {
-  it('reads the relevance vocabulary and rate N, never a bare digit', async () => {
-    const { matchRelevanceReply, isWhyReply } = await import('./wa-feedback');
-    expect(matchRelevanceReply('matters')).toBe(4);
-    expect(matchRelevanceReply('Really matters!')).toBe(5);
-    expect(matchRelevanceReply("doesn't matter")).toBe(1);
-    expect(matchRelevanceReply('not my concern')).toBe(1);
-    expect(matchRelevanceReply('marginal')).toBe(2);
-    expect(matchRelevanceReply('rate 4')).toBe(4);
-    expect(matchRelevanceReply('3/5')).toBe(3);
-    expect(matchRelevanceReply('4')).toBeNull();
-    expect(matchRelevanceReply('that matters to me a lot actually')).toBeNull();
-    expect(isWhyReply('Why?')).toBe(true);
-    expect(isWhyReply('why is the sky blue')).toBe(false);
-  });
-});
-
-describe('chooseChannel — WhatsApp preference (D3)', () => {
-  // Verified, because the channel choice now sits behind the review gate — a
-  // thought nobody has checked is silent whatever channel is available.
-  const thought = { kind: 'musing_health', score: 0.9, reviewVerdict: 'verified' as const };
-  const state = () => ({ todayCount: 0, lastDeliveredAt: null, lastByKind: new Map() });
-  const base = { now: new Date('2026-08-27T12:00:00Z'), threshold: 0.75 };
-
-  it('prefers whatsapp over push over chat', () => {
-    expect(chooseChannel(thought, state(), { ...base, hasPushSubscriber: true, hasWhatsApp: true }).channel).toBe('whatsapp');
-    expect(chooseChannel(thought, state(), { ...base, hasPushSubscriber: true, hasWhatsApp: false }).channel).toBe('push');
-    expect(chooseChannel(thought, state(), { ...base, hasPushSubscriber: false, hasWhatsApp: false }).channel).toBe('chat');
-  });
-
-  it('keeps every limit ahead of the channel choice', () => {
-    // The principle: a limit is checked before a channel is picked, so having
-    // WhatsApp available never buys a delivery. The threshold used to be the
-    // limit demonstrated here and no longer gates anything — a verdict replaced
-    // it — so this uses one that still stands.
-    const capped = { todayCount: 4, lastDeliveredAt: null, lastByKind: new Map() };
-    const d = chooseChannel(thought, capped, { ...base, hasPushSubscriber: false, hasWhatsApp: true });
-    expect(d.channel).toBe('silent');
-    expect(d.suppressedReason).toBe('daily_cap');
-  });
-
-  it('having WhatsApp does not let an unreviewed thought through', () => {
-    const d = chooseChannel(
-      { kind: 'musing_health', score: 0.99 },
-      state(),
-      { ...base, hasPushSubscriber: true, hasWhatsApp: true },
-    );
-    expect(d.channel).toBe('silent');
-    expect(d.suppressedReason).toBe('awaiting_review');
-  });
-});
-
-describe('weekly digest phrasing', () => {
-  const facts: WeekFacts = {
-    weekEnding: '2026-08-30',
-    raised: 6,
-    delivered: 3,
-    usefulVotes: 2,
-    notUsefulVotes: 1,
-    placesAnswered: 4,
-    hypothesesTested: 5,
-    hypothesesHeld: 1,
-    hypothesesRefuted: 3,
-    leadsOpened: 2,
-    auditDropped: 0,
-    spendMinor: 12634,
-    topTitles: ['Recovery is the stronger signal today'],
-    reviewed: 6,
-    reviewRefuted: 2,
-    reviewUncertain: 1,
-    caught: ['Charged twice for Canva — the invoice and the bank line are one payment'],
-  };
-
-  it('summarises a full week deterministically', () => {
-    const s = phraseWeek(facts);
-    expect(s).toContain('6 thoughts raised, 3 delivered');
-    expect(s).toContain('2↑ 1↓');
-    expect(s).toContain('£126.34');
-    expect(s).toContain('audit clean');
-  });
-
-  it('reports the nothing when there is nothing', () => {
-    const s = phraseWeek({ ...facts, raised: 0, delivered: 0, usefulVotes: 0, notUsefulVotes: 0, placesAnswered: 0, hypothesesTested: 0, leadsOpened: 0, spendMinor: 0, topTitles: [], reviewed: 0, reviewRefuted: 0, reviewUncertain: 0, caught: [] });
-    expect(s).toContain('Nothing raised this week');
-  });
-
-  // A refuted thought never interrupts him, so the Sunday letter is the ONLY
-  // place he hears the engine caught itself. Counted in the summary, QUOTED in
-  // the facts — "2 refuted" tells him nothing, the sentence tells him what.
-  it('reports what the review threw out', () => {
-    expect(phraseWeek(facts)).toContain('6 checked against the sources, 2 thrown out');
-    const lines = weekFactLines(facts).join('\n');
-    expect(lines).toContain('Reviewed against the sources: 6 (2 refuted, 1 left uncertain)');
-    expect(lines).toContain('the invoice and the bank line are one payment');
-  });
-
-  it('says so plainly when the review threw nothing out', () => {
-    expect(phraseWeek({ ...facts, reviewRefuted: 0, caught: [] })).toContain('none thrown out');
-  });
-
-  it('every number the narrative may use appears in the fact lines', () => {
-    const lines = weekFactLines(facts).join('\n');
-    expect(lines).toContain('£126.34');
-    expect(lines).toContain('5 (1 held up, 3 refuted)');
-    expect(lines).toContain('Recovery is the stronger signal');
-  });
-
-  it('knows Sunday in local time', () => {
-    expect(isLocalSunday(new Date('2026-08-30T12:00:00Z'))).toBe(true); // a Sunday
-    expect(isLocalSunday(new Date('2026-08-27T12:00:00Z'))).toBe(false); // a Thursday
-    // BST midnight edge: 23:30Z Saturday is 00:30 Sunday in London.
-    expect(isLocalSunday(new Date('2026-08-29T23:30:00Z'))).toBe(true);
+    expect(thoughtLink({ id: 'm-1', kind: 'musing_health' })).toBe('https://strangeramblings.com/jkai/daydreams');
   });
 });

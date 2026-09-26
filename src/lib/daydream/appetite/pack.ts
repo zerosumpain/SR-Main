@@ -34,10 +34,8 @@ import { getCollectionBySlug, getRecordByKey, queryRecords } from '$lib/datastor
 import { NEWS_SOURCES } from '$lib/constants/news-sources';
 import { errMsg } from '../types';
 import { openFaults } from '../faults';
-import { collectStarvation } from '../starvation';
 import { listCapabilities } from './store';
 import type { PackFact } from './spec';
-import { investigationGapFacts } from '../hypotheses/gaps';
 
 /**
  * Datastore collections read by literal slug rather than by importing
@@ -272,14 +270,6 @@ async function gapFacts(facts: PackFact[]): Promise<number> {
     console.warn(`[daydream] appetite: faults unread — ${errMsg(err)}`);
   }
 
-  try {
-    for (const [i, s] of (await collectStarvation()).slice(0, 6).entries()) {
-      push(facts, `starved:${i}`, `${s.title} — ${s.evidence}`);
-      n++;
-    }
-  } catch (err) {
-    console.warn(`[daydream] appetite: starvation unread — ${errMsg(err)}`);
-  }
   return n;
 }
 
@@ -319,11 +309,6 @@ export async function assembleAppetitePack(): Promise<AppetitePack> {
   sizes.questions = await questionFacts(facts);
   sizes.inventory = await inventoryFacts(facts);
   sizes.gaps = await gapFacts(facts);
-  // Unlike short inventory lines, these retain the evidence need and acceptance check.
-  const investigationFacts = await investigationGapFacts();
-  facts.push(...investigationFacts);
-  sizes.gaps += investigationFacts.length;
-  sizes.investigations = investigationFacts.length;
   sizes.ledger = await ledgerFacts(facts);
   return { facts, keys: new Set(facts.map((f) => f.key)), sizes };
 }

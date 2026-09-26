@@ -17,21 +17,11 @@ export interface HubTab {
   tone?: 'action' | 'watch' | 'quiet';
 }
 
-/** The twelve rooms, in rail order, each a real route. */
-export const ROOMS = [
-  'feed',
-  'memory',
-  'briefing',
-  'watches',
-  'family',
-  'discoveries',
-  'calendar',
-  'places',
-  'money',
-  'engine',
-  'improvement',
-  'backlog',
-] as const;
+/** The rooms, in rail order, each a real route. The feed is the hub's own
+ *  page; the rest are not daydream at all and are only housed here. The old
+ *  engine rooms (memory, places, money, engine, discoveries, calendar, feed)
+ *  are 308 stubs to the feed since P4 of the 2026-09-25 simplification. */
+export const ROOMS = ['feed', 'watches', 'improvement', 'backlog'] as const;
 export type RoomId = (typeof ROOMS)[number];
 
 export function isRoom(s: string | null | undefined): s is RoomId {
@@ -41,26 +31,13 @@ export function isRoom(s: string | null | undefined): s is RoomId {
 /** PURE. The rail, with its badges. Tested so a badge can never count the
  *  wrong population without a test saying so. */
 export interface BadgeCounts {
-  /** Reached him and never rated — the starved input. */
-  needsRating: number;
-  /** Verdicts with no memory behind them. */
-  unrememberedRulings: number;
   activeWatches: number;
-  /** Unnamed active places at or over the ask threshold, by distinct days. */
-  needsNaming: number;
-  proposedRules: number;
-  /** Daydream heartbeat rows in trouble: failures counted or paused. */
-  failingJobs: number;
   /** Think notes on the feed he has not rated yet — the Noticed badge. */
   notesToRate: number;
 }
 
-/**
- * PURE. The rail — since the 2026-09-25 simplification (P2), the ONE feed of
- * think notes plus the rooms housed here that are not daydream at all. The
- * other daydream rooms still answer at their URLs until P4 deletes them, and
- * `isRoom` still knows them, so an old link lands and highlights nothing.
- */
+/** PURE. The rail: the ONE feed of think notes plus the rooms housed here
+ *  that are not daydream at all. */
 export function hubTabs(c: BadgeCounts): HubTab[] {
   const room = (id: RoomId, label: string, extra: Partial<HubTab> = {}): HubTab => ({
     id,
@@ -78,26 +55,27 @@ export function hubTabs(c: BadgeCounts): HubTab[] {
 }
 
 /**
- * Does this arrival at the bare path mean an OLD room? A `?tab=` link, or a
- * notification's `?rate=` / `?open=` deep link into the old feed room, still
- * goes where it always went. Everything else at the bare path is the feed.
+ * Does this arrival at the bare path carry an OLD link? A `?tab=` link, or a
+ * notification's `?rate=` / `?open=` deep link into the retired feed room.
+ * Everything else at the bare path — including `?note=` — is the feed.
  */
 export function isLegacyLink(url: { searchParams: URLSearchParams }): boolean {
   const q = url.searchParams;
   return q.has('tab') || q.has('rate') || q.has('open');
 }
 
-/** Where an old `?tab=` link lands. Unknown tabs go to the feed; the rest of
- *  the query (`?rate=`) rides along, because a notification's deep link is
- *  the one link that must keep working. */
+/** Where an old link lands. A `?tab=` naming a room still housed here goes to
+ *  it; everything else — a retired room, `?rate=` / `?open=` on a thought the
+ *  feed no longer shows — lands on the bare feed. The legacy keys are always
+ *  stripped, so the target can never be a legacy link itself (no loop); any
+ *  other query rides along. */
 export function legacyTabTarget(url: { searchParams: URLSearchParams }): string {
   const tab = url.searchParams.get('tab');
-  const room: RoomId = isRoom(tab) ? tab : 'feed';
   const q = new URLSearchParams(url.searchParams);
-  q.delete('tab');
+  for (const k of ['tab', 'rate', 'open']) q.delete(k);
   const qs = q.toString();
   // No fragment: a server `load` may not read `url.hash` (SvelteKit throws),
-  // and it does not need to — the browser carries `#place-…` across a 3xx
-  // whose Location has no fragment of its own.
-  return `${HUB_BASE}/${room}${qs ? `?${qs}` : ''}`;
+  // and it does not need to — the browser carries it across a 3xx.
+  const path = isRoom(tab) && tab !== 'feed' ? `${HUB_BASE}/${tab}` : HUB_BASE;
+  return `${path}${qs ? `?${qs}` : ''}`;
 }

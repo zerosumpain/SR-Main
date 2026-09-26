@@ -1,7 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { getHomeAssistantService } from '$lib/workflows/homeassistant/service';
 import { DEVICES_TEMPLATE, houseOnly, summariseDevices, type DevicesPayload, type DevicesSummary } from '$lib/home/devices';
-import { errMsg } from '$lib/daydream/types';
+import { errMsg } from '$lib/home/presence/types';
 import { areaAccess } from '$lib/server/area-scope';
 
 // The owner and `home` holders (the catalogue). Read LIVE from

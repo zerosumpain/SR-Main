@@ -12,7 +12,7 @@
 // key genuinely differs by kind: asking twice about the same place is annoying,
 // while a free-window suggestion should recur on a new day.
 
-import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNotNull, or, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamThoughts } from '$lib/db/schema';
 import { getSetting } from '$lib/server/models/settings';
@@ -29,8 +29,6 @@ import {
   mergeCounts,
   tallyFeedback,
   tallyRelevance,
-  RELEVANCE_MAX,
-  RELEVANCE_MIN,
   type FeedbackRow,
   type FeedbackSource,
   type RelevanceRow,
@@ -94,6 +92,15 @@ export const EMPTY_PERSIST: PersistResult = {
 export async function mutedKinds(): Promise<Set<string>> {
   const raw = await getSetting<string[]>(SETTINGS_MUTED_KINDS_KEY);
   return new Set(Array.isArray(raw) ? raw : []);
+}
+
+/** Lift a `never this kind` mute. An absolute mute has to be reversible, or a
+ *  mis-tap is permanent and the only recourse is editing app_settings by hand. */
+export async function unmuteKind(kind: string): Promise<void> {
+  const { setSetting } = await import('$lib/server/models/settings');
+  const current = await mutedKinds();
+  current.delete(kind);
+  await setSetting(SETTINGS_MUTED_KINDS_KEY, [...current]);
 }
 
 /** Every feedback row that still matters, for the learned weights. */
@@ -169,50 +176,6 @@ export async function loadRelevanceRows(sinceDays = 180): Promise<RelevanceRow[]
         }).format(r.createdAt)) % 24,
       ),
     }));
-}
-
-/**
- * Set the owner's relevance for one thought.
- *
- * Writes NO status, on purpose. That is what keeps this clear of both traps
- * this table has already sprung: it cannot collide with `PROTECTED_STATUSES`
- * (so a rating never freezes a live row out of re-detection), and it cannot be
- * mistaken for the negative verdict `archived` exists specifically to avoid
- * recording. Rate a card and then file it, or rate it and leave it in the
- * feed — both are coherent, and neither is a verdict on the suggestion.
- *
- * `null` clears it, so a mis-tap is undoable without inventing a sixth value.
- */
-export async function setRelevance(
-  thoughtId: string,
-  relevance: number | null,
-): Promise<{ kind: string; relevance: number | null }> {
-  let value: number | null = null;
-  if (relevance != null) {
-    if (!Number.isFinite(relevance)) throw new Error('relevance must be a number');
-    const rounded = Math.round(relevance);
-    if (rounded < RELEVANCE_MIN || rounded > RELEVANCE_MAX) {
-      throw new Error(`relevance must be ${RELEVANCE_MIN}..${RELEVANCE_MAX}`);
-    }
-    value = rounded;
-  }
-
-  const now = new Date();
-  const [row] = await db
-    .update(daydreamThoughts)
-    .set({
-      relevance: value,
-      // Cleared with the value. A timestamp left behind on a null rating would
-      // survive into `loadRelevanceRows`' window filter and describe a rating
-      // that no longer exists.
-      relevanceAt: value == null ? null : now,
-      updatedAt: now,
-    })
-    .where(eq(daydreamThoughts.id, thoughtId))
-    .returning({ kind: daydreamThoughts.kind });
-
-  if (!row) throw new Error(`no such thought: ${thoughtId}`);
-  return { kind: row.kind, relevance: value };
 }
 
 /** Learned multiplier per kind, plus the global threshold, computed once per
@@ -474,114 +437,6 @@ export async function persistCandidates(
   return result;
 }
 
-/**
- * Thoughts waiting to be said, best first.
- *
- * A verified review supersedes the cold-start score bar. That invariant used to
- * exist only inside `chooseChannel`: below-threshold rows had status
- * `suppressed`, while this query selected only `new`, so the router never got a
- * chance to apply it. Include exactly that reviewed exception here; an
- * unreviewed or uncertain suppressed row remains feed-only.
- */
-export async function listUndelivered(limit = 10) {
-  return db
-    .select()
-    .from(daydreamThoughts)
-    .where(
-      or(
-        and(
-          eq(daydreamThoughts.status, 'new'),
-          or(
-            isNull(daydreamThoughts.reviewVerdict),
-            eq(daydreamThoughts.reviewVerdict, 'verified'),
-          ),
-        ),
-        and(
-          eq(daydreamThoughts.status, 'suppressed'),
-          eq(daydreamThoughts.reviewVerdict, 'verified'),
-          isNull(daydreamThoughts.deliveredAt),
-        ),
-      ),
-    )
-    .orderBy(desc(daydreamThoughts.score))
-    .limit(limit);
-}
-
-/** Wake anything whose snooze has expired, so it can be considered again. */
-export async function wakeSnoozed(now = new Date()): Promise<number> {
-  const woken = await db
-    .update(daydreamThoughts)
-    .set({ status: 'new', snoozeUntil: null, updatedAt: now })
-    .where(
-      and(
-        eq(daydreamThoughts.status, 'snoozed'),
-        isNotNull(daydreamThoughts.snoozeUntil),
-        lt(daydreamThoughts.snoozeUntil, now),
-      ),
-    )
-    .returning({ id: daydreamThoughts.id });
-  return woken.length;
-}
-
-/** How long a verified, delivered, unrated thought sits before it files itself. */
-export const EXPIRE_AFTER_DAYS = 7;
-
-/**
- * Low-stakes thoughts file themselves.
- *
- * Delivered, verified, and unrated a week later: he saw it, it was right, and
- * it was not worth an opinion. That is the ordinary fate of a true and
- * unremarkable observation, and without this the feed accretes them. No
- * verdict is recorded — `expired` moves no weight and does not count towards
- * the threshold, exactly like `archived`. It is in `PROTECTED_STATUSES` for
- * the same reason `archived` is: the ten-minute re-detection rewrites any
- * status not on that list.
- */
-export async function expireStale(now = new Date()): Promise<number> {
-  const before = new Date(now.getTime() - EXPIRE_AFTER_DAYS * 86_400_000);
-  const rows = await db
-    .update(daydreamThoughts)
-    .set({ status: 'expired', suppressedReason: 'expired_unrated', updatedAt: now })
-    .where(
-      and(
-        inArray(daydreamThoughts.status, ['delivered', 'seen']),
-        eq(daydreamThoughts.reviewVerdict, 'verified'),
-        isNull(daydreamThoughts.feedback),
-        isNotNull(daydreamThoughts.deliveredAt),
-        lt(daydreamThoughts.deliveredAt, before),
-      ),
-    )
-    .returning({ id: daydreamThoughts.id });
-  return rows.length;
-}
-
-/**
- * Filed away, with no opinion attached.
- *
- * The third thing the owner needs to be able to say about a card, and until now
- * the only one he could not. `useful` and `not useful` are both VERDICTS: they
- * move the kind's weight, they count toward the cold-start threshold, and they
- * are quoted back at the engine as evidence about what is worth saying. Most
- * cards deserve neither. "Yes, I have seen that, now go away" is the ordinary
- * response to a true and unremarkable observation, and forcing it through a
- * thumb means either inflating a kind that was merely correct or punishing one
- * that did nothing wrong.
- *
- * So `archived` is its own status and writes NO feedback. It cannot be folded
- * into `dismissed`, which `recordFeedback` already writes for *not useful* —
- * reusing it would silently record a negative verdict the owner explicitly
- * declined to give.
- */
-export async function archiveThought(thoughtId: string): Promise<{ kind: string }> {
-  const [row] = await db
-    .update(daydreamThoughts)
-    .set({ status: 'archived', updatedAt: new Date() })
-    .where(eq(daydreamThoughts.id, thoughtId))
-    .returning({ kind: daydreamThoughts.kind });
-  if (!row) throw new Error(`no such thought: ${thoughtId}`);
-  return { kind: row.kind };
-}
-
 /** Record a verdict. `never_kind` also writes the absolute mute — the escape
  *  hatch has to be one tap, and one tap has to be final. */
 export async function recordFeedback(
@@ -617,77 +472,3 @@ export async function recordFeedback(
   return { kind: row.kind, muted: false };
 }
 
-/**
- * The sorting deck: things it nearly said, offered thirty at a time.
- *
- * The cold start is otherwise unreachable. `coldStartThreshold` needs about 25
- * responses to fall from 0.75 to its floor; `MAX_PER_DAY` is 4, and with no
- * push subscriber almost nothing is delivered at all — so at the observed rate
- * that number is never reached and every ranking mechanism downstream is a
- * random walk on an empty ledger.
- *
- * Suppressed thoughts are the natural material. They were judged not worth an
- * interruption, which is a guess the system made with no evidence, and they are
- * exactly the guesses worth checking. Rating one here costs nothing, because a
- * page he opened is attention already offered.
- *
- * Ordered by recurrence first: something proposed forty times and never said is
- * a far better question than something noticed once. That is the counterfactual
- * the recurrence counter exists to preserve.
- */
-export async function loadTriageDeck(limit = 30) {
-  return db
-    .select({
-      id: daydreamThoughts.id,
-      kind: daydreamThoughts.kind,
-      title: daydreamThoughts.title,
-      explanation: daydreamThoughts.explanation,
-      narrative: daydreamThoughts.narrative,
-      verified: daydreamThoughts.verified,
-      score: daydreamThoughts.score,
-      recurrenceCount: daydreamThoughts.recurrenceCount,
-      suppressedReason: daydreamThoughts.suppressedReason,
-      createdAt: daydreamThoughts.createdAt,
-    })
-    .from(daydreamThoughts)
-    .where(and(eq(daydreamThoughts.status, 'suppressed'), isNull(daydreamThoughts.feedback)))
-    .orderBy(desc(daydreamThoughts.recurrenceCount), desc(daydreamThoughts.score))
-    .limit(limit);
-}
-
-/**
- * Rule on a batch from the deck.
- *
- * Each verdict is written with `source: 'triage'` so it is worth 0.7 of a
- * considered one — real signal, priced for the attention it actually had.
- * Failures are collected rather than thrown: one bad id must not discard
- * twenty-nine answers the owner already gave.
- */
-export async function recordTriageBatch(
-  items: Array<{ id: string; verdict: 'useful' | 'not_useful' | 'never_kind' }>,
-): Promise<{ recorded: number; muted: string[]; failed: Array<{ id: string; error: string }> }> {
-  const muted: string[] = [];
-  const failed: Array<{ id: string; error: string }> = [];
-  let recorded = 0;
-
-  for (const item of items) {
-    try {
-      const res = await recordFeedback(item.id, item.verdict, undefined, 'triage');
-      recorded++;
-      if (res.muted) muted.push(res.kind);
-    } catch (err) {
-      failed.push({ id: item.id, error: err instanceof Error ? err.message : String(err) });
-    }
-  }
-
-  return { recorded, muted, failed };
-}
-
-/** Counts by status, for the ledger page header. */
-export async function thoughtCounts(): Promise<Record<string, number>> {
-  const rows = await db
-    .select({ status: daydreamThoughts.status, n: sql<number>`count(*)::int` })
-    .from(daydreamThoughts)
-    .groupBy(daydreamThoughts.status);
-  return Object.fromEntries(rows.map((r) => [r.status, r.n]));
-}

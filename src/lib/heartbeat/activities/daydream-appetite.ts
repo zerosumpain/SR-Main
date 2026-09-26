@@ -2,7 +2,7 @@ import { getSetting } from '$lib/server/models/settings';
 import { isUserActive } from '$lib/heartbeat/idle';
 import { listChatJobs } from '$lib/workflows/chat/activity';
 import { attributeSpend, budgetStatus, readQuotaMark, ZERO_SPEND } from '$lib/daydream/budget';
-import { resolveDaydreamModel } from '$lib/daydream/compose';
+import { resolveDaydreamModel } from '$lib/daydream/model';
 import { runAppetite } from '$lib/daydream/appetite/run';
 import { scannedToday } from '$lib/daydream/appetite/store';
 import { SETTINGS_ENABLED_KEY, errMsg } from '$lib/daydream/types';

@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { emptyHouseSummary, houseSummary } from '$lib/alexa/store.server';
-import { errMsg } from '$lib/daydream/types';
+import { errMsg } from '$lib/home/presence/types';
 import { areaAccess } from '$lib/server/area-scope';
 
 // The owner and `home:all` holders (the catalogue): per-room motion by the

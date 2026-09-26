@@ -15,7 +15,7 @@
 // one place every unit has already been normalised (`features/normalise.ts`),
 // so nothing here re-derives a Whoop millisecond or an Apple ×100.
 
-import { SWEEP_METRICS, column, isEntangled, loadSeries } from '../stats/sweep';
+import { SWEEP_METRICS, column, isEntangled, loadSeries } from '../stats/series';
 import { benjaminiHochberg, correlate as testPair, MIN_PAIRS, type TestResult } from '../stats/tests';
 import { metricHeading } from '../features/metrics';
 import { DEFAULT_SUBJECT } from '../types';

@@ -1,24 +1,11 @@
-import type { PageServerLoad } from "./$types";
-import { errMsg } from "$lib/daydream/types";
-import { loadMoney } from "$lib/daydream/ledger";
-import {
-  emptySpendRollup,
-  loadSpendRollup,
-} from "$lib/daydream/rooms/money.server";
+import { redirect } from '@sveltejs/kit';
+import type { PageServerLoad } from './$types';
 
-// Evidenced spend, and nothing else. The old tab paid for sixteen ledger
-// loaders on arrival; this room reads the spend ledger and its own grouped
-// rollup, which is the whole point of the rooms being routes.
-export const load: PageServerLoad = async () => {
-  try {
-    const [money, rollup] = await Promise.all([loadMoney(), loadSpendRollup()]);
-    return { money, rollup, loadError: null as string | null };
-  } catch (err) {
-    console.error("[daydream] money load failed:", errMsg(err));
-    return {
-      money: null as Awaited<ReturnType<typeof loadMoney>> | null,
-      rollup: emptySpendRollup(),
-      loadError: errMsg(err),
-    };
-  }
+// The money room was retired with the daydream engine it showed (spec
+// 2026-09-25-daydream-simplify, P4). Kept as a redirect stub so old bookmarks
+// and notification links land on the one feed. The query is dropped on
+// purpose: the feed reads `?tab=`/`?rate=`/`?open=` as legacy links and
+// would bounce straight back here.
+export const load: PageServerLoad = () => {
+  throw redirect(308, '/jkai/daydreams');
 };

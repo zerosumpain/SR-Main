@@ -12,7 +12,7 @@ import {
   jkaiMemories,
 } from '$lib/db/schema';
 import { getLLMClient } from '$lib/llm/client';
-import { resolveDaydreamModel } from './compose';
+import { resolveDaydreamModel } from './model';
 import { LOCAL_TZ, errMsg } from './types';
 import {
   isDaydreamFindingMemory,

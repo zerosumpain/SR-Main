@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('../stats/sweep', async (orig) => {
-  const real = await orig<typeof import('../stats/sweep')>();
+vi.mock('../stats/series', async (orig) => {
+  const real = await orig<typeof import('../stats/series')>();
   return { ...real, loadSeries: vi.fn() };
 });
 
-import { loadSeries } from '../stats/sweep';
+import { loadSeries } from '../stats/series';
 import { MIN_PAIRS } from '../stats/tests';
 import { correlateRows, createCorrelator, refusal } from './correlate';
 

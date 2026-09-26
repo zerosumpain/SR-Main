@@ -10,9 +10,9 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
-import { backfillFromHomeAssistant, DEFAULT_BACKFILL_DAYS } from '$lib/daydream/backfill';
-import { refreshPlaces } from '$lib/daydream/places';
-import { errMsg } from '$lib/daydream/types';
+import { backfillFromHomeAssistant, DEFAULT_BACKFILL_DAYS } from '$lib/home/presence/backfill';
+import { refreshPlaces } from '$lib/home/presence/places';
+import { errMsg } from '$lib/home/presence/types';
 
 /**
  * Service-to-service auth, alongside the owner session.

@@ -5,7 +5,7 @@ import {
   readQuotaMark,
   ZERO_SPEND,
 } from '$lib/daydream/budget';
-import { resolveDaydreamModel } from '$lib/daydream/compose';
+import { resolveDaydreamModel } from '$lib/daydream/model';
 import { runMemoryConsolidation } from '$lib/daydream/memory-consolidation.server';
 import { SETTINGS_ENABLED_KEY } from '$lib/daydream/types';
 import type { ActivityHandler } from '../types';

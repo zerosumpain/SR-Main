@@ -22,9 +22,9 @@ import { writeMemory } from '$lib/jkai/memory/service.server';
 // Only that durable theme can reach a future ponder pack; the incident-specific
 // sentence remains available as provenance.
 
-import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { daydreamThoughts, jkaiMemories } from '$lib/db/schema';
+import { daydreamThoughts } from '$lib/db/schema';
 
 /** Long enough for a real correction, short enough that a card stays a card. */
 export const MAX_NOTE_CHARS = 1000;
@@ -82,27 +82,3 @@ export async function addNote(thoughtId: string, text: string): Promise<NoteResu
   });
 }
 
-/**
- * Recent notes, as pack cards.
- *
- * Carded separately from the general memory sweep rather than relying on it:
- * the snapshot takes 200 memories with no ordering guarantee, and a correction
- * John typed yesterday about a suggestion the engine is about to make again is
- * the single most valuable card in the pack. It should not be competing for a
- * slot with a two-year-old note about a coffee preference.
- */
-export async function recentNotes(limit = 12, withinDays = 90) {
-  const since = new Date(Date.now() - withinDays * 86_400_000);
-  return db
-    .select({
-      id: daydreamThoughts.id,
-      kind: daydreamThoughts.kind,
-      title: daydreamThoughts.title,
-      note: daydreamThoughts.note,
-      noteAt: daydreamThoughts.noteAt,
-    })
-    .from(daydreamThoughts)
-    .where(and(sql`${daydreamThoughts.note} is not null`, gte(daydreamThoughts.noteAt, since)))
-    .orderBy(desc(daydreamThoughts.noteAt))
-    .limit(limit);
-}
