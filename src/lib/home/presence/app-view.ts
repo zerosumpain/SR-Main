@@ -20,6 +20,13 @@
 //
 // Today's TRAIL is a history, not a position, so it rides with `today`: it is
 // in a view exactly where the person's day is.
+//
+// Every view also says what the app may OFFER the person beyond the family
+// (`access`: chat, news, … — `$lib/server/app-access`), and, for a member who
+// has just asked, carries the one-time code that pairs their phone with the
+// site (`sitePair`). That is the only way a member's code is ever minted: the
+// owner mints his at /api/admin/native-devices, behind his session; a member
+// has no page that could, so the push answers the app's request instead.
 
 import { and, asc, gte, inArray, isNotNull } from 'drizzle-orm';
 import { db } from '$lib/db';
@@ -32,6 +39,8 @@ import type { HouseholdMember } from './members';
 import { nowStatus, nowSub, type NowStatus } from './now';
 import { ABSURD_SPEED_KMH, LOCAL_TZ, MAX_USABLE_ACCURACY_M, activeLabels, errMsg, localDayStart } from './types';
 import { peopleViewerForEmail, scopeHousehold, type PeopleViewer, type ScopedPresence } from './viewer';
+import { appAccessForEmail, type AppAccess } from '$lib/server/app-access';
+import { createPairingCode, isPairingCodeLive } from '$lib/server/native-auth';
 
 /** Two fixes further apart than this are not joined: the line would be a guess. */
 export const TRAIL_GAP_S = 600;
@@ -76,15 +85,34 @@ export interface AppPerson {
   today: AppToday | null;
 }
 
+/** A one-time code that pairs this person's phone with the site. */
+export interface SitePair {
+  /** The site's public origin — where the phone redeems the code. */
+  server: string;
+  code: string;
+  expiresAt: string;
+}
+
+export interface AppViewAccess extends AppAccess {
+  /** Only for a member holding chat or news who asked in the last 15 minutes. */
+  sitePair: SitePair | null;
+}
+
 export interface AppHouseholdView {
   generatedAt: string;
-  /** 'none': a household member on the app who may not see the household
-   *  (no Family Circle). They get no people — only the places to watch. */
+  /** 'none': someone on the app who may not see the household (no Family
+   *  Circle, or no site access at all). They get no people — a household
+   *  member among them also gets the places to watch. */
   viewer: 'owner' | 'household' | 'none';
   people: AppPerson[];
   /** Places whose leaving switches the phone to close tracking. */
   watch?: WatchedPlace[];
+  /** What the app may offer this person beyond the family. */
+  access: AppViewAccess;
 }
+
+/** A view before its `access` is attached — what the pure builder returns. */
+export type AppPeopleView = Omit<AppHouseholdView, 'access'>;
 
 /** A place the phone registers as a geofence (see `trackOnLeave`). */
 export interface WatchedPlace {
@@ -178,7 +206,7 @@ export function buildAppView(input: {
   labels: ReadonlyMap<string, string | null>;
   dayStart: Date;
   now: Date;
-}): AppHouseholdView {
+}): AppPeopleView {
   const { viewer, scoped, names, positions, trails, labels, dayStart, now } = input;
   const posBy = new Map(positions.map((p) => [p.subject, p]));
   const selfSubject = viewer.kind === 'household' ? viewer.subject : input.self;
@@ -207,8 +235,87 @@ export function buildAppView(input: {
   return { generatedAt: now.toISOString(), viewer: viewer.kind, people };
 }
 
-function withWatch(view: AppHouseholdView, watch: WatchedPlace[] | undefined): AppHouseholdView {
+function withWatch(view: AppPeopleView, watch: WatchedPlace[] | undefined): AppPeopleView {
   return watch ? { ...view, watch } : view;
+}
+
+/** How recent `sitePairWanted` must be for the push to answer it. */
+export const SITE_PAIR_WANTED_MS = 15 * 60_000;
+/** A cached code with less life than this left is replaced, not re-sent. */
+export const SITE_PAIR_REUSE_FLOOR_MS = 2 * 60_000;
+
+/**
+ * Codes minted by this process, by email, so a push every 30 s re-sends the
+ * code the phone may be halfway through redeeming instead of rotating it —
+ * `createPairingCode` deletes the email's previous code, so a fresh one each
+ * cycle would kill the one on the screen. Lost on restart, which costs one
+ * rotation, and the phone simply picks up the new code on its next read.
+ */
+const sitePairCodes = new Map<string, { code: string; expiresAt: Date }>();
+
+/** For tests: forget every cached code. */
+export function resetSitePairCache(): void {
+  sitePairCodes.clear();
+}
+
+/**
+ * The site's public origin, where a phone redeems a code. There is no request
+ * here to take `url.origin` from (the heartbeat has none), so it is the same
+ * configured origin the rest of the server uses for links it sends out.
+ */
+export function siteOrigin(): string {
+  const configured =
+    process.env.PUBLIC_BASE_URL?.trim() || process.env.PUBLIC_SITE_URL?.trim() || process.env.ORIGIN?.trim();
+  return (configured || 'https://strangeramblings.com').replace(/\/+$/, '');
+}
+
+/**
+ * Did this person ask to pair with the site recently enough to answer? PURE.
+ * A stamp from the future beyond a little clock skew is ignored rather than
+ * read as a request that never goes stale.
+ */
+export function sitePairWanted(stamp: string | null | undefined, now: Date): boolean {
+  if (!stamp) return false;
+  const at = Date.parse(stamp);
+  if (!Number.isFinite(at)) return false;
+  const age = now.getTime() - at;
+  return age <= SITE_PAIR_WANTED_MS && age >= -2 * 60_000;
+}
+
+/**
+ * A pairing code for a MEMBER who holds chat or news and has asked, or null.
+ *
+ * Never for the owner: his phone pairs from /admin, behind his own session,
+ * and a code of his travelling through the pilot would put an owner credential
+ * one hop further from him than it needs to be. Never for anyone holding
+ * neither area: they have nothing on the site to pair for. A mint that fails is
+ * null — the rest of the push is worth more than one code.
+ */
+async function sitePairFor(
+  email: string,
+  access: AppAccess,
+  wanted: string | null | undefined,
+  now: Date,
+): Promise<SitePair | null> {
+  if (access.owner || !(access.chat || access.news) || !sitePairWanted(wanted, now)) {
+    sitePairCodes.delete(email);
+    return null;
+  }
+  try {
+    let held = sitePairCodes.get(email);
+    const reusable =
+      !!held &&
+      held.expiresAt.getTime() - now.getTime() > SITE_PAIR_REUSE_FLOOR_MS &&
+      (await isPairingCodeLive(held.code));
+    if (!held || !reusable) {
+      held = await createPairingCode(email);
+      sitePairCodes.set(email, held);
+    }
+    return { server: siteOrigin(), code: held.code, expiresAt: held.expiresAt.toISOString() };
+  } catch (err) {
+    console.error('[app-view] could not mint a site pairing code:', errMsg(err));
+    return null;
+  }
 }
 
 /** Today's trail for these subjects, oldest first. */
@@ -255,7 +362,7 @@ async function loadLabels(ids: readonly string[]): Promise<Map<string, string | 
 export interface AppViewsResult {
   /** Views the pilot filed. */
   stored: number;
-  /** People on the app who got no view: not the owner, not in the Family Circle, or no household row. */
+  /** People on the app who see nobody: not the owner, not in the Family Circle, or no household row. */
   refused: number;
   error?: string;
 }
@@ -263,7 +370,9 @@ export interface AppViewsResult {
 /**
  * Build a view for everyone on the app and hand the whole set to the pilot,
  * which REPLACES the family's views with it — somebody who stops qualifying
- * loses the view they had on the next cycle. Null when no token is configured,
+ * loses what their view showed on the next cycle. Everyone gets a view, since
+ * it also carries `access`; someone who may not see the household gets one
+ * with nobody in it. Null when no token is configured,
  * and null without a request when the pilot's users list cannot be read: an
  * empty push would wipe everybody's map over a read failure.
  */
@@ -278,25 +387,38 @@ export async function pushAppViews(
   if (!users) return null;
 
   const viewers: Array<{ email: string; viewer: PeopleViewer }> = [];
-  // Household members on the app who may not see the household still get
-  // the watched places: close tracking is about their own phone.
-  const watchOnly: string[] = [];
+  // Everyone else on the app gets a view with nobody in it. A household member
+  // among them still gets the watched places: close tracking is about their
+  // own phone. Anyone else gets no places — they are not the household's.
+  const outside: Array<{ email: string; household: boolean }> = [];
+  const accessBy = new Map<string, AppViewAccess>();
+  const seen = new Set<string>();
   let refused = 0;
   const memberEmails = new Set(members.map((m) => m.email).filter((e): e is string => !!e));
   for (const u of users) {
     const email = String(u.email ?? '').trim().toLowerCase();
-    const viewer = email ? await peopleViewerForEmail(email) : null;
+    if (!email) {
+      refused++;
+      continue;
+    }
+    if (seen.has(email)) continue;
+    seen.add(email);
+    const viewer = await peopleViewerForEmail(email);
+    const { access } = await appAccessForEmail(email, viewer !== null);
+    accessBy.set(email, { ...access, sitePair: await sitePairFor(email, access, u.sitePairWanted, now) });
     if (viewer) viewers.push({ email, viewer });
     else {
       refused++;
-      if (memberEmails.has(email)) watchOnly.push(email);
+      outside.push({ email, household: memberEmails.has(email) });
     }
   }
   const watch = await loadWatchedPlaces().catch(() => undefined);
+  const accessOf = (email: string) => accessBy.get(email) as AppViewAccess;
 
   const views: Array<{ email: string; view: AppHouseholdView }> = [];
-  for (const email of watchOnly) {
-    views.push({ email, view: { generatedAt: now.toISOString(), viewer: 'none', people: [], watch } });
+  for (const { email, household } of outside) {
+    const view: AppHouseholdView = { generatedAt: now.toISOString(), viewer: 'none', people: [], access: accessOf(email) };
+    views.push({ email, view: household && watch ? { ...view, watch } : view });
   }
   if (viewers.length) {
     const dayStart = localDayStart(now);
@@ -310,7 +432,8 @@ export async function pushAppViews(
     for (const v of scopedBy) {
       views.push({
         email: v.email,
-        view: withWatch(buildAppView({
+        view: {
+          ...withWatch(buildAppView({
           viewer: v.viewer,
           self: members.find((m) => m.email === v.email)?.subject ?? null,
           scoped: v.scoped,
@@ -321,6 +444,8 @@ export async function pushAppViews(
           dayStart,
           now,
         }), watch),
+          access: accessOf(v.email),
+        },
       });
     }
   }

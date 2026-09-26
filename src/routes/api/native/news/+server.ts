@@ -1,6 +1,7 @@
 import type { RequestHandler } from './$types';
-import { clampLimit, withDevice } from '$lib/server/native-handler';
+import { clampLimit, withNativeAccess } from '$lib/server/native-handler';
 import { loadNewsDesk, parseNewsSort, parseNewsView } from '$lib/news/desk';
+import { newsCapabilities } from '$lib/news/capabilities.server';
 
 /**
  * GET /api/native/news — the desk, shaped for a 390pt screen.
@@ -18,8 +19,17 @@ import { loadNewsDesk, parseNewsSort, parseNewsView } from '$lib/news/desk';
  * `read` and `kept` arrive as booleans ON the row rather than as two separate
  * key arrays. The web desk holds Sets and tests membership while rendering a
  * table; a phone list re-renders per row and would rebuild that Set each time.
+ *
+ * A member's phone reads the desk as the web gives it to them: their own saved
+ * and read stories (keyed on their email, as `newsOwnerKey` keys the web), and
+ * none of John's material — no correlations, no kept-in-graph marks, no
+ * retained counts (`ownerData`). `can` is the same capability set the web page
+ * renders its row actions from, so the phone offers exactly what
+ * `/api/native/news/actions` will then accept.
  */
-export const GET: RequestHandler = withDevice(async ({ url }, identity) => {
+export const GET: RequestHandler = withNativeAccess('news', async (event, identity) => {
+  const { url } = event;
+  const can = await newsCapabilities(event);
   const view = parseNewsView(url.searchParams.get('view'));
   const desk = await loadNewsDesk({
     view,
@@ -30,6 +40,7 @@ export const GET: RequestHandler = withDevice(async ({ url }, identity) => {
     limit: clampLimit(url.searchParams.get('limit'), 40, 100),
     force: url.searchParams.has('fresh'),
     ownerKey: identity.ownerEmail,
+    ownerData: can.ownerData,
   });
 
   const read = new Set(desk.readKeys);
@@ -43,6 +54,7 @@ export const GET: RequestHandler = withDevice(async ({ url }, identity) => {
     newSinceLast: desk.feed.newSinceLast,
     anchorCount: desk.anchorCount,
     stats: desk.stats,
+    can: { graph: can.graph, research: can.research, note: can.note, ask: can.ask },
     sources: desk.feed.sources,
     stories: desk.feed.stories.map((story, index) => {
       const correlation = desk.correlations[story.key];

@@ -19,14 +19,14 @@ import { startOrphanSweep } from '$lib/jkai/media/sweep';
 // The barrel is maintained by the node-builder codegen.
 import '$lib/integrations/adapters';
 import { isPublicPath, isGuestAllowedPath } from '$lib/auth';
-import { requiredFor } from '$lib/access/catalogue';
+import { requiredFor, satisfies } from '$lib/access/catalogue';
 import { requestHost } from '$lib/request-host';
 import { resolveAdminRedirect } from '$lib/components/admin/admin-nav';
 import { isOwnerEmail } from '$lib/server/access';
 import { INVITE_COOKIE, signInWithInvite } from '$lib/server/invites';
 import { viewerHolds, viewerOf } from '$lib/server/viewer';
 import { rateLimit } from '$lib/server/rate-limit';
-import { nativeDevice } from '$lib/server/native-gate';
+import { actAsDeviceMember, memberDevice, nativeDevice, pairedDevice } from '$lib/server/native-gate';
 import { hasMaintenanceSecret } from '$lib/server/maintenance-auth';
 import { isPublicApiPath } from '$lib/server/public-api-paths';
 import { hasStudioServiceToken } from '$lib/server/studio-auth';
@@ -742,7 +742,9 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   // `$lib/server/native-handler`: every handler under here resolves the identity
   // itself and 401s without one, so this bypass grants reachability and nothing
   // else. A new file that forgets is not a hole that opens quietly — it has no
-  // session and no identity, so it cannot read anything.
+  // session and no identity, so it cannot read anything. `withDevice` is
+  // owner-only; the few routes a MEMBER's phone may reach opt in one at a time
+  // through `withNativeAccess`, which checks the member's grant itself.
   //
   // `/api/native/pair` is the deliberate exception and gates itself: it is the
   // one path that must answer a caller holding no device token yet, because
@@ -750,9 +752,10 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   if (pathname.startsWith('/api/native/')) {
     // /api/native/pair gates itself and has its own per-address ceiling; every
     // other path here is behind a device token and gets the same per-caller
-    // limits a browser session would.
+    // limits a browser session would. Keyed on ANY live device (`pairedDevice`),
+    // since a member's phone finds no bucket under the owner-only `nativeDevice`.
     if (pathname !== '/api/native/pair') {
-      const device = await nativeDevice(event.request);
+      const device = await pairedDevice(event.request);
       const capped = device ? rateLimited(pathname, event.request.method, `device:${device.id}`) : null;
       if (capped) return capped;
     }
@@ -789,6 +792,33 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
       const capped = rateLimited(pathname, event.request.method, `device:${device.id}`);
       if (capped) return capped;
       return resolve(event);
+    }
+
+    // A MEMBER's phone on the same two paths. Not the sessionless resolve
+    // above: sessionless is the OWNER to every chat helper (`areaAccess` reads
+    // anonymous as an owner-grade lane), so a member device let through there
+    // would chat as John. Instead the request is made to look like the member
+    // signed in (`actAsDeviceMember` sets `locals.viewer` and `locals.auth`) and
+    // falls through to the ordinary `/api` gate below — `memberMayReach`, the
+    // per-user limit — and then the handler's own member path: `chatAccess`,
+    // the restricted tool policy, the daily turn cap, `requireOwnJob`.
+    //
+    // A member device without chat is refused here rather than falling through
+    // as a request with no session, so the phone gets a 403 it can explain
+    // instead of a 401 that reads as "pair again".
+    const held = await memberDevice(event.request);
+    if (held) {
+      if (!satisfies(held.grants, 'jkai.chat:self')) {
+        return new Response(JSON.stringify({ error: 'Forbidden' }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      // Keyed on the device as well as (below) on the member's email, so a
+      // phone stuck in a retry loop spends its own allowance first.
+      const capped = rateLimited(pathname, event.request.method, `device:${held.identity.id}`);
+      if (capped) return capped;
+      actAsDeviceMember(event.locals, held);
     }
   }
 

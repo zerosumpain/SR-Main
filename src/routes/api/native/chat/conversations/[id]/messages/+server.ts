@@ -4,7 +4,8 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { conversations } from '$lib/db/schema';
 import { getConversationMessages } from '$lib/jkai/queries';
-import { clampLimit, withDevice } from '$lib/server/native-handler';
+import { clampLimit, withNativeAccess } from '$lib/server/native-handler';
+import { requireConversation } from '$lib/jkai/chat-access.server';
 import { nativeArtifacts, nativeSources } from '$lib/jkai/native-rich';
 
 /**
@@ -23,8 +24,13 @@ import { nativeArtifacts, nativeSources } from '$lib/jkai/native-rich';
  * `artifacts` (charts, tables, diagrams from the visualise tools — see
  * `$lib/jkai/native-rich`) and `sources` (the files and research it cited).
  * Without these the phone showed "render_chart ✓" where the web shows a chart.
+ *
+ * A member reads a thread only if the web would let them
+ * (`requireConversation` 'read'): one they may not see is a 404, exactly like
+ * one that does not exist.
  */
-export const GET: RequestHandler = withDevice(async ({ params, url }) => {
+export const GET: RequestHandler = withNativeAccess('jkai.chat', async (event, _identity, role) => {
+  const { params, url } = event;
   const beforeRaw = url.searchParams.get('before');
   const beforeId = url.searchParams.get('beforeId');
   const before = beforeRaw ? new Date(beforeRaw) : null;
@@ -38,6 +44,7 @@ export const GET: RequestHandler = withDevice(async ({ params, url }) => {
     .where(eq(conversations.id, params.id))
     .limit(1);
   if (!conversation) return json({ error: 'Conversation not found' }, { status: 404 });
+  if (role === 'member') await requireConversation(event, params.id, 'read');
 
   const history = await getConversationMessages(params.id, {
     limit: clampLimit(url.searchParams.get('limit'), 60, 200),

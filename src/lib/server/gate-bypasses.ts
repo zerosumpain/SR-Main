@@ -37,7 +37,8 @@ export const HOOK_BYPASSES: string[] = [
   // on purpose: nothing under /api/native has a browser caller, so the subtree
   // exists solely for this credential rather than being an opening cut into
   // somebody else's endpoints. Every handler under it resolves its own identity
-  // through `withDevice`, so a file added here without one answers nothing.
+  // through `withDevice` (owner only) or `withNativeAccess` (owner, or a member
+  // holding that route's area), so a file added here without one answers nothing.
   '/api/native',
   '/api/scraper/script', // SCRAPER_SERVICE_TOKEN
   '/api/mcp', // bridge token (tools/list + tools/call)
@@ -166,11 +167,12 @@ export const HOOK_NON_BYPASSES: string[] = [
  * HOOK_BYPASSES.
  */
 export const BYPASS_GUARDS: Record<string, string> = {
-  '/api/native': 'Bearer device token (native_credentials row) · re-checked per handler by withDevice',
+  '/api/native':
+    'Bearer device token (native_credentials row) · re-checked per handler: withDevice (owner only) or withNativeAccess (owner, or a member holding that area)',
   '/api/workflows/orchestrator/chat':
-    'owner session OR Bearer device token · the phone starting, polling and cancelling a chat turn',
+    "owner session OR owner's Bearer device token · a member's device token only as that member's session (jkai.chat:self), through the member gate",
   '/api/workflows/orchestrator/chat/stream':
-    'owner session OR Bearer device token · SSE for the turn above',
+    "owner session OR owner's Bearer device token · a member's device as that member · SSE for the turn above",
   '/api/scraper/script': 'homeserv-only + SCRAPER_SERVICE_TOKEN',
   '/api/mcp': 'Bearer SERVICE_BRIDGE_SECRET',
   '/api/claude-changelog': 'POST only · ingest secret',

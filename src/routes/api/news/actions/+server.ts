@@ -1,18 +1,8 @@
 import { isHttpError, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import {
-  commissionNewsResearch,
-  keepNewsInGraph,
-  linkNewsInNote,
-  newsActionArticle,
-} from '$lib/news/actions';
 import { getNewsStory, isNewsSource, isNewsStoryId } from '$lib/news/sources';
 import { newsOwnerKey, toggleNewsFavourite } from '$lib/news/favourites';
-import { newsCapabilities } from '$lib/news/capabilities.server';
-import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
-import { writeSpace } from '$lib/jkai/intel/scope';
-import { areaAccess } from '$lib/server/area-scope';
-import { reserveResearchStart } from '$lib/deepdive/session-access.server';
+import { runScopedNewsAction } from '$lib/news/actions.server';
 
 export const POST: RequestHandler = async (event) => {
   const { request, locals } = event;
@@ -33,29 +23,10 @@ export const POST: RequestHandler = async (event) => {
       ]);
       return json(await toggleNewsFavourite(ownerKey, story));
     }
-    // Each action writes into another area: it needs that area's grant, and
-    // lands in the caller's own space there, never the owner's.
-    const can = await newsCapabilities(event);
-    if (!['graph', 'note', 'research'].includes(action)) {
-      return json({ error: 'Unknown news action' }, { status: 400 });
-    }
-    if (!can[action as 'graph' | 'note' | 'research']) {
-      return json({ error: 'Your access does not include that.' }, { status: 403 });
-    }
-    if (action === 'research') {
-      const access = await areaAccess(event, 'research');
-      await reserveResearchStart(access, 'brief');
-      const article = await newsActionArticle(source, id);
-      return json(await commissionNewsResearch(article, access.own), { status: 201 });
-    }
-    const article = await newsActionArticle(source, id);
-    if (action === 'graph') {
-      const scope = await resolveRequestScope(event, 'own');
-      return json(await keepNewsInGraph(article, { scope, spaceId: writeSpace(scope) }), { status: 201 });
-    }
-    // Into the caller's own notebook — never the owner's for a member.
-    const notes = await areaAccess(event, 'jkai.notes');
-    return json(await linkNewsInNote(article, notes.own), { status: 201 });
+    // Each other action writes into another area: it needs that area's grant,
+    // and lands in the caller's own space there, never the owner's. Shared with
+    // the iPhone's door (`$lib/news/actions.server`).
+    return json(await runScopedNewsAction(event, action, source, id), { status: 201 });
   } catch (err) {
     // A refusal (the research cap, a scope check) is an answer, not a failure.
     if (isHttpError(err)) return json({ error: err.body.message }, { status: err.status });

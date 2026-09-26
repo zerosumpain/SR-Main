@@ -1,7 +1,10 @@
-import { json } from '@sveltejs/kit';
+import { isHttpError, json } from '@sveltejs/kit';
 import type { RequestEvent } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
+import { satisfies, type AreaId } from '$lib/access/catalogue';
 import { identifyDevice, touchDevice, type NativeIdentity } from './native-auth';
+import { actAsDeviceMember } from './native-gate';
+import { loadMember } from './grants';
 
 /**
  * The gate every `/api/native/*` handler passes through.
@@ -67,6 +70,84 @@ export function withDevice<E extends RequestEvent, T>(handler: NativeHandler<E, 
       if (result instanceof Response) return result;
       return json(result as Record<string, unknown>);
     } catch (error) {
+      console.error(`[native] ${event.url.pathname} failed`, error);
+      return json({ error: 'Something went wrong. Try again.' }, { status: 500 });
+    }
+  };
+}
+
+export type NativeRole = 'owner' | 'member';
+
+export type NativeAccessHandler<E extends RequestEvent, T> = (
+  event: E,
+  identity: NativeIdentity,
+  role: NativeRole,
+) => Promise<T> | T;
+
+/**
+ * `withDevice`, opened to a MEMBER's phone for one area — the wrapper a route
+ * uses once it scopes itself exactly like its web twin, and not before.
+ *
+ * `withDevice` stays owner-only on purpose. Every handler written before
+ * members could pair assumes the owner (the owner's threads, the owner's graph,
+ * the owner's defaults), so a route reaches members only by being converted to
+ * this, one at a time, and a route nobody converted keeps refusing them. That
+ * is the whole design: new reach is opt-in per file, never inherited.
+ *
+ * For the owner nothing changes: no locals are touched, the request stays
+ * sessionless, and the area seam reads that as the owner exactly as it did.
+ *
+ * For anyone else the email on the credential must be a member NOW
+ * (`loadMember`, read fresh on every request, so a demotion closes the phone on
+ * its next call) holding `<area>:self`. The request is then made to look like
+ * that member signed in on the web (`actAsDeviceMember`) so every web helper —
+ * `chatAccess`, `requireConversation`, `newsCapabilities`, `newsOwnerKey` —
+ * answers for them and not for the sessionless owner.
+ *
+ * `area: 'any'` is for `/api/native/me` alone: the call the phone makes to ask
+ * what it may show, which must answer any member whatever they hold.
+ *
+ * A refusal thrown by a web helper (404 for a thread they cannot see, 429 for a
+ * daily cap) comes back as `{ error }` with its status. Those sentences were
+ * written for a person — "That is 30 files today — the limit." — and flattening
+ * them into "Something went wrong" would leave the phone retrying a cap.
+ */
+export function withNativeAccess<E extends RequestEvent, T>(
+  area: AreaId | 'any',
+  handler: NativeAccessHandler<E, T>,
+) {
+  return async (event: E): Promise<Response> => {
+    const identity = await identifyDevice(event.request);
+    if (!identity) {
+      return json({ error: 'Pair this iPhone again.' }, { status: 401 });
+    }
+
+    let role: NativeRole = 'owner';
+    if (!isOwnerEmail(identity.ownerEmail)) {
+      // Fail closed: a lookup that cannot reach the database refuses the
+      // request rather than guessing who this is.
+      const member = await loadMember(identity.ownerEmail).catch((err) => {
+        console.error('[native] member lookup failed:', err);
+        return null;
+      });
+      if (!member) {
+        return json({ error: 'This account can no longer use the app.' }, { status: 403 });
+      }
+      if (area !== 'any' && !satisfies(member.grants, `${area}:self`)) {
+        return json({ error: 'Your access does not include that.' }, { status: 403 });
+      }
+      actAsDeviceMember(event.locals, { identity, principalId: member.principalId, grants: member.grants });
+      role = 'member';
+    }
+
+    void touchDevice(identity.id).catch(() => {});
+
+    try {
+      const result = await handler(event, identity, role);
+      if (result instanceof Response) return result;
+      return json(result as Record<string, unknown>);
+    } catch (error) {
+      if (isHttpError(error)) return json({ error: error.body.message }, { status: error.status });
       console.error(`[native] ${event.url.pathname} failed`, error);
       return json({ error: 'Something went wrong. Try again.' }, { status: 500 });
     }

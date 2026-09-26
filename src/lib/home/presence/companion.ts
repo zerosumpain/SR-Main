@@ -39,6 +39,13 @@ export interface HouseholdUser {
   email: string;
   name: string;
   sharing: boolean;
+  /**
+   * ISO8601, when this person last asked the app to pair with the SITE (for
+   * chat and news), or null. Set by the pilot; absent from a pilot that
+   * predates the member device lane, which reads as never asked. The push
+   * answers it with a one-time code in their view (`app-view.ts`).
+   */
+  sitePairWanted?: string | null;
 }
 
 export interface HouseholdFix {

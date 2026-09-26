@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { withDevice } from '$lib/server/native-handler';
+import { withNativeAccess } from '$lib/server/native-handler';
+import { newsCapabilities } from '$lib/news/capabilities.server';
 import { isNewsSource } from '$lib/constants/news-sources';
 import { isNewsStoryId } from '$lib/news/sources';
 import { readNewsStory } from '$lib/news/reader';
@@ -19,8 +20,13 @@ import { recordRead } from '$lib/news/store';
  * article must open outside, and anything else carries extracted text. Sending
  * empty content with no mode would make "we could not fetch it" and "it has no
  * body" the same thing on screen.
+ *
+ * Saved and read are keyed on the holder's email, owner or member, as the web
+ * reader keys them on the session's. `can` travels with the story for the same
+ * reason it does on the desk: the detail screen's actions are the row's.
  */
-export const GET: RequestHandler = withDevice(async ({ params, url }, identity) => {
+export const GET: RequestHandler = withNativeAccess('news', async (event, identity) => {
+  const { params, url } = event;
   const { source, id } = params;
   if (!isNewsSource(source) || !isNewsStoryId(source, id)) {
     return json({ error: 'Unknown news story' }, { status: 404 });
@@ -28,7 +34,7 @@ export const GET: RequestHandler = withDevice(async ({ params, url }, identity) 
 
   const article = await readNewsStory(source, id, { force: url.searchParams.has('fresh') });
   const key = `${source}:${id}`;
-  const favourite = await isNewsFavourite(identity.ownerEmail, key);
+  const [favourite, can] = await Promise.all([isNewsFavourite(identity.ownerEmail, key), newsCapabilities(event)]);
 
   // Best-effort, and deliberately not awaited into the response: a failed read
   // stamp must not cost the reader the article.
@@ -59,5 +65,6 @@ export const GET: RequestHandler = withDevice(async ({ params, url }, identity) 
     truncated: article.truncated,
     message: article.message,
     favourite,
+    can: { graph: can.graph, research: can.research, note: can.note, ask: can.ask },
   };
 });

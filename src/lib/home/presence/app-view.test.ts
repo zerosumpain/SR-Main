@@ -2,11 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const h = vi.hoisted(() => ({
   token: 'tok' as string | null,
-  users: [] as Array<{ email: string; name: string; sharing: boolean }> | null,
+  users: [] as Array<{ email: string; name: string; sharing: boolean; sitePairWanted?: string | null }> | null,
   viewers: new Map<string, unknown>(),
   trailRows: [] as unknown[],
   posted: [] as unknown[],
   status: 200,
+  owners: new Set<string>(),
+  members: new Map<string, { principalId: string; grants: Set<string> }>(),
+  minted: [] as Array<{ email: string; code: string; expiresAt: Date }>,
+  live: new Set<string>(),
+  ttlMs: 10 * 60_000,
 }));
 
 // A select chain that answers with the trail rows whatever is asked; the
@@ -37,12 +42,27 @@ vi.mock('./places', () => ({
     { id: 'g', label: 'Gym', lat: 40.77, lon: -73.95, radiusM: 80, isHome: false, trackOnLeave: false },
   ],
 }));
+// The access flags run for real (`appAccessFrom`); only who is an owner, who
+// is a member and the credential table are stood in for.
+vi.mock('$lib/server/access', () => ({ isOwnerEmail: (e: string) => h.owners.has(String(e).toLowerCase()) }));
+vi.mock('$lib/server/grants', () => ({ loadMember: async (e: string) => h.members.get(e) ?? null }));
+vi.mock('$lib/server/native-auth', () => ({
+  createPairingCode: async (email: string) => {
+    const minted = { email, code: `code-${h.minted.length + 1}`, expiresAt: new Date(NOW.getTime() + h.ttlMs) };
+    h.minted.push(minted);
+    h.live.add(minted.code);
+    return { code: minted.code, expiresAt: minted.expiresAt };
+  },
+  isPairingCodeLive: async (code: string) => h.live.has(code),
+}));
 vi.mock('./viewer', async (orig) => {
   const real = await orig<typeof import('./viewer')>();
   return { ...real, peopleViewerForEmail: async (email: string) => h.viewers.get(email) ?? null };
 });
 
-const { buildAppView, summariseTrail, thin, trailSubjects, pushAppViews } = await import('./app-view');
+const { buildAppView, summariseTrail, thin, trailSubjects, pushAppViews, resetSitePairCache, sitePairWanted } = await import(
+  './app-view'
+);
 const { scopeHousehold } = await import('./viewer');
 type Presence = import('./household').HouseholdPresence;
 type TrailPoint = import('./app-view').TrailPoint;
@@ -81,6 +101,12 @@ beforeEach(() => {
   h.trailRows = [];
   h.posted = [];
   h.status = 200;
+  h.owners = new Set(['owner@example.test']);
+  h.members.clear();
+  h.minted = [];
+  h.live.clear();
+  h.ttlMs = 10 * 60_000;
+  resetSitePairCache();
 });
 
 describe('thin', () => {
@@ -203,7 +229,7 @@ describe('pushAppViews', () => {
     expect(h.posted).toEqual([]);
   });
 
-  it('builds a view for each app user who qualifies and counts the rest as refused', async () => {
+  it('builds a view for everyone on the app, counting those who see nobody as refused', async () => {
     h.users = [
       { email: 'Owner@Example.test', name: 'J', sharing: true },
       { email: 'stranger@example.test', name: 'S', sharing: true },
@@ -211,9 +237,31 @@ describe('pushAppViews', () => {
     h.viewers.set('owner@example.test', { kind: 'owner' });
     const res = await pushAppViews(members, fakeFetch(), NOW);
     expect(res).toEqual({ stored: 1, refused: 1 });
-    const body = h.posted[0] as { views: Array<{ email: string; view: { people: Array<{ subject: string; self: boolean }> } }> };
-    expect(body.views.map((v) => v.email)).toEqual(['owner@example.test']);
-    expect(body.views[0].view.people.find((p) => p.subject === 'john')?.self).toBe(true);
+    type Posted = { email: string; view: { viewer: string; watch?: unknown; access: Record<string, unknown>; people: Array<{ subject: string; self: boolean }> } };
+    const body = h.posted[0] as { views: Posted[] };
+    expect(body.views.map((v) => v.email)).toEqual(['stranger@example.test', 'owner@example.test']);
+    const owner = body.views[1].view;
+    expect(owner.people.find((p) => p.subject === 'john')?.self).toBe(true);
+    expect(owner.access).toEqual({
+      owner: true, chat: true, news: true, research: true, notes: true, intel: true, family: true, sitePair: null,
+    });
+    // Somebody with no site access and no household row: nobody, no places, nothing offered.
+    const stranger = body.views[0].view;
+    expect(stranger).toMatchObject({ viewer: 'none', people: [] });
+    expect(stranger.watch).toBeUndefined();
+    expect(Object.values(stranger.access).every((v) => v === false || v === null)).toBe(true);
+  });
+
+  it("offers a member exactly what their grants hold, and the family only through the Circle rule", async () => {
+    h.users = [{ email: 'ann@example.test', name: 'A', sharing: true }];
+    h.members.set('ann@example.test', { principalId: 'u_ann', grants: new Set(['news:self', 'jkai.chat:all', 'family:circle']) });
+    await pushAppViews(members, fakeFetch(), NOW);
+    const body = h.posted[0] as { views: Array<{ view: { access: Record<string, unknown> } }> };
+    // family:circle alone is not the family: she has no household row, so
+    // `peopleViewerForEmail` (stood in for here) says no, and so does the flag.
+    expect(body.views[0].view.access).toEqual({
+      owner: false, chat: true, news: true, research: false, notes: false, intel: false, family: false, sitePair: null,
+    });
   });
 
   it('carries the watched places — home unnamed reads as Home — and never an unflagged one', async () => {
@@ -238,10 +286,12 @@ describe('pushAppViews', () => {
     expect(body.views[0].view.watch).toHaveLength(2);
   });
 
-  it('still posts an empty set when nobody qualifies, so a revoked view is cleared', async () => {
+  it('still posts when nobody qualifies, so a revoked view is emptied', async () => {
     h.users = [{ email: 'stranger@example.test', name: 'S', sharing: true }];
     await pushAppViews(members, fakeFetch(), NOW);
-    expect(h.posted).toEqual([{ views: [] }]);
+    const body = h.posted[0] as { views: Array<{ view: { people: unknown[] } }> };
+    expect(body.views).toHaveLength(1);
+    expect(body.views[0].view.people).toEqual([]);
   });
 
   it('reports a refusal from the pilot rather than throwing', async () => {
@@ -249,4 +299,91 @@ describe('pushAppViews', () => {
     h.status = 500;
     expect(await pushAppViews(members, fakeFetch(), NOW)).toEqual({ stored: 0, refused: 0, error: 'views answered 500' });
   });
+});
+
+describe('site pairing through the push', () => {
+  function fakeFetch() {
+    return (async (_url: string, init: RequestInit) => {
+      h.posted.push(JSON.parse(String(init.body)));
+      return new Response(JSON.stringify({ stored: 1 }), { status: 200 });
+    }) as unknown as typeof fetch;
+  }
+  const asked = (minsAgo: number) => new Date(NOW.getTime() - minsAgo * 60_000).toISOString();
+  const pairOf = (i = h.posted.length - 1) =>
+    (h.posted[i] as { views: Array<{ email: string; view: { access: { sitePair: { server: string; code: string; expiresAt: string } | null } } }> })
+      .views[0].view.access.sitePair;
+
+  beforeEach(() => {
+    h.members.set('ann@example.test', { principalId: 'u_ann', grants: new Set(['jkai.chat:self']) });
+  });
+
+  it('mints a code for a member holding chat who asked in the last 15 minutes', async () => {
+    h.users = [{ email: 'ann@example.test', name: 'A', sharing: true, sitePairWanted: asked(3) }];
+    await pushAppViews([], fakeFetch(), NOW);
+    expect(h.minted.map((m) => m.email)).toEqual(['ann@example.test']);
+    expect(pairOf()).toEqual({
+      server: expect.stringMatching(/^https?:\/\/[^/]+$/),
+      code: 'code-1',
+      expiresAt: h.minted[0].expiresAt.toISOString(),
+    });
+  });
+
+  it('re-sends the same code every cycle rather than rotating the one on screen', async () => {
+    h.users = [{ email: 'ann@example.test', name: 'A', sharing: true, sitePairWanted: asked(1) }];
+    await pushAppViews([], fakeFetch(), NOW);
+    await pushAppViews([], fakeFetch(), NOW);
+    await pushAppViews([], fakeFetch(), NOW);
+    expect(h.minted).toHaveLength(1);
+    expect([pairOf(0)?.code, pairOf(1)?.code, pairOf(2)?.code]).toEqual(['code-1', 'code-1', 'code-1']);
+  });
+
+  it('mints afresh once the code is spent, or has under two minutes left', async () => {
+    h.users = [{ email: 'ann@example.test', name: 'A', sharing: true, sitePairWanted: asked(1) }];
+    await pushAppViews([], fakeFetch(), NOW);
+    h.live.delete('code-1'); // redeemed by the phone
+    await pushAppViews([], fakeFetch(), NOW);
+    expect(pairOf()?.code).toBe('code-2');
+
+    h.ttlMs = 90_000; // the next one is minted nearly dead
+    h.live.delete('code-2');
+    await pushAppViews([], fakeFetch(), NOW);
+    await pushAppViews([], fakeFetch(), NOW);
+    expect(h.minted.map((m) => m.code)).toEqual(['code-1', 'code-2', 'code-3', 'code-4']);
+  });
+
+  it('sends nothing for a stale ask, no ask, the owner, or a member with neither chat nor news', async () => {
+    h.users = [
+      { email: 'ann@example.test', name: 'A', sharing: true, sitePairWanted: asked(20) },
+      { email: 'bob@example.test', name: 'B', sharing: true },
+      { email: 'owner@example.test', name: 'J', sharing: true, sitePairWanted: asked(1) },
+      { email: 'cat@example.test', name: 'C', sharing: true, sitePairWanted: asked(1) },
+    ];
+    h.members.set('bob@example.test', { principalId: 'u_bob', grants: new Set(['news:self']) });
+    h.members.set('cat@example.test', { principalId: 'u_cat', grants: new Set(['research:self', 'family:circle']) });
+    h.viewers.set('owner@example.test', { kind: 'owner' });
+    await pushAppViews(members(), fakeFetch(), NOW);
+    const body = h.posted[0] as { views: Array<{ email: string; view: { access: { sitePair: unknown } } }> };
+    expect(body.views.map((v) => [v.email, v.view.access.sitePair])).toEqual([
+      ['ann@example.test', null],
+      ['bob@example.test', null],
+      ['cat@example.test', null],
+      ['owner@example.test', null],
+    ]);
+    expect(h.minted).toEqual([]);
+  });
+
+  it('reads the ask window strictly, and ignores a stamp from the future', () => {
+    expect(sitePairWanted(null, NOW)).toBe(false);
+    expect(sitePairWanted('not a date', NOW)).toBe(false);
+    expect(sitePairWanted(asked(14.9), NOW)).toBe(true);
+    expect(sitePairWanted(asked(15.1), NOW)).toBe(false);
+    expect(sitePairWanted(asked(-1), NOW)).toBe(true);
+    expect(sitePairWanted(asked(-60), NOW)).toBe(false);
+  });
+
+  function members() {
+    return [
+      { subject: 'john', email: 'owner@example.test', displayName: 'John', source: 'companion' as const, haPersonEntity: null, whatsapp: null, alerts: {} },
+    ];
+  }
 });

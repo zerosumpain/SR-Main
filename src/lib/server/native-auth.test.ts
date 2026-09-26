@@ -64,12 +64,44 @@ describe('every native route gates itself', () => {
     '%s resolves a device identity',
     (path) => {
       const src = readFileSync(join(process.cwd(), path), 'utf8');
-      expect(src).toContain('withDevice');
+      expect(src.includes('withDevice(') || src.includes('withNativeAccess(')).toBe(true);
       // Exported without the wrapper round it — the shape that would answer
       // anyone who could reach the path.
       expect(src).not.toMatch(/export const (GET|POST|PUT|PATCH|DELETE)[^=]*=\s*async/);
     },
   );
+
+  /**
+   * The routes a MEMBER's phone may reach, named. `withNativeAccess` is how a
+   * route opts in, and each one here was converted to scope itself exactly as
+   * its web twin does; everything else stays on owner-only `withDevice`. A new
+   * entry must be a deliberate edit to this list, not a wrapper swapped in
+   * passing.
+   */
+  it('opens only the converted routes to members', () => {
+    const opened = handlers
+      .filter((p) => readFileSync(join(process.cwd(), p), 'utf8').includes('withNativeAccess('))
+      .map((p) => p.slice(NATIVE_ROUTES.length))
+      .sort();
+    expect(opened).toEqual(
+      [
+        '/chat/attachments/+server.ts',
+        '/chat/attachments/[id]/+server.ts',
+        '/chat/conversations/+server.ts',
+        '/chat/conversations/[id]/+server.ts',
+        '/chat/conversations/[id]/messages/+server.ts',
+        '/chat/conversations/[id]/model/+server.ts',
+        '/me/+server.ts',
+        '/news/+server.ts',
+        '/news/actions/+server.ts',
+        '/news/story/[source]/[id]/+server.ts',
+      ].sort(),
+    );
+    // And none of them keeps an owner-only handler beside it by accident.
+    for (const p of handlers.filter((h) => opened.includes(h.slice(NATIVE_ROUTES.length)))) {
+      expect(readFileSync(join(process.cwd(), p), 'utf8')).not.toContain('withDevice(');
+    }
+  });
 
   it('keeps /pair as the only ungated path, and gates it another way', () => {
     const src = readFileSync(join(process.cwd(), `${NATIVE_ROUTES}/pair/+server.ts`), 'utf8');
@@ -183,6 +215,18 @@ describe('the phone is capped like a browser', () => {
       .join('\n');
     expect(code.match(/function rateLimited\(/g)?.length).toBe(1);
     expect(code.match(/RATE_LIMITS\.find\(/g)?.length).toBe(1);
+  });
+
+  it('sends a member device through the member gate, never the sessionless resolve', () => {
+    // Sessionless is the OWNER to every chat helper. A member's phone that
+    // reached `resolve(event)` from this lane would chat as John.
+    const lane = hook.slice(hook.indexOf('const held = await memberDevice(event.request)'));
+    const branch = lane.slice(0, lane.indexOf('// API routes return 401'));
+    expect(branch.length).toBeGreaterThan(0);
+    expect(branch).toContain("'jkai.chat:self'");
+    expect(branch).toContain('actAsDeviceMember(event.locals, held)');
+    expect(branch).toContain('`device:${held.identity.id}`');
+    expect(branch).not.toContain('resolve(event)');
   });
 
   it('still exempts the pairing endpoint, which has its own ceiling', () => {
