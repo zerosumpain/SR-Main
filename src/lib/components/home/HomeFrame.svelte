@@ -68,7 +68,10 @@
           <p class="standfirst">{standfirst}</p>
         </div>
         {#if summary.length}
-          <dl class="lede-summary" style="--cells: {Math.min(summary.length, 4)}">
+          <dl
+            class="lede-summary"
+            style="--cells: {Math.min(summary.length, 4)}; --cells-narrow: {summary.length === 3 ? 3 : 2}"
+          >
             {#each summary as c (c.label)}
               <div>
                 <dt>{c.label}</dt>
@@ -316,8 +319,9 @@
     h1 {
       font-size: clamp(2.55rem, 12vw, 3.6rem);
     }
+    /* Three cells stay one row (a 2-up grid left a hole); four go 2×2. */
     .lede-summary {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(var(--cells-narrow), minmax(0, 1fr));
     }
     .lede-summary > div {
       padding: 10px;
