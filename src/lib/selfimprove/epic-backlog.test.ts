@@ -52,6 +52,8 @@ describe('automatic epic backlog', () => {
   });
   it('does not label partially delivered epics as complete', () => {
     const epics = buildEpicBacklog(board([row('a', 'Apple Calendar sync', { status: 'shipped' }), row('b', 'iCloud calendar reminders')]));
-    expect(epics[0].stage).toBe('accepted');
+    // The open row is untapped, so the epic is Proposed (was 'accepted' before
+    // the board distinguished the tap) — either way, not Live.
+    expect(epics[0].stage).toBe('proposed');
   });
 });

@@ -9,7 +9,7 @@
 // needs a test does not belong in a component. The component's job is to draw
 // what these functions return and to send what `planMove` says to send.
 
-import { canMove, type WorkItem, type WorkStage } from './board';
+import { canMove, isTapped, type WorkItem, type WorkStage } from './board';
 import { contentWords } from './narrative';
 import type { BacklogEpic } from './epic-backlog';
 
@@ -261,12 +261,20 @@ const STAGE_PRECEDENCE: ReadonlyArray<WorkStage> = ['building', 'accepted', 'pro
  * where their parent is one of the epic's combined deliveries.
  */
 function stageAfter(card: BoardCard, parked: ReadonlySet<string>, to: WorkStage): WorkStage {
-  if (card.level === 'deliverable') return to;
+  // A restored row is open and untried again, so it lands where `stageFor`
+  // would put it: Accepted only if its brief was already accepted, otherwise
+  // Proposed, waiting for the tap. Un-parking is not a tap.
+  const landing = (i: WorkItem): WorkStage => (to === 'accepted' && !isTapped(i) ? 'proposed' : to);
+  if (card.level === 'deliverable') return landing(card.item!);
   const combined = new Set(card.epic!.combinedDeliveries.map((c) => c.slug));
   const active = membersOf(card.epic!).filter((i) => !i.foldedInto || combined.has(i.foldedInto));
-  const stages = active.map((i) => (parked.has(i.slug) ? to : i.stage));
+  const stages = active.map((i) => (parked.has(i.slug) ? landing(i) : i.stage));
   return STAGE_PRECEDENCE.find((s) => stages.includes(s)) ?? 'parked';
 }
+
+/** Why a Proposed card cannot be dragged to Accepted, and what to do instead. */
+export const TAP_REASON =
+  'Accepting is the tap: open the card, review its brief and save it. Only accepted briefs get built.';
 
 const REFUSED: Readonly<Record<string, string>> = {
   live: 'Nothing can be moved into Live — a tool becomes live when jkai calls it.',
@@ -289,6 +297,11 @@ const REFUSED: Readonly<Record<string, string>> = {
  */
 export function planMove(card: BoardCard, to: WorkStage): PlannedMove {
   if (card.stage === to) return { ok: false, action: null, slugs: [], lands: null, reason: '' };
+  // The tap is saving an accepted brief, never a drag (D3): a board move that
+  // could start a paid build is the thing the tap exists to prevent.
+  if (card.stage === 'proposed' && to === 'accepted') {
+    return { ok: false, action: null, slugs: [], lands: null, reason: TAP_REASON };
+  }
   if (!canMove(card.stage, to)) {
     return {
       ok: false,
@@ -333,7 +346,11 @@ function describeMove(
       : `${verb} ${n} deliverable${n === 1 ? '' : 's'} in “${card.title}”.`;
   // Said up front, not discovered afterwards: the card is about to appear in a
   // column nobody dropped it on.
-  return lands === to ? what : `${what} The epic stays under ${STAGE_LABEL[lands]} — that is where its other deliverables are.`;
+  if (lands === to) return what;
+  if (card.level === 'deliverable') {
+    return `${what} It waits under ${STAGE_LABEL[lands]} until you accept its brief.`;
+  }
+  return `${what} The epic stays under ${STAGE_LABEL[lands]} — that is where its other deliverables are.`;
 }
 
 /** Column names, so the plan can name one without importing the surface. */

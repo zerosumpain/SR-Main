@@ -115,8 +115,8 @@ export interface StageMeta {
 }
 
 export const STAGE_META: Readonly<Record<WorkStage, StageMeta>> = {
-  proposed: { label: 'Proposed', question: 'nobody has ruled', tone: 'action' },
-  accepted: { label: 'Accepted', question: 'waiting for a slot', tone: 'steady' },
+  proposed: { label: 'Proposed', question: 'waiting for your tap', tone: 'action' },
+  accepted: { label: 'Accepted', question: 'brief accepted, waiting for a slot', tone: 'steady' },
   building: { label: 'In build', question: 'a lane is on it', tone: 'watch' },
   verifying: { label: 'Verifying', question: 'exists, unproven', tone: 'watch' },
   live: { label: 'Live', question: 'used at least once', tone: 'good' },
@@ -483,7 +483,22 @@ export function stageFor(item: BacklogItemData, ctx: StageContext): WorkStage {
   // open
   if (item.attempts >= ctx.attemptCeiling) return 'parked';
   if (item.attempts > 0) return 'building';
-  return 'accepted';
+  // Only the owner's tap — an accepted brief — makes an untried row buildable
+  // (D3, 2026-09-26: propose picks tapped items only). Before that every
+  // untried open row read "Accepted", which told the owner the engine would
+  // build things it never will.
+  return isTapped(item) ? 'accepted' : 'proposed';
+}
+
+/**
+ * Has the owner tapped this item — saved its groomed brief?
+ *
+ * The same test as `isOwnerAccepted` in `backlog.ts`, restated here because
+ * this module may not VALUE-import `backlog.ts` (see the top of the file). The
+ * board test pins the two to the same answer so they cannot drift.
+ */
+export function isTapped(item: { grooming?: { acceptedAt?: string | null } | null }): boolean {
+  return Boolean(item.grooming?.acceptedAt);
 }
 
 // ---------------------------------------------------------------------------

@@ -28,6 +28,7 @@
     prioritySlugs,
     sortCards,
     stepPriority,
+    TAP_REASON,
     toCards,
     type BoardCard,
     type BoardLevel,
@@ -417,6 +418,18 @@
                        anyone not using a mouse, decided by the same `planMove`,
                        so the keyboard can never assert a transition the drop
                        would refuse. -->
+                  {#if card.stage === 'proposed'}
+                    <!-- The tap. Not a move: accepting is saving the brief in
+                         the editor (D3), so this opens the card rather than
+                         writing anything. -->
+                    <button
+                      type="button"
+                      class="btn sm"
+                      disabled={moving}
+                      title={TAP_REASON}
+                      onclick={() => (openSlug = card.epicSlug)}
+                    >Review brief</button>
+                  {/if}
                   {#if toAccept.ok}
                     <button
                       type="button"
@@ -424,7 +437,7 @@
                       disabled={moving}
                       title={toAccept.reason}
                       onclick={() => move(card, 'accepted')}
-                    >Accept</button>
+                    >Restore</button>
                   {/if}
                   {#if toPark.ok}
                     <button
@@ -762,6 +775,7 @@
 
   .wc-acts {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 6px;
     padding-top: 8px;

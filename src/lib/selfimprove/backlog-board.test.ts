@@ -11,6 +11,7 @@ import {
   matchesCard,
   matchClaim,
   sharedTerms,
+  TAP_REASON,
   type BoardCard,
 } from './backlog-board';
 import type { WorkItem, WorkStage } from './board';
@@ -208,6 +209,33 @@ describe('planMove', () => {
     )[0];
     const plan = planMove(card, 'accepted');
     expect(plan.slugs).toEqual(['parked-one']);
+  });
+
+  it('refuses to drag a proposed card to accepted — the tap is the saved brief', () => {
+    const card = toCards([epic({ stage: 'proposed', deliverables: [work({ stage: 'proposed' })] })], 'deliverable')[0];
+    const plan = planMove(card, 'accepted');
+    expect(plan).toMatchObject({ ok: false, slugs: [], reason: TAP_REASON });
+    expect(dropTargets(card)).toEqual(['parked']);
+  });
+
+  it('restores an untapped row to proposed, not accepted', () => {
+    const parked = work({ slug: 'p', backlogStatus: 'abandoned', stage: 'parked' });
+    const card = toCards([epic({ stage: 'parked', deliverables: [parked] })], 'deliverable')[0];
+    const plan = planMove(card, 'accepted');
+    expect(plan.ok).toBe(true);
+    expect(plan.lands).toBe('proposed');
+    expect(plan.reason).toContain('until you accept its brief');
+  });
+
+  it('restores a row whose brief was already accepted to accepted', () => {
+    const parked = work({
+      slug: 'p',
+      backlogStatus: 'abandoned',
+      stage: 'parked',
+      grooming: { acceptedAt: '2026-09-26' } as WorkItem['grooming'],
+    });
+    const card = toCards([epic({ stage: 'parked', deliverables: [parked] })], 'deliverable')[0];
+    expect(planMove(card, 'accepted').lands).toBe('accepted');
   });
 
   it('refuses a move into live', () => {
