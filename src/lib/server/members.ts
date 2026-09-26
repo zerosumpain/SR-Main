@@ -89,7 +89,7 @@ export async function householdSubjectFor(email: string | null | undefined): Pro
  * reference_drizzle_unique_push_gotcha) — the owner clicks a toggle, so the
  * only race is the owner racing themselves.
  */
-async function ensureMemberPrincipal(email: string, label: string): Promise<string> {
+export async function ensureMemberPrincipal(email: string, label: string): Promise<string> {
   const [existing] = await db
     .select({ id: activityPrincipals.id })
     .from(activityPrincipals)
