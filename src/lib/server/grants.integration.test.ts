@@ -5,6 +5,12 @@ import { accessGroup, activityPrincipals, allowedUser, gmailAccounts } from '$li
 import { deleteGroup, listGroups, loadMember, saveGroup, setUserAccess } from './grants';
 import { loadAccessPage } from './access-page';
 
+/** Family Circle's grants as THIS database holds them: the seed runs once, so an older database has an older set. */
+async function circleGrants(): Promise<string[]> {
+  const [row] = await db.select({ grants: accessGroup.grants }).from(accessGroup).where(eq(accessGroup.id, 'family-circle'));
+  return [...(row?.grants ?? [])];
+}
+
 // Real rows, real resolution. Touches only rows it creates (named with this
 // run's tag) and deletes them after; no cleanup, purge or sweep path runs.
 
@@ -54,7 +60,8 @@ describe.skipIf(!process.env.DATABASE_URL)('grants resolve from groups and one-o
     expect(saved).toMatchObject({ groups: ['family-circle'], grants: [] });
     const member = await loadMember(A.toUpperCase());
     expect(member?.principalId).toMatch(/^u_/);
-    expect([...(member?.grants ?? [])]).toEqual(['family:circle']);
+    expect([...(member?.grants ?? [])].sort()).toEqual((await circleGrants()).sort());
+    expect(member?.grants.has('family:circle')).toBe(true);
   });
 
   it('a group edit changes what its members hold on the next read', async () => {
