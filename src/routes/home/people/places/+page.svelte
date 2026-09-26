@@ -3,42 +3,50 @@
    * The owner's places panel — /home/people/places.
    *
    * Every place on a map, beside the same places as a list. On the map a
-   * place is a circle: select it (click it, or its row), drag the centre to
-   * move it, drag the edge handle to set the radius, then Save. "Add a place"
+   * place is a circle: select it (click it, or its row) and its details open
+   * in a panel NEXT TO the map (under it on a phone, with the map kept in
+   * view), so nothing is a scroll away. Drag the centre to move it, drag the
+   * edge handle to set the radius, then Save. × or Escape closes the panel. "Add a place"
    * drops a new circle where the map is next clicked. Moving, resizing or
    * creating a place pins its geometry: the nightly places refresh stops
    * re-deriving it.
    *
    * Each place says whether the household hears about a crossing ("Notify
    * family"), in which directions (arrive, leave), and whether by WhatsApp as
-   * well. Home is always watched; its direction switches still apply.
+   * well. Nothing notifies unless its switch is on — home included (home is
+   * still watched, so who is in stays known).
    *
    * A place that is no longer wanted can be removed from its editor (never
    * home): it is set aside, not deleted, so its alerts stop and the nightly
    * refresh does not suggest it again. The editor also says who spends how
    * long there — streamed after the page, so the map never waits for it.
    *
-   * The list is the whole page without the map: every place can be selected,
-   * renamed, resized and switched from it by keyboard. Owner only; the load
+   * The list is the whole page without the map: every place can be selected
+   * from it by keyboard, which opens the same panel and moves focus into it.
+   * While a place is open the list sits under the map and panel. Owner only; the load
    * and every action check.
    */
   import { enhance } from '$app/forms';
   import type { SubmitFunction } from '@sveltejs/kit';
   import HomeFrame from '$lib/components/home/HomeFrame.svelte';
+  import PlaceEditor from '$lib/components/home/PlaceEditor.svelte';
   import PlacesMap, { type Geometry } from '$lib/components/home/PlacesMap.svelte';
   import LoadErrorCard from '$lib/components/jkai/daydream/hub/LoadErrorCard.svelte';
   import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
   import { NEW_PLACE_RADIUS_M, clampRadius } from '$lib/home/presence/geo';
+  import { tick } from 'svelte';
   import type { ActionData, PageData } from './$types';
+
+  type EditorForm = import('svelte').ComponentProps<typeof PlaceEditor>['form'];
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
 
   const places = $derived(data.places);
-  const watched = $derived(places.filter((p) => p.alerts || p.isHome).length);
+  const alerting = $derived(places.filter((p) => p.alerts).length);
   const byWhatsApp = $derived(places.filter((p) => p.whatsappAlerts).length);
   const summary = $derived([
     { label: 'Places', value: String(places.length), sub: 'named, plus home' },
-    { label: 'Alerting', value: String(watched), sub: 'home always' },
+    { label: 'Alerting', value: String(alerting), sub: 'notify the family' },
     { label: 'WhatsApp', value: String(byWhatsApp), sub: 'also sent by message' },
   ]);
 
@@ -50,8 +58,8 @@
   /** Adding a place needs a working map: it is placed by clicking one. */
   let mapStatus = $state<'loading' | 'ready' | 'unavailable'>('loading');
   let mapView = $state<{ centre: () => { lat: number; lon: number } | null; fitAll: () => void } | null>(null);
-  /** The place whose "Remove place" is asking for a yes. */
-  let confirmRemove = $state<string | null>(null);
+  /** The detail panel, for moving focus into it. */
+  let panelEl: HTMLElement | undefined = $state();
 
   const selected = $derived(places.find((p) => p.id === selectedId) ?? null);
 
@@ -75,20 +83,49 @@
     return { lat: p.lat, lon: p.lon, radiusM: Math.round(p.radiusM) };
   }
 
-  function select(id: string) {
+  /** Select a place. From the list (`focus`), keyboard focus follows it into
+   *  the panel, wherever the panel is drawn. */
+  async function select(id: string, focus = false) {
     placing = false;
-    confirmRemove = null;
-    if (selectedId === id) return;
-    const p = places.find((x) => x.id === id);
-    selectedId = p ? id : null;
-    draft = p ? geometryOf(p) : null;
+    if (selectedId !== id) {
+      const p = places.find((x) => x.id === id);
+      selectedId = p ? id : null;
+      draft = p ? geometryOf(p) : null;
+    }
+    if (!selectedId) return;
+    await tick();
+    showPanel();
+    // preventScroll: showPanel has just put the map and panel on screen.
+    if (focus) panelEl?.querySelector<HTMLElement>('#place-panel-title')?.focus({ preventScroll: true });
   }
 
-  function closeEditor() {
-    confirmRemove = null;
+  /** Bring the map and the open panel onto the screen together, unless they
+   *  already are (a click on the map must not jump the page). */
+  function showPanel() {
+    const mapEl = document.querySelector<HTMLElement>('.places-layout .map-col');
+    if (!mapEl || !panelEl) return;
+    const nav = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--site-nav-height')) || 56;
+    const top = mapEl.getBoundingClientRect().top;
+    const bottom = Math.max(mapEl.getBoundingClientRect().bottom, panelEl.getBoundingClientRect().bottom);
+    if (top < nav || bottom > window.innerHeight) mapEl.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+
+  async function closeEditor() {
+    const was = selectedId;
     selectedId = null;
     draft = null;
     placing = false;
+    // Keyboard focus goes back to the place's row, not to the top of the page.
+    if (was && panelEl?.contains(document.activeElement)) {
+      await tick();
+      document.querySelector<HTMLElement>(`.row-select[data-place="${CSS.escape(was)}"]`)?.focus();
+    }
+  }
+
+  function onKeydown(e: KeyboardEvent) {
+    if (e.key !== 'Escape' || e.defaultPrevented) return;
+    if (placing) placing = false;
+    else if (selectedId) closeEditor();
   }
 
   function revert() {
@@ -159,29 +196,116 @@
     if (result.type === 'success') closeEditor();
   };
 
-  /** Keyboard focus onto the confirm's safe answer as it appears. */
-  function focusOnMount(node: HTMLElement) {
-    node.focus();
-  }
-
-  const REMOVE_NOTE = 'Its alerts stop and it will not be suggested again.';
-
-  /** Minutes as a length of time: 45m, 5h 20m, then whole hours. */
-  function dur(mins: number): string {
-    if (mins < 60) return `${mins}m`;
-    if (mins < 24 * 60) {
-      const m = mins % 60;
-      return m ? `${Math.floor(mins / 60)}h ${m}m` : `${mins / 60}h`;
-    }
-    return `${Math.round(mins / 60)}h`;
-  }
-
-  function submitOnChange(e: Event & { currentTarget: HTMLInputElement }) {
-    e.currentTarget.form?.requestSubmit();
-  }
-
   const formError = $derived(form && 'error' in form && form.error ? form : null);
 </script>
+
+<svelte:window onkeydown={onKeydown} />
+
+{#snippet listBlock()}
+  <div class="list-head">
+    {#if mapStatus === 'unavailable'}
+      <p class="map-note">Map unavailable — places can still be edited in the list.</p>
+    {/if}
+    {#if form && 'removed' in form && form.removed}
+      <p class="map-note good" role="status">Removed {form.removedLabel ?? 'the place'}.</p>
+    {/if}
+    {#if mapStatus === 'ready'}
+      <button class="btn" type="button" onclick={() => mapView?.fitAll()}>Show all places</button>
+    {/if}
+    <button
+      class="btn"
+      type="button"
+      onclick={startAdding}
+      aria-pressed={placing}
+      disabled={mapStatus !== 'ready'}
+      aria-describedby={mapStatus === 'ready' ? undefined : 'add-needs-map'}
+    >Add a place</button>
+    {#if mapStatus === 'loading'}<span class="map-note" id="add-needs-map">Waiting for the map</span>{/if}
+    {#if mapStatus === 'unavailable'}<span class="visually-hidden" id="add-needs-map">Adding a place needs the map.</span>{/if}
+  </div>
+
+  {#if creating && draft}
+    <form class="card place open new" method="POST" action="?/create" use:enhance={afterCreate}>
+      <p class="card-kicker">New place · pinned where you put it</p>
+      <input type="hidden" name="lat" value={draft.lat} />
+      <input type="hidden" name="lon" value={draft.lon} />
+      <div class="actions">
+        <label class="field">
+          <span class="field-label">Name</span>
+          <!-- svelte-ignore a11y_autofocus -->
+          <input class="text-input" name="label" maxlength={data.labelMax} required autocomplete="off" autofocus />
+        </label>
+        <label class="field kind">
+          <span class="field-label">Kind</span>
+          <select class="text-input select" name="kind">
+            {#each data.kinds as k (k)}<option value={k} selected={k === 'other'}>{k}</option>{/each}
+          </select>
+        </label>
+        <label class="field radius">
+          <span class="field-label">Radius (m)</span>
+          <input
+            class="text-input"
+            name="radiusM"
+            type="number"
+            inputmode="numeric"
+            min={data.radius.min}
+            max={data.radius.max}
+            step="10"
+            value={draft.radiusM}
+            oninput={onRadiusInput}
+            onchange={onRadiusChange}
+            required
+          />
+        </label>
+      </div>
+      <div class="card-actions">
+        <button class="cta sm" type="submit">Save</button>
+        <button class="btn" type="button" onclick={closeEditor}>Cancel</button>
+      </div>
+      {#if formError && !formError.placeId}<p class="err" role="alert">{formError.error}</p>{/if}
+    </form>
+  {/if}
+
+  {#if !places.length}
+    <p class="lede">No named places yet. Add one on the map, or name them from the daydream naming queue.</p>
+  {:else}
+    <ul class="stack place-list">
+      {#each places as p (p.id)}
+        {@const open = p.id === selectedId}
+        <li class="card place" class:open>
+          <button
+            class="row-select"
+            type="button"
+            data-place={p.id}
+            aria-expanded={open}
+            aria-controls={open ? 'place-panel' : undefined}
+            onclick={() => (open ? closeEditor() : select(p.id, true))}
+          >
+            <span class="card-kicker">
+              {p.isHome ? 'home' : kindLabel(p.kind)} · {p.visitCount} visits{p.radiusPinned ? ' · set by you' : ''}
+            </span>
+            <span class="row-title">{p.label ?? 'Home'}</span>
+            <span class="row-meta">
+              {Math.round(open && draft ? draft.radiusM : p.radiusM)} m ·
+              {#if p.alerts}
+                notifies on {p.alertArrive && p.alertLeave ? 'arrive and leave' : p.alertArrive ? 'arrive' : p.alertLeave ? 'leave' : 'neither'}{#if p.whatsappAlerts}, WhatsApp too{/if}
+              {:else}
+                no notifications
+              {/if}
+            </span>
+          </button>
+        </li>
+      {/each}
+    </ul>
+  {/if}
+  {#if formError && !formError.placeId && !creating}<p class="err" role="alert">{formError.error}</p>{/if}
+  <p class="rules">
+    <span class="phone-only">Select a place on the map or in the list; drag its centre to move it and the square handle to set the radius, 50 to 2,000 m.</span>
+    Someone arrives on the first fix inside a place’s edge and leaves on the first one more than 50 m outside it. No place
+    notifies anyone until you switch it on; a place with WhatsApp on also messages anyone who asked, at most once every half
+    hour per person and place.
+  </p>
+{/snippet}
 
 <HomeFrame
   path="/home/people/places"
@@ -201,11 +325,11 @@
       <SectionHead
         kicker="A / Places"
         title={['Named places,', 'and home']}
-        strap="Select a place on the map or in the list. Drag its centre to move it and the square handle to set the radius, 50 to 2,000 m."
+        strap="Select a place on the map or in the list: its details open beside the map. Drag its centre to move it and the square handle to set the radius, 50 to 2,000 m."
       />
       </div>
 
-      <div class="places-layout">
+      <div class="places-layout" class:has-panel={!!selected}>
         <div class="map-col">
           <PlacesMap
             bind:this={mapView}
@@ -240,241 +364,51 @@
           {/if}
         </div>
 
-        <div class="list-col">
-          <div class="list-head">
-            {#if mapStatus === 'unavailable'}
-              <p class="map-note">Map unavailable — places can still be edited in the list.</p>
-            {/if}
-            {#if form && 'removed' in form && form.removed}
-              <p class="map-note good" role="status">Removed {form.removedLabel ?? 'the place'}.</p>
-            {/if}
-            {#if mapStatus === 'ready'}
-              <button class="btn" type="button" onclick={() => mapView?.fitAll()}>Show all places</button>
-            {/if}
-            <button
-              class="btn"
-              type="button"
-              onclick={startAdding}
-              aria-pressed={placing}
-              disabled={mapStatus !== 'ready'}
-              aria-describedby={mapStatus === 'ready' ? undefined : 'add-needs-map'}
-            >Add a place</button>
-            {#if mapStatus === 'loading'}<span class="map-note" id="add-needs-map">Waiting for the map</span>{/if}
-            {#if mapStatus === 'unavailable'}<span class="visually-hidden" id="add-needs-map">Adding a place needs the map.</span>{/if}
-          </div>
-
-          {#if creating && draft}
-            <form class="card place open new" method="POST" action="?/create" use:enhance={afterCreate}>
-              <p class="card-kicker">New place · pinned where you put it</p>
-              <input type="hidden" name="lat" value={draft.lat} />
-              <input type="hidden" name="lon" value={draft.lon} />
-              <div class="actions">
-                <label class="field">
-                  <span class="field-label">Name</span>
-                  <!-- svelte-ignore a11y_autofocus -->
-                  <input class="text-input" name="label" maxlength={data.labelMax} required autocomplete="off" autofocus />
-                </label>
-                <label class="field kind">
-                  <span class="field-label">Kind</span>
-                  <select class="text-input select" name="kind">
-                    {#each data.kinds as k (k)}<option value={k} selected={k === 'other'}>{k}</option>{/each}
-                  </select>
-                </label>
-                <label class="field radius">
-                  <span class="field-label">Radius (m)</span>
-                  <input
-                    class="text-input"
-                    name="radiusM"
-                    type="number"
-                    inputmode="numeric"
-                    min={data.radius.min}
-                    max={data.radius.max}
-                    step="10"
-                    value={draft.radiusM}
-                    oninput={onRadiusInput}
-                    onchange={onRadiusChange}
-                    required
-                  />
-                </label>
-              </div>
-              <div class="card-actions">
-                <button class="cta sm" type="submit">Save</button>
-                <button class="btn" type="button" onclick={closeEditor}>Cancel</button>
-              </div>
-              {#if formError && !formError.placeId}<p class="err" role="alert">{formError.error}</p>{/if}
-            </form>
-          {/if}
-
-          {#if !places.length}
-            <p class="lede">No named places yet. Add one on the map, or name them from the daydream naming queue.</p>
+        <div class="side-col">
+          {#if selected && draft}
+            <section
+              class="card place-panel"
+              id="place-panel"
+              aria-labelledby="place-panel-title"
+              bind:this={panelEl}
+            >
+              <header class="panel-head">
+                <div>
+                  <p class="card-kicker">
+                    {selected.isHome ? 'home' : kindLabel(selected.kind)} · {selected.visitCount} visits{selected.radiusPinned ? ' · set by you' : ''}
+                  </p>
+                  <h3 class="panel-title" id="place-panel-title" tabindex="-1">{selected.label ?? 'Home'}</h3>
+                </div>
+                <button class="close" type="button" onclick={closeEditor} aria-label="Close {selected.label ?? 'home'}">
+                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.8" fill="none" /></svg>
+                </button>
+              </header>
+              {#key selected.id}
+                <PlaceEditor
+                  place={selected}
+                  {draft}
+                  {moved}
+                  radius={data.radius}
+                  labelMax={data.labelMax}
+                  kinds={data.kinds}
+                  placeTimeDays={data.placeTimeDays}
+                  placeTime={data.placeTime}
+                  form={form as EditorForm}
+                  onradius={(r) => draft && (draft = { ...draft, radiusM: r })}
+                  onrevert={revert}
+                  {afterGeometry}
+                  {afterRemove}
+                />
+              {/key}
+            </section>
           {:else}
-            <ul class="stack place-list">
-              {#each places as p (p.id)}
-                {@const open = p.id === selectedId}
-                <li class="card place" class:open>
-                  <button
-                    class="row-select"
-                    type="button"
-                    aria-expanded={open}
-                    aria-controls="place-{p.id}"
-                    onclick={() => (open ? closeEditor() : select(p.id))}
-                  >
-                    <span class="card-kicker">
-                      {p.isHome ? 'home' : kindLabel(p.kind)} · {p.visitCount} visits{p.radiusPinned ? ' · set by you' : ''}
-                    </span>
-                    <span class="row-title">{p.label ?? 'Home'}</span>
-                    <span class="row-meta">
-                      {Math.round(open && draft ? draft.radiusM : p.radiusM)} m ·
-                      {#if p.alerts || p.isHome}
-                        notifies on {p.alertArrive && p.alertLeave ? 'arrive and leave' : p.alertArrive ? 'arrive' : p.alertLeave ? 'leave' : 'neither'}{#if p.whatsappAlerts}, WhatsApp too{/if}
-                      {:else}
-                        no alerts
-                      {/if}
-                    </span>
-                  </button>
-
-                  {#if open && draft}
-                    <div class="editor" id="place-{p.id}">
-                      <form method="POST" action="?/save" use:enhance={afterGeometry}>
-                        <input type="hidden" name="placeId" value={p.id} />
-                        <input type="hidden" name="lat" value={draft.lat} />
-                        <input type="hidden" name="lon" value={draft.lon} />
-                        <div class="actions">
-                          <label class="field">
-                            <span class="field-label">Name</span>
-                            <input
-                              class="text-input"
-                              name="label"
-                              value={p.label ?? ''}
-                              placeholder={p.isHome ? 'home' : ''}
-                              maxlength={Math.max(data.labelMax, (p.label ?? '').length)}
-                              autocomplete="off"
-                            />
-                          </label>
-                          <label class="field radius">
-                            <span class="field-label">Radius (m)</span>
-                            <input
-                              class="text-input"
-                              name="radiusM"
-                              type="number"
-                              inputmode="numeric"
-                              min={data.radius.min}
-                              max={data.radius.max}
-                              step="10"
-                              value={draft.radiusM}
-                              oninput={onRadiusInput}
-                              onchange={onRadiusChange}
-                              required
-                            />
-                          </label>
-                        </div>
-                        <div class="card-actions">
-                          <button class="cta sm" type="submit">Save</button>
-                          <button class="btn" type="button" onclick={revert} disabled={!moved}>Undo move</button>
-                          {#if form && 'saved' in form && form.saved === p.id}<span class="note good inline">Saved.</span>{/if}
-                          {#if form && 'moved' in form && form.moved === p.id}<span class="note good inline">Moved.</span>{/if}
-                        </div>
-                      </form>
-
-                      <form class="notify" method="POST" action="?/notify" use:enhance={keep}>
-                        <input type="hidden" name="placeId" value={p.id} />
-                        <label class="toggle">
-                          <input
-                            type="checkbox"
-                            name="alerts"
-                            checked={p.alerts || p.isHome || p.whatsappAlerts}
-                            disabled={p.isHome || p.whatsappAlerts}
-                            onchange={submitOnChange}
-                          />
-                          <span>Notify family{#if p.isHome} (always, for home){:else if p.whatsappAlerts} (turn WhatsApp off first){/if}</span>
-                        </label>
-                        <fieldset class="sub" class:dim={!p.alerts && !p.isHome}>
-                          <legend class="field-label">When they</legend>
-                          <label class="toggle">
-                            <input type="checkbox" name="alertArrive" checked={p.alertArrive} onchange={submitOnChange} />
-                            <span>arrive</span>
-                          </label>
-                          <label class="toggle">
-                            <input type="checkbox" name="alertLeave" checked={p.alertLeave} onchange={submitOnChange} />
-                            <span>leave</span>
-                          </label>
-                          <label class="toggle">
-                            <input type="checkbox" name="whatsappAlerts" checked={p.whatsappAlerts} onchange={submitOnChange} />
-                            <span>also by WhatsApp</span>
-                          </label>
-                        </fieldset>
-                        <noscript><button class="btn" type="submit">Save alerts</button></noscript>
-                        {#if form && 'notified' in form && form.notified === p.id}<span class="note good inline">Saved.</span>{/if}
-                      </form>
-
-                      <div class="time-here">
-                        <p class="field-label">Time here, last {data.placeTimeDays} days</p>
-                        {#await data.placeTime}
-                          <p class="map-note">Reading the trail…</p>
-                        {:then byPlace}
-                          {@const rows = byPlace ? (byPlace[p.id] ?? []) : null}
-                          {#if rows === null}
-                            <p class="map-note">The time here could not be worked out just now.</p>
-                          {:else if !rows.length}
-                            <p class="map-note">Nobody has stayed here in that time.</p>
-                          {:else}
-                            <div class="tbl-wrap">
-                              <table class="tbl compact">
-                                <thead>
-                                  <tr>
-                                    <th scope="col">Person</th>
-                                    <th scope="col" class="right">Time</th>
-                                    <th scope="col" class="right visits">Visits</th>
-                                    <th scope="col" class="right">Arrives</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {#each rows as r (r.subject)}
-                                    <tr>
-                                      <td class="cell-lead">{r.displayName}</td>
-                                      <td class="right num">{dur(r.minutes)}</td>
-                                      <td class="right num visits">{r.visits}</td>
-                                      <td class="right num">{r.usualArrival ?? '—'}</td>
-                                    </tr>
-                                  {/each}
-                                </tbody>
-                              </table>
-                            </div>
-                          {/if}
-                        {/await}
-                      </div>
-
-                      {#if !p.isHome}
-                        {#if confirmRemove === p.id}
-                          <form class="confirm" method="POST" action="?/remove" use:enhance={afterRemove}>
-                            <input type="hidden" name="placeId" value={p.id} />
-                            <p id="remove-{p.id}">Remove <em>{p.label ?? 'this place'}</em>? {REMOVE_NOTE}</p>
-                            <div class="card-actions">
-                              <button class="cta sm" type="submit" aria-describedby="remove-{p.id}">Remove</button>
-                              <button class="btn" type="button" use:focusOnMount onclick={() => (confirmRemove = null)}>Keep</button>
-                            </div>
-                          </form>
-                        {:else}
-                          <div class="card-actions">
-                            <button class="btn" type="button" onclick={() => (confirmRemove = p.id)}>Remove place</button>
-                          </div>
-                        {/if}
-                      {/if}
-                      {#if formError && formError.placeId === p.id}<p class="err" role="alert">{formError.error}</p>{/if}
-                    </div>
-                  {/if}
-                </li>
-              {/each}
-            </ul>
+            {@render listBlock()}
           {/if}
-          {#if formError && !formError.placeId && !creating}<p class="err" role="alert">{formError.error}</p>{/if}
-          <p class="rules">
-            <span class="phone-only">Select a place on the map or in the list; drag its centre to move it and the square handle to set the radius, 50 to 2,000 m.</span>
-            Someone arrives on the first fix inside a place’s edge and leaves on the first one more than 50 m outside it. Home
-            always tells the household; a place with WhatsApp on also messages anyone who asked, at most once every half hour
-            per person and place.
-          </p>
         </div>
+
+        {#if selected}
+          <div class="below">{@render listBlock()}</div>
+        {/if}
       </div>
     </div>
   </section>
@@ -527,16 +461,100 @@
     height: 55vh;
     min-height: 320px;
   }
+  /* The page shell clips overflow, so `position: sticky` never sticks here.
+     Instead, while a place is open, the map and its panel are sized to share
+     one screen, and selecting scrolls them into it (see `showPanel`). On a
+     phone the panel sits straight under a shorter map and scrolls inside
+     itself, so the map stays in view above it. */
+  .map-col,
+  .place-panel {
+    scroll-margin-top: calc(var(--site-nav-height, 56px) + 8px);
+  }
+  @media (max-width: 899px) {
+    .has-panel .map-col {
+      height: 38svh;
+      min-height: 220px;
+    }
+    .has-panel {
+      gap: 12px;
+    }
+    .place-panel {
+      max-height: calc(100svh - max(38svh, 220px) - var(--site-nav-height, 56px) - 28px);
+      min-height: 240px;
+      overflow-y: auto;
+    }
+  }
   @media (min-width: 900px) {
     .places-layout {
-      grid-template-columns: minmax(0, 1.5fr) minmax(320px, 1fr);
+      grid-template-columns: minmax(0, 1.5fr) minmax(340px, 1fr);
       align-items: start;
     }
     .map-col {
-      position: sticky;
-      top: calc(var(--site-nav-height, 56px) + 16px);
       height: min(78vh, 760px);
     }
+    /* The panel is as tall as the map at most, and scrolls inside itself, so
+       the map and the place's details sit side by side on one screen. */
+    .place-panel {
+      max-height: min(78vh, 760px);
+      overflow-y: auto;
+    }
+    .below {
+      grid-column: 1 / -1;
+    }
+  }
+  .side-col,
+  .below {
+    min-width: 0;
+  }
+  .place-panel {
+    margin: 0;
+    background: var(--surface-elevated);
+    border-left: 3px solid var(--accent);
+  }
+  .panel-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line-hair);
+  }
+  .panel-head .card-kicker {
+    margin: 0 0 4px;
+  }
+  .panel-title {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: var(--fs-body-lg, 1.2rem);
+    font-weight: 400;
+    color: var(--text-primary);
+  }
+  .panel-title:focus-visible,
+  .close:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+  .close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid var(--line-strong);
+    border-radius: 2px;
+    background: var(--bg);
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+  .close:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .place.open {
+    border-left-color: var(--accent);
   }
   .map-bar {
     position: absolute;
@@ -557,9 +575,6 @@
   }
   .map-bar span {
     flex: 1 1 160px;
-  }
-  .list-col {
-    min-width: 0;
   }
   .list-head {
     display: flex;
@@ -624,14 +639,6 @@
     font-size: var(--fs-label-xs);
     color: var(--text-secondary);
   }
-  .editor {
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid var(--line-hair);
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
   .field {
     display: flex;
     flex-direction: column;
@@ -647,73 +654,7 @@
   .field.kind {
     flex: 0 1 140px;
   }
-  .notify {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-  .sub {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px 18px;
-    margin: 0;
-    padding: 0 0 0 26px;
-    border: 0;
-  }
-  .sub legend {
-    float: left;
-    margin-right: 4px;
-    padding: 0;
-  }
-  .sub.dim {
-    opacity: 0.6;
-  }
-  .toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    color: var(--text-secondary);
-  }
-  .toggle input {
-    accent-color: var(--accent);
-    width: 18px;
-    height: 18px;
-  }
-  .inline {
-    margin: 0;
-  }
   .map-note.good {
     color: var(--success);
-  }
-  .time-here {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .time-here .field-label,
-  .time-here .map-note {
-    margin: 0;
-  }
-  @media (max-width: 719px) {
-    .time-here .visits {
-      display: none;
-    }
-  }
-  .confirm {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    padding: 12px;
-    border: 1px solid var(--line-strong);
-    border-left: 3px solid var(--warn);
-    background: var(--surface-elevated);
-  }
-  .confirm p {
-    margin: 0;
-    font-size: var(--fs-body-sm, 0.95rem);
-    color: var(--text-primary);
   }
 </style>
