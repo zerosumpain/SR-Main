@@ -23,6 +23,20 @@ const listMembers = vi.fn(async () => [
 ]);
 vi.mock('$lib/home/presence/members', () => ({ listMembers }));
 
+const STATS = {
+  byMode: {
+    foot: { count: 1, metres: 1500, seconds: 1200 },
+    car: { count: 0, metres: 0, seconds: 0 },
+    rail: { count: 0, metres: 0, seconds: 0 },
+    other: { count: 0, metres: 0, seconds: 0 },
+  },
+  walkingPace: null,
+  commonTrips: [],
+  timeOut: [],
+};
+const loadMovementStats = vi.fn(async (_subject: string, _opts?: unknown) => STATS);
+vi.mock('$lib/home/presence/movement', () => ({ loadMovementStats }));
+
 const { load } = await import('./+page.server');
 
 function eventFor(email: string | null, subject: string) {
@@ -37,11 +51,22 @@ beforeEach(() => {
   householdSubjects.clear();
   householdSubjects.set('sam@example.test', 'sam');
   listMembers.mockClear();
+  loadMovementStats.mockClear();
+  loadMovementStats.mockImplementation(async () => STATS);
+});
+
+const page = (subject: string, displayName: string) => ({
+  subject,
+  displayName,
+  days: 30,
+  stats: STATS,
+  loadError: null,
 });
 
 describe('/home/people/[subject] load — the guard', () => {
   it('lets a household viewer open their own page', async () => {
-    expect(await load(eventFor('sam@example.test', 'sam'))).toEqual({ subject: 'sam', displayName: 'Sam' });
+    expect(await load(eventFor('sam@example.test', 'sam'))).toEqual(page('sam', 'Sam'));
+    expect(loadMovementStats).toHaveBeenCalledWith('sam', { days: 30 });
   });
 
   it("403s a household viewer asking for someone else's, before any lookup", async () => {
@@ -49,15 +74,33 @@ describe('/home/people/[subject] load — the guard', () => {
     // An unknown name gets the same answer, so the page cannot list the household.
     await expect(load(eventFor('sam@example.test', 'nobody'))).rejects.toMatchObject({ status: 403 });
     expect(listMembers).not.toHaveBeenCalled();
+    expect(loadMovementStats).not.toHaveBeenCalled();
   });
 
   it('lets the owner open anyone, and 404s a subject that does not exist', async () => {
-    expect(await load(eventFor('owner@example.test', 'alex'))).toEqual({ subject: 'alex', displayName: 'Alex' });
+    expect(await load(eventFor('owner@example.test', 'alex'))).toEqual(page('alex', 'Alex'));
+    expect(loadMovementStats).toHaveBeenCalledWith('alex', { days: 30 });
     await expect(load(eventFor('owner@example.test', 'nobody'))).rejects.toMatchObject({ status: 404 });
   });
 
   it('403s a guest and a signed-out visitor', async () => {
     await expect(load(eventFor('guest@example.test', 'sam'))).rejects.toMatchObject({ status: 403 });
     await expect(load(eventFor(null, 'sam'))).rejects.toMatchObject({ status: 403 });
+    expect(loadMovementStats).not.toHaveBeenCalled();
+  });
+});
+
+describe('/home/people/[subject] load — the stats', () => {
+  it('draws the page with a plain message when the trail cannot be read', async () => {
+    loadMovementStats.mockImplementation(async () => {
+      throw new Error('relation "daydream_trail" does not exist');
+    });
+    const data = await load(eventFor('sam@example.test', 'sam'));
+    expect(data).toMatchObject({ subject: 'sam', stats: null, loadError: 'The trail could not be read just now.' });
+  });
+
+  it('sends no coordinates to the page', async () => {
+    const data = await load(eventFor('owner@example.test', 'alex'));
+    expect(JSON.stringify(data)).not.toMatch(/"(lat|lon|latitude|longitude)"/);
   });
 });

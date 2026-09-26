@@ -26,7 +26,7 @@ vi.mock('$lib/server/grants', () => ({
 }));
 vi.mock('$lib/db', () => ({ db: {} }));
 
-const { peopleViewerOf, scopeHousehold } = await import('./viewer');
+const { peopleViewerOf, personLinks, scopeHousehold } = await import('./viewer');
 type Presence = import('./household').HouseholdPresence;
 
 function eventFor(email: string | null) {
@@ -142,5 +142,19 @@ describe('scopeHousehold', () => {
     const withExtra = [{ ...card('alex'), secretTrack: [[51.0, -1.0]] } as unknown as Presence];
     const [alex] = scopeHousehold(withExtra, { kind: 'household', subject: 'sam' });
     expect(alex).not.toHaveProperty('secretTrack');
+  });
+});
+
+describe('personLinks', () => {
+  it('gives the owner every person page and a household viewer only their own', () => {
+    const subjects = ['alex', 'sam', 'robin'];
+    expect(personLinks(subjects, { kind: 'owner' })).toEqual({
+      alex: '/home/people/alex',
+      sam: '/home/people/sam',
+      robin: '/home/people/robin',
+    });
+    expect(personLinks(subjects, { kind: 'household', subject: 'sam' })).toEqual({ sam: '/home/people/sam' });
+    // Not on the list, so no link — even to themselves.
+    expect(personLinks(['alex'], { kind: 'household', subject: 'sam' })).toEqual({});
   });
 });
