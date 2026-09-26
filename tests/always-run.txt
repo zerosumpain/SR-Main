@@ -9,6 +9,7 @@ src/lib/access/catalogue.test.ts
 src/lib/access/route-guards.test.ts
 src/lib/auth.test.ts
 src/lib/costs/ledger.test.ts
+src/lib/daydream/budget.test.ts
 src/lib/daydream/think/tools.test.ts
 src/lib/deepdive/route-access.test.ts
 src/lib/drive/owner-lane.test.ts
