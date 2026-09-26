@@ -25,6 +25,7 @@ export const AREA_IDS = [
   'jkai.notes',
   'jkai.intel',
   'jkai.knowledge',
+  'games',
 ] as const;
 export type AreaId = (typeof AREA_IDS)[number];
 
@@ -117,6 +118,13 @@ export const AREAS: readonly AreaInfo[] = [
     open: true,
     levels: { self: 'What their other grants let them read', all: 'Same as self', admin: 'Same as self' },
   },
+  {
+    id: 'games',
+    label: 'Games',
+    blurb: 'Family games in the iPhone app: start one, invite the family, join when invited.',
+    open: true,
+    levels: { self: 'Play, start games and invite', all: 'Same as self', admin: 'Same as self' },
+  },
 ];
 
 export const FAMILY: readonly { id: FamilyPermission; label: string; blurb: string; open: boolean }[] = [
@@ -148,13 +156,13 @@ export const BUILT_IN_GROUPS: readonly {
     id: 'family-circle',
     label: 'Family Circle',
     description: "Own and family members' live locations on a map.",
-    grants: ['family:circle'],
+    grants: ['family:circle', 'games:self'],
   },
   {
     id: 'family-admin',
     label: 'Family Admin',
     description: "Own and their kids' location history, plus the family circle.",
-    grants: ['family:circle', 'family:admin'],
+    grants: ['family:circle', 'family:admin', 'games:self'],
   },
 ];
 

@@ -44,6 +44,9 @@
 /api/native/connections
 /api/native/daydream
 /api/native/daydream/feedback
+/api/native/games
+/api/native/games/[id]
+/api/native/games/[id]/stream
 /api/native/health/activities
 /api/native/health/activities/[id]
 /api/native/health/hub

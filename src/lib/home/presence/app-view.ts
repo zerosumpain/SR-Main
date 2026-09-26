@@ -118,7 +118,7 @@ export interface SitePair {
 }
 
 export interface AppViewAccess extends AppAccess {
-  /** Only for a member holding chat or news who asked in the last 15 minutes. */
+  /** Only for a member holding chat, news or games who asked in the last 15 minutes. */
   sitePair: SitePair | null;
 }
 
@@ -349,12 +349,12 @@ export function sitePairWanted(stamp: string | null | undefined, now: Date): boo
 }
 
 /**
- * A pairing code for a MEMBER who holds chat or news and has asked, or null.
+ * A pairing code for a MEMBER who holds chat, news or games and has asked, or null.
  *
  * Never for the owner: his phone pairs from /admin, behind his own session,
  * and a code of his travelling through the pilot would put an owner credential
  * one hop further from him than it needs to be. Never for anyone holding
- * neither area: they have nothing on the site to pair for. A mint that fails is
+ * none of them: they have nothing on the site to pair for. A mint that fails is
  * null — the rest of the push is worth more than one code.
  */
 async function sitePairFor(
@@ -363,7 +363,7 @@ async function sitePairFor(
   wanted: string | null | undefined,
   now: Date,
 ): Promise<SitePair | null> {
-  if (access.owner || !(access.chat || access.news) || !sitePairWanted(wanted, now)) {
+  if (access.owner || !(access.chat || access.news || access.games) || !sitePairWanted(wanted, now)) {
     sitePairCodes.delete(email);
     return null;
   }

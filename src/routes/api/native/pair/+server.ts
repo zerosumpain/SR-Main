@@ -68,7 +68,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 
 /**
  * Who a redeemed code may become a device for: the owner, or a member who holds
- * news or chat right now — the two areas the app opens to members.
+ * news, chat or games right now — the areas the app opens to members.
  *
  * A member's code is only ever minted by the household push, for a member who
  * held one of those when it was minted; this asks again at redemption because
@@ -82,7 +82,12 @@ async function mayHoldDevice(email: string): Promise<boolean> {
   if (isOwnerEmail(email)) return true;
   try {
     const member = await loadMember(email);
-    return !!member && (satisfies(member.grants, 'news:self') || satisfies(member.grants, 'jkai.chat:self'));
+    return (
+      !!member &&
+      (satisfies(member.grants, 'news:self') ||
+        satisfies(member.grants, 'jkai.chat:self') ||
+        satisfies(member.grants, 'games:self'))
+    );
   } catch (err) {
     console.error('[native] pair: member lookup failed:', err);
     return false;
