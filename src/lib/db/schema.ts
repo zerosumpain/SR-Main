@@ -1677,14 +1677,36 @@ export const allowedUser = pgTable('allowed_user', {
   note: text('note'), // optional label, e.g. "partner", "colleague"
   addedBy: text('added_by'), // owner email that granted access
   /**
-   * 'guest' | 'member' | 'household'. A guest signs in and sees public pages;
-   * a member also reaches their own intel space (see $lib/server/members and
-   * isMemberAllowedRoute in $lib/auth); a household viewer reaches
-   * /home/people and their own page (isHouseholdAllowedRoute). Owners are
-   * never in this table.
+   * Pre-groups access, still honoured: 'member' reads as `jkai.intel:self`,
+   * 'household' as `family:circle` ($lib/server/grants). Saving a person at
+   * /admin/access resets it to 'guest', after which `groups` and `grants` are
+   * the only source. Owners are never in this table.
    */
   role: text('role').notNull().default('guest'),
+  /**
+   * `access_group` ids this user belongs to, and one-off permissions on top
+   * (strings from $lib/access/catalogue). Their union is what the user may do;
+   * anything the catalogue does not define is ignored on read. See
+   * $lib/server/access/grants.
+   */
+  groups: jsonb('groups').$type<string[]>().notNull().default([]),
+  grants: jsonb('grants').$type<string[]>().notNull().default([]),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Named bundles of permissions, edited at /admin/access. `grants` holds
+ * catalogue strings ($lib/access/catalogue); built-ins are seeded on first read
+ * and can be edited but not deleted.
+ */
+export const accessGroup = pgTable('access_group', {
+  id: text('id').primaryKey(),
+  label: text('label').notNull(),
+  description: text('description'),
+  grants: jsonb('grants').$type<string[]>().notNull().default([]),
+  builtIn: boolean('built_in').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export type AllowedUser = typeof allowedUser.$inferSelect;

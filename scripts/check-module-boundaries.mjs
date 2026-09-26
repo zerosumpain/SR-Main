@@ -116,6 +116,10 @@ const MODULE_LAYER = {
   // domain, precisely so the LLM gateway can read them without importing the
   // features that set them.
   context: 'platform',
+  // The permission catalogue — which areas and levels exist and which route
+  // each opens. A table with no feature knowledge: `server/viewer` resolves
+  // every request against it, so it must sit where the platform can read it.
+  access: 'platform',
 
   // ui — presentation-layer modules. Nothing below may import these; a feature
   // module that reaches for a Svelte component has put rendering in the wrong

@@ -1,3 +1,5 @@
+import { requiredFor, routeIdsFor } from '$lib/access/catalogue';
+
 // Route protection helpers — Auth.js config is in hooks.server.ts
 
 // Routes that don't require authentication
@@ -100,85 +102,17 @@ export function isGuestAllowedPath(pathname: string): boolean {
   return GUEST_ALLOWED_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + '/'));
 }
 
-// What a MEMBER (a guest the owner promoted at /admin/access — see
-// $lib/server/members) may reach beyond the guest surface: their own intel
-// space, read-only, plus triage of their own held mail and connecting their
-// own Gmail.
-//
-// Keyed on SvelteKit's ROUTE ID, not the pathname, and matched exactly. A
-// pathname pattern for `/jkai/intel/notes/[id]` would also match the static
-// sibling `/jkai/intel/notes/new`, and `/api/jkai/intel/entities/[id]` would
-// match `/api/jkai/intel/entities/split`; the route id cannot be confused that
-// way, and a directory added beside one of these is closed until listed here.
-// Per method, too: most of these handlers also carry owner-only writes.
-//
-// Every route here must resolve its data through `resolveRequestScope` — the
-// hook deciding a member may REACH a route is not what stops the owner's rows
-// reaching them (members.integration.test.ts and route-scope.test.ts).
-const MEMBER_ROUTES: Record<string, readonly string[]> = {
-  // Pages. A page's `__data.json` carries the same route id.
-  '/jkai/intel': ['GET'],
-  '/jkai/intel/notes': ['GET'],
-  '/jkai/intel/notes/[id]': ['GET'],
-  '/jkai/intel/entities': ['GET'],
-  '/jkai/intel/entities/[id]': ['GET'],
-  '/jkai/intel/timeline': ['GET'],
-  '/jkai/intel/mail': ['GET'],
-  // Read APIs the pages above call.
-  '/api/jkai/intel/network': ['GET'],
-  '/api/jkai/intel/network/paths': ['GET'],
-  '/api/jkai/intel/evidence-network': ['GET'],
-  '/api/jkai/intel/entity-card': ['GET'],
-  '/api/jkai/intel/entities': ['GET'],
-  '/api/jkai/intel/entities/[id]': ['GET'],
-  '/api/jkai/intel/notes': ['GET'],
-  '/api/jkai/intel/notes/[id]': ['GET'],
-  // Triage of their own held mail: admit / reject / requeue / similar /
-  // score-relevance, each within the request's scope. The one owner-only
-  // action on this handler (backfill-embeddings) refuses non-owner scopes.
-  '/api/jkai/intel/mail': ['GET', 'POST'],
-  // Their own Gmail, read-only scopes; the callback stamps their principal.
-  '/api/gmail/connect': ['GET'],
-  '/api/gmail/callback': ['GET'],
-};
+// What a signed-in non-owner may reach beyond the guest surface is decided by
+// the permission catalogue ($lib/access/catalogue): route id + verb → the
+// permission it needs. These two wrappers keep the intel-era names for the
+// tests that prove each intel route is scoped.
 
+/** True when some grant opens this route + verb (whether the viewer holds it is the hook's job). */
 export function isMemberAllowedRoute(routeId: string | null | undefined, method: string): boolean {
-  if (!routeId) return false;
-  const methods = MEMBER_ROUTES[routeId];
-  if (!methods) return false;
-  const m = method.toUpperCase();
-  return methods.includes(m) || (m === 'HEAD' && methods.includes('GET'));
+  return requiredFor(routeId, method) !== null;
 }
 
-/** The member route ids, for the tests that prove each one is scoped. */
+/** The intel route ids, for the tests that prove each one is scoped. */
 export function memberRouteIds(): string[] {
-  return Object.keys(MEMBER_ROUTES);
-}
-
-// What a HOUSEHOLD viewer (an `allowed_user` row with role 'household' whose
-// email is on a `household_member` row — see $lib/server/viewer) may reach:
-// the People room and their own page under it. Nothing else under /home —
-// voice, echoes and devices stay owner-only — and no API.
-//
-// Keyed on the route id and per verb, exactly like MEMBER_ROUTES and for the
-// same reasons. Reaching the route is not seeing everything on it: both loads
-// scope their payload to the viewer (`peopleViewerOf`, `scopeHousehold`) —
-// the production database role bypasses RLS, so the load is the only place
-// scoping can live.
-const HOUSEHOLD_ROUTES: Record<string, readonly string[]> = {
-  '/home/people': ['GET'],
-  '/home/people/[subject]': ['GET'],
-};
-
-export function isHouseholdAllowedRoute(routeId: string | null | undefined, method: string): boolean {
-  if (!routeId) return false;
-  const methods = HOUSEHOLD_ROUTES[routeId];
-  if (!methods) return false;
-  const m = method.toUpperCase();
-  return methods.includes(m) || (m === 'HEAD' && methods.includes('GET'));
-}
-
-/** The household route ids, for the test that proves each one exists. */
-export function householdRouteIds(): string[] {
-  return Object.keys(HOUSEHOLD_ROUTES);
+  return routeIdsFor('jkai.intel');
 }

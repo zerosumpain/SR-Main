@@ -59,7 +59,8 @@ async function relevanceCoverage(scope: IntelScope) {
 // global list each, learned from and built over the owner's mailbox — see
 // /api/jkai/intel/mail/rules), so any other scope gets them empty.
 export const load: PageServerLoad = async (event) => {
-  const scope = await resolveRequestScope(event);
+  // Held mail is its owner's until admitted: `all` does not widen it (see scope.server).
+  const scope = await resolveRequestScope(event, 'own');
   const owner = isOwnerScope(scope);
   const noDecisions = { total: 0, admitted: 0, rejected: 0, byOwner: 0 };
   const [queue, rules, decisions, index, relevance] = await Promise.all([

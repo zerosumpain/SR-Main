@@ -32,7 +32,7 @@ vi.mock('$lib/db', () => ({
   },
 }));
 
-const { householdSubjectFor, isAllowedRole } = await import('./members');
+const { householdSubjectFor } = await import('./members');
 const render = (s: unknown) => new PgDialect().sqlToQuery(s as SQL);
 
 beforeEach(() => {
@@ -43,14 +43,16 @@ beforeEach(() => {
 });
 
 describe('householdSubjectFor', () => {
-  it('joins and filters on lower-cased email, role household', async () => {
+  it('filters household_member on lower-cased email — identity, not permission', async () => {
     state.rows = [{ subject: 'sam' }];
     expect(await householdSubjectFor('  Sam@Example.TEST ')).toBe('sam');
 
-    expect(render(state.join).sql).toBe('lower("household_member"."email") = lower("allowed_user"."email")');
+    // No join to allowed_user and no role: whether they may LOOK is
+    // family:circle, checked in peopleViewerOf.
+    expect(state.join).toBeNull();
     const where = render(state.where);
-    expect(where.sql).toBe('(lower("allowed_user"."email") = $1 and "allowed_user"."role" = $2)');
-    expect(where.params).toEqual(['sam@example.test', 'household']);
+    expect(where.sql).toBe('lower("household_member"."email") = $1');
+    expect(where.params).toEqual(['sam@example.test']);
   });
 
   it('is null with no row, and asks nothing for a blank address', async () => {
@@ -59,12 +61,5 @@ describe('householdSubjectFor', () => {
     expect(await householdSubjectFor('  ')).toBeNull();
     expect(await householdSubjectFor(null)).toBeNull();
     expect(state.asked).toBe(0);
-  });
-});
-
-describe('isAllowedRole', () => {
-  it('accepts guest, member and household only', () => {
-    for (const r of ['guest', 'member', 'household']) expect(isAllowedRole(r), r).toBe(true);
-    for (const r of ['owner', 'admin', '', null, 1]) expect(isAllowedRole(r), String(r)).toBe(false);
   });
 });

@@ -19,11 +19,12 @@ import { startOrphanSweep } from '$lib/jkai/media/sweep';
 // Side-effect import: every integration adapter registers itself on load.
 // The barrel is maintained by the node-builder codegen.
 import '$lib/integrations/adapters';
-import { isPublicPath, isGuestAllowedPath, isMemberAllowedRoute, isHouseholdAllowedRoute } from '$lib/auth';
+import { isPublicPath, isGuestAllowedPath } from '$lib/auth';
+import { requiredFor } from '$lib/access/catalogue';
 import { requestHost } from '$lib/request-host';
 import { resolveAdminRedirect } from '$lib/components/admin/admin-nav';
 import { isEmailAllowedToSignIn, isOwnerEmail } from '$lib/server/access';
-import { viewerOf } from '$lib/server/viewer';
+import { viewerHolds, viewerOf } from '$lib/server/viewer';
 import { rateLimit } from '$lib/server/rate-limit';
 import { nativeDevice } from '$lib/server/native-gate';
 import { hasMaintenanceSecret } from '$lib/server/maintenance-auth';
@@ -858,23 +859,18 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
 };
 
 /**
- * A member (see $lib/server/members) may reach the exact routes and verbs in
- * `isMemberAllowedRoute` and nothing else; a household viewer, likewise, the
- * routes in `isHouseholdAllowedRoute`. The route is checked first, so a
- * guest's request for anything outside that list costs no database read. What
- * the member then SEES is `resolveRequestScope`'s job, not this gate's.
+ * A member (a signed-in non-owner holding permissions — $lib/server/grants)
+ * may reach exactly the routes and verbs the catalogue opens to a permission
+ * they hold ($lib/access/catalogue), and nothing else. The route is checked
+ * first, so a request for anything the catalogue does not name costs no
+ * database read. What the member then SEES is their area's scope seam, not
+ * this gate's.
  */
 async function memberMayReach(event: Parameters<Handle>[0]['event']): Promise<boolean> {
-  const method = event.request.method;
-  const asMember = isMemberAllowedRoute(event.route.id, method);
-  // A household viewer (role 'household' + a household_member row) reaches the
-  // exact routes in `isHouseholdAllowedRoute` — /home/people and their own
-  // page — the same way. What they then SEE is scoped in those loads.
-  const asHousehold = isHouseholdAllowedRoute(event.route.id, method);
-  if (!asMember && !asHousehold) return false;
+  const required = requiredFor(event.route.id, event.request.method);
+  if (!required) return false;
   try {
-    const kind = (await viewerOf(event)).kind;
-    return (asMember && kind === 'member') || (asHousehold && kind === 'household');
+    return viewerHolds(await viewerOf(event), required);
   } catch (err) {
     // Fail closed: a member lookup that cannot reach the database refuses the
     // request, it does not wave it through.
