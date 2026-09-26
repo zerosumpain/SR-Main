@@ -85,12 +85,15 @@
     if (editing?.email === email) editing = null;
   }
 
+  /** What a pre-groups role held, carried into the first save here so nobody loses it. */
+  const LEGACY: Record<string, Permission> = { member: 'jkai.intel:self', household: 'family:circle' };
+
   function editPerson(p: AccessPerson) {
+    const carried = p.legacyRole ? LEGACY[p.legacyRole] : null;
     editing = {
       email: p.email,
       groups: [...p.groups],
-      // A pre-groups member keeps their intel space when first saved here.
-      grants: p.legacyMember && !p.grants.includes('jkai.intel:self') ? [...p.grants, 'jkai.intel:self'] : [...p.grants],
+      grants: carried && !p.grants.includes(carried) ? [...p.grants, carried] : [...p.grants],
     };
   }
 
@@ -219,7 +222,7 @@
           <div class="chips">
             {#each person.groups as g}<span class="chip group">{groupLabel(g)}</span>{/each}
             {#each person.grants as p}<span class="chip">{LABELS[p] ?? p}</span>{/each}
-            {#if person.legacyMember}<span class="chip">{LABELS['jkai.intel:self']} (member)</span>{/if}
+            {#if person.legacyRole}<span class="chip">{LABELS[LEGACY[person.legacyRole]]} ({person.legacyRole})</span>{/if}
             {#if person.effective.length === 0}<span class="chip ghost">Guest — public pages only</span>{/if}
           </div>
 

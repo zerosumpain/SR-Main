@@ -8,13 +8,15 @@
 // load returns reaches the browser whether the markup shows it or not.
 //
 // - The owner sees everything, as before.
-// - A household viewer (role 'household' + a household_member row — see
-//   `householdSubjectFor` in $lib/server/members) sees every sharing person's
-//   live status, their OWN day in full, and nothing of anyone who has chosen
-//   not to share.
+// - A household viewer — a member holding `family:circle` (the Family Circle
+//   group, $lib/access/catalogue) whose email is on a household_member row
+//   (`householdSubjectFor` in $lib/server/members) — sees every sharing
+//   person's live status, their OWN day in full, and nothing of anyone who has
+//   chosen not to share.
 
+import { householdSubjectFor } from '$lib/server/members';
 import { isOwnerRequest, type OwnerCheckEvent } from '$lib/server/owner';
-import { viewerOf } from '$lib/server/viewer';
+import { viewerHolds, viewerOf } from '$lib/server/viewer';
 import type { HouseholdPresence } from './household';
 
 export type PeopleViewer = { kind: 'owner' } | { kind: 'household'; subject: string };
@@ -30,7 +32,9 @@ export async function peopleViewerOf(event: OwnerCheckEvent): Promise<PeopleView
   if (await isOwnerRequest(event)) return { kind: 'owner' };
   try {
     const viewer = await viewerOf(event);
-    return viewer.kind === 'household' ? { kind: 'household', subject: viewer.subject } : null;
+    if (viewer.kind !== 'member' || !viewerHolds(viewer, 'family:circle')) return null;
+    const subject = await householdSubjectFor(viewer.email);
+    return subject ? { kind: 'household', subject } : null;
   } catch (err) {
     console.error('[home/people] viewer lookup failed:', err);
     return null;

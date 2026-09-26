@@ -29,8 +29,9 @@ export type AccessGroupRow = typeof accessGroup.$inferSelect;
 /**
  * The permissions a user holds.
  *
- * `role = 'member'` is the pre-groups way of saying "their own intel space",
- * kept so a row written before this shipped keeps meaning what it meant.
+ * `role = 'member'` / `'household'` are the pre-groups ways of saying "their
+ * own intel space" / "the family circle", kept so a row written before this
+ * shipped keeps meaning what it meant.
  * `setUserAccess` resets it, so once the owner has saved a user from the new
  * page their groups and grants are the only source.
  */
@@ -44,6 +45,7 @@ export function effectivePermissions(
     for (const p of parsePermissions(groups.get(id))) out.add(p);
   }
   if (user.role === 'member') out.add('jkai.intel:self');
+  if (user.role === 'household') out.add('family:circle');
   return out;
 }
 

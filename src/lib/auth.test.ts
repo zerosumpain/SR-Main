@@ -5,9 +5,8 @@ import {
   isGuestAllowedPath,
   isMemberAllowedRoute,
   memberRouteIds,
-  isHouseholdAllowedRoute,
-  householdRouteIds,
 } from './auth';
+import { requiredFor, routeIdsFor } from './access/catalogue';
 
 describe('isPublicPath', () => {
   it('allows known public pages and APIs', () => {
@@ -107,19 +106,21 @@ describe('isMemberAllowedRoute — a member reaches their own intel space and no
   });
 });
 
-describe('isHouseholdAllowedRoute — a household viewer reaches People and nothing else', () => {
+describe('family:circle — a Family Circle member reaches People and nothing else', () => {
+  const circle = (id: string | null | undefined, m = 'GET') => requiredFor(id, m) === 'family:circle';
+
   it('opens /home/people and one person under it, GET and HEAD only', () => {
-    expect(isHouseholdAllowedRoute('/home/people', 'GET')).toBe(true);
-    expect(isHouseholdAllowedRoute('/home/people/[subject]', 'GET')).toBe(true);
-    expect(isHouseholdAllowedRoute('/home/people', 'HEAD')).toBe(true);
-    expect(isHouseholdAllowedRoute('/home/people', 'get')).toBe(true);
+    expect(circle('/home/people')).toBe(true);
+    expect(circle('/home/people/[subject]')).toBe(true);
+    expect(circle('/home/people', 'HEAD')).toBe(true);
+    expect(circle('/home/people', 'get')).toBe(true);
     for (const m of ['POST', 'PUT', 'PATCH', 'DELETE']) {
-      expect(isHouseholdAllowedRoute('/home/people', m), m).toBe(false);
-      expect(isHouseholdAllowedRoute('/home/people/[subject]', m), m).toBe(false);
+      expect(requiredFor('/home/people', m), m).toBeNull();
+      expect(requiredFor('/home/people/[subject]', m), m).toBeNull();
     }
   });
 
-  it("refuses the other rooms of /home, the owner's surfaces and a member's", () => {
+  it("opens none of /home's other rooms, the owner's surfaces or intel to the circle", () => {
     for (const id of [
       '/home',
       '/home/voice',
@@ -133,21 +134,21 @@ describe('isHouseholdAllowedRoute — a household viewer reaches People and noth
       '/health/activities',
       '/api/home/people',
     ]) {
-      expect(isHouseholdAllowedRoute(id, 'GET'), id).toBe(false);
+      expect(circle(id), id).toBe(false);
     }
-    expect(isHouseholdAllowedRoute(null, 'GET')).toBe(false);
-    expect(isHouseholdAllowedRoute(undefined, 'GET')).toBe(false);
+    expect(circle(null)).toBe(false);
+    expect(circle(undefined)).toBe(false);
   });
 
   it('matches route ids, not pathnames', () => {
     // A concrete path is not a route id: `/home/people/sam` only ever reaches
     // the gate as `/home/people/[subject]`.
-    expect(isHouseholdAllowedRoute('/home/people/sam', 'GET')).toBe(false);
+    expect(requiredFor('/home/people/sam', 'GET')).toBeNull();
   });
 
-  it('is kept apart from the member list', () => {
-    for (const id of householdRouteIds()) expect(isMemberAllowedRoute(id, 'GET'), id).toBe(false);
-    for (const id of memberRouteIds()) expect(isHouseholdAllowedRoute(id, 'GET'), id).toBe(false);
+  it('is kept apart from intel', () => {
+    for (const id of routeIdsFor('family:circle')) expect(requiredFor(id, 'GET'), id).not.toMatch(/^jkai/);
+    for (const id of memberRouteIds()) expect(circle(id), id).toBe(false);
   });
 
   it('opens none of it to guests or the public', () => {
@@ -158,8 +159,8 @@ describe('isHouseholdAllowedRoute — a household viewer reaches People and noth
   });
 
   it('lists only routes that exist', () => {
-    expect(householdRouteIds().sort()).toEqual(['/home/people', '/home/people/[subject]']);
-    for (const id of householdRouteIds()) {
+    expect(routeIdsFor('family:circle').sort()).toEqual(['/home/people', '/home/people/[subject]']);
+    for (const id of routeIdsFor('family:circle')) {
       expect(existsSync(`src/routes${id}/+page.svelte`), id).toBe(true);
       expect(existsSync(`src/routes${id}/+page.server.ts`), id).toBe(true);
     }

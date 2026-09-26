@@ -9,8 +9,13 @@ vi.mock('$lib/server/access', () => ({
   isOwnerEmail: (email: string | null | undefined) => (email ?? '').toLowerCase() === 'owner@example.test',
 }));
 vi.mock('$lib/server/members', () => ({
-  memberPrincipalFor: async () => null,
   householdSubjectFor: async (email: string) => householdSubjects.get(email) ?? null,
+}));
+// A household viewer is a member holding family:circle; here, anyone with a
+// household subject is one.
+vi.mock('$lib/server/grants', () => ({
+  loadMember: async (email: string) =>
+    householdSubjects.has(email) ? { principalId: 'u_test', grants: new Set(['family:circle']) } : null,
 }));
 vi.mock('$lib/db', () => ({ db: {} }));
 

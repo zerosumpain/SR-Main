@@ -4,26 +4,29 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // the database-reading lookups under it are faked.
 const ownerEmails = new Set(['owner@example.test']);
 const householdSubjects = new Map<string, string>();
-const memberPrincipals = new Map<string, string>();
+/** email → the permissions they hold (a member). */
+const memberGrants = new Map<string, string[]>();
 let lookupFails = false;
 
 vi.mock('$lib/server/access', () => ({
   isOwnerEmail: (email: string | null | undefined) => ownerEmails.has((email ?? '').trim().toLowerCase()),
 }));
 vi.mock('$lib/server/members', () => ({
-  memberPrincipalFor: async (email: string) => {
-    if (lookupFails) throw new Error('db down');
-    return memberPrincipals.get(email) ?? null;
-  },
   householdSubjectFor: async (email: string) => {
     if (lookupFails) throw new Error('db down');
     return householdSubjects.get(email) ?? null;
   },
 }));
+vi.mock('$lib/server/grants', () => ({
+  loadMember: async (email: string) => {
+    if (lookupFails) throw new Error('db down');
+    const grants = memberGrants.get(email);
+    return grants ? { principalId: 'u_abc', grants: new Set(grants) } : null;
+  },
+}));
 vi.mock('$lib/db', () => ({ db: {} }));
 
 const { peopleViewerOf, scopeHousehold } = await import('./viewer');
-const { viewerOf } = await import('$lib/server/viewer');
 type Presence = import('./household').HouseholdPresence;
 
 function eventFor(email: string | null) {
@@ -36,25 +39,8 @@ function eventFor(email: string | null) {
 
 beforeEach(() => {
   householdSubjects.clear();
-  memberPrincipals.clear();
+  memberGrants.clear();
   lookupFails = false;
-});
-
-describe('viewerOf — the household kind', () => {
-  it('resolves role household + a household_member row to the subject', async () => {
-    householdSubjects.set('sam@example.test', 'sam');
-    expect(await viewerOf(eventFor('Sam@Example.test'))).toEqual({
-      kind: 'household',
-      subject: 'sam',
-      email: 'sam@example.test',
-    });
-  });
-
-  it('leaves a member a member and anyone else a guest', async () => {
-    memberPrincipals.set('m@example.test', 'u_abc');
-    expect((await viewerOf(eventFor('m@example.test'))).kind).toBe('member');
-    expect((await viewerOf(eventFor('nobody@example.test'))).kind).toBe('guest');
-  });
 });
 
 describe('peopleViewerOf', () => {
@@ -63,19 +49,33 @@ describe('peopleViewerOf', () => {
     expect(await peopleViewerOf(eventFor('owner@example.test'))).toEqual({ kind: 'owner' });
   });
 
-  it('household ⇒ their subject', async () => {
+  it('family:circle + a household_member row ⇒ their subject', async () => {
+    memberGrants.set('sam@example.test', ['family:circle']);
     householdSubjects.set('sam@example.test', 'sam');
-    expect(await peopleViewerOf(eventFor('sam@example.test'))).toEqual({ kind: 'household', subject: 'sam' });
+    expect(await peopleViewerOf(eventFor('Sam@Example.test'))).toEqual({ kind: 'household', subject: 'sam' });
   });
 
-  it('a guest, a member, a signed-out visitor ⇒ null', async () => {
-    memberPrincipals.set('m@example.test', 'u_abc');
+  it('family:circle with no household_member row has nobody to be ⇒ null', async () => {
+    memberGrants.set('sam@example.test', ['family:circle']);
+    expect(await peopleViewerOf(eventFor('sam@example.test'))).toBeNull();
+  });
+
+  it('a household_member row without family:circle is someone tracked, not someone who may look ⇒ null', async () => {
+    memberGrants.set('sam@example.test', ['jkai.intel:self']);
+    householdSubjects.set('sam@example.test', 'sam');
+    expect(await peopleViewerOf(eventFor('sam@example.test'))).toBeNull();
+  });
+
+  it('a guest, an intel-only member, a signed-out visitor ⇒ null', async () => {
+    memberGrants.set('m@example.test', ['jkai.intel:self']);
     expect(await peopleViewerOf(eventFor('m@example.test'))).toBeNull();
     expect(await peopleViewerOf(eventFor('guest@example.test'))).toBeNull();
     expect(await peopleViewerOf(eventFor(null))).toBeNull();
   });
 
   it('fails closed when the lookup throws', async () => {
+    memberGrants.set('sam@example.test', ['family:circle']);
+    householdSubjects.set('sam@example.test', 'sam');
     lookupFails = true;
     expect(await peopleViewerOf(eventFor('sam@example.test'))).toBeNull();
   });

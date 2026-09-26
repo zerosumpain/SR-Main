@@ -116,7 +116,7 @@ export const FAMILY: readonly { id: FamilyPermission; label: string; blurb: stri
     id: 'family:circle',
     label: 'Family circle',
     blurb: "See their own and the family's live locations.",
-    open: false,
+    open: true,
   },
   {
     id: 'family:admin',
@@ -239,6 +239,15 @@ const ROUTES: Record<string, Partial<Record<Method, Permission>>> = {
   // Their own Gmail, read-only scopes; the callback stamps their principal.
   '/api/gmail/connect': { GET: 'jkai.intel:self' },
   '/api/gmail/callback': { GET: 'jkai.intel:self' },
+
+  // ── family:circle — the People room and a person page under it. Nothing else
+  // under /home (voice, echoes and devices are the `home` area) and no API.
+  // Reaching the route is not seeing everything on it: both loads scope their
+  // payload to the viewer (`peopleViewerOf`, `scopeHousehold` in
+  // $lib/home/presence/viewer), and a circle viewer's own page is the only
+  // person page that opens for them.
+  '/home/people': { GET: 'family:circle' },
+  '/home/people/[subject]': { GET: 'family:circle' },
 };
 
 /** The permission a route + verb needs, or null when only the owner may reach it. */

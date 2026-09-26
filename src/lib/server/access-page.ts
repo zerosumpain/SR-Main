@@ -17,8 +17,11 @@ export interface AccessPerson {
   grants: Permission[];
   /** What they hold, groups and grants together. */
   effective: Permission[];
-  /** A pre-groups `member` row the owner has not saved since: it holds intel self. */
-  legacyMember: boolean;
+  /**
+   * A pre-groups role the owner has not saved over since: 'member' holds
+   * `jkai.intel:self`, 'household' holds `family:circle`.
+   */
+  legacyRole: 'member' | 'household' | null;
 }
 
 export interface AccessGroupView {
@@ -50,7 +53,7 @@ export async function loadAccessPage(): Promise<{
     groups: (r.groups ?? []).filter((g): g is string => typeof g === 'string' && known.has(g)),
     grants: parsePermissions(r.grants),
     effective: [...effectivePermissions(r, byId)],
-    legacyMember: r.role === 'member',
+    legacyRole: r.role === 'member' || r.role === 'household' ? r.role : null,
   }));
 
   return {
