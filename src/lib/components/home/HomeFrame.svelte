@@ -68,7 +68,10 @@
           <p class="standfirst">{standfirst}</p>
         </div>
         {#if summary.length}
-          <dl class="lede-summary" style="--cells: {Math.min(summary.length, 4)}">
+          <dl
+            class="lede-summary"
+            style="--cells: {Math.min(summary.length, 4)}; --cells-narrow: {summary.length === 3 ? 3 : 2}"
+          >
             {#each summary as c (c.label)}
               <div>
                 <dt>{c.label}</dt>
@@ -152,9 +155,10 @@
     text-transform: uppercase;
     text-wrap: balance;
   }
+  /* The outlined line wraps like the first: a nowrap here ran "IS WORTH A
+     MESSAGE" under the summary cells beside it. */
   h1 span {
     color: transparent;
-    white-space: nowrap;
     -webkit-text-stroke: 1.5px var(--bg);
   }
   .standfirst {
@@ -290,6 +294,12 @@
   :global(.home-page .tbl td.lead) {
     color: var(--text-primary);
   }
+  /* DsVocab gives `.text-input` `flex: 1 1 220px` for a ROW of controls;
+     inside a column-flex `.field` label that basis is a HEIGHT, and every
+     input came out 220px tall. */
+  :global(.home-page .field .text-input) {
+    flex: 0 0 auto;
+  }
   :global(.home-page .note.in-tbl) {
     margin: 0;
     padding: 10px 12px;
@@ -309,11 +319,9 @@
     h1 {
       font-size: clamp(2.55rem, 12vw, 3.6rem);
     }
-    h1 span {
-      white-space: normal;
-    }
+    /* Three cells stay one row (a 2-up grid left a hole); four go 2×2. */
     .lede-summary {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(var(--cells-narrow), minmax(0, 1fr));
     }
     .lede-summary > div {
       padding: 10px;

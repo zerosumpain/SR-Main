@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import type { Journey } from './journeys';
 import type { MovementMode } from './types';
-import { circularMedianMinute, hhmm, localWeekStart, modeBucket, movementStats, type StatsVisit } from './stats';
+import {
+  circularMedianMinute,
+  hhmm,
+  localWeekStart,
+  localWindow,
+  modeBucket,
+  movementStats,
+  placeTime,
+  placeTimeByPlace,
+  type StatsVisit,
+} from './stats';
 
 // Journeys are built directly — the segmenter has its own tests. No
 // coordinates are needed here at all.
@@ -140,7 +150,7 @@ describe('common trips', () => {
     const s = movementStats([a.j, b.j, c.j], [...a.v, ...b.v, ...c.v], OPTS);
     expect(s.commonTrips).toEqual([
       // 07:20 UTC is 08:20 BST: the departure is on the house's clock.
-      { fromLabel: 'Home', toLabel: 'Work', count: 3, usualDeparture: '08:20', medianSeconds: 1500, mode: 'car' },
+      { fromLabel: 'Home', toLabel: 'Work', count: 3, usualDeparture: '08:20', medianSeconds: 1500, totalSeconds: 4500, mode: 'car' },
     ]);
   });
 
@@ -176,6 +186,155 @@ describe('common trips', () => {
     const j3 = again[2].j;
     again[2].v[0] = { ...again[2].v[0], to: new Date(j3.startedAt.getTime() - 25 * 60_000) };
     expect(movementStats(again.map((t) => t.j), again.flatMap((t) => t.v), OPTS).commonTrips).toEqual([]);
+  });
+
+  it('pulls out-and-back loops into round trips, whatever their count, not the table', () => {
+    const loop = (day: string, mins: number) => {
+      const start = new Date(`${day}T07:00:00Z`);
+      const end = new Date(start.getTime() + mins * 60_000);
+      return {
+        j: journey(start.toISOString(), mins, 2, 'walking'),
+        v: [
+          visit('p-home', 'Home', new Date(start.getTime() - 600 * 60_000).toISOString(), new Date(start.getTime() - 2 * 60_000).toISOString()),
+          visit('p-home', 'Home', new Date(end.getTime() + 3 * 60_000).toISOString(), new Date(end.getTime() + 300 * 60_000).toISOString()),
+        ],
+      };
+    };
+    const loops = [loop('2026-10-20', 20), loop('2026-10-21', 40), loop('2026-10-22', 30)];
+    const commutes = ['2026-10-23', '2026-10-24', '2026-10-25'].map((d) => commute(d, '07:10', 20));
+    const all = [...loops, ...commutes];
+    const s = movementStats(all.map((x) => x.j), all.flatMap((x) => x.v), OPTS);
+    expect(s.commonTrips.map((t) => `${t.fromLabel}→${t.toLabel}`)).toEqual(['Home→Work']);
+    expect(s.roundTrips).toEqual({ count: 3, medianSeconds: 1800, totalSeconds: 5400 });
+    // One loop alone is still a round trip: the three-journey rule is for trips.
+    const one = loop('2026-10-20', 20);
+    expect(movementStats([one.j], one.v, OPTS).roundTrips).toEqual({ count: 1, medianSeconds: 1200, totalSeconds: 1200 });
+    expect(movementStats([], [], OPTS).roundTrips).toBeNull();
+  });
+});
+
+describe('time per place', () => {
+  // A GMT week, so UTC clock times equal the house's.
+  const W = { from: new Date('2026-11-02T00:00:00Z'), to: new Date('2026-11-09T00:00:00Z') };
+
+  it('sums time per name, clipped to the window, with its share and visit count', () => {
+    const t = placeTime(
+      [
+        visit('p-home', 'Home', '2026-11-01T18:00:00Z', '2026-11-02T08:00:00Z'), // 8h inside
+        visit('p-work', 'Work', '2026-11-02T09:00:00Z', '2026-11-02T17:00:00Z'),
+        visit('p-home', 'Home', '2026-11-02T18:00:00Z', '2026-11-03T08:00:00Z'),
+        visit('p-shop', null, '2026-11-03T12:00:00Z', '2026-11-03T12:30:00Z'),
+        visit('p-late', 'Late', '2026-11-08T23:00:00Z', '2026-11-09T02:00:00Z'), // 1h inside
+        visit('p-old', 'Old', '2026-10-20T09:00:00Z', '2026-10-20T10:00:00Z'), // outside
+      ],
+      W,
+    );
+    expect(t.windowMinutes).toBe(7 * 24 * 60);
+    expect(t.places.map((p) => [p.label, p.minutes, p.visits])).toEqual([
+      ['Home', 22 * 60, 2],
+      ['Work', 8 * 60, 1],
+      ['Late', 60, 1],
+    ]);
+    expect(t.places[0].share).toBeCloseTo((22 * 60) / (7 * 24 * 60), 6);
+    expect(t.unnamed).toEqual({ minutes: 30, visits: 1 });
+  });
+
+  it('merges two places that carry one name, keeping both ids', () => {
+    const t = placeTime(
+      [visit('p-b', 'School', '2026-11-03T09:00:00Z', '2026-11-03T10:00:00Z'), visit('p-a', 'School', '2026-11-04T09:00:00Z', '2026-11-04T11:00:00Z')],
+      W,
+    );
+    expect(t.places).toHaveLength(1);
+    expect(t.places[0]).toMatchObject({ label: 'School', placeIds: ['p-a', 'p-b'], minutes: 180, visits: 2 });
+  });
+
+  it('takes usual arrival and departure on a clock, counting only those inside the window', () => {
+    const t = placeTime(
+      [
+        visit('p-h', 'Home', '2026-11-01T23:50:00Z', '2026-11-02T07:00:00Z'), // arrived before the window
+        visit('p-h', 'Home', '2026-11-03T00:10:00Z', '2026-11-03T08:00:00Z'),
+        visit('p-h', 'Home', '2026-11-04T23:55:00Z', '2026-11-05T07:00:00Z'),
+        visit('p-h', 'Home', '2026-11-06T00:05:00Z', '2026-11-06T09:00:00Z'),
+      ],
+      W,
+    );
+    // 00:10, 23:55, 00:05 → 00:05; not dragged toward noon, and 23:50 is not counted.
+    expect(t.places[0].usualArrival).toBe('00:05');
+    // 07:00, 08:00, 07:00, 09:00: the first stay's LEAVING is inside the window.
+    expect(t.places[0].usualDeparture).toBe('07:30');
+  });
+
+  it('gives no departure for a stay still under way at the end of the window', () => {
+    const t = placeTime([visit('p-w', 'Work', '2026-11-08T20:00:00Z', '2026-11-08T23:50:00Z')], W);
+    expect(t.places[0].usualArrival).toBe('20:00');
+    expect(t.places[0].usualDeparture).toBeNull();
+  });
+
+  it('counts time in transit from the journeys, clipped to the window', () => {
+    const t = placeTime(
+      [],
+      W,
+      [journey('2026-11-03T08:00:00Z', 30, 8, 'vehicle'), journey('2026-11-01T23:40:00Z', 40, 20, 'vehicle')],
+    );
+    expect(t.transitMinutes).toBe(30 + 20);
+  });
+
+  it('never counts a minute twice: a journey inside a stay is not transit, and shares sum to at most 100%', () => {
+    const visits = [
+      visit('p-h', 'Home', '2026-11-02T00:00:00Z', '2026-11-05T08:10:00Z'), // overlaps the journey's first 10m
+      visit('p-w', 'Work', '2026-11-05T08:25:00Z', '2026-11-09T00:00:00Z'), // and its last 5m
+    ];
+    const t = placeTime(visits, W, [journey('2026-11-05T08:00:00Z', 30, 8, 'vehicle')]);
+    expect(t.transitMinutes).toBe(15);
+    const total = t.places.reduce((n, p) => n + p.minutes, 0) + t.unnamed.minutes + t.transitMinutes;
+    expect(total).toBeLessThanOrEqual(t.windowMinutes);
+    expect(t.places.reduce((n, p) => n + p.share, 0) + (t.unnamed.minutes + t.transitMinutes) / t.windowMinutes).toBeLessThanOrEqual(1 + 1e-9);
+  });
+
+  it('opens the window at true local midnight across the clock change', () => {
+    // Autumn: Sunday 25 Oct 2026 is 25 hours long.
+    const w = localWindow(new Date('2026-10-26T12:00:00Z'), 2);
+    expect(w.from.toISOString()).toBe('2026-10-24T23:00:00.000Z'); // 00:00 BST
+    const t = placeTime([visit('p-h', 'Home', '2026-10-24T22:00:00Z', '2026-10-26T12:00:00Z')], w);
+    expect(t.windowMinutes).toBe((25 + 12) * 60);
+    expect(t.places[0].minutes).toBe((25 + 12) * 60);
+    expect(t.places[0].share).toBeCloseTo(1, 6);
+    // Spring: Sunday 29 Mar 2026 is 23 hours long, and starts at 00:00 GMT.
+    const spring = localWindow(new Date('2026-03-30T12:00:00Z'), 2);
+    expect(spring.from.toISOString()).toBe('2026-03-29T00:00:00.000Z');
+    expect(placeTime([], spring).windowMinutes).toBe((23 + 13) * 60);
+  });
+
+  it('is part of movementStats over the same local days as time out', () => {
+    const s = movementStats([], [visit('p-h', 'Home', '2026-10-27T00:00:00Z', '2026-10-28T12:00:00Z')], OPTS);
+    expect(s.placeTime.places[0]).toMatchObject({ label: 'Home', minutes: 36 * 60 });
+    expect(s.placeTime.windowMinutes).toBe(Math.round((NOW.getTime() - localWindow(NOW, 30).from.getTime()) / 60_000));
+  });
+});
+
+describe('time per place, by person', () => {
+  const W = { from: new Date('2026-11-02T00:00:00Z'), to: new Date('2026-11-09T00:00:00Z') };
+  it('lists each place’s people, most time first, under every id the name covers', () => {
+    const alex = placeTime([visit('p-a', 'School', '2026-11-03T09:00:00Z', '2026-11-03T10:00:00Z')], W);
+    const sam = placeTime(
+      [
+        visit('p-b', 'School', '2026-11-03T09:00:00Z', '2026-11-03T15:00:00Z'),
+        visit('p-a', 'School', '2026-11-04T09:00:00Z', '2026-11-04T10:00:00Z'),
+        visit('p-h', 'Home', '2026-11-03T16:00:00Z', '2026-11-03T20:00:00Z'),
+      ],
+      W,
+    );
+    const nobody = placeTime([], W);
+    const out = placeTimeByPlace([
+      { subject: 'alex', displayName: 'Alex', time: alex },
+      { subject: 'sam', displayName: 'Sam', time: sam },
+      { subject: 'kit', displayName: 'Kit', time: nobody },
+    ]);
+    expect(out['p-a'].map((r) => r.displayName)).toEqual(['Sam', 'Alex']);
+    // Sam's one "School" row (both ids) is under each; Alex was only at p-a.
+    expect(out['p-b'].map((r) => [r.displayName, r.minutes])).toEqual([['Sam', 420]]);
+    expect(out['p-h']).toEqual([{ subject: 'sam', displayName: 'Sam', minutes: 240, share: 240 / (7 * 1440), visits: 1, usualArrival: '16:00' }]);
+    expect(Object.values(out).flat().some((r) => r.subject === 'kit')).toBe(false);
   });
 });
 

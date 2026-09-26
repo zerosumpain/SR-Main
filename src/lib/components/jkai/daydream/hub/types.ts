@@ -66,6 +66,8 @@ export interface RollupCell {
   active?: boolean;
   /** The mono kicker before the label — a family mark, a stage. */
   mark?: string | null;
+  /** A tooltip on the whole cell — an exact time behind a relative one. */
+  title?: string | null;
 }
 
 /** An axis of a `CategoryMatrix`. */

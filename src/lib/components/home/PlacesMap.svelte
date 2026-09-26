@@ -6,6 +6,8 @@
     lon: number;
     radiusM: number;
     isHome: boolean;
+    /** Label priority when names collide: busier places keep theirs. */
+    visitCount?: number;
   }
   export interface Geometry {
     lat: number;
@@ -24,6 +26,13 @@
    * (drag to move the circle) and an east-edge handle (drag to set the radius,
    * the handle's distance from the centre, 50–2000 m). Every drag reports the
    * new geometry through `ondraft`; the page owns the draft, Save and Cancel.
+   *
+   * It opens on home and the places near it (within 15 km), not on every
+   * place ever named: one far-off holiday cottage would otherwise zoom the
+   * whole map out until the 50 m circles vanish. "Show all places" (the
+   * page's button, `fitAll`) takes it back out. Zoomed out past 13 a place
+   * is a dot rather than a circle, and a name that would sit on top of a
+   * busier place's name is hidden until there is room for it.
    *
    * The map is an enhancement. The list beside it selects and edits every
    * place without it, so a missing token or a blocked tile server leaves the
@@ -87,6 +96,17 @@
   let lastFitted: string | null | undefined = undefined;
 
   const SOURCE = 'places';
+  const POINTS = 'places-points';
+  /** The opening view keeps to places this close to home… */
+  const NEAR_HOME_M = 15_000;
+  /** …when there are at least this many of them; otherwise it shows all. */
+  const NEAR_MIN = 3;
+  /** Above this zoom a place is a circle; below it, a dot. */
+  const CIRCLE_MIN_ZOOM = 13;
+  /** Below this zoom only home's and the selected place's names show. */
+  const LABELS_MIN_ZOOM = 11;
+  /** The label sits this far under the place's centre (the marker offset). */
+  const LABEL_OFFSET_Y = 14;
 
   /** A design token's current value. The map paints in the page's colours
    *  rather than its own, and a reading theme changes them. */
@@ -100,6 +120,21 @@
     if (!map) return null;
     const c = map.getCenter();
     return { lat: c.lat, lon: c.lng };
+  }
+
+  /** Take the map back out to every named place and home. */
+  export function fitAll(): void {
+    fit(places.filter((p) => p.label || p.isHome), true);
+  }
+
+  /** The view the page opens on: home and the named places within 15 km of
+   *  it, or everything when fewer than three are that close. */
+  function openingView(): Geometry[] {
+    const all = places.filter((p) => p.label || p.isHome);
+    const home = places.find((p) => p.isHome);
+    if (!home) return all;
+    const near = all.filter((p) => !p.isHome && distanceM(home.lat, home.lon, p.lat, p.lon) <= NEAR_HOME_M);
+    return near.length >= NEAR_MIN ? [home, ...near] : all;
   }
 
   function shown(): Array<MapPlace & { selected: boolean; draftNew?: boolean }> {
@@ -123,6 +158,48 @@
         geometry: { type: 'Polygon' as const, coordinates: [circlePolygon(p.lat, p.lon, p.radiusM)] },
       })),
     };
+  }
+
+  /** The same places as dots, for the zooms where a circle is too small. */
+  function pointCollection() {
+    const items = shown().sort((a, b) => Number(a.selected) - Number(b.selected));
+    return {
+      type: 'FeatureCollection' as const,
+      features: items.map((p) => ({
+        type: 'Feature' as const,
+        properties: { id: p.id, selected: p.selected },
+        geometry: { type: 'Point' as const, coordinates: [p.lon, p.lat] },
+      })),
+    };
+  }
+
+  /**
+   * Hide any name that would overlap one already placed, in priority order:
+   * the selected place, home, then the most visited. Below zoom 11 only home
+   * and the selected place are named at all. Reads the label elements' sizes
+   * (plain DOM, not state), so it runs after a move and after a redraw.
+   */
+  function declutter() {
+    if (!map) return;
+    const zoom = map.getZoom();
+    const items = shown().filter((p) => labels.has(p.id));
+    const rank = (p: (typeof items)[number]) => (p.selected ? 0 : p.isHome ? 1 : 2);
+    items.sort((a, b) => rank(a) - rank(b) || (b.visitCount ?? 0) - (a.visitCount ?? 0));
+    const placed: Array<{ l: number; t: number; r: number; b: number }> = [];
+    const PAD = 3;
+    for (const p of items) {
+      const el = labels.get(p.id)!.getElement();
+      let show = zoom >= LABELS_MIN_ZOOM || p.selected || p.isHome;
+      if (show) {
+        const at = map.project([p.lon, p.lat]);
+        const w = el.offsetWidth;
+        const h = el.offsetHeight;
+        const box = { l: at.x - w / 2 - PAD, r: at.x + w / 2 + PAD, t: at.y + LABEL_OFFSET_Y - PAD, b: at.y + LABEL_OFFSET_Y + h + PAD };
+        if (placed.some((o) => box.l < o.r && box.r > o.l && box.t < o.b && box.b > o.t)) show = false;
+        else placed.push(box);
+      }
+      el.classList.toggle('hidden', !show);
+    }
   }
 
   function boundsOf(items: Geometry[]) {
@@ -206,7 +283,7 @@
           const el = document.createElement('span');
           el.className = 'pm-label';
           el.textContent = p.label ?? (p.isHome ? 'home' : 'unnamed');
-          return [p.id, new mapboxgl!.Marker({ element: el, anchor: 'top', offset: [0, 14] }).setLngLat([p.lon, p.lat]).addTo(map!)];
+          return [p.id, new mapboxgl!.Marker({ element: el, anchor: 'top', offset: [0, LABEL_OFFSET_Y] }).setLngLat([p.lon, p.lat]).addTo(map!)];
         }),
       );
     }
@@ -216,7 +293,9 @@
   function render() {
     if (!map || !loaded) return;
     (map.getSource(SOURCE) as GeoJSONSource | undefined)?.setData(featureCollection());
+    (map.getSource(POINTS) as GeoJSONSource | undefined)?.setData(pointCollection());
     syncLabels();
+    declutter();
     syncHandles(draft);
     map.getCanvas().style.cursor = placing ? 'crosshair' : '';
     // Fly to a newly selected place; not on every drag of it.
@@ -272,10 +351,12 @@
           const accent = token('--accent', '--text-primary');
           const ink = token('--accent-ink', '--text-primary');
           map.addSource(SOURCE, { type: 'geojson', data: featureCollection() });
+          map.addSource(POINTS, { type: 'geojson', data: pointCollection() });
           map.addLayer({
             id: 'places-fill',
             type: 'fill',
             source: SOURCE,
+            minzoom: CIRCLE_MIN_ZOOM,
             paint: {
               'fill-color': ['case', ['get', 'selected'], accent, ink],
               'fill-opacity': ['case', ['get', 'selected'], 0.22, 0.12],
@@ -285,9 +366,24 @@
             id: 'places-line',
             type: 'line',
             source: SOURCE,
+            minzoom: CIRCLE_MIN_ZOOM,
             paint: {
               'line-color': ['case', ['get', 'selected'], accent, ink],
               'line-width': ['case', ['get', 'selected'], 3, 1.5],
+            },
+          });
+          // Zoomed out, a 50 m circle is a speck: the place is a dot instead.
+          // The ranges overlap by a zoom so a place is never neither.
+          map.addLayer({
+            id: 'places-point',
+            type: 'circle',
+            source: POINTS,
+            maxzoom: CIRCLE_MIN_ZOOM + 1,
+            paint: {
+              'circle-radius': 6,
+              'circle-color': ['case', ['get', 'selected'], accent, ink],
+              'circle-stroke-width': 2,
+              'circle-stroke-color': token('--bg', '--surface-elevated'),
             },
           });
           map.on('click', 'places-fill', (e) => {
@@ -299,18 +395,26 @@
             const id = String(hit.properties?.id ?? '');
             if (id && id !== '__new') onselect?.(id);
           });
+          map.on('click', 'places-point', (e) => {
+            if (placing || !e.features?.length) return;
+            // The dot drawn last is on top, and the selected one is drawn last.
+            const id = String(e.features[0].properties?.id ?? '');
+            if (id && id !== '__new') onselect?.(id);
+          });
+          map.on('moveend', declutter);
           map.on('click', (e) => {
             if (placing) onplace?.(e.lngLat.lat, e.lngLat.lng);
           });
-          map.on('mouseenter', 'places-fill', () => {
-            if (map && !placing) map.getCanvas().style.cursor = 'pointer';
-          });
-          map.on('mouseleave', 'places-fill', () => {
-            if (map) map.getCanvas().style.cursor = placing ? 'crosshair' : '';
-          });
-          // Everything labelled, and home: the view the page opens on.
+          for (const layer of ['places-fill', 'places-point']) {
+            map.on('mouseenter', layer, () => {
+              if (map && !placing) map.getCanvas().style.cursor = 'pointer';
+            });
+            map.on('mouseleave', layer, () => {
+              if (map) map.getCanvas().style.cursor = placing ? 'crosshair' : '';
+            });
+          }
           lastFitted = selectedId;
-          const start = places.filter((p) => p.label || p.isHome);
+          const start = openingView();
           if (start.length) fit(start, false);
           render();
         });
@@ -400,5 +504,8 @@
     border: 1px solid var(--line-strong);
     padding: 1px 5px;
     white-space: nowrap;
+  }
+  .places-map :global(.pm-label.hidden) {
+    visibility: hidden;
   }
 </style>

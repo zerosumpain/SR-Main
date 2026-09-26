@@ -9,8 +9,17 @@ import { db } from '$lib/db';
 import { daydreamPlaces, daydreamTrail } from '$lib/db/schema';
 import { looksLikeRail, segmentVisits } from './cluster';
 import { segmentJourneys, type Journey, type JourneyFix } from './journeys';
-import { DEFAULT_WINDOW_DAYS, movementStats, type MovementStats, type StatsVisit } from './stats';
-import { MIN_DWELL_MINS, RAIL_MIN_FIXES, VISIT_MAX_GAP_MINS, type MovementMode } from './types';
+import {
+  DEFAULT_WINDOW_DAYS,
+  localWindow,
+  movementStats,
+  placeTime,
+  placeTimeByPlace,
+  type MovementStats,
+  type PersonPlaceTime,
+  type StatsVisit,
+} from './stats';
+import { MIN_DWELL_MINS, RAIL_MIN_FIXES, VISIT_MAX_GAP_MINS, activeLabels, type MovementMode } from './types';
 
 /**
  * Whether a vehicle journey ran like a train somewhere along it: any run of
@@ -66,6 +75,23 @@ async function homePlaceId(): Promise<string | null> {
   return home?.id ?? null;
 }
 
+export { activeLabels };
+
+async function placeLabels(fixes: Array<{ placeId?: string | null }>): Promise<Map<string, string | null>> {
+  const placeIds = [...new Set(fixes.map((f) => f.placeId).filter((x): x is string => !!x))];
+  if (!placeIds.length) return new Map();
+  const rows = await db
+    .select({ id: daydreamPlaces.id, label: daydreamPlaces.label, status: daydreamPlaces.status })
+    .from(daydreamPlaces)
+    .where(inArray(daydreamPlaces.id, placeIds));
+  return activeLabels(rows);
+}
+
+/** Home is a place whether or not anyone named it: unnamed, it reads "Home". */
+function withHomeName(labelOf: Map<string, string | null>, home: string | null): void {
+  if (home && !labelOf.get(home)) labelOf.set(home, 'Home');
+}
+
 export async function loadMovementStats(
   subject: string,
   opts: { days?: number; now?: Date } = {},
@@ -105,17 +131,8 @@ export async function loadMovementStats(
     placeId: r.placeId,
   }));
 
-  const placeIds = [...new Set(fixes.map((f) => f.placeId).filter((x): x is string => !!x))];
-  const [labels, home] = await Promise.all([
-    placeIds.length
-      ? db
-          .select({ id: daydreamPlaces.id, label: daydreamPlaces.label })
-          .from(daydreamPlaces)
-          .where(inArray(daydreamPlaces.id, placeIds))
-      : Promise.resolve([] as Array<{ id: string; label: string | null }>),
-    homePlaceId(),
-  ]);
-  const labelOf = new Map(labels.map((l) => [l.id, l.label]));
+  const [labelOf, home] = await Promise.all([placeLabels(fixes), homePlaceId()]);
+  withHomeName(labelOf, home);
 
   const journeys = segmentJourneys(fixes);
   const rail = new Set<Journey>();
@@ -131,4 +148,64 @@ export async function loadMovementStats(
     homePlaceId: home,
     isRail: (j) => rail.has(j),
   });
+}
+
+/**
+ * Everyone's time at each place over the window, for the owner's places panel:
+ * one trail read over every subject named, then the same `visitsFromFixes` →
+ * `placeTime` pass per person as their own page makes. OWNER ONLY — called
+ * from /home/people/places alone, whose load checks. Keyed by place id; no
+ * coordinate leaves here.
+ */
+export async function placeTimeByPerson(
+  people: Array<{ subject: string; displayName: string }>,
+  opts: { days?: number; now?: Date } = {},
+): Promise<Record<string, PersonPlaceTime[]>> {
+  if (!people.length) return {};
+  const now = opts.now ?? new Date();
+  const days = opts.days ?? DEFAULT_WINDOW_DAYS;
+  const window = localWindow(now, days);
+  // A day's lead-in so a stay already under way when the window opens is seen.
+  const from = new Date(window.from.getTime() - 86_400_000);
+
+  const rows = await db
+    .select({
+      ts: daydreamTrail.ts,
+      subject: daydreamTrail.subject,
+      lat: daydreamTrail.lat,
+      lon: daydreamTrail.lon,
+      placeId: daydreamTrail.placeId,
+    })
+    .from(daydreamTrail)
+    .where(
+      and(
+        inArray(
+          daydreamTrail.subject,
+          people.map((p) => p.subject),
+        ),
+        gte(daydreamTrail.ts, from),
+        lte(daydreamTrail.ts, now),
+        isNotNull(daydreamTrail.lat),
+      ),
+    )
+    .orderBy(asc(daydreamTrail.ts));
+
+  const bySubject = new Map<string, JourneyFix[]>();
+  for (const r of rows) {
+    const list = bySubject.get(r.subject) ?? [];
+    list.push({ ts: r.ts, lat: r.lat as number, lon: r.lon as number, subject: r.subject, placeId: r.placeId });
+    bySubject.set(r.subject, list);
+  }
+
+  const all = [...bySubject.values()].flat();
+  const [labelOf, home] = await Promise.all([placeLabels(all), homePlaceId()]);
+  withHomeName(labelOf, home);
+
+  return placeTimeByPlace(
+    people.map((p) => ({
+      subject: p.subject,
+      displayName: p.displayName,
+      time: placeTime(visitsFromFixes(bySubject.get(p.subject) ?? [], labelOf), window),
+    })),
+  );
 }

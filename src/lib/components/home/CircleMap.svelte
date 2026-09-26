@@ -9,19 +9,27 @@
   // a plain ground and still say where everyone is relative to each other.
   //
   // Positions come from the page load, already filtered to people who share,
-  // and rounded to ~11 m there.
+  // and rounded to ~11 m there. Dots closer than 28 px share one pin
+  // (`clusterDots`), so a household at home is one label, not five on top of
+  // each other.
   import { onMount } from 'svelte';
+  import { clusterDots } from './circle-clusters';
 
   type Position = { subject: string; label: string; lat: number; lon: number; at: string; isHome: boolean | null };
   let { positions }: { positions: Position[] } = $props();
 
   const TILE = 512;
-  const HEIGHT = 360;
+  /** 280 px, 220 px below a 720 px viewport. */
+  const HEIGHT = 280;
+  const HEIGHT_NARROW = 220;
+  const MERGE_PX = 28;
   const PAD = 48;
   const MAX_ZOOM = 16;
   const MAX_LAT = 85.0511287798;
 
   let width = $state(0);
+  let narrow = $state(false);
+  const height = $derived(narrow ? HEIGHT_NARROW : HEIGHT);
   let tileUrl = $state<((z: number, x: number, y: number) => string) | null>(null);
 
   const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -39,12 +47,12 @@
       const pts = positions.map((p) => project(p.lon, p.lat, zoom));
       const xs = pts.map((p) => p[0]);
       const ys = pts.map((p) => p[1]);
-      if (Math.max(...xs) - Math.min(...xs) <= width - PAD * 2 && Math.max(...ys) - Math.min(...ys) <= HEIGHT - PAD * 2) break;
+      if (Math.max(...xs) - Math.min(...xs) <= width - PAD * 2 && Math.max(...ys) - Math.min(...ys) <= height - PAD * 2) break;
     }
     const pts = positions.map((p) => project(p.lon, p.lat, zoom));
     const cx = (Math.max(...pts.map((p) => p[0])) + Math.min(...pts.map((p) => p[0]))) / 2;
     const cy = (Math.max(...pts.map((p) => p[1])) + Math.min(...pts.map((p) => p[1]))) / 2;
-    return { zoom, left: cx - width / 2, top: cy - HEIGHT / 2 };
+    return { zoom, left: cx - width / 2, top: cy - height / 2 };
   });
 
   const tiles = $derived.by(() => {
@@ -52,7 +60,7 @@
     const n = 2 ** view.zoom;
     const out: { key: string; src: string; x: number; y: number }[] = [];
     for (let tx = Math.floor(view.left / TILE); tx <= Math.floor((view.left + width) / TILE); tx++) {
-      for (let ty = Math.floor(view.top / TILE); ty <= Math.floor((view.top + HEIGHT) / TILE); ty++) {
+      for (let ty = Math.floor(view.top / TILE); ty <= Math.floor((view.top + height) / TILE); ty++) {
         if (ty < 0 || ty >= n) continue;
         const wx = ((tx % n) + n) % n;
         out.push({ key: `${view.zoom}/${tx}/${ty}`, src: tileUrl(view.zoom, wx, ty), x: tx * TILE - view.left, y: ty * TILE - view.top });
@@ -61,12 +69,16 @@
     return out;
   });
 
-  const dots = $derived.by(() => {
+  const pins = $derived.by(() => {
     if (!view) return [];
-    return positions.map((p) => {
-      const [x, y] = project(p.lon, p.lat, view.zoom);
-      return { ...p, x: x - view.left, y: y - view.top };
-    });
+    const v = view;
+    return clusterDots(
+      positions.map((p) => {
+        const [x, y] = project(p.lon, p.lat, v.zoom);
+        return { ...p, x: x - v.left, y: y - v.top };
+      }),
+      MERGE_PX,
+    );
   });
 
   function ago(iso: string): string {
@@ -76,7 +88,16 @@
     return h < 48 ? `${h} h ago` : `${Math.round(h / 24)} d ago`;
   }
 
-  onMount(async () => {
+  onMount(() => {
+    const mq = window.matchMedia('(max-width: 720px)');
+    narrow = mq.matches;
+    const onChange = (e: MediaQueryListEvent) => (narrow = e.matches);
+    mq.addEventListener('change', onChange);
+    void loadTiles();
+    return () => mq.removeEventListener('change', onChange);
+  });
+
+  async function loadTiles() {
     try {
       const res = await fetch('/api/maps/config');
       if (!res.ok) return;
@@ -88,10 +109,10 @@
     } catch {
       // No streets under the dots: the map still says who is where relative to whom.
     }
-  });
+  }
 </script>
 
-<div class="circle-map" bind:clientWidth={width} style:height="{HEIGHT}px" role="img" aria-label="Where the household is now">
+<div class="circle-map" bind:clientWidth={width} style:height="{height}px" role="img" aria-label="Where the household is now">
   {#each tiles as t (t.key)}
     <img
       class="tile"
@@ -102,11 +123,10 @@
       style:left="{t.x}px"
       style:top="{t.y}px"
       referrerpolicy="strict-origin-when-cross-origin"
-      loading="lazy"
       draggable="false"
     />
   {/each}
-  {#each dots as d (d.subject)}
+  {#each pins as d (d.key)}
     <div class="dot" class:home={d.isHome} style:left="{d.x}px" style:top="{d.y}px">
       <span class="pin" aria-hidden="true"></span>
       <span class="name">{d.label}</span>
@@ -129,9 +149,12 @@
     background: var(--surface-sunken);
     border: 1px solid var(--line-strong);
   }
+  /* A site-wide `img { max-width: 100% }` shrank each 512px tile to the
+     map's width below 512px, leaving a blank band between tiles on a phone. */
   .tile {
     position: absolute;
     width: 512px;
+    max-width: none;
     height: 512px;
     user-select: none;
   }

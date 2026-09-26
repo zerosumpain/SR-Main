@@ -32,7 +32,9 @@ const STATS = {
   },
   walkingPace: null,
   commonTrips: [],
+  roundTrips: null,
   timeOut: [],
+  placeTime: { windowMinutes: 43200, places: [], unnamed: { minutes: 0, visits: 0 }, transitMinutes: 20 },
 };
 const loadMovementStats = vi.fn(async (_subject: string, _opts?: unknown) => STATS);
 vi.mock('$lib/home/presence/movement', () => ({ loadMovementStats }));

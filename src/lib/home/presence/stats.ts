@@ -59,7 +59,52 @@ export interface CommonTrip {
    *  leaves either side of midnight reads near midnight. */
   usualDeparture: string;
   medianSeconds: number;
+  /** Every journey in the group, end to end: the time spent in transit
+   *  between these two places over the window. */
+  totalSeconds: number;
   mode: ModeBucket;
+}
+
+/** Journeys that left a named place and came back to it (a walk round the
+ *  block, a drive that turned round). A loop, not a trip between places, so
+ *  it is one line under the table, not a row in it. */
+export interface RoundTrips {
+  count: number;
+  medianSeconds: number;
+  totalSeconds: number;
+}
+
+/** One named place's share of a window, for one person. */
+export interface PlaceTimeRow {
+  label: string;
+  /** Every place carrying this name (a house and the road cluster outside it
+   *  can share one) — how /places finds the row for the place it has open. */
+  placeIds: string[];
+  /** Time at the place, first fix to last, clipped to the window. */
+  minutes: number;
+  /** `minutes` over the window's length, 0..1. */
+  share: number;
+  /** Stays that overlap the window. */
+  visits: number;
+  /** Circular median of the local clock times they arrived / left; null when
+   *  no arrival (or departure) fell inside the window. */
+  usualArrival: string | null;
+  usualDeparture: string | null;
+}
+
+export interface PlaceTime {
+  windowMinutes: number;
+  /** Named places, most time first. */
+  places: PlaceTimeRow[];
+  /** Stays at places nobody has named. */
+  unnamed: { minutes: number; visits: number };
+  /** Time on the move: every journey, clipped to the window. */
+  transitMinutes: number;
+}
+
+export interface PlaceTimeWindow {
+  from: Date;
+  to: Date;
 }
 
 export interface TimeOutDay {
@@ -74,7 +119,9 @@ export interface MovementStats {
   byMode: Record<ModeBucket, ModeTotals>;
   walkingPace: WalkingPace | null;
   commonTrips: CommonTrip[];
+  roundTrips: RoundTrips | null;
   timeOut: TimeOutDay[];
+  placeTime: PlaceTime;
 }
 
 export interface MovementStatsOpts {
@@ -211,13 +258,28 @@ export function movementStats(
     .filter((j) => j.startedAt >= windowStart && j.startedAt <= opts.now)
     .sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
   const bucketOf = new Map(inWindow.map((j) => [j, modeBucket(j, opts.isRail)]));
+  const trips = commonTrips(inWindow, visits, bucketOf);
 
   return {
     byMode: byMode(inWindow, bucketOf),
     walkingPace: walkingPace(inWindow, bucketOf),
-    commonTrips: commonTrips(inWindow, visits, bucketOf),
+    commonTrips: trips.trips,
+    roundTrips: trips.roundTrips,
     timeOut: opts.homePlaceId ? timeOut(inWindow, visits, opts.homePlaceId, opts) : [],
+    placeTime: placeTimeFor(journeys, visits, opts),
   };
+}
+
+/** The journeys `placeTime` needs: those in the local window, plus a day's
+ *  lead-in so one under way at its first midnight is clipped, not lost. */
+function placeTimeFor(journeys: Journey[], visits: StatsVisit[], opts: MovementStatsOpts): PlaceTime {
+  const window = localWindow(opts.now, opts.days);
+  const leadIn = window.from.getTime() - 86_400_000;
+  return placeTime(
+    visits,
+    window,
+    journeys.filter((j) => j.startedAt.getTime() >= leadIn && j.startedAt <= opts.now),
+  );
 }
 
 function byMode(journeys: Journey[], bucketOf: Map<Journey, ModeBucket>): MovementStats['byMode'] {
@@ -297,7 +359,7 @@ function commonTrips(
   journeys: Journey[],
   visits: StatsVisit[],
   bucketOf: Map<Journey, ModeBucket>,
-): CommonTrip[] {
+): { trips: CommonTrip[]; roundTrips: RoundTrips | null } {
   // Grouped by NAME, not place id: two places can carry one label (a house
   // and the road cluster outside it), and the reader sees names.
   const groups = new Map<string, { fromLabel: string; toLabel: string; journeys: Journey[] }>();
@@ -313,7 +375,14 @@ function commonTrips(
   }
 
   const trips: CommonTrip[] = [];
+  // Out and back to one place is a loop, not a trip between two: pulled out
+  // whatever its count, and summed across places into one line.
+  const loops: number[] = [];
   for (const g of groups.values()) {
+    if (g.fromLabel === g.toLabel) {
+      loops.push(...g.journeys.map(seconds));
+      continue;
+    }
     if (g.journeys.length < MIN_TRIP_COUNT) continue;
     const modeCount = new Map<ModeBucket, number>();
     for (const j of g.journeys) {
@@ -333,10 +402,142 @@ function commonTrips(
       count: g.journeys.length,
       usualDeparture: hhmm(circularMedianMinute(g.journeys.map((j) => localParts(j.startedAt).minuteOfDay))),
       medianSeconds: Math.round(quantile(g.journeys.map(seconds), 0.5)),
+      totalSeconds: Math.round(g.journeys.reduce((n, j) => n + seconds(j), 0)),
       mode,
     });
   }
-  return trips.sort((a, b) => b.count - a.count || a.fromLabel.localeCompare(b.fromLabel));
+  return {
+    trips: trips.sort((a, b) => b.count - a.count || a.fromLabel.localeCompare(b.fromLabel)),
+    roundTrips: loops.length
+      ? {
+          count: loops.length,
+          medianSeconds: Math.round(quantile(loops, 0.5)),
+          totalSeconds: Math.round(loops.reduce((n, x) => n + x, 0)),
+        }
+      : null,
+  };
+}
+
+// ── Time per place ───────────────────────────────────────────────────────────
+
+/** A stay whose last fix is this close to the window's end is taken to be
+ *  still under way: its "last fix" is just the latest reading, not a leaving. */
+export const UNDER_WAY_MINS = TRIP_LINK_MINS;
+
+/**
+ * The last `days` local days, from the first one's true local midnight (so a
+ * 23- or 25-hour clock-change day is exactly that long) to `now`. The same
+ * days `timeOut` draws.
+ */
+export function localWindow(now: Date, days: number): PlaceTimeWindow {
+  return { from: localMidnight(addDays(localDate(now), -(days - 1))), to: now };
+}
+
+function overlapMs(from: Date, to: Date, w: PlaceTimeWindow): number {
+  return Math.max(0, Math.min(to.getTime(), w.to.getTime()) - Math.max(from.getTime(), w.from.getTime()));
+}
+
+/**
+ * Where one person's time went over a window: per named place, the time there
+ * (clipped to the window), its share, the number of stays and the usual
+ * arrival and departure on the local clock. Built on the visits the stats
+ * already use — no new segmentation — and the journeys for time in transit.
+ *
+ * Places are grouped by NAME, as common trips are. An arrival counts only
+ * when it falls inside the window (a stay already under way when it opens was
+ * not arrived at then); a departure only when the stay ended inside it and
+ * not in the last `UNDER_WAY_MINS` (then it is still going on).
+ */
+export function placeTime(visits: StatsVisit[], window: PlaceTimeWindow, journeys: Journey[] = []): PlaceTime {
+  const windowMinutes = Math.max(0, (window.to.getTime() - window.from.getTime()) / 60_000);
+  const groups = new Map<string, { placeIds: Set<string>; ms: number; visits: number; arrive: number[]; leave: number[] }>();
+  const unnamed = { minutes: 0, visits: 0 };
+  let unnamedMs = 0;
+  const underWayFrom = window.to.getTime() - UNDER_WAY_MINS * 60_000;
+
+  for (const v of visits) {
+    const ms = overlapMs(v.from, v.to, window);
+    if (ms <= 0) continue;
+    if (!v.label) {
+      unnamedMs += ms;
+      unnamed.visits++;
+      continue;
+    }
+    const g = groups.get(v.label) ?? { placeIds: new Set<string>(), ms: 0, visits: 0, arrive: [], leave: [] };
+    g.placeIds.add(v.placeId);
+    g.ms += ms;
+    g.visits++;
+    if (v.from >= window.from) g.arrive.push(localParts(v.from).minuteOfDay);
+    if (v.to.getTime() < underWayFrom) g.leave.push(localParts(v.to).minuteOfDay);
+    groups.set(v.label, g);
+  }
+  unnamed.minutes = Math.round(unnamedMs / 60_000);
+
+  const places: PlaceTimeRow[] = [...groups.entries()].map(([label, g]) => ({
+    label,
+    placeIds: [...g.placeIds].sort(),
+    minutes: Math.round(g.ms / 60_000),
+    share: windowMinutes ? g.ms / 60_000 / windowMinutes : 0,
+    visits: g.visits,
+    usualArrival: g.arrive.length ? hhmm(circularMedianMinute(g.arrive)) : null,
+    usualDeparture: g.leave.length ? hhmm(circularMedianMinute(g.leave)) : null,
+  }));
+  places.sort((a, b) => b.minutes - a.minutes || a.label.localeCompare(b.label));
+
+  // A journey's first or last fixes can sit inside a stay (the run that ends
+  // a visit is where the next journey starts), so its overlap with any stay
+  // is taken off: no minute is counted twice, and the shares cannot pass 100%.
+  // One person's stays never overlap each other, so subtracting each is exact.
+  let transitMs = 0;
+  for (const j of journeys) {
+    let ms = overlapMs(j.startedAt, j.endedAt, window);
+    if (ms <= 0) continue;
+    for (const v of visits) {
+      const a = Math.max(j.startedAt.getTime(), v.from.getTime(), window.from.getTime());
+      const b = Math.min(j.endedAt.getTime(), v.to.getTime(), window.to.getTime());
+      if (b > a) ms -= b - a;
+    }
+    transitMs += Math.max(0, ms);
+  }
+  return { windowMinutes: Math.round(windowMinutes), places, unnamed, transitMinutes: Math.round(transitMs / 60_000) };
+}
+
+/** One person's line in a place's breakdown (/places, owner only). */
+export interface PersonPlaceTime {
+  subject: string;
+  displayName: string;
+  minutes: number;
+  share: number;
+  visits: number;
+  usualArrival: string | null;
+}
+
+/**
+ * Several people's `placeTime` folded into a breakdown per place id: for each
+ * place, who spent time there, most first. A row that carries several place
+ * ids (one name on two places) is listed under each. Nobody with no time at a
+ * place is listed under it.
+ */
+export function placeTimeByPlace(
+  people: Array<{ subject: string; displayName: string; time: PlaceTime }>,
+): Record<string, PersonPlaceTime[]> {
+  const out: Record<string, PersonPlaceTime[]> = {};
+  for (const p of people) {
+    for (const row of p.time.places) {
+      if (row.minutes <= 0) continue;
+      const line: PersonPlaceTime = {
+        subject: p.subject,
+        displayName: p.displayName,
+        minutes: row.minutes,
+        share: row.share,
+        visits: row.visits,
+        usualArrival: row.usualArrival,
+      };
+      for (const id of row.placeIds) (out[id] ??= []).push(line);
+    }
+  }
+  for (const list of Object.values(out)) list.sort((a, b) => b.minutes - a.minutes || a.displayName.localeCompare(b.displayName));
+  return out;
 }
 
 /**

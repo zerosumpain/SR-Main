@@ -3,6 +3,9 @@ import type { Actions, PageServerLoad } from './$types';
 import { isOwnerRequest } from '$lib/server/owner';
 import { errMsg } from '$lib/home/presence/types';
 import { validPlaceGeometry } from '$lib/home/presence/geo';
+import { listMembers } from '$lib/home/presence/members';
+import { placeTimeByPerson } from '$lib/home/presence/movement';
+import { DEFAULT_WINDOW_DAYS, type PersonPlaceTime } from '$lib/home/presence/stats';
 import {
   PLACE_KINDS,
   PLACE_LABEL_MAX,
@@ -10,6 +13,7 @@ import {
   RADIUS_MIN_M,
   confirmPlace,
   createPlace,
+  ignorePlace,
   isPlaceKind,
   listPanelPlaces,
   updatePlaceAlerts,
@@ -34,6 +38,21 @@ export const load: PageServerLoad = async (event) => {
     // "not asked yet", never an answer.
     kinds: PLACE_KINDS.filter((k) => k !== 'unknown'),
     labelMax: PLACE_LABEL_MAX,
+    placeTimeDays: DEFAULT_WINDOW_DAYS,
+    // Who spends how long at each place. OWNER ONLY, and only ever built here,
+    // behind the check above. Streamed: a month of everyone's trail must not
+    // hold the map up, and a failure leaves the rest of the page standing.
+    placeTime: listMembers()
+      .then((members) =>
+        placeTimeByPerson(
+          members.map((m) => ({ subject: m.subject, displayName: m.displayName })),
+          { days: DEFAULT_WINDOW_DAYS },
+        ),
+      )
+      .catch((err): Record<string, PersonPlaceTime[]> | null => {
+        console.error('[home/people/places] place time failed:', errMsg(err));
+        return null;
+      }),
   };
   try {
     return { places: await listPanelPlaces(), ...fixed, loadError: null as string | null };
@@ -164,6 +183,26 @@ export const actions: Actions = {
       console.error('[home/people/places] created place not written to memory:', errMsg(err));
     }
     return { created: id };
+  },
+
+  /** Take a place off the panel. Never a DELETE: the place is set `ignored`,
+   *  so its alerts stop (they read active places only), the nightly refresh
+   *  will not bring it back (a non-active match is rejected), and its alert
+   *  settings and history stay on the row. Home cannot be removed. */
+  remove: async (event) => {
+    if (!(await isOwnerRequest(event))) return OWNER_ONLY();
+    const form = await event.request.formData();
+    const found = await panelPlace(form);
+    if (!found.place) return found.failure;
+    const place = found.place;
+    if (place.isHome) return fail(400, { error: 'Home cannot be removed.', placeId: place.id });
+    try {
+      await ignorePlace(place.id);
+    } catch (err) {
+      console.error('[home/people/places] remove failed:', errMsg(err));
+      return fail(500, { error: 'That place was not removed. Try again.', placeId: place.id });
+    }
+    return { removed: place.id, removedLabel: place.label };
   },
 
   /** Who hears about a crossing: the master switch, which directions, and

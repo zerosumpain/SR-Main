@@ -8,7 +8,7 @@
 import { inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamPlaces, daydreamTrail } from '$lib/db/schema';
-import { FAMILY_SUBJECTS, localDayStart } from './types';
+import { FAMILY_SUBJECTS, activeLabels, localDayStart } from './types';
 import { listMembers, type HouseholdMember } from './members';
 import { loadCompanionUsers, notSharingSubjects } from './companion';
 
@@ -130,11 +130,12 @@ export async function loadHousehold(): Promise<{ members: HouseholdPresence[] }>
   const placeIds = [...new Set(latestRows.map((r) => r.place_id).filter((x): x is string => !!x))];
   const labels = placeIds.length
     ? await db
-        .select({ id: daydreamPlaces.id, label: daydreamPlaces.label })
+        .select({ id: daydreamPlaces.id, label: daydreamPlaces.label, status: daydreamPlaces.status })
         .from(daydreamPlaces)
         .where(inArray(daydreamPlaces.id, placeIds))
     : [];
-  const labelBy = new Map(labels.map((l) => [l.id, l.label]));
+  // A removed place names nothing: the card reads as somewhere unnamed.
+  const labelBy = activeLabels(labels);
   const asDate = (v: Date | string | null | undefined) => (v == null ? null : v instanceof Date ? v : new Date(v));
 
   const members = subjects.map((subject): HouseholdPresence => {
