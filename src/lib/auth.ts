@@ -11,6 +11,12 @@ const PUBLIC_PATHS = [
   '/sitemap.xml',
   '/login',
   '/auth-error',
+  // The way in for people who are not on the allow-list yet: the request-access
+  // form and invite links (/welcome/<code>). The page decides everything else
+  // for itself — a signed-out visitor sees only the form and whatever a LIVE
+  // invite says; setup steps render only for a signed-in, allowed session, and
+  // every form action re-checks that session (src/routes/welcome).
+  '/welcome',
   '/auth',
   // Linked from Google's OAuth consent screen, which requires them to be public.
   '/privacy',
