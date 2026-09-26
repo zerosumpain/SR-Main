@@ -21,7 +21,6 @@
 #   jkai-builder   Has its own path (`ci-stage-builder.sh`) with an apply-when-idle
 #                  watchdog, because restarting it kills the `pi` process of a
 #                  build in flight with no resume. Do not fold it into this.
-#   jkai-run-worker  No unit file, and inert on the VPS (JKAI_RUN_WORKER unset).
 #   services/webframe  Docker, not systemd.
 set -euo pipefail
 

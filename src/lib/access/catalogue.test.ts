@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { EXTRACTED_ROUTE_IDS } from './extracted-route-ids';
 import {
   AREAS,
   AREA_IDS,
@@ -90,10 +91,12 @@ describe('the route map', () => {
   });
 
   it('lists only routes that exist', () => {
+    const missingFromMain: string[] = [];
     for (const id of catalogueRouteIds()) {
       const file = id.startsWith('/api/') ? '+server.ts' : '+page.svelte';
-      expect(existsSync(`src/routes${id}/${file}`), id).toBe(true);
+      if (!existsSync(`src/routes${id}/${file}`)) missingFromMain.push(id);
     }
+    expect(missingFromMain.sort()).toEqual([...EXTRACTED_ROUTE_IDS].sort());
   });
 });
 

@@ -41,8 +41,6 @@ services/webframe/dist
 # jkai-builder bundle — produced by `npm run build:builder` from packages/jkai-builder/{bin,src}/
 packages/jkai-builder/dist/
 
-# jkai-run-worker bundle — produced by `node packages/jkai-run-worker/build.mjs`
-packages/jkai-run-worker/dist/
 packages/jkai-codex-bridge/dist/
 packages/jkai-wa-worker/dist/
 

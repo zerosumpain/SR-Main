@@ -62,10 +62,9 @@ describe("the owner's number is not in the source tree", () => {
   // exact number IS detected and redacted, so the real value is the fixture.
   //
   // SCOPED TO WHAT GIT WOULD PUBLISH, not to what is on the disk. This used to
-  // be a plain `grep -r` over src and packages, which also read build output:
-  // packages/jkai-run-worker/dist/ is gitignored, is regenerated from bin/, and
-  // legitimately inlines ownerPhone()'s runtime value — so anyone who had built
-  // the worker locally failed this test while CI, on a clean checkout, stayed
+  // be a plain `grep -r` over src and packages, which also read ignored build
+  // output that can inline ownerPhone()'s runtime value. Someone who had built
+  // a sidecar locally failed this test while CI, on a clean checkout, stayed
   // green. A security guard that cries wolf on a developer's own disk is one
   // people learn to skip, which costs more than it protects.
   //

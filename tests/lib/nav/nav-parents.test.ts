@@ -41,10 +41,12 @@ const ROUTE_SET = new Set<string>([
   ...walk(ROUTES, /^\+page(@[^.]*)?\.svelte$/).map(routeOf),
   ...walk(ROUTES, /^\+page\.server\.ts$/).map(routeOf),
 ]);
+// The chat landing page is served by SR-Jkai-Core at the same public URL.
+const EXTRACTED_PAGE_SET = new Set(['/jkai']);
 
 describe('every back link points at a page that exists', () => {
   it('found the route tree', () => {
-    expect(ROUTE_SET.size).toBeGreaterThan(150);
+    expect(ROUTE_SET.size).toBeGreaterThan(130);
   });
 
   it('resolves the parent of every page that wears the bar', () => {
@@ -53,7 +55,7 @@ describe('every back link points at a page that exists', () => {
       if (!wearsSharedChrome(route)) continue;
       const parent = parentHref(route);
       if (parent === null || parent === '/') continue;
-      if (!ROUTE_SET.has(parent)) broken.push(`${route} -> ${parent}`);
+      if (!ROUTE_SET.has(parent) && !EXTRACTED_PAGE_SET.has(parent)) broken.push(`${route} -> ${parent}`);
     }
     expect(
       broken,
