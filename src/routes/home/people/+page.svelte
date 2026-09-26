@@ -164,6 +164,15 @@
       strap="Read off the trail, not asked for. A cell goes amber when the last fix is over half an hour old — an unknown position and a position at home are not the same answer."
     />
 
+    {#if isOwner}
+      <!-- Owner-only settings. Neither route is a household route, so the hook
+           refuses anyone else; the links are drawn for the owner only. -->
+      <p class="actions owner-links">
+        <a class="btn sm" href="/home/people/places">Places and alerts</a>
+        <a class="btn sm" href="/home/people/settings">Household settings</a>
+      </p>
+    {/if}
+
     {#if !members.length}
       <p class="lede">Nobody is on the trail.</p>
     {:else}
@@ -276,5 +285,8 @@
      `.link`, `.btn`, `.cta` all come from `.ds-vocab` (HomeFrame's DsVocab). */
   .today {
     margin-top: 22px;
+  }
+  .owner-links {
+    margin: 0 0 18px;
   }
 </style>
