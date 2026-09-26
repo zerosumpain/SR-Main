@@ -78,7 +78,7 @@
   footer={[
     'strangeramblings.com/home/echoes',
     hs.firstAt ? `Recording since ${WHEN.format(new Date(hs.firstAt))}` : 'Recording from the first sync',
-    'Owner-gated · the whole household, never shared',
+    'The owner, and people given Home access',
   ]}
 >
   <section class="band flush-top">

@@ -214,7 +214,7 @@
   footer={[
     'strangeramblings.com/home/voice',
     s.firstAt ? `Logging since ${WHEN.format(new Date(s.firstAt))}` : 'Logging since the HA upgrade, 24 Sep 2026',
-    'Owner-gated · the whole household, never shared',
+    'The owner, and people given Home access',
   ]}>
   <div class="vx">
     {#if data.loadError}

@@ -73,9 +73,13 @@ export const AREAS: readonly AreaInfo[] = [
   {
     id: 'home',
     label: 'Home',
-    blurb: 'The household dashboard, devices, echoes and voice.',
-    open: false,
-    levels: { self: 'Read', all: 'Same as self', admin: 'Same as self' },
+    blurb: 'The household dashboard, devices and Echo readings; the voice log at all.',
+    open: true,
+    levels: {
+      self: 'The house: dashboard, devices, Echoes',
+      all: "Also the voice log — everyone's speech",
+      admin: 'Same as all',
+    },
   },
   {
     id: 'jkai.chat',
@@ -299,6 +303,14 @@ const ROUTES: Record<string, Partial<Record<Method, Permission>>> = {
 
   // ── news — the desk and a story. Each action checks the grant it needs
   // (graph: jkai.intel, research: research) inside the handler.
+  // ── home — the house, not a person. People are /home/people's (family:circle),
+  // and the dashboard's people card follows that rule. The voice log is the
+  // whole household's speech, so it opens at `all`, never `self`.
+  '/home': { GET: 'home:self' },
+  '/home/devices': { GET: 'home:self' },
+  '/home/echoes': { GET: 'home:self' },
+  '/home/voice': { GET: 'home:all' },
+
   '/news': { GET: 'news:self' },
   '/news/[source]/[id]': { GET: 'news:self' },
   '/api/news/actions': { POST: 'news:self' },
