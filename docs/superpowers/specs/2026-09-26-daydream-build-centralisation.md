@@ -1,6 +1,6 @@
 # Daydream and build: centralise, don't split
 
-**Status:** PR-A (quick wins) in review; PR-B … P4b queued
+**Status:** PR-A (quick wins) in review; PR-B … P4b queued; PR-D (shared tool loop) in review
 **Brief (John, 2026-09-26):** compare daydream and build, and centralise the
 behaviour they duplicate.
 
@@ -48,3 +48,20 @@ SR-Jkai-Core in `docs/module-ownership.json`.
 | A5 | Spend tags | New `build` workload / existing ids | Existing workload ids: the adversary's calls (`development-review`, autopilot's answer-from-brief, which runs on the assessor model) → `development-assessor`; develop-lane grooming → `builder` | A tag is a workload id so the spend row is the row that switches the model. Both ids are already registered, so `/admin/ops/costs` labels them with no mapping change. `planner.ts` (`builder`) and `design-review.ts` (`design-review`) were already right. | Yes |
 | A6 | Report notification category | New categories / reuse | Reuse `build` | "Autonomous builds and workflow runs reaching a terminal state" covers both nightly runs. It defaults to WhatsApp + phone, and production has no customised `build` route (checked 2026-09-26), so the owner keeps receiving the WhatsApp summary; `whatsappText` keeps its text exactly the old message. | Yes |
 | A7 | Idle gate and module cycles | `$lib/heartbeat/idle` imported by everyone / injected | Heartbeat activities import `$lib/heartbeat/idle`; `runImprovementNow` and `runDoctorNow` take `isUserActive` as an option | The heartbeat already imports `$lib/selfimprove` and `$lib/workflowdoctor`; importing the gate back would add two module cycles the boundary gate refuses. A cron run with no gate fails **closed** (reads as active and skips), the same answer the gate gives when the DB is unreachable. No re-export shim is left in `selfimprove/run.ts`; selfimprove's `IDLE_WINDOW_MS` went with it (the heartbeat module owns the 60-minute default). | Yes |
+
+### PR-D decisions
+
+`runToolLoop` in `src/lib/llm/tool-loop.ts`. Adopted by the think cycle
+(`daydream/think/run.ts`) and the heartbeat turn (`heartbeat/llm.ts`).
+
+| # | Decision | Options | Chosen | Why | Reversible? |
+|---|---|---|---|---|---|
+| D1 | How the loop reaches a model | Resolve the model itself / take a resolved client | Takes a client from `getLLMClient` | Keeps provider selection in `$lib/llm/client`. `installUsageCapture` already records every `create()`, so the loop only sums usage for the caller and never writes to the ledger. | Yes |
+| D2 | Activity tagging | Always wrap / optional | Optional `activity`, one wrap around the whole loop | A turn's spend stays one row. The heartbeat passes none, because `runHeartbeatTurn` already wraps the turn. | Yes |
+| D3 | Tool calls when no tools were offered | Execute / ignore | Ignore: the message is the reply | The heartbeat with `toolsEnabled: false` always took the content in that case; running a call to a tool it never offered makes no sense. Only differs from the think cycle when its toolbox has zero definitions, which never happens. | Yes |
+| D4 | Tool arguments | Pass parsed JSON through / normalise | Malformed or non-object → `{}` | The think cycle already did this; the heartbeat passed an array or `null` through to the executor. | Yes |
+| D5 | A response with no message | Stop / forced final | Forced final when configured, else `stop: 'empty'` | Matches think's `break` into its final call and the heartbeat's empty reply. | Yes |
+| D6 | Timeout scope | Per call / whole loop | Whole loop, via `combineSignals` | A per-call ceiling multiplies by the round count. Neither adopter sets one yet. | Yes |
+| D7 | Think's counters when the loop throws | Keep partial counts / report zero | Zero rounds and tokens on that path | The loop returns totals, not a running tally. The `error` field is what that path reports; the ledger still has every call. | Yes |
+| D8 | Callers left alone | Adopt all / two | `workflows/nodes/llm-agent.ts` (owned by SR-Workflows in `docs/module-ownership.json`, would drift), `blog/assistant/runner.ts` (an async generator that streams; later), every single-shot caller | | Yes |
+| D9 | The activity-tag registry check | Callers wrap `withActivity` themselves / extend the check | Extend `workloads.test.ts` | Moving the literal into an option hid `'daydream'` from the scan that catches tag typos. The scan now also reads `activity: '…'` in any file calling `runToolLoop(`, and `tool-loop.ts` joins the documented dynamic-tag exceptions. No existing assertion changed. | Yes |

@@ -20,7 +20,7 @@ import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamThoughts, researchSessions } from '$lib/db/schema';
 import { getLLMClient } from '$lib/llm/client';
-import { withActivity } from '$lib/context/activity';
+import { runToolLoop } from '$lib/llm/tool-loop';
 import { notifyOwner } from '$lib/server/notify';
 import { resolveDaydreamModel } from '../model';
 import { persistCandidates, type PersistResult } from '../thought-store';
@@ -168,7 +168,6 @@ export function systemPrompt(opts: {
 }
 
 type ChatMessage = Record<string, unknown>;
-type ToolCall = { id: string; function?: { name?: string; arguments?: string } };
 
 export async function runThink(
   opts: { now?: Date; subject?: string; maxRounds?: number } = {},
@@ -214,56 +213,27 @@ export async function runThink(
       { role: 'user', content: 'Begin. Look first, then answer with the JSON object.' },
     ];
 
-    let reply = '';
-    await withActivity('daydream', async () => {
-      for (let round = 0; round < rounds; round++) {
-        result.rounds++;
-        const res = await client.chat.completions.create({
-          model: modelId,
-          temperature: 0.6,
-          max_tokens: 1800,
-          // The gateway's types are the OpenAI SDK's; the messages here carry
-          // tool_calls and tool results, which that union spells differently.
-          messages: messages as never,
-          ...(definitions.length ? { tools: definitions as never } : {}),
-        });
-        result.tokens.prompt += res.usage?.prompt_tokens ?? 0;
-        result.tokens.completion += res.usage?.completion_tokens ?? 0;
-        const msg = res.choices[0]?.message;
-        if (!msg) break;
-        const calls = (msg as { tool_calls?: ToolCall[] }).tool_calls ?? [];
-        if (calls.length === 0) {
-          reply = (msg.content ?? '').trim();
-          return;
-        }
-        messages.push({ role: 'assistant', content: msg.content ?? '', tool_calls: calls });
-        for (const tc of calls) {
-          let args: Record<string, unknown> = {};
-          try {
-            const parsed = JSON.parse(tc.function?.arguments || '{}');
-            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) args = parsed as Record<string, unknown>;
-          } catch {
-            /* keep empty — the tool's own defaults apply */
-          }
-          const outcome = await toolbox.call(tc.function?.name ?? '', args);
-          if (outcome.failed) result.toolFailures++;
-          messages.push({ role: 'tool', tool_call_id: tc.id, content: outcome.content });
-        }
-      }
-      // Out of rounds while still looking. One last call, without tools, for
+    const loop = await runToolLoop({
+      client,
+      model: modelId,
+      messages,
+      tools: definitions,
+      maxRounds: rounds,
+      temperature: 0.6,
+      maxTokens: 1800,
+      activity: 'daydream',
+      // Out of rounds while still looking: one last call, without tools, for
       // the answer — a cycle that looked and wrote nothing down is wasted.
-      result.rounds++;
-      messages.push({ role: 'user', content: 'No more tools. Answer now with the JSON object only.' });
-      const res = await client.chat.completions.create({
-        model: modelId,
-        temperature: 0.4,
-        max_tokens: 1800,
-        messages: messages as never,
-      });
-      result.tokens.prompt += res.usage?.prompt_tokens ?? 0;
-      result.tokens.completion += res.usage?.completion_tokens ?? 0;
-      reply = (res.choices[0]?.message?.content ?? '').trim();
+      forceFinal: { prompt: 'No more tools. Answer now with the JSON object only.', temperature: 0.4 },
+      execute: async (call) => {
+        const outcome = await toolbox.call(call.name, call.args);
+        if (outcome.failed) result.toolFailures++;
+        return outcome.content;
+      },
     });
+    const reply = loop.reply;
+    result.rounds = loop.rounds;
+    result.tokens = { ...loop.usage };
     result.toolCalls = toolbox.calls;
     result.cards = toolbox.cards.size;
 
