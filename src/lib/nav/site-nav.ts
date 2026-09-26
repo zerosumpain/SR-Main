@@ -180,26 +180,19 @@ export const SECTIONS: NavSection[] = [
     id: 'jkai-daydreams',
     parent: '/jkai',
     label: 'Daydreams',
-    // The family prefix, not the feed. `/jkai/daydreams` 307s to the feed via
-    // legacyTabTarget, so the cell still lands on the feed — but every child's
-    // back link now walks UP into it instead of sideways onto a sibling, which
-    // is what "back" has to mean if it is going to mean anything.
+    // The family prefix. `/jkai/daydreams` IS the feed of think notes since
+    // the 2026-09-25 simplification, so the Noticed cell matches it exactly and
+    // every child's back link walks UP into it rather than sideways.
     rootHref: '/jkai/daydreams',
     ownerOnly: true,
     match: (p) => under('/jkai/daydreams', p),
+    // Only the pages that still exist. The engine rooms (feed, discoveries,
+    // memory, engine, calendar, places, money) are 308 stubs to the feed, and
+    // improvement, backlog and doctor moved to /jkai/develop on 2026-09-26.
     items: [
-      { label: 'Feed', href: '/jkai/daydreams/feed' },
-      { label: 'Briefing', href: '/jkai/daydreams/briefing' },
-      { label: 'Discoveries', href: '/jkai/daydreams/discoveries' },
+      { label: 'Noticed', href: '/jkai/daydreams', match: (p) => p === '/jkai/daydreams' },
       { label: 'Watches', href: '/jkai/daydreams/watches' },
-      { label: 'Memory', href: '/jkai/daydreams/memory' },
-      { label: 'Engine', href: '/jkai/daydreams/engine' },
-      { label: 'Calendar', href: '/jkai/daydreams/calendar' },
-      { label: 'Places', href: '/jkai/daydreams/places' },
-      { label: 'Money', href: '/jkai/daydreams/money' },
-      // Improvement, Backlog and Doctor left for the build process on
-      // 2026-09-26: they live at /jkai/develop/{improvement,backlog,doctor}
-      // and light the Develop cell.
+      { label: 'Briefing', href: '/jkai/daydreams/briefing' },
     ],
   },
   {

@@ -319,7 +319,7 @@
         "zerosumpain/SR-Drive",
         "zerosumpain/SR-Health"
       ],
-      "sha256": "971b4508c1a27ecb8c593e97505cb12074aa31c9ad70a251dfa8b8e429ad3c7a"
+      "sha256": "19610de1773588fd0c4954f7d98a344eb000c600ad7b492de305f8694cc13ef9"
     },
     "src/lib/components/SiteHeader.svelte": {
       "peer": [
