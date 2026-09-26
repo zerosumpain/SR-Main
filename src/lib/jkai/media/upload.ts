@@ -57,6 +57,8 @@ export async function storeChatUpload(
   /** Whose file it is — the uploader's principal. The caller has already
    *  checked a member may post in `conversationId`. */
   principalId: string = 'owner',
+  /** Kinds this uploader may store; absent = every allowed kind (the owner). */
+  allowedKinds?: ReadonlySet<string>,
 ) {
   if (!(file instanceof File)) throw error(400, 'file is required');
   if (file.size === 0) throw error(400, 'file is empty');
@@ -77,6 +79,7 @@ export async function storeChatUpload(
   mime = baseMime;
 
   const kind = kindFromMime(mime)!;
+  if (allowedKinds && !allowedKinds.has(kind)) throw error(415, `${kind} files cannot be uploaded here`);
   const limit = LIMITS_BY_KIND[kind];
   if (file.size > limit) throw error(413, `file too large (${kind} limit: ${limit} bytes)`);
 

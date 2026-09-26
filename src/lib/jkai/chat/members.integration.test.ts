@@ -227,6 +227,13 @@ describe.skipIf(!process.env.DATABASE_URL)('jkai chat for members, end to end', 
   afterAll(async () => {
     const threads = [ids.owner, ids.mine, ids.second, ids.created].filter((x): x is string => !!x);
     await db.delete(accessUsage).where(inArray(accessUsage.principalId, PRINCIPALS));
+    // Files our uploads wrote to the media store go first, then their rows.
+    const { deleteByDiskPath } = await import('$lib/jkai/media/storage');
+    const stored = await db
+      .select({ diskPath: jkaiAttachments.diskPath })
+      .from(jkaiAttachments)
+      .where(inArray(jkaiAttachments.principalId, PRINCIPALS));
+    for (const f of stored) await deleteByDiskPath(f.diskPath).catch(() => {});
     // Messages and attachments cascade with their thread; a stray upload of
     // ours with no thread goes by its principal.
     await db.delete(jkaiAttachments).where(inArray(jkaiAttachments.principalId, PRINCIPALS));
@@ -458,5 +465,46 @@ describe.skipIf(!process.env.DATABASE_URL)('jkai chat for members, end to end', 
     expect(rows).toHaveLength(cap);
 
     await db.delete(accessUsage).where(eq(accessUsage.principalId, F));
+  });
+  it('(g) a member uploads only into their own thread, only things to read, and HTML is never served as HTML', async () => {
+    const up = await import('../../../routes/api/jkai/attachments/+server');
+    const one = await import('../../../routes/api/jkai/attachments/[id]/+server');
+    const upload = (email: string, file: File, conversationId?: string) => {
+      const fd = new FormData();
+      fd.set('file', file);
+      if (conversationId) fd.set('conversationId', conversationId);
+      const e = event(email);
+      e.request = new Request('http://test.local/api/jkai/attachments', { method: 'POST', body: fd });
+      return run(() => up.POST(e));
+    };
+    const html = new File([`<script>alert('${TAG}')</script>`], 'evil.html', { type: 'text/html' });
+
+    expect((await upload(EMAIL.A, html)).status).toBe(400); // no thread named
+    expect((await upload(EMAIL.A, html, ids.owner)).status).toBe(404); // the owner's thread
+    const audio = new File([new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8])], 'a.ogg', { type: 'audio/ogg' });
+    expect((await upload(EMAIL.A, audio, ids.mine)).status).toBe(415); // not a kind members upload
+
+    const stored = await upload(EMAIL.A, html, ids.mine);
+    expect(stored.status).toBe(200);
+    const served = await one.GET(event(EMAIL.A, { params: { id: stored.body.id } }));
+    expect(served.headers.get('content-type')).toBe('text/plain; charset=utf-8');
+    expect(served.headers.get('content-disposition')).toMatch(/^attachment;/);
+    expect(served.headers.get('content-security-policy')).toContain('sandbox');
+  });
+
+  it('(h) a member runs at most two turns at once', async () => {
+    const chat = await import('../../../routes/api/workflows/orchestrator/chat/+server');
+    const store = await import('$lib/workflows/chat/job-store');
+    const { MEMBER_CONCURRENT_TURNS } = await import('$lib/jkai/chat-access.server');
+    // Two running jobs of A's, in two other threads.
+    const busy = Array.from({ length: MEMBER_CONCURRENT_TURNS }, (_, i) =>
+      store.createJob(`busy ${i} ${TAG}`, { conversationId: `busy-${i}-${TAG}`, principalId: A }),
+    );
+    try {
+      const res = await run(() => chat.POST(event(EMAIL.A, { body: { message: `third ${TAG}`, conversationId: ids.mine } })));
+      expect(res.status).toBe(429);
+    } finally {
+      for (const j of busy) store.cancelJob(j.jobId);
+    }
   });
 });

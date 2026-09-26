@@ -2846,7 +2846,11 @@
           <p class="hero-kicker"><span>Live workspace</span> jkai / start anywhere</p>
           <h1 class="hero-title">What are we making today?</h1>
           <p class="hero-sub">
-            Ask plainly, or take the workspace in another direction. Your systems, notes, health data and working context can come with you.
+            {#if member}
+              Ask plainly. jkai can search the web and the news and draw charts and tables for you.
+            {:else}
+              Ask plainly, or take the workspace in another direction. Your systems, notes, health data and working context can come with you.
+            {/if}
           </p>
             <div class="direction-grid" class:has-library={!!onopenlibrary} aria-label="Workspace directions">
               <!-- Owner workspaces a member cannot open (the server refuses them);
