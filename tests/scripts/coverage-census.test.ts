@@ -4,7 +4,7 @@
  * Two things were quietly untrue:
  *
  *   - nightly.yml said it runs "the eight *.integration.test.ts files the merge
- *     gate has never once executed". There are 41 after JKAI Chat, Intel,
+ *     gate has never once executed". There are 42 after JKAI Chat, Intel,
  *     Canvas and workflow tests moved with their applications. The earlier
  *     count was right when it was written and nothing had re-counted since.
  *     Intel spaces had added,
@@ -53,7 +53,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
  * RAISING THIS NUMBER IS A DECISION, not a formality: every file added here is
  * a file no pull request will ever execute.
  */
-const INTEGRATION_FILES = 41;
+const INTEGRATION_FILES = 42;
 
 function tracked(pattern: string): string[] {
 	return execFileSync('git', ['ls-files', pattern], { cwd: ROOT, encoding: 'utf8' })
