@@ -348,6 +348,19 @@ export function routeIdsFor(area: AreaId | FamilyPermission): string[] {
     .map(([id]) => id);
 }
 
+/**
+ * The pages (not APIs, not `[param]` routes) these grants open, for the nav:
+ * a member is offered exactly the destinations they can reach. Sorted, so the
+ * nav's "first page under a cell" is stable.
+ */
+export function reachablePages(grants: Iterable<Permission>): string[] {
+  const held = [...grants];
+  return Object.entries(ROUTES)
+    .filter(([id, verbs]) => !id.startsWith('/api/') && !id.includes('[') && verbs.GET && satisfies(held, verbs.GET))
+    .map(([id]) => id)
+    .sort();
+}
+
 /** Every route id the catalogue opens to anyone. */
 export function catalogueRouteIds(): string[] {
   return Object.keys(ROUTES);

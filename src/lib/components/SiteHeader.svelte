@@ -39,6 +39,7 @@
     title,
     items,
     isOwner = true,
+    reach = [],
     showBack = true,
     meta,
     before,
@@ -50,6 +51,8 @@
     items?: NavItem[];
     /** Signed-out visitors are never offered a cell that would 302 to /login. */
     isOwner?: boolean;
+    /** Pages a member's permissions open: their owner-only cells stay. */
+    reach?: readonly string[];
     showBack?: boolean;
     /** Small metadata beside the section cell (counts, sync status). */
     meta?: Snippet;
@@ -66,7 +69,7 @@
   const backHref = $derived(showBack ? parentHref(path) : null);
   const backLabel = $derived(backHref ? parentLabel(path) : null);
   const cells = $derived(
-    items ? visibleItems(items, isOwner) : navCellsFor(path, isOwner),
+    items ? visibleItems(items, isOwner, reach) : navCellsFor(path, isOwner, reach),
   );
   const atHome = $derived(path === '/');
 
@@ -84,7 +87,7 @@
    * title cell was an <a href="/jkai"> pointed straight at /login.
    */
   const titleIsLink = $derived(
-    !!sectionHref && path !== sectionHref && (isOwner || !section?.ownerOnly),
+    !!sectionHref && path !== sectionHref && (isOwner || !section?.ownerOnly || reach.includes(sectionHref)),
   );
 </script>
 

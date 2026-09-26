@@ -339,14 +339,14 @@
         "zerosumpain/SR-Drive",
         "zerosumpain/SR-Health"
       ],
-      "sha256": "5370b0ee9281960759ed82a99eda497e567b460497b661caf62e7ff953bcc07f"
+      "sha256": "bb17569b2fbdf16542f85499eefb1efb9911b3a4782e24e3ac31b65e3028a66c"
     },
     "src/lib/components/SiteHeader.svelte": {
       "peer": [
         "zerosumpain/SR-Drive",
         "zerosumpain/SR-Health"
       ],
-      "sha256": "1b7b4c8458b0011a6459908e485d834a210663d94671a2f9de1df5b156b6fd9c"
+      "sha256": "c1364e8053012cd96cd9137b542b0e1ef53621aefb8821ed8eee5e3a1d7884d1"
     },
     "src/lib/nav/page-path.ts": {
       "peer": [

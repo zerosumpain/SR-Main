@@ -109,3 +109,20 @@ describe('the catalogue itself', () => {
     for (const g of BUILT_IN_GROUPS) expect(parsePermissions(g.grants)).toEqual([...g.grants]);
   });
 });
+
+describe('reachablePages — what the nav offers a member', () => {
+  it('lists the pages their grants open, never an API or a [param] route', async () => {
+    const { reachablePages } = await import('./catalogue');
+    const pages = reachablePages(['research:self', 'family:circle']);
+    expect(pages).toContain('/research');
+    expect(pages).toContain('/home/people');
+    expect(pages.some((p) => p.startsWith('/api/') || p.includes('['))).toBe(false);
+    expect(pages).not.toContain('/news');
+  });
+
+  it('respects levels: home:self does not reach the voice log', async () => {
+    const { reachablePages } = await import('./catalogue');
+    expect(reachablePages(['home:self'])).toEqual(['/home', '/home/devices']);
+    expect(reachablePages(['home:all'])).toEqual(['/home', '/home/devices', '/home/echoes', '/home/voice']);
+  });
+});

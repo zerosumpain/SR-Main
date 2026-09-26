@@ -66,6 +66,7 @@
     activitySourceCount={data.hub.activitySourceCount}
     buildVersion={data.deploy.short}
     {member}
+    memberHome={data.memberHome}
   />
 
   <div class="jkai-body">
