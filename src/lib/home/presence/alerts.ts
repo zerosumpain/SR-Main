@@ -19,7 +19,7 @@
 // A WhatsApp number is never logged. Summaries carry the last three digits.
 
 import { and, asc, desc, eq, gte, inArray, isNotNull, lte, max, ne, sql } from 'drizzle-orm';
-import { db } from '$lib/db';
+import { db, type DbExecutor } from '$lib/db';
 import { daydreamPlaces, daydreamTrail, householdEvent } from '$lib/db/schema';
 import { getSetting, setSetting } from '$lib/server/models/settings';
 import { followers, type HouseholdMember } from './members';
@@ -108,6 +108,23 @@ export function silencedMovers(
   for (const m of members) if (m.source === 'none') out.add(m.subject);
   for (const e of events) if (!known.has(e.subject)) out.add(e.subject);
   return out;
+}
+
+/**
+ * Split movers not to announce now into `silenced` (their events are marked
+ * done: on 'none', not sharing, gone) and `held` (left owed for the next run:
+ * app members, when the users list is unknown). PURE.
+ */
+export function partitionMovers(
+  events: readonly Pick<AlertEvent, 'subject'>[],
+  members: readonly HouseholdMember[],
+  users: Parameters<typeof notSharingSubjects>[1],
+): { silenced: Set<string>; held: Set<string> } {
+  if (Array.isArray(users)) return { silenced: silencedMovers(events, members, users), held: new Set() };
+  const held = new Set(members.filter((m) => m.source === 'companion').map((m) => m.subject));
+  const silenced = silencedMovers(events, members, []);
+  for (const h of held) silenced.delete(h);
+  return { silenced, held };
 }
 
 // ── Pure pieces ──────────────────────────────────────────────────────────────
@@ -474,8 +491,13 @@ export type WhatsAppSend = (to: string, text: string) => Promise<{ sent: boolean
 
 /** Where attempts and outcomes are written. The database in production. */
 export interface AttemptStore {
-  /** Count an attempt BEFORE the send. Throws when it cannot be recorded. */
-  attempt(eventId: string, recipient: string): Promise<void>;
+  /**
+   * Claim an attempt BEFORE the send, atomically: true only if this call
+   * recorded it AND the row still allowed one (under the cap, not sent, no
+   * unresolved attempt). False means someone else has it, or it is done:
+   * do not send. Throws when it cannot be recorded.
+   */
+  attempt(eventId: string, recipient: string): Promise<boolean>;
   /** A definite failure: the attempt may be retried (up to the cap). */
   failed(eventId: string, recipient: string): Promise<void>;
   /** Delivered. */
@@ -499,12 +521,15 @@ export async function executeWhatsApp(
 ): Promise<{ sent: string[]; failed: string[] }> {
   const out = { sent: [] as string[], failed: [] as string[] };
   for (const s of sends) {
+    let claimed: boolean;
     try {
-      await store.attempt(s.eventId, s.recipient);
+      claimed = await store.attempt(s.eventId, s.recipient);
     } catch {
       out.failed.push(maskNumber(s.number));
       continue;
     }
+    // Another run (or a stale plan) got there first, or it is already done.
+    if (!claimed) continue;
     let ok: boolean | null;
     try {
       ok = (await sendWhatsApp(s.number, s.text)).sent === true;
@@ -532,20 +557,43 @@ function bumpTried(recipient: string, field: 'attempts' | 'failed') {
     to_jsonb(coalesce((${householdEvent.whatsappTried} -> ${recipient}::text ->> ${field}::text)::int, 0) + 1))`;
 }
 
-const dbAttemptStore: AttemptStore = {
-  async attempt(eventId, recipient) {
-    await db.update(householdEvent).set({ whatsappTried: bumpTried(recipient, 'attempts') }).where(eq(householdEvent.id, eventId));
-  },
-  async failed(eventId, recipient) {
-    await db.update(householdEvent).set({ whatsappTried: bumpTried(recipient, 'failed') }).where(eq(householdEvent.id, eventId));
-  },
-  async sent(eventId, recipient) {
-    await db
-      .update(householdEvent)
-      .set({ whatsappSent: sql`${householdEvent.whatsappSent} || ${JSON.stringify([recipient])}::jsonb` })
-      .where(eq(householdEvent.id, eventId));
-  },
-};
+/**
+ * The attempt store over a database handle. `attempt` is ONE conditional
+ * UPDATE: the row is only bumped while it still allows an attempt — under the
+ * cap, the recipient not in `whatsapp_sent`, and no attempt without a recorded
+ * failure. Two runs racing on one row serialise on the row lock, and the
+ * second re-checks the WHERE against the first's write and matches nothing.
+ */
+export function attemptStoreFor(exec: DbExecutor): AttemptStore {
+  const n = (field: 'attempts' | 'failed', r: string) =>
+    sql`coalesce((${householdEvent.whatsappTried} -> ${r}::text ->> ${field}::text)::int, 0)`;
+  return {
+    async attempt(eventId, recipient) {
+      const rows = await exec
+        .update(householdEvent)
+        .set({ whatsappTried: bumpTried(recipient, 'attempts') })
+        .where(
+          and(
+            eq(householdEvent.id, eventId),
+            sql`${n('attempts', recipient)} < ${WHATSAPP_MAX_ATTEMPTS}`,
+            sql`${n('attempts', recipient)} = ${n('failed', recipient)}`,
+            sql`not (${householdEvent.whatsappSent} @> jsonb_build_array(${recipient}::text))`,
+          ),
+        )
+        .returning({ id: householdEvent.id });
+      return rows.length === 1;
+    },
+    async failed(eventId, recipient) {
+      await exec.update(householdEvent).set({ whatsappTried: bumpTried(recipient, 'failed') }).where(eq(householdEvent.id, eventId));
+    },
+    async sent(eventId, recipient) {
+      await exec
+        .update(householdEvent)
+        .set({ whatsappSent: sql`${householdEvent.whatsappSent} || jsonb_build_array(${recipient}::text)` })
+        .where(eq(householdEvent.id, eventId));
+    },
+  };
+}
 
 /** The site's WhatsApp service, the way followup-queue reaches it. */
 async function defaultWhatsApp(to: string, text: string) {
@@ -600,22 +648,30 @@ export async function deliverAlerts(
     .where(inArray(daydreamPlaces.id, [...new Set(events.map((e) => e.placeId))]));
   const places = new Map(placeRows.map((p) => [p.id, { ...p, isHome: p.id === home?.id } as AlertPlace]));
 
-  // Movers who are not to be announced any more. Read once per run; an
-  // unreadable users list fails closed (every app member counts as not
-  // sharing), because announcing someone who switched sharing off is the
-  // one mistake this must not make.
+  // Movers who are not to be announced any more. Read once per run. When the
+  // pilot's users list cannot be read (or was never stored), whether an app
+  // member is sharing is UNKNOWN: their events are HELD — not announced, and
+  // not marked done either — and looked at again next run. Announcing
+  // someone who switched sharing off is the one mistake this must not make;
+  // dropping a real alert over a settings hiccup is the second.
   let users: Awaited<ReturnType<typeof loadCompanionUsers>> = null;
   try {
     users = await loadCompanionUsers();
   } catch {
     users = null;
   }
-  const silenced = silencedMovers(events, members, users);
+  const { silenced, held } = partitionMovers(events, members, users);
+  const quiet = new Set([...silenced, ...held]);
 
   // The app.
   const owed = events.filter((e) => isDeliverable(e, now));
   if (owed.length && pilotToken()) {
-    const { send, nobody } = buildPilotEvents(owed, places, members, silenced);
+    const { send, nobody } = buildPilotEvents(
+      owed.filter((e) => !held.has(e.subject)),
+      places,
+      members,
+      silenced,
+    );
     const done = [...nobody];
     if (send.length) {
       const res = await postToPilot(send, deps.fetchImpl);
@@ -634,8 +690,8 @@ export async function deliverAlerts(
   }
 
   // WhatsApp, for flagged places only.
-  const sends = planWhatsApp(events, places, members, now, silenced);
-  const outcome = await executeWhatsApp(sends, sendWhatsApp, dbAttemptStore);
+  const sends = planWhatsApp(events, places, members, now, quiet);
+  const outcome = await executeWhatsApp(sends, sendWhatsApp, attemptStoreFor(db));
   result.whatsappSent = outcome.sent;
   result.whatsappFailed = outcome.failed;
   return result;

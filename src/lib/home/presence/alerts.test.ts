@@ -5,6 +5,8 @@ vi.mock('$lib/db', () => ({ db: {} }));
 vi.mock('$lib/server/models/settings', () => ({ getSetting: async () => null, setSetting: async () => {} }));
 
 const {
+  mayAttempt,
+  partitionMovers,
   executeWhatsApp,
   silencedMovers,
   alertText,
@@ -244,8 +246,13 @@ describe('WhatsApp attempts across runs', () => {
       const t = row.whatsappTried![r] ?? { attempts: 0, failed: 0 };
       row.whatsappTried![r] = { ...t, [f]: t[f] + 1 };
     };
+    // Mirrors the conditional UPDATE: claim only while the LIVE row allows it.
     const store = {
-      attempt: async (_: string, r: string) => bump(r, 'attempts'),
+      attempt: async (_: string, r: string) => {
+        if (!mayAttempt(row, r)) return false;
+        bump(r, 'attempts');
+        return true;
+      },
       failed: async (_: string, r: string) => bump(r, 'failed'),
       sent: async (_: string, r: string) => {
         if (opts.sentThrows) throw new Error('connection reset');
@@ -254,7 +261,7 @@ describe('WhatsApp attempts across runs', () => {
     };
     const run = (send: (to: string, text: string) => Promise<{ sent: boolean }>) =>
       executeWhatsApp(planWhatsApp([row], PLACES, members, NOW), send, store);
-    return { row, run };
+    return { row, run, store };
   }
 
   it('stops after two definite failures: no third attempt', async () => {
@@ -264,6 +271,16 @@ describe('WhatsApp attempts across runs', () => {
     await run(send);
     await run(send);
     expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it('a second planner working from the same stale row does not send', async () => {
+    const { row, store } = harness();
+    const stale = planWhatsApp([structuredClone(row)], PLACES, members, NOW);
+    const send = vi.fn(async () => ({ sent: true }));
+    await executeWhatsApp(stale, send, store);
+    await executeWhatsApp(stale, send, store);
+    expect(stale).toHaveLength(1);
+    expect(send).toHaveBeenCalledTimes(1);
   });
 
   it('never resends when recording a delivered send fails', async () => {
@@ -288,7 +305,7 @@ describe('WhatsApp attempts across runs', () => {
   it('does not send when the attempt cannot be recorded first', async () => {
     const send = vi.fn(async () => ({ sent: true }));
     const store = {
-      attempt: async () => {
+      attempt: async (): Promise<boolean> => {
         throw new Error('db down');
       },
       failed: async () => {},
@@ -326,5 +343,14 @@ describe('silenced movers', () => {
     const { send, nobody } = buildPilotEvents([ev('e1')], PLACES, [member('sam'), member('alex')], new Set(['sam']));
     expect(send).toEqual([]);
     expect(nobody).toEqual(['e1']);
+  });
+
+  it('holds app members\' events when sharing is unknown, instead of marking them done', () => {
+    const unknown = partitionMovers([ev('e1', { subject: 'ghost' })], members, null);
+    expect([...unknown.held].sort()).toEqual(['alex', 'sam']);
+    expect([...unknown.silenced].sort()).toEqual(['ghost', 'robin']);
+    const known = partitionMovers([], members, users);
+    expect(known.held.size).toBe(0);
+    expect([...known.silenced].sort()).toEqual(['alex', 'robin']);
   });
 });
