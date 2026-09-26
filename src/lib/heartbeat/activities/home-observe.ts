@@ -11,7 +11,22 @@ import {
   errMsg,
   type SubjectEntity,
 } from '$lib/home/presence/types';
+import { lifeSubjects, listMembers } from '$lib/home/presence/members';
 import type { ActivityHandler } from '../types';
+
+/**
+ * Who Home Assistant is polled for: household members whose source is
+ * 'life360'. A failed read of the members table falls back to the seed list,
+ * so a database hiccup never stops the trail; a companion or 'none' member is
+ * never polled from Life360, because choosing not to be tracked has to mean it.
+ */
+async function life360Subjects(): Promise<SubjectEntity[]> {
+  try {
+    return lifeSubjects(await listMembers());
+  } catch {
+    return FAMILY_SUBJECTS;
+  }
+}
 
 // The name is the heartbeat_actions row's identity: it stays 'daydream-observe'
 // although the file moved, because renaming it would orphan the row.
@@ -65,7 +80,7 @@ export const homeObserve: ActivityHandler = {
     const cfg = { ...DEFAULTS, ...(ctx.config as ObserveConfig) };
     const subjects: SubjectEntity[] =
       cfg.subjects ??
-      FAMILY_SUBJECTS.map((s) =>
+      (await life360Subjects()).map((s) =>
         // The legacy personEntity override still steers the default subject.
         s.subject === DEFAULT_SUBJECT ? { ...s, entity: cfg.personEntity } : s,
       );

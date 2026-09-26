@@ -5504,6 +5504,15 @@ export const daydreamPlaces = pgTable(
      */
     status: text('status').notNull().default('active'),
     mergedIntoId: text('merged_into_id'),
+    /**
+     * Whether crossing this place's edge (arriving or leaving) raises a
+     * household alert in the app. Owner-set on the places panel. Home counts
+     * as a place whatever this says.
+     */
+    alerts: boolean('alerts').notNull().default(false),
+    /** Whether a crossing here is ALSO sent by WhatsApp to followers who have
+     *  a number and WhatsApp on. Defined places only, owner-set. */
+    whatsappAlerts: boolean('whatsapp_alerts').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -5513,6 +5522,50 @@ export const daydreamPlaces = pgTable(
     index('daydream_places_label_idx').on(t.label),
   ],
 );
+
+/**
+ * One row per person in the household: who they are, where their trail is
+ * written from, and who their movements alert.
+ *
+ * `subject` is the trail's existing key (daydream_trail.subject), so a person
+ * is the same person on every table. `source` is the consent switch made
+ * concrete: 'life360' is polled from Home Assistant, 'companion' comes only
+ * from the iPhone app via the pilot (and a companion person who turns sharing
+ * off is shown as not sharing, never quietly picked up from Life360), 'none'
+ * writes nothing at all.
+ *
+ * `whatsapp` is a phone number and lives ONLY here, never in code or a page.
+ * `email` is lower-cased on write and maps a site sign-in or pilot user to a
+ * subject; null for someone on Life360 only (Postgres lets many nulls share
+ * a unique index).
+ */
+export interface HouseholdMemberAlerts {
+  /** Subjects whose movements alert this person. Absent = everyone. */
+  follow?: string[];
+  /** Whether crossings at WhatsApp-flagged places also go by WhatsApp. */
+  whatsapp?: boolean;
+}
+
+export const householdMember = pgTable(
+  'household_member',
+  {
+    subject: text('subject').primaryKey(),
+    email: text('email'),
+    displayName: text('display_name').notNull(),
+    /** 'life360' | 'companion' | 'none' */
+    source: text('source').notNull().default('life360'),
+    /** The Home Assistant person entity, for source 'life360'. */
+    haPersonEntity: text('ha_person_entity'),
+    whatsapp: text('whatsapp'),
+    alerts: jsonb('alerts').$type<HouseholdMemberAlerts>().notNull().default(sql`'{}'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('household_member_email_idx').on(t.email)],
+);
+
+export type HouseholdMemberRow = typeof householdMember.$inferSelect;
+export type NewHouseholdMemberRow = typeof householdMember.$inferInsert;
 
 /**
  * Every series daydream has ever discovered, whatever produced it.
