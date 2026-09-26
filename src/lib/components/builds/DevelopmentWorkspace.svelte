@@ -1,35 +1,20 @@
 <script lang="ts">
+  import DevelopmentPreview from './DevelopmentPreview.svelte';
+  import { previewAccess } from '$lib/builds/preview-access';
   import DevelopmentCodeContext from './DevelopmentCodeContext.svelte';
   import DevelopmentModelSelect from './DevelopmentModelSelect.svelte';
   let modelId = $state('');
-  // The Pi builder wrapper's workspace, wearing the /health editorial system.
-  //
-  // Chrome is `DaydreamShell` — the ink cover with a tile deck, the sticky
-  // rail, the mono footer — for the same reason the portfolio page uses it and
-  // not `HealthShell`: /jkai already mounts `HubHeader` outside the scroll
-  // container, and a second site bar plus a fixed grain layer would fight it.
-  // `/jkai/agents` is the precedent for the shell with in-page `ontab` tabs.
-  //
-  // The build controls sit in the shell's `actions` slot, INSIDE the sticky
-  // rail. They are the only thing on this page a reader needs at every scroll
-  // position: a run takes minutes, and Pause and Stop carried away by the
-  // cover band is the whole reason that slot exists.
-  //
-  // Everything below the rail is paper. The system's rule is that ink is for
-  // chrome and thin bands — a tall solid ink area reads as intensity, not as
-  // editorial — so the transcript, the forms and the evidence ledger stay on
-  // cream and only the cover and foot are dark.
+  // The shared ink cover orients the journey; the sticky rail keeps build
+  // controls reachable while the paper workspace holds the current task.
   import { onMount } from 'svelte';
   import DevelopmentBuildProgress from './DevelopmentBuildProgress.svelte';
   import DevelopmentBuildActivity from './DevelopmentBuildActivity.svelte';
   import DaydreamShell from '$lib/components/jkai/daydream/hub/DaydreamShell.svelte';
   import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
-  import StatDeck from '$lib/components/jkai/daydream/hub/StatDeck.svelte';
-  import type { DeckTile, ShellTab } from '$lib/components/jkai/daydream/hub/types';
-  import { featurePreviewUrl, developmentTone } from '$lib/builds/development-progress';
+  import type { ShellTab } from '$lib/components/jkai/daydream/hub/types';
   import type { DevelopmentProgress } from '$lib/builds/development-progress';
   import { replaceState } from '$app/navigation';
-  import { criterionResult, PRODUCT_AREAS, RELEASE_POLICIES, AUTOPILOT_ROUNDS, releaseBlocker, visibleDevelopmentStage, type DeliveryState, type ReleasePolicy } from '$lib/jkai/development';
+  import { PRODUCT_AREAS, RELEASE_POLICIES, AUTOPILOT_ROUNDS, releaseBlocker, visibleDevelopmentStage, type DeliveryState, type ReleasePolicy } from '$lib/jkai/development';
   import { RELEASE_POLICY_LABELS } from '$lib/constants/development';
   let { buildId }: { buildId: string } = $props();
   type Snapshot = {
@@ -44,20 +29,30 @@
   };
   let snapshot = $state<Snapshot | null>(null);
   let tab = $state('Brief'); let busy = $state(false); let error = $state(''); let connection = $state('Loading');
+  let previewPending = $state(false);
   let outcome = $state(''); let constraints = $state(''); let routes = $state(''); let criteria = $state(''); let area = $state('Platform');
   let scope = $state(''); let dependencies = $state(''); let assumptions = $state(''); let questions = $state(''); let validation = $state('');
   let feedback = $state(''); let grooming = $state(false);
   const briefFields = () => ({ outcome, constraints, routes, criteria, area, scope, dependencies, assumptions, questions, validation, modelId });
   let instruction = $state(''); let question = $state(''); let answers = $state<Record<string, string>>({});
   let evidence = $state<Record<string, string>>({}); let verdicts = $state<Record<string, string>>({});
-  let lesson = $state(''); let lessonEvidence = $state(''); let note = $state(''); let phone = $state(false);
-  let previewRoute = $state('');
+  let lesson = $state(''); let lessonEvidence = $state(''); let note = $state('');
+  let now = $state(Date.now());
+  let requestedTab: string | null = null;
+  const TAB_NAMES = ['Brief', 'Build', 'Preview', 'Delivery'];
+  function selectTab(id: string) {
+    if (!TAB_NAMES.includes(id)) return;
+    tab = id;
+    const url = new URL(location.href); url.searchParams.set('tab', id.toLowerCase());
+    replaceState(url, {});
+  }
   let policyDraft = $state<ReleasePolicy>('preview_only');
   let rounds = $state<number>(AUTOPILOT_ROUNDS.default);
   let evidenceCandidate: string | null = null; let briefRevision = 0; let loadedBrief = ''; let initialized = false; let refreshing = false;
   const deliveryState = $derived(snapshot?.delivery.state);
-  const chosenRoute = $derived(deliveryState?.brief.routes.includes(previewRoute) ? previewRoute : deliveryState?.brief.routes[0] ?? '/');
-  const previewHref = $derived(featurePreviewUrl(deliveryState?.preview.url ?? null, chosenRoute));
+  const expiredPreview = $derived(previewAccess(deliveryState?.preview.url ?? null, now).expired);
+  const preparing = $derived(previewPending || deliveryState?.preview.status === 'starting');
+  const canInspect = $derived(!!snapshot?.progress?.iterations.some(i => i.tokensUsed > 0) && !!deliveryState?.brief.acceptedAt && !deliveryState?.acceptedAt);
   const running = $derived(snapshot?.build.status === 'running' || snapshot?.build.status === 'queued');
   const pilot = $derived(deliveryState?.autopilot);
   const flying = $derived(Boolean(pilot?.enabled && !pilot.stopReason));
@@ -78,7 +73,7 @@
       const response = await fetch(`/api/jkai/development/${buildId}`);
       if (!response.ok) throw new Error('Workspace unavailable');
       snapshot = await response.json(); connection = 'Connected';
-      if (!initialized && snapshot?.delivery.state.brief.acceptedAt) tab = 'Build';
+      if (!initialized && snapshot) tab = requestedTab ?? (snapshot.delivery.state.preview.url || ['failed', 'starting'].includes(snapshot.delivery.state.preview.status) ? 'Preview' : snapshot.delivery.state.brief.acceptedAt ? 'Build' : 'Brief');
       if (snapshot && (!initialized || (snapshot.delivery.state.brief.revision !== briefRevision && JSON.stringify(briefFields()) === loadedBrief))) {
         const s = snapshot.delivery.state; briefRevision = s.brief.revision; outcome = s.brief.outcome; constraints = s.brief.constraints; routes = s.brief.routes.join('\n');
         scope = s.brief.scope ?? ''; dependencies = s.brief.dependencies ?? ''; assumptions = s.brief.assumptions ?? ''; questions = s.brief.questions ?? ''; validation = s.brief.validation ?? '';
@@ -106,25 +101,34 @@
     finally { refreshing = false; }
   }
   onMount(() => { void (async () => {
-    const auto = new URL(location.href).searchParams.get('refine') === '1';
-    if (auto) replaceState(location.pathname, {});
+    const url = new URL(location.href);
+    requestedTab = TAB_NAMES.find(name => name.toLowerCase() === url.searchParams.get('tab')) ?? null;
+    const auto = url.searchParams.get('refine') === '1';
+    if (auto) { url.searchParams.delete('refine'); replaceState(url, {}); }
     await refresh();
     if (auto && snapshot && !snapshot.delivery.state.grooming && !snapshot.delivery.state.brief.acceptedAt) await refine();
-  })(); const timer = setInterval(() => { void refresh(); }, 3000); return () => clearInterval(timer); });
+  })(); const timer = setInterval(() => { now = Date.now(); void refresh(); }, 3000); return () => clearInterval(timer); });
   async function act(action: string, fields: Record<string, unknown> = {}) {
-    if (!snapshot) return false; busy = true; error = '';
-    if (action === 'inspect_preview' || action === 'preview') tab = 'Preview';
+    if (!snapshot) return false;
+    const previewAction = action === 'inspect_preview' || action === 'preview';
+    if (previewAction && preparing) return false;
+    if (previewAction) previewPending = true;
+    else busy = true;
+    error = '';
+    if (action === 'inspect_preview' || action === 'preview') selectTab('Preview');
     try {
       const response = await fetch(`/api/jkai/development/${buildId}`, { method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action, revision: snapshot.delivery.revision, briefRevision, candidate: snapshot.delivery.state.candidate, ...fields }) });
       const result = await response.json(); if (!response.ok) throw new Error(result.error ?? 'Operation failed');
-      if (action === 'inspect_preview' || action === 'preview') tab = 'Preview';
-      if (action === 'start' || action === 'resume' || result.next === 'building') tab = 'Build';
-      if (result.next === 'accepted') tab = 'Delivery';
+      if (action === 'inspect_preview' || action === 'preview') selectTab('Preview');
+      if (action === 'start' || action === 'resume' || result.next === 'building') selectTab('Build');
+      if (result.next === 'accepted') selectTab('Delivery');
       if (action === 'brief' || action === 'groom') initialized = false;
-      await refresh(); return true;
+      await refresh();
+      if (action === 'brief') selectTab('Build');
+      return true;
     } catch (e) { error = e instanceof Error ? e.message : 'Operation failed'; await refresh(); return false; }
-    finally { busy = false; }
+    finally { if (previewAction) previewPending = false; else busy = false; }
   }
   async function continueAutomatically() {
     if (!snapshot) return;
@@ -133,7 +137,7 @@
       const verdict = verdicts[criterion.id] ?? 'unverified';
       const observation = evidence[criterion.id] ?? '';
       if (verdict !== criterion.verdict || observation !== criterion.evidence) {
-        if (!await act('criterion', { criterionId: criterion.id, verdict, evidence: observation })) return;
+        if (!await act('criterion', { criterionId: criterion.id, verdict, evidence: observation, judgedRevision })) return;
       }
     }
     await act('continue');
@@ -147,7 +151,6 @@
   // ── the chrome's copy ───────────────────────────────────────────────────
   const stage = $derived(deliveryState && snapshot ? visibleDevelopmentStage(deliveryState, snapshot.build.status, snapshot.build.outcome) : 'loading');
   const openDecisions = $derived(deliveryState?.decisions.filter((d) => !d.answer).length ?? 0);
-  const evidencedCount = $derived(deliveryState?.criteria.filter((c) => criterionResult(c, deliveryState.candidate).verdict === 'passed').length ?? 0);
   // Two lines at most: the fold is a typographic decision everywhere else in
   // this system, and a build title is arbitrary length, so it is split on
   // whole words near the middle rather than at a fixed character count.
@@ -167,7 +170,7 @@
     const same = outcome.toLowerCase().replace(/[.\s]+$/, '') === title.toLowerCase().replace(/[.\s]+$/, '');
     if (outcome && !same) return outcome;
     const routes = deliveryState?.brief.routes.filter(Boolean) ?? [];
-    return `Accept the brief, guide the build, then try the candidate in an isolated preview${routes.length ? ` on ${routes.join(', ')}` : ''}. Nothing here publishes a pull request or deploys production.`;
+    return routes.length ? `Try ${routes.join(', ')} and record what works or needs changing.` : 'Your brief, working version and test results stay together here.';
   });
   const tabs = $derived<ShellTab[]>([
     { id: 'Brief', label: 'Brief', tone: 'quiet' },
@@ -175,17 +178,8 @@
     { id: 'Preview', label: 'Preview', tone: 'quiet' },
     { id: 'Delivery', label: 'Delivery', tone: 'quiet' },
   ]);
-  const tiles = $derived<DeckTile[]>(!deliveryState || !snapshot ? [] : [
-    { key: 'stage', label: 'Stage', value: stage, tone: developmentTone(stage), lit: openDecisions > 0,
-      sub: deliveryState.brief.acceptedAt ? `brief revision ${deliveryState.brief.revision}, accepted` : `brief revision ${deliveryState.brief.revision}, draft` },
-    { key: 'criteria', label: 'Criteria assessed as met', value: String(evidencedCount), suffix: `/${deliveryState.criteria.length}`,
-      tone: deliveryState.criteria.length && evidencedCount === deliveryState.criteria.length ? 'good' : 'steady',
-      sub: deliveryState.candidate ? 'against the current candidate' : 'no candidate prepared yet' },
-    { key: 'candidate', label: 'Candidate', value: deliveryState.candidate?.slice(0, 8) ?? '—', tone: deliveryState.candidate ? 'steady' : 'quiet',
-      sub: deliveryState.gate?.passed ? 'repository checks passed' : 'no passing repository gate' },
-    { key: 'preview', label: 'Preview', value: deliveryState.preview.status, tone: deliveryState.preview.status === 'ready' ? 'good' : deliveryState.preview.status === 'failed' ? 'urgent' : 'quiet',
-      sub: `${snapshot.build.iterationsCompleted} iterations completed` },
-  ]);
+  const nextStep = $derived(!deliveryState?.brief.acceptedAt ? 'Review the brief, then start building.' : preparing ? 'Your preview is being prepared. Saved progress will appear here.' : expiredPreview ? 'Your preview access has expired. Refresh it to test the saved build.' : deliveryState?.preview.url ? 'Try the preview and record what should change.' : running ? 'Follow the first version as it builds. Answer any questions below.' : deliveryState?.candidate || canInspect ? 'Prepare the saved work as a preview and try it.' : 'Your brief is accepted. Build the first working page.');
+  function preparePreview() { void act(deliveryState?.candidate ? 'preview' : 'inspect_preview'); }
 </script>
 
 <DaydreamShell
@@ -193,6 +187,7 @@
   kicker={deliveryState ? `${deliveryState.area} · Pi site development` : 'Pi site development'}
   title={titleLines}
   compactTitle
+  compactCover
   {standfirst}
   readout={[
     { label: 'Stage', value: stage },
@@ -202,7 +197,7 @@
   ]}
   {tabs}
   active={tab}
-  ontab={(id) => (tab = id)}
+  ontab={selectTab}
   footer={[
     `strangeramblings.com/jkai/develop/${buildId.slice(0, 8)}`,
     snapshot ? `${snapshot.build.modelId} · ${snapshot.build.iterationsCompleted} iterations` : 'loading',
@@ -210,18 +205,27 @@
   ]}
 >
   {#snippet masthead()}
-    {#if tiles.length}<StatDeck {tiles} dark min={215} />{/if}
+    <div class="wk-journey" aria-label="Build journey">
+      {#each ['Brief', 'Build', 'Preview', 'Delivery'] as step, index}
+        <button aria-current={tab === step ? 'step' : undefined} onclick={() => selectTab(step)}><span>0{index + 1}</span><strong>{step === 'Preview' ? 'Try & refine' : step === 'Delivery' ? 'Accept' : step}</strong></button>
+      {/each}
+    </div>
+    <div class="wk-next"><p>{nextStep}</p>
+      {#if tab !== 'Preview' && deliveryState?.brief.acceptedAt && !running && !preparing && (deliveryState?.candidate || canInspect) && (!deliveryState.preview.url || expiredPreview || deliveryState.preview.lastError)}
+        <button class="wk-run" disabled={busy} onclick={preparePreview}>{expiredPreview ? 'Refresh preview access' : deliveryState.preview.lastError ? 'Retry preview' : 'Prepare preview'}</button>
+      {:else if tab !== 'Preview' && deliveryState?.preview.url && !expiredPreview}<button class="wk-run" onclick={() => selectTab('Preview')}>Test the preview →</button>{/if}
+    </div>
   {/snippet}
 
   {#snippet actions()}
     <a class="wk-back" href="/jkai/develop">← Portfolio</a>
-    <button class="wk-run" disabled={busy || running || deliveryState?.preview.status === 'starting' || !deliveryState?.brief.acceptedAt} onclick={() => act(deliveryState?.session.id ? 'resume' : 'start')}>{deliveryState?.session.id ? 'Continue iteration' : 'Build first working page'}</button>
-    <button class="wk-ghost" disabled={busy || !running} onclick={() => act('pause')}>Pause</button>
-    <button class="wk-ghost" disabled={busy || !running} onclick={() => act('stop')}>Stop</button>
+    <button class="wk-run" disabled={busy || running || preparing || !deliveryState?.brief.acceptedAt || openDecisions > 0} onclick={() => act(deliveryState?.session.id ? 'resume' : 'start')}>{deliveryState?.session.id || deliveryState?.candidate ? 'Continue building' : 'Build first working page'}</button>
+    {#if running}<button class="wk-ghost" disabled={busy} onclick={() => act('pause')}>Pause</button>
+    <button class="wk-ghost" disabled={busy} onclick={() => act('stop')}>Stop</button>{/if}
     <button
       class="wk-ghost"
       class:on={flying}
-      disabled={busy || !deliveryState?.brief.acceptedAt}
+      disabled={busy || preparing || !deliveryState?.brief.acceptedAt}
       aria-pressed={flying}
       onclick={() => act('autopilot', { enabled: !flying, maxRounds: rounds })}
     >{flying ? 'Stop autopilot' : 'Autopilot'}</button>
@@ -241,19 +245,19 @@
     {#if openDecisions}
       <div class="wk-alert wk-alert-act">
         <strong>A decision is waiting</strong>
-        <button class="wk-inline" onclick={() => (tab = 'Build')}>Open decisions →</button>
+        <button class="wk-inline" onclick={() => selectTab('Build')}>Open decisions →</button>
       </div>
     {/if}
 
     {#if snapshot && deliveryState?.brief.acceptedAt}
-      {#if snapshot.progress && tab === 'Build'}<DevelopmentBuildProgress {buildId} {busy} progress={snapshot.progress} build={snapshot.build} delivery={deliveryState} connected={connection === 'Connected'} navigate={(name) => tab = name} inspect={() => act('inspect_preview')} prepare={() => act('preview')} />{/if}
-      {#key buildId}<DevelopmentBuildActivity {buildId} build={snapshot.build} needsOwner={openDecisions > 0} showOutput={tab === 'Build'} />{/key}
+      {#if snapshot.progress && tab === 'Build'}<DevelopmentBuildProgress {buildId} {busy} progress={snapshot.progress} build={snapshot.build} delivery={deliveryState} connected={connection === 'Connected'} navigate={selectTab} inspect={() => act('inspect_preview')} prepare={() => act('preview')} />{/if}
+      {#if tab === 'Build'}{#key buildId}<DevelopmentBuildActivity {buildId} build={snapshot.build} needsOwner={openDecisions > 0} showOutput={true} />{/key}{/if}
     {/if}
 
     {#if !snapshot}
       <p class="wk-empty">{connection === 'Loading' ? 'Loading saved work…' : connection}</p>
     {:else if deliveryState}
-      {#if tab === 'Brief' || tab === 'Build'}<DevelopmentCodeContext {buildId} revision={deliveryState.candidate} />{/if}
+      {#if tab === 'Build'}<details class="wk-fold"><summary>Code context for this build</summary><DevelopmentCodeContext {buildId} revision={deliveryState.candidate} /></details>{/if}
       {#if tab === 'Brief'}
         <SectionHead
           kicker="01 / The brief"
@@ -279,8 +283,8 @@
 
         <form class="wk-form" onsubmit={(e) => { e.preventDefault(); void act('brief', briefFields()); }}>
           <fieldset disabled={busy || running}>
-            <label class="wk-field wk-narrow"><span class="wk-label">Product area</span><select aria-label="Product area" bind:value={area}>{#each PRODUCT_AREAS as value (value)}<option>{value}</option>{/each}</select></label>
-            <DevelopmentModelSelect bind:value={modelId} disabled={busy || running} />
+            <div class="wk-cols wk-brief-options"><label class="wk-field"><span class="wk-label">Product area</span><select aria-label="Product area" bind:value={area}>{#each PRODUCT_AREAS as value (value)}<option>{value}</option>{/each}</select></label>
+            <DevelopmentModelSelect bind:value={modelId} disabled={busy || running} /></div>
             <label class="wk-field"><span class="wk-label">Intended outcome</span><textarea required bind:value={outcome} rows="4"></textarea></label>
             <div class="wk-cols">
               <label class="wk-field"><span class="wk-label">Constraints</span><textarea bind:value={constraints} rows="4" placeholder="Behaviour, audience, design and data constraints"></textarea></label>
@@ -343,35 +347,10 @@
         <details class="wk-fold"><summary>Advanced build controls and logs</summary><p><a class="wk-link" href={`/jkai/builds/${buildId}`}>Open the existing build console →</a></p></details>
 
       {:else if tab === 'Preview'}
-        <SectionHead
-          kicker="03 / The preview"
-          title={['Try it before', 'you accept it']}
-          strap="An isolated full-site preview of one candidate revision. Working preview before release candidate — a preview of saved work verifies nothing on its own."
-        />
-        {#if !deliveryState.gate?.passed}
-          <div class="wk-alert wk-alert-act">
-            <div><strong>Working preview before release candidate</strong><p class="wk-muted">Try the first useful page while iteration continues. Full repository checks and acceptance evidence are still required.</p></div>
-            {#if !deliveryState.candidate}<button class="wk-ghost" disabled={busy || running || !snapshot.progress?.iterations.some(i => i.tokensUsed > 0)} onclick={() => act('inspect_preview')}>Prepare inspection preview</button>{/if}
-          </div>
-        {/if}
-        <div class="wk-actions">
-          <button class="wk-run" disabled={busy || running || deliveryState.preview.status !== 'ready' || deliveryState.preview.revision !== deliveryState.candidate || !!deliveryState.acceptedAt} onclick={continueAutomatically}>{busy ? 'Inspecting and continuing…' : 'Continue automatically'}</button>
-          <button class="wk-ghost" disabled={busy || running || !deliveryState.candidate} onclick={() => act('preview')}>Prepare preview</button>
-          <button class="wk-ghost" aria-pressed={phone} onclick={() => phone = !phone}>{phone ? 'Desktop width' : 'Phone width'}</button>
-          {#if previewHref}<a class="wk-link" href={previewHref} target="_blank" rel="noopener noreferrer">Open site preview ↗</a><button class="wk-ghost" disabled={busy || running} onclick={() => act('close_preview')}>Close preview</button>{/if}
-        </div>
-        {#if deliveryState.preview.url}<p class="wk-stamp"><strong>{deliveryState.preview.kind === 'working' ? `Working preview ${deliveryState.preview.number ?? 1}` : deliveryState.preview.kind === 'release' ? 'Release candidate' : 'Inspection preview'}</strong> · revision {deliveryState.preview.revision?.slice(0, 12) ?? 'legacy'}</p>{/if}
-        {#if deliveryState.preview.lastError}<p class="wk-alert wk-alert-bad" role="alert">{deliveryState.preview.lastError}</p>{/if}
-        {#if deliveryState.preview.evidence?.length}<details class="wk-fold"><summary>Feature browser checks</summary>{#each deliveryState.preview.evidence as evidence}<p>{evidence}</p>{/each}</details>{/if}
-        {#if deliveryState.preview.url?.startsWith('http://127.0.0.1:')}<p class="wk-muted">This preview uses a loopback port on the build host. When reviewing from another computer, forward that port before opening it here.</p>{:else if deliveryState.preview.url}<p class="wk-muted">Preview access lasts eight hours. Use Prepare preview to refresh an expired link.</p>{/if}
-        <p class="wk-stamp" role="status">{deliveryState.preview.status} · {deliveryState.preview.detail}</p>
-        {#if deliveryState.brief.routes.length}
-          <div class="wk-actions" aria-label="Feature routes">{#each deliveryState.brief.routes as route (route)}<button class="wk-chip" class:on={chosenRoute === route} aria-pressed={chosenRoute === route} onclick={() => previewRoute = route}>{route}</button>{/each}</div>
-        {/if}
-        {#if previewHref}<div class:phone class="wk-preview"><iframe title="Isolated feature preview" src={previewHref} sandbox="allow-scripts allow-forms allow-same-origin allow-downloads"></iframe></div>{/if}
+        <DevelopmentPreview delivery={deliveryState} {busy} pending={previewPending} {running} {canInspect} prepare={preparePreview} close={() => act('close_preview')} />
 
-        <h2 class="wk-h2">Acceptance evidence</h2>
-        <p class="wk-muted">Candidate {deliveryState.candidate?.slice(0, 12) ?? 'not prepared'}. Leave these fields unchanged to let the reviewer assess them when you continue; your own verdict always takes precedence over its.</p>
+        <h2 class="wk-h2" id="preview-evidence">Your test results</h2>
+        <p class="wk-muted">Test one criterion at a time. Record what you saw, or leave it untested for the automated reviewer. Your results refer to preview {judgedRevision?.slice(0, 12) ?? 'not prepared'}.</p>
         {#if previewIsBehind}
           <p class="wk-stamp">You are judging revision {judgedRevision?.slice(0, 8)}, which is what the preview is serving. The worker has since produced {deliveryState.candidate?.slice(0, 8)}; your verdict is recorded against what you looked at and will be reassessed when that revision gets a preview.</p>
         {/if}
@@ -396,7 +375,7 @@
                   {#if assessment.independent === false}<p class="wk-warn">No separate adversary is pinned, so this is the build marking its own homework. Pin a Development adversary in the model settings.</p>{/if}
                 </div>
               {:else}
-                <p class="wk-stamp wk-none">Not assessed yet. Continue automatically to have the reviewer judge it.</p>
+                <p class="wk-stamp wk-none">Not assessed yet. Record your test result, or use Review and continue below.</p>
               {/if}
               <div class="wk-criterion-controls">
                 <label class="wk-field wk-narrow"><span class="wk-label">Verdict</span><select aria-label="Verdict for {criterion.text}" bind:value={verdicts[criterion.id]}><option value="unverified">Not exercised</option><option value="passed">Passed</option><option value="failed">Failed</option><option value="blocked">Blocked</option></select></label>
@@ -417,6 +396,11 @@
           <button class="wk-run" disabled={busy || !deliveryState.brief.acceptedAt}>Add to this feature</button>
           {#if !deliveryState.brief.acceptedAt}<span class="wk-stamp">Accept the brief first.</span>{/if}
         </form>
+
+        <div class="wk-review-next">
+          <div><h2 class="wk-h2">Ready for another pass?</h2><p class="wk-muted">Save your observations, then let the reviewer check the brief and continue the build where work remains.</p></div>
+          <button class="wk-run" disabled={busy || running || preparing || expiredPreview || deliveryState.preview.status !== 'ready' || deliveryState.preview.revision !== deliveryState.candidate || !!deliveryState.acceptedAt} onclick={continueAutomatically}>{busy ? 'Reviewing…' : 'Review and continue'}</button>
+        </div>
 
       {:else}
         <SectionHead
@@ -492,6 +476,18 @@
 </DaydreamShell>
 
 <style>
+  .wk-journey { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid rgba(237, 228, 212, .2); border-bottom: 1px solid rgba(237, 228, 212, .2); }
+  .wk-journey button { display: flex; gap: 12px; align-items: center; text-align: left; background: none; color: rgba(237, 228, 212, .7); border: 0; padding: 14px 10px; cursor: pointer; }
+  .wk-journey button[aria-current='step'] { color: var(--bg); background: rgba(237, 228, 212, .08); }
+  .wk-journey span { font: var(--fs-label) var(--font-code); color: var(--accent-on-dark); }
+  .wk-journey strong { font-size: var(--fs-nav); font-weight: 600; }
+  .wk-next { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-top: 16px; }
+  .wk-next p { color: rgba(237, 228, 212, .8); font-size: var(--fs-nav); line-height: 1.5; margin: 0; }
+  .wk-brief-options { align-items: start; margin-bottom: 14px; }
+  .wk-review-next { border-top: 2px solid var(--line-strong); margin-top: 28px; padding-top: 20px; display: flex; align-items: center; gap: 20px; justify-content: space-between; }
+  .wk-review-next .wk-h2 { margin-top: 0; }
+  #preview-evidence { scroll-margin-top: 90px; }
+
   /* The reviewer's own column, set apart from the owner's controls: a rule down
      the left says "this is a report", the way the alert bands do. */
   .wk-assessment {
@@ -545,8 +541,7 @@
   .wk-back:hover { color: var(--accent); }
 
   .wk-run,
-  .wk-ghost,
-  .wk-chip {
+  .wk-ghost {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     letter-spacing: 0.12em;
@@ -569,25 +564,17 @@
     background: var(--accent-hover);
     border-color: var(--accent-hover);
   }
-  .wk-ghost,
-  .wk-chip {
+  .wk-ghost {
     color: var(--text-primary);
     background: transparent;
     border: 1px solid var(--line-strong);
   }
-  .wk-ghost:hover:not(:disabled),
-  .wk-chip:hover:not(:disabled) {
+  .wk-ghost:hover:not(:disabled) {
     border-color: var(--accent);
     color: var(--accent);
   }
-  .wk-chip.on {
-    background: var(--text-primary);
-    border-color: var(--text-primary);
-    color: var(--bg);
-  }
   .wk-run:disabled,
-  .wk-ghost:disabled,
-  .wk-chip:disabled {
+  .wk-ghost:disabled {
     opacity: 0.45;
     cursor: default;
   }
@@ -690,7 +677,7 @@
   .wk-field {
     display: flex;
     flex-direction: column;
-    gap: 7px;
+    gap: 8px;
     margin-bottom: 14px;
     min-width: 0;
   }
@@ -717,6 +704,7 @@
     line-height: 1.5;
   }
   textarea { resize: vertical; }
+  select { min-height: 48px; }
   .wk-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 22px; }
   .wk-actions {
     display: flex;
@@ -799,17 +787,6 @@
     border: 1px solid var(--line);
   }
 
-  /* ——— preview ——— */
-  .wk-preview {
-    width: 100%;
-    height: 650px;
-    margin: 18px 0;
-    border: 1px solid var(--line-strong);
-    background: var(--surface-elevated);
-  }
-  .wk-preview.phone { max-width: 390px; }
-  iframe { width: 100%; height: 100%; border: 0; }
-
   a:focus-visible,
   button:focus-visible,
   input:focus-visible,
@@ -866,6 +843,9 @@
   }
 
   @media (max-width: 760px) {
+    .wk-journey button { flex-direction: column; align-items: start; gap: 6px; }
+    .wk-next, .wk-review-next { flex-direction: column; align-items: stretch; }
+
     /* The rail's controls take one row on a phone and the four of them are
        430px wide against a 390px screen. The way back is the first thing to
        go: jkai's own header already carries `← Develop` two rows above this. */
@@ -873,7 +853,6 @@
     .wk-cols,
     .wk-criterion-controls { grid-template-columns: 1fr; gap: 0; }
     .wk-narrow { max-width: none; }
-    .wk-preview { height: 550px; }
     .wk-event { flex-direction: column; gap: 4px; }
   }
 </style>

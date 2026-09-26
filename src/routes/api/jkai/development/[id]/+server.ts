@@ -45,7 +45,9 @@ export const POST: RequestHandler = async ({ params, request }) => {
   const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, id));
   try {
     if (delivery.state.stage === 'integrating' && body.action !== 'accept') throw new Error('Batch integration is in progress.');
-    if (delivery.state.preview.status === 'starting' && !['steer', 'pause', 'stop', 'note'].includes(body.action)) throw new Error('Preview preparation is in progress. Wait for its result before changing this workspace.');
+    // Observations about the retained preview remain writable while its
+    // replacement is prepared. These actions have their own revision guards.
+    if (delivery.state.preview.status === 'starting' && ![...SCOPED, 'pause', 'stop'].includes(body.action)) throw new Error('Preview preparation is in progress. Wait for its result before changing this workspace.');
     switch (body.action) {
       case 'groom': {
         if (['running', 'queued'].includes(build.status) || delivery.state.brief.acceptedAt) throw new Error('Grooming is available for draft briefs. Pause and edit an accepted brief explicitly.');

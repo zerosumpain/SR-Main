@@ -30,7 +30,7 @@ try {
   assert.equal(page.status, 200, 'Isolated authenticated site must load');
   // Headline line breaks belong to the layout; assert the rendered sentence.
   const rendered = (await page.text()).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
-  assert.ok(rendered.includes('What should the site do next?'), 'Development UI must render in the isolated site');
+  assert.ok(rendered.includes('What should we build?'), 'Development UI must render in the isolated site');
   await call('close-preview');
   assert.equal((await fetch(base, { headers: { cookie }, redirect: 'manual', signal: AbortSignal.timeout(30000) })).status, 401, 'Closing a preview must revoke its access');
   console.log('PASS: production broker, isolated site build, HTTPS preview, anonymous denial, capability access and revocation. No paid model or production database was used.');

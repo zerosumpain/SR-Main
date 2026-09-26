@@ -33,6 +33,8 @@
      * work below the fold.
      */
     compactTitle?: boolean;
+    /** Less cover chrome for a task workspace; other hub pages keep their cover. */
+    compactCover?: boolean;
     standfirst: string;
     /** Mono lines on the right of the masthead — last run, coverage, span. */
     readout?: { label: string; value: string }[];
@@ -67,6 +69,7 @@
     kicker,
     title,
     compactTitle = false,
+    compactCover = false,
     standfirst,
     readout = [],
     live = true,
@@ -82,7 +85,7 @@
   }: Props = $props();
 </script>
 
-<div class="ds">
+<div class="ds" class:compact-cover={compactCover}>
   <!-- ——— the cover ——————————————————————————————————————————————— -->
   <section class="ds-cover">
     <div class="ds-inner">
@@ -188,6 +191,17 @@
   .ds-inner {
     max-width: 1500px;
     margin: 0 auto;
+  }
+  .compact-cover .ds-cover { padding-top: 22px; padding-bottom: 24px; }
+  .compact-cover .ds-mark { display: none; }
+  .compact-cover .ds-kicker { margin-bottom: 10px; }
+  .compact-cover .ds-title { overflow-wrap: anywhere; }
+  .compact-cover .ds-deck { margin-top: 22px; }
+  .compact-cover .ds-standfirst { max-width: 76ch; }
+  .compact-cover { overflow-x: clip; }
+  @media (max-width: 760px) {
+    .compact-cover .ds-cover-top { gap: 16px; }
+    .compact-cover .ds-cover-right { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 16px; }
   }
 
   /* ——— cover ——— */

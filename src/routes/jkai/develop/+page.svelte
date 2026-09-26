@@ -320,8 +320,10 @@
 <DaydreamShell
   path="/jkai/develop"
   kicker="JKAI · Pi site development"
-  title={['What should the', 'site do next?']}
-  standfirst="Describe an outcome and the model proposes acceptance criteria, dependencies and the questions it still has. You review the brief, guide the build, and try the result in an isolated preview. An autonomous run has a reviewer of its own and can carry a finished feature all the way to a pull request."
+  title={['What should we build?']}
+  compactTitle
+  compactCover
+  standfirst="Start with an idea. Shape the brief, build a first version, then try it and ask for changes."
   readout={[
     { label: 'Portfolio', value: `${rows.length} features` },
     { label: 'In flight', value: String(inFlight) },
@@ -332,44 +334,42 @@
   ontab={(id) => setLane(id as LaneTab)}
   footer={[
     'strangeramblings.com/jkai/develop · site development',
-    '01 brief → 02 build → 03 checks → 04 preview → 05 accept → 06 release',
+    '01 brief → 02 build → 03 try & refine → 04 accept',
     'a release opens a pull request; CI decides whether it merges',
   ]}
 >
   {#snippet masthead()}
-    <StatDeck {tiles} dark min={196} />
-  {/snippet}
-
-  <section class="dv-sec">
-    <div class="dv-inner">
-      <SectionHead
-        kicker="01 / Commission"
-        title={['Start with', 'an outcome']}
-        strap="One sentence about what the site should do. The model turns it into a brief you can argue with; nothing is built until you accept one."
-      />
-
+    <div class="dv-commission">
+      <div class="dv-compose">
       <form class="dv-form" onsubmit={(e) => { e.preventDefault(); void create(); }}>
-        <DevelopmentModelSelect bind:value={modelId} disabled={busy} />
-        <label class="dv-field dv-area">
-          <span class="dv-label">Product area</span>
-          <select aria-label="Product area" bind:value={area}>
-            {#each PRODUCT_AREAS as value (value)}<option>{value}</option>{/each}
-          </select>
-        </label>
         <label class="dv-field dv-outcome">
           <span class="dv-label">Intended outcome</span>
           <textarea
             required
+            disabled={busy}
+            rows="3"
             maxlength="20000"
             bind:value={outcome}
             placeholder="For example: compare two weeks of health data and save the comparison."
           ></textarea>
         </label>
-        <button class="dv-go" disabled={busy}>{busy ? 'Opening your draft…' : 'Refine this brief'}</button>
+        <div class="dv-options">
+          <label class="dv-field dv-area">
+            <span class="dv-label">Product area</span>
+            <select aria-label="Product area" bind:value={area} disabled={busy}>
+              {#each PRODUCT_AREAS as value (value)}<option>{value}</option>{/each}
+            </select>
+          </label>
+          <DevelopmentModelSelect bind:value={modelId} disabled={busy} dark />
+        </div>
+        <div class="dv-submit">
+          <p>Your idea is saved as a draft. Review the brief before building.</p>
+        <button class="dv-go" disabled={busy || !outcome.trim()}>{busy ? 'Opening your draft…' : 'Shape this idea →'}</button>
+        </div>
       </form>
 
       <details class="dv-fold" bind:open={advanced}>
-        <summary>How far it may go on its own</summary>
+        <summary>Build options · preview only by default</summary>
         <div class="dv-adv">
           <label class="dv-field dv-narrow">
             <span class="dv-label">Where it stops</span>
@@ -398,13 +398,18 @@
 
       {#if error}<p role="alert" class="dv-error">{error}</p>{/if}
 
-      <p class="dv-aside">
-        Bigger pieces of work live in the epic backlog.
-        <a href="/jkai/daydreams/backlog">Open the epic backlog →</a>
-        <a class="dv-sep" href="/jkai/codegraph">What building this has already taught us →</a>
-      </p>
+      </div>
+      <aside class="dv-journey" aria-label="The build journey">
+        <p class="dv-label">From idea to something you can try</p>
+        <ol>
+          <li><span>01</span><div><strong>Shape the brief</strong><p>Agree what it should do and how you will test it.</p></div></li>
+          <li><span>02</span><div><strong>Build a first version</strong><p>Follow progress and answer questions as they arise.</p></div></li>
+          <li><span>03</span><div><strong>Try the preview</strong><p>Open the feature, test it on desktop and phone, and record what needs work.</p></div></li>
+          <li><span>04</span><div><strong>Refine and accept</strong><p>Request changes, check the next version, then accept the result.</p></div></li>
+        </ol>
+      </aside>
     </div>
-  </section>
+  {/snippet}
 
   {#if lane === 'archive'}
     <section class="dv-sec dv-sec-last">
@@ -499,6 +504,7 @@
           strap="Newest first. The stage is the product's, not the worker's — a running process with no candidate is still Building."
         />
 
+        <div class="dv-overview"><StatDeck {tiles} min={196} /></div>
         <div class="dv-facets">
           <FacetBar label="Area" facets={areaFacets} active={filter} onpick={(id) => (filter = id)} />
         </div>
@@ -576,12 +582,24 @@
   }
 
   /* ——— commission ——— */
-  .dv-form {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 180px minmax(0, 2fr) auto;
-    gap: 18px;
-    align-items: end;
-  }
+  .dv-commission { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(260px, 1fr); gap: clamp(24px, 4vw, 64px); }
+  .dv-compose { min-width: 0; }
+  .dv-form { display: grid; gap: 18px; }
+  .dv-options { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+  .dv-submit { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+  .dv-submit p { margin: 0; font-size: var(--fs-nav); color: rgba(237, 228, 212, .75); max-width: 42ch; }
+  .dv-journey { border-left: 1px solid rgba(237, 228, 212, .2); padding-left: clamp(20px, 3vw, 40px); }
+  .dv-journey ol { list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 20px; }
+  .dv-journey li { display: flex; gap: 14px; }
+  .dv-journey li > span { color: var(--accent-on-dark); font: var(--fs-nav) var(--font-code); }
+  .dv-journey strong { font-size: var(--fs-body); font-weight: 600; }
+  .dv-journey p { font-size: var(--fs-nav); line-height: 1.5; margin: 4px 0 0; color: rgba(237, 228, 212, .75); }
+  .dv-commission .dv-label, .dv-commission summary { color: rgba(237, 228, 212, .75); }
+  .dv-commission .dv-fold { border-color: rgba(237, 228, 212, .2); }
+  .dv-commission .dv-aside, .dv-commission .dv-check { color: rgba(237, 228, 212, .75); }
+  .dv-commission .dv-error { color: var(--accent-on-dark); }
+  .dv-overview { margin-bottom: 28px; }
+  .dv-form select { min-height: 48px; }
   .dv-field {
     display: flex;
     flex-direction: column;
@@ -699,12 +717,6 @@
     color: var(--text-secondary);
     margin: 20px 0 0;
     max-width: 88ch;
-  }
-  .dv-aside a {
-    color: var(--accent-ink);
-  }
-  .dv-sep {
-    margin-left: 14px;
   }
 
   /* ——— the portfolio and the archive share the ledger ——— */
@@ -922,4 +934,13 @@
       text-align: left;
     }
   }
+  @media (max-width: 900px) {
+    .dv-commission { grid-template-columns: minmax(0, 1fr); }
+    .dv-journey { display: none; }
+  }
+  @media (max-width: 600px) {
+    .dv-options { grid-template-columns: minmax(0, 1fr); }
+    .dv-submit { flex-direction: column; align-items: stretch; }
+  }
+
 </style>
