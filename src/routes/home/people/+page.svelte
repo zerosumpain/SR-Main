@@ -28,6 +28,7 @@
   import RollupGrid from '$lib/components/jkai/daydream/hub/RollupGrid.svelte';
   import type { RollupCell } from '$lib/components/jkai/daydream/hub/types';
   import FamilyPerson from '$lib/components/jkai/daydream/rooms/FamilyPerson.svelte';
+  import CircleMap from '$lib/components/home/CircleMap.svelte';
 
   let { data }: { data: PageData } = $props();
 
@@ -154,6 +155,14 @@
 
 {#if data.loadError}
   <section class="band"><div class="inner"><LoadErrorCard kicker="The household did not load" message={data.loadError} /></div></section>
+{/if}
+
+{#if data.positions.length}
+  <section class="band flush-top">
+    <div class="inner">
+      <CircleMap positions={data.positions.map((p) => ({ ...p, label: cap(p.subject) }))} />
+    </div>
+  </section>
 {/if}
 
 <section class="band">

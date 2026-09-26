@@ -163,3 +163,55 @@ export async function loadHousehold(): Promise<{ members: HouseholdPresence[] }>
 
   return { members };
 }
+
+/** A person's last known position, for the household map. */
+export interface LivePosition {
+  subject: string;
+  lat: number;
+  lon: number;
+  /** When the fix was taken. */
+  at: string;
+  isHome: boolean | null;
+}
+
+/** Fixes older than this are not "where they are". */
+const POSITION_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000;
+
+/** ~11 m: enough to see which street, not which room. */
+const round4 = (n: number) => Math.round(n * 1e4) / 1e4;
+
+/**
+ * Where each SHARING person last was — the one read in the household that
+ * carries coordinates, so it is its own function and its own decision: the
+ * owner and a Family Circle viewer get it (the map on /home/people), and
+ * nobody who has chosen not to share is ever in it, whoever is looking.
+ * Choosing not to be tracked has to mean it.
+ */
+export async function livePositions(): Promise<LivePosition[]> {
+  const { subjects, notSharing } = await householdRoster();
+  const sharing = subjects.filter((s) => !notSharing.has(s));
+  if (sharing.length === 0) return [];
+  const since = new Date(Date.now() - POSITION_MAX_AGE_MS);
+  const rows = await db.execute(sql`
+    select distinct on (${daydreamTrail.subject})
+      ${daydreamTrail.subject} as subject,
+      ${daydreamTrail.lat} as lat,
+      ${daydreamTrail.lon} as lon,
+      ${daydreamTrail.ts} as ts,
+      ${daydreamTrail.isHome} as is_home
+    from ${daydreamTrail}
+    where ${daydreamTrail.lat} is not null and ${daydreamTrail.lon} is not null
+      and ${daydreamTrail.subject} in ${sharing}
+      and ${daydreamTrail.ts} >= ${since}
+    order by ${daydreamTrail.subject}, ${daydreamTrail.ts} desc
+  `);
+  return (rows.rows as Array<{ subject: string; lat: number; lon: number; ts: Date | string; is_home: boolean | null }>).map(
+    (r) => ({
+      subject: r.subject,
+      lat: round4(Number(r.lat)),
+      lon: round4(Number(r.lon)),
+      at: new Date(r.ts).toISOString(),
+      isHome: r.is_home,
+    }),
+  );
+}

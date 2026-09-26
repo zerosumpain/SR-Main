@@ -41,7 +41,11 @@ const DETAIL = {
 
 const loadHousehold = vi.fn(async () => ({ members: MEMBERS.map((m) => ({ ...m })) }));
 const loadFamily = vi.fn(async () => ({ members: MEMBERS.map((m) => ({ ...m })), detail: DETAIL }));
-vi.mock('$lib/home/presence/household', () => ({ loadHousehold }));
+// livePositions filters out anyone not sharing itself (in SQL); here it is the
+// already-filtered answer.
+const POSITIONS = [{ subject: 'alex', lat: 54.52, lon: -1.55, at: '2026-09-26T09:00:00.000Z', isHome: false }];
+const livePositions = vi.fn(async () => POSITIONS.map((p) => ({ ...p })));
+vi.mock('$lib/home/presence/household', () => ({ loadHousehold, livePositions }));
 vi.mock('$lib/daydream/ledger', () => ({ loadFamily }));
 
 const { load } = await import('./+page.server');
@@ -132,3 +136,23 @@ describe('/home/people load — D2 scoping', () => {
     expect(data.loadError).not.toContain('daydream_trail');
   });
 });
+
+describe('the household map', () => {
+  it('gives the owner and a household viewer the sharing positions, nobody else anything', async () => {
+    const { load } = await import('./+page.server');
+    householdSubjects.set('sam@example.test', 'sam');
+    const asViewer = (await load(eventFor('sam@example.test') as never)) as { positions: unknown[] };
+    expect(asViewer.positions).toEqual(POSITIONS);
+    await expect(load(eventFor('guest@example.test') as never)).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('draws no map, and nothing else breaks, when positions cannot be read', async () => {
+    const { load } = await import('./+page.server');
+    householdSubjects.set('sam@example.test', 'sam');
+    livePositions.mockRejectedValueOnce(new Error('db down'));
+    const data = (await load(eventFor('sam@example.test') as never)) as { positions: unknown[]; family: { members: unknown[] } };
+    expect(data.positions).toEqual([]);
+    expect(data.family.members.length).toBeGreaterThan(0);
+  });
+});
+
