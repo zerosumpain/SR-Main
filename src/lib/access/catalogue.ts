@@ -91,8 +91,8 @@ export const AREAS: readonly AreaInfo[] = [
   {
     id: 'jkai.notes',
     label: 'jkai · notes',
-    blurb: 'The notebook.',
-    open: false,
+    blurb: 'The notebook, with voice notes. Reviews and weaving stay yours.',
+    open: true,
     levels: { self: 'Own notebook', all: "Also read everyone's", admin: "Also edit everyone's" },
   },
   {
@@ -303,6 +303,14 @@ const ROUTES: Record<string, Partial<Record<Method, Permission>>> = {
 
   // ── news — the desk and a story. Each action checks the grant it needs
   // (graph: jkai.intel, research: research) inside the handler.
+  // ── jkai.notes — the notebook. Every route resolves notes through
+  // $lib/daydream/notebook/access.server (own / household / everyone's, read /
+  // write); review and weave refuse anyone but the owner inside the handler.
+  '/jkai/notes': { GET: 'jkai.notes:self' },
+  '/api/daydream/notes': { GET: 'jkai.notes:self', POST: 'jkai.notes:self' },
+  '/api/daydream/notes/audio': { POST: 'jkai.notes:self' },
+  '/api/daydream/notes/audio/[id]': { GET: 'jkai.notes:self', DELETE: 'jkai.notes:self' },
+
   // ── home — the house, not a person. People are /home/people's (family:circle),
   // and the dashboard's people card follows that rule. The voice log is the
   // whole household's speech, so it opens at `all`, never `self`.

@@ -820,8 +820,10 @@
             <p>The model works beside your note—never inside it.</p>
           </div>
           <div class="engine-controls">
-            <button type="button" class="engine-primary" disabled={busy === 'review'} onclick={reviewNow}>{busy === 'review' ? 'Reading…' : 'Read it now'}</button>
-            <button type="button" disabled={busy === 'weave'} onclick={weaveNow}>{busy === 'weave' ? 'Weaving…' : 'Into the graph'}</button>
+            {#if data.ownerTools}
+              <button type="button" class="engine-primary" disabled={busy === 'review'} onclick={reviewNow}>{busy === 'review' ? 'Reading…' : 'Read it now'}</button>
+              <button type="button" disabled={busy === 'weave'} onclick={weaveNow}>{busy === 'weave' ? 'Weaving…' : 'Into the graph'}</button>
+            {/if}
             <span class="engine-spacer"></span>
             <button type="button" disabled={busy === 'archive'} onclick={archiveNote}>Archive</button>
             <button type="button" class="danger" disabled={busy === 'delete'} onclick={removeNote}>Delete</button>

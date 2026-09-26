@@ -1,3 +1,4 @@
+import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { emptyVoiceSummary, searchUtterances, voiceSummary } from '$lib/alexa/store.server';
 import { errMsg } from '$lib/daydream/types';
@@ -27,7 +28,8 @@ function daysBetween(from: Date, to: Date): string[] {
 
 export const load: PageServerLoad = async (event) => {
   const { url } = event;
-  await areaAccess(event, 'home');
+  // The hook opens this at home:all; this is the second lock.
+  if ((await areaAccess(event, 'home')).level === 'self') error(403, 'Forbidden');
   const asked = Number(url.searchParams.get('days'));
   const days = (WINDOWS as readonly number[]).includes(asked) ? asked : 30;
   try {
