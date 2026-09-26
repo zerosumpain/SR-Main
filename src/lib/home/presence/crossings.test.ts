@@ -3,6 +3,7 @@ import {
   detectCrossings,
   eventId,
   isDuplicate,
+  raisesCrossing,
   stepCrossings,
   type CrossingPlace,
   type InsideState,
@@ -185,5 +186,39 @@ describe('stepCrossings — someone with no position yet', () => {
     expect(r.events).toEqual([]);
     expect(r.state).toMatchObject({ inside: ['p1'], lastId: 42 });
     expect(r.state?.unplaced).toBeUndefined();
+  });
+});
+
+describe('direction — alert on arrive, on leave, or both', () => {
+  const arriveOnly: CrossingPlace = { ...PLACE, alertArrive: true, alertLeave: false };
+  const leaveOnly: CrossingPlace = { ...PLACE, alertArrive: false, alertLeave: true };
+
+  it('raises only the directions the place is set to, and still tracks inside', () => {
+    const inArrive = detectCrossings(none(), north(20), [leaveOnly]);
+    expect(inArrive.events).toEqual([]);
+    expect([...inArrive.inside]).toEqual(['p1']);
+
+    const outLeave = detectCrossings({ inside: new Set(['p1']) }, north(900), [arriveOnly]);
+    expect(outLeave.events).toEqual([]);
+    expect(outLeave.inside.size).toBe(0);
+  });
+
+  it('treats an unset direction as on, which is the column default', () => {
+    expect(detectCrossings(none(), north(20), [PLACE]).events).toEqual([{ placeId: 'p1', kind: 'arrive' }]);
+  });
+
+  it('walks a visit to a leave-only place as one leave, with no phantom arrive after', () => {
+    const s: InsideState = { inside: [], lastId: 0, watched: ['p1'], lastTsMs: 0 };
+    const walk = [300, 20, 30, 400].map((m, i) => north(m, 10, i + 1, i));
+    const r = stepCrossings(s, walk, [leaveOnly]);
+    expect(r.events.map((e) => e.kind)).toEqual(['leave']);
+    expect(r.state?.inside).toEqual([]);
+  });
+
+  it('says which directions a place raises', () => {
+    expect(raisesCrossing(PLACE, 'arrive')).toBe(true);
+    expect(raisesCrossing(arriveOnly, 'leave')).toBe(false);
+    expect(raisesCrossing(leaveOnly, 'arrive')).toBe(false);
+    expect(raisesCrossing(undefined, 'arrive')).toBe(true);
   });
 });

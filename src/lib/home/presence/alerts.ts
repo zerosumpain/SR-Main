@@ -28,6 +28,7 @@ import {
   DEDUPE_WINDOW_MS,
   eventId,
   isDuplicate,
+  raisesCrossing,
   stepCrossings,
   type CrossingKind,
   type CrossingPlace,
@@ -247,6 +248,8 @@ export function planWhatsApp(
     if (silenced.has(ev.subject)) continue;
     const place = places.get(ev.placeId);
     if (!place?.whatsappAlerts) continue;
+    // A direction switched off since the crossing was written is not sent.
+    if (!raisesCrossing(place, ev.kind)) continue;
     const who = displayNameOf(members, ev.subject);
     const { title, body } = alertText(who, ev.kind, placeName(place), ev.at);
     for (const r of whatsappFollowers(members, ev.subject)) {
@@ -289,7 +292,9 @@ export function buildPilotEvents(
   for (const ev of events) {
     // A mover who has stopped sharing (or left the household) since the
     // crossing is not announced; the event is marked done, not kept owed.
-    const recipients = silenced.has(ev.subject) ? [] : pilotRecipients(members, ev.subject);
+    // Same for a direction the place has stopped announcing since.
+    const recipients =
+      silenced.has(ev.subject) || !raisesCrossing(places.get(ev.placeId), ev.kind) ? [] : pilotRecipients(members, ev.subject);
     if (!recipients.length) {
       nobody.push(ev.id);
       continue;
@@ -345,7 +350,8 @@ export async function postToPilot(
 // ── Detection ────────────────────────────────────────────────────────────────
 
 /** The places crossings are watched at: every active place flagged for
- *  alerts, and home whatever its flag says. */
+ *  alerts, and home whatever its flag says. Each carries which directions it
+ *  announces; `stepCrossings` tracks both regardless. */
 export async function loadAlertPlaces(): Promise<AlertPlace[]> {
   const rows = await db
     .select({
@@ -355,6 +361,8 @@ export async function loadAlertPlaces(): Promise<AlertPlace[]> {
       radiusM: daydreamPlaces.radiusM,
       label: daydreamPlaces.label,
       whatsappAlerts: daydreamPlaces.whatsappAlerts,
+      alertArrive: daydreamPlaces.alertArrive,
+      alertLeave: daydreamPlaces.alertLeave,
     })
     .from(daydreamPlaces)
     .where(and(eq(daydreamPlaces.status, 'active'), eq(daydreamPlaces.alerts, true)));
@@ -362,11 +370,23 @@ export async function loadAlertPlaces(): Promise<AlertPlace[]> {
   const out: AlertPlace[] = rows.map((r) => ({ ...r, isHome: r.id === home?.id }));
   if (home && !out.some((p) => p.id === home.id)) {
     const [flags] = await db
-      .select({ whatsappAlerts: daydreamPlaces.whatsappAlerts })
+      .select({
+        whatsappAlerts: daydreamPlaces.whatsappAlerts,
+        alertArrive: daydreamPlaces.alertArrive,
+        alertLeave: daydreamPlaces.alertLeave,
+      })
       .from(daydreamPlaces)
       .where(eq(daydreamPlaces.id, home.id))
       .limit(1);
-    out.push({ ...home, whatsappAlerts: flags?.whatsappAlerts ?? false, isHome: true });
+    // Home is watched whatever `alerts` says; its direction switches still
+    // apply, as they do everywhere.
+    out.push({
+      ...home,
+      whatsappAlerts: flags?.whatsappAlerts ?? false,
+      alertArrive: flags?.alertArrive ?? true,
+      alertLeave: flags?.alertLeave ?? true,
+      isHome: true,
+    });
   }
   return out;
 }
@@ -665,6 +685,8 @@ export async function deliverAlerts(
       radiusM: daydreamPlaces.radiusM,
       label: daydreamPlaces.label,
       whatsappAlerts: daydreamPlaces.whatsappAlerts,
+      alertArrive: daydreamPlaces.alertArrive,
+      alertLeave: daydreamPlaces.alertLeave,
     })
     .from(daydreamPlaces)
     .where(inArray(daydreamPlaces.id, [...new Set(events.map((e) => e.placeId))]));
