@@ -5,6 +5,7 @@ import { eq, and } from 'drizzle-orm';
 import { startRun } from './start-run';
 import { cronTimezone } from '$lib/workflows/cron-timezone';
 import { runsService } from './service-role';
+import { workflowOwner } from './extraction-owner';
 
 // Tracks active Cron instances keyed by schedule ID
 const activeJobs = new Map<string, Cron>();
@@ -38,7 +39,7 @@ const registeredSignature = new Map<string, string>();
  * the role is not enough (two processes can both hold it), so ownership starts
  * false and is granted only by winning the leader lock.
  */
-let cronOwner = process.env.JKAI_RUN_WORKER !== '1' && runsService('scheduler');
+let cronOwner = process.env.JKAI_RUN_WORKER !== '1' && runsService('scheduler') && workflowOwner() === 'main';
 
 /** How often the owner re-syncs its cron jobs against the schedules table. */
 const RECONCILE_INTERVAL_MS = 60_000;
@@ -50,6 +51,7 @@ export function getActiveJobs(): ReadonlyMap<string, Cron> {
 }
 
 export async function startScheduler(): Promise<void> {
+  if (workflowOwner() !== 'main') return;
   // #19 LEADER ELECTION (ADDITIVE, FEATURE-FLAGGED): when the durable run-worker
   // is enabled, the cron lane could fire in BOTH the web process and the worker
   // process. Gate cron registration on a pg advisory lock so exactly one process

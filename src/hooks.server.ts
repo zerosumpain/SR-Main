@@ -37,6 +37,10 @@ import { isRedirect, redirect, type Handle } from '@sveltejs/kit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { env } from '$env/dynamic/private';
 import { runsService } from '$lib/workflows/service-role';
+import { workflowOwner, jkaiCoreOwner } from '$lib/workflows/extraction-owner';
+
+const mainOwnsWorkflows = workflowOwner() === 'main';
+const mainOwnsJkaiCore = jkaiCoreOwner() === 'main';
 
 /**
  * The rate-limit decision, shared by the owner gate and the native device lanes.
@@ -147,16 +151,18 @@ if (runsService('scheduler')) startHealthWatch();
 if (runsService('scheduler')) startConnectorWatch();
 
 // Start the JKAI orphan attachment sweep (runs immediately + hourly)
-if (runsService('background')) startOrphanSweep();
+if (runsService('background') && mainOwnsJkaiCore) startOrphanSweep();
 
 // Install the WhatsApp escalation hook so orchestrator waiters / terminal
 // events fan out to WA when the user isn't attached to the chat stream.
 import { installWaEscalation } from '$lib/workflows/chat/wa-escalation';
-if (runsService('background')) installWaEscalation();
+if (runsService('background') && mainOwnsJkaiCore) installWaEscalation();
 
 // Start the Gmail polling watcher and orchestrator bridge
 import { startWatcher as startGmailWatcher, stopWatcher as stopGmailWatcher } from '$lib/workflows/gmail/watcher';
 import { registerGmailBridge, unregisterGmailBridge } from '$lib/workflows/gmail/orchestrator-bridge';
+// The bridge also pushes into process-local chat subscribers. Keep this pair in
+// Main until a durable cross-app notification contract replaces that push.
 if (runsService('background')) startGmailWatcher();
 if (runsService('background')) registerGmailBridge();
 
@@ -208,7 +214,7 @@ import { runResumeSweep, RESUME_SWEEP_INTERVAL_MS } from '$lib/deepdive/resume';
 import { startRunWorker, stopRunWorker } from '$lib/workflows/run-worker';
 import { webWorkerOptions } from '$lib/workflows/policy-worker-mode';
 if (!building) {
-  const options = webWorkerOptions(runsService('background'));
+  const options = mainOwnsWorkflows ? webWorkerOptions(runsService('background')) : null;
   if (options) startRunWorker();
 }
 if (runsService('background')) {
@@ -216,14 +222,14 @@ if (runsService('background')) {
   // Drains what Drive hands Intelligence. A no-op until Drive is its own
   // application — while both live here, Drive still calls these functions
   // directly and the table stays empty.
-  startDriveIntelOutbox();
+  if (mainOwnsJkaiCore) startDriveIntelOutbox();
   startSelfImprovementSeeds();
   // Monthly, advisory only — it writes a note and never touches the card.
   startVoiceDrift();
   startWorkflowDoctor();
   startBriefingEngine();
   startModelRouting();
-  startIntelEngine();
+  if (mainOwnsJkaiCore) startIntelEngine();
   /**
    * Deliberately delayed, then repeated.
    *
