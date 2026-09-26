@@ -12,7 +12,7 @@ import { searchFiles } from '$lib/file-index/search';
 import { searchResearch } from '$lib/deepdive/research-search';
 import { searchIntel, type IntelItem } from '$lib/jkai/intel/search';
 import { OWNER_INTEL_SCOPE, type IntelScope } from '$lib/jkai/intel/scope';
-import type { AreaAccess } from '$lib/server/area-scope';
+import type { AreaAccess } from '$lib/server/area-predicates';
 import { listCollections, queryRecords } from '$lib/datastore';
 
 export type KnowledgeSource = 'notes' | 'entities' | 'files' | 'research' | 'memory' | 'datastore' | 'activity';

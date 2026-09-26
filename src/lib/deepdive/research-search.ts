@@ -7,7 +7,7 @@
 // without the single-session filter and joined to session topic + source meta so
 // each hit can be cited across sessions.
 
-import { readable, type AreaAccess } from '$lib/server/area-scope';
+import { readable, type AreaAccess } from '$lib/server/area-predicates';
 import { sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { generateEmbedding } from './ai';

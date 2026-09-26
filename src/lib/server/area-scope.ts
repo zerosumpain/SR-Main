@@ -20,17 +20,20 @@
 // lives here, in code, and every route that reads an area's rows calls it.
 
 import { error } from '@sveltejs/kit';
-import { sql, type SQL } from 'drizzle-orm';
-import type { AnyColumn } from 'drizzle-orm';
-import { levelOf, type AreaId, type Level } from '$lib/access/catalogue';
+import { levelOf, type AreaId } from '$lib/access/catalogue';
+import { OWNER_ACCESS, type AreaAccess } from './area-predicates';
+
+export {
+  OWNER_PRINCIPAL,
+  HOUSEHOLD_PRINCIPAL,
+  OWNER_ACCESS,
+  readable,
+  writable,
+  canRead,
+  canWrite,
+  type AreaAccess,
+} from './area-predicates';
 import { viewerOf } from './viewer';
-
-export const OWNER_PRINCIPAL = 'owner';
-export const HOUSEHOLD_PRINCIPAL = 'household';
-
-export type AreaAccess = { level: 'owner' | Level; own: string };
-
-export const OWNER_ACCESS: AreaAccess = Object.freeze({ level: 'owner', own: OWNER_PRINCIPAL });
 
 export async function areaAccess(event: { locals: App.Locals }, area: AreaId): Promise<AreaAccess> {
   const viewer = await viewerOf(event);
@@ -40,33 +43,5 @@ export async function areaAccess(event: { locals: App.Locals }, area: AreaId): P
     if (level) return { level, own: viewer.principalId };
   }
   throw error(403, 'Forbidden');
-}
-
-/** The rows a reader may see. */
-export function readable(column: SQL | AnyColumn, access: AreaAccess): SQL {
-  if (access.level === 'owner') return sql`true`;
-  if (access.level === 'self') return sql`${column} in (${access.own}, ${HOUSEHOLD_PRINCIPAL})`;
-  return sql`${column} <> ${OWNER_PRINCIPAL}`;
-}
-
-/** The rows a reader may change. */
-export function writable(column: SQL | AnyColumn, access: AreaAccess): SQL {
-  if (access.level === 'owner') return sql`true`;
-  if (access.level === 'admin') return sql`${column} <> ${OWNER_PRINCIPAL}`;
-  return sql`${column} = ${access.own}`;
-}
-
-/** `readable`, for one row already in hand. */
-export function canRead(principalId: string, access: AreaAccess): boolean {
-  if (access.level === 'owner') return true;
-  if (access.level === 'self') return principalId === access.own || principalId === HOUSEHOLD_PRINCIPAL;
-  return principalId !== OWNER_PRINCIPAL;
-}
-
-/** `writable`, for one row already in hand. */
-export function canWrite(principalId: string, access: AreaAccess): boolean {
-  if (access.level === 'owner') return true;
-  if (access.level === 'admin') return principalId !== OWNER_PRINCIPAL;
-  return principalId === access.own;
 }
 
