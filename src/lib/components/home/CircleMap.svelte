@@ -149,9 +149,12 @@
     background: var(--surface-sunken);
     border: 1px solid var(--line-strong);
   }
+  /* A site-wide `img { max-width: 100% }` shrank each 512px tile to the
+     map's width below 512px, leaving a blank band between tiles on a phone. */
   .tile {
     position: absolute;
     width: 512px;
+    max-width: none;
     height: 512px;
     user-select: none;
   }
