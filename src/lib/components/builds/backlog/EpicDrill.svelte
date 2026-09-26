@@ -530,16 +530,21 @@
       gap: 6px;
       padding: 12px 4px;
     }
+    /* The vocabulary's `td.right` is `width: 1%; nowrap` — right for a table
+       column, and it shrinks a stacked cell to nothing, clipping its buttons. */
     .tbl tbody tr > :global(td) {
       display: block;
+      width: auto;
       padding: 0;
       border: 0;
       min-width: 0;
+      white-space: normal;
+      text-align: left;
     }
     .why {
       min-width: 0;
     }
-    .act-stack {
+    .tbl .act-stack {
       justify-content: flex-start;
     }
   }
