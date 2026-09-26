@@ -8,16 +8,8 @@ const h = vi.hoisted(() => ({
   pushFresh: false,
   alertsFail: false,
   alertCalls: [] as string[],
-  viewsFail: false,
 }));
 
-vi.mock('$lib/home/presence/app-view', () => ({
-  pushAppViews: async () => {
-    h.alertCalls.push('views');
-    if (h.viewsFail) throw new Error('pilot down');
-    return { stored: 2, refused: 1 };
-  },
-}));
 
 vi.mock('$lib/home/presence/alerts', () => ({
   runCrossings: async () => {
@@ -53,6 +45,7 @@ vi.mock('$lib/home/presence/observe', () => ({
   recordGap: async () => {},
 }));
 
+// household-live owns the companion pull now; observe must never make it.
 vi.mock('$lib/home/presence/companion', () => ({
   ingestCompanion: async () => {
     h.companionCalls++;
@@ -84,16 +77,14 @@ beforeEach(() => {
   h.pushFresh = false;
   h.alertsFail = false;
   h.alertCalls = [];
-  h.viewsFail = false;
 });
 
 describe('home-observe', () => {
-  it('polls Home Assistant only for life360 members, then pulls the companion lane', async () => {
+  it('polls Home Assistant only for life360 members, and leaves the companion lane to household-live', async () => {
     h.members = [member('p', 'life360'), member('q', 'companion'), member('r', 'none')];
-    const res = await homeObserve.run(ctx);
+    await homeObserve.run(ctx);
     expect(h.polled).toEqual(['p=person.p']);
-    expect(h.companionCalls).toBe(1);
-    expect(res.summary).toContain('companion: 2 written, 1 unmapped');
+    expect(h.companionCalls).toBe(0);
   });
 
   it('polls nobody and skips companion when the members read fails, without an error outcome', async () => {
@@ -120,19 +111,18 @@ describe('home-observe', () => {
     expect(h.polled).toEqual(['p=person.p']);
   });
 
-  it('still pulls companion fixes while the push stream lets the poll stand down', async () => {
+  it('stands the poll down while the push stream is fresh', async () => {
     h.pushFresh = true;
     h.members = [member('john', 'life360'), member('q', 'companion')];
     const res = await homeObserve.run(ctx);
     expect(h.polled).toEqual([]);
-    expect(h.companionCalls).toBe(1);
     expect(res.summary).toContain('push stream fresh');
   });
 
   it('raises crossings after the fixes are written, then delivers them', async () => {
     h.members = [member('p', 'life360'), member('q', 'companion')];
     const res = await homeObserve.run(ctx);
-    expect(h.alertCalls).toEqual(['crossings', 'deliver', 'views']);
+    expect(h.alertCalls).toEqual(['crossings', 'deliver']);
     expect(res.summary).toContain('crossings: 1 new');
     expect(res.summary).toContain('alerts: 1 to the app, WhatsApp to …000');
   });
@@ -144,15 +134,5 @@ describe('home-observe', () => {
     expect(res.outcome).toBe('ok');
     expect(res.summary).toContain('crossings failed');
     expect(res.summary).toContain('alerts failed');
-  });
-
-  it('files the app views last, and a failure there never fails the run', async () => {
-    h.members = [member('p', 'life360')];
-    const ok = await homeObserve.run(ctx);
-    expect(ok.summary).toContain('app views: 2 stored, 1 not in the Family Circle');
-    h.viewsFail = true;
-    const failed = await homeObserve.run(ctx);
-    expect(failed.outcome).toBe('ok');
-    expect(failed.summary).toContain('app views failed: pilot down');
   });
 });

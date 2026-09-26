@@ -30,6 +30,13 @@ vi.mock('./household', () => ({
     { subject: 'sam', lat: 51.6, lon: -0.2, at: '2026-09-26T08:58:00.000Z', isHome: true },
   ],
 }));
+vi.mock('./places', () => ({
+  listPanelPlaces: async () => [
+    { id: 'h', label: null, lat: 40.76, lon: -73.97, radiusM: 120, isHome: true, trackOnLeave: true },
+    { id: 's', label: 'School', lat: 40.78, lon: -73.96, radiusM: 150, isHome: false, trackOnLeave: true },
+    { id: 'g', label: 'Gym', lat: 40.77, lon: -73.95, radiusM: 80, isHome: false, trackOnLeave: false },
+  ],
+}));
 vi.mock('./viewer', async (orig) => {
   const real = await orig<typeof import('./viewer')>();
   return { ...real, peopleViewerForEmail: async (email: string) => h.viewers.get(email) ?? null };
@@ -207,6 +214,28 @@ describe('pushAppViews', () => {
     const body = h.posted[0] as { views: Array<{ email: string; view: { people: Array<{ subject: string; self: boolean }> } }> };
     expect(body.views.map((v) => v.email)).toEqual(['owner@example.test']);
     expect(body.views[0].view.people.find((p) => p.subject === 'john')?.self).toBe(true);
+  });
+
+  it('carries the watched places — home unnamed reads as Home — and never an unflagged one', async () => {
+    h.users = [{ email: 'owner@example.test', name: 'J', sharing: true }];
+    h.viewers.set('owner@example.test', { kind: 'owner' });
+    await pushAppViews(members, fakeFetch(), NOW);
+    const body = h.posted[0] as { views: Array<{ view: { watch: Array<{ id: string; label: string }> } }> };
+    expect(body.views[0].view.watch.map((w) => [w.id, w.label])).toEqual([
+      ['h', 'Home'],
+      ['s', 'School'],
+    ]);
+  });
+
+  it('gives a household member outside the Family Circle the watched places and nobody', async () => {
+    h.users = [{ email: 'kid@example.test', name: 'K', sharing: true }];
+    const withKid = [...members, { ...members[0], subject: 'kid', email: 'kid@example.test', displayName: 'Kid' }];
+    const res = await pushAppViews(withKid, fakeFetch(), NOW);
+    expect(res).toMatchObject({ refused: 1 });
+    const body = h.posted[0] as { views: Array<{ email: string; view: { viewer: string; people: unknown[]; watch: unknown[] } }> };
+    expect(body.views).toHaveLength(1);
+    expect(body.views[0]).toMatchObject({ email: 'kid@example.test', view: { viewer: 'none', people: [] } });
+    expect(body.views[0].view.watch).toHaveLength(2);
   });
 
   it('still posts an empty set when nobody qualifies, so a revoked view is cleared', async () => {

@@ -118,6 +118,7 @@
       alertArrive: place.alertArrive,
       alertLeave: place.alertLeave,
       whatsappAlerts: place.whatsappAlerts,
+      trackOnLeave: place.trackOnLeave,
     };
     for (const [name, v] of Object.entries(stored)) {
       const el = box(name);
@@ -216,6 +217,13 @@
       </label>
     </fieldset>
     {#if !notifyOn}<p class="quiet">No notifications. Who is here is still tracked.</p>{/if}
+    <label class="toggle">
+      <input type="checkbox" name="trackOnLeave" checked={place.trackOnLeave} onchange={submitOnChange} />
+      <span>Track closely after leaving</span>
+    </label>
+    <p class="quiet">
+      Phones on the app record a position every second once someone leaves, until they have been still for five minutes.
+    </p>
     <noscript><button class="btn" type="submit">Save alerts</button></noscript>
     {#if form?.notified === place.id}<span class="note good inline" role="status">Saved.</span>{/if}
   </form>
