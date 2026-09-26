@@ -157,8 +157,17 @@ describe('family:circle — a Family Circle member reaches People and nothing el
   });
 
   it('lists only routes that exist', () => {
-    expect(routeIdsFor('family:circle').sort()).toEqual(['/home/people', '/home/people/[subject]']);
+    // The pages, plus one API: "Your day", keyed on the session alone.
+    expect(routeIdsFor('family:circle').sort()).toEqual([
+      '/api/home/people/my-day',
+      '/home/people',
+      '/home/people/[subject]',
+    ]);
     for (const id of routeIdsFor('family:circle')) {
+      if (id.startsWith('/api/')) {
+        expect(existsSync(`src/routes${id}/+server.ts`), id).toBe(true);
+        continue;
+      }
       expect(existsSync(`src/routes${id}/+page.svelte`), id).toBe(true);
       expect(existsSync(`src/routes${id}/+page.server.ts`), id).toBe(true);
     }

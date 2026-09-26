@@ -110,3 +110,34 @@ route must resolve them). Labels in format.ts; a "Commuting" chip in the ledger;
 ledger totals and from `mergeOutings` totals; `listActivities()` (analytics etc.) untouched;
 `/api/trails/activities` (used by SR-Main native-trails → iPhone) EXCLUDES commuting unless
 `?include=commuting` so the phone's list is unchanged. Detail page works (map, speed not pace).
+
+# Phase 2 — retire the /apple-app dashboard (John: "do that then", 2026-09-26 ~15:10Z)
+
+## Contract F — pilot (SR-AppleApp), household token as before
+- `POST /api/apple/household/data/delete` `{email}` → exactly what `DELETE /api/apple/data` does for that user
+  (health, tombstones, locations, alerts, device + pair credentials wiped; sharing=0). Owner's family only; 404 unknown.
+  200 `{deleted:{health:n, locations:n, ...}}` (counts if cheap, else `{ok:true}`).
+- `GET /api/apple/household/day?email=&from=<ISO>&to=<ISO>&tz=<minutes offset>` → for that user, the SAME payload the
+  dashboard's Movement tab builds from `/api/apple/track` + `/api/apple/timeline` for that window (track fixes, segments,
+  activities/journeys, heart-rate, workouts, sleep unioned, step RECORDS). Reuse server/movement.mjs functions — no copy.
+  Window ≤ 48 h (400 otherwise). Owner family only.
+- `/apple-app` and `/apple-app/*` (the static dashboard) → 308 to `https://strangeramblings.com/welcome` (use
+  APPLE_PUBLIC_ORIGIN), EXCEPT when DEMO_MODE local preview needs it? No — delete the dashboard: server/public/*,
+  its static serving, scripts/browser-check.mjs parts for it, and docs that describe it. `/api/apple/*` untouched,
+  including session-auth endpoints (the iPhone uses device auth; keep session paths working, they're harmless).
+  Keep `/api/apple/pair-code` (session) etc. as-is.
+
+## Contract G — SR-Main
+- `/welcome` signed-in: a quiet "Your data" section at the foot: "Delete my uploaded data" (health & location records
+  the app uploaded; unpairs the phone; Apple Health on the phone untouched) with a typed/two-step confirm → Contract F delete.
+  Only when the person has a pilot account (pilot 404 ⇒ show nothing). Also note the site's own /home/people trail is
+  separate — say what it does and does not delete, honestly (does the household trail copy in daydream_trail get removed?
+  Decide: ALSO delete that person's `source='companion'` trail rows in SR-Main, since the user expects "my location data"
+  gone; state it in the confirm text).
+- `/home/people/[subject]` "Your day" section: ONLY when the viewer IS that subject (their own page; owner on own page).
+  Day picker (today default, back 30 days), map of the day's track (reuse CommuteMap/mapbox pattern), timeline strip under
+  it: heart rate line, sleep bands, workouts, step records; scrubbing the timeline moves a dot along the track (the
+  dashboard's behaviour — read SR-AppleApp server/public/movement.js + map.js on origin/main for exact semantics: segments
+  split >600 s gaps drawn dashed, days bucketed in the browser's tz offset, sleep unioned). Data from Contract F `day`
+  via a server endpoint/loader keyed on the signed-in email (never a subject param for someone else).
+- Admin nav / any remaining links to /apple-app → /welcome or removed.

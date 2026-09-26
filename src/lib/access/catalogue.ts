@@ -262,13 +262,17 @@ const ROUTES: Record<string, Partial<Record<Method, Permission>>> = {
   '/api/gmail/callback': { GET: 'jkai.intel:self' },
 
   // ── family:circle — the People room and a person page under it. Nothing else
-  // under /home (voice, echoes and devices are the `home` area) and no API.
+  // under /home (voice, echoes and devices are the `home` area).
   // Reaching the route is not seeing everything on it: both loads scope their
   // payload to the viewer (`peopleViewerOf`, `scopeHousehold` in
   // $lib/home/presence/viewer), and a circle viewer's own page is the only
   // person page that opens for them.
   '/home/people': { GET: 'family:circle' },
   '/home/people/[subject]': { GET: 'family:circle' },
+  // The one API: "Your day" on their own person page. It takes no subject and
+  // no email — the day is read for the SESSION's email (`ownDayOf`), so the
+  // route can only ever answer with the caller's own track and health.
+  '/api/home/people/my-day': { GET: 'family:circle' },
 
   // ── research — runs a member may read, start and change. Every route here
   // resolves the session through `requireResearchSession` (or the list through

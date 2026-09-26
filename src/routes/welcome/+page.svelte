@@ -60,6 +60,20 @@
   }
 
   const firstName = $derived(data.signedIn ? data.name.split(/\s+/)[0] : '');
+
+  // ── Your data: delete what the app uploaded ───────────────────────────────
+  // Two steps: the first button only opens the confirm, which says what goes
+  // and what stays and asks for the word typed. The server checks the word
+  // again; the page is never trusted to have asked.
+  let confirmOpen = $state(false);
+  let confirmWord = $state('');
+  let deleting = $state(false);
+  let deleteError = $state('');
+  let deletedLocal = $state<{ trailRows: number } | null>(null);
+  const deleted = $derived<{ trailRows: number } | null>(
+    deletedLocal ?? (form && 'deleted' in form ? (form.deleted as { trailRows: number }) : null),
+  );
+  const deleteFormError = $derived(deleteError || (form && 'deleteError' in form ? String(form.deleteError) : ''));
 </script>
 
 <svelte:head>
@@ -292,6 +306,96 @@
         </div>
       </section>
     {/if}
+
+    {#if data.hasAppAccount}
+      <!-- Your data: quiet, at the foot -->
+      <section class="w-card quiet" data-card="your-data">
+        <div class="w-card-hd"><h2>Your data</h2></div>
+        {#if deleted}
+          <p class="w-done" role="status">
+            Done. The app server no longer holds anything your phone uploaded, and this site's copy of your movement
+            is gone ({deleted.trailRows} location {deleted.trailRows === 1 ? 'record' : 'records'}). Your phone is
+            unpaired and sharing is off; pair again above whenever you like.
+          </p>
+        {:else}
+          <p>
+            Everything the SR app has uploaded for you lives on John's server. You can delete it all here, at any
+            time.
+          </p>
+          {#if !confirmOpen}
+            <div class="w-row">
+              <button type="button" class="w-btn ghost" onclick={() => (confirmOpen = true)}>
+                Delete my uploaded data…
+              </button>
+            </div>
+          {:else}
+            <div class="confirm" role="group" aria-labelledby="confirm-hd">
+              <p id="confirm-hd" class="confirm-hd">This deletes, for good:</p>
+              <ul>
+                <li>every health record and location the app uploaded for you, on the app server;</li>
+                <li>
+                  this site's copy of your movement — the location history /home/people draws from your iPhone;
+                </li>
+                <li>your phone's pairing, so it stops uploading, and your location sharing (it turns off).</li>
+              </ul>
+              <p class="confirm-hd">It does not touch:</p>
+              <ul>
+                <li>Apple Health on your phone — nothing on the phone itself is deleted;</li>
+                <li>location John's home system recorded through Life360, which is kept separately;</li>
+                <li>places named on the family map, and your sign-in here.</li>
+              </ul>
+              <form
+                method="POST"
+                action="?/deleteData"
+                use:enhance={() => {
+                  deleting = true;
+                  deleteError = '';
+                  return async ({ result }) => {
+                    if (result.type === 'success' && result.data?.deleted) {
+                      deletedLocal = result.data.deleted as { trailRows: number };
+                      sharingLocal = false;
+                      pairLocal = null;
+                    } else if (result.type === 'failure') {
+                      deleteError = String(result.data?.deleteError ?? 'That did not work.');
+                    } else if (result.type === 'error') {
+                      deleteError = 'That did not work.';
+                    }
+                    deleting = false;
+                  };
+                }}
+              >
+                <label class="w-field">
+                  <span>Type “delete” to confirm</span>
+                  <input
+                    class="w-input"
+                    name="confirm"
+                    autocomplete="off"
+                    autocapitalize="off"
+                    spellcheck="false"
+                    bind:value={confirmWord}
+                  />
+                </label>
+                {#if deleteFormError}<p class="w-error" role="alert">{deleteFormError}</p>{/if}
+                <div class="w-row">
+                  <button class="w-btn danger" disabled={deleting || confirmWord.trim().toLowerCase() !== 'delete'}>
+                    {deleting ? 'Deleting…' : 'Delete it all'}
+                  </button>
+                  <button
+                    type="button"
+                    class="w-btn ghost"
+                    onclick={() => {
+                      confirmOpen = false;
+                      confirmWord = '';
+                      deleteError = '';
+                    }}>Keep it</button
+                  >
+                </div>
+              </form>
+            </div>
+          {/if}
+        {/if}
+      </section>
+    {/if}
   {/if}
 </WelcomeFrame>
 
@@ -333,4 +437,31 @@
     overflow-wrap: anywhere;
     user-select: all;
   }
+  .quiet { background: var(--bg); }
+  .confirm {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    border-top: 1px solid var(--line-strong);
+    padding-top: 0.9rem;
+  }
+  .confirm .confirm-hd {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-primary);
+  }
+  .confirm ul {
+    margin: 0;
+    padding-left: 1.1rem;
+    display: grid;
+    gap: 0.3rem;
+    font-size: var(--fs-body-sm);
+    line-height: 1.5;
+    color: var(--text-secondary);
+  }
+  .confirm form { display: flex; flex-direction: column; gap: 0.8rem; margin-top: 0.4rem; }
+  .w-btn.danger { background: var(--error); border-color: var(--error); color: var(--bg); }
+  .w-btn.danger:hover:not(:disabled) { background: var(--text-primary); border-color: var(--text-primary); }
 </style>

@@ -45,14 +45,11 @@ export const POST: RequestHandler = async ({ locals, url }) => {
 
   // The QR is rendered HERE, server-side, and handed over as a data URL.
   //
-  // The page that shows it is the companion dashboard at /apple-app, which is
-  // served by a different process on the same hostname. Returning only the
-  // payload would mean that page needs a QR library, and its CSP is
-  // `script-src 'self'` — so the library would have to be vendored into the
-  // pilot, which is the one thing worth avoiding here: the pilot server has no
-  // business handling a credential that opens chat and the whole news desk.
-  // A data URL crosses as an image, under that page's `img-src 'self' data:`,
-  // and the token itself never reaches the pilot's server at all.
+  // It was first shown by the pilot's own dashboard (/apple-app, retired
+  // 2026-09-26), a different process on the same hostname whose CSP ruled out
+  // a QR library — hence a data URL, which crosses as an image and keeps the
+  // token away from the pilot's server. The callers now are /welcome and
+  // /admin/access/devices, which render the same data URL.
   const qr = await QRCode.toDataURL(payload, { errorCorrectionLevel: 'M', margin: 4, scale: 6 });
 
   return json({ code, expiresAt: expiresAt.toISOString(), payload, qr });

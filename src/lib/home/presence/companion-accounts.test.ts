@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  deletePilotData,
   listPilotDevices,
+  pilotDay,
   pilotFailureText,
   pilotPairCode,
   revokePilotDevice,
@@ -117,5 +119,109 @@ describe('the companion accounts client', () => {
     for (const r of ['unconfigured', 'unreachable', 'refused', 'not-found', 'conflict', 'bad-response'] as const) {
       expect(pilotFailureText(r).length).toBeGreaterThan(10);
     }
+  });
+});
+
+describe('phase 2: deleting uploaded data', () => {
+  it('posts the email, lower-cased, to household/data/delete and keeps the counts', async () => {
+    const f = fake(200, { deleted: { health: 12, locations: 340, alerts: 1, junk: 'x' } });
+    const r = await deletePilotData('Jane@Example.com', f.impl);
+    expect(r).toEqual({ ok: true, value: { counts: { health: 12, locations: 340, alerts: 1 } } });
+    expect(f.calls[0].url).toBe('http://pilot.test:5295/api/apple/household/data/delete');
+    expect(f.calls[0].init.method).toBe('POST');
+    expect((f.calls[0].init.headers as Record<string, string>).Authorization).toBe('Bearer tok-123');
+    expect(JSON.parse(String(f.calls[0].init.body))).toEqual({ email: 'jane@example.com' });
+  });
+
+  it('accepts a bare {ok:true}', async () => {
+    expect(await deletePilotData('a@b.com', fake(200, { ok: true }).impl)).toEqual({ ok: true, value: { counts: {} } });
+  });
+
+  it('never reports a deletion the pilot did not confirm', async () => {
+    expect(await deletePilotData('a@b.com', fake(200, { nope: 1 }).impl)).toEqual({ ok: false, reason: 'bad-response' });
+    expect(await deletePilotData('a@b.com', fake(404, { error: 'no' }).impl)).toEqual({
+      ok: false,
+      reason: 'not-found',
+      status: 404,
+    });
+  });
+});
+
+describe('phase 2: one day', () => {
+  // Made-up coordinates (51.0, -1.0): this repo is public.
+  const TRACK = {
+    date: '2026-09-20',
+    from: 1_789_858_800,
+    to: 1_789_945_200,
+    points: [
+      [-1.0, 51.0, 1_789_880_000, 8, 1, 1.4],
+      [-1.001, 51.001, 1_789_880_030, 6, 1, 1.5],
+      ['bad'],
+    ],
+    segments: [[0, 1]],
+    activities: [{ kind: 'journey', first: 0, last: 1, from: 1_789_880_000, to: 1_789_880_030, seconds: 30, metres: 130, fixes: 2 }],
+    totals: { fixes: 2, metres: 130, movingSeconds: 30, journeys: 1 },
+    gapSeconds: 600,
+    retentionDays: 30,
+    truncated: false,
+  };
+  const TIMELINE = {
+    from: 1_789_858_800,
+    to: 1_789_945_200,
+    heartRate: { seconds: 300, bins: [[1_789_880_000, 72], ['x', 1]] },
+    restingHeartRate: { value: 55, at: '2026-09-20T06:00:00Z' },
+    steps: [{ value: 8000, start: '2026-09-19T23:00:00Z', end: '2026-09-20T23:00:00Z', source: 'iPhone' }],
+    workouts: [{ activity: 'Walk', start: '2026-09-20T07:00:00Z', end: '2026-09-20T07:30:00Z', seconds: 1800, distance: 2100, energy: 90 }],
+    sleep: [{ stage: 'core', start: '2026-09-19T22:30:00Z', end: '2026-09-20T05:30:00Z', source: 'Watch' }, { stage: 'deep', start: 'nope', end: 'x' }],
+  };
+  const WINDOW = { from: 1_789_858_800, to: 1_789_945_200, tz: -60 };
+
+  it('asks for the window as ISO with the tz offset, email lower-cased', async () => {
+    const f = fake(200, { track: TRACK, timeline: TIMELINE });
+    const r = await pilotDay('Jane@Example.com', WINDOW, f.impl);
+    const url = new URL(f.calls[0].url);
+    expect(url.pathname).toBe('/api/apple/household/day');
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      email: 'jane@example.com',
+      from: new Date(WINDOW.from * 1000).toISOString(),
+      to: new Date(WINDOW.to * 1000).toISOString(),
+      tz: '-60',
+    });
+    expect(f.calls[0].init.method).toBe('GET');
+    expect(r.ok).toBe(true);
+  });
+
+  it('reads the track and timeline defensively', async () => {
+    const r = await pilotDay('jane@example.com', WINDOW, fake(200, { track: TRACK, timeline: TIMELINE }).impl);
+    if (!r.ok) throw new Error('expected ok');
+    // One malformed point dropped — so the pilot's indices no longer line up
+    // and segments/activities are left for the page to rebuild.
+    expect(r.value.track.points).toHaveLength(2);
+    expect(r.value.track.segments).toEqual([]);
+    expect(r.value.track.activities).toEqual([]);
+    expect(r.value.track.totals).toEqual({ fixes: 2, metres: 130, movingSeconds: 30, journeys: 1 });
+    expect(r.value.timeline.heartRate).toEqual({ seconds: 300, bins: [[1_789_880_000, 72]] });
+    expect(r.value.timeline.sleep).toEqual([{ stage: 'core', start: '2026-09-19T22:30:00Z', end: '2026-09-20T05:30:00Z' }]);
+    expect(r.value.timeline.steps).toEqual([{ value: 8000, start: '2026-09-19T23:00:00Z', end: '2026-09-20T23:00:00Z' }]);
+    expect(r.value.timeline.workouts[0]).toMatchObject({ activity: 'Walk', seconds: 1800, distance: 2100 });
+    expect(r.value.timeline.restingHeartRate).toEqual({ value: 55, at: '2026-09-20T06:00:00Z' });
+  });
+
+  it('keeps segments and activities when every point is good', async () => {
+    const clean = { ...TRACK, points: TRACK.points.slice(0, 2) };
+    const r = await pilotDay('jane@example.com', WINDOW, fake(200, { track: clean, timeline: {} }).impl);
+    if (!r.ok) throw new Error('expected ok');
+    expect(r.value.track.segments).toEqual([[0, 1]]);
+    expect(r.value.track.activities).toHaveLength(1);
+    expect(r.value.timeline.heartRate.bins).toEqual([]);
+  });
+
+  it('refuses an answer with no track, and maps 404 to not-found', async () => {
+    expect(await pilotDay('a@b.com', WINDOW, fake(200, { timeline: {} }).impl)).toEqual({ ok: false, reason: 'bad-response' });
+    expect(await pilotDay('a@b.com', WINDOW, fake(404, { error: 'unknown' }).impl)).toEqual({
+      ok: false,
+      reason: 'not-found',
+      status: 404,
+    });
   });
 });

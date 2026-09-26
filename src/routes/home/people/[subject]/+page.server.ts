@@ -3,6 +3,7 @@ import type { PageServerLoad } from './$types';
 import { listMembers } from '$lib/home/presence/members';
 import { mayOpenPerson, peopleViewerOf } from '$lib/home/presence/viewer';
 import { loadPersonMovement } from '$lib/home/presence/movement';
+import { ownDayOf } from '$lib/home/presence/my-day';
 import type { Commute } from '$lib/home/presence/commuting';
 import { DEFAULT_WINDOW_DAYS, type MovementStats } from '$lib/home/presence/stats';
 
@@ -40,8 +41,18 @@ export const load: PageServerLoad = async (event) => {
     loadError = 'The trail could not be read just now.';
   }
 
+  // "Your day" (spec Contract G) shows only on the viewer's OWN page: a
+  // circle member on theirs, the owner on theirs. The owner on anyone else's
+  // page, and a Family Admin on a ward's, see nothing of it — the day is read
+  // from the viewer's own phone account, not the subject's. The section loads
+  // its data lazily from /api/home/people/my-day, which is keyed on the
+  // session alone; this flag only decides whether to offer it.
+  const own = await ownDayOf(event).catch(() => null);
+  const yourDay = !!own && own.subject === member.subject;
+
   return {
     subject: member.subject,
+    yourDay,
     displayName: member.displayName,
     days: DEFAULT_WINDOW_DAYS,
     stats,
