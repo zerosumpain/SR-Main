@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CommuteMap from '$lib/components/home/CommuteMap.svelte';
   import HomeFrame from '$lib/components/home/HomeFrame.svelte';
   import LoadErrorCard from '$lib/components/jkai/daydream/hub/LoadErrorCard.svelte';
   import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
@@ -8,8 +9,9 @@
   /**
    * One person's movement — /home/people/[subject]. The load decides who may
    * open it (the owner anyone's, a household viewer only their own) and sends
-   * figures only: counts, distances, clock times and the names of places. No
-   * map and no coordinates, by design (spec section 5).
+   * figures: counts, distances, clock times and the names of places. The one
+   * exception is Commuting (spec D3, 2026-09-26): the newest drives and train
+   * rides carry a thinned route, drawn on a small map under the row selected.
    *
    * Where the time went comes first — each named place's share of the
    * window, then the journeys between places — because that is the question
@@ -166,6 +168,32 @@
     return h ? `${d}d ${h}h` : `${d}d`;
   }
   const daysNewest = $derived([...outDays].reverse());
+
+  // ── Commuting ───────────────────────────────────────────────────────────
+  /** Rows shown before "Show all": keeps the page short on a phone. */
+  const COMMUTE_SHOWN = 5;
+  const commutes = $derived(data.commuting ?? []);
+  let showAllCommutes = $state(false);
+  let selectedCommute = $state<string | null>(null);
+  const visibleCommutes = $derived(showAllCommutes ? commutes : commutes.slice(0, COMMUTE_SHOWN));
+  const COMMUTE_MODE = { car: 'By car', rail: 'By train' } as const;
+  const WHEN_FMT = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  });
+  const CLOCK_FMT = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  const when = (iso: string) => `${WHEN_FMT.format(new Date(iso))} · ${CLOCK_FMT.format(new Date(iso))}`;
+  const endName = (label: string | null) => label ?? 'unnamed';
+  function toggleCommute(id: string) {
+    selectedCommute = selectedCommute === id ? null : id;
+  }
 </script>
 
 <HomeFrame
@@ -284,7 +312,57 @@
     <section class="band">
       <div class="inner">
         <SectionHead
-          kicker="C / Time out"
+          kicker="C / Commuting"
+          title={['Drives', 'and trains']}
+          strap="The last {data.days} days’ car and train journeys, newest first. Train or car is read from speed and a straight line, so a motorway can pass for a train. Select one to see its route."
+        />
+        {#if commutes.length}
+          <ul class="commutes">
+            {#each visibleCommutes as c (c.id)}
+              {@const open = selectedCommute === c.id}
+              <li class:open>
+                <button
+                  type="button"
+                  class="commute"
+                  aria-expanded={open}
+                  aria-controls="route-{c.id}"
+                  onclick={() => toggleCommute(c.id)}
+                >
+                  <span class="c-when num">{when(c.startedAt)}</span>
+                  <span class="c-mode">{COMMUTE_MODE[c.mode]}</span>
+                  <span class="c-route">
+                    <span class:dim={!c.fromLabel}>{endName(c.fromLabel)}</span><span class="arrow" aria-hidden="true">→</span><span class="vh"> to </span><span class:dim={!c.toLabel}>{endName(c.toLabel)}</span>
+                  </span>
+                  <span class="c-figs num">
+                    {km(c.distanceKm * 1000)} km · {dur(c.minutes * 60)}{#if c.meanSpeedKmh != null}&nbsp;· {Math.round(c.meanSpeedKmh)} km/h{/if}
+                  </span>
+                </button>
+                {#if open}
+                  <div class="c-map" id="route-{c.id}">
+                    <CommuteMap
+                      route={c.route}
+                      label="{COMMUTE_MODE[c.mode].toLowerCase()} from {endName(c.fromLabel)} to {endName(c.toLabel)}, {when(c.startedAt)}"
+                    />
+                  </div>
+                {/if}
+              </li>
+            {/each}
+          </ul>
+          {#if commutes.length > COMMUTE_SHOWN}
+            <button type="button" class="more" onclick={() => (showAllCommutes = !showAllCommutes)}>
+              {showAllCommutes ? `Show the newest ${COMMUTE_SHOWN}` : `Show all ${commutes.length}`}
+            </button>
+          {/if}
+        {:else}
+          <p class="lede">No drive or train journey in the last {data.days} days.</p>
+        {/if}
+      </div>
+    </section>
+
+    <section class="band sunken">
+      <div class="inner">
+        <SectionHead
+          kicker="D / Time out"
           title={['Away from', 'home, by day']}
           strap="Leaving home to getting back. A quiet phone at home is not time out."
         />
@@ -356,10 +434,10 @@
       </div>
     </section>
 
-    <section class="band sunken">
+    <section class="band">
       <div class="inner">
         <SectionHead
-          kicker="D / How they moved"
+          kicker="E / How they moved"
           title={['Journeys,', 'and pace']}
           strap="Inferred from speed, so a best guess. Pace counts walks of 500 m or more at 3.2–9 km/h."
         />
@@ -591,6 +669,111 @@
     }
     .share-col {
       min-width: 90px;
+    }
+  }
+  /* Commuting: one compact row per journey, a button that opens its route
+     beneath it. One grid row on a desktop, two lines on a phone. */
+  .commutes {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--line-hair);
+  }
+  .commutes li {
+    border-bottom: 1px solid var(--line-hair);
+  }
+  .commute {
+    all: unset;
+    box-sizing: border-box;
+    width: 100%;
+    cursor: pointer;
+    display: grid;
+    grid-template-columns: 12em 6.5em minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 2px 14px;
+    padding: 9px 4px;
+  }
+  .commute:hover .c-route,
+  li.open .c-route {
+    color: var(--accent);
+  }
+  .commute:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  .c-when,
+  .c-figs,
+  .c-mode {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    white-space: nowrap;
+  }
+  .c-when,
+  .c-figs {
+    color: var(--text-secondary);
+  }
+  .c-mode {
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .c-route {
+    font-size: var(--fs-body-sm);
+    color: var(--text-primary);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .c-route .dim {
+    color: var(--text-muted);
+  }
+  .c-route .arrow {
+    margin: 0 0.35em;
+    color: var(--text-muted);
+  }
+  .c-figs {
+    text-align: right;
+  }
+  .c-map {
+    padding: 0 0 12px;
+  }
+  .more {
+    margin-top: 10px;
+    padding: 6px 12px;
+    background: transparent;
+    border: 1px solid var(--line-strong);
+    border-radius: 2px;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+  .more:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .more:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  @media (max-width: 719px) {
+    .commute {
+      grid-template-columns: minmax(0, 1fr) auto;
+      padding: 8px 0;
+    }
+    .c-mode {
+      text-align: right;
+    }
+    .c-route {
+      grid-column: 1;
+      grid-row: 2;
+    }
+    .c-figs {
+      grid-column: 2;
+      grid-row: 2;
     }
   }
   .grid {

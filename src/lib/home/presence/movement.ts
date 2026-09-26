@@ -2,12 +2,15 @@
 //
 // The loader behind `movementStats`: one person's trail for a window, cut into
 // journeys and visits by the same segmenters the rest of presence uses, with
-// place names attached. Returns the stats only — no coordinate leaves here.
+// place names attached. The stats carry no coordinate; `loadPersonMovement`
+// adds the person's drives and train rides with thinned routes (`commuting.ts`),
+// for the one page that draws them behind the same gate.
 
 import { and, asc, eq, gte, inArray, isNotNull, lte, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamPlaces, daydreamTrail } from '$lib/db/schema';
 import { looksLikeRail, segmentVisits } from './cluster';
+import { commutingJourneys, type Commute } from './commuting';
 import { segmentJourneys, type Journey, type JourneyFix } from './journeys';
 import {
   DEFAULT_WINDOW_DAYS,
@@ -96,6 +99,18 @@ export async function loadMovementStats(
   subject: string,
   opts: { days?: number; now?: Date } = {},
 ): Promise<MovementStats> {
+  return (await loadPersonMovement(subject, opts)).stats;
+}
+
+/**
+ * One trail read, two answers: the coordinate-free stats, and the car and rail
+ * journeys with their routes. The caller owns the visibility decision — only
+ * /home/people/[subject] calls this, after `mayOpenPerson`.
+ */
+export async function loadPersonMovement(
+  subject: string,
+  opts: { days?: number; now?: Date } = {},
+): Promise<{ stats: MovementStats; commuting: Commute[] }> {
   const now = opts.now ?? new Date();
   const days = opts.days ?? DEFAULT_WINDOW_DAYS;
   // A day's lead-in so a stay already under way when the window opens is seen.
@@ -136,18 +151,30 @@ export async function loadMovementStats(
 
   const journeys = segmentJourneys(fixes);
   const rail = new Set<Journey>();
+  // The fixes along every vehicle or rail journey: the rail test reads them,
+  // and so does the commuting route. Nothing else is ever kept.
+  const alongOf = new Map<Journey, JourneyFix[]>();
   for (const j of journeys) {
-    if (j.dominantMode !== 'vehicle') continue;
+    if (j.dominantMode !== 'vehicle' && j.dominantMode !== 'rail') continue;
     const along = fixes.filter((f) => f.ts >= j.startedAt && f.ts <= j.endedAt);
+    alongOf.set(j, along);
+    if (j.dominantMode !== 'vehicle') continue;
     if (railJourney(along.map((f) => ({ lat: f.lat, lon: f.lon, speedKmh: f.speedKmh ?? null })))) rail.add(j);
   }
+  const isRail = (j: Journey) => rail.has(j);
+  const visits = visitsFromFixes(fixes, labelOf);
 
-  return movementStats(journeys, visitsFromFixes(fixes, labelOf), {
-    days,
-    now,
-    homePlaceId: home,
-    isRail: (j) => rail.has(j),
-  });
+  return {
+    stats: movementStats(journeys, visits, { days, now, homePlaceId: home, isRail }),
+    commuting: commutingJourneys(journeys, {
+      now,
+      days,
+      isRail,
+      labelOf,
+      visits,
+      fixesOf: (j) => alongOf.get(j) ?? [],
+    }),
+  };
 }
 
 /**
