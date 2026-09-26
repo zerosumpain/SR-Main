@@ -640,6 +640,18 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
     reason:
       'Pinned cheap on purpose, and separate from "Notebook research" — this one only decides WHAT to look up, and the money belongs in the lookups it asks for rather than in the asking. A failure here leaves the note unreviewed, which is simply a note.',
   },
+  {
+    id: 'games-quiz',
+    scope: 'site',
+    label: 'Quiz Night writer',
+    blurb: 'Writes the ten questions for a family Quiz Night in the iPhone app, once per game.',
+    key: 'games.quiz.model',
+    fallbackModelId: null,
+    requires: null,
+    catalogue: 'tools',
+    reason:
+      'Follows the site default: one ~2k-token call per game, and wrong "facts" are the one failure a quiz cannot hide, so it is not pinned to a cheaper model than the default. The server marks answers; the model only drafts.',
+  },
 ];
 
 export const WORKLOADS: WorkloadDef[] = [...SITE_WORKLOADS];

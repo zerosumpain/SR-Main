@@ -145,6 +145,9 @@ export const resolveExtractionModel = () => resolveById('extraction');
 /** Adjudicating one candidate duplicate pair against its evidence. */
 export const resolveResolutionModel = () => resolveById('resolution');
 
+/** Quiz Night's question writer, one call per game. */
+export const resolveGamesQuizModel = () => resolveById('games-quiz');
+
 /** The nightly self-improvement engine's code-authoring calls. */
 export const resolveSelfimproveModel = () => resolveById('selfimprove');
 

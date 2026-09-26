@@ -84,18 +84,28 @@ function inRoom(room: RoomBase, playerId: string): boolean {
   return room.players.some((p) => p.id === playerId);
 }
 
+/**
+ * Throw the refusal `createGame` would, without creating anything — so a
+ * caller that meters creation (Quiz Night's daily cap) can ask first and not
+ * charge for a game that was never going to start.
+ */
+export function canCreate(hostId: string): void {
+  const open = [...rooms.values()].filter((l) => l.room.phase !== 'closed' && l.room.phase !== 'finished');
+  if (open.length >= MAX_ROOMS) throw new GameError(409, 'Too many games running. Try again shortly.');
+  if (open.filter((l) => l.room.hostId === hostId).length >= MAX_OPEN_PER_HOST) {
+    throw new GameError(409, 'Finish one of your games first.');
+  }
+}
+
 export function createGame(input: {
   game: GameId;
   host: { id: string; name: string };
   invite: { id: string; name: string }[];
   difficulty: Difficulty;
+  options?: Record<string, unknown>;
 }): WireRoom {
   // A finished game waits ten minutes for "Play again"; it is not one the host is still running.
-  const open = [...rooms.values()].filter((l) => l.room.phase !== 'closed' && l.room.phase !== 'finished');
-  if (open.length >= MAX_ROOMS) throw new GameError(409, 'Too many games running. Try again shortly.');
-  if (open.filter((l) => l.room.hostId === input.host.id).length >= MAX_OPEN_PER_HOST) {
-    throw new GameError(409, 'Finish one of your games first.');
-  }
+  canCreate(input.host.id);
   const now = Date.now();
   const rules = GAMES[input.game];
   const room = rules.createRoom({
@@ -103,12 +113,21 @@ export function createGame(input: {
     host: input.host,
     invite: input.invite,
     difficulty: input.difficulty,
+    options: input.options,
     now,
   });
   const live: Live = { room, rules, emitter: new EventEmitter(), timer: null };
   live.emitter.setMaxListeners(20);
   rooms.set(room.id, live);
   settle(live, true);
+  if (rules.prepare) {
+    void rules
+      .prepare(room)
+      .catch((err) => console.error(`[games] ${room.id}: prepare failed`, err))
+      .finally(() => {
+        if (rooms.get(room.id) === live && live.room.phase !== 'closed') settle(live, true);
+      });
+  }
   return rules.toWire(room, input.host.id, now);
 }
 
@@ -152,7 +171,7 @@ export function act(id: string, playerId: string, action: string, body: Record<s
 /** Lobbies this player is invited to and has not answered. */
 export function invitesFor(playerId: string) {
   const out = [];
-  for (const { room } of rooms.values()) {
+  for (const { room, rules } of rooms.values()) {
     if (room.phase !== 'lobby') continue;
     const me = room.players.find((p) => p.id === playerId);
     if (me?.status !== 'invited') continue;
@@ -161,6 +180,7 @@ export function invitesFor(playerId: string) {
       roomId: room.id,
       game: room.game,
       difficulty: room.difficulty,
+      about: rules.about?.(room) ?? null,
       hostName: host?.name ?? 'Someone',
       players: room.players.filter((p) => p.status === 'joined' || p.status === 'invited').map((p) => p.name),
       expiresAt: room.phaseEndsAt,

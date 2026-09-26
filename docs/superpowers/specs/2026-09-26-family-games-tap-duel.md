@@ -138,3 +138,47 @@ R.") — a refused guess costs nothing. 409 once solved, out, or out of time.
   "winnerIds": [],
   "serverNow": 1790000000000 }
 ```
+
+## Game 3 — jkai Quiz Night (added 2026-09-26)
+
+The host picks a **topic** (free text ≤60 chars, or blank = jkai picks), an **audience**
+(`kids` ≈7–11, `family` default, `adults`) and a difficulty (seconds per question: easy 20,
+medium 15, hard 10). jkai writes the questions ONCE, while the lobby fills; the lobby shows
+`prep: writing → ready | failed` and Start is refused (409, a sentence) until `ready`. 10
+questions (min 6), four options, server-marked: a right answer scores 500 + up to 500 for speed
+(server clock from when the question opened), a wrong one 0. Everyone answering reveals early;
+the reveal lasts 4 s. "Play again" is a NEW quiz (the phone POSTs create with the same
+settings); `again` answers 409.
+
+- Create: `POST /api/native/games {game:'quiz-night', difficulty, invite, topic?, audience?}`.
+  A member may start 10 quizzes per rolling 24 h (429 with a sentence); the owner is uncapped.
+- Move: `POST /api/native/games/[id] {action:'answer', question:<index>, choice:0-3}`.
+- Model: workload `games-quiz` (follows the site default; settable at /admin/ops/costs), reasoning
+  off, JSON mode, one resample. Output is screened (shape, distinct options, repeats, a whole-word
+  family-safety block list) and options are shuffled server-side.
+
+```jsonc
+{ "id":"g_…", "game":"quiz-night", "difficulty":"easy|medium|hard",
+  "audience":"kids|family|adults", "topic":"space" /* or null */, "title":"The Solar System",
+  "phase":"lobby|countdown|question|reveal|finished|closed",
+  "prep":"writing|ready|failed", "prepError": null,
+  "hostId":"p_…", "meId":"p_…", "questionCount":10, "timeMs":20000,
+  "players":[{"id":"p_…","name":"Sam","status":"joined","score":1450,"isHost":false}],
+  "phaseEndsAt": 1790000000000,           // lobby expiry, countdown end, the question's clock, reveal end
+  "question": null | {
+     "index":0, "prompt":"…", "options":["…","…","…","…"], "startsAt":…,
+     "answeredIds":["p_…"],                 // who has answered — never what — while open
+     "myChoice": 2 /* or null */,
+     "answerIndex": null,                   // set in reveal
+     "explain": null,                       // set in reveal
+     "picks": [] },                         // reveal: [{"playerId","choice","points","ms"}]
+  "standings": null | [{"id","name","score","correct","avgMs"}],
+  "winnerIds": [], "serverNow": 1790000000000 }
+```
+
+Review changes (same day): scores move only at the reveal (a jump would give an answer away);
+every create refusal is checked before a member's quiz cap is charged; the topic is refused (400)
+if it fails the block list and is quoted as JSON to the model; the block list has a stricter
+`kids` layer and undoes l33t/asterisk dodges; each model call has a 60 s timeout. Every invite in
+`GET /api/native/games` gains `about` — one line, e.g. `"The Solar System · for kids"`, null for
+games with nothing to say.
