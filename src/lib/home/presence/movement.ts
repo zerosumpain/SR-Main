@@ -19,7 +19,7 @@ import {
   type PersonPlaceTime,
   type StatsVisit,
 } from './stats';
-import { MIN_DWELL_MINS, RAIL_MIN_FIXES, VISIT_MAX_GAP_MINS, type MovementMode } from './types';
+import { MIN_DWELL_MINS, RAIL_MIN_FIXES, VISIT_MAX_GAP_MINS, activeLabels, type MovementMode } from './types';
 
 /**
  * Whether a vehicle journey ran like a train somewhere along it: any run of
@@ -75,15 +75,7 @@ async function homePlaceId(): Promise<string | null> {
   return home?.id ?? null;
 }
 
-/**
- * The names of the places a trail touches, keyed by id. Only an ACTIVE place
- * lends its name: a place the owner removed (`ignored`), merged or demoted to
- * transit reads as unnamed, so its time folds into "elsewhere" rather than
- * living on under a name nobody sees on /places any more.
- */
-export function activeLabels(rows: Array<{ id: string; label: string | null; status: string }>): Map<string, string | null> {
-  return new Map(rows.map((r) => [r.id, r.status === 'active' ? r.label : null]));
-}
+export { activeLabels };
 
 async function placeLabels(fixes: Array<{ placeId?: string | null }>): Promise<Map<string, string | null>> {
   const placeIds = [...new Set(fixes.map((f) => f.placeId).filter((x): x is string => !!x))];

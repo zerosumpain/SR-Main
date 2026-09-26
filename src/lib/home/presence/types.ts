@@ -341,3 +341,13 @@ export function localDayStart(now: Date, tz = LOCAL_TZ): Date {
   const drift = tzOffsetMins(now, tz) - tzOffsetMins(candidate, tz);
   return new Date(candidate.getTime() + drift * 60_000);
 }
+
+/**
+ * Place names keyed by id, where only an ACTIVE place lends its name. A place
+ * the owner removed (`ignored`), merged or demoted to transit reads as
+ * unnamed everywhere a name is shown — a card, a stay, a trip — rather than
+ * living on under a name nobody sees on /places any more. PURE.
+ */
+export function activeLabels(rows: Array<{ id: string; label: string | null; status: string }>): Map<string, string | null> {
+  return new Map(rows.map((r) => [r.id, r.status === 'active' ? r.label : null]));
+}

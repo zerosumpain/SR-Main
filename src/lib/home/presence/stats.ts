@@ -266,8 +266,20 @@ export function movementStats(
     commonTrips: trips.trips,
     roundTrips: trips.roundTrips,
     timeOut: opts.homePlaceId ? timeOut(inWindow, visits, opts.homePlaceId, opts) : [],
-    placeTime: placeTime(visits, localWindow(opts.now, opts.days), journeys),
+    placeTime: placeTimeFor(journeys, visits, opts),
   };
+}
+
+/** The journeys `placeTime` needs: those in the local window, plus a day's
+ *  lead-in so one under way at its first midnight is clipped, not lost. */
+function placeTimeFor(journeys: Journey[], visits: StatsVisit[], opts: MovementStatsOpts): PlaceTime {
+  const window = localWindow(opts.now, opts.days);
+  const leadIn = window.from.getTime() - 86_400_000;
+  return placeTime(
+    visits,
+    window,
+    journeys.filter((j) => j.startedAt.getTime() >= leadIn && j.startedAt <= opts.now),
+  );
 }
 
 function byMode(journeys: Journey[], bucketOf: Map<Journey, ModeBucket>): MovementStats['byMode'] {
@@ -472,7 +484,21 @@ export function placeTime(visits: StatsVisit[], window: PlaceTimeWindow, journey
   }));
   places.sort((a, b) => b.minutes - a.minutes || a.label.localeCompare(b.label));
 
-  const transitMs = journeys.reduce((n, j) => n + overlapMs(j.startedAt, j.endedAt, window), 0);
+  // A journey's first or last fixes can sit inside a stay (the run that ends
+  // a visit is where the next journey starts), so its overlap with any stay
+  // is taken off: no minute is counted twice, and the shares cannot pass 100%.
+  // One person's stays never overlap each other, so subtracting each is exact.
+  let transitMs = 0;
+  for (const j of journeys) {
+    let ms = overlapMs(j.startedAt, j.endedAt, window);
+    if (ms <= 0) continue;
+    for (const v of visits) {
+      const a = Math.max(j.startedAt.getTime(), v.from.getTime(), window.from.getTime());
+      const b = Math.min(j.endedAt.getTime(), v.to.getTime(), window.to.getTime());
+      if (b > a) ms -= b - a;
+    }
+    transitMs += Math.max(0, ms);
+  }
   return { windowMinutes: Math.round(windowMinutes), places, unnamed, transitMinutes: Math.round(transitMs / 60_000) };
 }
 

@@ -279,6 +279,18 @@ describe('time per place', () => {
     expect(t.transitMinutes).toBe(30 + 20);
   });
 
+  it('never counts a minute twice: a journey inside a stay is not transit, and shares sum to at most 100%', () => {
+    const visits = [
+      visit('p-h', 'Home', '2026-11-02T00:00:00Z', '2026-11-05T08:10:00Z'), // overlaps the journey's first 10m
+      visit('p-w', 'Work', '2026-11-05T08:25:00Z', '2026-11-09T00:00:00Z'), // and its last 5m
+    ];
+    const t = placeTime(visits, W, [journey('2026-11-05T08:00:00Z', 30, 8, 'vehicle')]);
+    expect(t.transitMinutes).toBe(15);
+    const total = t.places.reduce((n, p) => n + p.minutes, 0) + t.unnamed.minutes + t.transitMinutes;
+    expect(total).toBeLessThanOrEqual(t.windowMinutes);
+    expect(t.places.reduce((n, p) => n + p.share, 0) + (t.unnamed.minutes + t.transitMinutes) / t.windowMinutes).toBeLessThanOrEqual(1 + 1e-9);
+  });
+
   it('opens the window at true local midnight across the clock change', () => {
     // Autumn: Sunday 25 Oct 2026 is 25 hours long.
     const w = localWindow(new Date('2026-10-26T12:00:00Z'), 2);

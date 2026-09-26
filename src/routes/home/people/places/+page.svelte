@@ -424,8 +424,8 @@
                                   <tr>
                                     <th scope="col">Person</th>
                                     <th scope="col" class="right">Time</th>
-                                    <th scope="col" class="right">Visits</th>
-                                    <th scope="col" class="right">Usually arrives</th>
+                                    <th scope="col" class="right visits">Visits</th>
+                                    <th scope="col" class="right">Arrives</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -433,7 +433,7 @@
                                     <tr>
                                       <td class="cell-lead">{r.displayName}</td>
                                       <td class="right num">{dur(r.minutes)}</td>
-                                      <td class="right num">{r.visits}</td>
+                                      <td class="right num visits">{r.visits}</td>
                                       <td class="right num">{r.usualArrival ?? '—'}</td>
                                     </tr>
                                   {/each}
@@ -696,6 +696,11 @@
   .time-here .field-label,
   .time-here .map-note {
     margin: 0;
+  }
+  @media (max-width: 719px) {
+    .time-here .visits {
+      display: none;
+    }
   }
   .confirm {
     display: flex;

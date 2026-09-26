@@ -10,10 +10,14 @@ const state = vi.hoisted(() => ({
   usersThrow: false,
   membersThrow: false,
   calls: 0,
+  placeOf: {} as Record<string, string>,
+  places: [] as Array<{ id: string; label: string | null; status: string }>,
 }));
 
 vi.mock('$lib/db', () => ({
   db: {
+    // The place-name lookup: select → from → where, awaited.
+    select: () => ({ from: () => ({ where: async () => state.places }) }),
     execute: async () => {
       // Promise.all issues the latest-fix query first, then today's aggregate.
       const first = state.calls++ % 2 === 0;
@@ -24,7 +28,7 @@ vi.mock('$lib/db', () => ({
               subject,
               ts: new Date(Date.now() - 5 * 60_000),
               is_home: false,
-              place_id: null,
+              place_id: state.placeOf[subject] ?? null,
               distance_home_km: 2.5,
               battery_pct: 70,
             }))
@@ -80,6 +84,8 @@ beforeEach(() => {
   state.usersThrow = false;
   state.membersThrow = false;
   state.calls = 0;
+  state.placeOf = {};
+  state.places = [];
 });
 
 describe('loadHousehold — sharing fails closed', () => {
@@ -128,5 +134,19 @@ describe('loadHousehold — sharing fails closed', () => {
     for (const m of scopeHousehold(members, { kind: 'household', subject: 'sam' })) {
       for (const k of POSITION) expect(m[k], k).toBeNull();
     }
+  });
+});
+
+describe('loadHousehold — place names', () => {
+  it('names an active place, and leaves a removed (ignored) one unnamed', async () => {
+    state.users = [{ email: 'sam@example.test', name: 'Sam', sharing: true }];
+    state.placeOf = { alex: 'p-school', sam: 'p-gone' };
+    state.places = [
+      { id: 'p-school', label: 'School', status: 'active' },
+      { id: 'p-gone', label: 'Carmel College', status: 'ignored' },
+    ];
+    const { members } = await loadHousehold();
+    expect(members.find((m) => m.subject === 'alex')!.placeLabel).toBe('School');
+    expect(members.find((m) => m.subject === 'sam')!.placeLabel).toBeNull();
   });
 });

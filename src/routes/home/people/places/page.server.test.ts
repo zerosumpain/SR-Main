@@ -61,6 +61,7 @@ vi.mock('$lib/home/presence/places', () => ({
 }));
 
 const { actions, load } = await import('./+page.server');
+const { DEFAULT_WINDOW_DAYS } = await import('$lib/home/presence/stats');
 
 function eventFor(email: string | null, fields: Record<string, string> = {}) {
   const form = new FormData();
@@ -130,7 +131,7 @@ describe('/home/people/places — owner only', () => {
           { subject: 'alex', displayName: 'Alex' },
           { subject: 'sam', displayName: 'Sam' },
         ],
-        { days: 30 },
+        { days: DEFAULT_WINDOW_DAYS },
       ],
     ]);
   });

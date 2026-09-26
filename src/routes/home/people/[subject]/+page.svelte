@@ -74,11 +74,6 @@
       ? [
           { label: 'Journeys', value: String(totalJourneys), sub: `${data.days} days` },
           { label: 'Distance', value: `${km(totalMetres)} km`, sub: 'all modes' },
-          {
-            label: 'Walking pace',
-            value: stats.walkingPace ? `${kmh(stats.walkingPace.medianMps)}` : '—',
-            sub: stats.walkingPace ? 'km/h, median' : 'no qualifying walk',
-          },
           { label: 'Out a day', value: avgOut == null ? '—' : dur(avgOut * 60), sub: 'average' },
         ]
       : [],
@@ -95,17 +90,17 @@
   );
 
   // ── Pace chart: weekly median, one line ─────────────────────────────────
-  const PW = 600;
-  /** Shorter on a phone: the plot is a third as wide. */
-  const PH = $derived(paceW > 0 && paceW < 520 ? 110 : 150);
-  const PL = 44; // room for the y labels
-  const PT = 10;
   /** Rendered width of each plot. Once known, the viewBox is exactly that wide,
    *  so a unit is a pixel: text is 12px and bars keep their shape at any width
    *  instead of a 600-unit drawing being blown up to fill a desktop frame.
    *  Before it is known (server render) the fixed widths stand in. */
   let paceW = $state(0);
   let outW = $state(0);
+  const PW = 600;
+  /** Shorter on a phone: the plot is a third as wide. */
+  const PH = $derived(paceW > 0 && paceW < 520 ? 110 : 150);
+  const PL = 44; // room for the y labels
+  const PT = 10;
   const TICK_PX = 12;
   const tickUnits = (viewW: number, shownW: number) => (shownW > 0 ? (TICK_PX * viewW) / shownW : TICK_PX);
   const PWv = $derived(paceW > 0 ? paceW : PW);
@@ -171,7 +166,6 @@
     return h ? `${d}d ${h}h` : `${d}d`;
   }
   const daysNewest = $derived([...outDays].reverse());
-  const allJourneySeconds = $derived(stats ? Object.values(stats.byMode).reduce((n, t) => n + t.seconds, 0) : 0);
 </script>
 
 <HomeFrame
@@ -192,7 +186,7 @@
         <SectionHead
           kicker="A / Where the time went"
           title={['Time,', 'place by place']}
-          strap="Each named place’s share of the last {data.days} days. Arrives and leaves are the usual times on the house’s clock."
+          strap="Each named place’s share of {data.days} days, on the house’s clock. Time the phone was quiet (overnight, say) is unaccounted, not home."
         />
         {#if timeRows.length}
           <div class="tbl-wrap">
@@ -240,7 +234,7 @@
         <SectionHead
           kicker="B / Between places"
           title={['The journeys', 'that repeat']}
-          strap="Named place to named place, three times or more, with the time spent in transit. Name a place and its journeys count."
+          strap="Named place to named place, three times or more, and the time in transit."
         />
         {#if stats.commonTrips.length}
           <div class="tbl-wrap">
@@ -250,7 +244,7 @@
                   <th scope="col">From</th>
                   <th scope="col">To</th>
                   <th scope="col" class="right">Times</th>
-                  <th scope="col" class="right">Usually leaves</th>
+                  <th scope="col" class="right">Leaves</th>
                   <th scope="col" class="right">Median</th>
                   <th scope="col" class="right">Total</th>
                   <th scope="col">Mostly</th>
@@ -274,13 +268,13 @@
         {:else}
           <p class="lede">No trip between two named places has come up three times yet.</p>
         {/if}
-        {#if stats.roundTrips || totalJourneys}
+        {#if stats.roundTrips || (totalJourneys && pt)}
         <p class="note">
           {#if stats.roundTrips}
-            Plus {stats.roundTrips.count} round trip{stats.roundTrips.count === 1 ? '' : 's'} out and back to the same place — median {dur(stats.roundTrips.medianSeconds)}, {dur(stats.roundTrips.totalSeconds)} in all.
+            Plus {stats.roundTrips.count} round trip{stats.roundTrips.count === 1 ? '' : 's'} out and back (median {dur(stats.roundTrips.medianSeconds)}).
           {/if}
-          {#if totalJourneys}
-            {totalJourneys} journey{totalJourneys === 1 ? '' : 's'} in all, {dur(allJourneySeconds)} in transit.
+          {#if totalJourneys && pt}
+            {span(pt?.transitMinutes ?? 0)} in transit in all.
           {/if}
         </p>
         {/if}
@@ -292,7 +286,7 @@
         <SectionHead
           kicker="C / Time out"
           title={['Away from', 'home, by day']}
-          strap="Leaving home to getting back, counted only when a journey began in between: a quiet phone at home is not time out."
+          strap="Leaving home to getting back. A quiet phone at home is not time out."
         />
         {#if outDays.length}
           <div class="chart" style="--tick: {outTick}px">
@@ -367,11 +361,25 @@
         <SectionHead
           kicker="D / How they moved"
           title={['Journeys,', 'and pace']}
-          strap="Inferred from speed, so a best guess: running looks like cycling and a motorway like a railway. Pace counts walks of 500 m or more at 3.2–9 km/h."
+          strap="Inferred from speed, so a best guess. Pace counts walks of 500 m or more at 3.2–9 km/h."
         />
-        <div class="deck modes"><StatDeck tiles={modeTiles} min={120} /></div>
+        <div class="deck modes wide"><StatDeck tiles={modeTiles} min={120} /></div>
+        <!-- On a phone: the same four figures as a list, and pace as one line. -->
+        <ul class="mode-list narrow">
+          {#each modeTiles as t (t.key)}
+            <li>
+              <span class="ml-label">{t.label}</span>
+              <span class="ml-value num">{t.value}</span>
+              <span class="ml-sub">{t.sub}</span>
+            </li>
+          {/each}
+        </ul>
         {#if stats.walkingPace}
-          <div class="deck paces"><StatDeck tiles={paceTiles} min={90} /></div>
+          <div class="deck paces wide"><StatDeck tiles={paceTiles} min={90} /></div>
+          <p class="pace-line narrow">
+            Pace <strong>{kmh(stats.walkingPace.medianMps)} km/h</strong> · brisk {kmh(stats.walkingPace.p75Mps)} ·
+            {stats.walkingPace.n} walk{stats.walkingPace.n === 1 ? '' : 's'}
+          </p>
           <div class="chart" style="--tick: {paceTick}px">
             <p class="field-label">Median pace by week, from Monday</p>
             <div bind:clientWidth={paceW}>
@@ -436,7 +444,7 @@
      it in text, so the bar is never the only carrier. */
   .share-col {
     width: 34%;
-    min-width: 120px;
+    min-width: 90px;
   }
   .share {
     display: flex;
@@ -494,8 +502,7 @@
   }
   /* How they moved: the four modes in a row (2×2 on a phone), the three pace
      figures always in one row. StatDeck's auto-fit would stack them singly. */
-  .deck + .deck,
-  .deck + .chart {
+  .deck.paces {
     margin-top: 12px;
   }
   .modes :global(.dk) {
@@ -503,6 +510,62 @@
   }
   .paces :global(.dk) {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .narrow {
+    display: none;
+  }
+  .mode-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--line-hair);
+  }
+  .mode-list li {
+    display: grid;
+    grid-template-columns: 6.5em 3ch minmax(0, 1fr);
+    align-items: baseline;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line-hair);
+  }
+  .ml-label {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .ml-value {
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    text-align: right;
+    color: var(--text-primary);
+  }
+  .ml-sub {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-secondary);
+  }
+  .pace-line {
+    margin: 14px 0 0;
+    font-size: var(--fs-body-sm);
+    color: var(--text-secondary);
+  }
+  .pace-line strong {
+    color: var(--text-primary);
+  }
+  @media (max-width: 719px) {
+    .wide {
+      display: none;
+    }
+    .days,
+    .note,
+    .pace-line {
+      margin-top: 10px;
+    }
+    .narrow {
+      display: block;
+    }
   }
   @media (max-width: 720px) {
     .modes :global(.dk) {
@@ -527,7 +590,7 @@
       display: none;
     }
     .share-col {
-      min-width: 110px;
+      min-width: 90px;
     }
   }
   .grid {
