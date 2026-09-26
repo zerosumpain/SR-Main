@@ -27,13 +27,13 @@ describe('transcribeAudioBestEffort', () => {
     h.chat.mockReset();
   });
 
-  it('uses speech-to-text (whisper-1), never a chat model', async () => {
+  it('uses speech-to-text (gpt-4o-transcribe), never a chat model', async () => {
     h.transcribe.mockResolvedValue({ text: ' Remind me to book the car in on Monday. ' });
     const text = await transcribeAudioBestEffort(Buffer.from([1, 2, 3]), 'audio/mp4');
     expect(text).toBe('Remind me to book the car in on Monday.');
     expect(h.chat).not.toHaveBeenCalled();
     const arg = h.transcribe.mock.calls[0][0] as { model: string; file: File };
-    expect(arg.model).toBe('whisper-1');
+    expect(arg.model).toBe('gpt-4o-transcribe');
     expect(arg.file.name).toBe('audio.m4a');
     expect(arg.file.type).toBe('audio/mp4');
   });

@@ -245,8 +245,13 @@ export async function describePdfBestEffort(buf: Buffer, filename: string): Prom
   }
 }
 
-/** The speech-to-text model — the one /jkai/notes records through. */
-const TRANSCRIBE_MODEL = 'whisper-1';
+/**
+ * The speech-to-text model — the same one /jkai/notes records through
+ * (`$lib/jkai/extract/audio`). gpt-4o-transcribe over whisper-1 (2026-09-26):
+ * on one clip whisper-1 heard "on Monday" as "Anmandi", gpt-4o-transcribe was
+ * word-perfect, and it billed $0.000195 against whisper-1's $0.0003.
+ */
+const TRANSCRIBE_MODEL = 'gpt-4o-transcribe';
 
 /**
  * Best-effort transcription of an audio file into searchable text, through the
@@ -257,8 +262,8 @@ const TRANSCRIBE_MODEL = 'whisper-1';
  * `input_audio` part. Its fallback, google/gemini-2.0-flash-001, was retired on
  * OpenRouter, and every @files audio file, intel recording and chat voice note
  * came back empty — while /jkai/notes, on speech-to-text, kept working. A chat
- * model was the wrong tool anyway: it paraphrases, and three seconds of speech
- * cost $0.0003 on `whisper-1`.
+ * model was the wrong tool anyway: it paraphrases, and speech-to-text costs
+ * fractions of a penny a note.
  */
 export async function transcribeAudioBestEffort(buf: Buffer, mimeType: string): Promise<string | null> {
   if (buf.byteLength > MAX_AUDIO_BYTES) return null;
