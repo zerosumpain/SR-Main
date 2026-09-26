@@ -14,7 +14,7 @@ Tools persist across conversations.
 
 ## Hard rule: never ask the user for tokens or URLs
 
-If a service is already integrated (Home Assistant, Whoop, Strava, memory, blog, gmail, files, etc.), compose its built-in tools via `platform.call(toolName, args)` rather than fetching directly. The platform owns auth — your handler must never ask the user for credentials. Use raw `fetch` only for public, no-auth APIs (geocoding, weather, conversions).
+If a service is already integrated (Home Assistant, Whoop, memory, blog, gmail, files, etc.), compose its built-in tools via `platform.call(toolName, args)` rather than fetching directly. The platform owns auth — your handler must never ask the user for credentials. Use raw `fetch` only for public, no-auth APIs (geocoding, weather, conversions).
 
 ## Promote ephemeral tools that worked
 

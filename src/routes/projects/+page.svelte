@@ -40,7 +40,7 @@
   const isPub = (key: string) => isProjectPublic(vis, key);
   const showCard = (key: string) => data.authenticated || isPub(key);
 
-  const shownCards = $derived(PROJECT_CARDS.filter((c) => showCard(c.key)));
+  const shownCards = $derived([...PROJECT_CARDS.filter((c) => showCard(c.key)), ...data.ownerCards]);
   const benchCount = $derived(shownCards.length + projects.length);
   const studyCount = $derived(shownCards.filter((c) => /^field study/i.test(c.kind)).length);
 

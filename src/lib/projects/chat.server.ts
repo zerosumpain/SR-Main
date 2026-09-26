@@ -24,9 +24,8 @@ interface ProjectChatOptions {
   systemPrompt: string;
   /**
    * The passages to ground the answer in. Most projects search their own
-   * corpus for the question; one (the Local Plan Navigator) searches in the
-   * browser and sends the ids of what it found, which is why the request body
-   * is passed along too.
+   * corpus for the question. The request body is available when a project
+   * needs additional retrieval choices.
    */
   retrieve: (question: string, limit: number, context: ProjectChatContext) => ProjectChatChunk[] | Promise<ProjectChatChunk[]>;
   /**

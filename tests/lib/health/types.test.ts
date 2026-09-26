@@ -45,17 +45,14 @@ describe('health types', () => {
       timestamp: '2026-03-20T00:00:00Z',
     };
     expect(response.timestamp).toBeDefined();
-    expect(response.strava).toBeUndefined();
     expect(response.whoop).toBeUndefined();
     expect(response.apple).toBeUndefined();
 
     const full: SyncResponse = {
-      strava: { success: true, recordsSynced: 5, errors: [], duration: 200 },
       whoop: { success: false, recordsSynced: 0, errors: ['auth failed'], duration: 50 },
       apple: { success: true, recordsSynced: 100, errors: [], duration: 300 },
       timestamp: '2026-03-20T00:00:00Z',
     };
-    expect(full.strava?.recordsSynced).toBe(5);
     expect(full.whoop?.errors).toContain('auth failed');
     expect(full.apple?.recordsSynced).toBe(100);
   });

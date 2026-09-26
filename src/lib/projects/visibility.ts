@@ -32,7 +32,6 @@ export const STATIC_PROJECT_KEYS = [
   // the only thing it controls, since the application does its own owner check
   // and never consults this table.
   'policy-analysis',
-  'local-plan-navigator',
   'engine-room',
   'scs-earnings',
   'data-standard-designer',

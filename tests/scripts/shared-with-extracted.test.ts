@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 /**
- * 47 modules in this repository are also held, byte for byte, by an extracted
+ * These modules in this repository are also held, byte for byte, by an extracted
  * application. Each was duplicated rather than moved, for a reason recorded in
  * shared-with-extracted.json.
  *
@@ -82,7 +82,6 @@ describe('modules shared with the extracted applications', () => {
       'src/lib/health-sync/tokens.ts',
       'src/lib/health-sync/types.ts',
       'src/lib/health-sync/whoop.ts',
-      'src/lib/health/polyline.ts',
       'src/lib/jkai/intel/source-policy.ts',
       'src/lib/llm/client.ts',
       'src/lib/llm/keys.ts',
@@ -103,9 +102,6 @@ describe('modules shared with the extracted applications', () => {
       'src/lib/server/owner.ts',
       'src/lib/server/rate-limit.ts',
       'src/lib/server/ssrf-guard.ts',
-      'src/lib/trails/activity-meta.ts',
-      'src/lib/trails/field/tile-math.ts',
-      'src/lib/trails/track.ts',
     ]);
   });
 

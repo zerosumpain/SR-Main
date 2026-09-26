@@ -26,14 +26,18 @@
       "migrationAuthor": "zerosumpain/SR-Policy-Analysis",
       "schemaExecutor": "zerosumpain/SR-Main",
       "requiredTables": [
+        "agent_actions",
+        "agent_tasks",
         "allowed_user",
         "api_secrets",
         "app_settings",
         "datastore_audit_log",
         "datastore_collections",
         "datastore_records",
+        "fact",
         "integration_credentials",
         "integration_oauth_configs",
+        "integrations",
         "openrouter_models",
         "policy_analyses",
         "policy_artefacts",
@@ -42,9 +46,12 @@
         "policy_model_calls",
         "policy_persona_observations",
         "policy_personas",
+        "policy_passes",
         "policy_provenance",
         "policy_share",
         "policy_stages",
+        "research_session",
+        "source",
         "workflow_runs",
         "workflows"
       ]
@@ -68,10 +75,9 @@
       },
       "workflows": [
         ".github/workflows/check.yml",
-        ".github/workflows/release.yml",
-        ".github/workflows/gateway.yml"
+        ".github/workflows/release.yml"
       ],
-      "executionOwner": "Drive HTTP requests; Intelligence outbox consumer and WebDAV remain Main-owned",
+      "executionOwner": "Drive HTTP requests; Intelligence outbox consumer remains Main-owned",
       "migrationAuthor": "zerosumpain/SR-Main",
       "schemaExecutor": "zerosumpain/SR-Main",
       "requiredTables": [
@@ -102,10 +108,8 @@
       "repository": "zerosumpain/SR-Health",
       "paths": [
         "/health",
-        "/live",
         "/api/health",
-        "/api/trails",
-        "/api/live-walk"
+        "/api/trails"
       ],
       "excludedPaths": [
         "/api/health/workflow-engine"
@@ -120,10 +124,9 @@
       },
       "workflows": [
         ".github/workflows/check.yml",
-        ".github/workflows/release.yml",
-        ".github/workflows/gateway.yml"
+        ".github/workflows/release.yml"
       ],
-      "executionOwner": "Health HTTP requests; hourly Strava/WHOOP scheduler remains Main-owned",
+      "executionOwner": "Health HTTP requests; hourly WHOOP scheduler remains Main-owned",
       "migrationAuthor": "zerosumpain/SR-Main",
       "schemaExecutor": "zerosumpain/SR-Main",
       "requiredTables": [
@@ -139,6 +142,7 @@
         "api_secrets",
         "app_settings",
         "apple_health_metrics",
+        "apple_sleep_stages",
         "fact",
         "health_sync_jobs",
         "health_sync_state",
@@ -155,6 +159,152 @@
         "whoop_sleep",
         "whoop_workouts"
       ]
+    },
+    {
+      "id": "policy-engine",
+      "repository": "zerosumpain/SR-Policy-Engine",
+      "paths": [
+        "/projects/policy-engine",
+        "/api/policy-engine"
+      ],
+      "excludedPaths": [],
+      "stagedPaths": [],
+      "assetPrefix": "/_policy_engine",
+      "ports": {
+        "gateway": 5340,
+        "primary": 5342,
+        "candidate": 5343
+      },
+      "workflows": [
+        ".github/workflows/check.yml",
+        ".github/workflows/release.yml"
+      ],
+      "executionOwner": "Policy Engine project pages and APIs",
+      "migrationAuthor": "zerosumpain/SR-Main",
+      "schemaExecutor": "zerosumpain/SR-Main",
+      "requiredTables": [
+        "agent_actions",
+        "agent_tasks",
+        "app_settings",
+        "decks",
+        "fact",
+        "openrouter_models",
+        "policy_indicator_snapshots",
+        "project_share",
+        "project_visibility",
+        "research_session",
+        "source",
+        "workflow_edges",
+        "workflow_nodes",
+        "workflow_schedules",
+        "workflows"
+      ]
+    },
+    {
+      "id": "dfe-data-strategy",
+      "repository": "zerosumpain/SR-DfE-Data-Strategy",
+      "paths": [
+        "/projects/dfe-data-strategy",
+        "/api/dfe-data-strategy"
+      ],
+      "excludedPaths": [],
+      "stagedPaths": [],
+      "assetPrefix": "/_dfe_strategy",
+      "ports": {
+        "gateway": 5350,
+        "primary": 5352,
+        "candidate": 5353
+      },
+      "workflows": [
+        ".github/workflows/check.yml",
+        ".github/workflows/release.yml"
+      ],
+      "executionOwner": "DfE Data Strategy project pages and APIs",
+      "migrationAuthor": "zerosumpain/SR-Main",
+      "schemaExecutor": "zerosumpain/SR-Main",
+      "requiredTables": [
+        "agent_actions",
+        "agent_tasks",
+        "app_settings",
+        "decks",
+        "fact",
+        "keystone_intel",
+        "keystone_intel_runs",
+        "openrouter_models",
+        "project_share",
+        "project_visibility",
+        "research_session",
+        "source",
+        "workflow_edges",
+        "workflow_nodes",
+        "workflow_schedules",
+        "workflows"
+      ]
+    },
+    {
+      "id": "data-standard-designer",
+      "repository": "zerosumpain/SR-Data-Standard-Designer",
+      "paths": [
+        "/projects/data-standard-designer",
+        "/api/data-standard-designer"
+      ],
+      "excludedPaths": [],
+      "stagedPaths": [],
+      "assetPrefix": "/_data_standard",
+      "ports": {
+        "gateway": 5360,
+        "primary": 5362,
+        "candidate": 5363
+      },
+      "workflows": [
+        ".github/workflows/check.yml",
+        ".github/workflows/release.yml"
+      ],
+      "executionOwner": "Data Standard Designer project pages and APIs",
+      "migrationAuthor": "zerosumpain/SR-Main",
+      "schemaExecutor": "zerosumpain/SR-Main",
+      "requiredTables": [
+        "agent_actions",
+        "agent_tasks",
+        "app_settings",
+        "decks",
+        "fact",
+        "openrouter_models",
+        "project_share",
+        "project_visibility",
+        "research_session",
+        "source",
+        "standard_registry_entries",
+        "standard_registry_source_runs",
+        "workflow_edges",
+        "workflow_nodes",
+        "workflow_schedules",
+        "workflows"
+      ]
+    },
+    {
+      "id": "local-plan-navigator",
+      "repository": "zerosumpain/local-plan-navigator",
+      "paths": [
+        "/projects/local-plan-navigator",
+        "/api/projects/local-plan-navigator"
+      ],
+      "excludedPaths": [],
+      "stagedPaths": [],
+      "assetPrefix": "/_local_plan_navigator",
+      "ports": {
+        "gateway": 5370,
+        "primary": 5372,
+        "candidate": 5373
+      },
+      "workflows": [
+        ".github/workflows/check.yml",
+        ".github/workflows/release.yml"
+      ],
+      "executionOwner": "Local Plan Navigator static pages and ask API",
+      "migrationAuthor": "zerosumpain/local-plan-navigator",
+      "schemaExecutor": "zerosumpain/local-plan-navigator",
+      "requiredTables": []
     },
     {
       "id": "main",
