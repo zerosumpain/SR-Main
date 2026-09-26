@@ -4,7 +4,7 @@
  * Two things were quietly untrue:
  *
  *   - nightly.yml said it runs "the eight *.integration.test.ts files the merge
- *     gate has never once executed". There are 49. The number was right when it
+ *     gate has never once executed". There are 51. The number was right when it
  *     was written and nothing has re-counted since, so a class of test grew by
  *     5x with no one deciding that was fine. Intel spaces added the last two,
  *     src/lib/jkai/intel/spaces.integration.test.ts and
@@ -13,7 +13,12 @@
  *     in a rolled-back transaction. Neither means anything against a mock, so
  *     both need a real database. Intel spaces PR B added
  *     src/lib/jkai/intel/members.integration.test.ts: a real member row resolved
- *     by the real scope seam, which is the whole point of it.
+ *     by the real scope seam, which is the whole point of it. Access groups added
+ *     src/lib/server/grants.integration.test.ts and
+ *     src/routes/api/admin/access/access.integration.test.ts: permissions
+ *     resolved from real group and allow-list rows (jsonb operators, principal
+ *     creation, Gmail disabling), which a mocked db cannot answer. The pure
+ *     halves (catalogue, effectivePermissions) run in the gate.
  *
  *   - tests/e2e/ holds two Playwright specs and package.json has a `test:e2e`
  *     script, but NO workflow invokes it. The lane was written because
@@ -39,7 +44,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
  * RAISING THIS NUMBER IS A DECISION, not a formality: every file added here is
  * a file no pull request will ever execute.
  */
-const INTEGRATION_FILES = 49;
+const INTEGRATION_FILES = 51;
 
 function tracked(pattern: string): string[] {
 	return execFileSync('git', ['ls-files', pattern], { cwd: ROOT, encoding: 'utf8' })
