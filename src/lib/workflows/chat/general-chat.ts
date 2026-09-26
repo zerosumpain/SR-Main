@@ -316,12 +316,23 @@ interface ChatOptions {
  */
 async function assertThreadPrincipal(options: Pick<ChatOptions, 'conversationId' | 'restriction'>): Promise<void> {
   if (!options.conversationId) return;
-  const [row] = await db
-    .select({ principalId: conversations.principalId })
-    .from(conversations)
-    .where(eq(conversations.id, options.conversationId))
-    .limit(1);
   const restriction = options.restriction;
+  let row: { principalId: string } | undefined;
+  try {
+    [row] = await db
+      .select({ principalId: conversations.principalId })
+      .from(conversations)
+      .where(eq(conversations.id, options.conversationId))
+      .limit(1);
+  } catch (err) {
+    // A restricted turn fails closed. An owner turn carries on as it did
+    // before this check existed: a database blip must not cost the owner a
+    // reply, and an unrestricted turn on a member thread needs a row that says
+    // so — which this read could not produce.
+    if (restriction) throw err;
+    console.warn('[chat] thread principal lookup failed; continuing as owner:', err);
+    return;
+  }
   if (!row) {
     if (restriction) throw new Error('restricted turn refused: its thread was not found');
     return;
@@ -905,8 +916,9 @@ export async function generalChat(
   // Before anything is armed or fetched: whose thread is this?
   await assertThreadPrincipal(options);
   // Skipped for sub-agents — their output isn't meant for the user chat.
+  // Skipped for a member too: its prompt's examples are the owner's day.
   const ack =
-    options.conversationId && (options.subagentDepth ?? 0) === 0
+    options.conversationId && (options.subagentDepth ?? 0) === 0 && !options.restriction
       ? scheduleOpeningAck({
           userMessage: input.text,
           modelContext: options.modelContext,
@@ -1084,7 +1096,9 @@ async function runGeneralChat(
     restriction ? Promise.resolve(MEMBER_PERSONA_PROMPT) : getCompiledPrompt(),
     contextPromise,
     restriction ? Promise.resolve('') : buildCanvasContextSection(options.workflowId),
-    buildPastedUrlsSection(userMessage, onProgress, options.onStreamEvent),
+    // A member's pasted links are read by fetch_url, inside the turn's tool
+    // budget, rather than pre-fetched outside it.
+    restriction ? Promise.resolve('') : buildPastedUrlsSection(userMessage, onProgress, options.onStreamEvent),
   ]);
   const { routed, plan: contextPlan, memory: memorySelection, integrations: integrationContext } = turnContext;
   const graphSection = turnContext.graph.text;

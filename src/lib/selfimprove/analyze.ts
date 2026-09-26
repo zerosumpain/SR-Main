@@ -6,6 +6,7 @@
 // (`latest` + `weekly:<YYYY-WW>`).
 
 import { db } from '$lib/db';
+import { inOwnerThread } from '$lib/jkai/owner-threads';
 import { orchestratorChats, customTools, daydreamSignals } from '$lib/db/schema';
 import { and, eq, gte, desc, sql } from 'drizzle-orm';
 import {
@@ -119,7 +120,8 @@ export async function gatherSignals(): Promise<GatheredSignals> {
     const rows = await db
       .select({ content: orchestratorChats.content, createdAt: orchestratorChats.createdAt })
       .from(orchestratorChats)
-      .where(and(eq(orchestratorChats.role, 'user'), gte(orchestratorChats.createdAt, since)))
+      // The owner's own words only: a member's thread never feeds the backlog.
+      .where(and(eq(orchestratorChats.role, 'user'), gte(orchestratorChats.createdAt, since), inOwnerThread(orchestratorChats.conversationId)))
       .orderBy(desc(orchestratorChats.createdAt))
       .limit(MAX_MESSAGES);
     messages = rows

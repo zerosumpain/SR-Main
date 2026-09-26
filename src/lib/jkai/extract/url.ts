@@ -6,7 +6,9 @@ import { STATUS_CODES } from 'node:http';
 const USER_AGENT =
 	'Mozilla/5.0 (compatible; JkaiChatBot/1.0; +https://strangeramblings.com)';
 
-const FETCH_TIMEOUT_MS = 10_000;
+// The whole download, not just the headers: guardedPublicFetch times the body
+// too, so this is the old 10 s header wait plus room for a slow page to finish.
+const FETCH_TIMEOUT_MS = 20_000;
 const MAX_BYTES = 2 * 1024 * 1024; // 2 MB raw HTML cap
 const MAX_TEXT_CHARS = 50_000; // ~12k tokens after extraction
 // Every hop is re-validated and re-pinned by guardedPublicFetch. Plain fetch()
