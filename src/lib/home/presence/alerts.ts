@@ -350,8 +350,10 @@ export async function postToPilot(
 // ── Detection ────────────────────────────────────────────────────────────────
 
 /** The places crossings are watched at: every active place flagged for
- *  alerts, and home whatever its flag says. Each carries which directions it
- *  announces; `stepCrossings` tracks both regardless. */
+ *  alerts, and home whatever its flag says — but home RAISES only when its
+ *  flag is on, like any place (`alerts: false` keeps it watched and silent).
+ *  Each carries which directions it announces; `stepCrossings` tracks both
+ *  regardless. */
 export async function loadAlertPlaces(): Promise<AlertPlace[]> {
   const rows = await db
     .select({
@@ -367,24 +369,47 @@ export async function loadAlertPlaces(): Promise<AlertPlace[]> {
     .from(daydreamPlaces)
     .where(and(eq(daydreamPlaces.status, 'active'), eq(daydreamPlaces.alerts, true)));
   const home = await getHomePlace();
-  const out: AlertPlace[] = rows.map((r) => ({ ...r, isHome: r.id === home?.id }));
+  return withHome(
+    rows.map((r) => ({ ...r, alerts: true })),
+    home,
+    home && !rows.some((r) => r.id === home.id)
+      ? ((
+          await db
+            .select({
+              whatsappAlerts: daydreamPlaces.whatsappAlerts,
+              alertArrive: daydreamPlaces.alertArrive,
+              alertLeave: daydreamPlaces.alertLeave,
+            })
+            .from(daydreamPlaces)
+            .where(eq(daydreamPlaces.id, home.id))
+            .limit(1)
+        )[0] ?? null)
+      : null,
+  );
+}
+
+/**
+ * The flagged places plus home. Home always joins (so who is in stays
+ * tracked), but one not among the flagged rows has its switch OFF: it raises
+ * nothing. PURE.
+ */
+export function withHome(
+  flagged: ReadonlyArray<Omit<AlertPlace, 'isHome'>>,
+  home: Pick<CrossingPlace, 'id' | 'lat' | 'lon' | 'radiusM'> & { label?: string | null } | null,
+  homeFlags: { whatsappAlerts: boolean; alertArrive: boolean; alertLeave: boolean } | null,
+): AlertPlace[] {
+  const out: AlertPlace[] = flagged.map((r) => ({ ...r, isHome: r.id === home?.id }));
   if (home && !out.some((p) => p.id === home.id)) {
-    const [flags] = await db
-      .select({
-        whatsappAlerts: daydreamPlaces.whatsappAlerts,
-        alertArrive: daydreamPlaces.alertArrive,
-        alertLeave: daydreamPlaces.alertLeave,
-      })
-      .from(daydreamPlaces)
-      .where(eq(daydreamPlaces.id, home.id))
-      .limit(1);
-    // Home is watched whatever `alerts` says; its direction switches still
-    // apply, as they do everywhere.
     out.push({
-      ...home,
-      whatsappAlerts: flags?.whatsappAlerts ?? false,
-      alertArrive: flags?.alertArrive ?? true,
-      alertLeave: flags?.alertLeave ?? true,
+      id: home.id,
+      lat: home.lat,
+      lon: home.lon,
+      radiusM: home.radiusM,
+      label: home.label ?? null,
+      alerts: false,
+      whatsappAlerts: homeFlags?.whatsappAlerts ?? false,
+      alertArrive: homeFlags?.alertArrive ?? true,
+      alertLeave: homeFlags?.alertLeave ?? true,
       isHome: true,
     });
   }
@@ -663,7 +688,7 @@ export async function deliverAlerts(
     .where(gte(householdEvent.at, since))
     .orderBy(asc(householdEvent.at));
   if (!rows.length) return result;
-  const events: AlertEvent[] = rows.map((r) => ({
+  const raised: AlertEvent[] = rows.map((r) => ({
     id: r.id,
     subject: r.subject,
     placeId: r.placeId,
@@ -674,12 +699,14 @@ export async function deliverAlerts(
     whatsappTried: r.whatsappTried && typeof r.whatsappTried === 'object' ? r.whatsappTried : {},
   }));
 
-  // Labels and flags as they are now, for any place an event names —
-  // including one un-flagged since, which then simply gets no WhatsApp.
+  // Labels and flags as they are now, for any place an event names. One
+  // un-flagged since (home included) delivers nothing: no place notifies
+  // unless its switch is on.
   const home = await getHomePlace();
   const placeRows = await db
     .select({
       id: daydreamPlaces.id,
+      alerts: daydreamPlaces.alerts,
       lat: daydreamPlaces.lat,
       lon: daydreamPlaces.lon,
       radiusM: daydreamPlaces.radiusM,
@@ -689,8 +716,10 @@ export async function deliverAlerts(
       alertLeave: daydreamPlaces.alertLeave,
     })
     .from(daydreamPlaces)
-    .where(inArray(daydreamPlaces.id, [...new Set(events.map((e) => e.placeId))]));
+    .where(inArray(daydreamPlaces.id, [...new Set(raised.map((e) => e.placeId))]));
   const places = new Map(placeRows.map((p) => [p.id, { ...p, isHome: p.id === home?.id } as AlertPlace]));
+  const events = raised.filter((e) => places.get(e.placeId)?.alerts !== false);
+  if (!events.length) return result;
 
   // Movers who are not to be announced any more. Read once per run. When the
   // pilot's users list cannot be read (or was never stored), whether an app

@@ -19,6 +19,7 @@ const {
   postToPilot,
   whatsappFollowers,
   DELIVERY_WINDOW_MS,
+  withHome,
 } = await import('./alerts');
 type AlertEvent = import('./alerts').AlertEvent;
 type AlertPlace = import('./alerts').AlertPlace;
@@ -393,5 +394,25 @@ describe('direction — a place set to announce only arrivals, or only departure
   it('does not WhatsApp a leave either', () => {
     const leave = ev('e2', { kind: 'leave', at: new Date(AT.getTime() + 60_000) });
     expect(planWhatsApp([ev('e1'), leave], ARRIVE_ONLY, members, NOW).map((s) => s.eventId)).toEqual(['e1']);
+  });
+});
+
+describe('withHome — home is watched, but silent unless switched on', () => {
+  const HOME = { id: 'home', lat: 51.2, lon: -1, radiusM: 100, label: null };
+  const FLAGS = { whatsappAlerts: false, alertArrive: true, alertLeave: true };
+
+  it('adds an unflagged home with its switch OFF, so it raises nothing', () => {
+    const out = withHome([], HOME, FLAGS);
+    expect(out).toEqual([{ ...HOME, ...FLAGS, alerts: false, isHome: true }]);
+  });
+
+  it('keeps a flagged home as it is, switch on', () => {
+    const flagged = [{ ...HOME, ...FLAGS, alerts: true }];
+    expect(withHome(flagged, HOME, null)).toEqual([{ ...flagged[0], isHome: true }]);
+  });
+
+  it('with no home, is just the flagged places', () => {
+    const school = { id: 'school', lat: 51, lon: -1, radiusM: 100, label: 'School', alerts: true, whatsappAlerts: false };
+    expect(withHome([school], null, null)).toEqual([{ ...school, isHome: false }]);
   });
 });
