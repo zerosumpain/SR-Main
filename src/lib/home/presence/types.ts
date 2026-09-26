@@ -39,7 +39,8 @@ export const FAMILY_SUBJECTS: SubjectEntity[] = [
 
 // ── Trail sources ────────────────────────────────────────────────────────────
 
-export const TRAIL_SOURCES = ['push', 'poll', 'gap'] as const;
+/** 'companion' is the iPhone app, pulled from the pilot's household lane. */
+export const TRAIL_SOURCES = ['push', 'poll', 'gap', 'companion'] as const;
 export type TrailSource = (typeof TRAIL_SOURCES)[number];
 
 // ── Movement mode ────────────────────────────────────────────────────────────
@@ -234,6 +235,13 @@ export interface IncomingFix {
   haState?: string | null;
   /** Seconds since the underlying HA reading was taken. */
   readingAgeS?: number | null;
+  /**
+   * Speed the device itself reported (km/h), when it knows. Preferred over the
+   * speed implied by the previous fix, which is an average over however long
+   * the gap was. Null or negative means unknown and falls back to the implied
+   * speed.
+   */
+  speedKmh?: number | null;
 }
 
 /** The minimum a previous row has to expose to derive speed and mode. */

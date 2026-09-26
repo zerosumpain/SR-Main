@@ -5385,7 +5385,7 @@ export const daydreamTrail = pgTable(
     /** Whose fix. 'john' today; the column exists so a second subject never
      *  means a second table. The whole household writes trail rows since 2026-08-27 (owner's D1 decision). */
     subject: text('subject').notNull().default('john'),
-    /** 'push' | 'poll' | 'gap' — see the note above. */
+    /** 'push' | 'poll' | 'gap' | 'companion' (the iPhone app, via the pilot) — see the note above. */
     source: text('source').notNull(),
     lat: doublePrecision('lat'),
     lon: doublePrecision('lon'),

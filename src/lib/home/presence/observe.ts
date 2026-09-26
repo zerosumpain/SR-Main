@@ -22,6 +22,7 @@ import {
   haversineKm,
 } from './cluster';
 import {
+  ABSURD_SPEED_KMH,
   DEFAULT_SUBJECT,
   MAX_USABLE_ACCURACY_M,
   RAIL_MIN_FIXES,
@@ -43,7 +44,7 @@ export interface RecordedFix {
 }
 
 /** Coordinates that are merely wrong rather than merely imprecise. */
-function isPlausibleCoord(lat: unknown, lon: unknown): lat is number {
+export function isPlausibleCoord(lat: unknown, lon: unknown): lat is number {
   return (
     typeof lat === 'number' &&
     typeof lon === 'number' &&
@@ -147,12 +148,11 @@ export async function recordFix(
   const priors = await getPriorFixes(subject, RAIL_MIN_FIXES);
   const prev = priors[0] ?? null;
 
-  const speedKmh = speedKmhBetween(
-    prev ? { ts: prev.ts, lat: prev.lat, lon: prev.lon } : null,
-    fix.lat,
-    fix.lon,
-    ts,
-  );
+  const reported = fix.speedKmh;
+  const speedKmh =
+    typeof reported === 'number' && Number.isFinite(reported) && reported >= 0 && reported <= ABSURD_SPEED_KMH
+      ? Math.round(reported * 10) / 10
+      : speedKmhBetween(prev ? { ts: prev.ts, lat: prev.lat, lon: prev.lon } : null, fix.lat, fix.lon, ts);
 
   let mode = inferMode(speedKmh);
   if (mode === 'vehicle') {

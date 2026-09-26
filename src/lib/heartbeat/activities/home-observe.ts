@@ -11,22 +11,9 @@ import {
   errMsg,
   type SubjectEntity,
 } from '$lib/home/presence/types';
-import { lifeSubjects, listMembers } from '$lib/home/presence/members';
+import { ingestCompanion, type CompanionResult } from '$lib/home/presence/companion';
+import { lifeSubjects, listMembers, type HouseholdMember } from '$lib/home/presence/members';
 import type { ActivityHandler } from '../types';
-
-/**
- * Who Home Assistant is polled for: household members whose source is
- * 'life360'. A failed read of the members table falls back to the seed list,
- * so a database hiccup never stops the trail; a companion or 'none' member is
- * never polled from Life360, because choosing not to be tracked has to mean it.
- */
-async function life360Subjects(): Promise<SubjectEntity[]> {
-  try {
-    return lifeSubjects(await listMembers());
-  } catch {
-    return FAMILY_SUBJECTS;
-  }
-}
 
 // The name is the heartbeat_actions row's identity: it stays 'daydream-observe'
 // although the file moved, because renaming it would orphan the row.
@@ -37,7 +24,7 @@ interface ObserveConfig {
   pushFreshMins?: number;
   /** Legacy single-entity override, honoured for the default subject. */
   personEntity?: string;
-  /** Everyone to observe. Defaults to the whole household (FAMILY_SUBJECTS). */
+  /** Everyone to poll from HA. Defaults to the household's life360 members. */
   subjects?: SubjectEntity[];
 }
 
@@ -67,7 +54,7 @@ const DEFAULTS: Required<Omit<ObserveConfig, 'subjects'>> = {
 export const homeObserve: ActivityHandler = {
   name: NAME,
   description:
-    'Poll floor for the daydream trail. Records where the whole household is in one Home Assistant round trip — the push stream only covers John — and records an explicit per-subject gap row when it looks and cannot see, so coverage is computable rather than assumed. No LLM.',
+    'Poll floor for the household trail. Records where every Life360 member is in one Home Assistant round trip — the push stream only covers John — with an explicit per-subject gap row when it looks and cannot see, then pulls the iPhone app\'s fixes from the pilot for companion members. No LLM.',
   // Same constant coverage divides by. Written once so they cannot drift.
   defaultCadenceSeconds: OBSERVE_CADENCE_SECONDS,
   defaultEnabled: true,
@@ -78,9 +65,21 @@ export const homeObserve: ActivityHandler = {
 
   async run(ctx) {
     const cfg = { ...DEFAULTS, ...(ctx.config as ObserveConfig) };
+
+    // Who is written from where. A failed read of the members table falls back
+    // to the seed list for Home Assistant, so a database hiccup never stops
+    // the trail, and skips the companion pull, which cannot map an email to a
+    // person without it. A companion or 'none' member is never polled from
+    // Life360: choosing not to be tracked has to mean it.
+    let members: HouseholdMember[] | null = null;
+    try {
+      members = await listMembers();
+    } catch {
+      members = null;
+    }
     const subjects: SubjectEntity[] =
       cfg.subjects ??
-      (await life360Subjects()).map((s) =>
+      (members ? lifeSubjects(members) : FAMILY_SUBJECTS).map((s) =>
         // The legacy personEntity override still steers the default subject.
         s.subject === DEFAULT_SUBJECT ? { ...s, entity: cfg.personEntity } : s,
       );
@@ -93,19 +92,18 @@ export const homeObserve: ActivityHandler = {
         s.subject === DEFAULT_SUBJECT && (await hasFreshFix(cfg.pushFreshMins * 60_000, s.subject));
       if (!fresh) due.push(s);
     }
-    if (due.length === 0) {
-      return {
-        outcome: 'ok',
-        summary: `push stream fresh (<${cfg.pushFreshMins}m) — no poll needed`,
-      };
-    }
-
-    const polled = await pollAllSubjects(due);
 
     const fixes: string[] = [];
     const gaps: string[] = [];
     const errors: string[] = [];
     const details: Record<string, unknown> = {};
+    const bits: string[] = [];
+
+    if (due.length === 0 && subjects.length > 0) {
+      bits.push(`push stream fresh (<${cfg.pushFreshMins}m) — no poll needed`);
+    }
+
+    const polled = due.length ? await pollAllSubjects(due) : new Map();
 
     for (const s of due) {
       const res = polled.get(s.subject) ?? { error: 'not polled' };
@@ -137,12 +135,34 @@ export const homeObserve: ActivityHandler = {
       }
     }
 
-    const bits: string[] = [];
+    // The iPhone app, through the pilot's household lane. Skipped silently
+    // when no token is configured. A failure here is reported, not an error
+    // outcome: the pilot being unreachable is as ordinary as HA being so, and
+    // the cursor stays put so nothing is lost. No gap rows either — silence is
+    // normal for a phone (a still phone is suspended), so it proves nothing.
+    let companion: CompanionResult | null = null;
+    if (members) {
+      try {
+        companion = await ingestCompanion(members);
+      } catch (err) {
+        companion = { pages: 0, written: 0, dropped: 0, rejected: 0, more: false, error: errMsg(err) };
+      }
+    }
+    if (companion) {
+      details.companion = companion;
+      const c = [`${companion.written} written`];
+      if (companion.dropped) c.push(`${companion.dropped} unmapped`);
+      if (companion.rejected) c.push(`${companion.rejected} rejected`);
+      if (companion.more) c.push('more waiting');
+      if (companion.error) c.push(`failed: ${companion.error.slice(0, 80)}`);
+      bits.push(`companion: ${c.join(', ')}`);
+    }
+
     if (fixes.length) bits.push(`fixes: ${fixes.join(', ')}`);
     if (gaps.length) bits.push(`gaps: ${gaps.join(', ')}`);
     if (errors.length) bits.push(`rejected: ${errors.join('; ')}`);
 
-    // Every fix rejected and none written is a fault; gaps alone are not.
+    // Every polled fix rejected and none written is a fault; gaps alone are not.
     const outcome = errors.length > 0 && fixes.length === 0 ? 'error' : 'ok';
     return { outcome, summary: bits.join(' · ') || 'nothing to record', details };
   },
