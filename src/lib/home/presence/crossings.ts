@@ -18,6 +18,11 @@
 //
 // An arrive is refused from a fix moving at rail speed: a train through a
 // flagged place is passing, not arriving. Leaving on one is still leaving.
+//
+// Each place says which DIRECTIONS it announces (`alertArrive`, `alertLeave`,
+// both on by default). That gates the EVENT only: whether someone is inside is
+// tracked exactly as before, so turning "when they leave" off and on again
+// never invents a crossing that did not happen.
 
 import { metresBetween } from './cluster';
 import { MAX_USABLE_ACCURACY_M } from './types';
@@ -37,6 +42,19 @@ export interface CrossingPlace {
   lat: number;
   lon: number;
   radiusM: number;
+  /** Raise an event on arriving here. Absent = on (the column default). */
+  alertArrive?: boolean;
+  /** Raise an event on leaving here. Absent = on. */
+  alertLeave?: boolean;
+}
+
+/** Whether a place announces crossings in this direction. An unknown place
+ *  (or one without the flags) announces both, as the columns default. PURE. */
+export function raisesCrossing(
+  place: Pick<CrossingPlace, 'alertArrive' | 'alertLeave'> | undefined,
+  kind: CrossingKind,
+): boolean {
+  return (kind === 'arrive' ? place?.alertArrive : place?.alertLeave) !== false;
 }
 
 export interface CrossingFix {
@@ -68,7 +86,8 @@ export interface Crossing {
  * `prev.inside` is every place they were last known to be inside. A place in
  * `inside` that is no longer in `places` (unflagged, retired) is dropped from
  * the returned set silently: no leave is raised for somewhere nobody is
- * watching any more.
+ * watching any more. A direction the place does not announce moves `inside`
+ * all the same and raises nothing.
  *
  * A null accuracy is taken as usable, as the trail writer takes it: Home
  * Assistant does not always report one, and refusing those fixes would make a
@@ -86,12 +105,13 @@ export function detectCrossings(
     const was = prev.inside.has(p.id);
     if (was) {
       // The near edge of the accuracy circle must be past the band too.
-      if (d - (fix.accuracyM ?? 0) > p.radiusM + LEAVE_BAND_M) events.push({ placeId: p.id, kind: 'leave' });
-      else inside.add(p.id);
+      if (d - (fix.accuracyM ?? 0) > p.radiusM + LEAVE_BAND_M) {
+        if (raisesCrossing(p, 'leave')) events.push({ placeId: p.id, kind: 'leave' });
+      } else inside.add(p.id);
     } else {
       const precise = fix.accuracyM == null || fix.accuracyM < p.radiusM;
       if (d <= p.radiusM && precise && !isPassingThrough(fix)) {
-        events.push({ placeId: p.id, kind: 'arrive' });
+        if (raisesCrossing(p, 'arrive')) events.push({ placeId: p.id, kind: 'arrive' });
         inside.add(p.id);
       }
     }

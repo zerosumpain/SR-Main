@@ -372,3 +372,26 @@ describe('silenced movers', () => {
     expect([...known.silenced].sort()).toEqual(['alex', 'robin']);
   });
 });
+
+describe('direction — a place set to announce only arrivals, or only departures', () => {
+  // The same school, now told not to announce departures. An event already
+  // written before the switch was flipped is not delivered either.
+  const ARRIVE_ONLY = new Map<string, AlertPlace>([
+    ['school', { ...(PLACES.get('school') as AlertPlace), alertArrive: true, alertLeave: false }],
+  ]);
+  const members = [
+    member('sam'),
+    member('alex', { whatsapp: '+440000000002', alerts: { whatsapp: true } }),
+  ];
+
+  it('does not send a leave to the app, and marks it done rather than owed', () => {
+    const { send, nobody } = buildPilotEvents([ev('e1'), ev('e2', { kind: 'leave' })], ARRIVE_ONLY, members);
+    expect(send.map((s) => s.id)).toEqual(['e1']);
+    expect(nobody).toEqual(['e2']);
+  });
+
+  it('does not WhatsApp a leave either', () => {
+    const leave = ev('e2', { kind: 'leave', at: new Date(AT.getTime() + 60_000) });
+    expect(planWhatsApp([ev('e1'), leave], ARRIVE_ONLY, members, NOW).map((s) => s.eventId)).toEqual(['e1']);
+  });
+});

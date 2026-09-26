@@ -5561,9 +5561,20 @@ export const daydreamPlaces = pgTable(
     /** Whether a crossing here is ALSO sent by WhatsApp to followers who have
      *  a number and WhatsApp on. Defined places only, owner-set. */
     whatsappAlerts: boolean('whatsapp_alerts').notNull().default(false),
-    /** True once the owner has set `radiusM` by hand on the places panel.
-     *  The places refresh re-derives the radius from member spread on every
-     *  pass, which would quietly undo the owner's number without this. */
+    /** Which directions a crossing here is announced in, under `alerts` (and
+     *  for home, always watched). Tracking who is inside ignores these: they
+     *  gate the event, not the state. Owner-set on the places map. */
+    alertArrive: boolean('alert_arrive').notNull().default(true),
+    alertLeave: boolean('alert_leave').notNull().default(true),
+    /**
+     * True once the owner has set this place's GEOMETRY by hand — moved,
+     * resized or created it on the places map, or typed a radius. The places
+     * refresh then keeps `lat`, `lon` and `radiusM` as they are and never
+     * retires the place to `transit`; otherwise it re-derives all three from
+     * the trail on every pass and would quietly undo the owner's edge. (Named
+     * for the radius, which is all it once covered; not renamed, because a
+     * column rename makes drizzle push prompt.)
+     */
     radiusPinned: boolean('radius_pinned').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
