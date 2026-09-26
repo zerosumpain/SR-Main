@@ -302,9 +302,19 @@ Super-Admin-only jkai features; per-user model choice; a cash budget per user.
 | Member explore depth | `brief`, with that tier's budget | Explore children were implicitly `investigation`, which the cap forbids; brief keeps explore usable | Yes |
 | Research the owner's own stores | `to-drive`, `to-intel` stay owner-only; a member's run never auto-commits into owner intel (`fromIntel` stripped, worker checks `principalId`) | Both write into John's stores | Yes |
 | Closed-area grants | Stored but never held (`isOpenPermission` in `effectivePermissions`) | The API accepts any valid string; a capability check (news "note") must not find a door the catalogue has not opened | Yes |
-| Home levels | `self` = the house (dashboard, devices, Echoes); `all` = + the voice log | The voice log is everyone's speech, children's included — not a person's own material | Yes |
+| Home levels | `self` = the house (dashboard, devices); `all` = + Echoes and the voice log | Both are other people's words, children's included — not a person's own material (Echoes moved up in the P4 review) | Yes |
 | Notebook readers | Every store reader defaults to the owner's notes; routes pass the viewer's scope | Ponder, think, steer and the review/weave heartbeat read on John's behalf and must never pick up a member's notebook | Yes |
 | Review and weave for members | Owner only | Both spend unattended-style and weave writes into John's intel space | Yes |
 | Recall for members | Their intel scope + readable research only; never files, memory, datastore, activity | Those four are John's alone; Drive opens in P6 | Yes |
 | Recall page | Stays in the intel workbench; give intel with recall | Moving it out of the intel layout is a redesign, not a permission | Yes |
-
+| Member chat tools | A closed list (web search, fetch_url, news search, charts/tables/diagrams, evidence_read), enforced in the executor AND in `runSingleToolCall` | Filtering the offered tools alone leaves meta tools and model-invented names; the check sits where a call is run | Yes |
+| Member chat caps | 50 turns/day, 30 uploads/day, 30 new threads/day, 2 turns at once, on the `access_usage` ledger | Same mechanism as research; Codex is quota, not cash, so a count is the cap that can be enforced | Yes |
+| Owner threads in background jobs | Every background reader filters through `$lib/jkai/owner-threads` | Gmail previews, check-ins, memory review and briefings would otherwise post into or read a member's thread | Yes |
+| Attachment serving | Raster images, audio, video and PDF inline; everything else downloads under `sandbox` CSP | A member's HTML or SVG upload served inline on the site origin is a stored XSS against the owner (P5 review, high) | Yes |
+| `all` in chat | Reads other members' threads; posts only into your own | A turn runs as the thread's principal; posting into someone else's thread would act as them | Yes |
+| Member files in Drive | Stored under `members/<principal>/`, shown to the member without the prefix | `workflow_files.name` is globally unique and the owner's tools find files by name; a prefix keeps both, where a composite index would ripple through every reader | Yes, rename rows |
+| Owner's view of members' files | Not in the owner's Drive yet (404 like anyone else) | The owner's drive reads exactly as before; a Members view is a feature of its own | Yes |
+| Member Drive extras | No shares, RAG index, conversion or intel extraction | Each reaches the owner's stores or public links; the upload/list/rename/delete core is what the brief needs | Yes |
+| Drive quota | 2 GB per principal (`DRIVE_MEMBER_QUOTA_BYTES`), checked before the insert, not atomically | Parallel uploads overshoot by at most one file each; a lock per upload is not worth it at this size | Yes |
+| Made-up folder owners | An upload names a real principal (own, household, or an existing user principal) or is refused | An admin-level member could otherwise mint rows under nobody, each with a fresh quota | Yes |
+| Drive rollout | Main A → Drive A (dormant lane) → Drive B (vendored catalogue, open) → Main B (open + nav) | Each step is harmless alone: nothing a member can reach changes until the last two | n/a |
