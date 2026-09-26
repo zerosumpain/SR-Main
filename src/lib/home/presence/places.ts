@@ -24,6 +24,7 @@ import { and, asc, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamPlaces, daydreamTrail, jkaiMemories } from '$lib/db/schema';
 import { clusterPointsYielding, clusterRadiusM, median, metresBetween, segmentVisits } from './cluster';
+import { RADIUS_MAX_M, RADIUS_MIN_M, validPlaceGeometry } from './geo';
 import {
   CLUSTER_RADIUS_M,
   LOCAL_TZ,
@@ -86,6 +87,35 @@ function histogram(size: number, values: number[]): number[] {
   return out;
 }
 
+/** The geometry columns a refresh may write, for a place the owner has or
+ *  has not set on the map. `radius_pinned` means the owner set the centre and
+ *  the radius (moved, resized or created it), so both are kept and only the
+ *  visit statistics move. PURE. */
+export function refreshedGeometry<T extends { lat: number; lon: number; radiusM: number }>(
+  matched: { radiusPinned: boolean; lat: number; lon: number; radiusM: number },
+  stats: T,
+): T {
+  return matched.radiusPinned ? { ...stats, lat: matched.lat, lon: matched.lon, radiusM: matched.radiusM } : stats;
+}
+
+/**
+ * What happens to the matched place when this pass's cluster there did not
+ * qualify. PURE.
+ *
+ * `keep`: a place the owner named, or drew, is not demoted by a quiet
+ * fortnight — a place drawn round a school before term starts has no visits
+ * at all, and retiring it would take it off the panel and out of the alerts.
+ * `retire`: an inferred active place that no longer qualifies goes to
+ * `transit`. `reject`: nothing matched (or it is not active) — noise.
+ */
+export function quietPlaceOutcome(
+  matched: { source: string; status: string; radiusPinned: boolean } | undefined,
+): 'keep' | 'retire' | 'reject' {
+  if (!matched) return 'reject';
+  if (matched.source === 'confirmed' || matched.radiusPinned) return 'keep';
+  return matched.status === 'active' ? 'retire' : 'reject';
+}
+
 /**
  * Re-derive the place graph from the trail.
  *
@@ -98,7 +128,8 @@ function histogram(size: number, values: number[]): number[] {
  * What it will NOT do is overwrite a name. A confirmed place keeps its label,
  * kind, source and memory id no matter how the geometry moves underneath it —
  * the owner's answer is the one thing here that recomputation must never
- * silently revise.
+ * silently revise. Nor will it move, resize or retire a place whose geometry
+ * the owner set on the places map (`radiusPinned`).
  */
 export async function refreshPlaces(opts: { windowDays?: number } = {}): Promise<RefreshResult> {
   const windowDays = opts.windowDays ?? TRAIL_RETENTION_DAYS;
@@ -183,10 +214,11 @@ export async function refreshPlaces(opts: { windowDays?: number } = {}): Promise
 
     if (realVisits.length < MIN_VISITS_FOR_PLACE) {
       // Not a place yet. An ALREADY confirmed place is not demoted by a quiet
-      // fortnight — you named it, it stays named.
-      if (matched && matched.source === 'confirmed') {
+      // fortnight — you named it, it stays named. Nor is one you drew.
+      const outcome = quietPlaceOutcome(matched);
+      if (matched && outcome === 'keep') {
         for (const m of members) assignment.set(m.id, matched.id);
-      } else if (matched && matched.status === 'active') {
+      } else if (matched && outcome === 'retire') {
         // It used to qualify and does not any more. Retiring it is the point:
         // the stillness rule reclassified 78 stretches of road that the old
         // span-based dwell had promoted to places, and leaving them `active`
@@ -243,10 +275,10 @@ export async function refreshPlaces(opts: { windowDays?: number } = {}): Promise
       // revisable when the evidence changes. An `ignored` place stays ignored:
       // that one is the owner's.
       //
-      // A radius the owner set on the places panel is theirs too: it decides
-      // where an arrival alert fires, and re-deriving it from member spread
-      // every pass would quietly move that edge back.
-      const refreshed = matched.radiusPinned ? { ...stats, radiusM: matched.radiusM } : stats;
+      // Geometry the owner set on the places map is theirs too: it decides
+      // where an arrival alert fires, and re-deriving the centre and radius
+      // from member spread every pass would quietly move that edge back.
+      const refreshed = refreshedGeometry(matched, stats);
       await db
         .update(daydreamPlaces)
         .set(matched.status === 'transit' ? { ...refreshed, status: 'active' } : refreshed)
@@ -628,17 +660,21 @@ export async function getPlaceVisits(placeId: string, limit = 12): Promise<Place
 
 // ── The owner's places panel (/home/people/places) ──────────────────────────
 
-/** The radius the owner may set by hand, in metres. */
-export const RADIUS_MIN_M = 50;
-export const RADIUS_MAX_M = 2000;
+/** The radius the owner may set by hand, in metres (defined beside the map
+ *  geometry in geo.ts, re-exported here for the server side). */
+export { RADIUS_MAX_M, RADIUS_MIN_M };
 
 export interface PanelPlace {
   id: string;
   label: string | null;
   kind: string;
+  lat: number;
+  lon: number;
   radiusM: number;
   radiusPinned: boolean;
   alerts: boolean;
+  alertArrive: boolean;
+  alertLeave: boolean;
   whatsappAlerts: boolean;
   visitCount: number;
   isHome: boolean;
@@ -655,9 +691,13 @@ export async function listPanelPlaces(): Promise<PanelPlace[]> {
       id: daydreamPlaces.id,
       label: daydreamPlaces.label,
       kind: daydreamPlaces.kind,
+      lat: daydreamPlaces.lat,
+      lon: daydreamPlaces.lon,
       radiusM: daydreamPlaces.radiusM,
       radiusPinned: daydreamPlaces.radiusPinned,
       alerts: daydreamPlaces.alerts,
+      alertArrive: daydreamPlaces.alertArrive,
+      alertLeave: daydreamPlaces.alertLeave,
       whatsappAlerts: daydreamPlaces.whatsappAlerts,
       visitCount: daydreamPlaces.visitCount,
     })
@@ -679,10 +719,12 @@ export async function listPanelPlaces(): Promise<PanelPlace[]> {
  */
 export async function updatePlaceAlerts(
   placeId: string,
-  patch: { alerts?: boolean; whatsappAlerts?: boolean; radiusM?: number },
+  patch: { alerts?: boolean; alertArrive?: boolean; alertLeave?: boolean; whatsappAlerts?: boolean; radiusM?: number },
 ): Promise<{ id: string } | null> {
   const set: Record<string, unknown> = { updatedAt: new Date() };
   if (patch.alerts !== undefined) set.alerts = patch.alerts;
+  if (patch.alertArrive !== undefined) set.alertArrive = patch.alertArrive;
+  if (patch.alertLeave !== undefined) set.alertLeave = patch.alertLeave;
   if (patch.whatsappAlerts !== undefined) set.whatsappAlerts = patch.whatsappAlerts;
   if (patch.radiusM !== undefined) {
     if (!Number.isFinite(patch.radiusM) || patch.radiusM < RADIUS_MIN_M || patch.radiusM > RADIUS_MAX_M) {
@@ -697,4 +739,69 @@ export async function updatePlaceAlerts(
     .where(eq(daydreamPlaces.id, placeId))
     .returning({ id: daydreamPlaces.id });
   return row ?? null;
+}
+
+/**
+ * Move and/or resize a place from the places map. PINS it: the refresh keeps
+ * this centre and radius from now on and never retires the place. Null when
+ * there is no such place.
+ */
+export async function updatePlaceGeometry(
+  placeId: string,
+  geo: { lat: number; lon: number; radiusM: number },
+): Promise<{ id: string } | null> {
+  const bad = validPlaceGeometry(geo.lat, geo.lon, geo.radiusM);
+  if (bad) throw new Error(bad);
+  const [row] = await db
+    .update(daydreamPlaces)
+    .set({ lat: geo.lat, lon: geo.lon, radiusM: geo.radiusM, radiusPinned: true, updatedAt: new Date() })
+    .where(eq(daydreamPlaces.id, placeId))
+    .returning({ id: daydreamPlaces.id });
+  return row ?? null;
+}
+
+/** The longest name a place drawn on the map may carry. */
+export const PLACE_LABEL_MAX = 60;
+
+/**
+ * A place the owner drew on the map rather than one the trail found: named,
+ * active and pinned from birth, with no visits yet. The row is the same shape
+ * `refreshPlaces` inserts; the first refresh that finds a cluster inside it
+ * fills in the statistics and leaves the geometry alone.
+ *
+ * `source: 'confirmed'`, because the owner typed the name — that is what the
+ * column means. The caller writes the name into jkai's memory through
+ * `confirmPlace`, as a rename does.
+ */
+export async function createPlace(input: {
+  label: string;
+  kind: PlaceKind;
+  lat: number;
+  lon: number;
+  radiusM: number;
+}): Promise<{ id: string }> {
+  const label = input.label.trim();
+  if (!label) throw new Error('a place needs a name');
+  if (label.length > PLACE_LABEL_MAX) throw new Error(`a name is at most ${PLACE_LABEL_MAX} characters`);
+  const bad = validPlaceGeometry(input.lat, input.lon, input.radiusM);
+  if (bad) throw new Error(bad);
+  const [created] = await db
+    .insert(daydreamPlaces)
+    .values({
+      lat: input.lat,
+      lon: input.lon,
+      radiusM: input.radiusM,
+      label,
+      kind: input.kind,
+      source: 'confirmed',
+      status: 'active',
+      radiusPinned: true,
+      visitCount: 0,
+      distinctDays: 0,
+      medianDwellMins: 0,
+      dayHistogram: histogram(7, []),
+      hourHistogram: histogram(24, []),
+    })
+    .returning({ id: daydreamPlaces.id });
+  return created;
 }
