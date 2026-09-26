@@ -1,7 +1,13 @@
-import { json } from '@sveltejs/kit';
+import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { storeChatUpload } from '$lib/jkai/media/upload';
-import { chatAccess, requireConversation } from '$lib/jkai/chat-access.server';
+import {
+  chatAccess,
+  MEMBER_DAILY_UPLOADS,
+  MEMBER_UPLOAD_KINDS,
+  requireConversation,
+  reserveUsage,
+} from '$lib/jkai/chat-access.server';
 
 const ALLOWED_SOURCES = new Set(['web', 'generated']);
 
@@ -22,7 +28,14 @@ export const POST: RequestHandler = async (event) => {
   // A member uploads into their OWN thread only (404 for one they cannot read,
   // 403 for one they can but may not post in), and the row is stamped theirs.
   // The owner's path is unchanged: an upload may name a thread before it lands.
-  if (access.level !== 'owner' && conversationId) await requireConversation(event, conversationId, 'post');
+  if (access.level !== 'owner') {
+    // A member's upload always names their own thread (so the post check
+    // applies), is a kind to read rather than run or re-encode, and is metered.
+    if (!conversationId) throw error(400, 'Upload into a conversation.');
+    await requireConversation(event, conversationId, 'post');
+    await reserveUsage(access, 'upload', MEMBER_DAILY_UPLOADS, `That is ${MEMBER_DAILY_UPLOADS} files today — the limit.`);
+    return json(await storeChatUpload(form.get('file'), conversationId, 'web', access.own, MEMBER_UPLOAD_KINDS));
+  }
 
   return json(await storeChatUpload(form.get('file'), conversationId, source, access.own));
 };

@@ -92,6 +92,7 @@
     recentThreads = [],
     dailyAlerts,
     onopenlibrary,
+    member = false,
   }: {
     conversationId: string | null;
     initialDraft?: string;
@@ -161,6 +162,13 @@
       messageCount: number;
     }>;
     onopenlibrary?: () => void;
+    /**
+     * A non-owner member's pane (access groups). The server enforces what a
+     * member may do; this only hides the owner's controls — model and thinking
+     * pickers, builds, traces, secrets, tool promotion, the launcher — and skips
+     * the owner-only calls behind them, so a member meets no dead buttons.
+     */
+    member?: boolean;
   } = $props();
 
   function buildIdFromMessage(m: Message): string | null {
@@ -923,9 +931,13 @@
     // every mounted pane can call it.
     hydrateQueuedSends();
     if (active) textareaEl?.focus();
-    void fetchMentionIndex().then((list) => {
-      entityMentions = list;
-    });
+    // The mention index is the owner's intel graph, not a chat route; a member
+    // is refused it server-side, so skip the round trip.
+    if (!member) {
+      void fetchMentionIndex().then((list) => {
+        entityMentions = list;
+      });
+    }
     // Dock the command-palette trigger in the composer row.
     const undock = dockTrigger();
     /** A chart/entity selection in the contextual rail can be handed back to
@@ -1306,7 +1318,7 @@
         // waiting out its own backoff.
         if (data.type === 'intel') {
           intelRunning = data.phase === 'running';
-          if (data.phase === 'done') {
+          if (data.phase === 'done' && !member) {
             void fetchMentionIndex({ refresh: true }).then((list) => {
               entityMentions = list;
             });
@@ -1948,7 +1960,7 @@
     return () => mq.removeEventListener('change', sync);
   });
   const composerPlaceholder = $derived(
-    isPhone ? 'Ask…' : 'Ask, or type ⌥ to fire a workflow…',
+    isPhone || member ? 'Ask…' : 'Ask, or type ⌥ to fire a workflow…',
   );
 
   function insertWorkflowMention() {
@@ -2299,7 +2311,9 @@
 
   async function setThinkingLevel(level: ThinkingLevel | null) {
     thinkingMenuOpen = false;
-    if (!conversationId || level === thinkingLevel) return;
+    // The chip is hidden for a member and the PATCH field is owner-only (the
+    // server enforces it); this guard just keeps a stray call from 403ing.
+    if (member || !conversationId || level === thinkingLevel) return;
     const previous = thinkingLevel;
     // Optimistic: the chip is a preference, and making the user wait on a round
     // trip to see their own click is worse than reverting on the rare failure.
@@ -2336,6 +2350,9 @@
     // optimistic user bubble — reading `messages.length` here now would see that
     // bubble and silently disable routing for every conversation.
     if (!conversationId || !isFirstMessage) return;
+    // /api/jkai/routing/* is owner-only (the server enforces it): a member's
+    // model is the site default, chosen server-side, so there is nothing to route.
+    if (member) return;
     // A hand-picked model wins over the router — overriding it would make the
     // picker feel broken.
     if (modelPickedByUser) return;
@@ -2829,18 +2846,26 @@
           <p class="hero-kicker"><span>Live workspace</span> jkai / start anywhere</p>
           <h1 class="hero-title">What are we making today?</h1>
           <p class="hero-sub">
-            Ask plainly, or take the workspace in another direction. Your systems, notes, health data and working context can come with you.
+            {#if member}
+              Ask plainly. jkai can search the web and the news and draw charts and tables for you.
+            {:else}
+              Ask plainly, or take the workspace in another direction. Your systems, notes, health data and working context can come with you.
+            {/if}
           </p>
             <div class="direction-grid" class:has-library={!!onopenlibrary} aria-label="Workspace directions">
-              {#each LANDING_DIRECTIONS as direction (direction.label)}
-                <a class="direction-card" href={direction.href} title={direction.note}>
-                  <span class="direction-index">{direction.index}</span>
-                  <span class="direction-copy">
-                    <strong>{direction.label}</strong>
-                  </span>
-                  <span class="direction-arrow" aria-hidden="true">↗</span>
-                </a>
-              {/each}
+              <!-- Owner workspaces a member cannot open (the server refuses them);
+                   hidden so the member hub shows no dead links. -->
+              {#if !member}
+                {#each LANDING_DIRECTIONS as direction (direction.label)}
+                  <a class="direction-card" href={direction.href} title={direction.note}>
+                    <span class="direction-index">{direction.index}</span>
+                    <span class="direction-copy">
+                      <strong>{direction.label}</strong>
+                    </span>
+                    <span class="direction-arrow" aria-hidden="true">↗</span>
+                  </a>
+                {/each}
+              {/if}
               {#if onopenlibrary}
                 <button type="button" class="direction-card" onclick={() => onopenlibrary?.()}>
                   <span class="direction-index">05</span>
@@ -2849,7 +2874,9 @@
                 </button>
               {/if}
             </div>
-          {#if dailyAlerts}
+          <!-- A member's digest is often empty (no intel space); only show one
+               that has something in it. -->
+          {#if dailyAlerts && (!member || dailyAlerts.items.length > 0)}
             <DailyAlertsSummary summary={dailyAlerts} />
           {/if}
             <div class="hero-metrics" aria-label="Current workspace status">
@@ -2908,7 +2935,11 @@
           {:else if msg.isProgress}
             <!-- Live delegate_task workers — self-hides when there are none, and
                  renders above both the tool-progress box and the typing state. -->
-            <WorkerTray agents={Object.values(subAgents)} onToggleStep={toggleSubAgentStep} />
+            <!-- Members get no delegate workers (the server's member tool list
+                 has none); hidden rather than left as an empty control. -->
+            {#if !member}
+              <WorkerTray agents={Object.values(subAgents)} onToggleStep={toggleSubAgentStep} />
+            {/if}
             {#if msg.toolSteps && msg.toolSteps.length > 0}
               <!-- Tool progress box — only shown when tools are actually being used -->
               {@const split = splitToolSteps(msg.toolSteps)}
@@ -2931,7 +2962,9 @@
                     onresolve={() => { pendingConfirm = null; }}
                   />
                 {/if}
-                {#if pendingSecret}
+                <!-- Secret capture, dangerous-command approval: owner-only on the
+                     server; hidden for a member so there is nothing dead to press. -->
+                {#if pendingSecret && !member}
                   <SecretRequestModal
                     request={pendingSecret}
                     onDone={(r) => ackSecretRequest(r)}
@@ -2945,7 +2978,7 @@
                     onresolve={() => { pendingClarify = null; }}
                   />
                 {/if}
-                {#if pendingApproval}
+                {#if pendingApproval && !member}
                   <div class="approval-card">
                     <div class="approval-head">
                       <span aria-hidden="true">
@@ -3175,10 +3208,14 @@
               {#each artifactsForMessage(msg) as artifact, i (i)}
                 <Artifact {artifact} />
               {/each}
-              {#each promoteMarkersForMessage(msg) as marker (marker.toolCallId)}
-                <PromoteToolBanner messageId={msg.id} {marker} />
-              {/each}
-              {#if toolSteps.length === 0 && msg.traceId}
+              <!-- Tool promotion and traces are owner-only on the server; a member
+                   sees neither, so no dead banner or link. -->
+              {#if !member}
+                {#each promoteMarkersForMessage(msg) as marker (marker.toolCallId)}
+                  <PromoteToolBanner messageId={msg.id} {marker} />
+                {/each}
+              {/if}
+              {#if toolSteps.length === 0 && msg.traceId && !member}
                 <!-- Reloaded history with no persisted `metadata.toolSteps`,
                      so there are no step cards to show — but the chain itself
                      was recorded, and the trace page has it. -->
@@ -3204,7 +3241,7 @@
                     </span>
                     <span class="ta-count">{toolSteps.length} {toolSteps.length === 1 ? 'tool' : 'tools'}</span>
                     <span class="ta-names">{toolSteps.map((s) => friendlyToolName(resolveDisplayTool(s.tool, s.args).tool)).join(' · ')}</span>
-                    {#if msg.traceId}
+                    {#if msg.traceId && !member}
                       <!-- stopPropagation: an <a> inside <summary> would
                            otherwise toggle the disclosure on its way out. -->
                       <a
@@ -3335,7 +3372,8 @@
               {#if msg.attachments && msg.attachments.length > 0}
                 <MessageAttachments attachments={msg.attachments} />
               {/if}
-              {#if buildIdFromMessage(msg)}
+              <!-- Builds are owner-only (server-enforced); no pill for a member. -->
+              {#if buildIdFromMessage(msg) && !member}
                 <BuildPill buildId={buildIdFromMessage(msg)!} variant="inline" />
               {/if}
             </div>
@@ -3449,7 +3487,7 @@
             {/each}
           </div>
         {/if}
-        {#if activeBuild?.id}
+        {#if activeBuild?.id && !member}
           <div class="mb-2">
             <BuildPill buildId={activeBuild.id} variant="sticky" />
           </div>
@@ -3481,6 +3519,9 @@
                thread since the cutover has been on the default. Un-gated only
                after the `/model` push above was gated, or each switch would
                have posted a visible bubble and billed a turn. -->
+          <!-- A member's model and thinking level are chosen server-side (it
+               enforces this); the pickers are hidden, not left to 403. -->
+          {#if !member}
           {#if conversationId}
             <div class="model-switcher">
               {#if messages.length === 0}
@@ -3572,9 +3613,13 @@
               </div>
             {/if}
           {/if}
-          <button type="button" class="composer-chip" onclick={insertWorkflowMention} title="Fire a workflow">
-            <span class="chip-glyph" aria-hidden="true">⌥</span><span class="chip-word">workflow</span>
-          </button>
+          {/if}
+          <!-- The @ picker lists the owner's intel graph, never loaded for a member. -->
+          {#if !member}
+            <button type="button" class="composer-chip" onclick={insertWorkflowMention} title="Fire a workflow">
+              <span class="chip-glyph" aria-hidden="true">⌥</span><span class="chip-word">workflow</span>
+            </button>
+          {/if}
           <button
             type="button"
             class="composer-chip"
@@ -3592,15 +3637,18 @@
               est. {formatGbp(estPerTurnUsd)} / turn
             </span>
           {/if}
-          <button
-            type="button"
-            onclick={openLauncher}
-            class="composer-launch"
-            title="JKAI launcher (⌘K)"
-            aria-label="Open JKAI launcher"
-          >
-            ⌘K
-          </button>
+          <!-- The /jkai layout mounts no launcher for a member, so ⌘K would open nothing. -->
+          {#if !member}
+            <button
+              type="button"
+              onclick={openLauncher}
+              class="composer-launch"
+              title="JKAI launcher (⌘K)"
+              aria-label="Open JKAI launcher"
+            >
+              ⌘K
+            </button>
+          {/if}
           <button
             type="button"
             onclick={() => send()}

@@ -69,7 +69,7 @@ describe('isMemberAllowedRoute — a member reaches their own intel space and no
 
   it('refuses the owner surfaces a member must never reach', () => {
     for (const id of [
-      '/jkai',
+      '/jkai/canvas',
       '/jkai/intel/review',
       '/jkai/intel/quality',
       '/jkai/intel/dossiers',

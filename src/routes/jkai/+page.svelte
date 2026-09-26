@@ -31,6 +31,9 @@
   let conversationsLoadingMore = $state(false);
   let conversationCursor = $state(untrack(() => data.conversationCursor));
   let whatsappThread = $state(data.whatsappThread);
+  // A non-owner member's hub (access groups). The server enforces what they can
+  // reach; this only hides the owner's surfaces so they meet no dead controls.
+  const member = $derived(data.member === true);
   // The knowledge-graph rail collapses behind a header toggle below 1280px.
   let graphRailOpen = $state(true);
   // The old permanent left rail has become a centred library. Open work lives
@@ -536,7 +539,7 @@
       canOpenMore={openTabs.items.length < MAX_TABS}
       limitHit={openTabs.limitHit}
       onOpenLibrary={() => (libraryOpen = true)}
-      onToggleGraph={() => (graphRailOpen = !graphRailOpen)}
+      onToggleGraph={member ? undefined : () => (graphRailOpen = !graphRailOpen)}
       graphOpen={graphRailOpen}
       onActivate={activateTab}
       onClose={closeTab}
@@ -544,7 +547,7 @@
       onCycle={cycleTab}
     />
 
-    {#if data.freshBriefing}
+    {#if data.freshBriefing && !member}
       <div class="briefing-slot">
         <BriefingCard briefing={data.freshBriefing} />
       </div>
@@ -582,6 +585,7 @@
             dailyAlerts={data.dailyAlerts}
             recentThreads={conversationList}
             onopenlibrary={() => (libraryOpen = true)}
+            {member}
             onbusychange={(busy, ok) => handleBusyChange(tab.id, busy, ok)}
             onmodelchange={(ctx: ModelContext, supportsThinking?: boolean) =>
               handleModelChange(tab.id, ctx, supportsThinking)}
@@ -595,34 +599,38 @@
     {/if}
   </div>
 
-  <!-- Contextual workspace / phone bottom sheet. -->
-  <div class="graph-slot" class:collapsed={!graphRailOpen} class:sheet-open={hub.graphSheet !== 'closed'}>
-    <!-- The inspector reads the thread ledger straight off the hub bus now, so
-         the page no longer relays two of its numbers as props. -->
-    <ContextRail
-      conversationId={activeId}
-      sheetDetent={hub.graphSheet}
-      onCloseSheet={closeGraphSheet}
-    />
-  </div>
-  {#if hub.graphSheet !== 'closed'}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <div class="sheet-scrim" onclick={closeGraphSheet}></div>
+  <!-- Contextual workspace / phone bottom sheet. Owner-only: the rail reads the
+       owner's health, places, memory and graph, and its endpoints refuse a
+       member server-side — not mounted for one, rather than left to 403. -->
+  {#if !member}
+    <div class="graph-slot" class:collapsed={!graphRailOpen} class:sheet-open={hub.graphSheet !== 'closed'}>
+      <!-- The inspector reads the thread ledger straight off the hub bus now, so
+           the page no longer relays two of its numbers as props. -->
+      <ContextRail
+        conversationId={activeId}
+        sheetDetent={hub.graphSheet}
+        onCloseSheet={closeGraphSheet}
+      />
+    </div>
+    {#if hub.graphSheet !== 'closed'}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <div class="sheet-scrim" onclick={closeGraphSheet}></div>
+    {/if}
   {/if}
 </div>
 
 {#if libraryOpen}
   <ThreadLibrary
     conversations={conversationList}
-    {whatsappThread}
+    whatsappThread={member ? null : whatsappThread}
     activeConversationId={activeId}
     onSelect={selectConversation}
     onWhatsAppSelect={selectWhatsApp}
     onDelete={deleteConversation}
     onRename={renameConversation}
     onTogglePin={togglePinConversation}
-    onShare={openShare}
+    onShare={member ? undefined : openShare}
     onNew={createConversation}
     onClose={() => (libraryOpen = false)}
     {liveConversationIds}
@@ -633,7 +641,8 @@
   />
 {/if}
 
-{#if shareModalConv}
+<!-- Sharing is owner-only (server-enforced); no modal, and no Share button in the library. -->
+{#if shareModalConv && !member}
   <ShareConversationModal
     conversation={shareModalConv}
     onClose={() => (shareModalConv = null)}

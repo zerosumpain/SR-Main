@@ -29,8 +29,8 @@ describe('effectivePermissions', () => {
   });
 
   it('holds nothing in an area that has not opened yet, whatever is stored', () => {
-    // Drive and jkai.chat open in later phases.
-    const got = effectivePermissions({ role: 'guest', groups: [], grants: ['drive:admin', 'jkai.chat:self', 'research:self'] }, groups);
+    // Drive opens in a later phase.
+    const got = effectivePermissions({ role: 'guest', groups: [], grants: ['drive:admin', 'drive:self', 'research:self'] }, groups);
     expect([...got]).toEqual(['research:self']);
   });
 

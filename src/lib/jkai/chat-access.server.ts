@@ -93,24 +93,40 @@ export function chatTurnDecision(
 }
 
 /**
- * Take one metered chat turn, or throw the refusal. Count and ledger row under
- * a per-principal advisory lock, as `reserveResearchStart` does.
+ * Take one metered act of `kind` for a member, or throw 429 with `refusal`.
+ * Count and ledger row under a per-principal advisory lock in one transaction
+ * (as `reserveResearchStart` does), so parallel requests cannot all read the
+ * same count. The owner is never counted.
  */
-export async function reserveChatTurn(access: AreaAccess): Promise<void> {
+export async function reserveUsage(access: AreaAccess, kind: string, cap: number, refusal: string): Promise<void> {
   if (access.level === 'owner') return;
-  const setting = await getSetting<number>('access.chat.dailyTurns').catch(() => null);
-  const cap = typeof setting === 'number' && setting > 0 ? setting : CHAT_DAILY_TURNS;
-  const refusal = await db.transaction(async (tx) => {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`access_usage:chat:${access.own}`}))`);
+  const refused = await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`access_usage:${kind}:${access.own}`}))`);
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const [row] = await tx
       .select({ n: count() })
       .from(accessUsage)
-      .where(and(eq(accessUsage.principalId, access.own), eq(accessUsage.kind, 'chat'), gte(accessUsage.at, since)));
-    const decision = chatTurnDecision(access, Number(row?.n ?? 0), cap);
-    if (!decision.ok) return decision;
-    await tx.insert(accessUsage).values({ principalId: access.own, kind: 'chat' });
-    return null;
+      .where(and(eq(accessUsage.principalId, access.own), eq(accessUsage.kind, kind), gte(accessUsage.at, since)));
+    if (Number(row?.n ?? 0) >= cap) return true;
+    await tx.insert(accessUsage).values({ principalId: access.own, kind });
+    return false;
   });
-  if (refusal) throw error(refusal.status, refusal.error);
+  if (refused) throw error(429, refusal);
 }
+
+/** Take one metered chat turn (50/24 h unless `access.chat.dailyTurns` says otherwise), or throw. */
+export async function reserveChatTurn(access: AreaAccess): Promise<void> {
+  if (access.level === 'owner') return;
+  const setting = await getSetting<number>('access.chat.dailyTurns').catch(() => null);
+  const cap = typeof setting === 'number' && setting > 0 ? setting : CHAT_DAILY_TURNS;
+  await reserveUsage(access, 'chat', cap, `That is ${cap} messages today — the limit. Try again tomorrow.`);
+}
+
+/** Member uploads per rolling 24 h. */
+export const MEMBER_DAILY_UPLOADS = 30;
+/** What a member may upload: things to read, not things to run or re-encode. */
+export const MEMBER_UPLOAD_KINDS: ReadonlySet<string> = new Set(['image', 'pdf', 'document', 'text']);
+/** New member threads per rolling 24 h. */
+export const MEMBER_DAILY_THREADS = 30;
+/** Member chat turns running at once. */
+export const MEMBER_CONCURRENT_TURNS = 2;

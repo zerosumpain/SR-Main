@@ -78,7 +78,7 @@ describe('the route map', () => {
 
   it('closes every route it does not name', () => {
     expect(requiredFor(null, 'GET')).toBeNull();
-    expect(requiredFor('/jkai', 'GET')).toBeNull();
+    expect(requiredFor('/jkai/canvas', 'GET')).toBeNull();
     expect(requiredFor('/admin/access', 'GET')).toBeNull();
     expect(requiredFor('/jkai/intel/notes/new', 'GET')).toBeNull();
   });

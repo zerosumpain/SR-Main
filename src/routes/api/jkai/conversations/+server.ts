@@ -8,7 +8,7 @@ import { resolveChatTurnModel } from '$lib/server/models/workload-settings';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
 import { modelSupportsThinking } from '$lib/server/models/capabilities';
 import type { ModelContext } from '$lib/server/models/types';
-import { chatAccess, conversationListScope } from '$lib/jkai/chat-access.server';
+import { chatAccess, conversationListScope, reserveUsage, MEMBER_DAILY_THREADS } from '$lib/jkai/chat-access.server';
 
 export const GET: RequestHandler = async (event) => {
 	const { url } = event;
@@ -49,7 +49,12 @@ export const POST: RequestHandler = async (event) => {
 	const access = await chatAccess(event);
 	const isOwner = access.level === 'owner';
 	const body = await request.json();
-	const { title } = body;
+	// A title is a short string or nothing; anything else is not a title.
+	const title = typeof body?.title === 'string' ? body.title.trim().slice(0, 200) : null;
+	if (!isOwner) {
+		// A member's threads are bounded: a script cannot mint rows for ever.
+		await reserveUsage(access, 'thread', MEMBER_DAILY_THREADS, `That is ${MEMBER_DAILY_THREADS} new conversations today — the limit.`);
+	}
 	// A member's thread is a plain web thread on the site's chat model: no model
 	// pick (the owner's spend), no WhatsApp binding (the owner's number), and
 	// no thinking level (the owner's last pick).

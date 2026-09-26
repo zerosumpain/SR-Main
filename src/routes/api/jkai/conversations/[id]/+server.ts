@@ -133,12 +133,17 @@ export const DELETE: RequestHandler = async (event) => {
  */
 export const PATCH: RequestHandler = async (event) => {
 	const { params, request } = event;
-	const { access } = await requireConversation(event, params.id, 'write');
+	const { conversation, access } = await requireConversation(event, params.id, 'write');
 	const body = await request.json();
 	if (access.level !== 'owner') {
 		const refused = Object.keys(body ?? {}).filter((k) => !MEMBER_PATCHABLE.has(k));
 		if (refused.length > 0 || Object.keys(body ?? {}).length === 0) {
 			throw error(403, `Only the title and pin can be changed (refused: ${refused.join(', ') || 'nothing to change'})`);
+		}
+		// The pin is one flag on the thread and orders its OWNER's list: an admin
+		// may rename someone else's thread, not rearrange their list.
+		if ('pinned' in (body ?? {}) && conversation.principalId !== access.own) {
+			throw error(403, 'Only the thread\'s own member can pin it');
 		}
 	}
 

@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm';
 import { readBuffer, deleteByDiskPath } from '$lib/jkai/media/storage';
 import { chatAccess } from '$lib/jkai/chat-access.server';
 import { canRead, canWrite } from '$lib/server/area-scope';
+import { servingHeaders } from '$lib/jkai/media/serve';
 
 // A file is its uploader's: one the reader may not see is a 404, exactly like
 // one that does not exist.
@@ -20,15 +21,17 @@ export const GET: RequestHandler = async (event) => {
   } catch {
     throw error(410, 'attachment file missing on disk');
   }
-  return new Response(new Uint8Array(buf), {
-    status: 200,
-    headers: {
-      'Content-Type': row.mimeType,
-      'Content-Length': String(row.sizeBytes),
-      'Content-Disposition': `inline; filename="${encodeURIComponent(row.originalName ?? row.id)}"`,
-      'Cache-Control': 'private, max-age=3600',
-    },
-  });
+  const serve = servingHeaders(row.mimeType, row.kind);
+  const headers: Record<string, string> = {
+    'Content-Type': serve.type,
+    'Content-Length': String(row.sizeBytes),
+    'Content-Disposition': `${serve.disposition}; filename="${encodeURIComponent(row.originalName ?? row.id)}"`,
+    'X-Content-Type-Options': 'nosniff',
+    'Cache-Control': 'private, max-age=3600',
+  };
+  // A download is never rendered; if something opens it anyway, it runs nothing.
+  if (serve.disposition === 'attachment') headers['Content-Security-Policy'] = "sandbox; default-src 'none'";
+  return new Response(new Uint8Array(buf), { status: 200, headers });
 };
 
 export const DELETE: RequestHandler = async (event) => {

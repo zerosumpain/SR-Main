@@ -5,7 +5,7 @@ import { generalChat } from '$lib/workflows/chat/general-chat';
 import { db } from '$lib/db';
 import { workflowNodes, workflows, orchestratorChats, conversations, jkaiAttachments, jkaiToolTraces } from '$lib/db/schema';
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import { createJob, getJob, cancelJob, cancelAllRunning, cancelAllRunningFor, cancelForScope, cleanOldJobs, deleteJob, listJobs, publishJobEvent, respondToWaiter, getRunningJobIdForConversation, markJobQueued, clearJobQueued, whenJobSettles } from '$lib/workflows/chat/job-store';
+import { createJob, getJob, cancelJob, cancelAllRunning, cancelAllRunningFor, cancelForScope, cleanOldJobs, deleteJob, listJobs, publishJobEvent, respondToWaiter, getRunningJobIdForConversation, listRunningJobsByConversation, markJobQueued, clearJobQueued, whenJobSettles } from '$lib/workflows/chat/job-store';
 import type { OrchestratorJob, JobEvent } from '$lib/workflows/chat/job-store';
 import { loadConversationHistory } from '$lib/workflows/chat/conversation-history';
 import { extractEphemeralSidecar, type StoredToolStep } from '$lib/workflows/chat/ephemeral-sidecar';
@@ -29,7 +29,7 @@ import { recordDurableLLMCall } from '$lib/llm/usage-log';
 import { maybeExtractThreadConcepts } from '$lib/jkai/intel/chat-extract';
 import { isOwnerScope, type IntelScope } from '$lib/jkai/intel/scope';
 import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
-import { chatAccess, requireConversation, requireOwnJob, reserveChatTurn } from '$lib/jkai/chat-access.server';
+import { chatAccess, MEMBER_CONCURRENT_TURNS, requireConversation, requireOwnJob, reserveChatTurn } from '$lib/jkai/chat-access.server';
 import { memberRestriction } from '$lib/jkai/member-chat/policy';
 import { viewerOf, viewerHolds } from '$lib/server/viewer';
 // The leaf, not `meta-tool`: that module implements the operations and so
@@ -201,7 +201,16 @@ async function handleWithLoop(event: Parameters<RequestHandler>[0]): Promise<Res
   // A member's turn is metered: take it now, after every validation and before
   // anything with a side effect, so a refused request neither costs a turn nor
   // cancels the one already running in their thread.
-  if (!isOwner) await reserveChatTurn(access);
+  if (!isOwner) {
+    // At most two turns at once: the daily cap counts turns, and fifty fired
+    // together from fifty threads would all run on the owner's keys at once.
+    // The one already running in THIS thread is about to be cancelled below.
+    const running = [...listRunningJobsByConversation({ principalId: access.own }).keys()].filter((c) => c !== conversationId);
+    if (running.length >= MEMBER_CONCURRENT_TURNS) {
+      return json({ error: 'Two conversations are already working — wait for one to finish.' }, { status: 429 });
+    }
+    await reserveChatTurn(access);
+  }
 
   // Cancel any stale running jobs in THIS conversation/workflow before
   // starting a new one. Previously this cancelled all in-flight jobs
