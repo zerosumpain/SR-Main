@@ -1,11 +1,5 @@
 import type { NodeExecutor, NodeResult, ExecutionContext, JsonSchema } from '../types';
-import { getValidToken } from '$lib/health-sync/tokens';
-import {
-  getWhoopCycles,
-  getWhoopRecoveries,
-  getWhoopSleeps,
-  getWhoopWorkouts,
-} from '$lib/health-sync/whoop';
+import { queryWhoop } from '$lib/server/health-service';
 import { db } from '$lib/db';
 import { whoopRecovery, whoopSleep, whoopCycles, whoopWorkouts } from '$lib/db/schema';
 import { and, gte, lte, desc } from 'drizzle-orm';
@@ -197,26 +191,23 @@ export const whoopExecutor: NodeExecutor = {
 
     // ---------- API-backed (live, costs a Whoop API hit) ----------
 
-    const token = await getValidToken('whoop');
-    if (!token) throw new Error('Whoop token not available. Connect Whoop in Health settings.');
-
     const opts = { limit, ...(start ? { start } : {}), ...(end ? { end } : {}) };
 
     switch (operation) {
       case 'get_cycles': {
-        const cycles = await getWhoopCycles(token, opts);
+        const cycles = await queryWhoop(operation, opts);
         return { output: { cycles, count: cycles.length }, rowCount: cycles.length };
       }
       case 'get_recovery': {
-        const recoveries = await getWhoopRecoveries(token, opts);
+        const recoveries = await queryWhoop(operation, opts);
         return { output: { recoveries, count: recoveries.length }, rowCount: recoveries.length };
       }
       case 'get_sleep': {
-        const sleeps = await getWhoopSleeps(token, opts);
+        const sleeps = await queryWhoop(operation, opts);
         return { output: { sleeps, count: sleeps.length }, rowCount: sleeps.length };
       }
       case 'get_workouts': {
-        const workouts = await getWhoopWorkouts(token, opts);
+        const workouts = await queryWhoop(operation, opts);
         return { output: { workouts, count: workouts.length }, rowCount: workouts.length };
       }
       default:

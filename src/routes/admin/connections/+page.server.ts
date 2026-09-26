@@ -42,8 +42,17 @@ export const actions: Actions = {
       return fail(400, { ok: false, key, error: 'unknown service' });
     }
 
-    const { syncWhoopAll } = await import('$lib/health-sync/sync-service');
-    const result = await syncWhoopAll({ maxPages: 1 });
+    const { syncWhoop } = await import('$lib/server/health-service');
+    let result: Awaited<ReturnType<typeof syncWhoop>>;
+    try {
+      result = await syncWhoop();
+    } catch (error) {
+      return fail(502, {
+        ok: false,
+        key,
+        error: error instanceof Error ? error.message : 'Health sync is unavailable',
+      });
+    }
 
     if (!result.success) {
       return fail(400, {

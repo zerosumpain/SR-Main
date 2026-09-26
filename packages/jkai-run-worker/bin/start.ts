@@ -26,11 +26,16 @@
 process.env.JKAI_BUILDER_PROCESS = '1';
 
 import { startRunWorker, stopRunWorker } from '$lib/workflows/run-worker';
+import { workflowOwner } from '$lib/workflows/extraction-owner';
 
 async function main(): Promise<void> {
   if (process.env.JKAI_RUN_WORKER !== '1') {
     console.error('[run-worker-entry] JKAI_RUN_WORKER must be set to "1" to start the worker. Exiting.');
     process.exit(1);
+  }
+  if (workflowOwner() !== 'main') {
+    console.log('[run-worker-entry] SR_WORKFLOWS_OWNER is workflows — Main worker is inactive.');
+    process.exit(0);
   }
 
   startRunWorker();

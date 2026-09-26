@@ -1,11 +1,11 @@
-import { hasToken } from '$lib/health-sync/tokens';
+import { getWhoopStatus } from '$lib/server/health-service';
 import { db } from '$lib/db';
 import { healthSyncState, healthSyncJobs, stravaActivities } from '$lib/db/schema';
 import { desc, asc, eq, sql } from 'drizzle-orm';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ url }) => {
-  const whoopConnected = await hasToken('whoop');
+  const whoopConnected = (await getWhoopStatus()).connected;
 
   // These columns are what the Strava integration left behind when it was
   // removed on 2026-09-13. The table and its 671 rows stay, SR-Health renders

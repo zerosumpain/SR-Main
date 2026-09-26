@@ -982,7 +982,7 @@ jobs:
       - name: Prepare the Webframe sidecar
         run: ./scripts/ci-webframe.sh prepare
 
-      # Seven private service repositories are measured outside this public
+      # Private service repositories are measured outside this public
       # checkout. Only the master release job receives their inventory, and the
       # runtime loader exposes it solely to the owner.
       - name: Install private site footprint

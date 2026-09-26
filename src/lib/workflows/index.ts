@@ -105,6 +105,7 @@ import { syncPrompts } from './prompts/loader';
 import { loadCustomTools } from './site-tools/custom-tool-loader';
 import { startMemoryReview } from './chat/memory-review';
 import { startScheduler } from './scheduler';
+import { workflowOwner, jkaiCoreOwner } from './extraction-owner';
 import { startReaper, initEventLoopMonitor, startBlockReporter } from './engine-runtime';
 import { db } from '$lib/db';
 import { whatsappConfig, homeAssistantConfig } from '$lib/db/schema';
@@ -377,7 +378,7 @@ async function bootHomeAssistant() {
 
 if (runsService('homeassistant')) bootHomeAssistant();
 
-if (runsService('background')) {
+if (runsService('background') && jkaiCoreOwner() === 'main') {
   syncPrompts().catch((err: unknown) => {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     console.error('[prompts] Sync failed:', msg);
@@ -393,7 +394,7 @@ if (runsService('background')) {
 
 // Bring every workflow into canvas shape before the scheduler takes
 // a fresh snapshot. Idempotent — no-ops on a clean DB.
-(async () => {
+if (workflowOwner() === 'main') (async () => {
   try {
     const { migrateWorkflowsToCanvas } = await import('$lib/canvas/migrate');
     await migrateWorkflowsToCanvas();
@@ -402,7 +403,7 @@ if (runsService('background')) {
   }
 })();
 
-if (runsService('scheduler')) {
+if (runsService('scheduler') && workflowOwner() === 'main') {
   // The ONLY place the workflow cron scheduler boots. hooks.server.ts used to
   // start it here too, ungated — see the note there before re-adding one.
   //

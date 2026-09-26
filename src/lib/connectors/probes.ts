@@ -235,8 +235,8 @@ async function probeOAuthHealth(service: 'whoop'): Promise<ConnectorReport> {
   const impact = 'No new sleep, recovery or strain — readiness and sleep balance go stale';
 
   return guard(service, label, 'Health', 'account', async () => {
-    const { getValidToken, hasToken } = await import('$lib/health-sync/tokens');
-    const token = await getValidToken(service);
+    const { getWhoopStatus } = await import('$lib/server/health-service');
+    const grant = await getWhoopStatus();
     // `getValidToken` says null both for "never connected" and for "a token is
     // stored but refreshing it failed". Reporting the second as `unconfigured`
     // meant a lapsed Whoop grant could never alert: it looked like an
@@ -244,7 +244,7 @@ async function probeOAuthHealth(service: 'whoop'): Promise<ConnectorReport> {
     // (tokens.ts is shared with SR-Health, so it is not widened here), so this
     // does not claim a refused grant — it is reported as an outage, which the
     // watcher confirms on a second check before telling anyone.
-    if (!token && (await hasToken(service))) {
+    if (!grant.valid && grant.connected) {
       return {
         status: 'broken' as ConnectorStatus,
         detail: 'a token is stored but refreshing it failed — see the service log for the provider\'s answer',
@@ -257,7 +257,7 @@ async function probeOAuthHealth(service: 'whoop'): Promise<ConnectorReport> {
         ],
       };
     }
-    if (!token) {
+    if (!grant.valid) {
       return {
         status: 'unconfigured' as ConnectorStatus,
         detail: 'not connected',
