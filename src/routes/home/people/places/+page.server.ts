@@ -16,9 +16,11 @@ import {
   ignorePlace,
   isPlaceKind,
   listPanelPlaces,
+  namePlace,
   updatePlaceAlerts,
   updatePlaceGeometry,
   type PanelPlace,
+  type PlaceKind,
 } from '$lib/home/presence/places';
 
 // The owner's places panel: which places raise arrive/leave alerts (and in
@@ -123,16 +125,32 @@ export const actions: Actions = {
     if (geo && 'error' in geo) return fail(400, { error: geo.error, placeId });
     const moved = !!geo && (geo.lat !== place.lat || geo.lon !== place.lon);
 
+    // The kind is sent by the editor; without it, the place keeps its own.
+    const kindRaw = form.get('kind');
+    const currentKind: PlaceKind = isPlaceKind(place.kind) ? place.kind : 'other';
+    const kind: PlaceKind = isPlaceKind(kindRaw) && kindRaw !== 'unknown' ? kindRaw : currentKind;
+    const renamed = !!label && (label !== (place.label ?? '') || kind !== place.kind);
+
+    // The place row first: the edge, then the name. Only then jkai's memory of
+    // it — and only when the name or kind changed. A radius, a centre or a
+    // switch never touches memory.
     try {
-      if (label && label !== place.label) {
-        // Through confirmPlace, so the name in jkai's memory moves with it.
-        await confirmPlace(place.id, label, isPlaceKind(place.kind) ? place.kind : 'other');
-      }
       if (geo && moved) await updatePlaceGeometry(place.id, geo);
       else if (radiusM !== Math.round(place.radiusM)) await updatePlaceAlerts(place.id, { radiusM });
+      if (renamed) await namePlace(place.id, label, kind);
     } catch (err) {
       console.error('[home/people/places] save failed:', errMsg(err));
       return fail(500, { error: 'That did not save. Try again.', placeId });
+    }
+    if (renamed) {
+      try {
+        // Through confirmPlace, so the name in jkai's memory moves with it.
+        await confirmPlace(place.id, label, kind);
+      } catch (err) {
+        // The place is saved; say so, softly, rather than "try again".
+        console.error('[home/people/places] saved, but memory not updated:', errMsg(err));
+        return { saved: placeId, note: "Saved; couldn't update jkai's memory of this place." };
+      }
     }
     return { saved: placeId };
   },
@@ -215,12 +233,11 @@ export const actions: Actions = {
     const place = found.place;
     const whatsappAlerts = on(form, 'whatsappAlerts');
     // WhatsApp rides on an alert: a place nobody watches raises nothing to
-    // send. Home is watched by the code whatever its flag says, so its stored
-    // flag is left exactly as it is.
-    const alerts = place.isHome ? undefined : on(form, 'alerts') || whatsappAlerts;
+    // send. Home is no exception: it notifies only when its switch is on.
+    const alerts = on(form, 'alerts') || whatsappAlerts;
     try {
       await updatePlaceAlerts(place.id, {
-        ...(alerts === undefined ? {} : { alerts }),
+        alerts,
         alertArrive: on(form, 'alertArrive'),
         alertLeave: on(form, 'alertLeave'),
         whatsappAlerts,
