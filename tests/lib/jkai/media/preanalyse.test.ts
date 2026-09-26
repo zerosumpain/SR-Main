@@ -19,9 +19,15 @@ vi.mock('$lib/file-index/describe', async (orig) => {
     ...actual,
     describeImage: (...a: unknown[]) => describeImage(...a),
     describePdfBestEffort: (...a: unknown[]) => describePdfBestEffort(...a),
-    transcribeAudioBestEffort: (...a: unknown[]) => transcribeAudioBestEffort(...a),
   };
 });
+
+// Audio goes through the notebook's speech-to-text now, not the file index's
+// chat-model transcriber. `transcribeAudioBestEffort` is kept as the spy name
+// so the cases below read the same.
+vi.mock('$lib/jkai/extract/audio', () => ({
+  extractAudio: async (...a: unknown[]) => ({ text: await transcribeAudioBestEffort(...a), meta: { kind: 'audio' } }),
+}));
 
 vi.mock('$lib/db', () => ({
   db: {
