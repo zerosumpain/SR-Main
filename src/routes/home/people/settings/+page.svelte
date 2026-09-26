@@ -12,6 +12,7 @@
    *
    * Owner only; the load and the action both check.
    */
+  import { untrack } from 'svelte';
   import { enhance } from '$app/forms';
   import HomeFrame from '$lib/components/home/HomeFrame.svelte';
   import LoadErrorCard from '$lib/components/jkai/daydream/hub/LoadErrorCard.svelte';
@@ -36,9 +37,35 @@
     none: 'Not tracked',
   };
 
+  const SOURCE_SHORT: Record<string, string> = {
+    life360: 'Life360',
+    companion: 'app',
+    none: 'not tracked',
+  };
+
+  type Member = PageData['members'][number];
+
+  /** Who this person hears about, in the words of the card's summary line. */
+  function alertsLine(m: Member): string {
+    const follow = m.alerts?.follow;
+    if (follow == null) return 'alerts about everyone';
+    if (!follow.length) return 'no alerts';
+    const names = follow.map((s) => members.find((o) => o.subject === s)?.displayName ?? s);
+    return names.length > 2 ? `alerts about ${names.length} people` : `alerts about ${names.join(' and ')}`;
+  }
+
+  /** Which cards are open. All start closed; a save error opens its card. */
+  const opened = $state<Record<string, boolean>>({});
+  $effect(() => {
+    const f = form;
+    untrack(() => {
+      if (f && 'error' in f && f.error && f.subject) opened[f.subject] = true;
+    });
+  });
+
   function masked(n: string | null): string {
     if (!n) return 'no number';
-    return `number ending ${n.replace(/\D/g, '').slice(-3)}`;
+    return `number …${n.replace(/\D/g, '').slice(-3)}`;
   }
 
   const keep = () => async ({ update }: { update: (o?: { reset?: boolean }) => Promise<void> }) => {
@@ -50,7 +77,7 @@
   path="/home/people/settings"
   kicker="Home · People · Settings"
   title={['Who is in the', 'household, and how']}
-  standfirst="Where each person’s location comes from, and who hears when they arrive or leave. Moving someone to the app takes their location from their phone only: if they turn sharing off, they are shown as not sharing, never picked up from Life360 instead."
+  standfirst="Where each person’s location comes from, and who hears when they arrive or leave."
   {summary}
   footer={['strangeramblings.com/home/people/settings', 'Household members', 'Owner only']}
 >
@@ -63,21 +90,25 @@
       <SectionHead
         kicker="A / People"
         title={['Each person,', 'one card']}
-        strap="App alerts reach people on the app. WhatsApp goes only for places with WhatsApp on, and only to people with a number and WhatsApp switched on. Nobody is told about their own movements."
+        strap="App alerts reach people on the app. WhatsApp reaches people with a number and it on, for places with WhatsApp on. Nobody hears about their own movements."
       />
 
       {#if !members.length}
         <p class="lede">Nobody in the household table.</p>
       {:else}
-        <div class="stack">
+        <div class="stack people">
           {#each members as m (m.subject)}
             {@const others = members.filter((o) => o.subject !== m.subject)}
             {@const followAll = m.alerts?.follow == null}
-            <form class="card person" method="POST" action="?/save" use:enhance={keep}>
+            <details class="card person" bind:open={opened[m.subject]}>
+              <summary>
+                <span class="who">{m.displayName}</span>
+                <span class="facts">{SOURCE_SHORT[m.source] ?? m.source} · {masked(m.whatsapp)} · {alertsLine(m)}</span>
+              </summary>
+            <form method="POST" action="?/save" use:enhance={keep}>
               <input type="hidden" name="subject" value={m.subject} />
-              <p class="card-kicker">{m.subject} · {SOURCE_LABEL[m.source] ?? m.source} · {masked(m.whatsapp)}</p>
 
-              <div class="actions">
+              <div class="fields">
                 <label class="field">
                   <span class="field-label">Name</span>
                   <input class="text-input" name="displayName" value={m.displayName} maxlength="60" required autocomplete="off" />
@@ -86,20 +117,22 @@
                   <span class="field-label">Email they sign in with</span>
                   <input class="text-input" name="email" type="email" value={m.email ?? ''} autocomplete="off" />
                 </label>
-              </div>
-
-              <div class="actions row">
-                <label class="field narrow">
+                <label class="field">
                   <span class="field-label">Location from</span>
                   <select class="text-input select" name="source">
                     {#each data.sources as s (s)}
                       <option value={s} selected={s === m.source}>{SOURCE_LABEL[s] ?? s}</option>
                     {/each}
                   </select>
+                  <span class="note hint">
+                    The app takes their location from their phone only: with sharing off they show as not sharing, never
+                    picked up from Life360 instead.
+                  </span>
                 </label>
-                <label class="field">
-                  <span class="field-label">WhatsApp number</span>
+                <div class="field">
+                  <label class="field-label" for="wa-{m.subject}">WhatsApp number</label>
                   <input
+                    id="wa-{m.subject}"
                     class="text-input"
                     name="whatsapp"
                     type="tel"
@@ -107,11 +140,11 @@
                     placeholder="07… or +44…"
                     autocomplete="off"
                   />
-                </label>
-                <label class="toggle">
-                  <input type="checkbox" name="whatsappOn" checked={m.alerts?.whatsapp === true} />
-                  <span>WhatsApp alerts</span>
-                </label>
+                  <label class="toggle">
+                    <input type="checkbox" name="whatsappOn" checked={m.alerts?.whatsapp === true} />
+                    <span>WhatsApp alerts</span>
+                  </label>
+                </div>
               </div>
 
               <fieldset class="follow">
@@ -156,6 +189,7 @@
                 <p class="err" role="alert">{form.error}</p>
               {/if}
             </form>
+            </details>
           {/each}
         </div>
       {/if}
@@ -168,22 +202,82 @@
 
 <style>
   /* Room-specific only — `.card`, `.text-input`, `.field-label`, `.actions`,
-     `.card-actions`, `.cta`, `.note`, `.err` come from HomeFrame's DsVocab. */
+     `.card-actions`, `.cta`, `.note`, `.err` come from HomeFrame's DsVocab,
+     and the input-height fix for a `.field` column from HomeFrame. */
+  .stack.people {
+    gap: 8px;
+  }
+  .card.person {
+    padding: 0;
+  }
+  .person > summary {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    padding: 14px 20px 14px 44px;
+    position: relative;
+    cursor: pointer;
+    list-style: none;
+  }
+  .person > summary::-webkit-details-marker {
+    display: none;
+  }
+  .person > summary::before {
+    content: '+';
+    position: absolute;
+    left: 18px;
+    top: 13px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-body);
+    color: var(--accent);
+  }
+  .person[open] > summary::before {
+    content: '−';
+  }
+  .person > summary:hover .who {
+    color: var(--accent);
+  }
+  .person > summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  .who {
+    font-family: var(--font-body);
+    font-size: var(--fs-body);
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+  .hint {
+    margin: 6px 0 0;
+  }
+  .facts {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    min-width: 0;
+  }
+  .person > form {
+    padding: 4px 20px 18px;
+    border-top: 1px solid var(--line-hair);
+  }
+  /* Name | Email, then Location from | WhatsApp number with its toggle
+     directly under the number. One column on a phone. */
+  .fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 18px;
+    margin-top: 14px;
+    align-items: start;
+  }
   .field {
     display: flex;
     flex-direction: column;
-    flex: 1 1 220px;
     min-width: 0;
   }
   .field .field-label {
     margin-bottom: 6px;
-  }
-  .field.narrow {
-    flex: 0 1 240px;
-  }
-  .actions.row {
-    margin-top: 14px;
-    align-items: flex-end;
   }
   .toggle {
     display: inline-flex;
@@ -193,6 +287,9 @@
     font-size: var(--fs-label-xs);
     color: var(--text-secondary);
     padding: 6px 0;
+  }
+  .field .toggle {
+    margin-top: 6px;
   }
   .toggle input {
     accent-color: var(--accent);
@@ -219,5 +316,27 @@
   }
   .inline {
     margin: 0;
+  }
+  @media (max-width: 720px) {
+    .fields {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .person > summary {
+      padding: 8px 14px 8px 36px;
+      gap: 2px 8px;
+    }
+    .person > summary::before {
+      left: 14px;
+      top: 7px;
+    }
+    .stack.people {
+      gap: 6px;
+    }
+    .facts {
+      letter-spacing: 0;
+    }
+    .person > form {
+      padding: 4px 14px 16px;
+    }
   }
 </style>
