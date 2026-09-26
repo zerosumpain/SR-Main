@@ -41,6 +41,32 @@ beforeEach(() => {
   vi.mocked(searchIntel).mockResolvedValue({ items: [], total: 0 });
 });
 
+describe("searchKnowledge — a member's recall", () => {
+  const research = { level: 'self', own: 'u_x' } as const;
+
+  it("never touches the owner's files, memory, datastore or activity, whatever it asks for", async () => {
+    dsCollections.push({ slug: 'notes', isSystem: false });
+    vi.mocked(searchResearch).mockResolvedValue([] as never);
+    const r = await searchKnowledge('thing', {
+      sources: ['files', 'memory', 'datastore', 'activity', 'research', 'notes'],
+      reader: { intel: ['u_x', 'household'], research },
+    });
+    expect(searchFiles).not.toHaveBeenCalled();
+    expect(Object.keys(r.counts).filter((k) => r.counts[k as keyof typeof r.counts] > 0)).toEqual([]);
+    expect(r.errors).toEqual({});
+    // Research is searched with the reader's access; intel with the reader's scope.
+    expect(vi.mocked(searchResearch).mock.calls[0][1]).toMatchObject({ visibleTo: research });
+    expect(vi.mocked(searchIntel).mock.calls[0][2]).toEqual(['u_x', 'household']);
+  });
+
+  it('skips intel without an intel grant, and research without a research grant', async () => {
+    await searchKnowledge('thing', { reader: { intel: null, research: null } });
+    expect(searchIntel).not.toHaveBeenCalled();
+    expect(searchResearch).not.toHaveBeenCalled();
+    expect(searchFiles).not.toHaveBeenCalled();
+  });
+});
+
 describe('searchKnowledge', () => {
   it('merges all stores and ranks by score descending', async () => {
     vi.mocked(searchFiles).mockResolvedValue([

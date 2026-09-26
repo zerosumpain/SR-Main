@@ -11,6 +11,8 @@ import { jkaiMemories } from '$lib/db/schema';
 import { searchFiles } from '$lib/file-index/search';
 import { searchResearch } from '$lib/deepdive/research-search';
 import { searchIntel, type IntelItem } from '$lib/jkai/intel/search';
+import { OWNER_INTEL_SCOPE, type IntelScope } from '$lib/jkai/intel/scope';
+import type { AreaAccess } from '$lib/server/area-scope';
 import { listCollections, queryRecords } from '$lib/datastore';
 
 export type KnowledgeSource = 'notes' | 'entities' | 'files' | 'research' | 'memory' | 'datastore' | 'activity';
@@ -35,7 +37,17 @@ export interface KnowledgeSearchOptions {
   limitPerSource?: number;
   /** Which datastore collections to keyword-search. Omit = every non-system collection. */
   datastoreCollections?: string[];
+  /**
+   * A member's recall: only what they may already read. Omitted = the owner's
+   * reach (every store). Given, the intel branches search `intel` (skipped when
+   * null), research searches `research` (skipped when null), and files, memory,
+   * datastore and activity — all the owner's own — are never searched.
+   */
+  reader?: { intel: IntelScope | null; research: AreaAccess | null };
 }
+
+/** The stores a member's recall may ever touch. */
+const MEMBER_SOURCES: ReadonlySet<KnowledgeSource> = new Set(['notes', 'entities', 'research']);
 
 export interface KnowledgeSearchResult {
   query: string;
@@ -59,7 +71,7 @@ function clip(s: string): string {
  * once and queries both tables. Splitting them into two independent branches
  * would pay for the embedding twice for identical results.
  */
-function intelSplit(query: string, limit: number): {
+function intelSplit(query: string, limit: number, scope: IntelScope = OWNER_INTEL_SCOPE): {
   notes: () => Promise<KnowledgeHit[]>;
   entities: () => Promise<KnowledgeHit[]>;
 } {
@@ -67,7 +79,7 @@ function intelSplit(query: string, limit: number): {
   const items = (): Promise<IntelItem[]> => {
     // Over-fetch: `limit` applies per kind after the split, and searchIntel
     // caps the merged list.
-    shared ??= searchIntel(query, { limit: Math.min(limit * 2, 50), ordering: 'relevant' }).then((r) => r.items);
+    shared ??= searchIntel(query, { limit: Math.min(limit * 2, 50), ordering: 'relevant' }, scope).then((r) => r.items);
     return shared;
   };
 
@@ -125,8 +137,8 @@ async function branchFiles(query: string, limit: number): Promise<KnowledgeHit[]
   }));
 }
 
-async function branchResearch(query: string, limit: number): Promise<KnowledgeHit[]> {
-  const hits = await searchResearch(query, { topK: limit });
+async function branchResearch(query: string, limit: number, visibleTo?: AreaAccess): Promise<KnowledgeHit[]> {
+  const hits = await searchResearch(query, { topK: limit, visibleTo });
   return hits.map((h) => ({
     source: 'research' as const,
     title: h.sessionTopic || 'research',
@@ -218,7 +230,11 @@ export async function searchKnowledge(
   query: string,
   options: KnowledgeSearchOptions = {},
 ): Promise<KnowledgeSearchResult> {
-  const sources = options.sources?.length ? options.sources : ALL_SOURCES;
+  const reader = options.reader;
+  const allowed = (s: KnowledgeSource) =>
+    !reader ||
+    (MEMBER_SOURCES.has(s) && (s === 'research' ? reader.research !== null : reader.intel !== null));
+  const sources = (options.sources?.length ? options.sources : ALL_SOURCES).filter(allowed);
   const perSource = Math.min(Math.max(options.limitPerSource ?? 5, 1), 20);
 
   // Per-branch timeout: without it one hung branch (files/research each await
@@ -235,11 +251,12 @@ export async function searchKnowledge(
     });
 
   const branches: Array<[KnowledgeSource, Promise<KnowledgeHit[]>]> = [];
-  const intel = intelSplit(query, perSource);
+  const intel = intelSplit(query, perSource, reader?.intel ?? OWNER_INTEL_SCOPE);
   if (sources.includes('notes')) branches.push(['notes', withTimeout(intel.notes(), 'notes')]);
   if (sources.includes('entities')) branches.push(['entities', withTimeout(intel.entities(), 'entities')]);
   if (sources.includes('files')) branches.push(['files', withTimeout(branchFiles(query, perSource), 'files')]);
-  if (sources.includes('research')) branches.push(['research', withTimeout(branchResearch(query, perSource), 'research')]);
+  if (sources.includes('research'))
+    branches.push(['research', withTimeout(branchResearch(query, perSource, reader?.research ?? undefined), 'research')]);
   if (sources.includes('activity')) branches.push(['activity', withTimeout(branchActivity(query, perSource), 'activity')]);
   if (sources.includes('memory')) branches.push(['memory', withTimeout(branchMemory(query, perSource), 'memory')]);
   if (sources.includes('datastore'))

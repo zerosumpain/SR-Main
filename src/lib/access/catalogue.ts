@@ -109,9 +109,9 @@ export const AREAS: readonly AreaInfo[] = [
   {
     id: 'jkai.knowledge',
     label: 'jkai · recall',
-    blurb: 'Search across what they can already read.',
-    open: false,
-    levels: { self: 'Own material', all: 'Follows their other grants', admin: 'Same as all' },
+    blurb: 'One search across their intel and research. The page lives in the intel workbench, so give intel too.',
+    open: true,
+    levels: { self: 'What their other grants let them read', all: 'Same as self', admin: 'Same as self' },
   },
 ];
 
@@ -303,6 +303,13 @@ const ROUTES: Record<string, Partial<Record<Method, Permission>>> = {
 
   // ── news — the desk and a story. Each action checks the grant it needs
   // (graph: jkai.intel, research: research) inside the handler.
+  // ── jkai.knowledge — recall. The search reads only what the caller's other
+  // grants already open (their intel scope, their readable research), never
+  // the owner's files, memory, datastore or activity. The page sits in the
+  // intel workbench, whose layout still needs an intel level.
+  '/jkai/intel/search': { GET: 'jkai.knowledge:self' },
+  '/api/jkai/knowledge/search': { POST: 'jkai.knowledge:self' },
+
   // ── jkai.notes — the notebook. Every route resolves notes through
   // $lib/daydream/notebook/access.server (own / household / everyone's, read /
   // write); review and weave refuse anyone but the owner inside the handler.

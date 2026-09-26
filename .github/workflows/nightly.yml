@@ -10,7 +10,7 @@ name: Nightly full suite
 # dependency graph entirely), and modules loaded by a computed string at
 # runtime. Nothing catches those at PR time. This does, within twelve hours.
 #
-# It also runs the 52 *.integration.test.ts files the merge gate has never
+# It also runs the 53 *.integration.test.ts files the merge gate has never
 # once executed. They are excluded there because they need a database; they get
 # one here, and each already skips itself when its dependency is absent.
 #

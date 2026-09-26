@@ -7,6 +7,7 @@
 // without the single-session filter and joined to session topic + source meta so
 // each hit can be cited across sessions.
 
+import { readable, type AreaAccess } from '$lib/server/area-scope';
 import { sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { generateEmbedding } from './ai';
@@ -53,6 +54,12 @@ export type ResearchSearchOptions = {
    * hardcoded confidence of 0. The studio research brief passes this.
    */
   factsOnly?: boolean;
+  /**
+   * Whose runs to search. Omitted = every run — the owner's reach, and what
+   * every unattended caller (chat tools, studio, daydream) has always had. A
+   * member's recall passes their research access ($lib/server/area-scope).
+   */
+  visibleTo?: AreaAccess;
 };
 
 /**
@@ -115,6 +122,8 @@ export async function searchResearch(
   const model = getEmbeddingModel();
   const factSessionFilter = options.sessionId ? sql`AND f.session_id = ${options.sessionId}` : sql``;
   const chunkSessionFilter = options.sessionId ? sql`AND sc.session_id = ${options.sessionId}` : sql``;
+  const factOwnerFilter = options.visibleTo ? sql`AND ${readable(sql`rs.principal_id`, options.visibleTo)}` : sql``;
+  const chunkOwnerFilter = options.visibleTo ? sql`AND ${readable(sql`rs2.principal_id`, options.visibleTo)}` : sql``;
 
   // Search BOTH the distilled facts and the raw source-material chunks in one
   // ranked pass. Both were embedded with the same model, so their cosine
@@ -150,6 +159,7 @@ export async function searchResearch(
         -- explainer. The studio brief's own DB path has always filtered it.
         AND f.desk_state <> 'archived'
         ${factSessionFilter}
+        ${factOwnerFilter}
         AND 1 - (f.embedding <=> ${vectorStr}::vector) >= ${minSim}
 
       ${options.factsOnly ? sql`` : sql`UNION ALL
@@ -177,6 +187,7 @@ export async function searchResearch(
       WHERE sc.embedding IS NOT NULL
         AND sc.embedding_model = ${model}
         ${chunkSessionFilter}
+        ${chunkOwnerFilter}
         AND 1 - (sc.embedding <=> ${vectorStr}::vector) >= ${minSim}`}
     ) u
     ORDER BY u.similarity DESC
