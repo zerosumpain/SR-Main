@@ -23,7 +23,8 @@ import { isPublicPath, isGuestAllowedPath } from '$lib/auth';
 import { requiredFor } from '$lib/access/catalogue';
 import { requestHost } from '$lib/request-host';
 import { resolveAdminRedirect } from '$lib/components/admin/admin-nav';
-import { isEmailAllowedToSignIn, isOwnerEmail } from '$lib/server/access';
+import { isOwnerEmail } from '$lib/server/access';
+import { INVITE_COOKIE, signInWithInvite } from '$lib/server/invites';
 import { viewerHolds, viewerOf } from '$lib/server/viewer';
 import { rateLimit } from '$lib/server/rate-limit';
 import { nativeDevice } from '$lib/server/native-gate';
@@ -308,8 +309,13 @@ if (runsService('background')) registerDeliveryListener();
 
 // Sign-in gating (owners env + guest allow-list) lives in $lib/server/access.
 
-// Auth.js handler
-const { handle: authHandle } = SvelteKitAuth({
+// Auth.js handler.
+//
+// The config is a FUNCTION of the request so the `signIn` callback can read the
+// invite cookie: /welcome/<code> puts a one-time code in `sr_invite` before the
+// Google redirect, and the OAuth callback request carries it back (SameSite=Lax
+// rides a top-level GET). Everything else about the config is unchanged.
+const { handle: authHandle } = SvelteKitAuth(async (event) => ({
   providers: [
     Google({
       clientId: env.GOOGLE_CLIENT_ID!,
@@ -347,10 +353,13 @@ const { handle: authHandle } = SvelteKitAuth({
   callbacks: {
     async signIn({ user, profile }) {
       const email = (user?.email || (profile as any)?.email || '').toLowerCase();
-      // Owners (AUTH_ALLOWED_EMAILS) OR guests (allowed_user table) may sign in.
-      const ok = await isEmailAllowedToSignIn(email);
-      console.log(`[auth] Sign-in attempt: ${email} → ${ok ? 'allowed' : 'denied'}`);
-      return ok;
+      // Owners (AUTH_ALLOWED_EMAILS) OR guests (allowed_user table) may sign in,
+      // exactly as before; failing that, a live invite in the cookie admits
+      // them once and puts them on the allow-list ($lib/server/invites).
+      const outcome = await signInWithInvite(email, event.cookies.get(INVITE_COOKIE));
+      const how = outcome.allow ? `allowed (${outcome.via})` : `denied (${outcome.reason})`;
+      console.log(`[auth] Sign-in attempt: ${email} → ${how}`);
+      return outcome.allow;
     },
     async session({ session }) {
       return session;
@@ -360,7 +369,7 @@ const { handle: authHandle } = SvelteKitAuth({
     signIn: '/login',
     error: '/auth-error',
   },
-});
+}));
 
 // JKAImaps (maps.strangeramblings.com) was retired in favour of the /health hub, which
 // does the same job with a server behind it — routes and recordings live in

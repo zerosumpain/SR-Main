@@ -1735,6 +1735,61 @@ export const accessGroup = pgTable('access_group', {
 
 export type AllowedUser = typeof allowedUser.$inferSelect;
 
+/**
+ * One-time invite links (`/welcome/<code>`), minted at /admin/access.
+ *
+ * Only the SHA-256 of the code is stored, like every other capability table
+ * here: a row is enough to revoke a link and never enough to use one. A code
+ * is spent by the Auth.js sign-in that accepts it (`used_at`), and a used,
+ * revoked or expired row admits nobody. `email` null = whoever holds the link;
+ * set = only that Google account. `groups` are `access_group` ids the person
+ * lands in, applied through the same write path the add form uses.
+ */
+export const accessInvite = pgTable(
+  'access_invite',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    codeHash: text('code_hash').notNull(),
+    email: text('email'),
+    name: text('name'),
+    note: text('note'),
+    groups: jsonb('groups').$type<string[]>().notNull().default([]),
+    createdBy: text('created_by'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now() + interval '14 days'`),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    usedByEmail: text('used_by_email'),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (t) => [uniqueIndex('access_invite_code_hash_idx').on(t.codeHash)],
+);
+
+/**
+ * Requests from the public form on /welcome. The owner approves (the person
+ * joins the allow-list with the chosen groups) or declines at /admin/access.
+ * `ip_hash` is the salted hash the public rate limiter already keys on, kept
+ * so a flood can be told apart from a family; never a raw address.
+ */
+export const accessRequest = pgTable(
+  'access_request',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    email: text('email').notNull(),
+    name: text('name').notNull(),
+    message: text('message'),
+    wants: jsonb('wants').$type<Record<string, boolean>>().notNull().default({}),
+    /** 'pending' | 'approved' | 'declined'. */
+    status: text('status').notNull().default('pending'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+    decidedBy: text('decided_by'),
+    ipHash: text('ip_hash'),
+  },
+  (t) => [index('access_request_status_created_idx').on(t.status, t.createdAt)],
+);
+
 // Secure per-project share links. A row grants access to ONE project page even
 // when it is private, via an unguessable token. We store only the sha256 of the
 // token (the raw token is shown once at creation); a row is live while revokedAt

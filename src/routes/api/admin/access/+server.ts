@@ -4,6 +4,7 @@ import { db } from '$lib/db';
 import { allowedUser } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { isOwnerEmail } from '$lib/server/access';
+import { addToAllowList } from '$lib/server/allow-list';
 import { disableMemberGmail } from '$lib/server/members';
 import { setUserAccess } from '$lib/server/grants';
 import { loadAccessPage } from '$lib/server/access-page';
@@ -49,20 +50,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   const session = await locals.auth();
   const addedBy = (session?.user?.email || '').toLowerCase() || null;
 
-  if (note !== null) {
-    // A note was supplied — upsert it (re-adding an existing person refreshes it).
-    await db
-      .insert(allowedUser)
-      .values({ email, note, addedBy })
-      .onConflictDoUpdate({ target: allowedUser.email, set: { note } });
-  } else {
-    // No note supplied — insert if new, but never wipe an existing person's note
-    // (or addedBy/createdAt) when the owner re-adds them with the field blank.
-    await db
-      .insert(allowedUser)
-      .values({ email, note: null, addedBy })
-      .onConflictDoNothing();
-  }
+  // Upserts a supplied note; never wipes an existing person's note, addedBy or
+  // createdAt when they are re-added with the field blank.
+  await addToAllowList({ email, note, addedBy });
 
   return json({ ok: true, ...(await loadAccessPage()) });
 };

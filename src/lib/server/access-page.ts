@@ -7,6 +7,8 @@ import { allowedUser } from '$lib/db/schema';
 import { parsePermissions, type Permission } from '$lib/access/catalogue';
 import { getOwnerEmails } from './access';
 import { asList, effectivePermissions, listGroups } from './grants';
+import { listInvites, type InviteView } from './invites';
+import { listRequests, type AccessRequestView } from './access-requests';
 
 export interface AccessPerson {
   email: string;
@@ -37,10 +39,14 @@ export async function loadAccessPage(): Promise<{
   superAdmins: string[];
   people: AccessPerson[];
   groups: AccessGroupView[];
+  invites: InviteView[];
+  requests: AccessRequestView[];
 }> {
-  const [groups, rows] = await Promise.all([
+  const [groups, rows, invites, requests] = await Promise.all([
     listGroups(),
     db.select().from(allowedUser).orderBy(desc(allowedUser.createdAt)),
+    listInvites(),
+    listRequests(),
   ]);
   const byId = new Map(groups.map((g) => [g.id, g.grants]));
   const known = new Set(byId.keys());
@@ -67,5 +73,7 @@ export async function loadAccessPage(): Promise<{
       builtIn: g.builtIn,
       members: people.filter((p) => p.groups.includes(g.id)).length,
     })),
+    invites,
+    requests,
   };
 }

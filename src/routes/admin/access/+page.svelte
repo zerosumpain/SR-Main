@@ -8,6 +8,8 @@
 
   type AccessPerson = PageData['people'][number];
   type AccessGroupView = PageData['groups'][number];
+  type InviteView = PageData['invites'][number];
+  type RequestView = PageData['requests'][number];
 
   let { data }: { data: PageData } = $props();
 
@@ -15,6 +17,8 @@
   let superAdmins = $state<string[]>(data.superAdmins);
   let people = $state<AccessPerson[]>(data.people);
   let groups = $state<AccessGroupView[]>(data.groups);
+  let invites = $state<InviteView[]>(data.invites);
+  let requests = $state<RequestView[]>(data.requests);
 
   let newEmail = $state('');
   let newNote = $state('');
@@ -33,13 +37,22 @@
   ]);
   const groupLabel = (id: string) => groups.find((g) => g.id === id)?.label ?? id;
 
-  function adopt(body: { superAdmins?: string[]; people?: AccessPerson[]; groups?: AccessGroupView[] }) {
+  function adopt(body: {
+    superAdmins?: string[];
+    people?: AccessPerson[];
+    groups?: AccessGroupView[];
+    invites?: InviteView[];
+    requests?: RequestView[];
+  }) {
     if (body.superAdmins) superAdmins = body.superAdmins;
     if (body.people) people = body.people;
     if (body.groups) groups = body.groups;
+    if (body.invites) invites = body.invites;
+    if (body.requests) requests = body.requests;
   }
 
-  async function call(url: string, method: string, payload: unknown, key: string): Promise<boolean> {
+  /** Send a change; adopt the fresh page data it answers with. Null on failure. */
+  async function send(url: string, method: string, payload: unknown, key: string): Promise<Record<string, unknown> | null> {
     busy = key;
     errorMsg = '';
     try {
@@ -51,16 +64,81 @@
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
         errorMsg = body.error ?? 'That did not work';
-        return false;
+        return null;
       }
       adopt(body);
-      return true;
+      return body;
     } catch {
       errorMsg = 'Network error';
-      return false;
+      return null;
     } finally {
       busy = null;
     }
+  }
+
+  async function call(url: string, method: string, payload: unknown, key: string): Promise<boolean> {
+    return (await send(url, method, payload, key)) !== null;
+  }
+
+  // ── Invites ──────────────────────────────────────────────────────────────
+  let inviteEmail = $state('');
+  let inviteName = $state('');
+  let inviteGroups = $state<string[]>(['family-circle']);
+  /** The link just minted: the only time its code exists in plaintext. */
+  let minted = $state<{ link: string; qr: string } | null>(null);
+  let copied = $state(false);
+
+  async function mintInvite() {
+    minted = null;
+    copied = false;
+    const body = await send(
+      '/api/admin/access/invites',
+      'POST',
+      { email: inviteEmail.trim() || undefined, name: inviteName.trim() || undefined, groups: inviteGroups },
+      'invite:new',
+    );
+    if (body) {
+      minted = { link: String(body.link), qr: String(body.qr) };
+      inviteEmail = '';
+      inviteName = '';
+    }
+  }
+
+  async function copyLink() {
+    if (!minted) return;
+    try {
+      await navigator.clipboard.writeText(minted.link);
+      copied = true;
+    } catch {
+      copied = false;
+    }
+  }
+
+  async function revokeInvite(inv: InviteView) {
+    if (!confirm(`Revoke the invite${inv.name ? ` for ${inv.name}` : ''}? The link stops working at once.`)) return;
+    await call('/api/admin/access/invites', 'DELETE', { id: inv.id }, `invite:${inv.id}`);
+  }
+
+  function toggleInviteGroup(id: string, on: boolean) {
+    inviteGroups = on ? [...inviteGroups.filter((g) => g !== id), id] : inviteGroups.filter((g) => g !== id);
+  }
+
+  const INVITE_STATE: Record<string, string> = { ok: 'Open', used: 'Used', revoked: 'Revoked', expired: 'Expired' };
+
+  // ── Requests ─────────────────────────────────────────────────────────────
+  /** Groups ticked per pending request; Family Circle by default when they want the app. */
+  let requestGroups = $state<Record<string, string[]>>({});
+  const pickedFor = (r: RequestView) => requestGroups[r.id] ?? (r.wantsApp ? ['family-circle'] : []);
+  function toggleRequestGroup(r: RequestView, id: string, on: boolean) {
+    const cur = pickedFor(r);
+    requestGroups[r.id] = on ? [...cur.filter((g) => g !== id), id] : cur.filter((g) => g !== id);
+  }
+  const pending = $derived(requests.filter((r) => r.status === 'pending'));
+  const decided = $derived(requests.filter((r) => r.status !== 'pending').slice(0, 10));
+
+  async function decide(r: RequestView, decision: 'approve' | 'decline') {
+    if (decision === 'decline' && !confirm(`Decline ${r.name}'s request?`)) return;
+    await call('/api/admin/access/requests', 'PATCH', { id: r.id, decision, groups: pickedFor(r) }, `request:${r.id}`);
   }
 
   async function addPerson() {
@@ -198,6 +276,130 @@
         {adding ? 'Adding…' : 'Add person'}
       </button>
     </div>
+  </section>
+
+  <section class="nm-sec" data-section="requests" id="requests">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Requests</span>
+      <span class="nm-pill" data-state={pending.length ? 'connected' : 'disconnected'}>{pending.length} waiting</span>
+    </div>
+    <p class="muted">
+      From the public form on <a href="/welcome">/welcome</a>. Approving adds them to the allow-list in the groups
+      you tick; they then sign in there.
+    </p>
+    <ul class="access-list">
+      {#each pending as r (r.id)}
+        <li class="access-row person">
+          <div class="row-main">
+            <span class="group-name">{r.name}</span>
+            <span class="email">{r.email}</span>
+            {#if r.wantsApp}<span class="note">wants the app</span>{/if}
+            <span class="added">asked {formatDate(r.createdAt)}</span>
+          </div>
+          {#if r.message}<p class="muted desc">“{r.message}”</p>{/if}
+          <div class="group-picks inline">
+            {#each groups as g (g.id)}
+              <label class="group-pick">
+                <input
+                  type="checkbox"
+                  checked={pickedFor(r).includes(g.id)}
+                  onchange={(e) => toggleRequestGroup(r, g.id, e.currentTarget.checked)}
+                />
+                <span class="area-name">{g.label}</span>
+              </label>
+            {/each}
+          </div>
+          <div class="add-row">
+            <button class="nm-save-btn" onclick={() => decide(r, 'approve')} disabled={busy === `request:${r.id}`}>
+              Approve
+            </button>
+            <button class="row-link danger" onclick={() => decide(r, 'decline')} disabled={busy === `request:${r.id}`}>
+              Decline
+            </button>
+          </div>
+        </li>
+      {:else}
+        <li class="access-row muted">No requests waiting.</li>
+      {/each}
+      {#each decided as r (r.id)}
+        <li class="access-row decided">
+          <span class="email">{r.email}</span>
+          <span class="note">{r.status}</span>
+          <span class="added">{r.decidedAt ? formatDate(r.decidedAt) : ''}</span>
+        </li>
+      {/each}
+    </ul>
+  </section>
+
+  <section class="nm-sec" data-section="invites">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Invites</span>
+      <span class="nm-pill" data-state="connected">{invites.filter((i) => i.state === 'ok').length} open</span>
+    </div>
+    <p class="muted">
+      A one-time link to /welcome. Whoever opens it signs in with Google and joins the allow-list in the groups you
+      tick. Leave the email blank to let whoever you send it to use it. Links last 14 days.
+    </p>
+    <div class="nm-form-row">
+      <label class="nm-field">
+        <span class="sr-label-tight">Their name</span>
+        <input class="nm-text-input" type="text" bind:value={inviteName} placeholder="e.g. Jane" />
+      </label>
+      <label class="nm-field">
+        <span class="sr-label-tight">Google email (optional)</span>
+        <input class="nm-text-input" type="email" bind:value={inviteEmail} placeholder="only this account may use it" />
+      </label>
+    </div>
+    <div class="group-picks inline">
+      {#each groups as g (g.id)}
+        <label class="group-pick">
+          <input
+            type="checkbox"
+            checked={inviteGroups.includes(g.id)}
+            onchange={(e) => toggleInviteGroup(g.id, e.currentTarget.checked)}
+          />
+          <span class="area-name">{g.label}</span>
+        </label>
+      {/each}
+    </div>
+    <div class="add-row">
+      <button class="nm-save-btn" onclick={mintInvite} disabled={busy === 'invite:new'}>
+        {busy === 'invite:new' ? 'Making…' : 'Create invite link'}
+      </button>
+    </div>
+
+    {#if minted}
+      <div class="minted" data-state="minted">
+        <img src={minted.qr} alt="Invite link QR code" width="180" height="180" />
+        <div class="minted-meta">
+          <span class="sr-label-tight">Send this link. It is shown once.</span>
+          <code class="link">{minted.link}</code>
+          <div class="add-row">
+            <button class="nm-btn-ghost" onclick={copyLink}>{copied ? 'Copied' : 'Copy link'}</button>
+            <button class="nm-btn-ghost" onclick={() => (minted = null)}>Done</button>
+          </div>
+        </div>
+      </div>
+    {/if}
+
+    <ul class="access-list">
+      {#each invites as inv (inv.id)}
+        <li class="access-row invite">
+          <span class="group-name">{inv.name ?? 'Anyone with the link'}</span>
+          {#if inv.email}<span class="email">{inv.email}</span>{/if}
+          {#each inv.groups as g}<span class="chip group">{groupLabel(g)}</span>{/each}
+          <span class="note">{INVITE_STATE[inv.state] ?? inv.state}{inv.usedByEmail ? ` · ${inv.usedByEmail}` : ''}</span>
+          <span class="added">{inv.state === 'ok' ? `until ${formatDate(inv.expiresAt)}` : formatDate(inv.createdAt)}</span>
+          {#if inv.state === 'ok'}
+            <button class="row-link danger" onclick={() => revokeInvite(inv)} disabled={busy === `invite:${inv.id}`}>
+              Revoke
+            </button>
+          {/if}
+        </li>
+      {:else}
+        <li class="access-row muted">No invites yet.</li>
+      {/each}
+    </ul>
   </section>
 
   <section class="nm-sec" data-section="people">
@@ -441,4 +643,31 @@
   .row-link:hover { color: var(--text-primary); }
   .row-link.danger:hover { color: var(--error); }
   .row-link:disabled { opacity: 0.5; cursor: default; }
+  .muted a { color: var(--accent-ink); }
+  .group-picks.inline { flex-direction: row; flex-wrap: wrap; gap: 0.35rem 1.1rem; margin: 0.5rem 0; }
+  .group-picks.inline .group-pick { grid-template-columns: auto auto; }
+  .access-row.invite { flex-wrap: wrap; }
+  .access-row.decided { color: var(--text-ghost); font-size: var(--fs-label); }
+  .minted {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: flex-start;
+    margin: 0.75rem 0;
+    padding: 0.8rem;
+    border: 1px solid var(--accent);
+    background: var(--bg);
+  }
+  .minted img { image-rendering: pixelated; border: 1px solid var(--line-strong); }
+  .minted-meta { display: flex; flex-direction: column; gap: 0.45rem; min-width: 0; flex: 1; }
+  .link {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    background: var(--code-bg);
+    color: var(--code-text);
+    padding: 0.35rem 0.5rem;
+    border-radius: 2px;
+    overflow-wrap: anywhere;
+    user-select: all;
+  }
 </style>

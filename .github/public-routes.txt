@@ -153,3 +153,5 @@
 /rss.xml
 /sitemap.xml
 /tos
+/welcome
+/welcome/[code]

@@ -123,6 +123,17 @@ export const NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
     minIntervalSeconds: 12 * 60 * 60,
   },
   {
+    id: 'access',
+    label: 'Access requests',
+    description: 'Someone asked to join the site from the welcome page.',
+    // Both, like every event a person is waiting on. The form is rate-limited
+    // per address and a second request from the same email while one is
+    // pending is never raised, so there is no floor to set here.
+    whatsapp: true,
+    native: true,
+    minIntervalSeconds: 0,
+  },
+  {
     id: 'system',
     label: 'Everything else',
     description: 'Anything that has not been given a category of its own yet.',

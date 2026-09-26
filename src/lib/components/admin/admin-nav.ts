@@ -109,12 +109,10 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     match: (p) => p.startsWith('/admin/access'),
     items: [
       { label: 'Allow-list', href: '/admin/access', match: (p) => p === '/admin/access' },
-      // Pairing lives on the companion dashboard, but it still needs a way IN
-      // from here. Removing the page and leaving only a redirect meant the only
-      // route to it was knowing the old URL — which is no route at all.
-      // `match` never fires: /apple-app is served by another process and never
-      // reaches this nav, so the cell simply never lights.
-      { label: 'Devices', href: '/apple-app', match: () => false },
+      // Every person's paired phones, both lanes — the companion pilot's
+      // (health & location) and the site's (chat & news). Moved back from the
+      // companion dashboard (2026-09-26) so the dashboard can be retired.
+      { label: 'Devices', href: '/admin/access/devices' },
       { label: 'Security', href: '/admin/access/security' },
     ],
   },
@@ -140,13 +138,6 @@ export function isItemActive(item: AdminNavItem, path: string): boolean {
 // Old → new page URLs. Longest keys are matched first in hooks.server.ts so that
 // e.g. /admin/agent/config (→ ai/config) wins over /admin/agent (→ ops/agent).
 export const ADMIN_ROUTE_REDIRECTS: Record<string, string> = {
-  // Device pairing moved to the companion dashboard (2026-09-22). Both
-  // credentials a phone can hold — the site token for chat and news, and the
-  // companion token for health and location — are minted from one page there
-  // rather than from two that look identical and revoke different things. The
-  // API stays at /api/admin/native-devices under the owner gate; only the UI
-  // moved, so the pilot server never mints a site credential.
-  '/admin/access/devices': '/apple-app',
   '/admin/blog': '/admin/content/blog',
   '/admin/hero': '/admin/content/hero',
   '/admin/health': '/admin/connections/health',
