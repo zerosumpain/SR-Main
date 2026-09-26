@@ -7,10 +7,9 @@
 // DNS-resolved addresses are checked (defence against a public name that
 // points at an internal service).
 //
-// It began as a widening of the private-IP classifier `$lib/jkai/extract/url.ts`
-// once carried (adding the CGNAT range, 100.64.0.0/10). url.ts now fetches
-// through `guardedPublicFetch` ($lib/server/safe-fetch), which pins each hop to
-// an address this module has checked — there is one classifier, here.
+// Precedent: the private-IP classifier in `$lib/jkai/extract/url.ts`. This
+// module widens it with the CGNAT range (100.64.0.0/10) and exposes the
+// single pinned entry point `assertPublicUrl` that Task 4 imports.
 
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
