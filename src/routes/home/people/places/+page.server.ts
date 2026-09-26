@@ -127,9 +127,13 @@ export const actions: Actions = {
 
     // The kind is sent by the editor; without it, the place keeps its own.
     const kindRaw = form.get('kind');
-    const currentKind: PlaceKind = isPlaceKind(place.kind) ? place.kind : 'other';
-    const kind: PlaceKind = isPlaceKind(kindRaw) && kindRaw !== 'unknown' ? kindRaw : currentKind;
-    const renamed = !!label && (label !== (place.label ?? '') || kind !== place.kind);
+    // A changed kind is one the form SENT and that differs from the stored
+    // one; a missing, 'unknown' or home kind is no change. The stored value is
+    // compared as stored, so a radius-only save is never a rename.
+    const sentKind = !place.isHome && isPlaceKind(kindRaw) && kindRaw !== 'unknown' ? kindRaw : null;
+    const kindChanged = sentKind !== null && sentKind !== place.kind;
+    const kind: PlaceKind = sentKind ?? (isPlaceKind(place.kind) ? place.kind : 'other');
+    const renamed = !!label && (label !== (place.label ?? '') || kindChanged);
 
     // The place row first: the edge, then the name. Only then jkai's memory of
     // it — and only when the name or kind changed. A radius, a centre or a
@@ -231,10 +235,11 @@ export const actions: Actions = {
     const found = await panelPlace(form);
     if (!found.place) return found.failure;
     const place = found.place;
-    const whatsappAlerts = on(form, 'whatsappAlerts');
-    // WhatsApp rides on an alert: a place nobody watches raises nothing to
-    // send. Home is no exception: it notifies only when its switch is on.
-    const alerts = on(form, 'alerts') || whatsappAlerts;
+    // The master switch is exactly what was sent. WhatsApp rides on an alert
+    // (a place nobody watches raises nothing to send), so it is off whenever
+    // the switch is. Home is no exception.
+    const alerts = on(form, 'alerts');
+    const whatsappAlerts = alerts && on(form, 'whatsappAlerts');
     try {
       await updatePlaceAlerts(place.id, {
         alerts,

@@ -87,6 +87,7 @@
    *  the panel, wherever the panel is drawn. */
   async function select(id: string, focus = false) {
     placing = false;
+    if (selectedId !== id) confirming = false;
     if (selectedId !== id) {
       const p = places.find((x) => x.id === id);
       selectedId = p ? id : null;
@@ -112,6 +113,7 @@
 
   async function closeEditor() {
     const was = selectedId;
+    confirming = false;
     selectedId = null;
     draft = null;
     placing = false;
@@ -122,10 +124,21 @@
     }
   }
 
+  /** The remove confirm in the open panel is showing. */
+  let confirming = $state(false);
+
+  /** Escape backs out ONE step and never throws work away: never from a
+   *  field being typed in; a remove confirm answers "Keep"; an unsaved move
+   *  is undone; only then does the panel close. */
   function onKeydown(e: KeyboardEvent) {
     if (e.key !== 'Escape' || e.defaultPrevented) return;
+    const t = e.target as HTMLElement | null;
+    if (t && (t.closest('input, select, textarea') || t.isContentEditable)) return;
     if (placing) placing = false;
-    else if (selectedId) closeEditor();
+    else if (!selectedId) return;
+    else if (confirming) confirming = false;
+    else if (moved) revert();
+    else closeEditor();
   }
 
   function revert() {
@@ -398,6 +411,7 @@
                   onrevert={revert}
                   {afterGeometry}
                   {afterRemove}
+                  bind:confirming
                 />
               {/key}
             </section>

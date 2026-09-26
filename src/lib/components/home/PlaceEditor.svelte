@@ -42,6 +42,7 @@
     onrevert,
     afterGeometry,
     afterRemove,
+    confirming = $bindable(false),
   }: {
     place: PanelPlace;
     draft: Geometry;
@@ -56,14 +57,15 @@
     onrevert: () => void;
     afterGeometry: SubmitFunction;
     afterRemove: SubmitFunction;
+    /** "Remove place" is asking for a yes. Bindable, so the page's Escape
+     *  can answer "Keep" rather than close the panel. */
+    confirming?: boolean;
   } = $props();
 
   /** Whether "Notify family" is ticked. Follows the stored flag, and the box
    *  while it is being changed: the directions and WhatsApp show (and only
    *  matter) while it is on. */
   let notifyOn = $derived(place.alerts);
-  /** "Remove place" is asking for a yes. */
-  let confirmRemove = $state(false);
 
   const REMOVE_NOTE = 'Its alerts stop and it will not be suggested again.';
   const error = $derived(form?.error && form.placeId === place.id ? form.error : null);
@@ -84,7 +86,7 @@
   }
 
   /** The master switch. Off takes WhatsApp with it (WhatsApp rides on an
-   *  alert, and the server would otherwise keep alerts on for it); the
+   *  alert; the server drops it too, so the box must say so); the
    *  directions keep what they were, for the next time it is ticked. On with
    *  both directions off means both: "Notify family" means arrive and leave. */
   function onNotify(e: Event & { currentTarget: HTMLInputElement }) {
@@ -104,8 +106,23 @@
     f.requestSubmit();
   }
 
-  const keep: SubmitFunction = () => async ({ update }) => {
+  /** A switch that did not save goes back to what is stored, rather than
+   *  showing a setting the server never took. */
+  const notify: SubmitFunction = ({ formElement }) => async ({ result, update }) => {
     await update({ reset: false });
+    if (result.type === 'success' || result.type === 'redirect') return;
+    notifyOn = place.alerts;
+    const box = (name: string) => formElement.elements.namedItem(name) as HTMLInputElement | null;
+    const stored: Record<string, boolean> = {
+      alerts: place.alerts,
+      alertArrive: place.alertArrive,
+      alertLeave: place.alertLeave,
+      whatsappAlerts: place.whatsappAlerts,
+    };
+    for (const [name, v] of Object.entries(stored)) {
+      const el = box(name);
+      if (el) el.checked = v;
+    }
   };
 
   /** Keyboard focus onto the confirm's safe answer as it appears. */
@@ -177,7 +194,7 @@
     </div>
   </form>
 
-  <form class="notify" method="POST" action="?/notify" use:enhance={keep}>
+  <form class="notify" method="POST" action="?/notify" use:enhance={notify}>
     <input type="hidden" name="placeId" value={place.id} />
     <label class="toggle">
       <input type="checkbox" name="alerts" checked={notifyOn} onchange={onNotify} />
@@ -241,18 +258,18 @@
   </div>
 
   {#if !place.isHome}
-    {#if confirmRemove}
+    {#if confirming}
       <form class="confirm" method="POST" action="?/remove" use:enhance={afterRemove}>
         <input type="hidden" name="placeId" value={place.id} />
         <p id="remove-{place.id}">Remove <em>{place.label ?? 'this place'}</em>? {REMOVE_NOTE}</p>
         <div class="card-actions">
           <button class="cta sm" type="submit" aria-describedby="remove-{place.id}">Remove</button>
-          <button class="btn" type="button" use:focusOnMount onclick={() => (confirmRemove = false)}>Keep</button>
+          <button class="btn" type="button" use:focusOnMount onclick={() => (confirming = false)}>Keep</button>
         </div>
       </form>
     {:else}
       <div class="card-actions">
-        <button class="btn" type="button" onclick={() => (confirmRemove = true)}>Remove place</button>
+        <button class="btn" type="button" onclick={() => (confirming = true)}>Remove place</button>
       </div>
     {/if}
   {/if}

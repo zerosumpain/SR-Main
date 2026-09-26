@@ -199,6 +199,13 @@ describe('/home/people/places — save (name and edge)', () => {
     expect(h.renames).toEqual([['school', 'School', 'gym']]);
   });
 
+  it('is not a rename when a stored kind outside the picker meets a radius-only save', async () => {
+    h.places[1] = { ...h.places[1], kind: 'unknown' };
+    await actions.save(eventFor('owner@example.test', { placeId: 'school', label: 'School', kind: 'unknown', radiusM: '300' }));
+    await actions.save(eventFor('owner@example.test', { placeId: 'school', label: 'School', radiusM: '300' }));
+    expect(h.renames).toEqual([]);
+  });
+
   it('keeps the kind when the form sends none, or sends "unknown"', async () => {
     await actions.save(eventFor('owner@example.test', { placeId: 'school', label: 'New', radiusM: '150' }));
     await actions.save(eventFor('owner@example.test', { placeId: 'school', label: 'Newer', kind: 'unknown', radiusM: '150' }));
@@ -321,14 +328,9 @@ describe('/home/people/places — notify', () => {
     expect(h.updates).toEqual([['school', { alerts: true, alertArrive: true, alertLeave: false, whatsappAlerts: true }]]);
   });
 
-  it('keeps alerts on while WhatsApp is on, even with the master box absent (the page disables it then)', async () => {
-    await actions.notify(eventFor('owner@example.test', { placeId: 'school', whatsappAlerts: 'on' }));
-    expect(h.updates[0][1]).toMatchObject({ alerts: true, whatsappAlerts: true });
-  });
-
-  it('turns alerts on with WhatsApp, since WhatsApp rides on an alert', async () => {
+  it('never turns alerts on for WhatsApp: WhatsApp without the master switch is dropped', async () => {
     await actions.notify(eventFor('owner@example.test', { placeId: 'school', whatsappAlerts: 'on', alertArrive: 'on', alertLeave: 'on' }));
-    expect(h.updates[0][1]).toMatchObject({ alerts: true, whatsappAlerts: true });
+    expect(h.updates[0][1]).toMatchObject({ alerts: false, whatsappAlerts: false });
   });
 
   it('treats home like any place: off unless its switch is on', async () => {

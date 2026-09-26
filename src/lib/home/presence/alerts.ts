@@ -200,6 +200,31 @@ export function isDeliverable(ev: Pick<AlertEvent, 'at' | 'forwardedAt'>, now: D
   return ev.forwardedAt == null && now.getTime() - ev.at.getTime() <= DELIVERY_WINDOW_MS;
 }
 
+/**
+ * Events still owed whose place has since been switched off, or no longer
+ * announces that direction. PURE. They are closed by stamping `forwardedAt`
+ * with the crossing's OWN time — a real forward always comes after it — so
+ * `closedUnsent` can tell them apart and keep WhatsApp off them too (WhatsApp
+ * does not read `forwardedAt`, which records the app's delivery).
+ */
+export function staleEventIds(
+  events: readonly AlertEvent[],
+  places: ReadonlyMap<string, Pick<AlertPlace, 'alerts' | 'alertArrive' | 'alertLeave'>>,
+  now: Date,
+): string[] {
+  return events
+    .filter((e) => {
+      const place = places.get(e.placeId);
+      return !!place && isDeliverable(e, now) && !raisesCrossing(place, e.kind);
+    })
+    .map((e) => e.id);
+}
+
+/** An event closed by `staleEventIds`: nothing is sent for it. PURE. */
+export function closedUnsent(ev: Pick<AlertEvent, 'at' | 'forwardedAt'>): boolean {
+  return ev.forwardedAt != null && ev.forwardedAt.getTime() === ev.at.getTime();
+}
+
 /** A number as a summary may show it: the last three digits. PURE. */
 export function maskNumber(n: string): string {
   const digits = n.replace(/\D/g, '');
@@ -718,7 +743,18 @@ export async function deliverAlerts(
     .from(daydreamPlaces)
     .where(inArray(daydreamPlaces.id, [...new Set(raised.map((e) => e.placeId))]));
   const places = new Map(placeRows.map((p) => [p.id, { ...p, isHome: p.id === home?.id } as AlertPlace]));
-  const events = raised.filter((e) => places.get(e.placeId)?.alerts !== false);
+  // A crossing whose place (or direction) has been switched off since is
+  // CLOSED, not just skipped: switching it back on later must not deliver a
+  // stale "arrived" from an hour ago.
+  const stale = staleEventIds(raised, places, now);
+  if (stale.length) {
+    await db
+      .update(householdEvent)
+      .set({ forwardedAt: sql`${householdEvent.at}` })
+      .where(inArray(householdEvent.id, stale));
+  }
+  const closed = new Set(stale);
+  const events = raised.filter((e) => !closed.has(e.id) && !closedUnsent(e));
   if (!events.length) return result;
 
   // Movers who are not to be announced any more. Read once per run. When the

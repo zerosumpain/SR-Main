@@ -20,6 +20,8 @@ const {
   whatsappFollowers,
   DELIVERY_WINDOW_MS,
   withHome,
+  staleEventIds,
+  closedUnsent,
 } = await import('./alerts');
 type AlertEvent = import('./alerts').AlertEvent;
 type AlertPlace = import('./alerts').AlertPlace;
@@ -414,5 +416,39 @@ describe('withHome — home is watched, but silent unless switched on', () => {
   it('with no home, is just the flagged places', () => {
     const school = { id: 'school', lat: 51, lon: -1, radiusM: 100, label: 'School', alerts: true, whatsappAlerts: false };
     expect(withHome([school], null, null)).toEqual([{ ...school, isHome: false }]);
+  });
+});
+
+describe('staleEventIds — crossings at places switched off since', () => {
+  const on = { alerts: true, alertArrive: true, alertLeave: true };
+  const places = new Map([
+    ['school', on],
+    ['home', { ...on, alerts: false }],
+    ['club', { ...on, alertArrive: false }],
+  ]);
+
+  it('closes an owed event whose place is off, or whose direction is off', () => {
+    const ids = staleEventIds(
+      [ev('a'), ev('b', { placeId: 'home' }), ev('c', { placeId: 'club' }), ev('d', { placeId: 'club', kind: 'leave' })],
+      places,
+      NOW,
+    );
+    expect(ids).toEqual(['b', 'c']);
+  });
+
+  it('leaves alone an event already forwarded, too old, or at an unknown place', () => {
+    const old = new Date(NOW.getTime() - DELIVERY_WINDOW_MS - 60_000);
+    const ids = staleEventIds(
+      [ev('x', { placeId: 'home', forwardedAt: NOW }), ev('y', { placeId: 'home', at: old }), ev('z', { placeId: 'gone' })],
+      places,
+      NOW,
+    );
+    expect(ids).toEqual([]);
+  });
+
+  it('tells a closed-unsent event (forwardedAt = its own time) from a real forward', () => {
+    expect(closedUnsent(ev('a', { forwardedAt: new Date(AT.getTime()) }))).toBe(true);
+    expect(closedUnsent(ev('a', { forwardedAt: NOW }))).toBe(false);
+    expect(closedUnsent(ev('a'))).toBe(false);
   });
 });
