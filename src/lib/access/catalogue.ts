@@ -67,7 +67,7 @@ export const AREAS: readonly AreaInfo[] = [
     id: 'drive',
     label: 'Drive',
     blurb: 'The file store: their own folder, and the household one.',
-    open: false,
+    open: true,
     levels: {
       self: 'Own files; read household files',
       all: "Also read every member's files",
