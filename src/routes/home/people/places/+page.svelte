@@ -42,9 +42,21 @@
   let selectedId = $state<string | null>(null);
   let draft = $state<Geometry | null>(null);
   let placing = $state(false);
+  /** Adding a place needs a working map: it is placed by clicking one. */
+  let mapStatus = $state<'loading' | 'ready' | 'unavailable'>('loading');
   let mapView = $state<{ centre: () => { lat: number; lon: number } | null } | null>(null);
 
   const selected = $derived(places.find((p) => p.id === selectedId) ?? null);
+
+  // A selected place that has gone from the list (ignored or merged since, by
+  // another tab or the nightly refresh) leaves nothing to edit. Reads only the
+  // list and the id; the write is guarded, so it runs once.
+  $effect(() => {
+    if (selectedId && !places.some((p) => p.id === selectedId)) {
+      selectedId = null;
+      draft = null;
+    }
+  });
   const creating = $derived(!selectedId && !!draft);
   const moved = $derived(
     !!selected &&
@@ -169,6 +181,10 @@
             onselect={select}
             ondraft={(g) => (draft = g)}
             onplace={dropAt}
+            onstatus={(st) => {
+              mapStatus = st;
+              if (st !== 'ready') placing = false;
+            }}
           />
           {#if placing}
             <div class="map-bar" role="status">
@@ -191,7 +207,19 @@
 
         <div class="list-col">
           <div class="list-head">
-            <button class="btn" type="button" onclick={startAdding} aria-pressed={placing}>Add a place</button>
+            {#if mapStatus === 'unavailable'}
+              <p class="map-note">Map unavailable — places can still be edited in the list.</p>
+            {/if}
+            <button
+              class="btn"
+              type="button"
+              onclick={startAdding}
+              aria-pressed={placing}
+              disabled={mapStatus !== 'ready'}
+              aria-describedby={mapStatus === 'ready' ? undefined : 'add-needs-map'}
+            >Add a place</button>
+            {#if mapStatus === 'loading'}<span class="map-note" id="add-needs-map">Waiting for the map</span>{/if}
+            {#if mapStatus === 'unavailable'}<span class="visually-hidden" id="add-needs-map">Adding a place needs the map.</span>{/if}
           </div>
 
           {#if creating && draft}
@@ -278,7 +306,7 @@
                               name="label"
                               value={p.label ?? ''}
                               placeholder={p.isHome ? 'home' : ''}
-                              maxlength="200"
+                              maxlength={Math.max(data.labelMax, (p.label ?? '').length)}
                               autocomplete="off"
                             />
                           </label>
@@ -310,8 +338,14 @@
                       <form class="notify" method="POST" action="?/notify" use:enhance={keep}>
                         <input type="hidden" name="placeId" value={p.id} />
                         <label class="toggle">
-                          <input type="checkbox" name="alerts" checked={p.alerts || p.isHome} disabled={p.isHome} onchange={submitOnChange} />
-                          <span>Notify family{#if p.isHome} (always, for home){/if}</span>
+                          <input
+                            type="checkbox"
+                            name="alerts"
+                            checked={p.alerts || p.isHome || p.whatsappAlerts}
+                            disabled={p.isHome || p.whatsappAlerts}
+                            onchange={submitOnChange}
+                          />
+                          <span>Notify family{#if p.isHome} (always, for home){:else if p.whatsappAlerts} (turn WhatsApp off first){/if}</span>
                         </label>
                         <fieldset class="sub" class:dim={!p.alerts && !p.isHome}>
                           <legend class="field-label">When they</legend>
@@ -396,8 +430,26 @@
   }
   .list-head {
     display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     justify-content: flex-end;
+    gap: 8px 12px;
     margin-bottom: 12px;
+  }
+  .map-note {
+    margin: 0;
+    flex: 1 1 200px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-secondary);
+  }
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
   .place-list {
     list-style: none;

@@ -117,6 +117,15 @@ describe('/home/people/places — save (name and edge)', () => {
     expect(h.updates).toEqual([]);
   });
 
+  it('holds a rename to the same 60-character limit as a new place', async () => {
+    const res = (await actions.save(
+      eventFor('owner@example.test', { placeId: 'school', label: 'x'.repeat(61), radiusM: '150' }),
+    )) as { status: number };
+    expect(res.status).toBe(400);
+    await actions.save(eventFor('owner@example.test', { placeId: 'school', label: 'y'.repeat(60), radiusM: '150' }));
+    expect(h.renames).toEqual([['school', 'y'.repeat(60), 'school']]);
+  });
+
   it('rejects a radius outside 50–2000 m', async () => {
     for (const radiusM of ['49', '2001', '', 'wide']) {
       const res = (await actions.save(eventFor('owner@example.test', { placeId: 'school', label: 'School', radiusM }))) as {
@@ -201,6 +210,11 @@ describe('/home/people/places — notify', () => {
     );
     expect(res).toEqual({ notified: 'school' });
     expect(h.updates).toEqual([['school', { alerts: true, alertArrive: true, alertLeave: false, whatsappAlerts: true }]]);
+  });
+
+  it('keeps alerts on while WhatsApp is on, even with the master box absent (the page disables it then)', async () => {
+    await actions.notify(eventFor('owner@example.test', { placeId: 'school', whatsappAlerts: 'on' }));
+    expect(h.updates[0][1]).toMatchObject({ alerts: true, whatsappAlerts: true });
   });
 
   it('turns alerts on with WhatsApp, since WhatsApp rides on an alert', async () => {

@@ -48,6 +48,7 @@
     onselect,
     ondraft,
     onplace,
+    onstatus,
   }: {
     places: MapPlace[];
     selectedId?: string | null;
@@ -59,9 +60,18 @@
     onselect?: (id: string) => void;
     ondraft?: (g: Geometry) => void;
     onplace?: (lat: number, lon: number) => void;
+    /** Whether the map can be used — the page gates "Add a place" on it. */
+    onstatus?: (s: 'loading' | 'ready' | 'unavailable') => void;
   } = $props();
 
   let status = $state<'loading' | 'ready' | 'unavailable'>('loading');
+
+  /** Set and report the map's status in one place. */
+  function setStatus(s: 'loading' | 'ready' | 'unavailable', text?: string) {
+    status = s;
+    if (text) statusText = text;
+    onstatus?.(s);
+  }
   let statusText = $state('Loading map…');
 
   // Not state: nothing in the template reads these.
@@ -233,8 +243,7 @@
         const cfg = (await res.json().catch(() => ({}))) as { accessToken?: string; token?: string; style?: string; message?: string };
         const accessToken = cfg.accessToken ?? cfg.token;
         if (!res.ok || !accessToken) {
-          status = 'unavailable';
-          statusText = cfg.message ?? 'The map is unavailable. The list still does everything.';
+          setStatus('unavailable', cfg.message ?? 'The map is unavailable. The list still does everything.');
           return;
         }
         const mod = await import('mapbox-gl');
@@ -254,15 +263,12 @@
         map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-left');
         map.on('error', () => {
           // Never echo the provider's message: its URLs carry the token.
-          if (!loaded) {
-            status = 'unavailable';
-            statusText = 'Map imagery unavailable. The list still does everything.';
-          }
+          if (!loaded) setStatus('unavailable', 'Map imagery unavailable. The list still does everything.');
         });
         map.on('load', () => {
           if (!map) return;
           loaded = true;
-          status = 'ready';
+          setStatus('ready');
           const accent = token('--accent', '--text-primary');
           const ink = token('--accent-ink', '--text-primary');
           map.addSource(SOURCE, { type: 'geojson', data: featureCollection() });
@@ -309,8 +315,7 @@
           render();
         });
       } catch {
-        status = 'unavailable';
-        statusText = 'The map did not load. The list still does everything.';
+        setStatus('unavailable', 'The map did not load. The list still does everything.');
       }
     })();
     return () => {

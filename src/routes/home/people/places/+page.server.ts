@@ -86,7 +86,11 @@ export const actions: Actions = {
     const placeId = place.id;
 
     const label = String(form.get('label') ?? '').trim();
-    if (label.length > 200) return fail(400, { error: 'Keep the name under 200 characters.', placeId });
+    // One limit for a rename and a new place. Only a CHANGED name is held to
+    // it, so an older, longer name does not block saving a radius.
+    if (label !== (place.label ?? '') && label.length > PLACE_LABEL_MAX) {
+      return fail(400, { error: `Keep the name to ${PLACE_LABEL_MAX} characters.`, placeId });
+    }
     if (!label && place.label) return fail(400, { error: 'A named place needs a name.', placeId });
 
     const radiusRaw = String(form.get('radiusM') ?? '').trim();
