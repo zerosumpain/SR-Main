@@ -18,6 +18,7 @@
   // it takes one hue and direct labels, not six categorical ones.
   import SectionHead from '$lib/components/shell/SectionHead.svelte';
   import { KIND_LABEL, type ReleaseItemKind } from '$lib/releases/types';
+  import { kindHref, weekDates, weekHref, type ChartFilters } from '$lib/releases/chart-links';
   import type { CadenceWeek } from '$lib/releases/console';
 
   interface Props {
@@ -27,9 +28,10 @@
     /** Names the lower series — the public and owner counts mean different things. */
     shippedLabel: string;
     strap: string;
+    filters: ChartFilters;
   }
 
-  let { kicker, cadence, kindMix, shippedLabel, strap }: Props = $props();
+  let { kicker, cadence, kindMix, shippedLabel, strap, filters }: Props = $props();
   let view = $state<'activity' | 'churn'>('activity');
 
   const peak = $derived(Math.max(1, ...cadence.flatMap((w) => [w.deploys, w.shipped])));
@@ -87,13 +89,16 @@
             <span class="b-peak">{peak}</span>
             <div class="b-cols">
               {#each cadence as w (w.week)}
-                <div
+                <a
                   class="b-col"
+                  href={weekHref(filters, w.week)}
+                  aria-current={filters.from === weekDates(w.week).from && filters.to === weekDates(w.week).to ? 'true' : undefined}
+                  aria-label="Filter releases to {w.week}: {w.deploys} deploys, {w.shipped} {shippedLabel.toLowerCase()}"
                   title="{w.week}: {w.deploys} deploy{w.deploys === 1 ? '' : 's'}, {w.shipped} {shippedLabel.toLowerCase()}"
                 >
                   <span class="b-bar deploys" style="height: {(w.deploys / peak) * 100}%"></span>
                   <span class="b-bar shipped" style="height: {(w.shipped / peak) * 100}%"></span>
-                </div>
+                </a>
               {/each}
             </div>
             <div class="b-axis">
@@ -113,15 +118,16 @@
             </div>
             <div class="churn-cols">
               {#each cadence as w (w.week)}
-                <div
+                <a
                   class="churn-col"
-                  role="img"
-                  aria-label="{w.week}: {fmt(w.insertions)} lines added, {fmt(w.deletions)} lines removed"
+                  href={weekHref(filters, w.week)}
+                  aria-current={filters.from === weekDates(w.week).from && filters.to === weekDates(w.week).to ? 'true' : undefined}
+                  aria-label="Filter releases to {w.week}: {fmt(w.insertions)} lines added, {fmt(w.deletions)} lines removed"
                   title="{w.week}: +{fmt(w.insertions)} / −{fmt(w.deletions)} lines"
                 >
                   <span class="churn-up" style="height: {(w.insertions / churnPeak) * 50}%"></span>
                   <span class="churn-down" style="height: {(w.deletions / churnPeak) * 50}%"></span>
-                </div>
+                </a>
               {/each}
             </div>
             <div class="b-axis">
@@ -144,13 +150,13 @@
         {:else}
           <div class="b-rows">
             {#each kindMix as k (k.kind)}
-              <div class="b-row">
+              <a class="b-row" href={kindHref(filters, k.kind)} aria-current={filters.kind === k.kind ? 'true' : undefined} aria-label="Filter releases to {KIND_LABEL[k.kind as ReleaseItemKind] ?? k.kind}">
                 <span class="b-row-lbl">{KIND_LABEL[k.kind as ReleaseItemKind] ?? k.kind}</span>
                 <span class="b-track">
                   <span class="b-fill" style="width: {(k.count / kindMax) * 100}%"></span>
                 </span>
                 <span class="b-row-val">{k.count}</span>
-              </div>
+              </a>
             {/each}
           </div>
         {/if}
@@ -279,6 +285,8 @@
     flex: 1;
     min-width: 0;
     height: 100%;
+    text-decoration: none;
+    cursor: pointer;
   }
   .b-bar {
     flex: 1;
@@ -298,6 +306,9 @@
   .churn-scale { position: absolute; left: 0; top: 0; height: 142px; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; color: var(--text-ghost); font: var(--fs-label-xs) var(--font-mono); font-variant-numeric: tabular-nums; }
   .churn-cols { display: flex; height: 142px; border-bottom: 1px solid var(--line-hair); background: linear-gradient(to bottom, transparent calc(50% - 0.5px), var(--line-strong) 50%, transparent calc(50% + 0.5px)); }
   .churn-col { position: relative; flex: 1; min-width: 0; height: 100%; }
+  .b-col:hover, .churn-col:hover { background: var(--accent-tint-14); }
+  .b-col[aria-current='true'], .churn-col[aria-current='true'] { background: var(--accent-tint-25); }
+  .b-col:focus-visible, .churn-col:focus-visible, .b-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; z-index: 1; }
   .churn-up, .churn-down { position: absolute; left: 18%; width: 64%; }
   .churn-up { bottom: 50%; background: var(--accent); }
   .churn-down { top: 50%; background: var(--accent-ink); }
@@ -329,7 +340,11 @@
     grid-template-columns: 8.5rem 1fr 3rem;
     align-items: center;
     gap: 12px;
+    padding: 4px 3px;
+    color: inherit;
+    text-decoration: none;
   }
+  .b-row:hover, .b-row[aria-current='true'] { background: var(--accent-tint-14); }
   .b-row-lbl {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);

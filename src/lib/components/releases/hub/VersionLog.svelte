@@ -98,6 +98,7 @@
             <span class="rel-meta">
               <span class="rel-date">{fmtDate(r.deployedAt)}</span>
               {#if r.via !== 'github-actions'}<span class="chip via">{r.via}</span>{/if}
+              {#if r.corrected}<span class="chip">diff corrected</span>{/if}
               {#each r.kinds as k (k)}<span class="chip">{KIND_LABEL[k] ?? k}</span>{/each}
               {#if r.summaryStatus === 'pending'}<span class="chip warn">awaiting summary</span>{/if}
               {#if r.summaryStatus === 'failed'}<span class="chip bad">summary failed</span>{/if}
@@ -134,6 +135,8 @@
                 <span class="prov-note">
                   reconstructed from git history — boundary and time approximate
                 </span>
+              {:else if r.corrected}
+                <span class="prov-note">original deploy stamp was missing; diff repaired against the prior deploy</span>
               {/if}
             </p>
 

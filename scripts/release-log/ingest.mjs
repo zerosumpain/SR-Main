@@ -8,6 +8,7 @@
 //
 // Flags:
 //   --prev <sha>        commit being replaced (CI reads it from the old build/.deploy-sha)
+//   --initial           explicitly record a first-ever deployment from the empty tree
 //   --via <source>      github-actions | manual | backfill  (default: github-actions for --head)
 //   --deployed-at <iso> deploy timestamp (default: now for --head, commit date for --backfill)
 //   --built-at <iso>    build timestamp from build/.deploy-sha
@@ -62,15 +63,18 @@ async function runHead() {
     console.log(`release-log: HEAD ${sha.slice(0, 8)} is already the deployed commit — nothing to record.`);
     return;
   }
-  // A prev sha that isn't in this clone (shallow checkout, force-push) would
-  // make the range meaningless — fall back to "just this commit".
+  // A missing or unavailable previous sha does not mean the repository was
+  // created today. That assumption inflated the 2026-08-08 release by 646k
+  // lines. Refuse to record a false diff; backfill the gap after repair.
   if (prev) {
     try {
       git(['cat-file', '-e', `${prev}^{commit}`], REPO);
     } catch {
-      console.warn(`release-log: prev sha ${prev.slice(0, 8)} not found in this clone — recording HEAD only.`);
-      prev = null;
+      throw new Error(`previous deployed sha ${prev.slice(0, 8)} is unavailable; release not recorded`);
     }
+  }
+  if (!prev && !has('--initial')) {
+    throw new Error('previous deployed sha is missing; release not recorded (pass --initial only for a first deployment)');
   }
 
   const payload = collectRelease(prev, sha, REPO, {

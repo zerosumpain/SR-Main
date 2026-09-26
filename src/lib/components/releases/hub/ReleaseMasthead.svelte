@@ -42,6 +42,8 @@
     busyMsg = null,
     onSummarise = () => {},
   }: Props = $props();
+
+  const fmt = (n: number) => n.toLocaleString('en-GB');
 </script>
 
 <section class="a">
@@ -58,11 +60,46 @@
       {/each}
     </div>
 
-    <p class="a-source">
-      Current source counts the non-blank lines supporting the site and its features, including comments.
-      Excludes tests, dependencies, vendored code and generated output. Recounted every build;
-      measured <time datetime={sourceFootprint.measuredAt}>{shortDate(sourceFootprint.measuredAt.slice(0, 10))}</time>.
-    </p>
+    <div class="a-footprint">
+      <div class="a-footprint-head">
+        <h3>{sourceFootprint.repositories.length ? 'Where the site lives' : 'SR-Main source'}</h3>
+        <p>Physical lines, including comments and blank lines. Dependencies, vendored files and build output are excluded.</p>
+      </div>
+      <div class="a-counts" aria-label="Source line counts by type">
+        <div><span>Code</span><strong>{fmt(sourceFootprint.categories.code.lines)}</strong></div>
+        <div><span>Documentation</span><strong>{fmt(sourceFootprint.categories.documentation.lines)}</strong></div>
+        <div><span>Tests</span><strong>{fmt(sourceFootprint.categories.tests.lines)}</strong></div>
+      </div>
+      {#if sourceFootprint.repositories.length}
+        <p class="a-scroll-hint">Swipe across the table for each repository's tests and revision →</p>
+        <div class="a-repositories" role="region" aria-label="Source lines by site repository">
+          <table>
+            <thead><tr><th scope="col">Repository</th><th scope="col">Code</th><th scope="col">Documentation</th><th scope="col">Tests</th><th scope="col">Revision</th></tr></thead>
+            <tbody>
+              {#each sourceFootprint.repositories as repository (repository.id)}
+                <tr>
+                  <th scope="row"><a href={repository.url} target="_blank" rel="noopener noreferrer">{repository.name}</a><small>{repository.role}</small></th>
+                  <td>{fmt(repository.code.lines)}</td>
+                  <td>{fmt(repository.documentation.lines)}</td>
+                  <td>{fmt(repository.tests.lines)}</td>
+                  <td class="a-rev">{repository.revision?.slice(0, 8) ?? 'local build'}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
+      <p class="a-source">
+        {#if sourceFootprint.repositories.length}
+          {sourceFootprint.repositories.length} active site service repositories are included. SR-Main is measured from this build;
+          the others are revision-pinned snapshots
+          {#if sourceFootprint.snapshotAt}measured <time datetime={sourceFootprint.snapshotAt}>{shortDate(sourceFootprint.snapshotAt.slice(0, 10))}</time>{/if}.
+        {:else}
+          SR-Main is measured from this build.
+        {/if}
+        The deployment chart below currently records SR-Main releases only.
+      </p>
+    </div>
 
     {#if queue}
       <div class="a-ops">
@@ -156,13 +193,41 @@
   }
 
   .a-source {
-    margin: 12px 0 0;
-    max-width: 90ch;
+    margin: 10px 0 0;
+    max-width: 110ch;
     font-family: var(--font-body);
     font-size: var(--fs-label-xs);
     line-height: 1.6;
     color: var(--bg);
     opacity: 0.7;
+  }
+
+  .a-footprint { margin-top: 20px; padding-top: 17px; border-top: 1px solid rgba(237, 228, 212, 0.22); }
+  .a-footprint-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px 30px; flex-wrap: wrap; }
+  .a-footprint-head h3 { font: 500 var(--fs-label) var(--font-mono); letter-spacing: .14em; text-transform: uppercase; margin: 0; }
+  .a-footprint-head p { color: rgba(237, 228, 212, .72); font: var(--fs-label) var(--font-body); margin: 0; }
+  .a-counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid rgba(237, 228, 212, .2); margin-top: 12px; }
+  .a-counts > div { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; min-width: 0; padding: 11px 14px; }
+  .a-counts > div + div { border-left: 1px solid rgba(237, 228, 212, .2); }
+  .a-counts span { color: rgba(237, 228, 212, .68); font: var(--fs-label-xs) var(--font-mono); text-transform: uppercase; letter-spacing: .1em; }
+  .a-counts strong { font: 600 clamp(1.2rem, 2vw, 1.8rem) var(--font-code); font-variant-numeric: tabular-nums; }
+  .a-repositories { overflow-x: auto; margin-top: 10px; }
+  .a-scroll-hint { display: none; }
+  .a-repositories:focus-visible { outline: 2px solid var(--accent-on-dark); outline-offset: 2px; }
+  .a-repositories table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  .a-repositories th, .a-repositories td { padding: 7px 11px; border-bottom: 1px solid rgba(237, 228, 212, .16); }
+  .a-repositories thead th { color: rgba(237, 228, 212, .65); font: 500 var(--fs-label-xs) var(--font-mono); letter-spacing: .1em; text-transform: uppercase; text-align: right; white-space: nowrap; }
+  .a-repositories thead th:first-child { text-align: left; }
+  .a-repositories tbody th { text-align: left; font-weight: 600; min-width: 190px; }
+  .a-repositories tbody th a { color: var(--bg); text-underline-offset: 3px; }
+  .a-repositories tbody th a:hover { color: var(--accent-on-dark); }
+  .a-repositories tbody th small { display: block; color: rgba(237, 228, 212, .55); font: var(--fs-label-xs) var(--font-body); }
+  .a-repositories td { text-align: right; font: var(--fs-label) var(--font-code); white-space: nowrap; }
+  .a-repositories .a-rev { color: rgba(237, 228, 212, .58); }
+  @media (max-width: 680px) {
+    .a-counts { grid-template-columns: 1fr; }
+    .a-counts > div + div { border-left: 0; border-top: 1px solid rgba(237, 228, 212, .2); }
+    .a-scroll-hint { display: block; color: rgba(237, 228, 212, .62); font: var(--fs-label-xs) var(--font-mono); margin: 10px 0 0; }
   }
 
   .a-ops {

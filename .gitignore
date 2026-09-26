@@ -78,3 +78,8 @@ static/policy-offline/
 # are checked. Never part of the source tree.
 .candidate/
 .build-env
+
+# Private service-repository footprint; provisioned to the server at release.
+data/site-footprint.json
+vite-plugins/site-footprint.json
+vite-plugins/site-repositories.json

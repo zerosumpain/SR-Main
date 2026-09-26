@@ -1,12 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, unlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { measureSource, sourceFootprint } from './source-footprint.mjs';
+import { measureRepository, measureSource, sourceFootprint } from './source-footprint.mjs';
 import { build } from 'vite';
 
-test('counts runtime source and edits; embeds a snapshot without a runtime checkout', async () => {
+test('embeds only public SR-Main counts in the client build', async () => {
   const root = mkdtempSync(join(tmpdir(), 'sr-source-'));
   function put(path, source) {
     const file = join(root, path);
@@ -14,26 +14,37 @@ test('counts runtime source and edits; embeds a snapshot without a runtime check
     writeFileSync(file, source);
   }
   try {
-    for (const dir of ['src', 'packages', 'services', 'static']) mkdirSync(join(root, dir));
     put('src/page.svelte', '<h1>Hello</h1>\n\n<!-- comment -->\n');
-    put('src/routes/projects/example/build/+page.svelte', '<p>Real route</p>');
     put('packages/worker/src/index.ts', 'run();\n');
-    put('services/worker/server.ts', 'serve();\r\n');
-    put('static/app.js', 'start();');
-    for (const path of ['src/page.test.ts', 'src/types.d.ts', 'static/vendor/lib.js', 'static/lib.min.js', 'packages/worker/build/index.js', 'packages/worker/dist/index.js', 'packages/worker/node_modules/lib/index.js', 'src/fixtures/example.ts']) put(path, 'excluded();');
-    assert.equal(measureSource(root).lines, 6);
-    assert.equal(measureSource(root).files, 5);
-    put('src/page.svelte', '<h1>Edited</h1>\n');
-    unlinkSync(join(root, 'static/app.js'));
-    assert.equal(measureSource(root).lines, 4);
+    put('scripts/update.mjs', 'update();\n');
+    put('src/page.test.ts', 'test();\n');
+    put('tests/feature.spec.ts', 'assert();\n');
+    put('docs/guide.md', '# Guide\n\nRead me.\n');
+    put('README.md', '# Site\n');
+    for (const path of ['src/types.d.ts', 'src/fixtures/example.ts', 'packages/worker/dist/index.js', 'static/vendor/lib.js']) put(path, 'excluded();\n');
+    put('vite-plugins/site-footprint.json', JSON.stringify({ measuredAt: '2026-09-26T00:00:00Z', repositories: [{
+      id: 'health', name: 'SR-Health', revision: 'abc123', measuredAt: '2026-09-26T00:00:00Z', source: 'revision snapshot',
+      code: { lines: 5, files: 1 }, documentation: { lines: 3, files: 1 }, tests: { lines: 2, files: 1 },
+    }] }));
+    const main = measureRepository(root);
+    assert.deepEqual(main, {
+      code: { lines: 5, files: 3 },
+      documentation: { lines: 4, files: 2 },
+      tests: { lines: 2, files: 2 },
+    });
+    const measured = measureSource(root);
+    assert.equal(measured.lines, 5);
+    assert.equal(measured.categories.documentation.lines, 4);
+    assert.equal(measured.categories.tests.lines, 2);
+    assert.equal(measured.repositories.length, 1);
+
     put('entry.js', "export { SOURCE_FOOTPRINT } from 'virtual:sr-source-footprint';");
     const result = await build({ root, configFile: false, plugins: [sourceFootprint()], logLevel: 'silent', build: { write: false, lib: { entry: join(root, 'entry.js'), formats: ['es'] }, minify: false } });
     const output = Array.isArray(result) ? result[0].output : result.output;
     const chunk = output.find((entry) => entry.type === 'chunk');
-    rmSync(root, { recursive: true, force: true });
     const { SOURCE_FOOTPRINT } = await import(`data:text/javascript;base64,${Buffer.from(chunk.code).toString('base64')}`);
-    assert.equal(SOURCE_FOOTPRINT.lines, 4);
-    assert.equal(SOURCE_FOOTPRINT.files, 4);
-    assert.ok(Number.isFinite(Date.parse(SOURCE_FOOTPRINT.measuredAt)));
+    assert.equal(SOURCE_FOOTPRINT.categories.code.lines, 5);
+    assert.equal(SOURCE_FOOTPRINT.repositories.length, 1);
+    assert.equal(chunk.code.includes('SR-Health'), false);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
