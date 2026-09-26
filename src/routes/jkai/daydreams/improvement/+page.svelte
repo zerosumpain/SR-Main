@@ -36,7 +36,7 @@
   // fact and stays quiet; the first non-zero stage after a zero is where the
   // loop is currently stuck.
   const story = $derived(data.story);
-  // Seven stages in the order the work flows. Appetite leads it because that
+  // Five stages in the order the work flows. Appetite leads it because that
   // is the reordering: until 2026-09-04 every driver here was a repair of
   // something that already existed, and the first cell was a fault.
   const cells = $derived<RollupCell[]>([
@@ -58,7 +58,6 @@
       suffix: story.faults.total ? `/${story.faults.total}` : null,
       sub: Object.entries(story.faults.byWants).map(([w, n]) => `${n} ${w.replace('_', ' ')}`).join(' · ') || 'nothing daydream could not do',
       tone: story.faults.open ? 'action' : 'quiet',
-      href: '/jkai/daydreams/engine',
     },
     {
       key: 'ideas',
@@ -80,32 +79,13 @@
       tone: data.loop.tools.shippedRecently ? (data.loop.tools.shippedRecentlyCalled ? 'good' : 'watch') : 'quiet',
     },
     {
-      key: 'signals',
-      mark: '5',
-      label: 'Tool signals swept',
-      value: String(data.loop.toolSignals?.sweepable ?? 0),
-      suffix: data.loop.toolSignals ? `/${data.loop.toolSignals.registered}` : null,
-      sub: data.loop.toolSignals ? `${data.loop.toolSignals.observing} observing · ${data.loop.toolSignals.minPairs} days to join` : 'not read',
-      tone: (data.loop.toolSignals?.sweepable ?? 0) ? 'good' : 'quiet',
-      href: '/jkai/daydreams/engine',
-    },
-    {
-      key: 'findings',
-      mark: '6',
-      label: 'Findings, 7 days',
-      value: String(story.findings7d),
-      sub: 'survived the false-discovery correction; carded into pondering',
-      tone: story.findings7d ? 'good' : 'quiet',
-      href: '/jkai/daydreams/discoveries',
-    },
-    {
       key: 'thoughts',
-      mark: '7',
+      mark: '5',
       label: 'Thoughts, 7 days',
       value: String(story.thoughts7d),
-      sub: 'raised across every family',
+      sub: 'notes the think loop wrote',
       tone: story.thoughts7d ? 'steady' : 'quiet',
-      href: '/jkai/daydreams/feed',
+      href: '/jkai/daydreams',
     },
   ]);
 
@@ -158,7 +138,7 @@
     <SectionHead
       kicker="D / The loop, end to end"
       title={['What it could not do,', 'and what that built']}
-      strap="Seven stages in the order the work flows: a capability the appetite scan wants, a fault daydreaming raises, an idea self-improve queues, a tool it ships, a signal that tool becomes, a finding the sweep keeps, a thought that finding shapes. The first zero after a non-zero is where the loop is stuck."
+      strap="Five stages in the order the work flows: a capability the appetite scan wants, a fault daydreaming raises, an idea self-improve queues, a tool it ships, a note the think loop writes. The first zero after a non-zero is where the loop is stuck."
     />
     {#if story.error}<p class="err">{story.error}</p>{/if}
     <RollupGrid {cells} min={190} />

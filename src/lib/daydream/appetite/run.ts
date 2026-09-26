@@ -23,7 +23,7 @@
 // switches.
 
 import { getLLMClient } from '$lib/llm/client';
-import { resolveDaydreamModel } from '../compose';
+import { resolveDaydreamModel } from '../model';
 import { persistCandidates, type PersistResult } from '../thought-store';
 import { errMsg } from '../types';
 import { assembleAppetitePack, renderAppetitePack } from './pack';

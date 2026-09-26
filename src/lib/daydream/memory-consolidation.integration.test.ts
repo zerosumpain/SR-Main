@@ -26,7 +26,7 @@ const CONTAMINATED_THEME_SLUG = 'itest-global-contamination';
 const DAY = '2099-09-02';
 const PARTIAL_DAY = '2099-09-03';
 
-vi.mock('./compose', () => ({
+vi.mock('./model', () => ({
   resolveDaydreamModel: vi.fn(async () => ({
     provider: 'openrouter',
     modelId: 'itest-model',
@@ -49,9 +49,7 @@ vi.mock('$lib/llm/client', () => ({
 }));
 
 import { runMemoryConsolidation } from './memory-consolidation.server';
-import { listDaydreamMemories, listDaydreamMemoryThemes } from './memories.server';
 import { DAYDREAM_MEMORY_ORIGINS, repairDaydreamMemoryScope } from './memory-scope.server';
-import { resolveEvidence } from './evidence';
 
 let dbReady = false;
 let heldMemoryIds: string[] = [];
@@ -200,7 +198,7 @@ afterAll(async () => {
 });
 
 describe('nightly memory consolidation', () => {
-  it('stores one theme, two source links, pack-ready guidance, and visible influence', async () => {
+  it('stores one theme, two source links and pack-ready guidance', async () => {
     if (!dbReady) return expect(dbReady).toBe(false);
 
     const started: Array<{ localDay: string; startedAt: Date }> = [];
@@ -241,10 +239,6 @@ describe('nightly memory consolidation', () => {
       .where(eq(daydreamMemoryThemes.slug, CONTAMINATED_THEME_SLUG));
     expect(badThemes).toHaveLength(0);
 
-    const memoryRoom = await listDaydreamMemories();
-    expect(memoryRoom.map((memory) => memory.id)).toEqual(expect.arrayContaining(IDS));
-    expect(memoryRoom.map((memory) => memory.id)).not.toContain(GLOBAL_ID);
-
     const [audit] = await db
       .select()
       .from(daydreamMemoryConsolidations)
@@ -252,22 +246,6 @@ describe('nightly memory consolidation', () => {
     expect(audit.memoriesIgnored).toBe(0);
     expect(audit.promptTokens).toBe(200);
     expect(audit.completionTokens).toBe(120);
-
-    await db.insert(daydreamThoughts).values({
-      kind: 'musing_health',
-      title: 'ITest sleep and readiness diverged',
-      explanation: 'The consolidated lesson supplied relevant context.',
-      evidence: [{ kind: 'memory-theme', id: theme.id }],
-      dedupeKey: 'itest-memory-consolidation:thought',
-    });
-
-    const [view] = (await listDaydreamMemoryThemes()).filter((t) => t.id === theme.id);
-    expect(view.sources).toHaveLength(2);
-    expect(view.influenced[0].title).toContain('sleep and readiness');
-
-    const [evidence] = await resolveEvidence([{ kind: 'memory-theme', id: theme.id }]);
-    expect(evidence.title).toContain('Lesson');
-    expect(evidence.lines.some((line) => line.startsWith('Source memory'))).toBe(true);
 
     const second = await runMemoryConsolidation({
       now: new Date('2099-09-02T22:15:00Z'),

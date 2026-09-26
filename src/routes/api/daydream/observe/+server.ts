@@ -15,8 +15,8 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
-import { recordFix } from '$lib/daydream/observe';
-import { DEFAULT_SUBJECT, INGEST_SECRET_ENV, errMsg } from '$lib/daydream/types';
+import { recordFix } from '$lib/home/presence/observe';
+import { DEFAULT_SUBJECT, INGEST_SECRET_ENV, errMsg } from '$lib/home/presence/types';
 import { isLife360Subject, listMembers } from '$lib/home/presence/members';
 
 const CORS_HEADERS = {

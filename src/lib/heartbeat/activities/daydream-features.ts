@@ -1,6 +1,6 @@
 import { getSetting } from '$lib/server/models/settings';
 import { buildDayFeatures, DEFAULT_WINDOW_DAYS } from '$lib/daydream/features/build';
-import { DEFAULT_SUBJECT, FAMILY_SUBJECTS, SETTINGS_ENABLED_KEY } from '$lib/daydream/types';
+import { DEFAULT_SUBJECT, SETTINGS_ENABLED_KEY } from '$lib/daydream/types';
 import type { ActivityHandler } from '../types';
 
 const NAME = 'daydream-features';
@@ -25,25 +25,20 @@ const DEFAULTS: Required<FeaturesConfig> = { windowDays: DEFAULT_WINDOW_DAYS };
  *
  * Cheap and completely silent: a few tens of thousands of rows read, one
  * upsert per day, no model, no notifications. It produces nothing anyone sees;
- * it is what the statistics and the hypothesis engine stand on.
+ * it is what the think loop's correlate() stands on.
  *
- * ── Every person, not just John (2026-08-28) ──────────────────────────────
+ * ── The owner only (P4 of the 2026-09-25 simplification) ─────────────────
  *
- * The table is keyed (subject, day) and had only ever held `john`, so making
- * hypotheses per-person would have proposed questions about four people that
- * nothing could answer. The trail has carried all five since the family
- * backfill.
- *
- * What each person's row contains differs, and honestly: the trail features
- * are theirs, while health, diary and spend are John's alone and stay ABSENT
- * for everybody else. Absent is not zero here — the whole feature store is
- * built on that distinction — so a correlation involving sleep simply has no
- * pairs for Katie rather than a column of false zeroes.
+ * From 2026-08-28 this built a row per person in the trail, for per-person
+ * hypotheses. Those went with the hypothesis engine; the one reader left is
+ * the think loop's `correlate()`, which asks about the owner. So it builds the
+ * owner's rows and nobody else's. Absent is not zero here — the whole feature
+ * store is built on that distinction.
  */
 export const daydreamFeatures: ActivityHandler = {
   name: NAME,
   description:
-    'Rebuilds the daily feature table for daydreaming, for every person in the trail — one row per subject per local day joining trail, Apple health, Whoop and activities on a common key, with per-domain coverage so an absent reading never reads as a zero. Health, diary and spend are the owner\'s alone and stay absent for everyone else. No LLM.',
+    'Rebuilds the owner\'s daily feature table for daydreaming — one row per local day joining trail, Apple health, Whoop, diary, spend and activities on a common key, with per-domain coverage so an absent reading never reads as a zero. The series the think loop\'s correlate() reads. No LLM.',
   defaultCadenceSeconds: 6 * 3600,
   defaultEnabled: true,
   defaultConfig: DEFAULTS as unknown as Record<string, unknown>,
@@ -56,54 +51,32 @@ export const daydreamFeatures: ActivityHandler = {
       return { outcome: 'skipped', summary: 'daydreaming disabled' };
     }
 
-    const perSubject: Record<string, unknown> = {};
-    const lines: string[] = [];
-    let written = 0;
-    let ownerAllDead = false;
-    let ownerFailed: string | null = null;
+    const res = await buildDayFeatures({ windowDays: cfg.windowDays, subject: DEFAULT_SUBJECT });
 
-    for (const { subject } of FAMILY_SUBJECTS) {
-      const res = await buildDayFeatures({ windowDays: cfg.windowDays, subject });
+    // A source that produced nothing on every single day is a broken feed,
+    // not a quiet life, and it must not read as a green tick. The
+    // correlation layer would otherwise silently drop that whole dimension
+    // and report on what was left as though it were the whole picture.
+    const dead = Object.entries(res.absent)
+      .filter(([, n]) => n === res.days && res.days > 0)
+      .map(([domain]) => domain);
+    const allDead = dead.length > 0 && dead.length === Object.keys(res.absent).length;
 
-      // A source that produced nothing on every single day is a broken feed,
-      // not a quiet life, and it must not read as a green tick. The
-      // correlation layer would otherwise silently drop that whole dimension
-      // and report on what was left as though it were the whole picture.
-      const dead = Object.entries(res.absent)
-        .filter(([, n]) => n === res.days && res.days > 0)
-        .map(([domain]) => domain);
-      const allDead = dead.length > 0 && dead.length === Object.keys(res.absent).length;
-
-      written += res.written;
-      perSubject[subject] = { ...res, dead };
-      lines.push(
-        `${subject} ${res.written}/${res.days}` +
-          (dead.length ? ` (no ${dead.join('/')})` : '') +
-          (res.errors.length ? ` ${res.errors.length} err` : ''),
-      );
-
-      // Only the OWNER's build can raise a fault. The other four legitimately
-      // have no health, diary or spend, so judging them by the same rule would
-      // paint the row red every six hours for a state that is correct — and a
-      // row that is always red is a row nobody reads.
-      if (subject === DEFAULT_SUBJECT) {
-        ownerAllDead = allDead;
-        if (res.errors.length && res.written === 0) ownerFailed = res.errors[0];
-      }
-    }
-
-    if (ownerFailed) {
+    if (res.errors.length && res.written === 0) {
       return {
         outcome: 'error',
-        summary: `no days written for ${DEFAULT_SUBJECT} — ${ownerFailed}`,
-        details: { perSubject },
+        summary: `no days written for ${DEFAULT_SUBJECT} — ${res.errors[0]}`,
+        details: { ...res, dead },
       };
     }
 
     return {
-      outcome: ownerAllDead ? 'error' : 'ok',
-      summary: `${written} day-rows across ${FAMILY_SUBJECTS.length} people · ${lines.join(' · ')}`,
-      details: { perSubject, written },
+      outcome: allDead ? 'error' : 'ok',
+      summary:
+        `${res.written}/${res.days} day-rows` +
+        (dead.length ? ` (no ${dead.join('/')})` : '') +
+        (res.errors.length ? ` · ${res.errors.length} err` : ''),
+      details: { ...res, dead },
     };
   },
 };

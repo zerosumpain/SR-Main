@@ -401,9 +401,9 @@ export const briefingComposeExecutor: NodeExecutor = {
       daydreamsDay = dd.day;
       for (const f of dd.facts) facts.push({ section: f.section, label: f.label, value: f.value, source: f.source, href: f.href });
       if (dd.status === 'ok') {
-        record('daydreams', 'Daydreams', 'ok', `${dd.counts.sent} said, ${dd.counts.held} held for you, ${dd.counts.refuted} caught`);
+        record('daydreams', 'Daydreams', 'ok', `${dd.counts.sent} said, ${dd.counts.held} held for you`);
       } else {
-        record('daydreams', 'Daydreams', 'empty', 'a quiet day — nothing said, nothing held, nothing caught');
+        record('daydreams', 'Daydreams', 'empty', 'a quiet day — nothing said, nothing held');
       }
     } catch (err) {
       record('daydreams', 'Daydreams', 'failed', err instanceof Error ? err.message : String(err));

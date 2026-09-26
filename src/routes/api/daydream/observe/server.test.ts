@@ -7,12 +7,12 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock('$env/dynamic/private', () => ({ env: { DAYDREAM_INGEST_SECRET: 'test-secret' } }));
-vi.mock('$lib/daydream/types', () => ({
+vi.mock('$lib/home/presence/types', () => ({
   DEFAULT_SUBJECT: 'john',
   INGEST_SECRET_ENV: 'DAYDREAM_INGEST_SECRET',
   errMsg: (e: unknown) => (e instanceof Error ? e.message : String(e)),
 }));
-vi.mock('$lib/daydream/observe', () => ({
+vi.mock('$lib/home/presence/observe', () => ({
   recordFix: async (_fix: unknown, _source: string, subject: string) => {
     h.written.push(subject);
     return { id: 1, mode: 'unknown', placeId: null };

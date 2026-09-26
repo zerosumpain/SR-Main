@@ -25,7 +25,8 @@ import {
   whoopRecovery,
   whoopSleep,
 } from '$lib/db/schema';
-import { DEFAULT_SUBJECT, LOCAL_TZ, OBSERVE_CADENCE_SECONDS, errMsg } from '../types';
+import { DEFAULT_SUBJECT, LOCAL_TZ, errMsg } from '../types';
+import { OBSERVE_CADENCE_SECONDS } from '$lib/home/presence/types';
 import {
   APPLE_AGGREGATION,
   aggregate,

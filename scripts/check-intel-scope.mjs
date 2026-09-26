@@ -75,11 +75,6 @@ export const MAINTENANCE = {
   'src/lib/components/jkai/KnowledgeGraphModal.svelte':
     'Not a table reader: a client component; `intel_relationships` appears only in a CSS comment. ' +
     'Its data comes from the thread-graph and entity-card routes, which are scoped.',
-  'src/lib/daydream/adjudicate.ts':
-    'Not a table reader: the tool NAME \'intel_find\' in the reviewer\'s allow-list and ' +
-    '`intel_notes` in comments. The tools it hands the reviewer read the owner\'s scope.',
-  'src/lib/daydream/mechanics.ts':
-    'Not a table reader: descriptive strings for the mechanics page (`reads: [\'intel_notes (email)\']`).',
   'src/lib/daydream/notebook/cards.ts':
     'Not a table reader: `intel_notes.graph_state` appears only in a comment; the weave writes ' +
     'through extractIntoIntel into OWNER_SPACE.',

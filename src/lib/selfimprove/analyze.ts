@@ -29,10 +29,8 @@ import {
 } from './types';
 import type { Budget } from './run';
 import { addIdeas } from './backlog';
-import { collectStarvation } from '$lib/daydream/starvation';
 import { collectHealthFaults } from '$lib/daydream/health-quality';
 import { collectFaultIdeas } from '$lib/daydream/faults';
-import { engineProposals } from '$lib/daydream/engine-proposals';
 import { collectCapabilityIdeas } from '$lib/daydream/appetite/intake';
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -377,24 +375,6 @@ export async function learnInsights(
     })),
   ];
 
-  // Starvation leads, questions follow.
-  //
-  // Question-mining produced 33 tools in the fortnight to 2026-08-30 and not
-  // one was ever called: a question asked once is not a standing appetite, so
-  // the tool built to answer it waits for a repeat that never comes.
-  // Daydreaming runs every day whether or not anybody asks it anything, and it
-  // keeps a record of what it could not settle — a tool built for one of those
-  // has a caller the moment it ships, namely the thing that named the gap.
-  //
-  // Ordered first so the nightly intake cap spends its slots here before the
-  // question-mined ideas, rather than after.
-  let starving: Awaited<ReturnType<typeof collectStarvation>> = [];
-  try {
-    starving = await collectStarvation();
-  } catch (err) {
-    console.error('[selfimprove] starvation collection failed:', errMsg(err));
-  }
-
   // A health source emitting numbers that cannot be true. Empty in a healthy
   // system, so this usually costs one read and adds nothing — but when a unit
   // mismatch appears it is the difference between a card saying "you slept
@@ -429,21 +409,15 @@ export async function learnInsights(
 
   // The fault ledger, next. Every site where daydreaming could not do
   // something writes here with the shape of the fix; nothing else in this
-  // pass says as precisely what to build. Then the engine's proposals about
-  // itself — kind `engine`, never built, only listed.
+  // pass says as precisely what to build. (The starvation and engine-proposal
+  // feeds went with the daydream engine, P4 of the 2026-09-25 simplification.)
   let faultIdeas: Awaited<ReturnType<typeof collectFaultIdeas>> = [];
   try {
     faultIdeas = await collectFaultIdeas();
   } catch (err) {
     console.error('[selfimprove] fault ledger read failed:', errMsg(err));
   }
-  let engineIdeas: Awaited<ReturnType<typeof engineProposals>> = [];
-  try {
-    engineIdeas = await engineProposals();
-  } catch (err) {
-    console.error('[selfimprove] engine proposals failed:', errMsg(err));
-  }
-  for (const s of [...capabilityIdeas, ...faultIdeas, ...starving, ...healthFaults, ...engineIdeas]) {
+  for (const s of [...capabilityIdeas, ...faultIdeas, ...healthFaults]) {
     actions.push({
       kind: 'insight',
       detail: `${s.title} — ${s.evidence}`,
@@ -487,20 +461,6 @@ export async function learnInsights(
         kind: s.kind,
         priority: s.priority,
         source: 'health' as const,
-      })),
-      ...starving.map((s) => ({
-        title: s.title,
-        detail: s.detail,
-        kind: s.kind,
-        priority: s.priority,
-        source: 'starved' as const,
-      })),
-      ...engineIdeas.map((s) => ({
-        title: s.title,
-        detail: s.detail,
-        kind: s.kind,
-        priority: s.priority,
-        source: 'engine' as const,
       })),
       // Everything in `ideas` is mined from the questions the owner asked —
       // unmet needs, under-served intents, and portfolio opportunities.

@@ -6,10 +6,10 @@
 //
 // The location half (trail, places, movement mode, coverage, retention) moved
 // to $lib/home/presence/types on 2026-09-26 so /home/people survives the
-// daydream simplification; it is re-exported here so daydream code compiles
-// unchanged.
+// daydream simplification. Only the generic helpers daydream code still uses
+// are re-exported; presence code imports $lib/home/presence/types directly.
 
-export * from '$lib/home/presence/types';
+export { DEFAULT_SUBJECT, LOCAL_TZ, errMsg, localDayStart } from '$lib/home/presence/types';
 
 // ── Settings keys (app_settings) ─────────────────────────────────────────────
 
@@ -18,6 +18,3 @@ export * from '$lib/home/presence/types';
 export const SETTINGS_ENABLED_KEY = 'daydream.enabled';
 /** Per-kind mute list, written by a `never_kind` tap. */
 export const SETTINGS_MUTED_KINDS_KEY = 'daydream.muted_kinds';
-
-/** Env var holding the shared secret for the push ingest endpoint. */
-export const INGEST_SECRET_ENV = 'DAYDREAM_INGEST_SECRET';

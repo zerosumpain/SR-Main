@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { emptyVoiceSummary, searchUtterances, voiceSummary } from '$lib/alexa/store.server';
-import { errMsg } from '$lib/daydream/types';
+import { errMsg } from '$lib/home/presence/types';
 import { areaAccess } from '$lib/server/area-scope';
 
 // The whole household's speech, the children's included — so it is not a

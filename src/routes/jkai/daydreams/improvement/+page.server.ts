@@ -1,4 +1,7 @@
 import type { PageServerLoad } from './$types';
+import { gte, sql } from 'drizzle-orm';
+import { db } from '$lib/db';
+import { daydreamThoughts } from '$lib/db/schema';
 import { errMsg } from '$lib/daydream/types';
 import { loadLoopHealth, loopVerdict } from '$lib/daydream/loop-health';
 import { MIN_PAIRS } from '$lib/daydream/stats/tests';
@@ -6,15 +9,21 @@ import { loadImprovementDashboard } from '$lib/dashboard/improvement.server';
 import { EMPTY_APPETITE, toLead, type AppetiteView } from '$lib/daydream/appetite/view';
 import { loadOvernight } from '$lib/daydream/rooms/overnight.server';
 
-/** The loop, end to end: faults raised → ideas → tools built → signals → findings → thoughts. */
+/** The loop, end to end: faults raised → ideas → tools built → thoughts. */
 export interface LoopStory {
   faults: { open: number; closed: number; total: number; byWants: Record<string, number> };
   backlog: { open: number; engine: number; shipped: number };
   toolsBuilt: number;
-  toolSignals: number;
-  findings7d: number;
   thoughts7d: number;
   error: string | null;
+}
+
+async function countThoughts7d(): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(daydreamThoughts)
+    .where(gte(daydreamThoughts.createdAt, new Date(Date.now() - 7 * 86_400_000)));
+  return row?.n ?? 0;
 }
 
 async function loadLoopStory(loop: Awaited<ReturnType<typeof loadLoopHealth>>): Promise<LoopStory> {
@@ -22,19 +31,15 @@ async function loadLoopStory(loop: Awaited<ReturnType<typeof loadLoopHealth>>): 
     faults: { open: 0, closed: 0, total: 0, byWants: {} },
     backlog: { open: 0, engine: 0, shipped: 0 },
     toolsBuilt: loop.tools.shippedRecently,
-    toolSignals: loop.toolSignals?.sweepable ?? 0,
-    findings7d: 0,
     thoughts7d: 0,
     error: null,
   };
   try {
-    const [{ faultCounts }, { listBacklog }, { recentFindings }, { loadCounts }] = await Promise.all([
+    const [{ faultCounts }, { listBacklog }] = await Promise.all([
       import('$lib/daydream/faults'),
       import('$lib/selfimprove/backlog'),
-      import('$lib/daydream/stats/findings'),
-      import('$lib/daydream/ledger'),
     ]);
-    const [faults, backlog, findings, counts] = await Promise.all([faultCounts(), listBacklog(), recentFindings({ days: 7, limit: 200 }), loadCounts()]);
+    const [faults, backlog, thoughts7d] = await Promise.all([faultCounts(), listBacklog(), countThoughts7d()]);
     return {
       ...empty,
       faults,
@@ -43,8 +48,7 @@ async function loadLoopStory(loop: Awaited<ReturnType<typeof loadLoopHealth>>): 
         engine: backlog.filter((b) => b.status === 'open' && b.kind === 'engine').length,
         shipped: backlog.filter((b) => b.status === 'shipped').length,
       },
-      findings7d: findings.length,
-      thoughts7d: counts.thoughts7d,
+      thoughts7d,
     };
   } catch (err) {
     console.error('[daydream] loop story failed:', errMsg(err));

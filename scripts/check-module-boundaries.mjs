@@ -169,7 +169,6 @@ const BASELINE_CYCLES = [
   'blog <-> voice',
   'canvas <-> workflows',
   'codegraph <-> jkai',
-  'daydream <-> heartbeat',
   'daydream <-> workflows',
   'deepdive <-> jkai',
   'deepdive <-> workflows',

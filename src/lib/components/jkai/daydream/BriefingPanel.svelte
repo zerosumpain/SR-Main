@@ -378,11 +378,7 @@
           kicker="C / Shared back from daydreaming"
           title={['New memories']}
           strap="Durable facts learned inside the {profile.memoryLookbackHours}-hour window and carried into this briefing."
-        >
-          {#snippet aside()}
-            <a class="btn sm" href="/jkai/daydreams/memory">Open shared memory →</a>
-          {/snippet}
-        </SectionHead>
+        />
         {#if learnedMemories.length}
           <div class="grid">
             {#each learnedMemories as memory (memory.id)}

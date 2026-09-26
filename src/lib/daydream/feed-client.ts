@@ -27,35 +27,4 @@ export async function postThought<T = Record<string, unknown>>(
   }
 }
 
-/** The steps of the relevance dial and what each means. The card read-out is
- *  TERSE; the sentence rides in `title` and is printed in full in the drill. */
-export const RELEVANCE_STEPS = [1, 2, 3, 4, 5] as const;
-export const RELEVANCE_HINT: Record<number, string> = {
-  1: 'Not my concern — push this kind of subject down',
-  2: 'Marginal',
-  3: 'Ordinary — no opinion either way',
-  4: 'Worth my attention',
-  5: 'This is what I care about — push this kind of subject up',
-};
-export const RELEVANCE_TERSE: Record<number, string> = {
-  1: 'not my concern',
-  2: 'marginal',
-  3: 'ordinary',
-  4: 'worth attention',
-  5: 'what I care about',
-};
-
-/** Statuses that mean "this reached him". Only these can be rated. */
-export const SHOWN_STATUSES = ['delivered', 'seen', 'actioned'];
-
-export function reviewWord(verdict: string | null): string {
-  return verdict === 'verified'
-    ? 'checked · holds up'
-    : verdict === 'refuted'
-      ? 'checked · does not hold'
-      : verdict
-        ? 'checked · cannot tell'
-        : '';
-}
-
 export { ago, stamp, pct, when } from './format';

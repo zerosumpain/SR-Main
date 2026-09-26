@@ -3,7 +3,7 @@
 // Shared constants and types for household presence: the location trail, the
 // places clustered out of it, and the journeys between them. Moved out of
 // $lib/daydream (2026-09-26) so /home/people no longer depends on the daydream
-// engine; $lib/daydream/types re-exports everything here. Kept free of
+// engine; $lib/daydream/types re-exports the few helpers daydream uses. Kept free of
 // `$lib/db` so the pure modules (cluster, coverage, mode inference) can be
 // unit-tested without a database or a clock.
 //
@@ -177,6 +177,10 @@ export const STILL_MAX_GAP_MINS = 6;
  */
 export const MIN_JOURNEY_MINS = 2;
 export const MIN_JOURNEY_METRES = 300;
+
+/** Env var holding the shared secret for the push ingest endpoint
+ *  (`/api/daydream/observe` — the path predates the move to presence). */
+export const INGEST_SECRET_ENV = 'DAYDREAM_INGEST_SECRET';
 
 /** Local timezone for the day/hour histograms. A place's rhythm is a LOCAL
  *  fact — "usually Tuesday afternoon" is meaningless in UTC. */
