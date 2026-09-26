@@ -1,5 +1,4 @@
 import { building } from '$app/environment';
-import { startScheduler } from '$lib/health-sync/scheduler';
 import { startForgeScheduler, stopForgeScheduler } from '$lib/jkai/forge-scheduler';
 import {
   startHeroTitlesScheduler,
@@ -110,8 +109,6 @@ const RATE_LIMITS: Array<{ pattern: RegExp; capacity: number; refillPerSecond: n
   { pattern: /^\/api\/native(\/|$)/, capacity: 60, refillPerSecond: 60 / 60 },
 ];
 
-// Start the health data sync scheduler
-if (runsService('scheduler')) startScheduler();
 
 // The workflow cron scheduler boots in $lib/workflows/index.ts, inside the
 // runsService('scheduler') gate, alongside every other platform service. It used
@@ -255,7 +252,6 @@ if (runsService('background')) {
 }
 
 // Graceful shutdown — stop schedulers so process can exit on SIGTERM
-import { stopScheduler as stopHealthScheduler } from '$lib/health-sync/scheduler';
 import { stopScheduler as stopWorkflowScheduler } from '$lib/workflows/scheduler';
 import { engine as workflowEngine } from '$lib/workflows';
 
@@ -277,7 +273,6 @@ async function gracefulShutdown() {
   }
   stopHeartbeatEngine();
   stopScheduledEngine();
-  stopHealthScheduler();
   stopWorkflowScheduler();
   stopForgeScheduler();
   stopHeroTitlesScheduler();

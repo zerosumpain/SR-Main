@@ -1,4 +1,4 @@
-import { hasToken } from '$lib/health-sync/tokens';
+import { getWhoopStatus } from '$lib/server/health-service';
 import { db } from '$lib/db';
 import {
   healthSyncState,
@@ -27,7 +27,7 @@ export const load: PageServerLoad = async () => {
     customToolStats,
     todayCost,
   ] = await Promise.all([
-    hasToken('whoop').catch(() => false),
+    getWhoopStatus().then((status) => status.connected).catch(() => false),
     db.select().from(healthSyncState).catch(() => []),
     db
       .select()
