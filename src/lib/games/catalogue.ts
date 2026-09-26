@@ -1,0 +1,76 @@
+// The games the rooms can host, each a rules module behind one interface.
+//
+// A rules module is pure (see `tap-duel.ts`): every function takes `now`, and
+// the dealing ones a `rng`. The lobby verbs — join, decline, leave, start,
+// again — mean the same thing in every game; what differs is the game's own
+// moves (`tap`, `guess`) and what a phone may see (`toWire`).
+
+import * as tapDuel from './tap-duel';
+import * as wordleRace from './wordle-race';
+import type { Difficulty, PlayerStatus, Rng } from './tap-duel';
+
+export const GAME_IDS = ['tap-duel', 'wordle-race'] as const;
+export type GameId = (typeof GAME_IDS)[number];
+
+export function isGameId(value: unknown): value is GameId {
+  return typeof value === 'string' && (GAME_IDS as readonly string[]).includes(value);
+}
+
+/** What the registry reads of any room: who is in it, who hosts, where it is. */
+export interface RoomBase {
+  id: string;
+  game: GameId;
+  difficulty: Difficulty;
+  hostId: string;
+  phase: string;
+  players: { id: string; name: string; status: PlayerStatus }[];
+  phaseEndsAt: number | null;
+}
+
+type Verb = (room: RoomBase, playerId: string, now: number) => void;
+type Move = (room: RoomBase, playerId: string, body: Record<string, unknown>, now: number) => void;
+
+// Method syntax on purpose: each module's functions take its own Room, and
+// method parameters are checked bivariantly, so a module fits without casts.
+export interface GameRules {
+  createRoom(input: {
+    id: string;
+    host: { id: string; name: string };
+    invite: { id: string; name: string }[];
+    difficulty: Difficulty;
+    now: number;
+  }): RoomBase;
+  join: Verb;
+  decline: Verb;
+  leave: Verb;
+  start: Verb;
+  again: Verb;
+  advance(room: RoomBase, now: number, rng: Rng): boolean;
+  deadline(room: RoomBase): number | null;
+  toWire(room: RoomBase, meId: string, now: number): { id: string; phase: string; serverNow: number };
+  /** The game's own actions, by the name the phone posts. */
+  moves: Record<string, Move>;
+}
+
+const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+export const GAMES: Record<GameId, GameRules> = {
+  'tap-duel': {
+    ...tapDuel,
+    moves: {
+      tap: (room, playerId, body, now) =>
+        tapDuel.tap(
+          room as tapDuel.Room,
+          playerId,
+          { round: num(body.round) ?? -1, reactionMs: num(body.reactionMs), early: body.early === true },
+          now,
+        ),
+    },
+  },
+  'wordle-race': {
+    ...wordleRace,
+    moves: {
+      guess: (room, playerId, body, now) => wordleRace.guess(room as wordleRace.Room, playerId, { word: body.word }, now),
+    },
+  },
+};

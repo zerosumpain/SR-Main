@@ -16,7 +16,7 @@ afterEach(() => {
 
 describe('rooms', () => {
   it('offers the invite, then plays a round on its own clock', () => {
-    const { id } = createGame({ host: john, invite: [sam], difficulty: 'easy' });
+    const { id } = createGame({ game: 'tap-duel', host: john, invite: [sam], difficulty: 'easy' });
     expect(invitesFor('p_sam')).toEqual([
       expect.objectContaining({ roomId: id, hostName: 'John', difficulty: 'easy', players: ['John', 'Sam'] }),
     ]);
@@ -50,7 +50,7 @@ describe('rooms', () => {
   });
 
   it('settles a round nobody answers when its window shuts', () => {
-    const { id } = createGame({ host: john, invite: [], difficulty: 'hard' });
+    const { id } = createGame({ game: 'tap-duel', host: john, invite: [], difficulty: 'hard' });
     act(id, 'p_john', 'start');
     vi.advanceTimersByTime(COUNTDOWN_MS);
     const r = roomFor(id, 'p_john');
@@ -59,7 +59,7 @@ describe('rooms', () => {
   });
 
   it('keeps strangers out and says so with a status', () => {
-    const { id } = createGame({ host: john, invite: [], difficulty: 'easy' });
+    const { id } = createGame({ game: 'tap-duel', host: john, invite: [], difficulty: 'easy' });
     expect(() => asHttp(() => roomFor(id, 'p_kit'))).toThrow(expect.objectContaining({ status: 403 }));
     expect(() => asHttp(() => roomFor('g_nope', 'p_john'))).toThrow(expect.objectContaining({ status: 404 }));
     expect(() => asHttp(() => act(id, 'p_john', 'tap', { round: 1, reactionMs: 200 }))).toThrow(
@@ -68,7 +68,7 @@ describe('rooms', () => {
   });
 
   it('closes an unstarted lobby, then forgets it and tells the stream', () => {
-    const { id } = createGame({ host: john, invite: [sam], difficulty: 'easy' });
+    const { id } = createGame({ game: 'tap-duel', host: john, invite: [sam], difficulty: 'easy' });
     const gone = vi.fn();
     subscribe(id, 'p_john', () => {}, gone);
     vi.advanceTimersByTime(LOBBY_MS);
@@ -80,7 +80,7 @@ describe('rooms', () => {
   });
 
   it('still tells the room about a round that shut under a late, refused tap', () => {
-    const { id } = createGame({ host: john, invite: [sam], difficulty: 'easy' });
+    const { id } = createGame({ game: 'tap-duel', host: john, invite: [sam], difficulty: 'easy' });
     act(id, 'p_sam', 'join');
     act(id, 'p_john', 'start');
     vi.advanceTimersByTime(COUNTDOWN_MS);
@@ -93,7 +93,7 @@ describe('rooms', () => {
   });
 
   it('refuses every action on a closed room, so nothing keeps it alive', () => {
-    const { id } = createGame({ host: john, invite: [sam], difficulty: 'easy' });
+    const { id } = createGame({ game: 'tap-duel', host: john, invite: [sam], difficulty: 'easy' });
     vi.advanceTimersByTime(LOBBY_MS);
     expect(() => asHttp(() => act(id, 'p_john', 'leave'))).toThrow(expect.objectContaining({ status: 409 }));
     vi.advanceTimersByTime(60_000);
@@ -101,7 +101,26 @@ describe('rooms', () => {
   });
 
   it('caps how many games one host can hold open', () => {
-    for (let i = 0; i < 3; i++) createGame({ host: john, invite: [], difficulty: 'easy' });
-    expect(() => createGame({ host: john, invite: [], difficulty: 'easy' })).toThrow(/Finish one/);
+    for (let i = 0; i < 3; i++) createGame({ game: 'tap-duel', host: john, invite: [], difficulty: 'easy' });
+    expect(() => createGame({ game: 'tap-duel', host: john, invite: [], difficulty: 'easy' })).toThrow(/Finish one/);
+  });
+
+  it('hosts Wordle Race through the same verbs, with its own move', () => {
+    const { id } = createGame({ game: 'wordle-race', host: john, invite: [sam], difficulty: 'easy' });
+    act(id, 'p_sam', 'join');
+    act(id, 'p_john', 'start');
+    vi.advanceTimersByTime(COUNTDOWN_MS);
+    expect(roomFor(id, 'p_john').phase).toBe('playing');
+    expect(() => asHttp(() => act(id, 'p_john', 'guess', { word: 'zzzzz' }))).toThrow(
+      expect.objectContaining({ status: 400 }),
+    );
+    expect(() => asHttp(() => act(id, 'p_john', 'tap', { round: 1 }))).toThrow(expect.objectContaining({ status: 400 }));
+    const after = act(id, 'p_john', 'guess', { word: 'house' }) as unknown as {
+      players: { id: string; rows: { word: string | null }[] }[];
+    };
+    expect(after.players.find((p) => p.id === 'p_john')!.rows).toHaveLength(1);
+    // Sam sees John's colours, not his letters.
+    const seenBySam = roomFor(id, 'p_sam') as unknown as typeof after;
+    expect(seenBySam.players.find((p) => p.id === 'p_john')!.rows[0].word).toBeNull();
   });
 });
