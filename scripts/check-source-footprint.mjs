@@ -51,7 +51,12 @@ const LIMITS = {
   // deploy killed, and telling the generator today's date.
   // +25 on 2026-09-25 (#964, alexa_home_signals): the tool's registration and
   // keyword rule only — its caveats and answer live in $lib/alexa.
-  workflows: 60_275,
+  // +325 on 2026-09-26 (access groups P5, member chat): a member's turn runs on
+  // a closed tool list enforced in the executor and the chat loop. ~260 lines
+  // of it are general-chat.ts's tool tiers re-indented under `if
+  // (!restriction)`, the rest the restricted branch and its refusals; the
+  // policy itself lives in $lib/jkai/member-chat.
+  workflows: 60_600,
   panels: 26_000,
   tests: 210_000,
 };

@@ -14,7 +14,10 @@ vi.mock('$lib/db', () => ({
     }),
   },
 }));
-vi.mock('$lib/db/schema', () => ({ jkaiAttachments: {} }));
+vi.mock('$lib/db/schema', () => ({ jkaiAttachments: {}, conversations: {}, accessUsage: {} }));
+
+// The route asks who is uploading; a cached owner viewer answers without auth.
+const OWNER_LOCALS = { viewer: Promise.resolve({ kind: 'owner' }) };
 
 let tmpRoot: string;
 
@@ -35,7 +38,7 @@ describe('POST /api/jkai/attachments', () => {
     fd.append('conversationId', 'conv-1');
     const req = new Request('http://x/api/jkai/attachments', { method: 'POST', body: fd });
     try {
-      await mod.POST({ request: req } as any);
+      await mod.POST({ request: req, locals: OWNER_LOCALS } as any);
       throw new Error('expected rejection');
     } catch (e: any) {
       expect(e.status ?? e.body?.status).toBe(400);
@@ -54,7 +57,7 @@ describe('POST /api/jkai/attachments', () => {
     ]);
     fd.append('file', new Blob([png], { type: 'image/png' }), 'tiny.png');
     const req = new Request('http://x/api/jkai/attachments', { method: 'POST', body: fd });
-    const res = await mod.POST({ request: req } as any);
+    const res = await mod.POST({ request: req, locals: OWNER_LOCALS } as any);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.kind).toBe('image');

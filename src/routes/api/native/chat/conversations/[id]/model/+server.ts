@@ -55,6 +55,8 @@ export const GET: RequestHandler = withDevice(async ({ params }) => {
     db
       .select({ provider: conversations.modelProvider, modelId: conversations.modelId })
       .from(conversations)
+      // The owner's own threads — "the models he uses", not a member's picks.
+      .where(eq(conversations.principalId, 'owner'))
       .orderBy(desc(conversations.updatedAt))
       .limit(RECENT_THREADS),
     modelSupportsThinking(current),

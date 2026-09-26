@@ -12,6 +12,7 @@ src/lib/costs/ledger.test.ts
 src/lib/daydream/think/tools.test.ts
 src/lib/deepdive/route-access.test.ts
 src/lib/estate/estate.test.ts
+src/lib/jkai/chat-route-access.test.ts
 src/lib/jkai/explainer-kit.test.ts
 src/lib/jkai/intel/chat-extract.wiring.test.ts
 src/lib/jkai/intel/route-scope.test.ts

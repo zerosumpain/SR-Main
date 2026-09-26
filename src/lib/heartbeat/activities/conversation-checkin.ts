@@ -1,6 +1,6 @@
 import { db } from '$lib/db';
-import { orchestratorChats, heartbeatPulses } from '$lib/db/schema';
-import { and, eq, gt, isNotNull } from 'drizzle-orm';
+import { orchestratorChats, heartbeatPulses, conversations } from '$lib/db/schema';
+import { and, eq, gt, inArray, isNotNull } from 'drizzle-orm';
 import { listChatJobs } from '$lib/workflows/chat/activity';
 import { postHeartbeatNote } from '../llm';
 import type { ActivityHandler } from '../types';
@@ -46,9 +46,26 @@ export const conversationCheckin: ActivityHandler = {
     const cooldownMs = cfg.perConversationCooldownMinutes * 60_000;
     const now = ctx.now;
 
-    const jobs = (await listChatJobs()).filter(
+    const longJobs = (await listChatJobs()).filter(
       (j) => j.status === 'running' && j.conversationId && j.elapsed >= ageThresholdMs,
     );
+    // The owner's threads only — a background note never lands in a member's.
+    const ownerConvIds = longJobs.length
+      ? new Set(
+          (
+            await db
+              .select({ id: conversations.id })
+              .from(conversations)
+              .where(
+                and(
+                  inArray(conversations.id, longJobs.map((j) => j.conversationId as string)),
+                  eq(conversations.principalId, 'owner'),
+                ),
+              )
+          ).map((r) => r.id),
+        )
+      : new Set<string>();
+    const jobs = longJobs.filter((j) => ownerConvIds.has(j.conversationId as string));
     if (jobs.length === 0) {
       return { outcome: 'ok', summary: 'no long-running jobs' };
     }

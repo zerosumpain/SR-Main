@@ -1,11 +1,10 @@
-import { json } from '@sveltejs/kit';
-import { eq } from 'drizzle-orm';
-import { db } from '$lib/db';
-import { conversations } from '$lib/db/schema';
+import { isHttpError, json } from '@sveltejs/kit';
+import { requireConversation } from '$lib/jkai/chat-access.server';
 import { CHAT_HISTORY_PAGE_SIZE, getConversationMessages } from '$lib/jkai/queries';
 import type { RequestHandler } from './$types';
 
-export const GET: RequestHandler = async ({ params, url }) => {
+export const GET: RequestHandler = async (event) => {
+  const { params, url } = event;
   const beforeRaw = url.searchParams.get('before');
   const beforeId = url.searchParams.get('beforeId');
   const before = beforeRaw ? new Date(beforeRaw) : null;
@@ -13,12 +12,14 @@ export const GET: RequestHandler = async ({ params, url }) => {
     return json({ error: 'Invalid message cursor' }, { status: 400 });
   }
 
-  const [conversation] = await db
-    .select({ source: conversations.source })
-    .from(conversations)
-    .where(eq(conversations.id, params.id))
-    .limit(1);
-  if (!conversation) return json({ error: 'Conversation not found' }, { status: 404 });
+  // A thread the reader may not see is a 404, exactly like one that does not exist.
+  let conversation;
+  try {
+    ({ conversation } = await requireConversation(event, params.id, 'read'));
+  } catch (err) {
+    if (isHttpError(err) && err.status === 404) return json({ error: 'Conversation not found' }, { status: 404 });
+    throw err;
+  }
 
   const history = await getConversationMessages(params.id, {
     limit: CHAT_HISTORY_PAGE_SIZE,

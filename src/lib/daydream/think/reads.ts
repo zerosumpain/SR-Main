@@ -28,6 +28,7 @@
 import { and, desc, eq, gte, ilike, lte, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { conversations, daydreamSpend, intelNotes, intelTimelineEvents, orchestratorChats } from '$lib/db/schema';
+import { ownerThread } from '$lib/jkai/owner-threads';
 import { OWNER_INTEL_SCOPE, spaceIn } from '$lib/jkai/intel/scope';
 import { DEFAULT_SUBJECT } from '../types';
 import { localDay } from '../features/build';
@@ -173,7 +174,8 @@ export async function chatThreadsTool(args: Record<string, unknown>, now = new D
   const threads = await db
     .select({ id: conversations.id, title: conversations.title, updatedAt: conversations.updatedAt })
     .from(conversations)
-    .where(gte(conversations.updatedAt, since))
+    // The owner's threads only — a member's thread is never daydream material.
+    .where(and(gte(conversations.updatedAt, since), ownerThread))
     .orderBy(desc(conversations.updatedAt))
     .limit(25);
   if (!threads.length) return `No jkai threads active in the last ${days} days.`;

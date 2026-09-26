@@ -122,7 +122,7 @@ export async function remoteCatalogue(target: RemoteInvokeTarget): Promise<Catal
 }
 
 /**
- * The six fields that cross, picked one at a time.
+ * The seven fields that cross, picked one at a time.
  *
  * Deliberately not a spread-and-delete: the danger is a NEW field on
  * `ToolExecContext` being carried across by default, and only an allow-list
@@ -140,6 +140,9 @@ export function contextForWire(ctx?: ToolExecContext): InvokeContext {
 	}
 	if (ctx.thinkingLevel !== undefined) wire.thinkingLevel = ctx.thinkingLevel;
 	if (ctx.allowedTools !== undefined) wire.allowedTools = ctx.allowedTools;
+	// Crosses so the callee's `executeTool` can fail closed on a member call
+	// that arrives without a scope — the same check it makes in-process.
+	if (ctx.principalId !== undefined) wire.principalId = ctx.principalId;
 	return wire;
 }
 

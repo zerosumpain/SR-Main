@@ -54,6 +54,9 @@ export async function storeChatUpload(
   file: FormDataEntryValue | null,
   conversationId: string | null,
   source: 'web' | 'generated',
+  /** Whose file it is — the uploader's principal. The caller has already
+   *  checked a member may post in `conversationId`. */
+  principalId: string = 'owner',
 ) {
   if (!(file instanceof File)) throw error(400, 'file is required');
   if (file.size === 0) throw error(400, 'file is empty');
@@ -91,7 +94,11 @@ export async function storeChatUpload(
     diskPath,
     duration: null,
     metadata: null,
+    principalId,
   }).returning();
+
+  // /drive is the owner's: a member's upload stays in the media store only.
+  if (principalId !== 'owner') return row;
 
   // Mirror everything the chat touches into /drive under `jkai/<chat title>/`
   // and embed it, so chat files are browsable in /drive and searchable via

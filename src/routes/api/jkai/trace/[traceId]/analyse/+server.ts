@@ -17,6 +17,7 @@ import {
 import { parseJsonLoose } from '$lib/selfimprove/types';
 import { withActivity } from '$lib/context/activity';
 import { loadTraceRow } from '$lib/jkai/tool-trace.server';
+import { requireChatOwner } from '$lib/jkai/chat-access.server';
 
 // Read one turn's tool-call chain and say where the calls went. Owner-gated by
 // hooks, like the rest of /api/jkai.
@@ -28,7 +29,10 @@ import { loadTraceRow } from '$lib/jkai/tool-trace.server';
 // so a finding means the same thing whichever surface produced it — the
 // engine's own phases are pinned the same way, and this feeds the same backlog.
 
-export const POST: RequestHandler = async ({ params, request }) => {
+export const POST: RequestHandler = async (event) => {
+  const { params, request } = event;
+  // Owner-only: it reads a trace and feeds the owner's self-improvement backlog.
+  await requireChatOwner(event);
   const row = await loadTraceRow(params.traceId);
   if (!row) return json({ error: 'No tool trace for that turn' }, { status: 404 });
 

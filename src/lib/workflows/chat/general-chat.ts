@@ -14,6 +14,7 @@ import { applyCapabilityPolicy, resolveCapabilities } from '$lib/jkai/grounding/
 import { withChatContext, emptyChatUsage, type ChatUsageTotals } from '$lib/context/chat';
 import { db } from '$lib/db';
 import {
+  conversations,
   homeAssistantConfig,
   jkaiMemories,
   orchestratorChats,
@@ -52,6 +53,8 @@ import { extractClarify, awaitClarifyAnswers } from './clarify-phase';
 import { renderSkillIndex } from '$lib/jkai/skills/registry';
 import { compressHistory, refreshCompression, renderCompressionSection } from './compress';
 import { carriedToolsets } from './carried-toolsets';
+import { MEMBER_PERSONA_PROMPT, memberCapabilitiesSection, type TurnRestriction } from '$lib/jkai/member-chat/policy';
+import type { ToolExecContext } from '$lib/workflows/site-tools/registry-internal';
 
 const MAX_HISTORY = 30;
 const DEFAULT_TOOL_ROUNDS = 10;
@@ -69,6 +72,14 @@ const EXTENDED_AUTONOMY_PHRASES = [
   /\bextended autonomy\b/i,
   /\b(?:autonomously|on your own) (?:until|for longer)\b/i,
 ];
+/**
+ * A restricted (member) turn's tool-call budget. Its tools read the public web
+ * and render things, so these bound spend, not risk: a model looping on
+ * `research_web_search` is metered here rather than by the owner's patience.
+ * Refused calls do not count — they cost nothing.
+ */
+const RESTRICTED_CALLS_PER_ROUND = 3;
+const RESTRICTED_CALLS_PER_TURN = 12;
 function detectExtendedAutonomy(userMessage: string): boolean {
   return EXTENDED_AUTONOMY_PHRASES.some((re) => re.test(userMessage));
 }
@@ -278,6 +289,49 @@ interface ChatOptions {
    * scheduled turn is to schedule the one after it.
    */
   origin?: 'followup';
+  /**
+   * A member's turn: their principal and the closed tool list it runs on (see
+   * `$lib/jkai/member-chat/policy`). When set, the turn runs on the member
+   * persona, fetches none of the owner's context (memory, graph, roster,
+   * integrations, skills, canvas), is offered only `allow`, and every call is
+   * refused unless its name is in `allow` — in this loop AND in the executor,
+   * which gets `allowedTools` + `principalId` on its context. Absent = the
+   * owner's turn, exactly as it always was.
+   */
+  restriction?: TurnRestriction;
+}
+
+/**
+ * The thread-principal guard: a turn on a member's thread must be that
+ * member's restricted turn, and a restricted turn must be on its own thread.
+ *
+ * The routes check who may POST, but not every turn comes through a route —
+ * the WhatsApp bridge, the follow-up queue and scheduled callbacks all call
+ * `generalChat` with a conversation id and no restriction. Without this, a
+ * follow-up scheduled on a member's thread would run with the owner's tools
+ * and memory and answer into it. Checked before anything else happens.
+ *
+ * A thread with no row is left alone for an unrestricted turn (it cannot be a
+ * member's) and refused for a restricted one (its principal cannot be shown).
+ */
+async function assertThreadPrincipal(options: Pick<ChatOptions, 'conversationId' | 'restriction'>): Promise<void> {
+  if (!options.conversationId) return;
+  const [row] = await db
+    .select({ principalId: conversations.principalId })
+    .from(conversations)
+    .where(eq(conversations.id, options.conversationId))
+    .limit(1);
+  const restriction = options.restriction;
+  if (!row) {
+    if (restriction) throw new Error('restricted turn refused: its thread was not found');
+    return;
+  }
+  if (row.principalId !== 'owner' && !restriction) {
+    throw new Error('owner-grade turn refused on a non-owner thread');
+  }
+  if (restriction && restriction.principalId !== row.principalId) {
+    throw new Error("restricted turn refused on another principal's thread");
+  }
 }
 
 /**
@@ -418,6 +472,42 @@ interface RunToolContext {
   thinkingLevel?: ThinkingLevel | null;
   subagentDepth?: number;
   toolWhitelist?: string[];
+  /** A member's turn — see ChatOptions.restriction. */
+  restriction?: TurnRestriction;
+  /** Restricted turns only: calls made this round and this turn, shared by
+   *  every call of the turn. The loop zeroes `round` before each batch. */
+  callBudget?: { round: number; turn: number };
+}
+
+/**
+ * Whether this call may run at all, decided before any dispatch — so a meta
+ * tool handled in this loop (activate_toolset, create_tool, delete_tool,
+ * agent_spawn) is refused exactly like a site tool, not only what reaches the
+ * executor. Synchronous on purpose: a round's calls start under `Promise.all`,
+ * and the budget below is only exact if each call counts itself before the
+ * next one begins.
+ */
+function scopeRefusal(fnName: string, ctx: RunToolContext): { success: false; error: string } | null {
+  if (ctx.restriction && !ctx.restriction.allow.includes(fnName)) {
+    return { success: false, error: `${fnName} is not available in this conversation.` };
+  }
+  // The whitelist was only applied to what the model was OFFERED, so a
+  // sub-agent naming a meta tool it was never handed still reached the
+  // handlers above. Owner top-level turns carry no whitelist.
+  if (ctx.toolWhitelist && !ctx.toolWhitelist.includes(fnName)) {
+    return { success: false, error: `${fnName} is not in the current tool whitelist.` };
+  }
+  if (ctx.restriction && ctx.callBudget) {
+    if (ctx.callBudget.turn >= RESTRICTED_CALLS_PER_TURN) {
+      return { success: false, error: `Tool-call limit reached for this message (${RESTRICTED_CALLS_PER_TURN}). Answer with what you have.` };
+    }
+    if (ctx.callBudget.round >= RESTRICTED_CALLS_PER_ROUND) {
+      return { success: false, error: `At most ${RESTRICTED_CALLS_PER_ROUND} tool calls at once. Call ${fnName} again next step if it is still needed.` };
+    }
+    ctx.callBudget.round++;
+    ctx.callBudget.turn++;
+  }
+  return null;
 }
 
 async function runSingleToolCall(
@@ -444,9 +534,11 @@ async function runSingleToolCall(
   onProgress?.(`${fnName}: running${runningSummary ? ` — ${runningSummary}` : ''}\n`);
   onStreamEvent?.({ type: 'tool_start', tool: fnName, args: fnArgs, toolCallId: toolCall.id, summary: runningSummary || undefined });
 
-  let toolResult: any;
+  let toolResult: any = scopeRefusal(fnName, ctx);
 
-  if (fnName === 'activate_toolset') {
+  if (toolResult) {
+    // Refused — nothing below runs, and the refusal goes back as the result.
+  } else if (fnName === 'activate_toolset') {
     const toolset = fnArgs.toolset as string;
     if (activatedToolsets.has(toolset)) {
       toolResult = { success: true, data: { toolset, status: 'already_active', message: `${toolset} tools are already loaded.` } };
@@ -554,7 +646,7 @@ async function runSingleToolCall(
     // spelling of no.
     const sessionModel = ctx.sessionModel ?? undefined;
     const sessionThinking = ctx.sessionModel ? (ctx.thinkingLevel ?? null) : null;
-    const toolCtx = jobId
+    let toolCtx: ToolExecContext | undefined = jobId
       ? {
           jobId,
           conversationId: conversationId ?? undefined,
@@ -577,7 +669,16 @@ async function runSingleToolCall(
               emit: () => {},
             }
           : undefined);
-    if (toolCtx && ctx.toolWhitelist) Object.assign(toolCtx, { allowedTools: ctx.toolWhitelist });
+    if (ctx.restriction) {
+      // Always a context on a restricted turn, job or not: the executor refuses
+      // a member call that arrives without its scope, and nested calls inherit
+      // this one through `currentExecution`.
+      toolCtx = {
+        ...(toolCtx ?? { emit: () => {} }),
+        allowedTools: ctx.restriction.allow.filter((n) => !ctx.toolWhitelist || ctx.toolWhitelist.includes(n)),
+        principalId: ctx.restriction.principalId,
+      };
+    } else if (toolCtx && ctx.toolWhitelist) Object.assign(toolCtx, { allowedTools: ctx.toolWhitelist });
     if (jobId) setJobPhase(jobId, 'tool_running', runningSummary || fnName);
     if (await isDestructive(fnName)) {
       if (!jobId) {
@@ -801,6 +902,8 @@ export async function generalChat(
   conversationHistory: HistoryMessage[],
   options: ChatOptions,
 ): Promise<{ response: string; usage: ChatUsageTotals; memory: MemoryTurnStamp }> {
+  // Before anything is armed or fetched: whose thread is this?
+  await assertThreadPrincipal(options);
   // Skipped for sub-agents — their output isn't meant for the user chat.
   const ack =
     options.conversationId && (options.subagentDepth ?? 0) === 0
@@ -857,7 +960,7 @@ async function runGeneralChat(
   /** Disarms the opening ack. Called on the first visible sign of life. */
   cancelAck: () => void,
 ): Promise<{ response: string; memory: MemoryTurnStamp }> {
-  const { onProgress, onToolProgress } = options;
+  const { onProgress, onToolProgress, restriction } = options;
   const userMessage = input.text;
 
   // The opening ack is armed by the `generalChat` wrapper above and disarmed
@@ -877,22 +980,26 @@ async function runGeneralChat(
   // 415 entities in production, fetched sequentially on EVERY turn, to satisfy
   // two `haEntities.length` checks. A count answers both, and the rows are only
   // read if the model actually activates the toolset.
+  //
+  // Not asked at all on a restricted turn: it cannot activate `home`.
   let haEntityCount = 0;
-  try {
-    const [row] = await db
-      .select({
-        n: sql<number>`CASE
-          WHEN ${homeAssistantConfig.token} IS NULL THEN 0
-          WHEN jsonb_typeof(${homeAssistantConfig.entityRegistry}) <> 'array' THEN 0
-          ELSE jsonb_array_length(${homeAssistantConfig.entityRegistry})
-        END`,
-      })
-      .from(homeAssistantConfig)
-      .where(eq(homeAssistantConfig.id, 'default'))
-      .limit(1);
-    haEntityCount = Number(row?.n ?? 0);
-  } catch (err) {
-    console.warn('[general-chat] Failed to count HA entities:', err instanceof Error ? err.message : err);
+  if (!restriction) {
+    try {
+      const [row] = await db
+        .select({
+          n: sql<number>`CASE
+            WHEN ${homeAssistantConfig.token} IS NULL THEN 0
+            WHEN jsonb_typeof(${homeAssistantConfig.entityRegistry}) <> 'array' THEN 0
+            ELSE jsonb_array_length(${homeAssistantConfig.entityRegistry})
+          END`,
+        })
+        .from(homeAssistantConfig)
+        .where(eq(homeAssistantConfig.id, 'default'))
+        .limit(1);
+      haEntityCount = Number(row?.n ?? 0);
+    } catch (err) {
+      console.warn('[general-chat] Failed to count HA entities:', err instanceof Error ? err.message : err);
+    }
   }
 
   // Memoised: a turn can activate the `home` toolset only once, but a retry or
@@ -920,21 +1027,40 @@ async function runGeneralChat(
 
   // Build system prompt — fetched in parallel to cut cold-start latency.
   // siteSection is synchronous, so no Promise.all entry for it.
-  const siteSection = await buildSiteSystemPromptSection();
+  //
+  // A restricted turn gets its own capabilities list: the site section names
+  // every toolset and carries the owner's WhatsApp number.
+  const siteSection = restriction ? memberCapabilitiesSection() : await buildSiteSystemPromptSection();
 
   // What is this turn about? Decided before any personal context is fetched,
   // so the fetchers search on a standalone query and only the slices the turn
   // needs are fetched at all — see `$lib/jkai/grounding/context-route`. A
   // sub-agent's brief is a task by construction and skips the router's round
   // trip; the roster loads once and serves both the router and the block.
-  const rosterPromise = loadClusterRoster().catch((err) => {
-    console.warn('[context-route] cluster roster unavailable:', err instanceof Error ? err.message : err);
-    return [] as RosterCluster[];
-  });
-  const routedPromise: Promise<RoutedTurn> = (options.subagentDepth ?? 0) > 0
-    ? Promise.resolve({ route: { ...fallbackRoute(userMessage), kind: 'task' as const, query: userMessage }, ms: 0 })
-    : rosterPromise.then((roster) => routeTurn(userMessage, conversationHistory, roster));
+  //
+  // A restricted turn fetches NONE of it — no roster, no router call, no
+  // memory, graph or saved integrations. Each of those is the owner's, and the
+  // router is given the roster's labels. It runs on a fixed empty context, and
+  // its stamp says so without naming anything of the owner's.
+  const rosterPromise = restriction
+    ? Promise.resolve([] as RosterCluster[])
+    : loadClusterRoster().catch((err) => {
+        console.warn('[context-route] cluster roster unavailable:', err instanceof Error ? err.message : err);
+        return [] as RosterCluster[];
+      });
+  const routedPromise: Promise<RoutedTurn> = restriction
+    ? Promise.resolve({ route: { kind: 'task' as const, domains: [], entities: [], clusters: [], query: '', capabilities: [], source: 'fallback' as const }, ms: 0 })
+    : (options.subagentDepth ?? 0) > 0
+      ? Promise.resolve({ route: { ...fallbackRoute(userMessage), kind: 'task' as const, query: userMessage }, ms: 0 })
+      : rosterPromise.then((roster) => routeTurn(userMessage, conversationHistory, roster));
   const contextPromise = Promise.all([routedPromise, rosterPromise]).then(async ([routed, roster]) => {
+    if (restriction) {
+      const plan: ContextPlan = { memory: 'pinned', graph: 'none', integrations: false, query: '', toolGroups: [], skills: false };
+      const memory: MemorySelection & { unavailable?: boolean } = { text: '', served: [], omitted: [], retrieved: 0, chars: 0 };
+      const graph = { text: '', anchors: [] as Anchor[], clusters: [] as string[] };
+      const integrations = { integrations: [] as Awaited<ReturnType<typeof discoverIntegrations>>, status: 'not needed' };
+      return { routed, plan, memory, graph, integrations };
+    }
     const plan = planContext(routed.route, userMessage);
     const graphPromise =
       options.intelContextOverride != null
@@ -952,10 +1078,12 @@ async function runGeneralChat(
     return { routed, plan, memory, graph, integrations };
   });
 
+  // A restricted turn runs on the member persona, never the owner's prompt
+  // files (`01-soul.md`, `04-context.md` describe the owner), and has no canvas.
   const [basePrompt, turnContext, canvasSection, pastedUrlsSection] = await Promise.all([
-    getCompiledPrompt(),
+    restriction ? Promise.resolve(MEMBER_PERSONA_PROMPT) : getCompiledPrompt(),
     contextPromise,
-    buildCanvasContextSection(options.workflowId),
+    restriction ? Promise.resolve('') : buildCanvasContextSection(options.workflowId),
     buildPastedUrlsSection(userMessage, onProgress, options.onStreamEvent),
   ]);
   const { routed, plan: contextPlan, memory: memorySelection, integrations: integrationContext } = turnContext;
@@ -993,7 +1121,7 @@ async function runGeneralChat(
   // Stealth-scrape playbook — only injected when the user's message looks
   // scraper-related. Kept out of the always-on prompt so the typical /jkai
   // turn doesn't pay for ~1KB of guidance it never uses.
-  const scraperSection = inferred.includes('scraper')
+  const scraperSection = inferred.includes('scraper') && !restriction
     ? `\n\n--- Web scraping ---\nThe \`stealth-scrape\` node is the pattern for reading live web pages — job boards, listings, prices, schedules, content behind cookie walls. It runs a stealth-patched Playwright on homeserv's residential IP and dispatches through a saved Python script keyed to a stable per-domain \`profile\` (e.g. \`civilservicejobs-gov-uk\`). Scripts have \`page\` (persistent context, cookies retained) and \`vars\` (string dict) in scope and \`return\` a list of dicts.\n\nWhen designing a scrape:\n1. \`scraper_script_list\` first — reuse an existing profile if one matches.\n2. If editing: \`scraper_script_read\` → modify → \`scraper_script_save\` → \`scraper_script_test\` to verify.\n3. If none exists: set \`goal\` + \`searchQuery\` on the \`stealth-scrape\` node — the first run authors and saves a script; subsequent runs replay it.\n\nTypical scrape canvas: \`trigger → (data-store get, stealth-scrape) → merge → transform (diff vs stored URLs) → llm-call (format) → gmail-send / whatsapp → data-store set\`. Keep transforms small (in-process, no sandbox); cap LLM prompts (few hundred chars per description); use \`bodyHtml\` not \`bodyText\` on \`gmail-send\` when output has links or lists.`
     : '';
 
@@ -1019,7 +1147,9 @@ async function runGeneralChat(
   // model to emit them or the job stalls.
   const supportsGates = options.jobId && (options.subagentDepth ?? 0) === 0 && !options.workflowId;
 
-  const planSection = supportsGates
+  // Never on a restricted turn: every one of its tools is read-only, so there
+  // is nothing for a plan to ask consent for.
+  const planSection = supportsGates && !restriction
     ? `\n\n--- Plan phase ---\nA plan exists to get the user's consent BEFORE something happens that they cannot simply undo by reading the answer. Emit one ONLY if the turn will write, modify, delete, publish, send, spend, run code, or change state anywhere — on the site, a device, an inbox, or a third party.\n\nDo NOT emit a plan for read-only work. Looking things up, searching, walking the graph, reading files, checking status — just call the tools and answer, however many lookups it takes. Nobody needs to approve a question.\n\n<plan>{\n  "summary": "one sentence of what you will do",\n  "steps": [\n    {"id": "s1", "title": "Short step title", "detail": "One-line detail of what this step does", "kind": "read" | "write" | "run" | "external"}\n  ],\n  "filesToTouch": [{"path": "...", "action": "create" | "modify" | "delete"}]\n}</plan>\n\nSet each step's "kind" accurately — it is load-bearing, not decoration. A plan whose steps are all "read" with no filesToTouch is treated as having nothing to approve and runs immediately; mislabelling a write as a read skips the user's say-so entirely.\n\nAfter emitting this block, STOP. Do not call any tools in the same message. The system will return with one of: "Plan approved — proceed.", "Plan rejected — stop.", or "Adjust the plan: <user feedback>". If the plan is adjusted, revise and emit a new <plan>. Only call tools after approval.`
     : '';
 
@@ -1034,7 +1164,7 @@ async function runGeneralChat(
   // Only on a task. 13k characters — the second-largest block in the prompt —
   // is worth sending when a playbook might apply; on "Sup dog" it was a fifth
   // of the turn's input for nothing (see `planContext`).
-  const skillsIndex = contextPlan.skills ? renderSkillIndex() : '';
+  const skillsIndex = contextPlan.skills && !restriction ? renderSkillIndex() : '';
   const skillsSection = skillsIndex
     ? `\n\n--- Skills ---\nCurated playbooks for specific jobs. If one covers what you are about to do, read it with skill_view(id) BEFORE starting — it carries the specifics, constraints and traps that general knowledge does not. Prefer loading one over guessing; do not load one that is merely adjacent.\n\n${skillsIndex}\n`
     : '';
@@ -1078,7 +1208,10 @@ async function runGeneralChat(
   // task turns only; the history summary, on refresh), and everything decided
   // by THIS message rides in `turnNote` after the history.
   const capabilityPolicy = await getActivePolicy();
-  const stablePrefix = `${personaSection}${basePrompt}${siteSection}${apiFirstSection}${canvasSection}${clarifySection}${planSection}${BEHAVIOUR_POLICY}${renderGlobalGuidance(capabilityPolicy)}`;
+  // The call-efficiency guidance is written about the owner's toolsets; a
+  // restricted turn has none of them.
+  const globalGuidance = restriction ? '' : renderGlobalGuidance(capabilityPolicy);
+  const stablePrefix = `${personaSection}${basePrompt}${siteSection}${apiFirstSection}${canvasSection}${clarifySection}${planSection}${BEHAVIOUR_POLICY}${globalGuidance}`;
   const perTurnSuffix = `${skillsSection}${compressionSection}`;
   const systemContent = `${stablePrefix}${perTurnSuffix}`;
   const turnNote = `${scraperSection}${newsSection}${renderAnswerContract(contract)}`.trim();
@@ -1154,98 +1287,109 @@ async function runGeneralChat(
   const toolGroups = contextPlan.toolGroups;
   const wantsGroup = (g: ToolCapability) => toolGroups === 'all' || toolGroups.includes(g);
 
-  // Tier 1. Meta-tools and discovery always: tools for FINDING tools are
-  // useless if you must already know to activate them. The authoring meta
-  // tools are tier 2 — see AUTHORING_META_TOOLS.
-  const activeTools: Array<any> = [
-    ...(await getMetaToolDefinitions()).filter((t) => !AUTHORING_META_TOOLS.has(t.function.name)),
-    ...(await getToolsetDefinitions('discovery')),
-  ];
+  const activeTools: Array<any> = [];
+  let routedCapabilities: ReturnType<typeof resolveCapabilities> = [];
+  if (restriction) {
+    // A restricted turn is offered its allow-list and nothing else: no meta
+    // tools (activate_toolset would open any toolset), no discovery (it lists
+    // the owner's integrations), none of the always-on set's `api_*` (they
+    // carry the owner's saved secrets), no routed or inferred toolsets. The
+    // executor refuses anything outside the list whatever is offered here.
+    activeTools.push(...(await getToolDefinitionsByName(restriction.allow)));
+  } else {
+    // Tier 1. Meta-tools and discovery always: tools for FINDING tools are
+    // useless if you must already know to activate them. The authoring meta
+    // tools are tier 2 — see AUTHORING_META_TOOLS.
+    activeTools.push(
+      ...(await getMetaToolDefinitions()).filter((t) => !AUTHORING_META_TOOLS.has(t.function.name)),
+      ...(await getToolsetDefinitions('discovery')),
+    );
 
-  // Tools the always-on prompt ORDERS the model to use, pushed by name.
-  //
-  // Two separate gaps, one fix. The API-first section below instructs every
-  // turn to reach `api_search` → `api_call` before answering from memory, and
-  // said structured data belongs in `datastore_query` — while a comment above
-  // it claimed those were reachable because they are in ESSENTIAL_TOOL_NAMES.
-  // They are not: that set lives in `$lib/mcp/essentials` and is read by the
-  // tool-policy publisher, which this file has never imported. The model was
-  // being told to call tools it had not been handed.
-  //
-  // Separately, open-web lookup was gone from a default turn. The gateway had web
-  // search on every one — 99 `web_search` and 72 `web_extract` calls in 45 days
-  // — and the classifier only loads `research`/`web` on "research", "deep dive"
-  // or a literal URL. Sampled real queries ("Carmel College term dates", "Apple
-  // Developer Program fee") trip neither pattern, so the turn either paid an
-  // `activate_toolset` round first or answered from training data.
-  //
-  // BY NAME, not by toolset: `research` carries nine session-management tools
-  // that have no business on an ordinary turn. Cost is ~400-600 tokens of
-  // schema against a ~4.3s round, and it now sits inside the cacheable prefix.
-  //
-  // `datastore_query` left this list on 2026-09-24: one call in 90 days, at
-  // 1.4k characters on every round. It is tier 2 now, under `datastore`.
-  const ALWAYS_ON_TOOL_NAMES = [
-    'api_search',
-    'api_call',
-    'research_web_search',
-    'fetch_url',
-    'evidence_read',
-  ] as const;
-  activeTools.push(...(await getToolDefinitionsByName(ALWAYS_ON_TOOL_NAMES)));
+    // Tools the always-on prompt ORDERS the model to use, pushed by name.
+    //
+    // Two separate gaps, one fix. The API-first section below instructs every
+    // turn to reach `api_search` → `api_call` before answering from memory, and
+    // said structured data belongs in `datastore_query` — while a comment above
+    // it claimed those were reachable because they are in ESSENTIAL_TOOL_NAMES.
+    // They are not: that set lives in `$lib/mcp/essentials` and is read by the
+    // tool-policy publisher, which this file has never imported. The model was
+    // being told to call tools it had not been handed.
+    //
+    // Separately, open-web lookup was gone from a default turn. The gateway had web
+    // search on every one — 99 `web_search` and 72 `web_extract` calls in 45 days
+    // — and the classifier only loads `research`/`web` on "research", "deep dive"
+    // or a literal URL. Sampled real queries ("Carmel College term dates", "Apple
+    // Developer Program fee") trip neither pattern, so the turn either paid an
+    // `activate_toolset` round first or answered from training data.
+    //
+    // BY NAME, not by toolset: `research` carries nine session-management tools
+    // that have no business on an ordinary turn. Cost is ~400-600 tokens of
+    // schema against a ~4.3s round, and it now sits inside the cacheable prefix.
+    //
+    // `datastore_query` left this list on 2026-09-24: one call in 90 days, at
+    // 1.4k characters on every round. It is tier 2 now, under `datastore`.
+    const ALWAYS_ON_TOOL_NAMES = [
+      'api_search',
+      'api_call',
+      'research_web_search',
+      'fetch_url',
+      'evidence_read',
+    ] as const;
+    activeTools.push(...(await getToolDefinitionsByName(ALWAYS_ON_TOOL_NAMES)));
 
-  // Visualise tools are always available — the LLM should be able to reach
-  // for render_chart/render_table/render_diagram whenever it wants to answer
-  // with a multimedia response.
-  activeTools.push(...(await getToolsetDefinitions('visualise')));
-  activatedToolsets.add('visualise');
+    // Visualise tools are always available — the LLM should be able to reach
+    // for render_chart/render_table/render_diagram whenever it wants to answer
+    // with a multimedia response.
+    activeTools.push(...(await getToolsetDefinitions('visualise')));
+    activatedToolsets.add('visualise');
 
-  // Canvas context: always include the workflows toolset so the model
-  // can build/modify THIS canvas without needing the user to say a magic
-  // keyword first. Stable for the whole of a canvas conversation.
-  if (options.workflowId) {
-    activeTools.push(...(await getToolsetDefinitions('workflows')));
-    activatedToolsets.add('workflows');
-  }
+    // Canvas context: always include the workflows toolset so the model
+    // can build/modify THIS canvas without needing the user to say a magic
+    // keyword first. Stable for the whole of a canvas conversation.
+    if (options.workflowId) {
+      activeTools.push(...(await getToolsetDefinitions('workflows')));
+      activatedToolsets.add('workflows');
+    }
 
-  // Tier 2 — the rarely-used groups, when the context router asked for them
-  // (or on every one of them when the turn was never routed). Otherwise each
-  // is one `activate_toolset` call away, and the prompt says so.
-  //
-  // A follow-up turn always gets the scheduling set: it IS a scheduled turn,
-  // and the likeliest thing it does next is schedule the one after.
-  if (wantsGroup('schedule') || options.origin === 'followup') {
-    for (const ts of SCHEDULING_TOOLSETS) {
+    // Tier 2 — the rarely-used groups, when the context router asked for them
+    // (or on every one of them when the turn was never routed). Otherwise each
+    // is one `activate_toolset` call away, and the prompt says so.
+    //
+    // A follow-up turn always gets the scheduling set: it IS a scheduled turn,
+    // and the likeliest thing it does next is schedule the one after.
+    if (wantsGroup('schedule') || options.origin === 'followup') {
+      for (const ts of SCHEDULING_TOOLSETS) {
+        activeTools.push(...(await getToolsetDefinitions(ts)));
+        activatedToolsets.add(ts);
+      }
+    }
+    if (wantsGroup('build-tool')) {
+      activeTools.push(...(await authoringMetaTools()), ...(await getToolsetDefinitions('custom-tools')));
+      activatedToolsets.add('custom-tools');
+    }
+    if (wantsGroup('datastore')) {
+      activeTools.push(...(await getToolDefinitionsByName(['datastore_query'])));
+    }
+    // agent_spawn only on a top-level orchestrator call, never inside a sub-agent.
+    if (wantsGroup('delegate') && (options.subagentDepth ?? 0) === 0 && options.jobId) {
+      // Lazy import to keep sub-agent logic out of cold prompt assembly.
+      const { AGENT_SPAWN_SCHEMA } = await import('./sub-agent');
+      activeTools.push(AGENT_SPAWN_SCHEMA);
+    }
+
+    // Tier 3 — chosen from this message.
+    routedCapabilities = resolveCapabilities(await allTools(), userMessage, 3);
+    activeTools.push(...(await getToolDefinitionsByName(routedCapabilities.map(t => t.name))));
+    if (integrationContext.integrations.length) { activeTools.push(...(await getToolDefinitionsByName(['api_integration_call']))); contract.needsReview = true; }
+
+    // Auto-activate the toolsets the classifier matched earlier in this turn.
+    for (const ts of inferred) {
+      if (ts === 'home' && haEntityCount === 0) continue;
+      if (activatedToolsets.has(ts)) continue;
+      if (ts === 'custom-tools') activeTools.push(...(await authoringMetaTools()));
       activeTools.push(...(await getToolsetDefinitions(ts)));
       activatedToolsets.add(ts);
     }
-  }
-  if (wantsGroup('build-tool')) {
-    activeTools.push(...(await authoringMetaTools()), ...(await getToolsetDefinitions('custom-tools')));
-    activatedToolsets.add('custom-tools');
-  }
-  if (wantsGroup('datastore')) {
-    activeTools.push(...(await getToolDefinitionsByName(['datastore_query'])));
-  }
-  // agent_spawn only on a top-level orchestrator call, never inside a sub-agent.
-  if (wantsGroup('delegate') && (options.subagentDepth ?? 0) === 0 && options.jobId) {
-    // Lazy import to keep sub-agent logic out of cold prompt assembly.
-    const { AGENT_SPAWN_SCHEMA } = await import('./sub-agent');
-    activeTools.push(AGENT_SPAWN_SCHEMA);
-  }
-
-  // Tier 3 — chosen from this message.
-  const routedCapabilities = resolveCapabilities(await allTools(), userMessage, 3);
-  activeTools.push(...(await getToolDefinitionsByName(routedCapabilities.map(t => t.name))));
-  if (integrationContext.integrations.length) { activeTools.push(...(await getToolDefinitionsByName(['api_integration_call']))); contract.needsReview = true; }
-
-  // Auto-activate the toolsets the classifier matched earlier in this turn.
-  for (const ts of inferred) {
-    if (ts === 'home' && haEntityCount === 0) continue;
-    if (activatedToolsets.has(ts)) continue;
-    if (ts === 'custom-tools') activeTools.push(...(await authoringMetaTools()));
-    activeTools.push(...(await getToolsetDefinitions(ts)));
-    activatedToolsets.add(ts);
   }
 
   // If we're inside an empty canvas, hide workflow_build_from_spec entirely
@@ -1293,7 +1437,8 @@ async function runGeneralChat(
   // decision, not a cleanup.
   let thinkingCtxPromise: Promise<ModelContext | null> | null = null;
   const getThinkingCtx = (): Promise<ModelContext | null> => {
-    if (!isOrchestrator) return Promise.resolve(null);
+    // A restricted turn never escalates: it stays on the model it was given.
+    if (!isOrchestrator || restriction) return Promise.resolve(null);
     thinkingCtxPromise ??= resolveThinkingModel();
     return thinkingCtxPromise;
   };
@@ -1315,11 +1460,17 @@ async function runGeneralChat(
   // extraction branch below may still bump this further when applicable.
   const isCanvasChat = !!options.workflowId;
   const baseDefault = isCanvasChat ? EXTENDED_TOOL_ROUNDS : DEFAULT_TOOL_ROUNDS;
-  let maxRounds = options.maxRounds
-    ? Math.max(1, Math.min(ABSOLUTE_TOOL_ROUNDS, options.maxRounds))
-    : detectExtendedAutonomy(userMessage)
-      ? Math.max(EXTENDED_TOOL_ROUNDS, baseDefault)
-      : baseDefault;
+  //
+  // A restricted turn gets the default and no more — no autonomy phrase, canvas
+  // or plan extends it — and a per-call budget on top (see scopeRefusal).
+  let maxRounds = restriction
+    ? Math.max(1, Math.min(DEFAULT_TOOL_ROUNDS, options.maxRounds ?? DEFAULT_TOOL_ROUNDS))
+    : options.maxRounds
+      ? Math.max(1, Math.min(ABSOLUTE_TOOL_ROUNDS, options.maxRounds))
+      : detectExtendedAutonomy(userMessage)
+        ? Math.max(EXTENDED_TOOL_ROUNDS, baseDefault)
+        : baseDefault;
+  const callBudget = restriction ? { round: 0, turn: 0 } : undefined;
   if (maxRounds !== DEFAULT_TOOL_ROUNDS) {
     onProgress?.(`[budget] tool-call budget set to ${maxRounds} rounds for this turn\n`);
   }
@@ -1440,9 +1591,14 @@ async function runGeneralChat(
     // another tool call. Also inject a directive so the model summarises
     // using what it already gathered.
     const policyTools = applyCapabilityPolicy([...new Map(activeTools.map(t => [t.function.name, t])).values()], capabilityPolicy);
-    const filteredActiveTools = options.toolWhitelist
+    const whitelistedTools = options.toolWhitelist
       ? policyTools.filter((t: any) => options.toolWhitelist!.includes(t?.function?.name))
       : policyTools;
+    // Intersected on every round, not only at assembly: nothing a call does to
+    // `activeTools` mid-turn can widen what a restricted turn is offered.
+    const filteredActiveTools = restriction
+      ? whitelistedTools.filter((t: any) => restriction.allow.includes(t?.function?.name))
+      : whitelistedTools;
     const tools = isFinalRound ? undefined : (filteredActiveTools.length > 0 ? filteredActiveTools : undefined);
     if (isFinalRound) {
       messages.push({
@@ -1659,7 +1815,9 @@ async function runGeneralChat(
     // --- Plan-phase interception (every round — the LLM may emit a revised
     // plan after an "adjusted" decision, and that revision must also go
     // through PlanCard, not the raw chat bubble). Top-level jobs only. ---
-    if (options.jobId && (options.subagentDepth ?? 0) === 0 && !options.workflowId && typeof msg.content === 'string' && msg.content.includes('<plan>')) {
+    // Never on a restricted turn: it is not invited to plan, and a plan block it
+    // emitted anyway must not buy it the plan's round extension.
+    if (!restriction && options.jobId && (options.subagentDepth ?? 0) === 0 && !options.workflowId && typeof msg.content === 'string' && msg.content.includes('<plan>')) {
       const extracted = extractPlan(msg.content);
       if (extracted) {
         // Tool calls in the same turn as a plan would be premature — discard
@@ -1749,6 +1907,7 @@ async function runGeneralChat(
     // strictly ordered relative to siblings, but that's OK in practice — the
     // LLM very rarely calls activate + execute in the same round, and the
     // mutations only affect *future* rounds.
+    if (callBudget) callBudget.round = 0;
     const toolOutcomes = await Promise.all(
       msg.tool_calls.map((toolCall: any) => runSingleToolCall(toolCall, {
         activeTools,
@@ -1766,6 +1925,8 @@ async function runGeneralChat(
         thinkingLevel: options.thinkingLevel ?? null,
         subagentDepth: options.subagentDepth ?? 0,
         toolWhitelist: options.toolWhitelist,
+        restriction,
+        callBudget,
       })),
     );
     if (msg.tool_calls.some((c: any) => /^api_/.test(c.function?.name ?? ''))) contract.needsReview = true;

@@ -12,6 +12,7 @@
 
 import { desc, eq, gte, and, notIlike, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
+import { inOwnerThread } from '$lib/jkai/owner-threads';
 import { daydreamThoughts, orchestratorChats } from '$lib/db/schema';
 import { loadFeedback, mutedKinds } from '../thought-store';
 import { tallyFeedback } from '../scoring';
@@ -105,6 +106,8 @@ export async function buildProfileLines(now = new Date()): Promise<string[]> {
           eq(orchestratorChats.role, 'user'),
           gte(orchestratorChats.createdAt, since),
           notIlike(orchestratorChats.content, '/model%'),
+          // His words only — never a member's thread.
+          inOwnerThread(orchestratorChats.conversationId),
         ),
       )
       .orderBy(desc(orchestratorChats.createdAt))

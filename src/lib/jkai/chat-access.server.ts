@@ -16,6 +16,7 @@ import { db } from '$lib/db';
 import { accessUsage, conversations } from '$lib/db/schema';
 import { areaAccess, canRead, canWrite, readable, type AreaAccess } from '$lib/server/area-scope';
 import { getSetting } from '$lib/server/models/settings';
+import { getJob, type OrchestratorJob } from '$lib/workflows/chat/job-store';
 
 export type ConversationRow = typeof conversations.$inferSelect;
 
@@ -34,6 +35,35 @@ export async function requireConversation(
   if (intent === 'write' && !canWrite(conversation.principalId, access)) throw error(403, 'Forbidden');
   if (intent === 'post' && conversation.principalId !== access.own) throw error(403, 'You can only post in your own threads.');
   return { conversation, access };
+}
+
+/**
+ * A chat job the caller may see, stream, answer or cancel — or a 404, exactly
+ * as for a job that does not exist. The owner reaches every job (he always
+ * could: the admin pulse and "cancel all" are his); anyone else only their own.
+ * A job with no principal predates members and is the owner's.
+ */
+export async function requireOwnJob(
+  event: { locals: App.Locals },
+  jobId: string,
+): Promise<{ job: OrchestratorJob; access: AreaAccess }> {
+  const access = await chatAccess(event);
+  const job = jobId ? getJob(jobId) : null;
+  if (!job) throw error(404, 'Job not found');
+  if (access.level !== 'owner' && (job.scope.principalId ?? 'owner') !== access.own) {
+    throw error(404, 'Job not found');
+  }
+  return { job, access };
+}
+
+/**
+ * Owner-only chat surfaces (the context rail and its drill, the memory panel,
+ * tool traces): they read the owner's health, places, research and memory,
+ * whoever's thread they are asked about. Anyone else is a 403.
+ */
+export async function requireChatOwner(event: { locals: App.Locals }): Promise<void> {
+  const access = await chatAccess(event);
+  if (access.level !== 'owner') throw error(403, 'owner only');
 }
 
 /**

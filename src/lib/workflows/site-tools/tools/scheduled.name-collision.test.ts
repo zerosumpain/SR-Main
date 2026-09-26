@@ -35,7 +35,7 @@ vi.mock('$lib/db', () => {
     const q: any = {
       from: () => q,
       where: () => q,
-      limit: () => (proj ? [{ id: CONV, phone: '+440000000000' }] : state.existing),
+      limit: () => (proj ? [{ id: CONV, phone: '+440000000000', principalId: 'owner' }] : state.existing),
     };
     return q;
   };

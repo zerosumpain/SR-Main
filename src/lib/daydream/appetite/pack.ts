@@ -23,6 +23,7 @@
 
 import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
+import { inOwnerThread } from '$lib/jkai/owner-threads';
 import {
   daydreamSignals,
   orchestratorChats,
@@ -113,7 +114,14 @@ async function questionFacts(facts: PackFact[]): Promise<number> {
     const rows = await db
       .select({ content: orchestratorChats.content })
       .from(orchestratorChats)
-      .where(and(eq(orchestratorChats.role, 'user'), gte(orchestratorChats.createdAt, since)))
+      // The owner's questions only — never a member's thread.
+      .where(
+        and(
+          eq(orchestratorChats.role, 'user'),
+          gte(orchestratorChats.createdAt, since),
+          inOwnerThread(orchestratorChats.conversationId),
+        ),
+      )
       .orderBy(desc(orchestratorChats.createdAt))
       .limit(120);
     const questions = rows

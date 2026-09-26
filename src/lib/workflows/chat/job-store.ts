@@ -252,6 +252,13 @@ export interface JobScope {
    * and a second engine would reintroduce exactly that.
    */
   engine?: 'loop';
+  /**
+   * Whose turn this is: 'owner' or a member's `u_…`. Absent means the owner —
+   * every job created before members could chat, and every owner-grade lane.
+   * The job routes key on it so a member can only see, stream, answer or cancel
+   * their own jobs, and wa-escalation only ever pings the owner about his.
+   */
+  principalId?: string;
 }
 
 export interface OrchestratorJob {
@@ -500,6 +507,7 @@ export function createJob(message: string, scope: JobScope = {}): { jobId: strin
       chatNodeId: scope.chatNodeId ?? null,
       // Default 'loop': a caller that does not say is the in-process lane.
       engine: scope.engine ?? 'loop',
+      principalId: scope.principalId ?? 'owner',
     },
     lastEventAt: now,
     lastHeartbeatAt: now,
@@ -574,6 +582,39 @@ export function cancelForScope(scope: JobScope, reason: string): string[] {
   return cancelled;
 }
 
+/** The principal a job belongs to. A job without one is the owner's. */
+export function jobPrincipal(job: OrchestratorJob): string {
+  return job.scope.principalId ?? 'owner';
+}
+
+/**
+ * Cancel every running job belonging to one principal — the member's
+ * equivalent of the owner's "cancel everything", which must never reach
+ * anyone else's turn.
+ */
+export function cancelAllRunningFor(principalId: string, reason = 'Cancelled by user'): number {
+  let n = 0;
+  for (const [id, job] of jobs) {
+    if (job.status !== 'running' || jobPrincipal(job) !== principalId) continue;
+    if (cancelJobWith(id, job, reason)) n += 1;
+  }
+  return n;
+}
+
+function cancelJobWith(id: string, job: OrchestratorJob, reason: string): boolean {
+  if (job.status !== 'running') return false;
+  console.log(`[orchestrator] Cancelling job ${id}: ${reason}`);
+  job.abortController.abort();
+  job.status = 'cancelled';
+  job.error = reason;
+  job.result = { success: false, error: reason };
+  if (job.watchdog) { clearInterval(job.watchdog); job.watchdog = undefined; }
+  if (job.heartbeat) { clearInterval(job.heartbeat); job.heartbeat = undefined; }
+  publishJobEvent(id, { type: 'error', message: reason });
+  failAllWaiters(id, reason);
+  return true;
+}
+
 /** Cancel every running job. Used only by the explicit admin DELETE with no jobId. */
 export function cancelAllRunning(reason: string): void {
   for (const [id, job] of jobs) {
@@ -613,7 +654,7 @@ export function deleteJob(jobId: string, delayMs = 30000): void {
   }, delayMs);
 }
 
-export function listJobs(): Array<{
+export function listJobs(filter: { principalId?: string } = {}): Array<{
   id: string;
   status: string;
   message: string;
@@ -630,8 +671,12 @@ export function listJobs(): Array<{
   /** Set while this turn is waiting for another on the same conversation. An
    *  operator reading the running-job list should see "waiting", not "stuck". */
   queuedBehind?: string | null;
+  /** Whose turn it is ('owner' or a member's `u_…`). */
+  principalId: string;
 }> {
-  return Array.from(jobs.entries()).map(([id, job]) => ({
+  return Array.from(jobs.entries())
+    .filter(([, job]) => filter.principalId === undefined || jobPrincipal(job) === filter.principalId)
+    .map(([id, job]) => ({
     id,
     status: job.status,
     message: job.message,
@@ -646,6 +691,7 @@ export function listJobs(): Array<{
     conversationId: job.scope.conversationId ?? null,
     chatNodeId: job.scope.chatNodeId ?? null,
     queuedBehind: job.queuedBehind,
+    principalId: jobPrincipal(job),
   }));
 }
 
@@ -718,10 +764,11 @@ export function getStreamSubscriberCount(jobId: string): number {
   return streams.get(jobId)?.subscribers.size ?? 0;
 }
 
-export function listRunningJobsByConversation(): Map<string, string> {
+export function listRunningJobsByConversation(filter: { principalId?: string } = {}): Map<string, string> {
   const out = new Map<string, string>();
   for (const [id, job] of jobs) {
     if (job.status !== 'running') continue;
+    if (filter.principalId !== undefined && jobPrincipal(job) !== filter.principalId) continue;
     const convId = job.scope.conversationId;
     if (!convId) continue;
     out.set(convId, id);

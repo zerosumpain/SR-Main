@@ -26,6 +26,14 @@ export async function guardedPublicFetch(
     maxBytes?: number;
     maxRedirects?: number;
     allowUrl?: (url: URL) => boolean;
+    /**
+     * Called once with the final (non-redirect) response's status and headers.
+     * Return false to skip the body: it is cancelled unread and `body` comes
+     * back empty. Lets a caller refuse an error page or a content type it
+     * cannot use without first downloading up to `maxBytes` of it. Omitted:
+     * the body is always read.
+     */
+    readBody?: (status: number, headers: Headers) => boolean;
   } = {},
 ): Promise<GuardedFetchResult> {
   const controller = new AbortController();
@@ -74,10 +82,12 @@ export async function guardedPublicFetch(
           continue;
         }
 
+        const headers = new Headers(response.headers as unknown as HeadersInit);
         const chunks: Uint8Array[] = [];
         let size = 0;
         let truncated = false;
-        if (maxBytes > 0 && response.body) {
+        const wanted = !options.readBody || options.readBody(response.status, headers);
+        if (maxBytes > 0 && wanted && response.body) {
           for await (const chunk of response.body) {
             const bytes = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk as ArrayBuffer);
             const room = maxBytes - size;
@@ -103,7 +113,7 @@ export async function guardedPublicFetch(
         return {
           status: response.status,
           ok: response.ok,
-          headers: new Headers(response.headers as unknown as HeadersInit),
+          headers,
           body: body.buffer as ArrayBuffer,
           finalUrl: current,
           truncated,

@@ -57,10 +57,14 @@ export async function runTargetedAction(action: HeartbeatAction): Promise<Activi
   // on every tick forever.
   const conversationId = normaliseConversationId(action.conversationId);
   const [conv] = await db
-    .select({ id: conversations.id })
+    .select({ id: conversations.id, principalId: conversations.principalId })
     .from(conversations)
     .where(eq(conversations.id, conversationId))
     .limit(1);
+  if (conv && conv.principalId !== 'owner') {
+    // A watch never posts into a member's thread — the heartbeat is the owner's.
+    return { outcome: 'error', summary: `conversation ${conversationId} is not the owner's — watch refused` };
+  }
   if (!conv) {
     // Say what actually happened. The old text claimed the action was being
     // paused; nothing paused it, and the same string covered both a bad id and

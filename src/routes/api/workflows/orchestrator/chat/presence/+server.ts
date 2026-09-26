@@ -8,8 +8,14 @@
 // away" is detected.
 import type { RequestHandler } from './$types';
 import { markPresent } from '$lib/workflows/chat/presence';
+import { chatAccess } from '$lib/jkai/chat-access.server';
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async (event) => {
+  const { request } = event;
+  // Presence exists only to hold back the OWNER's WhatsApp escalations, and a
+  // member's turns never escalate. Accepting their beat would let a member's tab
+  // mark a thread id "watched" — a no-op for them, a silenced ping for him.
+  if ((await chatAccess(event)).level !== 'owner') return new Response(null, { status: 204 });
   let conversationId: string | null = null;
   try {
     const body = (await request.json()) as { conversationId?: string };

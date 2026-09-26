@@ -70,7 +70,7 @@ register({
     // not resolve can never deliver anything, so tell the caller now rather
     // than creating a row that errors every 30 seconds for nine days.
     const [conv] = await db
-      .select({ id: conversations.id })
+      .select({ id: conversations.id, principalId: conversations.principalId })
       .from(conversations)
       .where(eq(conversations.id, conversationId))
       .limit(1);
@@ -81,6 +81,10 @@ register({
           `No conversation ${conversationId} — the watch was not registered. ` +
           'Pass the id of the conversation this chat belongs to.',
       };
+    }
+    // The heartbeat is the owner's: a watch never posts into a member's thread.
+    if (conv.principalId !== 'owner') {
+      return { success: false, error: 'Watches can only be registered on the owner\'s own threads.' };
     }
 
     const description = optionalString(args, 'description') ?? prompt.slice(0, 120);

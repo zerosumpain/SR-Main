@@ -14,7 +14,7 @@ import { retrieveMemories } from '$lib/jkai/memory/retrieve.server';
 import { register } from '../registry-internal';
 import { db } from '$lib/db';
 import { orchestratorChats, conversations, jkaiMemories } from '$lib/db/schema';
-import { and, desc, eq, ilike, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
 
 register({
   name: 'session_search',
@@ -37,7 +37,12 @@ register({
     if (q.length < 2) return { success: false, error: 'query must be at least 2 characters' };
     const limit = Math.min(Math.max(Number(args.limit) || 15, 1), 50);
     try {
-      const where = [ilike(orchestratorChats.content, `%${q}%`)];
+      const where = [
+        ilike(orchestratorChats.content, `%${q}%`),
+        // The owner's threads only (or no thread): a member's words never
+        // surface in an owner-grade recall.
+        or(isNull(orchestratorChats.conversationId), eq(conversations.principalId, 'owner'))!,
+      ];
       if (args.role === 'user' || args.role === 'assistant') {
         where.push(eq(orchestratorChats.role, args.role));
       }

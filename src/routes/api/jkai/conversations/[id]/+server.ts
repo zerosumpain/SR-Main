@@ -1,4 +1,4 @@
-import { json, error } from '@sveltejs/kit';
+import { json, error, isHttpError } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { conversations, orchestratorChats, jkaiBuilds, openrouterModels } from '$lib/db/schema';
@@ -9,16 +9,25 @@ import { setDefaultThinkingLevel } from '$lib/server/models/settings';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
 import { coerceModelContext } from '$lib/constants/default-models';
 import { isThinkingLevel, supportsThinking } from '$lib/models/thinking';
+import { requireConversation } from '$lib/jkai/chat-access.server';
 
-export const GET: RequestHandler = async ({ params }) => {
-	const [conv] = await db
-		.select()
-		.from(conversations)
-		.where(eq(conversations.id, params.id))
-		.limit(1);
+/**
+ * What a non-owner may change on their own thread: its name and its pin.
+ * Everything else is refused — `thinkingLevel` also writes the GLOBAL default
+ * for the next new thread, sharing mints a public link, `intelEnabled` is the
+ * owner's graph, and the model is the owner's spend.
+ */
+const MEMBER_PATCHABLE = new Set(['title', 'pinned']);
 
-	if (!conv) {
-		return json({ error: 'Not found' }, { status: 404 });
+export const GET: RequestHandler = async (event) => {
+	const { params } = event;
+	// A thread the reader may not see is a 404, exactly like one that does not exist.
+	let conv;
+	try {
+		({ conversation: conv } = await requireConversation(event, params.id, 'read'));
+	} catch (err) {
+		if (isHttpError(err) && err.status === 404) return json({ error: 'Not found' }, { status: 404 });
+		throw err;
 	}
 
 	// Get model capabilities from conversation's pinned model. Legacy rows can
@@ -110,7 +119,9 @@ export const GET: RequestHandler = async ({ params }) => {
 	});
 };
 
-export const DELETE: RequestHandler = async ({ params }) => {
+export const DELETE: RequestHandler = async (event) => {
+	const { params } = event;
+	await requireConversation(event, params.id, 'write');
 	await db.delete(conversations).where(eq(conversations.id, params.id));
 	return json({ deleted: true });
 };
@@ -120,8 +131,16 @@ export const DELETE: RequestHandler = async ({ params }) => {
  * Body: { modelProvider: 'openrouter', modelId: string }
  * 403 if any messages exist on the conversation (locked after first message).
  */
-export const PATCH: RequestHandler = async ({ params, request }) => {
+export const PATCH: RequestHandler = async (event) => {
+	const { params, request } = event;
+	const { access } = await requireConversation(event, params.id, 'write');
 	const body = await request.json();
+	if (access.level !== 'owner') {
+		const refused = Object.keys(body ?? {}).filter((k) => !MEMBER_PATCHABLE.has(k));
+		if (refused.length > 0 || Object.keys(body ?? {}).length === 0) {
+			throw error(403, `Only the title and pin can be changed (refused: ${refused.join(', ') || 'nothing to change'})`);
+		}
+	}
 
 	// Rename / pin / share — allowed at any time (unlike the model change,
 	// these are not locked after the first message).

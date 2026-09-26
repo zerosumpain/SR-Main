@@ -33,6 +33,12 @@ export interface InvokeContext {
 	modelContext?: Record<string, unknown>;
 	thinkingLevel?: string | null;
 	allowedTools?: string[];
+	/**
+	 * Whose turn the call serves ('owner' or a member's `u_…`). Added after the
+	 * first six; an older caller simply omits it and is read as the owner, as
+	 * before. A member call with no `allowedTools` is refused by `executeTool`.
+	 */
+	principalId?: string;
 }
 
 export interface InvokeRequest {
@@ -103,6 +109,11 @@ export function coerceInvokeRequest(body: unknown): InvokeRequest {
 	// bridge already had removed once.
 	if (Array.isArray(raw.allowedTools)) {
 		context.allowedTools = raw.allowedTools.filter((t): t is string => typeof t === 'string');
+	}
+	// A non-empty string or nothing. An empty or non-string value is dropped,
+	// never defaulted to a member: absent means the owner, exactly as before.
+	if (typeof raw.principalId === 'string' && raw.principalId.length > 0) {
+		context.principalId = raw.principalId;
 	}
 
 	return { name, args, context };
