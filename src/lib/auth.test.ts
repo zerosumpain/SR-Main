@@ -7,6 +7,7 @@ import {
   memberRouteIds,
 } from './auth';
 import { requiredFor, routeIdsFor } from './access/catalogue';
+import { EXTRACTED_ROUTE_IDS } from './access/extracted-route-ids';
 
 describe('isPublicPath', () => {
   it('allows known public pages and APIs', () => {
@@ -97,9 +98,10 @@ describe('isMemberAllowedRoute — a member reaches their own intel space and no
   });
 
   it('lists only routes that exist', () => {
+    const extracted = new Set<string>(EXTRACTED_ROUTE_IDS);
     for (const id of memberRouteIds()) {
       const file = id.startsWith('/api/') ? '+server.ts' : '+page.svelte';
-      expect(existsSync(`src/routes${id}/${file}`), id).toBe(true);
+      expect(existsSync(`src/routes${id}/${file}`) || extracted.has(id), id).toBe(true);
     }
   });
 });

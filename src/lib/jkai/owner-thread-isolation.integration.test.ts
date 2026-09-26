@@ -25,14 +25,6 @@ vi.mock('$lib/llm/client', async (importOriginal) => ({
     throw new Error('tripwire: no model call in this test');
   }),
 }));
-const extractCalls = vi.hoisted(() => ({ n: 0 }));
-vi.mock('$lib/jkai/intel/auto-extract', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('$lib/jkai/intel/auto-extract')>()),
-  extractIntoIntel: vi.fn(async () => {
-    extractCalls.n++;
-    throw new Error('tripwire: no extraction in this test');
-  }),
-}));
 // The briefing's alert source reaches out to live feeds; it is not what is under test.
 vi.mock('$lib/jkai/intel/daily-alerts.server', () => ({ loadDailyAlerts: async () => undefined }));
 
@@ -107,22 +99,6 @@ describe.skipIf(!process.env.DATABASE_URL)('background readers see only the owne
     const out = JSON.stringify(res.data);
     expect(out).toContain(OWNER_WORD);
     expect(out).not.toContain(MEMBER_WORD);
-  });
-
-  it('memory review refuses a member thread before any model call', async () => {
-    const { reviewConversation } = await import('$lib/workflows/chat/memory-review');
-    const before = llmCalls.n;
-    await expect(reviewConversation(ids.member!, { strict: true })).rejects.toThrow(/not the owner/i);
-    expect(llmCalls.n).toBe(before);
-  });
-
-  it('intel extraction skips a member thread, forced or not, and calls nothing', async () => {
-    const { maybeExtractThreadConcepts } = await import('$lib/jkai/intel/chat-extract');
-    const before = { llm: llmCalls.n, extract: extractCalls.n };
-    expect(await maybeExtractThreadConcepts(ids.member!, 'x', { force: true })).toBeUndefined();
-    expect(await maybeExtractThreadConcepts(ids.member!, 'x')).toBeUndefined();
-    expect(llmCalls.n).toBe(before.llm);
-    expect(extractCalls.n).toBe(before.extract);
   });
 
   it('a heartbeat turn refuses a member thread before any model call or write', async () => {

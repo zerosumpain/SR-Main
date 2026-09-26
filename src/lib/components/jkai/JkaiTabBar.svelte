@@ -7,7 +7,7 @@
   // collapses to five glyph tabs; `more` opens that same menu as a sheet, and
   // `context` raises the contextual bottom sheet rather than routing — the
   // workspace is about the open thread, so leaving it would be wrong.
-  const onChat = $derived(page.url.pathname === '/jkai');
+  const onChat = $derived(String(page.url.pathname) === '/jkai');
 
   async function openGraph() {
     if (!onChat) {

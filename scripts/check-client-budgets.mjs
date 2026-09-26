@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Post-build guards for the three routes reduced in the 2026-09 efficiency pass.
+// Post-build guards for Main routes reduced in the 2026-09 efficiency pass.
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 
@@ -16,10 +16,6 @@ const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8'));
 const budgets = [
   { route: 'home', source: 'src/routes/+page.svelte', gzipKiB: 100 },
   { route: 'blog editor', source: 'src/routes/admin/content/blog/[id]/+page.svelte', gzipKiB: 150 },
-  // The client-side node-definition registry is still deliberately shared by
-  // the palette and inspector; 550 KiB holds the measured 514.5 KiB result and
-  // prevents a return to the 718 KiB pre-split route.
-  { route: 'canvas', source: 'src/routes/jkai/canvas/[slug]/+page.svelte', gzipKiB: 550 },
 ];
 
 function generatedNodeFor(source) {

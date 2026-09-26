@@ -128,10 +128,10 @@ describe('site surface', () => {
     expect(surface.available).toBe(true);
     if (!surface.available) return;
 
-    // Comfortably below today's 598 — this guards against "the plugin returned
+    // Comfortably below the post-extraction route count — this guards against "the plugin returned
     // nothing", not against the route count changing.
-    expect(surface.routes.length).toBeGreaterThan(400);
-    expect(surface.counts.api).toBeGreaterThan(300);
+    expect(surface.routes.length).toBeGreaterThan(350);
+    expect(surface.counts.api).toBeGreaterThan(250);
     expect(surface.counts.page).toBeGreaterThan(100);
 
     const paths = surface.routes.map((r) => r.path);

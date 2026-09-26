@@ -68,7 +68,7 @@ export function measureSource(root) {
   try { revision = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); }
   catch { /* A fixture or source archive can have no .git directory. */ }
   const repositories = [
-    { id: 'main', name: 'SR-Main', url: 'https://github.com/zerosumpain/SR-Main', role: 'Site and JKAI', revision, measuredAt: new Date().toISOString(), source: 'this build', ...main },
+    { id: 'main', name: 'SR-Main', url: 'https://github.com/zerosumpain/SR-Main', role: 'Site and shared platform services', revision, measuredAt: new Date().toISOString(), source: 'this build', ...main },
   ];
   return {
     lines: main.code.lines,

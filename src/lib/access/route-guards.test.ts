@@ -15,22 +15,13 @@ const GUARDS: Partial<Record<AreaId, RegExp>> = {
   'jkai.notes': /\b(notesAccess|requireNote|requireRecording)\b/,
   home: /\bareaAccess\(\s*event,\s*'home'\s*\)/,
   news: /\bnewsCapabilities\b|\bnewsOwnerKey\b/,
-  'jkai.knowledge': /\bareaAccess\(\s*event,\s*'jkai\.knowledge'\s*\)/,
-};
-
-/**
- * Pages with no server load of their own read nothing themselves; the layout
- * above them does, and must resolve scope. Each is listed with that layout.
- */
-const LAYOUT_SCOPED: Record<string, string> = {
-  '/jkai/intel/search': 'src/routes/jkai/intel/+layout.server.ts',
 };
 
 function fileFor(routeId: string): string {
   const dir = `src/routes${routeId}`;
   if (existsSync(`${dir}/+server.ts`)) return `${dir}/+server.ts`;
   if (existsSync(`${dir}/+page.server.ts`)) return `${dir}/+page.server.ts`;
-  return LAYOUT_SCOPED[routeId] ?? `${dir}/+page.server.ts`;
+  return `${dir}/+page.server.ts`;
 }
 
 describe('each open area guards every route it opens', () => {
@@ -41,7 +32,7 @@ describe('each open area guards every route it opens', () => {
       const unguarded = ids.filter((id) => {
         const file = fileFor(id);
         const text = readFileSync(file, 'utf8');
-        return id in LAYOUT_SCOPED ? !/\bresolveRequestScope\b/.test(text) : !guard.test(text);
+        return !guard.test(text);
       });
       expect(unguarded).toEqual([]);
     });

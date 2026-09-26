@@ -33,11 +33,11 @@ function select(files: string[]): { mode: string; reason: string; files: string[
 
 describe('test selector', () => {
 	it('narrows to a subset for an ordinary leaf module', () => {
-		const r = select(['src/lib/jkai/tool-trace.ts']);
+		const r = select(['src/lib/jkai/code-blocks.ts']);
 		expect(r.mode).toBe('selected');
 		expect(r.files.length).toBeGreaterThan(0);
 		expect(r.files.length).toBeLessThan(200);
-		expect(r.files).toContain('src/lib/jkai/tool-trace.test.ts');
+		expect(r.files).toContain('src/lib/jkai/code-blocks.test.ts');
 	});
 
 	// The whole reason this selector is trustworthy. vitest's resolver drops
@@ -52,20 +52,17 @@ describe('test selector', () => {
 
 	// A registry that loads its modules for their side effects reaches them with
 	// `import './x';` and nothing else — there is no `from` edge anywhere in the
-	// repo. The selector was blind to that form, so changing any of the 33 tool
-	// modules only reachable this way selected exactly the always-run baseline.
-	// What that hid: toolchain-fixes.test.ts pins every `destructive: true` flag,
-	// and protected-paths.txt leans on it to stop a dropped confirmation gate
-	// auto-merging. It never ran.
+	// repo. The selector was blind to that form, so changing a tool module
+	// reached through the registry selected exactly the always-run baseline.
 	it('follows a bare side-effect import as an edge', () => {
 		const r = select(['src/lib/workflows/site-tools/tools/whatsapp.ts']);
 		expect(r.mode).toBe('selected');
-		expect(r.files).toContain('src/lib/workflows/site-tools/toolchain-fixes.test.ts');
+		expect(r.files).toContain('tests/lib/workflows/browser/tools.test.ts');
 	});
 
 	it('includes a changed test file itself', () => {
-		const r = select(['src/lib/jkai/tool-trace.test.ts']);
-		expect(r.files).toContain('src/lib/jkai/tool-trace.test.ts');
+		const r = select(['src/lib/jkai/code-blocks.test.ts']);
+		expect(r.files).toContain('src/lib/jkai/code-blocks.test.ts');
 	});
 
 	it('always includes the always-run list', () => {
@@ -73,7 +70,7 @@ describe('test selector', () => {
 			.split('\n')
 			.map((l) => l.trim())
 			.filter((l) => l && !l.startsWith('#'));
-		const r = select(['src/lib/jkai/tool-trace.ts']);
+		const r = select(['src/lib/jkai/code-blocks.ts']);
 		for (const f of always) expect(r.files).toContain(f);
 	});
 

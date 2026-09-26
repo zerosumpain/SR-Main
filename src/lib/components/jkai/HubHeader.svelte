@@ -186,7 +186,7 @@
   ]);
 
   function isCurrent(href: string): boolean {
-    const path = page.url.pathname;
+    const path: string = page.url.pathname;
     if (href === '/jkai') return path === '/jkai';
     return path === href || path.startsWith(`${href}/`);
   }
