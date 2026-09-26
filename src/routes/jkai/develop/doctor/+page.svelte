@@ -4,6 +4,8 @@
   import { formatGbp } from '$lib/utils/cost-format';
   import { onMount, tick } from 'svelte';
   import { runIdFromHash } from '$lib/daydream/run-ref';
+  import DaydreamShell from '$lib/components/jkai/daydream/hub/DaydreamShell.svelte';
+  import { developRoomRail } from '$lib/builds/develop-nav';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
@@ -161,24 +163,30 @@
   }
 </script>
 
+<DaydreamShell
+  path="/jkai/develop/doctor"
+  kicker="JKAI · Build process · Workflow doctor"
+  title={['What broke', 'overnight']}
+  standfirst={`Every failing canvas the nightly triage found, in plain English: the symptom, the cause, and the fix — applied, proposed, or refused. Runs at ${data.schedule.display}; what it cannot fix itself goes into the build backlog.`}
+  readout={[
+    { label: 'Failing now', value: String(data.prime.workflowsFailing) },
+    { label: 'Open findings', value: String(data.stats.openFindings) },
+    { label: 'Last run', value: data.stats.lastRunAt ? fmtDate(data.stats.lastRunAt) : 'never' },
+  ]}
+  tabs={developRoomRail()}
+  active="doctor"
+  footer={[
+    'strangeramblings.com/jkai/develop/doctor',
+    'escalations land in the build backlog, deduped at intake',
+    'switches and undo live in /admin/ai/doctor',
+  ]}
+>
 <div class="wrap">
-  <header class="page-hdr">
-    <div>
-      <div class="kicker">JKAI · WORKFLOW DOCTOR</div>
-      <h1>The Doctor</h1>
-      <p class="sub">
-        Every failing canvas the nightly triage found, in plain English: the
-        <strong>symptom</strong>, the <strong>cause</strong>, and the <strong>fix</strong> — applied,
-        proposed, or refused. Runs at {data.schedule.display}; the raw signatures, silent failures and
-        run log are under Technical detail.
-      </p>
-    </div>
-    <div class="hdr-links">
-      <a class="back-link" href="/jkai">JKAI</a>
-      <a class="back-link" href="/jkai/canvas">Canvases →</a>
-      <a class="back-link" href="/admin/ai/doctor">Controls →</a>
-    </div>
-  </header>
+  <nav class="hdr-links" aria-label="Related">
+    <a class="rel-link" href="/jkai/canvas">Canvases →</a>
+    <a class="rel-link" href="/jkai/develop/backlog">Build backlog →</a>
+    <a class="rel-link" href="/admin/ai/doctor">Controls →</a>
+  </nav>
 
   <!-- A dead WhatsApp bridge is invisible on every other nightly job, because
        executeTool swallows the send failure. Say it out loud. -->
@@ -599,6 +607,7 @@
   </section>
   {/if}
 </div>
+</DaydreamShell>
 
 <style>
   /* ── Plain-English finding cards ──────────────────────────────────────────
@@ -686,15 +695,10 @@
   .sw { font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-ghost); border: 1px solid var(--line-strong); padding: 0.25rem 0.5rem; }
   .sw[data-on='true'] { color: var(--accent); border-color: var(--accent); }
 
-  .wrap { max-width: 980px; margin: 2rem auto 4rem; padding: 0 1.5rem; color: var(--text-primary); font-family: var(--font-body); }
-  .page-hdr { display: flex; justify-content: space-between; align-items: flex-end; gap: 1.5rem; margin-bottom: 1.75rem; padding-bottom: 1rem; border-bottom: 2px solid var(--text-primary); }
-  .kicker { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.18em; color: var(--accent); margin-bottom: 0.35rem; }
-  .page-hdr h1 { margin: 0; font-family: var(--font-display); font-size: 2.2rem; font-weight: 900; line-height: 1.05; }
-  .sub { margin: 0.6rem 0 0; font-size: 0.95rem; line-height: 1.5; color: var(--text-secondary); max-width: 64ch; }
-  .sub strong { color: var(--text-primary); font-weight: 700; }
-  .hdr-links { display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-end; flex-shrink: 0; }
-  .back-link { font-family: var(--font-mono); font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); text-decoration: none; white-space: nowrap; }
-  .back-link:hover { text-decoration: underline; }
+  .wrap { max-width: 1100px; margin: 2rem auto 4rem; padding: 0 1.5rem; color: var(--text-primary); font-family: var(--font-body); }
+  .hdr-links { display: flex; flex-wrap: wrap; gap: 0.4rem 1.25rem; margin-bottom: 1.5rem; }
+  .rel-link { font-family: var(--font-mono); font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); text-decoration: none; white-space: nowrap; }
+  .rel-link:hover { text-decoration: underline; }
   .mono { font-family: var(--font-code); }
 
   /* Stat tiles */
@@ -775,8 +779,6 @@
 
   @media (max-width: 640px) {
     .row-tags { display: none; }
-    .page-hdr { flex-direction: column; align-items: flex-start; }
-    .hdr-links { flex-direction: row; align-items: flex-start; }
     .prime-hd { flex-direction: column; }
     .prime-figure { text-align: left; }
   }

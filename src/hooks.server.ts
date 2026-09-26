@@ -451,7 +451,7 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     ['/jkai/briefing', '/jkai/daydreams/briefing'],
     ['/jkai/monitors', '/jkai/daydreams/watches'],
     ['/jkai/improvement', '/jkai/daydreams/improvement'],
-    ['/jkai/doctor', '/jkai/daydreams/doctor'],
+    ['/jkai/doctor', '/jkai/develop/doctor'],
     ['/jkai/prompts', '/jkai/agents?tab=prompts'],
     ['/jkai/research', '/research'],
     // The household moved to its own top-level section, /home (2026-09-25).

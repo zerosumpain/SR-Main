@@ -46,7 +46,7 @@ const KIND_BY_ACTIVITY: Record<string, RunKind> = {
  */
 const LEDGER: Record<RunKind, string> = {
   improvement: '/jkai/daydreams/improvement',
-  doctor: '/jkai/daydreams/doctor',
+  doctor: '/jkai/develop/doctor',
 };
 
 function isKind(v: unknown): v is RunKind {

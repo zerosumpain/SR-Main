@@ -4,14 +4,14 @@ import { readRunRef, runIdFromHash, runRef, runRefHref } from './run-ref';
 describe('runRefHref', () => {
   it('reads the new runRef shape', () => {
     const details = { runId: 'abc', runRef: runRef('doctor', 'abc') };
-    expect(runRefHref(details, 'daydream-doctor')).toBe('/jkai/daydreams/doctor#run-abc');
+    expect(runRefHref(details, 'daydream-doctor')).toBe('/jkai/develop/doctor#run-abc');
     // The ref names its own ledger — the activity name is not needed.
     expect(runRefHref({ runRef: runRef('improvement', 'r1') })).toBe('/jkai/daydreams/improvement#run-r1');
   });
 
   it('infers the kind from the activity for the old runId-only shape', () => {
     expect(runRefHref({ runId: 'r2' }, 'daydream-improve')).toBe('/jkai/daydreams/improvement#run-r2');
-    expect(runRefHref({ runId: 'r3' }, 'daydream-doctor')).toBe('/jkai/daydreams/doctor#run-r3');
+    expect(runRefHref({ runId: 'r3' }, 'daydream-doctor')).toBe('/jkai/develop/doctor#run-r3');
   });
 
   it('returns null when nothing names a run', () => {

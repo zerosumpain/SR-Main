@@ -95,7 +95,7 @@ export async function improvementSchedule(): Promise<ImprovementSchedule> {
 /**
  * The live schedule of the `daydream-doctor` activity.
  *
- * `/jkai/daydreams/doctor` and `/admin/ai/doctor` printed `CRON_EXPR` and a
+ * `/jkai/develop/doctor` and `/admin/ai/doctor` printed `CRON_EXPR` and a
  * hardcoded '05:00 Europe/London' until 2026-09-04. The moment the croner
  * retired, both became a confident statement of a schedule nothing keeps —
  * which is exactly the failure this module was written for the first time.

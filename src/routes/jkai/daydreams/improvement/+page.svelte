@@ -35,7 +35,7 @@
       value: String(story.intake.week),
       sub: channelLine || 'nothing new queued this week',
       tone: story.intake.week ? 'steady' : 'quiet',
-      href: '/jkai/daydreams/backlog',
+      href: '/jkai/develop/backlog',
     },
     {
       key: 'tap',
@@ -44,7 +44,7 @@
       value: String(story.awaitingTap),
       sub: 'a build or watch starts only once you accept its brief',
       tone: story.awaitingTap ? 'action' : 'quiet',
-      href: '/jkai/daydreams/backlog',
+      href: '/jkai/develop/backlog',
     },
     {
       key: 'ideas',
@@ -55,7 +55,7 @@
       tone: story.backlog.open ? 'steady' : 'quiet',
       // The queue is its own room. The ledger below explains what changed;
       // Backlog is where waiting work is managed.
-      href: '/jkai/daydreams/backlog',
+      href: '/jkai/develop/backlog',
     },
     {
       key: 'tools',
@@ -79,8 +79,8 @@
 </script>
 
 <nav class="improvement-actions" aria-label="Improvement actions">
-  <a class="cta" href="/jkai/daydreams/doctor">Open Doctor →</a>
-  <a class="btn" href="/jkai/daydreams/backlog">Epic backlog →</a>
+  <a class="cta" href="/jkai/develop/doctor">Open Doctor →</a>
+  <a class="btn" href="/jkai/develop/backlog">Epic backlog →</a>
 </nav>
 
 <!-- The night, before anything it produced. One window, one budget: a night

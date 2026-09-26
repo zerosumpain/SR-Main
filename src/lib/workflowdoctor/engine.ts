@@ -13,7 +13,7 @@
 // the run changed: `runDoctorNow` is untouched, the advisory lock still holds
 // the lane, and both switches mean what they meant.
 //
-// The seed stays host-agnostic and stays here, because `/jkai/daydreams/doctor` and the
+// The seed stays host-agnostic and stays here, because `/jkai/develop/doctor` and the
 // admin page need the two datastore collections to exist even on a host that
 // never runs the doctor.
 

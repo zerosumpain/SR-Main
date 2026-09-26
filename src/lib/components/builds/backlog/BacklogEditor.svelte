@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invalidateAll } from '$app/navigation';
   import DrillPanel from '$lib/components/jkai/daydream/hub/DrillPanel.svelte';
-  import { postThought } from '$lib/daydream/feed-client';
+  import { postBacklog } from '$lib/builds/backlog-client';
   import { ago } from '$lib/daydream/format';
   import {
     BACKLOG_KINDS,
@@ -65,7 +65,7 @@
   async function loadNotes() {
     if (!item || notesBusy) return;
     notesBusy = true;
-    const result = await postThought<{ notes: BacklogNote[] }>({ action: 'backlog_notes', slug: item.slug });
+    const result = await postBacklog<{ notes: BacklogNote[] }>({ action: 'backlog_notes', slug: item.slug });
     notesBusy = false;
     if (result.ok) notes = result.out.notes;
     else {
@@ -82,7 +82,7 @@
     if (!item || !text) return;
     notesBusy = true;
     error = null;
-    const result = await postThought<{ notes: BacklogNote[] }>({
+    const result = await postBacklog<{ notes: BacklogNote[] }>({
       action: 'backlog_note',
       slug: item.slug,
       text,
@@ -103,7 +103,7 @@
     if (!item) return;
     notesBusy = true;
     error = null;
-    const result = await postThought<{ notes: BacklogNote[] }>({
+    const result = await postBacklog<{ notes: BacklogNote[] }>({
       action: 'backlog_note_remove',
       slug: item.slug,
       id,
@@ -195,7 +195,7 @@
     groomingBusy = true;
     step = 'groom';
     const sentConversation = conversation.slice(-12);
-    const result = await postThought<GroomingModelResult>({
+    const result = await postBacklog<GroomingModelResult>({
       action: 'backlog_groom',
       ...(item ? { slug: item.slug } : {}),
       title: title.trim(),
@@ -242,7 +242,7 @@
     }
     error = null;
     saving = true;
-    const result = await postThought({
+    const result = await postBacklog({
       action: creating ? 'backlog_create' : 'backlog_update',
       ...(creating && epicSlug ? { epicSlug } : {}),
       ...(item ? { slug: item.slug } : {}),
@@ -271,8 +271,8 @@
     error = null;
     destructiveBusy = true;
     const result = action === 'remove'
-      ? await postThought({ action: 'backlog_remove', slug: item.slug })
-      : await postThought({
+      ? await postBacklog({ action: 'backlog_remove', slug: item.slug })
+      : await postBacklog({
           action: 'backlog_park',
           slug: item.slug,
           parked: action === 'park',

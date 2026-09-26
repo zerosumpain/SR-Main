@@ -153,7 +153,7 @@
 
   {#if report}<p class="note good" role="status">{report}</p>{/if}
 
-  <div class="tbl-wrap">
+  <div class="tbl-wrap rv-wrap">
     <table class="tbl">
       <colgroup>
         <col style="width: 38px" />
@@ -322,10 +322,53 @@
        push the decide column off its track and over the text beside it.
        `min-width` because fixed + a narrow viewport is the other failure:
        at 390px the six tracks squeeze to a word each and 113 rows rendered
-       174,000px tall. Below the measure the wrapper scrolls sideways, which
-       is what `.tbl-wrap` is for. */
+       174,000px tall. Below the measure each row becomes a card instead (the
+       container query below) — the board never scrolls sideways. */
     table-layout: fixed;
-    min-width: 980px;
+  }
+  .rv-wrap {
+    container-type: inline-size;
+    overflow-x: visible;
+  }
+  @container (max-width: 979px) {
+    .tbl colgroup,
+    .tbl thead {
+      display: none;
+    }
+    .tbl,
+    .tbl tbody {
+      display: block;
+    }
+    .tbl tbody tr {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      gap: 6px 10px;
+      padding: 12px 4px;
+    }
+    .tbl tbody tr > :global(td) {
+      display: block;
+      padding: 0;
+      border: 0;
+      min-width: 0;
+    }
+    .tbl tbody tr > :global(td:nth-child(n + 3)) {
+      grid-column: 1 / -1;
+    }
+    .tbl tbody tr > :global(td[colspan]) {
+      grid-column: 1 / -1;
+    }
+    .target::before {
+      content: 'Looks like · ';
+      font-family: var(--font-mono);
+      font-size: var(--fs-label-xs);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+    .act-stack {
+      justify-content: flex-start;
+    }
   }
   .tbl :global(td) {
     vertical-align: top;

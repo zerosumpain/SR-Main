@@ -2,7 +2,7 @@
 //
 // The doctor, in six numbers, for the Improvement room.
 //
-// The full report stays at `/jkai/daydreams/doctor` — 800 lines of symptom,
+// The full report stays at `/jkai/develop/doctor` — 800 lines of symptom,
 // cause and fix that would make a four-thousand-line component if they were
 // moved here, which is the lesson M5 recorded when `/jkai/improvement` was
 // nearly folded into the hub the same way. What belongs in the unified room is

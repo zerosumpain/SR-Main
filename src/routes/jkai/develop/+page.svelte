@@ -39,6 +39,7 @@
   import { laneOf, type LaneStat } from '$lib/builds/lane-stats';
   import { criterionResult, PRODUCT_AREAS, RELEASE_POLICIES, AUTOPILOT_ROUNDS, visibleDevelopmentStage, type DeliveryState, type ReleasePolicy } from '$lib/jkai/development';
   import { RELEASE_POLICY_LABELS } from '$lib/constants/development';
+  import { developRooms } from '$lib/builds/develop-nav';
 
   type Row = { buildId: string; title: string; status: string; outcome?: string | null; state: DeliveryState };
   type ArchiveRow = {
@@ -158,6 +159,9 @@
       tone: (l.id === 'input' ? 'action' : 'quiet') as ShellTab['tone'],
     })),
     { id: 'archive', label: 'Archive', count: archive.length, tone: 'quiet' },
+    // The backlog and the doctor are rooms of their own (moved from daydreams
+    // 2026-09-26) — real links, not lanes of this list.
+    ...developRooms(),
   ]);
 
   const areaFacets = $derived<Facet[]>([
