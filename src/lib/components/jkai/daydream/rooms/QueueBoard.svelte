@@ -775,6 +775,7 @@
 
   .wc-acts {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 6px;
     padding-top: 8px;
