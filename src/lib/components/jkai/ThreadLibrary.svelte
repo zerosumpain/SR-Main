@@ -55,7 +55,8 @@
     onDelete: (id: string) => void;
     onRename: (id: string, title: string) => void;
     onTogglePin: (id: string, pinned: boolean) => void;
-    onShare: (c: ConversationItem) => void;
+    /** Absent for a member: sharing is owner-only (server-enforced), so no button. */
+    onShare?: (c: ConversationItem) => void;
     onNew: () => void;
     onClose: () => void;
     hasMore?: boolean;
@@ -311,7 +312,7 @@
                   <div class="card-actions">
                     <button type="button" class:active={c.pinned} onclick={() => onTogglePin(c.id, !c.pinned)}>{c.pinned ? 'Unpin' : 'Pin'}</button>
                     <button type="button" onclick={() => beginRename(c)}>Rename</button>
-                    <button type="button" onclick={() => onShare(c)}>Share</button>
+                    {#if onShare}<button type="button" onclick={() => onShare?.(c)}>Share</button>{/if}
                     {#if confirmingDeleteId === c.id}
                       <button type="button" class="danger" onclick={() => { confirmingDeleteId = null; onDelete(c.id); }}>Confirm</button>
                       <button type="button" onclick={() => (confirmingDeleteId = null)}>Keep</button>

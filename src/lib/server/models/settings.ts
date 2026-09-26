@@ -159,7 +159,7 @@ export interface ApprovalUiSettings {
 }
 
 const APPROVAL_UI_KEY = 'jkai.approval_ui';
-const DEFAULT_APPROVAL_UI: ApprovalUiSettings = {
+export const DEFAULT_APPROVAL_UI: ApprovalUiSettings = {
   defaultAction: 'none',
   autoSelectMs: 20_000,
 };

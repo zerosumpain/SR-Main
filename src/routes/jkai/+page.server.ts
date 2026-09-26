@@ -5,7 +5,12 @@ import { conversations, orchestratorChats } from '$lib/db/schema';
 import { desc, eq } from 'drizzle-orm';
 import type { PageServerLoad } from './$types';
 import { getConversationList } from '$lib/jkai/queries';
-import { resolveDefaultModel, resolveChatAltOpenRouterModel, getApprovalUiSettings } from '$lib/server/models/settings';
+import {
+  resolveDefaultModel,
+  resolveChatAltOpenRouterModel,
+  getApprovalUiSettings,
+  DEFAULT_APPROVAL_UI,
+} from '$lib/server/models/settings';
 import { getCollectionBySlug, queryRecords } from '$lib/datastore';
 import { BRIEFINGS_COLLECTION } from '$lib/constants/briefing';
 import type { BriefingData } from '$lib/briefing/types';
@@ -164,7 +169,8 @@ async function memberHub(
     // the picker is hidden and the owner's settings are not sent.
     defaultChatModel: { provider: 'openrouter' as const, modelId: '' },
     chatAltOpenRouterModel: null,
-    approvalUi: await getApprovalUiSettings(),
+    // The defaults, not the owner's tuned settings.
+    approvalUi: { ...DEFAULT_APPROVAL_UI },
     freshBriefing: null,
     dailyAlerts,
     member: true as const,
