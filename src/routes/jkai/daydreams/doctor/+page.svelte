@@ -1,6 +1,9 @@
 <svelte:head><title>Workflow Doctor — JKAI</title></svelte:head>
+<svelte:window onhashchange={openLinkedRun} />
 <script lang="ts">
   import { formatGbp } from '$lib/utils/cost-format';
+  import { onMount, tick } from 'svelte';
+  import { runIdFromHash } from '$lib/daydream/run-ref';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
@@ -120,6 +123,19 @@
   function toggleRun(id: string) {
     expandedRun = expandedRun === id ? null : id;
   }
+
+  // A link from the overnight timeline (`#run-<id>`) opens that run's row. The
+  // run list sits under the collapsed technical detail, so without this the
+  // anchor would not even be in the DOM. Also on `hashchange`: the timeline is
+  // on the same page as this ledger, and a same-page hash link never remounts.
+  function openLinkedRun() {
+    const id = runIdFromHash(location.hash);
+    if (!id || !data.runs.some((r) => r.runId === id)) return;
+    showTech = true;
+    expandedRun = id;
+    void tick().then(() => document.getElementById(`run-${id}`)?.scrollIntoView({ block: 'start' }));
+  }
+  onMount(openLinkedRun);
   function toggleSig(sig: string) {
     expandedSig = expandedSig === sig ? null : sig;
   }
@@ -531,7 +547,7 @@
     {:else}
       <div class="rows">
         {#each data.runs as run (run.runId)}
-          <div class="row">
+          <div class="row" id="run-{run.runId}">
             <button class="row-head" onclick={() => toggleRun(run.runId)} aria-expanded={expandedRun === run.runId}>
               <span class="status-pill s-{run.data.status}">{run.data.status.replace(/_/g, ' ')}</span>
               <span class="row-title">{fmtDate(run.createdAt)}</span>
