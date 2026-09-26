@@ -32,12 +32,11 @@ vi.mock('$lib/home/presence/observe', () => ({
 vi.mock('$lib/home/presence/companion', () => ({
   ingestCompanion: async () => {
     h.companionCalls++;
-    return { pages: 1, written: 2, dropped: 1, rejected: 0, more: false };
+    return { pages: 1, written: 2, dropped: 1, rejected: 0, skipped: 0, more: false };
   },
 }));
 
 import { homeObserve } from './home-observe';
-import { FAMILY_SUBJECTS } from '$lib/home/presence/types';
 
 const ctx = { config: {} } as unknown as Parameters<typeof homeObserve.run>[0];
 
@@ -70,11 +69,28 @@ describe('home-observe', () => {
     expect(res.summary).toContain('companion: 2 written, 1 unmapped');
   });
 
-  it('falls back to the seed list when the members read fails, and skips companion', async () => {
+  it('polls nobody and skips companion when the members read fails, without an error outcome', async () => {
     h.membersFail = true;
-    await homeObserve.run(ctx);
-    expect(h.polled).toHaveLength(FAMILY_SUBJECTS.length);
+    const res = await homeObserve.run(ctx);
+    expect(h.polled).toEqual([]);
     expect(h.companionCalls).toBe(0);
+    expect(res.outcome).toBe('ok');
+    expect(res.summary).toContain('db hiccup');
+  });
+
+  it('filters configured subjects through the life360 members', async () => {
+    h.members = [member('p', 'life360'), member('q', 'companion')];
+    const cfgCtx = {
+      config: {
+        subjects: [
+          { subject: 'p', entity: 'person.p' },
+          { subject: 'q', entity: 'person.q' },
+          { subject: 'stranger', entity: 'person.stranger' },
+        ],
+      },
+    } as unknown as Parameters<typeof homeObserve.run>[0];
+    await homeObserve.run(cfgCtx);
+    expect(h.polled).toEqual(['p=person.p']);
   });
 
   it('still pulls companion fixes while the push stream lets the poll stand down', async () => {

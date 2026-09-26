@@ -6,7 +6,6 @@ import {
 } from '$lib/home/presence/observe';
 import {
   DEFAULT_SUBJECT,
-  FAMILY_SUBJECTS,
   OBSERVE_CADENCE_SECONDS,
   errMsg,
   type SubjectEntity,
@@ -66,22 +65,32 @@ export const homeObserve: ActivityHandler = {
   async run(ctx) {
     const cfg = { ...DEFAULTS, ...(ctx.config as ObserveConfig) };
 
-    // Who is written from where. A failed read of the members table falls back
-    // to the seed list for Home Assistant, so a database hiccup never stops
-    // the trail, and skips the companion pull, which cannot map an email to a
-    // person without it. A companion or 'none' member is never polled from
-    // Life360: choosing not to be tracked has to mean it.
-    let members: HouseholdMember[] | null = null;
+    // Who is written from where. Only life360 members are polled from Home
+    // Assistant — a companion or 'none' member never is, and neither is a
+    // subject in `cfg.subjects` who is not a life360 member: choosing not to be
+    // tracked has to mean it. If the members table cannot be read we do not
+    // know who consented, so NOBODY is polled and the companion pull (which
+    // cannot map an email to a person without it) is skipped too. That is
+    // reported, not an error outcome: a transient DB hiccup must not burn the
+    // action's failure budget.
+    let members: HouseholdMember[];
     try {
       members = await listMembers();
-    } catch {
-      members = null;
+    } catch (err) {
+      const reason = errMsg(err).slice(0, 200);
+      return {
+        outcome: 'ok',
+        summary: `members unreadable — nobody observed: ${reason.slice(0, 120)}`,
+        details: { membersError: reason },
+      };
     }
-    const subjects: SubjectEntity[] =
-      cfg.subjects ??
-      (members ? lifeSubjects(members) : FAMILY_SUBJECTS).map((s) =>
+    const life = lifeSubjects(members);
+    const lifeSet = new Set(life.map((s) => s.subject));
+    const subjects: SubjectEntity[] = (cfg.subjects ?? life)
+      .filter((s) => lifeSet.has(s.subject))
+      .map((s) =>
         // The legacy personEntity override still steers the default subject.
-        s.subject === DEFAULT_SUBJECT ? { ...s, entity: cfg.personEntity } : s,
+        s.subject === DEFAULT_SUBJECT && !cfg.subjects ? { ...s, entity: cfg.personEntity } : s,
       );
 
     // The push stream only carries the default subject, so only that subject
@@ -141,18 +150,17 @@ export const homeObserve: ActivityHandler = {
     // the cursor stays put so nothing is lost. No gap rows either — silence is
     // normal for a phone (a still phone is suspended), so it proves nothing.
     let companion: CompanionResult | null = null;
-    if (members) {
-      try {
-        companion = await ingestCompanion(members);
-      } catch (err) {
-        companion = { pages: 0, written: 0, dropped: 0, rejected: 0, more: false, error: errMsg(err) };
-      }
+    try {
+      companion = await ingestCompanion(members);
+    } catch (err) {
+      companion = { pages: 0, written: 0, dropped: 0, rejected: 0, skipped: 0, more: false, error: errMsg(err) };
     }
     if (companion) {
       details.companion = companion;
       const c = [`${companion.written} written`];
       if (companion.dropped) c.push(`${companion.dropped} unmapped`);
       if (companion.rejected) c.push(`${companion.rejected} rejected`);
+      if (companion.skipped) c.push(`${companion.skipped} already written`);
       if (companion.more) c.push('more waiting');
       if (companion.error) c.push(`failed: ${companion.error.slice(0, 80)}`);
       bits.push(`companion: ${c.join(', ')}`);

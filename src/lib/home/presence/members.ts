@@ -13,7 +13,12 @@
 import { asc, eq } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { householdMember, type HouseholdMemberAlerts } from '$lib/db/schema';
+import { getSetting, setSetting } from '$lib/server/models/settings';
 import { FAMILY_SUBJECTS, type SubjectEntity } from './types';
+
+/** Set once the seed has been written. An empty table after that is the
+ *  owner's doing, and re-seeding would quietly put everyone back on Life360. */
+export const MEMBERS_SEEDED_KEY = 'home.presence.membersSeeded';
 
 export const MEMBER_SOURCES = ['life360', 'companion', 'none'] as const;
 export type MemberSource = (typeof MEMBER_SOURCES)[number];
@@ -83,16 +88,29 @@ async function selectAll(): Promise<HouseholdMember[]> {
 
 /**
  * Everyone in the household. Seeds from FAMILY_SUBJECTS the first time it finds
- * the table empty; `onConflictDoNothing` makes two concurrent first reads safe.
+ * the table empty, and only ever once (MEMBERS_SEEDED_KEY): an owner who
+ * removes everyone must not find them all back on Life360 two minutes later.
+ * `onConflictDoNothing` makes two concurrent first reads safe.
  */
 export async function listMembers(): Promise<HouseholdMember[]> {
   const rows = await selectAll();
   if (rows.length > 0) return rows;
+  if ((await getSetting<boolean>(MEMBERS_SEEDED_KEY)) === true) return rows;
   await db
     .insert(householdMember)
     .values(seedMembers())
     .onConflictDoNothing();
+  await setSetting(MEMBERS_SEEDED_KEY, true);
   return selectAll();
+}
+
+/**
+ * Whether Home Assistant may write this subject's trail: only a member whose
+ * source is 'life360'. Someone not in the table, on the app, or on 'none' is
+ * not tracked from HA. PURE.
+ */
+export function isLife360Subject(members: readonly HouseholdMember[], subject: string): boolean {
+  return members.some((m) => m.subject === subject && m.source === 'life360');
 }
 
 export async function memberByEmail(email: string): Promise<HouseholdMember | null> {

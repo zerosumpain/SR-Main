@@ -11,7 +11,7 @@
 // first thing it guesses wrong is "you have not left the house in three days"
 // when the truth is that homeserv was down.
 
-import { and, desc, eq, gte, isNotNull, lt } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, lt, max } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamTrail, daydreamPlaces } from '$lib/db/schema';
 import {
@@ -248,6 +248,28 @@ export async function hasFreshFix(
     )
     .limit(1);
   return rows.length > 0;
+}
+
+/**
+ * The newest trail time already written from a source, per subject. The
+ * companion pull skips anything at or before it, so a page re-read after a
+ * partial failure writes each fix once.
+ */
+export async function latestTsBySource(
+  source: TrailSource,
+  subjects: readonly string[],
+): Promise<Map<string, Date>> {
+  const out = new Map<string, Date>();
+  if (subjects.length === 0) return out;
+  const rows = await db
+    .select({ subject: daydreamTrail.subject, ts: max(daydreamTrail.ts) })
+    .from(daydreamTrail)
+    .where(and(eq(daydreamTrail.source, source), inArray(daydreamTrail.subject, [...subjects])))
+    .groupBy(daydreamTrail.subject);
+  for (const r of rows) {
+    if (r.ts) out.set(r.subject, r.ts instanceof Date ? r.ts : new Date(r.ts));
+  }
+  return out;
 }
 
 /** Drop raw fixes past the retention horizon. Places, which are the point of

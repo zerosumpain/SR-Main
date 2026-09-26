@@ -15,7 +15,7 @@
 // that is not production.
 
 import { getSetting, setSetting } from '$lib/server/models/settings';
-import { isPlausibleCoord, recordFix } from './observe';
+import { isPlausibleCoord, latestTsBySource, recordFix } from './observe';
 import type { HouseholdMember } from './members';
 import { errMsg, type IncomingFix } from './types';
 
@@ -62,6 +62,9 @@ export interface CompanionResult {
   dropped: number;
   /** Fixes with coordinates or a timestamp that could never be a row. */
   rejected: number;
+  /** Fixes at or before the newest companion fix already in the trail for
+   *  that person: a page re-read after a failure, or a late upload. */
+  skipped: number;
   /** True when the page cap stopped the run with more waiting. */
   more: boolean;
   /** Set when a fetch or a write failed; the cursor stays on the failed page. */
@@ -149,8 +152,9 @@ export async function ingestCompanion(
   if (!companionToken()) return null;
 
   const bySubject = companionByEmail(members);
-  const result: CompanionResult = { pages: 0, written: 0, dropped: 0, rejected: 0, more: false };
+  const result: CompanionResult = { pages: 0, written: 0, dropped: 0, rejected: 0, skipped: 0, more: false };
   let cursor = (await getSetting<string>(COMPANION_CURSOR_KEY)) ?? '';
+  let latest: Map<string, Date> | undefined;
 
   for (let i = 0; i < maxPages; i++) {
     let page: HouseholdPage | null;
@@ -162,6 +166,18 @@ export async function ingestCompanion(
     }
     if (!page) return result.pages === 0 ? null : result;
     result.pages++;
+    // Once per run, and only once there is something to compare against.
+    // The phone uploads its queue in order, so dropping a fix older than the
+    // newest one written loses only a late out-of-order upload, and makes a
+    // re-read page idempotent.
+    if (!latest) {
+      try {
+        latest = await latestTsBySource('companion', [...new Set(bySubject.values())]);
+      } catch (err) {
+        result.error = `could not read the trail: ${errMsg(err)}`;
+        return result;
+      }
+    }
 
     await setSetting(COMPANION_USERS_KEY, page.users);
 
@@ -172,12 +188,19 @@ export async function ingestCompanion(
         continue;
       }
       const incoming = toIncomingFix(f);
-      if (!isPlausibleCoord(incoming.lat, incoming.lon) || Number.isNaN(Date.parse(f.recorded))) {
+      const recordedMs = Date.parse(f.recorded);
+      if (!isPlausibleCoord(incoming.lat, incoming.lon) || Number.isNaN(recordedMs)) {
         result.rejected++;
+        continue;
+      }
+      const newest = latest.get(subject);
+      if (newest && recordedMs <= newest.getTime()) {
+        result.skipped++;
         continue;
       }
       try {
         await recordFix(incoming, 'companion', subject);
+        latest.set(subject, new Date(recordedMs));
         result.written++;
       } catch (err) {
         result.error = `write failed: ${errMsg(err)}`;

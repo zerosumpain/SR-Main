@@ -8,6 +8,9 @@ const h = vi.hoisted(() => ({
   order: [] as string[],
   recorded: [] as Array<{ fix: Record<string, unknown>; source: string; subject: string }>,
   failWrite: false,
+  /** Fail the write with this 1-based index in the run, once. */
+  failOnWrite: 0,
+  writes: 0,
 }));
 
 vi.mock('$lib/server/models/settings', () => ({
@@ -21,8 +24,19 @@ vi.mock('$lib/server/models/settings', () => ({
 vi.mock('./observe', () => ({
   isPlausibleCoord: (lat: unknown, lon: unknown) =>
     typeof lat === 'number' && typeof lon === 'number' && !(lat === 0 && lon === 0),
+  latestTsBySource: async (source: string, subjects: string[]) => {
+    const out = new Map<string, Date>();
+    for (const r of h.recorded) {
+      if (r.source !== source || !subjects.includes(r.subject)) continue;
+      const ts = new Date(String(r.fix.at));
+      const cur = out.get(r.subject);
+      if (!cur || ts > cur) out.set(r.subject, ts);
+    }
+    return out;
+  },
   recordFix: async (fix: Record<string, unknown>, source: string, subject: string) => {
-    if (h.failWrite) throw new Error('db down');
+    h.writes++;
+    if (h.failWrite || h.writes === h.failOnWrite) throw new Error('db down');
     h.order.push(`fix:${subject}`);
     h.recorded.push({ fix, source, subject });
     return { id: h.recorded.length };
@@ -79,6 +93,8 @@ beforeEach(() => {
   h.order = [];
   h.recorded = [];
   h.failWrite = false;
+  h.failOnWrite = 0;
+  h.writes = 0;
   process.env.COMPANION_HOUSEHOLD_TOKEN = TOKEN;
   delete process.env.COMPANION_URL;
 });
@@ -134,8 +150,8 @@ describe('ingestCompanion', () => {
   it('pages until more=false, starting from the stored cursor', async () => {
     h.settings.set(COMPANION_CURSOR_KEY, 'start');
     const pages: HouseholdPage[] = [
-      { cursor: 'p1', more: true, users: [], fixes: [fix('a@example.test', '1')] },
-      { cursor: 'p2', more: false, users: [], fixes: [fix('A@Example.test', '2')] },
+      { cursor: 'p1', more: true, users: [], fixes: [fix('a@example.test', '1', { recorded: '2026-09-26T08:00:00Z' })] },
+      { cursor: 'p2', more: false, users: [], fixes: [fix('A@Example.test', '2', { recorded: '2026-09-26T08:01:00Z' })] },
     ];
     const f = vi.fn(async () => pageResponse(pages.shift()!));
     const res = await ingestCompanion([member('a')], f as unknown as typeof fetch);
@@ -178,6 +194,51 @@ describe('ingestCompanion', () => {
     const res = await ingestCompanion([member('a')], f as unknown as typeof fetch);
     expect(h.settings.get(COMPANION_CURSOR_KEY)).toBe('before');
     expect(res?.error).toMatch(/db down/);
+  });
+
+  it('writes each fix once when a page is replayed after a partial failure', async () => {
+    const page: HouseholdPage = {
+      cursor: 'p1',
+      more: false,
+      users: [],
+      fixes: [
+        fix('a@example.test', '1', { recorded: '2026-09-26T08:00:00Z' }),
+        fix('a@example.test', '2', { recorded: '2026-09-26T08:01:00Z' }),
+        fix('a@example.test', '3', { recorded: '2026-09-26T08:02:00Z' }),
+      ],
+    };
+    const f = vi.fn(async () => pageResponse(page));
+    h.failOnWrite = 2;
+    const first = await ingestCompanion([member('a')], f as unknown as typeof fetch);
+    expect(first?.error).toMatch(/db down/);
+    expect(h.settings.get(COMPANION_CURSOR_KEY)).toBeUndefined();
+
+    const second = await ingestCompanion([member('a')], f as unknown as typeof fetch);
+    expect(second).toMatchObject({ written: 2, skipped: 1 });
+    expect(h.recorded.map((r) => r.fix.at)).toEqual([
+      '2026-09-26T08:00:00Z',
+      '2026-09-26T08:01:00Z',
+      '2026-09-26T08:02:00Z',
+    ]);
+    expect(h.settings.get(COMPANION_CURSOR_KEY)).toBe('p1');
+  });
+
+  it('skips a fix no newer than the last one written for that person', async () => {
+    const f = vi.fn(async () =>
+      pageResponse({
+        cursor: 'p1',
+        more: false,
+        users: [],
+        fixes: [
+          fix('a@example.test', '1', { recorded: '2026-09-26T08:05:00Z' }),
+          fix('a@example.test', '2', { recorded: '2026-09-26T08:04:00Z' }),
+          fix('b@example.test', '3', { recorded: '2026-09-26T08:04:00Z' }),
+        ],
+      }),
+    );
+    const res = await ingestCompanion([member('a'), member('b')], f as unknown as typeof fetch);
+    expect(res).toMatchObject({ written: 2, skipped: 1 });
+    expect(h.recorded.map((r) => r.subject)).toEqual(['a', 'b']);
   });
 
   it('drops fixes for unknown emails and for members not on the companion source', async () => {

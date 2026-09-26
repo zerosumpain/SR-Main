@@ -7,6 +7,14 @@ const state = vi.hoisted(() => ({
   inserts: [] as Array<Array<Record<string, unknown>>>,
   conflictIgnored: 0,
   updates: [] as Array<Record<string, unknown>>,
+  settings: new Map<string, unknown>(),
+}));
+
+vi.mock('$lib/server/models/settings', () => ({
+  getSetting: async (k: string) => (state.settings.has(k) ? state.settings.get(k) : null),
+  setSetting: async (k: string, v: unknown) => {
+    state.settings.set(k, v);
+  },
 }));
 
 vi.mock('$lib/db', () => {
@@ -47,7 +55,9 @@ vi.mock('$lib/db', () => {
 });
 
 import {
+  MEMBERS_SEEDED_KEY,
   followers,
+  isLife360Subject,
   lifeSubjects,
   listMembers,
   seedMembers,
@@ -115,19 +125,39 @@ describe('seedMembers / lifeSubjects', () => {
   });
 });
 
+describe('isLife360Subject', () => {
+  it('admits only a life360 member', () => {
+    const members = [m('a'), m('b', { source: 'companion' }), m('c', { source: 'none' })];
+    expect(isLife360Subject(members, 'a')).toBe(true);
+    expect(isLife360Subject(members, 'b')).toBe(false);
+    expect(isLife360Subject(members, 'c')).toBe(false);
+    expect(isLife360Subject(members, 'stranger')).toBe(false);
+  });
+});
+
 describe('listMembers', () => {
   beforeEach(() => {
     state.rows = [];
     state.inserts = [];
     state.conflictIgnored = 0;
     state.updates = [];
+    state.settings.clear();
   });
 
-  it('seeds an empty table with onConflictDoNothing and returns the seed', async () => {
+  it('seeds an empty table with onConflictDoNothing, returns the seed and records it', async () => {
     const out = await listMembers();
     expect(state.inserts).toHaveLength(1);
     expect(state.conflictIgnored).toBe(1);
     expect(out.map((x) => x.subject)).toEqual(FAMILY_SUBJECTS.map((f) => f.subject));
+    expect(state.settings.get(MEMBERS_SEEDED_KEY)).toBe(true);
+  });
+
+  it('never reseeds once the seed has been written, even if the table is emptied', async () => {
+    await listMembers();
+    state.rows = [];
+    const out = await listMembers();
+    expect(out).toEqual([]);
+    expect(state.inserts).toHaveLength(1);
   });
 
   it('does not seed when the table already has people', async () => {
