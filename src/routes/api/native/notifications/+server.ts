@@ -1,7 +1,7 @@
 import type { RequestHandler } from './$types';
 import { json } from '@sveltejs/kit';
 import { clampLimit, withDevice } from '$lib/server/native-handler';
-import { markAllRead, markCollected, pendingForDevice, recentEvents } from '$lib/server/notify';
+import { markAllRead, markCollected, markRead, pendingForDevice, recentEvents } from '$lib/server/notify';
 
 /**
  * GET /api/native/notifications — what the phone has not raised yet, and the inbox.
@@ -38,7 +38,7 @@ export const GET: RequestHandler = withDevice(async ({ url }) => {
  *
  * `{ collected: [id, …] }` is the phone saying it has posted those as local
  * notifications and they must not be posted again. `{ readAll: true }` is the
- * person having looked at the inbox.
+ * person having looked at the inbox; `{ read: [id, …] }` is one alert opened.
  *
  * Acknowledging is deliberately a separate call from fetching rather than a
  * side effect of it. A refresh that is killed by iOS mid-flight — which is
@@ -52,11 +52,14 @@ export const POST: RequestHandler = withDevice(async ({ request }) => {
   } catch {
     return json({ error: 'Expected a JSON body.' }, { status: 400 });
   }
-  const payload = (body ?? {}) as { collected?: unknown; readAll?: unknown };
+  const payload = (body ?? {}) as { collected?: unknown; readAll?: unknown; read?: unknown };
 
   let collected = 0;
   if (Array.isArray(payload.collected)) {
     collected = await markCollected(payload.collected.filter((id): id is string => typeof id === 'string'));
+  }
+  if (Array.isArray(payload.read)) {
+    await markRead(payload.read.filter((id): id is string => typeof id === 'string'));
   }
   if (payload.readAll === true) await markAllRead();
 

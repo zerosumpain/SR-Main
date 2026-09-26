@@ -38,7 +38,7 @@ import { viewerOf, viewerHolds } from '$lib/server/viewer';
 import { JKAI_EXTENDED_TOOL } from '$lib/mcp/extended-tool';
 import { createTraceRecorder, compactStepsForMessage, type CompactToolStep } from '$lib/jkai/tool-trace';
 import { resolveChatTurnModel } from '$lib/server/models/workload-settings';
-import { isPlaceholderTitle } from '$lib/jkai/thread-title';
+import { isPlaceholderTitle, titleFromMessage } from '$lib/jkai/thread-title';
 import { refileConversationFiles } from '$lib/jkai/media/drive-link';
 
 const MAX_MESSAGE_LEN = 20_000;
@@ -127,7 +127,7 @@ async function handleWithLoop(event: Parameters<RequestHandler>[0]): Promise<Res
       // conversation ends up stamped with.
       const defaultCtx = await resolveChatTurnModel();
       const [conv] = await db.insert(conversations).values({
-        title: message.slice(0, 50),
+        title: titleFromMessage(message),
         source: 'web',
         modelProvider: defaultCtx.provider,
         modelId: defaultCtx.modelId,
@@ -557,9 +557,10 @@ async function handleWithLoop(event: Parameters<RequestHandler>[0]): Promise<Res
           // "New thread" counts as no title: it is what the iPhone app opens
           // every thread with, and those threads never got named.
           const [conv] = await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1);
-          if (conv && isPlaceholderTitle(conv.title)) {
+          const named = titleFromMessage(message);
+          if (conv && isPlaceholderTitle(conv.title) && named) {
             await db.update(conversations)
-              .set({ title: message.slice(0, 50), updatedAt: new Date() })
+              .set({ title: named, updatedAt: new Date() })
               .where(eq(conversations.id, conversationId));
             // Files sent before the title existed were filed under the month;
             // now the thread has a name, give them its folder in /drive.

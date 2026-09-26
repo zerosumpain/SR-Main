@@ -50,14 +50,31 @@ const CONVERSATION_CARD = {
  */
 const OWNER_THREADS = (): SQL => eq(conversations.principalId, 'owner');
 
+/**
+ * A thread worth listing: somebody wrote in it, or it was opened in the last
+ * half hour (the one on screen right now, before its first send), or it is
+ * pinned. The phone's "Ask jkai" and + both open a thread BEFORE anything is
+ * typed, and 271 of 688 threads were exactly that — opened, never used, and
+ * drawn as "Untitled thread" rows in the list.
+ */
+const EMPTY_GRACE = sql`interval '30 minutes'`;
+const NOT_EMPTY: SQL = sql`(
+  ${conversations.pinned}
+  or ${conversations.createdAt} > now() - ${EMPTY_GRACE}
+  or exists (select 1 from orchestrator_chats oc where oc.conversation_id = "jkai_conversations"."id")
+)`;
+
 export async function getConversationList({
   limit = CONVERSATION_PAGE_SIZE,
   cursor,
   scope = OWNER_THREADS(),
+  hideEmpty = false,
 }: {
   limit?: number;
   cursor?: { pinned: boolean; before: Date; beforeId: string };
   scope?: SQL;
+  /** Leave out threads nobody ever wrote in — see `NOT_EMPTY`. */
+  hideEmpty?: boolean;
 } = {}) {
   const boundedLimit = Math.max(1, Math.min(200, Math.trunc(limit)));
   const samePinBucket = cursor
@@ -80,7 +97,7 @@ export async function getConversationList({
   const rows = await db
     .select(CONVERSATION_CARD)
     .from(conversations)
-    .where(and(scope, cursorFilter))
+    .where(and(scope, cursorFilter, hideEmpty ? NOT_EMPTY : undefined))
     .orderBy(desc(conversations.pinned), desc(conversations.updatedAt), desc(conversations.id))
     .limit(boundedLimit + 1);
 
