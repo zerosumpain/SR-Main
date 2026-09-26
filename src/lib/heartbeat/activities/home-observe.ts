@@ -12,6 +12,7 @@ import {
 } from '$lib/home/presence/types';
 import { ingestCompanion, type CompanionResult } from '$lib/home/presence/companion';
 import { lifeSubjects, listMembers, type HouseholdMember } from '$lib/home/presence/members';
+import { deliverAlerts, runCrossings } from '$lib/home/presence/alerts';
 import type { ActivityHandler } from '../types';
 
 // The name is the heartbeat_actions row's identity: it stays 'daydream-observe'
@@ -53,7 +54,7 @@ const DEFAULTS: Required<Omit<ObserveConfig, 'subjects'>> = {
 export const homeObserve: ActivityHandler = {
   name: NAME,
   description:
-    'Poll floor for the household trail. Records where every Life360 member is in one Home Assistant round trip — the push stream only covers John — with an explicit per-subject gap row when it looks and cannot see, then pulls the iPhone app\'s fixes from the pilot for companion members. No LLM.',
+    'Poll floor for the household trail. Records where every Life360 member is in one Home Assistant round trip — the push stream only covers John — with an explicit per-subject gap row when it looks and cannot see, then pulls the iPhone app\'s fixes from the pilot for companion members, then raises arrive/leave alerts to the people who follow them. No LLM.',
   // Same constant coverage divides by. Written once so they cannot drift.
   defaultCadenceSeconds: OBSERVE_CADENCE_SECONDS,
   defaultEnabled: true,
@@ -164,6 +165,38 @@ export const homeObserve: ActivityHandler = {
       if (companion.more) c.push('more waiting');
       if (companion.error) c.push(`failed: ${companion.error.slice(0, 80)}`);
       bits.push(`companion: ${c.join(', ')}`);
+    }
+
+    // Arrivals and departures, from every trail row written since the last
+    // run — this run's poll and app fixes, and the push stream's, which never
+    // pass through here. Then delivery. Neither can fail the run: an alert
+    // that did not go stays owed and is retried while it is under two hours
+    // old.
+    try {
+      const crossings = await runCrossings(members);
+      details.crossings = crossings;
+      const c: string[] = [];
+      if (crossings.written) c.push(`${crossings.written} new`);
+      if (crossings.deduped) c.push(`${crossings.deduped} repeated`);
+      if (crossings.initialised.length) c.push(`started watching ${crossings.initialised.join(', ')}`);
+      if (crossings.errors.length) c.push(`failed: ${crossings.errors.join('; ').slice(0, 120)}`);
+      if (c.length) bits.push(`crossings: ${c.join(', ')}`);
+    } catch (err) {
+      details.crossingsError = errMsg(err).slice(0, 200);
+      bits.push(`crossings failed: ${errMsg(err).slice(0, 80)}`);
+    }
+    try {
+      const sent = await deliverAlerts(members);
+      details.alerts = sent;
+      const a: string[] = [];
+      if (sent.forwarded) a.push(`${sent.forwarded} to the app`);
+      if (sent.pilotError) a.push(`app queue failed: ${sent.pilotError.slice(0, 80)}`);
+      if (sent.whatsappSent.length) a.push(`WhatsApp to ${sent.whatsappSent.join(', ')}`);
+      if (sent.whatsappFailed.length) a.push(`WhatsApp failed to ${sent.whatsappFailed.join(', ')}`);
+      if (a.length) bits.push(`alerts: ${a.join(', ')}`);
+    } catch (err) {
+      details.alertsError = errMsg(err).slice(0, 200);
+      bits.push(`alerts failed: ${errMsg(err).slice(0, 80)}`);
     }
 
     if (fixes.length) bits.push(`fixes: ${fixes.join(', ')}`);
