@@ -117,18 +117,18 @@
                   <span class="field-label">Email they sign in with</span>
                   <input class="text-input" name="email" type="email" value={m.email ?? ''} autocomplete="off" />
                 </label>
-                <label class="field">
-                  <span class="field-label">Location from</span>
-                  <select class="text-input select" name="source">
+                <div class="field">
+                  <label class="field-label" for="src-{m.subject}">Location from</label>
+                  <select id="src-{m.subject}" class="text-input select" name="source" aria-describedby="src-hint-{m.subject}">
                     {#each data.sources as s (s)}
                       <option value={s} selected={s === m.source}>{SOURCE_LABEL[s] ?? s}</option>
                     {/each}
                   </select>
-                  <span class="note hint">
+                  <p class="note hint" id="src-hint-{m.subject}">
                     The app takes their location from their phone only: with sharing off they show as not sharing, never
                     picked up from Life360 instead.
-                  </span>
-                </label>
+                  </p>
+                </div>
                 <div class="field">
                   <label class="field-label" for="wa-{m.subject}">WhatsApp number</label>
                   <input

@@ -9,7 +9,7 @@
 // old counts put a stale fix in both "home" and "unknown" and read 6 of 5.
 //   - home    = a fresh fix, at home
 //   - out     = a fresh fix, not at home
-//   - unknown = a stale fix, or no fix at all
+//   - unknown = a stale fix, no fix at all, or a fix with no home answer
 // Someone not sharing is none of the three: "off".
 
 /** Over this many minutes without a fix, where they are is "we don't know". */
@@ -30,6 +30,8 @@ export interface NowFields {
 export function nowStatus(m: NowFields, staleMins = STALE_MINS): NowStatus {
   if (m.notSharing) return 'off';
   if (m.ageMins == null || m.ageMins > staleMins) return 'unknown';
+  // A fresh fix that cannot say whether it is at home is not "out".
+  if (m.isHome == null) return 'unknown';
   return m.isHome ? 'home' : 'out';
 }
 

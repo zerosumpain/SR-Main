@@ -22,6 +22,11 @@ describe('nowStatus', () => {
     expect(nowStatus(card({ ageMins: null, isHome: null }))).toBe('unknown');
   });
 
+  it('is unknown on a fresh fix that cannot say whether it is at home', () => {
+    expect(nowStatus(card({ isHome: null, placeLabel: null, distanceHomeKm: null }))).toBe('unknown');
+    expect(nowCounts([card(), card({ isHome: null })])).toEqual({ home: 1, out: 0, unknown: 1, sharing: 2, notSharing: 0 });
+  });
+
   it('is off for someone not sharing, whatever the trail says', () => {
     expect(nowStatus(card({ notSharing: true }))).toBe('off');
     expect(nowStatus(card({ notSharing: true, ageMins: null }))).toBe('off');
