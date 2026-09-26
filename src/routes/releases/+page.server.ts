@@ -3,6 +3,7 @@ import { getReleaseShowcase } from '$lib/releases/public';
 import { getReleaseConsole, monthlyReleaseBuckets, parseConsoleFilters, weeklyCadence } from '$lib/releases/console';
 import { isOwnerRequest } from '$lib/server/owner';
 import { getReleaseSessions } from '$lib/releases/sessions.server';
+import { withPrivateFootprint } from '$lib/releases/private-footprint.server';
 import type { PageServerLoad } from './$types';
 
 /**
@@ -39,7 +40,7 @@ export const load: PageServerLoad = async (event) => {
     // whole design exists to prevent.
     const sessions = await getReleaseSessions(console_.items.map((i) => i.id));
     return {
-      sourceFootprint: SOURCE_FOOTPRINT,
+      sourceFootprint: withPrivateFootprint(SOURCE_FOOTPRINT),
       mode: 'owner' as const,
       ...console_,
       sessions,
@@ -80,7 +81,20 @@ export const load: PageServerLoad = async (event) => {
 
   return {
     mode: 'public' as const,
-    sourceFootprint: SOURCE_FOOTPRINT,
+    // External service repositories are private. Keep their names and sizes
+    // out of the anonymous payload, while showing the public SR-Main source.
+    sourceFootprint: {
+      ...SOURCE_FOOTPRINT,
+      lines: SOURCE_FOOTPRINT.repositories[0].code.lines,
+      files: SOURCE_FOOTPRINT.repositories[0].code.files,
+      categories: {
+        code: SOURCE_FOOTPRINT.repositories[0].code,
+        documentation: SOURCE_FOOTPRINT.repositories[0].documentation,
+        tests: SOURCE_FOOTPRINT.repositories[0].tests,
+      },
+      repositories: [],
+      snapshotAt: null,
+    },
     today,
     totals: data.totals,
     cadence: weeklyCadence(data.cadence.filter((day) =>

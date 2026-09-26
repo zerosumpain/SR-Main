@@ -20,12 +20,24 @@ import type { OwnerReleasesData, PublicReleasesData } from './types';
 const SHA = 'deadbeefcafe1234';
 const SECRET_PATH = 'src/lib/server/secrets/vault.ts';
 const COMMIT_BODY = 'normalise the JID for the number that kept failing';
+const footprint = {
+  lines: 456789,
+  files: 2345,
+  categories: {
+    code: { lines: 456789, files: 2345 },
+    documentation: { lines: 120000, files: 200 },
+    tests: { lines: 90000, files: 600 },
+  },
+  repositories: [],
+  measuredAt: '2026-09-07T09:00:00Z',
+  snapshotAt: '2026-09-07T09:00:00Z',
+};
 
 function publicData(over: Partial<PublicReleasesData> = {}): PublicReleasesData {
   return {
     mode: 'public',
     today: '2026-09-25',
-    sourceFootprint: { lines: 456789, files: 2345, measuredAt: '2026-09-07T09:00:00Z' },
+    sourceFootprint: footprint,
     totals: {
       releases: 1004,
       commits: 2338,
@@ -60,7 +72,7 @@ function ownerData(over: Partial<OwnerReleasesData> = {}): OwnerReleasesData {
   return {
     mode: 'owner',
     today: '2026-09-25',
-    sourceFootprint: { lines: 456789, files: 2345, measuredAt: '2026-09-07T09:00:00Z' },
+    sourceFootprint: footprint,
     filters: { kind: 'all', impact: 'all', via: 'all', q: '', from: '', to: '', page: 0 },
     totals: {
       releases: 418,
@@ -121,6 +133,7 @@ function ownerData(over: Partial<OwnerReleasesData> = {}): OwnerReleasesData {
           },
         ],
         itemCount: 1,
+        corrected: false,
       },
     ],
     hasMore: true,
@@ -353,13 +366,27 @@ describe('weeklyCadence', () => {
   });
 });
 
- it('shows the same current-build count in both audiences alongside release history', () => {
+ it('shows code, documentation and test counts in both audiences alongside release history', () => {
    for (const data of [publicData(), ownerData()]) {
      const { body } = render(ReleasesHub, { props: { data } });
-     expect(body).toContain('Current source lines');
+     expect(body).toContain(data.mode === 'owner' ? 'Site code lines' : 'SR-Main code lines');
      expect(body).toContain('456,789');
-     expect(body).toContain('2,345 source files');
+     expect(body).toContain('120,000');
+     expect(body).toContain('90,000');
      expect(body).toContain('690,507');
-     expect(body).toContain('7 Sep');
    }
+ });
+
+ it('shows repository counts in the owner view only', () => {
+   const repository = {
+     id: 'health', name: 'SR-Health', url: 'https://github.com/zerosumpain/SR-Health',
+     role: 'Health', revision: '1234567890abcdef', measuredAt: '2026-09-07T09:00:00Z',
+     source: 'revision snapshot', code: { lines: 1000, files: 10 },
+     documentation: { lines: 200, files: 2 }, tests: { lines: 300, files: 3 },
+   };
+   const owner = html(ownerData({ sourceFootprint: { ...footprint, repositories: [repository] } }));
+   expect(owner).toContain('SR-Health');
+   expect(owner).toContain('12345678');
+   expect(owner).toContain('7 Sep');
+   expect(html(publicData())).not.toContain('SR-Health');
  });
