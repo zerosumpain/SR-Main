@@ -11,8 +11,10 @@
    * figures only: counts, distances, clock times and the names of places. No
    * map and no coordinates, by design (spec section 5).
    *
-   * One chart per concern — walking pace by week, time out by day — with the
-   * mode split as figures and the repeating trips as a table.
+   * Where the time went comes first — each named place's share of the
+   * window, then the journeys between places — because that is the question
+   * the page is opened with. Then time out by day, then how they travelled.
+   * One chart per concern, each with its table.
    */
   let { data }: { data: PageData } = $props();
 
@@ -53,7 +55,7 @@
             label: MODE_LABEL[b],
             value: String(t.count),
             suffix: t.count === 1 ? ' journey' : ' journeys',
-            sub: t.count ? `${km(t.metres)} km · ${dur(t.seconds)} · ${MODE_SUB[b]}` : MODE_SUB[b],
+            sub: t.count ? `${km(t.metres)} km · ${dur(t.seconds)}` : MODE_SUB[b],
             tone: t.count ? 'steady' : 'quiet',
           };
         })
@@ -86,27 +88,28 @@
     stats?.walkingPace
       ? [
           { key: 'median', label: 'Median', value: kmh(stats.walkingPace.medianMps), suffix: ' km/h', sub: 'half of walks were faster', lit: true },
-          { key: 'p75', label: 'Brisk (75th percentile)', value: kmh(stats.walkingPace.p75Mps), suffix: ' km/h', sub: 'a quarter of walks were faster' },
-          { key: 'n', label: 'Walks counted', value: String(stats.walkingPace.n), sub: '500 m or more, at walking speed' },
+          { key: 'p75', label: 'Brisk', value: kmh(stats.walkingPace.p75Mps), suffix: ' km/h', sub: '75th percentile: a quarter of walks were faster' },
+          { key: 'n', label: 'Walks', value: String(stats.walkingPace.n), sub: '500 m or more, at walking speed' },
         ]
       : [],
   );
 
   // ── Pace chart: weekly median, one line ─────────────────────────────────
   const PW = 600;
-  const PH = 150;
+  /** Shorter on a phone: the plot is a third as wide. */
+  const PH = $derived(paceW > 0 && paceW < 520 ? 110 : 150);
   const PL = 44; // room for the y labels
   const PT = 10;
-  /** Rendered width of each chart, so tick text can be sized in viewBox units
-   *  that come out at 12px on screen — a 600-wide viewBox on a phone would
-   *  otherwise shrink it to under 7px. Plain layout readings, drawn only. */
+  /** Rendered width of each plot. Once known, the viewBox is exactly that wide,
+   *  so a unit is a pixel: text is 12px and bars keep their shape at any width
+   *  instead of a 600-unit drawing being blown up to fill a desktop frame.
+   *  Before it is known (server render) the fixed widths stand in. */
   let paceW = $state(0);
   let outW = $state(0);
   const TICK_PX = 12;
-  const MAX_CHART_W = 720;
-  const tickUnits = (viewW: number, shownW: number) =>
-    shownW > 0 ? (TICK_PX * viewW) / Math.min(shownW, MAX_CHART_W) : TICK_PX;
-  const paceTick = $derived(tickUnits(PW, paceW));
+  const tickUnits = (viewW: number, shownW: number) => (shownW > 0 ? (TICK_PX * viewW) / shownW : TICK_PX);
+  const PWv = $derived(paceW > 0 ? paceW : PW);
+  const paceTick = $derived(tickUnits(PWv, paceW));
   const PB = $derived(paceTick + 10); // room for the x labels
   const weekly = $derived(stats?.walkingPace?.weekly ?? []);
   const paceRange = $derived.by(() => {
@@ -116,26 +119,66 @@
     const hi = Math.ceil(Math.max(...v) + 0.3);
     return { lo, hi: hi > lo ? hi : lo + 1 };
   });
-  const paceX = (i: number) => (weekly.length <= 1 ? PL + (PW - PL) / 2 : PL + 8 + (i / (weekly.length - 1)) * (PW - PL - 16));
+  const paceX = (i: number) => (weekly.length <= 1 ? PL + (PWv - PL) / 2 : PL + 8 + (i / (weekly.length - 1)) * (PWv - PL - 16));
   const paceY = (mps: number) => PT + (1 - (mps * 3.6 - paceRange.lo) / (paceRange.hi - paceRange.lo)) * (PH - PT - PB);
   const pacePath = $derived(weekly.map((w, i) => `${i ? 'L' : 'M'}${paceX(i)},${paceY(w.medianMps)}`).join(' '));
 
   // ── Time-out chart: minutes per day, bars ───────────────────────────────
   const BAR_W = 14;
   const GAP = 4;
-  const CH = 120;
-  const OW = $derived(outDays.length * (BAR_W + GAP) + 30);
+  const CH = $derived(outW > 0 && outW < 520 ? 80 : 120);
+  const OW = $derived(outW > 0 ? outW : outDays.length * (BAR_W + GAP) + 30);
+  /** Each day's slot, and the bar inside it: at most 22px wide. */
+  const slot = $derived(outDays.length ? (OW - 30) / outDays.length : BAR_W + GAP);
+  /** A date label is ~50px of mono and the last is pulled left to fit, so a
+   *  label every week where a week is 80px or wider, else every fortnight.
+   *  Counted back from today, which is always labelled. */
+  const outLabelEvery = $derived(slot * 7 < 80 ? 14 : 7);
+  const paceLabelEvery = $derived(weekly.length > 1 && (PWv - PL - 16) / (weekly.length - 1) < 80 ? 2 : 1);
+  const barW = $derived(Math.max(2, Math.min(slot - GAP, 22)));
   const outTick = $derived(tickUnits(OW, outW));
   const outMax = $derived(Math.max(60, ...outDays.map((d) => d.minutesOut)));
   const outCeilHours = $derived(Math.ceil(outMax / 60));
-  const lastWeek = $derived([...outDays].slice(-7).reverse());
+
+  // ── Where the time went ─────────────────────────────────────────────────
+  const TOP_PLACES = 10;
+  const pt = $derived(stats?.placeTime ?? null);
+  /** Top ten named places, then everything else as "elsewhere", then time on
+   *  the move, then what the trail did not see — so the shares add up. */
+  const timeRows = $derived.by(() => {
+    if (!pt || !pt.windowMinutes) return [];
+    const top = pt.places.slice(0, TOP_PLACES);
+    const rest = pt.places.slice(TOP_PLACES);
+    const share = (m: number) => m / pt.windowMinutes;
+    const rows: Array<{ key: string; label: string; minutes: number; share: number; visits: number | null; arrives: string | null; leaves: string | null; kind: 'place' | 'other' }> =
+      top.map((r) => ({ key: `p:${r.label}`, label: r.label, minutes: r.minutes, share: r.share, visits: r.visits, arrives: r.usualArrival, leaves: r.usualDeparture, kind: 'place' }));
+    const elsewhere = pt.unnamed.minutes + rest.reduce((n, r) => n + r.minutes, 0);
+    const elsewhereVisits = pt.unnamed.visits + rest.reduce((n, r) => n + r.visits, 0);
+    if (elsewhere > 0) rows.push({ key: 'elsewhere', label: 'Elsewhere / unnamed', minutes: elsewhere, share: share(elsewhere), visits: elsewhereVisits, arrives: null, leaves: null, kind: 'other' });
+    if (pt.transitMinutes > 0) rows.push({ key: 'moving', label: 'On the move', minutes: pt.transitMinutes, share: share(pt.transitMinutes), visits: null, arrives: null, leaves: null, kind: 'other' });
+    return rows;
+  });
+  const unseenMinutes = $derived(pt ? Math.max(0, pt.windowMinutes - timeRows.reduce((n, r) => n + r.minutes, 0)) : 0);
+  const pct = (share: number) => {
+    const v = share * 100;
+    return v > 0 && v < 1 ? '<1%' : `${Math.round(v)}%`;
+  };
+  /** Long stretches in days and hours; a whole month at home is not "731h". */
+  function span(mins: number): string {
+    if (mins < 48 * 60) return dur(mins * 60);
+    const d = Math.floor(mins / 1440);
+    const h = Math.round((mins % 1440) / 60);
+    return h ? `${d}d ${h}h` : `${d}d`;
+  }
+  const daysNewest = $derived([...outDays].reverse());
+  const allJourneySeconds = $derived(stats ? Object.values(stats.byMode).reduce((n, t) => n + t.seconds, 0) : 0);
 </script>
 
 <HomeFrame
   path="/home/people/{data.subject}"
   kicker="Home · People"
   title={[data.displayName, 'on the move']}
-  standfirst="Journeys, walking pace and the trips that repeat over the last {data.days} days, read off this person’s own trail. How someone travelled is inferred from speed, never known."
+  standfirst="Where the last {data.days} days went, read off this person’s own trail."
   {summary}
   footer={['strangeramblings.com/home/people', 'One person’s trail · seen by them and the owner only']}
 >
@@ -147,28 +190,194 @@
     <section class="band">
       <div class="inner">
         <SectionHead
-          kicker="A / How they got about"
-          title={['Journeys,', 'by mode']}
-          strap="Inferred from speed. GPS cannot tell running from cycling, and a straight motorway looks like a railway, so each count is a best guess from how fast the phone moved."
+          kicker="A / Where the time went"
+          title={['Time,', 'place by place']}
+          strap="Each named place’s share of the last {data.days} days. Arrives and leaves are the usual times on the house’s clock."
         />
-        <StatDeck tiles={modeTiles} min={200} />
+        {#if timeRows.length}
+          <div class="tbl-wrap">
+            <table class="tbl compact time">
+              <thead>
+                <tr>
+                  <th scope="col">Place</th>
+                  <th scope="col" class="right">Time</th>
+                  <th scope="col" class="share-col">Share</th>
+                  <th scope="col" class="right">Visits</th>
+                  <th scope="col" class="right">Arrives</th>
+                  <th scope="col" class="right">Leaves</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each timeRows as r (r.key)}
+                  <tr class:other={r.kind === 'other'}>
+                    <td class="cell-lead">{r.label}</td>
+                    <td class="right num">{span(r.minutes)}</td>
+                    <td class="share-col">
+                      <span class="share">
+                        <span class="share-track" aria-hidden="true"><span class="share-bar" style="width: {Math.min(100, r.share * 100)}%"></span></span>
+                        <span class="share-pct num">{pct(r.share)}</span>
+                      </span>
+                    </td>
+                    <td class="right num">{r.visits ?? '—'}</td>
+                    <td class="right num">{r.arrives ?? '—'}</td>
+                    <td class="right num">{r.leaves ?? '—'}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+          {#if unseenMinutes > 0}
+            <p class="note">The other {span(unseenMinutes)} ({pct(unseenMinutes / (pt?.windowMinutes || 1))}) the phone was quiet or between places too briefly to count.</p>
+          {/if}
+        {:else}
+          <p class="lede">No stay long enough to count in the window yet.</p>
+        {/if}
       </div>
     </section>
 
     <section class="band sunken">
       <div class="inner">
         <SectionHead
-          kicker="B / Walking pace"
-          title={['How fast,', 'on foot']}
-          strap="Each walk’s distance over its time, for walks of 500 m or more between 3.2 and 9 km/h. Slower is a stroll with stops; faster is a jog or a bike."
+          kicker="B / Between places"
+          title={['The journeys', 'that repeat']}
+          strap="Named place to named place, three times or more, with the time spent in transit. Name a place and its journeys count."
         />
+        {#if stats.commonTrips.length}
+          <div class="tbl-wrap">
+            <table class="tbl compact">
+              <thead>
+                <tr>
+                  <th scope="col">From</th>
+                  <th scope="col">To</th>
+                  <th scope="col" class="right">Times</th>
+                  <th scope="col" class="right">Usually leaves</th>
+                  <th scope="col" class="right">Median</th>
+                  <th scope="col" class="right">Total</th>
+                  <th scope="col">Mostly</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each stats.commonTrips as t (`${t.fromLabel}→${t.toLabel}`)}
+                  <tr>
+                    <td class="cell-lead">{t.fromLabel}</td>
+                    <td>{t.toLabel}</td>
+                    <td class="right num">{t.count}</td>
+                    <td class="right num">{t.usualDeparture}</td>
+                    <td class="right num">{dur(t.medianSeconds)}</td>
+                    <td class="right num">{dur(t.totalSeconds)}</td>
+                    <td>{MODE_LABEL[t.mode].toLowerCase()}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        {:else}
+          <p class="lede">No trip between two named places has come up three times yet.</p>
+        {/if}
+        {#if stats.roundTrips || totalJourneys}
+        <p class="note">
+          {#if stats.roundTrips}
+            Plus {stats.roundTrips.count} round trip{stats.roundTrips.count === 1 ? '' : 's'} out and back to the same place — median {dur(stats.roundTrips.medianSeconds)}, {dur(stats.roundTrips.totalSeconds)} in all.
+          {/if}
+          {#if totalJourneys}
+            {totalJourneys} journey{totalJourneys === 1 ? '' : 's'} in all, {dur(allJourneySeconds)} in transit.
+          {/if}
+        </p>
+        {/if}
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="inner">
+        <SectionHead
+          kicker="C / Time out"
+          title={['Away from', 'home, by day']}
+          strap="Leaving home to getting back, counted only when a journey began in between: a quiet phone at home is not time out."
+        />
+        {#if outDays.length}
+          <div class="chart" style="--tick: {outTick}px">
+            <p class="field-label">Hours out per day, last {outDays.length} days</p>
+            <div bind:clientWidth={outW}>
+            <svg
+              class="out"
+              viewBox="0 {-outTick * 1.2} {OW} {CH + outTick * 2.3 + 8}"
+              role="img"
+              aria-label="Hours away from home per day. Every day follows as a table."
+            >
+              <line x1="30" x2={OW} y1="4" y2="4" class="grid" />
+              <text x="0" y="0" class="tick">{outCeilHours}h</text>
+              <line x1="30" x2={OW} y1={CH} y2={CH} class="base" />
+              <text x="0" y={CH - 4} class="tick">0</text>
+              {#each outDays as d, i (d.date)}
+                {@const bh = d.minutesOut ? Math.max(2, (d.minutesOut / (outCeilHours * 60)) * (CH - 4)) : 0}
+                <g>
+                  <title>{dayLabel(d.date)}: {dur(d.minutesOut * 60)} out{d.firstOut ? `, first out ${d.firstOut}` : ''}{d.lastIn ? `, last in ${d.lastIn}` : ''}</title>
+                  <rect x={30 + i * slot} y="0" width={slot} height={CH} class="hit" />
+                  {#if bh}
+                    <rect x={30 + i * slot + (slot - barW) / 2} y={CH - bh} width={barW} height={bh} rx="2" class="bar" />
+                  {/if}
+                  {#if (outDays.length - 1 - i) % outLabelEvery === 0}
+                    <text
+                      x={i === outDays.length - 1 ? 30 + (i + 1) * slot : 30 + i * slot + slot / 2}
+                      y={CH + outTick + 4}
+                      text-anchor={i === outDays.length - 1 ? 'end' : 'middle'}
+                      class="tick">{shortLabel(d.date)}</text
+                    >
+                  {/if}
+                </g>
+              {/each}
+            </svg>
+            </div>
+          </div>
+
+          <details class="days">
+            <summary>Every day as a table</summary>
+            <div class="tbl-wrap">
+              <table class="tbl compact">
+                <caption class="vh">Time away from home, every day, newest first</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Day</th>
+                    <th scope="col" class="right">Out</th>
+                    <th scope="col" class="right">First out</th>
+                    <th scope="col" class="right">Last in</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each daysNewest as d (d.date)}
+                    <tr>
+                      <td class="cell-lead nowrap">{dayLabel(d.date)}</td>
+                      <td class="right num">{d.minutesOut ? dur(d.minutesOut * 60) : '—'}</td>
+                      <td class="right num">{d.firstOut ?? '—'}</td>
+                      <td class="right num">{d.lastIn ?? '—'}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        {:else}
+          <p class="lede">No home is named on the trail, so there is no “out” to measure yet.</p>
+        {/if}
+      </div>
+    </section>
+
+    <section class="band sunken">
+      <div class="inner">
+        <SectionHead
+          kicker="D / How they moved"
+          title={['Journeys,', 'and pace']}
+          strap="Inferred from speed, so a best guess: running looks like cycling and a motorway like a railway. Pace counts walks of 500 m or more at 3.2–9 km/h."
+        />
+        <div class="deck modes"><StatDeck tiles={modeTiles} min={120} /></div>
         {#if stats.walkingPace}
-          <StatDeck tiles={paceTiles} min={200} />
-          <div class="chart" bind:clientWidth={paceW} style="--tick: {paceTick}px">
-            <p class="field-label">Median pace by week (weeks start Monday)</p>
-            <svg class="pace" viewBox="0 0 {PW} {PH}" role="img" aria-label="Median walking pace by week, in km/h. The same figures follow as a table.">
+          <div class="deck paces"><StatDeck tiles={paceTiles} min={90} /></div>
+          <div class="chart" style="--tick: {paceTick}px">
+            <p class="field-label">Median pace by week, from Monday</p>
+            <div bind:clientWidth={paceW}>
+            <svg class="pace" viewBox="0 0 {PWv} {PH}" role="img" aria-label="Median walking pace by week, in km/h. The same figures follow as a table.">
               {#each [paceRange.lo, paceRange.hi] as v (v)}
-                <line x1={PL} x2={PW} y1={paceY(v / 3.6)} y2={paceY(v / 3.6)} class="grid" />
+                <line x1={PL} x2={PWv} y1={paceY(v / 3.6)} y2={paceY(v / 3.6)} class="grid" />
                 <text x={PL - 8} y={paceY(v / 3.6) + paceTick / 3} text-anchor="end" class="tick">{v}</text>
               {/each}
               {#if weekly.length > 1}<path d={pacePath} class="line" />{/if}
@@ -177,10 +386,18 @@
                   <title>Week of {shortLabel(w.weekStart)}: {kmh(w.medianMps)} km/h over {w.n} walk{w.n === 1 ? '' : 's'}</title>
                   <circle cx={paceX(i)} cy={paceY(w.medianMps)} r="12" class="hit" />
                   <circle cx={paceX(i)} cy={paceY(w.medianMps)} r="4.5" class="dot" />
-                  <text x={paceX(i)} y={PH - 4} text-anchor="middle" class="tick">{shortLabel(w.weekStart)}</text>
+                  {#if (weekly.length - 1 - i) % paceLabelEvery === 0}
+                  <text
+                    x={i === weekly.length - 1 && weekly.length > 1 ? PWv : paceX(i)}
+                    y={PH - 4}
+                    text-anchor={i === weekly.length - 1 && weekly.length > 1 ? 'end' : 'middle'}
+                    class="tick">{shortLabel(w.weekStart)}</text
+                  >
+                  {/if}
                 </g>
               {/each}
             </svg>
+            </div>
             <table class="vh">
               <caption>Median walking pace by week</caption>
               <thead><tr><th scope="col">Week starting</th><th scope="col">Median pace (km/h)</th><th scope="col">Walks</th></tr></thead>
@@ -196,124 +413,6 @@
         {/if}
       </div>
     </section>
-
-    <section class="band">
-      <div class="inner">
-        <SectionHead
-          kicker="C / Common trips"
-          title={['The journeys', 'that repeat']}
-          strap="From one named place to another, seen at least three times. A journey that starts or ends somewhere unnamed is not counted — name the place and it will be."
-        />
-        {#if stats.commonTrips.length}
-          <div class="tbl-wrap">
-            <table class="tbl compact">
-              <thead>
-                <tr>
-                  <th>From</th>
-                  <th>To</th>
-                  <th class="right">Times</th>
-                  <th class="right">Usually leaves</th>
-                  <th class="right">Takes</th>
-                  <th>Mostly</th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each stats.commonTrips as t (`${t.fromLabel}→${t.toLabel}`)}
-                  <tr>
-                    <td class="cell-lead">{t.fromLabel}</td>
-                    <td>{t.toLabel}</td>
-                    <td class="right num">{t.count}</td>
-                    <td class="right num">{t.usualDeparture}</td>
-                    <td class="right num">{dur(t.medianSeconds)}</td>
-                    <td>{MODE_LABEL[t.mode].toLowerCase()}</td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
-        {:else}
-          <p class="lede">No trip between two named places has come up three times yet.</p>
-        {/if}
-      </div>
-    </section>
-
-    <section class="band sunken">
-      <div class="inner">
-        <SectionHead
-          kicker="D / Time out"
-          title={['Away from', 'home, by day']}
-          strap="From leaving home to getting back, counted only when a journey began in between — a phone that went quiet at home overnight is not time out. Times are the house’s clock."
-        />
-        {#if outDays.length}
-          <div class="chart" bind:clientWidth={outW} style="--tick: {outTick}px">
-            <p class="field-label">Hours out per day, last {outDays.length} days</p>
-            <svg
-              class="out"
-              viewBox="0 {-outTick / 2} {OW} {CH + outTick * 1.6 + 8}"
-              role="img"
-              aria-label="Hours away from home per day. Every day follows as a table."
-            >
-              <line x1="30" x2={OW} y1="4" y2="4" class="grid" />
-              <text x="26" y={4 + outTick / 3} text-anchor="end" class="tick">{outCeilHours}h</text>
-              <line x1="30" x2={OW} y1={CH} y2={CH} class="base" />
-              <text x="26" y={CH + outTick / 3} text-anchor="end" class="tick">0</text>
-              {#each outDays as d, i (d.date)}
-                {@const bh = d.minutesOut ? Math.max(2, (d.minutesOut / (outCeilHours * 60)) * (CH - 4)) : 0}
-                <g>
-                  <title>{dayLabel(d.date)}: {dur(d.minutesOut * 60)} out{d.firstOut ? `, first out ${d.firstOut}` : ''}{d.lastIn ? `, last in ${d.lastIn}` : ''}</title>
-                  <rect x={30 + i * (BAR_W + GAP)} y="0" width={BAR_W + GAP} height={CH} class="hit" />
-                  {#if bh}
-                    <rect x={30 + i * (BAR_W + GAP) + GAP / 2} y={CH - bh} width={BAR_W} height={bh} rx="2" class="bar" />
-                  {/if}
-                  {#if (outDays.length - 1 - i) % 7 === 0}
-                    <text x={30 + i * (BAR_W + GAP) + (BAR_W + GAP) / 2} y={CH + outTick + 4} text-anchor="middle" class="tick">{shortLabel(d.date)}</text>
-                  {/if}
-                </g>
-              {/each}
-            </svg>
-            <table class="vh">
-              <caption>Time away from home, every day</caption>
-              <thead><tr><th scope="col">Day</th><th scope="col">Time out</th><th scope="col">First out</th><th scope="col">Last in</th></tr></thead>
-              <tbody>
-                {#each outDays as d (d.date)}
-                  <tr>
-                    <th scope="row">{dayLabel(d.date)}</th>
-                    <td>{d.minutesOut ? dur(d.minutesOut * 60) : 'none'}</td>
-                    <td>{d.firstOut ?? 'none'}</td>
-                    <td>{d.lastIn ?? 'none'}</td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
-
-          <div class="tbl-wrap week">
-            <table class="tbl compact">
-              <thead>
-                <tr>
-                  <th>Day</th>
-                  <th class="right">Out</th>
-                  <th class="right">First out</th>
-                  <th class="right">Last in</th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each lastWeek as d (d.date)}
-                  <tr>
-                    <td class="cell-lead nowrap">{dayLabel(d.date)}</td>
-                    <td class="right num">{d.minutesOut ? dur(d.minutesOut * 60) : '—'}</td>
-                    <td class="right num">{d.firstOut ?? '—'}</td>
-                    <td class="right num">{d.lastIn ?? '—'}</td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
-        {:else}
-          <p class="lede">No home is named on the trail, so there is no “out” to measure yet.</p>
-        {/if}
-      </div>
-    </section>
   {/if}
 </HomeFrame>
 
@@ -325,15 +424,111 @@
     position: relative;
     margin-top: clamp(20px, 2.4vw, 32px);
   }
-  .week {
-    margin-top: 22px;
-    max-width: 520px;
-  }
   svg {
     display: block;
     width: 100%;
-    max-width: 720px;
     height: auto;
+  }
+  .note {
+    margin: 14px 0 0;
+  }
+  /* Time per place: the share as a bar on a hairline track, its figure beside
+     it in text, so the bar is never the only carrier. */
+  .share-col {
+    width: 34%;
+    min-width: 120px;
+  }
+  .share {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .share-track {
+    flex: 1 1 auto;
+    height: 8px;
+    background: var(--line-hair);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .share-bar {
+    display: block;
+    height: 100%;
+    background: var(--accent-ink);
+    border-radius: 0 2px 2px 0;
+  }
+  tr.other .share-bar {
+    background: var(--text-muted);
+  }
+  tr.other .cell-lead {
+    color: var(--text-secondary);
+  }
+  .share-pct {
+    flex: 0 0 4ch;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .days {
+    margin-top: 18px;
+  }
+  /* Names stay on one line; a table wider than a phone scrolls inside its
+     own frame (.tbl-wrap), never the page. */
+  .tbl-wrap :global(td.cell-lead),
+  .tbl-wrap td {
+    white-space: nowrap;
+  }
+  .days summary {
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    padding: 6px 0;
+  }
+  .days summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .days .tbl-wrap {
+    margin-top: 8px;
+  }
+  /* How they moved: the four modes in a row (2×2 on a phone), the three pace
+     figures always in one row. StatDeck's auto-fit would stack them singly. */
+  .deck + .deck,
+  .deck + .chart {
+    margin-top: 12px;
+  }
+  .modes :global(.dk) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .paces :global(.dk) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  @media (max-width: 720px) {
+    .modes :global(.dk) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .paces :global(.dk) {
+      gap: 8px;
+    }
+    .deck :global(.dk-tile) {
+      padding: 12px;
+    }
+    .deck :global(.dk-value) {
+      font-size: 26px;
+    }
+    .paces :global(.dk-suffix) {
+      display: block;
+      margin: 4px 0 0;
+      font-size: 13px;
+    }
+    .paces :global(.dk-sub) {
+      display: none;
+    }
+    .share-col {
+      min-width: 110px;
+    }
   }
   .grid {
     stroke: var(--line-hair);
