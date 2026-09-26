@@ -9,7 +9,9 @@ vi.mock('$lib/jkai/development-workspace.server', () => ({ prepareDevelopmentPre
 import { POST } from '../../routes/api/jkai/development/[id]/+server';
 
 const local = process.env.JKAI_LOCAL_TESTS === '1' && /127\.0\.0\.1:15445\/workflows_jkai_local/.test(process.env.DATABASE_URL ?? '');
-describe.skipIf(!local)('feedback while a replacement preview is prepared', () => {
+// Keep this in the merge gate: its database is isolated and provisioned by CI.
+const ci = process.env.CI === 'true' && process.env.DATABASE_URL === 'postgresql://app:test@localhost:5432/strange_rambling';
+describe.skipIf(!local && !ci)('feedback while a replacement preview is prepared', () => {
   const id = crypto.randomUUID();
   const old = 'a'.repeat(40), next = 'b'.repeat(40);
   beforeAll(async () => {
