@@ -1,5 +1,5 @@
 import { getFromExtracted, postToExtracted } from './extracted-app';
-import type { SyncResult } from '$lib/health-sync/types';
+type SyncResult = { success: boolean; recordsSynced: number; errors: string[]; duration: number };
 
 export type WhoopStatus = { connected: boolean; valid: boolean };
 
