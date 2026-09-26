@@ -1,20 +1,20 @@
-import { getSetting } from '$lib/server/models/settings';
 import {
   hasFreshFix,
   pollAllSubjects,
   recordFix,
   recordGap,
-} from '$lib/daydream/observe';
+} from '$lib/home/presence/observe';
 import {
   DEFAULT_SUBJECT,
   FAMILY_SUBJECTS,
   OBSERVE_CADENCE_SECONDS,
-  SETTINGS_ENABLED_KEY,
   errMsg,
   type SubjectEntity,
-} from '$lib/daydream/types';
+} from '$lib/home/presence/types';
 import type { ActivityHandler } from '../types';
 
+// The name is the heartbeat_actions row's identity: it stays 'daydream-observe'
+// although the file moved, because renaming it would orphan the row.
 const NAME = 'daydream-observe';
 
 interface ObserveConfig {
@@ -49,7 +49,7 @@ const DEFAULTS: Required<Omit<ObserveConfig, 'subjects'>> = {
  *
  * No LLM, so cost is zero and the cadence can be short.
  */
-export const daydreamObserve: ActivityHandler = {
+export const homeObserve: ActivityHandler = {
   name: NAME,
   description:
     'Poll floor for the daydream trail. Records where the whole household is in one Home Assistant round trip — the push stream only covers John — and records an explicit per-subject gap row when it looks and cannot see, so coverage is computable rather than assumed. No LLM.',
@@ -69,12 +69,6 @@ export const daydreamObserve: ActivityHandler = {
         // The legacy personEntity override still steers the default subject.
         s.subject === DEFAULT_SUBJECT ? { ...s, entity: cfg.personEntity } : s,
       );
-
-    // Unset/null means enabled, matching the self-improvement engine.
-    const enabled = await getSetting<boolean>(SETTINGS_ENABLED_KEY);
-    if (enabled === false) {
-      return { outcome: 'skipped', summary: 'daydreaming disabled' };
-    }
 
     // The push stream only carries the default subject, so only that subject
     // may stand down on its freshness — everyone else is poll-only.

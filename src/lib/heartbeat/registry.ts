@@ -3,12 +3,12 @@ import { chatContinuation } from './activities/chat-continuation';
 import { conversationCheckin } from './activities/conversation-checkin';
 import { buildProgressCheck } from './activities/build-progress-check';
 import { workflowReview } from './activities/workflow-review';
-import { daydreamObserve } from './activities/daydream-observe';
+import { homeObserve } from './activities/home-observe';
 import { daydreamFeatures } from './activities/daydream-features';
 import { daydreamDigest } from './activities/daydream-digest';
 import { daydreamExplore } from './activities/daydream-explore';
 import { daydreamHypothesise } from './activities/daydream-hypothesise';
-import { daydreamPlacesRefresh } from './activities/daydream-places';
+import { homePlaces } from './activities/home-places';
 import { daydreamSignalsRefresh } from './activities/daydream-signals';
 import { daydreamSpendExtract } from './activities/daydream-spend';
 import { daydreamSweep } from './activities/daydream-sweep';
@@ -43,12 +43,12 @@ const handlers: ActivityHandler[] = [
   conversationCheckin,
   buildProgressCheck,
   workflowReview,
-  daydreamObserve,
+  homeObserve,
   daydreamFeatures,
   daydreamDigest,
   daydreamExplore,
   daydreamHypothesise,
-  daydreamPlacesRefresh,
+  homePlaces,
   daydreamSignalsRefresh,
   daydreamSpendExtract,
   daydreamSweep,

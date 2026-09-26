@@ -9,7 +9,7 @@
  * Excluded from the merge gate (`*.integration.test.ts`) because it needs a
  * reachable Home Assistant. Skips itself cleanly when there is none. Run it
  * deliberately:
- *   npx vitest run src/lib/daydream/backfill.integration.test.ts
+ *   npx vitest run src/lib/home/presence/backfill.integration.test.ts
  *
  * Writes under its own subject and deletes everything it wrote.
  */

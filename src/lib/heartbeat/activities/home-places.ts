@@ -1,9 +1,11 @@
-import { getSetting } from '$lib/server/models/settings';
-import { pruneTrail } from '$lib/daydream/observe';
-import { reconcileNamedPlaceThoughts, refreshPlaces } from '$lib/daydream/places';
-import { SETTINGS_ENABLED_KEY, TRAIL_RETENTION_DAYS } from '$lib/daydream/types';
+import { pruneTrail } from '$lib/home/presence/observe';
+import { refreshPlaces } from '$lib/home/presence/places';
+import { TRAIL_RETENTION_DAYS } from '$lib/home/presence/types';
+import { reconcileNamedPlaceThoughts } from '$lib/daydream/place-thoughts';
 import type { ActivityHandler } from '../types';
 
+// The name is the heartbeat_actions row's identity: it stays 'daydream-places'
+// although the file moved, because renaming it would orphan the row.
 const NAME = 'daydream-places';
 
 interface PlacesConfig {
@@ -33,7 +35,7 @@ const DEFAULTS: Required<PlacesConfig> = {
  * exists at all, so the first stretch of this action's life is honest, cheap,
  * and completely silent.
  */
-export const daydreamPlacesRefresh: ActivityHandler = {
+export const homePlaces: ActivityHandler = {
   name: NAME,
   description:
     'Reclusters the daydream trail into places hourly, refreshes their visit counts and rhythms, and prunes raw fixes past retention. A place needs one stay of 10+ still minutes to exist; a cluster the trail only passes through is retired as transit. No LLM.',
@@ -43,11 +45,6 @@ export const daydreamPlacesRefresh: ActivityHandler = {
 
   async run(ctx) {
     const cfg = { ...DEFAULTS, ...(ctx.config as PlacesConfig) };
-
-    const enabled = await getSetting<boolean>(SETTINGS_ENABLED_KEY);
-    if (enabled === false) {
-      return { outcome: 'skipped', summary: 'daydreaming disabled' };
-    }
 
     const refresh = await refreshPlaces({ windowDays: cfg.windowDays });
     const pruned = cfg.prune ? await pruneTrail(cfg.retentionDays) : 0;
