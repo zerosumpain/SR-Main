@@ -625,3 +625,76 @@ export async function getPlaceVisits(placeId: string, limit = 12): Promise<Place
       timeLabel: timeFmt.format(v.startedAt),
     }));
 }
+
+// ── The owner's places panel (/home/people/places) ──────────────────────────
+
+/** The radius the owner may set by hand, in metres. */
+export const RADIUS_MIN_M = 50;
+export const RADIUS_MAX_M = 2000;
+
+export interface PanelPlace {
+  id: string;
+  label: string | null;
+  kind: string;
+  radiusM: number;
+  radiusPinned: boolean;
+  alerts: boolean;
+  whatsappAlerts: boolean;
+  visitCount: number;
+  isHome: boolean;
+}
+
+/**
+ * Every named, active place, and home whether named or not — the places a
+ * crossing alert can be set on. Home first, then the most visited.
+ */
+export async function listPanelPlaces(): Promise<PanelPlace[]> {
+  const home = await getHomePlace();
+  const rows = await db
+    .select({
+      id: daydreamPlaces.id,
+      label: daydreamPlaces.label,
+      kind: daydreamPlaces.kind,
+      radiusM: daydreamPlaces.radiusM,
+      radiusPinned: daydreamPlaces.radiusPinned,
+      alerts: daydreamPlaces.alerts,
+      whatsappAlerts: daydreamPlaces.whatsappAlerts,
+      visitCount: daydreamPlaces.visitCount,
+    })
+    .from(daydreamPlaces)
+    .where(
+      and(
+        eq(daydreamPlaces.status, 'active'),
+        home ? sql`(${daydreamPlaces.label} is not null or ${daydreamPlaces.id} = ${home.id})` : isNotNull(daydreamPlaces.label),
+      ),
+    )
+    .orderBy(sql`${daydreamPlaces.visitCount} desc`, asc(daydreamPlaces.label));
+  const out = rows.map((r) => ({ ...r, isHome: r.id === home?.id }));
+  return [...out.filter((p) => p.isHome), ...out.filter((p) => !p.isHome)];
+}
+
+/**
+ * The owner's alert settings for one place. A radius set here is PINNED, so
+ * the places refresh stops re-deriving it. Null when there is no such place.
+ */
+export async function updatePlaceAlerts(
+  placeId: string,
+  patch: { alerts?: boolean; whatsappAlerts?: boolean; radiusM?: number },
+): Promise<{ id: string } | null> {
+  const set: Record<string, unknown> = { updatedAt: new Date() };
+  if (patch.alerts !== undefined) set.alerts = patch.alerts;
+  if (patch.whatsappAlerts !== undefined) set.whatsappAlerts = patch.whatsappAlerts;
+  if (patch.radiusM !== undefined) {
+    if (!Number.isFinite(patch.radiusM) || patch.radiusM < RADIUS_MIN_M || patch.radiusM > RADIUS_MAX_M) {
+      throw new Error(`radius must be ${RADIUS_MIN_M}–${RADIUS_MAX_M} m`);
+    }
+    set.radiusM = patch.radiusM;
+    set.radiusPinned = true;
+  }
+  const [row] = await db
+    .update(daydreamPlaces)
+    .set(set)
+    .where(eq(daydreamPlaces.id, placeId))
+    .returning({ id: daydreamPlaces.id });
+  return row ?? null;
+}
