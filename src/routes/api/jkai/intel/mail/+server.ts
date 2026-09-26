@@ -49,7 +49,7 @@ export const GET: RequestHandler = async (event) => {
 };
 
 export const POST: RequestHandler = async (event) => {
-  const scope = await resolveRequestScope(event);
+  const scope = await resolveRequestScope(event, 'write');
   let body: Record<string, unknown>;
   try {
     body = (await event.request.json()) as Record<string, unknown>;

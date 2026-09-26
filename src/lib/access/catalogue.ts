@@ -98,8 +98,8 @@ export const AREAS: readonly AreaInfo[] = [
     open: true,
     levels: {
       self: 'Own space + household',
-      all: "Also every other user's space",
-      admin: 'Same as all',
+      all: "Also read every other user's space",
+      admin: "Also triage everyone's held mail",
     },
   },
   {

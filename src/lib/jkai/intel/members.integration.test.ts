@@ -11,6 +11,7 @@ import {
   intelTimelineEvents,
 } from '$lib/db/schema';
 import { resolveRequestScope } from './scope.server';
+import { ensureBuiltInGroups } from '$lib/server/grants';
 
 // The PR B proof: a MEMBER session — a real allowed_user row with role
 // 'member' and a real principal, resolved by the REAL `resolveRequestScope` —
@@ -39,6 +40,12 @@ const TAG = `m${Math.random().toString(36).slice(2, 10)}`;
 const MEMBER_EMAIL = `member-${TAG}@example.test`;
 const GUEST_EMAIL = `guest-${TAG}@example.test`;
 const PRINCIPAL = `u_${TAG}`;
+// A second member holding `jkai.intel:all` through a one-off grant, and a third
+// holding only Family Circle: the groups era's two new shapes of member.
+const READER_EMAIL = `reader-${TAG}@example.test`;
+const READER = `u_r${TAG}`;
+const FAMILY_EMAIL = `family-${TAG}@example.test`;
+const FAMILY = `u_f${TAG}`;
 /** Words that appear in the owner's seeded rows and nowhere else. */
 const OWNER_SECRET = `Ownersecret${TAG}`;
 const MEMBER_WORD = `Memberthing${TAG}`;
@@ -96,8 +103,15 @@ describe.skipIf(!process.env.DATABASE_URL)('a member session sees only its own s
     await db.insert(allowedUser).values([
       { email: MEMBER_EMAIL, role: 'member', note: 'members.integration' },
       { email: GUEST_EMAIL, role: 'guest', note: 'members.integration' },
+      { email: READER_EMAIL, grants: ['jkai.intel:all'], note: 'members.integration' },
+      { email: FAMILY_EMAIL, groups: ['family-circle'], note: 'members.integration' },
     ]);
-    await db.insert(activityPrincipals).values({ id: PRINCIPAL, kind: 'user', externalRef: MEMBER_EMAIL, label: 'test member' });
+    await db.insert(activityPrincipals).values([
+      { id: PRINCIPAL, kind: 'user', externalRef: MEMBER_EMAIL, label: 'test member' },
+      { id: READER, kind: 'user', externalRef: READER_EMAIL, label: 'test reader' },
+      { id: FAMILY, kind: 'user', externalRef: FAMILY_EMAIL, label: 'test family' },
+    ]);
+    await ensureBuiltInGroups();
 
     const [type] = await db.select({ id: intelEntityTypes.id }).from(intelEntityTypes).limit(1);
 
@@ -145,13 +159,31 @@ describe.skipIf(!process.env.DATABASE_URL)('a member session sees only its own s
     if (notes.length) await db.delete(intelRelationships).where(inArray(intelRelationships.sourceNoteId, notes));
     if (entities.length) await db.delete(intelEntities).where(inArray(intelEntities.id, entities));
     if (notes.length) await db.delete(intelNotes).where(inArray(intelNotes.id, notes));
-    await db.delete(activityPrincipals).where(eq(activityPrincipals.id, PRINCIPAL));
-    await db.delete(allowedUser).where(inArray(allowedUser.email, [MEMBER_EMAIL, GUEST_EMAIL]));
+    await db.delete(activityPrincipals).where(inArray(activityPrincipals.id, [PRINCIPAL, READER, FAMILY]));
+    await db.delete(allowedUser).where(inArray(allowedUser.email, [MEMBER_EMAIL, GUEST_EMAIL, READER_EMAIL, FAMILY_EMAIL]));
   });
 
   it('resolves the member to their own space then household, and a guest to 403', async () => {
     expect([...(await resolveRequestScope(event(MEMBER_EMAIL)))]).toEqual([PRINCIPAL, 'household']);
     await expect(resolveRequestScope(event(GUEST_EMAIL))).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("an `all` reader reads the member's space and never the owner's; writes stay its own", async () => {
+    const scope = [...(await resolveRequestScope(event(READER_EMAIL)))];
+    expect(scope.slice(0, 2)).toEqual([READER, 'household']);
+    expect(scope).toContain(PRINCIPAL);
+    expect(scope).not.toContain('owner');
+    expect([...(await resolveRequestScope(event(READER_EMAIL), 'write'))]).toEqual([READER, 'household']);
+
+    const network = await import('../../../routes/api/jkai/intel/network/+server');
+    const res = await run(() => network.GET(event(READER_EMAIL, { url: 'http://test.local/api/jkai/intel/network' })));
+    expect(res.status).toBe(200);
+    expect(leaks(res.body)).toEqual([]);
+    expect(JSON.stringify(res.body)).toContain(MEMBER_WORD);
+  });
+
+  it('a member holding only Family Circle gets no intel at all', async () => {
+    await expect(resolveRequestScope(event(FAMILY_EMAIL))).rejects.toMatchObject({ status: 403 });
   });
 
   it('read APIs return none of the owner rows', async () => {
