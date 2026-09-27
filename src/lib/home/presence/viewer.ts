@@ -127,17 +127,18 @@ export function scopeHousehold(members: readonly HouseholdPresence[], viewer: Pe
 }
 
 /**
- * Which person pages a viewer may open, as subject → href. PURE. The owner may
- * open anyone's; a household viewer only their own. Decided here, beside the
- * guard on /home/people/[subject], so a card never offers a link that page
- * would refuse.
- */
 /** Whether a viewer may open this person's page: the owner anyone's, anyone else their own and their wards'. PURE. */
 export function mayOpenPerson(viewer: PeopleViewer, subject: string): boolean {
   return viewer.kind === 'owner' || subject === viewer.subject || (viewer.wards ?? []).includes(subject);
 }
 
+/**
+ * Whose movement a viewer may filter /home/people to, as subject → href. PURE.
+ * The owner anyone's; a household viewer their own and their wards'. Decided
+ * here, beside `mayOpenPerson`, so a card never offers a filter the load would
+ * ignore.
+ */
 export function personLinks(subjects: readonly string[], viewer: PeopleViewer): Record<string, string> {
   const open = viewer.kind === 'owner' ? subjects : subjects.filter((s) => mayOpenPerson(viewer, s));
-  return Object.fromEntries(open.map((s) => [s, `/home/people/${encodeURIComponent(s)}`]));
+  return Object.fromEntries(open.map((s) => [s, `/home/people?person=${encodeURIComponent(s)}#movement`]));
 }
