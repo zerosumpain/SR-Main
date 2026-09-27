@@ -14,6 +14,7 @@
     "local-plan-navigator",
     "jkai-core",
     "workflows",
+    "hex",
     "main"
   ],
   "apps": [
@@ -465,6 +466,49 @@
       "executionOwner": "Dedicated workflow worker; Canvas and workflow HTTP requests",
       "migrationAuthor": "main",
       "schemaExecutor": "main"
+    },
+    {
+      "key": "hex",
+      "repo": "zerosumpain/SR-Hex",
+      "status": "live",
+      "audience": "sr-hex",
+      "releaseDir": "/opt/sr-hex",
+      "configDir": "/etc/sr-hex",
+      "assetPrefix": "/projects/hex/assets",
+      "ports": {
+        "gateway": 5400,
+        "primary": 5402
+      },
+      "paths": [
+        "/projects/hex"
+      ],
+      "excludePaths": [],
+      "publicPatterns": [
+        {
+          "pattern": "^/projects/hex/api/health$",
+          "methods": [
+            "GET",
+            "HEAD"
+          ]
+        },
+        {
+          "pattern": "^/projects/hex/assets/.*$",
+          "methods": [
+            "GET",
+            "HEAD"
+          ]
+        }
+      ],
+      "passthroughPatterns": [],
+      "queueTriggers": [],
+      "note": "Owner-only hex conquest and PyTorch learning lab. Persistent checkpoints have one writer; single-slot releases briefly restart the API. Ollama stays on the private Compose network. Public assets and readiness carry no user data.",
+      "branch": "main",
+      "workflows": [
+        ".github/workflows/check.yml"
+      ],
+      "executionOwner": "Hex API and one in-process PyTorch training worker",
+      "migrationAuthor": "hex",
+      "schemaExecutor": "hex"
     }
   ]
 }
