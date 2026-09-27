@@ -15,6 +15,20 @@ import { readScript, deleteScript } from '$lib/workflows/scraper/script-store';
 import { runScript } from '$lib/workflows/scraper/script-runner';
 import { runScriptAuthor } from '$lib/workflows/scraper/script-author';
 import { assertScraperServiceRequest } from '$lib/workflows/scraper/service-auth';
+import { isOwnerRequest } from '$lib/server/owner';
+
+/**
+ * The local read/clear on homeserv. The hook lets this whole prefix through
+ * there (the VPS calls it with no session), so without a check here anyone who
+ * could reach homeserv over the LAN or the tailnet could read or delete every
+ * saved scraper script. Two callers are real: the VPS proxy below, which sends
+ * the service bearer, and the owner's own panel on homeserv. On the VPS the
+ * owner gate has already run and the request is proxied, never read here.
+ */
+async function assertLocalCaller(request: Request, locals: App.Locals, getClientAddress: () => string): Promise<void> {
+  if (await isOwnerRequest({ locals, getClientAddress })) return;
+  assertScraperServiceRequest(request);
+}
 
 function resolveProfile(url: URL): string {
   const p = url.searchParams.get('profile');
@@ -22,19 +36,21 @@ function resolveProfile(url: URL): string {
   return p;
 }
 
-export const GET: RequestHandler = async ({ url, request }) => {
+export const GET: RequestHandler = async ({ url, request, locals, getClientAddress }) => {
   const profile = resolveProfile(url);
   const remote = await maybeProxyToHomeserv('GET', profile, request);
   if (remote) return remote;
+  await assertLocalCaller(request, locals, getClientAddress);
   const r = await readScript(profile);
   if (!r) return json({ profile, code: null, meta: null });
   return json({ profile, code: r.code, meta: r.meta });
 };
 
-export const DELETE: RequestHandler = async ({ url, request }) => {
+export const DELETE: RequestHandler = async ({ url, request, locals, getClientAddress }) => {
   const profile = resolveProfile(url);
   const remote = await maybeProxyToHomeserv('DELETE', profile, request);
   if (remote) return remote;
+  await assertLocalCaller(request, locals, getClientAddress);
   const cleared = await deleteScript(profile);
   return json({ profile, cleared });
 };

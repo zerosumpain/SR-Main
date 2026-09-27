@@ -39,24 +39,45 @@ export interface BatteryReading {
   name: string;
   level: number;
   /**
-   * A person's phone rather than the house's kit (Life360, the HA companion
-   * app, a device tracker). Its level is where-they-are-adjacent data that
-   * /home/people deliberately scopes, so only the owner sees it here
-   * (`houseOnly`).
+   * Not the house's kit: a person's phone (Life360, the HA companion app, a
+   * device tracker), or anything from an integration that is not on
+   * `HOUSE_DOMAINS`. Only the owner sees these (`houseOnly`).
    */
   personal: boolean;
 }
 
-/** Integrations whose batteries are a person's phone, not the house's kit. */
-const PERSONAL_DOMAINS = new Set(['life360', 'mobile_app']);
+/**
+ * The integrations that are the HOUSE, and so may be shown to a member at
+ * `home:self`. An allowlist, not a denylist of people's integrations: the
+ * denylist it replaced (life360, mobile_app) let any personal integration added
+ * later — iCloud, a calendar, a watch, Spotify — show its title, device names
+ * and batteries to members the day it was installed (pre-invite audit,
+ * 2026-09-27). A new house integration stays owner-only until listed here.
+ */
+export const HOUSE_DOMAINS: ReadonlySet<string> = new Set([
+  'alexa_devices',
+  'hue',
+  'tado',
+  'ring',
+  'cast',
+  'braviatv',
+  'dlna_dmr',
+  'upnp',
+  'met',
+  'sun',
+  'backup',
+  'hacs',
+  'shopping_list',
+  'google_translate',
+]);
 
 /**
- * The summary with every person's phone taken out — for anyone but the owner:
- * their batteries, and the people integrations themselves (whose unavailable
- * entities are named after the person).
+ * The summary with everything but the house's kit taken out — for anyone but
+ * the owner: people's phones and trackers, and any integration not on
+ * `HOUSE_DOMAINS` (whose names and entities can be about a person).
  */
 export function houseOnly(summary: DevicesSummary): DevicesSummary {
-  const integrations = summary.integrations.filter((i) => !PERSONAL_DOMAINS.has(i.domain));
+  const integrations = summary.integrations.filter((i) => HOUSE_DOMAINS.has(i.domain));
   const counts: Record<Verdict, number> = { down: 0, degraded: 0, watch: 0, ok: 0, off: 0 };
   for (const i of integrations) counts[i.verdict]++;
   return {
@@ -167,7 +188,7 @@ export function summariseDevices(payload: DevicesPayload): DevicesSummary {
     if (!Number.isFinite(level)) continue;
     const domain = payload.entries?.[entryId]?.[0] ?? '';
     const personal =
-      PERSONAL_DOMAINS.has(domain) || entityId.startsWith('device_tracker.') || entityId.startsWith('person.');
+      !HOUSE_DOMAINS.has(domain) || entityId.startsWith('device_tracker.') || entityId.startsWith('person.');
     batteries.push({ entityId, name: name || entityId, level: Math.round(level), personal });
   }
   batteries.sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));

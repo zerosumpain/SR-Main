@@ -106,14 +106,18 @@ describe('houseOnly — a person’s phone is not the house’s kit', () => {
         e1: ['hue', 'Hue', 'loaded', 'None'],
         e2: ['life360', 'someone@example.test', 'loaded', 'None'],
         e3: ['mobile_app', 'Phone', 'loaded', 'None'],
+        // A personal integration nobody thought to deny: an allowlist hides it.
+        e4: ['icloud', 'Apple ID', 'loaded', 'None'],
       },
       rows: [
         ['e1', 'sensor.hall_motion_battery', '80', '2026-09-26T00:00:00Z', 'battery', null, 'Hall motion'],
         ['e2', 'device_tracker.someone', 'home', '2026-09-26T00:00:00Z', null, 41, 'Someone'],
         ['e3', 'sensor.phone_battery_level', '12', '2026-09-26T00:00:00Z', 'battery', null, 'Phone battery'],
+        ['e4', 'sensor.watch_battery', '55', '2026-09-26T00:00:00Z', 'battery', null, 'Watch'],
+        ['e4', 'sensor.icloud_macbook', 'unavailable', '2026-09-26T00:00:00Z', null, null, 'MacBook'],
       ],
     } as never);
-    expect(summary.batteries.map((b) => b.name).sort()).toEqual(['Hall motion', 'Phone battery', 'Someone']);
+    expect(summary.batteries.map((b) => b.name).sort()).toEqual(['Hall motion', 'Phone battery', 'Someone', 'Watch']);
     const house = houseOnly(summary);
     expect(house.batteries.map((b) => b.name)).toEqual(['Hall motion']);
     expect(house.integrations.map((i) => i.domain)).toEqual(['hue']);

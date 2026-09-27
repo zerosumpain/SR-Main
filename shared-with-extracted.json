@@ -177,11 +177,17 @@
       "sha256": "0500e5eed1ecfed42cfa3dacd09799ba73b28df69faddcacebcd7423d88f89c7"
     },
     "src/lib/access/catalogue.ts": {
-      "peer": "zerosumpain/SR-Drive",
+      "peer": [
+        "zerosumpain/SR-Drive",
+        "zerosumpain/SR-Jkai-Core"
+      ],
       "sha256": "7a9e5db0a4a1e3a6c453886050cce86d14376ffe600e430e47b2428cb9c4e6ac"
     },
     "src/lib/access/effective.ts": {
-      "peer": "zerosumpain/SR-Drive",
+      "peer": [
+        "zerosumpain/SR-Drive",
+        "zerosumpain/SR-Jkai-Core"
+      ],
       "sha256": "224a23e52fafc16ddb49fca77f0bb8f9dd8dfb74fe4b40aa696f50541b8c8f83"
     },
     "src/lib/server/area-predicates.ts": {
