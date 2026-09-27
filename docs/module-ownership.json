@@ -781,6 +781,28 @@
       ]
     },
     {
+      "id": "hex",
+      "repository": "zerosumpain/SR-Hex",
+      "paths": [
+        "/projects/hex"
+      ],
+      "excludedPaths": [],
+      "stagedPaths": [],
+      "assetPrefix": "/projects/hex/assets",
+      "ports": {
+        "gateway": 5400,
+        "primary": 5402
+      },
+      "workflows": [
+        ".github/workflows/check.yml"
+      ],
+      "executionOwner": "Hex API and one in-process PyTorch training worker",
+      "migrationAuthor": "zerosumpain/SR-Hex",
+      "schemaExecutor": "zerosumpain/SR-Hex",
+      "requiredTables": [],
+      "database": "none"
+    },
+    {
       "id": "main",
       "repository": "zerosumpain/SR-Main",
       "paths": [

@@ -47,6 +47,17 @@ export interface ProjectCard {
 
 export const PROJECT_CARDS: ProjectCard[] = [
   {
+    key: 'hex',
+    href: '/projects/hex/',
+    label: 'Open Hex',
+    kind: 'Game',
+    tag: 'Playable · Owner sign-in',
+    title: 'Hex',
+    blurb:
+      'Build a world, choose your rivals, and play for the frontier. An isometric hex conquest game with configurable maps and players, a reinforcement-learning lab, and a rule forge that turns your ideas into new game mechanics. Play a turn yourself, watch the AI compete, or let it learn through thousands of headless matches.',
+    chips: 'turn-based conquest · PyTorch · custom rules · independent app',
+  },
+  {
     key: 'policy-analysis',
     // Another application answers this path — cloudflared routes
     // /projects/policy-analysis to SR-Policy-Analysis, never to Main. The card
