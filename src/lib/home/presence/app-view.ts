@@ -40,7 +40,6 @@ import type { HouseholdMember } from './members';
 import { nowStatus, nowSub, type NowStatus } from './now';
 import { ABSURD_SPEED_KMH, LOCAL_TZ, MAX_USABLE_ACCURACY_M, activeLabels, errMsg, localDayStart } from './types';
 import { peopleViewerForEmail, scopeHousehold, type PeopleViewer, type ScopedPresence } from './viewer';
-import { isOwnerEmail } from '$lib/server/access';
 import { appAccessForEmail, type AppAccess } from '$lib/server/app-access';
 import { createPairingCode, isPairingCodeLive } from '$lib/server/native-auth';
 
@@ -572,6 +571,7 @@ export interface AppViewsResult {
 export function attachPreviews(
   views: ReadonlyArray<{ email: string; view: AppHouseholdView }>,
   users: readonly HouseholdUser[],
+  isOwnerEmail: (email: string) => boolean,
 ): Array<{ email: string; view: AppHouseholdView }> {
   const nameOf = new Map(users.map((u) => [String(u.email ?? '').trim().toLowerCase(), u.name]));
   return views.map((entry) => {
@@ -682,7 +682,7 @@ export async function pushAppViews(
     }
   }
 
-  const withPreviews = attachPreviews(views, users);
+  const withPreviews = attachPreviews(views, users, (email) => accessBy.get(email)?.owner === true);
 
   try {
     const res = await fetchImpl(`${companionUrl()}/api/apple/household/views`, {

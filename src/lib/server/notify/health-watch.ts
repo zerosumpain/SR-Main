@@ -30,7 +30,7 @@ import { notificationWatermarks } from '$lib/db/schema';
 import { getNativeHealthSummary, type NativeHealthSummary } from '$lib/server/native-health';
 import { notifyOwner, pruneEvents } from './index';
 import { emit as emitPlatformEvent } from '$lib/events/platform-bus';
-import { LOCAL_TZ } from '$lib/home/presence/types';
+import { HEALTH_TIMEZONE } from '$lib/constants/health-day';
 
 const WATERMARK_ID = 'health';
 
@@ -39,7 +39,7 @@ const ONCE_A_DAY_S = 24 * 60 * 60;
 
 /** "2026-09-27" in the owner's time zone, not UTC's. */
 export function localDayKey(at: Date): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: LOCAL_TZ }).format(at);
+  return new Intl.DateTimeFormat('en-CA', { timeZone: HEALTH_TIMEZONE }).format(at);
 }
 
 /** Fifteen minutes. Far under the floor, deliberately — see above. */
