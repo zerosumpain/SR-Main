@@ -103,3 +103,55 @@ export function actAsDeviceMember(locals: App.Locals, member: DeviceMember): voi
   const session = { user: { email }, expires: member.identity.expiresAt.toISOString() };
   locals.auth = async () => session;
 }
+
+/**
+ * "View as", sent by the OWNER's phone: the email of the person the app is
+ * being viewed as. Lower-cased and trimmed by the reader.
+ */
+export const VIEW_AS_HEADER = 'x-sr-view-as';
+
+export type NativeViewAs =
+  | { kind: 'none' }
+  | { kind: 'as'; member: DeviceMember }
+  | { kind: 'refused'; status: number; error: string };
+
+/**
+ * Whether this request asks to be answered as somebody else — the app's
+ * Settings → View as — and if so, as whom.
+ *
+ * The web has the same thing behind a signed cookie ($lib/server/view-as). A
+ * phone needs no signature: the header is only honoured on a live device
+ * credential held by the OWNER, which is already the strongest thing the lane
+ * knows, and the answer is then exactly what that person's own phone would
+ * get — `actAsDeviceMember` as them, their grants read fresh. Only reads: a
+ * look must not post in their threads or act on their stories, so anything but
+ * GET/HEAD is refused.
+ *
+ * Refused loudly, never ignored: a header from anybody but the owner, or naming
+ * somebody who is not a member, would otherwise fall back to answering as the
+ * device's holder — which is precisely the wrong data the preview exists to
+ * catch.
+ */
+export async function nativeViewAs(request: Request, identity: NativeIdentity): Promise<NativeViewAs> {
+  const raw = request.headers.get(VIEW_AS_HEADER);
+  if (raw === null) return { kind: 'none' };
+  const email = raw.trim().toLowerCase();
+  if (!isOwnerEmail(identity.ownerEmail)) {
+    return { kind: 'refused', status: 403, error: 'Only the owner can view the app as someone else.' };
+  }
+  if (!email || isOwnerEmail(email)) return { kind: 'none' };
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return { kind: 'refused', status: 403, error: 'View as is look-only: exit it to make changes.' };
+  }
+  const member = await loadMember(email).catch((err) => {
+    console.error('[native] view-as lookup failed:', err);
+    return null;
+  });
+  // What their own phone would hear: `withNativeAccess` says exactly this to
+  // a credential whose email is no member.
+  if (!member) return { kind: 'refused', status: 403, error: 'This account can no longer use the app.' };
+  return {
+    kind: 'as',
+    member: { identity: { ...identity, ownerEmail: email }, principalId: member.principalId, grants: member.grants },
+  };
+}
