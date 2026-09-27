@@ -368,7 +368,8 @@
         "/api/jkai/development",
         "/api/jkai/monitors",
         "/api/jkai/run-snippet",
-        "/api/jkai/forge"
+        "/api/jkai/forge",
+        "/api/jkai/backlog"
       ],
       "publicPatterns": [
         "^/jkai/shared/[^/]+(?:/__data.json)?/?$"
