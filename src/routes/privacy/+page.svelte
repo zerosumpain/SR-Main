@@ -52,13 +52,16 @@
     can see.
   </p>
   <p>
-    A connected mailbox is read once a night, and most of it is left alone. A thread is only taken in
-    if it's with someone you write to yourself and an automatic check agrees it's real correspondence
-    rather than a receipt or a notification, or if you've starred it or given it the label "intel". Those
-    threads are the only ones whose text is read in full: they become notes and facts in your own private
-    knowledge graph, and to do that their text is sent to the AI model providers the site uses (currently
-    OpenAI, OpenRouter and Z.ai) under their API terms. Every other recent thread is kept only as its
-    subject, who was on it and the date, and that is deleted after 14 days. I don't use any of it to
+    A connected mailbox is read at least once a night (I can also run it by hand), and most of it is left
+    alone. To know who you write to, the site reads the To and Cc lines of your sent mail from the past
+    year and keeps only a one-way hash of each address. A thread is only taken in if you've starred it or
+    given it the label "intel", or if it's with someone you write to and an automatic check agrees it's
+    real correspondence rather than a receipt or a notification. That check sends the thread's subject,
+    who was on it and its first 1,500 or so characters to an AI model, whichever way it decides. Threads
+    that are taken in become notes and facts in your own private knowledge graph, and to do that their
+    full text is sent to the AI model providers the site uses (currently OpenAI, OpenRouter and Z.ai)
+    under their API terms. Every other recent thread is kept only as its subject, who was on it and the
+    date, and that is deleted after 14 days. I don't use any of it to
     train models, I don't sell it, and I don't use it for advertising. The access tokens Google issues
     are stored encrypted.
   </p>
@@ -70,8 +73,10 @@
   <p>
     You can take the access away whenever you like, from the site or from your
     <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">Google account's third-party access page</a>.
-    Disconnecting a mailbox on the site deletes what was taken from it: the notes made from its mail,
-    the graph facts drawn from them, its search index and any attachments that were saved.
+    When I disconnect a mailbox on the site, what was taken from it is deleted: the notes made from its
+    mail, the graph facts drawn from them, its search index and any attachments that were saved. If you
+    take the access away from Google's side instead, or you'd just like it gone, ask me and I'll delete
+    what was read from your mailbox.
   </p>
 
   <h2>Keeping and deleting</h2>

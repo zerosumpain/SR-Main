@@ -63,13 +63,6 @@ An entity's `summary` is an LLM-distilled ~200-300 char description. Instead of 
 ### Structured navigation
 `intel_find` → `intel_neighbourhood` gives the N-hop neighbourhood of any entity. That replaces reading N source files to trace connections manually.
 
-### Rule-based analytics cost nothing
-The `intel_insights` system is **deliberately rule-based, not LLM-generated** (see `src/lib/jkai/intel/analytics/insights.ts`):
-
-> *"Each detector is a pure function over the analysis snapshot returning zero or more findings. They are deliberately RULE-BASED rather than LLM-generated: a detector that fires on a measurable structural condition can be trusted, explained, and tested, whereas 'ask a model what's interesting' produces confident prose about things that aren't there."*
-
-The LLM only phrases the natural-language output. The structural computation costs zero tokens.
-
 ## Available Tools
 
 | Tool | What it does |
@@ -77,34 +70,6 @@ The LLM only phrases the natural-language output. The structural computation cos
 | `intel_find` | Find entities by name or partial name. Returns type, connection count, broker status. Use this first to get an entity ID. |
 | `intel_neighbourhood` | Walk the N-hop neighbourhood of an entity. Returns connected entities grouped by hop distance with relationship descriptions. |
 | `intel_path` | Trace how two entities are connected — the chain of relationships between them, and alternative routes. |
-| `intel_insights` | Graph-wide structural analytics (brokers, unlikely relations, missing links, etc.). **Now accepts an optional `query` parameter** — when provided, scopes the analysis to entities semantically related to that topic and returns the matching entities alongside the scoped insights. Omit `query` for the full graph-wide view. See `src/lib/workflows/site-tools/tools/intel-graph.ts` for the dual-mode handler. |
-| `intel_unlikely_relations` | Surprising connections — pairs that sit in different clusters but are connected. |
-
-## Insight Types (from `intel_insights`)
-
-| Kind | What it detects | Action |
-|------|----------------|--------|
-| `broker` | Entities bridging separate clusters | Deep-dive research |
-| `unlikely_relation` | Connected entities that shouldn't be | Ask jkai why |
-| `missing_link` | Entities that should be connected but aren't | Confirm the link |
-| `orphan` | Entities with zero relationships | Review extraction quality |
-| `isolated_cluster` | A component disconnected from the main graph | Research the connection |
-| `emerging_hub` | New entity already well-connected | Briefing |
-| `stale_hub` | Well-connected entity gone quiet | Refresh research |
-| `thin_evidence` | Entity with many connections from a single source | Corroborate |
-| `type_outlier` | Entity types with ≤2 members | Tidy types |
-| `dominant_cluster` | One cluster >70% of the graph | Review relationship quality |
-
-## `intel_insights` Query Mode (added 2026-08-08)
-
-When the `query` parameter is provided, `intel_insights` works in two phases:
-
-1. **Entity search**: Uses `searchIntel` (semantic embedding + keyword) to find the top-N entities matching the query, plus a name substring fallback through the analysis index (catches entities whose name matches but whose embedding didn't rank them top-N)
-2. **Insight filtering**: Filters the graph-wide insights to only those involving the matched entities
-
-Returns both `data.entities` (matched entities with type, summary, connections) and `data.insights` (scoped brokers, unlikely relations, missing links, etc.).
-
-**Implementation:** `src/lib/workflows/site-tools/tools/intel-graph.ts` (the `intel_insights` handler). The entity search uses `searchIntel` from `$lib/jkai/intel/search` (lazy-imported) and unions its results with a name substring pass through the cached graph analysis for coverage.
 
 ## Key Source Files
 

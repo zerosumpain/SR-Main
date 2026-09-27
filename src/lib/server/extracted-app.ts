@@ -85,6 +85,13 @@ async function call<T>(
 				});
 			},
 		);
+		// `timeout` above is a socket IDLE timeout: a response that trickles in
+		// never trips it. This caps the whole call, so a caller's budget holds.
+		const deadline = setTimeout(() => {
+			request.destroy(new ExtractedAppError(`${app}${path} exceeded ${timeoutMs}ms`));
+		}, timeoutMs);
+		deadline.unref?.();
+		request.on('close', () => clearTimeout(deadline));
 		request.on('timeout', () => {
 			// destroy() does not itself reject; the 'error' handler below does.
 			request.destroy(new ExtractedAppError(`${app}${path} timed out after ${timeoutMs}ms`));

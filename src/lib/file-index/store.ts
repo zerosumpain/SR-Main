@@ -183,7 +183,9 @@ export async function indexFile(fileId: string): Promise<IndexResult> {
       kind: 'file',
       refId: fileId,
       title: row.name,
-      text: content.text,
+      // Core's extractor reads the first 24,000 characters and dedupes on the
+      // precomputed hash, so the rest would only sit in the outbox for a week.
+      text: content.text.slice(0, 24_000),
       contentHash: hash,
       metadata: { mimeType: row.mimeType, modality: content.modality, sourceUrl: '/drive' },
     }).catch((err) =>
