@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   oauthTokens,
-  stravaActivities,
   whoopWorkouts,
   whoopSleep,
   whoopRecovery,
@@ -20,42 +19,6 @@ describe('health database schema', () => {
       expect(oauthTokens.expiresAt).toBeDefined();
       expect(oauthTokens.createdAt).toBeDefined();
       expect(oauthTokens.updatedAt).toBeDefined();
-    });
-  });
-
-  describe('stravaActivities', () => {
-    it('has expected core columns', () => {
-      expect(stravaActivities.id).toBeDefined();
-      expect(stravaActivities.name).toBeDefined();
-      expect(stravaActivities.type).toBeDefined();
-      expect(stravaActivities.sportType).toBeDefined();
-      expect(stravaActivities.startDate).toBeDefined();
-      expect(stravaActivities.startDateLocal).toBeDefined();
-      expect(stravaActivities.timezone).toBeDefined();
-    });
-
-    it('has metric columns', () => {
-      expect(stravaActivities.distance).toBeDefined();
-      expect(stravaActivities.movingTime).toBeDefined();
-      expect(stravaActivities.elapsedTime).toBeDefined();
-      expect(stravaActivities.totalElevationGain).toBeDefined();
-      expect(stravaActivities.averageSpeed).toBeDefined();
-      expect(stravaActivities.maxSpeed).toBeDefined();
-    });
-
-    it('has heart rate columns', () => {
-      expect(stravaActivities.averageHeartrate).toBeDefined();
-      expect(stravaActivities.maxHeartrate).toBeDefined();
-    });
-
-    it('has map data columns', () => {
-      expect(stravaActivities.mapData).toBeDefined();
-      expect(stravaActivities.startLatLng).toBeDefined();
-      expect(stravaActivities.endLatLng).toBeDefined();
-    });
-
-    it('has sync metadata', () => {
-      expect(stravaActivities.syncedAt).toBeDefined();
     });
   });
 

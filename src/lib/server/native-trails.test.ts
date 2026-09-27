@@ -336,7 +336,7 @@ describe('segments', () => {
 describe('ids, cursors and failures', () => {
   it('accepts a source-prefixed activity id and nothing that could escape the path', () => {
     expect(isActivityId('apple:6F9619FF-8B86-D011-B42D-00C04FC964FF')).toBe(true);
-    expect(isActivityId('strava:12345')).toBe(true);
+    expect(isActivityId('imported:12345')).toBe(true);
     expect(isActivityId('ABC')).toBe(false);
     expect(isActivityId('apple:../../admin')).toBe(false);
     expect(isActivityId('apple:a/b')).toBe(false);

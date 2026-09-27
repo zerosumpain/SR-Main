@@ -119,7 +119,6 @@ This skill includes comprehensive documentation in `references/`:
 
 - **api.md** - Api documentation
 - **dataset-formats.md** - Dataset-Formats documentation
-- **other.md** - Other documentation
 
 Use `view` to read specific reference files when detailed information is needed.
 

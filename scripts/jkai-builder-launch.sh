@@ -17,7 +17,7 @@ keep=(
 )
 
 # This list is intentionally explicit. Authentication cookies, OAuth client
-# secrets, mail credentials, Home Assistant tokens, WebDAV credentials and
+# secrets, mail credentials, Home Assistant tokens and
 # unrelated integration keys must never enter the builder process.
 allowed=(
   DATABASE_URL BUILDER_GATE_DATABASE_URL

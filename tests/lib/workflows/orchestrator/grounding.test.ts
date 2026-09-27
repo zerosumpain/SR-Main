@@ -23,7 +23,7 @@ const mockDef: NodeDefinition = {
 
 const mockExecution = {
   nodeType: 'http-request',
-  inputData: { url: 'https://api.strava.com/activities', headers: { Authorization: 'Bearer xxx' } },
+  inputData: { url: 'https://api.imported.com/activities', headers: { Authorization: 'Bearer xxx' } },
   outputData: { status: 200, body: { activities: [{ id: 1, name: 'Morning Run' }] } },
 };
 
@@ -57,7 +57,7 @@ describe('buildNodeGrounding', () => {
   it('includes execution examples when provided', () => {
     const result = buildNodeGrounding([mockDef], [mockExecution]);
     expect(result).toContain('**Real usage example:**');
-    expect(result).toContain('strava.com');
+    expect(result).toContain('imported.com');
   });
 
   it('omits execution examples when none match', () => {

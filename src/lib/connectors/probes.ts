@@ -224,8 +224,8 @@ async function probeHaSensors(): Promise<ConnectorReport> {
 // Whoop — getValidToken performs a real refresh when expired.
 //
 // A valid token is NOT the same as a working sync, and conflating the two is
-// how Strava sat broken for five weeks while this page said "ok": the refresh
-// kept succeeding and every fetch came back 403. Strava has since been removed
+// how historical activity sat broken for five weeks while this page said "ok": the refresh
+// kept succeeding and every fetch came back 403. historical activity has since been removed
 // entirely, but the lesson is Whoop's now — so the token check is only the first
 // half, and the second asks the sync-state row whether the last run actually
 // landed, and how long ago the last one that did was.
@@ -310,7 +310,7 @@ async function probeOAuthHealth(service: 'whoop'): Promise<ConnectorReport> {
       // fault from a bad grant: the refresh endpoint keeps handing out fresh
       // tokens, and reconnecting can never fix it because there is nothing
       // wrong with the user's consent. Sending someone to "Reconnect" here is a
-      // loop they cannot win, so it gets its own branch. Strava did exactly
+      // loop they cannot win, so it gets its own branch. historical activity did exactly
       // this before it was removed; Whoop could.
       const appInactive = /\bapplication\b/i.test(why) && /\binactive\b/i.test(why);
       if (appInactive) {

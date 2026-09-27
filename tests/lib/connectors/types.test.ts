@@ -35,10 +35,10 @@ describe('what the landing banner counts', () => {
   it('counts accounts that are broken or stalled', () => {
     const reports = [
       r({ key: 'gmail:1', tier: 'account', status: 'broken' }),
-      r({ key: 'strava', tier: 'account', status: 'degraded' }),
+      r({ key: 'imported', tier: 'account', status: 'degraded' }),
       r({ key: 'whoop', tier: 'account', status: 'ok' }),
     ];
-    expect(needsResync(reports).map((x) => x.key)).toEqual(['gmail:1', 'strava']);
+    expect(needsResync(reports).map((x) => x.key)).toEqual(['gmail:1', 'imported']);
   });
 
   it('ignores infrastructure — a dead LLM key is not an account to resync', () => {
@@ -55,22 +55,22 @@ describe('what the landing banner counts', () => {
   });
 
   it('ignores dormant accounts — parked on purpose is not waiting to be resynced', () => {
-    const reports = [r({ key: 'strava', tier: 'account', status: 'dormant' })];
+    const reports = [r({ key: 'imported', tier: 'account', status: 'dormant' })];
     expect(needsResync(reports)).toEqual([]);
   });
 });
 
 describe('dormant connectors', () => {
   it('is not counted as broken', () => {
-    expect(brokenOf([r({ key: 'strava', status: 'dormant' })])).toEqual([]);
+    expect(brokenOf([r({ key: 'imported', status: 'dormant' })])).toEqual([]);
   });
 
   it('sorts below everything else — there is nothing to act on', () => {
     const sorted = sortReports([
-      r({ key: 'strava', label: 'Strava', status: 'dormant' }),
+      r({ key: 'imported', label: 'Imported', status: 'dormant' }),
       r({ key: 'whoop', label: 'Whoop', status: 'ok' }),
       r({ key: 'gmail', label: 'Gmail', status: 'broken' }),
     ]);
-    expect(sorted.map((x) => x.key)).toEqual(['gmail', 'whoop', 'strava']);
+    expect(sorted.map((x) => x.key)).toEqual(['gmail', 'whoop', 'imported']);
   });
 });

@@ -56,7 +56,7 @@ describe('GET /api/maps/config', () => {
   });
 
   it('refuses a credential of the wrong kind or integration', async () => {
-    store.credential = cred('pk.eyJ1IjoieCJ9.aaaaaaaa', { integrationType: 'strava' });
+    store.credential = cred('pk.eyJ1IjoieCJ9.aaaaaaaa', { integrationType: 'imported' });
     expect(await mapboxConfig()).toBeNull();
     store.credential = cred('pk.eyJ1IjoieCJ9.aaaaaaaa', { kind: 'oauth' });
     expect(await mapboxConfig()).toBeNull();

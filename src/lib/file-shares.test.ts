@@ -20,7 +20,7 @@ describe('who may share what', () => {
     expect(isAgentCreated(null)).toBe(false);
     expect(isAgentCreated(undefined)).toBe(false);
     expect(isAgentCreated('')).toBe(false);
-    expect(isAgentCreated('webdav')).toBe(false);
+    expect(isAgentCreated('client-upload')).toBe(false);
   });
 });
 

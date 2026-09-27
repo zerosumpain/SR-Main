@@ -53,7 +53,7 @@ export interface TrainingLoadResponse {
   chronic: number;
   ratio: number;
   zone: 'detraining' | 'undertraining' | 'optimal' | 'caution' | 'danger';
-  source?: 'whoop' | 'strava' | 'none';
+  source?: 'whoop' | 'none';
   history: Array<{ date: string; load: number }>;
 }
 
@@ -66,7 +66,7 @@ export interface SparklineData {
 
 export interface TimelineEvent {
   id: string;
-  type: 'strava_activity' | 'whoop_workout' | 'whoop_sleep' | 'whoop_recovery';
+  type: 'whoop_workout' | 'whoop_sleep' | 'whoop_recovery';
   date: string;
   title: string;
   summary: Record<string, string | number>;

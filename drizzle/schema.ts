@@ -312,31 +312,6 @@ export const appSettings = pgTable("app_settings", {
 	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
 });
 
-export const stravaActivities = pgTable("strava_activities", {
-	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
-	id: bigint({ mode: "number" }).primaryKey().notNull(),
-	name: text().notNull(),
-	type: text().notNull(),
-	sportType: text("sport_type").notNull(),
-	startDate: integer("start_date").notNull(),
-	startDateLocal: text("start_date_local").notNull(),
-	timezone: text().notNull(),
-	distance: integer().notNull(),
-	movingTime: integer("moving_time").notNull(),
-	elapsedTime: integer("elapsed_time").notNull(),
-	totalElevationGain: integer("total_elevation_gain").notNull(),
-	averageSpeed: integer("average_speed").notNull(),
-	maxSpeed: integer("max_speed").notNull(),
-	averageHeartrate: integer("average_heartrate"),
-	maxHeartrate: integer("max_heartrate"),
-	calories: integer(),
-	sufferScore: integer("suffer_score"),
-	mapData: text("map_data"),
-	startLatlng: text("start_latlng"),
-	endLatlng: text("end_latlng"),
-	syncedAt: integer("synced_at").default(sql`(EXTRACT(epoch FROM now()))`),
-});
-
 export const openrouterModels = pgTable("openrouter_models", {
 	id: text().primaryKey().notNull(),
 	name: text().notNull(),

@@ -1,7 +1,7 @@
 // Secure per-project share links. The owner mints an unguessable token that
 // grants access to ONE project page even while it is private. Generate the raw
 // token once, store only its sha256, compare by hash — the same pattern the
-// webdav credentials used before that mount was removed. A link is live while it is neither revoked nor
+// file-share capabilities. A link is live while it is neither revoked nor
 // expired. Server-only (imports the db).
 
 import { createHash, randomBytes } from 'node:crypto';

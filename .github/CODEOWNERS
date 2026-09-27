@@ -35,7 +35,6 @@
 # Self-gating helpers for PUBLIC_PATHS-prefixed trees. hooks.server.ts
 # delegates to these, so protecting the hook without them protects nothing.
 /src/lib/agent/auth.ts                           @zerosumpain
-/src/lib/webdav/auth.ts                          @zerosumpain
 /src/lib/workflows/scraper/service-auth.ts       @zerosumpain
 /src/lib/workflows/webhook-secret.ts             @zerosumpain
 /src/lib/projects/guard.ts                       @zerosumpain

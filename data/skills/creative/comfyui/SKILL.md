@@ -40,12 +40,6 @@ for workflow execution.
 - `official-cli.md` — every `comfy ...` command, with flags
 - `rest-api.md` — REST + WebSocket endpoints (local + cloud), payload schemas
 - `workflow-format.md` — API-format JSON, common node types, param mapping
-- `template-integrity.md` — converting `comfyui-workflow-templates` from
-  editor format to API format: Reroute bypass, dotted dynamic-input keys
-  (`values.a`, `resize_type.width`), Cloud quirks (302 redirect, 1 concurrent
-  free-tier job, 1080p VRAM ceiling), Discord-compatible ffmpeg stitch.
-  Authored by [@purzbeats](https://github.com/purzbeats). Load this whenever
-  you're starting from an official template.
 
 **Scripts (`scripts/`):**
 

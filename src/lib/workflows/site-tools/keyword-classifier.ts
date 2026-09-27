@@ -7,7 +7,7 @@
 const DECK_PATTERN = /\bdecks?\b|\bslides?\b|\bpresentations?\b|\bpitch\b|\bkeynote\b|\bpowerpoint\b|\bppt\b/i;
 
 const TOOLSET_PATTERNS: Array<{ toolset: string; pattern: RegExp }> = [
-  { toolset: 'health', pattern: /sleep|heart|readiness|train(?:ing)?|health|hrv|recovery|workout|exercise|strain|\brun\b|\bruns\b|cycling|fitness|activity|strava/i },
+  { toolset: 'health', pattern: /sleep|heart|readiness|train(?:ing)?|health|hrv|recovery|workout|exercise|strain|\brun\b|\bruns\b|cycling|fitness|activity/i },
   // Personal activity sources (/jkai/sources): games, listening, archives.
   // `activity` alone still loads `health` above — the two overlap on the word
   // and both answer "what have I been doing"; the model picks by tool name.

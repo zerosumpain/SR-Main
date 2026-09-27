@@ -7,9 +7,12 @@ import {
 beforeEach(() => clearSkillCache());
 
 describe('skill index', () => {
-  it('finds the whole library that was ported', () => {
-    const all = loadSkillIndex();
-    expect(all.length).toBeGreaterThanOrEqual(115);
+  it('keeps the site domain guides available after catalogue pruning', () => {
+    const ids = loadSkillIndex().map((skill) => skill.id);
+    expect(ids).toEqual(expect.arrayContaining([
+      'jkai-general', 'jkai-canvas', 'jkai-files', 'jkai-health',
+      'jkai-gmail', 'jkai-calendar', 'jkai-home-assistant', 'jkai-utility',
+    ]));
   });
 
   it('gives every skill a non-empty id', () => {
@@ -19,9 +22,6 @@ describe('skill index', () => {
   it('ids are unique even though frontmatter names are not', () => {
     const all = loadSkillIndex();
     expect(new Set(all.map((s) => s.id)).size).toBe(all.length);
-    // `computer-use` is declared twice — the reason ids are paths, not names.
-    const dupes = all.filter((s) => all.filter((o) => o.name === s.name).length > 1);
-    expect(dupes.length).toBeGreaterThan(0);
   });
 
   it('keeps nested skills addressable by path', () => {
@@ -63,21 +63,21 @@ describe('the 60-character truncation trap', () => {
 });
 
 describe('resolveSkill', () => {
+  it('refuses ambiguous names and resolves the canonical ID', () => {
+    const index = loadSkillIndex();
+    const template = index[0];
+    index.push(
+      { ...template, id: 'fixture/a', name: 'fixture-duplicate' },
+      { ...template, id: 'fixture/b', name: 'fixture-duplicate' },
+    );
+    expect(resolveSkill('fixture-duplicate')).toHaveProperty('error');
+    expect(resolveSkill('fixture/a')).toMatchObject({ skill: { id: 'fixture/a' } });
+  });
+
   it('resolves by id', () => {
     const id = loadSkillIndex()[0].id;
     const r = resolveSkill(id);
     expect('skill' in r && r.skill.id).toBe(id);
-  });
-
-  it('refuses an ambiguous frontmatter name rather than picking one', () => {
-    const r = resolveSkill('computer-use');
-    // Two skills declare it, so this must error and name both ids.
-    if ('error' in r) {
-      expect(r.error).toMatch(/2 skills|Use the id/);
-    } else {
-      // If the library ever loses the duplicate this is fine too.
-      expect(r.skill.name).toBe('computer-use');
-    }
   });
 
   it('suggests near matches for an unknown name', () => {
