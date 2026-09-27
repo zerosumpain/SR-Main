@@ -2050,9 +2050,18 @@ export const workflows = pgTable('workflows', {
   // D1 — additive nullable opt-in run-outcome notifications. Nullable so the
   // drizzle-kit push is non-destructive; default silent when null/absent.
   notifications: jsonb('notifications').$type<WorkflowNotifications>(),
+  /**
+   * Whose workflow: 'owner' (every workflow before members), or a member's
+   * `u_…` principal (`workflows:self`, SR-Workflows docs/member-workflows.md).
+   * SR-Workflows scopes every read and write by it and runs a member's
+   * workflow on a closed list of safe nodes only.
+   */
+  principalId: text('principal_id').notNull().default('owner'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  index('workflows_principal_idx').on(t.principalId),
+]);
 
 export type Workflow = typeof workflows.$inferSelect;
 export type NewWorkflow = typeof workflows.$inferInsert;
