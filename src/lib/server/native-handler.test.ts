@@ -44,13 +44,16 @@ function device(email: string) {
   return { id: `dev-${email}`, ownerEmail: email, label: 'iPhone', expiresAt: new Date('2026-12-01T00:00:00Z') };
 }
 
-function makeEvent(opts: { bearer?: boolean; session?: string | null } = {}): RequestEvent {
+function makeEvent(
+  opts: { bearer?: boolean; session?: string | null; viewAs?: string; method?: string } = {},
+): RequestEvent {
   const headers: Record<string, string> = {};
   if (opts.bearer !== false) headers.authorization = `Bearer ${'x'.repeat(43)}`;
+  if (opts.viewAs !== undefined) headers['x-sr-view-as'] = opts.viewAs;
   const url = new URL('https://site.test/api/native/me');
   const session = opts.session ? { user: { email: opts.session }, expires: '2027-01-01T00:00:00Z' } : null;
   return {
-    request: new Request(url, { headers }),
+    request: new Request(url, { headers, method: opts.method ?? 'GET' }),
     url,
     locals: { auth: async () => session },
   } as unknown as RequestEvent;
@@ -227,5 +230,73 @@ describe('the hook helpers', () => {
     expect(await viewerOf(event)).toMatchObject({ kind: 'member', principalId: 'u_ann' });
     expect((await event.locals.auth())?.user?.email).toBe(ANN);
     expect(await chatAccess(event)).toEqual({ level: 'self', own: 'u_ann' });
+  });
+});
+
+describe('view as — the owner\'s phone answered as somebody else', () => {
+  beforeEach(() => {
+    h.members.clear();
+    h.memberLookupFails = false;
+  });
+
+  it('answers a chat read as the member, never as the owner', async () => {
+    h.identity = device(OWNER);
+    h.members.set(ANN, { principalId: 'u_ann', grants: new Set(['jkai.chat:self']) });
+    let seen: unknown = null;
+    let role: string | null = null;
+    const handler = withNativeAccess('jkai.chat', async (event, _identity, r) => {
+      seen = await viewerOf(event);
+      role = r;
+      return { ok: true };
+    });
+    const res = await body(await handler(makeEvent({ viewAs: ' Ann@Example.test ' })));
+    expect(res.status).toBe(200);
+    expect(role).toBe('member');
+    expect(seen).toMatchObject({ kind: 'member', email: ANN, principalId: 'u_ann' });
+  });
+
+  it('refuses an area the member does not hold, as their own phone would', async () => {
+    h.identity = device(OWNER);
+    h.members.set(ANN, { principalId: 'u_ann', grants: new Set(['news:self']) });
+    const res = await body(await withNativeAccess('jkai.chat', async () => ({ ok: true }))(makeEvent({ viewAs: ANN })));
+    expect(res.status).toBe(403);
+  });
+
+  it('refuses owner-only routes while viewing as a member', async () => {
+    h.identity = device(OWNER);
+    h.members.set(ANN, { principalId: 'u_ann', grants: new Set(['jkai.chat:self']) });
+    const res = await body(await withDevice(async () => ({ secret: 'owner' }))(makeEvent({ viewAs: ANN })));
+    expect(res.status).toBe(403);
+    expect(res.json.secret).toBeUndefined();
+  });
+
+  it('is look-only: a write is refused before any handler runs', async () => {
+    h.identity = device(OWNER);
+    h.members.set(ANN, { principalId: 'u_ann', grants: new Set(['jkai.chat:self']) });
+    const ran = vi.fn(async () => ({ ok: true }));
+    const res = await body(await withNativeAccess('jkai.chat', ran)(makeEvent({ viewAs: ANN, method: 'POST' })));
+    expect(res.status).toBe(403);
+    expect(ran).not.toHaveBeenCalled();
+  });
+
+  it('refuses the header from a member\'s phone, and names nobody who is not a member', async () => {
+    h.identity = device(ANN);
+    h.members.set(ANN, { principalId: 'u_ann', grants: new Set(['jkai.chat:self']) });
+    const ran = vi.fn(async () => ({ ok: true }));
+    expect((await withNativeAccess('jkai.chat', ran)(makeEvent({ viewAs: OWNER }))).status).toBe(403);
+    h.identity = device(OWNER);
+    expect((await withNativeAccess('jkai.chat', ran)(makeEvent({ viewAs: 'stranger@example.test' }))).status).toBe(403);
+    expect(ran).not.toHaveBeenCalled();
+  });
+
+  it('an empty header, or naming the owner, is the owner as before', async () => {
+    h.identity = device(OWNER);
+    let role: string | null = null;
+    const handler = withNativeAccess('jkai.chat', async (_e, _i, r) => {
+      role = r;
+      return { ok: true };
+    });
+    expect((await handler(makeEvent({ viewAs: OWNER }))).status).toBe(200);
+    expect(role).toBe('owner');
   });
 });

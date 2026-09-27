@@ -34,7 +34,7 @@ import {
   viewerForEmail,
 } from '$lib/server/view-as';
 import { rateLimit } from '$lib/server/rate-limit';
-import { actAsDeviceMember, memberDevice, nativeDevice, pairedDevice } from '$lib/server/native-gate';
+import { actAsDeviceMember, memberDevice, nativeDevice, nativeViewAs, pairedDevice } from '$lib/server/native-gate';
 import { hasMaintenanceSecret } from '$lib/server/maintenance-auth';
 import { isPublicApiPath } from '$lib/server/public-api-paths';
 import { hasStudioServiceToken } from '$lib/server/studio-auth';
@@ -767,7 +767,8 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     ['GET', 'POST', 'DELETE', 'PATCH'].includes(event.request.method)
   ) {
     const device = await nativeDevice(event.request);
-    if (device) {
+    const viewAs = device ? await nativeViewAs(event.request, device) : ({ kind: 'none' } as const);
+    if (device && viewAs.kind === 'none') {
       // The 10/min orchestrator cap lives INSIDE the owner-gate block below, and
       // this lane returns before reaching it — so without this a paired phone
       // could start chat turns without limit. Every turn is a paid model call
@@ -791,7 +792,17 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     // A member device without chat is refused here rather than falling through
     // as a request with no session, so the phone gets a 403 it can explain
     // instead of a 401 that reads as "pair again".
-    const held = await memberDevice(event.request);
+    //
+    // The owner's phone viewing the app as a member (Settings → View as) takes
+    // this same lane AS that member — never the owner's sessionless one — and
+    // `nativeViewAs` has already refused anything but a read.
+    if (viewAs.kind === 'refused') {
+      return new Response(JSON.stringify({ error: viewAs.error }), {
+        status: viewAs.status,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    const held = await memberDevice(event.request) ?? (viewAs.kind === 'as' ? viewAs.member : null);
     if (held) {
       if (!satisfies(held.grants, 'jkai.chat:self')) {
         return new Response(JSON.stringify({ error: 'Forbidden' }), {

@@ -3,7 +3,7 @@ import type { RequestEvent } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { satisfies, type AreaId } from '$lib/access/catalogue';
 import { identifyDevice, touchDevice, type NativeIdentity } from './native-auth';
-import { actAsDeviceMember } from './native-gate';
+import { actAsDeviceMember, nativeViewAs } from './native-gate';
 import { loadMember } from './grants';
 
 /**
@@ -58,6 +58,13 @@ export function withDevice<E extends RequestEvent, T>(handler: NativeHandler<E, 
       return json({ error: 'Pair this iPhone again.' }, { status: 401 });
     }
     if (!isOwnerEmail(identity.ownerEmail)) {
+      return json({ error: 'This account can no longer use the app.' }, { status: 403 });
+    }
+    // Viewing as a member: an owner-only route refuses them, as it would
+    // their own phone — with the sentence their own phone would get.
+    const viewAs = await nativeViewAs(event.request, identity);
+    if (viewAs.kind === 'refused') return json({ error: viewAs.error }, { status: viewAs.status });
+    if (viewAs.kind === 'as') {
       return json({ error: 'This account can no longer use the app.' }, { status: 403 });
     }
 
@@ -123,7 +130,17 @@ export function withNativeAccess<E extends RequestEvent, T>(
     }
 
     let role: NativeRole = 'owner';
-    if (!isOwnerEmail(identity.ownerEmail)) {
+    // The owner viewing the app as somebody: answered as that person's phone.
+    const viewAs = await nativeViewAs(event.request, identity);
+    if (viewAs.kind === 'refused') return json({ error: viewAs.error }, { status: viewAs.status });
+    if (viewAs.kind === 'as') {
+      const { member } = viewAs;
+      if (area !== 'any' && !satisfies(member.grants, `${area}:self`)) {
+        return json({ error: 'Your access does not include that.' }, { status: 403 });
+      }
+      actAsDeviceMember(event.locals, member);
+      role = 'member';
+    } else if (!isOwnerEmail(identity.ownerEmail)) {
       // Fail closed: a lookup that cannot reach the database refuses the
       // request rather than guessing who this is.
       const member = await loadMember(identity.ownerEmail).catch((err) => {
