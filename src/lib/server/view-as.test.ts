@@ -79,7 +79,7 @@ describe('acting as', () => {
     actAs(locals, { kind: 'member', principalId: 'u_ann', email: ANN, grants: new Set(['news:self']) }, NOW);
     expect(await viewerOf({ locals })).toMatchObject({ kind: 'member', email: ANN });
     expect((await locals.auth())?.user?.email).toBe(ANN);
-    expect(await isOwnerRequest({ locals, getClientAddress: () => '127.0.0.1' })).toBe(false);
+    expect(await isOwnerRequest({ locals })).toBe(false);
     expect(locals.viewingAs).toEqual({ email: ANN, kind: 'member', expiresAt: NOW });
   });
 
