@@ -131,6 +131,7 @@
       "migrationAuthor": "zerosumpain/SR-Main",
       "schemaExecutor": "zerosumpain/SR-Main",
       "requiredTables": [
+        "access_group",
         "activities",
         "activity_segment_efforts",
         "activity_segments",
@@ -144,6 +145,7 @@
         "app_settings",
         "apple_health_metrics",
         "apple_sleep_stages",
+        "entity",
         "fact",
         "health_sync_jobs",
         "health_sync_state",

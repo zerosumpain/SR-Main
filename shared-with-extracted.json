@@ -179,14 +179,16 @@
     "src/lib/access/catalogue.ts": {
       "peer": [
         "zerosumpain/SR-Drive",
-        "zerosumpain/SR-Jkai-Core"
+        "zerosumpain/SR-Jkai-Core",
+        "zerosumpain/SR-Health"
       ],
       "sha256": "d76b931bc595652c7b3ed3f7045ca6a4ae6a4423a824a8d63f7806bfbb6d714c"
     },
     "src/lib/access/effective.ts": {
       "peer": [
         "zerosumpain/SR-Drive",
-        "zerosumpain/SR-Jkai-Core"
+        "zerosumpain/SR-Jkai-Core",
+        "zerosumpain/SR-Health"
       ],
       "sha256": "224a23e52fafc16ddb49fca77f0bb8f9dd8dfb74fe4b40aa696f50541b8c8f83"
     },
