@@ -25,8 +25,6 @@ vi.mock('$lib/llm/client', async (importOriginal) => ({
     throw new Error('tripwire: no model call in this test');
   }),
 }));
-// The briefing's alert source reaches out to live feeds; it is not what is under test.
-vi.mock('$lib/jkai/intel/daily-alerts.server', () => ({ loadDailyAlerts: async () => undefined }));
 
 const TAG = `t${Math.random().toString(36).slice(2, 10)}`;
 const OWNER_WORD = `Ownerthread${TAG}`;

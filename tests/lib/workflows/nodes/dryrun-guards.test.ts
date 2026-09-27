@@ -17,7 +17,7 @@ import { hasSideEffects } from '$lib/workflows/side-effects';
 const WRITES: Array<[string, Record<string, unknown>]> = [
   ['whatsapp', {}], ['notify', {}], ['email', {}],
   ['gmail-send', {}], ['gmail-reply', {}], ['gmail-label', {}],
-  ['intel-write', {}], ['deck-build', {}], ['builder-chat', {}], ['builder-pi', {}],
+  ['deck-build', {}], ['builder-chat', {}], ['builder-pi', {}],
   ['infrastructure-update', {}], ['delegate-agent', {}], ['site-tool', { toolName: 'save_memory' }],
   ['file-write', {}], ['file-delete', {}], ['file-build', { persist: true }],
   ['blog-create', {}], ['blog-update', {}], ['blog', { operation: 'create' }], ['blog', { operation: 'update' }],

@@ -1,22 +1,15 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { briefingComposeExecutor } from '$lib/workflows/nodes/briefing-compose';
 import { DEFAULT_BRIEFING_PROFILE } from '$lib/constants/briefing';
 import type { ExecutionContext } from '$lib/workflows/types';
 
-const alertMocks = vi.hoisted(() => ({ load: vi.fn(), enabled: true }));
-vi.mock('$lib/jkai/intel/daily-alerts.server', () => ({ loadDailyAlerts: alertMocks.load }));
 vi.mock('$lib/server/models/settings', () => ({ getSetting: async () => null }));
 vi.mock('$lib/server/briefing-profile', () => ({
   getBriefingProfile: async () => ({ ...DEFAULT_BRIEFING_PROFILE, sources: {
     ...DEFAULT_BRIEFING_PROFILE.sources,
     memories: { enabled: false, required: false },
-    alerts: { enabled: alertMocks.enabled, required: false },
   } }),
 }));
-beforeEach(() => {
-  alertMocks.enabled = true;
-  alertMocks.load.mockReset().mockResolvedValue({ status: 'empty', total: 0, high: 0, items: [] });
-});
 
 // The Daydreams section reads the LIVE ledger, and this file tests the
 // composer, not the ledger — a dev database with four hypotheses in it made
@@ -283,28 +276,11 @@ describe('truth-required sources', () => {
   });
 });
 
-describe('daily alert briefing facts', () => {
-  it('includes ranked alerts with significance, evidence links and a source ledger', async () => {
-    alertMocks.load.mockResolvedValue({ status: 'ok', total: 7, high: 2, items: [
-      { id: 'sample', title: 'Synthetic connection', content: 'Sample evidence', significance: 'high' },
-    ] });
+describe('daily alerts', () => {
+  // SR-Jkai-Core deleted intel alerts; the composer no longer reads or offers them.
+  it('has no Daily alerts section', async () => {
     const out = await run({});
-    expect(out.factSheet).toContain('7 undismissed alerts');
-    expect(out.factSheet).toContain('high: Synthetic connection: Sample evidence');
-    expect(out.facts.find((f) => f.source === 'intel-alert:sample')).toMatchObject({ href: '/jkai/intel/alerts' });
-    expect(out.sources.find((s) => s.key === 'alerts')?.status).toBe('ok');
-  });
-  it('reports failure as unavailable, without claiming there are no alerts', async () => {
-    alertMocks.load.mockResolvedValue({ status: 'failed', total: 0, high: 0, items: [] });
-    const out = await run({});
-    expect(out.sources.find((s) => s.key === 'alerts')?.status).toBe('failed');
-    expect(out.gapSheet).toContain('Daily alerts: UNAVAILABLE');
-    expect(out.factSheet).not.toContain('No undismissed');
-  });
-  it('honours the disabled source without reading alerts', async () => {
-    alertMocks.enabled = false;
-    const out = await run({});
-    expect(alertMocks.load).not.toHaveBeenCalled();
     expect(out.sources.some((s) => s.key === 'alerts')).toBe(false);
+    expect(out.factSheet).not.toContain('Daily alerts');
   });
 });

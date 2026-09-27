@@ -21,11 +21,6 @@ const SITE_NODE_FAMILIES: Array<{ family: string; description: string; types: st
     types: ['deep-dive', 'deep-dive-start', 'deep-dive-status', 'deep-dive-report', 'deep-dive-list', 'deep-dive-control'],
   },
   {
-    family: 'Intelligence',
-    description: 'Intel store + query.',
-    types: ['intel-write', 'intel-query', 'intelligence'],
-  },
-  {
     family: 'JKAI',
     description: 'Orchestrator chat hub.',
     types: ['jkai'],

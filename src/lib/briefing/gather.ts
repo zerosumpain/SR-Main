@@ -1,8 +1,6 @@
 // Gather the raw material for a briefing: learned question intents (the
 // personalisation core), recent research, what you've been asking, and live
 // site signals. All best-effort — a missing source contributes nothing.
-import { loadDailyAlerts } from '$lib/jkai/intel/daily-alerts.server';
-import type { DailyAlertsSummary } from '$lib/constants/daily-alerts';
 import { db } from '$lib/db';
 import { and, desc, eq, gte, isNull, sql } from 'drizzle-orm';
 import { researchSessions, orchestratorChats, jkaiMemories } from '$lib/db/schema';
@@ -11,7 +9,6 @@ import { inOwnerThread } from '$lib/jkai/owner-threads';
 import { getBriefingProfile } from '$lib/server/briefing-profile';
 
 export interface BriefingSignals {
-  dailyAlerts?: DailyAlertsSummary;
   insights: { intents: Array<{ intent: string; count: number; missingCapability?: string }>; topUnmet: string[] } | null;
   recentResearch: Array<{ topic: string; status: string; createdAt: string }>;
   recentQuestions: string[];
@@ -105,8 +102,6 @@ export async function gatherBriefingSignals(): Promise<BriefingSignals> {
 
   const siteSignals: Record<string, unknown> = {};
 
-  const dailyAlerts = profile.sources.alerts.enabled ? await loadDailyAlerts() : undefined;
-  if (dailyAlerts?.status === 'ok') gathered.push('alerts');
 
-  return { dailyAlerts, insights, recentResearch, recentQuestions, recentMemories, siteSignals, gathered };
+  return { insights, recentResearch, recentQuestions, recentMemories, siteSignals, gathered };
 }
