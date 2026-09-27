@@ -58,9 +58,15 @@ describe('peopleViewerOf', () => {
     expect(await peopleViewerOf(eventFor('Sam@Example.test'))).toEqual({ kind: 'household', subject: 'sam', wards: [] });
   });
 
-  it('family:circle with no household_member row has nobody to be ⇒ null', async () => {
+  it('family:circle with no household_member row still sees the family — just no day of their own', async () => {
     memberGrants.set('sam@example.test', ['family:circle']);
-    expect(await peopleViewerOf(eventFor('sam@example.test'))).toBeNull();
+    expect(await peopleViewerOf(eventFor('sam@example.test'))).toEqual({ kind: 'household', subject: null, wards: [] });
+  });
+
+  it('family:admin alone is enough to see the family', async () => {
+    memberGrants.set('sam@example.test', ['family:admin']);
+    householdSubjects.set('sam@example.test', 'sam');
+    expect(await peopleViewerOf(eventFor('sam@example.test'))).toEqual({ kind: 'household', subject: 'sam', wards: ['kit'] });
   });
 
   it('a household_member row without family:circle is someone tracked, not someone who may look ⇒ null', async () => {
@@ -112,11 +118,20 @@ describe('peopleViewerForEmail — the same rule, for the app', () => {
     expect(await peopleViewerForEmail('sam@example.test')).toEqual({ kind: 'household', subject: 'sam', wards: ['kit'] });
   });
 
-  it('null without the grant, without a household row, for a blank email, or when a lookup fails', async () => {
+  it('a circle or admin member on NO household row sees everyone live, owns no day, and has no wards', async () => {
+    memberGrants.set('pat@example.test', ['family:circle', 'family:admin']);
+    const viewer = await peopleViewerForEmail('pat@example.test');
+    expect(viewer).toEqual({ kind: 'household', subject: null, wards: [] });
+    const scoped = scopeHousehold([card('sam'), card('kit')], viewer!);
+    expect(scoped.map((m) => [m.subject, m.isHome !== undefined, m.today])).toEqual([
+      ['sam', true, null],
+      ['kit', true, null],
+    ]);
+  });
+
+  it('null without either grant, for a blank email, or when a lookup fails', async () => {
     householdSubjects.set('sam@example.test', 'sam');
     expect(await peopleViewerForEmail('sam@example.test')).toBeNull();
-    memberGrants.set('pat@example.test', ['family:circle']);
-    expect(await peopleViewerForEmail('pat@example.test')).toBeNull();
     expect(await peopleViewerForEmail('  ')).toBeNull();
     memberGrants.set('sam@example.test', ['family:circle']);
     lookupFails = true;

@@ -357,7 +357,7 @@ export function buildAppView(input: {
   const { viewer, scoped, names, positions, trails, labels, dayStart, now } = input;
   const recent = input.recent ?? new Map<string, readonly TrailPoint[]>();
   const posBy = new Map(positions.map((p) => [p.subject, p]));
-  const selfSubject = viewer.kind === 'household' ? viewer.subject : input.self;
+  const selfSubject = (viewer.kind === 'household' ? viewer.subject : null) ?? input.self;
   const people = scoped.map((m): AppPerson => {
     const pos = m.notSharing ? undefined : posBy.get(m.subject);
     const firstOutAt = m.today?.firstOutMins == null ? null : new Date(dayStart.getTime() + m.today.firstOutMins * 60_000);

@@ -8,11 +8,14 @@
 // load returns reaches the browser whether the markup shows it or not.
 //
 // - The owner sees everything, as before.
-// - A household viewer — a member holding `family:circle` (the Family Circle
-//   group, $lib/access/catalogue) whose email is on a household_member row
-//   (`householdSubjectFor` in $lib/server/members) — sees every sharing
-//   person's live status, their OWN day in full, and nothing of anyone who has
-//   chosen not to share.
+// - A household viewer — a member holding `family:circle` or `family:admin`
+//   (the Family Circle / Family Admin groups, $lib/access/catalogue) — sees
+//   every sharing person's live status, and nothing of anyone who has chosen
+//   not to share. If their email is on a household_member row
+//   (`householdSubjectFor` in $lib/server/members) they also get their OWN day
+//   in full, and a Family Admin their wards' days. The row adds the day; it is
+//   NOT what lets them see the family — a circle member whose row had no email
+//   saw nobody at all (Katie, 2026-09-27).
 
 import { householdSubjectFor } from '$lib/server/members';
 import { wardsOf } from './members';
@@ -27,7 +30,11 @@ import type { HouseholdPresence } from './household';
  * for a `family:admin` holder whose household_member row names them. A ward's
  * day and person page are open to their guardian as their own are.
  */
-export type PeopleViewer = { kind: 'owner' } | { kind: 'household'; subject: string; wards?: readonly string[] };
+export type PeopleViewer =
+  | { kind: 'owner' }
+  /** `subject` null: in the Family Circle, but on no household row — every
+   *  live status, no day of their own. */
+  | { kind: 'household'; subject: string | null; wards?: readonly string[] };
 
 /**
  * The viewer of a /home/people route, or null for anyone else — the route
@@ -46,12 +53,13 @@ export async function peopleViewerOf(event: OwnerCheckEvent): Promise<PeopleView
   }
 }
 
-/** The member half of both lookups: a Family Circle holder with a household row. */
+/** The member half of both lookups: a Family Circle or Family Admin holder. */
 async function householdViewer(viewer: Viewer): Promise<PeopleViewer | null> {
-  if (viewer.kind !== 'member' || !viewerHolds(viewer, 'family:circle')) return null;
+  if (viewer.kind !== 'member') return null;
+  const admin = viewerHolds(viewer, 'family:admin');
+  if (!admin && !viewerHolds(viewer, 'family:circle')) return null;
   const subject = await householdSubjectFor(viewer.email);
-  if (!subject) return null;
-  const wards = viewerHolds(viewer, 'family:admin') ? await wardsOf(subject) : [];
+  const wards = admin && subject ? await wardsOf(subject) : [];
   return { kind: 'household', subject, wards };
 }
 
@@ -129,7 +137,9 @@ export function scopeHousehold(members: readonly HouseholdPresence[], viewer: Pe
 /**
 /** Whether a viewer may open this person's page: the owner anyone's, anyone else their own and their wards'. PURE. */
 export function mayOpenPerson(viewer: PeopleViewer, subject: string): boolean {
-  return viewer.kind === 'owner' || subject === viewer.subject || (viewer.wards ?? []).includes(subject);
+  return (
+    viewer.kind === 'owner' || (viewer.subject !== null && subject === viewer.subject) || (viewer.wards ?? []).includes(subject)
+  );
 }
 
 /**
