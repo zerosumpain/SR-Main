@@ -247,28 +247,6 @@ export interface GenericWorkflowEvent extends BaseWorkflowEvent {
   data?: Record<string, unknown>;
 }
 
-export interface GmailMessageReceivedEvent extends BaseWorkflowEvent {
-  type: 'gmail.message.received';
-  accountId: number;
-  accountEmail: string;
-  watchId: number;
-  watchLabel: string;
-  messageId: string;
-  threadId: string;
-  from: string;
-  to: string;
-  subject: string;
-  snippet: string;
-  labels: string[];
-}
-
-export interface GmailAuthExpiredEvent extends BaseWorkflowEvent {
-  type: 'gmail.auth.expired';
-  accountId: number;
-  accountEmail: string;
-  error: string;
-}
-
 export interface ScraperProgressEvent extends BaseWorkflowEvent {
   type: 'scraper.progress';
   runLogId: number;
@@ -288,8 +266,6 @@ export interface ScraperRunFinishedEvent extends BaseWorkflowEvent {
 
 export type WorkflowEvent =
   | GenericWorkflowEvent
-  | GmailMessageReceivedEvent
-  | GmailAuthExpiredEvent
   | ScraperProgressEvent
   | ScraperRunFinishedEvent;
 

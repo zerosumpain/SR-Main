@@ -284,9 +284,8 @@ describe('trigger', () => {
     expect(t.description).toBe('Paused — every weekday at 08:30 (America/New_York)');
   });
 
-  it('knows the inbox triggers and a wired chat by their nodes', () => {
+  it('knows the inbox trigger and a wired chat by their nodes', () => {
     expect(triggerDTO({ ...base, nodeTypes: ['whatsapp-trigger'] }).kind).toBe('whatsapp');
-    expect(triggerDTO({ ...base, nodeTypes: ['gmail-trigger'] }).kind).toBe('gmail');
     expect(triggerDTO({ ...base, chatWired: true }).kind).toBe('chat');
     expect(triggerDTO(base)).toMatchObject({ kind: 'manual', enabled: true, cron: null, nextRuns: [] });
     expect(triggerDTO({ ...base, triggerNodeConfig: { kind: 'manual', enabled: false } }).enabled).toBe(false);

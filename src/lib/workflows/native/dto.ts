@@ -204,7 +204,6 @@ export const ENTRY_NODE_TYPES: ReadonlySet<string> = new Set([
   'trigger',
   'manual-trigger',
   'whatsapp-trigger',
-  'gmail-trigger',
 ]);
 
 function pos(n: GraphNode): { x: number; y: number } {
@@ -482,7 +481,7 @@ function str(v: unknown): string | null {
 /**
  * What starts this workflow, in the phone's terms.
  *
- * The inbox triggers are NODES (`whatsapp-trigger`, `gmail-trigger`) rather
+ * The inbox trigger is a NODE (`whatsapp-trigger`) rather
  * than a `workflows.trigger` kind, and a wired `chat` node is an entry of its
  * own; everything else reads `workflows.trigger`. For a cron, the schedule ROW
  * is what the scheduler actually fires, so it wins over the trigger column and
@@ -498,7 +497,6 @@ export function triggerDTO(input: TriggerInput): TriggerDTO {
 
   let kind: TriggerKindDTO;
   if (types.has('whatsapp-trigger')) kind = 'whatsapp';
-  else if (types.has('gmail-trigger')) kind = 'gmail';
   else if (rowType === 'cron' || rowType === 'webhook' || rowType === 'event') kind = rowType;
   else if (input.chatWired) kind = 'chat';
   else kind = 'manual';

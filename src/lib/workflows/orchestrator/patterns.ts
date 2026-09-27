@@ -97,8 +97,7 @@ export function getPatternsForOrchestrator(): string {
  *
  * These are few-shot exemplars, not abstract patterns. Every `type` here is a
  * real entry in the registry (manual-trigger, stealth-scrape, tavily-search,
- * llm-call, email, http-request, whatsapp, gmail-trigger, gmail-fetch,
- * gmail-reply, gmail-label, conditional, loop, data-store, dedupe, merge,
+ * llm-call, email, http-request, whatsapp, conditional, loop, data-store, dedupe, merge,
  * transform), and every `config` snippet
  * uses the node's ACTUAL config keys (verified against the node definitions).
  * The orchestrator should be able to translate one of these almost verbatim
@@ -106,7 +105,7 @@ export function getPatternsForOrchestrator(): string {
  */
 export interface GoldenExemplar {
   request: string;
-  /** Trigger shape: a manual-trigger node, a cron trigger config, or a gmail-trigger start node. */
+  /** Trigger shape: a manual-trigger node or a cron trigger config. */
   trigger: string;
   /** Ordered nodes: spec id, registered type, and the load-bearing config. */
   nodes: { id: string; type: string; config: string }[];
@@ -138,37 +137,6 @@ export const goldenExemplars: GoldenExemplar[] = [
     ],
     edges: ['trigger → fetch', 'fetch → isDown', 'isDown → alert (sourceHandle: "true")'],
     note: 'Only the "true" handle of the conditional is wired — when the service is healthy the workflow ends. http-request auto-parses JSON bodies, so reference input.body.* paths. conditional config key is `expression` (a single boolean JS expression).',
-  },
-  {
-    request: 'When an email from my boss arrives, draft a polite acknowledgement reply and label the thread "Boss".',
-    trigger: 'gmail-trigger (start node) — config.accountId = 1 (boss filter set via a gmail watch)',
-    nodes: [
-      { id: 'full', type: 'gmail-fetch', config: `accountId: 1, messageId: "{{trigger.output.messageId}}"` },
-      { id: 'draft', type: 'llm-call', config: `userPrompt: "Write a short, polite acknowledgement reply to this email:\\n\\nSubject: {{input.subject}}\\n\\n{{input.bodyText}}"` },
-      { id: 'reply', type: 'gmail-reply', config: `accountId: 1, to: "{{trigger.output.from}}", threadId: "{{trigger.output.threadId}}", inReplyTo: "{{nodes.full.output.rfc822MessageId}}", subject: "{{trigger.output.subject}}", bodyText: "{{nodes.draft.output.text}}"` },
-      { id: 'label', type: 'gmail-label', config: `accountId: 1, messageId: "{{trigger.output.messageId}}", add: ["Label_boss"]` },
-    ],
-    edges: ['gmail-trigger → full', 'full → draft', 'draft → reply', 'reply → label'],
-    note: 'gmail-trigger only yields a snippet — gmail-fetch gets the full body (input.subject/input.bodyText/input.rfc822MessageId). gmail-reply REQUIRES accountId, to, threadId, inReplyTo and subject, and the body goes in bodyText (or bodyHtml) — there is no plain `body` key. gmail-label uses `add`/`remove` arrays of label IDs (custom label IDs like "Label_boss", looked up at /admin/connections/gmail), not action/labelName.',
-  },
-  {
-    request: 'Classify each incoming support email as "urgent" or "normal"; reply immediately to urgent ones, otherwise just label it.',
-    trigger: 'gmail-trigger (start node) — config.accountId = 1 (support watch)',
-    nodes: [
-      { id: 'full', type: 'gmail-fetch', config: `accountId: 1, messageId: "{{trigger.output.messageId}}"` },
-      { id: 'classify', type: 'llm-call', config: `userPrompt: "Reply with exactly one word, 'urgent' or 'normal':\\n\\n{{input.subject}}\\n{{input.bodyText}}"` },
-      { id: 'isUrgent', type: 'conditional', config: `expression: "input.text.toLowerCase().includes('urgent')"` },
-      { id: 'reply', type: 'gmail-reply', config: `accountId: 1, to: "{{trigger.output.from}}", threadId: "{{trigger.output.threadId}}", inReplyTo: "{{nodes.full.output.rfc822MessageId}}", subject: "Re: {{trigger.output.subject}}", bodyText: "Thanks — we've flagged this as urgent and will respond shortly."` },
-      { id: 'labelNormal', type: 'gmail-label', config: `accountId: 1, messageId: "{{trigger.output.messageId}}", add: ["Label_triage_normal"]` },
-    ],
-    edges: [
-      'gmail-trigger → full',
-      'full → classify',
-      'classify → isUrgent',
-      'isUrgent → reply (sourceHandle: "true")',
-      'isUrgent → labelNormal (sourceHandle: "false")',
-    ],
-    note: 'Branch example: the conditional fans out to two different action nodes via the "true" and "false" handles. The LLM classification (input.text) is read inside the `expression`. Note input.text/input.subject/input.body all survive through the conditional pass-through.',
   },
   {
     request: 'Fetch the latest blog posts from an API and reshape each one into a {title, url} record for downstream use.',

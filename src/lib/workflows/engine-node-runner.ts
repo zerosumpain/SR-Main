@@ -118,7 +118,7 @@ export function resolveNodeConfig(
     }
     return undefined;
   };
-  // {{trigger.x}}: the trigger node's output (e.g. gmail-trigger's from/subject),
+  // {{trigger.x}}: the trigger node's output (e.g. a whatsapp-trigger's from/text),
   // over the raw payload the run was started with.
   const roots = run.graph.nodeIds.filter((id) => !run.graph.incomingCount.get(id));
   const trigger = Object.assign({}, run.trigger, ...roots.map((id) => run.nodeOutputs.get(id) ?? {}));

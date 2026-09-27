@@ -286,8 +286,7 @@ const OUTBOUND_SEND_TYPES = new Set([
  *  every run unless a memory node filters them first.
  *
  *  `gmail-fetch` is deliberately NOT here: it fetches a SINGLE message by
- *  messageId (per-message idempotent, driven by a gmail-trigger that fires once
- *  per new message), so it never re-delivers a list. Only `gmail-search` (which
+ *  messageId (per-message idempotent), so it never re-delivers a list. Only `gmail-search` (which
  *  returns a list) is a feed source — matching the generator's own hard-rule /
  *  critic prompts, which name gmail-search and never gmail-fetch. Listing
  *  gmail-fetch here made the canonical gmail auto-reply exemplars trip a bogus
@@ -324,7 +323,7 @@ function isOutboundSend(node: WorkflowNodeDef): boolean {
 
 /**
  * True when the workflow fires on a recurring schedule/event (cron, interval,
- * platform event, or a gmail-trigger) — the class of workflow for which
+ * or platform event) — the class of workflow for which
  * "re-sends across runs" is a real failure. Manual/webhook-only triggers are
  * NOT treated as recurring (a manual run re-sending is expected).
  */
@@ -335,8 +334,6 @@ export function isRecurringWorkflow(
   const t = (trigger?.type ?? '').toLowerCase();
   if (t === 'cron' || t === 'interval' || t === 'schedule' || t === 'event') return true;
   for (const n of nodes) {
-    // gmail-trigger fires on every matching inbound message — inherently recurring.
-    if (n.type === 'gmail-trigger') return true;
     if (n.type === 'trigger') {
       const cfg = (n.config ?? {}) as Record<string, unknown>;
       const kind = String(cfg.kind ?? '').toLowerCase();
@@ -420,7 +417,7 @@ function detectMissingDedupMemory(
       // Fan-in barrier: a join node (≥2 inputs) that pulls a memory value in on
       // one branch carries that memory forward (a downstream transform can dedup
       // against it), so it protects every source feeding the same join. This is
-      // the diff-dance topology — without it, exemplar 7 flags its own scrape.
+      // the diff-dance topology — without it, the diff-dance exemplar flags its own scrape.
       const incoming = predecessors.get(id) ?? [];
       if (incoming.length >= 2 && hasMemoryUpstream(id)) continue;
       for (const p of incoming) queue.push(p);

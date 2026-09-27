@@ -47,7 +47,6 @@ import { deepDiveDef } from './nodes/deep-dive.def';
 import { webScrapeDef } from './nodes/web-scrape.def';
 import { stealthScrapeDef } from './nodes/stealth-scrape.def';
 import { stealthScrapeLlmDef } from './nodes/stealth-scrape-llm.def';
-import { gmailTriggerDef } from './nodes/gmail-trigger.def';
 import { whatsappTriggerDef } from './nodes/whatsapp-trigger.def';
 import { gmailFetchDef } from './nodes/gmail-fetch.def';
 import { gmailSendDef } from './nodes/gmail-send.def';
@@ -133,7 +132,6 @@ const builtInDefinitions: NodeDefinition[] = [
   webScrapeDef,
   stealthScrapeDef,
   stealthScrapeLlmDef,
-  gmailTriggerDef,
   whatsappTriggerDef,
   gmailFetchDef,
   gmailSendDef,

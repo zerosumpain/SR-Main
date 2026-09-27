@@ -6,7 +6,7 @@
  * the payload's TOP-LEVEL keys, all of which must hold. `equals` compares string
  * forms; `contains` is a case-insensitive substring test (and, on an array, "any
  * element contains"). That is enough for "whatsapp.inbound where text contains
- * 'lights'" and "gmail.inbound where from contains '@bank'", and small enough to
+ * 'lights'" and "news.item where title contains 'rates'", and small enough to
  * edit from a phone. Anything cleverer belongs in an `if` node after the trigger,
  * where it can see the whole payload and be tested on a run.
  */

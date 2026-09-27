@@ -628,18 +628,6 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     },
   },
   {
-    type: 'gmail-trigger',
-    label: 'Gmail Trigger',
-    kind: 'trigger',
-    group: 'Integrations',
-    description: 'Fires when a new Gmail message matches a watched query.',
-    defaultConfig: { accountId: 0, watchId: null },
-    handles: {
-      inputs: [],
-      outputs: [{ id: 'out', kinds: ['json'] }],
-    },
-  },
-  {
     type: 'whatsapp-trigger',
     label: 'WhatsApp Trigger',
     kind: 'trigger',

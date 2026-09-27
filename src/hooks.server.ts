@@ -160,14 +160,6 @@ if (runsService('background') && mainOwnsJkaiCore) startOrphanSweep();
 import { installWaEscalation } from '$lib/workflows/chat/wa-escalation';
 if (runsService('background') && mainOwnsJkaiCore) installWaEscalation();
 
-// Start the Gmail polling watcher and orchestrator bridge
-import { startWatcher as startGmailWatcher, stopWatcher as stopGmailWatcher } from '$lib/workflows/gmail/watcher';
-import { registerGmailBridge, unregisterGmailBridge } from '$lib/workflows/gmail/orchestrator-bridge';
-// The bridge also pushes into process-local chat subscribers. Keep this pair in
-// Main until a durable cross-app notification contract replaces that push.
-if (runsService('background')) startGmailWatcher();
-if (runsService('background')) registerGmailBridge();
-
 // Start the heartbeat engine — periodic autonomous activities (chat
 // continuation, build/job nudges, workflow review). Tickers are configured
 // in the heartbeat_activities table; the engine ticks every 30s and fires
@@ -286,8 +278,6 @@ async function gracefulShutdown() {
   stopHeroTitlesScheduler();
   stopDependencyMonitor();
   stopHealthWatch();
-  stopGmailWatcher();
-  unregisterGmailBridge();
   stopDatastoreReaper();
     stopDriveIntelOutbox();
   stopWorkflowDoctor();

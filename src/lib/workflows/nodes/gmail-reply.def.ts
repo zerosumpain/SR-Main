@@ -32,7 +32,7 @@ export const gmailReplyDef: NodeDefinition = {
       bodyHtml: { type: 'string', description: 'HTML body (supports {{input.x}})' },
     },
   },
-  llmDescription: 'Sends a reply to an existing Gmail thread, preserving In-Reply-To and References headers so mail clients show it as a continuation of the conversation. Use this instead of gmail-send whenever replying to a received message. Requires threadId and inReplyTo from the upstream trigger or fetch output — both are available from gmail-trigger output directly. The defaults already template these fields from {{input.threadId}} and {{input.rfc822MessageId}}, so the minimal config is just accountId and bodyText. Output: { messageId, threadId, success }.',
+  llmDescription: 'Sends a reply to an existing Gmail thread, preserving In-Reply-To and References headers so mail clients show it as a continuation of the conversation. Use this instead of gmail-send whenever replying to a received message. Requires threadId and inReplyTo from the upstream fetch output. The defaults already template these fields from {{input.threadId}} and {{input.rfc822MessageId}}, so the minimal config is just accountId and bodyText. Output: { messageId, threadId, success }.',
   llmExamples: [
     {
       accountId: 1,

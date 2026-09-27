@@ -67,11 +67,6 @@ describe.skipIf(!process.env.DATABASE_URL)('background readers see only the owne
     if (all.length) await db.delete(conversations).where(inArray(conversations.id, all)); // messages cascade
   });
 
-  it('the Gmail preview lands in the owner\'s latest web thread', async () => {
-    const { gmailNotificationTarget } = await import('$lib/workflows/gmail/orchestrator-bridge');
-    expect(await gmailNotificationTarget()).toBe(ids.owner);
-  });
-
   it('think/reads chat_threads never names a member thread', async () => {
     const { chatThreadsTool } = await import('$lib/daydream/think/reads');
     const out = await chatThreadsTool({ days: 1 });

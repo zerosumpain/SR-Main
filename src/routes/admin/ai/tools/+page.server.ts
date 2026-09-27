@@ -33,7 +33,7 @@ const SITE_NODE_FAMILIES: Array<{ family: string; description: string; types: st
   {
     family: 'Gmail',
     description: 'Connected Gmail accounts.',
-    types: ['gmail-trigger', 'gmail-fetch', 'gmail-send', 'gmail-reply', 'gmail-label', 'gmail-search'],
+    types: ['gmail-fetch', 'gmail-send', 'gmail-reply', 'gmail-label', 'gmail-search'],
   },
   {
     family: 'Vitals / Health',

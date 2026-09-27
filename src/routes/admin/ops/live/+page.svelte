@@ -428,12 +428,6 @@
       file: 'src/lib/health/scheduler.ts:4',
     },
     {
-      name: 'Gmail watcher',
-      cadence: '45s per active account',
-      desc: 'Polls users.history.list using gmail_history_cursors.history_id; matches new messages against gmail_watches; emits on gmailEventBus.',
-      file: 'src/lib/workflows/gmail/watcher.ts:75',
-    },
-    {
       name: 'Follow-up queue worker',
       cadence: '15s, lazily started on first enqueue',
       desc: '"I\'ll check back in N minutes" pattern. In-memory queue; stops itself when empty. Re-checks task status with 1.2× exponential backoff capped at 5 min, max 40 retries.',
