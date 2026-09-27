@@ -22,8 +22,9 @@
 //  - The exit endpoint (`VIEW_AS_PATH`) is never emulated, so the owner can
 //    always leave.
 //
-// Other applications on the domain (SR-Drive, SR-Health) are not emulated:
-// they resolve the viewer themselves.
+// The other applications on the domain (SR-Jkai-Core, SR-Drive, SR-Health) are
+// emulated at the SR-Infra gateway, which verifies this same cookie and signs the
+// target's identity instead (gateway/view-as.mjs; the format must match).
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { db } from '$lib/db';
