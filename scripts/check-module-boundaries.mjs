@@ -194,7 +194,15 @@ const BASELINE_CYCLES = [
 // regex once declared all 391 API routes public; the same class of failure here
 // is quieter, because nothing visibly breaks. Fix the extraction, do not lower
 // the number.
-const MIN_EDGES = 6500;
+//
+// Lowered ONCE, deliberately, from 6500 on 2026-09-27: intel-basics M1 deleted
+// ~95 files that no live root reached or that only ran under the retired
+// SR_JKAI_CORE_OWNER=main switch (the intel engine and its mail pipeline, the
+// Gmail watcher, the Drive outbox drain, ~30 unreachable modules). That took
+// the measured count from 6,616 to 6,369 real imports. The floor keeps ~170 of
+// headroom under that; M2 (Main's intel copy) will re-measure and move it once
+// more. A drop to near zero is still what this exists to catch.
+const MIN_EDGES = 6200;
 
 // ---------------------------------------------------------------------------
 
