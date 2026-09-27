@@ -388,12 +388,6 @@
           ]
         },
         {
-          "pattern": "^/api/jkai/intel/daily-alerts/?$",
-          "methods": [
-            "GET"
-          ]
-        },
-        {
           "pattern": "^/api/workflows/orchestrator/chat(?:/stream)?/?$",
           "methods": [
             "GET",
