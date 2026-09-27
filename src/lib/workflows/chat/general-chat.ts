@@ -1043,9 +1043,11 @@ async function runGeneralChat(
   // sub-agent's brief is a task by construction and skips the router's round
   // trip.
   //
-  // A restricted turn fetches NONE of it — no router call, no memory, graph or
-  // saved integrations. Each of those is the owner's. It runs on a fixed empty
-  // context, and its stamp says so without naming anything of the owner's.
+  // A restricted turn fetches none of the owner's context — no router call, no
+  // memory, no saved integrations. Its graph is the member's OWN: Core's
+  // chat-context answers in the principal's scope (their space + household),
+  // and with nothing — never the owner's graph — for a principal it does not
+  // recognise or a Core too old to honour the name (see `chatContext`).
   const routedPromise: Promise<RoutedTurn> = restriction
     ? Promise.resolve({ route: { kind: 'task' as const, domains: [], entities: [], clusters: [], query: '', capabilities: [], source: 'fallback' as const }, ms: 0 })
     : (options.subagentDepth ?? 0) > 0
@@ -1053,9 +1055,14 @@ async function runGeneralChat(
       : routeTurn(userMessage, conversationHistory);
   const contextPromise = routedPromise.then(async (routed) => {
     if (restriction) {
-      const plan: ContextPlan = { memory: 'pinned', graph: 'none', integrations: false, query: '', toolGroups: [], skills: false };
+      const useGraph = options.useIntelContext !== false && !!userMessage.trim();
+      const plan: ContextPlan = { memory: 'pinned', graph: useGraph ? 'search' : 'none', integrations: false, query: useGraph ? userMessage : '', toolGroups: [], skills: false };
       const memory: MemorySelection & { unavailable?: boolean } = { text: '', served: [], omitted: [], retrieved: 0, chars: 0 };
-      const graph = { text: '', anchors: [] as Anchor[], clusters: [] as string[] };
+      const graph = {
+        text: useGraph ? (await chatContext({ userMessage, principal: restriction.principalId })).knowledge : '',
+        anchors: [] as Anchor[],
+        clusters: [] as string[],
+      };
       const integrations = { integrations: [] as Awaited<ReturnType<typeof discoverIntegrations>>, status: 'not needed' };
       return { routed, plan, memory, graph, integrations };
     }

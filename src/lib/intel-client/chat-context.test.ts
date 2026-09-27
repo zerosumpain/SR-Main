@@ -71,4 +71,48 @@ describe('chatContext', () => {
     expect(out).toEqual({ knowledge: '', grounding: '' });
     expect(called).toBe(false);
   });
+
+  /** A Core stub that records each body and answers with `reply(body)`. */
+  async function core(reply: (body: Record<string, unknown>) => Record<string, unknown>) {
+    process.env.JKAI_INVOKE_TOKEN = 't'.repeat(40);
+    const bodies: Record<string, unknown>[] = [];
+    const port = await stub((req, res) => {
+      let raw = '';
+      req.on('data', (c) => (raw += c));
+      req.on('end', () => {
+        const body = JSON.parse(raw) as Record<string, unknown>;
+        bodies.push(body);
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(reply(body)));
+      });
+    });
+    return { port, bodies };
+  }
+
+  it("names the member on a member's turn, and takes Core's member-scoped answer", async () => {
+    const { port, bodies } = await core((b) => ({ knowledge: `for ${b.principal}`, grounding: '', principal: b.principal }));
+    const out = await chatContext({ userMessage: 'a', scope: ['u_1', 'household'], principal: 'u_1' }, { port });
+    expect(bodies).toEqual([{ userMessage: 'a', entityIds: [], principal: 'u_1' }]);
+    expect(out).toEqual({ knowledge: 'for u_1', grounding: '' });
+  });
+
+  it("does not send a principal on the owner's turn", async () => {
+    const { port, bodies } = await core(() => ({ knowledge: 'K', grounding: '' }));
+    await chatContext({ userMessage: 'a' }, { port });
+    await chatContext({ userMessage: 'b', principal: 'owner' }, { port });
+    await chatContext({ userMessage: 'c', principal: null }, { port });
+    expect(bodies.map((b) => 'principal' in b)).toEqual([false, false, false]);
+  });
+
+  it('drops the answer of a Core that ignored the principal (no echo = the owner\'s graph)', async () => {
+    const { port, bodies } = await core(() => ({ knowledge: 'owner things', grounding: 'owner grounding' }));
+    const out = await chatContext({ userMessage: 'a', principal: 'u_1' }, { port });
+    expect(bodies).toHaveLength(1);
+    expect(out).toEqual({ knowledge: '', grounding: '' });
+  });
+
+  it('drops an answer that echoes a different principal', async () => {
+    const { port } = await core(() => ({ knowledge: 'someone else', grounding: '', principal: 'u_2' }));
+    expect(await chatContext({ userMessage: 'a', principal: 'u_1' }, { port })).toEqual({ knowledge: '', grounding: '' });
+  });
 });
