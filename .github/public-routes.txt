@@ -128,7 +128,6 @@
 /projects/engine-room/turn/routing
 /projects/engine-room/turn/stream
 /projects/engine-room/turn/trace
-/projects/hex
 /projects/jkai
 /projects/jkai/[slug]/[...path]
 /rss.xml
