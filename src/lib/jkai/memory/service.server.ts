@@ -2,7 +2,7 @@ import { db, type DbExecutor } from '$lib/db';
 import { jkaiMemories, jkaiMemoryEntities } from '$lib/db/schema';
 import { and, or, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { MemoryProvenance } from './contracts';
-import { generateEmbedding } from '$lib/jkai/intel/embed';
+import { generateEmbedding } from '$lib/intel-client/embed';
 
 export interface MemoryWrite {
   category: string; content: string; confidence?: string; replacesId?: string | null;

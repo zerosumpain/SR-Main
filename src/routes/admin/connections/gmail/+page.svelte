@@ -7,54 +7,13 @@
   let { data } = $props();
 
   let accounts = $state(data.accounts);
-  let watchesByAccount = $state<Record<number, any[]>>(
-    Object.fromEntries(
-      data.accounts.map((a: any) => [a.id, data.watches.filter((w: any) => w.accountId === a.id)])
-    )
-  );
   let openAccountId = $state<number | null>(null);
-  let newLabel = $state<Record<number, string>>({});
-  let newQuery = $state<Record<number, string>>({});
   let testQuery = $state<Record<number, string>>({});
   let testResult = $state<Record<number, { count: number; sample: any } | null>>({});
   let busy = $state<Record<string, boolean>>({});
 
   const connected = $derived($page.url.searchParams.get('connected'));
   const errorCode = $derived($page.url.searchParams.get('error'));
-
-  async function loadWatches(accountId: number) {
-    const res = await fetch(`/api/gmail/accounts/${accountId}/watches`);
-    watchesByAccount[accountId] = await res.json();
-  }
-
-  async function addWatch(accountId: number) {
-    const label = (newLabel[accountId] ?? '').trim();
-    const query = (newQuery[accountId] ?? '').trim();
-    if (!label || !query) return;
-    busy[`add-${accountId}`] = true;
-    try {
-      await fetch(`/api/gmail/accounts/${accountId}/watches`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ label, query }),
-      });
-      newLabel[accountId] = '';
-      newQuery[accountId] = '';
-      await loadWatches(accountId);
-    } finally {
-      busy[`add-${accountId}`] = false;
-    }
-  }
-
-  async function deleteWatch(accountId: number, watchId: number) {
-    busy[`del-watch-${watchId}`] = true;
-    try {
-      await fetch(`/api/gmail/accounts/${accountId}/watches?watchId=${watchId}`, { method: 'DELETE' });
-      await loadWatches(accountId);
-    } finally {
-      busy[`del-watch-${watchId}`] = false;
-    }
-  }
 
   async function disconnect(accountId: number) {
     if (!confirm('Disconnect this Gmail account?')) return;
@@ -90,7 +49,6 @@
       openAccountId = null;
     } else {
       openAccountId = id;
-      if (!watchesByAccount[id]) loadWatches(id);
     }
   }
 
@@ -104,7 +62,7 @@
   <PageHeader
     kicker="Channels"
     title="Gmail"
-    sub="Multi-account inbox watches. The polling watcher fires workflows whose start node matches a watch query."
+    sub="Connected Gmail accounts. Disconnecting one deletes the notes, graph facts and files taken from its mail."
   >
     {#snippet actions()}
       <a class="nm-save-btn" href="/api/gmail/connect">Connect account</a>
@@ -143,48 +101,10 @@
 
           {#if isOpen}
             <div class="account-body">
-              <!-- Watches -->
-              <div class="account-section">
-                <span class="sr-label-tight">Watches</span>
-                {#if (watchesByAccount[account.id] ?? []).length === 0}
-                  <div class="nm-empty">No watches yet.</div>
-                {:else}
-                  <div class="nm-table-scroll">
-                    <table class="nm-table">
-                      <thead>
-                        <tr><th>Label</th><th>Query</th><th>Enabled</th><th></th></tr>
-                      </thead>
-                      <tbody>
-                        {#each watchesByAccount[account.id] as w}
-                          <tr>
-                            <td>{w.label}</td>
-                            <td><code>{w.query}</code></td>
-                            <td>{w.enabled ? 'yes' : 'no'}</td>
-                            <td><button class="nm-link-btn danger" onclick={() => deleteWatch(account.id, w.id)} disabled={busy[`del-watch-${w.id}`]}>{busy[`del-watch-${w.id}`] ? '…' : 'Delete'}</button></td>
-                          </tr>
-                        {/each}
-                      </tbody>
-                    </table>
-                  </div>
-                {/if}
-              </div>
-
-              <!-- Add watch -->
-              <div class="account-section">
-                <span class="sr-label-tight">Add watch</span>
-                <div class="add-watch-row">
-                  <input class="nm-text-input" type="text" placeholder="Label" bind:value={newLabel[account.id]} />
-                  <input class="nm-text-input" type="text" placeholder="Query (e.g. newer_than:1d from:someone@x.com)" bind:value={newQuery[account.id]} />
-                  <button class="nm-save-btn" onclick={() => addWatch(account.id)} disabled={busy[`add-${account.id}`]}>
-                    {busy[`add-${account.id}`] ? '…' : 'Add'}
-                  </button>
-                </div>
-              </div>
-
               <!-- Test fetch -->
               <div class="account-section">
                 <span class="sr-label-tight">Test fetch</span>
-                <div class="add-watch-row">
+                <div class="test-row">
                   <input class="nm-text-input" type="text" placeholder="Gmail search query" bind:value={testQuery[account.id]} />
                   <button class="nm-btn-ghost" onclick={() => runTest(account.id)} disabled={busy[`test-${account.id}`]}>
                     {busy[`test-${account.id}`] ? '…' : 'Run test'}
@@ -235,14 +155,14 @@
   .account-date { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); margin-left: auto; }
   .account-body { display: flex; flex-direction: column; gap: 0.9rem; padding-top: 0.6rem; }
   .account-section { display: flex; flex-direction: column; gap: 0.4rem; }
-  .add-watch-row {
+  .test-row {
     display: grid;
-    grid-template-columns: 200px 1fr auto;
+    grid-template-columns: 1fr auto;
     gap: 0.5rem;
     align-items: center;
   }
   @media (max-width: 600px) {
-    .add-watch-row { grid-template-columns: 1fr; }
+    .test-row { grid-template-columns: 1fr; }
   }
   .test-result {
     display: flex;
@@ -257,11 +177,4 @@
   }
   .sample-body { margin: 0.4rem 0 0; white-space: pre-wrap; color: var(--text-ghost); }
   .muted { color: var(--text-ghost); }
-  code {
-    font-family: var(--font-mono);
-    font-size: max(0.85em, var(--fs-label-xs));
-    background: var(--code-bg);
-    color: var(--code-text);
-    padding: 0.08rem 0.38rem;
-  }
 </style>

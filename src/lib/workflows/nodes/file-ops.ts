@@ -7,7 +7,7 @@ import { db } from '$lib/db';
 import { workflowFiles, type WorkflowFilePermissions } from '$lib/db/schema';
 import { and, eq, like } from 'drizzle-orm';
 import { readBuffer, saveBuffer, appendBuffer, deleteFile, newDiskPath } from '$lib/file-store/storage';
-import { queueDerivedIntelDelete } from '$lib/jkai/intel/auto-extract';
+import { enqueueIntelJob } from '$lib/intel-client/outbox';
 import { fileReadDef, fileWriteDef, fileDeleteDef, fileListDef } from './file-ops.def';
 import { getPath as resolvePath } from '../expressions';
 import { isReservedForOwnerLane } from '$lib/drive/namespace';
@@ -174,7 +174,10 @@ export const fileDeleteExecutor: NodeExecutor = {
     await db.delete(workflowFiles).where(and(OWNER_FILE, eq(workflowFiles.id, existing.id)));
     // Derived intel has no FK to the file — remove what this document put in
     // the graph, or the entities outlive their only source.
-    queueDerivedIntelDelete('file', existing.id);
+    // SR-Jkai-Core does the cascade when it drains the outbox.
+    void enqueueIntelJob('file-deleted', existing.id, undefined).catch((err) =>
+      console.warn(`[file-delete] could not queue intel delete for ${existing.id}: ${(err as Error).message}`),
+    );
     return { output: { ok: true, deleted: true, name: fileName }, rowCount: 1 };
   },
   getInputSchema(): JsonSchema { return { type: 'object', description: 'Only fileName is needed.' }; },

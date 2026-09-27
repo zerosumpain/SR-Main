@@ -25,8 +25,6 @@ vi.mock('$lib/llm/client', async (importOriginal) => ({
     throw new Error('tripwire: no model call in this test');
   }),
 }));
-// The briefing's alert source reaches out to live feeds; it is not what is under test.
-vi.mock('$lib/jkai/intel/daily-alerts.server', () => ({ loadDailyAlerts: async () => undefined }));
 
 const TAG = `t${Math.random().toString(36).slice(2, 10)}`;
 const OWNER_WORD = `Ownerthread${TAG}`;
@@ -65,11 +63,6 @@ describe.skipIf(!process.env.DATABASE_URL)('background readers see only the owne
   afterAll(async () => {
     const all = [ids.owner, ids.member].filter((x): x is string => !!x);
     if (all.length) await db.delete(conversations).where(inArray(conversations.id, all)); // messages cascade
-  });
-
-  it('the Gmail preview lands in the owner\'s latest web thread', async () => {
-    const { gmailNotificationTarget } = await import('$lib/workflows/gmail/orchestrator-bridge');
-    expect(await gmailNotificationTarget()).toBe(ids.owner);
   });
 
   it('think/reads chat_threads never names a member thread', async () => {

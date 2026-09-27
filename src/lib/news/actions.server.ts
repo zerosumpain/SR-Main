@@ -15,8 +15,8 @@ import { error } from '@sveltejs/kit';
 import { commissionNewsResearch, keepNewsInGraph, linkNewsInNote, newsActionArticle } from './actions';
 import { newsCapabilities } from './capabilities.server';
 import type { NewsSource } from '$lib/constants/news-sources';
-import { resolveRequestScope } from '$lib/jkai/intel/scope.server';
-import { writeSpace } from '$lib/jkai/intel/scope';
+import { resolveRequestScope } from '$lib/intel-client/scope.server';
+import { writeSpace } from '$lib/intel-client/scope';
 import { areaAccess } from '$lib/server/area-scope';
 import { reserveResearchStart } from '$lib/deepdive/session-access.server';
 

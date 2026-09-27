@@ -6,7 +6,7 @@ import { contextResult } from '$lib/jkai/grounding/evidence';
 import { retrieveMemories } from '$lib/jkai/memory/retrieve.server';
 import { MEMORY_PROMPT_BUDGET, selectMemoryLines, pinnedOnly, type MemorySelection, type MemoryTurnStamp, type ContextTurnStamp } from '$lib/jkai/memory/contracts';
 import { fallbackRoute, planContext, type ContextPlan, type ContextRoute, type ToolCapability } from '$lib/jkai/grounding/context-route';
-import { routeTurn, resolveAnchors, clustersForTurn, type Anchor, type RoutedTurn } from '$lib/jkai/grounding/context-route.server';
+import { routeTurn, resolveAnchors, type Anchor, type RoutedTurn } from '$lib/jkai/grounding/context-route.server';
 import { getActivePolicy, renderGlobalGuidance } from '$lib/toolpolicy/policy';
 import { applyCapabilityPolicy, resolveCapabilities } from '$lib/jkai/grounding/capabilities';
 // src/lib/workflows/chat/general-chat.ts — full replacement
@@ -43,9 +43,9 @@ import { buildMultimodalContent, encodedSizeBytes, planTurnMedia } from '$lib/jk
 import { extractUrlsFromText, fetchUrlContent, isUrlFetchError } from '$lib/jkai/extract/url';
 import type { JkaiAttachment } from '$lib/db/schema';
 import type { HistoryMessage } from './conversation-history';
-import { buildKnowledgeContext, buildEntityGrounding, loadClusterRoster, type RosterCluster } from '$lib/jkai/intel/context';
-import { createNote, processNote } from '$lib/jkai/intel/ingest';
-import { OWNER_SPACE } from '$lib/jkai/intel/scope';
+import { chatContext } from '$lib/intel-client/chat-context';
+import { enqueueIntelJob } from '$lib/intel-client/outbox';
+import { OWNER_SPACE } from '$lib/intel-client/scope';
 import { summarizeToolResult, summarizeRunningTool } from './tool-summary';
 import { extractReasoningDelta } from './reasoning-delta';
 import { extractPlan, awaitPlanApproval, isReadOnlyPlan } from './plan-phase';
@@ -262,7 +262,7 @@ interface ChatOptions {
   useIntelContext?: boolean;
   /**
    * Pre-built intel context to inject verbatim, overriding the global
-   * buildKnowledgeContext() call. Non-empty string = use it. Empty string =
+   * chatContext() call. Non-empty string = use it. Empty string =
    * no intel section. null/undefined = fall back to useIntelContext.
    */
   intelContextOverride?: string | null;
@@ -292,7 +292,7 @@ interface ChatOptions {
   /**
    * A member's turn: their principal and the closed tool list it runs on (see
    * `$lib/jkai/member-chat/policy`). When set, the turn runs on the member
-   * persona, fetches none of the owner's context (memory, graph, roster,
+   * persona, fetches none of the owner's context (memory, graph,
    * integrations, skills, canvas), is offered only `allow`, and every call is
    * refused unless its name is in `allow` — in this loop AND in the executor,
    * which gets `allowedTools` + `principalId` on its context. Absent = the
@@ -391,27 +391,22 @@ async function buildMemorySection(query = '', mode: ContextPlan['memory'] = 'rel
 async function buildGraphSection(
   plan: ContextPlan,
   route: ContextRoute,
-  roster: readonly RosterCluster[],
 ): Promise<{ text: string; anchors: Anchor[]; clusters: string[] }> {
   if (plan.graph === 'none') return { text: '', anchors: [], clusters: [] };
-  if (plan.graph === 'overview') {
-    return { text: await buildKnowledgeContext(plan.query), anchors: [], clusters: roster.map((c) => c.label) };
-  }
+  // Both halves come from SR-Jkai-Core in one call (`chatContext`), which
+  // returns empty context rather than failing when Core is unreachable.
   if (plan.graph === 'anchored') {
     const anchors = await resolveAnchors(route.entities).catch((err) => {
       console.warn('[context-route] anchor lookup failed:', err instanceof Error ? err.message : err);
       return [] as Anchor[];
     });
-    const clusters = clustersForTurn(route, anchors, roster);
-    if (anchors.length || clusters.length) {
-      const [grounding, rest] = await Promise.all([
-        anchors.length ? buildEntityGrounding(anchors.map((a) => a.id), 'routed') : Promise.resolve(''),
-        buildKnowledgeContext(plan.query, { entities: false, clusters: clusters.map((c) => c.key) }),
-      ]);
-      return { text: [grounding, rest].filter(Boolean).join('\n\n'), anchors, clusters: clusters.map((c) => c.label) };
+    if (anchors.length) {
+      const { grounding, knowledge } = await chatContext({ userMessage: plan.query, entityIds: anchors.map((a) => a.id) });
+      return { text: [grounding, knowledge].filter(Boolean).join('\n\n'), anchors, clusters: [] };
     }
   }
-  return { text: await buildKnowledgeContext(plan.query, { clusters: [] }), anchors: [], clusters: [] };
+  const { knowledge } = await chatContext({ userMessage: plan.query });
+  return { text: knowledge, anchors: [], clusters: [] };
 }
 
 /**
@@ -445,17 +440,15 @@ function maybeIngestAsNote(userMessage: string): void {
   const isCapture = capturePatterns.some((p) => p.test(userMessage.trim()));
   if (!isCapture) return;
 
-  createNote({
-    rawContent: userMessage,
+  // SR-Jkai-Core creates and processes the note when it drains the outbox.
+  enqueueIntelJob('note', `chat:${Date.now()}`, {
+    content: userMessage,
     source: 'web',
-    format: 'text',
     metadata: { capturedFrom: 'chat' },
     spaceId: OWNER_SPACE,
-  }).then((noteId) => {
-    processNote(noteId).catch((err) => {
-      console.error(`[intel] Chat capture processing failed:`, err);
-    });
-    console.log(`[intel] Captured chat message as note ${noteId}`);
+    process: true,
+  }).then((jobId) => {
+    console.log(`[intel] Queued chat capture as outbox job ${jobId}`);
   }).catch((err) => {
     console.error('[intel] Chat capture failed:', err);
   });
@@ -1048,24 +1041,17 @@ async function runGeneralChat(
   // so the fetchers search on a standalone query and only the slices the turn
   // needs are fetched at all — see `$lib/jkai/grounding/context-route`. A
   // sub-agent's brief is a task by construction and skips the router's round
-  // trip; the roster loads once and serves both the router and the block.
+  // trip.
   //
-  // A restricted turn fetches NONE of it — no roster, no router call, no
-  // memory, graph or saved integrations. Each of those is the owner's, and the
-  // router is given the roster's labels. It runs on a fixed empty context, and
-  // its stamp says so without naming anything of the owner's.
-  const rosterPromise = restriction
-    ? Promise.resolve([] as RosterCluster[])
-    : loadClusterRoster().catch((err) => {
-        console.warn('[context-route] cluster roster unavailable:', err instanceof Error ? err.message : err);
-        return [] as RosterCluster[];
-      });
+  // A restricted turn fetches NONE of it — no router call, no memory, graph or
+  // saved integrations. Each of those is the owner's. It runs on a fixed empty
+  // context, and its stamp says so without naming anything of the owner's.
   const routedPromise: Promise<RoutedTurn> = restriction
     ? Promise.resolve({ route: { kind: 'task' as const, domains: [], entities: [], clusters: [], query: '', capabilities: [], source: 'fallback' as const }, ms: 0 })
     : (options.subagentDepth ?? 0) > 0
       ? Promise.resolve({ route: { ...fallbackRoute(userMessage), kind: 'task' as const, query: userMessage }, ms: 0 })
-      : rosterPromise.then((roster) => routeTurn(userMessage, conversationHistory, roster));
-  const contextPromise = Promise.all([routedPromise, rosterPromise]).then(async ([routed, roster]) => {
+      : routeTurn(userMessage, conversationHistory);
+  const contextPromise = routedPromise.then(async (routed) => {
     if (restriction) {
       const plan: ContextPlan = { memory: 'pinned', graph: 'none', integrations: false, query: '', toolGroups: [], skills: false };
       const memory: MemorySelection & { unavailable?: boolean } = { text: '', served: [], omitted: [], retrieved: 0, chars: 0 };
@@ -1079,7 +1065,7 @@ async function runGeneralChat(
         ? Promise.resolve({ text: options.intelContextOverride, anchors: [] as Anchor[], clusters: [] as string[] })
         : options.useIntelContext === false
           ? Promise.resolve({ text: '', anchors: [] as Anchor[], clusters: [] as string[] })
-          : buildGraphSection(plan, routed.route, roster);
+          : buildGraphSection(plan, routed.route);
     const [memory, graph, integrations] = await Promise.all([
       buildMemorySection(plan.query, plan.memory),
       graphPromise,
@@ -1199,7 +1185,7 @@ async function runGeneralChat(
   // Prompt caching matches on a PREFIX, so the first byte that changes between
   // turns invalidates everything after it — including the ~5KB of tool schemas
   // and the whole history that follow the system message. `graphSection` is
-  // rebuilt per message by `buildKnowledgeContext(userMessage)`, and it sat in
+  // rebuilt per message by `chatContext` (SR-Jkai-Core), and it sat in
   // the middle: everything behind it was uncacheable by construction.
   //
   // Measured on production over 36 hours: 224 codex calls at 54.1% cached, with

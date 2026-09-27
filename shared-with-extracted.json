@@ -13,14 +13,6 @@
       "peer": "zerosumpain/SR-Drive",
       "sha256": "81dafdf78991e04f61978feb477b6dfb0cfc74f3a0609c8ea6f3e737c72f41b2"
     },
-    "src/lib/file-serving.ts": {
-      "peer": "zerosumpain/SR-Drive",
-      "sha256": "a849615e5e96eab3a20a9c562b79756042911142516d771d5dcb59a404f295b5"
-    },
-    "src/lib/jkai/intel/source-policy.ts": {
-      "peer": "zerosumpain/SR-Drive",
-      "sha256": "45cc2038dce4518471b10ab5b92e0d91c798e8015a63b002d47e575bd3a489ce"
-    },
     "src/lib/constants/apple-health-scale.ts": {
       "peer": "zerosumpain/SR-Health",
       "sha256": "af63a8ba495f5537458a0003317c65cedbd509c839caea0c016cb21e5bca1669"
@@ -48,10 +40,6 @@
     "src/lib/file-index/hash.ts": {
       "peer": "zerosumpain/SR-Drive",
       "sha256": "1d244d37cedac5425d1af7e9290c6e5b691d677af303d9ad875cfd018e4dd1d2"
-    },
-    "src/lib/file-index/index-status.ts": {
-      "peer": "zerosumpain/SR-Drive",
-      "sha256": "dfd93ebb55be2e9c409cda2c4c29aa51eeccc760cf833417e0fae8b1cf349ab8"
     },
     "src/lib/file-index/jkai-mirror.ts": {
       "peer": "zerosumpain/SR-Drive",
@@ -171,14 +159,14 @@
         "zerosumpain/SR-Drive",
         "zerosumpain/SR-Health"
       ],
-      "sha256": "19610de1773588fd0c4954f7d98a344eb000c600ad7b492de305f8694cc13ef9"
+      "sha256": "9c2d5b516cc9d0b197155132024fd458f87a1405dc81ef8aa810ed6a2a68e4fa"
     },
     "src/lib/components/SiteHeader.svelte": {
       "peer": [
         "zerosumpain/SR-Drive",
         "zerosumpain/SR-Health"
       ],
-      "sha256": "c1364e8053012cd96cd9137b542b0e1ef53621aefb8821ed8eee5e3a1d7884d1"
+      "sha256": "ae21add7908d57ff7713135f215630b9b1fd442cbe0c290df9956dbd82ce7bb1"
     },
     "src/lib/nav/page-path.ts": {
       "peer": [
@@ -190,7 +178,7 @@
     },
     "src/lib/access/catalogue.ts": {
       "peer": "zerosumpain/SR-Drive",
-      "sha256": "b2344f16a82ca86a04f8f6f49754bc4e4e7375aeb41372a474b60e05513bbe9f"
+      "sha256": "7a9e5db0a4a1e3a6c453886050cce86d14376ffe600e430e47b2428cb9c4e6ac"
     },
     "src/lib/access/effective.ts": {
       "peer": "zerosumpain/SR-Drive",

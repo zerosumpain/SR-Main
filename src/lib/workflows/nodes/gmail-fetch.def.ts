@@ -17,7 +17,7 @@ export const gmailFetchDef: NodeDefinition = {
       accountId: { type: 'number', description: 'Account to fetch from. Falls back to input.accountId if 0.' },
     },
   },
-  llmDescription: 'Fetches the full content of a Gmail message by id, including headers, plain-text body, HTML body, and attachment metadata. Place this immediately after gmail-trigger or gmail-search when you need more than the snippet. The trigger only provides a short preview — use gmail-fetch to get the complete body for LLM processing or forwarding. Output shape: { messageId, threadId, subject, from, to, date, bodyText, bodyHtml, attachments: [{ filename, mimeType, size }], labels }. Set accountId=0 to auto-inherit from the upstream trigger output.',
+  llmDescription: 'Fetches the full content of a Gmail message by id, including headers, plain-text body, HTML body, and attachment metadata. Place this after gmail-search when you need more than the snippet. Search results only carry a short preview — use gmail-fetch to get the complete body for LLM processing or forwarding. Output shape: { messageId, threadId, subject, from, to, date, bodyText, bodyHtml, attachments: [{ filename, mimeType, size }], labels }. Set accountId=0 to auto-inherit from the upstream trigger output.',
   llmExamples: [
     { messageId: '{{trigger.output.messageId}}', accountId: 0 },
     { messageId: '{{input.messageId}}', accountId: 1 },
@@ -32,7 +32,7 @@ export const gmailFetchDef: NodeDefinition = {
       label: 'Message ID',
       type: 'template-textarea',
       placeholder: '{{trigger.output.messageId}}',
-      description: 'Gmail message id to fetch. Typically passed from gmail-trigger or gmail-search output.',
+      description: 'Gmail message id to fetch. Typically passed from gmail-search output.',
     },
     {
       key: 'accountId',

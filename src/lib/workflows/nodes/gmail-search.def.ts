@@ -27,7 +27,7 @@ export const gmailSearchDef: NodeDefinition = {
       },
     },
   },
-  llmDescription: 'On-demand Gmail search using Gmail query syntax (e.g. "from:boss@corp.com subject:invoice newer_than:7d is:unread"). Use this node — not gmail-trigger — when you want to actively query the mailbox mid-workflow rather than reacting to incoming mail. Returns { messages: [{ id, threadId, subject, from, snippet }], count }. Set fetchFullMessages=true to include full body and attachments in each result (slower, avoid for large result sets). Pair with gmail-fetch downstream if you only need the full body for specific results. Query syntax reference: Gmail advanced search operators.',
+  llmDescription: 'On-demand Gmail search using Gmail query syntax (e.g. "from:boss@corp.com subject:invoice newer_than:7d is:unread"). Use this node to query the mailbox mid-workflow. Returns { messages: [{ id, threadId, subject, from, snippet }], count }. Set fetchFullMessages=true to include full body and attachments in each result (slower, avoid for large result sets). Pair with gmail-fetch downstream if you only need the full body for specific results. Query syntax reference: Gmail advanced search operators.',
   llmExamples: [
     {
       accountId: 1,

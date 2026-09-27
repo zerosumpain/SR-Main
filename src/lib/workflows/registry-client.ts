@@ -47,7 +47,6 @@ import { deepDiveDef } from './nodes/deep-dive.def';
 import { webScrapeDef } from './nodes/web-scrape.def';
 import { stealthScrapeDef } from './nodes/stealth-scrape.def';
 import { stealthScrapeLlmDef } from './nodes/stealth-scrape-llm.def';
-import { gmailTriggerDef } from './nodes/gmail-trigger.def';
 import { whatsappTriggerDef } from './nodes/whatsapp-trigger.def';
 import { gmailFetchDef } from './nodes/gmail-fetch.def';
 import { gmailSendDef } from './nodes/gmail-send.def';
@@ -56,7 +55,6 @@ import { gmailLabelDef } from './nodes/gmail-label.def';
 import { gmailSearchDef } from './nodes/gmail-search.def';
 import { tavilySearchDef } from './nodes/tavily-search.def';
 import { notifyDef } from './nodes/notify.def';
-import { intelWriteDef } from './nodes/intel-write.def';
 import { interactiveStepDef } from './nodes/interactive-step.def';
 // Client-safe `.def.ts` files (type-only imports) for nodes whose main `.ts`
 // executor file pulls in server-only modules — same pattern as the imports
@@ -74,10 +72,8 @@ import { inspectorDef } from './nodes/inspector';
 import { postitDef } from './nodes/postit';
 import { annotationDef } from './nodes/annotation';
 import type { NodeDefinition } from './types';
-import { intelligenceDef } from './nodes/intelligence.def';
 import { quickAnswerDef } from './nodes/quick-answer.def';
 import { deepResearchDef } from './nodes/deep-research.def';
-import { intelQueryDef } from './nodes/intel-query.def';
 import { chatDef } from './nodes/chat.def';
 import { builderChatDef, builderPiDef, buildViewDef } from './nodes/builder-canvas.def';
 import { fileReadDef, fileWriteDef, fileDeleteDef, fileListDef } from './nodes/file-ops.def';
@@ -133,7 +129,6 @@ const builtInDefinitions: NodeDefinition[] = [
   webScrapeDef,
   stealthScrapeDef,
   stealthScrapeLlmDef,
-  gmailTriggerDef,
   whatsappTriggerDef,
   gmailFetchDef,
   gmailSendDef,
@@ -142,18 +137,15 @@ const builtInDefinitions: NodeDefinition[] = [
   gmailSearchDef,
   tavilySearchDef,
   notifyDef,
-  intelWriteDef,
   interactiveStepDef,
   // Reconciled with registered executors (see registry-parity.test.ts).
   builderChatDef,
   builderPiDef,
   buildViewDef,
-  intelligenceDef,
   researchResultDef,
   quickAnswerDef,
   deepResearchDef,
   siteMapperDef,
-  intelQueryDef,
   chatDef,
   triggerDef,
   inspectorDef,

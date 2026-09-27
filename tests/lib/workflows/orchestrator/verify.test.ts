@@ -35,9 +35,6 @@ describe('isRecurringWorkflow', () => {
   it('is recurring for a trigger node with a bare cron expression', () => {
     expect(isRecurringWorkflow([node('trigger', { cron: '*/5 * * * *' })])).toBe(true);
   });
-  it('is recurring when a gmail-trigger node is present', () => {
-    expect(isRecurringWorkflow([node('gmail-trigger', { accountId: 1 })])).toBe(true);
-  });
   it('is NOT recurring for a manual trigger', () => {
     expect(isRecurringWorkflow([node('trigger', { kind: 'manual' })], { type: 'manual' })).toBe(false);
   });
@@ -79,19 +76,18 @@ describe('verifyWorkflow — B3 recurring send without dedup memory', () => {
   });
 
   it('does NOT flag a gmail auto-reply — gmail-fetch is a single-message fetch, not a feed', () => {
-    // Golden exemplars 3 & 4: gmail-trigger → gmail-fetch → llm → gmail-reply.
     // gmail-fetch pulls ONE message by id (per-message idempotent), so it must
-    // not trip the dedupe rule even though the gmail-trigger makes it recurring.
-    const trigger = node('gmail-trigger', { accountId: 1 });
+    // not trip the dedupe rule even on a recurring workflow.
+    const trigger = node('trigger', { kind: 'cron', cron: '*/15 * * * *' });
     const full = node('gmail-fetch', { accountId: 1, messageId: '{{trigger.output.messageId}}' }, 'Fetch full');
     const draft = node('llm-call', { userPrompt: 'Draft a reply' }, 'Draft');
     const reply = node('gmail-reply', { accountId: 1, to: 'x@y.z', threadId: 't', bodyText: 'b' }, 'Reply');
     const nodes = [trigger, full, draft, reply];
     const edges = [edge(trigger, full), edge(full, draft), edge(draft, reply)];
-    expect(dedupeIssues(nodes, edges)).toHaveLength(0);
+    expect(dedupeIssues(nodes, edges, CRON)).toHaveLength(0);
   });
 
-  it('does NOT flag the manual diff-dance — data-store on a parallel merge branch guards the send (golden exemplar 7)', () => {
+  it('does NOT flag the manual diff-dance — data-store on a parallel merge branch guards the send (the diff-dance golden exemplar)', () => {
     // trigger → seen(data-store get) → merge ; trigger → scrape → merge ;
     // merge → diff(transform) → email ; diff → save(data-store set).
     // The memory node sits on a PARALLEL branch feeding the merge, so the naive
@@ -160,13 +156,13 @@ describe('verifyWorkflow — B3 recurring send without dedup memory', () => {
     expect(dedupeIssues(nodes, edges, CRON)).toHaveLength(0);
   });
 
-  it('flags a gmail-trigger → gmail-search → gmail-send chain', () => {
-    const trigger = node('gmail-trigger', { accountId: 1 });
+  it('flags a cron → gmail-search → gmail-send chain', () => {
+    const trigger = node('trigger', { kind: 'cron', cron: '0 * * * *' });
     const search = node('gmail-search', { query: 'is:unread' }, 'Find Mail');
     const send = node('gmail-send', { to: 'x@y.z' }, 'Auto-reply');
     const nodes = [trigger, search, send];
     const edges = [edge(trigger, search), edge(search, send)];
-    const issues = dedupeIssues(nodes, edges);
+    const issues = dedupeIssues(nodes, edges, CRON);
     expect(issues).toHaveLength(1);
     expect(issues[0].nodeId).toBe(search.id);
   });

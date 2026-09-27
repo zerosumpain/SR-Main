@@ -30,6 +30,12 @@ const CANONICAL_HOST = 'strangeramblings.com';
 
 const APPS = {
 	health: { port: 5320, tokenEnv: 'HEALTH_SERVICE_TOKEN' },
+	// Not a gateway service lane: SR-Jkai-Core's gateway PASSES THROUGH the one
+	// path Main calls (`POST /api/jkai/intel/chat-context`, a `passthroughPatterns`
+	// entry in Core's deploy/app.json) and the route itself checks the JKAI invoke
+	// token — the same credential Core presents when it runs Main's tools, so
+	// Main already holds it. See $lib/intel-client/chat-context.
+	'jkai-core': { port: 5330, tokenEnv: 'JKAI_INVOKE_TOKEN' },
 } as const satisfies Record<string, { port: number; tokenEnv: string }>;
 
 export type ExtractedApp = keyof typeof APPS;
@@ -79,6 +85,13 @@ async function call<T>(
 				});
 			},
 		);
+		// `timeout` above is a socket IDLE timeout: a response that trickles in
+		// never trips it. This caps the whole call, so a caller's budget holds.
+		const deadline = setTimeout(() => {
+			request.destroy(new ExtractedAppError(`${app}${path} exceeded ${timeoutMs}ms`));
+		}, timeoutMs);
+		deadline.unref?.();
+		request.on('close', () => clearTimeout(deadline));
 		request.on('timeout', () => {
 			// destroy() does not itself reject; the 'error' handler below does.
 			request.destroy(new ExtractedAppError(`${app}${path} timed out after ${timeoutMs}ms`));

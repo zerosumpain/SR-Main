@@ -428,22 +428,10 @@
       file: 'src/lib/health/scheduler.ts:4',
     },
     {
-      name: 'Gmail watcher',
-      cadence: '45s per active account',
-      desc: 'Polls users.history.list using gmail_history_cursors.history_id; matches new messages against gmail_watches; emits on gmailEventBus.',
-      file: 'src/lib/workflows/gmail/watcher.ts:75',
-    },
-    {
       name: 'Follow-up queue worker',
       cadence: '15s, lazily started on first enqueue',
       desc: '"I\'ll check back in N minutes" pattern. In-memory queue; stops itself when empty. Re-checks task status with 1.2× exponential backoff capped at 5 min, max 40 retries.',
       file: 'src/lib/workflows/chat/followup-queue.ts:124',
-    },
-    {
-      name: 'Orphan-attachment sweep',
-      cadence: '1h (immediate on boot then every hour)',
-      desc: 'Deletes jkai_attachments rows where message_id IS NULL and created_at < 24h ago, plus the file on disk.',
-      file: 'src/lib/jkai/media/sweep.ts:29',
     },
     {
       name: 'Engine event-loop monitor',

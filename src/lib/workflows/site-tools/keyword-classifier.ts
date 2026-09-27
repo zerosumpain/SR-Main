@@ -58,8 +58,8 @@ const TOOLSET_PATTERNS: Array<{ toolset: string; pattern: RegExp }> = [
   { toolset: 'monitors', pattern: /\bmonitors?\b|watch\s+(?:for|this|that|the)|tell\s+me\s+when|alert\s+me\s+(?:when|if)|keep\s+an\s+eye\s+on/i },
   // The entity graph. Distinct from `knowledge` above: that one loads
   // knowledge_search (a flat ranked recall across every store), this one loads
-  // the graph walkers — intel_find / intel_path / intel_neighbourhood /
-  // intel_insights / intel_unlikely_relations. Asking about "the knowledge
+  // the graph walkers — intel_find / intel_path / intel_neighbourhood.
+  // Asking about "the knowledge
   // graph" matches both, which is intended: you want the recall AND the walk.
   // Without an entry here the whole toolset was unreachable unless the model
   // thought to call activate_toolset('intel-graph') off its own bat.

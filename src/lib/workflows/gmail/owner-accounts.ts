@@ -11,7 +11,7 @@
 // quietly become the default for the owner's chat.
 import { and, eq, type SQL } from 'drizzle-orm';
 import { gmailAccounts } from '$lib/db/schema';
-import { OWNER_SPACE } from '$lib/jkai/intel/scope';
+import { OWNER_SPACE } from '$lib/intel-client/scope';
 
 /** `principal_id = 'owner'`, optionally AND-ed with more conditions. */
 export function ownerGmailWhere(...more: Array<SQL | undefined>): SQL {

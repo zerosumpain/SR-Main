@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { queueNote, syncPendingNotes, getPendingNotes } from '$lib/jkai/intel/offline-queue';
+  import { queueNote, syncPendingNotes, getPendingNotes } from '$lib/capture/offline-queue';
   import SiteFooter from '$lib/components/SiteFooter.svelte';
 
   let title = $state('');

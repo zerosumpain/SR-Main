@@ -1,6 +1,6 @@
 // Retrieval over an in-memory chunk index. Vectors are unit-normalized at
 // write time, so cosine similarity is a plain dot product. Mirrors the shape of
-// $lib/jkai/intel/context.ts (labelled context block, threshold, '' when empty).
+// SR-Jkai-Core's intel context.ts (labelled context block, threshold, '' when empty).
 
 import {
   RETRIEVE_TOP_K,

@@ -72,8 +72,10 @@ register({
     // at all and the thread inspector cannot say which memories were recalled.
     const rows = retrieved.map(({ embedding: _embedding, ...row }) => row);
 
-    const { buildKnowledgeContext } = await import('$lib/jkai/intel/context');
-    const intelligence = query ? await buildKnowledgeContext(query) : '';
+    // The graph's recall for the same query, from SR-Jkai-Core. Empty, never an
+    // error, when Core cannot answer.
+    const { chatContext } = await import('$lib/intel-client/chat-context');
+    const intelligence = query ? (await chatContext({ userMessage: query })).knowledge : '';
     return { success: true, data: { memories: rows, count: rows.length, intelligence } };
   },
 });

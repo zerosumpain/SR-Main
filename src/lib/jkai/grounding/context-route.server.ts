@@ -9,9 +9,8 @@ import { getLLMClient } from '$lib/llm/client';
 import { withActivity } from '$lib/context/activity';
 import { resolveContextRouterModel } from '$lib/server/models/workload-settings';
 import { thinkingRequestParams } from '$lib/models/thinking';
-import { canonicalName } from '$lib/jkai/intel/resolve/match';
-import { OWNER_INTEL_SCOPE } from '$lib/jkai/intel/scope';
-import type { RosterCluster } from '$lib/jkai/intel/context';
+import { canonicalName } from '$lib/intel-client/names';
+import { OWNER_INTEL_SCOPE } from '$lib/intel-client/scope';
 import { fallbackRoute, parseRoute, renderRouterInput, ROUTER_SYSTEM, type ContextRoute } from './context-route';
 
 /**
@@ -31,13 +30,19 @@ export interface RoutedTurn {
   error?: string;
 }
 
+/**
+ * The router is given no cluster roster any more: the clusters it named were
+ * a curation layer SR-Jkai-Core has deleted. `parseRoute` therefore keeps no
+ * cluster, and the graph section runs on anchors and recall alone.
+ */
+const NO_CLUSTERS: readonly string[] = [];
+
 export async function routeTurn(
   message: string,
   history: ReadonlyArray<{ role: string; content: string }>,
-  roster: readonly RosterCluster[],
 ): Promise<RoutedTurn> {
   const started = Date.now();
-  const labels = roster.map((c) => c.label);
+  const labels = NO_CLUSTERS;
   try {
     const ctx = await resolveContextRouterModel();
     const { client, model } = await getLLMClient(ctx);
@@ -128,17 +133,4 @@ export async function resolveAnchors(names: readonly string[]): Promise<Anchor[]
     out.push({ id: String(r.id), name: String(r.name), type: String(r.type_name ?? '') });
   }
   return out;
-}
-
-/**
- * The roster clusters a turn is about: the ones the router named, plus the ones
- * its anchors belong to. One line each in the context block — never the roster.
- */
-export function clustersForTurn(
-  route: ContextRoute,
-  anchors: readonly Anchor[],
-  roster: readonly RosterCluster[],
-): RosterCluster[] {
-  const anchorIds = new Set(anchors.map((a) => a.id));
-  return roster.filter((c) => route.clusters.includes(c.label) || c.members.some((m) => anchorIds.has(m)));
 }

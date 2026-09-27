@@ -6,7 +6,7 @@ import { gmailAccounts } from '$lib/db/schema';
 import { encryptToken } from '$lib/workflows/gmail/crypto';
 import { verifyConnectState } from '$lib/workflows/gmail/oauth-state';
 import { viewerOf } from '$lib/server/viewer';
-import { OWNER_SPACE } from '$lib/jkai/intel/scope';
+import { OWNER_SPACE } from '$lib/intel-client/scope';
 import { eq } from 'drizzle-orm';
 
 /**
@@ -28,7 +28,7 @@ export const GET: RequestHandler = async (event) => {
 
   const back = (params: Record<string, string>) => {
     const qs = new URLSearchParams(params).toString();
-    return member ? `/jkai/intel?${qs}` : `/admin/connections/gmail?${qs}`;
+    return member ? `/jkai/intel/sources?${qs}` : `/admin/connections/gmail?${qs}`;
   };
   const fail = (code: string): never => {
     throw redirect(302, back(member ? { gmail_error: code } : { error: code }));

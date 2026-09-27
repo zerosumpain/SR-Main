@@ -2884,7 +2884,7 @@ export const intelNotes = pgTable('intel_notes', {
    * to. Nothing here is a general-purpose moderation queue.
    */
   graphState: text('graph_state').notNull().default('admitted'),
-  /** Whose intel this is — see $lib/jkai/intel/scope. 'owner' | 'household' | 'u_…'. */
+  /** Whose intel this is — see $lib/intel-client/scope. 'owner' | 'household' | 'u_…'. */
   spaceId: text('space_id').notNull().default('owner'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -2919,7 +2919,7 @@ export const intelEntities = pgTable(
     confirmed: boolean('confirmed').notNull().default(false),
     mergedIntoId: text('merged_into_id'),
     firstSeenIn: text('first_seen_in').references(() => intelNotes.id, { onDelete: 'set null' }),
-    /** Whose intel this is — see $lib/jkai/intel/scope. 'owner' | 'household' | 'u_…'. */
+    /** Whose intel this is — see $lib/intel-client/scope. 'owner' | 'household' | 'u_…'. */
     spaceId: text('space_id').notNull().default('owner'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -3011,7 +3011,7 @@ export const intelRelationships = pgTable(
     properties: jsonb('properties').$type<Record<string, unknown>>(),
     confidence: text('confidence').notNull().default('medium'),
     sourceNoteId: text('source_note_id').references(() => intelNotes.id, { onDelete: 'set null' }),
-    /** Whose intel this is — see $lib/jkai/intel/scope. 'owner' | 'household' | 'u_…'. */
+    /** Whose intel this is — see $lib/intel-client/scope. 'owner' | 'household' | 'u_…'. */
     spaceId: text('space_id').notNull().default('owner'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 
@@ -3126,7 +3126,7 @@ export const intelTimelineEvents = pgTable('intel_timeline_events', {
   type: text('type').notNull(),
   title: text('title').notNull(),
   description: text('description'),
-  /** Whose intel this is — see $lib/jkai/intel/scope. 'owner' | 'household' | 'u_…'. */
+  /** Whose intel this is — see $lib/intel-client/scope. 'owner' | 'household' | 'u_…'. */
   spaceId: text('space_id').notNull().default('owner'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -3147,7 +3147,7 @@ export const intelAlerts = pgTable('intel_alerts', {
   dismissedReason: text('dismissed_reason'),
   /** Stable key so the same alert is not raised twice. */
   dedupeKey: text('dedupe_key'),
-  /** Whose intel this is — see $lib/jkai/intel/scope. 'owner' | 'household' | 'u_…'. */
+  /** Whose intel this is — see $lib/intel-client/scope. 'owner' | 'household' | 'u_…'. */
   spaceId: text('space_id').notNull().default('owner'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -3222,7 +3222,7 @@ export const intelInsights = pgTable(
       .notNull()
       .default(sql`'[]'::jsonb`),
     runId: text('run_id'),
-    /** Whose intel this is — see $lib/jkai/intel/scope. 'owner' | 'household' | 'u_…'. */
+    /** Whose intel this is — see $lib/intel-client/scope. 'owner' | 'household' | 'u_…'. */
     spaceId: text('space_id').notNull().default('owner'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -3255,7 +3255,7 @@ export const intelLenses = pgTable(
     cron: text('cron'),
     lastRunAt: timestamp('last_run_at', { withTimezone: true }),
     lastCount: integer('last_count'),
-    /** Whose intel this is — see $lib/jkai/intel/scope. 'owner' | 'household' | 'u_…'. */
+    /** Whose intel this is — see $lib/intel-client/scope. 'owner' | 'household' | 'u_…'. */
     spaceId: text('space_id').notNull().default('owner'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -3277,7 +3277,7 @@ export const intelDossiers = pgTable(
     lensId: text('lens_id'),
     status: text('status').notNull().default('open'), // open|parked|closed
     openQuestions: jsonb('open_questions').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
-    /** Whose intel this is — see $lib/jkai/intel/scope. 'owner' | 'household' | 'u_…'. */
+    /** Whose intel this is — see $lib/intel-client/scope. 'owner' | 'household' | 'u_…'. */
     spaceId: text('space_id').notNull().default('owner'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -3326,7 +3326,7 @@ export const intelCommissions = pgTable(
     status: text('status').notNull().default('queued'), // queued|running|complete|failed
     resultNoteId: text('result_note_id'),
     error: text('error'),
-    /** Whose intel this is — see $lib/jkai/intel/scope. 'owner' | 'household' | 'u_…'. */
+    /** Whose intel this is — see $lib/intel-client/scope. 'owner' | 'household' | 'u_…'. */
     spaceId: text('space_id').notNull().default('owner'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -3473,7 +3473,7 @@ export type NewIntelCategory = typeof intelCategories.$inferInsert;
  * hang a column on, and a per-file column would need rewriting on every move.
  * Keyed on the folder path with no trailing slash ('' is the root).
  *
- * Resolution is inheritance-based (see `$lib/jkai/intel/source-policy`):
+ * Resolution is inheritance-based (see `$lib/intel-client/source-policy`):
  *   - `intelMode`: the NEAREST ancestor with a non-'inherit' mode decides.
  *   - `categoryIds`: the UNION of every ancestor's categories.
  */
@@ -3488,7 +3488,7 @@ export const driveFolderSettings = pgTable(
     /**
      * The intel space files here land in: 'owner' | 'household', or null to
      * inherit from the nearest ancestor that says (the root defaults to the
-     * owner). Resolved in $lib/jkai/intel/source-policy.
+     * owner). Resolved in $lib/intel-client/source-policy.
      */
     spaceId: text('space_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -3522,9 +3522,9 @@ export const driveIntelOutbox = pgTable(
   'drive_intel_outbox',
   {
     id: serial('id').primaryKey(),
-    /** 'file-changed' | 'file-deleted' | 'policy-resync' */
+    /** 'file-changed' | 'file-deleted' | 'policy-resync' | 'extract' | 'note' | 'mail-purge' ($lib/intel-client/outbox) */
     kind: text('kind').notNull(),
-    /** A workflow_files id for the file kinds, a folder path for policy-resync. */
+    /** A workflow_files id for the file kinds, a folder path for policy-resync, the caller's ref for extract/note, a gmail_accounts id for mail-purge. */
     ref: text('ref').notNull(),
     /** Extra arguments the consumer needs, e.g. the ids a resync should cover. */
     payload: jsonb('payload'),

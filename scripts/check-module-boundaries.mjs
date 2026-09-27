@@ -170,9 +170,7 @@ const BASELINE_CYCLES = [
   'canvas <-> workflows',
   'codegraph <-> jkai',
   'daydream <-> workflows',
-  'deepdive <-> jkai',
   'deepdive <-> workflows',
-  'file-index <-> jkai',
   'heartbeat <-> workflows',
   'jkai <-> workflows',
   // Was 'jkai <-> server' before the gateway moved down — the same knot, now
@@ -194,7 +192,16 @@ const BASELINE_CYCLES = [
 // regex once declared all 391 API routes public; the same class of failure here
 // is quieter, because nothing visibly breaks. Fix the extraction, do not lower
 // the number.
-const MIN_EDGES = 6500;
+//
+// Lowered deliberately, twice, on 2026-09-27 by the intel-basics change.
+// M1 (6500 → 6200) deleted ~95 files that no live root reached or that only ran
+// under the retired SR_JKAI_CORE_OWNER=main switch (the intel engine and its
+// mail pipeline, the Gmail watcher, the Drive outbox drain, ~30 unreachable
+// modules): 6,616 → 6,369 real imports. M2 (6200 → 6000) deleted Main's copy of
+// src/lib/jkai/intel (~70 files, ~12k lines, SR-Jkai-Core owns it) for a thin
+// $lib/intel-client: 6,369 → 6,175. The floor keeps ~175 of headroom under
+// that. A drop to near zero is still what this exists to catch.
+const MIN_EDGES = 6000;
 
 // ---------------------------------------------------------------------------
 

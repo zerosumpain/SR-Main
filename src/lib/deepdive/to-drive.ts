@@ -27,7 +27,7 @@ import { workflowFiles, driveFolderSettings, type WorkflowFilePermissions } from
 import { eq, like } from 'drizzle-orm';
 import { newDiskPath, saveBuffer, deleteFile } from '$lib/file-store/storage';
 import { reindexFileInBackground } from '$lib/file-index/store';
-import { syncSourcePolicy } from '$lib/jkai/intel/source-policy.server';
+import { enqueueIntelJob } from '$lib/intel-client/outbox';
 import { assertPublicUrl } from '$lib/server/ssrf-guard';
 import { fetchPageText } from './fetch-page-text';
 import { readableFromHtml } from './extract-local';
@@ -339,9 +339,9 @@ export async function saveSourceToDrive(
  * Mark the run's folder as feeding entity resolution.
  *
  * Without this the files would be searchable and invisible to the intel graph,
- * which is half the reason for putting them there. `syncSourcePolicy` then
- * applies the policy to everything already beneath the path, so it does not
- * matter whether the folder is created before or after the files.
+ * which is half the reason for putting them there. A `policy-resync` job then
+ * has SR-Jkai-Core apply the policy to everything already beneath the path, so
+ * it does not matter whether the folder is created before or after the files.
  */
 export async function ensureResearchFolderPolicy(folder: string): Promise<void> {
   const [existing] = await db
@@ -361,7 +361,7 @@ export async function ensureResearchFolderPolicy(folder: string): Promise<void> 
       .where(eq(driveFolderSettings.id, existing.id));
   }
 
-  await syncSourcePolicy(folder);
+  await enqueueIntelJob('policy-resync', folder, undefined);
 }
 
 /**

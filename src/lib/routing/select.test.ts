@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { selectForProfile, enrichRow, NEUTRAL_PRIOR, type Candidate } from './scoring';
 import { wilsonLower, buildSuccessIndex, successForProfile } from './success';
-import { classifyQuery } from './classify';
 import { DEFAULT_CONFIG, PRICE_WEIGHT_CAP, type RoutingEvent } from './types';
 
 const noSuccess = () => ({ rate: null, samples: 0 });
@@ -234,24 +233,6 @@ describe('NEUTRAL_PRIOR keeps exploration alive', () => {
   it('is between 0.5 and 0.8', () => {
     expect(NEUTRAL_PRIOR).toBeGreaterThan(0.5);
     expect(NEUTRAL_PRIOR).toBeLessThan(0.8);
-  });
-});
-
-describe('classifyQuery', () => {
-  it('workflow context → agentic', () => {
-    expect(classifyQuery({ message: 'hi', workflowId: 'w1' }).profile).toBe('agentic');
-  });
-  it('@files → rag', () => {
-    expect(classifyQuery({ message: 'summarise @files the report' }).profile).toBe('rag');
-  });
-  it('delegate → agentic', () => {
-    expect(classifyQuery({ message: 'delegate this to the researcher' }).profile).toBe('agentic');
-  });
-  it('home control → tool', () => {
-    expect(classifyQuery({ message: 'turn on the living room lights' }).profile).toBe('tool');
-  });
-  it('plain chat → general', () => {
-    expect(classifyQuery({ message: 'what do you think about stoicism?' }).profile).toBe('general');
   });
 });
 

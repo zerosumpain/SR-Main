@@ -25,7 +25,6 @@ describe('event catalogue', () => {
         'alexa.utterance',
         'connector.broken',
         'connector.recovered',
-        'gmail.inbound',
         'health.summary_changed',
         'intel.alert',
         'news.item',

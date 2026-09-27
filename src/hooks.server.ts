@@ -15,7 +15,6 @@ import { startConnectorWatch, stopConnectorWatch } from '$lib/connectors/watch';
 // jkai-builder.service). Build-control routes call it over the Unix socket
 // via $lib/jkai/builder-client. Phase 3 of jkai-build-rewrite.md in the Drive
 // archive linked from docs/README.md.
-import { startOrphanSweep } from '$lib/jkai/media/sweep';
 // Side-effect import: every integration adapter registers itself on load.
 // The barrel is maintained by the node-builder codegen.
 import '$lib/integrations/adapters';
@@ -39,10 +38,9 @@ import { isRedirect, redirect, type Handle } from '@sveltejs/kit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { env } from '$env/dynamic/private';
 import { runsService } from '$lib/workflows/service-role';
-import { workflowOwner, jkaiCoreOwner } from '$lib/workflows/extraction-owner';
+import { workflowOwner } from '$lib/workflows/extraction-owner';
 
 const mainOwnsWorkflows = workflowOwner() === 'main';
-const mainOwnsJkaiCore = jkaiCoreOwner() === 'main';
 
 /**
  * The rate-limit decision, shared by the owner gate and the native device lanes.
@@ -152,21 +150,10 @@ if (runsService('scheduler')) startHealthWatch();
 // a Gmail token that died at 07:40 go unnoticed for 23 hours.
 if (runsService('scheduler')) startConnectorWatch();
 
-// Start the JKAI orphan attachment sweep (runs immediately + hourly)
-if (runsService('background') && mainOwnsJkaiCore) startOrphanSweep();
-
-// Install the WhatsApp escalation hook so orchestrator waiters / terminal
-// events fan out to WA when the user isn't attached to the chat stream.
-import { installWaEscalation } from '$lib/workflows/chat/wa-escalation';
-if (runsService('background') && mainOwnsJkaiCore) installWaEscalation();
-
-// Start the Gmail polling watcher and orchestrator bridge
-import { startWatcher as startGmailWatcher, stopWatcher as stopGmailWatcher } from '$lib/workflows/gmail/watcher';
-import { registerGmailBridge, unregisterGmailBridge } from '$lib/workflows/gmail/orchestrator-bridge';
-// The bridge also pushes into process-local chat subscribers. Keep this pair in
-// Main until a durable cross-app notification contract replaces that push.
-if (runsService('background')) startGmailWatcher();
-if (runsService('background')) registerGmailBridge();
+// The JKAI orphan-attachment sweep, WhatsApp escalation, the Drive
+// Intelligence outbox drain and the nightly intel engine all run in
+// SR-Jkai-Core now. Main's copies only ever started under
+// SR_JKAI_CORE_OWNER=main and were retired with that rollback switch.
 
 // Start the heartbeat engine — periodic autonomous activities (chat
 // continuation, build/job nudges, workflow review). Tickers are configured
@@ -192,7 +179,6 @@ if (runsService('background')) startScheduledEngine().catch((err) => {
 // one idle-cycle scheduler instead of two. Neither belongs in the jkai-builder
 // sidecar process.
 import { startDatastoreReaper, stopDatastoreReaper } from '$lib/datastore';
-import { startDriveIntelOutbox, stopDriveIntelOutbox } from '$lib/jkai/intel/drive-outbox';
 import { startSelfImprovementSeeds } from '$lib/selfimprove/engine';
 import { startVoiceDrift } from '$lib/voice/drift-engine';
 // Nightly workflow doctor — triages node_executions failures, quarantines
@@ -203,10 +189,6 @@ import { startVoiceDrift } from '$lib/voice/drift-engine';
 import { startWorkflowDoctor, stopWorkflowDoctor } from '$lib/workflowdoctor/engine';
 import { startBriefingEngine, stopBriefingEngine } from '$lib/briefing/engine';
 import { startModelRouting, stopModelRouting } from '$lib/routing/engine';
-// Nightly intel maintenance: confidence scores, watchlist diffs, live-query
-// lenses. Each of those had a batch half nothing was calling — a watchlist that
-// only diffs when you open its endpoint is not a watchlist.
-import { startIntelEngine, stopIntelEngine } from '$lib/jkai/intel/engine';
 // Research runs whose worker was lost. Worker state is process-local and
 // `startResearch` is fire-and-forget, so a deploy landing mid-run used to strand
 // the session permanently — seven of thirty-one production sessions were stuck
@@ -221,17 +203,12 @@ if (!building) {
 }
 if (runsService('background')) {
   startDatastoreReaper();
-  // Drains what Drive hands Intelligence. A no-op until Drive is its own
-  // application — while both live here, Drive still calls these functions
-  // directly and the table stays empty.
-  if (mainOwnsJkaiCore) startDriveIntelOutbox();
   startSelfImprovementSeeds();
   // Monthly, advisory only — it writes a note and never touches the card.
   startVoiceDrift();
   startWorkflowDoctor();
   startBriefingEngine();
   startModelRouting();
-  if (mainOwnsJkaiCore) startIntelEngine();
   /**
    * Deliberately delayed, then repeated.
    *
@@ -286,15 +263,11 @@ async function gracefulShutdown() {
   stopHeroTitlesScheduler();
   stopDependencyMonitor();
   stopHealthWatch();
-  stopGmailWatcher();
-  unregisterGmailBridge();
   stopDatastoreReaper();
-    stopDriveIntelOutbox();
   stopWorkflowDoctor();
   stopBriefingEngine();
   stopConnectorWatch();
   stopModelRouting();
-  stopIntelEngine();
   process.exit(0);
 }
 
@@ -674,10 +647,6 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   if (
     pathname === '/api/deepdive/index-sources' ||
     pathname === '/api/deepdive/reindex-facts' ||
-    pathname === '/api/jkai/intel/backfill' ||
-    pathname === '/api/jkai/intel/source-facets' ||
-    pathname === '/api/jkai/intel/clusters/recalculate' ||
-    pathname === '/api/jkai/intel/entities/split' ||
     (pathname === '/api/trails/segments' && event.request.method === 'POST')
   ) {
     let clientAddr = '';
@@ -705,15 +674,14 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   // is shut by default). Scoped to exactly this path and to POST; the route
   // re-checks the credential itself, defence in depth, and an unrecognised one
   // falls through to the owner gate below and 401s there.
-  // The intel lane: the three calls chat makes to intel on the SERVER, which
-  // become cross-process the day chat moves. Same credential as the tool lane —
+  // The intel lane: the two calls chat makes to intel on the SERVER, which
+  // are cross-process now that chat lives in SR-Jkai-Core. Same credential as the tool lane —
   // it identifies SR-JKAI as the caller, and what it may DO is the tool lane's
   // question, not this one. Each route also accepts an owner session and
   // re-checks for itself, so this bypass only ever widens the tokened path.
   if (
     ((pathname === '/api/jkai/intel/chat-context' && event.request.method === 'POST') ||
-      (pathname === '/api/jkai/intel/extract-thread' && event.request.method === 'POST') ||
-      (pathname === '/api/jkai/intel/daily-alerts' && event.request.method === 'GET')) &&
+      (pathname === '/api/jkai/intel/extract-thread' && event.request.method === 'POST')) &&
     hasJkaiServiceToken(event.request)
   ) {
     return resolve(event);

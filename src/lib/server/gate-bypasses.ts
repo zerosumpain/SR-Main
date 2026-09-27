@@ -49,10 +49,6 @@ export const HOOK_BYPASSES: string[] = [
   '/api/health/workflow-engine', // watchdog probe (historical path, being retired)
   '/api/deepdive/index-sources',
   '/api/deepdive/reindex-facts',
-  '/api/jkai/intel/backfill', // loopback + MAINTENANCE_SECRET, re-checked in the handler
-  '/api/jkai/intel/source-facets', // as above — both verbs re-check in the handler
-  '/api/jkai/intel/clusters/recalculate', // as above; its own path so the secret cannot reach rename/narrate
-  '/api/jkai/intel/entities/split', // as above; conflation repair, driven from the VPS against prod
   '/api/trails/segments', // POST ONLY — loopback + MAINTENANCE_SECRET, re-checked in the handler.
   // GET on the same path is NOT bypassed: it answers with segment geometry, and a
   // GPS trace starts at the front door. Only the idempotent rebuild is reachable.
@@ -74,14 +70,12 @@ export const HOOK_BYPASSES: string[] = [
   // What tools exist and which need a human — the other half of the same seam,
   // on the same credential. GET only, and it carries no descriptions or schemas.
   '/api/platform/tools/catalogue', // GET only, same credential
-  // The three server-side calls chat makes to intel, which become cross-process
-  // when chat moves. Same SR-JKAI credential; each also accepts an owner session
-  // and re-checks it. Named one at a time — /api/jkai/intel is NOT a tree here,
-  // and its siblings (backfill, clusters/recalculate, entities/split) carry the
-  // maintenance secret instead.
+  // The two server-side calls chat makes to intel, cross-process now that
+  // chat lives in SR-Jkai-Core. Same SR-JKAI credential; each also accepts an
+  // owner session and re-checks it. Named one at a time — /api/jkai/intel is
+  // NOT a tree here.
   '/api/jkai/intel/chat-context', // POST only, JKAI_INVOKE_TOKEN or owner
   '/api/jkai/intel/extract-thread', // POST only, same
-  '/api/jkai/intel/daily-alerts', // GET only, same
   // Autonomous-builder tool bridge. HMAC-over-build-id bearer token, verified
   // in $lib/jkai/tool-bridge. Named one path at a time on purpose: the sibling
   // /api/jkai/tools/promote has NO auth of its own and must stay owner-gated.
@@ -184,10 +178,6 @@ export const BYPASS_GUARDS: Record<string, string> = {
   '/api/health/workflow-engine': 'loopback only · watchdog probe (historical path, being retired)',
   '/api/deepdive/index-sources': 'loopback + MAINTENANCE_SECRET',
   '/api/deepdive/reindex-facts': 'loopback + MAINTENANCE_SECRET',
-  '/api/jkai/intel/backfill': 'loopback + MAINTENANCE_SECRET',
-  '/api/jkai/intel/source-facets': 'loopback + MAINTENANCE_SECRET',
-  '/api/jkai/intel/clusters/recalculate': 'loopback + MAINTENANCE_SECRET',
-  '/api/jkai/intel/entities/split': 'loopback + MAINTENANCE_SECRET',
   '/api/trails/segments': 'POST only · loopback + MAINTENANCE_SECRET (GET stays gated)',
   '/api/jkai/studio': 'POST only · STUDIO_SERVICE_TOKEN',
   '/api/platform/tools/invoke':
@@ -195,7 +185,6 @@ export const BYPASS_GUARDS: Record<string, string> = {
   '/api/platform/tools/catalogue': 'GET only · JKAI_INVOKE_TOKEN; tool names and their destructive flag',
   '/api/jkai/intel/chat-context': 'POST only · JKAI_INVOKE_TOKEN or owner session; intel context for a chat turn',
   '/api/jkai/intel/extract-thread': 'POST only · JKAI_INVOKE_TOKEN or owner session; fire-and-forget extraction',
-  '/api/jkai/intel/daily-alerts': 'GET only · JKAI_INVOKE_TOKEN or owner session; 24h alert summary',
   '/api/jkai/tools/manifest': 'JKAI_BRIDGE_TOKEN',
   '/api/jkai/tools/invoke': 'JKAI_BRIDGE_TOKEN',
   '/api/jkai/studio/image': 'JKAI_BRIDGE_TOKEN',

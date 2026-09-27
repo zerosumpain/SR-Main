@@ -10,8 +10,8 @@ import { and, desc, ilike, isNull } from 'drizzle-orm';
 import { jkaiMemories } from '$lib/db/schema';
 import { searchFiles } from '$lib/file-index/search';
 import { searchResearch } from '$lib/deepdive/research-search';
-import { searchIntel, type IntelItem } from '$lib/jkai/intel/search';
-import { OWNER_INTEL_SCOPE, type IntelScope } from '$lib/jkai/intel/scope';
+import { searchIntel, type IntelItem } from '$lib/intel-client/read';
+import { OWNER_INTEL_SCOPE, type IntelScope } from '$lib/intel-client/scope';
 import type { AreaAccess } from '$lib/server/area-predicates';
 import { listCollections, queryRecords } from '$lib/datastore';
 

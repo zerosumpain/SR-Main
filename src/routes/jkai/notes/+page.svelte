@@ -461,6 +461,8 @@
           ? `Into the graph — ${w.entityCount ?? 0} entit${w.entityCount === 1 ? 'y' : 'ies'}.`
           : w?.status === 'unchanged'
             ? 'Already in the graph, unchanged.'
+            : w?.status === 'queued'
+              ? 'Queued for the graph. It is extracted in the background; weave again to see the result.'
             : w?.status === 'too-thin'
               ? `Too short to extract (${w.chars ?? 0} characters).`
               : `Not woven: ${w?.error ?? w?.reason ?? w?.status ?? 'unknown'}`;

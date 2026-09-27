@@ -21,11 +21,6 @@ const SITE_NODE_FAMILIES: Array<{ family: string; description: string; types: st
     types: ['deep-dive', 'deep-dive-start', 'deep-dive-status', 'deep-dive-report', 'deep-dive-list', 'deep-dive-control'],
   },
   {
-    family: 'Intelligence',
-    description: 'Intel store + query.',
-    types: ['intel-write', 'intel-query', 'intelligence'],
-  },
-  {
     family: 'JKAI',
     description: 'Orchestrator chat hub.',
     types: ['jkai'],
@@ -33,7 +28,7 @@ const SITE_NODE_FAMILIES: Array<{ family: string; description: string; types: st
   {
     family: 'Gmail',
     description: 'Connected Gmail accounts.',
-    types: ['gmail-trigger', 'gmail-fetch', 'gmail-send', 'gmail-reply', 'gmail-label', 'gmail-search'],
+    types: ['gmail-fetch', 'gmail-send', 'gmail-reply', 'gmail-label', 'gmail-search'],
   },
   {
     family: 'Vitals / Health',

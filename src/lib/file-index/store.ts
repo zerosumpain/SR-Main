@@ -21,9 +21,7 @@ import { chunkText } from '$lib/rag/chunk';
 import { sha256Hex } from './hash';
 import { fileToText, isIndexableMime } from './content';
 import { embedChunks, FILE_INDEX_EMBEDDING_MODEL } from './embed';
-import { queueIntelExtraction } from '$lib/jkai/intel/auto-extract';
-import { OWNER_SPACE } from '$lib/jkai/intel/scope';
-import { policyForFileName } from '$lib/jkai/intel/source-policy.server';
+import { enqueueIntelJob } from '$lib/intel-client/outbox';
 
 // Cap the bytes we ever read into RAM to embed. The upload interface allows
 // multi-GB files; loading one whole into a single Buffer on the memory-constrained
@@ -170,32 +168,29 @@ export async function indexFile(fileId: string): Promise<IndexResult> {
 
   if (!applied) return { status: 'skipped', reason: 'superseded' };
 
-  // The file's text is now the current indexed text — feed it to the intel
-  // graph so uploads become entities, not just vectors. Hash-deduped and
-  // fire-and-forget: extraction never blocks or fails indexing.
-  //
-  // Unless its Drive folder is excluded from ER: the semantic index (@files,
-  // RAG) is unaffected either way, but an excluded folder must not put entities
-  // in the graph. Categories inherited from the folder tree ride along so the
-  // Intel graph filter can select on them.
-  const policy = await policyForFileName(row.name);
+  // The file's text is now the current indexed text — hand it to the intel
+  // graph so uploads become entities, not just vectors. A `file-changed` job on
+  // the intel outbox: SR-Jkai-Core applies the Drive folder's policy (an
+  // ER-excluded folder puts nothing in the graph), picks the space (owner, or
+  // household if the folder routes there) and extracts, hash-deduped. Never
+  // awaited past the insert and never fatal: extraction must not block or fail
+  // indexing.
   if (row.principalId !== 'owner') {
     // A member's file is theirs: it never feeds the owner's intel graph.
     console.log(`[file-index] ${row.name} is a member's file — skipping intel extraction`);
-  } else if (policy && !policy.included) {
-    console.log(`[file-index] ${row.name} is in an ER-excluded folder — skipping intel extraction`);
   } else {
-    queueIntelExtraction({
+    await enqueueIntelJob('file-changed', fileId, {
       kind: 'file',
       refId: fileId,
       title: row.name,
-      text: content.text,
+      // Core's extractor reads the first 24,000 characters and dedupes on the
+      // precomputed hash, so the rest would only sit in the outbox for a week.
+      text: content.text.slice(0, 24_000),
       contentHash: hash,
-      categories: policy?.categorySlugs ?? [],
       metadata: { mimeType: row.mimeType, modality: content.modality, sourceUrl: '/drive' },
-      // The owner's, unless its folder routes it to household (./source-space).
-      spaceId: policy?.spaceId ?? OWNER_SPACE,
-    });
+    }).catch((err) =>
+      console.warn(`[file-index] could not queue intel extraction for ${fileId}: ${(err as Error).message}`),
+    );
   }
 
   return { status: 'indexed', chunkCount: rows.length, modality: content.modality };

@@ -542,11 +542,11 @@ async function runResearchPhases(sessionId: string): Promise<void> {
         if (!budget.expired()) {
           const { commitSessionGraph } = await import('./graph-commit');
           const outcome = await commitSessionGraph(sessionId);
-          if (outcome.status === 'committed') {
+          if (outcome.status === 'queued') {
             emitLog(
               sessionId,
               '\u{1F517}',
-              `Committed ${outcome.entities} entities and ${outcome.relationships} relationships to the knowledge graph.`,
+              `Queued ${outcome.entities} entities and ${outcome.relationships} relationships for the knowledge graph.`,
             );
           }
         }

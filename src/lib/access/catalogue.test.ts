@@ -71,8 +71,10 @@ describe('levels are ordered and never cross areas', () => {
 describe('the route map', () => {
   it('names a permission per verb, with HEAD following GET', () => {
     expect(requiredFor('/jkai/intel', 'GET')).toBe('jkai.intel:self');
-    expect(requiredFor('/api/jkai/intel/network', 'HEAD')).toBe('jkai.intel:self');
-    expect(requiredFor('/api/jkai/intel/mail', 'POST')).toBe('jkai.intel:self');
+    expect(requiredFor('/api/jkai/intel/entity-card', 'HEAD')).toBe('jkai.intel:self');
+    expect(requiredFor('/api/jkai/intel/entities/[id]', 'PUT')).toBe('jkai.intel:self');
+    expect(requiredFor('/api/jkai/intel/entities/[id]', 'DELETE')).toBe('jkai.intel:self');
+    expect(requiredFor('/api/jkai/knowledge/search', 'POST')).toBe('jkai.intel:self');
     expect(requiredFor('/api/jkai/intel/entities', 'POST')).toBeNull();
     expect(requiredFor('/jkai/intel', 'post')).toBeNull();
   });
@@ -82,6 +84,9 @@ describe('the route map', () => {
     expect(requiredFor('/jkai/canvas', 'GET')).toBeNull();
     expect(requiredFor('/admin/access', 'GET')).toBeNull();
     expect(requiredFor('/jkai/intel/notes/new', 'GET')).toBeNull();
+    // Retired with the intel simplification: no grant opens them any more.
+    expect(requiredFor('/api/jkai/intel/network', 'GET')).toBeNull();
+    expect(requiredFor('/api/jkai/intel/mail', 'POST')).toBeNull();
   });
 
   it('opens routes only for areas that are open', () => {

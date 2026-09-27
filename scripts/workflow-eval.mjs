@@ -34,8 +34,8 @@
  *   --out <path>                   default docs/evals/workflow-eval.json
  *   --dry                          list the cases, call nothing
  *
- * Runs module code through Vite's SSR loader, as evaluate-intelligence.mjs
- * does, so `$lib`/`$env` resolve exactly as they do in the app. (A bare
+ * Runs module code through Vite's SSR loader
+ * so `$lib`/`$env` resolve exactly as they do in the app. (A bare
  * `tsx src/lib/workflows/eval/run-eval.ts` could not: `$lib` is a Vite alias.)
  */
 import { mkdirSync, writeFileSync } from 'node:fs';

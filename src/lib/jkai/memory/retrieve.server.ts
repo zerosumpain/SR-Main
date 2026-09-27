@@ -2,7 +2,7 @@ import { graphMemoryIds, memoryLinks } from './graph.server';
 import { db } from '$lib/db';
 import { jkaiMemories } from '$lib/db/schema';
 import { and, desc, eq, isNull, or, sql, inArray } from 'drizzle-orm';
-import { generateEmbedding } from '$lib/jkai/intel/embed';
+import { generateEmbedding } from '$lib/intel-client/embed';
 import { memoryScore } from './contracts';
 
 /** Lexical recall is always available; semantic recall degrades independently. */

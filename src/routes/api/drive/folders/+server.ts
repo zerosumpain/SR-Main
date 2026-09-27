@@ -3,7 +3,8 @@
 //
 //   GET  ?path=…  the stored row for one folder plus its RESOLVED policy
 //        (no path) every stored row + every category, for the /drive UI
-//   PUT           save one folder's settings and re-sync everything beneath it
+//   PUT           save one folder's settings and queue a re-sync of everything
+//                 beneath it
 //
 //   space (PUT body, optional): 'owner' | 'household' | null — which intel space
 //        this folder's files land in; null inherits. Absent leaves it as it is,
@@ -12,14 +13,60 @@
 // The re-sync is the point: without it, excluding a folder would only stop
 // FUTURE extraction and leave the entities already in the graph, which is the
 // same "source removed, intel survives" bug this release fixes elsewhere.
+//
+// SR-Jkai-Core runs it: a `policy-resync` job on the intel outbox, drained within
+// seconds. So the PUT answers `sync: { queued: true, jobId, filesConsidered }`
+// — how many of the owner's files sit under the folder and will be re-checked —
+// rather than what the re-sync did, which is not known yet. SR-Drive's folder
+// modal reads `filesConsidered` and treats the other counts as optional.
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { driveFolderSettings, intelCategories } from '$lib/db/schema';
+import { driveFolderSettings, intelCategories, workflowFiles, type IntelCategory } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { isIntelMode, normalisePath, resolveFolderPolicy } from '$lib/jkai/intel/source-policy';
-import { loadSourcePolicyContext, syncSourcePolicy } from '$lib/jkai/intel/source-policy.server';
-import { isDriveSpace, resolveFolderSpace } from '$lib/jkai/intel/source-space';
+import {
+  folderOf,
+  isIntelMode,
+  isUnder,
+  normalisePath,
+  resolveFolderPolicy,
+  type FolderSetting,
+} from '$lib/intel-client/source-policy';
+import { isDriveSpace, resolveFolderSpace, type FolderSpaceSetting } from '$lib/intel-client/source-space';
+import { enqueueIntelJob } from '$lib/intel-client/outbox';
+
+/** Everything the resolvers need, in one round trip. */
+async function loadSourcePolicyContext(): Promise<{
+  settings: FolderSetting[];
+  spaces: FolderSpaceSetting[];
+  categories: IntelCategory[];
+}> {
+  const [settingRows, categories] = await Promise.all([
+    db.select().from(driveFolderSettings),
+    db.select().from(intelCategories).orderBy(intelCategories.name),
+  ]);
+  return {
+    settings: settingRows.map((r) => ({
+      path: normalisePath(r.path),
+      intelMode: isIntelMode(r.intelMode) ? r.intelMode : 'inherit',
+      categoryIds: r.categoryIds ?? [],
+    })),
+    spaces: settingRows.map((r) => ({
+      path: normalisePath(r.path),
+      spaceId: isDriveSpace(r.spaceId) ? r.spaceId : null,
+    })),
+    categories,
+  };
+}
+
+/** The owner's files under a folder — the ones a re-sync will re-check. Members' files never had intel. */
+async function ownerFilesUnder(path: string): Promise<number> {
+  const files = await db
+    .select({ name: workflowFiles.name })
+    .from(workflowFiles)
+    .where(eq(workflowFiles.principalId, 'owner'));
+  return files.filter((f) => isUnder(folderOf(f.name), path)).length;
+}
 
 export const GET: RequestHandler = async ({ url }) => {
   const rawPath = url.searchParams.get('path');
@@ -86,7 +133,10 @@ export const PUT: RequestHandler = async ({ request }) => {
 
   // Scoped to this subtree — sweeping the whole Drive on every save would make
   // a one-folder edit cost an all-files pass.
-  const sync = await syncSourcePolicy(path);
+  const [jobId, filesConsidered] = await Promise.all([
+    enqueueIntelJob('policy-resync', path, undefined),
+    ownerFilesUnder(path),
+  ]);
 
-  return json({ folder: saved, sync });
+  return json({ folder: saved, sync: { queued: true, jobId, filesConsidered } });
 };

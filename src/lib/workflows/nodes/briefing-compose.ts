@@ -1,5 +1,3 @@
-import { loadDailyAlerts } from '$lib/jkai/intel/daily-alerts.server';
-import { dailyAlertsText, DAILY_ALERTS_HREF } from '$lib/constants/daily-alerts';
 import type { NodeExecutor, NodeResult, ExecutionContext } from '../types';
 import {
   SETTINGS_TOPICS_KEY,
@@ -183,7 +181,6 @@ export const briefingComposeExecutor: NodeExecutor = {
       ['Knowledge graph', 'knowledge'],
       ['Daydreams', 'daydreams'],
       ['New memories', 'memories'],
-      ['Daily alerts', 'alerts'],
     ]);
 
     // A gap means "this section produced no usable value", so only `failed` and
@@ -409,18 +406,6 @@ export const briefingComposeExecutor: NodeExecutor = {
       record('daydreams', 'Daydreams', 'failed', err instanceof Error ? err.message : String(err));
     }
 
-    // Read directly so existing scheduled workflows need no new node.
-    if (sourceEnabled('alerts')) {
-      const alerts = await loadDailyAlerts(now);
-      record('alerts', 'Daily alerts', alerts.status, dailyAlertsText(alerts));
-      if (alerts.status === 'ok') {
-        facts.push({ section: 'Daily alerts', label: 'Last 24 hours', value: dailyAlertsText(alerts), source: 'intel-alerts', href: DAILY_ALERTS_HREF });
-        for (const alert of alerts.items) {
-          facts.push({ section: 'Daily alerts', label: `${alert.significance}: ${alert.title}`, value: alert.content.slice(0, 1000), source: `intel-alert:${alert.id}`, href: DAILY_ALERTS_HREF });
-        }
-      }
-    }
-
     // ---- New shared memories --------------------------------------------
     // Daydream reviews, notes and confirmed places all end up in the shared
     // memory table. Feeding the newest live rows back into the briefing makes
@@ -579,7 +564,7 @@ export const briefingComposeExecutor: NodeExecutor = {
       .map((s) => {
         const heading = s === 'New memories'
           ? 'New memories — REQUIRED: share in a “What I learned” bullet'
-          : s === 'Daily alerts' ? 'Daily alerts — include a short summary with significance; recorded alerts, not independently verified facts' : s;
+          : s;
         return `[${heading}]\n` + facts.filter((f) => f.section === s).map((f) => `  ${f.label}: ${f.value}`).join('\n');
       })
       .join('\n\n');

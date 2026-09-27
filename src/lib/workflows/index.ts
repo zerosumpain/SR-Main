@@ -48,7 +48,6 @@ import {
   buildViewDef, buildViewExecutor,
 } from './nodes/builder-canvas';
 import { deepDiveDef, deepDiveExecutor } from './nodes/deep-dive';
-import { intelligenceDef, intelligenceExecutor } from './nodes/intelligence';
 import { researchResultDef, researchResultExecutor } from './nodes/research-result';
 import { quickAnswerDef, quickAnswerExecutor } from './nodes/quick-answer';
 import { deepResearchDef, deepResearchExecutor } from './nodes/deep-research';
@@ -56,7 +55,6 @@ import { webScrapeDef, webScrapeExecutor } from './nodes/web-scrape';
 import { stealthScrapeDef, stealthScrapeExecutor } from './nodes/stealth-scrape';
 import { siteMapperDef, siteMapperExecutor } from './nodes/site-mapper';
 import { stealthScrapeLlmDef, stealthScrapeLlmExecutor } from './nodes/stealth-scrape-llm';
-import { gmailTriggerDef, gmailTriggerExecutor } from './nodes/gmail-trigger';
 import { whatsappTriggerDef, whatsappTriggerExecutor } from './nodes/whatsapp-trigger';
 import { gmailFetchDef, gmailFetchExecutor } from './nodes/gmail-fetch';
 import { gmailSendDef, gmailSendExecutor } from './nodes/gmail-send';
@@ -65,9 +63,7 @@ import { gmailLabelDef, gmailLabelExecutor } from './nodes/gmail-label';
 import { gmailSearchDef, gmailSearchExecutor } from './nodes/gmail-search';
 import { tavilySearchDef, tavilySearchExecutor } from './nodes/tavily-search';
 import { notifyDef, notifyExecutor } from './nodes/notify';
-import { intelWriteDef, intelWriteExecutor } from './nodes/intel-write';
 import { interactiveStepDef, interactiveStepExecutor } from './nodes/interactive-step';
-import { intelQueryDef, intelQueryExecutor } from './nodes/intel-query';
 import { chatDef, chatExecutor } from './nodes/chat';
 import { triggerDef, triggerExecutor } from './nodes/trigger';
 import { inspectorDef, inspectorExecutor } from './nodes/inspector';
@@ -101,11 +97,8 @@ import { getWhatsAppService } from './whatsapp/service';
 import { ownerPhone } from '$lib/config/owner';
 import { registerNotificationChannel } from '$lib/server/notify';
 import { OrchestratorBridge } from './whatsapp/orchestrator-bridge';
-import { syncPrompts } from './prompts/loader';
-import { loadCustomTools } from './site-tools/custom-tool-loader';
-import { startMemoryReview } from './chat/memory-review';
 import { startScheduler } from './scheduler';
-import { workflowOwner, jkaiCoreOwner } from './extraction-owner';
+import { workflowOwner } from './extraction-owner';
 import { startReaper, initEventLoopMonitor, startBlockReporter } from './engine-runtime';
 import { db } from '$lib/db';
 import { whatsappConfig, homeAssistantConfig } from '$lib/db/schema';
@@ -168,7 +161,6 @@ registry.register(builderChatDef, builderChatExecutor);
 registry.register(builderPiDef, builderPiExecutor);
 registry.register(buildViewDef, buildViewExecutor);
 registry.register(deepDiveDef, deepDiveExecutor);
-registry.register(intelligenceDef, intelligenceExecutor);
 registry.register(researchResultDef, researchResultExecutor);
 registry.register(quickAnswerDef, quickAnswerExecutor);
 registry.register(deepResearchDef, deepResearchExecutor);
@@ -176,7 +168,6 @@ registry.register(webScrapeDef, webScrapeExecutor);
 registry.register(stealthScrapeDef, stealthScrapeExecutor);
 registry.register(stealthScrapeLlmDef, stealthScrapeLlmExecutor);
 registry.register(siteMapperDef, siteMapperExecutor);
-registry.register(gmailTriggerDef, gmailTriggerExecutor);
 registry.register(whatsappTriggerDef, whatsappTriggerExecutor);
 registry.register(gmailFetchDef, gmailFetchExecutor);
 registry.register(gmailSendDef, gmailSendExecutor);
@@ -185,9 +176,7 @@ registry.register(gmailLabelDef, gmailLabelExecutor);
 registry.register(gmailSearchDef, gmailSearchExecutor);
 registry.register(tavilySearchDef, tavilySearchExecutor);
 registry.register(notifyDef, notifyExecutor);
-registry.register(intelWriteDef, intelWriteExecutor);
 registry.register(interactiveStepDef, interactiveStepExecutor);
-registry.register(intelQueryDef, intelQueryExecutor);
 registry.register(chatDef, chatExecutor);
 registry.register(triggerDef, triggerExecutor);
 registry.register(inspectorDef, inspectorExecutor);
@@ -377,20 +366,6 @@ async function bootHomeAssistant() {
 }
 
 if (runsService('homeassistant')) bootHomeAssistant();
-
-if (runsService('background') && jkaiCoreOwner() === 'main') {
-  syncPrompts().catch((err: unknown) => {
-    const msg = err instanceof Error ? err.message : 'Unknown error';
-    console.error('[prompts] Sync failed:', msg);
-  });
-
-  loadCustomTools().catch((err: unknown) => {
-    const msg = err instanceof Error ? err.message : 'Unknown error';
-    console.error('[custom-tools] Load failed:', msg);
-  });
-
-  startMemoryReview();
-}
 
 // Bring every workflow into canvas shape before the scheduler takes
 // a fresh snapshot. Idempotent — no-ops on a clean DB.

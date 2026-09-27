@@ -53,8 +53,7 @@ describe('isMemberAllowedRoute — a member reaches their own intel space and no
       '/jkai/intel/notes/[id]',
       '/jkai/intel/entities/[id]',
       '/jkai/intel/timeline',
-      '/jkai/intel/mail',
-      '/api/jkai/intel/network',
+      '/jkai/intel/sources',
       '/api/jkai/intel/entity-card',
     ]) {
       expect(isMemberAllowedRoute(id, 'GET'), id).toBe(true);
@@ -80,6 +79,12 @@ describe('isMemberAllowedRoute — a member reaches their own intel space and no
       '/api/jkai/intel/clusters',
       '/api/jkai/intel/source-facets',
       '/api/jkai/intel/mail/rules',
+      // Deleted with the intel simplification; no grant may reopen them.
+      '/jkai/intel/mail',
+      '/api/jkai/intel/mail',
+      '/api/jkai/intel/network',
+      '/api/jkai/intel/network/paths',
+      '/api/jkai/intel/evidence-network',
       '/api/gmail/accounts',
       '/admin/access',
     ]) {
@@ -88,13 +93,14 @@ describe('isMemberAllowedRoute — a member reaches their own intel space and no
     expect(isMemberAllowedRoute(null, 'GET')).toBe(false);
   });
 
-  it('is per verb: the read APIs are GET only, mail triage alone may POST', () => {
+  it('is per verb: reads are GET, only an entity may be corrected or deleted', () => {
     expect(isMemberAllowedRoute('/api/jkai/intel/entities', 'POST')).toBe(false);
     expect(isMemberAllowedRoute('/api/jkai/intel/notes/[id]', 'DELETE')).toBe(false);
-    expect(isMemberAllowedRoute('/api/jkai/intel/entities/[id]', 'PUT')).toBe(false);
+    expect(isMemberAllowedRoute('/api/jkai/intel/entities/[id]', 'PUT')).toBe(true);
+    expect(isMemberAllowedRoute('/api/jkai/intel/entities/[id]', 'DELETE')).toBe(true);
     expect(isMemberAllowedRoute('/jkai/intel', 'POST')).toBe(false);
-    expect(isMemberAllowedRoute('/api/jkai/intel/mail', 'POST')).toBe(true);
-    expect(isMemberAllowedRoute('/api/jkai/intel/network', 'HEAD')).toBe(true);
+    expect(isMemberAllowedRoute('/api/jkai/knowledge/search', 'POST')).toBe(true);
+    expect(isMemberAllowedRoute('/api/jkai/intel/entity-card', 'HEAD')).toBe(true);
   });
 
   it('lists only routes that exist', () => {

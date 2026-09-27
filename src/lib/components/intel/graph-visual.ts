@@ -5,7 +5,12 @@
 // each held its own copy of the palette and the opacity thresholds. Anything NEW
 // that both need goes here instead, so there is one place to change it.
 
-import { RECENCY_FLOOR } from '$lib/jkai/intel/staleness';
+/**
+ * The lowest recency the staleness model hands out — SR-Jkai-Core's
+ * `staleness.RECENCY_FLOOR`. Recency arrives on a node already computed, so
+ * only the floor is needed here, to map Core's range onto the fade.
+ */
+export const RECENCY_FLOOR = 0.15;
 
 /**
  * How faint the stalest thing on the graph is allowed to get, as a fraction of

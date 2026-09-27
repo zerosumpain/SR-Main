@@ -20,7 +20,7 @@
 // other". ANN neighbours over short titles are mostly noise, which this
 // codebase has already measured once.
 
-import { acronymsOf, normaliseName, significantTokens } from '$lib/jkai/intel/resolve/match';
+import { acronymsOf, normaliseName, significantTokens } from '$lib/intel-client/names';
 import type { NewsStory } from './types';
 
 /** Where an anchor came from. Drives its weight and how a match is explained. */

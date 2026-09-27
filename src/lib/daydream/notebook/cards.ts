@@ -12,8 +12,9 @@
 //   ponders / daydreams / suggestions — all three are the ponder engine. One
 //       pack, one `aggregates` slot, cards carried verbatim and cited like
 //       everything else. `noteCards` and `actionCards` below.
-//   intelligence / the knowledge graph — `extractIntoIntel`, a fifth AutoKind.
-//       Entities and relationships, not prose.
+//   intelligence / the knowledge graph — an `extract` job on the intel outbox,
+//       which SR-Jkai-Core runs as a fifth AutoKind. Entities and
+//       relationships, not prose.
 //
 // So a note reaches the thinking engine as a CARD and the graph as a NOTE, and
 // neither path is a copy of the other.
@@ -114,54 +115,73 @@ export function weaveText(n: NoteCardInput): string {
 /**
  * Weave one note into the knowledge graph.
  *
- * `extractIntoIntel` again — the fifth `AutoKind`, not a second extraction
- * pipeline. A second one would be a second place to forget the graph gate, and
- * `intel_notes.graph_state` is the thing standing between a mailbox and a graph
- * full of marketing.
+ * SR-Jkai-Core does the extraction (`extractIntoIntel`, the fifth `AutoKind`)
+ * when it drains the intel outbox; this queues an `extract` job and, on a later
+ * call, reads the job's outcome back. The pass is therefore two-step: the first
+ * call for a text returns `queued`, and the next one (the next heartbeat tick,
+ * or the next press) finds the result and marks the note woven.
+ *
+ * A job is matched to the note's CURRENT text by its content hash, so an edit
+ * made while a job was in flight queues a fresh one rather than being marked
+ * woven on the strength of the old text.
  *
  * Never throws: a graph that is busy must not cost the notebook a save.
  */
 export async function weaveNote(noteId: string): Promise<
   | { status: 'woven'; noteId: string; entityCount: number }
   | { status: 'unchanged'; noteId: string }
+  | { status: 'queued' }
   | { status: 'too-thin'; chars: number }
   | { status: 'skipped'; reason: string }
   | { status: 'failed'; error: string }
 > {
   try {
-    const [{ getNote, markWoven }, { MIN_EXTRACT_CHARS, extractIntoIntel }, { OWNER_SPACE }] = await Promise.all([
-      import('./store'),
-      import('$lib/jkai/intel/auto-extract'),
-      import('$lib/jkai/intel/scope'),
-    ]);
+    const [{ getNote, markWoven }, { MIN_EXTRACT_CHARS }, { OWNER_SPACE }, { enqueueIntelJob, latestIntelJob }] =
+      await Promise.all([
+        import('./store'),
+        import('$lib/intel-client/types'),
+        import('$lib/intel-client/scope'),
+        import('$lib/intel-client/outbox'),
+      ]);
     const note = await getNote(noteId);
     if (!note) return { status: 'skipped', reason: `no such note: ${noteId}` };
 
     const text = weaveText(note);
     if (text.length < MIN_EXTRACT_CHARS) return { status: 'too-thin', chars: text.length };
+    const contentHash = weaveHash(text);
+    const ref = `notebook:${note.id}`;
 
-    const out = await extractIntoIntel({
+    const job = await latestIntelJob<{ status?: string; noteId?: string | null; entityCount?: number }>('extract', ref);
+    const jobHash = (job?.payload as { contentHash?: unknown } | null | undefined)?.contentHash;
+    if (job && jobHash === contentHash) {
+      if (job.state === 'pending') return { status: 'queued' };
+      if (job.state === 'done') {
+        const out: { status?: string; noteId?: string | null; entityCount?: number } = job.result ?? {};
+        if (out.status === 'extracted' && out.noteId) {
+          await markWoven(note.id, out.noteId);
+          return { status: 'woven', noteId: out.noteId, entityCount: out.entityCount ?? 0 };
+        }
+        if (out.status === 'unchanged' && out.noteId) {
+          await markWoven(note.id, out.noteId);
+          return { status: 'unchanged', noteId: out.noteId };
+        }
+        if (out.status === 'too-short') return { status: 'too-thin', chars: text.length };
+        // Anything else (skipped, disabled, failed) is retried with a new job.
+      }
+    }
+
+    await enqueueIntelJob('extract', ref, {
       kind: 'note',
       refId: note.id,
       title: (note.title || 'Untitled note').slice(0, 200),
       text,
-      contentHash: weaveHash(text),
+      contentHash,
       source: 'notebook',
       metadata: { noteFolder: note.folder, notebookId: note.id },
       // The notebook is the owner's.
       spaceId: OWNER_SPACE,
     });
-
-    if (out.status === 'extracted') {
-      await markWoven(note.id, out.noteId);
-      return { status: 'woven', noteId: out.noteId, entityCount: out.entityCount };
-    }
-    if (out.status === 'unchanged' && out.noteId) {
-      await markWoven(note.id, out.noteId);
-      return { status: 'unchanged', noteId: out.noteId };
-    }
-    if (out.status === 'too-short') return { status: 'too-thin', chars: text.length };
-    return { status: 'skipped', reason: out.status };
+    return { status: 'queued' };
   } catch (err) {
     return { status: 'failed', error: (err instanceof Error ? err.message : String(err)).slice(0, 300) };
   }

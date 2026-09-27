@@ -49,7 +49,13 @@ function leaves(v: unknown, path: string[] = []): Array<{ path: string[]; value:
 const at = (obj: unknown, path: string[]) => path.reduce<unknown>((o, k) => (o as Record<string, unknown>)?.[k], obj);
 
 type FixtureNode = { n: number; type: string; config: Record<string, unknown> };
-const nodes = (fixture as { nodes: FixtureNode[] }).nodes;
+/**
+ * Node types Main no longer defines. SR-Workflows executes canvases and keeps
+ * its own definitions of these; Main's copies were deleted (intel-query with
+ * Main's intel library, 2026-09-27), so there is no Main resolver to compare.
+ */
+const NOT_IN_MAIN = new Set(['intel-query']);
+const nodes = (fixture as { nodes: FixtureNode[] }).nodes.filter((n) => !NOT_IN_MAIN.has(n.type));
 
 describe('prod template configs resolve identically under the engine resolver', () => {
   it('has the production sample', () => {

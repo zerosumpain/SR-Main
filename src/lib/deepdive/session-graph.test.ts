@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { buildSessionSnapshot, iconForType, type SessionEntityRow, type SessionRelationshipRow } from './session-graph';
-import { buildIndex } from '$lib/jkai/intel/analytics/model';
-import { pagerank } from '$lib/jkai/intel/analytics/centrality';
-import { detectCommunities } from '$lib/jkai/intel/analytics/community';
+import { buildIndex } from '$lib/graph-analytics/model';
+import { pagerank } from '$lib/graph-analytics/centrality';
+import { detectCommunities } from '$lib/graph-analytics/community';
 
 const ent = (id: string, type = 'person'): SessionEntityRow => ({ id, name: `E${id}`, type });
 const rel = (id: string, a: string | null, b: string | null, strength = 0.5): SessionRelationshipRow => ({

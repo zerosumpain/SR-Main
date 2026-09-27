@@ -175,13 +175,19 @@ export const daydreamNotebook: ActivityHandler = {
     // worth a second query per tick.
     //
     // Never fatal: a graph that is busy must not turn the run red.
+    //
+    // Two-step since the graph moved to SR-Jkai-Core: a pass queues the note,
+    // and a later pass reads the outcome back and marks it woven.
     let woven = 0;
     let wovenEntities = 0;
+    let queued = 0;
     for (const note of toWeave) {
       const res = await weaveNote(note.id);
       if (res.status === 'woven') {
         woven++;
         wovenEntities += res.entityCount;
+      } else if (res.status === 'queued') {
+        queued++;
       } else if (res.status === 'failed') {
         errors.push(`weave ${note.id.slice(0, 8)}: ${res.error}`);
       }
@@ -194,11 +200,12 @@ export const daydreamNotebook: ActivityHandler = {
       `${planned} actions planned, ${executed} done${failed ? `, ${failed} failed` : ''}`,
       ...(refused ? [`${refused} refused by the validator`] : []),
       ...(woven ? [`${woven} woven into the graph (${wovenEntities} entities)`] : []),
+      ...(queued ? [`${queued} queued for the graph`] : []),
     ];
     if (errors.length) bits.push(`errors: ${errors.slice(0, 3).join('; ')}`);
 
     return {
-      outcome: reviewed === 0 && woven === 0 && errors.length ? 'error' : 'ok',
+      outcome: reviewed === 0 && woven === 0 && queued === 0 && errors.length ? 'error' : 'ok',
       summary: bits.join(' · '),
       promptTokens,
       completionTokens,
@@ -213,6 +220,7 @@ export const daydreamNotebook: ActivityHandler = {
         refused,
         woven,
         wovenEntities,
+        queued,
         errors,
       },
     };
@@ -234,7 +242,7 @@ async function relatedRefs(
   try {
     const { db } = await import('$lib/db');
     const { intelEntities, researchSessions } = await import('$lib/db/schema');
-    const { OWNER_INTEL_SCOPE, spaceIn } = await import('$lib/jkai/intel/scope');
+    const { OWNER_INTEL_SCOPE, spaceIn } = await import('$lib/intel-client/scope');
     const { and, desc, ilike, or, sql } = await import('drizzle-orm');
 
     // The words worth matching on: long enough to be a name, capped so one

@@ -68,21 +68,6 @@ export const EVENT_CATALOGUE = [
     payloadExample: { from: '+44…', text: 'lights off downstairs' },
   },
   {
-    type: 'gmail.inbound',
-    label: 'Email arrived on a watch',
-    description: 'A Gmail watch saw a new message. Filter on from, subject or watchLabel.',
-    source: 'Gmail watcher',
-    payloadExample: {
-      accountEmail: 'me@example.com',
-      watchLabel: 'Inbox',
-      from: 'someone@example.com',
-      subject: 'Invoice',
-      snippet: 'Please find attached…',
-      messageId: '18f…',
-      threadId: '18f…',
-    },
-  },
-  {
     type: 'news.item',
     label: 'New stories on the news desk',
     description: 'The desk stored stories it had never seen. One event per gather, carrying every new story, not one event per story.',
