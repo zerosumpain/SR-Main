@@ -396,7 +396,7 @@ export const blogMedia = pgTable(
 
 export const oauthTokens = pgTable('oauth_tokens', {
   id: serial('id').primaryKey(),
-  service: text('service').notNull(), // 'strava' | 'whoop'
+  service: text('service').notNull(), // 'whoop'
   refreshToken: text('refresh_token').notNull(),
   accessToken: text('access_token'),
   expiresAt: integer('expires_at'),
@@ -405,51 +405,6 @@ export const oauthTokens = pgTable('oauth_tokens', {
 });
 
 export type OAuthToken = typeof oauthTokens.$inferSelect;
-
-// ==========================================
-// Health Dashboard - Strava Activities
-// ==========================================
-
-export const stravaActivities = pgTable('strava_activities', {
-  id: bigint('id', { mode: 'number' }).primaryKey(), // Strava activity ID (no auto-increment)
-  name: text('name').notNull(),
-  type: text('type').notNull(), // 'Run', 'Ride', 'Swim', etc.
-  sportType: text('sport_type').notNull(), // More specific: 'TrailRun', 'VirtualRide'
-  startDate: integer('start_date').notNull(), // Unix timestamp for queries
-  startDateLocal: text('start_date_local').notNull(), // ISO string for display
-  timezone: text('timezone').notNull(),
-
-  // Core metrics
-  distance: integer('distance').notNull(), // meters
-  movingTime: integer('moving_time').notNull(), // seconds
-  elapsedTime: integer('elapsed_time').notNull(), // seconds
-  totalElevationGain: integer('total_elevation_gain').notNull(), // meters
-  averageSpeed: integer('average_speed').notNull(), // m/s * 100 (store as int)
-  maxSpeed: integer('max_speed').notNull(), // m/s * 100
-
-  // Heart rate (nullable)
-  averageHeartrate: integer('average_heartrate'),
-  maxHeartrate: integer('max_heartrate'),
-
-  // Additional metrics
-  calories: integer('calories'),
-  sufferScore: integer('suffer_score'),
-
-  // Map data (JSON stringified)
-  mapData: text('map_data'), // { id, summary_polyline }
-  startLatLng: text('start_latlng'), // JSON [lat, lng]
-  endLatLng: text('end_latlng'), // JSON [lat, lng]
-
-  // Editorial: featured on public /health "epic activities" rail
-  featured: boolean('featured').notNull().default(false),
-  featuredOrder: integer('featured_order'), // lower = earlier; null = default by date desc
-  featuredCaption: text('featured_caption'), // optional editorial blurb shown under the title
-
-  // Sync metadata
-  syncedAt: integer('synced_at').default(sql`extract(epoch from now())::integer`),
-});
-
-export type StravaActivityRecord = typeof stravaActivities.$inferSelect;
 
 // ==========================================
 // Health Dashboard - Whoop Workouts
@@ -638,7 +593,7 @@ export type WhoopCycleRecord = typeof whoopCycles.$inferSelect;
 
 export const healthSyncState = pgTable('health_sync_state', {
   id: serial('id').primaryKey(),
-  service: text('service').notNull().unique(), // 'strava' | 'whoop'
+  service: text('service').notNull().unique(), // 'whoop'
   lastSyncAt: integer('last_sync_at').notNull(),
   lastSuccessfulSyncAt: integer('last_successful_sync_at'),
   status: text('status').notNull().default('idle'), // 'idle' | 'syncing' | 'error'
@@ -654,7 +609,7 @@ export type HealthSyncState = typeof healthSyncState.$inferSelect;
 
 export const healthSyncJobs = pgTable('health_sync_jobs', {
   id: text('id').primaryKey(), // uuid
-  service: text('service').notNull(), // 'strava' | 'whoop' | 'all'
+  service: text('service').notNull(), // 'whoop' | 'all'
   mode: text('mode').notNull().default('backfill'), // 'incremental' | 'backfill'
   rangeStart: integer('range_start'), // unix seconds, null = unbounded
   rangeEnd: integer('range_end'),
@@ -662,7 +617,7 @@ export const healthSyncJobs = pgTable('health_sync_jobs', {
   recordsSynced: integer('records_synced').notNull().default(0),
   pagesDone: integer('pages_done').notNull().default(0),
   totalPagesEstimate: integer('total_pages_estimate'),
-  currentStep: text('current_step'), // 'whoop:workouts', 'whoop:sleep', 'strava:page-3', etc.
+  currentStep: text('current_step'), // 'whoop:workouts', 'whoop:sleep', etc.
   startedAt: integer('started_at').notNull(),
   finishedAt: integer('finished_at'),
   errorMessage: text('error_message'),
@@ -726,9 +681,7 @@ export type NewAppleSleepStage = typeof appleSleepStages.$inferInsert;
 // ==========================================
 // Trails — Activities, Tracks, Series
 // ==========================================
-// Source-agnostic workout records for /trails. Written by the Apple Health
-// (Health Auto Export) workout ingest; `source` leaves room to union in the
-// dormant strava_activities / whoop_workouts rows later without a migration.
+// Source-agnostic workout records for /trails, including native and imported history.
 //
 // UNITS: these tables store real SI units in doublePrecision — metres,
 // seconds, kilojoules, bpm. They deliberately do NOT follow the `value * 100`
@@ -740,7 +693,7 @@ export const activities = pgTable(
   'activities',
   {
     id: text('id').primaryKey(), // `${source}:${externalId}`
-    source: text('source').notNull(), // 'apple' | 'strava' | 'whoop' | 'manual'
+    source: text('source').notNull(), // 'apple' | 'whoop' | 'manual' | 'imported'
     externalId: text('external_id').notNull(),
 
     name: text('name').notNull(),
@@ -3863,25 +3816,6 @@ export const mailEmbeddings = pgTable(
 
 export type MailEmbedding = typeof mailEmbeddings.$inferSelect;
 export type NewMailEmbedding = typeof mailEmbeddings.$inferInsert;
-
-// Main remains the migration owner for tables used by extracted applications.
-export const webdavCredentials = pgTable(
-  'webdav_credentials',
-  {
-    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
-    label: text('label').notNull(),
-    secretHash: text('secret_hash').notNull(),
-    ownerEmail: text('owner_email').notNull(),
-    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    revokedAt: timestamp('revoked_at', { withTimezone: true }),
-  },
-  (t) => ({
-    bySecret: uniqueIndex('webdav_credentials_secret_hash_idx').on(t.secretHash),
-  }),
-);
-
-export type WebdavCredentialRow = typeof webdavCredentials.$inferSelect;
 
 
 // ==========================================

@@ -271,7 +271,6 @@ code with no caller.
   file**, so filtering has to be in Drive's data layer.
 - The gateway signs `{aud, email, method, path}` and has no DB access by design: grants are
   looked up by the app from the verified email, not carried in the assertion.
-- `/dav` is still Main's, Basic-auth against `webdav_credentials`: owner-only, stays so.
 
 ## Not in scope
 

@@ -23,7 +23,9 @@ describe('discovery toolset', () => {
   it('skills_list returns the library, and filters when asked', async () => {
     const all = await run('skills_list');
     expect(all.success).toBe(true);
-    expect((all.data as never as { count: number }).count).toBeGreaterThan(100);
+    const catalogue = all.data as never as { count: number; skills: Array<{ id: string }> };
+    expect(catalogue.count).toBe(catalogue.skills.length);
+    expect(catalogue.skills.map((skill) => skill.id)).toContain('jkai-general');
 
     const filtered = await run('skills_list', { query: 'canvas workflow', limit: 5 });
     const d = filtered.data as never as { count: number; skills: Array<{ id: string }> };

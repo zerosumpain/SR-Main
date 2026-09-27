@@ -46,9 +46,8 @@ src/lib/jkai/development-review.server.ts
 # self-gating helper — and hooks.server.ts DELEGATES to these, so protecting the
 # hook without them protects nothing. Each is 1-2 commits in 2,294, and between
 # them they are the entire control for the private DfE/Keystone work, private
-# decks, shared conversations and the WebDAV mount.
+# decks and shared conversations.
 src/lib/agent/auth.ts
-src/lib/webdav/auth.ts
 src/lib/workflows/scraper/service-auth.ts
 src/lib/workflows/webhook-secret.ts
 src/lib/projects/guard.ts

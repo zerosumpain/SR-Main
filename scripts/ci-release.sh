@@ -177,6 +177,9 @@ rsync -a package.json package-lock.json .npmrc "$VPS_DIR/"
 # runtime by publish_page that do not exist in git; --delete would erase them.
 echo "==> Placing data files (additive)..."
 rsync -a data/ "$VPS_DIR/data/"
+# Skills are versioned application content; remove retired manuals without
+# deleting published projects or other runtime data beside this directory.
+rsync -a --delete data/skills/ "$VPS_DIR/data/skills/"
 
 echo "==> Placing runtime-read sources..."
 mkdir -p "$VPS_DIR/src/lib/db" "$VPS_DIR/src/lib/constants" \
@@ -188,6 +191,7 @@ rsync -a src/app.css "$VPS_DIR/src/" 2>/dev/null || true
 rsync -a src/lib/styles/ "$VPS_DIR/src/lib/styles/" 2>/dev/null || true
 rsync -a src/lib/workflows/scraper/python/ "$VPS_DIR/src/lib/workflows/scraper/python/"
 rsync -a scripts/server-with-ws.mjs "$VPS_DIR/scripts/"
+rsync -a scripts/check-retired-integration-storage.mjs "$VPS_DIR/scripts/"
 # The build smoke harness. `runStaticSmoke` shells out to this by path, and it
 # must live inside the repo — `import('playwright')` resolves from the script's
 # own directory. Shipped in #144 without this line, so the check reported
@@ -284,6 +288,11 @@ fi
 # notice. Bounded by only recording the hash after a clean push. If that
 # exposure is ever unwelcome, add a weekly unconditional push rather than
 # dropping the guard.
+# Refuse automatic drops until the explicit, data-preserving cutover completed.
+(
+  set -a; . "$VPS_DIR/.env"; set +a
+  node "$VPS_DIR/scripts/check-retired-integration-storage.mjs"
+)
 echo "==> Applying DB schema..."
 SCHEMA_HASH="$(sha256sum src/lib/db/schema.ts | cut -d' ' -f1)"
 if [ "$(cat "$STATE_DIR/schema.sha256" 2>/dev/null || true)" = "$SCHEMA_HASH" ]; then

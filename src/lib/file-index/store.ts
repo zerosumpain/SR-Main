@@ -25,7 +25,7 @@ import { queueIntelExtraction } from '$lib/jkai/intel/auto-extract';
 import { OWNER_SPACE } from '$lib/jkai/intel/scope';
 import { policyForFileName } from '$lib/jkai/intel/source-policy.server';
 
-// Cap the bytes we ever read into RAM to embed. The WebDAV write site allowed
+// Cap the bytes we ever read into RAM to embed. The upload interface allows
 // multi-GB files; loading one whole into a single Buffer on the memory-constrained
 // homeserv box would OOM the always-on service. Text extraction / captioning of
 // anything this large is also not what @files search is for.

@@ -9,7 +9,3 @@
 ### Dataset-Formats
 **File:** `dataset-formats.md`
 **Pages:** 9
-
-### Other
-**File:** `other.md`
-**Pages:** 26

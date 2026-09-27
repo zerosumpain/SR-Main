@@ -50,7 +50,7 @@ export async function syncAttentionSummary(): Promise<SyncAttentionSummary> {
     // `apple_health` is permanently months stale — it is written by a pull-sync
     // job that no longer runs, while the webhook keeps delivering.
     //
-    // Strava sync was removed on 2026-09-13. Its old health_sync_state row
+    // historical activity sync was removed on 2026-09-13. Its old health_sync_state row
     // may exist until the retirement migration runs, so include only WHOOP.
     db
       .select({

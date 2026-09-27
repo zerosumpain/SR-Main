@@ -184,7 +184,7 @@ describe('bare filenames — the way people actually write a task', () => {
  * other a file that already exists and was already named. A greenfield task
  * satisfies neither, and the graph's connector knowledge — which service a
  * credential binds to, why one in node config spreads to nine tables, that
- * Strava is parked by design — was unreachable from it.
+ * Imported is parked by design — was unreachable from it.
  */
 describe('the topic fallback', () => {
   it('asks about a task that names no file and follows no failure', () => {

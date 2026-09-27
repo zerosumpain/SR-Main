@@ -110,14 +110,13 @@ describe('health types', () => {
 
   it('TimelineEvent type is a valid event type', () => {
     const validTypes: TimelineEvent['type'][] = [
-      'strava_activity',
       'whoop_workout',
       'whoop_sleep',
       'whoop_recovery',
     ];
     const event: TimelineEvent = {
       id: 'abc-123',
-      type: 'strava_activity',
+      type: 'whoop_workout',
       date: '2026-03-20T08:00:00Z',
       title: 'Morning Run',
       summary: { distance: 10000, duration: 3600 },

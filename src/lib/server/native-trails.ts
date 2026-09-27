@@ -507,7 +507,7 @@ export function projectSegmentDetail(upstream: { segment: UpstreamSegmentDetail 
 
 // ——— ids, cursors, failures ————————————————————————————————————————————————
 
-/** `apple:UUID`, `strava:123` — a source prefix and an opaque id. */
+/** `apple:UUID`, `imported:123` — a source prefix and an opaque id. */
 const ACTIVITY_ID = /^[a-z]+:[A-Za-z0-9._-]+$/;
 
 export function isActivityId(id: string): boolean {

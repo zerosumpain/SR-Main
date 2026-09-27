@@ -113,7 +113,7 @@ project-name/
 
 ### Fonts
 
-**Use monospace fonts for all text.** Manim's Pango renderer produces broken kerning with proportional fonts at all sizes. See `references/visual-design.md` for full recommendations.
+**Use monospace fonts for all text.** Manim's Pango renderer produces broken kerning with proportional fonts at all sizes.
 
 ```python
 MONO = "Menlo"  # define once at top of file
@@ -232,13 +232,11 @@ Always iterate at `-ql`. Only render `-qh` for final output.
 |------|----------|
 | `references/animations.md` | Core animations, rate functions, composition, `.animate` syntax, timing patterns |
 | `references/mobjects.md` | Text, shapes, VGroup/Group, positioning, styling, custom mobjects |
-| `references/visual-design.md` | 12 design principles, opacity layering, layout templates, color palettes |
 | `references/equations.md` | LaTeX in Manim, TransformMatchingTex, derivation patterns |
 | `references/graphs-and-data.md` | Axes, plotting, BarChart, animated data, algorithm visualization |
 | `references/camera-and-3d.md` | MovingCameraScene, ThreeDScene, 3D surfaces, camera control |
 | `references/scene-planning.md` | Narrative arcs, layout templates, scene transitions, planning template |
 | `references/rendering.md` | CLI reference, quality presets, ffmpeg, voiceover workflow, GIF export |
-| `references/troubleshooting.md` | LaTeX errors, animation errors, common mistakes, debugging |
 | `references/animation-design-thinking.md` | When to animate vs show static, decomposition, pacing, narration sync |
 | `references/updaters-and-trackers.md` | ValueTracker, add_updater, always_redraw, time-based updaters, patterns |
 | `references/paper-explainer.md` | Turning research papers into animations — workflow, templates, domain patterns |

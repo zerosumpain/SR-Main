@@ -10,7 +10,7 @@ import { canonicalEventType, PLATFORM_EVENT_TYPES, type PlatformEventName, type 
  * reacts to an event by starting a workflow. Publishing and dispatching are not
  * the same job, and joining them made the cheap half expensive: `event-bus`
  * imports `engine` from the `$lib/workflows` barrel, so anything that merely
- * wanted to SAY "a Strava activity synced" pulled in the entire node registry
+ * wanted to SAY "a historical activity activity synced" pulled in the entire node registry
  * behind it. Measured from `$lib/health`, that one edge took the module's import
  * closure from 308 files to 1,007. A publisher must not depend on its
  * subscribers, so the static imports here stay tiny.
