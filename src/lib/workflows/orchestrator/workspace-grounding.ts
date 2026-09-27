@@ -24,8 +24,9 @@ import {
   blogPosts,
   homeAssistantConfig,
 } from '$lib/db/schema';
-import { eq, desc, ne, asc } from 'drizzle-orm';
+import { eq, desc, ne, asc, and } from 'drizzle-orm';
 import { ownerGmailWhere } from '$lib/workflows/gmail/owner-accounts';
+import { ownerWorkflows } from '$lib/workflows/owner-rows';
 
 const MAX_HA_ENTITIES = 50;
 const MAX_BLOG_POSTS = 50;
@@ -75,7 +76,8 @@ async function buildWorkflowsSection(currentWorkflowId?: string | null): Promise
     const rows = await db
       .select({ id: workflows.id, name: workflows.name })
       .from(workflows)
-      .where(currentWorkflowId ? ne(workflows.id, currentWorkflowId) : undefined)
+      // The owner's workflows only: a member's never enters the orchestrator's context.
+      .where(and(ownerWorkflows(), currentWorkflowId ? ne(workflows.id, currentWorkflowId) : undefined))
       .orderBy(desc(workflows.updatedAt))
       .limit(50);
 

@@ -5,6 +5,7 @@ import { getLLMClient } from '$lib/llm/client';
 import { resolveHeartbeatModel } from '$lib/server/models/workload-settings';
 import { withActivity } from '$lib/context/activity';
 import type { ActivityHandler } from '../types';
+import { ownerWorkflows } from '$lib/workflows/owner-rows';
 
 const NAME = 'workflow-review';
 
@@ -58,17 +59,20 @@ export const workflowReview: ActivityHandler = {
         .filter((v): v is string => !!v),
     );
 
-    const runs = await db
-      .select()
+    // The owner's workflows only: a member's run is theirs, not the owner's to review.
+    const runs = (await db
+      .select({ run: workflowRuns })
       .from(workflowRuns)
+      .innerJoin(workflows, eq(workflows.id, workflowRuns.workflowId))
       .where(
         and(
           gt(workflowRuns.startedAt, since),
           isNotNull(workflowRuns.completedAt),
+          ownerWorkflows(),
         ),
       )
       .orderBy(desc(workflowRuns.completedAt))
-      .limit(20);
+      .limit(20)).map((r) => r.run);
 
     const candidate = runs.find((r) => !reviewed.has(r.id));
     if (!candidate) {

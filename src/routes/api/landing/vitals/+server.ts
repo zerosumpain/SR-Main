@@ -6,6 +6,7 @@ import { and, desc, eq, inArray, isNull, like, or, sql } from 'drizzle-orm';
 import { STATIC_PROJECT_KEYS } from '$lib/projects/visibility';
 import { runningJobsByConversation } from '$lib/workflows/chat/activity';
 import { publishedLink } from '$lib/builds/published-link';
+import { ownerWorkflows } from '$lib/workflows/owner-rows';
 
 /**
  * Public, read-only aggregator for the landing-page "Vital Signs" tiles.
@@ -172,7 +173,8 @@ async function publicSummary(): Promise<PublicSummary> {
       })
       .from(workflows)
       .leftJoin(workflowRuns, eq(workflowRuns.workflowId, workflows.id))
-      .where(like(workflows.name, 'canvas:%')),
+      // The owner's canvases: a member's workflows are not the site's public work.
+      .where(and(like(workflows.name, 'canvas:%'), ownerWorkflows())),
   ]).then(([countRows, publishedRows, canvasRows]) => {
     const data: PublicSummary = {
       shippedCount: countRows[0]?.n ?? 0,

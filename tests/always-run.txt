@@ -30,6 +30,7 @@ src/lib/selfimprove/narrative.probe.test.ts
 src/lib/selfimprove/verify.test.ts
 src/lib/server/jsdom.test.ts
 src/lib/server/native-auth.test.ts
+src/lib/workflows/owner-rows.test.ts
 src/routes/projects/engine-room/lib/tour-routes.test.ts
 tests/extract/docx.test.ts
 tests/extract/pdf.test.ts
