@@ -1,7 +1,7 @@
 // Registration + contract tests for the intel-graph toolset.
 //
-// The handlers themselves are thin wrappers over the analytics layer, which has
-// its own 57 unit tests. What is worth guarding here is the wiring: that every
+// The handlers themselves are thin wrappers over $lib/graph-analytics, which
+// has its own unit tests. What is worth guarding here is the wiring: that every
 // tool is actually registered under the expected name, carries a schema the LLM
 // can call, and declares the toolset that gates it — the class of mistake that
 // produced a `DEFAULT_SUBAGENT_TOOLS` entry naming a tool that never existed.
@@ -13,9 +13,10 @@ const TOOLS = [
   'intel_find',
   'intel_neighbourhood',
   'intel_path',
-  'intel_insights',
-  'intel_unlikely_relations',
 ];
+
+// Deleted with SR-Jkai-Core's insights and surprise scoring (intel basics).
+const REMOVED = ['intel_insights', 'intel_unlikely_relations'];
 
 describe('intel-graph toolset', () => {
   it('registers every tool', () => {
@@ -48,10 +49,8 @@ describe('intel-graph toolset', () => {
     );
   });
 
-  it('leaves the survey tools callable with no arguments', () => {
-    // A standing "what's interesting" question should not need parameters.
-    expect(getTool('intel_insights')?.parameters?.required ?? []).toEqual([]);
-    expect(getTool('intel_unlikely_relations')?.parameters?.required ?? []).toEqual([]);
+  it('no longer registers the survey tools', () => {
+    for (const name of REMOVED) expect(getTool(name)).toBeUndefined();
   });
 
   it('declares none of them destructive — the whole toolset is read-only', () => {
@@ -99,18 +98,6 @@ describe('intel-graph handlers against a live graph', () => {
     expect(r.success).toBe(false);
   }, 30_000);
 
-  it('intel_insights runs and reports graph totals', async () => {
-    const r = await getTool('intel_insights')!.handler({}, {} as never);
-    expect(r.success).toBe(true);
-    expect(typeof data(r).graph?.entities).toBe('number');
-    expect(Array.isArray(data(r).insights)).toBe(true);
-  }, 30_000);
-
-  it('intel_unlikely_relations runs and returns an array', async () => {
-    const r = await getTool('intel_unlikely_relations')!.handler({ limit: 3 }, {} as never);
-    expect(r.success).toBe(true);
-    expect(Array.isArray(data(r).relations)).toBe(true);
-  }, 30_000);
 });
 
 describe('DEFAULT_SUBAGENT_TOOLS', () => {

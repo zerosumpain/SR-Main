@@ -7,12 +7,13 @@
 // from chat — since the cutover, chat reached intel only through flat
 // ranked hits with the edges stripped off.
 //
-// Everything here is read-only and shares the cached graph analysis with the
-// dashboard, so a chat question costs a lookup, not a recomputation.
+// Everything here is read-only. SR-Jkai-Core owns the graph; these read it
+// through $lib/intel-client/read, whose analysis is cached for a minute, so a
+// run of graph questions in one turn costs a lookup, not a recomputation.
 import { register } from '../registry-internal';
-import { normaliseName } from '$lib/jkai/intel/resolve/match';
-import type { AdjacencyIndex } from '$lib/jkai/intel/analytics/model';
-import { OWNER_INTEL_SCOPE, type IntelScope } from '$lib/jkai/intel/scope';
+import { normaliseName } from '$lib/intel-client/names';
+import type { AdjacencyIndex } from '$lib/graph-analytics/model';
+import { OWNER_INTEL_SCOPE, type IntelScope } from '$lib/intel-client/scope';
 
 /**
  * Whose graph these tools read. Chat is the owner's (a member scope gets no
@@ -31,12 +32,10 @@ const TOOL_SCOPE: IntelScope = OWNER_INTEL_SCOPE;
 // Named with a `load` prefix so they cannot be shadowed by a local variable of
 // the obvious name inside a handler — `const paths = findPaths(...)` put the
 // module-level `paths` loader in its function's temporal dead zone and threw.
-const loadAnalytics = () => import('$lib/jkai/intel/analytics/load');
-const loadPaths = () => import('$lib/jkai/intel/analytics/paths');
-const loadModel = () => import('$lib/jkai/intel/analytics/model');
-const loadSurprise = () => import('$lib/jkai/intel/analytics/surprise');
-const loadInsights = () => import('$lib/jkai/intel/analytics/insights');
-const loadCentrality = () => import('$lib/jkai/intel/analytics/centrality');
+const loadAnalytics = () => import('$lib/intel-client/read');
+const loadPaths = () => import('$lib/graph-analytics/paths');
+const loadModel = () => import('$lib/graph-analytics/model');
+const loadCentrality = () => import('$lib/graph-analytics/centrality');
 
 /**
  * Resolve a name the model typed to an entity id.
@@ -106,7 +105,7 @@ register({
 
     const { getGraphAnalysis } = await loadAnalytics();
     const { brokerageScore } = await loadCentrality();
-    const { index, centrality: cent } = await getGraphAnalysis(false, { scope: TOOL_SCOPE });
+    const { index, centrality: cent } = await getGraphAnalysis(TOOL_SCOPE);
     const nq = normaliseName(query);
 
     const hits = index.ids
@@ -158,7 +157,7 @@ register({
 
     const { getGraphAnalysis } = await loadAnalytics();
     const { hopNeighbourhood } = await loadModel();
-    const analysis = await getGraphAnalysis(false, { scope: TOOL_SCOPE });
+    const analysis = await getGraphAnalysis(TOOL_SCOPE);
     const { index, community } = analysis;
     const resolved = resolveEntity(index, query);
     if (!resolved) return notFound(query);
@@ -232,7 +231,7 @@ register({
 
     const { getGraphAnalysis } = await loadAnalytics();
     const { findPaths } = await loadPaths();
-    const { index } = await getGraphAnalysis(false, { scope: TOOL_SCOPE });
+    const { index } = await getGraphAnalysis(TOOL_SCOPE);
     const a = resolveEntity(index, fromQ);
     const b = resolveEntity(index, toQ);
     if (!a) return notFound(fromQ);
@@ -263,106 +262,6 @@ register({
         note: paths.length
           ? undefined
           : `No route within ${maxHops} hops. They sit in unconnected parts of the graph — which may itself be worth saying.`,
-      },
-    };
-  },
-});
-
-register({
-  name: 'intel_insights',
-  description:
-    'What the intel graph has noticed on its own: brokers holding separate areas together, unexpected connections, links that probably exist but are not recorded, isolated clusters, entities going stale, and data-quality problems. ' +
-    'Use when the user asks what is interesting, what they are missing, what to look at, or for a standing brief on their knowledge base.',
-  parameters: {
-    type: 'object',
-    properties: {
-      kind: {
-        type: 'string',
-        description:
-          'Optional filter: broker, unlikely_relation, missing_link, orphan, isolated_cluster, emerging_hub, stale_hub, thin_evidence, type_outlier, dominant_cluster.',
-      },
-      limit: { type: 'number', description: 'Max findings (default 10, max 30).' },
-    },
-  },
-  category: 'Knowledge',
-  toolset: 'intel-graph',
-  handler: async (args) => {
-    const limit = Math.min(Math.max(Number(args.limit ?? 10), 1), 30);
-    const kind = typeof args.kind === 'string' ? args.kind : null;
-
-    const { getGraphAnalysis, ensureEmbeddings } = await loadAnalytics();
-    const { generateInsights } = await loadInsights();
-    const analysis = await getGraphAnalysis(false, { scope: TOOL_SCOPE });
-    // generateInsights scores semantic distance, which needs the embeddings the
-    // analysis no longer loads eagerly.
-    await ensureEmbeddings(analysis);
-    let found = await generateInsights(analysis);
-    if (kind) found = found.filter((i) => i.kind === kind);
-
-    return {
-      success: true,
-      data: {
-        count: found.length,
-        graph: {
-          entities: analysis.index.ids.length,
-          relationships: analysis.snapshot.edges.length,
-          clusters: analysis.community.communities.size,
-          modularity: Number(analysis.community.modularity.toFixed(3)),
-        },
-        insights: found.slice(0, limit).map((i) => ({
-          kind: i.kind,
-          title: i.title,
-          detail: i.detail,
-          confidence: Number(i.score.toFixed(2)),
-          entities: i.entityIds.map((id) => analysis.index.byId.get(id)?.name).filter(Boolean),
-          suggestedAction: `${i.action}: ${i.actionPayload}`,
-        })),
-      },
-    };
-  },
-});
-
-register({
-  name: 'intel_unlikely_relations',
-  description:
-    'Surprising connections in the intel graph — pairs of entities that are connected but sit in different clusters, share no context, and are about unrelated subjects. ' +
-    'Each comes with the reasons it was flagged and the entities it runs through. Use when the user asks what is unexpected, what they would not have guessed, or for non-obvious leads.',
-  parameters: {
-    type: 'object',
-    properties: {
-      limit: { type: 'number', description: 'Max results (default 10, max 25).' },
-      maxHops: { type: 'number', description: 'Longest connection to consider surprising (default 3).' },
-    },
-  },
-  category: 'Knowledge',
-  toolset: 'intel-graph',
-  handler: async (args) => {
-    const limit = Math.min(Math.max(Number(args.limit ?? 10), 1), 25);
-    const maxHops = Math.min(Math.max(Number(args.maxHops ?? 3), 2), 4);
-
-    const { getGraphAnalysis, ensureEmbeddings } = await loadAnalytics();
-    const { scoreSurprisingLinks } = await loadSurprise();
-    const analysis = await getGraphAnalysis(false, { scope: TOOL_SCOPE });
-    await ensureEmbeddings(analysis);
-    const links = await scoreSurprisingLinks(
-      { index: analysis.index, membership: analysis.community.membership, embeddings: analysis.embeddings },
-      { maxHops, limit, minScore: 0.05 },
-    );
-    const name = (id: string) => analysis.index.byId.get(id)?.name ?? id;
-
-    return {
-      success: true,
-      data: {
-        count: links.length,
-        relations: links.map((l) => ({
-          a: name(l.a),
-          b: name(l.b),
-          hops: l.hops,
-          surprise: Number(l.score.toFixed(3)),
-          why: l.reasons.join('; '),
-          via: l.via.map(name),
-        })),
-        note: links.length ? undefined : 'Nothing surprising found — the graph may be too small or too uniform yet.',
       },
     };
   },

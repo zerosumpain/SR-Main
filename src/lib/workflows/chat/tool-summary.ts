@@ -320,10 +320,6 @@ export function summarizeRunningTool(tool: string, args: Record<string, unknown>
       return str('from') && str('to')
         ? `${trim(str('from')!, 24)} → ${trim(str('to')!, 24)}`
         : 'tracing a connection';
-    case 'intel_insights':
-      return str('kind') ? `${str('kind')} findings` : 'reading the graph';
-    case 'intel_unlikely_relations':
-      return 'looking for surprising links';
     case 'fetch_url':
     case 'webpage_fetch': return str('url') ? `fetching ${host(str('url')) ?? trim(str('url')!, 50)}` : 'fetching a page';
     case 'web_extract': {
@@ -481,14 +477,6 @@ export function summarizeToolResult(step: ToolProgressStep): string {
       if (!d.connected || !paths.length) return 'No route between them';
       const hops = num((paths[0] as Record<string, unknown>)?.hops);
       return `Connected in ${hops ?? '?'} hop${hops === 1 ? '' : 's'}`;
-    }
-    case 'intel_insights': {
-      const n = count ?? 0;
-      return `${n} finding${n === 1 ? '' : 's'} from the graph`;
-    }
-    case 'intel_unlikely_relations': {
-      const n = count ?? 0;
-      return n ? `${n} surprising connection${n === 1 ? '' : 's'}` : 'Nothing surprising found';
     }
     case 'intel_note_create':
       return 'Created intel note';

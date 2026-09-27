@@ -2,8 +2,7 @@ import { pgTextArray } from '$lib/db/sql-array';
 import { db, type DbExecutor } from '$lib/db';
 import { jkaiMemories, jkaiMemoryEntities } from '$lib/db/schema';
 import { eq, sql, and, isNull } from 'drizzle-orm';
-import { resolveMention } from '$lib/jkai/intel/resolve/ingestion.server';
-import { OWNER_INTEL_SCOPE, OWNER_SPACE, type IntelScope } from '$lib/jkai/intel/scope';
+import { OWNER_INTEL_SCOPE, OWNER_SPACE, type IntelScope } from '$lib/intel-client/scope';
 
 /**
  * Keep original entity references: canonical IDs resolve at read time, including after unmerge.
@@ -68,7 +67,7 @@ export async function memoryLinks(memoryIds: string[], intelScope: IntelScope = 
   return rows.rows as {memory_id: string; original_id: string; id: string; name: string; method: string}[];
 }
 
-/** Bounded migration of existing memories. Only the shared resolver can auto-link an identity. */
+/** Bounded migration of existing memories. */
 export async function backfillMemoryLinks(limit = 20) {
   const memories = await db.select().from(jkaiMemories).where(and(isNull(jkaiMemories.supersededBy), isNull(jkaiMemories.daydreamOrigin),
     sql`coalesce(${jkaiMemories.provenance}->>'scope','personal')='personal' AND ${jkaiMemories.provenance}->>'linkedAt' IS NULL`)).limit(limit);
@@ -82,14 +81,22 @@ export async function backfillMemoryLinks(limit = 20) {
 export async function linkMemoryAutomatically(id: string) {
   const [memory] = await db.select().from(jkaiMemories).where(and(eq(jkaiMemories.id,id),isNull(jkaiMemories.supersededBy),isNull(jkaiMemories.daydreamOrigin)));
   if (!memory || (memory.provenance?.scope && memory.provenance.scope !== 'personal')) return 0;
-    const candidates = await db.execute(sql`SELECT e.name, t.name AS type, e.type_id FROM intel_entities e JOIN intel_entity_types t ON t.id=e.type_id
-      WHERE e.merged_into_id IS NULL AND e.space_id=${OWNER_SPACE} AND length(e.name)>=3 AND position(lower(e.name) in lower(${memory.content}))>0 ORDER BY length(e.name) DESC LIMIT 12`);
-    const ids: string[] = [];
-    for (const c of candidates.rows) {
-      // A jkai memory is the owner's own, never a member's, so it links only into the owner's space.
-      const result = await resolveMention({ name: String(c.name), type: String(c.type), properties: {}, confidence: 'medium', possibleMatchId: null }, String(c.type_id), db, false, OWNER_SPACE);
-      if (result.outcome === 'link' && result.entity) ids.push(result.entity.id);
-    }
+    // An exact, normalised name match: an entity whose name appears in the
+    // memory, and which is the ONLY live entity in the owner's space with that
+    // name. Two entities sharing a name is an identity question this cannot
+    // answer, so neither is linked — a wrong link would feed recall the wrong
+    // person. (This replaced a call into intel's identity resolver, which Main
+    // no longer carries; for a candidate chosen by its own name that resolver
+    // reduced to the same rule.) A jkai memory is the owner's own, never a
+    // member's, so it links only into the owner's space.
+    const candidates = await db.execute(sql`
+      SELECT min(e.id) AS id FROM intel_entities e
+      WHERE e.merged_into_id IS NULL AND e.space_id=${OWNER_SPACE} AND length(e.name)>=3
+        AND position(lower(e.name) in lower(${memory.content}))>0
+      GROUP BY lower(e.name)
+      HAVING count(*) = 1
+      ORDER BY max(length(e.name)) DESC LIMIT 12`);
+    const ids = candidates.rows.map((c) => String(c.id));
     await db.transaction(async tx => { await tx.execute(sql`select pg_advisory_xact_lock(hashtext('jkai-memory-write'))`); await setMemoryLinks(memory.id, ids, tx); });
     return ids.length;
 }

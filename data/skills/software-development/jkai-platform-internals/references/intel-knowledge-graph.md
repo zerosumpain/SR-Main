@@ -1,5 +1,11 @@
 # Intel Knowledge Graph
 
+> **2026-09-27 (intel basics): much of this page is history.** SR-Jkai-Core owns intel; Main's copy of
+> `src/lib/jkai/intel` is deleted. Main keeps a thin read/outbox client in `src/lib/intel-client/` and the
+> pure graph maths in `src/lib/graph-analytics/`. `intel_insights` and `intel_unlikely_relations` are
+> gone (insights and surprise scoring were deleted in Core); `intel_find`, `intel_neighbourhood`,
+> `intel_path` and `knowledge_search` remain.
+
 The intel knowledge graph is a pre-computed entity-relationship layer over everything JKai knows: files, research, Gmail, chat, and hand-written notes. It adds a **relational dimension** that raw text storage can't provide — who connects to whom, what bridges separate domains, and what the graph noticed on its own.
 
 ## Quick Stats (as of 2026-08-08)
