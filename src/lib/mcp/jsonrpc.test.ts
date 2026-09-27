@@ -1,4 +1,17 @@
-import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
+
+vi.mock('$env/dynamic/private', () => ({ env: process.env }));
+// MCP still dispatches the real registry adapter; the owner service is remote.
+const workflowInvoke = vi.hoisted(() => vi.fn(async () => ({ success: true, data: { matched: 1, total: 1, types: [{ type: 'trigger' }] } })));
+vi.mock('$lib/workflows/site-tools/remote', async (importOriginal) => ({
+  ...await importOriginal<typeof import('$lib/workflows/site-tools/remote')>(),
+  invokeRemoteTool: workflowInvoke,
+}));
+beforeAll(() => {
+  vi.stubEnv('WORKFLOWS_TOOL_INVOKE_URL', 'http://workflows.test/api/workflows/tools/invoke');
+  vi.stubEnv('WORKFLOWS_TOOL_INVOKE_TOKEN', 'mcp-workflows-test-token-32-bytes-long');
+});
+afterAll(() => vi.unstubAllEnvs());
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 import { dispatchJsonRpc, parseJsonRpcBody } from './jsonrpc';
 import { subscribeToolSteps, _resetToolStepBusForTests, type ToolStepEvent } from '$lib/jkai/tool-step-bus';
 
@@ -141,6 +154,7 @@ describe('mcp/jsonrpc', () => {
     // bare array, so a filtered call can say how much of the catalogue it cut.
     expect(Array.isArray(parsed.data.types)).toBe(true);
     expect(parsed.data.total).toBeGreaterThan(0);
+    expect(workflowInvoke).toHaveBeenCalledWith('workflow_list_node_types', { workflow_id: 'wf_99' }, expect.any(Object), expect.objectContaining({ url: 'http://workflows.test/api/workflows/tools/invoke' }));
   });
 
   it('publishes started + completed tool-step events to the bus on a successful tools/call', async () => {
