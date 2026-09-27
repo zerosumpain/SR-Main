@@ -57,7 +57,7 @@
   <div class="view-as-bar" role="status">
     <span class="view-as-label">Viewing as</span>
     <span class="view-as-who">{data.viewingAs.email}</span>
-    <span class="view-as-label">{data.viewingAs.kind === 'member' ? 'member' : 'guest · no grants'} · read-only</span>
+    <span class="view-as-label">{data.viewingAs.kind === 'member' ? 'member' : 'guest · no grants'} · read-only except chat · threads you start are deleted on exit</span>
     <button class="view-as-exit" onclick={exitViewAs}>Exit</button>
   </div>
 {/if}
