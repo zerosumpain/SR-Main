@@ -7,6 +7,7 @@ const householdSubjects = new Map<string, string>();
 
 vi.mock('$lib/server/access', () => ({
   isOwnerEmail: (email: string | null | undefined) => (email ?? '').toLowerCase() === 'owner@example.test',
+  getOwnerEmails: () => ['owner@example.test'],
 }));
 vi.mock('$lib/server/members', () => ({
   householdSubjectFor: async (email: string) => householdSubjects.get(email) ?? null,
@@ -49,13 +50,25 @@ vi.mock('$lib/daydream/ledger', () => {
 const loadFeedChecks = vi.fn(async () => ({ alex: { source: 'companion', checkedAt: new Date('2026-09-26T10:00:00Z') } }));
 vi.mock('$lib/home/presence/feed-checks', () => ({ loadFeedChecks }));
 
+const listMembers = vi.fn(async () => [
+  { subject: 'alex', displayName: 'Alex' },
+  { subject: 'sam', displayName: 'Sam' },
+  { subject: 'robin', displayName: 'Robin' },
+]);
+vi.mock('$lib/home/presence/members', () => ({ listMembers, wardsOf: async () => [] }));
+const loadPeopleMovement = vi.fn(async (people: Array<{ subject: string; displayName: string }>, _opts?: unknown) =>
+  people.map((p) => ({ ...p, stats: null, commuting: [], error: null })),
+);
+vi.mock('$lib/home/presence/movement', () => ({ loadPeopleMovement }));
+
 const { load } = await import('./+page.server');
 
-function eventFor(email: string | null) {
+function eventFor(email: string | null, person?: string) {
   return {
     locals: { auth: async () => (email ? { user: { email } } : null) } as unknown as App.Locals,
     getClientAddress: () => '203.0.113.9',
     params: {},
+    url: new URL(`https://example.test/home/people${person ? `?person=${person}` : ''}`),
     depends: vi.fn(),
   } as unknown as Parameters<typeof load>[0];
 }
@@ -78,6 +91,7 @@ beforeEach(() => {
   loadHousehold.mockClear();
   livePositions.mockClear();
   loadFeedChecks.mockClear();
+  loadPeopleMovement.mockClear();
 });
 
 describe('/home/people load — D2 scoping', () => {
@@ -120,11 +134,11 @@ describe('/home/people load — D2 scoping', () => {
 
   it('links the owner to every person page, a household viewer to their own only', async () => {
     expect((await run('owner@example.test')).links).toEqual({
-      alex: '/home/people/alex',
-      sam: '/home/people/sam',
-      robin: '/home/people/robin',
+      alex: '/home/people?person=alex#movement',
+      sam: '/home/people?person=sam#movement',
+      robin: '/home/people?person=robin#movement',
     });
-    expect((await run('sam@example.test')).links).toEqual({ sam: '/home/people/sam' });
+    expect((await run('sam@example.test')).links).toEqual({ sam: '/home/people?person=sam#movement' });
   });
 
   it('refuses a guest and a signed-out visitor', async () => {
@@ -201,5 +215,37 @@ describe('feed check scoping', () => {
     expect(data.family.members).toHaveLength(3);
     expect(data.feedChecks).toEqual({});
     expect(data.loadError).toBeNull();
+  });
+});
+
+describe('everyone’s movement on the one page', () => {
+  type Moving = { movement: Array<{ subject: string }>; person: string | null; ownSubject: string | null };
+  const moving = async (email: string, person?: string) => (await load(eventFor(email, person))) as unknown as Moving;
+
+  it('gives the owner everyone, and honours the person filter', async () => {
+    const data = await moving('owner@example.test', 'alex');
+    expect(data.movement.map((p) => p.subject)).toEqual(['alex', 'sam', 'robin']);
+    expect(data.person).toBe('alex');
+  });
+
+  it('reads a household viewer’s own trail only, and ignores a filter on anyone else', async () => {
+    const data = await moving('sam@example.test', 'alex');
+    expect(loadPeopleMovement.mock.calls.map((c) => c[0].map((p) => p.subject))).toEqual([['sam']]);
+    expect(data.movement.map((p) => p.subject)).toEqual(['sam']);
+    // Not a 403 and not an echo: the filter says nothing about who exists.
+    expect(data.person).toBeNull();
+    expect(data.ownSubject).toBe('sam');
+  });
+
+  it('reads no trail for a refused visitor', async () => {
+    await expect(load(eventFor('guest@example.test'))).rejects.toMatchObject({ status: 403 });
+    expect(loadPeopleMovement).not.toHaveBeenCalled();
+  });
+
+  it('still draws the live band when movement cannot be read', async () => {
+    loadPeopleMovement.mockRejectedValueOnce(new Error('db down'));
+    const data = await moving('owner@example.test');
+    expect(data.movement).toEqual([]);
+    expect((data as unknown as PeopleData).family.members).toHaveLength(3);
   });
 });

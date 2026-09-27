@@ -9,8 +9,9 @@
    * person — under the hero's three counts.
    *
    * The daydream sweep's per-person findings used to fill 80% of this page;
-   * the engine is gone (#970) and so are they. Each person's history is on
-   * their own page, /home/people/[subject].
+   * the engine is gone (#970) and so are they. Under the live band now:
+   * everyone's movement on this one page (`PeopleMovement`), filtered by
+   * `?person=` — it replaced a page per person.
    *
    * Two viewers: the owner, and a household member signed in with the
    * 'household' role. What each receives is decided in the load
@@ -24,6 +25,7 @@
   import RollupGrid from '$lib/components/jkai/daydream/hub/RollupGrid.svelte';
   import type { RollupCell } from '$lib/components/jkai/daydream/hub/types';
   import CircleMap from '$lib/components/home/CircleMap.svelte';
+  import PeopleMovement from '$lib/components/home/PeopleMovement.svelte';
   import { feedCheckText, nowCounts, nowLabel, nowStatus, nowSub, type NowStatus } from '$lib/home/presence/now';
 
   let { data }: { data: PageData } = $props();
@@ -104,8 +106,9 @@
         detail: m.notSharing ? null : feedCheckText(data.feedChecks[m.subject], now),
         tone: status === 'unknown' && m.ageMins != null ? 'steady' : TONE[status],
         corner: m.today && m.today.minutesOut > 0 ? `${outFor(m.today.minutesOut)} out` : null,
-        // The person's own page, where the load says this viewer may open it:
-        // the owner anyone's, a household viewer their own and their wards'.
+        // Filters the movement below to this person, where the load says this
+        // viewer may see it: the owner anyone's, a household viewer their own
+        // and their wards'.
         href: links[m.subject] ?? null,
         title: stampOf(m),
       };
@@ -128,7 +131,7 @@
   title={['Where everyone', 'is, and was']}
   standfirst={isOwner
     ? 'The family’s latest locations — app uploads checked every 30 seconds, Life360 through Home Assistant every two minutes, kept ninety days.'
-    : 'Where everyone who shares their location is now; your own day is on your own page.'}
+    : 'Where everyone who shares their location is now, and where your own days went.'}
   {summary}
   navBack={isOwner}
   footer={isOwner
@@ -172,6 +175,8 @@
     {/if}
   </div>
 </section>
+
+<PeopleMovement movement={data.movement} person={data.person} ownSubject={data.ownSubject} days={data.days} />
 
 </HomeFrame>
 

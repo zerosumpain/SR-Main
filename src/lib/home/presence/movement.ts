@@ -121,7 +121,8 @@ export async function loadMovementStats(
 /**
  * One trail read, two answers: the coordinate-free stats, and the car and rail
  * journeys with their routes. The caller owns the visibility decision — only
- * /home/people/[subject] calls this, after `mayOpenPerson`.
+ * `loadPeopleMovement` calls this, for people /home/people has already passed
+ * through `mayOpenPerson`.
  */
 export async function loadPersonMovement(
   subject: string,
@@ -191,6 +192,55 @@ export async function loadPersonMovement(
       fixesOf: (j) => alongOf.get(j) ?? [],
     }),
   };
+}
+
+/** One person's movement on /home/people, or why it is missing. */
+export interface PersonMovement {
+  subject: string;
+  displayName: string;
+  stats: MovementStats | null;
+  commuting: Commute[];
+  error: string | null;
+}
+
+/**
+ * How long one person's movement is reused. /home/people re-runs its load
+ * every 30 seconds for the live cards; a 30-day trail does not change on that
+ * clock, and re-reading it for every person twice a minute would be the most
+ * expensive thing the page does.
+ */
+export const MOVEMENT_TTL_MS = 5 * 60_000;
+const movementCache = new Map<string, { at: number; value: { stats: MovementStats; commuting: Commute[] } }>();
+
+/**
+ * Every named person's movement for /home/people's one-page view. The CALLER
+ * decides who is named — the load passes only the people `mayOpenPerson`
+ * allows. Read one at a time, each behind the cache; a person whose trail
+ * fails comes back with `error`, and the rest still draw.
+ */
+export async function loadPeopleMovement(
+  people: Array<{ subject: string; displayName: string }>,
+  opts: { days?: number; now?: Date } = {},
+): Promise<PersonMovement[]> {
+  const days = opts.days ?? DEFAULT_WINDOW_DAYS;
+  const nowMs = (opts.now ?? new Date()).getTime();
+  const out: PersonMovement[] = [];
+  for (const p of people) {
+    const key = `${p.subject}:${days}`;
+    const hit = movementCache.get(key);
+    try {
+      let value = hit && nowMs - hit.at < MOVEMENT_TTL_MS ? hit.value : null;
+      if (!value) {
+        value = await loadPersonMovement(p.subject, { days, now: opts.now });
+        movementCache.set(key, { at: nowMs, value });
+      }
+      out.push({ subject: p.subject, displayName: p.displayName, ...value, error: null });
+    } catch (err) {
+      console.error(`[home/people] movement for ${p.subject} failed:`, err);
+      out.push({ subject: p.subject, displayName: p.displayName, stats: null, commuting: [], error: 'The trail could not be read just now.' });
+    }
+  }
+  return out;
 }
 
 /**

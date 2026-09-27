@@ -178,11 +178,11 @@ describe('personLinks', () => {
   it('gives the owner every person page and a household viewer only their own', () => {
     const subjects = ['alex', 'sam', 'robin'];
     expect(personLinks(subjects, { kind: 'owner' })).toEqual({
-      alex: '/home/people/alex',
-      sam: '/home/people/sam',
-      robin: '/home/people/robin',
+      alex: '/home/people?person=alex#movement',
+      sam: '/home/people?person=sam#movement',
+      robin: '/home/people?person=robin#movement',
     });
-    expect(personLinks(subjects, { kind: 'household', subject: 'sam' })).toEqual({ sam: '/home/people/sam' });
+    expect(personLinks(subjects, { kind: 'household', subject: 'sam' })).toEqual({ sam: '/home/people?person=sam#movement' });
     // Not on the list, so no link — even to themselves.
     expect(personLinks(['alex'], { kind: 'household', subject: 'sam' })).toEqual({});
   });
@@ -203,7 +203,7 @@ describe('Family Admin — a guardian sees their wards as their own', () => {
 
   it("opens a ward's person page and card, and nobody else's", () => {
     const viewer = { kind: 'household', subject: 'sam', wards: ['kit'] } as const;
-    expect(personLinks(['sam', 'kit', 'alex'], viewer)).toEqual({ sam: '/home/people/sam', kit: '/home/people/kit' });
+    expect(personLinks(['sam', 'kit', 'alex'], viewer)).toEqual({ sam: '/home/people?person=sam#movement', kit: '/home/people?person=kit#movement' });
     const out = scopeHousehold([card('kit'), card('alex')], viewer);
     expect(out.find((m) => m.subject === 'kit')?.today).not.toBeNull();
     expect(out.find((m) => m.subject === 'alex')?.today).toBeNull();

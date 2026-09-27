@@ -98,8 +98,9 @@ describe('the route map', () => {
   it('lists only routes that exist', () => {
     const missingFromMain: string[] = [];
     for (const id of catalogueRouteIds()) {
-      const file = id.startsWith('/api/') ? '+server.ts' : '+page.svelte';
-      if (!existsSync(`src/routes${id}/${file}`)) missingFromMain.push(id);
+      // A page route may be a load alone — a redirect such as /home/people/[subject].
+      const files = id.startsWith('/api/') ? ['+server.ts'] : ['+page.svelte', '+page.server.ts'];
+      if (!files.some((f) => existsSync(`src/routes${id}/${f}`))) missingFromMain.push(id);
     }
     expect(missingFromMain.sort()).toEqual([...EXTRACTED_ROUTE_IDS].sort());
   });

@@ -272,6 +272,8 @@ const ROUTES: Record<string, Partial<Record<Method, Permission>>> = {
   // $lib/home/presence/viewer), and a circle viewer's own page is the only
   // person page that opens for them.
   '/home/people': { GET: 'family:circle' },
+  // The old person page: a redirect onto /home/people?person=, kept open so
+  // a circle member's old link lands rather than 403s.
   '/home/people/[subject]': { GET: 'family:circle' },
   // The one API: "Your day" on their own person page. It takes no subject and
   // no email — the day is read for the SESSION's email (`ownDayOf`), so the
