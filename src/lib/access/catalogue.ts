@@ -145,12 +145,13 @@ export const AREAS: readonly AreaInfo[] = [
   },
   {
     // Their own workflows on the canvas, run on a closed list of safe nodes —
-    // never the owner's accounts, credentials, data or code nodes. Closed until
-    // SR-Workflows scopes workflows by owner.
+    // never the owner's accounts, credentials, data or code nodes. SR-Workflows
+    // enforces it (docs/member-workflows.md there): rows scoped by
+    // workflows.principal_id, the node policy checked in the engine, daily caps.
     id: 'workflows',
     label: 'Workflows',
-    blurb: 'Build and run their own workflows on the canvas, with safe nodes only: none of your data, accounts or credentials.',
-    open: false,
+    blurb: 'Build and run their own workflows on the canvas, with safe nodes only (fetch, model calls, text, timing): none of your data, accounts or credentials. 50 runs and 100 model calls a day.',
+    open: true,
     levels: { self: 'Own workflows', all: "Also read everyone's", admin: "Also edit everyone's" },
   },
   {
@@ -437,6 +438,7 @@ const ROUTES: Record<string, Partial<Record<Method, Permission>>> = {
 export const EXTERNAL_PAGES: Readonly<Record<string, Permission>> = {
   '/drive': 'drive:self',
   '/health/activities': 'health:all',
+  '/jkai/canvas': 'workflows:self',
 };
 
 /** The permission a route + verb needs, or null when only the owner may reach it. */
