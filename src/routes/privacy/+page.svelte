@@ -55,9 +55,11 @@
     A connected mailbox is read at least once a night (I can also run it by hand), and most of it is left
     alone. To know who you write to, the site reads the To and Cc lines of your sent mail from the past
     year and keeps only a one-way hash of each address. A thread is only taken in if you've starred it or
-    given it the label "intel", or if it's with someone you write to and an automatic check agrees it's
-    real correspondence rather than a receipt or a notification. That check sends the thread's subject,
-    who was on it and its first 1,500 or so characters to an AI model, whichever way it decides. Threads
+    given it the label "intel", or if it's correspondence with a person (a thread you wrote in, someone
+    you write to, or anyone else who isn't a newsletter or an automated sender) and an automatic check
+    agrees it's worth remembering rather than a receipt or a pleasantry. That check sends the thread's
+    subject, who was on it and its first 1,500 or so characters to an AI model, whichever way it decides.
+    Threads
     that are taken in become notes and facts in your own private knowledge graph, and to do that their
     full text is sent to the AI model providers the site uses (currently OpenAI, OpenRouter and Z.ai)
     under their API terms. Every other recent thread is kept only as its subject, who was on it and the
