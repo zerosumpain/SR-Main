@@ -75,5 +75,7 @@ export const load: PageServerLoad = async (event) => {
   }));
   const projects = authenticated ? withVis : withVis.filter((p) => p.isPublic);
 
-  return { projects, authenticated, visibility, ownerCards: authenticated ? OWNER_ONLY_CARDS : [] };
+  // The visibility map names every private project's slug: the owner's toggles
+  // only, never the public's.
+  return { projects, authenticated, visibility: authenticated ? visibility : {}, ownerCards: authenticated ? OWNER_ONLY_CARDS : [] };
 };

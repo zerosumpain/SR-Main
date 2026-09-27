@@ -23,7 +23,8 @@ export async function isOwnerRequest(event: OwnerCheckEvent): Promise<boolean> {
   } catch {
     /* fall through to bypass check */
   }
-  if (import.meta.env.DEV) {
+  // Viewing as someone else: the emulated session is the whole answer.
+  if (import.meta.env.DEV && !event.locals.viewingAs) {
     let addr = '';
     try {
       addr = event.getClientAddress?.() ?? '';

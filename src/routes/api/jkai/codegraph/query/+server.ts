@@ -31,6 +31,7 @@ import {
 } from '$lib/codegraph/auth';
 import { CgqlError, parseCgql } from '$lib/codegraph/query';
 import { renderContext, runPlan } from '$lib/codegraph/retrieve';
+import { isOwnerEmail } from '$lib/server/access';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
@@ -45,8 +46,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     // the Auth.js handle; this route is NOT in the hooks bypass for anything
     // other than an exact-path service call, so an anonymous request never
     // reaches here without a token.
+    //
+    // The OWNER session, not any session: the lessons returned here include
+    // every Claude memory note verbatim, and the hook lets this exact path
+    // through for POST, so a signed-in guest would otherwise read them all.
     const session = await locals.auth?.();
     if (!session?.user) throw error(401, codegraphAuthFailure(request));
+    if (!isOwnerEmail(session.user.email)) throw error(403, 'Forbidden');
   }
 
   const body = (await request.json().catch(() => null)) as {

@@ -23,6 +23,9 @@ export const GET: RequestHandler = async (event) => {
   const signedIn = session?.user?.email?.trim().toLowerCase();
   if (!signedIn) throw redirect(302, '/login');
   const viewer = await viewerOf(event);
+  // Only the owner and members connect a mailbox. A guest must never fall
+  // through to the owner branch below and land a mailbox in the owner's space.
+  if (viewer.kind !== 'owner' && viewer.kind !== 'member') throw redirect(302, '/');
   const member = viewer.kind === 'member';
   const principalId = viewer.kind === 'member' ? viewer.principalId : OWNER_SPACE;
 

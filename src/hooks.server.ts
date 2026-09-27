@@ -25,6 +25,14 @@ import { resolveAdminRedirect } from '$lib/components/admin/admin-nav';
 import { isOwnerEmail } from '$lib/server/access';
 import { INVITE_COOKIE, signInWithInvite } from '$lib/server/invites';
 import { viewerHolds, viewerOf } from '$lib/server/viewer';
+import {
+  VIEW_AS_COOKIE,
+  VIEW_AS_PATH,
+  VIEW_AS_WRITE_REFUSED,
+  actAs,
+  verifyViewAs,
+  viewerForEmail,
+} from '$lib/server/view-as';
 import { rateLimit } from '$lib/server/rate-limit';
 import { actAsDeviceMember, memberDevice, nativeDevice, pairedDevice } from '$lib/server/native-gate';
 import { hasMaintenanceSecret } from '$lib/server/maintenance-auth';
@@ -394,6 +402,30 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     }
   }
 
+  // View as ($lib/server/view-as): the owner sees the site as one person on the
+  // allow-list. Before every gate below — the dev LAN bypass included — so the
+  // public pages, the owner gates and the member gate all answer for that
+  // person. Honoured only for the owner's own session with a cookie signed for
+  // it; read-only; never applied to the exit endpoint.
+  const viewAsCookie = event.cookies.get(VIEW_AS_COOKIE);
+  if (viewAsCookie && pathname !== VIEW_AS_PATH) {
+    const owner = (await event.locals.auth())?.user?.email ?? '';
+    const signed = isOwnerEmail(owner) ? verifyViewAs(env.AUTH_SECRET ?? '', owner, viewAsCookie) : null;
+    const target = signed ? await viewerForEmail(signed.email) : null;
+    if (signed && target && target.kind !== 'owner' && target.kind !== 'anonymous') {
+      actAs(event.locals, target, signed.expiresAt);
+      if (!['GET', 'HEAD', 'OPTIONS'].includes(event.request.method)) {
+        return new Response(JSON.stringify({ error: VIEW_AS_WRITE_REFUSED }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    } else {
+      // Expired, forged, or the person was removed: drop it.
+      event.cookies.delete(VIEW_AS_COOKIE, { path: '/' });
+    }
+  }
+
   if (requestHost(event) === RETIRED_MAPS_HOST) {
     throw redirect(301, `https://strangeramblings.com${retiredMapsTarget(pathname)}`);
   }
@@ -451,7 +483,7 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   // Development-only local-network bypass. Production builds never honour an
   // environment toggle: a reverse tunnel makes internet clients appear to be
   // loopback, so address classification cannot safely authorise production.
-  if (import.meta.env.DEV) {
+  if (import.meta.env.DEV && !event.locals.viewingAs) {
     let clientAddr = '';
     try { clientAddr = event.getClientAddress?.() ?? ''; } catch { clientAddr = ''; }
     // `isPrivateAddress` rather than a list of prefixes written out here. The

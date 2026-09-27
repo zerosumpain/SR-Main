@@ -7,6 +7,7 @@
 
 import { env } from '$env/dynamic/private';
 import { timingSafeEqual } from 'node:crypto';
+import { isOwnerEmail } from './access';
 
 /** True iff the request carries a valid x-maintenance-secret. Only when the env is set. */
 export function hasMaintenanceSecret(request: Request): boolean {
@@ -26,6 +27,7 @@ export function hasMaintenanceSecret(request: Request): boolean {
 /** Owner session OR a valid maintenance secret. */
 export async function isMaintenanceAuthorized(request: Request, locals: App.Locals): Promise<boolean> {
   const session = await locals.auth();
-  if (session?.user?.email) return true;
+  // The OWNER, not any session: a signed-in guest or member is not an owner.
+  if (isOwnerEmail(session?.user?.email)) return true;
   return hasMaintenanceSecret(request);
 }
