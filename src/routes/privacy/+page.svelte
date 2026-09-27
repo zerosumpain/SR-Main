@@ -7,7 +7,7 @@
   <meta name="description" content="What strangeramblings.com collects, why, and what it does with it." />
 </svelte:head>
 
-<LegalPage title="Privacy" updated="25 September 2026">
+<LegalPage title="Privacy" updated="27 September 2026">
   <p>
     Strange Ramblings is my personal website, run by me, John Kelly, in the UK. It isn't a business and
     it doesn't sell anything, least of all you. This page says what the site collects, why, and what I do
@@ -52,11 +52,15 @@
     can see.
   </p>
   <p>
-    Mail is used for the features you connected it for and nothing else — summaries, reminders and notes
-    in your own space. Some of that is done by AI models, so the text of relevant messages is sent to the
-    model providers the site uses (currently OpenAI, OpenRouter and Z.ai) under their API terms, to
-    produce those results for you. I don't use it to train models, I don't sell it, and I don't use it
-    for advertising. The access tokens Google issues are stored encrypted.
+    A connected mailbox is read once a night, and most of it is left alone. A thread is only taken in
+    if it's with someone you write to yourself and an automatic check agrees it's real correspondence
+    rather than a receipt or a notification, or if you've starred it or given it the label "intel". Those
+    threads are the only ones whose text is read in full: they become notes and facts in your own private
+    knowledge graph, and to do that their text is sent to the AI model providers the site uses (currently
+    OpenAI, OpenRouter and Z.ai) under their API terms. Every other recent thread is kept only as its
+    subject, who was on it and the date, and that is deleted after 14 days. I don't use any of it to
+    train models, I don't sell it, and I don't use it for advertising. The access tokens Google issues
+    are stored encrypted.
   </p>
   <p>
     The site's use and transfer of information received from Google APIs adheres to the
@@ -65,8 +69,9 @@
   </p>
   <p>
     You can take the access away whenever you like, from the site or from your
-    <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">Google account's third-party access page</a>,
-    and I'll delete what was read from your mailbox if you ask.
+    <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">Google account's third-party access page</a>.
+    Disconnecting a mailbox on the site deletes what was taken from it: the notes made from its mail,
+    the graph facts drawn from them, its search index and any attachments that were saved.
   </p>
 
   <h2>Keeping and deleting</h2>
