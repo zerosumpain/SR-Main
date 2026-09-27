@@ -14,9 +14,14 @@
 //  - Only the OWNER can be emulating. The cookie is honoured only when the real
 //    session is an owner session AND the cookie was signed (AUTH_SECRET) for
 //    that owner's email, so a forged or borrowed cookie does nothing.
-//  - Read-only. The hook refuses every state-changing request while emulating
-//    (`VIEW_AS_WRITE_REFUSED`), so the owner cannot post chat turns as the
-//    person, spend their daily allowances or write rows into their space.
+//  - Read-only, except chat. The hook refuses every state-changing request to
+//    Main while emulating (`VIEW_AS_WRITE_REFUSED`). The gateway lets through
+//    only the writes an app lists — SR-Jkai-Core lists starting a thread and
+//    talking in it — and tags them, so Core marks such threads
+//    `source = 'view-as'` and confines the owner's posts to them. Exit deletes
+//    them (`purgeViewAsThreads`), and so does the next start, in case the
+//    owner let the hour run out instead. Turns still count against the
+//    person's daily allowance.
 //  - It expires after an hour, and the target is re-read from the allow-list on
 //    every request: remove the person and the emulation ends.
 //  - The exit endpoint (`VIEW_AS_PATH`) is never emulated, so the owner can
@@ -26,9 +31,9 @@
 // emulated at the SR-Infra gateway, which verifies this same cookie and signs the
 // target's identity instead (gateway/view-as.mjs; the format must match).
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { allowedUser } from '$lib/db/schema';
+import { activityPrincipals, allowedUser, conversations } from '$lib/db/schema';
 import { isOwnerEmail } from './access';
 import { loadMember } from './grants';
 import type { Viewer } from './viewer';
@@ -108,6 +113,30 @@ export function actAs(locals: App.Locals, viewer: Viewer & { email: string }, ex
     kind: viewer.kind === 'member' ? 'member' : 'guest',
     expiresAt,
   };
+}
+
+/** Thread source SR-Jkai-Core stamps on a thread started during view-as. */
+export const VIEW_AS_THREAD_SOURCE = 'view-as';
+
+/**
+ * Delete the threads the owner started while viewing as `email`. Their
+ * messages, traces and attachments cascade, as they do for Core's own delete.
+ * Only `source = 'view-as'` rows of that person's principal: their real threads
+ * are never touched. Returns how many went.
+ */
+export async function purgeViewAsThreads(email: string): Promise<number> {
+  const e = email.trim().toLowerCase();
+  const [principal] = await db
+    .select({ id: activityPrincipals.id })
+    .from(activityPrincipals)
+    .where(and(eq(activityPrincipals.kind, 'user'), eq(activityPrincipals.externalRef, e)))
+    .limit(1);
+  if (!principal) return 0;
+  const gone = await db
+    .delete(conversations)
+    .where(and(eq(conversations.principalId, principal.id), eq(conversations.source, VIEW_AS_THREAD_SOURCE)))
+    .returning({ id: conversations.id });
+  return gone.length;
 }
 
 export const VIEW_AS_WRITE_REFUSED = 'Read-only while viewing as someone else. Exit view-as to make changes.';

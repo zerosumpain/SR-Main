@@ -2,7 +2,14 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
 import { isOwnerEmail } from '$lib/server/access';
-import { VIEW_AS_COOKIE, VIEW_AS_TTL_S, signViewAs, viewerForEmail } from '$lib/server/view-as';
+import {
+  VIEW_AS_COOKIE,
+  VIEW_AS_TTL_S,
+  purgeViewAsThreads,
+  signViewAs,
+  verifyViewAs,
+  viewerForEmail,
+} from '$lib/server/view-as';
 
 // Start and stop viewing the site as someone on the allow-list
 // ($lib/server/view-as). Owner-only: the hook gates /api/admin/*, and it never
@@ -25,6 +32,8 @@ export const POST: RequestHandler = async ({ request, locals, cookies, url }) =>
   }
   const viewer = await viewerForEmail(email);
   if (!viewer) return json({ error: 'Not on the allow-list' }, { status: 404 });
+  // Threads left from a view-as whose hour ran out without an Exit.
+  await purgeViewAsThreads(email);
 
   cookies.set(VIEW_AS_COOKIE, signViewAs(env.AUTH_SECRET ?? '', owner, email), {
     path: '/',
@@ -36,8 +45,13 @@ export const POST: RequestHandler = async ({ request, locals, cookies, url }) =>
   return json({ ok: true, email, kind: viewer.kind });
 };
 
-/** DELETE — stop viewing as anyone. */
-export const DELETE: RequestHandler = async ({ cookies }) => {
+/** DELETE — stop viewing as anyone, and delete the chat threads started while viewing. */
+export const DELETE: RequestHandler = async ({ cookies, locals }) => {
+  const owner = (await locals.auth())?.user?.email ?? '';
+  // Expired cookies still name who was being viewed: the threads are theirs to
+  // clean up whether or not the hour ran out, so verify the MAC, not the clock.
+  const signed = isOwnerEmail(owner) ? verifyViewAs(env.AUTH_SECRET ?? '', owner, cookies.get(VIEW_AS_COOKIE), 0) : null;
+  const purged = signed ? await purgeViewAsThreads(signed.email) : 0;
   cookies.delete(VIEW_AS_COOKIE, { path: '/' });
-  return json({ ok: true });
+  return json({ ok: true, purged });
 };

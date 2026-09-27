@@ -14,24 +14,43 @@ const h = vi.hoisted(() => ({
   allowed: new Set<string>(),
   members: new Map<string, { principalId: string; grants: Set<string> }>(),
   lastEmail: '',
+  principals: new Map<string, string>(),
+  threads: [] as string[],
+  deleteWhere: null as unknown,
 }));
 
 vi.mock('$env/dynamic/private', () => ({ env: { AUTH_ALLOWED_EMAILS: 'owner@example.test' } }));
-vi.mock('$lib/db/schema', () => ({ allowedUser: { email: 'email' } }));
-vi.mock('drizzle-orm', () => ({ eq: (_col: unknown, v: string) => ((h.lastEmail = v), v) }));
+vi.mock('$lib/db/schema', () => ({
+  allowedUser: { email: 'allowed_user.email' },
+  activityPrincipals: { id: 'p.id', kind: 'p.kind', externalRef: 'p.external_ref' },
+  conversations: { id: 'c.id', principalId: 'c.principal_id', source: 'c.source' },
+}));
+vi.mock('drizzle-orm', () => ({
+  eq: (col: string, v: string) => ((h.lastEmail = col.endsWith('email') || col.endsWith('external_ref') ? v : h.lastEmail), [col, v]),
+  and: (...parts: unknown[]) => parts,
+}));
 vi.mock('$lib/db', () => {
+  let table = '';
   const chain = {
     select: () => chain,
-    from: () => chain,
+    from: (t: Record<string, string>) => ((table = Object.values(t)[0]), chain),
     where: () => chain,
-    limit: async () => (h.allowed.has(h.lastEmail) ? [{ email: h.lastEmail }] : []),
+    limit: async () => {
+      if (table.startsWith('p.')) return h.principals.has(h.lastEmail) ? [{ id: h.principals.get(h.lastEmail) }] : [];
+      return h.allowed.has(h.lastEmail) ? [{ email: h.lastEmail }] : [];
+    },
+    delete: () => ({
+      where: (cond: unknown) => ({
+        returning: async () => ((h.deleteWhere = cond), h.threads.map((id) => ({ id }))),
+      }),
+    }),
   };
   return { db: chain };
 });
 vi.mock('./access', () => ({ isOwnerEmail: (e: string | null | undefined) => (e ?? '').trim().toLowerCase() === OWNER }));
 vi.mock('./grants', () => ({ loadMember: async (e: string) => h.members.get(e) ?? null }));
 
-const { actAs, signViewAs, verifyViewAs, viewerForEmail, VIEW_AS_TTL_S } = await import('./view-as');
+const { actAs, purgeViewAsThreads, signViewAs, verifyViewAs, viewerForEmail, VIEW_AS_TTL_S } = await import('./view-as');
 const { viewerOf } = await import('./viewer');
 const { isOwnerRequest } = await import('./owner');
 
@@ -88,5 +107,23 @@ describe('acting as', () => {
     actAs(locals, { kind: 'guest', email: BOB }, NOW);
     expect(await viewerOf({ locals })).toEqual({ kind: 'guest', email: BOB });
     expect(await isOwnerRequest({ locals })).toBe(false);
+  });
+});
+
+describe('leaving view-as', () => {
+  it('deletes only that person\u2019s view-as threads', async () => {
+    h.principals = new Map([[ANN, 'u_ann']]);
+    h.threads = ['t1', 't2'];
+    expect(await purgeViewAsThreads(ANN)).toBe(2);
+    expect(h.deleteWhere).toEqual([
+      ['c.principal_id', 'u_ann'],
+      ['c.source', 'view-as'],
+    ]);
+  });
+
+  it('deletes nothing for someone with no principal', async () => {
+    h.deleteWhere = null;
+    expect(await purgeViewAsThreads('nobody@example.test')).toBe(0);
+    expect(h.deleteWhere).toBeNull();
   });
 });
