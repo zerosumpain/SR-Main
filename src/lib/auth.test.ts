@@ -177,7 +177,9 @@ describe('family:circle — a Family Circle member reaches People and nothing el
         expect(existsSync(`src/routes${id}/+server.ts`), id).toBe(true);
         continue;
       }
-      expect(existsSync(`src/routes${id}/+page.svelte`), id).toBe(true);
+      // Every page is scoped in its load; the old person page is that load
+      // alone, a redirect onto /home/people?person=.
+      if (id !== '/home/people/[subject]') expect(existsSync(`src/routes${id}/+page.svelte`), id).toBe(true);
       expect(existsSync(`src/routes${id}/+page.server.ts`), id).toBe(true);
     }
   });
