@@ -5,6 +5,7 @@ const h = vi.hoisted(() => ({
   users: [] as Array<{ email: string; name: string; sharing: boolean; sitePairWanted?: string | null }> | null,
   viewers: new Map<string, unknown>(),
   trailRows: [] as unknown[],
+  allowedRows: [] as Array<{ email: string; note: string | null }>,
   posted: [] as unknown[],
   status: 200,
   owners: new Set<string>(),
@@ -22,7 +23,10 @@ function chain(rows: () => unknown[]): unknown {
   c.then = (resolve: (v: unknown) => void) => resolve(rows());
   return c;
 }
-vi.mock('$lib/db', () => ({ db: { select: () => chain(() => h.trailRows) } }));
+// The allow-list read is the one select that asks for `note`.
+vi.mock('$lib/db', () => ({
+  db: { select: (fields?: Record<string, unknown>) => chain(() => (fields && 'note' in fields ? h.allowedRows : h.trailRows)) },
+}));
 vi.mock('./companion', () => ({
   companionToken: () => h.token,
   companionUrl: () => 'http://pilot.test',
@@ -111,6 +115,7 @@ beforeEach(() => {
   h.users = [];
   h.viewers.clear();
   h.trailRows = [];
+  h.allowedRows = [];
   h.posted = [];
   h.status = 200;
   h.owners = new Set(['owner@example.test']);
@@ -382,6 +387,28 @@ describe('pushAppViews', () => {
     expect(preview.view.access.news).toBe(true);
     expect(preview.view.access.sitePair).toBeNull();
     expect(preview.view.watch).toBeUndefined();
+  });
+
+  it('previews a person the site allows who is NOT on the app yet, without filing them a view', async () => {
+    h.users = [{ email: 'owner@example.test', name: 'J', sharing: true }];
+    h.viewers.set('owner@example.test', { kind: 'owner' });
+    h.allowedRows = [{ email: 'Bea@Example.test', note: 'Bea' }];
+    h.members.set('bea@example.test', { principalId: 'u_bea', grants: new Set(['jkai.chat:all']) });
+    await pushAppViews(members, fakeFetch(), NOW);
+    type V = { email: string; view: { previewAs?: Array<{ email: string; name: string; view: { access: { chat: boolean } } }> } };
+    const body = h.posted[0] as { views: V[] };
+    expect(body.views.map((v) => v.email)).toEqual(['owner@example.test']);
+    expect(body.views[0].view.previewAs).toEqual([
+      expect.objectContaining({ email: 'bea@example.test', name: 'Bea', view: expect.objectContaining({ access: expect.objectContaining({ chat: true }) }) }),
+    ]);
+  });
+
+  it('reads no allow-list when no owner is on the app', async () => {
+    h.users = [{ email: 'ann@example.test', name: 'A', sharing: true }];
+    h.allowedRows = [{ email: 'bea@example.test', note: 'Bea' }];
+    await pushAppViews(members, fakeFetch(), NOW);
+    const body = h.posted[0] as { views: Array<{ email: string }> };
+    expect(body.views.map((v) => v.email)).toEqual(['ann@example.test']);
   });
 
   it("offers a member exactly what their grants hold, and the family only through the Circle rule", async () => {
