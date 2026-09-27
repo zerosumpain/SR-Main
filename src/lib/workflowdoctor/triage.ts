@@ -25,6 +25,7 @@ import {
 import { extractSignature } from '$lib/canvas/stats/errorSignature';
 import { redactSensitive } from '$lib/security/sensitive';
 import { WORK_CAPS } from './types';
+import { ownerWorkflows } from '$lib/workflows/owner-rows';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CANVAS_PREFIX = 'canvas:';
@@ -288,6 +289,7 @@ export async function triageFailures(opts: TriageOptions = {}): Promise<FailureT
       and(
         eq(workflowRuns.status, 'failed'),
         isNotNull(workflowRuns.error),
+        ownerWorkflows(),
         gte(workflowRuns.startedAt, since),
         ...noiseFilters(workflowRuns.error, workflowRuns.id),
       ),
@@ -315,6 +317,7 @@ export async function triageFailures(opts: TriageOptions = {}): Promise<FailureT
       and(
         eq(nodeExecutions.status, 'failed'),
         isNotNull(nodeExecutions.error),
+        ownerWorkflows(),
         gte(workflowRuns.startedAt, since),
         ...noiseFilters(nodeExecutions.error, nodeExecutions.runId),
       ),
@@ -469,7 +472,7 @@ export async function detectDeadNodeTypes(workflowIds?: string[]): Promise<DeadN
     })
     .from(workflowNodes)
     .innerJoin(workflows, eq(workflows.id, workflowNodes.workflowId))
-    .where(workflowIds?.length ? inArray(workflowNodes.workflowId, workflowIds) : undefined);
+    .where(and(ownerWorkflows(), workflowIds?.length ? inArray(workflowNodes.workflowId, workflowIds) : undefined));
 
   // One successor search per distinct dead type, not per node.
   const picks = new Map<string, { candidate: string | null; candidateConfidence: number }>();
