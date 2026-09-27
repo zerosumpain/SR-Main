@@ -1,5 +1,18 @@
+
+vi.mock('$env/dynamic/private', () => ({ env: process.env }));
+// MCP still dispatches the real registry adapter; the owner service is remote.
+const workflowInvoke = vi.hoisted(() => vi.fn(async () => ({ success: true, data: { matched: 1, total: 1, types: [{ type: 'trigger' }] } })));
+vi.mock('$lib/workflows/site-tools/remote', async (importOriginal) => ({
+  ...await importOriginal<typeof import('$lib/workflows/site-tools/remote')>(),
+  invokeRemoteTool: workflowInvoke,
+}));
+beforeAll(() => {
+  vi.stubEnv('WORKFLOWS_TOOL_INVOKE_URL', 'http://workflows.test/api/workflows/tools/invoke');
+  vi.stubEnv('WORKFLOWS_TOOL_INVOKE_TOKEN', 'mcp-workflows-test-token-32-bytes-long');
+});
+afterAll(() => vi.unstubAllEnvs());
 vi.mock('$lib/apis/integration-discovery', () => ({ discoverIntegrations: async () => [] }));
-import { describe, it, expect, beforeAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { JKAI_EXTENDED_TOOL, dispatchMetaTool } from './meta-tool';
 import { ESSENTIAL_TOOL_NAMES } from './essentials';
 import { listMcpTools } from './server';
@@ -219,7 +232,7 @@ describe('jkai_extended meta-tool', () => {
       expect(result.error).toMatch(/requires "name"/);
     });
 
-    it('dispatches a real extended tool via the registry (workflow_list_node_types is side-effect-free)', async () => {
+    it('dispatches an extended workflow tool through the real registry adapter to its owner', async () => {
       const result = (await dispatchMetaTool(
         {
           operation: 'invoke',
@@ -229,6 +242,7 @@ describe('jkai_extended meta-tool', () => {
         fakeCtx,
       )) as { success: boolean; data?: unknown };
       expect(result.success).toBe(true);
+      expect(workflowInvoke).toHaveBeenCalledWith('workflow_list_node_types', { workflow_id: 'wf_meta_test' }, expect.any(Object), expect.objectContaining({ url: 'http://workflows.test/api/workflows/tools/invoke' }));
       expect(Array.isArray((result.data as { types: unknown[] }).types)).toBe(true);
     });
 

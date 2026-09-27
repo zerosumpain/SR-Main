@@ -206,13 +206,13 @@ describe('the run kernel is the only start path', () => {
   const users = (re: RegExp) =>
     files.filter((f) => re.test(fs.readFileSync(f, 'utf8').replace(/^\s*(\/\/|\*).*$/gm, ''))).map((f) => path.relative(SRC, f)).sort();
 
-  it('only start-run.ts executes the engine (plus the generator\'s draft dry-run, which has no run row)', () => {
-    expect(users(/\bengine\s*\.\s*execute\(/)).toEqual(['lib/workflows/orchestrator/index.ts', 'lib/workflows/start-run.ts']);
+  it('only the retained run kernel can execute the engine; generation is remote', () => {
+    expect(users(/\bengine\s*\.\s*execute\(/)).toEqual(['lib/workflows/start-run.ts']);
   });
 
-  it('only start-run.ts finalises a run or inserts a run row', () => {
+  it('only the retained kernel finalises runs; Main no longer inserts run rows', () => {
     expect(users(/\bfinaliseRun\(/)).toEqual(['lib/workflows/run-finalise.ts', 'lib/workflows/start-run.ts']);
-    expect(users(/insert\(\s*workflowRuns\s*\)/)).toEqual(['lib/workflows/start-run.ts']);
+    expect(users(/insert\(\s*workflowRuns\s*\)/)).toEqual([]);
   });
 
   it('the kernel never writes a heal back to the saved node', () => {

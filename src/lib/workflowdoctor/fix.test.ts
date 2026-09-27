@@ -81,15 +81,8 @@ vi.mock('$lib/canvas/mutate.server', async () => {
     revertNodeConfig: vi.fn(async () => ({})),
   };
 });
-// scheduler.ts drags the whole node registry in; the breaker only needs the
-// one function, and the stub proves we called it.
-vi.mock('$lib/workflows/scheduler', () => ({
-  unregisterCronJob: vi.fn(),
-  reloadSchedule: vi.fn(async () => {}),
-}));
 
 import { getSetting } from '$lib/server/models/settings';
-import { unregisterCronJob } from '$lib/workflows/scheduler';
 import {
   mutateNodeConfig,
   revertNodeConfig,
@@ -236,17 +229,10 @@ describe('quarantineRunaways (the circuit breaker)', () => {
     });
   });
 
-  it('stops the in-memory cron as well as the row', async () => {
-    await quarantineRunaways([runaway()], { enabled: true });
-    expect(unregisterCronJob).toHaveBeenCalledWith('s1');
-  });
-
-  it('still quarantines when unregistering the cron throws', async () => {
-    vi.mocked(unregisterCronJob).mockImplementationOnce(() => {
-      throw new Error('no such job');
-    });
+  it('persists a disable for the Workflows worker to reconcile', async () => {
     const res = await quarantineRunaways([runaway()], { enabled: true });
     expect(res.quarantined).toBe(1);
+    expect(h.scheduleWrites).toContainEqual({ enabled: false });
   });
 
   it('emits a story the report can render without re-parsing prose', async () => {

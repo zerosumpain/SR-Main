@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { listChatJobs, recentChatPulses } from '$lib/workflows/chat/activity';
 import { getQueueStatus } from '$lib/workflows/chat/followup-queue';
 import { getRuntimeStats, readEventLoopMaxMs } from '$lib/workflows/engine-runtime';
-import { getActiveJobs } from '$lib/workflows/scheduler';
+import { readWorkerStatus } from '$lib/workflows/worker-status.server';
 import { db } from '$lib/db';
 import { workflowRuns, workflows, healthSyncState } from '$lib/db/schema';
 import { eq, desc, inArray } from 'drizzle-orm';
@@ -89,16 +89,8 @@ export const GET: RequestHandler = async () => {
     pausedAtNodeId: r.pausedAtNodeId,
   }));
 
-  const cronJobs = Array.from(getActiveJobs().entries()).map(([scheduleId, cron]) => {
-    let nextRunMs: number | null = null;
-    try {
-      const next = cron.nextRun();
-      nextRunMs = next ? next.getTime() : null;
-    } catch {
-      // ignore — cron may have stopped
-    }
-    return { scheduleId, nextRunMs, paused: !cron.isRunning() };
-  });
+  const scheduler = await readWorkerStatus();
+  const cronJobs = scheduler.available ? scheduler.snapshot.jobs : null;
 
   const stats = getRuntimeStats();
   const loopMaxMs = readEventLoopMaxMs();
@@ -111,6 +103,7 @@ export const GET: RequestHandler = async () => {
     followUps,
     activeRuns,
     cronJobs,
+    scheduler,
     recentPulses,
     thresholds: {
       heartbeatIntervalMs: HEARTBEAT_INTERVAL_MS,

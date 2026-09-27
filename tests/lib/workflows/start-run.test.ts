@@ -136,81 +136,19 @@ describe('pinVersion / loadPinnedDefinition', () => {
   });
 });
 
-describe('startRun', () => {
-  it('pins a version, writes the run and pending node rows, executes and finalises', async () => {
-    state.versions = [{ id: 'ver-1' }];
-    const started = await startRun({ workflowId: 'wf', trigger: 'manual', input: { q: 1 }, label: 'test' });
-    expect(started?.status).toBe('running');
-    expect(inserted('runs')[0]).toMatchObject({
-      id: started!.runId, workflowId: 'wf', status: 'running', trigger: 'manual', inputData: { q: 1 }, versionId: 'ver-1', parentRunId: null,
-    });
-    expect(inserted('execs')[0]).toEqual([
-      { runId: started!.runId, nodeId: 't', status: 'pending' },
-      { runId: started!.runId, nodeId: 'n', status: 'pending' },
-    ]);
-    await started!.done;
-    expect(execute).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'wf' }), started!.runId, { q: 1 }, undefined, 'wf',
-      expect.objectContaining({ child: false }), undefined, undefined,
-    );
-    expect(finaliseRun).toHaveBeenCalledWith(expect.objectContaining({ workflowId: 'wf', runId: started!.runId, label: 'test' }));
-  });
-
-  it('enqueues instead of executing in worker mode', async () => {
-    process.env.JKAI_RUN_WORKER = '1';
-    const started = await startRun({ workflowId: 'wf', trigger: 'manual' });
-    expect(inserted('runs')[0]).toMatchObject({ status: 'pending' });
-    expect(enqueue).toHaveBeenCalledWith(started!.runId);
+const invoke = vi.hoisted(() => vi.fn());
+vi.mock('$lib/workflows/runtime-client', () => ({ invokeWorkflowRuntime: invoke, decodeEngineResult: (r: unknown) => r }));
+describe('remote run handoff', () => {
+  it('passes input and chain depth to Workflows without writing or executing a local run', async () => {
+    invoke.mockResolvedValue({ runId: 'remote-1', status: 'pending', result: null });
+    expect(await startTriggeredRun('wf', { event: 'test' }, { label: 'event-bus', chainDepth: 3 })).toBe('remote-1');
+    expect(invoke).toHaveBeenCalledWith({ action: 'start', options: expect.objectContaining({ workflowId: 'wf', trigger: 'event', input: { event: 'test' }, chainDepth: 3 }) });
+    expect(inserted('runs')).toEqual([]);
     expect(execute).not.toHaveBeenCalled();
-    expect(await started!.done).toBeNull();
   });
-
-  it('a sub-workflow child always runs here, without a top-level slot', async () => {
-    process.env.JKAI_RUN_WORKER = '1';
-    const started = await startRun({ workflowId: 'wf', trigger: 'sub-workflow', parentRunId: 'parent' });
-    await started!.done;
-    expect(enqueue).not.toHaveBeenCalled();
-    expect(inserted('runs')[0]).toMatchObject({ status: 'running', parentRunId: 'parent' });
-    expect((execute.mock.calls[0] as unknown[])[5]).toMatchObject({ child: true });
-    expect(finaliseRun).toHaveBeenCalledWith(expect.objectContaining({ parentRunId: 'parent' }));
-  });
-
-  it('a TEST run is recorded as one, runs here, stubs and never self-heals', async () => {
-    process.env.JKAI_RUN_WORKER = '1';
-    const pins = { t: { output: { saved: true }, handle: null } };
-    const started = await startRun({ workflowId: 'wf', trigger: 'manual', mode: 'test', pins, allowSideEffects: ['n'], selfHealing: true });
-    await started!.done;
-    expect(enqueue).not.toHaveBeenCalled();
-    expect(inserted('runs')[0]).toMatchObject({ status: 'running', mode: 'test' });
-    const opts = (execute.mock.calls[0] as unknown[])[5] as Record<string, unknown>;
-    expect(opts).toMatchObject({ dryRun: true, selfHealing: false, pins });
-    expect([...(opts.allowSideEffects as Set<string>)]).toEqual(['n']);
-    expect(finaliseRun).toHaveBeenCalledWith(expect.objectContaining({ test: true }));
-  });
-
-  it('a live run is recorded as live and passes no pins', async () => {
-    const started = await startRun({ workflowId: 'wf', trigger: 'manual', pins: { t: { output: {} } } });
-    await started!.done;
-    expect(inserted('runs')[0]).toMatchObject({ mode: 'live' });
-    const opts = (execute.mock.calls[0] as unknown[])[5] as Record<string, unknown>;
-    expect(opts.pins).toBeUndefined();
-    expect(opts.dryRun).toBeFalsy();
-    expect(finaliseRun).toHaveBeenCalledWith(expect.objectContaining({ test: false }));
-  });
-
-  it('starts nothing for a deleted workflow', async () => {
-    state.workflow = [];
-    expect(await startRun({ workflowId: 'gone', trigger: 'manual' })).toBeNull();
-    expect(state.inserts).toHaveLength(0);
-  });
-});
-
-describe('startTriggeredRun', () => {
-  it('records an event run and finalises with the chain depth', async () => {
-    const runId = await startTriggeredRun('wf', { event: { x: 1 } }, { label: 'test', chainDepth: 2 });
-    expect(inserted('runs')[0]).toMatchObject({ id: runId, trigger: 'event', inputData: { event: { x: 1 } } });
-    expect(runChainDepth(runId!)).toBe(2);
-    await vi.waitFor(() => expect(finaliseRun).toHaveBeenCalled());
-    expect(finaliseRun).toHaveBeenCalledWith(expect.objectContaining({ runId, chainDepth: 2, label: 'test' }));
+  it('surfaces an unavailable owner instead of executing locally', async () => {
+    invoke.mockRejectedValue(new Error('Workflows unavailable'));
+    await expect(startRun({ workflowId: 'wf', trigger: 'manual' })).rejects.toThrow('Workflows unavailable');
+    expect(execute).not.toHaveBeenCalled();
   });
 });

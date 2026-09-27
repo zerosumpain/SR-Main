@@ -97,9 +97,6 @@ import { getWhatsAppService } from './whatsapp/service';
 import { ownerPhone } from '$lib/config/owner';
 import { registerNotificationChannel } from '$lib/server/notify';
 import { OrchestratorBridge } from './whatsapp/orchestrator-bridge';
-import { startScheduler } from './scheduler';
-import { workflowOwner } from './extraction-owner';
-import { startReaper, initEventLoopMonitor, startBlockReporter } from './engine-runtime';
 import { db } from '$lib/db';
 import { whatsappConfig, homeAssistantConfig } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -367,64 +364,7 @@ async function bootHomeAssistant() {
 
 if (runsService('homeassistant')) bootHomeAssistant();
 
-// Bring every workflow into canvas shape before the scheduler takes
-// a fresh snapshot. Idempotent — no-ops on a clean DB.
-if (workflowOwner() === 'main') (async () => {
-  try {
-    const { migrateWorkflowsToCanvas } = await import('$lib/canvas/migrate');
-    await migrateWorkflowsToCanvas();
-  } catch (err) {
-    console.error('[canvas-migrate] Boot migration failed:', err);
-  }
-})();
-
-if (runsService('scheduler') && workflowOwner() === 'main') {
-  // The ONLY place the workflow cron scheduler boots. hooks.server.ts used to
-  // start it here too, ungated — see the note there before re-adding one.
-  //
-  // Deferred out of module evaluation on purpose. `./scheduler` imports `engine`
-  // back from this module, so the two form a cycle. Enter it at scheduler.ts —
-  // hooks.server.ts still does, via its stopScheduler import — and this module
-  // evaluates to completion while scheduler.ts is suspended on its own import, i.e.
-  // before its `let cronOwner` initialiser has run. Calling startScheduler()
-  // there put the assignment `cronOwner = true` on a binding still in the
-  // temporal dead zone, so every boot logged "Cannot access 'cronOwner' before
-  // initialization" and the first registration pass was lost (the reconciler
-  // picked the schedules up a minute later, which is why cron still fired and
-  // the fault stayed invisible). A microtask runs only once the whole graph has
-  // finished evaluating, so the binding exists by the time the boot touches it.
-  queueMicrotask(() => {
-    startScheduler().catch((err: unknown) => {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      console.error('[scheduler] Boot failed:', msg);
-    });
-  });
-
-  // Boot stale-run reaper (clears orphaned `running` rows from previous process
-  // + sweeps every 5 min) and start the event-loop delay histogram so the
-  // /api/health/workflow-engine probe can report blockage.
-  startReaper();
-  initEventLoopMonitor();
-  // Names the phase running when the loop stalls, so the next blocker is a log
-  // line rather than a benchmarking exercise.
-  startBlockReporter();
-
-  // #19 DURABLE RUN-WORKER (ADDITIVE, FEATURE-FLAGGED): only when
-  // JKAI_RUN_WORKER === '1' AND the operator opted the web process into hosting
-  // the worker in-process (JKAI_RUN_WORKER_IN_WEB === '1'). The normal topology
-  // runs the worker as a SEPARATE process (packages/jkai-run-worker), so by
-  // default the web process does NOT start a worker even when the flag is on —
-  // that avoids two pollers in one host racing the queue. The cron-leader gate
-  // in startScheduler() already handles double-firing for the flag-on case.
-  // When the flag is OFF this block is inert and behaviour is unchanged.
-  if (process.env.JKAI_RUN_WORKER === '1' && process.env.JKAI_RUN_WORKER_IN_WEB === '1') {
-    import('./run-worker')
-      .then(({ startRunWorker }) => startRunWorker())
-      .catch((err: unknown) =>
-        console.error('[run-worker] in-web boot failed:', err instanceof Error ? err.message : err),
-      );
-  }
-}
+// SR-Workflows owns workflow migration, scheduling and queue execution.
 
 export const engine = new WorkflowEngine(registry);
 

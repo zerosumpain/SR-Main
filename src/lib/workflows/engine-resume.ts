@@ -1,3 +1,4 @@
+import { invokeWorkflowRuntime } from './runtime-client';
 /**
  * engine-resume.ts
  *
@@ -30,7 +31,7 @@ export interface ResolveInteractionResult {
  * Resolve a pending workflow interaction and, if the run was paused
  * (`awaiting_human`), resume it. This is the single underlying code path the
  * canvas resolve API route uses — the inbound WhatsApp approval handler calls
- * it directly (no HTTP self-hop) so resume works identically in worker mode.
+ * this adapter, which hands resolution and resumption to SR-Workflows.
  *
  * Mirrors the route's semantics: flip resolvedAt/resolvedBy/formValues, emit the
  * `interaction_resolved` SSE event, and only call `resumeRun` when the run is
@@ -43,51 +44,7 @@ export async function resolveInteraction(opts: {
   formValues: Record<string, unknown>;
   resolvedBy?: string | null;
 }): Promise<ResolveInteractionResult> {
-  const { runId, nodeId, formValues, resolvedBy = null } = opts;
-
-  const [pending] = await db
-    .select()
-    .from(workflowInteractions)
-    .where(
-      and(
-        eq(workflowInteractions.runId, runId),
-        eq(workflowInteractions.nodeId, nodeId),
-        isNull(workflowInteractions.resolvedAt),
-      ),
-    );
-
-  if (!pending) return { resolved: false, reason: 'not_pending' };
-  if (pending.cancelled) return { resolved: false, reason: 'cancelled' };
-
-  await db
-    .update(workflowInteractions)
-    .set({ resolvedAt: new Date(), resolvedBy, formValues })
-    .where(eq(workflowInteractions.id, pending.id));
-
-  emitWorkflowEvent({
-    type: 'interaction_resolved',
-    runId,
-    nodeId,
-    data: { interactionId: pending.id },
-    timestamp: new Date().toISOString(),
-  });
-
-  const [run] = await db
-    .select({ status: workflowRuns.status })
-    .from(workflowRuns)
-    .where(eq(workflowRuns.id, runId));
-
-  if (run?.status === 'awaiting_human') {
-    const nodeOutput = {
-      completed: true,
-      completedAt: new Date().toISOString(),
-      formValues,
-      durationMs: Date.now() - new Date(pending.openedAt).getTime(),
-    };
-    await resumeRun(runId, { [nodeId]: nodeOutput });
-  }
-
-  return { resolved: true };
+  return invokeWorkflowRuntime<ResolveInteractionResult>({ action: 'resolve', options: opts });
 }
 
 /**

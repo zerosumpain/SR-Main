@@ -165,12 +165,7 @@ export async function createMonitor(
     .insert(workflowSchedules)
     .values({ workflowId, type: 'cron', config: { expression: effectiveCron } })
     .returning();
-  try {
-    const { reloadSchedule } = await import('$lib/workflows/scheduler');
-    await reloadSchedule(schedule.id);
-  } catch (err) {
-    console.error('[monitors] reloadSchedule failed:', err instanceof Error ? err.message : err);
-  }
+  // The Workflows worker reconciles this durable schedule change.
 
   const marker: MonitorMarker = { workflowId, slug, description: desc, cron: effectiveCron, createdAt: new Date().toISOString() };
   await ensureMonitorsCollection();
@@ -253,12 +248,7 @@ export async function setMonitorEnabled(workflowId: string, enabled: boolean): P
   const [sched] = await db.select().from(workflowSchedules).where(eq(workflowSchedules.workflowId, workflowId)).limit(1);
   if (!sched) return { ok: false };
   await db.update(workflowSchedules).set({ enabled }).where(eq(workflowSchedules.id, sched.id));
-  try {
-    const { reloadSchedule } = await import('$lib/workflows/scheduler');
-    await reloadSchedule(sched.id);
-  } catch (err) {
-    console.error('[monitors] reloadSchedule failed:', err instanceof Error ? err.message : err);
-  }
+  // The Workflows worker reconciles this durable schedule change.
   return { ok: true };
 }
 

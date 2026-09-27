@@ -38,9 +38,13 @@ import { isRedirect, redirect, type Handle } from '@sveltejs/kit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { env } from '$env/dynamic/private';
 import { runsService } from '$lib/workflows/service-role';
-import { workflowOwner } from '$lib/workflows/extraction-owner';
+import { initEventLoopMonitor, startBlockReporter } from '$lib/workflows/engine-runtime';
 
-const mainOwnsWorkflows = workflowOwner() === 'main';
+// Main's watchdog measures this process, independently of Workflows ownership.
+if (!building) {
+  initEventLoopMonitor();
+  startBlockReporter();
+}
 
 /**
  * The rate-limit decision, shared by the owner gate and the native device lanes.
@@ -114,16 +118,6 @@ const RATE_LIMITS: Array<{ pattern: RegExp; capacity: number; refillPerSecond: n
 ];
 
 
-// The workflow cron scheduler boots in $lib/workflows/index.ts, inside the
-// runsService('scheduler') gate, alongside every other platform service. It used
-// to be started here as well, ungated — this call predated service roles, so a
-// process running these hooks under JKAI_SERVICE_ROLE=whatsapp would have started
-// a second scheduler, which is the exact "every cron fires twice" failure
-// service-role.ts exists to prevent. Both sites in fact registered every schedule
-// at boot, harmlessly (registerCronJob replaces by id), and it stayed invisible
-// only because the gated one threw on a temporal-dead-zone error until 2026-09-04.
-// Do not re-add a boot call here. stopScheduler() is still wired to shutdown below.
-
 // Start the Forge trigger scheduler (scheduled + autonomous brass-and-rails
 // builds). Leader-elected on its own advisory-lock lane.
 if (runsService('scheduler')) startForgeScheduler().catch((err) => {
@@ -195,12 +189,6 @@ import { startModelRouting, stopModelRouting } from '$lib/routing/engine';
 // in a non-terminal status before this existed, the oldest for four months. CI
 // deploys on every merge, so the exposure is continuous.
 import { runResumeSweep, RESUME_SWEEP_INTERVAL_MS } from '$lib/deepdive/resume';
-import { startRunWorker, stopRunWorker } from '$lib/workflows/run-worker';
-import { webWorkerOptions } from '$lib/workflows/policy-worker-mode';
-if (!building) {
-  const options = mainOwnsWorkflows ? webWorkerOptions(runsService('background')) : null;
-  if (options) startRunWorker();
-}
 if (runsService('background')) {
   startDatastoreReaper();
   startSelfImprovementSeeds();
@@ -237,7 +225,6 @@ if (runsService('background')) {
 }
 
 // Graceful shutdown — stop schedulers so process can exit on SIGTERM
-import { stopScheduler as stopWorkflowScheduler } from '$lib/workflows/scheduler';
 import { engine as workflowEngine } from '$lib/workflows';
 
 let shuttingDown = false;
@@ -245,8 +232,6 @@ async function gracefulShutdown() {
   // SIGTERM can fire more than once during a deploy; only drain/stop once.
   if (shuttingDown) return;
   shuttingDown = true;
-  // Stop claiming new policy stages; the existing shutdown deadline bounds drain.
-  void stopRunWorker();
   console.log('[hooks.server] Shutting down...');
   // #10 GRACEFUL DRAIN: let in-flight workflow runs finish (bounded) BEFORE we
   // tear down schedulers and exit, so a deploy mid-run doesn't orphan it.
@@ -258,7 +243,6 @@ async function gracefulShutdown() {
   }
   stopHeartbeatEngine();
   stopScheduledEngine();
-  stopWorkflowScheduler();
   stopForgeScheduler();
   stopHeroTitlesScheduler();
   stopDependencyMonitor();

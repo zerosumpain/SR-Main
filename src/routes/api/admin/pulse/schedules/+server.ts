@@ -3,11 +3,10 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { workflowSchedules, workflows } from '$lib/db/schema';
 import { eq, inArray, asc } from 'drizzle-orm';
-import { reloadSchedule, unregisterCronJob } from '$lib/workflows/scheduler';
 
 /**
  * GET — list all workflow_schedules joined with their workflow name.
- * PATCH — toggle enabled (and hot-reload the in-memory cron job).
+ * PATCH — toggle enabled; the Workflows worker reconciles the change.
  */
 export const GET: RequestHandler = async () => {
   const schedules = await db
@@ -50,13 +49,7 @@ export const PATCH: RequestHandler = async ({ request }) => {
     .returning();
   if (!row) throw error(404, 'schedule not found');
 
-  // Hot-reload: register/unregister the in-memory cron job so the change
-  // takes effect without a service restart.
-  if (enabled) {
-    await reloadSchedule(id);
-  } else {
-    unregisterCronJob(id);
-  }
+  // SR-Workflows reconciles this durable change within one minute.
 
   return json({ ok: true, id, enabled });
 };
