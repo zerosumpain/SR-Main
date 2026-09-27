@@ -60,7 +60,19 @@ vi.mock('./viewer', async (orig) => {
   return { ...real, peopleViewerForEmail: async (email: string) => h.viewers.get(email) ?? null };
 });
 
-const { buildAppView, movingFrom, summariseTrail, thin, trailSubjects, pushAppViews, resetSitePairCache, sitePairWanted } = await import(
+const {
+  buildAppView,
+  movingFrom,
+  previousDayStarts,
+  resetHistoryCache,
+  summariseDays,
+  summariseTrail,
+  thin,
+  trailSubjects,
+  pushAppViews,
+  resetSitePairCache,
+  sitePairWanted,
+} = await import(
   './app-view'
 );
 const { scopeHousehold } = await import('./viewer');
@@ -107,6 +119,7 @@ beforeEach(() => {
   h.live.clear();
   h.ttlMs = 10 * 60_000;
   resetSitePairCache();
+  resetHistoryCache();
 });
 
 describe('thin', () => {
@@ -248,10 +261,60 @@ describe('buildAppView', () => {
     expect(view.people.find((p) => p.subject === 'kit')?.today).toBeNull();
   });
 
+  it('carries the past days exactly where today is shown', () => {
+    const viewer = { kind: 'household' as const, subject: 'sam', wards: [] };
+    const day = { date: '2026-09-25', firstOut: '08:00', minutesOut: 30, distanceKm: 2.1, stops: ['School'] };
+    const history = new Map([['john', [day]], ['sam', [day]], ['kit', [day]]]);
+    const view = buildAppView({ ...base, history, viewer, self: null, scoped: scopeHousehold(household, viewer) });
+    const by = new Map(view.people.map((p) => [p.subject, p]));
+    expect(by.get('sam')?.days).toEqual([day]);
+    expect(by.get('john')).not.toHaveProperty('days');
+    expect(by.get('kit')).not.toHaveProperty('days');
+  });
+
   it('asks for trails only where the day is visible', () => {
     const viewer = { kind: 'household' as const, subject: 'sam', wards: [] };
     expect(trailSubjects(scopeHousehold(household, viewer))).toEqual(['sam']);
     expect(trailSubjects(scopeHousehold(household, { kind: 'owner' }))).toEqual(['john', 'sam']);
+  });
+});
+
+describe('previousDayStarts', () => {
+  it('walks back whole local days, across the clocks going back', () => {
+    // 2026-10-25 is the last Sunday in October: BST ends, the day is 25 hours.
+    const starts = previousDayStarts(new Date('2026-10-26T00:00:00Z'), 3);
+    expect(starts.map((d) => d.toISOString())).toEqual([
+      '2026-10-24T23:00:00.000Z',
+      '2026-10-23T23:00:00.000Z',
+      '2026-10-22T23:00:00.000Z',
+    ]);
+  });
+});
+
+describe('summariseDays', () => {
+  const starts = previousDayStarts(DAY_START, 3);
+  const dayPt = (start: Date, mins: number, lat: number, extra: Partial<TrailPoint> = {}): TrailPoint => ({
+    ...pt(0, lat, 0, extra),
+    ts: new Date(start.getTime() + mins * 60_000),
+  });
+
+  it('gives each day its own figures, newest first, and leaves out a day with no fixes', () => {
+    const points = [
+      // Three days ago: out at 09:00 BST, a kilometre-ish.
+      dayPt(starts[2], 480, 51, { isHome: true }),
+      dayPt(starts[2], 540, 51),
+      dayPt(starts[2], 545, 51.005),
+      dayPt(starts[2], 550, 51.01),
+      // Yesterday: home all day.
+      dayPt(starts[0], 600, 52, { isHome: true }),
+      dayPt(starts[0], 605, 52, { isHome: true }),
+    ];
+    const days = summariseDays(points, starts, new Map());
+    expect(days.map((d) => d.date)).toEqual(['2026-09-25', '2026-09-23']);
+    expect(days[0]).toMatchObject({ firstOut: null, minutesOut: 0, distanceKm: 0 });
+    expect(days[1]).toMatchObject({ firstOut: '09:00', minutesOut: 10 });
+    expect(days[1].distanceKm).toBeGreaterThan(1);
+    expect(days[1]).not.toHaveProperty('trail');
   });
 });
 
@@ -296,6 +359,29 @@ describe('pushAppViews', () => {
     expect(stranger).toMatchObject({ viewer: 'none', people: [] });
     expect(stranger.watch).toBeUndefined();
     expect(Object.values(stranger.access).every((v) => v === false || v === null)).toBe(true);
+  });
+
+  it('gives ONLY the owner everyone else’s view to preview — no codes, no watch list', async () => {
+    h.users = [
+      { email: 'owner@example.test', name: 'J', sharing: true },
+      { email: 'ann@example.test', name: 'Ann', sharing: true, sitePairWanted: NOW.toISOString() },
+    ];
+    h.viewers.set('owner@example.test', { kind: 'owner' });
+    h.members.set('ann@example.test', { principalId: 'u_ann', grants: new Set(['news:self']) });
+    await pushAppViews(members, fakeFetch(), NOW);
+    type V = { email: string; view: { previewAs?: Array<{ email: string; name: string; view: { access: { news: boolean; sitePair: unknown }; watch?: unknown } }>; access: { sitePair: unknown } } };
+    const body = h.posted[0] as { views: V[] };
+    const ann = body.views.find((v) => v.email === 'ann@example.test')!;
+    const owner = body.views.find((v) => v.email === 'owner@example.test')!;
+    // Ann's own view still carries her pairing code; she gets no previews.
+    expect(ann.view.access.sitePair).not.toBeNull();
+    expect(ann.view.previewAs).toBeUndefined();
+    expect(owner.view.previewAs).toHaveLength(1);
+    const preview = owner.view.previewAs![0];
+    expect(preview).toMatchObject({ email: 'ann@example.test', name: 'Ann' });
+    expect(preview.view.access.news).toBe(true);
+    expect(preview.view.access.sitePair).toBeNull();
+    expect(preview.view.watch).toBeUndefined();
   });
 
   it("offers a member exactly what their grants hold, and the family only through the Circle rule", async () => {

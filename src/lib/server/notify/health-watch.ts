@@ -1,5 +1,5 @@
 /**
- * Tell me when my health figures move — and not more often than every three hours.
+ * Tell me when my health figures move — and not more than once a day.
  *
  * Two halves, and the interesting one is the second.
  *
@@ -9,8 +9,10 @@
  * same string says nothing. That is what makes polling every fifteen minutes
  * free: nothing happens on a quiet afternoon.
  *
- * **How often may it speak?** The floor lives on the category, defaults to
- * three hours, and is enforced inside `notifyOwner` against the ledger. It is
+ * **How often may it speak?** Once a local day: the raise asks for a day's
+ * floor under a day-dated key (the category's own floor, three hours by
+ * default, is the larger only if somebody sets it past a day). Both are
+ * enforced inside `notifyOwner` against the ledger. It is
  * NOT enforced here with a timestamp of its own — a second copy of the rule
  * would be a second thing to keep in step, and the one in the ledger is the one
  * that survives a restart. This watcher's interval is therefore free to be
@@ -28,10 +30,19 @@ import { notificationWatermarks } from '$lib/db/schema';
 import { getNativeHealthSummary, type NativeHealthSummary } from '$lib/server/native-health';
 import { notifyOwner, pruneEvents } from './index';
 import { emit as emitPlatformEvent } from '$lib/events/platform-bus';
+import { HEALTH_TIMEZONE } from '$lib/constants/health-day';
 
 const WATERMARK_ID = 'health';
 
-/** Fifteen minutes. Far under the three-hour floor, deliberately — see above. */
+/** A day, as a floor: see the `notifyOwner` call. */
+const ONCE_A_DAY_S = 24 * 60 * 60;
+
+/** "2026-09-27" in the owner's time zone, not UTC's. */
+export function localDayKey(at: Date): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: HEALTH_TIMEZONE }).format(at);
+}
+
+/** Fifteen minutes. Far under the floor, deliberately — see above. */
 const DEFAULT_MS = 15 * 60 * 1000;
 
 let interval: ReturnType<typeof setInterval> | undefined;
@@ -113,7 +124,7 @@ export async function tick(): Promise<{ changed: boolean; raised: boolean }> {
     const title = headline(summary);
     const body = sentence(summary, (previous.snapshot ?? {}) as Record<string, unknown>);
     // The event fires on every move; the notification below is still held to
-    // the category's three-hour floor. A workflow decides its own cadence.
+    // a one-a-day floor. A workflow decides its own cadence.
     emitPlatformEvent(
       'health.summary_changed',
       {
@@ -132,9 +143,12 @@ export async function tick(): Promise<{ changed: boolean; raised: boolean }> {
       body,
       url: '/health',
       severity: 'info',
-      // Scoped to the day, so the floor is per-day-per-category rather than
-      // shared with anything else health might want to say later.
-      dedupeKey: `health:${new Date().toISOString().slice(0, 10)}`,
+      // Once a day. The key is the LOCAL day and the floor is a whole day, so
+      // the first move of the morning — readiness landing with the night's
+      // sleep — speaks and every later move that day is kept to the inbox's
+      // silence. A three-hour floor let readiness land four times a day.
+      dedupeKey: `health:${localDayKey(new Date())}`,
+      minIntervalSeconds: ONCE_A_DAY_S,
       data: {
         figures: summary.figures.map((f) => ({
           key: f.key,

@@ -28,7 +28,7 @@
 // owner mints his at /api/admin/native-devices, behind his session; a member
 // has no page that could, so the push answers the app's request instead.
 
-import { and, asc, gte, inArray, isNotNull } from 'drizzle-orm';
+import { and, asc, gte, inArray, isNotNull, lt } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamPlaces, daydreamTrail } from '$lib/db/schema';
 import { companionToken, companionUrl, loadCompanionUsers, type HouseholdUser } from './companion';
@@ -107,7 +107,29 @@ export interface AppPerson {
    *  than a pin that moves on every refresh already does. */
   moving: AppMoving | null;
   today: AppToday | null;
+  /** The days before today, newest first — exactly where `today` is shown,
+   *  since a day's history is the same thing as a day. */
+  days?: AppDay[];
 }
+
+/** One whole local day, before today: the day page's figures without the trail. */
+export interface AppDay {
+  /** "2026-09-26", the local date. */
+  date: string;
+  firstOut: string | null;
+  minutesOut: number;
+  distanceKm: number;
+  stops: string[];
+}
+
+/** Days of history on a person's page, today not counted. */
+export const HISTORY_DAYS = 7;
+/**
+ * How long a past day's figures are reused. Past days do not change often,
+ * and a week of trail is ~100k rows a person, so it is read once an hour, not
+ * every 30-second push; an hour still catches a phone's outbox landing late.
+ */
+export const HISTORY_TTL_MS = 60 * 60_000;
 
 /** A one-time code that pairs this person's phone with the site. */
 export interface SitePair {
@@ -133,6 +155,21 @@ export interface AppHouseholdView {
   watch?: WatchedPlace[];
   /** What the app may offer this person beyond the family. */
   access: AppViewAccess;
+  /**
+   * The OWNER's view only: every other app user's view, exactly as it was
+   * filed for them, so the owner can switch the app to "view as" them and
+   * check what a permission change does before anyone else sees it. No
+   * pairing codes and no watch list ride along — a preview is to look at,
+   * not to pair or track with.
+   */
+  previewAs?: AppPreview[];
+}
+
+/** One person the owner can view the app as. */
+export interface AppPreview {
+  email: string;
+  name: string;
+  view: AppHouseholdView;
 }
 
 /** A view before its `access` is attached — what the pure builder returns. */
@@ -248,6 +285,50 @@ export function movingFrom(points: readonly TrailPoint[], now: Date): AppMoving 
   return { mode, speedKmh: Math.round(kmh), since: first.ts.toISOString() };
 }
 
+/** "2026-09-26" for a local day's start. */
+function localDate(dayStart: Date): string {
+  // en-CA formats as YYYY-MM-DD. Noon, so a DST day's odd length cannot tip it.
+  return new Intl.DateTimeFormat('en-CA', { timeZone: LOCAL_TZ }).format(new Date(dayStart.getTime() + 12 * 3600_000));
+}
+
+/** The starts of the HISTORY_DAYS local days before `dayStart`, newest first. PURE. */
+export function previousDayStarts(dayStart: Date, count = HISTORY_DAYS): Date[] {
+  const out: Date[] = [];
+  let cursor = dayStart;
+  for (let i = 0; i < count; i++) {
+    // Twelve hours back is inside the previous day whatever the clocks did
+    // (a local day is 23 to 25 hours). `localDayStart` keeps the input's
+    // milliseconds, so they are dropped: a boundary is a whole second.
+    const start = localDayStart(new Date(cursor.getTime() - 12 * 3600_000));
+    cursor = new Date(Math.floor(start.getTime() / 1000) * 1000);
+    out.push(cursor);
+  }
+  return out;
+}
+
+/**
+ * The days before today, one figure line each, newest first. PURE.
+ * `points` covers all of them, oldest first. A day with no fixes at all is
+ * left out: nothing is known about it, which is not the same as a day in.
+ */
+export function summariseDays(
+  points: readonly TrailPoint[],
+  starts: readonly Date[],
+  labels: ReadonlyMap<string, string | null>,
+): AppDay[] {
+  const out: AppDay[] = [];
+  for (let i = 0; i < starts.length; i++) {
+    const from = starts[i].getTime();
+    const to = i === 0 ? Infinity : starts[i - 1].getTime();
+    const day = points.filter((p) => p.ts.getTime() >= from && p.ts.getTime() < to);
+    if (day.length === 0) continue;
+    const firstOut = day.find((p) => p.isHome === false)?.ts ?? null;
+    const { trail: _trail, ...figures } = summariseTrail(day, labels, firstOut);
+    out.push({ date: localDate(starts[i]), ...figures });
+  }
+  return out;
+}
+
 /** Whose trails a viewer's view carries: exactly the cards whose day they may see. PURE. */
 export function trailSubjects(scoped: readonly ScopedPresence[]): string[] {
   return scoped.filter((m) => m.today != null && !m.notSharing).map((m) => m.subject);
@@ -268,6 +349,8 @@ export function buildAppView(input: {
   /** The last MOVING_WINDOW_S of fixes for everyone sharing, for `moving`. */
   recent?: ReadonlyMap<string, readonly TrailPoint[]>;
   labels: ReadonlyMap<string, string | null>;
+  /** The days before today by subject, already summarised. */
+  history?: ReadonlyMap<string, AppDay[]>;
   dayStart: Date;
   now: Date;
 }): AppPeopleView {
@@ -278,6 +361,8 @@ export function buildAppView(input: {
   const people = scoped.map((m): AppPerson => {
     const pos = m.notSharing ? undefined : posBy.get(m.subject);
     const firstOutAt = m.today?.firstOutMins == null ? null : new Date(dayStart.getTime() + m.today.firstOutMins * 60_000);
+    const dayShown = m.today != null && !m.notSharing;
+    const days = dayShown ? input.history?.get(m.subject) : undefined;
     return {
       subject: m.subject,
       name: names.get(m.subject) ?? m.subject,
@@ -288,7 +373,8 @@ export function buildAppView(input: {
       lastSeenAt: m.notSharing || !m.lastSeenAt ? null : m.lastSeenAt.toISOString(),
       position: pos ? { lat: pos.lat, lon: pos.lon, at: pos.at } : null,
       moving: pos ? movingFrom(recent.get(m.subject) ?? [], now) : null,
-      today: m.today != null && !m.notSharing ? summariseTrail(trails.get(m.subject) ?? [], labels, firstOutAt) : null,
+      today: dayShown ? summariseTrail(trails.get(m.subject) ?? [], labels, firstOutAt) : null,
+      ...(days ? { days } : {}),
     };
   });
   // Yourself first, then whoever was seen most recently: the order a glance wants.
@@ -384,8 +470,12 @@ async function sitePairFor(
   }
 }
 
-/** The trail since `dayStart` for these subjects, oldest first. */
-async function loadTodayTrails(subjects: readonly string[], dayStart: Date): Promise<Map<string, TrailPoint[]>> {
+/** The trail since `dayStart` (and before `until`) for these subjects, oldest first. */
+async function loadTodayTrails(
+  subjects: readonly string[],
+  dayStart: Date,
+  until?: Date,
+): Promise<Map<string, TrailPoint[]>> {
   const out = new Map<string, TrailPoint[]>();
   if (subjects.length === 0) return out;
   const rows = await db
@@ -403,6 +493,7 @@ async function loadTodayTrails(subjects: readonly string[], dayStart: Date): Pro
       and(
         inArray(daydreamTrail.subject, [...subjects]),
         gte(daydreamTrail.ts, dayStart),
+        until ? lt(daydreamTrail.ts, until) : undefined,
         isNotNull(daydreamTrail.lat),
         isNotNull(daydreamTrail.lon),
       ),
@@ -414,6 +505,43 @@ async function loadTodayTrails(subjects: readonly string[], dayStart: Date): Pro
     out.set(r.subject, list);
   }
   return out;
+}
+
+/** Past days by subject, and when they were read — see HISTORY_TTL_MS. */
+let historyCache: { dayStart: number; at: number; subjects: string; days: Map<string, AppDay[]> } | null = null;
+
+/** For tests: forget the history. */
+export function resetHistoryCache(): void {
+  historyCache = null;
+}
+
+/**
+ * The days before today for these subjects. Cached for HISTORY_TTL_MS against
+ * the same day and the same subjects; a failed read is no history, not a
+ * failed push — today is the part of the view that matters.
+ */
+async function loadHistory(subjects: readonly string[], dayStart: Date, now: Date): Promise<Map<string, AppDay[]>> {
+  const key = [...subjects].sort().join(',');
+  if (
+    historyCache &&
+    historyCache.dayStart === dayStart.getTime() &&
+    historyCache.subjects === key &&
+    now.getTime() - historyCache.at < HISTORY_TTL_MS
+  ) {
+    return historyCache.days;
+  }
+  const starts = previousDayStarts(dayStart);
+  try {
+    const trails = await loadTodayTrails(subjects, starts[starts.length - 1], dayStart);
+    const ids = [...new Set([...trails.values()].flat().map((p) => p.placeId).filter((x): x is string => !!x))];
+    const labels = await loadLabels(ids);
+    const days = new Map(subjects.map((s) => [s, summariseDays(trails.get(s) ?? [], starts, labels)]));
+    historyCache = { dayStart: dayStart.getTime(), at: now.getTime(), subjects: key, days };
+    return days;
+  } catch (err) {
+    console.error('[app-view] could not read the family history:', errMsg(err));
+    return new Map();
+  }
 }
 
 async function loadLabels(ids: readonly string[]): Promise<Map<string, string | null>> {
@@ -431,6 +559,35 @@ export interface AppViewsResult {
   /** People on the app who see nobody: not the owner, not in the Family Circle, or no household row. */
   refused: number;
   error?: string;
+}
+
+/**
+ * Give each OWNER's view everybody else's, for "view as" in the app. PURE.
+ *
+ * Only an owner email with an owner view gets them — the gate is here, on the
+ * site, not a switch the phone could flip. Each preview is the person's own
+ * view with the pairing code and the watch list taken out.
+ */
+export function attachPreviews(
+  views: ReadonlyArray<{ email: string; view: AppHouseholdView }>,
+  users: readonly HouseholdUser[],
+  isOwnerEmail: (email: string) => boolean,
+): Array<{ email: string; view: AppHouseholdView }> {
+  const nameOf = new Map(users.map((u) => [String(u.email ?? '').trim().toLowerCase(), u.name]));
+  return views.map((entry) => {
+    if (entry.view.viewer !== 'owner' || !isOwnerEmail(entry.email)) return entry;
+    const previewAs: AppPreview[] = views
+      .filter((other) => other.email !== entry.email && !isOwnerEmail(other.email))
+      .map((other) => {
+        const { watch: _watch, previewAs: _nested, ...rest } = other.view;
+        return {
+          email: other.email,
+          name: nameOf.get(other.email) || other.email,
+          view: { ...rest, access: { ...rest.access, sitePair: null } },
+        };
+      });
+    return { email: entry.email, view: { ...entry.view, previewAs } };
+  });
 }
 
 /**
@@ -500,6 +657,7 @@ export async function pushAppViews(
     ).catch(() => new Map<string, TrailPoint[]>());
     const placeIds = [...new Set([...trails.values()].flat().map((p) => p.placeId).filter((x): x is string => !!x))];
     const labels = await loadLabels(placeIds);
+    const history = await loadHistory(wanted, dayStart, now);
     const names = new Map(members.map((m) => [m.subject, m.displayName]));
     for (const v of scopedBy) {
       views.push({
@@ -514,6 +672,7 @@ export async function pushAppViews(
           trails,
           recent,
           labels,
+          history,
           dayStart,
           now,
         }), watch),
@@ -523,11 +682,13 @@ export async function pushAppViews(
     }
   }
 
+  const withPreviews = attachPreviews(views, users, (email) => accessBy.get(email)?.owner === true);
+
   try {
     const res = await fetchImpl(`${companionUrl()}/api/apple/household/views`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ views }),
+      body: JSON.stringify({ views: withPreviews }),
       signal: AbortSignal.timeout(PUSH_TIMEOUT_MS),
     });
     if (!res.ok) return { stored: 0, refused, error: `views answered ${res.status}` };
