@@ -121,7 +121,7 @@ export interface Room {
   updatedAt: number;
 }
 
-function player(id: string, name: string, status: PlayerStatus): Player {
+export function player(id: string, name: string, status: PlayerStatus): Player {
   return { id, name, status, playing: false, alive: false, best: 0, roundsSurvived: 0, outRound: null };
 }
 

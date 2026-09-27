@@ -20,7 +20,7 @@ vi.mock('./quiz-night.server', () => ({
     );
   },
 }));
-import { _resetRooms, act, asHttp, createGame, invitesFor, roomFor, roomsFor, subscribe } from './rooms.server';
+import { _resetRooms, act, asHttp, createGame, inviteTo, invitesFor, roomFor, roomsFor, subscribe } from './rooms.server';
 import { COUNTDOWN_MS, LOBBY_MS, RESULT_MS, type WireRoom } from './tap-duel';
 
 const john = { id: 'p_john', name: 'John' };
@@ -190,5 +190,59 @@ describe('rooms', () => {
     const survived = act(seq.id, 'p_john', 'attempt', { round: round.number, taps: round.steps.map((x) => x.tile) }) as unknown as Wire;
     expect(['result', 'show']).toContain(survived.phase);
     expect(survived.players[0].alive).toBe(true);
+  });
+
+  describe('inviting from the lobby', () => {
+    const kim = { id: 'p_kim', name: 'Kim' };
+    type Seen = { players: { id: string; status: string; sawInvite: boolean }[]; phaseEndsAt: number | null };
+
+    it('asks somebody in after the room opened, in every game', () => {
+      for (const game of ['tap-duel', 'wordle-race', 'anagram-blitz', 'maths-sprint', 'sequence-memory'] as const) {
+        const { id } = createGame({ game, host: john, invite: [], difficulty: 'easy' });
+        const room = inviteTo(id, 'p_john', [sam]) as unknown as Seen;
+        expect(room.players.map((p) => [p.id, p.status])).toEqual([['p_john', 'joined'], ['p_sam', 'invited']]);
+        expect(invitesFor('p_sam').map((i) => i.roomId)).toContain(id);
+        act(id, 'p_sam', 'join');
+        _resetRooms();
+      }
+    });
+
+    it('tells the host when the invite reached the phone', () => {
+      const { id } = createGame({ game: 'tap-duel', host: john, invite: [sam], difficulty: 'easy' });
+      const seen: Seen[] = [];
+      subscribe(id, 'p_john', (r) => seen.push(r as unknown as Seen), () => {});
+      expect(seen.at(-1)!.players.find((p) => p.id === 'p_sam')!.sawInvite).toBe(false);
+      invitesFor('p_sam');
+      expect(seen.at(-1)!.players.find((p) => p.id === 'p_sam')!.sawInvite).toBe(true);
+      const count = seen.length;
+      invitesFor('p_sam');
+      expect(seen.length).toBe(count); // a second poll is not news
+    });
+
+    it('re-asks somebody who declined, and leaves the joined alone', () => {
+      const { id } = createGame({ game: 'tap-duel', host: john, invite: [sam, kim], difficulty: 'easy' });
+      act(id, 'p_sam', 'decline');
+      act(id, 'p_kim', 'join');
+      const room = inviteTo(id, 'p_john', [sam, kim]) as unknown as Seen;
+      expect(room.players.map((p) => p.status)).toEqual(['joined', 'invited', 'joined']);
+    });
+
+    it('holds the lobby open long enough to answer a late invite', () => {
+      const { id } = createGame({ game: 'tap-duel', host: john, invite: [], difficulty: 'easy' });
+      vi.advanceTimersByTime(LOBBY_MS - 10_000);
+      const room = inviteTo(id, 'p_john', [sam]) as unknown as Seen;
+      expect(room.phaseEndsAt).toBe(Date.now() + 2 * 60_000);
+      vi.advanceTimersByTime(60_000);
+      expect(roomFor(id, 'p_sam').phase).toBe('lobby');
+    });
+
+    it('is the host’s, in the lobby, within the player cap', () => {
+      const { id } = createGame({ game: 'tap-duel', host: john, invite: [sam], difficulty: 'easy' });
+      expect(() => inviteTo(id, 'p_sam', [kim])).toThrow(expect.objectContaining({ status: 403 }));
+      const many = Array.from({ length: 5 }, (_, i) => ({ id: `p_${i}`, name: `P${i}` }));
+      expect(() => inviteTo(id, 'p_john', many)).toThrow(expect.objectContaining({ status: 400 }));
+      act(id, 'p_john', 'start');
+      expect(() => inviteTo(id, 'p_john', [kim])).toThrow(expect.objectContaining({ status: 409 }));
+    });
   });
 });

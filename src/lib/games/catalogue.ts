@@ -2,7 +2,7 @@
 //
 // A rules module is pure (see `tap-duel.ts`): every function takes `now`, and
 // the dealing ones a `rng`. The lobby verbs — join, decline, leave, start,
-// again — mean the same thing in every game; what differs is the game's own
+// again (and invite, which the registry runs on `player`) — mean the same thing in every game; what differs is the game's own
 // moves (`tap`, `guess`) and what a phone may see (`toWire`).
 
 import * as tapDuel from './tap-duel';
@@ -61,6 +61,8 @@ export interface GameRules {
   prepare?(room: RoomBase): Promise<void>;
   /** One line for an invite banner saying what this game is about, or null. */
   about?(room: RoomBase): string | null;
+  /** A fresh player row in this game's own shape — for an invite sent from the lobby. */
+  player(id: string, name: string, status: PlayerStatus): RoomBase['players'][number];
   join(room: RoomBase, playerId: string, now: number): void;
   decline(room: RoomBase, playerId: string, now: number): void;
   leave(room: RoomBase, playerId: string, now: number): void;
