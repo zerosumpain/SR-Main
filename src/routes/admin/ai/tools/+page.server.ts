@@ -1,6 +1,7 @@
 import { db } from '$lib/db';
 import { customTools } from '$lib/db/schema';
 import { desc } from 'drizzle-orm';
+import { isShowcase } from '$lib/server/showcase';
 import type { PageServerLoad } from './$types';
 import { registry } from '$lib/workflows';
 import { getToolsetManifest } from '$lib/workflows/site-tools/registry';
@@ -68,7 +69,10 @@ function toRow(d: NodeDefinition) {
   };
 }
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async (event) => {
+  // Showcase ($lib/server/showcase): no handler source (it can name internal
+  // hosts and paths) and no author email.
+  const showcase = await isShowcase(event);
   const customRows = await db
     .select({
       id: customTools.id,
@@ -116,7 +120,7 @@ export const load: PageServerLoad = async () => {
   }));
 
   return {
-    tools: customRows,
+    tools: showcase ? customRows.map((t) => ({ ...t, handlerCode: '', createdBy: t.createdBy?.includes('@') ? 'owner' : t.createdBy })) : customRows,
     primitives,
     siteNodeFamilies,
     toolsets,

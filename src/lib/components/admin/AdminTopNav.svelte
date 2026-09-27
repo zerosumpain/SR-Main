@@ -1,9 +1,12 @@
 <script lang="ts">
   import { page } from '$app/state';
 
-  import { ADMIN_SECTIONS, activeSection, isSectionActive } from './admin-nav';
+  import { activeSection, isSectionActive, reachableSections } from './admin-nav';
 
   const path = $derived(page.url.pathname);
+  // The owner sees every section; an admin-showcase visitor only the pages
+  // their grants open (root layout's `navReach`).
+  const sections = $derived(reachableSections(page.data.isOwner ? null : ((page.data.navReach as string[] | undefined) ?? [])));
 
   /**
    * The way back, one level up.
@@ -33,7 +36,7 @@
     const clean = path.length > 1 ? path.replace(/\/+$/, '') : path;
     if (clean === '/admin') return null;
 
-    const section = activeSection(clean);
+    const section = activeSection(clean, sections);
     if (section) {
       const inStrip = clean === section.href || section.items.some((i) => i.href === clean);
       if (!inStrip) {
@@ -84,7 +87,7 @@
   </a>
 
   <nav class="admin-sections" aria-label="Admin sections">
-    {#each ADMIN_SECTIONS as s, i (s.id)}
+    {#each sections as s, i (s.id)}
       <a
         href={s.href}
         class="nav-link"

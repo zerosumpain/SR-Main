@@ -26,6 +26,9 @@ export const AREA_IDS = [
   'jkai.intel',
   'jkai.knowledge',
   'games',
+  'health',
+  'workflows',
+  'admin',
 ] as const;
 export type AreaId = (typeof AREA_IDS)[number];
 
@@ -124,6 +127,41 @@ export const AREAS: readonly AreaInfo[] = [
     blurb: 'Family games in the iPhone app: start one, invite the family, join when invited.',
     open: true,
     levels: { self: 'Play, start games and invite', all: 'Same as self', admin: 'Same as self' },
+  },
+  {
+    // Every health row is the owner's: nobody else's health is stored. So this
+    // is read access to HIS health, and it opens at `all` ("read everyone's").
+    // SR-Health enforces it (GET only, a fixed list of pages and APIs); sync,
+    // recording, planning, share links and corrections stay his.
+    id: 'health',
+    label: 'Health',
+    blurb: 'Your /health, read-only: the hub, activities with their routes, sleep and analytics. No sync, recording, planning, sharing or corrections.',
+    open: true,
+    levels: {
+      self: 'Nothing yet: they have no health data of their own',
+      all: 'Read your health, read-only',
+      admin: 'Same as all',
+    },
+  },
+  {
+    // Their own workflows on the canvas, run on a closed list of safe nodes —
+    // never the owner's accounts, credentials, data or code nodes. Closed until
+    // SR-Workflows scopes workflows by owner.
+    id: 'workflows',
+    label: 'Workflows',
+    blurb: 'Build and run their own workflows on the canvas, with safe nodes only: none of your data, accounts or credentials.',
+    open: false,
+    levels: { self: 'Own workflows', all: "Also read everyone's", admin: "Also edit everyone's" },
+  },
+  {
+    // A read-only tour of the admin pages that hold nothing personal and no
+    // secrets: each page's load redacts for a non-owner ($lib/server/showcase),
+    // and ROUTES opens them for GET only, so every save and action stays his.
+    id: 'admin',
+    label: 'Admin showcase',
+    blurb: 'Browse the admin pages read-only, to see how the site runs: nothing personal, no secrets, no edits.',
+    open: true,
+    levels: { self: 'Browse the showcase', all: 'Same as self', admin: 'Same as self' },
   },
 ];
 
@@ -364,6 +402,25 @@ const ROUTES: Record<string, Partial<Record<Method, Permission>>> = {
   '/home/echoes': { GET: 'home:all' },
   '/home/voice': { GET: 'home:all' },
 
+  // ── admin — the showcase: GET only, and only pages whose load redacts for a
+  // non-owner ($lib/server/showcase). Never a prefix: credentials, the
+  // allow-list, security posture, the estate map, costs, the live feed and
+  // datastore records sit in the same tree and stay owner-only. Every form
+  // action and API write is a POST/PUT/PATCH/DELETE, so none is opened.
+  '/admin': { GET: 'admin:self' },
+  '/admin/content/blog': { GET: 'admin:self' },
+  '/admin/content/hero': { GET: 'admin:self' },
+  '/admin/content/voice': { GET: 'admin:self' },
+  '/admin/connections/catalog': { GET: 'admin:self' },
+  '/admin/ai/keys': { GET: 'admin:self' },
+  '/admin/ai/models': { GET: 'admin:self' },
+  '/admin/ai/model-routing': { GET: 'admin:self' },
+  '/admin/ai/tools': { GET: 'admin:self' },
+  '/admin/ai/approvals': { GET: 'admin:self' },
+  '/admin/ops/tool-usage': { GET: 'admin:self' },
+  // The model browser on /admin/ai/models: OpenRouter's public catalogue.
+  '/api/admin/models/openrouter': { GET: 'admin:self' },
+
   '/news': { GET: 'news:self' },
   '/news/[source]/[id]': { GET: 'news:self' },
   '/api/news/actions': { POST: 'news:self' },
@@ -379,6 +436,7 @@ const ROUTES: Record<string, Partial<Record<Method, Permission>>> = {
  */
 export const EXTERNAL_PAGES: Readonly<Record<string, Permission>> = {
   '/drive': 'drive:self',
+  '/health/activities': 'health:all',
 };
 
 /** The permission a route + verb needs, or null when only the owner may reach it. */

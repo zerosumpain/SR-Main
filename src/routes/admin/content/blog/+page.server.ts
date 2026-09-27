@@ -9,10 +9,14 @@ import {
 import { desc } from 'drizzle-orm';
 import type { PageServerLoad } from './$types';
 import { getUmami } from '$lib/umami/client';
+import { isShowcase } from '$lib/server/showcase';
 import { plainTextFromHtml, countWords } from '$lib/blog/readability';
 
-export const load: PageServerLoad = async () => {
-  const posts = await db
+export const load: PageServerLoad = async (event) => {
+  // Showcase ($lib/server/showcase): published posts only — a draft's title
+  // and excerpt are unpublished writing.
+  const showcase = await isShowcase(event);
+  const all = await db
     .select({
       id: blogPosts.id,
       slug: blogPosts.slug,
@@ -27,6 +31,7 @@ export const load: PageServerLoad = async () => {
     })
     .from(blogPosts)
     .orderBy(desc(blogPosts.updatedAt));
+  const posts = showcase ? all.filter((p) => p.status === 'published') : all;
 
   const umami = getUmami();
   let stats: Record<string, { pageviews: number; visitors: number }> = {};

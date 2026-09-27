@@ -7,6 +7,7 @@
 # this list from the source and fails if it has drifted, so a new filesystem-
 src/lib/access/catalogue.test.ts
 src/lib/access/route-guards.test.ts
+src/lib/access/showcase-routes.test.ts
 src/lib/auth.test.ts
 src/lib/costs/ledger.test.ts
 src/lib/daydream/budget.test.ts

@@ -13,8 +13,12 @@ import {
 import { desc, sql, eq } from 'drizzle-orm';
 import { spendToday } from '$lib/costs/ledger.server';
 import type { PageServerLoad } from './$types';
+import { isShowcase } from '$lib/server/showcase';
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async (event) => {
+  // Showcase ($lib/server/showcase): counts only. No sync state (when and
+  // whether the owner's WHOOP last synced) and no spend.
+  const showcase = await isShowcase(event);
 
   const [
     whoopConnected,
@@ -78,8 +82,9 @@ export const load: PageServerLoad = async () => {
   const whoopState = syncStates.find((s) => s.service === 'whoop');
 
   return {
+    showcase,
     health: {
-      whoop: { connected: whoopConnected, state: whoopState ?? null },
+      whoop: { connected: whoopConnected, state: showcase ? null : (whoopState ?? null) },
       activeJobs: activeJobs.length,
     },
     blog: blogCounts,
@@ -90,9 +95,8 @@ export const load: PageServerLoad = async () => {
       total: Number(customToolStats[0]?.total ?? 0),
       enabled: Number(customToolStats[0]?.enabled ?? 0),
     },
-    agent: {
-      todayCost: todayCost.costUsd,
-      todayActions: todayCost.calls,
-    },
+    agent: showcase
+      ? { todayCost: null, todayActions: null }
+      : { todayCost: todayCost.costUsd, todayActions: todayCost.calls },
   };
 };
