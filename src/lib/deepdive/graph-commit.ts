@@ -49,14 +49,15 @@ import {
 } from '$lib/db/schema';
 import type { ResearchReport } from './types';
 import { buildResearchDigest, collectFactIds, isOpaqueId } from './intel-bridge';
-import { extractIntoIntel, type AutoExtractOutcome } from '$lib/jkai/intel/auto-extract';
-import { OWNER_INTEL_SCOPE, OWNER_SPACE, spaceIn } from '$lib/jkai/intel/scope';
+import { enqueueIntelJob, latestIntelJob } from '$lib/intel-client/outbox';
+import { OWNER_INTEL_SCOPE, OWNER_SPACE, spaceIn } from '$lib/intel-client/scope';
 import type {
   ExtractionResult,
   ExtractedEntity,
   ExtractedRelationship,
   ExtractedTimelineEvent,
-} from '$lib/jkai/intel/extract';
+  ExtractJobResult,
+} from '$lib/intel-client/types';
 
 /**
  * Research types that the intel taxonomy does not carry under the same name.
@@ -110,7 +111,14 @@ export interface CommitState extends SessionGraphSummary {
   committedAt: string | null;
   /** The derived intel note, when there is one. */
   noteId: string | null;
+  /** A commit is queued and SR-Jkai-Core has not finished it yet. */
+  pending: boolean;
+  /** Why the last queued commit did not land, when it did not. */
+  lastError: string | null;
 }
+
+/** The outbox ref a session's commit travels under. */
+export const researchCommitRef = (sessionId: string) => `research:${sessionId}`;
 
 /**
  * Whether a session has been committed, and how big its graph is.
@@ -122,7 +130,7 @@ export interface CommitState extends SessionGraphSummary {
  * disagree with the graph; this cannot.
  */
 export async function commitState(sessionId: string): Promise<CommitState> {
-  const [[entityCount], [relCount], [note]] = await Promise.all([
+  const [[entityCount], [relCount], [note], job] = await Promise.all([
     db
       .select({ n: sql<number>`count(*)::int` })
       .from(entities)
@@ -145,14 +153,25 @@ export async function commitState(sessionId: string): Promise<CommitState> {
         ),
       )
       .limit(1),
+    latestIntelJob<ExtractJobResult>('extract', researchCommitRef(sessionId)),
   ]);
 
+  // The note is the truth about "in the graph"; the job says whether one is on
+  // its way, and why the last one did not arrive.
+  const lastError =
+    job?.state === 'failed'
+      ? job.error
+      : job?.state === 'done' && !['extracted', 'unchanged'].includes(job.result?.status ?? '')
+        ? `Intel did not merge it (${job.result?.status ?? 'unknown'})`
+        : null;
   return {
     entities: entityCount?.n ?? 0,
     relationships: relCount?.n ?? 0,
     committed: !!note,
     committedAt: note ? (note.updatedAt ?? note.createdAt)?.toISOString() ?? null : null,
     noteId: note?.id ?? null,
+    pending: job?.state === 'pending',
+    lastError,
   };
 }
 
@@ -354,17 +373,18 @@ export function mapSessionGraph(
 }
 
 export type CommitOutcome =
-  | { status: 'committed'; noteId?: string; entities: number; relationships: number }
+  | { status: 'queued'; jobId: number; entities: number; relationships: number }
   | { status: 'empty'; entities: 0; relationships: 0 }
-  | { status: 'failed' | 'disabled'; reason: string };
+  | { status: 'failed'; reason: string };
 
 /**
- * Merge a session's graph into the intel graph.
+ * Queue a session's graph for merging into the intel graph.
  *
- * Idempotent by content hash, like every other path into `extractIntoIntel`:
- * committing twice with nothing changed is free, and committing after the
- * session grew re-merges the difference (edges corroborate rather than
- * duplicate — see `persistExtraction`).
+ * SR-Jkai-Core does the merge (`extractIntoIntel` with this pre-built
+ * extraction) when it drains the outbox, seconds later, and writes the outcome
+ * onto the job; `commitState` reads it back. Idempotent by content hash, like
+ * every other path into the graph: committing twice with nothing changed is
+ * free, and committing after the session grew re-merges the difference.
  */
 export async function commitSessionGraph(
   sessionId: string,
@@ -398,7 +418,7 @@ export async function commitSessionGraph(
   const body = digest.trim() || `Research topic: ${session.topic}`;
   extraction.summary = report.executive_summary?.slice(0, 400) ?? session.topic;
 
-  const outcome: AutoExtractOutcome = await extractIntoIntel({
+  const jobId = await enqueueIntelJob('extract', researchCommitRef(sessionId), {
     kind: 'research',
     refId: sessionId,
     spaceId: OWNER_SPACE,
@@ -427,35 +447,7 @@ export async function commitSessionGraph(
     force: opts.force ?? false,
   });
 
-  if (outcome.status === 'extracted') {
-    return {
-      status: 'committed',
-      noteId: outcome.noteId,
-      entities: summary.entities,
-      relationships: summary.relationships,
-    };
-  }
-  if (outcome.status === 'unchanged') {
-    // Already in the graph, and nothing has changed since. Reported as a
-    // commit because from the caller's point of view it is one: the session IS
-    // in the graph. Only a sweep can see this, since an explicit commit forces.
-    return {
-      status: 'committed',
-      noteId: outcome.noteId,
-      entities: summary.entities,
-      relationships: summary.relationships,
-    };
-  }
-  if (outcome.status === 'disabled') {
-    return { status: 'disabled', reason: 'Intel auto-extraction is switched off on this host' };
-  }
-  if (outcome.status === 'held') {
-    // The note landed in the admission queue rather than the graph. Only the
-    // mail path asks for that, so it should be unreachable here — but reporting
-    // it as a plain failure would say the wrong thing about where the data went.
-    return { status: 'failed', reason: 'The note is waiting to be admitted to the graph' };
-  }
-  return { status: 'failed', reason: `Intel refused the merge (${outcome.status})` };
+  return { status: 'queued', jobId, entities: summary.entities, relationships: summary.relationships };
 }
 
 /** fact id → content, for the ids the report references. Mirrors ./intel-bridge. */

@@ -1,8 +1,8 @@
 import { and, desc, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { intelNotes, researchSessions } from '$lib/db/schema';
-import { createNote as createIntelNote, processNote } from '$lib/jkai/intel/ingest';
-import { OWNER_INTEL_SCOPE, OWNER_SPACE, spaceIn, type IntelScope } from '$lib/jkai/intel/scope';
+import { enqueueIntelJob, hasPendingIntelJob } from '$lib/intel-client/outbox';
+import { OWNER_INTEL_SCOPE, OWNER_SPACE, spaceIn, type IntelScope } from '$lib/intel-client/scope';
 import { saveNote } from '$lib/daydream/notebook/store';
 import { depthPreset } from '$lib/deepdive/depth';
 import { coerceScope } from '$lib/deepdive/scope';
@@ -29,6 +29,8 @@ export async function keepNewsInGraph(
   id: string;
   href: string;
   existing: boolean;
+  /** True when the note is queued for SR-Jkai-Core and has no id yet. */
+  queued?: boolean;
 }> {
   const [existing] = await db
     .select({ id: intelNotes.id })
@@ -51,11 +53,18 @@ export async function keepNewsInGraph(
     .filter(Boolean)
     .join('\n')
     .slice(0, 50_000);
-  const id = await createIntelNote({
+  // SR-Jkai-Core writes the note and extracts it when it drains the outbox, a
+  // few seconds from now. Until then there is no note id to link to, so the
+  // link is the intel search page. One job per story per space: a second press
+  // while the first is still queued does not queue it again.
+  const ref = `news:${into.spaceId}:${article.story.key}`;
+  if (await hasPendingIntelJob('note', ref)) {
+    return { id: ref, href: '/jkai/intel', existing: true, queued: true };
+  }
+  await enqueueIntelJob('note', ref, {
     title: article.story.title,
-    rawContent: body,
+    content: body,
     source: 'news',
-    format: 'text',
     metadata: {
       newsKey: article.story.key,
       newsSource: article.story.source,
@@ -64,9 +73,9 @@ export async function keepNewsInGraph(
       publishedAt: article.story.publishedAt,
     },
     spaceId: into.spaceId,
+    process: true,
   });
-  void processNote(id).catch((err) => console.error(`[news] graph processing failed for ${id}:`, err));
-  return { id, href: `/jkai/intel/notes/${id}`, existing: false };
+  return { id: ref, href: '/jkai/intel', existing: false, queued: true };
 }
 
 export async function linkNewsInNote(

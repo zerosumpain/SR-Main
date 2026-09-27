@@ -23,7 +23,7 @@ const OWNER_LANE = [
   'src/lib/workflows/orchestrator/workspace-grounding.ts',
   'src/routes/api/decks/media/drive/+server.ts',
   'src/lib/jkai/media/drive-link.ts',
-  'src/lib/jkai/intel/source-policy.server.ts',
+  'src/routes/api/drive/folders/+server.ts',
   'src/lib/file-index/store.ts',
 ] as const;
 
@@ -50,9 +50,11 @@ describe("the owner lane reads and writes the owner's files only", () => {
   });
 });
 
-describe('the intel backfill sweep reads owner files only', () => {
-  it('filters principal_id in its raw SQL', () => {
-    expect(readFileSync('src/lib/jkai/intel/auto-extract.ts', 'utf8')).toMatch(/f\.principal_id = 'owner'/);
+describe("a member's file never feeds the owner's intel graph", () => {
+  // The backfill sweep that used to be checked here lives in SR-Jkai-Core now;
+  // Main's one remaining writer is the file index, which only queues the owner's.
+  it('the file index queues intel extraction for owner files only', () => {
+    expect(readFileSync('src/lib/file-index/store.ts', 'utf8')).toMatch(/row\.principalId !== 'owner'/);
   });
 });
 

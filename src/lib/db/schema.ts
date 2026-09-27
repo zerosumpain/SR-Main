@@ -3522,9 +3522,9 @@ export const driveIntelOutbox = pgTable(
   'drive_intel_outbox',
   {
     id: serial('id').primaryKey(),
-    /** 'file-changed' | 'file-deleted' | 'policy-resync' | 'mail-purge' */
+    /** 'file-changed' | 'file-deleted' | 'policy-resync' | 'extract' | 'note' | 'mail-purge' ($lib/intel-client/outbox) */
     kind: text('kind').notNull(),
-    /** A workflow_files id for the file kinds, a folder path for policy-resync, a gmail_accounts id for mail-purge. */
+    /** A workflow_files id for the file kinds, a folder path for policy-resync, the caller's ref for extract/note, a gmail_accounts id for mail-purge. */
     ref: text('ref').notNull(),
     /** Extra arguments the consumer needs, e.g. the ids a resync should cover. */
     payload: jsonb('payload'),

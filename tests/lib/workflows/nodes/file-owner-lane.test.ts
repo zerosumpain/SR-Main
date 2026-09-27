@@ -27,7 +27,7 @@ vi.mock('$lib/file-store/storage', () => ({
   deleteFile: vi.fn(),
   newDiskPath: vi.fn(() => '/tmp/never'),
 }));
-vi.mock('$lib/jkai/intel/auto-extract', () => ({ queueDerivedIntelDelete: vi.fn() }));
+vi.mock('$lib/intel-client/outbox', () => ({ enqueueIntelJob: vi.fn(async () => 1) }));
 vi.mock('$lib/jkai/extract', () => ({
   extractText: vi.fn(),
   synthesize: vi.fn(async () => ({ buffer: Buffer.from('x'), mimeType: 'text/csv', suggestedExtension: 'csv' })),

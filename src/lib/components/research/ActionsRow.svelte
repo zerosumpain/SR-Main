@@ -47,6 +47,9 @@
     committedAt: string | null;
     entities: number;
     relationships: number;
+    /** Queued, and the knowledge graph has not taken it in yet. */
+    pending?: boolean;
+    lastError?: string | null;
   } | null>(null);
 
   onMount(async () => {
@@ -79,13 +82,17 @@
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body?.error ?? `Commit failed (${res.status})`);
       confirmingCommit = false;
+      // Queued, not merged: the knowledge graph takes it in a few seconds
+      // later, and a reload shows whether it did.
       graph = {
-        committed: true,
-        committedAt: new Date().toISOString(),
+        committed: graph?.committed ?? false,
+        committedAt: graph?.committedAt ?? null,
         entities: body.entities ?? graph?.entities ?? 0,
         relationships: body.relationships ?? graph?.relationships ?? 0,
+        pending: true,
+        lastError: null,
       };
-      return `Merged ${body.entities ?? 0} entities and ${body.relationships ?? 0} relationships into the knowledge graph.`;
+      return `Queued ${body.entities ?? 0} entities and ${body.relationships ?? 0} relationships for the knowledge graph. They are merged in the background.`;
     });
 
   const share = () =>
@@ -132,10 +139,15 @@
           </button>
           <button class="act" type="button" onclick={() => (confirmingCommit = false)}>Cancel</button>
         </span>
+      {:else if graph?.pending}
+        <span class="state">Queued for the knowledge graph</span>
       {:else if graph?.committed}
         <span class="state">In the knowledge graph</span>
         <button class="act" type="button" onclick={() => (confirmingCommit = true)}>Re-commit</button>
       {:else}
+        {#if graph?.lastError}
+          <span class="state">The last commit did not land: {graph.lastError}</span>
+        {/if}
         <button class="act" type="button" onclick={() => (confirmingCommit = true)}>
           {graph && graph.entities > 0
             ? `Commit ${graph.entities} entities, ${graph.relationships} links`

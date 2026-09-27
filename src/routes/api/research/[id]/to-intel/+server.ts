@@ -6,10 +6,12 @@
  * finishes, and the backfill sweep only refreshes sessions already committed.
  * This endpoint is the deliberate act that merges one.
  *
- * POST commits (idempotent — committing again re-merges what changed).
- * GET reports whether it has been committed and how big the session graph is,
- * so the page can say "already in the graph" rather than offering a button that
- * does nothing new.
+ * POST queues the commit (idempotent — committing again re-merges what
+ * changed). SR-Jkai-Core does the merge when it drains the intel outbox, a few
+ * seconds later; the response says it is queued, not that it is done.
+ * GET reports whether it has been committed, whether a commit is on its way,
+ * and how big the session graph is, so the page can say "already in the graph"
+ * rather than offering a button that does nothing new.
  *
  * The merge itself is structural, not a re-extraction from prose — see
  * `$lib/deepdive/graph-commit` for why that matters.
@@ -56,15 +58,16 @@ export const POST: RequestHandler = async ({ params }) => {
         { status: 409 },
       );
     }
-    if (outcome.status !== 'committed') {
+    if (outcome.status !== 'queued') {
       return json({ error: outcome.reason }, { status: 500 });
     }
 
     return json({
       ok: true,
+      queued: true,
+      jobId: outcome.jobId,
       entities: outcome.entities,
       relationships: outcome.relationships,
-      noteId: outcome.noteId ?? null,
     });
   } catch (err) {
     console.error('[research] graph commit failed:', err);

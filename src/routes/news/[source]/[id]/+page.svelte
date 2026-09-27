@@ -54,6 +54,7 @@
         error?: string;
         href?: string;
         existing?: boolean;
+        queued?: boolean;
         favourited?: boolean;
       };
       if (!response.ok || result.error) throw new Error(result.error ?? `Action failed (${response.status})`);
@@ -64,7 +65,11 @@
           : { text: 'Removed from favourites.' };
       } else if (action === 'graph') {
         notice = {
-          text: result.existing ? 'Already present in the knowledge graph.' : 'Added to the graph. Entity extraction is running.',
+          text: result.existing
+            ? result.queued
+              ? 'Already queued for the knowledge graph.'
+              : 'Already present in the knowledge graph.'
+            : 'Queued for the knowledge graph. Entities are extracted in the background.',
           href: result.href,
           link: 'View in Intel →',
         };
