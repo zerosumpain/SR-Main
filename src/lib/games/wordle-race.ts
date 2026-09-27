@@ -89,7 +89,7 @@ export interface Room {
   updatedAt: number;
 }
 
-function player(id: string, name: string, status: PlayerStatus): Player {
+export function player(id: string, name: string, status: PlayerStatus): Player {
   return { id, name, status, guesses: [], solveMs: null };
 }
 

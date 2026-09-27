@@ -103,7 +103,7 @@ function between(rng: Rng, [lo, hi]: [number, number]): number {
   return lo + rng() * (hi - lo);
 }
 
-function player(id: string, name: string, status: PlayerStatus): Player {
+export function player(id: string, name: string, status: PlayerStatus): Player {
   return { id, name, status, score: 0, reactions: [], falseStarts: 0 };
 }
 

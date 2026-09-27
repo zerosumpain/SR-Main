@@ -99,7 +99,7 @@ export function cleanTopic(value: unknown): string | null {
   return t.length >= 2 ? t : null;
 }
 
-function player(id: string, name: string, status: PlayerStatus): Player {
+export function player(id: string, name: string, status: PlayerStatus): Player {
   return { id, name, status, score: 0, picks: [] };
 }
 

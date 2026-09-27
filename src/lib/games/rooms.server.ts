@@ -11,10 +11,13 @@
 import { error } from '@sveltejs/kit';
 import { EventEmitter } from 'node:events';
 import { randomBytes } from 'node:crypto';
-import { GameError, type Difficulty } from './tap-duel';
+import { GameError, MAX_PLAYERS, type Difficulty } from './tap-duel';
 import { GAMES, type GameId, type GameRules, type RoomBase } from './catalogue';
 
 type WireRoom = ReturnType<GameRules['toWire']>;
+
+/** How long an invite sent from the lobby holds the lobby open for, at least. */
+const INVITE_HOLD_MS = 2 * 60_000;
 
 /** A room that closed stays readable briefly, so a phone arriving late sees "closed", not a 404. */
 const CLOSED_KEEP_MS = 60_000;
@@ -26,6 +29,19 @@ interface Live {
   rules: GameRules;
   emitter: EventEmitter;
   timer: ReturnType<typeof setTimeout> | null;
+  /**
+   * Invitees whose phone has fetched the invite. There is no push certificate,
+   * so an invite reaches a phone only when its app polls — this is the one
+   * thing the host can be told about whether it got there.
+   */
+  sawInvite: Set<string>;
+}
+
+/** The room as `playerId` sees it, with who has had their invite. */
+function wire(live: Live, playerId: string, now = Date.now()): WireRoom {
+  const out = live.rules.toWire(live.room, playerId, now) as WireRoom & { players?: { id: string }[] };
+  if (!Array.isArray(out.players)) return out;
+  return { ...out, players: out.players.map((p) => ({ ...p, sawInvite: live.sawInvite.has(p.id) })) } as WireRoom;
 }
 
 const rooms = new Map<string, Live>();
@@ -116,7 +132,7 @@ export function createGame(input: {
     options: input.options,
     now,
   });
-  const live: Live = { room, rules, emitter: new EventEmitter(), timer: null };
+  const live: Live = { room, rules, emitter: new EventEmitter(), timer: null, sawInvite: new Set() };
   live.emitter.setMaxListeners(20);
   rooms.set(room.id, live);
   settle(live, true);
@@ -128,13 +144,13 @@ export function createGame(input: {
         if (rooms.get(room.id) === live && live.room.phase !== 'closed') settle(live, true);
       });
   }
-  return rules.toWire(room, input.host.id, now);
+  return wire(live, input.host.id, now);
 }
 
 export function roomFor(id: string, playerId: string): WireRoom {
   const live = get(id);
   if (!inRoom(live.room, playerId)) throw new GameError(403, 'You are not in this game.');
-  return live.rules.toWire(live.room, playerId, Date.now());
+  return wire(live, playerId);
 }
 
 /**
@@ -160,21 +176,63 @@ export function act(id: string, playerId: string, action: string, body: Record<s
   try {
     if (move) move(room, playerId, body, now);
     else rules[action as Verb](room, playerId, now);
+    // "Play again" asks everyone afresh: nobody has had THAT invite yet.
+    if (action === 'again') live.sawInvite.clear();
   } catch (err) {
     settle(live, moved);
     throw err;
   }
   settle(live, true);
-  return rules.toWire(room, playerId, Date.now());
+  return wire(live, playerId);
+}
+
+/**
+ * The host asks more people in while the lobby is open. Somebody who declined
+ * or left is asked again; somebody already in or invited is left alone. The
+ * lobby is held open at least INVITE_HOLD_MS from now, so an invite sent in
+ * its last seconds still has time to be answered.
+ */
+export function inviteTo(id: string, hostId: string, people: { id: string; name: string }[]): WireRoom {
+  const live = get(id);
+  const now = Date.now();
+  const moved = live.rules.advance(live.room, now, Math.random);
+  const { room } = live;
+  const refuse = (status: number, message: string) => {
+    settle(live, moved);
+    return new GameError(status, message);
+  };
+  if (room.hostId !== hostId) throw refuse(403, 'Only the host can invite.');
+  if (room.phase !== 'lobby') throw refuse(409, 'That game has already started.');
+  const inPlay = (s: string) => s === 'joined' || s === 'invited';
+  const fresh = people.filter((p, i, all) => p.id !== hostId && all.findIndex((q) => q.id === p.id) === i);
+  const adding = fresh.filter((p) => !room.players.some((q) => q.id === p.id && inPlay(q.status)));
+  if (room.players.filter((p) => inPlay(p.status)).length + adding.length > MAX_PLAYERS) {
+    throw refuse(400, `Up to ${MAX_PLAYERS} players.`);
+  }
+  for (const p of adding) {
+    const known = room.players.find((q) => q.id === p.id);
+    if (known) known.status = 'invited';
+    else room.players.push(live.rules.player(p.id, p.name, 'invited'));
+    live.sawInvite.delete(p.id);
+  }
+  if (adding.length) room.phaseEndsAt = Math.max(room.phaseEndsAt ?? 0, now + INVITE_HOLD_MS);
+  settle(live, moved || adding.length > 0);
+  return wire(live, hostId);
 }
 
 /** Lobbies this player is invited to and has not answered. */
 export function invitesFor(playerId: string) {
   const out = [];
-  for (const { room, rules } of rooms.values()) {
+  for (const live of rooms.values()) {
+    const { room, rules } = live;
     if (room.phase !== 'lobby') continue;
     const me = room.players.find((p) => p.id === playerId);
     if (me?.status !== 'invited') continue;
+    // This read IS the delivery: the phone raises its notification from it.
+    if (!live.sawInvite.has(playerId)) {
+      live.sawInvite.add(playerId);
+      emit(live);
+    }
     const host = room.players.find((p) => p.id === room.hostId);
     out.push({
       roomId: room.id,
@@ -213,7 +271,7 @@ export function subscribe(
 ): () => void {
   const live = get(id);
   if (!inRoom(live.room, playerId)) throw new GameError(403, 'You are not in this game.');
-  const change = () => onRoom(live.rules.toWire(live.room, playerId, Date.now()));
+  const change = () => onRoom(wire(live, playerId));
   live.emitter.on('change', change);
   live.emitter.once('gone', onGone);
   change();
