@@ -31,15 +31,13 @@ async function otherUserSpaces(principalId: string): Promise<string[]> {
  *                       level (Family Circle only, say) gets 403.
  *   no session          the owner's scope. The hook lets a sessionless request
  *                       reach an intel route only through an owner-grade lane:
- *                       the maintenance secret (backfill, source-facets,
- *                       clusters/recalculate, split), the JKAI service token
- *                       (chat-context, extract-thread, daily-alerts), or the
- *                       dev-only LAN bypass. Refusing it here would 403 every
- *                       one of those.
+ *                       the JKAI service token (chat-context, extract-thread)
+ *                       or the dev-only LAN bypass. Refusing it here would 403
+ *                       both.
  *   intent 'own'        a member at `all` gets their `self` scope. For writes
- *                       and for the held-mail queue: `all` reads everyone's
- *                       graph, but triage — and mail nobody has admitted yet —
- *                       stays each person's own unless they hold `admin`.
+ *                       (correcting or deleting an entity): `all` reads
+ *                       everyone's graph, but changes stay each person's own
+ *                       unless they hold `admin`.
  *   any other session   403, whatever the hook decided. A guest never reaches
  *                       an intel route through the hook; if a gate regression
  *                       ever let one through, it gets nothing rather than the

@@ -32,7 +32,7 @@
     { code: '✦', label: 'Run briefing now', desc: "Generate today's digest", keywords: 'briefing run digest generate', run: runBriefing },
     { code: '+', label: 'New chat', desc: 'Start a fresh conversation', keywords: 'new chat conversation', run: () => navTo('/jkai') },
     { code: '⊹', label: 'New monitor', desc: 'Watch something new', keywords: 'new monitor watch alert', run: () => navTo('/jkai/daydreams/watches') },
-    { code: '⌕', label: 'Search knowledge', desc: 'Recall across everything', keywords: 'search knowledge recall find', run: () => navTo('/jkai/intel/search') },
+    { code: '⌕', label: 'Search knowledge', desc: 'Recall across everything', keywords: 'search knowledge recall find', run: () => navTo('/jkai/intel') },
   ];
 
   const NAV: { section: string; items: NavItem[] }[] = [
@@ -49,9 +49,9 @@
     {
       section: 'Recall & agents',
       items: [
-        { code: 'INT', label: 'Intel', href: '/jkai/intel', desc: 'Knowledge graph, notes & alerts', keywords: 'graph entities relationships' },
+        { code: 'INT', label: 'Intel', href: '/jkai/intel', desc: 'Search, sources & memory', keywords: 'graph entities relationships' },
         { code: 'CG', label: 'Codegraph', href: '/jkai/codegraph', desc: 'What building this codebase has already taught us', keywords: 'code graph build history episodes lessons precedent relevance' },
-        { code: 'KN', label: 'Recall', href: '/jkai/intel/search', desc: 'Search notes, entities, files, research, memory & datastore', keywords: 'recall search @knowledge unified knowledge' },
+        { code: 'KN', label: 'Recall', href: '/jkai/intel', desc: 'Search notes, entities, files, research, memory & datastore', keywords: 'recall search @knowledge unified knowledge' },
         { code: 'SRC', label: 'Sources', href: '/jkai/sources', desc: 'Connected accounts, archives and data permissions', keywords: 'activity integrations steam music podcasts reddit github data source connect' },
         { code: 'ACT', label: 'Activity', href: '/jkai/activity', desc: 'Audit evidence and its provenance', keywords: 'timeline events evidence provenance history activity' },
         { code: 'VOX', label: 'Voice', href: '/home/voice', desc: 'What the house says to Alexa, and the replies', keywords: 'alexa echo voice history utterances speaker household' },

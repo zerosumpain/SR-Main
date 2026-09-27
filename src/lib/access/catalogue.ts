@@ -103,12 +103,12 @@ export const AREAS: readonly AreaInfo[] = [
   {
     id: 'jkai.intel',
     label: 'jkai · intel',
-    blurb: 'Their own intel graph, the household graph, and their own Gmail read-only.',
+    blurb: 'Their own intel graph and the household graph, corrected and deleted in their own space, and their own Gmail read-only.',
     open: true,
     levels: {
-      self: 'Own space + household',
-      all: "Also read every other user's graph (not their held mail)",
-      admin: "Also see and triage everyone's held mail",
+      self: 'Own space + household; correct and delete in them',
+      all: "Also read every other user's graph (corrections stay their own)",
+      admin: "Also correct and delete in everyone's",
     },
   },
   {
@@ -242,29 +242,25 @@ type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
  * `resolveRequestScope` — members.integration.test.ts and route-scope.test.ts).
  */
 const ROUTES: Record<string, Partial<Record<Method, Permission>>> = {
-  // ── jkai.intel — a user's own intel space, read-only, plus triage of their
-  // own held mail and connecting their own Gmail (was MEMBER_ROUTES).
+  // ── jkai.intel — a user's own intel space: read it, correct or delete an
+  // entity in their OWN space (the handlers resolve the `own` scope for the
+  // writes), and connect their own Gmail (was MEMBER_ROUTES).
   // Pages. A page's `__data.json` carries the same route id.
   '/jkai/intel': { GET: 'jkai.intel:self' },
-  '/jkai/intel/notes': { GET: 'jkai.intel:self' },
+  '/jkai/intel/sources': { GET: 'jkai.intel:self' },
   '/jkai/intel/notes/[id]': { GET: 'jkai.intel:self' },
-  '/jkai/intel/entities': { GET: 'jkai.intel:self' },
   '/jkai/intel/entities/[id]': { GET: 'jkai.intel:self' },
+  // Retired pages that only 308 to a survivor, kept open so a member's
+  // bookmark still lands somewhere. They read nothing.
+  '/jkai/intel/notes': { GET: 'jkai.intel:self' },
+  '/jkai/intel/entities': { GET: 'jkai.intel:self' },
   '/jkai/intel/timeline': { GET: 'jkai.intel:self' },
-  '/jkai/intel/mail': { GET: 'jkai.intel:self' },
-  // Read APIs the pages above call.
-  '/api/jkai/intel/network': { GET: 'jkai.intel:self' },
-  '/api/jkai/intel/network/paths': { GET: 'jkai.intel:self' },
-  '/api/jkai/intel/evidence-network': { GET: 'jkai.intel:self' },
+  // APIs the pages above call.
   '/api/jkai/intel/entity-card': { GET: 'jkai.intel:self' },
   '/api/jkai/intel/entities': { GET: 'jkai.intel:self' },
-  '/api/jkai/intel/entities/[id]': { GET: 'jkai.intel:self' },
+  '/api/jkai/intel/entities/[id]': { GET: 'jkai.intel:self', PUT: 'jkai.intel:self', DELETE: 'jkai.intel:self' },
   '/api/jkai/intel/notes': { GET: 'jkai.intel:self' },
   '/api/jkai/intel/notes/[id]': { GET: 'jkai.intel:self' },
-  // Triage of their own held mail: admit / reject / requeue / similar /
-  // score-relevance, each within the request's scope. The one owner-only
-  // action on this handler (backfill-embeddings) refuses non-owner scopes.
-  '/api/jkai/intel/mail': { GET: 'jkai.intel:self', POST: 'jkai.intel:self' },
   // Their own Gmail, read-only scopes; the callback stamps their principal.
   '/api/gmail/connect': { GET: 'jkai.intel:self' },
   '/api/gmail/callback': { GET: 'jkai.intel:self' },
@@ -344,9 +340,12 @@ const ROUTES: Record<string, Partial<Record<Method, Permission>>> = {
   // ── jkai.knowledge — recall. The search reads only what the caller's other
   // grants already open (their intel scope, their readable research), never
   // the owner's files, memory, datastore or activity. The page sits in the
-  // intel workbench, whose layout still needs an intel level.
-  '/jkai/intel/search': { GET: 'jkai.knowledge:self' },
-  '/api/jkai/knowledge/search': { POST: 'jkai.knowledge:self' },
+  // intel workbench, whose layout still needs an intel level. Search IS the
+  // intel home page now, so the API sits under the intel grant: anyone who can
+  // open /jkai/intel can use its search box, and what it returns is still
+  // bounded by their other grants.
+  '/jkai/intel/search': { GET: 'jkai.intel:self' },
+  '/api/jkai/knowledge/search': { POST: 'jkai.intel:self' },
 
   // ── jkai.notes — the notebook. Every route resolves notes through
   // $lib/daydream/notebook/access.server (own / household / everyone's, read /

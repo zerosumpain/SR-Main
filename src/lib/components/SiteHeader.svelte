@@ -75,7 +75,7 @@
 
   /**
    * The section cell is dropped when the back cell already points at it.
-   * `/jkai/intel/mail` has "← Intel" one level up AND "Intel" as its section:
+   * `/jkai/intel/sources` has "← Intel" one level up AND "Intel" as its section:
    * two adjacent cells, one destination. The back cell wins — it carries the
    * same word and it is the affordance the brief asked for.
    */

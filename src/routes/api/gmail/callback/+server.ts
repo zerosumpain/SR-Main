@@ -28,7 +28,7 @@ export const GET: RequestHandler = async (event) => {
 
   const back = (params: Record<string, string>) => {
     const qs = new URLSearchParams(params).toString();
-    return member ? `/jkai/intel?${qs}` : `/admin/connections/gmail?${qs}`;
+    return member ? `/jkai/intel/sources?${qs}` : `/admin/connections/gmail?${qs}`;
   };
   const fail = (code: string): never => {
     throw redirect(302, back(member ? { gmail_error: code } : { error: code }));

@@ -48,7 +48,7 @@ export type NavSection = {
   ownerOnly?: boolean;
   /**
    * The family ABOVE this one, for sections that are themselves a sub-section.
-   * `/jkai/intel` is a section in its own right (ten surfaces of its own) but
+   * `/jkai/intel` is a section in its own right (three surfaces of its own) but
    * its way out is `/jkai`, not the home icon. Omitted on a top-level section,
    * where the home icon IS the answer and a second back cell is noise.
    */
@@ -149,17 +149,9 @@ export const SECTIONS: NavSection[] = [
     ownerOnly: true,
     match: (p) => under('/jkai/intel', p),
     items: [
-      { label: 'Mail', href: '/jkai/intel/mail' },
-      { label: 'Review', href: '/jkai/intel/review' },
-      { label: 'Quality', href: '/jkai/intel/quality' },
+      { label: 'Search', href: '/jkai/intel', match: (p) => p === '/jkai/intel' || under('/jkai/intel/entities', p) },
+      { label: 'Sources', href: '/jkai/intel/sources', match: (p) => under('/jkai/intel/sources', p) || under('/jkai/intel/notes', p) },
       { label: 'Memory', href: '/jkai/intel/memory' },
-      { label: 'Entities', href: '/jkai/intel/entities' },
-      { label: 'Clusters', href: '/jkai/intel/clusters' },
-      { label: 'Dossiers', href: '/jkai/intel/dossiers' },
-      { label: 'Timeline', href: '/jkai/intel/timeline' },
-      { label: 'Notes', href: '/jkai/intel/notes' },
-      { label: 'Search', href: '/jkai/intel/search' },
-      { label: 'Alerts', href: '/jkai/intel/alerts' },
     ],
   },
   {
@@ -446,7 +438,7 @@ export function navCellsFor(path: string, isOwner = true, reach: readonly string
 /**
  * The "common way back": one level up, never home.
  *
- * `/jkai/research` → `/jkai`, `/jkai/intel/notes/new` → `/jkai/intel/notes`,
+ * `/jkai/research` → `/jkai`, `/jkai/intel/sources` → `/jkai/intel`,
  * `/blog/some-post` → `/blog`. Returns null on a section root and on `/`,
  * where the home icon is already the answer and a second one would be noise.
  *

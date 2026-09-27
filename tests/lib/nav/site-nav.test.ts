@@ -14,7 +14,7 @@ import {
 
 describe('activeSection', () => {
   it('prefers the deepest matching section', () => {
-    expect(activeSection('/jkai/intel/notes')?.id).toBe('jkai-intel');
+    expect(activeSection('/jkai/intel/sources')?.id).toBe('jkai-intel');
     expect(activeSection('/jkai/codegraph/ask')?.id).toBe('jkai-codegraph');
     expect(activeSection('/jkai/develop/42')?.id).toBe('jkai');
     // The archive console still lives under /jkai/builds and must keep a section.
@@ -38,7 +38,7 @@ describe('parentHref — the common way back', () => {
     // to stay a real route: delete it and this back link points at a 404, which
     // is exactly what nav-parents.test.ts fails on.
     expect(parentHref('/jkai/builds/42')).toBe('/jkai/builds');
-    expect(parentHref('/jkai/intel/notes/new')).toBe('/jkai/intel/notes');
+    expect(parentHref('/jkai/intel/sources')).toBe('/jkai/intel');
     expect(parentHref('/health/activities/17')).toBe('/health/activities');
     expect(parentHref('/projects/engine-room/turn/trace')).toBe('/projects/engine-room/turn');
   });
@@ -79,7 +79,7 @@ describe('parentHref — the common way back', () => {
   });
 
   it('labels the back cell with the destination, not the current page', () => {
-    expect(parentLabel('/jkai/intel/notes/new')).toBe('Notes');
+    expect(parentLabel('/jkai/intel/memory')).toBe('Intel');
     expect(parentLabel('/blog/some-post')).toBe('Writing');
     expect(parentLabel('/jkai/intel')).toBe('jkai');
   });
@@ -143,7 +143,7 @@ describe('wearsSharedChrome', () => {
   });
 
   it('leaves every ordinary page wearing the bar', () => {
-    for (const p of ['/', '/blog', '/blog/a-post', '/jkai', '/jkai/intel/mail', '/health', '/health/plan', '/research', '/projects/engine-room/turn', '/admin/ops/costs']) {
+    for (const p of ['/', '/blog', '/blog/a-post', '/jkai', '/jkai/intel/sources', '/health', '/health/plan', '/research', '/projects/engine-room/turn', '/admin/ops/costs']) {
       expect(wearsSharedChrome(p), `${p} lost its header`).toBe(true);
     }
   });
@@ -158,7 +158,7 @@ describe('isItemActive', () => {
 
   it('lights a section cell for its whole subtree', () => {
     const intel = SECTIONS.find((s) => s.id === 'jkai')!.items.find((i) => i.label === 'Intel')!;
-    expect(isItemActive(intel, '/jkai/intel/notes/new')).toBe(true);
+    expect(isItemActive(intel, '/jkai/intel/entities/42')).toBe(true);
   });
 
   it('lights exactly one cell per section on every page it serves', () => {
@@ -184,8 +184,8 @@ describe('the bar is never empty', () => {
   });
 
   it('shows the SECTION strip where a section has one', () => {
-    expect(navCellsFor('/jkai/intel/mail', true).map((i) => i.href)).toContain(
-      '/jkai/intel/notes',
+    expect(navCellsFor('/jkai/intel/memory', true).map((i) => i.href)).toContain(
+      '/jkai/intel/sources',
     );
     expect(navCellsFor('/health/plan', true).map((i) => i.href)).toContain('/health/segments');
   });
