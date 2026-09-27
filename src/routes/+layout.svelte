@@ -38,7 +38,13 @@
     });
   });
 
-  let { children } = $props();
+  let { children, data } = $props();
+
+  /** Leave view-as: the exit endpoint is never emulated, so this always reaches the owner's session. */
+  async function exitViewAs() {
+    await fetch('/api/admin/access/view-as', { method: 'DELETE' }).catch(() => {});
+    window.location.assign('/admin/access');
+  }
 </script>
 
 <UmamiTracker />
@@ -47,7 +53,57 @@
   {@render children()}
 </div>
 
+{#if data.viewingAs}
+  <div class="view-as-bar" role="status">
+    <span class="view-as-label">Viewing as</span>
+    <span class="view-as-who">{data.viewingAs.email}</span>
+    <span class="view-as-label">{data.viewingAs.kind === 'member' ? 'member' : 'guest · no grants'} · read-only</span>
+    <button class="view-as-exit" onclick={exitViewAs}>Exit</button>
+  </div>
+{/if}
+
 <style>
+  /* View-as strip: pinned to the bottom of every page so the owner can never
+     mistake an emulated view for their own. Accent ground, because it is a
+     state the owner must notice, not chrome. */
+  .view-as-bar {
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 1000;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 12px;
+    padding: 8px 16px;
+    background: var(--accent);
+    color: var(--bg);
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+  }
+  .view-as-label {
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.85;
+  }
+  .view-as-who {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  .view-as-exit {
+    margin-left: auto;
+    padding: 4px 12px;
+    border: 1px solid var(--bg);
+    border-radius: 2px;
+    background: transparent;
+    color: var(--bg);
+    font: inherit;
+    cursor: pointer;
+  }
+  .view-as-exit:hover {
+    background: var(--bg);
+    color: var(--accent);
+  }
+
   /* The bar's height, and the ONE declaration of it. `src/app.css` used to
      carry a second `--site-nav-height: 56px` at the same specificity, decided
      purely by stylesheet order, while twelve places did arithmetic on the token

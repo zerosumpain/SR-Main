@@ -2,6 +2,7 @@
 // for information about these interfaces
 import type { Session } from '@auth/sveltekit';
 import type { Viewer } from '$lib/server/viewer';
+import type { ViewingAs } from '$lib/server/view-as';
 
 declare global {
 	namespace App {
@@ -10,6 +11,8 @@ declare global {
 			auth(): Promise<Session | null>;
 			/** Set by `viewerOf` — one owner/member/guest answer per request. */
 			viewer?: Promise<Viewer>;
+			/** Set when the owner is viewing the site as someone else ($lib/server/view-as). */
+			viewingAs?: ViewingAs;
 		}
 		// interface PageData {}
 		// interface PageState {}

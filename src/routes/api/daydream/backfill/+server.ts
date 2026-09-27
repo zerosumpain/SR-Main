@@ -9,6 +9,7 @@
 
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { isOwnerEmail } from '$lib/server/access';
 import { env } from '$env/dynamic/private';
 import { backfillFromHomeAssistant, DEFAULT_BACKFILL_DAYS } from '$lib/home/presence/backfill';
 import { refreshPlaces } from '$lib/home/presence/places';
@@ -41,8 +42,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   // A signed-in owner reaches here through the normal gate; a script presents
   // the bearer token instead. Anything else has already been turned away by
   // hooks, but the handler does not rely on that.
+  // The OWNER session — the hook lets this exact path through for POST, so a
+  // bare `session` check admitted any signed-in guest.
   const session = await locals.auth?.();
-  if (!session && !bearerOk(request)) {
+  if (!isOwnerEmail(session?.user?.email) && !bearerOk(request)) {
     return json({ error: 'Unauthorized' }, { status: 401 });
   }
 

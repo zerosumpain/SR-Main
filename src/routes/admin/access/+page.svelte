@@ -80,6 +80,11 @@
     return (await send(url, method, payload, key)) !== null;
   }
 
+  /** See the site as this person (read-only, an hour); the banner's Exit ends it. */
+  async function viewAs(email: string) {
+    if (await call('/api/admin/access/view-as', 'POST', { email }, email)) window.location.assign('/');
+  }
+
   // ── Invites ──────────────────────────────────────────────────────────────
   let inviteEmail = $state('');
   let inviteName = $state('');
@@ -417,6 +422,7 @@
             {#if person.note}<span class="note">{person.note}</span>{/if}
             <span class="added">added {formatDate(person.createdAt)}</span>
             <button class="row-link" onclick={() => editPerson(person)} disabled={busy === person.email}>Edit</button>
+            <button class="row-link" onclick={() => viewAs(person.email)} disabled={busy === person.email}>View as</button>
             <button class="row-link danger" onclick={() => removePerson(person.email)} disabled={busy === person.email}>
               Remove
             </button>
