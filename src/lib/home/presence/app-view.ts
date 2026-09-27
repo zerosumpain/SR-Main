@@ -30,7 +30,7 @@
 
 import { and, asc, gte, inArray, isNotNull, lt } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { daydreamPlaces, daydreamTrail } from '$lib/db/schema';
+import { allowedUser, daydreamPlaces, daydreamTrail } from '$lib/db/schema';
 import { companionToken, companionUrl, loadCompanionUsers, type HouseholdUser } from './companion';
 import { inferMode } from './cluster';
 import { distanceM } from './geo';
@@ -507,6 +507,12 @@ async function loadTodayTrails(
   return out;
 }
 
+/** Everyone on the site's allow-list (owners are never in it). */
+async function loadAllowedPeople(): Promise<Array<{ email: string; note: string | null }>> {
+  const rows = await db.select({ email: allowedUser.email, note: allowedUser.note }).from(allowedUser);
+  return rows.map((r) => ({ email: r.email.trim().toLowerCase(), note: r.note }));
+}
+
 /** Past days by subject, and when they were read — see HISTORY_TTL_MS. */
 let historyCache: { dayStart: number; at: number; subjects: string; days: Map<string, AppDay[]> } | null = null;
 
@@ -570,10 +576,9 @@ export interface AppViewsResult {
  */
 export function attachPreviews(
   views: ReadonlyArray<{ email: string; view: AppHouseholdView }>,
-  users: readonly HouseholdUser[],
+  nameOf: ReadonlyMap<string, string>,
   isOwnerEmail: (email: string) => boolean,
 ): Array<{ email: string; view: AppHouseholdView }> {
-  const nameOf = new Map(users.map((u) => [String(u.email ?? '').trim().toLowerCase(), u.name]));
   return views.map((entry) => {
     if (entry.view.viewer !== 'owner' || !isOwnerEmail(entry.email)) return entry;
     const previewAs: AppPreview[] = views
@@ -618,6 +623,7 @@ export async function pushAppViews(
   const seen = new Set<string>();
   let refused = 0;
   const memberEmails = new Set(members.map((m) => m.email).filter((e): e is string => !!e));
+  const nameOf = new Map<string, string>();
   for (const u of users) {
     const email = String(u.email ?? '').trim().toLowerCase();
     if (!email) {
@@ -626,6 +632,7 @@ export async function pushAppViews(
     }
     if (seen.has(email)) continue;
     seen.add(email);
+    nameOf.set(email, u.name || email);
     const viewer = await peopleViewerForEmail(email);
     const { access } = await appAccessForEmail(email, viewer !== null);
     accessBy.set(email, { ...access, sitePair: await sitePairFor(email, access, u.sitePairWanted, now) });
@@ -633,6 +640,28 @@ export async function pushAppViews(
     else {
       refused++;
       outside.push({ email, household: memberEmails.has(email) });
+    }
+  }
+
+  // People the site lets in who are not on the app YET: built for the owner's
+  // "view as" only, never filed as views of their own — the point is to see
+  // what the app would offer them before they are asked to install it. Only
+  // read when an owner is on the app to look.
+  const previewOnly = new Set<string>();
+  if ([...accessBy.values()].some((a) => a.owner)) {
+    const allowed = await loadAllowedPeople().catch(() => []);
+    for (const person of allowed) {
+      if (seen.has(person.email)) continue;
+      seen.add(person.email);
+      previewOnly.add(person.email);
+      const name = members.find((m) => m.email === person.email)?.displayName || person.note || person.email;
+      nameOf.set(person.email, name);
+      const viewer = await peopleViewerForEmail(person.email);
+      const { access } = await appAccessForEmail(person.email, viewer !== null);
+      if (access.owner) continue;
+      accessBy.set(person.email, { ...access, sitePair: null });
+      if (viewer) viewers.push({ email: person.email, viewer });
+      else outside.push({ email: person.email, household: memberEmails.has(person.email) });
     }
   }
   const watch = await loadWatchedPlaces().catch(() => undefined);
@@ -682,7 +711,9 @@ export async function pushAppViews(
     }
   }
 
-  const withPreviews = attachPreviews(views, users, (email) => accessBy.get(email)?.owner === true);
+  const withPreviews = attachPreviews(views, nameOf, (email) => accessBy.get(email)?.owner === true).filter(
+    (v) => !previewOnly.has(v.email),
+  );
 
   try {
     const res = await fetchImpl(`${companionUrl()}/api/apple/household/views`, {
