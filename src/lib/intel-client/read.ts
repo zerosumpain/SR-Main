@@ -243,7 +243,7 @@ async function loadSnapshot(scope: IntelScope): Promise<GraphSnapshot> {
            COALESCE(t.name, 'unknown')  AS type_name,
            COALESCE(t.icon, '🔷')       AS icon,
            COALESCE(t.color, '#7dd3fc') AS color,
-           e.summary, e.confidence, e.confidence_score, e.confirmed,
+           e.summary, e.confidence, e.confirmed,
            e.created_at, e.updated_at, e.aliases, e.space_id
     FROM intel_entities e
     LEFT JOIN intel_entity_types t ON t.id = e.type_id
@@ -265,7 +265,7 @@ async function loadSnapshot(scope: IntelScope): Promise<GraphSnapshot> {
         color: String(r.color ?? '#7dd3fc'),
         summary: r.summary == null ? null : String(r.summary),
         confidence: String(r.confidence ?? 'medium'),
-        confidenceScore: r.confidence_score == null ? null : Number(r.confidence_score),
+        confidenceScore: null,
         confirmed: Boolean(r.confirmed),
         createdAt: created,
         updatedAt: updated,
