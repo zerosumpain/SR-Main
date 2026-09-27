@@ -197,7 +197,7 @@ export function inviteTo(id: string, hostId: string, people: { id: string; name:
   const now = Date.now();
   const moved = live.rules.advance(live.room, now, Math.random);
   const { room } = live;
-  const refuse = (status: number, message: string) => {
+  const refuse = (status: ConstructorParameters<typeof GameError>[0], message: string) => {
     settle(live, moved);
     return new GameError(status, message);
   };
