@@ -106,8 +106,9 @@ describe('isMemberAllowedRoute — a member reaches their own intel space and no
   it('lists only routes that exist', () => {
     const extracted = new Set<string>(EXTRACTED_ROUTE_IDS);
     for (const id of memberRouteIds()) {
-      const file = id.startsWith('/api/') ? '+server.ts' : '+page.svelte';
-      expect(existsSync(`src/routes${id}/${file}`) || extracted.has(id), id).toBe(true);
+      // A page route may be a load alone — a redirect such as /home/people/[subject].
+      const files = id.startsWith('/api/') ? ['+server.ts'] : ['+page.svelte', '+page.server.ts'];
+      expect(files.some((f) => existsSync(`src/routes${id}/${f}`)) || extracted.has(id), id).toBe(true);
     }
   });
 });
