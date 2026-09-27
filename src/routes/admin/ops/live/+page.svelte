@@ -434,12 +434,6 @@
       file: 'src/lib/workflows/chat/followup-queue.ts:124',
     },
     {
-      name: 'Orphan-attachment sweep',
-      cadence: '1h (immediate on boot then every hour)',
-      desc: 'Deletes jkai_attachments rows where message_id IS NULL and created_at < 24h ago, plus the file on disk.',
-      file: 'src/lib/jkai/media/sweep.ts:29',
-    },
-    {
       name: 'Engine event-loop monitor',
       cadence: 'continuous histogram, read on each /api/health/workflow-engine probe',
       desc: 'perf_hooks.monitorEventLoopDelay({resolution:50}). The 60s systemd timer hits the probe; if loopMaxMs ≥ 5000 the probe returns 503 and systemd restarts the service.',

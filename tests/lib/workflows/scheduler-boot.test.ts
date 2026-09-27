@@ -40,15 +40,6 @@ vi.mock('$lib/workflows/whatsapp/service', () => ({
 vi.mock('$lib/workflows/whatsapp/orchestrator-bridge', () => ({
   OrchestratorBridge: vi.fn(),
 }));
-vi.mock('$lib/workflows/prompts/loader', () => ({
-  syncPrompts: vi.fn().mockResolvedValue(undefined),
-}));
-vi.mock('$lib/workflows/site-tools/custom-tool-loader', () => ({
-  loadCustomTools: vi.fn().mockResolvedValue(undefined),
-}));
-vi.mock('$lib/workflows/chat/memory-review', () => ({
-  startMemoryReview: vi.fn(),
-}));
 vi.mock('$lib/workflows/homeassistant/service', () => ({
   initHomeAssistantService: vi.fn(),
 }));

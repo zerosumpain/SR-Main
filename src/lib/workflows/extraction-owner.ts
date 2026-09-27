@@ -1,5 +1,4 @@
 export type WorkflowOwner = 'main' | 'workflows';
-export type JkaiCoreOwner = 'main' | 'core';
 function configuredOwner<T extends string>(
   value: string | undefined,
   key: string,
@@ -11,8 +10,4 @@ function configuredOwner<T extends string>(
 }
 export function workflowOwner(env: NodeJS.ProcessEnv = process.env): WorkflowOwner {
   return configuredOwner(env.SR_WORKFLOWS_OWNER, 'SR_WORKFLOWS_OWNER', ['main', 'workflows']);
-}
-
-export function jkaiCoreOwner(env: NodeJS.ProcessEnv = process.env): JkaiCoreOwner {
-  return configuredOwner(env.SR_JKAI_CORE_OWNER, 'SR_JKAI_CORE_OWNER', ['main', 'core']);
 }

@@ -15,7 +15,6 @@ import { startConnectorWatch, stopConnectorWatch } from '$lib/connectors/watch';
 // jkai-builder.service). Build-control routes call it over the Unix socket
 // via $lib/jkai/builder-client. Phase 3 of jkai-build-rewrite.md in the Drive
 // archive linked from docs/README.md.
-import { startOrphanSweep } from '$lib/jkai/media/sweep';
 // Side-effect import: every integration adapter registers itself on load.
 // The barrel is maintained by the node-builder codegen.
 import '$lib/integrations/adapters';
@@ -39,10 +38,9 @@ import { isRedirect, redirect, type Handle } from '@sveltejs/kit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { env } from '$env/dynamic/private';
 import { runsService } from '$lib/workflows/service-role';
-import { workflowOwner, jkaiCoreOwner } from '$lib/workflows/extraction-owner';
+import { workflowOwner } from '$lib/workflows/extraction-owner';
 
 const mainOwnsWorkflows = workflowOwner() === 'main';
-const mainOwnsJkaiCore = jkaiCoreOwner() === 'main';
 
 /**
  * The rate-limit decision, shared by the owner gate and the native device lanes.
@@ -152,13 +150,10 @@ if (runsService('scheduler')) startHealthWatch();
 // a Gmail token that died at 07:40 go unnoticed for 23 hours.
 if (runsService('scheduler')) startConnectorWatch();
 
-// Start the JKAI orphan attachment sweep (runs immediately + hourly)
-if (runsService('background') && mainOwnsJkaiCore) startOrphanSweep();
-
-// Install the WhatsApp escalation hook so orchestrator waiters / terminal
-// events fan out to WA when the user isn't attached to the chat stream.
-import { installWaEscalation } from '$lib/workflows/chat/wa-escalation';
-if (runsService('background') && mainOwnsJkaiCore) installWaEscalation();
+// The JKAI orphan-attachment sweep, WhatsApp escalation, the Drive
+// Intelligence outbox drain and the nightly intel engine all run in
+// SR-Jkai-Core now. Main's copies only ever started under
+// SR_JKAI_CORE_OWNER=main and were retired with that rollback switch.
 
 // Start the heartbeat engine — periodic autonomous activities (chat
 // continuation, build/job nudges, workflow review). Tickers are configured
@@ -184,7 +179,6 @@ if (runsService('background')) startScheduledEngine().catch((err) => {
 // one idle-cycle scheduler instead of two. Neither belongs in the jkai-builder
 // sidecar process.
 import { startDatastoreReaper, stopDatastoreReaper } from '$lib/datastore';
-import { startDriveIntelOutbox, stopDriveIntelOutbox } from '$lib/jkai/intel/drive-outbox';
 import { startSelfImprovementSeeds } from '$lib/selfimprove/engine';
 import { startVoiceDrift } from '$lib/voice/drift-engine';
 // Nightly workflow doctor — triages node_executions failures, quarantines
@@ -195,10 +189,6 @@ import { startVoiceDrift } from '$lib/voice/drift-engine';
 import { startWorkflowDoctor, stopWorkflowDoctor } from '$lib/workflowdoctor/engine';
 import { startBriefingEngine, stopBriefingEngine } from '$lib/briefing/engine';
 import { startModelRouting, stopModelRouting } from '$lib/routing/engine';
-// Nightly intel maintenance: confidence scores, watchlist diffs, live-query
-// lenses. Each of those had a batch half nothing was calling — a watchlist that
-// only diffs when you open its endpoint is not a watchlist.
-import { startIntelEngine, stopIntelEngine } from '$lib/jkai/intel/engine';
 // Research runs whose worker was lost. Worker state is process-local and
 // `startResearch` is fire-and-forget, so a deploy landing mid-run used to strand
 // the session permanently — seven of thirty-one production sessions were stuck
@@ -213,17 +203,12 @@ if (!building) {
 }
 if (runsService('background')) {
   startDatastoreReaper();
-  // Drains what Drive hands Intelligence. A no-op until Drive is its own
-  // application — while both live here, Drive still calls these functions
-  // directly and the table stays empty.
-  if (mainOwnsJkaiCore) startDriveIntelOutbox();
   startSelfImprovementSeeds();
   // Monthly, advisory only — it writes a note and never touches the card.
   startVoiceDrift();
   startWorkflowDoctor();
   startBriefingEngine();
   startModelRouting();
-  if (mainOwnsJkaiCore) startIntelEngine();
   /**
    * Deliberately delayed, then repeated.
    *
@@ -279,12 +264,10 @@ async function gracefulShutdown() {
   stopDependencyMonitor();
   stopHealthWatch();
   stopDatastoreReaper();
-    stopDriveIntelOutbox();
   stopWorkflowDoctor();
   stopBriefingEngine();
   stopConnectorWatch();
   stopModelRouting();
-  stopIntelEngine();
   process.exit(0);
 }
 

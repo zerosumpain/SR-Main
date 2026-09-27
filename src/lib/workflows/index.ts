@@ -100,11 +100,8 @@ import { getWhatsAppService } from './whatsapp/service';
 import { ownerPhone } from '$lib/config/owner';
 import { registerNotificationChannel } from '$lib/server/notify';
 import { OrchestratorBridge } from './whatsapp/orchestrator-bridge';
-import { syncPrompts } from './prompts/loader';
-import { loadCustomTools } from './site-tools/custom-tool-loader';
-import { startMemoryReview } from './chat/memory-review';
 import { startScheduler } from './scheduler';
-import { workflowOwner, jkaiCoreOwner } from './extraction-owner';
+import { workflowOwner } from './extraction-owner';
 import { startReaper, initEventLoopMonitor, startBlockReporter } from './engine-runtime';
 import { db } from '$lib/db';
 import { whatsappConfig, homeAssistantConfig } from '$lib/db/schema';
@@ -375,20 +372,6 @@ async function bootHomeAssistant() {
 }
 
 if (runsService('homeassistant')) bootHomeAssistant();
-
-if (runsService('background') && jkaiCoreOwner() === 'main') {
-  syncPrompts().catch((err: unknown) => {
-    const msg = err instanceof Error ? err.message : 'Unknown error';
-    console.error('[prompts] Sync failed:', msg);
-  });
-
-  loadCustomTools().catch((err: unknown) => {
-    const msg = err instanceof Error ? err.message : 'Unknown error';
-    console.error('[custom-tools] Load failed:', msg);
-  });
-
-  startMemoryReview();
-}
 
 // Bring every workflow into canvas shape before the scheduler takes
 // a fresh snapshot. Idempotent — no-ops on a clean DB.

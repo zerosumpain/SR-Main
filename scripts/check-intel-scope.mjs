@@ -45,9 +45,6 @@ export const MAINTENANCE = {
     'Pure type module for the analysed graph; the intel table names appear only in comments.',
   'src/lib/jkai/intel/domains.ts':
     'Pure source-to-domain mapping; `intel_notes.source` appears only in a comment.',
-  'src/lib/jkai/intel/entity-query.ts':
-    'Pure URL parsing and types for the entities index (client-safe); the reader is ' +
-    'entity-query.server.ts, which is scoped. `intel_notes` appears only in a comment.',
   'src/lib/jkai/intel/staleness.ts':
     'Pure recency and relevance maths; the intel table names appear only in comments.',
   'src/lib/jkai/intel/provenance.ts':
@@ -91,15 +88,6 @@ export const MAINTENANCE = {
     'Not a table reader: tool NAMES (\'intel_insights\' etc.) in switch cases that summarise results.',
   'src/lib/workflows/site-tools/keyword-classifier.ts':
     'Not a table reader: tool NAMES (\'intel_insights\' etc.) in a comment beside a toolset pattern.',
-  // Task 13 — maintenance that spans every space and returns only counts.
-  'src/lib/mail-index/store.ts':
-    'Passage indexing is per note, like embeddings (spec §2): backfillMailIndex indexes every ' +
-    'admitted thread that has no chunks and pruneUnadmittedMail drops unadmitted ones; both return ' +
-    'counts. The reader is mail-index/search.ts, which is scoped.',
-  // Task 14 — the nightly engine's one direct read.
-  'src/lib/jkai/intel/engine.ts':
-    'activeSpaces lists the distinct space ids in intel_entities (never row content) so each ' +
-    'per-space stage can run inside one space; the stages it calls each apply that space.',
 };
 
 export function classify(files, baseline, maintenance) {
