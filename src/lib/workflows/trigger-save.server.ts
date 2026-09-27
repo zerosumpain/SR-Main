@@ -1,7 +1,6 @@
 import { db } from '$lib/db';
 import { workflows, workflowNodes, workflowSchedules } from '$lib/db/schema';
 import { and, eq } from 'drizzle-orm';
-import { registerCronJob, unregisterCronJob } from '$lib/workflows/scheduler';
 import { recordAudit } from '$lib/canvas/audit';
 import { getWebhookSecret, type TriggerLike } from '$lib/workflows/webhook-secret';
 import { canonicalEventType, isKnownEventType } from '$lib/events/catalogue';
@@ -27,8 +26,7 @@ import { normaliseFilter } from '$lib/events/filter';
  *                                            configured without hitting
  *                                            workflows.trigger directly.
  *
- * Live-registers or un-registers cron jobs so changes take effect
- * without a process restart.
+ * SR-Workflows reconciles the durable schedule changes within one minute.
  */
 export type TriggerKind = 'manual' | 'cron' | 'webhook' | 'event';
 
@@ -128,14 +126,7 @@ export async function saveWorkflowTrigger(
     .set({ trigger: triggerMetadata, updatedAt: new Date() })
     .where(eq(workflows.id, workflowId));
 
-  // 2. Clean up stale schedules for this workflow, live-unregister cron jobs
-  const oldSchedules = await db
-    .select()
-    .from(workflowSchedules)
-    .where(eq(workflowSchedules.workflowId, workflowId));
-  for (const s of oldSchedules) {
-    unregisterCronJob(s.id);
-  }
+  // 2. The Workflows worker reconciles schedule changes from the database.
   await db.delete(workflowSchedules).where(eq(workflowSchedules.workflowId, workflowId));
 
   // 3. Recreate schedules for cron / event
@@ -149,7 +140,6 @@ export async function saveWorkflowTrigger(
         enabled: true,
       })
       .returning();
-    registerCronJob({ id: sch.id, workflowId, config: sch.config });
   } else if (enabled && kind === 'event') {
     const cfg: Record<string, unknown> = { eventType };
     if (sourceWorkflowId) cfg.sourceWorkflowId = sourceWorkflowId;

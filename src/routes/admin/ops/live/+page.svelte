@@ -46,7 +46,7 @@
       heartbeatAt: string | null;
       pausedAtNodeId: string | null;
     }>;
-    cronJobs: Array<{ scheduleId: string; nextRunMs: number | null; paused: boolean }>;
+    cronJobs: Array<{ scheduleId: string; nextRunMs: number | null; paused: boolean }> | null;
     recentPulses: Array<{
       ts: number;
       jobId: string;
@@ -481,7 +481,7 @@
   <button class="lane-card" class:active={activeTab === 'background'} onclick={() => activeTab = 'background'}>
     <div class="lane-label">Background</div>
     <div class="lane-value">{live.activeRuns.length + live.orchestratorJobs.length}</div>
-    <div class="lane-meta">{live.cronJobs.length} cron · {live.engine.activeRuns}/{live.engine.cap} slots</div>
+    <div class="lane-meta">{live.cronJobs === null ? 'Scheduler unavailable' : `${live.cronJobs?.length ?? 0} cron`} · {live.engine.activeRuns}/{live.engine.cap} slots</div>
   </button>
   <button class="lane-card" class:active={activeTab === 'live'} onclick={() => activeTab = 'live'}>
     <div class="lane-label">Engine</div>

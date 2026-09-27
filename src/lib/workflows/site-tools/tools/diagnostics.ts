@@ -15,8 +15,10 @@ register({
   category: 'System Diagnostics',
   toolset: 'diagnostics',
   handler: async () => {
-    const { getActiveJobs } = await import('$lib/workflows/scheduler');
-    const activeJobs = getActiveJobs();
+    const { readWorkerStatus } = await import('$lib/workflows/worker-status.server');
+    const status = await readWorkerStatus();
+    if (!status.available) return { success: false, error: `Workflows worker status unavailable (${status.reason})` };
+    const activeJobs = new Map(status.snapshot.jobs.map(job => [job.scheduleId, job]));
 
     const schedules = await db
       .select({
@@ -44,7 +46,7 @@ register({
 
     const entries = schedules.map((s) => {
       const job = activeJobs.get(s.id);
-      const nextFire = job?.nextRun() ?? null;
+      const nextFire = job?.nextRunMs == null ? null : new Date(job.nextRunMs);
       const expression = (s.config as Record<string, unknown>)?.expression as string | undefined;
 
       return {

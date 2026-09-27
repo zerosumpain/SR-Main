@@ -1,3 +1,4 @@
+import { invokeWorkflowRuntime } from './runtime-client';
 import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { workflows, workflowRuns, nodeExecutions } from '$lib/db/schema';
@@ -269,59 +270,7 @@ export async function proveWorkflow(
   workflowId: string,
   opts: { fromNodeId?: string; input?: Record<string, unknown>; timeoutMs?: number } = {},
 ): Promise<WorkflowVerification> {
-  const graph = await loadDefinition(workflowId);
-  if (!graph) throw new TestRunError(404, 'Workflow not found');
-  const { runWorkflowVerification } = await import('./orchestrator');
-  // The canvas's chat panel is not a step (the engine skips it unwired), and its
-  // panel settings read to the linter as unknown keys on every canvas.
-  const steps = graph.nodes.filter((n) => n.type !== 'chat');
-  const ids = new Set(steps.map((n) => n.id));
-  const issues = runWorkflowVerification(steps, graph.edges.filter((e) => ids.has(e.sourceNodeId) && ids.has(e.targetNodeId)));
-  const errors = issues.filter((i) => i.severity === 'error');
-  const lint = {
-    errors: errors.length,
-    warnings: issues.length - errors.length,
-    issues: errors.slice(0, 5).map((i) => `"${i.nodeLabel}" ${i.field}: ${i.issue}`),
-  };
-  const none = { stubbed: [] as string[], pinned: [] as string[] };
-  if (errors.length > 0) {
-    return { lint, passed: false, testRun: { runId: null, status: 'skipped', error: 'not run: fix the lint errors first', ...none } };
-  }
-
-  const started = await startTestRun({ workflowId, input: opts.input, fromNodeId: opts.fromNodeId, label: 'proof-run' });
-  if (!started) throw new TestRunError(404, 'Workflow not found');
-  let timedOut = false;
-  if (!(await waitFor(started.done, opts.timeoutMs ?? PROOF_TIMEOUT_MS))) {
-    timedOut = true;
-    const { engine } = await import('$lib/workflows');
-    engine.cancelRun(started.runId);
-    await waitFor(started.done, 10_000);
-  }
-
-  const [run] = await db.select().from(workflowRuns).where(eq(workflowRuns.id, started.runId)).limit(1);
-  const execs = await db.select().from(nodeExecutions).where(eq(nodeExecutions.runId, started.runId));
-  const label = (id: string) => graph.nodes.find((n) => n.id === id)?.label ?? id;
-  const marked = (key: '_stubbed' | '_pinned') =>
-    execs.filter((e) => (e.outputData as Record<string, unknown> | null)?.[key] === true).map((e) => label(e.nodeId));
-  const failed = execs
-    .filter((e) => e.status === 'failed')
-    .sort((a, b) => (a.startedAt?.getTime() ?? 0) - (b.startedAt?.getTime() ?? 0))[0];
-  const status = timedOut ? 'timed_out' : run?.status ?? 'failed';
-  const failedNodeId = status === 'awaiting_human' ? run?.pausedAtNodeId ?? undefined : failed?.nodeId;
-  return {
-    lint,
-    passed: PASSING.has(status),
-    testRun: {
-      runId: started.runId,
-      status,
-      ...(failedNodeId ? { failedNode: label(failedNodeId) } : {}),
-      ...(status !== 'completed' && status !== 'awaiting_human'
-        ? { error: (failed?.error ?? run?.error ?? (timedOut ? `no result within ${Math.round((opts.timeoutMs ?? PROOF_TIMEOUT_MS) / 1000)}s` : '')).slice(0, 400) }
-        : {}),
-      stubbed: marked('_stubbed'),
-      pinned: marked('_pinned'),
-    },
-  };
+  return invokeWorkflowRuntime<WorkflowVerification>({ action: 'prove', workflowId, options: opts });
 }
 
 /**

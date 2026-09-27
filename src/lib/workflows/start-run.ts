@@ -1,3 +1,4 @@
+import { invokeWorkflowRuntime, decodeEngineResult, type RemoteStartedRun } from './runtime-client';
 import { createHash } from 'node:crypto';
 import { db } from '$lib/db';
 import { workflows, workflowNodes, workflowEdges, workflowRuns, workflowVersions, nodeExecutions } from '$lib/db/schema';
@@ -219,41 +220,15 @@ export interface StartedRun {
 }
 
 /**
- * Start a run: load and pin the definition, write the run row and its pending
- * node rows, then enqueue it (worker mode) or execute it in process. Returns
- * once the run exists; execution is NOT awaited — await `done` for that.
- * Null when the workflow no longer exists.
+ * Start through SR-Workflows. Live queued runs acknowledge their durable ID;
+ * test/child/draft operations await the owner result before returning a settled
+ * `done` promise. A missing workflow returns null; transport errors never fall back.
  */
 export async function startRun(opts: StartRunOptions): Promise<StartedRun | null> {
-  const definition = opts.definition ?? (await loadDefinition(opts.workflowId));
-  if (!definition) return null;
-  const input = opts.input ?? {};
-  const versionId = await pinVersion(opts.workflowId, definition);
-  // A child is awaited by its parent's node, so it always runs here — and so
-  // does a test run, whose pins and allowances live only in this call.
-  const workerMode = process.env.JKAI_RUN_WORKER === '1' && !opts.parentRunId && opts.mode !== 'test';
-  const runId = crypto.randomUUID();
-  await db.insert(workflowRuns).values({
-    id: runId,
-    workflowId: opts.workflowId,
-    status: workerMode ? 'pending' : 'running',
-    trigger: opts.trigger,
-    startedAt: new Date(),
-    inputData: input,
-    versionId,
-    parentRunId: opts.parentRunId ?? null,
-    mode: opts.mode ?? 'live',
+  const started = await invokeWorkflowRuntime<RemoteStartedRun | null>({
+    action: 'start', options: { ...opts, breakpoints: opts.breakpoints ? [...opts.breakpoints] : undefined },
   });
-  if (definition.nodes.length > 0) {
-    await db.insert(nodeExecutions).values(definition.nodes.map((n) => ({ runId, nodeId: n.id, status: 'pending' })));
-  }
-  if (workerMode) {
-    const { enqueue } = await import('./run-queue');
-    await enqueue(runId);
-    return { runId, status: 'pending', done: Promise.resolve(null) };
-  }
-  const done = executeRun({ ...opts, runId, definition, input });
-  return { runId, status: 'running', done };
+  return started ? { runId: started.runId, status: started.status, done: Promise.resolve(decodeEngineResult(started.result)) } : null;
 }
 
 /** An event, WhatsApp keyword or email started it: a trigger='event' run. */

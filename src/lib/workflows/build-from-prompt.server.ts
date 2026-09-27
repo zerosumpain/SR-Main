@@ -165,7 +165,7 @@ export async function buildInBackground(workflowId: string, prompt: string, give
     }
 
     // Lint the graph as saved — the same sweep workflow_generate ends with.
-    const issues = runWorkflowVerification(generated.nodes, generated.edges, generated.trigger);
+    const issues = await runWorkflowVerification(generated.nodes, generated.edges, generated.trigger);
     const errors = issues.filter((i) => i.severity === 'error');
     if (errors.length > 0) {
       const first = errors[0];
@@ -297,13 +297,8 @@ async function screenProposal(
  */
 export async function proposeAmendOps(workflowId: string, instruction: string): Promise<AmendProposal> {
   const { nodes, edges } = await loadGraph(workflowId);
-  const [{ registry }, { buildNodeGrounding, buildSiteToolCatalog }] = await Promise.all([
-    import('$lib/workflows'),
-    import('$lib/workflows/orchestrator/grounding'),
-  ]);
-  const catalog = await buildSiteToolCatalog().catch(() => '');
-  const nodeDocs = buildNodeGrounding(registry.listDefinitions(), []);
-  const grounding = catalog ? `${nodeDocs}\n\n${catalog}` : nodeDocs;
+  const { invokeWorkflowRuntime } = await import('./runtime-client');
+  const grounding = await invokeWorkflowRuntime<string>({ action: 'grounding' });
 
   const current = JSON.stringify(
     {

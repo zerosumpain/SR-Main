@@ -207,17 +207,7 @@ export async function quarantineRunaways(
         continue;
       }
 
-      // The DB flag is the durable truth — the scheduler re-reads it on boot —
-      // but the in-memory Cron keeps firing until the process restarts, and on
-      // the VPS that is the same process the doctor is running in. Lazy import:
-      // scheduler.ts pulls the whole engine, which must not enter this module's
-      // graph. A failure here is logged, not fatal: the row is already flipped.
-      try {
-        const { unregisterCronJob } = await import('$lib/workflows/scheduler');
-        unregisterCronJob(runaway.scheduleId);
-      } catch (err) {
-        console.error('[workflowdoctor] unregisterCronJob failed:', errMsg(err));
-      }
+      // The Workflows worker reconciles this durable schedule change.
 
       const subject = runaway.canvasSlug ?? runaway.workflowName;
       const symptom = `${runaway.consecutiveFailures} runs in a row failed, none succeeded`;
@@ -293,12 +283,7 @@ export async function releaseQuarantine(scheduleId: string): Promise<boolean> {
     .returning({ id: workflowSchedules.id });
   if (rows.length === 0) return false;
 
-  try {
-    const { reloadSchedule } = await import('$lib/workflows/scheduler');
-    await reloadSchedule(scheduleId);
-  } catch (err) {
-    console.error('[workflowdoctor] reloadSchedule failed:', errMsg(err));
-  }
+  // The Workflows worker reconciles this durable schedule change.
   return true;
 }
 
