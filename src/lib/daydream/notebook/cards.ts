@@ -156,7 +156,7 @@ export async function weaveNote(noteId: string): Promise<
     if (job && jobHash === contentHash) {
       if (job.state === 'pending') return { status: 'queued' };
       if (job.state === 'done') {
-        const out = job.result ?? {};
+        const out: { status?: string; noteId?: string | null; entityCount?: number } = job.result ?? {};
         if (out.status === 'extracted' && out.noteId) {
           await markWoven(note.id, out.noteId);
           return { status: 'woven', noteId: out.noteId, entityCount: out.entityCount ?? 0 };
