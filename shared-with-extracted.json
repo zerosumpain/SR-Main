@@ -13,10 +13,6 @@
       "peer": "zerosumpain/SR-Drive",
       "sha256": "81dafdf78991e04f61978feb477b6dfb0cfc74f3a0609c8ea6f3e737c72f41b2"
     },
-    "src/lib/file-serving.ts": {
-      "peer": "zerosumpain/SR-Drive",
-      "sha256": "a849615e5e96eab3a20a9c562b79756042911142516d771d5dcb59a404f295b5"
-    },
     "src/lib/jkai/intel/source-policy.ts": {
       "peer": "zerosumpain/SR-Drive",
       "sha256": "45cc2038dce4518471b10ab5b92e0d91c798e8015a63b002d47e575bd3a489ce"
@@ -48,10 +44,6 @@
     "src/lib/file-index/hash.ts": {
       "peer": "zerosumpain/SR-Drive",
       "sha256": "1d244d37cedac5425d1af7e9290c6e5b691d677af303d9ad875cfd018e4dd1d2"
-    },
-    "src/lib/file-index/index-status.ts": {
-      "peer": "zerosumpain/SR-Drive",
-      "sha256": "dfd93ebb55be2e9c409cda2c4c29aa51eeccc760cf833417e0fae8b1cf349ab8"
     },
     "src/lib/file-index/jkai-mirror.ts": {
       "peer": "zerosumpain/SR-Drive",

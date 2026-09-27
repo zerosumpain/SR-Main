@@ -92,9 +92,6 @@ export const MAINTENANCE = {
   'src/lib/workflows/site-tools/keyword-classifier.ts':
     'Not a table reader: tool NAMES (\'intel_insights\' etc.) in a comment beside a toolset pattern.',
   // Task 13 — maintenance that spans every space and returns only counts.
-  'src/lib/news/relabel.ts':
-    'Whole-table maintenance relabel (secret-authorised backfill route): moves kept news from ' +
-    'source \'web\' to \'news\' in every space by its newsKey; returns a count.',
   'src/lib/mail-index/store.ts':
     'Passage indexing is per note, like embeddings (spec §2): backfillMailIndex indexes every ' +
     'admitted thread that has no chunks and pruneUnadmittedMail drops unadmitted ones; both return ' +

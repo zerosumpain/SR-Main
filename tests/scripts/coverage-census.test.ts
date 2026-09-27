@@ -29,7 +29,9 @@
  *     src/lib/jkai/chat/members.integration.test.ts: members of every level
  *     through the real chat routes, page load and turn cap. Daydream P4
  *     (2026-09-26) removed four with the engine they exercised: the detector
- *     snapshot, the hypothesis lifecycle + live board, and the sweep.
+ *     snapshot, the hypothesis lifecycle + live board, and the sweep. Intel
+ *     basics M1 (2026-09-27) removed two whose subjects were unreachable:
+ *     src/lib/news/relabel and src/lib/rag/pipeline.
  *
  *   - tests/e2e/ holds two Playwright specs and package.json has a `test:e2e`
  *     script, but NO workflow invokes it. The lane was written because
@@ -55,7 +57,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
  * RAISING THIS NUMBER IS A DECISION, not a formality: every file added here is
  * a file no pull request will ever execute.
  */
-const INTEGRATION_FILES = 38;
+const INTEGRATION_FILES = 36;
 
 function tracked(pattern: string): string[] {
 	return execFileSync('git', ['ls-files', pattern], { cwd: ROOT, encoding: 'utf8' })

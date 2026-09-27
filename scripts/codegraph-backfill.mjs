@@ -450,9 +450,9 @@ function edgesFrom(events) {
 const PATH_RE = /(?:^|[\s`'"(\[])((?:src|scripts|packages|static|docs|tests|field-study-system|\.github)\/[A-Za-z0-9_\-./\[\]]+\.[A-Za-z0-9]{1,6})/g;
 
 // ---------------------------------------------------------------------------
-// Citation resolution. Mirrors src/lib/codegraph/citations.ts — duplicated for
-// the same reason as the fingerprint and import rules above (plain node, no TS
-// build step), and pinned by citations.test.ts, which asserts the same cases.
+// Citation resolution. Its TypeScript twin (src/lib/codegraph/citations.ts)
+// and the test that pinned both were retired as unreachable on 2026-09-27;
+// this plain-node copy is now the only one.
 //
 // 117 of 277 notes cite no full path, so before these lanes existed they were
 // linked to no node and unreachable from any file seed. They are not vague:
@@ -569,9 +569,9 @@ function lessonsFromMemory(tracked) {
 // The behavioural edges (co_change, needs_context) only exist where a session
 // happened to touch two files together, which left half the graph isolated and
 // the layout with nothing to cluster on. `import` is exact, directional and
-// dense, and needs no history at all. Mirrors src/lib/codegraph/imports.ts —
-// duplicated because this script is plain node with no TS build step, and the
-// resolution rules are pinned by imports.test.ts.
+// dense, and needs no history at all. Its TypeScript twin
+// (src/lib/codegraph/imports.ts) and the test that pinned it were retired as
+// unreachable on 2026-09-27; this plain-node copy is now the only one.
 // ---------------------------------------------------------------------------
 const IMPORT_RE = /(?:^|\n)\s*(?:import|export)\s[^'"\n]*?from\s*['"]([^'"]+)['"]|(?:^|[^\w.])import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 const EXTS = ['.ts', '.js', '.svelte', '.mjs', '.svelte.ts', '.json'];
@@ -604,8 +604,8 @@ function subjectOfTest(path, exists) {
   const m = path.match(/^(.*)\.(test|spec)\.([tj]sx?)$/);
   if (!m) return null;
   const [, stem, , ext] = m;
-  // Qualified names — `x.diagnostics.test.ts` covers `x.ts`. Mirrors
-  // src/lib/codegraph/imports.ts; 91 of 342 test files need it.
+  // Qualified names — `x.diagnostics.test.ts` covers `x.ts`. 91 of 342
+  // test files need it.
   let s = stem;
   while (s) {
     for (const c of [`${s}.${ext}`, `${s}.svelte`, `${s}.ts`, `${s}.js`]) if (exists.has(c)) return c;
