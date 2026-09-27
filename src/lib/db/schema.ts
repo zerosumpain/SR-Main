@@ -5871,42 +5871,6 @@ export const daydreamObservations = pgTable(
 export type DaydreamObservation = typeof daydreamObservations.$inferSelect;
 
 /**
- * Sweep findings, persisted.
- *
- * The sweep used to write its survivors onto the heartbeat pulse and nowhere
- * else, so a correlation that cleared the correction reached ponder, compose
- * and the proposer never — discovery had no consumer. One row per surviving
- * pair per sweep day; the pulse still carries the same summary.
- */
-export const daydreamSweepFindings = pgTable(
-  'daydream_sweep_findings',
-  {
-    id: serial('id').primaryKey(),
-    subject: text('subject').notNull().default('john'),
-    /** Local day the sweep ran, `YYYY-MM-DD`. */
-    day: date('day').notNull(),
-    /** Signal keys, as the registry names them. */
-    a: text('a').notNull(),
-    b: text('b').notNull(),
-    aLabel: text('a_label'),
-    bLabel: text('b_label'),
-    lagDays: integer('lag_days').notNull().default(0),
-    r: doublePrecision('r').notNull(),
-    p: doublePrecision('p').notNull(),
-    qValue: doublePrecision('q_value').notNull(),
-    n: integer('n').notNull(),
-    windowDays: integer('window_days').notNull().default(120),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    uniqueIndex('daydream_sweep_findings_key_idx').on(t.subject, t.day, t.a, t.b, t.lagDays),
-    index('daydream_sweep_findings_day_idx').on(t.day),
-  ],
-);
-
-export type DaydreamSweepFinding = typeof daydreamSweepFindings.$inferSelect;
-
-/**
  * What daydreaming could not do, kept.
  *
  * Every failure site used to name its failure on the pulse and forget it.
@@ -6170,62 +6134,6 @@ export const daydreamHypotheses = pgTable(
   ],
 );
 
-/** Immutable assessment snapshots; the hypothesis row holds only the latest result. */
-export const daydreamHypothesisAssessments = pgTable(
-  'daydream_hypothesis_assessments',
-  {
-    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
-    hypothesisId: text('hypothesis_id').notNull().references(() => daydreamHypotheses.id, { onDelete: 'cascade' }),
-    assessedAt: timestamp('assessed_at', { withTimezone: true }).notNull(),
-    phase: text('phase').notNull(),
-    verdict: text('verdict').notNull(),
-    summary: text('summary').notNull(),
-    windowDays: integer('window_days').notNull(),
-    r: doublePrecision('r').notNull(),
-    pValue: doublePrecision('p_value').notNull(),
-    qValue: doublePrecision('q_value').notNull(),
-    pairs: integer('pairs').notNull(),
-    familySize: integer('family_size').notNull(),
-    fdr: doublePrecision('fdr').notNull(),
-    evidence: jsonb('evidence').notNull(),
-  },
-  (t) => [index('daydream_assessments_hypothesis_idx').on(t.hypothesisId, t.assessedAt)],
-);
-
-/**
- * Things John has asked it to look into.
- *
- * The only owner-authored text this engine could previously read was a place
- * name. There was no way to say "look at what I'm spending at weekends", and
- * so no way for his priorities to reach a system whose entire job is deciding
- * what he'd find interesting.
- *
- * A steer REORDERS work. It grants no new access whatsoever: the proposer still
- * sees only the metric catalogue, and a steer becomes at most a sentence of
- * emphasis in its prompt. That boundary is deliberate and load-bearing — free
- * text from a chat box that could widen what a model may read is an injection
- * surface, and this one cannot, by construction.
- */
-export const daydreamSteers = pgTable(
-  'daydream_steers',
-  {
-    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
-    subject: text('subject').notNull().default('john'),
-    /** What he typed, verbatim. Rendered back to him; never executed. */
-    text: text('text').notNull(),
-    /** 'active' | 'done' | 'dropped'. */
-    status: text('status').notNull().default('active'),
-    /** How many proposal batches have been run under this steer, so one that
-     *  has shaped a fortnight of questions and produced nothing is visible. */
-    batchesInfluenced: integer('batches_influenced').notNull().default(0),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [index('daydream_steers_status_idx').on(t.status)],
-);
-
-export type DaydreamSteer = typeof daydreamSteers.$inferSelect;
-
 /**
  * One card a morning: everything it thought yesterday, including the quiet parts.
  *
@@ -6483,41 +6391,6 @@ export const daydreamCalendarExclusions = pgTable(
 
 export type DaydreamCalendarExclusion = typeof daydreamCalendarExclusions.$inferSelect;
 export type NewDaydreamCalendarExclusion = typeof daydreamCalendarExclusions.$inferInsert;
-
-/**
- * One step of thinking, kept.
- *
- * The reviewable trace. Without it "the model explored during idle time" is an
- * unfalsifiable claim and a token bill; with it there is a record of what it
- * looked at, what it decided, and what that cost — which is the only way an
- * exploration loop can be audited rather than trusted.
- *
- * Deliberately append-only and pruned by age, not by interest. Keeping only
- * the steps that led somewhere would make the trace agree with the conclusion.
- */
-export const daydreamLeadSteps = pgTable(
-  'daydream_lead_steps',
-  {
-    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
-    leadId: text('lead_id').notNull(),
-    round: integer('round').notNull(),
-    /** 'plan' | 'spawn' | 'read' | 'judge' | 'prune'. */
-    kind: text('kind').notNull(),
-    /** What happened, in one deterministic line. */
-    note: text('note').notNull(),
-    /** Structured detail — hypothesis ids, verdicts, the numbers behind a
-     *  pruning decision. */
-    detail: jsonb('detail').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
-    tokens: integer('tokens').notNull().default(0),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    index('daydream_lead_steps_lead_idx').on(t.leadId, t.round),
-    index('daydream_lead_steps_created_idx').on(t.createdAt),
-  ],
-);
-
-export type DaydreamLeadStep = typeof daydreamLeadSteps.$inferSelect;
 
 export type DaydreamSpend = typeof daydreamSpend.$inferSelect;
 
@@ -6954,109 +6827,6 @@ export const daydreamNotebookAudio = pgTable(
 
 export type DaydreamNoteAudio = typeof daydreamNotebookAudio.$inferSelect;
 
-
-export const daydreamOffers = pgTable(
-  'daydream_offers',
-  {
-    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
-    /** The BRAND, as a person would say it — "Sports Direct", not
-     *  "email.sportsdirect.com". It has to match a place label to be useful. */
-    merchant: text('merchant').notNull(),
-    /** One line, as it would be read back. */
-    summary: text('summary').notNull(),
-    /** Discount code, when the email carried one. */
-    code: text('code'),
-    /** Null when the email stated no date — NOT a synonym for "no expiry". */
-    expiresAt: timestamp('expires_at', { withTimezone: true }),
-    /** 'high' | 'medium' | 'low' — the extractor's own confidence. Anything
-     *  below high is never used to interrupt, only to fill the page. */
-    confidence: text('confidence').notNull().default('medium'),
-    /** The intel note this came from, so a thought can cite it. */
-    noteId: text('note_id'),
-    /** Deep link back to the message in Gmail. */
-    sourceUrl: text('source_url'),
-    senderDomain: text('sender_domain'),
-    /** merchant + code + expiry day. Stops the same voucher landing twice when
-     *  a merchant re-sends it, which they all do. */
-    dedupeKey: text('dedupe_key').notNull(),
-    /** 'active' | 'expired' | 'dismissed' */
-    status: text('status').notNull().default('active'),
-    observedAt: timestamp('observed_at', { withTimezone: true }),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    uniqueIndex('daydream_offers_dedupe_idx').on(t.dedupeKey),
-    index('daydream_offers_status_idx').on(t.status),
-    index('daydream_offers_merchant_idx').on(t.merchant),
-    index('daydream_offers_expires_idx').on(t.expiresAt),
-  ],
-);
-
-export type DaydreamOffer = typeof daydreamOffers.$inferSelect;
-export type NewDaydreamOffer = typeof daydreamOffers.$inferInsert;
-
-/**
- * Rules a model proposed, and what happened to them.
- *
- * The mesh between rules-driven and model-driven: the model authors the RULE,
- * deterministic code evaluates it. `spec` is a validated expression tree over a
- * fixed allow-list of scalar facts — never code, never `eval`, and never able
- * to name anything the fact extractor did not put in front of it.
- *
- * Nothing here fires until `status = 'active'`, and only the owner moves a rule
- * there. A proposal that survives validation and backtesting is still only a
- * proposal; the self-improvement engine auto-enables what it builds, and that
- * is defensible for a tool nobody is interrupted by. This one buzzes a phone.
- */
-export const daydreamRules = pgTable(
-  'daydream_rules',
-  {
-    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
-    /** Becomes the thought `kind`, so it is also the mute key and the weight key. */
-    kind: text('kind').notNull(),
-    /** The validated RuleSpec. See $lib/daydream/rules/spec.ts. */
-    spec: jsonb('spec').$type<Record<string, unknown>>().notNull(),
-    /** 'proposed' | 'active' | 'rejected' | 'deprecated' */
-    status: text('status').notNull().default('proposed'),
-    /** Why the model proposed it, in its own words. Shown to the owner when
-     *  approving; never shown to the composer, which must work from evidence. */
-    rationale: text('rationale').notNull().default(''),
-    /** 'new' | 'tweak' | 'deprecate' — what the model was doing. */
-    proposalKind: text('proposal_kind').notNull().default('new'),
-    /** For a tweak or a deprecation, the rule it is about. */
-    supersedesId: text('supersedes_id'),
-
-    // ── Backtest ──
-    /** How many times it would have fired over the replayed window. */
-    backtestFires: integer('backtest_fires'),
-    backtestDays: integer('backtest_days'),
-    /**
-     * True when the replay could not reconstruct every fact the rule uses, so
-     * the firing count is a LOWER BOUND. Such a rule can never be auto-anything
-     * — an under-estimate is the dangerous direction for a noise check.
-     */
-    backtestLowerBound: boolean('backtest_lower_bound').notNull().default(false),
-    backtestNote: text('backtest_note'),
-
-    // ── Outcome, once live ──
-    firedCount: integer('fired_count').notNull().default(0),
-    usefulCount: integer('useful_count').notNull().default(0),
-    notUsefulCount: integer('not_useful_count').notNull().default(0),
-
-    decidedAt: timestamp('decided_at', { withTimezone: true }),
-    decidedBy: text('decided_by'),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    uniqueIndex('daydream_rules_kind_idx').on(t.kind),
-    index('daydream_rules_status_idx').on(t.status),
-  ],
-);
-
-export type DaydreamRule = typeof daydreamRules.$inferSelect;
-export type NewDaydreamRule = typeof daydreamRules.$inferInsert;
 
 // ---------------------------------------------------------------------------
 
