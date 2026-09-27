@@ -1,3 +1,4 @@
+import { isShowcase } from '$lib/server/showcase';
 import type { PageServerLoad } from './$types';
 import { getSetting } from '$lib/server/models/settings';
 import { loadKeys } from '$lib/llm/keys';
@@ -44,7 +45,10 @@ async function probeCodexBridge(): Promise<CodexBridgeHealth> {
   }
 }
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async (event) => {
+  // Showcase ($lib/server/showcase): the bridge's error text can name its
+  // loopback address, so a visitor sees only up/down.
+  const showcase = await isShowcase(event);
   const [chatDefault, alt, orKey, lastRefreshed, [{ count }], codexEnabled, codexHealth] =
     await Promise.all([
     getSetting<{ modelId?: string }>('jkai.chat.default_model'),
@@ -72,7 +76,7 @@ export const load: PageServerLoad = async () => {
     lastRefreshed,
     codex: {
       enabled: codexEnabled,
-      health: codexHealth,
+      health: showcase ? { ...codexHealth, error: codexHealth.error ? 'unavailable' : null } : codexHealth,
       modelCount: (await listCodexModels()).length,
     },
   };

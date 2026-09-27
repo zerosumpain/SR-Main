@@ -155,11 +155,12 @@ export const AREAS: readonly AreaInfo[] = [
   },
   {
     // A read-only tour of the admin pages that hold nothing personal and no
-    // secrets. Closed until each page on it is redacted and GET-only.
+    // secrets: each page's load redacts for a non-owner ($lib/server/showcase),
+    // and ROUTES opens them for GET only, so every save and action stays his.
     id: 'admin',
     label: 'Admin showcase',
     blurb: 'Browse the admin pages read-only, to see how the site runs: nothing personal, no secrets, no edits.',
-    open: false,
+    open: true,
     levels: { self: 'Browse the showcase', all: 'Same as self', admin: 'Same as self' },
   },
 ];
@@ -400,6 +401,25 @@ const ROUTES: Record<string, Partial<Record<Method, Permission>>> = {
   '/home/devices': { GET: 'home:self' },
   '/home/echoes': { GET: 'home:all' },
   '/home/voice': { GET: 'home:all' },
+
+  // ── admin — the showcase: GET only, and only pages whose load redacts for a
+  // non-owner ($lib/server/showcase). Never a prefix: credentials, the
+  // allow-list, security posture, the estate map, costs, the live feed and
+  // datastore records sit in the same tree and stay owner-only. Every form
+  // action and API write is a POST/PUT/PATCH/DELETE, so none is opened.
+  '/admin': { GET: 'admin:self' },
+  '/admin/content/blog': { GET: 'admin:self' },
+  '/admin/content/hero': { GET: 'admin:self' },
+  '/admin/content/voice': { GET: 'admin:self' },
+  '/admin/connections/catalog': { GET: 'admin:self' },
+  '/admin/ai/keys': { GET: 'admin:self' },
+  '/admin/ai/models': { GET: 'admin:self' },
+  '/admin/ai/model-routing': { GET: 'admin:self' },
+  '/admin/ai/tools': { GET: 'admin:self' },
+  '/admin/ai/approvals': { GET: 'admin:self' },
+  '/admin/ops/tool-usage': { GET: 'admin:self' },
+  // The model browser on /admin/ai/models: OpenRouter's public catalogue.
+  '/api/admin/models/openrouter': { GET: 'admin:self' },
 
   '/news': { GET: 'news:self' },
   '/news/[source]/[id]': { GET: 'news:self' },

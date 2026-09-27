@@ -1,9 +1,10 @@
 <script lang="ts">
   import { page } from '$app/state';
 
-  import { activeSection, isItemActive } from './admin-nav';
+  import { activeSection, isItemActive, reachableSections } from './admin-nav';
 
-  const section = $derived(activeSection(page.url.pathname));
+  const sections = $derived(reachableSections(page.data.isOwner ? null : ((page.data.navReach as string[] | undefined) ?? [])));
+  const section = $derived(activeSection(page.url.pathname, sections));
 </script>
 
 {#if section && section.items.length > 0}

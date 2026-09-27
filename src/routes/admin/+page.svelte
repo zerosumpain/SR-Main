@@ -33,17 +33,23 @@
        below this line is a number the site computed about itself, and all of it
        is meaningless if homeserv has fallen over. Fetches after mount, so it
        costs the console's load time nothing. -->
-  <HostStatusStrip />
+  <!-- Showcase: no host strip (tailnet addresses) and no dependency panel (its
+       GET can start a network check). The owner sees both as before. -->
+  {#if !data.showcase}
+    <HostStatusStrip />
 
-  <DependencyStatusPanel />
+    <DependencyStatusPanel />
+  {/if}
 
   <!-- Top stat strip -->
   <div class="stat-grid">
-    <div class="stat-card">
-      <div class="stat-card-label">Today's Spend</div>
-      <div class="stat-card-value">${data.agent.todayCost.toFixed(4)}</div>
-      <div class="stat-card-meta">across {data.agent.todayActions} calls</div>
-    </div>
+    {#if data.agent.todayCost !== null}
+      <div class="stat-card">
+        <div class="stat-card-label">Today's Spend</div>
+        <div class="stat-card-value">${data.agent.todayCost.toFixed(4)}</div>
+        <div class="stat-card-meta">across {data.agent.todayActions} calls</div>
+      </div>
+    {/if}
     <div class="stat-card">
       <div class="stat-card-label">Custom Tools</div>
       <div class="stat-card-value">{data.tools.enabled}<span class="muted-suffix">/{data.tools.total}</span></div>

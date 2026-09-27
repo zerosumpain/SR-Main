@@ -120,11 +120,29 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 ];
 
 /** The section owning a given path (non-overview matched first so /admin exact-only). */
-export function activeSection(path: string): AdminSection | undefined {
+export function activeSection(path: string, sections: readonly AdminSection[] = ADMIN_SECTIONS): AdminSection | undefined {
   return (
-    ADMIN_SECTIONS.find((s) => s.id !== 'overview' && s.match(path)) ??
-    ADMIN_SECTIONS.find((s) => s.match(path))
+    sections.find((s) => s.id !== 'overview' && s.match(path)) ??
+    sections.find((s) => s.match(path))
   );
+}
+
+/**
+ * The sections a visitor may open. `reach` is null for the owner (everything);
+ * for an admin-showcase visitor it is the pages their grants open
+ * (`reachablePages`), so the strip offers exactly those, each section leading
+ * to its first reachable page, and a section with none is not offered at all.
+ */
+export function reachableSections(reach: readonly string[] | null): AdminSection[] {
+  if (!reach) return ADMIN_SECTIONS;
+  const can = new Set(reach);
+  const out: AdminSection[] = [];
+  for (const s of ADMIN_SECTIONS) {
+    const items = s.items.filter((i) => can.has(i.href));
+    if (items.length > 0) out.push({ ...s, href: items[0].href, items });
+    else if (s.items.length === 0 && can.has(s.href)) out.push(s);
+  }
+  return out;
 }
 
 export function isSectionActive(section: AdminSection, path: string): boolean {

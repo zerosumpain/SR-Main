@@ -28,17 +28,17 @@ describe('effectivePermissions', () => {
     expect([...effectivePermissions({ role: 'member', groups: [], grants: [] }, groups)]).toEqual(['jkai.intel:self']);
   });
 
-  it('holds only grants of open areas — workflows and the admin showcase are closed until built', async () => {
+  it('holds only grants of open areas — workflows is closed until built', async () => {
     // effectivePermissions drops a grant whose area is closed (isOpenPermission):
     // a tick at /admin/access for a closed area is stored but never held, so it
     // cannot open anything before the area's scoping ships.
     const { AREAS } = await import('$lib/access/catalogue');
-    expect(AREAS.filter((a) => !a.open).map((a) => a.id)).toEqual(['workflows', 'admin']);
+    expect(AREAS.filter((a) => !a.open).map((a) => a.id)).toEqual(['workflows']);
     const got = effectivePermissions(
       { role: 'guest', groups: [], grants: ['drive:admin', 'research:self', 'health:all', 'workflows:self', 'admin:self'] },
       groups,
     );
-    expect([...got].sort()).toEqual(['drive:admin', 'health:all', 'research:self']);
+    expect([...got].sort()).toEqual(['admin:self', 'drive:admin', 'health:all', 'research:self']);
   });
 
   it('gives a guest with nothing nothing', () => {

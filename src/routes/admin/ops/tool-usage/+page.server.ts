@@ -1,11 +1,16 @@
 import type { PageServerLoad } from './$types';
+import { isShowcase } from '$lib/server/showcase';
 import os from 'node:os';
 import { clampDays } from '$lib/selfimprove/call-efficiency';
 import { getToolAudit } from '$lib/server/tool-audit';
 import { getToolErrorRates } from '$lib/server/tool-error-rates';
 import { getTools } from '$lib/workflows/site-tools/registry';
 
-export const load: PageServerLoad = async ({ url }) => {
+export const load: PageServerLoad = async (event) => {
+  const { url } = event;
+  // Showcase ($lib/server/showcase): no host name, no raw error text (it quotes
+  // arguments), and no hour-of-day profile (it is the owner's day).
+  const showcase = await isShowcase(event);
   const days = clampDays(url.searchParams.get('days'));
   // Both sources are now `jkai_tool_traces` in this app's own Postgres: the
   // audit is the call ranking, the error rates carry the per-tool failure
@@ -31,10 +36,13 @@ export const load: PageServerLoad = async ({ url }) => {
   }
 
   return {
-    audit,
-    errorRates,
+    audit: showcase && audit ? { ...audit, byHour: [] } : audit,
+    errorRates:
+      showcase && errorRates
+        ? { ...errorRates, tools: errorRates.tools.map((t) => ({ ...t, lastError: null })) }
+        : errorRates,
     days,
-    hostname: os.hostname(),
+    hostname: showcase ? null : os.hostname(),
     registryCount,
     neverUsed,
   };
