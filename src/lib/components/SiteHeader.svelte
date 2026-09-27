@@ -20,7 +20,8 @@
    *
    * Everything is on the INK ground (`.site-nav-bar` is `background:
    * var(--text-primary)`), so every colour in here is written for a dark
-   * ground: `--bg` for cream text, `--accent-on-dark` for the accent (plain
+   * ground: `--chrome-ink` for cream text (an app with a night theme defines it;
+   * without it the fallback is `--bg`, cream on the paper theme), `--accent-on-dark` for the accent (plain
    * `--accent` scores 2.6:1 on #1a1008), and cream-alpha for the hairlines.
    */
   import type { Snippet } from 'svelte';
@@ -181,7 +182,7 @@
     transition: color 0.2s var(--ease-out), background 0.2s var(--ease-out);
   }
   .hdr-home:hover {
-    color: var(--bg);
+    color: var(--chrome-ink, var(--bg));
     background: rgba(237, 228, 212, 0.07);
   }
   /* Cut out of the strip, like any other current cell. */
@@ -223,7 +224,7 @@
     line-height: 1;
     overflow: hidden;
     text-overflow: ellipsis;
-    color: var(--bg);
+    color: var(--chrome-ink, var(--bg));
     transition: color 0.2s var(--ease-out);
   }
   a.hdr-title:hover {
@@ -263,7 +264,7 @@
     transition: color 0.2s var(--ease-out), background 0.2s var(--ease-out);
   }
   .nav-cell:hover {
-    color: var(--bg);
+    color: var(--chrome-ink, var(--bg));
     background: rgba(237, 228, 212, 0.07);
   }
   /* The current cell is cut out of the band: page ground behind it and an
