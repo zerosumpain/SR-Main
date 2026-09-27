@@ -647,10 +647,6 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   if (
     pathname === '/api/deepdive/index-sources' ||
     pathname === '/api/deepdive/reindex-facts' ||
-    pathname === '/api/jkai/intel/backfill' ||
-    pathname === '/api/jkai/intel/source-facets' ||
-    pathname === '/api/jkai/intel/clusters/recalculate' ||
-    pathname === '/api/jkai/intel/entities/split' ||
     (pathname === '/api/trails/segments' && event.request.method === 'POST')
   ) {
     let clientAddr = '';
@@ -678,15 +674,14 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   // is shut by default). Scoped to exactly this path and to POST; the route
   // re-checks the credential itself, defence in depth, and an unrecognised one
   // falls through to the owner gate below and 401s there.
-  // The intel lane: the three calls chat makes to intel on the SERVER, which
-  // become cross-process the day chat moves. Same credential as the tool lane —
+  // The intel lane: the two calls chat makes to intel on the SERVER, which
+  // are cross-process now that chat lives in SR-Jkai-Core. Same credential as the tool lane —
   // it identifies SR-JKAI as the caller, and what it may DO is the tool lane's
   // question, not this one. Each route also accepts an owner session and
   // re-checks for itself, so this bypass only ever widens the tokened path.
   if (
     ((pathname === '/api/jkai/intel/chat-context' && event.request.method === 'POST') ||
-      (pathname === '/api/jkai/intel/extract-thread' && event.request.method === 'POST') ||
-      (pathname === '/api/jkai/intel/daily-alerts' && event.request.method === 'GET')) &&
+      (pathname === '/api/jkai/intel/extract-thread' && event.request.method === 'POST')) &&
     hasJkaiServiceToken(event.request)
   ) {
     return resolve(event);
