@@ -7,7 +7,7 @@
 // "Important" is not one number the schema already holds, so it is computed from
 // what each source can honestly support:
 //
-//   entity    connectedness (relationship degree), plus a lift for `watched`
+//   entity    connectedness (relationship degree), plus a lift for `confirmed`
 //             and `confirmed` — the two flags that mean a person said so
 //   research  recency of a completed session; you researched it, it matters
 //   memory    the stored confidence, which the memory writer set
@@ -117,7 +117,6 @@ async function entityAnchors(): Promise<Anchor[]> {
       name: intelEntities.name,
       aliases: intelEntities.aliases,
       canonicalName: intelEntities.canonicalName,
-      watched: intelEntities.watched,
       confirmed: intelEntities.confirmed,
       type: intelEntityTypes.name,
       degree: sql<number>`coalesce(${degrees.degree}, 0)`,
@@ -137,13 +136,10 @@ async function entityAnchors(): Promise<Anchor[]> {
         // the desk ends up recommending what it already recommended. An entity
         // whose ONLY evidence is news therefore cannot be an anchor.
         //
-        // Watched and confirmed survive regardless: both record a person
-        // deciding this matters, which is evidence from outside the loop and
-        // the strongest kind there is. Same rule the mail relevance work
-        // arrived at, one hop away.
+        // Confirmed survives regardless: it records a decision that this
+        // matters, which is evidence from outside the loop.
         sql`(
-          ${intelEntities.watched}
-          OR ${intelEntities.confirmed}
+          ${intelEntities.confirmed}
           OR EXISTS (
             SELECT 1 FROM intel_note_entities ne
             JOIN intel_notes n ON n.id = ne.note_id
@@ -158,14 +154,12 @@ async function entityAnchors(): Promise<Anchor[]> {
         )`,
       ),
     )
-    .orderBy(desc(sql`(${intelEntities.watched})::int`), desc(sql`coalesce(${degrees.degree}, 0)`))
+    .orderBy(desc(sql`coalesce(${degrees.degree}, 0)`))
     .limit(ENTITY_LIMIT);
 
   return rows.map((r) => {
     const base = clamp01(Number(r.degree ?? 0) / DEGREE_SATURATION);
-    // Watched is an explicit "tell me about this", so it floors the score high
-    // rather than merely adding to it.
-    const importance = clamp01(r.watched ? Math.max(0.85, base) : r.confirmed ? Math.max(0.5, base) : base * 0.8);
+    const importance = clamp01(r.confirmed ? Math.max(0.5, base) : base * 0.8);
     const aliases = [...new Set([...(r.aliases ?? []), r.canonicalName ?? ''].filter(Boolean))];
     return {
       id: r.id,
@@ -173,9 +167,7 @@ async function entityAnchors(): Promise<Anchor[]> {
       aliases,
       kind: 'entity' as const,
       importance,
-      why: r.watched
-        ? 'a watched entity in your knowledge graph'
-        : `${r.type ?? 'entity'} in your knowledge graph, ${Number(r.degree ?? 0)} connection(s)`,
+      why: `${r.type ?? 'entity'} in your knowledge graph, ${Number(r.degree ?? 0)} connection(s)`,
       evidence: {
         notes: Number(r.notes ?? 0),
         lastSeen: r.lastSeen ? new Date(r.lastSeen).toISOString() : null,

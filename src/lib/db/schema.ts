@@ -2910,12 +2910,6 @@ export const intelEntities = pgTable(
      *  derived, so a bad value is fixed by recomputing it. */
     canonicalName: text('canonical_name'),
 
-    // ── Foreground ───────────────────────────────────────────────────────
-    /** On the watchlist: structural changes to this entity raise an insight. */
-    watched: boolean('watched').notNull().default(false),
-    /** Which lens this belongs to — 'professional' | 'personal' | null. */
-    lens: text('lens'),
-
     // ── Trust (Admiralty-style dual grading) ─────────────────────────────
     /** Source reliability A–F. Null until graded. */
     sourceGrade: text('source_grade'),
@@ -2923,8 +2917,6 @@ export const intelEntities = pgTable(
     credibility: integer('credibility'),
     /** Distinct notes independently asserting this entity. */
     corroboration: integer('corroboration').notNull().default(0),
-    /** Computed, explainable 0..1 — never shown without its components. */
-    confidenceScore: doublePrecision('confidence_score'),
     lastCorroboratedAt: timestamp('last_corroborated_at', { withTimezone: true }),
   },
   // Plain indexes only. A unique index on a POPULATED table silently breaks
@@ -2933,7 +2925,6 @@ export const intelEntities = pgTable(
   (t) => ({
     byType: index('intel_entities_type_idx').on(t.typeId),
     byMerged: index('intel_entities_merged_idx').on(t.mergedIntoId),
-    byWatched: index('intel_entities_watched_idx').on(t.watched),
     byUpdated: index('intel_entities_updated_idx').on(t.updatedAt),
     byCanonical: index('intel_entities_canonical_idx').on(t.canonicalName),
     bySpace: index('intel_entities_space_idx').on(t.spaceId),
