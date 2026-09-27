@@ -29,7 +29,7 @@ import { and, desc, eq, gte, ilike, lte, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { conversations, daydreamSpend, intelNotes, intelTimelineEvents, orchestratorChats } from '$lib/db/schema';
 import { ownerThread } from '$lib/jkai/owner-threads';
-import { OWNER_INTEL_SCOPE, spaceIn } from '$lib/jkai/intel/scope';
+import { OWNER_INTEL_SCOPE, spaceIn } from '$lib/intel-client/scope';
 import { DEFAULT_SUBJECT } from '../types';
 import { localDay } from '../features/build';
 

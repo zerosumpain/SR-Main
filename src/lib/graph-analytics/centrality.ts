@@ -47,7 +47,7 @@
 //
 //   5,338 nodes / 5,356 edges →   1.66 s, results bit-for-bit identical
 //
-// `scripts/bench-intel-betweenness.ts` reproduces both the timing and the
+// A bench script (`bench-intel-betweenness.ts`, since removed) reproduced both the timing and the
 // accuracy comparison that settled where the sampling threshold goes.
 //
 import type { AdjacencyIndex } from './model';

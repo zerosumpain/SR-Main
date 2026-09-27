@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('$lib/file-index/search', () => ({ searchFiles: vi.fn() }));
 vi.mock('$lib/deepdive/research-search', () => ({ searchResearch: vi.fn() }));
-vi.mock('$lib/jkai/intel/search', () => ({ searchIntel: vi.fn(async () => ({ items: [], total: 0 })) }));
+vi.mock('$lib/intel-client/read', () => ({ searchIntel: vi.fn(async () => ({ items: [], total: 0 })) }));
 vi.mock('drizzle-orm', () => ({ and: () => ({}), desc: () => ({}), ilike: () => ({}), isNull: () => ({}) }));
 vi.mock('$lib/db/schema', () => ({ jkaiMemories: { content: 'c', supersededBy: 's', updatedAt: 'u' } }));
 
@@ -30,7 +30,7 @@ vi.mock('$lib/datastore', () => ({
 
 import { searchFiles } from '$lib/file-index/search';
 import { searchResearch } from '$lib/deepdive/research-search';
-import { searchIntel } from '$lib/jkai/intel/search';
+import { searchIntel } from '$lib/intel-client/read';
 import { searchKnowledge } from './search';
 
 beforeEach(() => {

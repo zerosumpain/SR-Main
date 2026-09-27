@@ -18,9 +18,9 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { researchSessions, entities, relationships } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { buildIndex, components } from '$lib/jkai/intel/analytics/model';
-import { computeCentrality, brokerageScore } from '$lib/jkai/intel/analytics/centrality';
-import { detectCommunities } from '$lib/jkai/intel/analytics/community';
+import { buildIndex, components } from '$lib/graph-analytics/model';
+import { computeCentrality, brokerageScore } from '$lib/graph-analytics/centrality';
+import { detectCommunities } from '$lib/graph-analytics/community';
 import { buildSessionSnapshot } from '$lib/deepdive/session-graph';
 import { requireResearchSession } from '$lib/deepdive/session-access.server';
 

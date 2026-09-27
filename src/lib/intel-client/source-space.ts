@@ -1,9 +1,9 @@
 // Which intel space a Drive folder's files land in — the owner's, or the
 // household's.
 //
-// Beside ./source-policy rather than inside it: that module is shared
-// byte-for-byte with SR-Drive (guarded by shared-with-extracted), and this rule
-// is Main's alone — Drive never resolves a space, it asks /api/drive/folders.
+// Beside ./source-policy rather than inside it: that module is a byte-for-byte
+// copy of SR-Drive's, and this rule is Main's alone — Drive never resolves a
+// space, it asks /api/drive/folders.
 // Pure and DB-free for the same reasons as its neighbour.
 //
 // The MODE's inheritance rule: the NEAREST ancestor that names a space wins,

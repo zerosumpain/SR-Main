@@ -21,8 +21,8 @@ import {
   matchesHighlight,
   keyColour,
   UNSET_COLOUR,
+  RECENCY_FLOOR,
 } from './graph-visual';
-import { RECENCY_FLOOR } from '$lib/jkai/intel/staleness';
 
 // These are the rules BOTH graph views draw by, and the whole point of the
 // module is that the two cannot disagree. Testing them here rather than through

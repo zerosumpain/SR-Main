@@ -21,8 +21,8 @@
  * guessed at — a research entity is as current as the run that produced it, so
  * `recency` and `relevance` are 1 and the renderers' fade never fires.
  */
-import type { GraphNode, GraphEdge, GraphSnapshot } from '$lib/jkai/intel/analytics/model';
-import { OWNER_SPACE } from '$lib/jkai/intel/scope';
+import type { GraphNode, GraphEdge, GraphSnapshot } from '$lib/graph-analytics/model';
+import { OWNER_SPACE } from '$lib/intel-client/scope';
 
 export interface SessionEntityRow {
   id: string;

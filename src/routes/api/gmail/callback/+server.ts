@@ -6,7 +6,7 @@ import { gmailAccounts } from '$lib/db/schema';
 import { encryptToken } from '$lib/workflows/gmail/crypto';
 import { verifyConnectState } from '$lib/workflows/gmail/oauth-state';
 import { viewerOf } from '$lib/server/viewer';
-import { OWNER_SPACE } from '$lib/jkai/intel/scope';
+import { OWNER_SPACE } from '$lib/intel-client/scope';
 import { eq } from 'drizzle-orm';
 
 /**

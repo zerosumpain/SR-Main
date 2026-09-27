@@ -6,11 +6,13 @@
 // questions and a caller usually knows which it wants: "what did we agree" is
 // mail, "what does the report say" is files.
 //
-// Only ADMITTED threads are indexed, so this cannot reach mail the owner has
-// not approved. That is enforced in the index and again in the query.
+// Only threads SR-Jkai-Core took into the graph are indexed (mail with people
+// the owner writes to that passes its relevance check, or starred / labelled
+// "intel"), so this cannot reach the rest of the mailbox. That is enforced in
+// the index and again in the query.
 import { register } from '../registry-internal';
 import { searchMail, readMail } from '$lib/mail-index/search';
-import { OWNER_INTEL_SCOPE, type IntelScope } from '$lib/jkai/intel/scope';
+import { OWNER_INTEL_SCOPE, type IntelScope } from '$lib/intel-client/scope';
 
 /**
  * Whose mail these tools read. Chat is the owner's (a member scope gets no
@@ -22,7 +24,7 @@ const TOOL_SCOPE: IntelScope = OWNER_INTEL_SCOPE;
 register({
   name: 'mail_search',
   description:
-    'Semantic search over email threads that have been admitted to the knowledge graph, including the text of their attachments. Returns ranked passages with the thread subject, who was on it, when it was received, and a link into Gmail. Use this for "what did X say about Y", "what did we agree", or anything whose answer is a sentence inside an email. Only threads the owner approved are searchable — held or rejected mail is invisible here. For documents in /drive use file_search instead.',
+    'Semantic search over email threads that have been admitted to the knowledge graph, including the text of their attachments. Returns ranked passages with the thread subject, who was on it, when it was received, and a link into Gmail. Use this for "what did X say about Y", "what did we agree", or anything whose answer is a sentence inside an email. Only threads taken into the knowledge graph are searchable — the rest of the mailbox is invisible here. For documents in /drive use file_search instead.',
   parameters: {
     type: 'object',
     properties: {
@@ -51,7 +53,7 @@ register({
         // model that cannot tell them apart will report the wrong one.
         note: hits.length
           ? undefined
-          : 'No admitted email matched. Threads must be approved at /jkai/intel/mail before they are searchable.',
+          : 'No admitted email matched. Only threads taken into the knowledge graph (correspondence with people the owner writes to, or threads starred or labelled "intel") are searchable.',
         hits,
       },
     };
@@ -76,7 +78,7 @@ register({
     if (!noteId) return { success: false, error: 'mail_read needs a noteId.' };
     const thread = await readMail(noteId, TOOL_SCOPE);
     if (!thread) {
-      return { success: false, error: 'No admitted thread with that id — it may be held or rejected.' };
+      return { success: false, error: 'No admitted thread with that id — it was not taken into the knowledge graph.' };
     }
     return { success: true, data: thread };
   },

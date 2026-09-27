@@ -16,11 +16,10 @@ import { pgTextArray } from '$lib/db/sql-array';
 import { embedQuery } from './embed';
 
 /**
- * The spaces a caller may read, as `$lib/jkai/intel/scope`'s IntelScope — but
- * typed structurally and REQUIRED, because this module sits below jkai (jkai's
- * engine and mail admission import the index store) and must not import the
- * owner constant back. The caller decides whose mail it is: chat's mail tools
- * pass the owner's scope, the mail page passes the request's.
+ * The spaces a caller may read, as `$lib/intel-client/scope`'s IntelScope —
+ * typed structurally and REQUIRED, so the caller decides whose mail it is:
+ * chat's mail tools pass the owner's scope. SR-Jkai-Core writes the index when
+ * it takes a thread into the graph; Main only reads it.
  */
 export type MailScope = readonly string[];
 

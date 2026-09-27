@@ -25,7 +25,7 @@ import {
   jkaiMemories,
   researchSessions,
 } from '$lib/db/schema';
-import { OWNER_INTEL_SCOPE, spaceIn } from '$lib/jkai/intel/scope';
+import { OWNER_INTEL_SCOPE, spaceIn } from '$lib/intel-client/scope';
 import type { Anchor } from './correlate';
 
 /**

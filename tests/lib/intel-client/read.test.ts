@@ -7,11 +7,11 @@ const { dbMock } = vi.hoisted(() => {
 });
 
 vi.mock('$lib/db', () => ({ db: dbMock }));
-vi.mock('$lib/jkai/intel/embed', () => ({
+vi.mock('$lib/intel-client/embed', () => ({
   generateEmbedding: vi.fn().mockResolvedValue(Array(1536).fill(0)),
 }));
 
-import { searchIntel } from '$lib/jkai/intel/search';
+import { searchIntel } from '$lib/intel-client/read';
 
 describe('searchIntel', () => {
   beforeEach(() => {

@@ -74,7 +74,7 @@ export interface GraphNode {
    * one source should return everything that source ever told us about.
    */
   sources: string[];
-  /** The space this entity belongs to — see $lib/jkai/intel/scope. */
+  /** The space this entity belongs to — see $lib/intel-client/scope. */
   space: string;
 }
 

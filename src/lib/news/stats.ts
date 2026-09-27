@@ -1,7 +1,7 @@
 import { and, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { intelNotes } from '$lib/db/schema';
-import { OWNER_INTEL_SCOPE, spaceIn } from '$lib/jkai/intel/scope';
+import { OWNER_INTEL_SCOPE, spaceIn } from '$lib/intel-client/scope';
 import { countNewsFavourites } from './favourites';
 
 export interface NewsStats {

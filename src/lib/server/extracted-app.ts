@@ -30,6 +30,12 @@ const CANONICAL_HOST = 'strangeramblings.com';
 
 const APPS = {
 	health: { port: 5320, tokenEnv: 'HEALTH_SERVICE_TOKEN' },
+	// Not a gateway service lane: SR-Jkai-Core's gateway PASSES THROUGH the one
+	// path Main calls (`POST /api/jkai/intel/chat-context`, a `passthroughPatterns`
+	// entry in Core's deploy/app.json) and the route itself checks the JKAI invoke
+	// token — the same credential Core presents when it runs Main's tools, so
+	// Main already holds it. See $lib/intel-client/chat-context.
+	'jkai-core': { port: 5330, tokenEnv: 'JKAI_INVOKE_TOKEN' },
 } as const satisfies Record<string, { port: number; tokenEnv: string }>;
 
 export type ExtractedApp = keyof typeof APPS;
