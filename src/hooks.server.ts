@@ -1,4 +1,4 @@
-import { privacyMaintenance } from '$lib/home/presence/privacy-jobs';
+import { privacyMaintenance } from '$lib/people/privacy-maintenance';
 import { building } from '$app/environment';
 import { startForgeScheduler, stopForgeScheduler } from '$lib/jkai/forge-scheduler';
 import {
@@ -37,7 +37,7 @@ import {
   viewerForEmail,
 } from '$lib/server/view-as';
 import { rateLimit } from '$lib/server/rate-limit';
-import { actAsDeviceMember, memberDevice, nativeDevice, nativeViewAs, pairedDevice } from '$lib/server/native-gate';
+import { actAsDeviceMember, actAsDeviceOwner, memberDevice, nativeDevice, nativeViewAs, pairedDevice } from '$lib/server/native-gate';
 import { hasMaintenanceSecret } from '$lib/server/maintenance-auth';
 import { isPublicApiPath } from '$lib/server/public-api-paths';
 import { hasStudioServiceToken } from '$lib/server/studio-auth';
@@ -447,6 +447,9 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     }
   }
 
+  // This read-only authority validates view-as itself; POST does not mutate data.
+  if (pathname === '/api/internal/session' && event.request.method === 'POST') return resolve(event);
+
   // View as ($lib/server/view-as): the owner sees the site as one person on the
   // allow-list. Before every gate below — the dev LAN bypass included — so the
   // public pages, the owner gates and the member gate all answer for that
@@ -537,9 +540,14 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     // — so on `vite dev --host` the bypass never fired and every request from
     // the box itself 401'd. See $lib/server/client-address.
     if (isPrivateAddress(clientAddr)) {
+      // Development identity is explicit; production never enters this branch.
+      event.locals.auth = async () => ({ user: { email: env.AUTH_ALLOWED_EMAILS?.split(',')[0]?.trim() }, expires: new Date(Date.now()+60_000).toISOString() });
+      event.locals.viewer = undefined;
       return resolve(event);
     }
   }
+
+  // The handler validates a dedicated, audience-bound credential itself.
 
   if (isPublicPath(pathname)) {
     return resolve(event);
@@ -745,6 +753,7 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
       (pathname === '/api/jkai/intel/extract-thread' && event.request.method === 'POST')) &&
     hasJkaiServiceToken(event.request)
   ) {
+    event.locals.serviceAreas = ['jkai.intel'];
     return resolve(event);
   }
 
@@ -814,6 +823,7 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     const device = await nativeDevice(event.request);
     const viewAs = device ? await nativeViewAs(event.request, device) : ({ kind: 'none' } as const);
     if (device && viewAs.kind === 'none') {
+      actAsDeviceOwner(event.locals, device);
       // The 10/min orchestrator cap lives INSIDE the owner-gate block below, and
       // this lane returns before reaching it — so without this a paired phone
       // could start chat turns without limit. Every turn is a paid model call
@@ -825,10 +835,8 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
       return resolve(event);
     }
 
-    // A MEMBER's phone on the same two paths. Not the sessionless resolve
-    // above: sessionless is the OWNER to every chat helper (`areaAccess` reads
-    // anonymous as an owner-grade lane), so a member device let through there
-    // would chat as John. Instead the request is made to look like the member
+    // A member phone establishes its own identity and current grants.
+    // The request is made to look like the member
     // signed in (`actAsDeviceMember` sets `locals.viewer` and `locals.auth`) and
     // falls through to the ordinary `/api` gate below — `memberMayReach`, the
     // per-user limit — and then the handler's own member path: `chatAccess`,
@@ -980,6 +988,9 @@ const securityHeadersHandle: Handle = async ({ event, resolve }) => {
     });
   }
   response.headers.set('X-Content-Type-Options', 'nosniff');
+  if (event.url.pathname.startsWith('/api/native/') || event.url.pathname === '/api/internal/session') {
+    response.headers.set('Cache-Control', 'private, no-store');
+  }
   // Framing policy: pages default to SAMEORIGIN (cross-origin embedding stays
   // blocked) because sr. decks legitimately frames site pages as slides — the
   // deck iframe block and the editor's site-media browser both need it. The

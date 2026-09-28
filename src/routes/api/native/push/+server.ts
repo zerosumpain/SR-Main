@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { withNativeAccess } from '$lib/server/native-handler';
 import { isApnsConfigured, isDeviceToken } from '$lib/server/apns';
-import { clearPushToken, pushTestTo, registerPushToken } from '$lib/server/push-devices';
+import { clearPushToken, pushTestTo, registerPushToken, devicePushPrivacy } from '$lib/server/push-devices';
 import { registerJourneyToken, registerLiveStartToken, startTestJourney } from '$lib/home/presence/live-journey';
 
 /**
@@ -68,4 +68,14 @@ export const POST: RequestHandler = withNativeAccess('any', async (event, identi
 export const DELETE: RequestHandler = withNativeAccess('any', async (_event, identity) => {
   await clearPushToken(identity.id);
   return { ok: true };
+});
+
+/** The choice belongs to this device, including non-owner family phones. */
+export const GET: RequestHandler = withNativeAccess('any', async (_event, identity) => devicePushPrivacy(identity.id));
+export const PATCH: RequestHandler = withNativeAccess('any', async (event, identity) => {
+  const body = await event.request.json().catch(() => null);
+  if (!body || typeof body.notificationDetails !== 'boolean' || typeof body.liveActivityEnabled !== 'boolean') {
+    return json({ error: 'Choose notification details and Live Activities.' }, { status: 400 });
+  }
+  return devicePushPrivacy(identity.id, { notificationDetails: body.notificationDetails, liveActivityEnabled: body.liveActivityEnabled });
 });

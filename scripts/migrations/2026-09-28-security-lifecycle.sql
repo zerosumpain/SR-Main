@@ -1,4 +1,6 @@
 BEGIN;
+ALTER TABLE native_credentials ADD COLUMN IF NOT EXISTS notification_details boolean NOT NULL DEFAULT false;
+ALTER TABLE native_credentials ADD COLUMN IF NOT EXISTS live_activity_enabled boolean NOT NULL DEFAULT false;
 CREATE TABLE IF NOT EXISTS companion_access_version (
   email text PRIMARY KEY, version bigint NOT NULL DEFAULT 1
 );

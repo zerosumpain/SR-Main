@@ -36,7 +36,7 @@ import { displayNameOf, loadAlertPlaces, localClock, partitionMovers, pilotRecip
 import { loadCompanionUsers } from './companion';
 import { getHomePlace } from './places';
 import { listMembers, type HouseholdMember } from './members';
-import { familyRole } from '$lib/family/roster.server';
+import { familyRole } from '$lib/server/family-access';
 import { isOwnerEmail } from '$lib/server/access';
 import { errMsg } from './types';
 
@@ -259,12 +259,12 @@ export async function registerLiveStartToken(deviceId: string, token: string): P
 /** One activity's update token, reported by the app once the activity exists. */
 export async function registerJourneyToken(journeyId: string, deviceId: string, token: string): Promise<boolean> {
   if (!isDeviceToken(token) || !journeyId || journeyId.length > 200) return false;
-  const [viewer] = await db.select({ email: nativeCredentials.ownerEmail, subject: householdJourney.subject })
+  const [viewer] = await db.select({ email: nativeCredentials.ownerEmail, subject: householdJourney.subject, liveActivityEnabled: nativeCredentials.liveActivityEnabled })
     .from(householdJourneyViewer)
     .innerJoin(householdJourney, eq(householdJourney.id, householdJourneyViewer.journeyId))
     .innerJoin(nativeCredentials, eq(nativeCredentials.id, householdJourneyViewer.deviceId))
     .where(and(eq(householdJourneyViewer.journeyId, journeyId), eq(householdJourneyViewer.deviceId, deviceId),
-      eq(nativeCredentials.kind, 'device'), isNull(nativeCredentials.revokedAt), gt(nativeCredentials.expiresAt, new Date()),
+      eq(nativeCredentials.kind, 'device'), eq(nativeCredentials.liveActivityEnabled, true), isNull(nativeCredentials.revokedAt), gt(nativeCredentials.expiresAt, new Date()),
       isNull(householdJourney.endedAt))).limit(1);
   if (!viewer || !(await journeyAccess(viewer.subject, viewer.email))) return false;
   const rows = await db.update(householdJourneyViewer)
@@ -300,6 +300,7 @@ async function startTargets(emails: readonly string[]) {
         isNull(nativeCredentials.revokedAt),
         gt(nativeCredentials.expiresAt, new Date()),
         isNotNull(nativeCredentials.laStartToken),
+        eq(nativeCredentials.liveActivityEnabled, true),
         inArray(nativeCredentials.ownerEmail, [...emails]),
       ),
     );
@@ -335,7 +336,7 @@ async function startOn(
 /** Push to every phone showing this journey that reported an update token. */
 export async function pushToViewers(journeyId: string, aps: Record<string, unknown>, send: LiveSender): Promise<number> {
   const viewers = await db
-    .select({ deviceId: householdJourneyViewer.deviceId, token: householdJourneyViewer.updateToken, env: nativeCredentials.apnsEnv, email: nativeCredentials.ownerEmail, subject: householdJourney.subject })
+    .select({ deviceId: householdJourneyViewer.deviceId, token: householdJourneyViewer.updateToken, env: nativeCredentials.apnsEnv, email: nativeCredentials.ownerEmail, subject: householdJourney.subject, liveActivityEnabled: nativeCredentials.liveActivityEnabled })
     .from(householdJourneyViewer)
     .innerJoin(householdJourney, eq(householdJourney.id, householdJourneyViewer.journeyId))
     .innerJoin(nativeCredentials, eq(nativeCredentials.id, householdJourneyViewer.deviceId))
@@ -343,7 +344,7 @@ export async function pushToViewers(journeyId: string, aps: Record<string, unkno
   let sent = 0;
   for (const v of viewers) {
     if (!v.token) continue;
-    const permitted = await journeyAccess(v.subject, v.email);
+    const permitted = v.liveActivityEnabled && await journeyAccess(v.subject, v.email);
     // A privacy change ends an existing activity with no retained personal state.
     const safeEnd = endAps({ phase: 'ended', headline: 'Journey ended', detail: '', distanceHomeM: null,
       progress: null, etaMinutes: null, mode: null, updatedAt: Math.floor(Date.now()/1000) }, new Date(), 0);

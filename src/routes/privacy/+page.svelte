@@ -95,8 +95,7 @@
     on the public Health dashboard. Other people's private Health uploads are not published there.
     These records are not end-to-end encrypted: the server operator can access stored data. Maps use
     Mapbox, which receives map requests and ordinary network details. Apple carries notification and
-    Live Activity payloads, which can include names, places, journey status and step counts; choose
-    notification previews and Live Activities in iOS Settings with your Lock Screen in mind. Content
+    Live Activity payloads. Notification details and journey Live Activities are off by default for each paired phone. Enabling them can reveal names, places, journey status and step counts on its Lock Screen; you can change the choices in the app’s Settings. Content
     you send to the site's AI features may go to the model providers described above.
   </p>
   <p>

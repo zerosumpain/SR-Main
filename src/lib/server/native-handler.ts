@@ -3,7 +3,7 @@ import type { RequestEvent } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { satisfies, type AreaId } from '$lib/access/catalogue';
 import { identifyDevice, touchDevice, type NativeIdentity } from './native-auth';
-import { actAsDeviceMember, nativeViewAs } from './native-gate';
+import { actAsDeviceMember, actAsDeviceOwner, nativeViewAs } from './native-gate';
 import { loadMember } from './grants';
 
 /**
@@ -68,6 +68,7 @@ export function withDevice<E extends RequestEvent, T>(handler: NativeHandler<E, 
       return json({ error: 'This account can no longer use the app.' }, { status: 403 });
     }
 
+    actAsDeviceOwner(event.locals, identity);
     // Telemetry for the device list. Deliberately not awaited into the response
     // path: a failed stamp must not turn a good read into a 500.
     void touchDevice(identity.id).catch(() => {});
@@ -101,8 +102,7 @@ export type NativeAccessHandler<E extends RequestEvent, T> = (
  * this, one at a time, and a route nobody converted keeps refusing them. That
  * is the whole design: new reach is opt-in per file, never inherited.
  *
- * For the owner nothing changes: no locals are touched, the request stays
- * sessionless, and the area seam reads that as the owner exactly as it did.
+ * An owner device establishes an explicit owner identity for the area seam.
  *
  * For anyone else the email on the credential must be a member NOW
  * (`loadMember`, read fresh on every request, so a demotion closes the phone on
@@ -157,6 +157,7 @@ export function withNativeAccess<E extends RequestEvent, T>(
       role = 'member';
     }
 
+    if (role === 'owner') actAsDeviceOwner(event.locals, identity);
     void touchDevice(identity.id).catch(() => {});
 
     try {

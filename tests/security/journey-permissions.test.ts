@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 const h = vi.hoisted(() => ({ allowed: true, sharing: true, usersAvailable: true, following: true, removed: false }));
 vi.mock('$lib/db', () => ({ db: {} }));
-vi.mock('$lib/family/roster.server', () => ({ familyRole: async () => h.allowed ? { parent: false } : null }));
+vi.mock('$lib/server/family-access', () => ({ familyRole: async () => h.allowed ? { parent: false } : null }));
 vi.mock('$lib/server/access', () => ({ isOwnerEmail: (email: string) => email === 'owner@example.test' }));
 vi.mock('$lib/home/presence/members', async original => ({ ...await original<typeof import('$lib/home/presence/members')>(), listMembers: async () => h.removed ? [] : [
   { subject: 'mover', email: 'mover@example.test', source: 'companion', alerts: {} },

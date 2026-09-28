@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * watermark, and asks for a fresh check when that watermark is stale.
  */
 
-let device: { id: string; ownerEmail: string } | null = { id: 'dev-1', ownerEmail: 'owner@example.com' };
+let device: { id: string; ownerEmail: string; expiresAt: Date } | null = { id: 'dev-1', ownerEmail: 'owner@example.com', expiresAt: new Date(Date.now() + 60000) };
 vi.mock('$lib/server/native-auth', () => ({
   identifyDevice: async () => device,
   touchDevice: async () => {},
@@ -34,11 +34,11 @@ vi.mock('$lib/server/connector-check', () => ({
 async function get() {
   const mod = await import('../../../../src/routes/api/native/connections/+server');
   const request = new Request('http://x/api/native/connections', { headers: { Authorization: 'Bearer t' } });
-  return (mod.GET as (e: unknown) => Promise<Response>)({ request, url: new URL(request.url), params: {} });
+  return (mod.GET as (e: unknown) => Promise<Response>)({ locals: {}, request, url: new URL(request.url), params: {} });
 }
 
 beforeEach(() => {
-  device = { id: 'dev-1', ownerEmail: 'owner@example.com' };
+  device = { id: 'dev-1', ownerEmail: 'owner@example.com', expiresAt: new Date(Date.now() + 60000) };
   checkedAt = new Date();
   requestConnectorCheck.mockClear();
 });
@@ -47,7 +47,7 @@ describe('GET /api/native/connections', () => {
   it('401s without a paired device, and 403s a device whose owner left the allow-list', async () => {
     device = null;
     expect((await get()).status).toBe(401);
-    device = { id: 'dev-2', ownerEmail: 'someone@else.com' };
+    device = { id: 'dev-2', ownerEmail: 'someone@else.com', expiresAt: new Date(Date.now() + 60000) };
     expect((await get()).status).toBe(403);
   });
 

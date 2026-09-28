@@ -7008,6 +7008,8 @@ export const nativeCredentials = pgTable('native_credentials', {
    * its pushes in the same write. Null until the app registers; cleared when
    * Apple answers that the token is dead. See `$lib/server/push-devices`.
    */
+  notificationDetails: boolean('notification_details').notNull().default(false),
+  liveActivityEnabled: boolean('live_activity_enabled').notNull().default(false),
   apnsToken: text('apns_token'),
   /** 'production' (TestFlight, App Store) or 'sandbox' (an Xcode build). */
   apnsEnv: text('apns_env'),

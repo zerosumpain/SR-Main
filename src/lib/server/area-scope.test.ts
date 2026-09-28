@@ -21,9 +21,12 @@ const event = (email: string | null) => ({
 const at = (level: 'self' | 'all' | 'admin') => ({ level, own: 'u_me' }) as const;
 
 describe('areaAccess', () => {
-  it('gives the owner, and an owner-grade sessionless lane, everything without a lookup', async () => {
+  it('requires an owner or an explicit authenticated service area', async () => {
     expect(await areaAccess(event('owner@example.test'), 'research')).toBe(OWNER_ACCESS);
-    expect(await areaAccess(event(null), 'research')).toBe(OWNER_ACCESS);
+    await expect(areaAccess(event(null), 'research')).rejects.toMatchObject({ status: 403 });
+    const service = event(null); service.locals.serviceAreas = ['research'];
+    expect(await areaAccess(service, 'research')).toBe(OWNER_ACCESS);
+    await expect(areaAccess(service, 'jkai.notes')).rejects.toMatchObject({ status: 403 });
     expect(loadMember).not.toHaveBeenCalled();
   });
 

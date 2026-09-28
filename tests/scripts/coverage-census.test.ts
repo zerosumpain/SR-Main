@@ -59,7 +59,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
  */
 // Family places adds the isolated stop/geocoder persistence checks. The nightly
 // enables them explicitly against its disposable loopback PostgreSQL service.
-const INTEGRATION_FILES = 37;
+const INTEGRATION_FILES = 38;
 
 function tracked(pattern: string): string[] {
 	return execFileSync('git', ['ls-files', pattern], { cwd: ROOT, encoding: 'utf8' })

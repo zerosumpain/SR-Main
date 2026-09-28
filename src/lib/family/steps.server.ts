@@ -105,7 +105,7 @@ async function refresh(people: readonly FamilyPerson[], window: StepsWindow, now
   return { written, failed };
 }
 
-function stepsPush(body: string, collapse: string, consentEmails: readonly string[]): PushMessage {
+export function stepsPush(body: string, collapse: string, consentEmails: readonly string[]): PushMessage {
   return {
     title: 'Family steps',
     body,
@@ -114,7 +114,11 @@ function stepsPush(body: string, collapse: string, consentEmails: readonly strin
     level: 'active',
     relevance: 0.5,
     collapseId: collapse,
-    stepsConsentEmails: consentEmails,
+    authorizeTargets: async (emails) => {
+      const permitted = new Set((await familyRoster()).filter(p => p.stepsSharing === true).map(p => p.email));
+      if (!consentEmails.length || consentEmails.some(e => !permitted.has(e.trim().toLowerCase()))) return [];
+      return emails.filter(email => permitted.has(email));
+    },
     ttlSeconds: 0,
     userInfo: { category: STEPS_CATEGORY, url: STEPS_URL },
   };

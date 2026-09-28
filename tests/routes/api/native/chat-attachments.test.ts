@@ -18,7 +18,7 @@ vi.mock('$lib/db', () => ({
 vi.mock('$lib/db/schema', () => ({ jkaiAttachments: {}, conversations: {}, accessUsage: {} }));
 vi.mock('$lib/file-index/jkai-mirror', () => ({ mirrorJkaiAttachmentToDrive: vi.fn() }));
 vi.mock('$lib/server/native-auth', () => ({
-  identifyDevice: async () => (paired ? { id: 'dev-1', ownerEmail: 'owner@example.com' } : null),
+  identifyDevice: async () => (paired ? { id: 'dev-1', ownerEmail: 'owner@example.com', expiresAt: new Date(Date.now() + 60000) } : null),
   touchDevice: async () => {},
 }));
 vi.mock('$env/dynamic/private', () => ({ env: { AUTH_ALLOWED_EMAILS: 'owner@example.com' } }));
@@ -52,7 +52,7 @@ async function post(body: BodyInit, query: Record<string, string> = {}, type = '
     body,
     headers: { Authorization: 'Bearer t', 'Content-Type': type },
   });
-  return mod.POST({ request, url } as any) as Promise<Response>;
+  return mod.POST({ locals: {}, request, url } as any) as Promise<Response>;
 }
 
 describe('POST /api/native/chat/attachments', () => {

@@ -11,9 +11,7 @@
 
 import { createHmac } from 'node:crypto';
 import { env } from '$env/dynamic/private';
-import { familyLevel } from '$lib/access/roles';
-import { isOwnerEmail } from '$lib/server/access';
-import { loadMember } from '$lib/server/grants';
+import { familyRole } from '$lib/server/family-access';
 import { listAllSiteDevices } from '$lib/server/site-devices';
 import { listMembers } from '$lib/home/presence/members';
 import { loadCompanionUsers } from '$lib/home/presence/companion';
@@ -40,17 +38,7 @@ export function nameFromEmail(email: string): string {
 
 const norm = (e: string | null | undefined) => (e ?? '').trim().toLowerCase();
 
-/** Owner, parent, circle, or null for someone outside the family. Fails closed. */
-export async function familyRole(email: string): Promise<{ parent: boolean } | null> {
-  const e = norm(email);
-  if (!e) return null;
-  if (isOwnerEmail(e)) return { parent: true };
-  const member = await loadMember(e).catch(() => null);
-  if (!member) return null;
-  const level = familyLevel(member.grants);
-  return level === 'none' ? null : { parent: level === 'parent' };
-}
-
+export { familyRole } from '$lib/server/family-access';
 
 /** Reset between tests, and after a write that changes who is in. */
 export function resetFamilyRoster(): void {

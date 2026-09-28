@@ -10,7 +10,7 @@ function signature(secret: string, payload: string): string {
 
 /** Mint a narrow, short-lived credential for Caddy's VNC forward-auth check. */
 export function issueVncAccessTicket(secret: string, nowMs = Date.now()): string {
-  if (!secret) throw new Error('AUTH_SECRET is required to issue VNC access');
+  if (!secret) throw new Error('VNC_ACCESS_SECRET is required to issue VNC access');
   const expires = Math.floor(nowMs / 1000) + VNC_ACCESS_TTL_SECONDS;
   const payload = `${expires}.${randomBytes(16).toString('hex')}`;
   return `${payload}.${signature(secret, payload)}`;

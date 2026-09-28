@@ -1,17 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildPayload, type PushMessage } from '$lib/server/apns';
+import { buildPayload } from '$lib/server/apns';
 
 const state = vi.hoisted(() => ({
   roster: vi.fn(), role: vi.fn(), select: vi.fn(),
 }));
-vi.mock('$lib/family/roster.server', () => ({ familyRoster: state.roster, familyRole: state.role }));
+vi.mock('$lib/family/roster.server', () => ({ familyRoster: state.roster }));
+vi.mock('$lib/server/family-access', () => ({ familyRole: state.role }));
 vi.mock('$lib/db', () => ({ db: { select: state.select } }));
 const { pushToEmails } = await import('$lib/server/push-devices');
 
-const message: PushMessage = {
-  title: 'Family steps', body: 'Leader has 6000 steps', category: 'family-steps',
-  stepsConsentEmails: ['reader@example.invalid', 'leader@example.invalid'], ttlSeconds: 0,
-};
+const { stepsPush } = await import('$lib/family/steps.server');
+const message = stepsPush('Leader has 6000 steps', 'synthetic', ['reader@example.invalid', 'leader@example.invalid']);
 beforeEach(() => {
   vi.clearAllMocks();
   state.role.mockResolvedValue({ parent: false });
@@ -29,7 +28,7 @@ describe('steps push consent at delivery', () => {
     expect((await pushToEmails(['reader@example.invalid'], message, send)).sent).toBe(1);
     expect(send).toHaveBeenCalledOnce();
     expect(buildPayload(message)).not.toContain('example.invalid');
-    expect(buildPayload(message)).not.toContain('stepsConsentEmails');
+    expect(buildPayload(message)).not.toContain('authorizeTargets');
   });
   it('suppresses a prepared message when the disclosed person opts out', async () => {
     state.roster.mockResolvedValue([{ email: 'reader@example.invalid', stepsSharing: true }]);
@@ -50,9 +49,9 @@ describe('steps push consent at delivery', () => {
     expect((await pushToEmails(['reader@example.invalid'], message, send)).sent).toBe(0);
     expect(send).not.toHaveBeenCalled();
   });
-  it('rejects a steps message without its disclosure list', async () => {
+  it('rejects a steps message without its current consent check', async () => {
     const send = vi.fn();
-    await pushToEmails(['reader@example.invalid'], { ...message, stepsConsentEmails: undefined }, send);
+    await pushToEmails(['reader@example.invalid'], { ...message, authorizeTargets: undefined }, send);
     expect(send).not.toHaveBeenCalled();
   });
 });

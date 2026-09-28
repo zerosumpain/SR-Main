@@ -6,18 +6,16 @@
 // 'owner' (John's — the default, so every row that existed before the area
 // opened stays his), 'household' (shared), or a member's `u_…`.
 //
-//   owner / anonymous   everything. Anonymous reaches an authed route only
-//                       through an owner-grade lane (maintenance secret,
-//                       service token, dev LAN) — the same rule as intel's
-//                       `resolveRequestScope`.
+//   owner              everything
+//   verified service   only the areas assigned by its authenticated entry point
+//   anonymous          forbidden
 //   self                reads own + household, writes own
 //   all                 reads every member's + household (never the owner's),
 //                       writes own
 //   admin               reads and writes every member's + household
 //   anyone else         403
 //
-// The production DB role is a superuser, so Postgres RLS cannot do this; it
-// lives here, in code, and every route that reads an area's rows calls it.
+// Row scope is enforced here independently of the database runtime role.
 
 import { error } from '@sveltejs/kit';
 import { levelOf, type AreaId } from '$lib/access/catalogue';
@@ -37,7 +35,7 @@ import { viewerOf } from './viewer';
 
 export async function areaAccess(event: { locals: App.Locals }, area: AreaId): Promise<AreaAccess> {
   const viewer = await viewerOf(event);
-  if (viewer.kind === 'owner' || viewer.kind === 'anonymous') return OWNER_ACCESS;
+  if (viewer.kind === 'owner' || (viewer.kind === 'anonymous' && event.locals.serviceAreas?.includes(area))) return OWNER_ACCESS;
   if (viewer.kind === 'member') {
     const level = levelOf(viewer.grants, area);
     if (level) return { level, own: viewer.principalId };

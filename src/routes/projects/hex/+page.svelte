@@ -1,8 +1,13 @@
+<script lang="ts">
+  import PageHeader from '$lib/components/PageHeader.svelte';
+</script>
+
 <svelte:head>
   <title>Hex — Strange Ramblings</title>
   <meta name="description" content="A standalone hex conquest game, reinforcement-learning lab, and custom rule forge." />
 </svelte:head>
 
+<PageHeader title="Projects" />
 <main class="hex-stub">
   <a href="/projects">← Projects</a>
   <p>STRATEGY · LEARNING · POSSIBILITY</p>

@@ -52,8 +52,8 @@ export interface PushMessage {
   userInfo?: Record<string, string>;
   /** Seconds Apple keeps trying a phone that is off. 0 = once, now. */
   ttlSeconds?: number;
-  /** Server-only: people whose step totals/names appear in this message. Never sent to APNs. */
-  stepsConsentEmails?: readonly string[];
+  /** Server-only current consent check. Never serialized into APNs payloads. */
+  authorizeTargets?: (emails: readonly string[]) => Promise<readonly string[]>;
 }
 
 export interface ApnsResult {

@@ -47,6 +47,7 @@ vi.mock('$lib/home/presence/observe', () => ({
 
 // household-live owns the companion pull now; observe must never make it.
 vi.mock('$lib/home/presence/companion', () => ({
+  companionToken: () => '',
   ingestCompanion: async () => {
     h.companionCalls++;
     return { pages: 1, written: 2, dropped: 1, rejected: 0, skipped: 0, more: false };

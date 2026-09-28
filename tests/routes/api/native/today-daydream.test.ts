@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  */
 
 vi.mock('$lib/server/native-auth', () => ({
-  identifyDevice: async () => ({ id: 'dev-1', ownerEmail: 'owner@example.com' }),
+  identifyDevice: async () => ({ id: 'dev-1', ownerEmail: 'owner@example.com', expiresAt: new Date(Date.now() + 60000) }),
   touchDevice: async () => {},
 }));
 vi.mock('$env/dynamic/private', () => ({ env: { AUTH_ALLOWED_EMAILS: 'owner@example.com' } }));
@@ -36,7 +36,7 @@ vi.mock('$lib/daydream/think/notes.server', () => ({ loadTodayNotes: () => notes
 async function today() {
   const mod = await import('../../../../src/routes/api/native/today/+server');
   const request = new Request('http://x/api/native/today', { headers: { Authorization: 'Bearer t' } });
-  const res = await (mod.GET as (e: unknown) => Promise<Response>)({ request, url: new URL(request.url), params: {} });
+  const res = await (mod.GET as (e: unknown) => Promise<Response>)({ locals: {}, request, url: new URL(request.url), params: {} });
   return { status: res.status, body: await res.json() };
 }
 

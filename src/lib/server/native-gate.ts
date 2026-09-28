@@ -32,6 +32,13 @@ export async function nativeDevice(request: Request): Promise<NativeIdentity | n
   return isOwnerEmail(identity.ownerEmail) ? identity : null;
 }
 
+/** Carry an already-verified owner device through ordinary request scope. */
+export function actAsDeviceOwner(locals: App.Locals, identity: NativeIdentity): void {
+  if (!isOwnerEmail(identity.ownerEmail)) throw new Error('Owner device required');
+  locals.auth = async () => ({ user: { email: identity.ownerEmail }, expires: identity.expiresAt.toISOString() });
+  locals.viewer = Promise.resolve({ kind: 'owner' });
+}
+
 /**
  * Any live device credential, whoever holds it — for keying a rate-limit
  * bucket and NOTHING else.
