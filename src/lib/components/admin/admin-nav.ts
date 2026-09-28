@@ -109,7 +109,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     href: '/admin/access',
     match: (p) => p.startsWith('/admin/access'),
     items: [
-      { label: 'Allow-list', href: '/admin/access', match: (p) => p === '/admin/access' },
+      { label: 'People', href: '/admin/access', match: (p) => p === '/admin/access' || /^\/admin\/access\/(?!devices|security)[^/]+$/.test(p) },
       // Every person's paired phones, both lanes — the companion pilot's
       // (health & location) and the site's (chat & news). Moved back from the
       // companion dashboard (2026-09-26) so the dashboard can be retired.

@@ -156,7 +156,7 @@
            refuses anyone else; the links are drawn for the owner only. -->
       <p class="actions owner-links">
         <a class="btn sm" href="/home/people/places">Places and alerts</a>
-        <a class="btn sm" href="/home/people/settings">Household settings</a>
+        <a class="btn sm" href="/admin/access">Household settings</a>
       </p>
     {/if}
 

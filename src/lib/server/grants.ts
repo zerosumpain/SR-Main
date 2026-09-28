@@ -18,6 +18,7 @@ import { db } from '$lib/db';
 import { accessGroup, activityPrincipals, allowedUser } from '$lib/db/schema';
 import { BUILT_IN_GROUPS, levelOf, parsePermissions, type Permission } from '$lib/access/catalogue';
 import { asList, effectivePermissions } from '$lib/access/effective';
+import { BUILT_IN_RELABEL, EXTRA_BUILT_IN_ROLES, normaliseGrants, pruneAdds, strongestRole } from '$lib/access/roles';
 import { disableMemberGmail, ensureMemberPrincipal } from './members';
 
 export type AccessGroupRow = typeof accessGroup.$inferSelect;
@@ -42,7 +43,7 @@ export async function ensureBuiltInGroups(): Promise<void> {
   await db
     .insert(accessGroup)
     .values(
-      BUILT_IN_GROUPS.map((g) => ({
+      [...BUILT_IN_GROUPS, ...EXTRA_BUILT_IN_ROLES].map((g) => ({
         id: g.id,
         label: g.label,
         description: g.description,
@@ -51,6 +52,14 @@ export async function ensureBuiltInGroups(): Promise<void> {
       })),
     )
     .onConflictDoNothing();
+  // The one-role names (Family, Parent), only over the label a built-in was
+  // seeded with: a name the owner typed is left alone.
+  for (const [id, r] of Object.entries(BUILT_IN_RELABEL)) {
+    await db
+      .update(accessGroup)
+      .set({ label: r.label, description: r.description })
+      .where(and(eq(accessGroup.id, id), eq(accessGroup.label, r.from)));
+  }
 }
 
 export async function listGroups(): Promise<AccessGroupRow[]> {
@@ -104,11 +113,14 @@ export async function loadMember(
 }
 
 /**
- * Set a user's groups and one-off grants. Unknown groups and permissions are
- * dropped. Holding anything creates their principal; holding no intel level
- * any more stops their Gmail being swept (their graph stays — demoting is not
- * deleting). Returns the stored access, or null when the email is not on the
- * allow-list.
+ * Set a user's role and the grants added on top of it. A person holds ONE
+ * role: a list of several (an old row, or a request approved for someone who
+ * already had one) keeps the strongest, so this never demotes. Adds are
+ * normalised and anything the role already gives is dropped, so the stored
+ * list is exactly the difference (see $lib/access/roles). Holding anything
+ * creates their principal; holding no intel level any more stops their Gmail
+ * being swept (their graph stays — demoting is not deleting). Returns the
+ * stored access, or null when the email is not on the allow-list.
  */
 export async function setUserAccess(
   email: string,
@@ -119,12 +131,11 @@ export async function setUserAccess(
   if (!user) return null;
 
   const all = await listGroups();
-  const groups = cleanGroupIds(access.groups, new Set(all.map((g) => g.id)));
-  const grants = parsePermissions(access.grants);
-  const effective = effectivePermissions(
-    { role: 'guest', groups, grants },
-    new Map(all.map((g) => [g.id, g.grants])),
-  );
+  const byId = new Map(all.map((g) => [g.id, parsePermissions(asList(g.grants))]));
+  const role = strongestRole(cleanGroupIds(access.groups, new Set(byId.keys())), byId);
+  const groups = role ? [role] : [];
+  const grants = pruneAdds(role ? (byId.get(role) ?? []) : [], access.grants);
+  const effective = effectivePermissions({ role: 'guest', groups, grants }, byId);
 
   if (effective.size > 0) await ensureMemberPrincipal(e, user.note?.trim() || e);
   await db.update(allowedUser).set({ groups, grants, role: 'guest' }).where(eq(allowedUser.email, e));
@@ -181,8 +192,8 @@ export async function saveGroup(input: {
   grants: readonly unknown[];
 }): Promise<AccessGroupRow | { error: string }> {
   const label = input.label.trim();
-  if (!label) return { error: 'A group needs a name' };
-  const grants = parsePermissions(input.grants);
+  if (!label) return { error: 'A role needs a name' };
+  const grants = normaliseGrants(input.grants);
   const description = input.description?.trim() || null;
   await ensureBuiltInGroups();
 

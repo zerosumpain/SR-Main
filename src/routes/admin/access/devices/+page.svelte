@@ -5,7 +5,7 @@
   import type { PageData, ActionData } from './$types';
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
-  import { LANE_LABEL } from './rows';
+  import { LANE_LABEL } from '$lib/access/device-rows';
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
 

@@ -173,3 +173,35 @@ export function lifeSubjects(members: readonly HouseholdMember[]): SubjectEntity
     .filter((m) => m.source === 'life360' && !!m.haPersonEntity)
     .map((m) => ({ subject: m.subject, entity: m.haPersonEntity as string }));
 }
+
+/** A trail subject from a name: `Mary Jane` → `mary-jane`. PURE. */
+export function subjectFromName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32);
+}
+
+/**
+ * Add a person to the household. Their subject comes from their name, made
+ * unique (`sam`, `sam-2`); it is their trail's key for good, so it never
+ * changes when they are renamed. A new person starts on 'none' — nothing is
+ * polled or accepted for them until the owner picks a source.
+ */
+export async function createMember(input: { displayName: string; email?: string | null }): Promise<HouseholdMember> {
+  const base = subjectFromName(input.displayName) || 'person';
+  const taken = new Set((await selectAll()).map((m) => m.subject));
+  let subject = base;
+  for (let n = 2; taken.has(subject); n++) subject = `${base}-${n}`;
+  const [row] = await db
+    .insert(householdMember)
+    .values({
+      subject,
+      displayName: input.displayName.trim(),
+      email: normaliseEmail(input.email),
+      source: 'none',
+    })
+    .returning();
+  return toMember(row as Record<string, unknown>);
+}

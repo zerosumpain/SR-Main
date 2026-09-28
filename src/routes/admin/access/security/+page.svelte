@@ -205,7 +205,7 @@
 
   <section class="nm-sec">
     <div class="nm-sec-hd"><span class="sr-label-tight">Allowed — sign-in</span></div>
-    <p class="muted">Owners have full access. Guests are recognised but see only public pages.</p>
+    <p class="muted">Owners have full access. Everyone else holds what their role and adds give them — see <a href="/admin/access">People</a>.</p>
     <ul class="ips">
       {#each data.access.owners as email (email)}
         <li><code>{email}</code><span class="pill">owner</span></li>
