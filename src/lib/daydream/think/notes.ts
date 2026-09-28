@@ -13,6 +13,7 @@
 // The wire shape (`NativeNote`) is FIXED: the iPhone app was built against it.
 
 import { QUESTION_EVIDENCE_KIND } from './audit';
+import { describeSources, noteStage, sourceText, splitNarrative, type Bucket, type SourceLine, type Stage } from './explain';
 import { CHANNELS, type Channel, type Outcome } from './questions';
 
 export const THINK_KIND_PREFIX = 'think_';
@@ -291,6 +292,9 @@ export function inScope(note: Pick<NativeNote, 'channel' | 'outcome'>, scope: No
 
 export const NATIVE_LIST_DEFAULT = 5;
 export const NATIVE_LIST_MAX = 20;
+/** The Daydream page's `?detail=1` read — a month of notes fits. */
+export const NATIVE_DETAIL_DEFAULT = 40;
+export const NATIVE_DETAIL_MAX = 80;
 
 /** The phone's verdicts, and what each writes. `never` is the kind mute. */
 const WIRE_VERDICTS = { useful: 'useful', not_useful: 'not_useful', never: 'never_kind' } as const;
@@ -312,8 +316,20 @@ export function parseFeedbackBody(
 
 // ── The feed page ──────────────────────────────────────────────────────────
 
+/** What the server knows about a note beyond its row: whether its sources can
+ *  be re-read (a fact check is possible), the check it started, and the
+ *  build-queue item it became. Loaded by `context.server.ts`. */
+export interface NoteContext {
+  checkable: boolean;
+  commission: { id: string; state: string } | null;
+  build: { slug: string; status: string; accepted: boolean } | null;
+}
+
+export const EMPTY_CONTEXT: NoteContext = { checkable: false, commission: null, build: null };
+
 /** A note as the web feed draws it: the wire note plus what only the page
- *  shows — what it read, whether it went out, the owner's own note. */
+ *  shows — what it read, whether it went out, the owner's own note — and the
+ *  note in plain words (`explain.ts`). */
 export interface FeedNote extends NativeNote {
   outcomeLabel: string;
   channelLabel: string;
@@ -329,10 +345,23 @@ export interface FeedNote extends NativeNote {
   /** What it read — code-built, never model prose. */
   read: string;
   ownerNote: string | null;
+  /** The body without its `Next:` line. */
+  summary: string;
+  /** The suggested step, split out of the body. */
+  next: string | null;
+  /** Each cited source, in words. */
+  sources: SourceLine[];
+  checkable: boolean;
+  stage: Stage;
+  bucket: Bucket;
+  commission: NoteContext['commission'];
+  build: NoteContext['build'];
 }
 
-export function toFeedNote(row: ThinkRow, muted: ReadonlySet<string>): FeedNote {
+export function toFeedNote(row: ThinkRow, muted: ReadonlySet<string>, ctx: NoteContext = EMPTY_CONTEXT): FeedNote {
   const n = toNativeNote(row);
+  const split = splitNarrative(n.body);
+  const where = noteStage({ verdict: row.feedback, commissionState: ctx.commission?.state, build: ctx.build });
   return {
     ...n,
     outcomeLabel: outcomeLabel(n.outcome),
@@ -344,5 +373,45 @@ export function toFeedNote(row: ThinkRow, muted: ReadonlySet<string>): FeedNote 
     verdict: row.feedback,
     read: row.explanation,
     ownerNote: row.note,
+    summary: split.summary,
+    next: split.next,
+    sources: describeSources(row.evidence),
+    checkable: ctx.checkable,
+    stage: where.stage,
+    bucket: where.bucket,
+    commission: ctx.commission,
+    build: ctx.build,
+  };
+}
+
+/**
+ * The phone's richer note — the fixed `NativeNote` plus optional keys an older
+ * app ignores. Same words as the web card.
+ */
+export interface NativeNoteDetail extends NativeNote {
+  summary: string;
+  next: string | null;
+  sources: string[];
+  stage: Stage;
+  bucket: Bucket;
+  checkable: boolean;
+  commissionId: string | null;
+  commissionState: string | null;
+}
+
+export function toNativeDetail(row: ThinkRow, ctx: NoteContext = EMPTY_CONTEXT): NativeNoteDetail {
+  const n = toNativeNote(row);
+  const split = splitNarrative(n.body);
+  const where = noteStage({ verdict: row.feedback, commissionState: ctx.commission?.state, build: ctx.build });
+  return {
+    ...n,
+    summary: split.summary,
+    next: split.next,
+    sources: describeSources(row.evidence).map(sourceText),
+    stage: where.stage,
+    bucket: where.bucket,
+    checkable: ctx.checkable,
+    commissionId: ctx.commission?.id ?? null,
+    commissionState: ctx.commission?.state ?? null,
   };
 }

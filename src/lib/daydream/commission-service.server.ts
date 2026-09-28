@@ -28,16 +28,18 @@ export async function prepareCommission(thoughtId: string, principal = 'owner') 
   const thought = await thoughtSource(thoughtId);
   if (['archived', 'expired'].includes(String(thought.status))) throw new CommissionError(409, 'This suggestion is no longer current.');
   const reads = sourceReads(thought.evidence, PRIVATE_TOOLS);
-  if (!reads.length) throw new CommissionError(422, 'This suggestion has no replayable private source references. It needs a new scoped investigation proposal.');
+  if (!reads.length) throw new CommissionError(422, 'This note has no private sources that can be re-read, so there is nothing to double-check.');
+  // Plain words, because this IS the sign-off sheet: every field below is read
+  // by the owner before he approves, on the web and on the phone.
   const spec: ImprovementSpec = {
-    version: 1, route: 'evidence_refresh', title: `Refresh the evidence: ${String(thought.title).slice(0, 160)}`,
-    outcome: 'Re-read the cited private sources and produce a dated evidence report, preserving your correction and recording unavailable evidence.',
+    version: 1, route: 'evidence_refresh', title: `Double-check: ${String(thought.title).slice(0, 160)}`,
+    outcome: 'jkai re-reads the sources this note was based on and gives you a dated report of what they say today.',
     currentBehaviour: String(thought.narrative || thought.explanation).slice(0, 8000),
-    improvedBehaviour: 'Review current source results alongside the suggestion before deciding whether its proposed improvement is justified. This step refreshes evidence; it does not verify original invoices or commission development.',
-    reuseAssessment: ['Reuse the existing Daydream private read-only toolbox.', 'Execute through the existing durable Workflows worker.', 'Use the existing backlog and notification inbox; no generated code is required.'],
-    acceptance: ['Every approved source read has a dated, hashed receipt or an explicit unavailable result.', 'The report preserves the source suggestion and owner correction.', 'No write to accounts, schedules, calendars or external recipients occurs.'],
-    effects: ['Read the listed private sources.', 'Store a private report and send progress to your existing notification inbox.'],
-    exclusions: ['No inference that a receipt and bank record are two payments.', 'No refunds, disputes, cancellations, account changes, workflow activation or builds.', 'Extracted summaries remain derived evidence, not original invoice proof.'],
+    improvedBehaviour: 'You get the current figures side by side with the note, so you can decide whether it still holds before doing anything about it. It checks the sources again; it does not prove the claim or change anything.',
+    reuseAssessment: ['Uses the same read-only look-ups the note used.', 'Runs on the existing workflow runner, so it carries on if you close the page.', 'Progress arrives in your usual notifications.'],
+    acceptance: ['Every source comes back with today’s answer, or is clearly marked as unavailable.', 'The report keeps the original note and anything you added to it.', 'Nothing is sent, booked, paid, cancelled or changed.'],
+    effects: ['Read the sources listed below again.', 'Save a private report here and notify you when it is ready.'],
+    exclusions: ['It will not treat a receipt and a bank line as two separate payments.', 'No refunds, disputes, cancellations, account changes, new automations or builds.', 'Mail is read as extracted facts only — not as the original invoice.'],
     reads, sourceHash: sourceHash(thought), ownerCorrection: typeof thought.note === 'string' ? thought.note : null,
     budget: { maxReads: reads.length, maxAttempts: 3, maxWallSeconds: 180 },
   };
@@ -71,12 +73,12 @@ export async function prepareCommission(thoughtId: string, principal = 'owner') 
       const previous = raw as unknown as CommissionRow;
       await tx.execute(sql`UPDATE daydream_commissions SET state='cancelled',revision=revision+1,generation=generation+1,
         updated_at=now() WHERE id=${previous.id}::uuid`);
-      await recordEvent(tx, previous, 'proposal.superseded', 'Replaced by a proposal using the updated suggestion', principal, { replacementId: commissionId });
+      await recordEvent(tx, previous, 'proposal.superseded', 'Replaced by a new double-check that includes your note', principal, { replacementId: commissionId });
       await tx.execute(sql`UPDATE datastore_records SET data=data || ${JSON.stringify({ commissioningState: 'cancelled', supersededBy: commissionId })}::jsonb,
         version=version+1,updated_at=now() WHERE key=${previous.backlog_slug} AND collection_id=${collection.rows[0].id}::uuid`);
     }
-    await recordEvent(tx, row, 'proposal.prepared', 'Evidence refresh proposal prepared', principal, { sourceHash: spec.sourceHash, backlogSlug });
-    await recordEvent(tx, row, 'approval.requested', 'Review your Daydream improvement', 'planner', { specHash }, true);
+    await recordEvent(tx, row, 'proposal.prepared', 'Double-check prepared', principal, { sourceHash: spec.sourceHash, backlogSlug });
+    await recordEvent(tx, row, 'approval.requested', 'A double-check is waiting for your OK', 'planner', { specHash }, true);
     return commissionId;
   });
   return loadCommission(id, principal);
@@ -109,7 +111,7 @@ export async function decideCommission(id: string, input: { decision: Commission
       approved_by=CASE WHEN ${execute} THEN coalesce(approved_by,${principal}) ELSE approved_by END,
       deferred_until=CASE WHEN ${state === 'deferred'} THEN now()+interval '7 days' ELSE NULL END,
       lease_token=NULL,lease_until=NULL,last_error=NULL,updated_at=now() WHERE id=${id}::uuid`);
-    const event = await recordEvent(tx, { ...row, revision }, `proposal.${input.decision}`, execute ? 'Approved — evidence refresh queued' : state === 'deferred' ? 'Deferred for seven days' : state === 'declined' ? 'Proposal declined' : 'Commission cancelled', principal, { specHash: row.spec_hash, generation }, execute);
+    const event = await recordEvent(tx, { ...row, revision }, `proposal.${input.decision}`, execute ? 'Approved — the double-check is queued' : state === 'deferred' ? 'Put off for seven days' : state === 'declined' ? 'Declined' : 'Cancelled', principal, { specHash: row.spec_hash, generation }, execute);
     if (execute) await tx.execute(sql`INSERT INTO daydream_commission_outbox(commission_id,event_id,kind,payload)
       VALUES (${id}::uuid,${event}::uuid,'dispatch',${JSON.stringify({ commissionId: id, generation, specHash: row.spec_hash })}::jsonb)`);
     await tx.execute(sql`UPDATE datastore_records SET data=data || ${JSON.stringify({ commissioningState: state, updatedAt: new Date().toISOString() })}::jsonb,

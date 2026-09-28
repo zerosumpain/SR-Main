@@ -25,8 +25,21 @@ const note = {
 };
 const loadNativeNotes = vi.fn(async (_opts: { scope: string; limit: number }) => [note]);
 let knownKind: string | null = 'think_health_plan';
+const loadNativeDetail = vi.fn(async (_opts: { limit: number }) => ({
+  notes: [{ ...note, summary: 'Three nights under six hours.', next: null, sources: [], stage: 'spotted', bucket: 'decide', checkable: false, commissionId: null, commissionState: null }],
+  pipeline: { decide: 1, motion: 0, done: 0 },
+}));
+let impactFails = false;
+vi.mock('$lib/daydream/impact.server', () => ({
+  loadImpact: async () => {
+    if (impactFails) throw new Error('db down');
+    const { computeImpact } = await import('../../../../src/lib/daydream/impact');
+    return { impact: computeImpact([], [], [], new Date('2026-09-28T12:00:00Z')), results: [] };
+  },
+}));
 vi.mock('$lib/daydream/think/notes.server', () => ({
   loadNativeNotes: (opts: { scope: string; limit: number }) => loadNativeNotes(opts),
+  loadNativeDetail: (opts: { limit: number }) => loadNativeDetail(opts),
   thinkNoteKind: async () => knownKind,
 }));
 const recordFeedback = vi.fn(async () => ({ kind: 'think_health_plan', muted: false }));
@@ -54,7 +67,33 @@ beforeEach(() => {
   device = { id: 'dev-1', ownerEmail: 'owner@example.com', expiresAt: new Date(Date.now() + 60000) };
   knownKind = 'think_health_plan';
   loadNativeNotes.mockClear();
+  loadNativeDetail.mockClear();
   recordFeedback.mockClear();
+});
+
+describe('GET /api/native/daydream?detail=1', () => {
+  it('adds stage, pipeline and the impact card without touching the plain list', async () => {
+    impactFails = false;
+    const res = await list('?detail=1');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(loadNativeDetail).toHaveBeenCalledWith({ limit: 40 });
+    expect(loadNativeNotes).not.toHaveBeenCalled();
+    expect(body.pipeline).toEqual({ decide: 1, motion: 0, done: 0 });
+    expect(body.notes[0]).toMatchObject({ id: 't-1', bucket: 'decide', stage: 'spotted' });
+    expect(body.impact).toMatchObject({ windowDays: 28, hitRate: null });
+    expect(body.impact.weeks).toHaveLength(12);
+  });
+  it('costs only the card when the impact read fails', async () => {
+    impactFails = true;
+    const body = await (await list('?detail=1')).json();
+    expect(body.impact).toBeNull();
+    expect(body.notes).toHaveLength(1);
+  });
+  it('ignores detail on a scoped read', async () => {
+    await list('?detail=1&scope=health');
+    expect(loadNativeDetail).not.toHaveBeenCalled();
+  });
 });
 
 describe('GET /api/native/daydream', () => {

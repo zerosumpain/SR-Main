@@ -163,6 +163,7 @@ export function systemPrompt(opts: {
     '3. When you are done, reply with ONE JSON object and nothing else:',
     '   {"notes":[{"outcome":"...","title":"...","body":"...","cites":["C1","C3"],"action":"..."}]}',
     `   title ≤ 90 chars, plain. body ≤ ${MAX_BODY_CHARS - 100} chars: what you found, the figures, and why it matters to him. action (optional, ≤ 200 chars): the one specific thing to do. No greeting, no emoji, second person.`,
+    '   PLAIN ENGLISH: he reads this on a phone between other things. Lead the body with what it means for him, then the figures. A statistic is said in words first — "no real link between X and Y (r −0.04 over 62 days)", never a bare "r=-0.04, n=62, p=0.783". No internal names (tool names, card ids, entity ids) in the title, body or action.',
     `4. At most ${MAX_NOTES} notes. Fewer, sharper.`,
   ].join('\n');
 }

@@ -19,12 +19,14 @@ import type { BadgeCounts } from './hub';
 export interface HubCounts extends BadgeCounts {
   /** Think notes only — what the cover deck reports. */
   think: { week: number; useful30d: number; rated30d: number; lastCycleAt: Date | null };
+  /** Fact checks: waiting for his OK (or stuck), and running on their own. */
+  checks: { waiting: number; running: number };
 }
 
 export async function loadHubCounts(opts: { activeWatches?: number } = {}): Promise<HubCounts> {
   const weekAgo = new Date(Date.now() - 7 * 86_400_000);
   const monthAgo = new Date(Date.now() - 30 * 86_400_000);
-  const [thinkRows] = await Promise.all([
+  const [thinkRows, checkRows] = await Promise.all([
     db
       .select({
         // Think notes the feed shows and nobody has ruled on. The held-back
@@ -38,7 +40,16 @@ export async function loadHubCounts(opts: { activeWatches?: number } = {}): Prom
       })
       .from(daydreamThoughts)
       .where(sql`${daydreamThoughts.kind} like 'think\\_%'`),
+    // A deploy before the commissions migration must not blank the cover.
+    db
+      .execute(
+        sql`SELECT count(*) filter (where state in ('awaiting_approval','needs_attention'))::int AS waiting,
+            count(*) filter (where state in ('queued','running'))::int AS running
+          FROM daydream_commissions WHERE principal_id = 'owner'`,
+      )
+      .catch(() => ({ rows: [] as Record<string, unknown>[] })),
   ]);
+  const c = checkRows.rows[0];
   const k = thinkRows[0];
   return {
     notesToRate: k?.notesToRate ?? 0,
@@ -49,6 +60,7 @@ export async function loadHubCounts(opts: { activeWatches?: number } = {}): Prom
       rated30d: k?.rated ?? 0,
       lastCycleAt: k?.lastCycleAt ? new Date(k.lastCycleAt) : null,
     },
+    checks: { waiting: Number(c?.waiting ?? 0), running: Number(c?.running ?? 0) },
   };
 }
 
@@ -59,5 +71,6 @@ export function emptyHubCounts(): HubCounts {
     notesToRate: 0,
     activeWatches: 0,
     think: { week: 0, useful30d: 0, rated30d: 0, lastCycleAt: null },
+    checks: { waiting: 0, running: 0 },
   };
 }

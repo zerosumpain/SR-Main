@@ -6,7 +6,7 @@ describe('commission authority and evidence boundary', () => {
     expect(decisionAllowed('awaiting_approval', 'approve')).toBe(true);
     for (const state of ['queued', 'running', 'completed', 'cancelled', 'declined'] as const) expect(decisionAllowed(state, 'approve')).toBe(false);
     expect(nextActor('awaiting_approval')).toBe('You');
-    expect(nextActor('queued')).toBe('Workflow worker');
+    expect(nextActor('queued')).toBe('jkai');
   });
   it('accepts only allow-listed source queries, not instructions from excerpts', () => {
     const refs = [
