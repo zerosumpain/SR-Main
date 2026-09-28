@@ -5395,6 +5395,9 @@ export const householdEvent = pgTable(
       .$type<Record<string, { attempts: number; failed: number }>>()
       .notNull()
       .default(sql`'{}'::jsonb`),
+    /** Recipient EMAILS an APNs push for this crossing reached. They are left
+     *  out of the pilot's queue, so the app does not raise it a second time. */
+    pushedTo: jsonb('pushed_to').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -6941,6 +6944,16 @@ export const nativeCredentials = pgTable('native_credentials', {
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
   lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
   useCount: integer('use_count').notNull().default(0),
+  /**
+   * The APNs device token this phone registered, hex. On the credential row
+   * because a push is addressed to a PHONE, and revoking the phone must stop
+   * its pushes in the same write. Null until the app registers; cleared when
+   * Apple answers that the token is dead. See `$lib/server/push-devices`.
+   */
+  apnsToken: text('apns_token'),
+  /** 'production' (TestFlight, App Store) or 'sandbox' (an Xcode build). */
+  apnsEnv: text('apns_env'),
+  apnsTokenAt: timestamp('apns_token_at', { withTimezone: true }),
 }, (t) => [
   uniqueIndex('native_credentials_token_hash_idx').on(t.tokenHash),
   index('native_credentials_owner_kind_idx').on(t.ownerEmail, t.kind),
@@ -6987,6 +7000,12 @@ export const notificationEvents = pgTable('notification_events', {
   whatsappAt: timestamp('whatsapp_at', { withTimezone: true }),
   /** When the phone collected it. See the note above: collection, not reading. */
   nativeAt: timestamp('native_at', { withTimezone: true }),
+  /**
+   * When the push dispatcher took this row, whether or not Apple then delivered
+   * it. Claimed once, so two processes never push the same alert twice; a row
+   * whose push reached no phone keeps `nativeAt` null and is pulled as before.
+   */
+  pushedAt: timestamp('pushed_at', { withTimezone: true }),
   readAt: timestamp('read_at', { withTimezone: true }),
 }, (t) => [
   index('notification_events_created_idx').on(t.createdAt),

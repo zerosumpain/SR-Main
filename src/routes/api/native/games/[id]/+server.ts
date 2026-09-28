@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { withNativeAccess } from '$lib/server/native-handler';
 import { gamePlayers, playerFor } from '$lib/games/players.server';
 import { act, asHttp, inviteTo, roomFor } from '$lib/games/rooms.server';
+import { pushInvites } from '$lib/games/invite-push.server';
 
 /** GET /api/native/games/[id] — one room as this player sees it. */
 export const GET: RequestHandler = withNativeAccess('games', async (event, identity) => {
@@ -35,8 +36,12 @@ export const POST: RequestHandler = withNativeAccess('games', async (event, iden
       if (!p) error(400, 'One of those players cannot be invited.');
       return { id: p.id, name: p.name };
     });
-    return { room: asHttp(() => inviteTo(event.params.id, me.id, people)) };
+    const room = asHttp(() => inviteTo(event.params.id, me.id, people));
+    void pushInvites(event.params.id);
+    return { room };
   }
   const room = asHttp(() => act(event.params.id, me.id, action, body));
+  // "Play again" re-invites everybody; their phones are rung afresh.
+  if (action === 'again') void pushInvites(event.params.id);
   return { room };
 });

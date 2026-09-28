@@ -9,6 +9,7 @@ import {
   stopDependencyMonitor,
 } from '$lib/dependencies/monitor.server';
 import { startHealthWatch, stopHealthWatch } from '$lib/server/notify/health-watch';
+import { startPushDispatch, stopPushDispatch } from '$lib/server/notify/push-dispatch';
 import { startConnectorWatch, stopConnectorWatch } from '$lib/connectors/watch';
 // JKAI build orchestrator no longer boots in the SvelteKit web app — it runs
 // in the jkai-builder sidecar service (packages/jkai-builder/, system unit
@@ -146,6 +147,12 @@ if (runsService('scheduler')) startDependencyMonitor();
 // the rate at which anybody is told anything.
 if (runsService('scheduler')) startHealthWatch();
 
+// Push the owner's alert ledger to their phones as rows land — including the
+// rows SR-Jkai-Core writes when a chat turn stops at a gate, which is why this
+// reads the ledger rather than hooking notifyOwner. Rows claimed one at a time,
+// so a second process running it cannot double-push.
+if (runsService('scheduler')) startPushDispatch();
+
 // Watch every connector and tell the owner (phone + WhatsApp, category
 // `connections`) when one needs re-authorising or is down, with a 12-hour
 // reminder while it stays that way. Replaced the 06:45 daily check, which let
@@ -255,6 +262,7 @@ async function gracefulShutdown() {
   stopHeroTitlesScheduler();
   stopDependencyMonitor();
   stopHealthWatch();
+  stopPushDispatch();
   stopDatastoreReaper();
   stopWorkflowDoctor();
   stopBriefingEngine();

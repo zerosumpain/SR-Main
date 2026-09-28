@@ -60,6 +60,7 @@
 /api/native/notifications
 /api/native/notifications/routes
 /api/native/pair
+/api/native/push
 /api/native/today
 /api/platform/tools/catalogue
 /api/platform/tools/invoke
