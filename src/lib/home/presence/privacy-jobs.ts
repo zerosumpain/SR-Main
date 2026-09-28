@@ -59,6 +59,12 @@ export async function privacyMaintenance(): Promise<void> {
   draining = true;
   try {
     await drainPrivacyJobs();
+    const r = await fetch(`${companionUrl()}/api/apple/household/account-deletions`, {
+      headers: { Authorization: `Bearer ${companionToken()}` }, redirect: 'error', signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) throw new Error('Account deletion queue unavailable');
+    const { users } = await r.json();
+    await (await import('$lib/people/erase')).sweepAccountDeletions(users);
     await db.execute(sql`DELETE FROM daydream_trail WHERE source='companion' AND ts<now()-interval '30 days'`);
     await db.execute(sql`DELETE FROM household_journey_viewer WHERE journey_id IN
       (SELECT id FROM household_journey WHERE started_at<now()-interval '30 days')`);

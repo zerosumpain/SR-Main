@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   deletePilotData,
+  deletePilotUser,
   listPilotDevices,
   pilotDay,
   pilotFailureText,
@@ -144,6 +145,23 @@ describe('phase 2: deleting uploaded data', () => {
       reason: 'not-found',
       status: 404,
     });
+  });
+});
+
+describe('deleting a person (account deletion)', () => {
+  it('posts the email, lower-cased, to household/users/delete and keeps the counts', async () => {
+    const f = fake(200, { deleted: { health: 3, locations: 9, users: 1, junk: 'x' } });
+    const r = await deletePilotUser('Jane@Example.com', f.impl);
+    expect(r).toEqual({ ok: true, value: { counts: { health: 3, locations: 9, users: 1 } } });
+    expect(f.calls[0].url).toBe('http://pilot.test:5295/api/apple/household/users/delete');
+    expect(f.calls[0].init.method).toBe('POST');
+    expect(JSON.parse(String(f.calls[0].init.body))).toEqual({ email: 'jane@example.com' });
+  });
+
+  it('never reports a deletion the pilot did not confirm, and passes the owner refusal through', async () => {
+    expect(await deletePilotUser('a@b.com', fake(200, { ok: true }).impl)).toEqual({ ok: false, reason: 'bad-response' });
+    expect(await deletePilotUser('a@b.com', fake(404, { error: 'no' }).impl)).toMatchObject({ ok: false, reason: 'not-found' });
+    expect(await deletePilotUser('a@b.com', fake(409, { error: 'owner' }).impl)).toMatchObject({ ok: false, reason: 'conflict' });
   });
 });
 

@@ -240,3 +240,45 @@ best length.
      "survivorIds": null | […]},
   "standings": null | [{"id","name","best","roundsSurvived","outRound"}], "winnerIds": [], "serverNow":… }
 ```
+
+## Game 7 — Boggle (added 2026-09-28)
+
+`game:'boggle'`. A grid of letter dice, the same roll for everyone; trace words through
+touching tiles (8 directions, each tile once per word) before the clock runs out.
+
+**The host picks the round** on create (all optional, defaults in bold):
+- `size`: **4** (16 classic dice) | 5 (25 Big Boggle dice) | 6 (36 dice, some with two-letter
+  faces: an, er, he, in, th — and `qu` everywhere a Q would be).
+- `seconds`: 30 | 90 | **120** | 180.
+- `scoring`: **`classic`** — a word two or more players found is crossed out for all of them
+  (the real Boggle rule; solo is exempt) | `every` — every word counts for whoever found it.
+
+**Difficulty** = how kind the roll is, and the shortest word:
+easy 3+ letters and the dice are rerolled until the board is rich in common words;
+medium 3+ letters, any board that is not a dud; hard 4+ letters, any board that is not a dud.
+
+**Points** by length in letters (`qu` is two): 3–4 → 1, 5 → 2, 6 → 3, 7 → 5, 8+ → 11.
+
+Move `{action:'word', word, path?:[tileIndex,…]}` — the phone sends the tiles it traced
+(row-major indices); the server uses a valid path that spells the word, else finds one itself,
+so a typed word works too. 400 "Words need at least N letters." / "That word isn't on the board."
+/ "Not in the word list." (all free); 409 "You already have that one." / time's up. 1 s grace.
+
+Wire (GameRoom additions; lobby verbs, invites, stream as every other game):
+```jsonc
+{ "game":"boggle", "phase":"lobby|countdown|playing|finished|closed",
+  "size":4, "scoring":"classic", "minLength":3,
+  "points":{"3":1,"4":1,"5":2,"6":3,"7":5,"8":11},     // "8" means 8 or more
+  "timeLimitMs":120000, "startedAt":…, "phaseEndsAt":…,  // the limit while playing
+  "grid": null | ["t","qu","e","a", …],                   // size×size faces, row-major, lowercase; null before play
+  "players":[{"id","name","status","isHost","wordCount":3,"score":4,
+              "words": null | [{"word":"quiet","points":2,"shared":null,"path":[1,2,6,5,9]}]}],
+              // mine always; everyone's at the finish, when `shared` is true/false
+              // and a crossed-out word's `points` is 0
+  "found":  null | [{"word","points","finderIds":[…],"shared":false,"path":[…]}],  // finished
+  "missed": null | [{"word","points","path":[…]}],    // finished: the best common words nobody found (≤ 10)
+  "possible": null | {"words":187,"points":260},      // finished: every valid word the board held
+  "standings": null | [{"id","name","score","words","longest"}], "winnerIds": [], "serverNow":… }
+```
+`score` mid-game is the raw points so far (crossing-out only happens at the finish).
+The invite's `about` reads "5×5 · 2 minutes" (+ " · every word counts").

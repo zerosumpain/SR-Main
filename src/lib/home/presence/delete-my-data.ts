@@ -20,7 +20,7 @@ import { drainPrivacyJobs } from './privacy-jobs';
 // is a failure too — it is also what a pilot without Contract F answers.
 
 import { and, eq } from 'drizzle-orm';
-import { db } from '$lib/db';
+import { db, type DbExecutor } from '$lib/db';
 import { daydreamTrail } from '$lib/db/schema';
 import { deletePilotData, pilotFailureText, type PilotDeleted, type PilotResult } from './companion-accounts';
 import { memberByEmail } from './members';
@@ -32,8 +32,8 @@ export interface DeleteDeps {
   pilotDelete: (email: string) => Promise<PilotResult<PilotDeleted>>;
   /** The household subject whose trail this email's phone wrote, or null. */
   subjectFor: (email: string) => Promise<string | null>;
-  /** Remove that subject's companion-sourced trail rows; the number removed. */
-  deleteCompanionTrail: (subject: string) => Promise<number>;
+  /** Remove that subject's companion-sourced trail rows; the number removed. Pass a transaction to join it. */
+  deleteCompanionTrail: (subject: string, executor?: DbExecutor) => Promise<number>;
 }
 
 export type DeleteOutcome =
@@ -43,8 +43,8 @@ export type DeleteOutcome =
 export const defaultDeleteDeps: DeleteDeps = {
   pilotDelete: (email) => deletePilotData(email),
   subjectFor: async (email) => (await memberByEmail(email))?.subject ?? null,
-  deleteCompanionTrail: async (subject) => {
-    const rows = await db
+  deleteCompanionTrail: async (subject, executor = db) => {
+    const rows = await executor
       .delete(daydreamTrail)
       .where(and(eq(daydreamTrail.subject, subject), eq(daydreamTrail.source, 'companion')))
       .returning({ id: daydreamTrail.id });

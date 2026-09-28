@@ -67,7 +67,7 @@ describe('every native route gates itself', () => {
    * the device itself because a registrant is no member for
    * `withNativeAccess` to find.
    */
-  const SELF_GATED = ['native/pair/+server.ts', 'native/register/apple/+server.ts', 'native/companion-policy/+server.ts', 'native/session/+server.ts'];
+  const SELF_GATED = ['native/pair/+server.ts', 'native/register/apple/+server.ts', 'native/review-demo/+server.ts', 'native/companion-policy/+server.ts', 'native/session/+server.ts'];
 
   it.each(handlers.filter((p) => !SELF_GATED.some((s) => p.endsWith(s))))(
     '%s resolves a device identity',

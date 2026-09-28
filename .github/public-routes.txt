@@ -35,6 +35,7 @@
 /api/maps/config
 /api/mcp
 /api/mcp/local
+/api/native/account
 /api/native/chat/attachments
 /api/native/chat/attachments/[id]
 /api/native/chat/conversations
@@ -69,6 +70,7 @@
 /api/native/push
 /api/native/register
 /api/native/register/apple
+/api/native/review-demo
 /api/native/session
 /api/native/today
 /api/platform/tools/catalogue

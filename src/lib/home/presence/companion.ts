@@ -47,6 +47,13 @@ export interface HouseholdUser {
    * answers it with a one-time code in their view (`app-view.ts`).
    */
   sitePairWanted?: string | null;
+  /**
+   * ISO8601, when this person deleted their account from a phone paired to
+   * the pilot alone (no site credential to call `/api/native/account` with).
+   * The pilot has already wiped what they uploaded; `sweepAccountDeletions`
+   * ($lib/people/erase) deletes the rest. Absent from an older pilot.
+   */
+  deleteRequested?: string | null;
 }
 
 export interface HouseholdFix {

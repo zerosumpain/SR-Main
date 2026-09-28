@@ -25,6 +25,7 @@ const TITLES: Record<GameId, string> = {
   'anagram-blitz': 'Anagram Blitz',
   'maths-sprint': 'Quick Maths Sprint',
   'sequence-memory': 'Sequence Memory',
+  boggle: 'Boggle',
 };
 
 const LEVELS: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };

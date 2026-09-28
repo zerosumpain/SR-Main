@@ -128,6 +128,25 @@ export async function renamePilotUser(
   return r.ok ? { ok: true, value: null } : r;
 }
 
+/**
+ * Delete a person in the family outright — their account row, every
+ * credential, and all their health, location, alerts and Family view. The
+ * iPhone app's "Delete account" (App Store 5.1.1(v)). 404 = not in the family
+ * (or a pilot that predates the route: the caller falls back to
+ * `deletePilotData`), 409 = the owner, who is never deleted.
+ */
+export async function deletePilotUser(email: string, fetchImpl: typeof fetch = fetch): Promise<PilotResult<PilotDeleted>> {
+  const r = await call('POST', '/api/apple/household/users/delete', { email: email.trim().toLowerCase() }, fetchImpl);
+  if (!r.ok) return r;
+  const deleted = ((r.value ?? {}) as Record<string, unknown>).deleted;
+  if (!deleted || typeof deleted !== 'object') return { ok: false, reason: 'bad-response' };
+  const counts: Record<string, number> = {};
+  for (const [k, v] of Object.entries(deleted as Record<string, unknown>)) {
+    if (typeof v === 'number' && Number.isFinite(v)) counts[k] = v;
+  }
+  return { ok: true, value: { counts } };
+}
+
 /** A fresh ten-minute pairing code for a person in the family; the old one stops working. */
 export async function pilotPairCode(email: string, fetchImpl: typeof fetch = fetch): Promise<PilotResult<PilotPairCode>> {
   const r = await call('POST', '/api/apple/household/pair-code', { email: email.trim().toLowerCase() }, fetchImpl);
