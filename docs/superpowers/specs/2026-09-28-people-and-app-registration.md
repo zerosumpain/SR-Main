@@ -70,21 +70,25 @@ Verification: unit tests for `roles.ts` (choices, family normalisation, add prun
 people join; the gate; then on prod: `/admin/access` lists 2 accounts + 3 household-only children, Katie
 reads **Parent** with her adds, and `/home/people/settings` 3xx's to `/admin/access`.
 
-## P2 — registration backend (SR-Main + pilot)
+## P2 — registration backend (SR-Main) — as built
 
-- `GET /native/register?provider=google&device=<nonce>` → Auth.js Google sign-in with a `sr_register`
-  cookie; the `signIn` callback admits an unknown email **only** with that cookie, as a *registrant*
-  (no allow-list row, no grants). The finish page records an `access_request` (`source: 'app'`,
-  `wants.app`) and redirects to `srapp://registered?code=<one-time>`.
-- `POST /api/native/register/apple {identityToken, name?}` → verify the JWT against Apple's JWKS
-  (`aud` = bundle id), record the request keyed by Apple `sub` (new `account_identity` table:
-  provider, subject, email, person email once linked), return a one-time code.
-- A registrant's code redeems at `/api/native/pair` into a credential that reaches only
-  `/api/native/me`, which answers `{status: 'pending' | 'declined' | 'active', access}`.
-- Approving links the identity to a person (for a relay Apple address the dialog asks for their Google
-  email, optional), and when the role includes the family circle, `/api/native/companion-pair` hands the
-  phone a companion code through its site credential — no QR.
-- Declining revokes the credential.
+- **Google:** the app's private sign-in sheet opens `/welcome/app`, which sets `sr_register` (10 min) and
+  hands straight on to Google. The Auth.js `signIn` callback admits an unknown email only while that cookie
+  is present. `/welcome/app/finish` records the request (`ensureAppRequest`: once; a no in the last 30 days
+  shows the no), mints a one-time pairing code, DELETES the web session, and redirects to
+  `srapp://registered?code=…`.
+- **Apple:** `POST /api/native/register/apple {identityToken, name?}` — RS256 against Apple's JWKS (node
+  crypto, kid refetch on rotation), `iss`, `aud` = bundle id (`APPLE_BUNDLE_ID` → `APNS_BUNDLE_ID` → default),
+  `exp`, verified email. Rate-limited per address. **Never mints the owner's code** (403): the owner's phone is
+  paired from an owner web session only. The relay address (`…@privaterelay.appleid.com`) IS the person's
+  email — no identity table; linking a Google address for the web is a later person-page action.
+- Both redeem at `/api/native/pair`, whose `mayHoldDevice` now also admits a **registrant** (latest request
+  pending or declined, no grants). A registrant's device reaches only `/api/native/me`, which answers
+  `{role:'registrant', status, name, email}` (approved-with-nothing answers as a member with no flags).
+- `DELETE /api/native/register` — a registrant withdraws: requests deleted, credentials revoked.
+- `POST /api/native/companion-pair` (`withNativeAccess('any')`, owner or `family:circle`) upserts the pilot
+  user and returns `{server, code}` so an approved phone connects health & location with no QR.
+- The Waiting list tags app requests "from the app · Apple/Google" (`wants.via`).
 
 ## P3 — the app (SR-AppleApp)
 

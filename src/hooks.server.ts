@@ -23,8 +23,9 @@ import { isPublicPath, isGuestAllowedPath } from '$lib/auth';
 import { requiredFor, satisfies } from '$lib/access/catalogue';
 import { requestHost } from '$lib/request-host';
 import { resolveAdminRedirect } from '$lib/components/admin/admin-nav';
-import { isOwnerEmail } from '$lib/server/access';
+import { isEmailAllowedToSignIn, isOwnerEmail } from '$lib/server/access';
 import { INVITE_COOKIE, signInWithInvite } from '$lib/server/invites';
+import { REGISTER_COOKIE, REGISTER_COOKIE_MAX_AGE_S, REGISTER_FINISH_PATH, isRegisterNonce } from '$lib/server/registration';
 import { viewerHolds, viewerOf } from '$lib/server/viewer';
 import {
   VIEW_AS_COOKIE,
@@ -334,9 +335,44 @@ const { handle: authHandle } = SvelteKitAuth(async (event) => ({
       const outcome = await signInWithInvite(email, event.cookies.get(INVITE_COOKIE));
       const how = outcome.allow ? `allowed (${outcome.via})` : `denied (${outcome.reason})`;
       console.log(`[auth] Sign-in attempt: ${email} → ${how}`);
-      return outcome.allow;
+      if (outcome.allow) return true;
+      // Registering from the iPhone app (/welcome/app set a nonce cookie):
+      // anyone whose address Google has VERIFIED may sign in, for
+      // /welcome/app/finish to learn who they are. The session is marked
+      // (jwt below) and reads as signed out everywhere but finish, for ten
+      // minutes; finish records the request and deletes it.
+      if (email && isRegisterNonce(event.cookies.get(REGISTER_COOKIE)) && (profile as any)?.email_verified === true) {
+        console.log(`[auth] Sign-in for app registration: ${email}`);
+        return true;
+      }
+      return false;
     },
-    async session({ session }) {
+    async jwt({ token, account, user }) {
+      // At sign-in only (`account` is present then). A sign-in made while
+      // /welcome/app's nonce is set carries that nonce, so finish can tell
+      // THIS sign-in from a session the browser already had.
+      if (account) {
+        const nonce = event.cookies.get(REGISTER_COOKIE);
+        if (isRegisterNonce(nonce)) {
+          const email = (user?.email ?? '').toLowerCase();
+          token.registerNonce = nonce;
+          token.registerUntil = Date.now() + REGISTER_COOKIE_MAX_AGE_S * 1000;
+          token.registrant = !(await isEmailAllowedToSignIn(email));
+        }
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      const t = token as { registerNonce?: string; registerUntil?: number; registrant?: boolean };
+      const live = typeof t.registerUntil === 'number' && Date.now() < t.registerUntil;
+      if (t.registrant && (!live || event.url.pathname !== REGISTER_FINISH_PATH)) {
+        // A stranger's registration session is nobody's session anywhere
+        // else: no page or API, here or behind the gateway, sees a user.
+        return { expires: session.expires } as typeof session;
+      }
+      if (live && event.url.pathname === REGISTER_FINISH_PATH) {
+        (session as typeof session & { registerNonce?: string }).registerNonce = t.registerNonce;
+      }
       return session;
     },
   },

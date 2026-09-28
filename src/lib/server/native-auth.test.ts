@@ -60,11 +60,20 @@ describe('every native route gates itself', () => {
     expect(handlers.length).toBeGreaterThan(3);
   });
 
-  it.each(handlers.filter((p) => !p.endsWith('native/pair/+server.ts')))(
+  /**
+   * Registering from the app ($lib/server/registration): the Apple sign-in
+   * takes no credential (it is how one is got, like /pair — guarded by
+   * Apple's signature and a per-address ceiling), and withdrawing resolves
+   * the device itself because a registrant is no member for
+   * `withNativeAccess` to find.
+   */
+  const SELF_GATED = ['native/pair/+server.ts', 'native/register/apple/+server.ts'];
+
+  it.each(handlers.filter((p) => !SELF_GATED.some((s) => p.endsWith(s))))(
     '%s resolves a device identity',
     (path) => {
       const src = readFileSync(join(process.cwd(), path), 'utf8');
-      expect(src.includes('withDevice(') || src.includes('withNativeAccess(')).toBe(true);
+      expect(src.includes('withDevice(') || src.includes('withNativeAccess(') || src.includes('identifyDevice(')).toBe(true);
       // Exported without the wrapper round it — the shape that would answer
       // anyone who could reach the path.
       expect(src).not.toMatch(/export const (GET|POST|PUT|PATCH|DELETE)[^=]*=\s*async/);
@@ -91,6 +100,7 @@ describe('every native route gates itself', () => {
         '/chat/conversations/[id]/+server.ts',
         '/chat/conversations/[id]/messages/+server.ts',
         '/chat/conversations/[id]/model/+server.ts',
+        '/companion-pair/+server.ts',
         '/games/+server.ts',
         '/games/[id]/+server.ts',
         '/games/[id]/stream/+server.ts',
@@ -108,6 +118,13 @@ describe('every native route gates itself', () => {
     for (const p of handlers.filter((h) => opened.includes(h.slice(NATIVE_ROUTES.length)))) {
       expect(readFileSync(join(process.cwd(), p), 'utf8')).not.toContain('withDevice(');
     }
+  });
+
+  it('gates the Apple sign-in on Apple’s signature and a ceiling, never the owner', () => {
+    const src = readFileSync(join(process.cwd(), `${NATIVE_ROUTES}/register/apple/+server.ts`), 'utf8');
+    expect(src).toContain('verifyAppleIdentityToken');
+    expect(src).toContain('rateLimit(');
+    expect(src).toMatch(/isOwnerEmail\(identity\.email\)\)\s*\{\s*\n?\s*(\/\/[^\n]*\n\s*)*return json/);
   });
 
   it('keeps /pair as the only ungated path, and gates it another way', () => {

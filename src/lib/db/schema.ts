@@ -1732,7 +1732,8 @@ export const accessRequest = pgTable(
     email: text('email').notNull(),
     name: text('name').notNull(),
     message: text('message'),
-    wants: jsonb('wants').$type<Record<string, boolean>>().notNull().default({}),
+    /** `{ app: true }` from the form's checkbox; `via: 'google' | 'apple'` for a sign-in from the app. */
+    wants: jsonb('wants').$type<Record<string, boolean | string>>().notNull().default({}),
     /** 'pending' | 'approved' | 'declined'. */
     status: text('status').notNull().default('pending'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

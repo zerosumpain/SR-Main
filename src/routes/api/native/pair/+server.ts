@@ -5,6 +5,7 @@ import { isOwnerEmail } from '$lib/server/native-handler';
 import { loadMember } from '$lib/server/grants';
 import { satisfies } from '$lib/access/catalogue';
 import { rateLimit } from '$lib/server/rate-limit';
+import { isRegistrant } from '$lib/server/registration';
 
 /**
  * POST /api/native/pair — exchange a one-time code for a device token.
@@ -67,8 +68,9 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 };
 
 /**
- * Who a redeemed code may become a device for: the owner, or a member who holds
- * news, chat or games right now — the areas the app opens to members.
+ * Who a redeemed code may become a device for: the owner, a member who holds
+ * news, chat or games right now — the areas the app opens to members — or a
+ * registrant waiting on the owner ($lib/server/registration).
  *
  * A member's code is only ever minted by the household push, for a member who
  * held one of those when it was minted; this asks again at redemption because
@@ -82,12 +84,18 @@ async function mayHoldDevice(email: string): Promise<boolean> {
   if (isOwnerEmail(email)) return true;
   try {
     const member = await loadMember(email);
-    return (
-      !!member &&
+    if (
+      member &&
       (satisfies(member.grants, 'news:self') ||
         satisfies(member.grants, 'jkai.chat:self') ||
         satisfies(member.grants, 'games:self'))
-    );
+    ) {
+      return true;
+    }
+    // Someone who signed in from the app and is waiting for the owner (or
+    // was refused): the device reaches /api/native/me and nothing else,
+    // because every other route asks `loadMember`, which knows no registrant.
+    return !member && (await isRegistrant(email));
   } catch (err) {
     console.error('[native] pair: member lookup failed:', err);
     return false;

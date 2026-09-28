@@ -141,10 +141,16 @@ export interface AccessRequestView {
   name: string;
   message: string | null;
   wantsApp: boolean;
+  /** Signed in from the iPhone app with Google or Apple; null for the web form. */
+  via: 'google' | 'apple' | null;
   status: string;
   createdAt: Date;
   decidedAt: Date | null;
   decidedBy: string | null;
+}
+
+function viaOf(v: unknown): 'google' | 'apple' | null {
+  return v === 'google' || v === 'apple' ? v : null;
 }
 
 /** Pending first, then the most recent decisions. */
@@ -156,6 +162,7 @@ export async function listRequests(limit = 50): Promise<AccessRequestView[]> {
     name: r.name,
     message: r.message,
     wantsApp: (r.wants as Record<string, unknown> | null)?.app === true,
+    via: viaOf((r.wants as Record<string, unknown> | null)?.via),
     status: r.status,
     createdAt: r.createdAt,
     decidedAt: r.decidedAt,

@@ -41,6 +41,7 @@
 /api/native/chat/conversations/[id]
 /api/native/chat/conversations/[id]/messages
 /api/native/chat/conversations/[id]/model
+/api/native/companion-pair
 /api/native/connections
 /api/native/daydream
 /api/native/daydream/feedback
@@ -61,6 +62,8 @@
 /api/native/notifications/routes
 /api/native/pair
 /api/native/push
+/api/native/register
+/api/native/register/apple
 /api/native/today
 /api/platform/tools/catalogue
 /api/platform/tools/invoke
@@ -136,3 +139,5 @@
 /tos
 /welcome
 /welcome/[code]
+/welcome/app
+/welcome/app/finish
