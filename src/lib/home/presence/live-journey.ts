@@ -35,7 +35,9 @@ import { raisesCrossing } from './crossings';
 import { displayNameOf, loadAlertPlaces, localClock, partitionMovers, pilotRecipients, placeName } from './alerts';
 import { loadCompanionUsers } from './companion';
 import { getHomePlace } from './places';
-import type { HouseholdMember } from './members';
+import { listMembers, type HouseholdMember } from './members';
+import { familyRole } from '$lib/family/roster.server';
+import { isOwnerEmail } from '$lib/server/access';
 import { errMsg } from './types';
 
 /** A departure older than this when first seen does not start a journey. */
@@ -257,27 +259,40 @@ export async function registerLiveStartToken(deviceId: string, token: string): P
 /** One activity's update token, reported by the app once the activity exists. */
 export async function registerJourneyToken(journeyId: string, deviceId: string, token: string): Promise<boolean> {
   if (!isDeviceToken(token) || !journeyId || journeyId.length > 200) return false;
-  const [journey] = await db
-    .select({ id: householdJourney.id })
-    .from(householdJourney)
-    .where(eq(householdJourney.id, journeyId))
-    .limit(1);
-  if (!journey) return false;
-  await db
-    .insert(householdJourneyViewer)
-    .values({ journeyId, deviceId, updateToken: token.toLowerCase(), updateTokenAt: new Date() })
-    .onConflictDoUpdate({
-      target: [householdJourneyViewer.journeyId, householdJourneyViewer.deviceId],
-      set: { updateToken: token.toLowerCase(), updateTokenAt: new Date() },
-    });
-  return true;
+  const [viewer] = await db.select({ email: nativeCredentials.ownerEmail, subject: householdJourney.subject })
+    .from(householdJourneyViewer)
+    .innerJoin(householdJourney, eq(householdJourney.id, householdJourneyViewer.journeyId))
+    .innerJoin(nativeCredentials, eq(nativeCredentials.id, householdJourneyViewer.deviceId))
+    .where(and(eq(householdJourneyViewer.journeyId, journeyId), eq(householdJourneyViewer.deviceId, deviceId),
+      eq(nativeCredentials.kind, 'device'), isNull(nativeCredentials.revokedAt), gt(nativeCredentials.expiresAt, new Date()),
+      isNull(householdJourney.endedAt))).limit(1);
+  if (!viewer || !(await journeyAccess(viewer.subject, viewer.email))) return false;
+  const rows = await db.update(householdJourneyViewer)
+    .set({ updateToken: token.toLowerCase(), updateTokenAt: new Date() })
+    .where(and(eq(householdJourneyViewer.journeyId, journeyId), eq(householdJourneyViewer.deviceId, deviceId)))
+    .returning({ deviceId: householdJourneyViewer.deviceId });
+  return rows.length > 0;
+}
+
+/** Current reader permission, follow relationship and mover consent, fail closed. */
+export async function journeyAccess(subject: string, email: string): Promise<boolean> {
+  try {
+    if (subject === TEST_SUBJECT) return isOwnerEmail(email);
+    if (!(await familyRole(email))) return false;
+    const members = await listMembers();
+    if (!pilotRecipients(members, subject).some(e => e.toLowerCase() === email.toLowerCase())) return false;
+    const users = await loadCompanionUsers();
+    const { silenced, held } = partitionMovers([{ subject }], members, users);
+    return !silenced.has(subject) && !held.has(subject);
+  } catch { return false; }
 }
 
 /** Phones of these people that can have a journey started on them. */
 async function startTargets(emails: readonly string[]) {
+  emails = (await Promise.all(emails.map(async e => await familyRole(e) ? e : null))).filter((e): e is string => e !== null);
   if (!emails.length) return [];
   return db
-    .select({ id: nativeCredentials.id, token: nativeCredentials.laStartToken, env: nativeCredentials.apnsEnv })
+    .select({ id: nativeCredentials.id, token: nativeCredentials.laStartToken, env: nativeCredentials.apnsEnv, email: nativeCredentials.ownerEmail })
     .from(nativeCredentials)
     .where(
       and(
@@ -298,12 +313,16 @@ async function startOn(
   send: LiveSender,
 ): Promise<number> {
   let started = 0;
+  const [journey] = await db.select({ subject: householdJourney.subject }).from(householdJourney).where(eq(householdJourney.id, journeyId)).limit(1);
   for (const p of phones) {
-    if (!p.token) continue;
+    if (!p.token || !journey || !(await journeyAccess(journey.subject, p.email))) continue;
+    // Record server authorisation before APNs: the phone may report its token
+    // as soon as Apple accepts the start, before this send has returned.
+    await db.insert(householdJourneyViewer).values({ journeyId, deviceId: p.id }).onConflictDoNothing();
     const result = await send(p.token, aps, envOf(p.env));
+    if (!result.ok) await db.delete(householdJourneyViewer).where(and(eq(householdJourneyViewer.journeyId, journeyId), eq(householdJourneyViewer.deviceId, p.id)));
     if (result.ok) {
       started++;
-      await db.insert(householdJourneyViewer).values({ journeyId, deviceId: p.id }).onConflictDoNothing();
     } else if (isDeadToken(result)) {
       await db.update(nativeCredentials).set({ laStartToken: null, laStartTokenAt: null }).where(eq(nativeCredentials.id, p.id));
     } else {
@@ -314,16 +333,24 @@ async function startOn(
 }
 
 /** Push to every phone showing this journey that reported an update token. */
-async function pushToViewers(journeyId: string, aps: Record<string, unknown>, send: LiveSender): Promise<number> {
+export async function pushToViewers(journeyId: string, aps: Record<string, unknown>, send: LiveSender): Promise<number> {
   const viewers = await db
-    .select({ deviceId: householdJourneyViewer.deviceId, token: householdJourneyViewer.updateToken, env: nativeCredentials.apnsEnv })
+    .select({ deviceId: householdJourneyViewer.deviceId, token: householdJourneyViewer.updateToken, env: nativeCredentials.apnsEnv, email: nativeCredentials.ownerEmail, subject: householdJourney.subject })
     .from(householdJourneyViewer)
+    .innerJoin(householdJourney, eq(householdJourney.id, householdJourneyViewer.journeyId))
     .innerJoin(nativeCredentials, eq(nativeCredentials.id, householdJourneyViewer.deviceId))
-    .where(and(eq(householdJourneyViewer.journeyId, journeyId), isNotNull(householdJourneyViewer.updateToken)));
+    .where(and(eq(householdJourneyViewer.journeyId, journeyId), isNotNull(householdJourneyViewer.updateToken), eq(nativeCredentials.kind, 'device'), isNull(nativeCredentials.revokedAt), gt(nativeCredentials.expiresAt, new Date())));
   let sent = 0;
   for (const v of viewers) {
     if (!v.token) continue;
-    const result = await send(v.token, aps, envOf(v.env));
+    const permitted = await journeyAccess(v.subject, v.email);
+    // A privacy change ends an existing activity with no retained personal state.
+    const safeEnd = endAps({ phase: 'ended', headline: 'Journey ended', detail: '', distanceHomeM: null,
+      progress: null, etaMinutes: null, mode: null, updatedAt: Math.floor(Date.now()/1000) }, new Date(), 0);
+    const result = await send(v.token, permitted ? aps : safeEnd, envOf(v.env));
+    if (!permitted) {
+      await db.delete(householdJourneyViewer).where(and(eq(householdJourneyViewer.journeyId, journeyId), eq(householdJourneyViewer.deviceId, v.deviceId)));
+    }
     if (result.ok) sent++;
     else if (isDeadToken(result)) {
       await db
@@ -473,7 +500,7 @@ export async function runLiveJourneys(
       const fromPlace = placeName(places.get(j.fromPlaceId));
       const last = (j.state as unknown as JourneyContent) ?? null;
 
-      if (silenced.has(j.subject) || !members.some((m) => m.subject === j.subject)) {
+      if (silenced.has(j.subject) || held.has(j.subject) || !members.some((m) => m.subject === j.subject)) {
         await close(j, 'silenced', endContent({ name, fromPlace, last }, { kind: 'ended', lastSeen: null }), 0, now, send);
         result.ended++;
         continue;
@@ -527,7 +554,7 @@ export async function runLiveJourneys(
  */
 export async function startTestJourney(deviceId: string, send: LiveSender = (t, aps, env) => sendLiveActivity(t, aps, env)): Promise<ApnsResult | null> {
   const [phone] = await db
-    .select({ id: nativeCredentials.id, token: nativeCredentials.laStartToken, env: nativeCredentials.apnsEnv })
+    .select({ id: nativeCredentials.id, token: nativeCredentials.laStartToken, env: nativeCredentials.apnsEnv, email: nativeCredentials.ownerEmail })
     .from(nativeCredentials)
     .where(eq(nativeCredentials.id, deviceId))
     .limit(1);

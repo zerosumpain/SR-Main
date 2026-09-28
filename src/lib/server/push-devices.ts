@@ -1,3 +1,4 @@
+import { familyRole, familyRoster } from '$lib/family/roster.server';
 /**
  * Which phones a push can reach, and pushing to a person rather than a token.
  *
@@ -113,9 +114,21 @@ export async function pushToEmails(
   message: PushMessage,
   send: PushSender = sendPush,
 ): Promise<PushOutcome> {
-  const wanted = [...new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean))];
-  if (!wanted.length) return { reached: new Set(), sent: 0, failed: 0 };
+  let wanted = [...new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean))];
   try {
+    if (message.category === 'household' || message.category?.startsWith('family-')) {
+      wanted = (await Promise.all(wanted.map(async e => await familyRole(e) ? e : null))).filter((e): e is string => e !== null);
+    }
+    if (message.category === 'family-steps') {
+      const permitted = new Set((await familyRoster()).filter(p => p.stepsSharing === true).map(p => p.email));
+      // Recheck both the recipient and every person disclosed by this message.
+      // An opt-out during a long refresh must suppress the already-built payload.
+      if (!message.stepsConsentEmails?.length || message.stepsConsentEmails.some(e => !permitted.has(e.trim().toLowerCase()))) {
+        return { reached: new Set(), sent: 0, failed: 0 };
+      }
+      wanted = wanted.filter(e => permitted.has(e));
+    }
+    if (!wanted.length) return { reached: new Set(), sent: 0, failed: 0 };
     return await deliver(await targets(wanted), message, send, clearPushToken);
   } catch (error) {
     console.error('[push] could not push:', (error as Error).message);

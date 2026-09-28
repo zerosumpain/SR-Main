@@ -31,6 +31,7 @@ vi.mock('./companion', () => ({
   companionToken: () => h.token,
   companionUrl: () => 'http://pilot.test',
   loadCompanionUsers: async () => h.users,
+  fetchHousehold: async () => h.users ? { users: h.users, revision: 'test-revision', fixes: [] } : null,
 }));
 vi.mock('./household', () => ({
   loadHousehold: async () => ({ members: [presence('john'), presence('sam'), { ...presence('kit'), notSharing: true }] }),

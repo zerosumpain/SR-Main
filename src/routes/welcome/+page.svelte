@@ -313,9 +313,10 @@
         <div class="w-card-hd"><h2>Your data</h2></div>
         {#if deleted}
           <p class="w-done" role="status">
-            Done. The app server no longer holds anything your phone uploaded, and this site's copy of your movement
-            is gone ({deleted.trailRows} location {deleted.trailRows === 1 ? 'record' : 'records'}). Your phone is
-            unpaired and sharing is off; pair again above whenever you like.
+            Deletion requested. Uploads and sharing are stopped and the app's raw copy is removed.
+            The site and Health copies are being removed with automatic retries if a service is unavailable.
+            Pairing stays blocked until every store has acknowledged deletion. Apple Health on your phone,
+            named places, other location sources and account membership remain; backups expire separately.
           </p>
         {:else}
           <p>

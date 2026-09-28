@@ -1,3 +1,4 @@
+import { drainPrivacyJobs } from '$lib/home/presence/privacy-jobs';
 import {
   hasFreshFix,
   pollAllSubjects,
@@ -64,6 +65,7 @@ export const homeObserve: ActivityHandler = {
   defaultConfig: DEFAULTS as unknown as Record<string, unknown>,
 
   async run(ctx) {
+    await drainPrivacyJobs();
     const cfg = { ...DEFAULTS, ...(ctx.config as ObserveConfig) };
 
     // Who is written from where. Only life360 members are polled from Home

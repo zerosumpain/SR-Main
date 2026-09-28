@@ -398,3 +398,12 @@ export async function pilotDay(email: string, window: DayWindow, fetchImpl: type
   if (!b.track || typeof b.track !== 'object') return { ok: false, reason: 'bad-response' };
   return { ok: true, value: { track: toDayTrack(b.track, window), timeline: toDayTimeline(b.timeline) } };
 }
+
+/** Minimal, consent-gated export: never fetch heart rate/sleep/route for a steps board. */
+export async function pilotSteps(email: string, window: DayWindow, fetchImpl: typeof fetch = fetch): Promise<PilotResult<{ steps: DayTimeline['steps'] }>> {
+  const q = new URLSearchParams({ email: email.trim().toLowerCase(),
+    from: new Date(window.from * 1000).toISOString(), to: new Date(window.to * 1000).toISOString() });
+  const r = await call('GET', `/api/apple/household/steps?${q}`, undefined, fetchImpl);
+  if (!r.ok) return r;
+  return { ok: true, value: { steps: toDayTimeline(r.value).steps } };
+}

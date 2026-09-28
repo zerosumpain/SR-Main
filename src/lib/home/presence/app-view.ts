@@ -31,7 +31,7 @@
 import { and, asc, gte, inArray, isNotNull, lt } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { allowedUser, daydreamPlaces, daydreamTrail } from '$lib/db/schema';
-import { companionToken, companionUrl, loadCompanionUsers, type HouseholdUser } from './companion';
+import { companionToken, companionUrl, fetchHousehold, loadCompanionUsers, type HouseholdUser } from './companion';
 import { inferMode } from './cluster';
 import { distanceM } from './geo';
 import { listPanelPlaces } from './places';
@@ -611,8 +611,9 @@ export async function pushAppViews(
 ): Promise<AppViewsResult | null> {
   const token = companionToken();
   if (!token) return null;
-  const users: HouseholdUser[] | null = await loadCompanionUsers().catch(() => null);
-  if (!users) return null;
+  const snapshot = await fetchHousehold('', fetchImpl).catch(() => null);
+  if (!snapshot?.revision) return null;
+  const users = snapshot.users;
 
   const viewers: Array<{ email: string; viewer: PeopleViewer }> = [];
   // Everyone else on the app gets a view with nobody in it. A household member
@@ -719,7 +720,7 @@ export async function pushAppViews(
     const res = await fetchImpl(`${companionUrl()}/api/apple/household/views`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ views: withPreviews }),
+      body: JSON.stringify({ views: withPreviews, revision: snapshot.revision }),
       signal: AbortSignal.timeout(PUSH_TIMEOUT_MS),
     });
     if (!res.ok) return { stored: 0, refused, error: `views answered ${res.status}` };

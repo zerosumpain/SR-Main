@@ -5162,6 +5162,7 @@ export const daydreamTrail = pgTable(
     subject: text('subject').notNull().default('john'),
     /** 'push' | 'poll' | 'gap' | 'companion' (the iPhone app, via the pilot) — see the note above. */
     source: text('source').notNull(),
+    companionReceivedAt: timestamp('companion_received_at', { withTimezone: true }),
     lat: doublePrecision('lat'),
     lon: doublePrecision('lon'),
     accuracyM: doublePrecision('accuracy_m'),
@@ -7292,3 +7293,27 @@ export const familyTask = pgTable(
 );
 
 export type FamilyTask = typeof familyTask.$inferSelect;
+
+// Permission epochs survive removal/re-add; triggers in the security migration
+// revoke device capabilities in the same transaction as access changes.
+export const companionAccessVersion = pgTable('companion_access_version', {
+  email: text('email').primaryKey(),
+  version: bigint('version', { mode: 'number' }).notNull().default(1),
+});
+export const accessSecurityAudit = pgTable('access_security_audit', {
+  id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  email: text('email').notNull(),
+  reason: text('reason').notNull(),
+});
+
+export const companionPrivacyReceipt = pgTable('companion_privacy_receipt', {
+  jobId: text('job_id').primaryKey(),
+  completedAt: timestamp('completed_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const companionDeletionFloor = pgTable('companion_deletion_floor', {
+  email: text('email').primaryKey(),
+  subject: text('subject'),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }).notNull(),
+}, (t) => [index('companion_deletion_floor_subject_idx').on(t.subject)]);

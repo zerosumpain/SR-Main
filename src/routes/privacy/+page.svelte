@@ -7,7 +7,7 @@
   <meta name="description" content="What strangeramblings.com collects, why, and what it does with it." />
 </svelte:head>
 
-<LegalPage title="Privacy" updated="27 September 2026">
+<LegalPage title="Privacy" updated="28 September 2026">
   <p>
     Strange Ramblings is my personal website, run by me, John Kelly, in the UK. It isn't a business and
     it doesn't sell anything, least of all you. This page says what the site collects, why, and what I do
@@ -79,6 +79,37 @@
     mail, the graph facts drawn from them, its search index and any attachments that were saved. If you
     take the access away from Google's side instead, or you'd just like it gone, ask me and I'll delete
     what was read from your mailbox.
+  </p>
+
+  <h2>If you use the iPhone app</h2>
+  <p>
+    The app uploads the Apple Health categories you choose to John's server, including workout routes
+    when allowed. Background location is a separate choice. Location sharing lets permitted family
+    members see your current status and map; your own history and a parent's named wards have more
+    detailed views. Family membership is checked by the site, and removing access invalidates paired devices.
+    Daily steps appear on the family board only after a separate opt-in, off by default. Location
+    consent alone does not share your steps. Family boards can appear in widgets and notifications.
+  </p>
+  <p>
+    The configured owner's Health export is copied into SR-Health and selected owner figures can appear
+    on the public Health dashboard. Other people's private Health uploads are not published there.
+    These records are not end-to-end encrypted: the server operator can access stored data. Maps use
+    Mapbox, which receives map requests and ordinary network details. Apple carries notification and
+    Live Activity payloads, which can include names, places, journey status and step counts; choose
+    notification previews and Live Activities in iOS Settings with your Lock Screen in mind. Content
+    you send to the site's AI features may go to the model providers described above.
+  </p>
+  <p>
+    Companion locations are kept for up to 30 days, queued household alerts for seven days, and cached
+    household views for at most five minutes. Health records stay until deleted. Pausing location
+    sharing stops uploads and invalidates shared views; it does not erase history. Switching family
+    steps off hides your counts and removes the board's copies on the next successful refresh.
+    Deleting uploaded data removes the raw companion copy and queues removal of Main's derived
+    movement/events/journeys/steps and the Health export. Services acknowledge each copy separately;
+    a failed service is retried and pairing stays blocked until completion. Apple Health on the phone,
+    named places, other-source location history and account membership remain. Backups expire separately.
+    Disconnecting the website revokes that website credential, with an offline retry; companion upload
+    and location controls are separate. Disconnect the companion to stop its collection and upload.
   </p>
 
   <h2>Keeping and deleting</h2>

@@ -3,7 +3,7 @@ import { join } from 'path';
 import { homedir } from 'os';
 import type { NodeDefinition, NodeExecutor, NodeResult, ExecutionContext } from '../types';
 
-export const DYNAMIC_NODES_DIR = join(homedir(), '.strange-rambling', 'workflow-nodes');
+export const DYNAMIC_NODES_DIR = process.env.WORKFLOW_DYNAMIC_NODES_DIR || join(homedir(), '.strange-rambling', 'workflow-nodes');
 
 export interface SyntaxCheckResult {
   valid: boolean;

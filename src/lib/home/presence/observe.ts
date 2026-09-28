@@ -182,6 +182,7 @@ export async function recordFix(
       ts,
       subject,
       source,
+      companionReceivedAt: source === 'companion' && fix.companionReceivedAt ? new Date(fix.companionReceivedAt) : null,
       lat: fix.lat,
       lon: fix.lon,
       accuracyM,
@@ -195,6 +196,8 @@ export async function recordFix(
       readingAgeS: fix.readingAgeS ?? null,
     })
     .returning({ id: daydreamTrail.id, ts: daydreamTrail.ts, isHome: daydreamTrail.isHome });
+
+  if (!row) throw Object.assign(new Error('A pre-deletion companion fix was discarded'), { name: 'CompanionDeletionFloor' });
 
   return {
     id: row.id,

@@ -38,7 +38,7 @@ import {
   type InsideState,
   type TrailFix,
 } from './crossings';
-import { COMPANION_DEFAULT_URL, loadCompanionUsers, notSharingSubjects } from './companion';
+import { COMPANION_DEFAULT_URL, loadCompanionUsers, fetchHousehold, notSharingSubjects } from './companion';
 import { createHash } from 'node:crypto';
 import { pushToEmails, type PushOutcome } from '$lib/server/push-devices';
 import type { PushMessage } from '$lib/server/apns';
@@ -419,17 +419,19 @@ function pilotUrl(): string {
 export async function postToPilot(
   events: readonly PilotEvent[],
   fetchImpl: typeof fetch = fetch,
+  revision?: string,
 ): Promise<{ accepted: string[]; error?: string } | null> {
   const token = pilotToken();
   if (!token) return null;
   const accepted: string[] = [];
+  if (!revision) return { accepted, error: 'No current household consent revision' };
   for (let i = 0; i < events.length; i += PILOT_BATCH) {
     const batch = events.slice(i, i + PILOT_BATCH);
     try {
       const res = await fetchImpl(`${pilotUrl()}/api/apple/household/events`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ events: batch }),
+        body: JSON.stringify({ events: batch, revision }),
         signal: AbortSignal.timeout(PILOT_TIMEOUT_MS),
       });
       if (!res.ok) return { accepted, error: `alert queue answered ${res.status}` };
@@ -842,8 +844,11 @@ export async function deliverAlerts(
   // someone who switched sharing off is the one mistake this must not make;
   // dropping a real alert over a settings hiccup is the second.
   let users: Awaited<ReturnType<typeof loadCompanionUsers>> = null;
+  let revision: string | undefined;
   try {
-    users = await loadCompanionUsers();
+    const snapshot = await fetchHousehold('');
+    users = snapshot?.users ?? null;
+    revision = snapshot?.revision;
   } catch {
     users = null;
   }
@@ -882,7 +887,7 @@ export async function deliverAlerts(
     );
     const done = [...nobody];
     if (send.length) {
-      const res = await postToPilot(send, deps.fetchImpl);
+      const res = await postToPilot(send, deps.fetchImpl, revision);
       if (res) {
         // The pilot saw the (possibly trimmed) id; map it back.
         const accepted = new Set(res.accepted);

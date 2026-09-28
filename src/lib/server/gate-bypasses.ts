@@ -161,6 +161,8 @@ export const HOOK_NON_BYPASSES: string[] = [
  * HOOK_BYPASSES.
  */
 export const BYPASS_GUARDS: Record<string, string> = {
+  '/api/native/companion-policy': 'Dedicated companion policy service token; current permission and version only',
+  '/api/native/session': 'Bearer possession revokes only itself; unauthenticated DELETE is an idempotent no-op',
   '/api/native':
     'Bearer device token (native_credentials row) · re-checked per handler: withDevice (owner only) or withNativeAccess (owner, or a member holding that area)',
   '/api/workflows/orchestrator/chat':

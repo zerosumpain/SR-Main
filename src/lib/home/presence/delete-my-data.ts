@@ -1,3 +1,4 @@
+import { drainPrivacyJobs } from './privacy-jobs';
 // src/lib/home/presence/delete-my-data.ts
 //
 // "Delete my uploaded data" on /welcome (spec Contract G). Two stores hold
@@ -67,6 +68,7 @@ export async function deleteMyUploadedData(
     return { ok: false, status: 502, error: `Nothing was deleted. ${pilotFailureText(pilot.reason)}` };
   }
 
+  if (deps === defaultDeleteDeps) await drainPrivacyJobs().catch(() => undefined);
   let trailRows = 0;
   try {
     const subject = await deps.subjectFor(e);

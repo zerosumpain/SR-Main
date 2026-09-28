@@ -1,3 +1,4 @@
+import { privacyMaintenance } from '$lib/home/presence/privacy-jobs';
 import { building } from '$app/environment';
 import { startForgeScheduler, stopForgeScheduler } from '$lib/jkai/forge-scheduler';
 import {
@@ -998,6 +999,7 @@ const securityHeadersHandle: Handle = async ({ event, resolve }) => {
     response.headers.set('X-Frame-Options', 'SAMEORIGIN');
   }
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  if (event.url.pathname.startsWith('/api/native/')) response.headers.set('Cache-Control', 'private, no-store');
   // Defence-in-depth for share links: any /projects/* response opened with a
   // share token (?t=) must never be edge-cached, indexed, or leak the token
   // onward via Referer — even if a route handler forgets. (Per-route guards
@@ -1043,3 +1045,12 @@ const securityHeadersHandle: Handle = async ({ event, resolve }) => {
 // Header handling is outermost so auth redirects and early public/service
 // responses cannot bypass it.
 export const handle = sequence(securityHeadersHandle, authHandle, protectionHandle);
+
+// One lightweight retry timer per web process. Database receipts make duplicate
+// workers safe; no health/location payload is logged on failure.
+if (!building && process.env.COMPANION_HOUSEHOLD_TOKEN) {
+  const maintain = () => void privacyMaintenance().catch(() => console.warn('[privacy] maintenance pending; retrying'));
+  const timer = setInterval(maintain, 60_000);
+  timer.unref();
+  maintain();
+}

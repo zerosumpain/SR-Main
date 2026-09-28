@@ -1,3 +1,4 @@
+import { fetchHousehold } from './companion';
 import { createHash } from 'node:crypto';
 import { db } from '$lib/db';
 import { appSettings } from '$lib/db/schema';
@@ -21,6 +22,8 @@ export async function deliverArrivalEstimates(): Promise<{ sent: number }> {
   const canQueue = !!process.env.COMPANION_HOUSEHOLD_TOKEN?.trim();
   const canPush = isApnsConfigured();
   if (!canQueue && !canPush) return { sent: 0 };
+  const snapshot = await fetchHousehold('').catch(() => null);
+  if (!snapshot?.revision) return { sent: 0 };
   const members = await listMembers();
   const movers = await insightMembers({ kind: 'owner' }, members);
   const data = await loadPresenceInsights({ kind: 'owner' }, 28);
@@ -51,7 +54,7 @@ export async function deliverArrivalEstimates(): Promise<{ sent: number }> {
       // A phone reached by APNs is excluded from the pull queue to avoid two banners.
       const remaining = pending.filter(r => !delivered.has(r));
       if (remaining.length && canQueue) {
-        const result = await postToPilot([{ ...event, recipients: remaining }]);
+        const result = await postToPilot([{ ...event, recipients: remaining }], fetch, snapshot.revision);
         if (result?.accepted.includes(event.id)) for (const r of remaining) delivered.add(r);
       }
       if (!pending.some(r => delivered.has(r))) return;
