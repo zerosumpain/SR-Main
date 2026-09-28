@@ -16,6 +16,8 @@ const PUBLIC_PATHS = [
   // for itself — a signed-out visitor sees only the form and whatever a LIVE
   // invite says; setup steps render only for a signed-in, allowed session, and
   // every form action re-checks that session (src/routes/welcome).
+  // /welcome/app is registering from the iPhone app: its sign-in sheet signs
+  // in with Google there, and /welcome/app/finish hands a one-time code back.
   '/welcome',
   '/auth',
   // Linked from Google's OAuth consent screen, which requires them to be public.

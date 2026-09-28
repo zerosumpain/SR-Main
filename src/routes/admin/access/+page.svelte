@@ -193,7 +193,8 @@
         <div class="row-main">
           <span class="person-name">{r.name}</span>
           <span class="email">{r.email}</span>
-          {#if r.wantsApp}<span class="tag">wants the app</span>{/if}
+          {#if r.via}<span class="tag">from the app · {r.via === 'apple' ? 'Apple' : 'Google'}</span>
+          {:else if r.wantsApp}<span class="tag">wants the app</span>{/if}
           <span class="added">asked {formatDate(r.createdAt)}</span>
         </div>
         {#if r.message}<p class="muted desc">“{r.message}”</p>{/if}

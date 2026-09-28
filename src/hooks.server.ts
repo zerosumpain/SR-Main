@@ -25,6 +25,7 @@ import { requestHost } from '$lib/request-host';
 import { resolveAdminRedirect } from '$lib/components/admin/admin-nav';
 import { isOwnerEmail } from '$lib/server/access';
 import { INVITE_COOKIE, signInWithInvite } from '$lib/server/invites';
+import { REGISTER_COOKIE } from '$lib/server/registration';
 import { viewerHolds, viewerOf } from '$lib/server/viewer';
 import {
   VIEW_AS_COOKIE,
@@ -334,7 +335,17 @@ const { handle: authHandle } = SvelteKitAuth(async (event) => ({
       const outcome = await signInWithInvite(email, event.cookies.get(INVITE_COOKIE));
       const how = outcome.allow ? `allowed (${outcome.via})` : `denied (${outcome.reason})`;
       console.log(`[auth] Sign-in attempt: ${email} → ${how}`);
-      return outcome.allow;
+      if (outcome.allow) return true;
+      // Registering from the iPhone app (/welcome/app set the cookie):
+      // anyone may sign in ONCE, for /welcome/app/finish to learn who
+      // they are. That page records their request and signs them straight
+      // back out; the session it passes through holds no grants, which is
+      // what an allow-listed guest holds anyway.
+      if (email && event.cookies.get(REGISTER_COOKIE) === '1') {
+        console.log(`[auth] Sign-in for app registration: ${email}`);
+        return true;
+      }
+      return false;
     },
     async session({ session }) {
       return session;
