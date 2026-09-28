@@ -19,7 +19,7 @@ import { eraseAccount, OWNER_REFUSAL } from '$lib/people/erase';
  * site's configuration), and any request made while viewing as someone
  * (view-as is look-only; this would delete the person being viewed).
  */
-export const DELETE: RequestHandler = async ({ request }) => {
+async function deleteAccount({ request }: Parameters<RequestHandler>[0]): Promise<Response> {
   const identity = await identifyDevice(request);
   if (!identity) return json({ error: 'Pair this iPhone again.' }, { status: 401 });
   if (request.headers.get(VIEW_AS_HEADER) !== null) {
@@ -30,4 +30,6 @@ export const DELETE: RequestHandler = async ({ request }) => {
   const outcome = await eraseAccount(identity.ownerEmail);
   if (!outcome.ok) return json({ error: outcome.error }, { status: outcome.status });
   return json({ ok: true, warnings: outcome.warnings });
-};
+}
+
+export const DELETE: RequestHandler = deleteAccount;
