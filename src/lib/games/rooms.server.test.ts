@@ -192,12 +192,40 @@ describe('rooms', () => {
     expect(survived.players[0].alive).toBe(true);
   });
 
+  it('hosts Boggle with the round the host picked, and takes a traced word', () => {
+    type Wire = Record<string, any>;
+    const { id } = createGame({
+      game: 'boggle',
+      host: john,
+      invite: [],
+      difficulty: 'easy',
+      options: { size: 5, seconds: 30, scoring: 'every' },
+    });
+    act(id, 'p_john', 'start');
+    vi.advanceTimersByTime(COUNTDOWN_MS);
+    const room = roomFor(id, 'p_john') as unknown as Wire;
+    expect(room.phase).toBe('playing');
+    expect(room.grid).toHaveLength(25);
+    expect(room.timeLimitMs).toBe(30_000);
+    expect(() => asHttp(() => act(id, 'p_john', 'word', { word: 'zzzz' }))).toThrow(
+      expect.objectContaining({ status: 400 }),
+    );
+    vi.advanceTimersByTime(31_000);
+    const done = roomFor(id, 'p_john') as unknown as Wire;
+    expect(done.phase).toBe('finished');
+    expect(done.possible.words).toBeGreaterThan(0);
+    // An easy board is rich: there is something to have missed.
+    expect(done.missed.length).toBeGreaterThan(0);
+    const [first] = done.missed as { word: string; path: number[] }[];
+    expect(first.path.map((i) => done.grid[i]).join('')).toBe(first.word);
+  });
+
   describe('inviting from the lobby', () => {
     const kim = { id: 'p_kim', name: 'Kim' };
     type Seen = { players: { id: string; status: string; sawInvite: boolean }[]; phaseEndsAt: number | null };
 
     it('asks somebody in after the room opened, in every game', () => {
-      for (const game of ['tap-duel', 'wordle-race', 'anagram-blitz', 'maths-sprint', 'sequence-memory'] as const) {
+      for (const game of ['tap-duel', 'wordle-race', 'anagram-blitz', 'maths-sprint', 'sequence-memory', 'boggle'] as const) {
         const { id } = createGame({ game, host: john, invite: [], difficulty: 'easy' });
         const room = inviteTo(id, 'p_john', [sam]) as unknown as Seen;
         expect(room.players.map((p) => [p.id, p.status])).toEqual([['p_john', 'joined'], ['p_sam', 'invited']]);

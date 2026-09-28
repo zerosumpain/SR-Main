@@ -11,6 +11,7 @@ import * as quizNight from './quiz-night';
 import * as anagramBlitz from './anagram-blitz';
 import * as mathsSprint from './maths-sprint';
 import * as sequenceMemory from './sequence-memory';
+import * as boggle from './boggle';
 import { writeQuiz } from './quiz-night.server';
 import type { Difficulty, PlayerStatus, Rng } from './tap-duel';
 
@@ -21,6 +22,7 @@ export const GAME_IDS = [
   'anagram-blitz',
   'maths-sprint',
   'sequence-memory',
+  'boggle',
 ] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
@@ -123,6 +125,13 @@ export const GAMES: Record<GameId, GameRules> = {
     moves: {
       attempt: (room, playerId, body, now) =>
         sequenceMemory.attempt(room as sequenceMemory.Room, playerId, { round: num(body.round) ?? -1, taps: body.taps }, now),
+    },
+  },
+  boggle: {
+    ...boggle,
+    moves: {
+      word: (room, playerId, body, now) =>
+        boggle.word(room as boggle.Room, playerId, { word: body.word, path: body.path }, now),
     },
   },
 };

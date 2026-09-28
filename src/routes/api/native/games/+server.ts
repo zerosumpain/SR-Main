@@ -36,7 +36,9 @@ export const GET: RequestHandler = withNativeAccess('games', async (_event, iden
 
 /**
  * POST /api/native/games — start a game: `{ game, difficulty, invite: [playerId] }`,
- * plus `topic` (optional) and `audience` (kids | family | adults) for Quiz Night.
+ * plus `topic` (optional) and `audience` (kids | family | adults) for Quiz Night, and
+ * `size` (4 | 5 | 6), `seconds` (30 | 90 | 120 | 180) and `scoring` (classic | every)
+ * for Boggle — an unknown value is that game's default.
  */
 export const POST: RequestHandler = withNativeAccess('games', async (event, identity, role) => {
   const body = (await event.request.json().catch(() => null)) as Record<string, unknown> | null;
@@ -72,7 +74,13 @@ export const POST: RequestHandler = withNativeAccess('games', async (event, iden
       `That is ${QUIZ_DAILY} quizzes today — the limit. Try Tap Duel or Wordle Race.`,
     );
   }
-  const options = { topic: body.topic, audience: body.audience };
+  const options = {
+    topic: body.topic,
+    audience: body.audience,
+    size: body.size,
+    seconds: body.seconds,
+    scoring: body.scoring,
+  };
   const room = asHttp(() => createGame({ game, host: { id: me.id, name: me.name }, invite, difficulty, options }));
   // Not awaited: the host's screen should not wait on Apple. An invite whose
   // push fails is still collected by the invitee's poll.
