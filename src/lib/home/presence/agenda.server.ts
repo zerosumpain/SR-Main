@@ -121,7 +121,7 @@ async function route(req: RouteRequest): Promise<RoutedTime | null> {
 // ── The read ────────────────────────────────────────────────────────────────
 
 const CALENDAR_TTL_MS = 5 * 60_000;
-let calendarMemo: { at: number; read: Awaited<ReturnType<typeof import('$lib/daydream/calendar/read').readCalendar>> } | null = null;
+let calendarMemo: { at: number; read: Awaited<ReturnType<typeof import('$lib/calendar/read').readCalendar>> } | null = null;
 
 export interface AgendaRead {
   items: AgendaItem[];
@@ -143,8 +143,8 @@ export async function loadAgenda(input: {
 }): Promise<AgendaRead> {
   const now = input.now ?? new Date();
   const [{ readCalendar }, { loadExclusionSet }] = await Promise.all([
-    import('$lib/daydream/calendar/read'),
-    import('$lib/daydream/calendar/store'),
+    import('$lib/calendar/read'),
+    import('$lib/calendar/store'),
   ]);
   // The page refreshes every 30 s and the heartbeat every 2 min; the diary is
   // a CalDAV round trip. Five minutes old is fresh enough to plan a journey.

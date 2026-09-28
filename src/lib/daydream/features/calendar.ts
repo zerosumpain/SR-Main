@@ -17,8 +17,8 @@
 // lives in one thin function at the bottom.
 
 import { LOCAL_TZ } from '../types';
-import { readCalendar } from '../calendar/read';
-import { ExclusionSet, NO_EXCLUSIONS } from '../calendar/exclusions';
+import { readCalendar } from '$lib/calendar/read';
+import { ExclusionSet, NO_EXCLUSIONS } from '$lib/calendar/exclusions';
 
 /** One calendar event as the site tool returns it, reduced to what matters. */
 export interface CalendarEventRow {
