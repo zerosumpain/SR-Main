@@ -30,11 +30,15 @@ interface Live {
   emitter: EventEmitter;
   timer: ReturnType<typeof setTimeout> | null;
   /**
-   * Invitees whose phone has fetched the invite. There is no push certificate,
-   * so an invite reaches a phone only when its app polls — this is the one
-   * thing the host can be told about whether it got there.
+   * Invitees whose phone has fetched the invite — by the app's poll, which is
+   * the one thing the host can be told about whether it got there.
    */
   sawInvite: Set<string>;
+  /**
+   * Invitees an APNs push reached (`invite-push.server`). Told to their phone
+   * with the invite, so its poll does not raise a second banner for it.
+   */
+  pushed: Set<string>;
 }
 
 /** The room as `playerId` sees it, with who has had their invite. */
@@ -132,7 +136,7 @@ export function createGame(input: {
     options: input.options,
     now,
   });
-  const live: Live = { room, rules, emitter: new EventEmitter(), timer: null, sawInvite: new Set() };
+  const live: Live = { room, rules, emitter: new EventEmitter(), timer: null, sawInvite: new Set(), pushed: new Set() };
   live.emitter.setMaxListeners(20);
   rooms.set(room.id, live);
   settle(live, true);
@@ -177,7 +181,10 @@ export function act(id: string, playerId: string, action: string, body: Record<s
     if (move) move(room, playerId, body, now);
     else rules[action as Verb](room, playerId, now);
     // "Play again" asks everyone afresh: nobody has had THAT invite yet.
-    if (action === 'again') live.sawInvite.clear();
+    if (action === 'again') {
+      live.sawInvite.clear();
+      live.pushed.clear();
+    }
   } catch (err) {
     settle(live, moved);
     throw err;
@@ -214,6 +221,7 @@ export function inviteTo(id: string, hostId: string, people: { id: string; name:
     if (known) known.status = 'invited';
     else room.players.push(live.rules.player(p.id, p.name, 'invited'));
     live.sawInvite.delete(p.id);
+    live.pushed.delete(p.id);
   }
   if (adding.length) room.phaseEndsAt = Math.max(room.phaseEndsAt ?? 0, now + INVITE_HOLD_MS);
   settle(live, moved || adding.length > 0);
@@ -242,9 +250,48 @@ export function invitesFor(playerId: string) {
       hostName: host?.name ?? 'Someone',
       players: room.players.filter((p) => p.status === 'joined' || p.status === 'invited').map((p) => p.name),
       expiresAt: room.phaseEndsAt,
+      // A push already rang for this one; the phone lists it without a banner.
+      pushed: live.pushed.has(playerId),
     });
   }
   return out;
+}
+
+/**
+ * An open lobby's invitees nobody has pushed to yet, with what a banner says
+ * about the room. Null when the room is gone or no longer a lobby.
+ */
+export function unpushedInvites(id: string): {
+  roomId: string;
+  game: GameId;
+  difficulty: Difficulty;
+  about: string | null;
+  hostName: string;
+  players: string[];
+  invitees: string[];
+  expiresAt: number | null;
+} | null {
+  const live = rooms.get(id);
+  if (!live || live.room.phase !== 'lobby') return null;
+  const { room, rules } = live;
+  const host = room.players.find((p) => p.id === room.hostId);
+  return {
+    roomId: room.id,
+    game: room.game,
+    difficulty: room.difficulty,
+    about: rules.about?.(room) ?? null,
+    hostName: host?.name ?? 'Someone',
+    players: room.players.filter((p) => p.status === 'joined' || p.status === 'invited').map((p) => p.name),
+    invitees: room.players.filter((p) => p.status === 'invited' && !live.pushed.has(p.id)).map((p) => p.id),
+    expiresAt: room.phaseEndsAt ?? null,
+  };
+}
+
+/** Record that a push reached these invitees' phones. */
+export function markInvitesPushed(id: string, playerIds: readonly string[]): void {
+  const live = rooms.get(id);
+  if (!live) return;
+  for (const p of playerIds) live.pushed.add(p);
 }
 
 /** Rooms this player is sitting in, so a phone that lost its screen can find its way back. */

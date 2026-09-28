@@ -95,6 +95,10 @@ describe('every native route gates itself', () => {
         '/games/[id]/+server.ts',
         '/games/[id]/stream/+server.ts',
         '/me/+server.ts',
+        // A member's phone registers its APNs token here so their game
+        // invites and household departures can be pushed to it. It stores a
+        // token on the caller's own credential row and reads nothing.
+        '/push/+server.ts',
         '/news/+server.ts',
         '/news/actions/+server.ts',
         '/news/story/[source]/[id]/+server.ts',

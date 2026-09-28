@@ -30,6 +30,7 @@ import { notificationEvents, notificationRoutes } from '$lib/db/schema';
 import { categoryOf, NOTIFICATION_CATEGORIES, type NotificationCategory } from './categories';
 import { notificationChannel } from './channels';
 import { emit as emitPlatformEvent } from '$lib/events/platform-bus';
+import { kickPushDispatch } from './push-dispatch';
 
 const SITE_URL = 'https://strangeramblings.com';
 
@@ -236,6 +237,10 @@ export async function notifyOwner(input: NotifyInput): Promise<NotifyResult> {
         target: notificationRoutes.category,
         set: { lastRaisedAt: new Date() },
       });
+
+    // Routed to the phone: push it now rather than on the dispatcher's next
+    // tick. The dispatcher claims the row, so this and the timer never both send.
+    if (route.native && !silent) kickPushDispatch();
 
     let whatsapp = false;
     if (route.whatsapp && !silent) whatsapp = await sendWhatsApp(input, row.id);

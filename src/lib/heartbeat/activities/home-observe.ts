@@ -170,6 +170,7 @@ export const homeObserve: ActivityHandler = {
       const sent = await deliverAlerts(members);
       details.alerts = sent;
       const a: string[] = [];
+      if (sent.pushed) a.push(`${sent.pushed} pushed`);
       if (sent.forwarded) a.push(`${sent.forwarded} to the app`);
       if (sent.pilotError) a.push(`app queue failed: ${sent.pilotError.slice(0, 80)}`);
       if (sent.whatsappSent.length) a.push(`WhatsApp to ${sent.whatsappSent.join(', ')}`);

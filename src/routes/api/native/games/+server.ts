@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { withNativeAccess } from '$lib/server/native-handler';
 import { gamePlayers, playerFor } from '$lib/games/players.server';
 import { asHttp, canCreate, createGame, invitesFor, roomsFor } from '$lib/games/rooms.server';
+import { pushInvites } from '$lib/games/invite-push.server';
 import { isDifficulty, MAX_PLAYERS } from '$lib/games/tap-duel';
 import { isGameId } from '$lib/games/catalogue';
 import { cleanTopic, isAudience, isClean } from '$lib/games/quiz-night';
@@ -16,9 +17,10 @@ const QUIZ_DAILY = 10;
  * GET /api/native/games — the lobby: who I am, who I can invite, what I am
  * invited to, and the games I am in.
  *
- * The phone polls this every few seconds while the app is open. There is no
- * push certificate, so this poll IS the invite notification: a new entry in
- * `invites` is what raises the banner.
+ * The phone polls this every few seconds while the app is open. An invite
+ * is pushed when it is sent (`invite-push.server`); one the push reached
+ * carries `pushed: true` and the app lists it without a second banner. One
+ * with no push (no token, Apple refused) still rings from this poll.
  */
 export const GET: RequestHandler = withNativeAccess('games', async (_event, identity) => {
   const me = await playerFor(identity.ownerEmail);
@@ -72,5 +74,8 @@ export const POST: RequestHandler = withNativeAccess('games', async (event, iden
   }
   const options = { topic: body.topic, audience: body.audience };
   const room = asHttp(() => createGame({ game, host: { id: me.id, name: me.name }, invite, difficulty, options }));
+  // Not awaited: the host's screen should not wait on Apple. An invite whose
+  // push fails is still collected by the invitee's poll.
+  void pushInvites(room.id);
   return json({ room }, { status: 201 });
 });

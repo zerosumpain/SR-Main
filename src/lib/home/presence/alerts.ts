@@ -7,9 +7,11 @@
 //     (whatever wrote them: the push stream, the poll, the app), walks them
 //     through `stepCrossings`, and writes a `household_event` row per crossing,
 //     deduped on (subject, place, kind) within ten minutes.
-//  2. `deliverAlerts` forwards undelivered events to the companion pilot's
-//     per-user alert queue (the app shows them) and, for places the owner has
-//     flagged for WhatsApp, sends one to each follower who asked for it.
+//  2. `deliverAlerts` PUSHES each departure to the followers whose phones
+//     can take one (APNs, time-sensitive), forwards what is left to the
+//     companion pilot's per-user alert queue (the app pulls it) and, for
+//     places the owner has flagged for WhatsApp, sends one to each follower
+//     who asked for it.
 //
 // Never `notifyOwner`: that channel is the owner's alone. Delivery failures
 // are reported, never thrown, and retried on the next run while the crossing
@@ -37,6 +39,9 @@ import {
   type TrailFix,
 } from './crossings';
 import { COMPANION_DEFAULT_URL, loadCompanionUsers, notSharingSubjects } from './companion';
+import { createHash } from 'node:crypto';
+import { pushToEmails, type PushOutcome } from '$lib/server/push-devices';
+import type { PushMessage } from '$lib/server/apns';
 import { LOCAL_TZ, errMsg } from './types';
 
 export const INSIDE_KEY_PREFIX = 'home.presence.inside.';
@@ -67,6 +72,8 @@ export interface AlertEvent {
   whatsappSent: string[];
   /** Per recipient subject: attempts made, and how many definitely failed. */
   whatsappTried?: Record<string, { attempts: number; failed: number }>;
+  /** Recipient emails a push already reached; the pilot is not sent these. */
+  pushedTo?: string[];
 }
 
 type Tried = { attempts: number; failed: number };
@@ -318,8 +325,11 @@ export function buildPilotEvents(
     // A mover who has stopped sharing (or left the household) since the
     // crossing is not announced; the event is marked done, not kept owed.
     // Same for a direction the place has stopped announcing since.
+    const pushed = new Set(ev.pushedTo ?? []);
     const recipients =
-      silenced.has(ev.subject) || !raisesCrossing(places.get(ev.placeId), ev.kind) ? [] : pilotRecipients(members, ev.subject);
+      silenced.has(ev.subject) || !raisesCrossing(places.get(ev.placeId), ev.kind)
+        ? []
+        : pilotRecipients(members, ev.subject).filter((r) => !pushed.has(r.trim().toLowerCase()));
     if (!recipients.length) {
       nobody.push(ev.id);
       continue;
@@ -328,6 +338,65 @@ export function buildPilotEvents(
     send.push({ id: ev.id.slice(0, 100), recipients, title, body, at: ev.at.toISOString() });
   }
   return { send, nobody };
+}
+
+export interface PlannedPush {
+  eventId: string;
+  recipients: string[];
+  message: PushMessage;
+}
+
+/** Apple caps a collapse id at 64 bytes; a crossing id can be longer. PURE. */
+function collapseIdFor(id: string): string {
+  return id.length <= 64 ? id : `hh-${createHash('sha256').update(id).digest('hex').slice(0, 40)}`;
+}
+
+/**
+ * The departures to push now. PURE.
+ *
+ * A LEAVE only — "left school" is the one worth breaking a Focus for; an
+ * arrival still reaches the app by its pull. Only while the event is owed,
+ * only for a place (and direction) still switched on, never for a mover who
+ * is silenced or held, and never twice to one recipient (`pushedTo`). The
+ * recipients are the pilot's own — followers on the app — so a push replaces
+ * exactly the notification the pull would have raised.
+ */
+export function planLeavePushes(
+  events: readonly AlertEvent[],
+  places: ReadonlyMap<string, AlertPlace>,
+  members: readonly HouseholdMember[],
+  now: Date,
+  quiet: ReadonlySet<string> = new Set(),
+): PlannedPush[] {
+  const out: PlannedPush[] = [];
+  for (const ev of events) {
+    if (ev.kind !== 'leave' || !isDeliverable(ev, now) || quiet.has(ev.subject)) continue;
+    const place = places.get(ev.placeId);
+    if (!raisesCrossing(place, 'leave')) continue;
+    const done = new Set(ev.pushedTo ?? []);
+    const recipients = pilotRecipients(members, ev.subject)
+      .map((r) => r.trim().toLowerCase())
+      .filter((r) => !done.has(r));
+    if (!recipients.length) continue;
+    const { title, body } = alertText(displayNameOf(members, ev.subject), ev.kind, placeName(place), ev.at);
+    out.push({
+      eventId: ev.id,
+      recipients,
+      message: {
+        title,
+        body,
+        category: 'household',
+        threadId: 'household',
+        level: 'time-sensitive',
+        relevance: 1,
+        collapseId: collapseIdFor(ev.id),
+        userInfo: { id: ev.id.slice(0, 100), category: 'household' },
+        // Past the delivery window it is not news; Apple may stop trying.
+        ttlSeconds: Math.max(60, Math.floor((ev.at.getTime() + DELIVERY_WINDOW_MS - now.getTime()) / 1000)),
+      },
+    });
+  }
+  return out;
 }
 
 // ── The pilot ────────────────────────────────────────────────────────────────
@@ -558,6 +627,8 @@ export async function runCrossings(members: readonly HouseholdMember[]): Promise
 // ── Delivery ─────────────────────────────────────────────────────────────────
 
 export interface DeliveryResult {
+  /** Departures pushed straight to a phone (one per recipient reached). */
+  pushed: number;
   forwarded: number;
   /** Events nobody on the app follows, marked done with nothing sent. */
   unfollowed: number;
@@ -700,11 +771,17 @@ async function defaultWhatsApp(to: string, text: string) {
  */
 export async function deliverAlerts(
   members: readonly HouseholdMember[],
-  deps: { fetchImpl?: typeof fetch; sendWhatsApp?: WhatsAppSend; now?: Date } = {},
+  deps: {
+    fetchImpl?: typeof fetch;
+    sendWhatsApp?: WhatsAppSend;
+    push?: (emails: readonly string[], message: PushMessage) => Promise<PushOutcome>;
+    now?: Date;
+  } = {},
 ): Promise<DeliveryResult> {
   const now = deps.now ?? new Date();
   const sendWhatsApp = deps.sendWhatsApp ?? defaultWhatsApp;
-  const result: DeliveryResult = { forwarded: 0, unfollowed: 0, whatsappSent: [], whatsappFailed: [] };
+  const push = deps.push ?? ((emails: readonly string[], message: PushMessage) => pushToEmails(emails, message));
+  const result: DeliveryResult = { pushed: 0, forwarded: 0, unfollowed: 0, whatsappSent: [], whatsappFailed: [] };
 
   const since = new Date(now.getTime() - DELIVERY_WINDOW_MS - WHATSAPP_FLOOR_MS);
   const rows = await db
@@ -722,6 +799,7 @@ export async function deliverAlerts(
     forwardedAt: r.forwardedAt,
     whatsappSent: Array.isArray(r.whatsappSent) ? r.whatsappSent : [],
     whatsappTried: r.whatsappTried && typeof r.whatsappTried === 'object' ? r.whatsappTried : {},
+    pushedTo: Array.isArray(r.pushedTo) ? r.pushedTo : [],
   }));
 
   // Labels and flags as they are now, for any place an event names. One
@@ -771,6 +849,27 @@ export async function deliverAlerts(
   }
   const { silenced, held } = partitionMovers(events, members, users);
   const quiet = new Set([...silenced, ...held]);
+
+  // Departures, pushed. Before the pilot, so whoever a push reached is left
+  // out of its queue and the app does not raise the same crossing twice.
+  // Recorded per recipient as it goes: a run that dies half way pushes the
+  // rest next time, and never the same person again.
+  for (const planned of planLeavePushes(events, places, members, now, quiet)) {
+    const outcome = await push(planned.recipients, planned.message);
+    const reached = planned.recipients.filter((r) => outcome.reached.has(r));
+    if (!reached.length) continue;
+    result.pushed += reached.length;
+    const ev = events.find((e) => e.id === planned.eventId);
+    if (ev) ev.pushedTo = [...(ev.pushedTo ?? []), ...reached];
+    try {
+      await db
+        .update(householdEvent)
+        .set({ pushedTo: sql`${householdEvent.pushedTo} || ${JSON.stringify(reached)}::jsonb` })
+        .where(eq(householdEvent.id, planned.eventId));
+    } catch (err) {
+      console.error('[home/alerts] could not record a push:', errMsg(err).slice(0, 200));
+    }
+  }
 
   // The app.
   const owed = events.filter((e) => isDeliverable(e, now));
