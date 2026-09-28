@@ -1,4 +1,4 @@
-// src/lib/daydream/calendar/exclusions.ts
+// src/lib/calendar/exclusions.ts
 //
 // "Some of those calendar events are rolling reminders."
 //

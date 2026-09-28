@@ -61,14 +61,25 @@ const loadPeopleMovement = vi.fn(async (people: Array<{ subject: string; display
 );
 vi.mock('$lib/home/presence/movement', () => ({ loadPeopleMovement }));
 
+const { forecastMock, namingMock } = vi.hoisted(() => ({
+  forecastMock: vi.fn(async (_viewer: unknown, _days: number, _person: string | null) => ({
+    forecast: { routines: [], next: [], watch: [], arrivals: [], departures: [], generatedAt: '', days: 28 },
+    insights: { people: [], routes: [] },
+    homeId: null,
+  })),
+  namingMock: vi.fn(async () => []),
+}));
+vi.mock('$lib/home/presence/forecast.server', () => ({ loadForecast: forecastMock }));
+vi.mock('$lib/home/presence/naming.server', () => ({ loadNamingQueue: namingMock, unnamedCount: async () => 3 }));
+
 const { load } = await import('./+page.server');
 
-function eventFor(email: string | null, person?: string) {
+function eventFor(email: string | null, person?: string, days?: string) {
   return {
     locals: { auth: async () => (email ? { user: { email } } : null) } as unknown as App.Locals,
     getClientAddress: () => '203.0.113.9',
     params: {},
-    url: new URL(`https://example.test/home/people${person ? `?person=${person}` : ''}`),
+    url: new URL(`https://example.test/home/people?${new URLSearchParams({ ...(person ? { person } : {}), ...(days ? { days } : {}) })}`),
     setHeaders: () => {},
     depends: vi.fn(),
   } as unknown as Parameters<typeof load>[0];
@@ -248,5 +259,33 @@ describe('everyone’s movement on the one page', () => {
     const data = await moving('owner@example.test');
     expect(data.movement).toEqual([]);
     expect((data as unknown as PeopleData).family.members).toHaveLength(3);
+  });
+});
+
+describe('the forecast and the naming queue', () => {
+  beforeEach(() => {
+    forecastMock.mockClear();
+    namingMock.mockClear();
+  });
+  it('gives the owner the naming queue and a household viewer none', async () => {
+    const owner = (await load(eventFor('owner@example.test'))) as unknown as { naming: Promise<unknown> | null };
+    expect(await owner.naming).toEqual({ queue: [], unnamed: 3 });
+    const sam = (await load(eventFor('sam@example.test'))) as unknown as { naming: Promise<unknown> | null };
+    expect(sam.naming).toBeNull();
+    expect(namingMock).toHaveBeenCalledTimes(1);
+  });
+  it('passes the forecast only a person the viewer may open, and a bounded window', async () => {
+    const own = (await load(eventFor('sam@example.test', 'sam', '7'))) as unknown as { forecast: Promise<unknown>; days: number };
+    await own.forecast;
+    expect(forecastMock).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'household' }), 7, 'sam');
+    const other = (await load(eventFor('sam@example.test', 'alex', '99999'))) as unknown as { forecast: Promise<unknown>; days: number };
+    await other.forecast;
+    expect(forecastMock).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'household' }), 28, null);
+    expect(other.days).toBe(28);
+  });
+  it('streams null, not an empty forecast, when the forecast fails', async () => {
+    forecastMock.mockRejectedValueOnce(new Error('boom'));
+    const data = (await load(eventFor('owner@example.test'))) as unknown as { forecast: Promise<unknown> };
+    expect(await data.forecast).toBeNull();
   });
 });

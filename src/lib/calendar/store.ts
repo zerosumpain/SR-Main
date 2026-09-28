@@ -1,4 +1,4 @@
-// src/lib/daydream/calendar/store.ts
+// src/lib/calendar/store.ts
 //
 // Storage for the diary filter. The decisions all live in `exclusions.ts`;
 // this is the thin database half.

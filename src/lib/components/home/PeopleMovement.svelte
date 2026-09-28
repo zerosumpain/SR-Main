@@ -175,6 +175,9 @@
     if (pt.transitMinutes > 0) rows.push({ ...base, key: 'moving', label: 'On the move', minutes: pt.transitMinutes, share: share(pt.transitMinutes), visits: null });
     return rows;
   });
+  /** The everyone table shows the ten places with the most time; the rest on request. */
+  const PLACES_SHOWN = 10;
+  let showAllPlaces = $state(false);
   /** Everyone: each named place once, the people who spent time there under
    *  it. Places by everyone's time together, people within a place by theirs. */
   const everyoneRows = $derived.by((): TimeRow[] => {
@@ -187,11 +190,14 @@
       }
     }
     const total = (rows: TimeRow[]) => rows.reduce((n, r) => n + r.minutes, 0);
-    return [...byPlace.values()]
-      .sort((a, b) => total(b) - total(a))
+    const groups = [...byPlace.values()].sort((a, b) => total(b) - total(a));
+    return (showAllPlaces ? groups : groups.slice(0, PLACES_SHOWN))
       .flatMap((rows) => rows.sort((a, b) => b.minutes - a.minutes).map((r, i) => ({ ...r, lead: i === 0 })));
   });
   const timeRows = $derived(single ? singleRows : everyoneRows);
+  const placeGroups = $derived(
+    new Set(shown.flatMap((p) => (p.stats?.placeTime.places.slice(0, TOP_PLACES) ?? []).map((r) => r.label))).size,
+  );
   const unseenMinutes = $derived.by(() => {
     const pt = stats?.placeTime;
     return single && pt ? Math.max(0, pt.windowMinutes - singleRows.reduce((n, r) => n + r.minutes, 0)) : 0;
@@ -255,17 +261,9 @@
       kicker="B / Where they went"
       title={single ? [single.displayName, `the last ${days} days`] : ['Everyone’s', `last ${days} days`]}
       strap={movement.length > 1
-        ? 'Everyone together, or pick one person for their day-by-day chart and walking pace.'
+        ? 'Everyone together. Pick one person in the filter at the top for their day-by-day chart and walking pace.'
         : 'Your own trail. Other people’s journeys are theirs to see.'}
     />
-    {#if movement.length > 1}
-      <nav class="who-filter" aria-label="Show movement for">
-        <a href={hrefFor(null)} data-sveltekit-noscroll aria-current={person ? undefined : 'page'}>Everyone</a>
-        {#each movement as p (p.subject)}
-          <a href={hrefFor(p.subject)} data-sveltekit-noscroll aria-current={person === p.subject ? 'page' : undefined}>{p.displayName}</a>
-        {/each}
-      </nav>
-    {/if}
     {#each failed as p (p.subject)}
       <LoadErrorCard kicker="{p.displayName}’s trail did not load" message={p.error ?? ''} />
     {/each}
@@ -329,6 +327,11 @@
           </tbody>
         </table>
       </div>
+      {#if !single && placeGroups > PLACES_SHOWN}
+        <button class="more-places" type="button" onclick={() => (showAllPlaces = !showAllPlaces)}>
+          {showAllPlaces ? `Show the top ${PLACES_SHOWN}` : `Show all ${placeGroups} places`}
+        </button>
+      {/if}
       {#if unseenMinutes > 0}
         <p class="note">The other {span(unseenMinutes)} ({pct(unseenMinutes / (stats?.placeTime.windowMinutes || 1))}) the phone was quiet or between places too briefly to count.</p>
       {/if}
@@ -624,6 +627,16 @@
 {/if}
 
 <style>
+  .more-places {
+    margin-top: 10px;
+    font: 600 var(--fs-label) var(--font-mono);
+    padding: 6px 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: 2px;
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+  }
   /* Page-specific only — `.band`, `.inner`, `.tbl`, `.lede`, `.field-label`
      come from `.ds-vocab` (HomeFrame's DsVocab). Marks follow /home/voice's
      hour chart: petrol ink, accent on hover, recessive axes. */
@@ -950,37 +963,6 @@
   }
   /* The person filter: the /home tab strip's type (HomeFrame `.home-tab`),
      as links so a filtered view has a URL. Wraps on a phone, never scrolls. */
-  .who-filter {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 18px;
-    margin-top: 6px;
-    border-bottom: 1px solid var(--line-hair);
-  }
-  .who-filter a {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    font-weight: 500;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    white-space: nowrap;
-    padding: 10px 0 8px;
-    color: var(--text-muted);
-    text-decoration: none;
-    border-bottom: 3px solid transparent;
-  }
-  .who-filter a:hover {
-    color: var(--accent);
-  }
-  .who-filter a[aria-current='page'] {
-    color: var(--text-primary);
-    font-weight: 700;
-    border-bottom-color: var(--accent);
-  }
-  .who-filter a:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
   .filter-band :global(.card) {
     margin-top: 12px;
   }

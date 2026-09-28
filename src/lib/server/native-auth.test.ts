@@ -101,6 +101,9 @@ describe('every native route gates itself', () => {
         '/chat/conversations/[id]/messages/+server.ts',
         '/chat/conversations/[id]/model/+server.ts',
         '/companion-pair/+server.ts',
+        // The travel desk's forecast. Scoped exactly as /home/people is: a
+        // Family Circle / Family Admin member gets themselves and their wards.
+        '/family/forecast/+server.ts',
         // Family steps and tasks: the owner or a family:circle/admin grant,
         // checked by `familyCaller` in each handler; everyone else 403s.
         '/family/steps/+server.ts',

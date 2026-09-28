@@ -1,4 +1,4 @@
-// src/lib/daydream/calendar/read.ts
+// src/lib/calendar/read.ts (moved out of daydream 2026-09-28: /home/people's agenda reads it too)
 //
 // The one place daydreaming reads the diary.
 //

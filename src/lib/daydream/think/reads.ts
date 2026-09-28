@@ -110,8 +110,8 @@ export async function diaryTool(args: Record<string, unknown>): Promise<string> 
   const to = typeof args.to === 'string' && args.to.trim() ? args.to.trim() : '+14d';
   const q = query(args.query).toLowerCase();
   const [{ readCalendar }, { loadExclusionSet }] = await Promise.all([
-    import('../calendar/read'),
-    import('../calendar/store'),
+    import('$lib/calendar/read'),
+    import('$lib/calendar/store'),
   ]);
   const read = await readCalendar({ dateRangeStart: from, dateRangeEnd: to }, await loadExclusionSet());
   if (!read.available) return `The calendar could not be read (${read.error ?? 'unavailable'}). Treat the diary as unknown, never as empty.`;

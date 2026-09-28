@@ -211,6 +211,11 @@ export const homeObserve: ActivityHandler = {
       const { deliverArrivalEstimates } = await import('$lib/home/presence/eta-alerts.server');
       details.arrivals = await deliverArrivalEstimates();
     } catch (err) { details.arrivalsError = errMsg(err).slice(0, 160); }
+    try {
+      // Off until the owner switches a kind on at /home/people; a no-op then.
+      const { deliverWatchAlerts } = await import('$lib/home/presence/watch-alerts.server');
+      details.watch = await deliverWatchAlerts();
+    } catch (err) { details.watchError = errMsg(err).slice(0, 160); }
 
     return { outcome, summary: bits.join(' · ') || 'nothing to record', details };
   },

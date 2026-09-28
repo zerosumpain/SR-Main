@@ -1,5 +1,6 @@
-import { error } from '@sveltejs/kit';
-import type { PageServerLoad } from './$types';
+import { error, fail } from '@sveltejs/kit';
+import type { Actions, PageServerLoad } from './$types';
+import { isOwnerRequest } from '$lib/server/owner';
 import { errMsg } from '$lib/home/presence/types';
 import { livePositions, loadHousehold, type LivePosition } from '$lib/home/presence/household';
 import { loadFeedChecks, type FeedCheck } from '$lib/home/presence/feed-checks';
@@ -7,6 +8,10 @@ import { listMembers } from '$lib/home/presence/members';
 import { loadPeopleMovement, type PersonMovement } from '$lib/home/presence/movement';
 import { ownDayOf } from '$lib/home/presence/my-day';
 import { DEFAULT_WINDOW_DAYS } from '$lib/home/presence/stats';
+
+/** History windows the filter bar offers; the forecast reads the chosen one. */
+const WINDOWS = [7, 28, 90] as const;
+const DEFAULT_FORECAST_DAYS = 28;
 import {
   mayOpenPerson,
   peopleViewerOf,
@@ -51,9 +56,64 @@ export const load: PageServerLoad = async (event) => {
   if (!viewer) error(403, 'Forbidden');
   event.depends('home:people');
   event.setHeaders({ 'cache-control': 'private, no-store' });
-  const arrivals = import('$lib/home/presence/insights.server')
-    .then(m => m.loadPresenceInsights(viewer, 28)).then(d => ({ arrivals: d.arrivals, generatedAt: d.generatedAt }))
-    .catch(() => null);
+  const askedDays = Number(event.url.searchParams.get('days'));
+  const days = (WINDOWS as readonly number[]).includes(askedDays) ? askedDays : DEFAULT_FORECAST_DAYS;
+  // A person this viewer may not open is ignored, as for the movement below.
+  const askedPerson = event.url.searchParams.get('person');
+  const forecastPerson = askedPerson && mayOpenPerson(viewer, askedPerson) ? askedPerson : null;
+  const isOwner = viewer.kind === 'owner';
+
+  // The forecast — routines, next moves, what looks off, the departure
+  // pattern — streamed: the live band must not wait on a month of trail.
+  // Scoped inside (`insightMembers`): a household viewer's forecast holds
+  // only themselves and their wards. A failure is null, drawn as "unavailable",
+  // never as an empty (and so reassuring) forecast.
+  const read = import('$lib/home/presence/forecast.server').then((m) => m.loadForecast(viewer, days, forecastPerson));
+  // One analysis feeds both the forecast and the agenda; a rejection is
+  // handled on each branch, so neither can surface as unhandled.
+  read.catch(() => {});
+  const forecast = read
+    .then(({ forecast, insights, homeId }) => ({
+      forecast,
+      homeId,
+      // Only routes with three clean trips are drawn; the rest (one-offs,
+      // most of the ~180) stay on the server.
+      routes: insights.routes.filter((r) => r.samples - r.broken >= 3),
+      people: insights.people.map((p) => ({ subject: p.subject, displayName: p.displayName, coverage: p.coverage })),
+    }))
+    .catch((err) => {
+      console.error('[home/people] forecast failed:', errMsg(err));
+      return null;
+    });
+  // Coming up: the owner's calendar over the learned routes. Owner only —
+  // it is the owner's calendar credential, and it names where people will be.
+  const agenda = isOwner
+    ? read
+        .then(async ({ insights, homeId }) => {
+          const { loadAgenda } = await import('$lib/home/presence/agenda.server');
+          return loadAgenda({ routes: insights.routes, live: insights.live, homeId });
+        })
+        .catch((err) => {
+          console.error('[home/people] agenda failed:', errMsg(err));
+          return null;
+        })
+    : null;
+  // Which travel-desk nudges reach the owner's phone. Owner only.
+  const notify = isOwner
+    ? await import('$lib/home/presence/watch-alerts.server')
+        .then(async (m) => ({ settings: await m.loadNotifySettings(), labels: m.NOTIFY_LABELS }))
+        .catch(() => null)
+    : null;
+  // Places worth naming, by the time actually spent there. Owner only: it
+  // names where everyone has been.
+  const naming = isOwner
+    ? import('$lib/home/presence/naming.server')
+        .then(async (m) => ({ queue: await m.loadNamingQueue(days), unnamed: await m.unnamedCount() }))
+        .catch((err) => {
+          console.error('[home/people] naming queue failed:', errMsg(err));
+          return null;
+        })
+    : null;
 
   // The map: every SHARING person's last fix (`livePositions` drops anyone not
   // sharing). The owner and any household viewer — that is what the Family
@@ -78,7 +138,7 @@ export const load: PageServerLoad = async (event) => {
   // is read from their phone, keyed on the session (see my-day.ts).
   const own = await ownDayOf(event).catch(() => null);
   const ownSubject = own?.subject ?? null;
-  const moving = { movement, person, ownSubject, days: DEFAULT_WINDOW_DAYS, arrivals };
+  const moving = { movement, person, ownSubject, movementDays: DEFAULT_WINDOW_DAYS, days, forecast, naming, agenda, notify };
 
   try {
     const { members } = await loadHousehold();
@@ -96,4 +156,47 @@ export const load: PageServerLoad = async (event) => {
     const loadError = viewer.kind === 'owner' ? errMsg(err) : 'The household could not be read just now.';
     return { family: EMPTY(), viewer, links: {} as Record<string, string>, loadError, positions, feedChecks: {} as Record<string, FeedCheck>, loadedAt: new Date(), ...moving };
   }
+};
+
+export const actions: Actions = {
+  /** Which kinds of travel-desk nudge reach the owner's phone. Owner only. */
+  notify: async (event) => {
+    if (!(await isOwnerRequest(event))) return fail(403, { error: 'Owner access required.' });
+    const form = await event.request.formData();
+    const { NOTIFY_KINDS, saveNotifySettings } = await import('$lib/home/presence/watch-alerts.server');
+    const settings = Object.fromEntries(NOTIFY_KINDS.map((k) => [k, form.get(k) === 'on'])) as Record<(typeof NOTIFY_KINDS)[number], boolean>;
+    try {
+      await saveNotifySettings(settings);
+    } catch (err) {
+      console.error('[home/people] notify settings save failed:', errMsg(err));
+      return fail(500, { error: 'That did not save. Try again.' });
+    }
+    return { savedNotify: true };
+  },
+  /**
+   * Who travels for each calendar: the owner's override of "a family name in
+   * the title, else the owner". `nobody` marks a calendar as not travel (a
+   * work calendar of video calls). Owner only — checked here, because a form
+   * action is a POST anyone can make.
+   */
+  calendars: async (event) => {
+    if (!(await isOwnerRequest(event))) return fail(403, { error: 'Owner access required.' });
+    const form = await event.request.formData();
+    const subjects = new Set((await listMembers()).map((m) => m.subject));
+    const map: Record<string, string[]> = {};
+    for (const [key, value] of form.entries()) {
+      if (!key.startsWith('cal:') || typeof value !== 'string') continue;
+      const calendar = key.slice(4).slice(0, 120);
+      if (value === 'auto') continue;
+      map[calendar] = value === 'nobody' ? [] : value.split(',').filter((s) => subjects.has(s));
+    }
+    try {
+      const { saveCalendarMap } = await import('$lib/home/presence/agenda.server');
+      await saveCalendarMap(map);
+    } catch (err) {
+      console.error('[home/people] calendar map save failed:', errMsg(err));
+      return fail(500, { error: 'That did not save. Try again.' });
+    }
+    return { savedCalendars: true };
+  },
 };

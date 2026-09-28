@@ -374,7 +374,7 @@ export async function buildDayFeatures(
     // when a caller supplied its own fetcher, which is how the tests run.
     let fetcher = opts.calendarFetch;
     if (!fetcher) {
-      const { loadExclusionSet } = await import('../calendar/store');
+      const { loadExclusionSet } = await import('$lib/calendar/store');
       fetcher = toolChunkFetch(await loadExclusionSet());
     }
     const cal = await fetchCalendarDays(localDay(from), localDay(now), fetcher);

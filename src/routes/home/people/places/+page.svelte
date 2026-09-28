@@ -77,7 +77,7 @@
   <div class="places-desk">
     {#if data.places.some(p => p.id.startsWith('sample-insights-'))}<p class="message">Local preview includes clearly labelled synthetic family places and journeys.</p>{/if}
     {#if data.loadError}<p class="error" role="alert">Places could not be loaded. Refresh to try again.</p>{/if}
-    <div class="lookup-status"><span>{data.geocoder}</span><a href="/home/people/insights">See journey insights →</a></div>
+    <div class="lookup-status"><span>{data.geocoder}</span><a href="/home/people">Routes and routines →</a></div>
     <div class="toolbar">
       <label class="search">Find a place<input type="search" bind:value={query} placeholder="Name, street or kind…" /></label>
       <div class="filters" aria-label="Filter places">

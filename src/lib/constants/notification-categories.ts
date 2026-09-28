@@ -134,6 +134,17 @@ export const NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
     minIntervalSeconds: 0,
   },
   {
+    id: 'family',
+    label: 'Family travel',
+    description: 'Someone has not left when they usually do, a journey running long, time to leave for something in the diary.',
+    // Phone only: these are "have a look" nudges, and each kind stays off
+    // until it is switched on at /home/people. Every raise carries a dedupe
+    // key per occurrence, so no floor is needed on the category.
+    whatsapp: false,
+    native: true,
+    minIntervalSeconds: 0,
+  },
+  {
     id: 'system',
     label: 'Everything else',
     description: 'Anything that has not been given a category of its own yet.',
