@@ -16,6 +16,7 @@ import { daydreamImprove } from './activities/daydream-improve';
 import { activitySync } from './activities/activity-sync';
 import { alexaSignalsSync, alexaVoiceSync, alexaVoiceTopics } from './activities/alexa-voice';
 import { newsBrief } from './activities/news-brief';
+import { familySteps, familySteps4pm } from './activities/family-steps';
 
 /**
  * The full set of available heartbeat activity handlers. The engine looks
@@ -42,6 +43,8 @@ const handlers: ActivityHandler[] = [
   alexaVoiceSync,
   alexaSignalsSync,
   alexaVoiceTopics,
+  familySteps,
+  familySteps4pm,
 ];
 
 const byName = new Map(handlers.map((h) => [h.name, h]));
