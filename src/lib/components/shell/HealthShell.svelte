@@ -229,7 +229,10 @@
     flex-direction: column;
     background: var(--bg);
     color: var(--text-primary);
-    overflow-x: hidden;
+    /* clip, not hidden: `hidden` makes the shell a scroll container, and a
+       sticky child (the /home/people filter bar) then sticks to nothing.
+       SR-Health's copy learned this on /health/analytics. */
+    overflow-x: clip;
     font-family: var(--font-body);
   }
 
