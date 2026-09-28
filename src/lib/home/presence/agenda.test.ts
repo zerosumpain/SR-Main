@@ -102,3 +102,17 @@ describe('the plan', () => {
     expect(e.high).toBeGreaterThan(e.p80);
   });
 });
+
+describe('the phone’s copy', () => {
+  it('keeps what the list and a reminder need, and says when the diary was unreadable', async () => {
+    const { phoneAgenda } = await import('./agenda');
+    const { items } = planAgenda(base({
+      events: [{ id: 'e1', title: 'Sam parents evening', start: '2026-09-28T16:00:00Z', end: '2026-09-28T17:00:00Z', location: 'Sample College', calendar: 'Home' }],
+    }));
+    const phone = phoneAgenda({ items, available: true });
+    expect(phone.items[0]).toMatchObject({ id: 'e1', place: 'Sample College', subjects: ['sam'], from: 'Home', travel: { source: 'person' } });
+    expect(phone.items[0].leaveBy).toBe(items[0].leaveBy);
+    expect(JSON.stringify(phone)).not.toMatch(/lat|lon|calendar/);
+    expect(phoneAgenda({ items: [], available: false })).toEqual({ available: false, items: [] });
+  });
+});

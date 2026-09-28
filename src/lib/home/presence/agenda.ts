@@ -254,3 +254,46 @@ export function planAgenda(input: AgendaInput): { items: AgendaItem[]; requests:
   }
   return { items, requests: [...requests.values()] };
 }
+
+// ── The phone's copy ────────────────────────────────────────────────────────
+
+/** One upcoming item as the app draws it and schedules its reminder. */
+export interface PhoneAgendaItem {
+  id: string;
+  title: string;
+  start: string;
+  end: string | null;
+  place: string;
+  subjects: string[];
+  /** Null when no travel time could be set (unplaced, or already there). */
+  leaveBy: string | null;
+  from: string | null;
+  travel: { source: 'person' | 'household' | 'routed'; median: number; p80: number; samples: number; mode: string } | null;
+  issue: { kind: 'tight' | 'overlap' | 'unplaced'; text: string } | null;
+}
+
+/**
+ * The owner's next two days, trimmed for the phone: no coordinates, no
+ * calendar names — only what the Coming up list and a reminder need. PURE.
+ * `available: false` means the diary could not be read, which the phone must
+ * say rather than draw an empty (reassuring) list.
+ */
+export function phoneAgenda(read: { items: AgendaItem[]; available: boolean }): { available: boolean; items: PhoneAgendaItem[] } {
+  return {
+    available: read.available,
+    items: read.items.map((i) => ({
+      id: i.id,
+      title: i.title,
+      start: i.start,
+      end: i.end,
+      place: i.place?.label ?? i.location,
+      subjects: i.subjects,
+      leaveBy: i.leaveBy,
+      from: i.origin?.label ?? null,
+      travel: i.travel
+        ? { source: i.travel.source, median: i.travel.median, p80: i.travel.p80, samples: i.travel.samples, mode: i.travel.mode }
+        : null,
+      issue: i.issue,
+    })),
+  };
+}
