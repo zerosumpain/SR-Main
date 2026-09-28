@@ -210,7 +210,7 @@ export async function notifyOwner(input: NotifyInput): Promise<NotifyResult> {
     // is stamped collected on the way in, so the phone never raises it.
     const silent = !route.whatsapp && !route.native;
 
-    const [row] = await db
+    const insert = db
       .insert(notificationEvents)
       .values({
         ...(input.eventId ? { id: input.eventId } : {}),
@@ -228,8 +228,8 @@ export async function notifyOwner(input: NotifyInput): Promise<NotifyResult> {
         nativeAt: route.native && !silent ? null : new Date(),
         // A silent row is read, because nobody was ever going to be shown it.
         readAt: silent ? new Date() : null,
-      })
-      .onConflictDoNothing({ target: notificationEvents.id })
+      });
+    const [row] = await (input.eventId ? insert.onConflictDoNothing({ target: notificationEvents.id }) : insert)
       .returning({ id: notificationEvents.id });
 
     if (!row) return { raised: false, reason: 'duplicate', id: input.eventId };
