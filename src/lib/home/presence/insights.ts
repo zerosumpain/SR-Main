@@ -1,9 +1,17 @@
 /** Pure, observation-bounded household analysis. No extrapolation across gaps. */
 import { metresBetween } from './cluster';
 import { circularMedianMinute, hhmm } from './stats';
-import { LOCAL_TZ, MAX_USABLE_ACCURACY_M, MIN_DWELL_MINS, MIN_JOURNEY_METRES, STILL_MAX_GAP_MINS, STILL_RADIUS_M } from './types';
+import { LOCAL_TZ, MAX_USABLE_ACCURACY_M, MIN_DWELL_MINS, MIN_JOURNEY_METRES, STILL_RADIUS_M } from './types';
 
 const MINUTE = 60_000;
+/**
+ * The longest gap between two readings that is still one unbroken track.
+ * Ten minutes, not the poll floor's six: Life360 reports a MOVING phone every
+ * few minutes of its own choosing, and 6–7 minute gaps split 24 of 37 school
+ * runs into nothing (measured on 28 days, 2026-09-28; 10 min recovers 30/37,
+ * 12 min no more). A 200 km/h ceiling still refuses a jump.
+ */
+export const CONTINUOUS_GAP_MINS = 10;
 const DAY = 86_400_000;
 export interface InsightFix {
   subject: string; ts: Date; lat: number | null; lon: number | null;
@@ -39,8 +47,19 @@ export interface PersonInsight extends InsightPerson {
   observed: number; coverage: number; home: number; away: number; wander: number; daylight: number;
   stationary: number; longestStill: number; distanceKm: number; places: number; lastSeen: string | null;
 }
+/**
+ * Where each person is on the trail right now, as the analysis sees it: the
+ * place of their last usable fix and since when, or the journey they are on.
+ * `placeId` is null between places; `moving` is set once a stay has ended and
+ * no new one has begun.
+ */
+export interface LiveState {
+  subject: string; placeId: string | null; since: string | null; lastSeen: string | null;
+  moving: { fromId: string; departedAt: string } | null;
+}
 export interface PresenceInsights {
   generatedAt: string; days: number; people: PersonInsight[]; routes: RouteInsight[]; arrivals: ArrivalInsight[];
+  live: LiveState[];
   groups: Array<{ subjects: string[]; names: string[]; minutes: number }>;
   together: number; daily: Array<{ date: string; observed: number; wander: number; daylight: number }>;
 }
@@ -80,7 +99,7 @@ export function usableFix(f: InsightFix, now: number): f is Fix {
 }
 function continuous(a: Fix, b: Fix): boolean {
   const dt = b.ts.getTime() - a.ts.getTime();
-  return dt > 0 && dt <= STILL_MAX_GAP_MINS * MINUTE && metresBetween(a.lat, a.lon, b.lat, b.lon) / dt * 3600 <= 200;
+  return dt > 0 && dt <= CONTINUOUS_GAP_MINS * MINUTE && metresBetween(a.lat, a.lon, b.lat, b.lon) / dt * 3600 <= 200;
 }
 /** NOAA fractional-year solar approximation. Geometric daylight, not UV or weather. */
 export function inDaylight(at: number, lat: number, lon: number): boolean {
@@ -139,10 +158,17 @@ function located(f: Fix, places: InsightPlace[]): Fix {
   // ~100k fixes against ~130 places is otherwise 13M haversines per analysis.
   const candidates = places.filter(p => Math.abs(f.lat - p.lat) * 111_320 <= p.radiusM && metresBetween(f.lat, f.lon, p.lat, p.lon) <= p.radiusM
     && (f.accuracyM ?? 0) <= p.radiusM && (f.speedKmh ?? 0) < 90);
-  candidates.sort((a, b) => metresBetween(f.lat, f.lon, a.lat, a.lon) - metresBetween(f.lat, f.lon, b.lat, b.lon));
+  // A named place beats an unnamed one it overlaps: a 266 m street cluster
+  // around the school gate otherwise "won" the school run by being nearer.
+  const named = (p: InsightPlace) => (p.label || p.kind === 'home' ? 0 : 1);
+  candidates.sort((a, b) => named(a) - named(b) || metresBetween(f.lat, f.lon, a.lat, a.lon) - metresBetween(f.lat, f.lon, b.lat, b.lon));
   // Recheck geometry: place ids on historical rows can predate an edited boundary.
   return { ...f, placeId: candidates[0]?.id ?? null };
 }
+/** Metres a phone may move per minute and still be stationary (~1.8 km/h). */
+const STILL_STEP_M = 30;
+/** Time inside a place, moving or not, that makes it a stay regardless. */
+const LINGER_MINS = 25;
 /** Two places whose circles overlap: drift at one door "arrives" at the other.
  *  A home drawn at 50 m beside a 200 m street cluster produced a daily
  *  three-minute "trip" between them for every person in the house. */
@@ -154,16 +180,23 @@ function adjacent(a: string, b: string, places: InsightPlace[]): boolean {
  *  and a real journey: not between overlapping places, not under 300 m. */
 export function extractTrips(rows: InsightFix[], places: InsightPlace[], now: Date): { trips: Trip[]; active: Fix[] } {
   const trips: Trip[] = [];
-  let origin: string | null = null, pending: Fix[] = [], path: Fix[] = [], prev: Fix | null = null;
+  let origin: string | null = null, pending: Fix[] = [], path: Fix[] = [], prev: Fix | null = null, still = 0;
   for (const raw of [...rows].sort((a, b) => +a.ts - +b.ts)) {
     if (!usableFix(raw, +now)) { origin = null; pending = []; path = []; prev = null; continue; }
     const f = located(raw, places);
     if (prev && +prev.ts === +f.ts) continue;
     if (prev && !continuous(prev, f)) { origin = null; pending = []; path = []; }
     if (origin) path.push(f);
-    if (f.placeId && f.placeId === prev?.placeId) pending.push(f);
-    else pending = f.placeId ? [f] : [];
-    if (pending.length && +f.ts - +pending[0].ts >= MIN_DWELL_MINS * MINUTE) {
+    if (f.placeId && f.placeId === prev?.placeId && pending.length) {
+      // Only still minutes make a stay: walking through a wide circle for ten
+      // minutes is passing it (the school walk crossed one for 12–16 min every
+      // morning and split in two). Lingering — a park, a town centre — still
+      // counts once it has gone on long enough.
+      const last = pending.at(-1)!, dt = +f.ts - +last.ts;
+      if (metresBetween(last.lat, last.lon, f.lat, f.lon) <= Math.max(STILL_STEP_M, dt / MINUTE * STILL_STEP_M)) still += dt;
+      pending.push(f);
+    } else { pending = f.placeId ? [f] : []; still = 0; }
+    if (pending.length && (still >= MIN_DWELL_MINS * MINUTE || +f.ts - +pending[0].ts >= LINGER_MINS * MINUTE)) {
       if (origin && origin !== f.placeId && path.length > 1) {
         const end = +pending[0].ts, start = +path[0].ts;
         const moving = path.filter(p => +p.ts <= end);
@@ -193,6 +226,8 @@ export function extractTrips(rows: InsightFix[], places: InsightPlace[], now: Da
  * a gap, never a stay.
  */
 export const HEARTBEAT_MAX_S = 6 * 3600;
+/** Younger than this, a repeat after a MOVING reading is a phone between reports. */
+export const HEARTBEAT_MIN_S = 5 * 60;
 
 /**
  * Put provider readings back on the clock they were taken at. PURE.
@@ -215,14 +250,20 @@ export function normaliseReadings(rows: InsightFix[], heartbeatMaxS = HEARTBEAT_
   for (const list of bySubject.values()) {
     list.sort((a, b) => +a.ts - +b.ts);
     const kept: InsightFix[] = [], beats = new Set<InsightFix>();
-    let lastSeen = -Infinity;
+    let lastSeen = -Infinity, lastReading: InsightFix | null = null, moving = false;
     for (const r of list) {
       if (!r.readingAgeS || r.readingAgeS < 0 || r.lat == null || r.lon == null) { kept.push(r); continue; }
       const seen = +r.ts - r.readingAgeS * 1000;
       if (Math.abs(seen - lastSeen) > 5_000) {
         while (kept.length && beats.has(kept.at(-1)!) && +kept.at(-1)!.ts > seen) kept.pop();
-        lastSeen = seen;
+        moving = lastReading != null && metresBetween(lastReading.lat!, lastReading.lon!, r.lat, r.lon) > STILL_RADIUS_M;
+        lastReading = r; lastSeen = seen;
         kept.push({ ...r, ts: new Date(seen), readingAgeS: 0 });
+      } else if (r.readingAgeS < HEARTBEAT_MIN_S && moving) {
+        // A moving phone between reports (it reports every minute or three):
+        // the repeat says nothing about stillness, and pinning the old spot
+        // at the poll time would drag the journey backwards. Skip it.
+        continue;
       } else if (r.readingAgeS <= heartbeatMaxS) {
         const beat: InsightFix = { ...r, readingAgeS: 0, speedKmh: 0, mode: 'still' };
         beats.add(beat); kept.push(beat);
@@ -308,15 +349,33 @@ export function predictArrival(active: Fix[], trips: Trip[], places: InsightPlac
     earliest: new Date(+now + Math.min(low, remaining) * MINUTE).toISOString(), latest: new Date(+now + high * MINUTE).toISOString(),
     minutesLeft: Math.round(remaining), samples: durations.length, confidence: durations.length >= 8 ? 'established' : 'emerging', returningHome: dest.kind === 'home' };
 }
+/** The place of the last usable fix and when the unbroken stay there began. PURE. */
+export function liveState(subject: string, fixes: InsightFix[], active: Fix[], places: InsightPlace[], now: Date): LiveState {
+  const usable = fixes.filter((f): f is Fix => usableFix(f, +now));
+  const last = usable.at(-1);
+  const state: LiveState = { subject, placeId: null, since: null, lastSeen: last?.ts.toISOString() ?? null, moving: null };
+  if (active.length >= 3 && active[0].placeId) state.moving = { fromId: active[0].placeId, departedAt: active[0].ts.toISOString() };
+  if (!last) return state;
+  const here = located(last, places).placeId;
+  if (!here || state.moving) return state;
+  let since = last;
+  for (let i = usable.length - 2; i >= 0; i--) {
+    const f = usable[i];
+    if (!continuous(f, since) || located(f, places).placeId !== here) break;
+    since = f;
+  }
+  return { ...state, placeId: here, since: since.ts.toISOString() };
+}
 export function analysePresence(rows: InsightFix[], places: InsightPlace[], people: InsightPerson[], now: Date, days: number): PresenceInsights {
   const start = +now - days * DAY;
   rows = normaliseReadings(rows);
   const daily = new Map<string, { date: string; observed: number; wander: number; daylight: number }>();
   const legsByPerson = new Map<string, Leg[]>(), allTrips: Trip[] = [], activeByPerson = new Map<string, Fix[]>();
-  const summaries: PersonInsight[] = [];
+  const summaries: PersonInsight[] = [], live: LiveState[] = [];
   for (const person of people) {
     const fixes = analysisFixes(rows.filter(f => f.subject === person.subject && +f.ts >= start && +f.ts <= +now), now);
     const { trips, active } = extractTrips(fixes, places, now); allTrips.push(...trips); activeByPerson.set(person.subject, active);
+    live.push(liveState(person.subject, fixes, active, places, now));
     const summary: PersonInsight = { ...person, observed: 0, coverage: 0, home: 0, away: 0, wander: 0, daylight: 0,
       stationary: 0, longestStill: 0, distanceKm: 0, places: 0, lastSeen: null };
     const visited = new Set<string>(), legs: Leg[] = [];
@@ -382,7 +441,7 @@ export function analysePresence(rows: InsightFix[], places: InsightPlace[], peop
   }
   const routes = new Map<string, Trip[]>();
   for (const t of allTrips) { const key = routeKey(t), list = routes.get(key) ?? []; list.push(t); routes.set(key, list); }
-  return { generatedAt: now.toISOString(), days, people: summaries, together: round(together),
+  return { generatedAt: now.toISOString(), days, people: summaries, live, together: round(together),
     daily: [...daily.values()].sort((a, b) => a.date.localeCompare(b.date)).map(d => ({ ...d, observed: round(d.observed), wander: round(d.wander), daylight: round(d.daylight) })),
     groups: [...groups].map(([key, minutes]) => ({ subjects: key.split('|'), names: key.split('|').map(s => people.find(p => p.subject === s)?.displayName ?? s), minutes: round(minutes) })).sort((a, b) => b.minutes - a.minutes),
     routes: [...routes].map(([id, list]): RouteInsight => {

@@ -29,7 +29,7 @@ describe('observed stops', () => {
     const points = Array.from({ length: 6 }, (_, i) => fix(+now - (5 - i) * 120000));
     expect(qualifiedStop(points.map(p => ({ ...p, readingAgeS: 900 })), now)).toBeNull();
     expect(qualifiedStop(points.map(p => ({ ...p, accuracyM: 500 })), now)).toBeNull();
-    expect(qualifiedStop([points[0], points[5]], now)).toBeNull();
+    expect(qualifiedStop([fix(+now - 12 * 60000), points[5]], now)).toBeNull(); // past CONTINUOUS_GAP_MINS
     expect(qualifiedStop(points.map((p, i) => ({ ...p, lat: 51.5 + i * .0005 })), now)).toBeNull();
     expect(qualifiedStop(points, new Date(+now + 4 * 60000))).toBeNull();
   });
@@ -160,5 +160,31 @@ describe('trips that are not journeys', () => {
     const d = analysePresence(history(), places, [person], new Date('2026-09-28T07:28Z'), 28);
     expect(d.routes[0]).toMatchObject({ broken: 0, departure: '08:20' }); // 07:20Z is 08:20 BST
     expect(d.routes[0].trips).toHaveLength(4);
+  });
+});
+
+describe('what makes a stay and whose place it is', () => {
+  const now = new Date('2026-09-28T12:00Z');
+  it('lets a named place win over an unnamed circle it overlaps', () => {
+    const wide: InsightPlace = { id: 'street', label: null, kind: 'unknown', lat: 51.59, lon: -.12, radiusM: 300 };
+    const data = analysePresence(history(), [...places, wide], [person], new Date('2026-09-28T07:28Z'), 28);
+    expect(data.routes[0]).toMatchObject({ to: 'Sample College', samples: 4 });
+  });
+  it('does not stop a walk that crosses a wide circle for ten minutes', () => {
+    const park: InsightPlace = { id: 'park', label: 'Park', kind: 'other', lat: 51.545, lon: -.12, radiusM: 900 };
+    const t0 = +now - 90 * 60_000, pts: InsightFix[] = [];
+    for (let m = 0; m <= 12; m += 2) pts.push(fix(t0 + m * 60_000, 51.5));
+    // 5 km/h north across the park, ~84 m a minute, 14 minutes inside it
+    for (let m = 14; m <= 60; m += 2) pts.push(fix(t0 + m * 60_000, 51.5 + (m - 12) * .00075, { mode: 'walking', speedKmh: 5, isHome: false }));
+    const last = pts.at(-1)!;
+    for (let m = 62; m <= 76; m += 2) pts.push(fix(t0 + m * 60_000, last.lat!, { isHome: false }));
+    const end: InsightPlace = { id: 'end', label: 'End', kind: 'other', lat: last.lat!, lon: -.12, radiusM: 100 };
+    expect(extractTrips(pts, [places[0], park, end], now).trips.map(t => [t.from, t.to])).toEqual([['home', 'end']]);
+  });
+  it('skips a young repeat of a moving reading rather than pinning the old spot', () => {
+    const a = fix(+now - 4 * 60_000, 51.5, { readingAgeS: 1 });
+    const b = fix(+now - 2 * 60_000, 51.51, { readingAgeS: 1 });         // moved ~1.1 km
+    const repeat = fix(+now, 51.51, { readingAgeS: 121 });                // same reading, 2 min on
+    expect(normaliseReadings([a, b, repeat])).toHaveLength(2);
   });
 });
