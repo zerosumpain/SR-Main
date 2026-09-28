@@ -14,7 +14,7 @@ const target = (id: string, email: string, env: string | null = 'production') =>
 describe('deliver', () => {
   it('reports who it reached, by lower-cased email, and forgets only dead tokens', async () => {
     const forgotten: string[] = [];
-    const send = vi.fn(async (token: string) =>
+    const send = vi.fn(async (token: string, _message: unknown, _env?: string | null) =>
       token.startsWith('a')
         ? { ok: true, status: 200 }
         : token.startsWith('b')
