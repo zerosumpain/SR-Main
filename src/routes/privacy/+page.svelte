@@ -43,45 +43,6 @@
     you stay signed in, and that's the only cookie it uses.
   </p>
 
-  <h2>If you use the iPhone app</h2>
-  <p>
-    Strange Rambler is the site's iPhone app (on your Home Screen it's called SR Companion), and like the site it's invitation only. You can sign in with
-    Apple or Google, which tells me your name and email address (or the private relay address Apple
-    makes if you ask it to hide yours), and I look at every request by hand before the account opens. If
-    I turn a request down, or you withdraw it, the request is all that's kept.
-  </p>
-  <p>
-    If you choose to share your location, the app sends where your phone is to my server so the people
-    in the family I've approved can see where you are, how charged your battery is and where you've been
-    today. It keeps doing that in the background, and after you leave a place you've picked it records
-    the journey more closely until you arrive — you can pause sharing whenever you like from Settings.
-    The phone's motion sensor is only read on the phone, to switch the GPS off while you're sitting still,
-    and none of that leaves it.
-  </p>
-  <p>
-    Apple Health data only goes up for the categories you pick, and it lands on your own health page,
-    which nobody else in the family can open. The one exception is your step total for the day, which
-    sits on the family steps leaderboard for everyone on it to see. The app reads from Apple Health and
-    never writes to it.
-  </p>
-  <p>
-    Family tasks — what the job is, who it's for, who did it and any reward attached — are seen by the
-    family, and a reward is just a note of what's owed, the app doesn't handle money. If you chat to jkai
-    from the app, your messages, photos and voice notes are stored with your account and sent to the AI
-    model providers the site uses to answer them, the same as on the site; voice notes are turned into
-    text on your phone first, and the recording is kept alongside so you can play it back. To send you
-    notifications your phone gets a push token from Apple, which I keep against your account.
-  </p>
-  <p>
-    It all sits on the same servers in the EU as the rest of the site. None of it is sold, used for
-    advertising or shared with anyone outside the family, and because it's my server I could technically
-    read it, which I don't. You can delete your account from the app, in Settings, and that removes your
-    account, your phones, the location history and health data your phone sent, your chats and anything
-    you saved on the site, straight away. Tasks you wrote for someone else stay on the family's list
-    with your name taken off, and if you share your location through Life360 as well, the family's
-    record of that isn't part of the app and stays until you ask me. Backups roll over as described below.
-  </p>
-
   <h2>If you connect a Gmail account</h2>
   <p>
     Only I and people I've invited can connect a mailbox, and only from a signed-in session. My own
@@ -118,6 +79,36 @@
     mail, the graph facts drawn from them, its search index and any attachments that were saved. If you
     take the access away from Google's side instead, or you'd just like it gone, ask me and I'll delete
     what was read from your mailbox.
+  </p>
+
+  <h2>If you use the iPhone app</h2>
+  <p>
+    The app uploads the Apple Health categories you choose to John's server, including workout routes
+    when allowed. Background location is a separate choice. Location sharing lets permitted family
+    members see your current status and map; your own history and a parent's named wards have more
+    detailed views. Family membership is checked by the site, and removing access invalidates paired devices.
+    Daily steps appear on the family board only after a separate opt-in, off by default. Location
+    consent alone does not share your steps. Family boards can appear in widgets and notifications.
+  </p>
+  <p>
+    The configured owner's Health export is copied into SR-Health and selected owner figures can appear
+    on the public Health dashboard. Other people's private Health uploads are not published there.
+    These records are not end-to-end encrypted: the server operator can access stored data. Maps use
+    Mapbox, which receives map requests and ordinary network details. Apple carries notification and
+    Live Activity payloads. Notification details and journey Live Activities are off by default for each paired phone. Enabling them can reveal names, places, journey status and step counts on its Lock Screen; you can change the choices in the app’s Settings. Content
+    you send to the site's AI features may go to the model providers described above.
+  </p>
+  <p>
+    Companion locations are kept for up to 30 days, queued household alerts for seven days, and cached
+    household views for at most five minutes. Health records stay until deleted. Pausing location
+    sharing stops uploads and invalidates shared views; it does not erase history. Switching family
+    steps off hides your counts and removes the board's copies on the next successful refresh.
+    Deleting uploaded data removes the raw companion copy and queues removal of Main's derived
+    movement/events/journeys/steps and the Health export. Services acknowledge each copy separately;
+    a failed service is retried and pairing stays blocked until completion. Apple Health on the phone,
+    named places, other-source location history and account membership remain. Backups expire separately.
+    Disconnecting the website revokes that website credential, with an offline retry; companion upload
+    and location controls are separate. Disconnect the companion to stop its collection and upload.
   </p>
 
   <h2>Keeping and deleting</h2>

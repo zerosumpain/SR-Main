@@ -57,11 +57,11 @@ async function statusOf(p: Promise<unknown>): Promise<number> {
 describe('requireOwnJob', () => {
   const event = { locals: {} as App.Locals };
 
-  it('gives the owner every job, and a sessionless owner-grade lane too', async () => {
+  it('gives the owner every job and refuses an anonymous caller', async () => {
     const a = createJob('member turn', { conversationId: 'c1', principalId: 'u_a' });
     expect(await statusOf(requireOwnJob(event, a.jobId))).toBe(200);
     viewer = { kind: 'anonymous' };
-    expect(await statusOf(requireOwnJob(event, a.jobId))).toBe(200);
+    expect(await statusOf(requireOwnJob(event, a.jobId))).toBe(403);
     cancelJob(a.jobId);
   });
 

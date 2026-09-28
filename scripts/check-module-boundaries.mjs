@@ -54,6 +54,13 @@ const ROOT = FIXTURE ? resolve(FIXTURE) : REPO;
 if (!FIXTURE) {
   const projectsRoot = join(REPO, 'src', 'routes', 'projects');
   const allowed = new Set(['[slug]', 'archetype', 'engine-room', 'jkai']);
+  // Preserve the cumulative SR-Hex redirect only. The game remains in SR-Hex;
+  // adding implementation files to Main still fails this boundary.
+  const hexFiles = readdirSync(join(projectsRoot, 'hex')).sort();
+  if (JSON.stringify(hexFiles) === JSON.stringify(['+page.server.ts', '+page.svelte']) &&
+      readFileSync(join(projectsRoot, 'hex', '+page.server.ts'), 'utf8').includes('env.HEX_APP_URL')) {
+    allowed.add('hex');
+  }
   const unexpected = readdirSync(projectsRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && !allowed.has(entry.name))
     .map((entry) => entry.name)

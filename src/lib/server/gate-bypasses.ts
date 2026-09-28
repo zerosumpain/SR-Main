@@ -122,6 +122,7 @@ export const HOOK_BYPASSES: string[] = [
  * its own and nothing underneath it does.
  */
 export const HOOK_EXACT_BYPASSES: string[] = [
+  '/api/internal/session', // POST only, audience-bound session authority key
   '/health', // the public health landing; every /health/* child is owner-only
   // The two orchestrator paths a chat turn needs, opened to a paired iPhone's
   // device token as well as an owner session.
@@ -161,6 +162,9 @@ export const HOOK_NON_BYPASSES: string[] = [
  * HOOK_BYPASSES.
  */
 export const BYPASS_GUARDS: Record<string, string> = {
+  '/api/internal/session': 'POST only · dedicated audience-bound session authority credential',
+  '/api/native/companion-policy': 'Dedicated companion policy service token; current permission and version only',
+  '/api/native/session': 'Bearer possession revokes only itself; unauthenticated DELETE is an idempotent no-op',
   '/api/native':
     'Bearer device token (native_credentials row) · re-checked per handler: withDevice (owner only) or withNativeAccess (owner, or a member holding that area)',
   '/api/workflows/orchestrator/chat':

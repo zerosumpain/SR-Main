@@ -1,3 +1,4 @@
+import { familyRole } from './family-access';
 /**
  * Which phones a push can reach, and pushing to a person rather than a token.
  *
@@ -23,6 +24,7 @@ export interface PushTarget {
   ownerEmail: string;
   apnsToken: string;
   apnsEnv: string | null;
+  notificationDetails?: boolean;
 }
 
 export interface PushOutcome {
@@ -67,6 +69,7 @@ async function targets(emails: readonly string[] | null): Promise<PushTarget[]> 
       ownerEmail: nativeCredentials.ownerEmail,
       apnsToken: nativeCredentials.apnsToken,
       apnsEnv: nativeCredentials.apnsEnv,
+      notificationDetails: nativeCredentials.notificationDetails,
     })
     .from(nativeCredentials)
     .where(
@@ -78,7 +81,7 @@ async function targets(emails: readonly string[] | null): Promise<PushTarget[]> 
         emails ? inArray(nativeCredentials.ownerEmail, [...emails]) : undefined,
       ),
     );
-  return rows.filter((r): r is PushTarget => !!r.apnsToken);
+  return rows.filter((r): r is typeof r & { apnsToken: string } => !!r.apnsToken);
 }
 
 /**
@@ -94,7 +97,7 @@ export async function deliver(
   const outcome: PushOutcome = { reached: new Set(), sent: 0, failed: 0 };
   for (const t of list) {
     const env = t.apnsEnv === 'sandbox' ? 'sandbox' : t.apnsEnv === 'production' ? 'production' : null;
-    const result = await send(t.apnsToken, message, env);
+    const result = await send(t.apnsToken, t.notificationDetails === true ? message : privatePush(message), env);
     if (result.ok) {
       outcome.sent++;
       outcome.reached.add(t.ownerEmail.trim().toLowerCase());
@@ -107,15 +110,42 @@ export async function deliver(
   return outcome;
 }
 
+/** Keep names, counts, locations and arbitrary metadata off private previews. */
+export function privatePush(message: PushMessage): PushMessage {
+  const userInfo: Record<string,string> = {};
+  if (message.userInfo?.category) userInfo.category = message.userInfo.category;
+  if (message.userInfo?.url) userInfo.url = message.userInfo.url;
+  return { title: 'Strange Ramblings', body: 'You have an update. Open the app to view it.',
+    category: message.category, threadId: message.threadId, collapseId: message.collapseId,
+    level: 'active', ttlSeconds: 0, userInfo };
+}
+
+export async function devicePushPrivacy(deviceId: string, update?: { notificationDetails: boolean; liveActivityEnabled: boolean }) {
+  if (update) await db.update(nativeCredentials).set(update).where(eq(nativeCredentials.id, deviceId));
+  const [row] = await db.select({ notificationDetails: nativeCredentials.notificationDetails,
+    liveActivityEnabled: nativeCredentials.liveActivityEnabled }).from(nativeCredentials).where(eq(nativeCredentials.id,deviceId)).limit(1);
+  return row ?? { notificationDetails: false, liveActivityEnabled: false };
+}
+
 /** Push to every phone these people hold. Never throws. */
 export async function pushToEmails(
   emails: readonly string[],
   message: PushMessage,
   send: PushSender = sendPush,
 ): Promise<PushOutcome> {
-  const wanted = [...new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean))];
-  if (!wanted.length) return { reached: new Set(), sent: 0, failed: 0 };
+  let wanted = [...new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean))];
   try {
+    if (message.category === 'household' || message.category?.startsWith('family-')) {
+      wanted = (await Promise.all(wanted.map(async e => await familyRole(e) ? e : null))).filter((e): e is string => e !== null);
+    }
+    if (message.category === 'family-steps' && !message.authorizeTargets) {
+      return { reached: new Set(), sent: 0, failed: 0 };
+    }
+    if (message.authorizeTargets) {
+      const permitted = new Set(await message.authorizeTargets(wanted));
+      wanted = wanted.filter(email => permitted.has(email));
+    }
+    if (!wanted.length) return { reached: new Set(), sent: 0, failed: 0 };
     return await deliver(await targets(wanted), message, send, clearPushToken);
   } catch (error) {
     console.error('[push] could not push:', (error as Error).message);

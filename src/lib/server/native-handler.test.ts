@@ -77,7 +77,7 @@ describe('withNativeAccess', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it('lets the owner through exactly as before: role owner, locals untouched, the seam reads OWNER', async () => {
+  it('carries the verified owner device identity through the area seam', async () => {
     h.identity = device(OWNER);
     const event = makeEvent();
     let seen: unknown;
@@ -89,7 +89,7 @@ describe('withNativeAccess', () => {
     expect(seen).toEqual({
       role: 'owner',
       email: OWNER,
-      viewer: { kind: 'anonymous' },
+      viewer: { kind: 'owner' },
       access: { level: 'owner', own: 'owner' },
     });
   });

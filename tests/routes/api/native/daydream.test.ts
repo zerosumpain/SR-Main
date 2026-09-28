@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * anything is read; `never` reaches the writer as the kind mute.
  */
 
-let device: { id: string; ownerEmail: string } | null = { id: 'dev-1', ownerEmail: 'owner@example.com' };
+let device: { id: string; ownerEmail: string; expiresAt: Date } | null = { id: 'dev-1', ownerEmail: 'owner@example.com', expiresAt: new Date(Date.now() + 60000) };
 vi.mock('$lib/server/native-auth', () => ({
   identifyDevice: async () => device,
   touchDevice: async () => {},
@@ -37,7 +37,7 @@ vi.mock('$lib/daydream/thought-store', () => ({
 async function list(query = '') {
   const mod = await import('../../../../src/routes/api/native/daydream/+server');
   const request = new Request(`http://x/api/native/daydream${query}`, { headers: { Authorization: 'Bearer t' } });
-  return (mod.GET as (e: unknown) => Promise<Response>)({ request, url: new URL(request.url), params: {} });
+  return (mod.GET as (e: unknown) => Promise<Response>)({ locals: {}, request, url: new URL(request.url), params: {} });
 }
 
 async function feedback(body: unknown) {
@@ -47,11 +47,11 @@ async function feedback(body: unknown) {
     headers: { Authorization: 'Bearer t', 'content-type': 'application/json' },
     body: typeof body === 'string' ? body : JSON.stringify(body),
   });
-  return (mod.POST as (e: unknown) => Promise<Response>)({ request, url: new URL(request.url), params: {} });
+  return (mod.POST as (e: unknown) => Promise<Response>)({ locals: {}, request, url: new URL(request.url), params: {} });
 }
 
 beforeEach(() => {
-  device = { id: 'dev-1', ownerEmail: 'owner@example.com' };
+  device = { id: 'dev-1', ownerEmail: 'owner@example.com', expiresAt: new Date(Date.now() + 60000) };
   knownKind = 'think_health_plan';
   loadNativeNotes.mockClear();
   recordFeedback.mockClear();

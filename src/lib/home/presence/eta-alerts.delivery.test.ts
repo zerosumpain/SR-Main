@@ -1,3 +1,4 @@
+vi.mock('./companion', () => ({ fetchHousehold: async () => ({ revision: 'test-revision', users: [] }) }));
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 const h = vi.hoisted(() => ({ value: null as unknown, accepted: true, calls: [] as any[], arrivals: [] as any[],
   apns: false, reached: [] as string[], pushes: [] as any[], recipients: ['sam@example.test'], sharing: true }));

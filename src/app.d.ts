@@ -8,6 +8,8 @@ declare global {
 	namespace App {
 		// interface Error {}
 		interface Locals {
+            /** Only authenticated server entry points may set these exact service areas. */
+            serviceAreas?: readonly string[];
 			auth(): Promise<Session | null>;
 			/** Set by `viewerOf` — one owner/member/guest answer per request. */
 			viewer?: Promise<Viewer>;

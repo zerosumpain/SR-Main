@@ -203,14 +203,14 @@ describe('postToPilot', () => {
   it('makes no request without a token', async () => {
     delete process.env.COMPANION_HOUSEHOLD_TOKEN;
     const f = vi.fn();
-    expect(await postToPilot([pilotEv('e1')], f as unknown as typeof fetch)).toBeNull();
+    expect(await postToPilot([pilotEv('e1')], f as unknown as typeof fetch, 'test-revision')).toBeNull();
     expect(f).not.toHaveBeenCalled();
   });
 
   it('posts batches of 200 with the bearer token and reports what was accepted', async () => {
     const f = vi.fn(async () => new Response(JSON.stringify({ accepted: 1 }), { status: 200 }));
     const events = Array.from({ length: 201 }, (_, i) => pilotEv(`e${i}`));
-    const res = await postToPilot(events, f as unknown as typeof fetch);
+    const res = await postToPilot(events, f as unknown as typeof fetch, 'test-revision');
     expect(f).toHaveBeenCalledTimes(2);
     const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toMatch(/\/api\/apple\/household\/events$/);
@@ -222,7 +222,7 @@ describe('postToPilot', () => {
 
   it('reports a refusal without throwing, so the events stay owed', async () => {
     const f = vi.fn(async () => new Response('no', { status: 503 }));
-    const res = await postToPilot([pilotEv('e1')], f as unknown as typeof fetch);
+    const res = await postToPilot([pilotEv('e1')], f as unknown as typeof fetch, 'test-revision');
     expect(res).toEqual({ accepted: [], error: 'alert queue answered 503' });
   });
 
@@ -230,7 +230,7 @@ describe('postToPilot', () => {
     const f = vi.fn(async () => {
       throw new Error('connect ECONNREFUSED');
     });
-    const res = await postToPilot([pilotEv('e1')], f as unknown as typeof fetch);
+    const res = await postToPilot([pilotEv('e1')], f as unknown as typeof fetch, 'test-revision');
     expect(res?.accepted).toEqual([]);
     expect(res?.error).toContain('ECONNREFUSED');
   });

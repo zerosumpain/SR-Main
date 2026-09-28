@@ -1,7 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { and, desc, eq, gt, isNull, lt, or, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { nativeCredentials } from '$lib/db/schema';
+import { nativeCredentials, householdJourneyViewer } from '$lib/db/schema';
 
 /**
  * The credential a paired iPhone presents, and the one-time code that mints it.
@@ -256,7 +256,7 @@ export async function touchDevice(id: string): Promise<void> {
 export async function revokeDevice(ownerEmail: string, id: string): Promise<boolean> {
   const rows = await db
     .update(nativeCredentials)
-    .set({ revokedAt: new Date() })
+    .set({ revokedAt: new Date(), apnsToken: null, apnsTokenAt: null, laStartToken: null, laStartTokenAt: null })
     .where(
       and(
         eq(nativeCredentials.id, id),
@@ -265,6 +265,7 @@ export async function revokeDevice(ownerEmail: string, id: string): Promise<bool
       ),
     )
     .returning({ id: nativeCredentials.id });
+  if (rows.length) await db.delete(householdJourneyViewer).where(eq(householdJourneyViewer.deviceId, id));
   return rows.length > 0;
 }
 

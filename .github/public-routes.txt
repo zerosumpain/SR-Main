@@ -21,6 +21,7 @@
 /api/deepdive/index-sources
 /api/deepdive/reindex-facts
 /api/health/workflow-engine
+/api/internal/session
 /api/jkai/codegraph/ingest
 /api/jkai/codegraph/query
 /api/jkai/cors/[...url]
@@ -43,6 +44,7 @@
 /api/native/chat/conversations/[id]/messages
 /api/native/chat/conversations/[id]/model
 /api/native/companion-pair
+/api/native/companion-policy
 /api/native/connections
 /api/native/daydream
 /api/native/daydream/feedback
@@ -70,6 +72,7 @@
 /api/native/register
 /api/native/register/apple
 /api/native/review-demo
+/api/native/session
 /api/native/today
 /api/platform/tools/catalogue
 /api/platform/tools/invoke
@@ -138,6 +141,7 @@
 /projects/engine-room/turn/routing
 /projects/engine-room/turn/stream
 /projects/engine-room/turn/trace
+/projects/hex
 /projects/jkai
 /projects/jkai/[slug]/[...path]
 /rss.xml

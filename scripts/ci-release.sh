@@ -192,6 +192,9 @@ rsync -a src/lib/styles/ "$VPS_DIR/src/lib/styles/" 2>/dev/null || true
 rsync -a src/lib/workflows/scraper/python/ "$VPS_DIR/src/lib/workflows/scraper/python/"
 rsync -a scripts/server-with-ws.mjs "$VPS_DIR/scripts/"
 rsync -a scripts/check-retired-integration-storage.mjs "$VPS_DIR/scripts/"
+rsync -a scripts/apply-security-lifecycle.mjs "$VPS_DIR/scripts/"
+mkdir -p "$VPS_DIR/scripts/migrations"
+rsync -a scripts/migrations/2026-09-28-security-lifecycle.sql "$VPS_DIR/scripts/migrations/"
 # The build smoke harness. `runStaticSmoke` shells out to this by path, and it
 # must live inside the repo — `import('playwright')` resolves from the script's
 # own directory. Shipped in #144 without this line, so the check reported
@@ -305,7 +308,13 @@ else
     if [ ! -x node_modules/.bin/drizzle-kit ]; then
       npm install --no-save --silent drizzle-kit@^0.31.10
     fi
-    set -a; . ./.env; set +a
+    # Runtime .env must not contain the migration credential. Deploy owns this
+    # separate 0600 file; sr-main cannot read it or receive it from systemd.
+    if [ ! -r /etc/strange-ramblings/main-migrations.env ]; then
+      echo 'Missing deployment-only /etc/strange-ramblings/main-migrations.env' >&2
+      exit 1
+    fi
+    set -a; . /etc/strange-ramblings/main-migrations.env; set +a
     set +e
     CI=1 FORCE_COLOR=0 timeout "${DRIZZLE_TIMEOUT}s" stdbuf -oL -eL \
       node_modules/.bin/drizzle-kit push --config=drizzle.config.ts --force 2>&1 \
@@ -361,6 +370,13 @@ else
   rm -f "$DRIZZLE_LOG"
   echo "$SCHEMA_HASH" > "$STATE_DIR/schema.sha256"
 fi
+
+# Drizzle does not own these revocation/deletion triggers. Install them before
+# the code switch, using only the deployment identity's migration credential.
+(
+  set -a; . /etc/strange-ramblings/main-migrations.env; set +a
+  node "$VPS_DIR/scripts/apply-security-lifecycle.mjs"
+)
 
 # Only the part the restarting web app reads — the broker URL and token, via a
 # systemd drop-in. A second or two. The expensive half (source install, container

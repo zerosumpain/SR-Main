@@ -229,6 +229,8 @@ export const TRAIL_RETENTION_DAYS = 90;
 
 /** A position report, from either writer, before it becomes a row. */
 export interface IncomingFix {
+  /** Companion server receipt time, independent of the phone's clock. */
+  companionReceivedAt?: string;
   lat: number;
   lon: number;
   accuracyM?: number | null;

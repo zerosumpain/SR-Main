@@ -29,11 +29,8 @@ async function otherUserSpaces(principalId: string): Promise<string[]> {
  *                       `all`/`admin` → the same, then every other member's
  *                       space. Never the owner's. A member holding no intel
  *                       level (Family Circle only, say) gets 403.
- *   no session          the owner's scope. The hook lets a sessionless request
- *                       reach an intel route only through an owner-grade lane:
- *                       the JKAI service token (chat-context, extract-thread)
- *                       or the dev-only LAN bypass. Refusing it here would 403
- *                       both.
+ *   verified service   explicit jkai.intel service scope, set after token verification
+ *   no session          forbidden
  *   intent 'own'        a member at `all` gets their `self` scope. For writes
  *                       (correcting or deleting an entity): `all` reads
  *                       everyone's graph, but changes stay each person's own
@@ -48,7 +45,7 @@ export async function resolveRequestScope(
   intent: 'read' | 'own' = 'read',
 ): Promise<IntelScope> {
   const viewer = await viewerOf(event);
-  if (viewer.kind === 'owner' || viewer.kind === 'anonymous') return OWNER_INTEL_SCOPE;
+  if (viewer.kind === 'owner' || (viewer.kind === 'anonymous' && event.locals.serviceAreas?.includes('jkai.intel'))) return OWNER_INTEL_SCOPE;
   if (viewer.kind === 'member') {
     const level = levelOf(viewer.grants, 'jkai.intel');
     // `all` READS every member's space, but acts on — and sees the held,

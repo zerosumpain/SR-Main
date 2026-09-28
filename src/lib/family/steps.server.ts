@@ -7,10 +7,10 @@
 //
 // Spec: docs/superpowers/specs/2026-09-28-family-steps-and-tasks.md
 
-import { and, eq, gte, sql } from 'drizzle-orm';
+import { and, eq, gte, sql, notInArray } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { familyStepsDay, familyStepsEvent } from '$lib/db/schema';
-import { pilotDay } from '$lib/home/presence/companion-accounts';
+import { pilotSteps } from '$lib/home/presence/companion-accounts';
 import { pushToEmails } from '$lib/server/push-devices';
 import type { PushMessage } from '$lib/server/apns';
 import { familyRoster, nameFromEmail, type FamilyPerson } from './roster.server';
@@ -88,12 +88,16 @@ async function refresh(people: readonly FamilyPerson[], window: StepsWindow, now
   let written = 0;
   let failed = 0;
   for (const p of people) {
-    const r = await pilotDay(p.email, window, fetchImpl);
+    const r = await pilotSteps(p.email, window, fetchImpl);
     if (!r.ok) {
       if (r.reason !== 'not-found') failed++;
+      if (r.reason === 'refused' || r.reason === 'not-found' || r.reason === 'conflict') {
+        await db.delete(familyStepsDay).where(eq(familyStepsDay.email, p.email));
+        await db.delete(familyStepsEvent).where(eq(familyStepsEvent.email, p.email));
+      }
       continue;
     }
-    const steps = todaysSteps(r.value.timeline.steps, window);
+    const steps = todaysSteps(r.value.steps, window);
     if (steps === null) continue;
     await upsertSteps(window.day, p.email, steps, now);
     written++;
@@ -101,7 +105,7 @@ async function refresh(people: readonly FamilyPerson[], window: StepsWindow, now
   return { written, failed };
 }
 
-function stepsPush(body: string, collapse: string): PushMessage {
+export function stepsPush(body: string, collapse: string, consentEmails: readonly string[]): PushMessage {
   return {
     title: 'Family steps',
     body,
@@ -110,6 +114,12 @@ function stepsPush(body: string, collapse: string): PushMessage {
     level: 'active',
     relevance: 0.5,
     collapseId: collapse,
+    authorizeTargets: async (emails) => {
+      const permitted = new Set((await familyRoster()).filter(p => p.stepsSharing === true).map(p => p.email));
+      if (!consentEmails.length || consentEmails.some(e => !permitted.has(e.trim().toLowerCase()))) return [];
+      return emails.filter(email => permitted.has(email));
+    },
+    ttlSeconds: 0,
     userInfo: { category: STEPS_CATEGORY, url: STEPS_URL },
   };
 }
@@ -130,7 +140,11 @@ function serial<T>(fn: () => Promise<T>): Promise<T> {
 export function refreshAndCheck(now = new Date(), fetchImpl: typeof fetch = fetch, push = pushToEmails): Promise<RefreshResult> {
   return serial(async () => {
     const window = londonWindow(now);
-    const people = (await familyRoster(now.getTime())).filter((p) => p.pilot);
+    const people = (await familyRoster(now.getTime())).filter((p) => p.pilot && p.stepsSharing === true);
+    const permitted = people.map(p => p.email);
+    // Purge old copies as well as filtering reads. Empty/unknown consent removes all.
+    await db.delete(familyStepsDay).where(permitted.length ? notInArray(familyStepsDay.email, permitted) : sql`true`);
+    await db.delete(familyStepsEvent).where(permitted.length ? notInArray(familyStepsEvent.email, permitted) : sql`true`);
     const before = leaderOf(await rowsFor(window.day));
     const { written, failed } = await refresh(people, window, now, fetchImpl);
     const after = await rowsFor(window.day);
@@ -143,7 +157,7 @@ export function refreshAndCheck(now = new Date(), fetchImpl: typeof fetch = fetc
       await recordEvent(window.day, decision.email, 'dethroned', now);
       await push(
         [decision.email],
-        stepsPush(dethroneText(leaderName, decision.leaderSteps, decision.mySteps), `steps-top-${window.day}`),
+        stepsPush(dethroneText(leaderName, decision.leaderSteps, decision.mySteps), `steps-top-${window.day}`, [decision.email, decision.newLeader]),
       );
       pushed = decision.email;
     }
@@ -172,7 +186,7 @@ export interface StepsBoard {
  */
 export async function stepsBoard(now = new Date()): Promise<StepsBoard> {
   const window = londonWindow(now);
-  const roster = await familyRoster(now.getTime());
+  const roster = (await familyRoster(now.getTime())).filter(p => p.stepsSharing === true);
   const byEmail = new Map(roster.map((p) => [p.email, p]));
   const since = new Date(Date.parse(`${window.day}T12:00:00Z`) - BOARD_RECENT_DAYS * 86_400_000).toISOString().slice(0, 10);
   const recent = await db
@@ -231,7 +245,7 @@ export async function pushStandings(now = new Date(), fetchImpl: typeof fetch = 
     if (!body) continue;
     // Recorded before the push: a phone Apple refuses must not be retried every tick.
     await recordEvent(window.day, person.email, 'standings', now);
-    await push([person.email], stepsPush(body, `steps-4pm-${window.day}`));
+    await push([person.email], stepsPush(body, `steps-4pm-${window.day}`, board.map(p => p.email)));
     pushed++;
   }
   return { day: window.day, board: board.length, pushed };

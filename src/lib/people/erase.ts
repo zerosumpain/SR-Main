@@ -89,6 +89,9 @@ type Fate = 'erase' | 'scrub' | 'cascade' | 'kept';
  * is erased; `kept` — with the reason it is not theirs to delete.
  */
 export const ACCOUNT_COLUMNS: Record<string, Record<string, Fate | `kept: ${string}`>> = {
+  companion_access_version: { email: 'kept: prevents removed credentials reviving after re-add' },
+  access_security_audit: { email: 'kept: append-only security accountability' },
+  companion_deletion_floor: { email: 'kept: prevents late worker writes restoring deleted copies' },
   allowed_user: { email: 'erase', added_by: 'scrub' },
   access_invite: { email: 'erase', used_by_email: 'scrub', created_by: 'scrub' },
   access_request: { email: 'erase', decided_by: 'scrub' },
@@ -391,6 +394,8 @@ export async function eraseAccount(
     }
     for (const [k, v] of Object.entries(r.value.counts)) pilot[k] = (pilot[k] ?? 0) + v;
   }
+
+  if (deps === defaultEraseDeps) await (await import('$lib/home/presence/privacy-jobs')).drainPrivacyJobs();
 
   // 2. Their data here, all or nothing.
   let rows: ErasedRows;

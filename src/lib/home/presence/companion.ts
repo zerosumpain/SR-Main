@@ -39,6 +39,7 @@ export interface HouseholdUser {
   email: string;
   name: string;
   sharing: boolean;
+  stepsSharing?: boolean;
   /**
    * ISO8601, when this person last asked the app to pair with the SITE (for
    * chat and news), or null. Set by the pilot; absent from a pilot that
@@ -56,6 +57,7 @@ export interface HouseholdUser {
 }
 
 export interface HouseholdFix {
+  received?: string;
   email: string;
   id: string;
   /** ISO8601, when the phone took the fix. */
@@ -76,6 +78,7 @@ export interface HouseholdPage {
   cursor: string;
   more: boolean;
   users: HouseholdUser[];
+  revision?: string;
   fixes: HouseholdFix[];
 }
 
@@ -113,6 +116,7 @@ function asPage(body: unknown): HouseholdPage {
   }
   return {
     cursor: b.cursor,
+    revision: b.revision,
     more: b.more === true,
     users: Array.isArray(b.users) ? b.users : [],
     fixes: b.fixes,
@@ -145,6 +149,7 @@ export async function fetchHousehold(
 export function toIncomingFix(f: HouseholdFix): IncomingFix {
   const speed = typeof f.speed === 'number' && Number.isFinite(f.speed) && f.speed >= 0 ? f.speed : null;
   return {
+    ...(f.received ? { companionReceivedAt: f.received } : {}),
     lat: f.lat,
     lon: f.lon,
     accuracyM: typeof f.accuracy === 'number' && Number.isFinite(f.accuracy) ? f.accuracy : null,
@@ -235,6 +240,7 @@ export async function ingestCompanion(
         latest.set(subject, new Date(recordedMs));
         result.written++;
       } catch (err) {
+        if (err instanceof Error && err.name === 'CompanionDeletionFloor') { result.skipped++; continue; }
         result.error = `write failed: ${errMsg(err)}`;
         return result;
       }
@@ -284,6 +290,5 @@ export function notSharingSubjects(
 
 /** The latest users list the pilot sent, for `notSharingSubjects`. */
 export async function loadCompanionUsers(): Promise<HouseholdUser[] | null> {
-  const v = await getSetting<HouseholdUser[]>(COMPANION_USERS_KEY);
-  return Array.isArray(v) ? v : null;
+  return (await fetchHousehold(''))?.users ?? null;
 }

@@ -11,9 +11,7 @@
 
 import { createHmac } from 'node:crypto';
 import { env } from '$env/dynamic/private';
-import { familyLevel } from '$lib/access/roles';
-import { isOwnerEmail } from '$lib/server/access';
-import { loadMember } from '$lib/server/grants';
+import { familyRole } from '$lib/server/family-access';
 import { listAllSiteDevices } from '$lib/server/site-devices';
 import { listMembers } from '$lib/home/presence/members';
 import { loadCompanionUsers } from '$lib/home/presence/companion';
@@ -25,6 +23,7 @@ export interface FamilyPerson {
   parent: boolean;
   /** Has an account on the iPhone app's pilot — the steps board's source. */
   pilot: boolean;
+  stepsSharing?: boolean;
 }
 
 export function familyId(email: string): string {
@@ -39,36 +38,26 @@ export function nameFromEmail(email: string): string {
 
 const norm = (e: string | null | undefined) => (e ?? '').trim().toLowerCase();
 
-/** Owner, parent, circle, or null for someone outside the family. Fails closed. */
-export async function familyRole(email: string): Promise<{ parent: boolean } | null> {
-  const e = norm(email);
-  if (!e) return null;
-  if (isOwnerEmail(e)) return { parent: true };
-  const member = await loadMember(e).catch(() => null);
-  if (!member) return null;
-  const level = familyLevel(member.grants);
-  return level === 'none' ? null : { parent: level === 'parent' };
-}
-
-const TTL_MS = 60_000;
-let cache: { at: number; people: FamilyPerson[] } | null = null;
+export { familyRole } from '$lib/server/family-access';
 
 /** Reset between tests, and after a write that changes who is in. */
 export function resetFamilyRoster(): void {
-  cache = null;
+  // Retained for callers/tests; each read now resolves current grants and consent.
 }
 
 export async function familyRoster(now = Date.now()): Promise<FamilyPerson[]> {
-  if (cache && now - cache.at < TTL_MS) return cache.people;
+  // Consent and grants are checked on every read, including board delivery.
 
   const names = new Map<string, string>();
   const pilot = new Set<string>();
+  const stepsSharing = new Set<string>();
   const candidates = new Set<string>();
 
   for (const u of (await loadCompanionUsers().catch(() => null)) ?? []) {
     const e = norm(u.email);
     if (!e) continue;
     pilot.add(e);
+    if (u.stepsSharing === true) stepsSharing.add(e);
     candidates.add(e);
     if (u.name && u.name !== u.email) names.set(e, u.name);
   }
@@ -95,10 +84,10 @@ export async function familyRoster(now = Date.now()): Promise<FamilyPerson[]> {
       name: names.get(email) ?? nameFromEmail(email),
       parent: role.parent,
       pilot: pilot.has(email),
+      stepsSharing: stepsSharing.has(email),
     });
   }
   people.sort((a, b) => a.name.localeCompare(b.name));
-  cache = { at: now, people };
   return people;
 }
 

@@ -1,6 +1,7 @@
 import type { RequestHandler } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { VNC_ACCESS_COOKIE, verifyVncAccessTicket } from '$lib/server/vnc-ticket';
+import { isOwnerEmail } from '$lib/server/access';
 
 /**
  * Lightweight session validity check for Caddy's forward_auth on the VNC proxy.
@@ -11,8 +12,8 @@ import { VNC_ACCESS_COOKIE, verifyVncAccessTicket } from '$lib/server/vnc-ticket
 export const GET: RequestHandler = async ({ locals, cookies }) => {
   const session = await locals.auth();
   const vncTicket = cookies.get(VNC_ACCESS_COOKIE);
-  if (!session?.user && !verifyVncAccessTicket(vncTicket, env.AUTH_SECRET)) {
-    return new Response(null, { status: 401 });
+  if (!isOwnerEmail(session?.user?.email) && !verifyVncAccessTicket(vncTicket, env.VNC_ACCESS_SECRET)) {
+    return new Response(null, { status: 401, headers: { 'cache-control': 'private, no-store' } });
   }
-  return new Response(null, { status: 204 });
+  return new Response(null, { status: 204, headers: { 'cache-control': 'private, no-store' } });
 };
