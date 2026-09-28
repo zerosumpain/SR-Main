@@ -1,4 +1,4 @@
-import { generateKeyPairSync, sign } from 'node:crypto';
+import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('$lib/db', () => ({ db: {} }));
@@ -20,7 +20,9 @@ function token(claims: Record<string, unknown>, header: Record<string, unknown> 
   return `${head}.${sign('RSA-SHA256', Buffer.from(head), privateKey).toString('base64url')}`;
 }
 
+const NONCE = 'raw-nonce-from-the-app';
 const good = {
+  nonce: createHash('sha256').update(NONCE).digest('hex'),
   iss: 'https://appleid.apple.com',
   aud: AUD,
   exp: NOW / 1000 + 600,
@@ -31,7 +33,8 @@ const good = {
 };
 
 const fetchKeys = vi.fn(async () => new Response(JSON.stringify({ keys: [jwk] })));
-const verify = (t: string) => verifyAppleIdentityToken(t, { fetchImpl: fetchKeys as unknown as typeof fetch, now: NOW, audience: AUD });
+const verify = (t: string, opts: { now?: number; nonce?: string } = {}) =>
+  verifyAppleIdentityToken(t, { fetchImpl: fetchKeys as unknown as typeof fetch, now: opts.now ?? NOW, audience: AUD, nonce: opts.nonce ?? NONCE });
 
 beforeEach(() => {
   resetAppleKeyCache();
@@ -64,10 +67,23 @@ describe('Sign in with Apple identity tokens', () => {
     expect(await verify('not.a-token')).toBeNull();
   });
 
-  it('refetches Apple’s keys once for a key id it has not seen (Apple rotates)', async () => {
+  it('refetches Apple’s keys for an unknown key id, but at most once a minute', async () => {
     await verify(token(good));
-    await verify(token(good, { alg: 'RS256', kid: 'rotated' }));
-    // One initial fetch, one forced refetch for the new kid; the first key is cached.
+    await verify(token({ ...good, sub: 'x' }, { alg: 'RS256', kid: 'rotated' }));
+    expect(fetchKeys).toHaveBeenCalledTimes(1);
+    await verify(token({ ...good, sub: 'y' }, { alg: 'RS256', kid: 'rotated' }), { now: NOW + 61_000 });
     expect(fetchKeys).toHaveBeenCalledTimes(2);
+  });
+
+  it('needs the nonce the app asked Apple to sign', async () => {
+    expect(await verify(token(good), { nonce: 'another' })).toBeNull();
+    expect(await verify(token(good), { nonce: '' })).toBeNull();
+    expect(await verify(token({ ...good, nonce: undefined }))).toBeNull();
+  });
+
+  it('signs a token in once', async () => {
+    const t = token({ ...good, sub: 'once' });
+    expect(await verify(t)).not.toBeNull();
+    expect(await verify(t)).toBeNull();
   });
 });

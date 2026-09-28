@@ -10,7 +10,7 @@
 //
 // Spec: docs/superpowers/specs/2026-09-28-people-and-app-registration.md (P2)
 
-import { createPublicKey, verify as verifySignature, type webcrypto } from 'node:crypto';
+import { createHash, createPublicKey, randomBytes, verify as verifySignature, type webcrypto } from 'node:crypto';
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
 import { db } from '$lib/db';
@@ -18,9 +18,23 @@ import { accessRequest, nativeCredentials } from '$lib/db/schema';
 import { isEmailAllowedToSignIn } from './access';
 import { notifyOwner } from './notify';
 
-/** Set by /welcome/app before Google, read back by the Auth.js signIn callback. */
+/**
+ * A random nonce set by /welcome/app before Google. The Auth.js callbacks
+ * stamp it into the session made by that sign-in, and /welcome/app/finish
+ * accepts only a session carrying the same nonce — never one the browser
+ * already had.
+ */
 export const REGISTER_COOKIE = 'sr_register';
 export const REGISTER_COOKIE_MAX_AGE_S = 10 * 60;
+export const REGISTER_FINISH_PATH = '/welcome/app/finish';
+
+export function mintRegisterNonce(): string {
+  return randomBytes(24).toString('base64url');
+}
+
+export function isRegisterNonce(value: string | null | undefined): value is string {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{32}$/.test(value);
+}
 
 /** Asking again inside this window after a no shows the no, rather than a fresh request. */
 export const DECLINED_HOLD_MS = 30 * 24 * 60 * 60 * 1000;
@@ -137,7 +151,9 @@ type AppleKey = webcrypto.JsonWebKey & { kid?: string };
 let keyCache: { at: number; keys: AppleKey[] } | null = null;
 
 async function appleKeys(fetchImpl: typeof fetch, now: number, force = false): Promise<AppleKey[]> {
-  if (!force && keyCache && now - keyCache.at < 60 * 60_000) return keyCache.keys;
+  // A forced refetch (an unknown key id) at most once a minute: otherwise a
+  // stream of made-up kids would have this server fetching Apple on each one.
+  if (keyCache && (force ? now - keyCache.at < 60_000 : now - keyCache.at < 60 * 60_000)) return keyCache.keys;
   const res = await fetchImpl(APPLE_KEYS_URL, { signal: AbortSignal.timeout(8000) });
   if (!res.ok) throw new Error(`Apple keys: ${res.status}`);
   const body = (await res.json()) as { keys?: AppleKey[] };
@@ -160,9 +176,12 @@ function b64urlJson(part: string): Record<string, unknown> | null {
  * rotates), issuer, audience (this app), expiry, and an email Apple vouches
  * for. Node's own crypto: one algorithm, no library needed.
  */
+/** Tokens already spent, by hash, until they expire: each signs in once. */
+const spent = new Map<string, number>();
+
 export async function verifyAppleIdentityToken(
   token: string,
-  opts: { fetchImpl?: typeof fetch; now?: number; audience?: string } = {},
+  opts: { fetchImpl?: typeof fetch; now?: number; audience?: string; nonce?: string } = {},
 ): Promise<AppleIdentity | null> {
   const fetchImpl = opts.fetchImpl ?? fetch;
   const now = opts.now ?? Date.now();
@@ -198,6 +217,16 @@ export async function verifyAppleIdentityToken(
   // Apple sends these as booleans or as the strings "true"/"false".
   const verified = claims.email_verified === true || claims.email_verified === 'true';
   if (!email || !verified) return null;
+  // The app asked Apple for sha256(nonce) and sends the nonce itself: a token
+  // lifted from somewhere else arrives without the secret that goes with it.
+  const nonce = opts.nonce ?? '';
+  if (!nonce || typeof claims.nonce !== 'string' || createHash('sha256').update(nonce).digest('hex') !== claims.nonce) {
+    return null;
+  }
+  const key = createHash('sha256').update(token).digest('hex');
+  for (const [k, exp] of spent) if (exp < now) spent.delete(k);
+  if (spent.has(key)) return null;
+  spent.set(key, claims.exp * 1000);
   const privateEmail = claims.is_private_email === true || claims.is_private_email === 'true';
   return { sub: claims.sub, email, privateEmail };
 }
@@ -205,4 +234,5 @@ export async function verifyAppleIdentityToken(
 /** For tests: forget the cached keys. */
 export function resetAppleKeyCache(): void {
   keyCache = null;
+  spent.clear();
 }

@@ -3,14 +3,17 @@
   // welcome pages and the sign-in page cannot drift apart.
   import { signIn } from '@auth/sveltekit/client';
 
-  let { callbackUrl = '/welcome', label = 'Continue with Google' }: { callbackUrl?: string; label?: string } =
-    $props();
+  let {
+    callbackUrl = '/welcome',
+    label = 'Continue with Google',
+    authorizationParams,
+  }: { callbackUrl?: string; label?: string; authorizationParams?: Record<string, string> } = $props();
 
   let loading = $state(false);
 
   function go() {
     loading = true;
-    signIn('google', { callbackUrl });
+    signIn('google', { callbackUrl }, authorizationParams);
   }
 </script>
 

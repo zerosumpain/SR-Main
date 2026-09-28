@@ -7,8 +7,11 @@
   import GoogleButton from '$lib/components/welcome/GoogleButton.svelte';
 
   const callbackUrl = '/welcome/app/finish';
+  // Google's account chooser, always: a registration never completes silently
+  // on an account the browser happens to be signed in to.
+  const chooser = { prompt: 'select_account' };
   onMount(() => {
-    signIn('google', { callbackUrl });
+    signIn('google', { callbackUrl }, chooser);
   });
 </script>
 
@@ -21,6 +24,6 @@
   </header>
   <section class="w-card" data-card="signin">
     <p>Sign in with Google so John knows who you are. You go straight back to the app afterwards.</p>
-    <GoogleButton {callbackUrl} />
+    <GoogleButton {callbackUrl} authorizationParams={chooser} />
   </section>
 </WelcomeFrame>
