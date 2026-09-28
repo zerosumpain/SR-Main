@@ -56,7 +56,7 @@ describe.skipIf(!process.env.DATABASE_URL)('/api/admin/access', () => {
       grants: ['jkai.intel:all', 'jkai.canvas:admin', 'owner'],
     });
     expect(patched.status).toBe(200);
-    expect(patched.body.saved).toMatchObject({ groups: ['family-circle'], grants: ['jkai.intel:all'] });
+    expect(patched.body.saved).toMatchObject({ groups: ['family-circle'], grants: ['jkai.intel:all', 'jkai.knowledge:self'] });
     const after = patched.body.people.find((p: any) => p.email === EMAIL);
     expect([...after.effective].sort()).toEqual([...new Set([...(await circleGrants()), 'jkai.intel:all'])].sort());
   });

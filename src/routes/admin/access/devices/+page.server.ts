@@ -10,7 +10,7 @@ import {
   pilotFailureText,
   revokePilotDevice,
 } from '$lib/home/presence/companion-accounts';
-import { mergeDeviceRows } from './rows';
+import { mergeDeviceRows } from '$lib/access/device-rows';
 
 // Owner-only: /admin is never in the access catalogue, so the hook's default
 // deny covers this page and its actions.

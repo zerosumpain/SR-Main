@@ -1,57 +1,23 @@
-<svelte:head><title>Access — Admin</title></svelte:head>
+<svelte:head><title>People — Admin</title></svelte:head>
 <script lang="ts">
+  import { invalidateAll } from '$app/navigation';
   import type { PageData } from './$types';
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
-  import GrantEditor from '$lib/components/admin/GrantEditor.svelte';
-  import { AREAS, FAMILY, type Permission } from '$lib/access/catalogue';
+  import AccessEditor from '$lib/components/admin/AccessEditor.svelte';
+  import type { Permission } from '$lib/access/catalogue';
+  import { summarise } from '$lib/access/roles';
 
-  type AccessPerson = PageData['people'][number];
-  type AccessGroupView = PageData['groups'][number];
-  type InviteView = PageData['invites'][number];
   type RequestView = PageData['requests'][number];
+  type InviteView = PageData['invites'][number];
+  type RoleView = PageData['roles'][number];
 
   let { data }: { data: PageData } = $props();
 
-  // One fresh copy of the page's data from every response that changes it.
-  let superAdmins = $state<string[]>(data.superAdmins);
-  let people = $state<AccessPerson[]>(data.people);
-  let groups = $state<AccessGroupView[]>(data.groups);
-  let invites = $state<InviteView[]>(data.invites);
-  let requests = $state<RequestView[]>(data.requests);
-
-  let newEmail = $state('');
-  let newNote = $state('');
-  let adding = $state(false);
   let errorMsg = $state('');
   let busy = $state<string | null>(null);
 
-  /** The person being edited, with a working copy of their access. */
-  let editing = $state<{ email: string; groups: string[]; grants: Permission[] } | null>(null);
-  /** The group being edited (`id` null = a new one). */
-  let editingGroup = $state<{ id: string | null; label: string; description: string; grants: Permission[] } | null>(null);
-
-  const LABELS: Record<string, string> = Object.fromEntries([
-    ...AREAS.flatMap((a) => (['self', 'all', 'admin'] as const).map((l) => [`${a.id}:${l}`, `${a.label} · ${l}`])),
-    ...FAMILY.map((f) => [f.id, f.label]),
-  ]);
-  const groupLabel = (id: string) => groups.find((g) => g.id === id)?.label ?? id;
-
-  function adopt(body: {
-    superAdmins?: string[];
-    people?: AccessPerson[];
-    groups?: AccessGroupView[];
-    invites?: InviteView[];
-    requests?: RequestView[];
-  }) {
-    if (body.superAdmins) superAdmins = body.superAdmins;
-    if (body.people) people = body.people;
-    if (body.groups) groups = body.groups;
-    if (body.invites) invites = body.invites;
-    if (body.requests) requests = body.requests;
-  }
-
-  /** Send a change; adopt the fresh page data it answers with. Null on failure. */
+  /** Send a change, then reload the page's data. False on failure. */
   async function send(url: string, method: string, payload: unknown, key: string): Promise<Record<string, unknown> | null> {
     busy = key;
     errorMsg = '';
@@ -66,7 +32,7 @@
         errorMsg = body.error ?? 'That did not work';
         return null;
       }
-      adopt(body);
+      await invalidateAll();
       return body;
     } catch {
       errorMsg = 'Network error';
@@ -76,22 +42,70 @@
     }
   }
 
-  async function call(url: string, method: string, payload: unknown, key: string): Promise<boolean> {
-    return (await send(url, method, payload, key)) !== null;
+  const roleById = $derived(new Map(data.roles.map((r) => [r.id, r])));
+  const holdsCircle = (roleId: string | null) => !!roleId && (roleById.get(roleId)?.grants ?? []).includes('family:circle');
+  /** Household people with no account yet: the ones an approval can link. */
+  const unlinked = $derived(data.household.filter((m) => !m.email));
+
+  // ── Waiting ──────────────────────────────────────────────────────────────
+  const pending = $derived(data.requests.filter((r) => r.status === 'pending'));
+  const decided = $derived(data.requests.filter((r) => r.status !== 'pending').slice(0, 5));
+
+  /** Per request: the owner's changes to the role and household choice. */
+  let picks = $state<Record<string, { role?: string | null; household?: string }>>({});
+  /** The choice shown: a sensible default, overridden by anything picked. PURE — no writes during render. */
+  function pickFor(r: RequestView): { role: string | null; household: string } {
+    const match = unlinked.find((m) => m.displayName.toLowerCase() === r.name.trim().toLowerCase());
+    const fallback = {
+      role: r.wantsApp ? 'family-circle' : roleById.has('friend') ? 'friend' : null,
+      household: match ? `link:${match.subject}` : r.wantsApp ? 'create' : 'none',
+    };
+    return { ...fallback, ...picks[r.id] };
+  }
+  function setPick(r: RequestView, patch: { role?: string | null; household?: string }) {
+    picks[r.id] = { ...picks[r.id], ...patch };
   }
 
-  /** See the site as this person (read-only, an hour); the banner's Exit ends it. */
-  async function viewAs(email: string) {
-    if (await call('/api/admin/access/view-as', 'POST', { email }, email)) window.location.assign('/');
+  async function decide(r: RequestView, decision: 'approve' | 'decline') {
+    if (decision === 'decline' && !confirm(`Decline ${r.name}'s request?`)) return;
+    const p = pickFor(r);
+    const inHousehold = decision === 'approve' && holdsCircle(p.role);
+    const household = !inHousehold
+      ? undefined
+      : p.household === 'create'
+        ? { create: true }
+        : p.household.startsWith('link:')
+          ? { link: p.household.slice(5) }
+          : undefined;
+    await send(
+      '/api/admin/access/requests',
+      'PATCH',
+      { id: r.id, decision, groups: p.role ? [p.role] : [], household },
+      `request:${r.id}`,
+    );
   }
 
-  // ── Invites ──────────────────────────────────────────────────────────────
-  let inviteEmail = $state('');
-  let inviteName = $state('');
-  let inviteGroups = $state<string[]>(['family-circle']);
+  // ── Add someone ──────────────────────────────────────────────────────────
+  let addMode = $state<'email' | 'invite'>('email');
+  let addEmail = $state('');
+  let addName = $state('');
+  let addRole = $state<string | null>('friend');
   /** The link just minted: the only time its code exists in plaintext. */
   let minted = $state<{ link: string; qr: string } | null>(null);
   let copied = $state(false);
+
+  async function addByEmail() {
+    const email = addEmail.trim().toLowerCase();
+    if (!email) {
+      errorMsg = 'Enter their Google email';
+      return;
+    }
+    const added = await send('/api/admin/access', 'POST', { email, note: addName.trim() || undefined }, 'add');
+    if (!added) return;
+    if (addRole) await send('/api/admin/access', 'PATCH', { email, groups: [addRole], grants: [] }, 'add');
+    addEmail = '';
+    addName = '';
+  }
 
   async function mintInvite() {
     minted = null;
@@ -99,13 +113,13 @@
     const body = await send(
       '/api/admin/access/invites',
       'POST',
-      { email: inviteEmail.trim() || undefined, name: inviteName.trim() || undefined, groups: inviteGroups },
+      { email: addEmail.trim() || undefined, name: addName.trim() || undefined, groups: addRole ? [addRole] : [] },
       'invite:new',
     );
     if (body) {
       minted = { link: String(body.link), qr: String(body.qr) };
-      inviteEmail = '';
-      inviteName = '';
+      addEmail = '';
+      addName = '';
     }
   }
 
@@ -121,98 +135,37 @@
 
   async function revokeInvite(inv: InviteView) {
     if (!confirm(`Revoke the invite${inv.name ? ` for ${inv.name}` : ''}? The link stops working at once.`)) return;
-    await call('/api/admin/access/invites', 'DELETE', { id: inv.id }, `invite:${inv.id}`);
-  }
-
-  function toggleInviteGroup(id: string, on: boolean) {
-    inviteGroups = on ? [...inviteGroups.filter((g) => g !== id), id] : inviteGroups.filter((g) => g !== id);
+    await send('/api/admin/access/invites', 'DELETE', { id: inv.id }, `invite:${inv.id}`);
   }
 
   const INVITE_STATE: Record<string, string> = { ok: 'Open', used: 'Used', revoked: 'Revoked', expired: 'Expired' };
+  const openInvites = $derived(data.invites.filter((i) => i.state === 'ok'));
 
-  // ── Requests ─────────────────────────────────────────────────────────────
-  /** Groups ticked per pending request; Family Circle by default when they want the app. */
-  let requestGroups = $state<Record<string, string[]>>({});
-  const pickedFor = (r: RequestView) => requestGroups[r.id] ?? (r.wantsApp ? ['family-circle'] : []);
-  function toggleRequestGroup(r: RequestView, id: string, on: boolean) {
-    const cur = pickedFor(r);
-    requestGroups[r.id] = on ? [...cur.filter((g) => g !== id), id] : cur.filter((g) => g !== id);
-  }
-  const pending = $derived(requests.filter((r) => r.status === 'pending'));
-  const decided = $derived(requests.filter((r) => r.status !== 'pending').slice(0, 10));
+  // ── Roles ────────────────────────────────────────────────────────────────
+  let editingRole = $state<{ id: string | null; label: string; description: string; grants: Permission[] } | null>(null);
 
-  async function decide(r: RequestView, decision: 'approve' | 'decline') {
-    if (decision === 'decline' && !confirm(`Decline ${r.name}'s request?`)) return;
-    await call('/api/admin/access/requests', 'PATCH', { id: r.id, decision, groups: pickedFor(r) }, `request:${r.id}`);
+  function editRole(r: RoleView) {
+    editingRole = { id: r.id, label: r.label, description: r.description ?? '', grants: [...r.grants] };
   }
 
-  async function addPerson() {
-    const email = newEmail.trim().toLowerCase();
-    errorMsg = '';
-    if (!email) {
-      errorMsg = 'Enter an email address';
-      return;
-    }
-    adding = true;
-    const ok = await call('/api/admin/access', 'POST', { email, note: newNote.trim() || undefined }, 'add');
-    adding = false;
-    if (ok) {
-      newEmail = '';
-      newNote = '';
-    }
-  }
-
-  async function removePerson(email: string) {
-    if (!confirm(`Revoke sign-in access for ${email}? Their material stays.`)) return;
-    await call('/api/admin/access', 'DELETE', { email }, email);
-    if (editing?.email === email) editing = null;
-  }
-
-  /** What a pre-groups role held, carried into the first save here so nobody loses it. */
-  const LEGACY: Record<string, Permission> = { member: 'jkai.intel:self', household: 'family:circle' };
-
-  function editPerson(p: AccessPerson) {
-    const carried = p.legacyRole ? LEGACY[p.legacyRole] : null;
-    editing = {
-      email: p.email,
-      groups: [...p.groups],
-      grants: carried && !p.grants.includes(carried) ? [...p.grants, carried] : [...p.grants],
-    };
-  }
-
-  function toggleGroup(id: string, on: boolean) {
-    if (!editing) return;
-    editing.groups = on ? [...editing.groups.filter((g) => g !== id), id] : editing.groups.filter((g) => g !== id);
-  }
-
-  async function savePerson() {
-    if (!editing) return;
-    const ok = await call('/api/admin/access', 'PATCH', editing, editing.email);
-    if (ok) editing = null;
-  }
-
-  function newGroup() {
-    editingGroup = { id: null, label: '', description: '', grants: [] };
-  }
-
-  function editGroup(g: AccessGroupView) {
-    editingGroup = { id: g.id, label: g.label, description: g.description ?? '', grants: [...g.grants] };
-  }
-
-  async function saveGroup() {
-    if (!editingGroup) return;
-    const { id, ...rest } = editingGroup;
+  async function saveRole() {
+    if (!editingRole) return;
+    const { id, ...rest } = editingRole;
     const ok = id
-      ? await call('/api/admin/access/groups', 'PATCH', { id, ...rest }, `group:${id}`)
-      : await call('/api/admin/access/groups', 'POST', rest, 'group:new');
-    if (ok) editingGroup = null;
+      ? await send('/api/admin/access/groups', 'PATCH', { id, ...rest }, `role:${id}`)
+      : await send('/api/admin/access/groups', 'POST', rest, 'role:new');
+    if (ok) editingRole = null;
   }
 
-  async function removeGroup(g: AccessGroupView) {
-    const who = g.members === 1 ? '1 person loses it' : `${g.members} people lose it`;
-    if (!confirm(`Delete the group "${g.label}"? ${who}.`)) return;
-    await call('/api/admin/access/groups', 'DELETE', { id: g.id }, `group:${g.id}`);
+  async function removeRole(r: RoleView, holders: number) {
+    const who = holders === 1 ? '1 person loses it' : `${holders} people lose it`;
+    if (!confirm(`Delete the role "${r.label}"? ${who}.`)) return;
+    await send('/api/admin/access/groups', 'DELETE', { id: r.id }, `role:${r.id}`);
   }
+
+  const holdersOf = (id: string) => data.people.filter((p) => p.roleId === id).length;
+
+  const SOURCE: Record<string, string> = { life360: 'Life360', companion: 'the app', none: 'no location' };
 
   function formatDate(d: string | Date) {
     return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -222,157 +175,146 @@
 <PageWrap>
   <PageHeader
     kicker="Access"
-    title="People and permissions"
-    sub="Who may sign in, and what each person may do. Put people in groups, and add one-off permissions on top. Someone with no permissions sees only public pages. Nothing here reaches your own material: 'all' means other people's and the household's, never yours."
+    title="People"
+    sub="Everyone who can sign in, everyone in the household, and what each of them may do. Open a person to change their access, household details and phones."
   />
 
   {#if errorMsg}<p class="result-bad" role="alert">{errorMsg}</p>{/if}
+  {#each data.deviceWarnings as w}<p class="muted warn">{w}</p>{/each}
 
-  <section class="nm-sec">
+  <section class="nm-sec" data-section="waiting" id="requests">
     <div class="nm-sec-hd">
-      <span class="sr-label-tight">Super Admin</span>
-      <span class="nm-pill" data-state="connected">{superAdmins.length} · env</span>
+      <span class="sr-label-tight">Waiting</span>
+      <span class="nm-pill" data-state={pending.length ? 'connected' : 'disconnected'}>{pending.length}</span>
     </div>
-    <p class="muted">
-      Full access to everything, set by the <code>AUTH_ALLOWED_EMAILS</code> environment variable so a
-      database fault can never lock you out. It is not a group and cannot be granted here.
-    </p>
-    <ul class="access-list">
-      {#each superAdmins as email}
-        <li class="access-row">
-          <span class="email">{email}</span>
-          <span class="owner-tag">Super Admin</span>
-        </li>
-      {:else}
-        <li class="access-row muted">None configured — nobody can sign in.</li>
-      {/each}
-    </ul>
-  </section>
-
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">Add a person</span>
-    </div>
-    <p class="muted">They sign in with Google using this exact address, and start with no permissions.</p>
-    <div class="nm-form-row">
-      <label class="nm-field">
-        <span class="sr-label-tight">Google email</span>
-        <input
-          class="nm-text-input"
-          type="email"
-          bind:value={newEmail}
-          placeholder="name@gmail.com"
-          onkeydown={(e) => e.key === 'Enter' && addPerson()}
-        />
-      </label>
-      <label class="nm-field">
-        <span class="sr-label-tight">Note (optional)</span>
-        <input
-          class="nm-text-input"
-          type="text"
-          bind:value={newNote}
-          placeholder="e.g. partner, colleague"
-          onkeydown={(e) => e.key === 'Enter' && addPerson()}
-        />
-      </label>
-    </div>
-    <div class="add-row">
-      <button class="nm-save-btn" onclick={addPerson} disabled={adding}>
-        {adding ? 'Adding…' : 'Add person'}
-      </button>
-    </div>
-  </section>
-
-  <section class="nm-sec" data-section="requests" id="requests">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">Requests</span>
-      <span class="nm-pill" data-state={pending.length ? 'connected' : 'disconnected'}>{pending.length} waiting</span>
-    </div>
-    <p class="muted">
-      From the public form on <a href="/welcome">/welcome</a>. Approving adds them to the allow-list in the groups
-      you tick; they then sign in there.
-    </p>
-    <ul class="access-list">
-      {#each pending as r (r.id)}
-        <li class="access-row person">
-          <div class="row-main">
-            <span class="group-name">{r.name}</span>
-            <span class="email">{r.email}</span>
-            {#if r.wantsApp}<span class="note">wants the app</span>{/if}
-            <span class="added">asked {formatDate(r.createdAt)}</span>
-          </div>
-          {#if r.message}<p class="muted desc">“{r.message}”</p>{/if}
-          <div class="group-picks inline">
-            {#each groups as g (g.id)}
-              <label class="group-pick">
-                <input
-                  type="checkbox"
-                  checked={pickedFor(r).includes(g.id)}
-                  onchange={(e) => toggleRequestGroup(r, g.id, e.currentTarget.checked)}
-                />
-                <span class="area-name">{g.label}</span>
+    {#each pending as r (r.id)}
+      {@const p = pickFor(r)}
+      <div class="request">
+        <div class="row-main">
+          <span class="person-name">{r.name}</span>
+          <span class="email">{r.email}</span>
+          {#if r.wantsApp}<span class="tag">wants the app</span>{/if}
+          <span class="added">asked {formatDate(r.createdAt)}</span>
+        </div>
+        {#if r.message}<p class="muted desc">“{r.message}”</p>{/if}
+        <div class="choose">
+          <span class="sr-label-tight">Role</span>
+          <div class="chips-pick" role="radiogroup" aria-label="Role for {r.name}">
+            <label class="pick" class:on={p.role === null}>
+              <input type="radio" name="req-{r.id}-role" checked={p.role === null} onchange={() => setPick(r, { role: null })} />
+              None
+            </label>
+            {#each data.roles as role (role.id)}
+              <label class="pick" class:on={p.role === role.id} title={role.description ?? ''}>
+                <input type="radio" name="req-{r.id}-role" checked={p.role === role.id} onchange={() => setPick(r, { role: role.id })} />
+                {role.label}
               </label>
             {/each}
           </div>
-          <div class="add-row">
-            <button class="nm-save-btn" onclick={() => decide(r, 'approve')} disabled={busy === `request:${r.id}`}>
-              Approve
-            </button>
-            <button class="row-link danger" onclick={() => decide(r, 'decline')} disabled={busy === `request:${r.id}`}>
-              Decline
-            </button>
-          </div>
-        </li>
-      {:else}
-        <li class="access-row muted">No requests waiting.</li>
-      {/each}
-      {#each decided as r (r.id)}
-        <li class="access-row decided">
-          <span class="email">{r.email}</span>
-          <span class="note">{r.status}</span>
-          <span class="added">{r.decidedAt ? formatDate(r.decidedAt) : ''}</span>
+        </div>
+        {#if holdsCircle(p.role)}
+          <label class="choose">
+            <span class="sr-label-tight">In the household as</span>
+            <select class="nm-text-input" value={p.household} onchange={(e) => setPick(r, { household: e.currentTarget.value })}>
+              {#each unlinked as m (m.subject)}<option value="link:{m.subject}">{m.displayName} (already on the map)</option>{/each}
+              <option value="create">A new household person, {r.name}</option>
+              <option value="none">Not in the household</option>
+            </select>
+          </label>
+        {/if}
+        <div class="add-row">
+          <button class="nm-save-btn" onclick={() => decide(r, 'approve')} disabled={busy === `request:${r.id}`}>Approve</button>
+          <button class="row-link danger" onclick={() => decide(r, 'decline')} disabled={busy === `request:${r.id}`}>Decline</button>
+        </div>
+      </div>
+    {:else}
+      <p class="muted">Nobody is waiting. Requests come from <a href="/welcome">/welcome</a>.</p>
+    {/each}
+    {#if decided.length}
+      <ul class="decided">
+        {#each decided as r (r.id)}
+          <li><span>{r.name}</span> <span class="email">{r.email}</span> <span class="tag">{r.status}</span></li>
+        {/each}
+      </ul>
+    {/if}
+  </section>
+
+  <section class="nm-sec" data-section="people">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">People</span>
+      <span class="nm-pill" data-state="connected">{data.people.length}</span>
+    </div>
+    <ul class="people">
+      {#each data.people as person (person.key)}
+        <li>
+          <a class="person" href="/admin/access/{encodeURIComponent(person.key)}">
+            <span class="person-name">{person.name}</span>
+            <span class="badge" data-kind={person.kind}>
+              {person.kind === 'owner' ? 'Super admin' : person.kind === 'household' ? 'Household only' : (person.roleLabel ?? 'No role')}
+            </span>
+            <span class="email">{person.email ?? 'no account'}</span>
+            <span class="facts">
+              {#if person.kind === 'account'}
+                {person.summary.length ? person.summary.join(', ') : 'public pages only'}
+              {/if}
+              {#if person.household}
+                <span class="fact">location from {SOURCE[person.household.source] ?? person.household.source}</span>
+              {/if}
+              {#if person.devices.length}
+                <span class="fact">{person.devices.length} phone {person.devices.length === 1 ? 'pairing' : 'pairings'}</span>
+              {/if}
+            </span>
+          </a>
         </li>
       {/each}
     </ul>
   </section>
 
-  <section class="nm-sec" data-section="invites">
+  <section class="nm-sec" data-section="add">
     <div class="nm-sec-hd">
-      <span class="sr-label-tight">Invites</span>
-      <span class="nm-pill" data-state="connected">{invites.filter((i) => i.state === 'ok').length} open</span>
+      <span class="sr-label-tight">Add someone</span>
+    </div>
+    <div class="chips-pick" role="radiogroup" aria-label="How to add them">
+      <label class="pick" class:on={addMode === 'email'}>
+        <input type="radio" name="add-mode" checked={addMode === 'email'} onchange={() => (addMode = 'email')} />
+        I know their Google email
+      </label>
+      <label class="pick" class:on={addMode === 'invite'}>
+        <input type="radio" name="add-mode" checked={addMode === 'invite'} onchange={() => (addMode = 'invite')} />
+        Send them a link
+      </label>
     </div>
     <p class="muted">
-      A one-time link to /welcome. Whoever opens it signs in with Google and joins the allow-list in the groups you
-      tick. Leave the email blank to let whoever you send it to use it. Links last 14 days.
+      {addMode === 'email'
+        ? 'They sign in with Google using exactly this address.'
+        : 'A one-time link to /welcome, good for 14 days. Leave the email blank and whoever you send it to can use it.'}
     </p>
     <div class="nm-form-row">
       <label class="nm-field">
-        <span class="sr-label-tight">Their name</span>
-        <input class="nm-text-input" type="text" bind:value={inviteName} placeholder="e.g. Jane" />
+        <span class="sr-label-tight">Name</span>
+        <input class="nm-text-input" type="text" bind:value={addName} placeholder="e.g. Jane" />
       </label>
       <label class="nm-field">
-        <span class="sr-label-tight">Google email (optional)</span>
-        <input class="nm-text-input" type="email" bind:value={inviteEmail} placeholder="only this account may use it" />
+        <span class="sr-label-tight">Google email{addMode === 'invite' ? ' (optional)' : ''}</span>
+        <input class="nm-text-input" type="email" bind:value={addEmail} placeholder="name@gmail.com" />
+      </label>
+      <label class="nm-field">
+        <span class="sr-label-tight">Role</span>
+        <select class="nm-text-input" bind:value={addRole}>
+          <option value={null}>No role</option>
+          {#each data.roles as role (role.id)}<option value={role.id}>{role.label}</option>{/each}
+        </select>
       </label>
     </div>
-    <div class="group-picks inline">
-      {#each groups as g (g.id)}
-        <label class="group-pick">
-          <input
-            type="checkbox"
-            checked={inviteGroups.includes(g.id)}
-            onchange={(e) => toggleInviteGroup(g.id, e.currentTarget.checked)}
-          />
-          <span class="area-name">{g.label}</span>
-        </label>
-      {/each}
-    </div>
     <div class="add-row">
-      <button class="nm-save-btn" onclick={mintInvite} disabled={busy === 'invite:new'}>
-        {busy === 'invite:new' ? 'Making…' : 'Create invite link'}
-      </button>
+      {#if addMode === 'email'}
+        <button class="nm-save-btn" onclick={addByEmail} disabled={busy === 'add'}>{busy === 'add' ? 'Adding…' : 'Add person'}</button>
+      {:else}
+        <button class="nm-save-btn" onclick={mintInvite} disabled={busy === 'invite:new'}>
+          {busy === 'invite:new' ? 'Making…' : 'Create invite link'}
+        </button>
+      {/if}
     </div>
-
     {#if minted}
       <div class="minted" data-state="minted">
         <img src={minted.qr} alt="Invite link QR code" width="180" height="180" />
@@ -386,152 +328,85 @@
         </div>
       </div>
     {/if}
+  </section>
 
-    <ul class="access-list">
-      {#each invites as inv (inv.id)}
-        <li class="access-row invite">
-          <span class="group-name">{inv.name ?? 'Anyone with the link'}</span>
+  <details class="nm-sec fold" data-section="invites">
+    <summary class="nm-sec-hd">
+      <span class="sr-label-tight">Invite links</span>
+      <span class="nm-pill" data-state={openInvites.length ? 'connected' : 'disconnected'}>{openInvites.length} open</span>
+    </summary>
+    <ul class="plain">
+      {#each data.invites as inv (inv.id)}
+        <li class="line">
+          <span class="person-name">{inv.name ?? 'Anyone with the link'}</span>
           {#if inv.email}<span class="email">{inv.email}</span>{/if}
-          {#each inv.groups as g}<span class="chip group">{groupLabel(g)}</span>{/each}
-          <span class="note">{INVITE_STATE[inv.state] ?? inv.state}{inv.usedByEmail ? ` · ${inv.usedByEmail}` : ''}</span>
+          {#each inv.groups as g}<span class="tag">{roleById.get(g)?.label ?? g}</span>{/each}
+          <span class="tag">{INVITE_STATE[inv.state] ?? inv.state}{inv.usedByEmail ? ` · ${inv.usedByEmail}` : ''}</span>
           <span class="added">{inv.state === 'ok' ? `until ${formatDate(inv.expiresAt)}` : formatDate(inv.createdAt)}</span>
           {#if inv.state === 'ok'}
-            <button class="row-link danger" onclick={() => revokeInvite(inv)} disabled={busy === `invite:${inv.id}`}>
-              Revoke
-            </button>
+            <button class="row-link danger" onclick={() => revokeInvite(inv)} disabled={busy === `invite:${inv.id}`}>Revoke</button>
           {/if}
         </li>
       {:else}
-        <li class="access-row muted">No invites yet.</li>
+        <li class="muted">No invites yet.</li>
       {/each}
     </ul>
-  </section>
+  </details>
 
-  <section class="nm-sec" data-section="people">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">People</span>
-      <span class="nm-pill" data-state={people.length ? 'connected' : 'disconnected'}>
-        {people.length} {people.length === 1 ? 'person' : 'people'}
-      </span>
-    </div>
-    <ul class="access-list">
-      {#each people as person (person.email)}
-        <li class="access-row person">
+  <details class="nm-sec fold" data-section="roles">
+    <summary class="nm-sec-hd">
+      <span class="sr-label-tight">Roles</span>
+      <span class="nm-pill" data-state="connected">{data.roles.length}</span>
+    </summary>
+    <p class="muted">
+      Each person has one role. What a role gives is edited here and changes for everyone in it; anything extra for one
+      person is added on their page.
+    </p>
+    <ul class="plain">
+      {#each data.roles as r (r.id)}
+        <li class="role-line">
           <div class="row-main">
-            <span class="email">{person.email}</span>
-            {#if person.note}<span class="note">{person.note}</span>{/if}
-            <span class="added">added {formatDate(person.createdAt)}</span>
-            <button class="row-link" onclick={() => editPerson(person)} disabled={busy === person.email}>Edit</button>
-            <button class="row-link" onclick={() => viewAs(person.email)} disabled={busy === person.email}>View as</button>
-            <button class="row-link danger" onclick={() => removePerson(person.email)} disabled={busy === person.email}>
-              Remove
-            </button>
-          </div>
-          <div class="chips">
-            {#each person.groups as g}<span class="chip group">{groupLabel(g)}</span>{/each}
-            {#each person.grants as p}<span class="chip">{LABELS[p] ?? p}</span>{/each}
-            {#if person.legacyRole}<span class="chip">{LABELS[LEGACY[person.legacyRole]]} ({person.legacyRole})</span>{/if}
-            {#if person.effective.length === 0}<span class="chip ghost">Guest — public pages only</span>{/if}
-          </div>
-
-          {#if editing?.email === person.email}
-            <div class="editor">
-              <span class="sr-label-tight">Groups</span>
-              <div class="group-picks">
-                {#each groups as g (g.id)}
-                  <label class="group-pick">
-                    <input
-                      type="checkbox"
-                      checked={editing.groups.includes(g.id)}
-                      onchange={(e) => toggleGroup(g.id, e.currentTarget.checked)}
-                    />
-                    <span class="area-name">{g.label}</span>
-                    {#if g.description}<span class="area-blurb">{g.description}</span>{/if}
-                  </label>
-                {/each}
-              </div>
-              <span class="sr-label-tight">One-off permissions, on top of the groups</span>
-              <GrantEditor
-                name="person-{person.email}"
-                grants={editing.grants}
-                onchange={(next) => editing && (editing.grants = next)}
-              />
-              <div class="add-row">
-                <button class="nm-save-btn" onclick={savePerson} disabled={busy === person.email}>
-                  {busy === person.email ? 'Saving…' : 'Save'}
-                </button>
-                <button class="nm-btn-ghost" onclick={() => (editing = null)}>Cancel</button>
-              </div>
-            </div>
-          {/if}
-        </li>
-      {:else}
-        <li class="access-row muted">Nobody yet — only the Super Admin can sign in.</li>
-      {/each}
-    </ul>
-  </section>
-
-  <section class="nm-sec" data-section="groups">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">Groups</span>
-      <span class="nm-pill" data-state="connected">{groups.length}</span>
-      <button class="row-link push" onclick={newGroup}>New group</button>
-    </div>
-    <ul class="access-list">
-      {#if editingGroup && editingGroup.id === null}
-        <li class="access-row person">
-          {@render groupEditor()}
-        </li>
-      {/if}
-      {#each groups as g (g.id)}
-        <li class="access-row person">
-          <div class="row-main">
-            <span class="group-name">{g.label}</span>
-            {#if g.builtIn}<span class="note">built-in</span>{/if}
-            <span class="added">{g.members} {g.members === 1 ? 'person' : 'people'}</span>
-            <button class="row-link" onclick={() => editGroup(g)} disabled={busy === `group:${g.id}`}>Edit</button>
-            {#if !g.builtIn}
-              <button class="row-link danger" onclick={() => removeGroup(g)} disabled={busy === `group:${g.id}`}>
-                Delete
-              </button>
+            <span class="person-name">{r.label}</span>
+            {#if r.builtIn}<span class="tag">built-in</span>{/if}
+            <span class="added">{holdersOf(r.id)} {holdersOf(r.id) === 1 ? 'person' : 'people'}</span>
+            <button class="row-link" onclick={() => editRole(r)} disabled={busy === `role:${r.id}`}>Edit</button>
+            {#if !r.builtIn}
+              <button class="row-link danger" onclick={() => removeRole(r, holdersOf(r.id))} disabled={busy === `role:${r.id}`}>Delete</button>
             {/if}
           </div>
-          {#if g.description}<p class="muted desc">{g.description}</p>{/if}
-          <div class="chips">
-            {#each g.grants as p}<span class="chip">{LABELS[p] ?? p}</span>{:else}<span class="chip ghost">No permissions</span>{/each}
-          </div>
-          {#if editingGroup?.id === g.id}
-            {@render groupEditor()}
-          {/if}
+          <p class="muted desc">{r.description ?? ''} <span class="gives">Gives: {summarise(r.grants).join(', ') || 'nothing'}{r.grants.includes('family:admin') ? ', kids’ history' : r.grants.includes('family:circle') ? ', live locations' : ''}</span></p>
+          {#if editingRole?.id === r.id}{@render roleEditor()}{/if}
         </li>
       {/each}
+      {#if editingRole && editingRole.id === null}
+        <li class="role-line">{@render roleEditor()}</li>
+      {/if}
     </ul>
-  </section>
+    {#if !editingRole}
+      <button class="row-link" onclick={() => (editingRole = { id: null, label: '', description: '', grants: [] })}>New role</button>
+    {/if}
+  </details>
 </PageWrap>
 
-{#snippet groupEditor()}
-  {#if editingGroup}
+{#snippet roleEditor()}
+  {#if editingRole}
     <div class="editor">
       <div class="nm-form-row">
         <label class="nm-field">
           <span class="sr-label-tight">Name</span>
-          <input class="nm-text-input" type="text" bind:value={editingGroup.label} placeholder="e.g. Research readers" />
+          <input class="nm-text-input" type="text" bind:value={editingRole.label} placeholder="e.g. Research readers" />
         </label>
         <label class="nm-field">
           <span class="sr-label-tight">Description</span>
-          <input class="nm-text-input" type="text" bind:value={editingGroup.description} />
+          <input class="nm-text-input" type="text" bind:value={editingRole.description} />
         </label>
       </div>
-      <GrantEditor
-        name="group-{editingGroup.id ?? 'new'}"
-        grants={editingGroup.grants}
-        onchange={(next) => editingGroup && (editingGroup.grants = next)}
-      />
+      <AccessEditor name="role-{editingRole.id ?? 'new'}" showRoles={false} bind:grants={editingRole.grants} />
       <div class="add-row">
-        <button class="nm-save-btn" onclick={saveGroup} disabled={busy?.startsWith('group:')}>
-          {editingGroup.id ? 'Save group' : 'Create group'}
+        <button class="nm-save-btn" onclick={saveRole} disabled={busy?.startsWith('role:')}>
+          {editingRole.id ? 'Save role' : 'Create role'}
         </button>
-        <button class="nm-btn-ghost" onclick={() => (editingGroup = null)}>Cancel</button>
+        <button class="nm-btn-ghost" onclick={() => (editingRole = null)}>Cancel</button>
       </div>
     </div>
   {/if}
@@ -540,48 +415,18 @@
 <style>
   .muted { margin: 0 0 0.75rem; font-size: 0.85rem; color: var(--text-secondary); }
   .muted.desc { margin: 0.25rem 0 0; }
-  .muted code {
+  .muted.warn { color: var(--warn); }
+  .muted a { color: var(--accent-ink); }
+  .result-bad { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--error); margin: 0 0 0.75rem; }
+  .row-main { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 0.85rem; }
+  .person-name { font-weight: 600; color: var(--text-primary); }
+  .email { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-secondary); overflow-wrap: anywhere; }
+  .tag {
     font-family: var(--font-mono);
-    font-size: max(0.85em, var(--fs-label-xs));
-    background: var(--code-bg);
-    color: var(--code-text);
-    padding: 0.08rem 0.38rem;
-    border-radius: 2px;
-  }
-  .access-list {
-    list-style: none;
-    margin: 0.5rem 0 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-  }
-  .access-row {
-    display: flex;
-    align-items: center;
-    gap: 0.85rem;
-    padding: 0.6rem 0;
-    border-bottom: 1px solid var(--divider);
-    font-size: 0.9rem;
-  }
-  .access-row.person {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.4rem;
-  }
-  .access-row:last-child { border-bottom: none; }
-  .row-main {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.85rem;
-  }
-  .email { font-family: var(--font-mono); font-size: 0.82rem; color: var(--text-primary); overflow-wrap: anywhere; }
-  .group-name { font-weight: 600; color: var(--text-primary); }
-  .note {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    padding: 0.1rem 0.45rem;
-    background: var(--bg-section);
+    font-size: var(--fs-label-xs);
+    color: var(--text-secondary);
+    border: 1px solid var(--divider);
+    padding: 0.05rem 0.4rem;
     border-radius: 2px;
   }
   .added {
@@ -592,48 +437,63 @@
     color: var(--text-ghost);
     margin-left: auto;
   }
-  .owner-tag {
-    margin-left: auto;
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.15em;
-    color: var(--accent);
-    border: 1px solid var(--accent);
-    padding: 0.1rem 0.4rem;
-    border-radius: 2px;
-  }
-  .chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-  .chip {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    color: var(--text-secondary);
-    border: 1px solid var(--divider);
-    padding: 0.1rem 0.4rem;
-    border-radius: 2px;
-  }
-  .chip.group { color: var(--text-primary); border-color: var(--line-strong); }
-  .chip.ghost { color: var(--text-ghost); }
-  .editor {
+  .request {
     display: flex;
     flex-direction: column;
     gap: 0.6rem;
-    margin-top: 0.4rem;
-    padding: 0.8rem;
+    padding: 0.8rem 0;
+    border-bottom: 1px solid var(--divider);
+  }
+  .choose { display: flex; flex-direction: column; gap: 0.3rem; max-width: 28rem; }
+  .chips-pick { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.5rem; }
+  .pick {
+    position: relative;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    padding: 0.25rem 0.6rem;
     border: 1px solid var(--line-strong);
-    background: var(--bg);
+    border-radius: 2px;
+    color: var(--text-secondary);
+    cursor: pointer;
   }
-  .group-picks { display: flex; flex-direction: column; gap: 0.35rem; }
-  .group-pick {
+  .pick input { position: absolute; opacity: 0; pointer-events: none; }
+  .pick.on { background: var(--accent-ink); border-color: var(--accent-ink); color: var(--bg); }
+  .pick:focus-within { outline: 2px solid var(--accent-ink); outline-offset: 1px; }
+  .decided { list-style: none; margin: 0.6rem 0 0; padding: 0; color: var(--text-ghost); font-size: var(--fs-label); }
+  .decided li { display: flex; gap: 0.6rem; align-items: center; padding: 0.2rem 0; }
+  .people { list-style: none; margin: 0.25rem 0 0; padding: 0; }
+  .person {
     display: grid;
-    grid-template-columns: auto auto 1fr;
-    align-items: baseline;
-    gap: 0.6rem;
+    grid-template-columns: minmax(8rem, 12rem) auto minmax(0, 1fr);
+    grid-template-areas: 'name badge email' 'facts facts facts';
+    align-items: center;
+    gap: 0.25rem 0.85rem;
+    padding: 0.65rem 0.25rem;
+    border-bottom: 1px solid var(--divider);
+    color: inherit;
+    text-decoration: none;
   }
-  .area-name { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-primary); }
-  .area-blurb { font-size: var(--fs-label-xs); color: var(--text-muted); }
+  .person:hover { background: var(--card-bg); }
+  .person:hover .person-name { color: var(--accent-ink); }
+  .person .person-name { grid-area: name; }
+  .person .email { grid-area: email; }
+  .person .facts { grid-area: facts; font-size: var(--fs-label-xs); color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 0.2rem 0.8rem; }
+  .fact::before { content: '· '; color: var(--text-ghost); }
+  .badge {
+    grid-area: badge;
+    justify-self: start;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 0.05rem 0.4rem;
+    border: 1px solid var(--line-strong);
+    border-radius: 2px;
+    color: var(--text-primary);
+  }
+  .badge[data-kind='owner'] { color: var(--accent); border-color: var(--accent); }
+  .badge[data-kind='household'] { color: var(--text-muted); border-color: var(--divider); }
   .add-row { display: flex; align-items: center; gap: 0.8rem; margin-top: 0.4rem; }
-  .result-bad { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--error); margin: 0 0 0.75rem; }
   .row-link {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
@@ -645,15 +505,26 @@
     cursor: pointer;
     padding: 0.15rem 0.3rem;
   }
-  .row-link.push { margin-left: auto; }
   .row-link:hover { color: var(--text-primary); }
   .row-link.danger:hover { color: var(--error); }
   .row-link:disabled { opacity: 0.5; cursor: default; }
-  .muted a { color: var(--accent-ink); }
-  .group-picks.inline { flex-direction: row; flex-wrap: wrap; gap: 0.35rem 1.1rem; margin: 0.5rem 0; }
-  .group-picks.inline .group-pick { grid-template-columns: auto auto; }
-  .access-row.invite { flex-wrap: wrap; }
-  .access-row.decided { color: var(--text-ghost); font-size: var(--fs-label); }
+  .fold > summary { cursor: pointer; list-style: none; }
+  .fold > summary::-webkit-details-marker { display: none; }
+  .fold > summary::after { content: '+'; margin-left: auto; font-family: var(--font-mono); color: var(--text-muted); }
+  .fold[open] > summary::after { content: '−'; }
+  .plain { list-style: none; margin: 0.5rem 0; padding: 0; }
+  .line { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.8rem; padding: 0.5rem 0; border-bottom: 1px solid var(--divider); }
+  .role-line { padding: 0.6rem 0; border-bottom: 1px solid var(--divider); }
+  .gives { color: var(--text-muted); }
+  .editor {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    margin-top: 0.6rem;
+    padding: 0.8rem;
+    border: 1px solid var(--line-strong);
+    background: var(--bg);
+  }
   .minted {
     display: flex;
     flex-wrap: wrap;
@@ -675,5 +546,11 @@
     border-radius: 2px;
     overflow-wrap: anywhere;
     user-select: all;
+  }
+  @media (max-width: 640px) {
+    .person {
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas: 'name badge' 'email email' 'facts facts';
+    }
   }
 </style>

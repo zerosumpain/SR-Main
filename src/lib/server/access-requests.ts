@@ -166,8 +166,10 @@ export async function listRequests(limit = 50): Promise<AccessRequestView[]> {
 
 /**
  * Approve or decline a pending request. Approving adds them to the allow-list
- * exactly as the add form does, then puts them in `groups` without removing
- * any they already hold. Null when there is no such pending request.
+ * exactly as the add form does, then gives them `groups` (one role; someone
+ * who already holds a stronger one keeps it). Putting them in the household
+ * is the caller's step — that lives a layer above this one. Null when there
+ * is no such pending request.
  */
 export async function decideRequest(
   id: string,

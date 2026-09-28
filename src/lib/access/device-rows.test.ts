@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LANE_LABEL, mergeDeviceRows } from './rows';
+import { LANE_LABEL, mergeDeviceRows } from './device-rows';
 
 const NOW = new Date('2026-09-26T12:00:00Z');
 
