@@ -49,6 +49,17 @@ const clockFmt = new Intl.DateTimeFormat('en-GB', { timeZone: LOCAL_TZ, hour: '2
 const dayFmt = new Intl.DateTimeFormat('en-GB', { timeZone: LOCAL_TZ, weekday: 'short' });
 export const placeTitle = (p: InsightPlace | undefined): string => p?.label || p?.suggestedLabel || (p?.kind === 'home' ? 'Home' : 'Unnamed stop');
 const round = (n: number) => Math.round(n * 10) / 10;
+/** The local date, formatted once per UTC hour — the minute loop asks ~200k times. */
+const dateByHour = new Map<number, string>();
+function localDateOf(t: number): string {
+  const hour = Math.floor(t / 3_600_000);
+  let d = dateByHour.get(hour);
+  if (d === undefined) {
+    if (dateByHour.size > 5_000) dateByHour.clear();
+    d = dateFmt.format(hour * 3_600_000); dateByHour.set(hour, d);
+  }
+  return d;
+}
 export function percentile(values: number[], q: number): number {
   const v = [...values].sort((a, b) => a - b);
   if (!v.length) return 0;
@@ -124,7 +135,9 @@ export function qualifiedStop(rows: InsightFix[], now: Date): Fix[] | null {
   return null;
 }
 function located(f: Fix, places: InsightPlace[]): Fix {
-  const candidates = places.filter(p => metresBetween(f.lat, f.lon, p.lat, p.lon) <= p.radiusM
+  // The latitude gap alone rules out almost every place before the haversine:
+  // ~100k fixes against ~130 places is otherwise 13M haversines per analysis.
+  const candidates = places.filter(p => Math.abs(f.lat - p.lat) * 111_320 <= p.radiusM && metresBetween(f.lat, f.lon, p.lat, p.lon) <= p.radiusM
     && (f.accuracyM ?? 0) <= p.radiusM && (f.speedKmh ?? 0) < 90);
   candidates.sort((a, b) => metresBetween(f.lat, f.lon, a.lat, a.lon) - metresBetween(f.lat, f.lon, b.lat, b.lon));
   // Recheck geometry: place ids on historical rows can predate an edited boundary.
@@ -329,7 +342,7 @@ export function analysePresence(rows: InsightFix[], places: InsightPlace[], peop
       // Minute subdivisions handle sunrise and local midnight without crediting a whole long leg to one day.
       for (let t = +a.ts; t < +b.ts; t += MINUTE) {
         const end = Math.min(+b.ts, t + MINUTE), dt = (end - t) / MINUTE;
-        const date = dateFmt.format((t + end) / 2);
+        const date = localDateOf((t + end) / 2);
         const d = daily.get(date) ?? { date, observed: 0, wander: 0, daylight: 0 };
         d.observed += dt;
         if (active && away) d.wander += dt;
