@@ -196,17 +196,8 @@ export async function sendPush(
   message: PushMessage,
   env?: ApnsEnv | null,
 ): Promise<ApnsResult> {
-  const config = apnsConfig();
-  if (!config) return { ok: false, status: 0, reason: 'NotConfigured' };
-  if (!isDeviceToken(deviceToken)) return { ok: false, status: 0, reason: 'BadDeviceToken' };
-  const target = env ?? config.defaultEnv;
   const passive = message.level === 'passive';
-
   const headers: Record<string, string> = {
-    [constants.HTTP2_HEADER_METHOD]: 'POST',
-    [constants.HTTP2_HEADER_PATH]: `/3/device/${deviceToken}`,
-    authorization: `bearer ${providerToken(config)}`,
-    'apns-topic': config.bundleId,
     'apns-push-type': 'alert',
     // 5 lets iOS batch a passive one with the next wake; 10 is "now".
     'apns-priority': passive ? '5' : '10',
@@ -215,6 +206,50 @@ export async function sendPush(
     ),
   };
   if (message.collapseId) headers['apns-collapse-id'] = message.collapseId.slice(0, 64);
+  return post(deviceToken, headers, buildPayload(message), env, '');
+}
+
+/**
+ * One Live Activity push: a push-to-start token, or one activity's own update
+ * token. `aps` is ActivityKit's (`event`, `content-state`, `timestamp`, …) and
+ * is passed through as built by the caller. Never throws.
+ *
+ * The topic is the app's bundle id with `.push-type.liveactivity`, and the
+ * push type `liveactivity`; the same key signs it.
+ */
+export async function sendLiveActivity(
+  token: string,
+  aps: Record<string, unknown>,
+  env?: ApnsEnv | null,
+  priority: 5 | 10 = 10,
+): Promise<ApnsResult> {
+  const headers: Record<string, string> = {
+    'apns-push-type': 'liveactivity',
+    'apns-priority': String(priority),
+    'apns-expiration': String(Math.floor(Date.now() / 1000) + 15 * 60),
+  };
+  return post(token, headers, JSON.stringify({ aps }), env, '.push-type.liveactivity');
+}
+
+async function post(
+  deviceToken: string,
+  extra: Record<string, string>,
+  body: string,
+  env: ApnsEnv | null | undefined,
+  topicSuffix: string,
+): Promise<ApnsResult> {
+  const config = apnsConfig();
+  if (!config) return { ok: false, status: 0, reason: 'NotConfigured' };
+  if (!isDeviceToken(deviceToken)) return { ok: false, status: 0, reason: 'BadDeviceToken' };
+  const target = env ?? config.defaultEnv;
+
+  const headers: Record<string, string> = {
+    [constants.HTTP2_HEADER_METHOD]: 'POST',
+    [constants.HTTP2_HEADER_PATH]: `/3/device/${deviceToken}`,
+    authorization: `bearer ${providerToken(config)}`,
+    'apns-topic': config.bundleId + topicSuffix,
+    ...extra,
+  };
 
   try {
     return await new Promise<ApnsResult>((resolve) => {
@@ -230,26 +265,26 @@ export async function sendPush(
         done({ ok: false, status: 0, reason: 'Timeout' });
       });
       let status = 0;
-      let body = '';
+      let text = '';
       request.on('response', (h) => {
         status = Number(h[constants.HTTP2_HEADER_STATUS]) || 0;
       });
       request.setEncoding('utf8');
       request.on('data', (chunk: string) => {
-        body += chunk;
+        text += chunk;
       });
       request.on('end', () => {
         if (status === 200) return done({ ok: true, status });
         let reason: string | undefined;
         try {
-          reason = (JSON.parse(body) as { reason?: string }).reason;
+          reason = (JSON.parse(text) as { reason?: string }).reason;
         } catch {
           reason = undefined;
         }
         done({ ok: false, status, reason });
       });
       request.on('error', (error) => done({ ok: false, status: 0, reason: error.message.slice(0, 120) }));
-      request.end(buildPayload(message));
+      request.end(body);
     });
   } catch (error) {
     return { ok: false, status: 0, reason: (error as Error).message.slice(0, 120) };

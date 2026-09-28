@@ -5407,6 +5407,52 @@ export const householdEvent = pgTable(
   ],
 );
 
+/**
+ * A household member on the move, shown live on the Lock Screens of the people
+ * who follow them (`$lib/home/presence/live-journey`).
+ *
+ * Opened by a departure from a flagged place (its id is that crossing's id, so
+ * one departure is one journey however many runs see it), closed by their next
+ * arrival, a newer departure, or two hours. `state` is the last content the
+ * phones were sent, so a run only pushes when what they show would change.
+ */
+export const householdJourney = pgTable(
+  'household_journey',
+  {
+    id: text('id').primaryKey(),
+    subject: text('subject').notNull(),
+    fromPlaceId: text('from_place_id').notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+    /** 'arrived' | 'superseded' | 'timeout' | 'silenced' | 'test' */
+    endReason: text('end_reason'),
+    endPlaceId: text('end_place_id'),
+    /** Distance to home when it started, for the progress bar. Null from home. */
+    homeStartM: doublePrecision('home_start_m'),
+    state: jsonb('state').$type<Record<string, unknown>>(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('household_journey_open_idx').on(t.endedAt, t.startedAt)],
+);
+
+/**
+ * One phone showing one journey: when it was started there, and the update
+ * token ActivityKit gave that activity (the app reports it back). Updates and
+ * the end go to that token; a phone that never reported one is left to the
+ * activity's own stale date.
+ */
+export const householdJourneyViewer = pgTable(
+  'household_journey_viewer',
+  {
+    journeyId: text('journey_id').notNull(),
+    deviceId: uuid('device_id').notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    updateToken: text('update_token'),
+    updateTokenAt: timestamp('update_token_at', { withTimezone: true }),
+  },
+  (t) => [primaryKey({ columns: [t.journeyId, t.deviceId] })],
+);
+
 export type HouseholdEventRow = typeof householdEvent.$inferSelect;
 export type NewHouseholdEventRow = typeof householdEvent.$inferInsert;
 
@@ -6955,6 +7001,14 @@ export const nativeCredentials = pgTable('native_credentials', {
   /** 'production' (TestFlight, App Store) or 'sandbox' (an Xcode build). */
   apnsEnv: text('apns_env'),
   apnsTokenAt: timestamp('apns_token_at', { withTimezone: true }),
+  /**
+   * ActivityKit's push-to-START token for the family-journey Live Activity:
+   * what lets the site put a journey on this phone's Lock Screen while the app
+   * is closed. Separate from `apnsToken` — Apple issues a different one per
+   * activity type. See `$lib/home/presence/live-journey`.
+   */
+  laStartToken: text('la_start_token'),
+  laStartTokenAt: timestamp('la_start_token_at', { withTimezone: true }),
 }, (t) => [
   uniqueIndex('native_credentials_token_hash_idx').on(t.tokenHash),
   index('native_credentials_owner_kind_idx').on(t.ownerEmail, t.kind),
