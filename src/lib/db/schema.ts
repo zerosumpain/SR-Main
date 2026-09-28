@@ -5238,6 +5238,8 @@ export const daydreamPlaces = pgTable(
     suggestedKind: text('suggested_kind'),
     suggestedAddress: text('suggested_address'),
     suggestedAt: timestamp('suggested_at', { withTimezone: true }),
+    suggestedProvider: text('suggested_provider'),
+    suggestedPrecision: text('suggested_precision'),
     visitCount: integer('visit_count').notNull().default(0),
     /**
      * On how many separate LOCAL DAYS anyone stayed here.

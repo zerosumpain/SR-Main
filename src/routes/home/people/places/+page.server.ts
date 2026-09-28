@@ -41,6 +41,7 @@ export const load: PageServerLoad = async (event) => {
     kinds: PLACE_KINDS.filter((k) => k !== 'unknown'),
     labelMax: PLACE_LABEL_MAX,
     placeTimeDays: DEFAULT_WINDOW_DAYS,
+    geocoder: await import('$lib/home/presence/geocode.server').then(m => m.geocoderStatus()).catch(() => 'Automatic place lookup temporarily unavailable.'),
     // Who spends how long at each place. OWNER ONLY, and only ever built here,
     // behind the check above. Streamed: a month of everyone's trail must not
     // hold the map up, and a failure leaves the rest of the page standing.
@@ -96,6 +97,37 @@ async function panelPlace(form: FormData) {
 const OWNER_ONLY = () => fail(403, { error: 'Owner access required.', placeId: null });
 
 export const actions: Actions = {
+  name: async (event) => {
+    if (!(await isOwnerRequest(event))) return OWNER_ONLY();
+    const form = await event.request.formData();
+    const found = await panelPlace(form);
+    if (!found.place) return found.failure;
+    const placeId = found.place.id;
+    const label = String(form.get('label') ?? '').trim();
+    const kind = form.get('kind');
+    if (!label || label.length > PLACE_LABEL_MAX || !isPlaceKind(kind) || kind === 'unknown') {
+      return fail(400, { error: `Choose a kind and a name of 1–${PLACE_LABEL_MAX} characters.`, placeId });
+    }
+    try {
+      await namePlace(placeId, label, kind);
+    } catch {
+      return fail(500, { error: 'The name could not be saved. Please try again.', placeId });
+    }
+    try { await confirmPlace(placeId, label, kind); }
+    catch { return { saved: placeId, note: 'Name saved; memory will need updating later.' }; }
+    return { saved: placeId };
+  },
+  lookup: async (event) => {
+    if (!(await isOwnerRequest(event))) return OWNER_ONLY();
+    const form = await event.request.formData();
+    const found = await panelPlace(form);
+    if (!found.place) return found.failure;
+    try {
+      const { geocodePlace } = await import('$lib/home/presence/geocode.server');
+      const resolved = await geocodePlace(found.place.id);
+      return { saved: found.place.id, note: resolved ? 'Address found. You can give it a family name below.' : 'No new result yet. Check the lookup connection, or name the place yourself. Failed lookups retry after one hour.' };
+    } catch { return fail(503, { error: 'Place lookup is temporarily unavailable.', placeId: found.place.id }); }
+  },
   /** The list's editor: the name, and the edge (the radius, plus the centre
    *  when the map moved it). Any change to the edge pins the place. */
   save: async (event) => {

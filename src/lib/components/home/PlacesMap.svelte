@@ -28,7 +28,7 @@
    * new geometry through `ondraft`; the page owns the draft, Save and Cancel.
    *
    * It opens on home and the places near it (within 15 km), not on every
-   * place ever named: one far-off holiday cottage would otherwise zoom the
+   * recorded place: one far-off holiday cottage would otherwise zoom the
    * whole map out until the 50 m circles vanish. "Show all places" (the
    * page's button, `fitAll`) takes it back out. Zoomed out past 13 a place
    * is a dot rather than a circle, and a name that would sit on top of a
@@ -93,6 +93,7 @@
   let labels = new Map<string, Marker>();
   let labelKey = '';
   let dragging: 'centre' | 'edge' | null = null;
+  let lastDragAt = 0;
   let lastFitted: string | null | undefined = undefined;
 
   const SOURCE = 'places';
@@ -122,15 +123,15 @@
     return { lat: c.lat, lon: c.lng };
   }
 
-  /** Take the map back out to every named place and home. */
+  /** Take the map back out to every place, including unnamed stops. */
   export function fitAll(): void {
-    fit(places.filter((p) => p.label || p.isHome), true);
+    fit(places, true);
   }
 
-  /** The view the page opens on: home and the named places within 15 km of
+  /** The view the page opens on: home and the places within 15 km of
    *  it, or everything when fewer than three are that close. */
   function openingView(): Geometry[] {
-    const all = places.filter((p) => p.label || p.isHome);
+    const all = places;
     const home = places.find((p) => p.isHome);
     if (!home) return all;
     const near = all.filter((p) => !p.isHome && distanceM(home.lat, home.lon, p.lat, p.lon) <= NEAR_HOME_M);
@@ -247,6 +248,7 @@
       });
       centreHandle.on('dragend', () => {
         dragging = null;
+        lastDragAt = Date.now();
         syncHandles(draft);
       });
     }
@@ -260,6 +262,7 @@
       });
       edgeHandle.on('dragend', () => {
         dragging = null;
+        lastDragAt = Date.now();
         // Snap back onto the circle: a drag past 2 km leaves the pointer
         // somewhere the radius is not.
         syncHandles(draft);
@@ -280,9 +283,17 @@
       for (const m of labels.values()) m.remove();
       labels = new Map(
         places.map((p) => {
-          const el = document.createElement('span');
+          const el = document.createElement('button');
+          el.type = 'button';
           el.className = 'pm-label';
           el.textContent = p.label ?? (p.isHome ? 'home' : 'unnamed');
+          // Mapbox otherwise assigns role="img", even to a native button.
+          el.setAttribute('role', 'button');
+          el.setAttribute('aria-label', `Select ${el.textContent}`);
+          el.addEventListener('click', (event) => {
+            event.stopPropagation();
+            if (!placing && Date.now() - lastDragAt > 300) onselect?.(p.id);
+          });
           return [p.id, new mapboxgl!.Marker({ element: el, anchor: 'top', offset: [0, LABEL_OFFSET_Y] }).setLngLat([p.lon, p.lat]).addTo(map!)];
         }),
       );
@@ -316,10 +327,14 @@
 
   onMount(() => {
     let cancelled = false;
+    // The editor changes the available width without resizing the window.
+    const resize = new ResizeObserver(() => { if (map) { map.resize(); declutter(); } });
+    resize.observe(container);
     (async () => {
       try {
         const res = await fetch('/api/maps/config', { headers: { accept: 'application/json' } });
         const cfg = (await res.json().catch(() => ({}))) as { accessToken?: string; token?: string; style?: string; message?: string };
+        if (cancelled) return;
         const accessToken = cfg.accessToken ?? cfg.token;
         if (!res.ok || !accessToken) {
           setStatus('unavailable', cfg.message ?? 'The map is unavailable. The list still does everything.');
@@ -387,7 +402,9 @@
             },
           });
           map.on('click', 'places-fill', (e) => {
-            if (placing || !e.features?.length) return;
+            // Mapbox can emit a layer click after a handle is released.
+            // It must not reselect a place and discard the geometry draft.
+            if (placing || dragging || Date.now() - lastDragAt < 300 || !e.features?.length) return;
             // Overlapping circles: the smallest is the one you meant.
             const hit = [...e.features].sort(
               (a, b) => Number(a.properties?.radiusM ?? 0) - Number(b.properties?.radiusM ?? 0),
@@ -396,7 +413,7 @@
             if (id && id !== '__new') onselect?.(id);
           });
           map.on('click', 'places-point', (e) => {
-            if (placing || !e.features?.length) return;
+            if (placing || dragging || Date.now() - lastDragAt < 300 || !e.features?.length) return;
             // The dot drawn last is on top, and the selected one is drawn last.
             const id = String(e.features[0].properties?.id ?? '');
             if (id && id !== '__new') onselect?.(id);
@@ -424,6 +441,7 @@
     })();
     return () => {
       cancelled = true;
+      resize.disconnect();
       for (const m of labels.values()) m.remove();
       labels = new Map();
       centreHandle = edgeHandle = null;
@@ -494,7 +512,8 @@
     cursor: grabbing;
   }
   .places-map :global(.pm-label) {
-    pointer-events: none;
+    pointer-events: auto;
+    cursor: pointer;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     letter-spacing: 0.06em;
@@ -507,5 +526,9 @@
   }
   .places-map :global(.pm-label.hidden) {
     visibility: hidden;
+  }
+  .places-map :global(.pm-label:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
   }
 </style>

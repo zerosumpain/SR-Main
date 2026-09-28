@@ -50,6 +50,10 @@ export const load: PageServerLoad = async (event) => {
   const viewer: PeopleViewer | null = await peopleViewerOf(event);
   if (!viewer) error(403, 'Forbidden');
   event.depends('home:people');
+  event.setHeaders({ 'cache-control': 'private, no-store' });
+  const arrivals = import('$lib/home/presence/insights.server')
+    .then(m => m.loadPresenceInsights(viewer, 28)).then(d => ({ arrivals: d.arrivals, generatedAt: d.generatedAt }))
+    .catch(() => null);
 
   // The map: every SHARING person's last fix (`livePositions` drops anyone not
   // sharing). The owner and any household viewer — that is what the Family
@@ -74,7 +78,7 @@ export const load: PageServerLoad = async (event) => {
   // is read from their phone, keyed on the session (see my-day.ts).
   const own = await ownDayOf(event).catch(() => null);
   const ownSubject = own?.subject ?? null;
-  const moving = { movement, person, ownSubject, days: DEFAULT_WINDOW_DAYS };
+  const moving = { movement, person, ownSubject, days: DEFAULT_WINDOW_DAYS, arrivals };
 
   try {
     const { members } = await loadHousehold();

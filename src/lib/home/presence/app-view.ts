@@ -553,7 +553,7 @@ async function loadHistory(subjects: readonly string[], dayStart: Date, now: Dat
 async function loadLabels(ids: readonly string[]): Promise<Map<string, string | null>> {
   if (ids.length === 0) return new Map();
   const rows = await db
-    .select({ id: daydreamPlaces.id, label: daydreamPlaces.label, status: daydreamPlaces.status })
+    .select({ id: daydreamPlaces.id, label: daydreamPlaces.label, suggestedLabel: daydreamPlaces.suggestedLabel, status: daydreamPlaces.status })
     .from(daydreamPlaces)
     .where(inArray(daydreamPlaces.id, [...ids]));
   return activeLabels(rows);

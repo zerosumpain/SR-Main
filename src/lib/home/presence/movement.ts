@@ -100,7 +100,7 @@ async function placeLabels(fixes: Array<{ placeId?: string | null }>): Promise<M
   const placeIds = [...new Set(fixes.map((f) => f.placeId).filter((x): x is string => !!x))];
   if (!placeIds.length) return new Map();
   const rows = await db
-    .select({ id: daydreamPlaces.id, label: daydreamPlaces.label, status: daydreamPlaces.status })
+    .select({ id: daydreamPlaces.id, label: daydreamPlaces.label, suggestedLabel: daydreamPlaces.suggestedLabel, status: daydreamPlaces.status })
     .from(daydreamPlaces)
     .where(inArray(daydreamPlaces.id, placeIds));
   return activeLabels(rows);

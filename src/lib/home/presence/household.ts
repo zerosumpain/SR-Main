@@ -130,7 +130,7 @@ export async function loadHousehold(): Promise<{ members: HouseholdPresence[] }>
   const placeIds = [...new Set(latestRows.map((r) => r.place_id).filter((x): x is string => !!x))];
   const labels = placeIds.length
     ? await db
-        .select({ id: daydreamPlaces.id, label: daydreamPlaces.label, status: daydreamPlaces.status })
+        .select({ id: daydreamPlaces.id, label: daydreamPlaces.label, suggestedLabel: daydreamPlaces.suggestedLabel, status: daydreamPlaces.status })
         .from(daydreamPlaces)
         .where(inArray(daydreamPlaces.id, placeIds))
     : [];
