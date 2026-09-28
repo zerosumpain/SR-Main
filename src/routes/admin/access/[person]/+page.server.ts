@@ -6,7 +6,7 @@ import { isOwnerRequest } from '$lib/server/owner';
 import { addToAllowList } from '$lib/server/allow-list';
 import { setUserAccess } from '$lib/server/grants';
 import { revokeDevice } from '$lib/server/native-auth';
-import { loadPerson, removePerson } from '$lib/server/people';
+import { loadPerson, removePerson } from '$lib/people/people.server';
 import { setSetting } from '$lib/server/models/settings';
 import { COMPANION_CURSOR_KEY } from '$lib/home/presence/companion';
 import { createMember, listMembers, updateMember } from '$lib/home/presence/members';

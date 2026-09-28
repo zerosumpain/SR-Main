@@ -1,5 +1,5 @@
 // /admin/access reads and changes PEOPLE here — one human, whatever records
-// they are spread across (see ./people-join). Owner-only callers: every route
+// they are spread across (see ./join). Owner-only callers: every route
 // using this sits under /admin, which the hook denies to anyone else.
 //
 // Spec: docs/superpowers/specs/2026-09-28-people-and-app-registration.md
@@ -11,11 +11,11 @@ import { parsePermissions } from '$lib/access/catalogue';
 import { mergeDeviceRows, type DeviceRow } from '$lib/access/device-rows';
 import { listMembers, updateMember, type HouseholdMember } from '$lib/home/presence/members';
 import { listPilotDevices, revokePilotDevice } from '$lib/home/presence/companion-accounts';
-import { getOwnerEmails } from './access';
-import { asList, listGroups } from './grants';
-import { disableMemberGmail } from './members';
-import { listAllSiteDevices } from './site-devices';
-import { findPerson, joinPeople, type Person, type RoleView } from './people-join';
+import { getOwnerEmails } from '$lib/server/access';
+import { asList, listGroups } from '$lib/server/grants';
+import { disableMemberGmail } from '$lib/server/members';
+import { listAllSiteDevices } from '$lib/server/site-devices';
+import { findPerson, joinPeople, type Person, type RoleView } from './join';
 
 export type { Person, RoleView };
 

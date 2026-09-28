@@ -1,5 +1,5 @@
 import type { PageServerLoad } from './$types';
-import { loadPeople } from '$lib/server/people';
+import { loadPeople } from '$lib/people/people.server';
 import { listInvites } from '$lib/server/invites';
 import { listRequests } from '$lib/server/access-requests';
 

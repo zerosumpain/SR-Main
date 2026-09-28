@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Permission } from '$lib/access/catalogue';
 import type { DeviceRow } from '$lib/access/device-rows';
 import type { HouseholdMember } from '$lib/home/presence/members';
-import { findPerson, joinPeople, type RoleView } from './people-join';
+import { findPerson, joinPeople, type RoleView } from './join';
 
 const roles: RoleView[] = [
   { id: 'family-circle', label: 'Family', description: null, grants: ['family:circle', 'games:self'], builtIn: true },

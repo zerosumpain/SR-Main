@@ -3,7 +3,7 @@
 // both phone lanes. Everything joins on the lower-cased email; a household row
 // with no email is a person with no account (the Life360-only children).
 //
-// PURE — the loader in ./people fetches, this joins, and the test drives it.
+// PURE — the loader in ./people.server fetches, this joins, and the test drives it.
 //
 // Spec: docs/superpowers/specs/2026-09-28-people-and-app-registration.md
 
