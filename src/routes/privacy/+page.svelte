@@ -45,7 +45,7 @@
 
   <h2>If you use the iPhone app</h2>
   <p>
-    SR Companion is the site's iPhone app, and like the site it's invitation only. You can sign in with
+    Strange Rambler is the site's iPhone app (on your Home Screen it's called SR Companion), and like the site it's invitation only. You can sign in with
     Apple or Google, which tells me your name and email address (or the private relay address Apple
     makes if you ask it to hide yours), and I look at every request by hand before the account opens. If
     I turn a request down, or you withdraw it, the request is all that's kept.
