@@ -12,6 +12,7 @@ import {
 } from '$lib/home/presence/types';
 import { lifeSubjects, listMembers, type HouseholdMember } from '$lib/home/presence/members';
 import { deliverAlerts, runCrossings } from '$lib/home/presence/alerts';
+import { runLiveJourneys } from '$lib/home/presence/live-journey';
 import type { ActivityHandler } from '../types';
 
 // The name is the heartbeat_actions row's identity: it stays 'daydream-observe'
@@ -179,6 +180,21 @@ export const homeObserve: ActivityHandler = {
     } catch (err) {
       details.alertsError = errMsg(err).slice(0, 200);
       bits.push(`alerts failed: ${errMsg(err).slice(0, 80)}`);
+    }
+
+    // Journeys on the Lock Screen: started by the departures just delivered,
+    // moved on by the fixes just written. Never fails the run either.
+    try {
+      const live = await runLiveJourneys(members);
+      details.liveJourneys = live;
+      const l: string[] = [];
+      if (live.started) l.push(`${live.started} started`);
+      if (live.updated) l.push(`${live.updated} moved`);
+      if (live.ended) l.push(`${live.ended} ended`);
+      if (live.errors.length) l.push(`failed: ${live.errors.join('; ').slice(0, 120)}`);
+      if (l.length) bits.push(`journeys: ${l.join(', ')}`);
+    } catch (err) {
+      details.liveJourneysError = errMsg(err).slice(0, 200);
     }
 
     if (fixes.length) bits.push(`fixes: ${fixes.join(', ')}`);
