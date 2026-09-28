@@ -69,6 +69,7 @@
 /api/native/push
 /api/native/register
 /api/native/register/apple
+/api/native/review-demo
 /api/native/today
 /api/platform/tools/catalogue
 /api/platform/tools/invoke

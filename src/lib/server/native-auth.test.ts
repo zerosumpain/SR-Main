@@ -67,7 +67,9 @@ describe('every native route gates itself', () => {
    * the device itself because a registrant is no member for
    * `withNativeAccess` to find.
    */
-  const SELF_GATED = ['native/pair/+server.ts', 'native/register/apple/+server.ts'];
+  // The App Review switch (`review-demo`) mints and reads nothing: it answers
+  // `{ demo: true }` to one env-held code, behind its own per-address ceiling.
+  const SELF_GATED = ['native/pair/+server.ts', 'native/register/apple/+server.ts', 'native/review-demo/+server.ts'];
 
   it.each(handlers.filter((p) => !SELF_GATED.some((s) => p.endsWith(s))))(
     '%s resolves a device identity',
