@@ -1,7 +1,8 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { researchSessions, facts, entities, sources, relationships, entityMentions, narrativeItems, globalEntityLinks, synthesisRuns } from '$lib/db/schema';
+import { researchSessions, facts, entities, sources } from '$lib/db/schema';
+import { deleteResearchSessionRows } from '$lib/deepdive/delete-session';
 import { eq, and, sql } from 'drizzle-orm';
 import { requestStop, requestSkipPhase } from '$lib/deepdive/worker';
 import { writable } from '$lib/server/area-scope';
@@ -76,44 +77,7 @@ export const DELETE: RequestHandler = async (event) => {
       .set({ parentSessionId: null })
       .where(and(eq(researchSessions.parentSessionId, params.id), writable(researchSessions.principalId, access)));
 
-    // 1. narrative items (references session + facts)
-    await tx.delete(narrativeItems).where(eq(narrativeItems.sessionId, params.id));
-
-    // 2. global entity links (references session + session-scoped entities)
-    await tx.delete(globalEntityLinks).where(eq(globalEntityLinks.sessionId, params.id));
-
-    // 3. entity_mentions (references entities.id + facts.id — must go before both)
-    const sessionEntities = await tx
-      .select({ id: entities.id })
-      .from(entities)
-      .where(eq(entities.sessionId, params.id));
-
-    for (const e of sessionEntities) {
-      await tx.delete(entityMentions).where(eq(entityMentions.entityId, e.id));
-    }
-
-    // 4. relationships (references entities + facts + sources, all session-scoped)
-    await tx.delete(relationships).where(eq(relationships.sessionId, params.id));
-
-    // 5. entities
-    await tx.delete(entities).where(eq(entities.sessionId, params.id));
-
-    // 6. facts (self-ref refutesFactId has no onDelete — null it first to
-    //    avoid FK violations on the self-referencing column within the batch)
-    await tx
-      .update(facts)
-      .set({ refutesFactId: null })
-      .where(eq(facts.sessionId, params.id));
-    await tx.delete(facts).where(eq(facts.sessionId, params.id));
-
-    // 7. synthesis runs (references session)
-    await tx.delete(synthesisRuns).where(eq(synthesisRuns.sessionId, params.id));
-
-    // 8. sources (references session)
-    await tx.delete(sources).where(eq(sources.sessionId, params.id));
-
-    // 9. session row
-    await tx.delete(researchSessions).where(eq(researchSessions.id, params.id));
+    await deleteResearchSessionRows(tx, params.id);
   });
 
   return new Response(null, { status: 204 });

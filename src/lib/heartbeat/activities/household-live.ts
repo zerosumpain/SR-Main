@@ -1,5 +1,5 @@
 import { errMsg } from '$lib/home/presence/types';
-import { ingestCompanion, type CompanionResult } from '$lib/home/presence/companion';
+import { ingestCompanion, loadCompanionUsers, type CompanionResult } from '$lib/home/presence/companion';
 import { listMembers, type HouseholdMember } from '$lib/home/presence/members';
 import { pushAppViews } from '$lib/home/presence/app-view';
 import type { ActivityHandler } from '../types';
@@ -65,6 +65,19 @@ export const householdLive: ActivityHandler = {
       if (companion.more) c.push('more waiting');
       if (companion.error) c.push(`failed: ${companion.error.slice(0, 80)}`);
       bits.push(`companion: ${c.join(', ')}`);
+    }
+
+    // Accounts deleted from a phone paired to the pilot alone: finish them
+    // off here (their site account, data, household link, then the pilot row).
+    try {
+      const { sweepAccountDeletions } = await import('$lib/people/erase');
+      const swept = await sweepAccountDeletions(await loadCompanionUsers());
+      if (swept.deleted || swept.failed) {
+        details.accountDeletions = swept;
+        bits.push(`accounts deleted: ${swept.deleted}${swept.failed ? `, ${swept.failed} failed` : ''}`);
+      }
+    } catch (err) {
+      details.accountDeletionsError = errMsg(err).slice(0, 160);
     }
 
     const due = (companion?.written ?? 0) > 0 || Date.now() - lastPush >= VIEW_REFRESH_S * 1000;
