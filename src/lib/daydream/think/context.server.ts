@@ -36,13 +36,16 @@ export async function loadNoteContexts(
   const refs = ids.map((id) => `thought:${id}`);
 
   const [commissions, builds] = await Promise.all([
-    // The newest check per note: a superseded proposal is history, not state.
+    // The newest LIVE check per note. A superseded proposal is cancelled in the
+    // same transaction that inserts its replacement, so both carry the same
+    // `now()` — the tie-break must prefer the live one, or the card shows
+    // "Cancelled" half the time.
     db
       .execute(
         sql`SELECT DISTINCT ON (thought_id) thought_id, id::text AS id, state
           FROM daydream_commissions
           WHERE principal_id = ${principal} AND thought_id IN (${inList(ids)})
-          ORDER BY thought_id, updated_at DESC`,
+          ORDER BY thought_id, (state IN ('cancelled','declined')), updated_at DESC, created_at DESC`,
       )
       .catch(readFailed),
     // A build idea's backlog item cites `thought:<id>`. A commission's own

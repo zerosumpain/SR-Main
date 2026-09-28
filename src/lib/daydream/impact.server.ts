@@ -1,8 +1,7 @@
 // src/lib/daydream/impact.server.ts
 //
-// The reads behind `impact.ts`: 24 weeks of daydream notes (both engines —
-// the window pair and the 12-week chart need 12 weeks, the previous window
-// reaches 56 days), every commission, and the build ideas daydream proposed.
+// The reads behind `impact.ts`: 13 weeks of daydream notes (both engines —
+// the 12-week chart plus the current week; the window pair reaches 56 days), every commission, and the build ideas daydream proposed.
 // A few hundred rows; the aggregation is in TypeScript so it is tested once.
 
 import { and, eq, gte, sql } from 'drizzle-orm';
@@ -38,19 +37,21 @@ export async function loadImpact(now = new Date()): Promise<{ impact: Impact; re
       sql`SELECT id::text AS id, state, approved_at, created_at, updated_at, spec->>'title' AS title
         FROM daydream_commissions WHERE principal_id = 'owner' ORDER BY updated_at DESC LIMIT 500`,
     ),
-    // Build ideas the loop proposed: backlog items citing a think note, less
+    // Build ideas the loop proposed: backlog items it filed or cited itself on
+    // (intake MERGES a restated idea as a citation, keeping the item's source), less
     // the backlog groups a fact check files for itself.
     db.execute(
       sql`SELECT r.key AS slug, r.data->>'title' AS title, r.data->>'status' AS status,
           r.data->'grooming'->>'acceptedAt' AS accepted_at, r.created_at, r.updated_at
         FROM datastore_records r
         JOIN datastore_collections col ON col.id = r.collection_id AND col.slug = 'improvement_backlog'
-        WHERE r.data->>'commissionId' IS NULL AND r.data->>'source' = 'think'
+        WHERE r.data->>'commissionId' IS NULL
+          AND (r.data->>'source' = 'think' OR (jsonb_typeof(r.data->'citations') = 'array' AND r.data->'citations' @> '[{"source":"think"}]'::jsonb))
         ORDER BY r.updated_at DESC LIMIT 500`,
     ),
   ]);
 
-  const date = (v: unknown): Date | null => (v == null ? null : new Date(String(v)));
+  const date = (v: unknown): Date | null => (v == null ? null : v instanceof Date ? v : new Date(String(v)));
   const cs: Array<ImpactCommission & { id: string; title: string }> = commissions.rows.map((r) => ({
     id: String(r.id),
     title: String(r.title ?? 'A fact check'),

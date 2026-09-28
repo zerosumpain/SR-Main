@@ -44,7 +44,7 @@ try {
   await page.goto(`${base}/jkai/daydreams?note=${ids[0]}`, { waitUntil: 'domcontentloaded' });
   const note = page.locator(`#note-${ids[0]}`);
   await expect(note).toBeVisible();
-  await note.getByRole('button', { name: 'Double-check it', exact: true }).click();
+  await note.getByRole('button', { name: /^Double-check it/ }).click();
   await expect(page).toHaveURL(/commission=/);
   const commissionId = new URL(page.url()).searchParams.get('commission');
   assert.ok(commissionId);

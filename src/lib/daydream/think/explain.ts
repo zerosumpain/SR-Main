@@ -212,7 +212,9 @@ export function sourceText(s: SourceLine): string {
 
 // ── Where a note is ────────────────────────────────────────────────────────
 
-/** Commission states grouped by who holds the next move. */
+/** Commission states grouped by who holds the next move. `deferred` is his
+ *  "not now": it comes back for his OK by itself, so it waits with the work
+ *  in motion rather than in his inbox. */
 const COMMISSION_NEEDS_YOU = new Set(['awaiting_approval', 'needs_attention']);
 const COMMISSION_RUNNING = new Set(['queued', 'running', 'deferred']);
 

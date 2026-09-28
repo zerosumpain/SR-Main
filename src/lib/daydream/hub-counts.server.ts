@@ -43,9 +43,16 @@ export async function loadHubCounts(opts: { activeWatches?: number } = {}): Prom
     // A deploy before the commissions migration must not blank the cover.
     db
       .execute(
-        sql`SELECT count(*) filter (where state in ('awaiting_approval','needs_attention'))::int AS waiting,
-            count(*) filter (where state in ('queued','running'))::int AS running
-          FROM daydream_commissions WHERE principal_id = 'owner'`,
+        // A waiting check on an UNRATED note is already counted as that note,
+        // so only checks on answered notes add to "waiting" — the badge then
+        // agrees with the Inbox's "To decide". Deferred sits with "in motion",
+        // as it does on the Inbox (`noteStage`).
+        sql`SELECT count(*) filter (where c.state in ('awaiting_approval','needs_attention') and t.feedback is not null)::int AS waiting,
+            count(*) filter (where c.state in ('queued','running','deferred'))::int AS running
+          FROM daydream_commissions c JOIN daydream_thoughts t ON t.id = c.thought_id
+          WHERE c.principal_id = 'owner'
+            AND c.id = (SELECT c2.id FROM daydream_commissions c2 WHERE c2.thought_id = c.thought_id AND c2.principal_id = 'owner'
+                        ORDER BY (c2.state IN ('cancelled','declined')), c2.updated_at DESC, c2.created_at DESC LIMIT 1)`,
       )
       .catch(() => ({ rows: [] as Record<string, unknown>[] })),
   ]);

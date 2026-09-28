@@ -66,7 +66,7 @@
       label: 'In motion',
       value: String(counts.checks.running),
       tone: counts.checks.running ? 'steady' : 'quiet',
-      sub: counts.checks.running ? 'double-checks running now' : 'nothing running',
+      sub: counts.checks.running ? 'double-checks running or put off' : 'nothing running',
     },
     {
       key: 'useful',

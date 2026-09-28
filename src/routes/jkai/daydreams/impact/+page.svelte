@@ -139,7 +139,7 @@
       <SectionHead
         kicker="D / From idea to result"
         title={['The journey', 'of a note']}
-        strap="How far this window's notes got. Each step can only be as big as the one before it, so the drop between two steps is where ideas stall."
+        strap="How far ideas got in this window. The first three steps follow the same notes, so the drop between them is where ideas stall; acted on and result count by the day the check was approved or the build shipped."
       />
       <ol class="funnel">
         {#each funnel as f, idx (f.k)}

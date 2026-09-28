@@ -46,7 +46,15 @@
   });
   const visible = $derived(data.notes.filter((n) => filter === 'all' || n.bucket === filter || recent.has(n.id)));
   const groups = $derived(groupByDay(visible));
-  const commissionFor = (n: FeedNote) => (n.commission ? (data.commissions.find((c) => c.id === n.commission!.id) ?? null) : null);
+  // A card shows its note's newest check — unless a `?commission=` link named
+  // an older one on the same note (a report that has since been superseded),
+  // in which case the link's check is the one drawn, so no report is ever
+  // unreachable.
+  const focusedCheck = $derived(data.commissions.find((c) => c.id === data.commissionFocus) ?? null);
+  function commissionFor(n: FeedNote) {
+    if (focusedCheck && focusedCheck.thoughtId === n.id) return focusedCheck;
+    return n.commission ? (data.commissions.find((c) => c.id === n.commission!.id) ?? null) : null;
+  }
 
   const FILTERS: Array<{ id: Filter; label: string; hint: string }> = [
     { id: 'decide', label: 'To decide', hint: 'Waiting on you' },
@@ -205,7 +213,7 @@
                 commission={commissionFor(n)}
                 checksOn={data.commissionEnabled}
                 focused={data.focus === n.id}
-                focusCommission={!!n.commission && n.commission.id === data.commissionFocus}
+                focusCommission={!!focusedCheck && focusedCheck.thoughtId === n.id}
                 {busy}
                 onrate={(v) => rate(n, v)}
                 onprepare={() => prepare(n)}
