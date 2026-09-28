@@ -35,7 +35,7 @@ export async function flushCommissionOutbox(): Promise<{ delivered: number }> {
         } else if (commission.state === 'queued' && commission.generation === payload.generation && commission.spec_hash === payload.specHash && commission.approved_at) {
           const run = await invokeWorkflowRuntime<{ runId: string }>({ action: 'commission_enqueue', ...payload });
           await tx.execute(sql`UPDATE daydream_commissions SET workflow_run_id=${run.runId},updated_at=now() WHERE id=${commission.id}::uuid`);
-          await recordEvent(tx, commission, 'workflow.queued', 'Workflow worker has the approved operation', 'dispatcher', { runId: run.runId, generation: commission.generation });
+          await recordEvent(tx, commission, 'workflow.queued', 'Handed to the workflow runner', 'dispatcher', { runId: run.runId, generation: commission.generation });
         }
         await tx.execute(sql`UPDATE daydream_commission_outbox SET delivered_at=now(),last_error=NULL WHERE id=${item.id}::uuid`);
         delivered++;
@@ -75,14 +75,14 @@ async function settle(row: CommissionRow, token: string, evidence: EvidenceResul
     const current = await rowFor(row.id, row.principal_id, tx, true);
     if (current.state !== 'running' || current.lease_token !== token || current.generation !== row.generation) return { revoked: true };
     const source = await thoughtSource(row.thought_id, tx);
-    if (sourceHash(source) !== row.spec.sourceHash) failure = 'The suggestion or your correction changed during execution. Prepare a fresh proposal.';
+    if (sourceHash(source) !== row.spec.sourceHash) failure = 'The note or your comment on it changed while this was running. Start a fresh double-check.';
     const missing = evidence.filter(e => e.status === 'unavailable').length;
-    const summary = failure ?? (missing ? `Refreshed ${evidence.length - missing} sources; ${missing} unavailable. The claim remains unverified.` : `Refreshed ${evidence.length} cited sources. This report does not independently verify the suggestion’s claim.`);
+    const summary = failure ?? (missing ? `Re-read ${evidence.length - missing} of ${evidence.length} sources; ${missing} could not be reached. What came back shows today’s data — it does not independently verify the note.` : `${evidence.length === 1 ? 'Re-read the source' : `Re-read all ${evidence.length} sources`}. ${evidence.length === 1 ? 'It shows' : 'They show'} what the data says today — this does not independently verify the note.`);
     const state = failure ? 'needs_attention' : 'completed';
     await tx.execute(sql`UPDATE daydream_commissions SET state=${state},revision=revision+1,
       result=${JSON.stringify({ summary, evidence })}::jsonb,last_error=${failure},lease_token=NULL,lease_until=NULL,updated_at=now() WHERE id=${row.id}::uuid`);
     await recordEvent(tx, { ...current, revision: current.revision + 1 }, failure ? 'execution.blocked' : 'outcome.recorded',
-      failure ? 'Your Daydream improvement needs attention' : 'Your Daydream evidence report is ready', 'workflow', { runId: current.workflow_run_id, available: evidence.length - missing, unavailable: missing }, true);
+      failure ? 'A double-check needs your attention' : 'Your double-check report is ready', 'workflow', { runId: current.workflow_run_id, available: evidence.length - missing, unavailable: missing }, true);
     await tx.execute(sql`UPDATE datastore_records SET data=data || ${JSON.stringify({ commissioningState: state, updatedAt: new Date().toISOString() })}::jsonb,
       version=version+1,updated_at=now() WHERE key=${row.backlog_slug} AND collection_id=(SELECT id FROM datastore_collections WHERE slug='improvement_backlog')`);
     return { state, summary };
@@ -100,7 +100,7 @@ async function executeCommission(context: RuntimeContext, runId: string) {
     if (current.attempts >= current.spec.budget.maxAttempts) throw new Error('Approved attempts exhausted.');
     await tx.execute(sql`UPDATE daydream_commissions SET state='running',revision=revision+1,attempts=attempts+1,
       lease_token=${token}::uuid,lease_until=now()+interval '4 minutes',workflow_run_id=${runId},updated_at=now() WHERE id=${current.id}::uuid`);
-    await recordEvent(tx, { ...current, revision: current.revision + 1 }, 'execution.started', 'Refreshing the approved evidence sources', 'workflow', { runId });
+    await recordEvent(tx, { ...current, revision: current.revision + 1 }, 'execution.started', 'Re-reading the sources', 'workflow', { runId });
     return current;
   });
   if (!row) return { skipped: true };
@@ -125,7 +125,7 @@ async function executeCommission(context: RuntimeContext, runId: string) {
         status: result.failed ? 'unavailable' : 'available', provenance: 'query_result' });
     }
   } catch {
-    failure = 'Evidence refresh could not finish within its approved scope and time budget. Review the retained report before retrying.';
+    failure = 'The double-check could not finish within the limits you approved. What it did get is kept below; you can try again.';
   }
   return settle(row, token, evidence, failure);
 }
@@ -150,9 +150,9 @@ export async function reconcileCommissions(): Promise<void> {
       const generation = row.generation + 1;
       await tx.execute(sql`UPDATE daydream_commissions SET state=${state},revision=revision+1,generation=generation+1,
         lease_token=NULL,lease_until=NULL,deferred_until=NULL,workflow_run_id=NULL,attempts=${attempts},updated_at=now(),
-        last_error=${state === 'needs_attention' ? 'Automatic recovery stopped: the approval is stale or its attempt budget is exhausted.' : null} WHERE id=${row.id}::uuid`);
+        last_error=${state === 'needs_attention' ? 'It stopped retrying: either the note changed since you approved it, or it used all its tries.' : null} WHERE id=${row.id}::uuid`);
       const event = await recordEvent(tx, { ...row, revision: row.revision + 1 }, deferred ? 'approval.requested' : retry ? 'execution.recovery_queued' : 'execution.interrupted',
-        deferred ? 'Your deferred Daydream proposal is ready to review' : retry ? 'Your Daydream workflow is recovering automatically' : 'Your Daydream workflow needs attention',
+        deferred ? 'A double-check you put off is back for your OK' : retry ? 'The double-check was interrupted and is retrying on its own' : 'A double-check stopped and needs your attention',
         'reconciler', { previousRunId: row.workflow_run_id, generation, attempts }, true);
       if (retry) await tx.execute(sql`INSERT INTO daydream_commission_outbox(commission_id,event_id,kind,payload)
         VALUES (${row.id}::uuid,${event}::uuid,'dispatch',${JSON.stringify({ commissionId: row.id, generation, specHash: row.spec_hash })}::jsonb)`);

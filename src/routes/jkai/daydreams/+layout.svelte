@@ -23,7 +23,6 @@
   let { data, children }: { data: LayoutData; children: Snippet } = $props();
 
   const counts = $derived(data.counts);
-  const tabs = $derived(hubTabs(counts));
   const active = $derived.by(() => {
     const seg = page.url.pathname.slice(HUB_BASE.length + 1).split('/')[0];
     return isRoom(seg) ? seg : 'feed';
@@ -39,45 +38,49 @@
   }
 
 
-  // The cover reports the think loop and nothing else. It used to count places
-  // to name, rules to approve and the health of two dozen jobs — the engine the
-  // 2026-09-25 simplification retired — so a paused job read as a failure here.
+  // The cover says what daydream is in one breath, then the four figures a
+  // reader needs before opening anything: what is waiting on them, what is
+  // running without them, whether it is worth having, and what is watched.
   const think = $derived(counts.think);
+  const waiting = $derived(counts.notesToRate + counts.checks.waiting);
+  const tabs = $derived(hubTabs({ ...counts, checksWaiting: counts.checks.waiting }));
   const readout = $derived([
-    { label: 'Last cycle', value: think.lastCycleAt ? ago(think.lastCycleAt) : 'never' },
-    { label: 'Cadence', value: 'every 45 min' },
-    { label: 'Interrupts', value: 'up to 4 a day' },
+    { label: 'Last look', value: think.lastCycleAt ? ago(think.lastCycleAt) : 'never' },
+    { label: 'Looks', value: 'every 45 min, 07–23' },
+    { label: 'Messages you', value: 'up to 4 a day' },
   ]);
 
   const coverTiles = $derived<DeckTile[]>([
     {
-      key: 'noticed',
-      label: 'Noticed, 7 days',
-      value: String(think.week),
-      tone: 'steady',
-      sub: 'notes written, each citing what it read',
+      key: 'waiting',
+      label: 'Waiting on you',
+      value: String(waiting),
+      tone: waiting ? 'action' : 'good',
+      lit: waiting > 0,
+      sub: waiting
+        ? [counts.notesToRate ? `${counts.notesToRate} to answer` : '', counts.checks.waiting ? `${counts.checks.waiting} to sign off` : ''].filter(Boolean).join(' · ')
+        : 'all caught up',
     },
     {
-      key: 'rate',
-      label: 'Waiting on you',
-      value: String(counts.notesToRate),
-      tone: counts.notesToRate ? 'action' : 'good',
-      lit: counts.notesToRate > 0,
-      sub: counts.notesToRate ? 'rate them — it learns from the verdicts' : 'every note rated',
+      key: 'motion',
+      label: 'In motion',
+      value: String(counts.checks.running),
+      tone: counts.checks.running ? 'steady' : 'quiet',
+      sub: counts.checks.running ? 'double-checks running or put off' : 'nothing running',
     },
     {
       key: 'useful',
-      label: 'Useful, 30 days',
+      label: 'Worth knowing, 30 days',
       value: think.rated30d ? pct(think.useful30d / think.rated30d) : '—',
       tone: 'steady',
-      sub: `${think.useful30d} of ${think.rated30d} rated`,
+      sub: think.rated30d ? `${think.useful30d} of the ${think.rated30d} you answered` : 'answer a few to see this',
     },
     {
-      key: 'watches',
-      label: 'Active watches',
-      value: String(counts.activeWatches),
-      tone: counts.activeWatches ? 'steady' : 'quiet',
-      sub: counts.activeWatches ? 'checked on their own schedules' : 'nothing being watched',
+      key: 'week',
+      label: 'Spotted, 7 days',
+      value: String(think.week),
+      tone: 'quiet',
+      sub: 'each one cites what it read',
     },
   ]);
 </script>
@@ -86,9 +89,9 @@
 
 <DaydreamShell
   path="/jkai/daydreams"
-  kicker="JKAI · Background intelligence"
-  title={['Spare cycles,', 'one question each']}
-  standfirst="Every 45 minutes it takes one part of your life — health, home, mail, chat, diary, money or something to read — and looks into it with read-only tools. It writes at most two notes, each citing what it read. Up to four a day reach you; the rest wait here."
+  kicker="JKAI · Daydream"
+  title={['Spotted while', 'you were busy']}
+  standfirst="Every 45 minutes jkai takes one corner of your life — health, home, mail, chats, diary, money, or something worth reading — and looks for one thing worth your attention. It only reads; it never acts on its own. You decide what happens next: keep it, have it double-checked, or tell it to stop."
   {readout}
   live={data.enabled}
   liveBusy={togglingEnabled}
@@ -98,11 +101,11 @@
   footer={[
     'strangeramblings.com/jkai/daydreams',
     'Owner-gated · nothing here leaves the house',
-    `${think.useful30d} useful of ${think.rated30d} rated, 30 days`,
+    `${think.useful30d} worth knowing of ${think.rated30d} answered, 30 days`,
   ]}
 >
   {#snippet masthead()}
-    <StatDeck dark tiles={coverTiles} min={210} />
+    <StatDeck dark tiles={coverTiles} min={150} />
   {/snippet}
 
   <DsVocab>

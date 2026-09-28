@@ -7,7 +7,7 @@ describe('hubTabs', () => {
 
   it('is the one feed plus the rooms that are not daydream, each a real route', () => {
     const tabs = hubTabs(base);
-    expect(tabs.map((t) => t.id)).toEqual(['feed', 'watches', 'briefing']);
+    expect(tabs.map((t) => t.id)).toEqual(['feed', 'impact', 'watches', 'briefing']);
     expect(tabs[0].href).toBe('/jkai/daydreams');
     for (const t of tabs.slice(1)) expect(t.href).toBe(`/jkai/daydreams/${t.id}`);
     for (const t of tabs) expect(isRoom(t.id)).toBe(true);
@@ -16,6 +16,7 @@ describe('hubTabs', () => {
   it('badges count the populations the rooms act on', () => {
     const by = Object.fromEntries(hubTabs({ ...base, notesToRate: 3, activeWatches: 2 }).map((t) => [t.id, t]));
     expect(by.feed.count).toBe(3);
+    expect(hubTabs({ ...base, notesToRate: 3, checksWaiting: 2 })[0].count).toBe(5);
     expect(by.watches.count).toBe(2);
   });
 

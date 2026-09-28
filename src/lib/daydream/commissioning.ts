@@ -59,14 +59,14 @@ export interface CommissionView {
   url: string;
 }
 export const COMMISSION_LABELS: Record<CommissionState, string> = {
-  awaiting_approval: 'Awaiting your approval', deferred: 'Deferred', declined: 'Declined',
-  queued: 'Queued for execution', running: 'Refreshing evidence', needs_attention: 'Needs attention',
-  completed: 'Evidence report ready', cancelled: 'Cancelled',
+  awaiting_approval: 'Waiting for your OK', deferred: 'Put off for now', declined: 'Declined',
+  queued: 'Queued', running: 'Checking now', needs_attention: 'Needs you',
+  completed: 'Report ready', cancelled: 'Cancelled',
 };
 export function nextActor(state: CommissionState): string {
   if (['awaiting_approval', 'deferred', 'needs_attention'].includes(state)) return 'You';
-  if (['queued', 'running'].includes(state)) return 'Workflow worker';
-  return 'None';
+  if (['queued', 'running'].includes(state)) return 'jkai';
+  return 'Nobody';
 }
 export function commissionPath(id: string): string {
   return `/jkai/daydreams?commission=${encodeURIComponent(id)}`;

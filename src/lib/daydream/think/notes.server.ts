@@ -17,6 +17,7 @@ import { daydreamThoughts, heartbeatActions, heartbeatPulses } from '$lib/db/sch
 import { localDayStart } from '../budget';
 import { DEFAULT_SUBJECT } from '../types';
 import { mutedKinds } from '../thought-store';
+import { loadNoteContexts } from './context.server';
 import { THINK_CADENCE_MS, questionAt, type Channel, type Outcome } from './questions';
 import {
   channelLabel,
@@ -26,7 +27,9 @@ import {
   outcomeLabel,
   todayNotes,
   toFeedNote,
+  toNativeDetail,
   toNativeNote,
+  type NativeNoteDetail,
   type FeedNote,
   type NativeNote,
   type NoteScope,
@@ -91,7 +94,25 @@ export async function loadFeedNotes(opts: { days?: number; now?: Date } = {}): P
   const now = opts.now ?? new Date();
   const since = new Date(now.getTime() - (opts.days ?? 30) * 86_400_000);
   const [rows, muted] = await Promise.all([loadThinkRows({ since, limit: 400 }), mutedKinds()]);
-  return rows.filter(isOnFeed).map((r) => toFeedNote(r, muted));
+  const shown = rows.filter(isOnFeed);
+  const ctx = await loadNoteContexts(shown);
+  return shown.map((r) => toFeedNote(r, muted, ctx.get(r.id)));
+}
+
+/** The phone's Daydream page: its notes with stage, next step and sources,
+ *  and the pipeline counted over EVERY note the phone may show — not just the
+ *  page it was sent — so "3 to decide" is the truth, not the page's share. */
+export async function loadNativeDetail(opts: { limit: number }): Promise<{
+  notes: NativeNoteDetail[];
+  pipeline: Record<'decide' | 'motion' | 'done', number>;
+}> {
+  const [rows, muted] = await Promise.all([loadThinkRows({ limit: 300 }), mutedKinds()]);
+  const shown = rows.filter((r) => isForPhone(r, muted));
+  const ctx = await loadNoteContexts(shown);
+  const all = shown.map((r) => toNativeDetail(r, ctx.get(r.id)));
+  const pipeline = { decide: 0, motion: 0, done: 0 };
+  for (const n of all) pipeline[n.bucket]++;
+  return { notes: all.slice(0, opts.limit), pipeline };
 }
 
 /** One note by id, for `?note=` when it sits outside the loaded window. */
@@ -102,7 +123,8 @@ export async function loadFeedNote(id: string): Promise<FeedNote | null> {
     .where(and(eq(daydreamThoughts.id, id), THINK_KIND))
     .limit(1);
   if (!row) return null;
-  return toFeedNote(row, await mutedKinds());
+  const [muted, ctx] = await Promise.all([mutedKinds(), loadNoteContexts([row])]);
+  return toFeedNote(row, muted, ctx.get(row.id));
 }
 
 /** Think rows by dedupe key — the keys `persistCandidates` reports as newly

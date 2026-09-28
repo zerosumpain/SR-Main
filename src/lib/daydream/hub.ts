@@ -22,7 +22,7 @@ export interface HubTab {
  *  engine rooms (memory, places, money, engine, discoveries, calendar, feed)
  *  are 308 stubs to the feed since P4 of the 2026-09-25 simplification; the
  *  backlog, improvement and the doctor moved to the build process, /jkai/develop. */
-export const ROOMS = ['feed', 'watches', 'briefing'] as const;
+export const ROOMS = ['feed', 'impact', 'watches', 'briefing'] as const;
 export type RoomId = (typeof ROOMS)[number];
 
 export function isRoom(s: string | null | undefined): s is RoomId {
@@ -33,8 +33,10 @@ export function isRoom(s: string | null | undefined): s is RoomId {
  *  wrong population without a test saying so. */
 export interface BadgeCounts {
   activeWatches: number;
-  /** Think notes on the feed he has not rated yet — the Noticed badge. */
+  /** Think notes on the feed he has not rated yet. */
   notesToRate: number;
+  /** Fact checks waiting for his OK — they are his to decide too. */
+  checksWaiting?: number;
 }
 
 /** PURE. The rail: the ONE feed of think notes plus the rooms housed here
@@ -48,7 +50,10 @@ export function hubTabs(c: BadgeCounts): HubTab[] {
   });
   return [
     // The feed is the hub's own page now, not a room beneath it.
-    { id: 'feed', label: 'Noticed', href: HUB_BASE, count: c.notesToRate, tone: 'action' },
+    // "Inbox": everything waiting on him — unrated notes and checks to sign off.
+    { id: 'feed', label: 'Inbox', href: HUB_BASE, count: c.notesToRate + (c.checksWaiting ?? 0), tone: 'action' },
+    // Is any of it working? Hit rate over time, and what was acted on.
+    room('impact', 'Impact'),
     room('watches', 'Watches', { count: c.activeWatches, tone: 'quiet' }),
     // The 07:00 digest's room. Without a tab of its own the rail fell back to
     // lighting Noticed while you read it.

@@ -44,12 +44,12 @@ try {
   await page.goto(`${base}/jkai/daydreams?note=${ids[0]}`, { waitUntil: 'domcontentloaded' });
   const note = page.locator(`#note-${ids[0]}`);
   await expect(note).toBeVisible();
-  await note.getByRole('button', { name: 'Investigate first', exact: true }).click();
+  await note.getByRole('button', { name: /^Double-check it/ }).click();
   await expect(page).toHaveURL(/commission=/);
   const commissionId = new URL(page.url()).searchParams.get('commission');
   assert.ok(commissionId);
   const panel = page.locator(`#commission-${commissionId}`);
-  await expect(panel.getByRole('button', { name: 'Approve evidence refresh', exact: true })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Approve and run', exact: true })).toBeVisible();
   await page.screenshot({ path: `${output}/proposal-desktop.png`, fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await panel.evaluate(element => element.scrollIntoView({ block: 'start' }));
@@ -58,8 +58,8 @@ try {
   const before = (await native(`daydream/commissions?id=${commissionId}`)).body.commission;
   assert.equal(before.state, 'awaiting_approval');
   assert.equal(before.workflowRunId, null, 'Backlog intake must not dispatch');
-  await panel.getByRole('button', { name: 'Approve evidence refresh', exact: true }).click();
-  await expect(panel.getByRole('button', { name: 'Approve evidence refresh', exact: true })).toHaveCount(0);
+  await panel.getByRole('button', { name: 'Approve and run', exact: true }).click();
+  await expect(panel.getByRole('button', { name: 'Approve and run', exact: true })).toHaveCount(0);
   await page.close(); // The rest must work with no browser open.
   let completed;
   await expect.poll(async () => {
@@ -68,7 +68,7 @@ try {
   }, { timeout: 90_000, intervals: [500, 1000, 2000] }).toBe('completed');
   assert.ok(completed.result.evidence.length);
   assert.equal(completed.result.evidence[0].provenance, 'query_result');
-  assert.match(completed.result.summary, /unverified|does not independently verify/);
+  assert.match(completed.result.summary, /does not independently verify/);
   const run = await db.query('SELECT status,version_id FROM workflow_runs WHERE id=$1', [completed.workflowRunId]);
   assert.ok(run.rows[0].version_id, 'Execution was pinned');
   await expect.poll(async () => (await db.query('SELECT status FROM workflow_runs WHERE id=$1', [completed.workflowRunId])).rows[0]?.status).toBe('completed');

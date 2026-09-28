@@ -19,12 +19,14 @@ import type { BadgeCounts } from './hub';
 export interface HubCounts extends BadgeCounts {
   /** Think notes only — what the cover deck reports. */
   think: { week: number; useful30d: number; rated30d: number; lastCycleAt: Date | null };
+  /** Fact checks: waiting for his OK (or stuck), and running on their own. */
+  checks: { waiting: number; running: number };
 }
 
 export async function loadHubCounts(opts: { activeWatches?: number } = {}): Promise<HubCounts> {
   const weekAgo = new Date(Date.now() - 7 * 86_400_000);
   const monthAgo = new Date(Date.now() - 30 * 86_400_000);
-  const [thinkRows] = await Promise.all([
+  const [thinkRows, checkRows] = await Promise.all([
     db
       .select({
         // Think notes the feed shows and nobody has ruled on. The held-back
@@ -38,7 +40,23 @@ export async function loadHubCounts(opts: { activeWatches?: number } = {}): Prom
       })
       .from(daydreamThoughts)
       .where(sql`${daydreamThoughts.kind} like 'think\\_%'`),
+    // A deploy before the commissions migration must not blank the cover.
+    db
+      .execute(
+        // A waiting check on an UNRATED note is already counted as that note,
+        // so only checks on answered notes add to "waiting" — the badge then
+        // agrees with the Inbox's "To decide". Deferred sits with "in motion",
+        // as it does on the Inbox (`noteStage`).
+        sql`SELECT count(*) filter (where c.state in ('awaiting_approval','needs_attention') and t.feedback is not null)::int AS waiting,
+            count(*) filter (where c.state in ('queued','running','deferred'))::int AS running
+          FROM daydream_commissions c JOIN daydream_thoughts t ON t.id = c.thought_id
+          WHERE c.principal_id = 'owner'
+            AND c.id = (SELECT c2.id FROM daydream_commissions c2 WHERE c2.thought_id = c.thought_id AND c2.principal_id = 'owner'
+                        ORDER BY (c2.state IN ('cancelled','declined')), c2.updated_at DESC, c2.created_at DESC LIMIT 1)`,
+      )
+      .catch(() => ({ rows: [] as Record<string, unknown>[] })),
   ]);
+  const c = checkRows.rows[0];
   const k = thinkRows[0];
   return {
     notesToRate: k?.notesToRate ?? 0,
@@ -49,6 +67,7 @@ export async function loadHubCounts(opts: { activeWatches?: number } = {}): Prom
       rated30d: k?.rated ?? 0,
       lastCycleAt: k?.lastCycleAt ? new Date(k.lastCycleAt) : null,
     },
+    checks: { waiting: Number(c?.waiting ?? 0), running: Number(c?.running ?? 0) },
   };
 }
 
@@ -59,5 +78,6 @@ export function emptyHubCounts(): HubCounts {
     notesToRate: 0,
     activeWatches: 0,
     think: { week: 0, useful30d: 0, rated30d: 0, lastCycleAt: null },
+    checks: { waiting: 0, running: 0 },
   };
 }
