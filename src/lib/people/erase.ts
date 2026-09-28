@@ -333,8 +333,8 @@ export async function eraseAccountRecords(addresses: string[], executor: DbExecu
 
 export interface EraseDeps {
   isOwner: (email: string) => boolean;
-  /** Who this is, or null when there is no account and no request under that address. */
-  resolve: (email: string) => Promise<(EraseTarget & { name: string }) | null>;
+  /** Who this is, or null when there is no account and no request under that address (unless `anyway`). */
+  resolve: (email: string, anyway: boolean) => Promise<(EraseTarget & { name: string }) | null>;
   pilotDeleteUser: (email: string) => Promise<PilotResult<PilotDeleted>>;
   pilotDeleteData: (email: string) => Promise<PilotResult<PilotDeleted>>;
   eraseRows: (target: EraseTarget) => Promise<ErasedRows>;
@@ -350,11 +350,24 @@ export type EraseOutcome =
 
 export const OWNER_REFUSAL = 'The owner account is managed on the website, not from the app.';
 
-export async function eraseAccount(emailRaw: string, deps: EraseDeps = defaultEraseDeps): Promise<EraseOutcome> {
+export interface EraseOptions {
+  /**
+   * The companion server vouches this person exists (they asked from a phone
+   * paired to it alone): go ahead even when this site holds no account or
+   * request for them — their household link and trail are still theirs.
+   */
+  pilotConfirmed?: boolean;
+}
+
+export async function eraseAccount(
+  emailRaw: string,
+  deps: EraseDeps = defaultEraseDeps,
+  options: EraseOptions = {},
+): Promise<EraseOutcome> {
   const email = emailRaw.trim().toLowerCase();
   if (!email || deps.isOwner(email)) return { ok: false, status: 403, error: OWNER_REFUSAL };
 
-  const target = await deps.resolve(email);
+  const target = await deps.resolve(email, options.pilotConfirmed === true);
   if (!target) return { ok: false, status: 404, error: 'There is no account here to delete.' };
   if (target.addresses.some((a) => deps.isOwner(a))) return { ok: false, status: 403, error: OWNER_REFUSAL };
   const canonical = target.addresses[0];
@@ -408,12 +421,60 @@ export async function eraseAccount(emailRaw: string, deps: EraseDeps = defaultEr
   return { ok: true, email: canonical, rows: counts, pilot, warnings };
 }
 
+// ── deletions asked for on the companion server ─────────────────────────────
+
+/** Addresses finished recently, so a users list cached before the pilot dropped them does not run them twice. */
+const recentlySwept = new Map<string, number>();
+const SWEEP_MEMORY_MS = 15 * 60_000;
+
+export interface SweepResult {
+  deleted: number;
+  failed: number;
+}
+
+/**
+ * A phone paired to the companion server alone deletes its account THERE
+ * (`POST /api/apple/account/delete`): the pilot wipes what it uploaded and
+ * flags the row. Every household pull (`household-live`) hands this the
+ * users it just read; each flagged one is deleted here exactly as the site
+ * route would, pilot row last-of-all included. The owner is never touched.
+ */
+export async function sweepAccountDeletions(
+  users: ReadonlyArray<{ email: string; deleteRequested?: string | null }> | null,
+  erase: (email: string) => Promise<EraseOutcome> = (email) => eraseAccount(email, defaultEraseDeps, { pilotConfirmed: true }),
+  now = Date.now(),
+  isOwner: (email: string) => boolean = isOwnerEmail,
+): Promise<SweepResult> {
+  const result: SweepResult = { deleted: 0, failed: 0 };
+  for (const [email, at] of recentlySwept) if (now - at > SWEEP_MEMORY_MS) recentlySwept.delete(email);
+  for (const u of users ?? []) {
+    const email = String(u.email ?? '').trim().toLowerCase();
+    if (!email || !u.deleteRequested || recentlySwept.has(email) || isOwner(email)) continue;
+    const r = await erase(email).catch((err) => {
+      console.error('[account] sweep failed:', err);
+      return null;
+    });
+    if (r?.ok) {
+      recentlySwept.set(email, now);
+      result.deleted++;
+    } else {
+      result.failed++;
+    }
+  }
+  return result;
+}
+
+/** Reset between tests. */
+export function resetSweepMemory(): void {
+  recentlySwept.clear();
+}
+
 function nameFromEmail(email: string): string {
   const local = email.split('@')[0] ?? email;
   return local.charAt(0).toUpperCase() + local.slice(1);
 }
 
-async function resolveTarget(email: string): Promise<(EraseTarget & { name: string }) | null> {
+async function resolveTarget(email: string, anyway: boolean): Promise<(EraseTarget & { name: string }) | null> {
   const [account] = await db
     .select()
     .from(allowedUser)
@@ -427,7 +488,7 @@ async function resolveTarget(email: string): Promise<(EraseTarget & { name: stri
     .from(accessRequest)
     .where(inArray(accessRequest.email, addresses))
     .limit(1);
-  if (!account && !request) return null;
+  if (!account && !request && !anyway) return null;
   const [principal] = await db
     .select({ id: activityPrincipals.id })
     .from(activityPrincipals)

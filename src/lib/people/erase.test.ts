@@ -4,7 +4,7 @@ import * as schema from '$lib/db/schema';
 
 vi.mock('$lib/db', () => ({ db: {} }));
 
-const { ACCOUNT_COLUMNS, eraseAccount, OWNER_REFUSAL } = await import('./erase');
+const { ACCOUNT_COLUMNS, eraseAccount, OWNER_REFUSAL, resetSweepMemory, sweepAccountDeletions } = await import('./erase');
 type Deps = Parameters<typeof eraseAccount>[1] & object;
 
 const MEMBER = 'member@example.test';
@@ -131,6 +131,55 @@ describe('deleting an account from the app', () => {
     const { d } = deps({ deleteFiles: async () => 2 });
     const r = await eraseAccount(MEMBER, d);
     expect(r.ok && r.warnings.join(' ')).toMatch(/2 stored file/);
+  });
+});
+
+describe('deletions asked for on the companion server', () => {
+  const isOwner = (e: string) => e === OWNER;
+  it('finishes each flagged person once, and never the owner', async () => {
+    resetSweepMemory();
+    const erased: string[] = [];
+    const erase = async (email: string) => {
+      erased.push(email);
+      return { ok: true as const, email, rows: rows(), pilot: {}, warnings: [] };
+    };
+    const users = [
+      { email: 'Kid@Example.test', deleteRequested: '2026-09-28T10:00:00Z' },
+      { email: 'other@example.test', deleteRequested: null },
+      { email: 'another@example.test' },
+      { email: OWNER, deleteRequested: '2026-09-28T10:00:00Z' },
+    ];
+    expect(await sweepAccountDeletions(users, erase, 1_000, isOwner)).toEqual({ deleted: 1, failed: 0 });
+    // The users list is a cache: the next pull may still carry them.
+    expect(await sweepAccountDeletions(users, erase, 2_000, isOwner)).toEqual({ deleted: 0, failed: 0 });
+    expect(erased).toEqual(['kid@example.test']);
+    expect(await sweepAccountDeletions(null, erase)).toEqual({ deleted: 0, failed: 0 });
+  });
+
+  it('retries a failure on the next pull', async () => {
+    resetSweepMemory();
+    let calls = 0;
+    const erase = async () => {
+      calls++;
+      return { ok: false as const, status: 502 as const, error: 'unreachable' };
+    };
+    const users = [{ email: 'kid@example.test', deleteRequested: '2026-09-28T10:00:00Z' }];
+    expect(await sweepAccountDeletions(users, erase, 1_000)).toEqual({ deleted: 0, failed: 1 });
+    expect(await sweepAccountDeletions(users, erase, 2_000)).toEqual({ deleted: 0, failed: 1 });
+    expect(calls).toBe(2);
+  });
+
+  it('goes ahead for a person the site holds no account for, when the pilot vouches', async () => {
+    const seen: boolean[] = [];
+    const { d } = deps({
+      resolve: async (_e, anyway) => {
+        seen.push(anyway);
+        return anyway ? { addresses: ['kid@example.test'], principalId: null, householdSubject: 'h2', name: 'Kid' } : null;
+      },
+    });
+    expect(await eraseAccount('kid@example.test', d)).toMatchObject({ ok: false, status: 404 });
+    expect(await eraseAccount('kid@example.test', d, { pilotConfirmed: true })).toMatchObject({ ok: true });
+    expect(seen).toEqual([false, true]);
   });
 });
 
