@@ -1,674 +1,183 @@
 <script lang="ts">
-  /**
-   * The owner's places panel — /home/people/places.
-   *
-   * Every place on a map, beside the same places as a list. On the map a
-   * place is a circle: select it (click it, or its row) and its details open
-   * in a panel NEXT TO the map (under it on a phone, with the map kept in
-   * view), so nothing is a scroll away. Drag the centre to move it, drag the
-   * edge handle to set the radius, then Save. × or Escape closes the panel. "Add a place"
-   * drops a new circle where the map is next clicked. Moving, resizing or
-   * creating a place pins its geometry: the nightly places refresh stops
-   * re-deriving it.
-   *
-   * Each place says whether the household hears about a crossing ("Notify
-   * family"), in which directions (arrive, leave), and whether by WhatsApp as
-   * well. Nothing notifies unless its switch is on — home included (home is
-   * still watched, so who is in stays known).
-   *
-   * A place that is no longer wanted can be removed from its editor (never
-   * home): it is set aside, not deleted, so its alerts stop and the nightly
-   * refresh does not suggest it again. The editor also says who spends how
-   * long there — streamed after the page, so the map never waits for it.
-   *
-   * The list is the whole page without the map: every place can be selected
-   * from it by keyboard, which opens the same panel and moves focus into it.
-   * While a place is open the list sits under the map and panel. Owner only; the load
-   * and every action check.
-   */
   import { enhance } from '$app/forms';
+  import { tick } from 'svelte';
   import type { SubmitFunction } from '@sveltejs/kit';
   import HomeFrame from '$lib/components/home/HomeFrame.svelte';
+  import PeopleNav from '$lib/components/home/PeopleNav.svelte';
   import PlaceEditor from '$lib/components/home/PlaceEditor.svelte';
   import PlacesMap, { type Geometry } from '$lib/components/home/PlacesMap.svelte';
-  import LoadErrorCard from '$lib/components/jkai/daydream/hub/LoadErrorCard.svelte';
-  import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
-  import { NEW_PLACE_RADIUS_M, clampRadius } from '$lib/home/presence/geo';
-  import { tick } from 'svelte';
+  import { NEW_PLACE_RADIUS_M } from '$lib/home/presence/geo';
+  import type { PanelPlace } from '$lib/home/presence/places';
   import type { ActionData, PageData } from './$types';
-
   type EditorForm = import('svelte').ComponentProps<typeof PlaceEditor>['form'];
-
   let { data, form }: { data: PageData; form: ActionData } = $props();
-
-  const places = $derived(data.places);
-  const alerting = $derived(places.filter((p) => p.alerts).length);
-  const byWhatsApp = $derived(places.filter((p) => p.whatsappAlerts).length);
-  const summary = $derived([
-    { label: 'Places', value: String(places.length), sub: 'named, plus home' },
-    { label: 'Alerting', value: String(alerting), sub: 'notify the family' },
-    { label: 'WhatsApp', value: String(byWhatsApp), sub: 'also sent by message' },
-  ]);
-
-  /** The place being looked at / edited, and its unsaved geometry. With no
-   *  selection, a non-null draft is a NEW place being drawn. */
+  let query = $state('');
+  let filter = $state<'all' | 'review' | 'named' | 'alerts'>('all');
   let selectedId = $state<string | null>(null);
   let draft = $state<Geometry | null>(null);
   let placing = $state(false);
-  /** Adding a place needs a working map: it is placed by clicking one. */
-  let mapStatus = $state<'loading' | 'ready' | 'unavailable'>('loading');
-  let mapView = $state<{ centre: () => { lat: number; lon: number } | null; fitAll: () => void } | null>(null);
-  /** The detail panel, for moving focus into it. */
-  let panelEl: HTMLElement | undefined = $state();
-
-  const selected = $derived(places.find((p) => p.id === selectedId) ?? null);
-
-  // A selected place that has gone from the list (ignored or merged since, by
-  // another tab or the nightly refresh) leaves nothing to edit. Reads only the
-  // list and the id; the write is guarded, so it runs once.
-  $effect(() => {
-    if (selectedId && !places.some((p) => p.id === selectedId)) {
-      selectedId = null;
-      draft = null;
-    }
-  });
-  const creating = $derived(!selectedId && !!draft);
-  const moved = $derived(
-    !!selected &&
-      !!draft &&
-      (draft.lat !== selected.lat || draft.lon !== selected.lon || Math.round(draft.radiusM) !== Math.round(selected.radiusM)),
-  );
-
-  function geometryOf(p: { lat: number; lon: number; radiusM: number }): Geometry {
-    return { lat: p.lat, lon: p.lon, radiusM: Math.round(p.radiusM) };
-  }
-
-  /** Select a place. From the list (`focus`), keyboard focus follows it into
-   *  the panel, wherever the panel is drawn. */
-  async function select(id: string, focus = false) {
-    placing = false;
-    if (selectedId !== id) confirming = false;
-    if (selectedId !== id) {
-      const p = places.find((x) => x.id === id);
-      selectedId = p ? id : null;
-      draft = p ? geometryOf(p) : null;
-    }
-    if (!selectedId) return;
-    await tick();
-    showPanel();
-    // preventScroll: showPanel has just put the map and panel on screen.
-    if (focus) panelEl?.querySelector<HTMLElement>('#place-panel-title')?.focus({ preventScroll: true });
-  }
-
-  /** Bring the map and the open panel onto the screen together, unless they
-   *  already are (a click on the map must not jump the page). */
-  function showPanel() {
-    const mapEl = document.querySelector<HTMLElement>('.places-layout .map-col');
-    if (!mapEl || !panelEl) return;
-    const nav = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--site-nav-height')) || 56;
-    const top = mapEl.getBoundingClientRect().top;
-    const bottom = Math.max(mapEl.getBoundingClientRect().bottom, panelEl.getBoundingClientRect().bottom);
-    if (top < nav || bottom > window.innerHeight) mapEl.scrollIntoView({ block: 'start', behavior: 'smooth' });
-  }
-
-  async function closeEditor() {
-    const was = selectedId;
-    confirming = false;
-    selectedId = null;
-    draft = null;
-    placing = false;
-    // Keyboard focus goes back to the place's row, not to the top of the page.
-    if (was && panelEl?.contains(document.activeElement)) {
-      await tick();
-      document.querySelector<HTMLElement>(`.row-select[data-place="${CSS.escape(was)}"]`)?.focus();
-    }
-  }
-
-  /** The remove confirm in the open panel is showing. */
+  let placesMap: PlacesMap | undefined = $state();
+  let adding = $state(false);
   let confirming = $state(false);
-
-  /** Escape backs out ONE step and never throws work away: never from a
-   *  field being typed in; a remove confirm answers "Keep"; an unsaved move
-   *  is undone; only then does the panel close. */
-  function onKeydown(e: KeyboardEvent) {
-    if (e.key !== 'Escape' || e.defaultPrevented) return;
-    const t = e.target as HTMLElement | null;
-    if (t && (t.closest('input, select, textarea') || t.isContentEditable)) return;
-    if (placing) placing = false;
-    else if (!selectedId) return;
-    else if (confirming) confirming = false;
-    else if (moved) revert();
-    else closeEditor();
+  let busy = $state<string | null>(null);
+  let mapStatus = $state<'loading' | 'ready' | 'unavailable'>('loading');
+  let panelEl: HTMLElement | undefined = $state();
+  let workspaceEl: HTMLDivElement | undefined = $state();
+  let addFormEl: HTMLFormElement | undefined = $state();
+  const name = (p: PanelPlace) => p.label || (p.isHome ? 'Home' : p.suggestedLabel || 'Unnamed stop');
+  const needsName = (p: PanelPlace) => !p.label && !p.isHome;
+  const review = $derived(data.places.filter(needsName));
+  const visible = $derived(data.places.filter(p => (filter === 'all' || filter === 'review' && needsName(p) || filter === 'named' && !needsName(p) || filter === 'alerts' && p.alerts)
+    && `${name(p)} ${p.suggestedAddress ?? ''} ${p.kind}`.toLowerCase().includes(query.toLowerCase()))
+    .sort((a, b) => Number(needsName(b)) - Number(needsName(a)) || b.visitCount - a.visitCount));
+  const selected = $derived(data.places.find(p => p.id === selectedId) ?? null);
+  const moved = $derived(!!selected && !!draft && (selected.lat !== draft.lat || selected.lon !== draft.lon || Math.round(selected.radiusM) !== draft.radiusM));
+  const summary = $derived([
+    { label: 'Places', value: String(data.places.length), sub: 'every observed stop, including unnamed' },
+    { label: 'Ready to name', value: String(review.length), sub: 'addresses become familiar places' },
+    { label: 'Auto-resolved', value: String(data.places.filter(p => p.suggestedLabel).length), sub: 'map-derived addresses retained' },
+    { label: 'Alerts on', value: String(data.places.filter(p => p.alerts).length), sub: 'arrival and departure preferences' },
+  ]);
+  const stamp = (d: Date | string | null | undefined) => d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', day: 'numeric', month: 'short' }).format(new Date(d)) : 'No visit yet';
+  const geometryOf = (p: PanelPlace): Geometry => ({ lat: p.lat, lon: p.lon, radiusM: Math.round(p.radiusM) });
+  async function select(id: string) {
+    const p = data.places.find(x => x.id === id);
+    if (!p) return;
+    if (selectedId !== id) draft = geometryOf(p);
+    selectedId = id; confirming = false; adding = false; placing = false;
+    await tick(); panelEl?.focus({ preventScroll: true }); workspaceEl?.scrollIntoView({ block: 'start' });
   }
-
-  function revert() {
-    if (selected) draft = geometryOf(selected);
-    else closeEditor();
-  }
-
-  function startAdding() {
-    selectedId = null;
-    draft = null;
-    placing = true;
-  }
-
-  function dropAt(lat: number, lon: number) {
-    placing = false;
-    selectedId = null;
-    draft = { lat, lon, radiusM: NEW_PLACE_RADIUS_M };
-  }
-
-  function dropAtCentre() {
-    const c = mapView?.centre();
-    if (c) dropAt(c.lat, c.lon);
-  }
-
-  function onRadiusInput(e: Event & { currentTarget: HTMLInputElement }) {
-    const v = Number(e.currentTarget.value);
-    if (draft && Number.isFinite(v) && v >= data.radius.min && v <= data.radius.max) draft = { ...draft, radiusM: Math.round(v) };
-  }
-
-  function onRadiusChange(e: Event & { currentTarget: HTMLInputElement }) {
-    if (!draft) return;
-    const r = clampRadius(Number(e.currentTarget.value));
-    draft = { ...draft, radiusM: r };
-    e.currentTarget.value = String(r);
-  }
-
-  function kindLabel(kind: string): string {
-    return kind === 'unknown' ? 'kind not set' : kind;
-  }
-
-  const keep: SubmitFunction = () => async ({ update }) => {
-    await update({ reset: false });
+  async function close() { const id = selectedId; selectedId = null; draft = null; confirming = false; await tick(); document.getElementById(`edit-${id}`)?.focus(); }
+  const keep: SubmitFunction = ({ formData }) => {
+    busy = String(formData.get('placeId') ?? 'new');
+    return async ({ update }) => { try { await update({ reset: false }); } finally { busy = null; } };
   };
-
-  /** After a geometry save, the draft is whatever was stored. */
   const afterGeometry: SubmitFunction = () => async ({ result, update }) => {
     await update({ reset: false });
-    if (result.type === 'success' && selectedId) {
-      const p = data.places.find((x) => x.id === selectedId);
-      if (p) draft = geometryOf(p);
-    }
+    if (result.type === 'success' && selected) draft = geometryOf(selected);
   };
-
-  /** A created place becomes the selected one. */
-  const afterCreate: SubmitFunction = () => async ({ result, update }) => {
-    await update({ reset: false });
-    if (result.type === 'success' && typeof result.data?.created === 'string') {
-      const p = data.places.find((x) => x.id === result.data?.created);
-      selectedId = p ? p.id : null;
-      draft = p ? geometryOf(p) : null;
-    }
-  };
-
-  /** A removed place leaves the list on the refreshed load; the editor goes
-   *  with it (the selection effect above would clear it anyway). */
-  const afterRemove: SubmitFunction = () => async ({ result, update }) => {
-    await update({ reset: false });
-    if (result.type === 'success') closeEditor();
-  };
-
-  const formError = $derived(form && 'error' in form && form.error ? form : null);
+  const afterRemove: SubmitFunction = () => async ({ result, update }) => { await update({ reset: false }); if (result.type === 'success') await close(); };
+  const afterCreate: SubmitFunction = () => async ({ result, update }) => { await update({ reset: false }); if (result.type === 'success' && typeof result.data?.created === 'string') { adding = false; await select(result.data.created); } };
+  async function dropAt(lat: number, lon: number) {
+    draft = { lat, lon, radiusM: NEW_PLACE_RADIUS_M }; selectedId = null; placing = false; adding = true;
+    await tick(); addFormEl?.querySelector<HTMLInputElement>('[name="label"]')?.focus();
+  }
+  function onKeydown(e: KeyboardEvent) {
+    if (e.key !== 'Escape' || (e.target as HTMLElement)?.closest('input,select,textarea')) return;
+    if (confirming) confirming = false;
+    else if (moved && selected) draft = geometryOf(selected);
+    else if (placing) placing = false;
+    else void close();
+  }
 </script>
-
+<svelte:head><title>Family places — Strange Ramblings</title><meta name="robots" content="noindex" /></svelte:head>
 <svelte:window onkeydown={onKeydown} />
-
-{#snippet listBlock()}
-  <div class="list-head">
-    {#if mapStatus === 'unavailable'}
-      <p class="map-note">Map unavailable — places can still be edited in the list.</p>
-    {/if}
-    {#if form && 'removed' in form && form.removed}
-      <p class="map-note good" role="status">Removed {form.removedLabel ?? 'the place'}.</p>
-    {/if}
-    {#if mapStatus === 'ready'}
-      <button class="btn" type="button" onclick={() => mapView?.fitAll()}>Show all places</button>
-    {/if}
-    <button
-      class="btn"
-      type="button"
-      onclick={startAdding}
-      aria-pressed={placing}
-      disabled={mapStatus !== 'ready'}
-      aria-describedby={mapStatus === 'ready' ? undefined : 'add-needs-map'}
-    >Add a place</button>
-    {#if mapStatus === 'loading'}<span class="map-note" id="add-needs-map">Waiting for the map</span>{/if}
-    {#if mapStatus === 'unavailable'}<span class="visually-hidden" id="add-needs-map">Adding a place needs the map.</span>{/if}
-  </div>
-
-  {#if creating && draft}
-    <form class="card place open new" method="POST" action="?/create" use:enhance={afterCreate}>
-      <p class="card-kicker">New place · pinned where you put it</p>
-      <input type="hidden" name="lat" value={draft.lat} />
-      <input type="hidden" name="lon" value={draft.lon} />
-      <div class="actions">
-        <label class="field">
-          <span class="field-label">Name</span>
-          <!-- svelte-ignore a11y_autofocus -->
-          <input class="text-input" name="label" maxlength={data.labelMax} required autocomplete="off" autofocus />
-        </label>
-        <label class="field kind">
-          <span class="field-label">Kind</span>
-          <select class="text-input select" name="kind">
-            {#each data.kinds as k (k)}<option value={k} selected={k === 'other'}>{k}</option>{/each}
-          </select>
-        </label>
-        <label class="field radius">
-          <span class="field-label">Radius (m)</span>
-          <input
-            class="text-input"
-            name="radiusM"
-            type="number"
-            inputmode="numeric"
-            min={data.radius.min}
-            max={data.radius.max}
-            step="10"
-            value={draft.radiusM}
-            oninput={onRadiusInput}
-            onchange={onRadiusChange}
-            required
-          />
-        </label>
+<HomeFrame path="/home/people/places" kicker="Home · People / Places" title={['Familiar places.', 'Better insights.']} standfirst="Every stop has a story. Start with its address, add the name your family uses, and let your routines take shape." {summary} footer={['Private household places', 'Automatic Mapbox address lookup', 'Confirmed family names always take priority']}>
+  <PeopleNav active="places" />
+  <div class="places-desk">
+    {#if data.places.some(p => p.id.startsWith('sample-insights-'))}<p class="message">Local preview includes clearly labelled synthetic family places and journeys.</p>{/if}
+    {#if data.loadError}<p class="error" role="alert">Places could not be loaded. Refresh to try again.</p>{/if}
+    <div class="lookup-status"><span>{data.geocoder}</span><a href="/home/people/insights">See journey insights →</a></div>
+    <div class="toolbar">
+      <label class="search">Find a place<input type="search" bind:value={query} placeholder="Name, street or kind…" /></label>
+      <div class="filters" aria-label="Filter places">
+        {#each [['all', 'All places'], ['review', 'Ready to name'], ['named', 'Named'], ['alerts', 'Alerts on']] as [id, label]}
+          <button type="button" aria-pressed={filter === id} onclick={() => filter = id as typeof filter}>{label}{id === 'review' ? ` (${review.length})` : ''}</button>
+        {/each}
       </div>
-      <div class="card-actions">
-        <button class="cta sm" type="submit">Save</button>
-        <button class="btn" type="button" onclick={closeEditor}>Cancel</button>
-      </div>
-      {#if formError && !formError.placeId}<p class="err" role="alert">{formError.error}</p>{/if}
-    </form>
-  {/if}
-
-  {#if !places.length}
-    <p class="lede">No named places yet. Add one on the map, or name them from the daydream naming queue.</p>
-  {:else}
-    <ul class="stack place-list">
-      {#each places as p (p.id)}
-        {@const open = p.id === selectedId}
-        <li class="card place" class:open>
-          <button
-            class="row-select"
-            type="button"
-            data-place={p.id}
-            aria-expanded={open}
-            aria-controls={open ? 'place-panel' : undefined}
-            onclick={() => (open ? closeEditor() : select(p.id, true))}
-          >
-            <span class="card-kicker">
-              {p.isHome ? 'home' : kindLabel(p.kind)} · {p.visitCount} visits{p.radiusPinned ? ' · set by you' : ''}
-            </span>
-            <span class="row-title">{p.label ?? 'Home'}</span>
-            <span class="row-meta">
-              {Math.round(open && draft ? draft.radiusM : p.radiusM)} m ·
-              {#if p.alerts}
-                notifies on {p.alertArrive && p.alertLeave ? 'arrive and leave' : p.alertArrive ? 'arrive' : p.alertLeave ? 'leave' : 'neither'}{#if p.whatsappAlerts}, WhatsApp too{/if}
-              {:else}
-                no notifications
-              {/if}
-            </span>
-          </button>
-        </li>
-      {/each}
-    </ul>
-  {/if}
-  {#if formError && !formError.placeId && !creating}<p class="err" role="alert">{formError.error}</p>{/if}
-  <p class="rules">
-    <span class="phone-only">Select a place on the map or in the list; drag its centre to move it and the square handle to set the radius, 50 to 2,000 m.</span>
-    Someone arrives on the first fix inside a place’s edge and leaves on the first one more than 50 m outside it. No place
-    notifies anyone until you switch it on; a place with WhatsApp on also messages anyone who asked, at most once every half
-    hour per person and place.
-  </p>
-{/snippet}
-
-<HomeFrame
-  path="/home/people/places"
-  kicker="Home · People · Places"
-  title={['Where an arrival', 'is worth a message']}
-  standfirst="Who hears when someone comes or goes."
-  {summary}
-  footer={['strangeramblings.com/home/people/places', 'Arrive and leave alerts', 'Owner only']}
->
-  {#if data.loadError}
-    <section class="band"><div class="inner"><LoadErrorCard kicker="The places did not load" message={data.loadError} /></div></section>
-  {/if}
-
-  <section class="band places-band">
-    <div class="inner">
-      <div class="head">
-      <SectionHead
-        kicker="A / Places"
-        title={['Named places,', 'and home']}
-        strap="Select a place on the map or in the list: its details open beside the map. Drag its centre to move it and the square handle to set the radius, 50 to 2,000 m."
-      />
-      </div>
-
-      <div class="places-layout" class:has-panel={!!selected}>
-        <div class="map-col">
-          <PlacesMap
-            bind:this={mapView}
-            {places}
-            {selectedId}
-            {draft}
-            {placing}
-            onselect={select}
-            ondraft={(g) => (draft = g)}
-            onplace={dropAt}
-            onstatus={(st) => {
-              mapStatus = st;
-              if (st !== 'ready') placing = false;
-            }}
-          />
-          {#if placing}
-            <div class="map-bar" role="status">
-              <span>Click the map where the place is.</span>
-              <button class="btn" type="button" onclick={dropAtCentre}>Use the map centre</button>
-              <button class="btn" type="button" onclick={() => (placing = false)}>Cancel</button>
-            </div>
-          {:else if selected && moved && draft}
-            <form class="map-bar" method="POST" action="?/move" use:enhance={afterGeometry}>
-              <input type="hidden" name="placeId" value={selected.id} />
-              <input type="hidden" name="lat" value={draft.lat} />
-              <input type="hidden" name="lon" value={draft.lon} />
-              <input type="hidden" name="radiusM" value={draft.radiusM} />
-              <span>{selected.label ?? 'Home'}: {draft.radiusM} m, not saved.</span>
-              <button class="cta sm" type="submit">Save</button>
-              <button class="btn" type="button" onclick={revert}>Cancel</button>
-            </form>
-          {/if}
-        </div>
-
-        <div class="side-col">
-          {#if selected && draft}
-            <section
-              class="card place-panel"
-              id="place-panel"
-              aria-labelledby="place-panel-title"
-              bind:this={panelEl}
-            >
-              <header class="panel-head">
-                <div>
-                  <p class="card-kicker">
-                    {selected.isHome ? 'home' : kindLabel(selected.kind)} · {selected.visitCount} visits{selected.radiusPinned ? ' · set by you' : ''}
-                  </p>
-                  <h3 class="panel-title" id="place-panel-title" tabindex="-1">{selected.label ?? 'Home'}</h3>
-                </div>
-                <button class="close" type="button" onclick={closeEditor} aria-label="Close {selected.label ?? 'home'}">
-                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.8" fill="none" /></svg>
-                </button>
-              </header>
-              {#key selected.id}
-                <PlaceEditor
-                  place={selected}
-                  {draft}
-                  {moved}
-                  radius={data.radius}
-                  labelMax={data.labelMax}
-                  kinds={data.kinds}
-                  placeTimeDays={data.placeTimeDays}
-                  placeTime={data.placeTime}
-                  form={form as EditorForm}
-                  onradius={(r) => draft && (draft = { ...draft, radiusM: r })}
-                  onrevert={revert}
-                  {afterGeometry}
-                  {afterRemove}
-                  bind:confirming
-                />
-              {/key}
-            </section>
-          {:else}
-            {@render listBlock()}
-          {/if}
-        </div>
-
-        {#if selected}
-          <div class="below">{@render listBlock()}</div>
+      <button class="btn" type="button" onclick={async () => { adding = !adding; selectedId = null; draft = null; placing = false; await tick(); if (adding) addFormEl?.querySelector<HTMLInputElement>('[name="label"]')?.focus(); }}>Add place</button>
+    </div>
+    {#if form && 'note' in form && form.note}<p class="message" role="status">{form.note}</p>{/if}
+    {#if form && 'saved' in form && form.saved && !('note' in form)}<p class="message" role="status">Place saved.</p>{/if}
+    {#if form && 'removed' in form}<p class="message" role="status">Place removed from your active places.</p>{/if}
+    {#if form && 'error' in form}<p class="error" role="alert">{form.error}</p>{/if}
+    <section class="map-section" aria-labelledby="places-map-title">
+      <header class="map-heading"><div><p class="eyebrow">01 / Your surroundings</p><h2 id="places-map-title">Your places on the map</h2></div><div class="map-actions">
+        <button class="btn sm" type="button" disabled={mapStatus !== 'ready'} onclick={() => placesMap?.fitAll()}>Show all places</button>
+        <button class="btn sm" type="button" disabled={mapStatus !== 'ready'} aria-pressed={placing} onclick={() => { placing = !placing; if (placing) { selectedId = null; draft = null; adding = false; } }}>{placing ? 'Cancel placement' : 'Add on map'}</button>
+      </div></header>
+      <p class="map-help" aria-live="polite">{placing ? 'Choose a point on the map, then give the new place a name.' : 'Select a marker or a place below to name it, adjust its boundary and manage alerts. The map shows all household places.'}</p>
+      <div class="map-workspace" bind:this={workspaceEl} class:editing={!!selected}>
+        <div class="map"><PlacesMap bind:this={placesMap} places={data.places.map(p => ({ ...p, label: name(p) }))} {selectedId} {draft} {placing} onselect={select} ondraft={g => draft = g} onplace={dropAt} onstatus={s => mapStatus = s} /></div>
+        {#if selected && draft}
+          <section class="editor-panel" bind:this={panelEl} tabindex="-1" aria-label={`Edit ${name(selected)}`}>
+            <header><div><p class="eyebrow">Place details</p><h2>{name(selected)}</h2></div><button class="btn sm" type="button" onclick={close}>Close</button></header>
+            {#key selected.id}<PlaceEditor place={selected} {draft} {moved} radius={data.radius} labelMax={data.labelMax} kinds={data.kinds} placeTimeDays={data.placeTimeDays} placeTime={data.placeTime} form={form as EditorForm} onradius={r => { if (draft) draft = { ...draft, radiusM: r }; }} onrevert={() => { if (selected) draft = geometryOf(selected); }} {afterGeometry} {afterRemove} bind:confirming />{/key}
+          </section>
         {/if}
       </div>
-    </div>
-  </section>
+    </section>
+    {#if adding}
+      <form class="add-form" bind:this={addFormEl} method="POST" action="?/create" use:enhance={afterCreate}>
+        <h2>Add a familiar place</h2><p>Choose a point on the map, or enter its coordinates.</p>
+        <div class="fields"><label>Name<input name="label" required maxlength={data.labelMax} /></label><label>Kind<select name="kind">{#each data.kinds as k}<option value={k} selected={k === 'other'}>{k}</option>{/each}</select></label>
+        <label>Latitude<input name="lat" type="number" step="any" min="-90" max="90" required value={draft?.lat ?? ''} /></label><label>Longitude<input name="lon" type="number" step="any" min="-180" max="180" required value={draft?.lon ?? ''} /></label><label>Radius (m)<input name="radiusM" type="number" min={data.radius.min} max={data.radius.max} required value={draft?.radiusM ?? NEW_PLACE_RADIUS_M} /></label></div>
+        <button class="cta" type="submit">Save place</button><button class="btn" type="button" onclick={() => { adding = false; draft = null; }}>Cancel</button>
+      </form>
+    {/if}
+      <section class="ledger" aria-label="Places">
+        <div class="ledger-heading"><h2>{filter === 'review' ? 'Make these places yours' : 'Your place book'}</h2><span>{visible.length} places</span></div>
+        {#if !data.places.length}<p class="empty">Your first place will appear after a ten-minute observed stop. You can also add Home or School now.</p>
+        {:else if !visible.length}<p class="empty">No places match this filter. Try another name or choose All places.</p>{/if}
+        {#each visible as p (p.id)}
+          <article class="place-row" class:selected={p.id === selectedId}>
+            <div class="place-top"><div><p class="eyebrow">{p.isHome ? 'Home' : p.label ? 'Family named' : p.suggestedLabel ? `Map-derived ${p.suggestedPrecision ?? 'address'}` : p.suggestedAt ? 'Lookup pending · retry scheduled' : 'New stop · awaiting lookup'}</p><h3>{name(p)}</h3></div><span class="visits">{p.visitCount}<small>visits</small></span></div>
+            <p class="address">{p.suggestedAddress || `${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`}</p>
+            <div class="place-meta"><span>Last seen {stamp(p.lastSeenAt)}</span>{#if p.medianDwellMins}<span>Typically {p.medianDwellMins} min</span>{/if}<span>{Math.round(p.radiusM)} m boundary</span><span>{p.alerts ? 'Family alerts on' : 'Alerts off'}</span></div>
+            {#if needsName(p)}
+              <form class="quick-name" method="POST" action="?/name" use:enhance={keep}>
+                <input type="hidden" name="placeId" value={p.id} />
+                <label>Family name<input name="label" value={p.suggestedLabel ?? ''} placeholder="e.g. Carmel College" required maxlength={data.labelMax} /></label>
+                <label>Kind<select name="kind">{#each data.kinds as k}<option value={k} selected={k === (p.suggestedKind ?? 'other')}>{k}</option>{/each}</select></label>
+                <button class="cta" type="submit" disabled={busy === p.id}>{busy === p.id ? 'Saving…' : 'Save name'}</button>
+              </form>
+            {/if}
+            <div class="row-actions"><button class="text-button" id={`edit-${p.id}`} type="button" aria-expanded={p.id === selectedId} onclick={() => p.id === selectedId ? close() : select(p.id)}>View on map & edit →</button>
+              {#if !p.label && !p.suggestedLabel}<form method="POST" action="?/lookup" use:enhance={keep}><input type="hidden" name="placeId" value={p.id} /><button class="text-button" disabled={busy === p.id} type="submit">Look up address</button></form>{/if}
+              {#if p.suggestedLabel}<span>{p.suggestedProvider ?? 'Map lookup'}</span>{/if}
+            </div>
+          </article>
+        {/each}
+      </section>
+    <p class="footnote">Stops are discovered after ten minutes of continuous, accurate observations. Address lookup runs automatically; family names take priority. Mapbox provides addresses, so a school or workplace may still benefit from your own name. Lookup data: Mapbox / <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>.</p>
+  </div>
 </HomeFrame>
-
 <style>
-  /* Room-specific only — `.card`, `.text-input`, `.field-label`, `.actions`,
-     `.card-actions`, `.cta`, `.btn`, `.note`, `.err` come from HomeFrame's
-     DsVocab. */
-  /* On a phone the map has to start near the top, so the section's masthead
-     is kept for the outline and screen readers but not drawn: the hero has
-     just said what the page is, and the how-to sits under the list. */
-  @media (max-width: 719px) {
-    .head {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      overflow: hidden;
-      clip: rect(0 0 0 0);
-      clip-path: inset(50%);
-      white-space: nowrap;
-    }
-    .head + .places-layout {
-      margin-top: 0;
-    }
-    .band.places-band {
-      padding-top: 8px;
-    }
-  }
-  @media (min-width: 720px) {
-    .phone-only {
-      display: none;
-    }
-  }
-  .rules {
-    margin: 16px 0 0;
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    line-height: 1.65;
-    color: var(--text-secondary);
-  }
-  .places-layout {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 20px;
-    margin-top: 20px;
-  }
-  .map-col {
-    position: relative;
-    height: 55vh;
-    min-height: 320px;
-  }
-  /* The page shell clips overflow, so `position: sticky` never sticks here.
-     Instead, while a place is open, the map and its panel are sized to share
-     one screen, and selecting scrolls them into it (see `showPanel`). On a
-     phone the panel sits straight under a shorter map and scrolls inside
-     itself, so the map stays in view above it. */
-  .map-col,
-  .place-panel {
-    scroll-margin-top: calc(var(--site-nav-height, 56px) + 8px);
-  }
-  @media (max-width: 899px) {
-    .has-panel .map-col {
-      height: 38svh;
-      min-height: 220px;
-    }
-    .has-panel {
-      gap: 12px;
-    }
-    .place-panel {
-      max-height: calc(100svh - max(38svh, 220px) - var(--site-nav-height, 56px) - 28px);
-      min-height: 240px;
-      overflow-y: auto;
-    }
-  }
-  @media (min-width: 900px) {
-    .places-layout {
-      grid-template-columns: minmax(0, 1.5fr) minmax(340px, 1fr);
-      align-items: start;
-    }
-    .map-col {
-      height: min(78vh, 760px);
-    }
-    /* The panel is as tall as the map at most, and scrolls inside itself, so
-       the map and the place's details sit side by side on one screen. */
-    .place-panel {
-      max-height: min(78vh, 760px);
-      overflow-y: auto;
-    }
-    .below {
-      grid-column: 1 / -1;
-    }
-  }
-  .side-col,
-  .below {
-    min-width: 0;
-  }
-  .place-panel {
-    margin: 0;
-    background: var(--surface-elevated);
-    border-left: 3px solid var(--accent);
-  }
-  .panel-head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 16px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid var(--line-hair);
-  }
-  .panel-head .card-kicker {
-    margin: 0 0 4px;
-  }
-  .panel-title {
-    margin: 0;
-    font-family: var(--font-display);
-    font-size: var(--fs-body-lg, 1.2rem);
-    font-weight: 400;
-    color: var(--text-primary);
-  }
-  .panel-title:focus-visible,
-  .close:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 3px;
-  }
-  .close {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: none;
-    width: 36px;
-    height: 36px;
-    padding: 0;
-    border: 1px solid var(--line-strong);
-    border-radius: 2px;
-    background: var(--bg);
-    color: var(--text-primary);
-    cursor: pointer;
-  }
-  .close:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-  .place.open {
-    border-left-color: var(--accent);
-  }
-  .map-bar {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    left: 56px;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px 12px;
-    padding: 10px 12px;
-    background: var(--surface-elevated);
-    border: 1px solid var(--line-strong);
-    border-left: 3px solid var(--accent);
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    color: var(--text-primary);
-  }
-  .map-bar span {
-    flex: 1 1 160px;
-  }
-  .list-head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 8px 12px;
-    margin-bottom: 12px;
-  }
-  .map-note {
-    margin: 0;
-    flex: 1 1 200px;
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    color: var(--text-secondary);
-  }
-  .visually-hidden {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-  }
-  .place-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-  }
-  .place.new {
-    margin-bottom: 12px;
-    border-left-color: var(--accent);
-  }
-  .row-select {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-    width: 100%;
-    padding: 0;
-    border: 0;
-    background: none;
-    color: inherit;
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-  }
-  .row-select:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 4px;
-  }
-  .row-select .card-kicker {
-    margin: 0;
-  }
-  .row-title {
-    font-family: var(--font-display);
-    font-size: var(--fs-body-lg, 1.2rem);
-    color: var(--text-primary);
-  }
-  .row-meta {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    color: var(--text-secondary);
-  }
-  .field {
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 200px;
-    min-width: 0;
-  }
-  .field .field-label {
-    margin-bottom: 6px;
-  }
-  .field.radius {
-    flex: 0 1 130px;
-  }
-  .field.kind {
-    flex: 0 1 140px;
-  }
-  .map-note.good {
-    color: var(--success);
-  }
+  .places-desk { max-width: 1488px; margin: auto; padding: 0 clamp(20px, 3vw, 44px) 3rem; }
+  .lookup-status { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .75rem; padding: 1rem 0; font-size: var(--fs-label); border-bottom: 1px solid var(--line); color: var(--text-muted); }
+  .lookup-status a { color: var(--accent-ink); }
+  .toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 1rem; padding: 1.5rem 0; }
+  label { display: grid; gap: .4rem; font-size: var(--fs-label); font-weight: 700; }
+  input, select { width: 100%; min-width: 0; padding: .65rem .75rem; border: 1px solid var(--line-strong); background: var(--surface-card); color: var(--text-primary); font: var(--fs-body) var(--font-body); border-radius: 0; }
+  .search { flex: 1; min-width: 200px; } .filters { display: flex; flex-wrap: wrap; }
+  .filters button { border: 1px solid var(--line-strong); padding: .75rem; font-size: var(--fs-label); background: var(--surface-rail); color: var(--text-primary); cursor: pointer; }
+  .filters button[aria-pressed='true'] { background: var(--text-primary); color: var(--bg); }
+  button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .map-workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.5rem; align-items: start; scroll-margin-top: 80px; }
+  .map-workspace.editing { grid-template-columns: minmax(0, 1.4fr) minmax(340px, 1fr); }
+  .ledger { min-width: 0; } .ledger-heading { display: flex; align-items: baseline; justify-content: space-between; border-bottom: 2px solid var(--text-primary); padding: .5rem 0 1rem; }
+  h2 { font: clamp(1.3rem, 2vw, 1.8rem) var(--font-display); margin: 0; } .ledger-heading span { font-size: var(--fs-label); }
+  .place-row { border-bottom: 1px solid var(--line-strong); padding: 1.5rem 1rem; } .place-row.selected { background: var(--surface-rail); border-left: 3px solid var(--accent); }
+  .place-top { display: flex; justify-content: space-between; gap: 1rem; } h3 { font: 1.25rem var(--font-display); margin: .4rem 0 0; overflow-wrap: anywhere; }
+  .eyebrow { font: var(--fs-label-xs) var(--font-mono); text-transform: uppercase; letter-spacing: .06em; color: var(--accent); margin: 0; }
+  .visits { font: 1.8rem var(--font-display); text-align: right; color: var(--accent-ink); } small { display: block; font: var(--fs-label-xs) var(--font-body); color: var(--text-muted); }
+  .address { color: var(--text-secondary); margin: .6rem 0; font-size: var(--fs-nav); overflow-wrap: anywhere; }
+  .place-meta { display: flex; flex-wrap: wrap; gap: .5rem 1.2rem; font-size: var(--fs-label-xs); color: var(--text-muted); }
+  .quick-name { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(100px, .4fr) auto; gap: .75rem; align-items: end; background: var(--surface-rail); padding: 1rem; margin-top: 1rem; }
+  .row-actions { display: flex; flex-wrap: wrap; gap: 1.4rem; align-items: center; margin-top: .9rem; font-size: var(--fs-label-xs); color: var(--text-muted); }
+  .text-button { padding: .35rem 0; border: 0; border-bottom: 1px solid var(--line); background: transparent; cursor: pointer; color: var(--accent-ink); font-size: var(--fs-label); }
+  .editor-panel { border: 1px solid var(--line-strong); padding: 1.5rem; background: var(--surface-card); min-width: 0; scroll-margin-top: 80px; }
+  .editor-panel:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .editor-panel header { display: flex; justify-content: space-between; align-items: start; gap: 1rem; padding-bottom: 1rem; margin-bottom: 1rem; border-bottom: 2px solid var(--text-primary); }
+  .editor-panel h2 { margin-top: .5rem; overflow-wrap: anywhere; }
+  .empty, .footnote { line-height: 1.65; color: var(--text-muted); padding: 1.2rem 0; } .footnote { font-size: var(--fs-label); max-width: 110ch; }
+  .map-section { margin-bottom: 2rem; }
+  .map-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 1rem; padding-bottom: .8rem; border-bottom: 2px solid var(--text-primary); }
+  .map-heading h2 { margin-top: .5rem; } .map-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+  .map { height: clamp(360px, 50vh, 560px); min-width: 0; }
+  .map-help { font-size: var(--fs-label); color: var(--text-muted); line-height: 1.65; margin: .8rem 0; }
+  .add-form { padding: 1.5rem; margin: 0 0 1.5rem; border: 1px solid var(--line-strong); } .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin: 1rem 0; }
+  .add-form > button { margin-right: .6rem; } .error, .message { padding: 1rem; background: var(--surface-rail); border-left: 3px solid var(--accent); }
+  @media(max-width: 1000px) { .map-workspace.editing { grid-template-columns: minmax(0, 1fr); } }
+  @media(max-width: 600px) { .quick-name { grid-template-columns: minmax(0, 1fr) 110px; } .quick-name button { grid-column: 1 / -1; } .place-row { padding: 1.25rem 0; } .toolbar { gap: .75rem; } .filters { width: 100%; } }
 </style>

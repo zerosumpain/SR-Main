@@ -69,6 +69,7 @@ function eventFor(email: string | null, person?: string) {
     getClientAddress: () => '203.0.113.9',
     params: {},
     url: new URL(`https://example.test/home/people${person ? `?person=${person}` : ''}`),
+    setHeaders: () => {},
     depends: vi.fn(),
   } as unknown as Parameters<typeof load>[0];
 }

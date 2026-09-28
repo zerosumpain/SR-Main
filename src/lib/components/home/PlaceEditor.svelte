@@ -143,6 +143,7 @@
 </script>
 
 <div class="editor">
+  {#if place.suggestedAddress}<p class="lookup-note">{place.suggestedAddress}<br /><small>{place.suggestedProvider ?? 'Map lookup'} · {place.suggestedPrecision ?? 'approximate address'}</small></p>{/if}
   <form method="POST" action="?/save" use:enhance={afterGeometry}>
     <input type="hidden" name="placeId" value={place.id} />
     <input type="hidden" name="lat" value={draft.lat} />
@@ -153,7 +154,7 @@
         <input
           class="text-input"
           name="label"
-          value={place.label ?? ''}
+          value={place.label ?? place.suggestedLabel ?? ''}
           placeholder={place.isHome ? 'home' : ''}
           maxlength={Math.max(labelMax, (place.label ?? '').length)}
           autocomplete="off"

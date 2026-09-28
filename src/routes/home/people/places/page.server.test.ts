@@ -352,3 +352,25 @@ describe('/home/people/places — notify', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('quick place naming', () => {
+  it('names an unresolved stop without changing its boundary or alert preferences', async () => {
+    h.places.push({ id: 'new-stop', label: null, kind: 'unknown', radiusM: 100, isHome: false, suggestedLabel: '42 Example Road' });
+    await actions.name(eventFor('owner@example.test', { placeId: 'new-stop', label: 'College', kind: 'school' }));
+    expect(h.named).toEqual([['new-stop', 'College', 'school']]);
+    expect(h.renames).toEqual([['new-stop', 'College', 'school']]);
+    expect(h.moves).toEqual([]); expect(h.updates).toEqual([]);
+  });
+  it('requires ownership for both quick naming and provider lookup', async () => {
+    for (const action of ['name', 'lookup'] as const) {
+      const result = await actions[action](eventFor('sam@example.test', { placeId: 'school', label: 'X', kind: 'school' }));
+      expect(result).toMatchObject({ status: 403 });
+    }
+    expect(h.named).toEqual([]);
+  });
+  it('refuses blank names and unknown kinds', async () => {
+    expect(await actions.name(eventFor('owner@example.test', { placeId: 'school', label: '', kind: 'school' }))).toMatchObject({ status: 400 });
+    expect(await actions.name(eventFor('owner@example.test', { placeId: 'school', label: 'X', kind: 'unknown' }))).toMatchObject({ status: 400 });
+    expect(h.named).toEqual([]);
+  });
+});

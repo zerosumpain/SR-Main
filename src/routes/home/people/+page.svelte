@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { invalidate } from '$app/navigation';
+  import PeopleNav from '$lib/components/home/PeopleNav.svelte';
+  import ArrivalBoard from '$lib/components/home/ArrivalBoard.svelte';
   import HomeFrame from '$lib/components/home/HomeFrame.svelte';
   import LoadErrorCard from '$lib/components/jkai/daydream/hub/LoadErrorCard.svelte';
   /**
@@ -128,7 +130,7 @@
 <HomeFrame
   path="/home/people"
   kicker="Home · People"
-  title={['Where everyone', 'is, and was']}
+  title={['Your family,', 'at a glance']}
   standfirst={isOwner
     ? 'The family’s latest locations — app uploads checked every 30 seconds, Life360 through Home Assistant every two minutes, kept ninety days.'
     : 'Where everyone who shares their location is now, and where your own days went.'}
@@ -139,6 +141,12 @@
     : ['strangeramblings.com/home/people', 'The household · live status only', 'Your day is shown to you and the owner']}
 >
 
+<PeopleNav active="now" owner={isOwner} />
+<section class="arrival-section"><div class="inner">
+  {#await data.arrivals}<p class="lede">Reading journeys…</p>{:then live}
+    {#if live}<ArrivalBoard arrivals={live.arrivals} generatedAt={live.generatedAt} />{:else}<p class="lede">Arrival estimates are temporarily unavailable.</p>{/if}
+  {/await}
+</div></section>
 {#if data.loadError}
   <section class="band"><div class="inner"><LoadErrorCard kicker="The household did not load" message={data.loadError} /></div></section>
 {/if}
@@ -155,7 +163,8 @@
       <!-- Owner-only settings. Neither route is a household route, so the hook
            refuses anyone else; the links are drawn for the owner only. -->
       <p class="actions owner-links">
-        <a class="btn sm" href="/home/people/places">Places and alerts</a>
+        <a class="cta sm" href="/home/people/insights">Explore family insights →</a>
+        <a class="btn sm" href="/home/people/places">Name your places</a>
         <a class="btn sm" href="/admin/access">Household settings</a>
       </p>
     {/if}
@@ -183,6 +192,7 @@
 <style>
   /* Room-specific only — `.band`, `.inner`, `.lede`, `.btn` come from
      `.ds-vocab` (HomeFrame's DsVocab). */
+  .arrival-section { padding: 1.5rem 0 0; }
   .owner-links {
     margin: 0 0 18px;
   }

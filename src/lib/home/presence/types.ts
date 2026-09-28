@@ -352,6 +352,6 @@ export function localDayStart(now: Date, tz = LOCAL_TZ): Date {
  * unnamed everywhere a name is shown — a card, a stay, a trip — rather than
  * living on under a name nobody sees on /places any more. PURE.
  */
-export function activeLabels(rows: Array<{ id: string; label: string | null; status: string }>): Map<string, string | null> {
-  return new Map(rows.map((r) => [r.id, r.status === 'active' ? r.label : null]));
+export function activeLabels(rows: Array<{ id: string; label: string | null; suggestedLabel?: string | null; status: string }>): Map<string, string | null> {
+  return new Map(rows.map((r) => [r.id, r.status === 'active' ? (r.label ?? (r.suggestedLabel ? `${r.suggestedLabel} (map)` : null)) : null]));
 }

@@ -278,7 +278,10 @@ export async function refreshPlaces(opts: { windowDays?: number } = {}): Promise
       // Geometry the owner set on the places map is theirs too: it decides
       // where an arrival alert fires, and re-deriving the centre and radius
       // from member spread every pass would quietly move that edge back.
-      const refreshed = refreshedGeometry(matched, stats);
+      const refreshed = { ...refreshedGeometry(matched, stats),
+        ...(!matched.radiusPinned && metresBetween(matched.lat, matched.lon, stats.lat, stats.lon) > 75
+          ? { suggestedLabel: null, suggestedAddress: null, suggestedKind: null, suggestedAt: null, suggestedProvider: null, suggestedPrecision: null } : {}),
+      };
       await db
         .update(daydreamPlaces)
         .set(matched.status === 'transit' ? { ...refreshed, status: 'active' } : refreshed)
@@ -736,6 +739,15 @@ export interface PanelPlace {
   trackOnLeave: boolean;
   visitCount: number;
   isHome: boolean;
+  source?: string;
+  suggestedLabel?: string | null;
+  suggestedAddress?: string | null;
+  suggestedKind?: string | null;
+  suggestedAt?: Date | null;
+  suggestedProvider?: string | null;
+  suggestedPrecision?: string | null;
+  lastSeenAt?: Date | null;
+  medianDwellMins?: number;
 }
 
 /** An undecided flag is on for home only. PURE. */
@@ -744,8 +756,7 @@ export function effectiveTrackOnLeave(stored: boolean | null | undefined, isHome
 }
 
 /**
- * Every named, active place, and home whether named or not — the places a
- * crossing alert can be set on. Home first, then the most visited.
+ * Every active place, including unresolved stops, so naming never hides its own queue. Home first, then the most visited.
  */
 export async function listPanelPlaces(): Promise<PanelPlace[]> {
   const home = await getHomePlace();
@@ -764,12 +775,20 @@ export async function listPanelPlaces(): Promise<PanelPlace[]> {
       whatsappAlerts: daydreamPlaces.whatsappAlerts,
       trackOnLeave: daydreamPlaces.trackOnLeave,
       visitCount: daydreamPlaces.visitCount,
+      source: daydreamPlaces.source,
+      suggestedLabel: daydreamPlaces.suggestedLabel,
+      suggestedAddress: daydreamPlaces.suggestedAddress,
+      suggestedKind: daydreamPlaces.suggestedKind,
+      suggestedAt: daydreamPlaces.suggestedAt,
+      suggestedProvider: daydreamPlaces.suggestedProvider,
+      suggestedPrecision: daydreamPlaces.suggestedPrecision,
+      lastSeenAt: daydreamPlaces.lastSeenAt,
+      medianDwellMins: daydreamPlaces.medianDwellMins,
     })
     .from(daydreamPlaces)
     .where(
       and(
         eq(daydreamPlaces.status, 'active'),
-        home ? sql`(${daydreamPlaces.label} is not null or ${daydreamPlaces.id} = ${home.id})` : isNotNull(daydreamPlaces.label),
       ),
     )
     .orderBy(sql`${daydreamPlaces.visitCount} desc`, asc(daydreamPlaces.label));
@@ -830,7 +849,14 @@ export async function updatePlaceGeometry(
   if (bad) throw new Error(bad);
   const [row] = await db
     .update(daydreamPlaces)
-    .set({ lat: geo.lat, lon: geo.lon, radiusM: geo.radiusM, radiusPinned: true, updatedAt: new Date() })
+    .set({ lat: geo.lat, lon: geo.lon, radiusM: geo.radiusM, radiusPinned: true, updatedAt: new Date(),
+      suggestedLabel: sql`case when lat <> ${geo.lat} or lon <> ${geo.lon} then null else suggested_label end`,
+      suggestedAddress: sql`case when lat <> ${geo.lat} or lon <> ${geo.lon} then null else suggested_address end`,
+      suggestedKind: sql`case when lat <> ${geo.lat} or lon <> ${geo.lon} then null else suggested_kind end`,
+      suggestedProvider: sql`case when lat <> ${geo.lat} or lon <> ${geo.lon} then null else suggested_provider end`,
+      suggestedPrecision: sql`case when lat <> ${geo.lat} or lon <> ${geo.lon} then null else suggested_precision end`,
+      suggestedAt: sql`case when lat <> ${geo.lat} or lon <> ${geo.lon} then null else suggested_at end`,
+    })
     .where(eq(daydreamPlaces.id, placeId))
     .returning({ id: daydreamPlaces.id });
   return row ?? null;

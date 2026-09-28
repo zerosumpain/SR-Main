@@ -85,6 +85,15 @@ export const householdLive: ActivityHandler = {
       }
     }
 
+    try {
+      const { discoverRecentStops } = await import('$lib/home/presence/stops.server');
+      details.stops = await discoverRecentStops();
+    } catch (err) { details.stopsError = errMsg(err).slice(0, 160); }
+    try {
+      const { deliverArrivalEstimates } = await import('$lib/home/presence/eta-alerts.server');
+      details.arrivals = await deliverArrivalEstimates();
+    } catch (err) { details.arrivalsError = errMsg(err).slice(0, 160); }
+
     return { outcome: 'ok', summary: bits.join(' · ') || 'nothing new', details };
   },
 };

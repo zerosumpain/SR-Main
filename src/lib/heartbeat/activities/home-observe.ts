@@ -203,6 +203,15 @@ export const homeObserve: ActivityHandler = {
 
     // Every polled fix rejected and none written is a fault; gaps alone are not.
     const outcome = errors.length > 0 && fixes.length === 0 ? 'error' : 'ok';
+    try {
+      const { discoverRecentStops } = await import('$lib/home/presence/stops.server');
+      details.stops = await discoverRecentStops();
+    } catch (err) { details.stopsError = errMsg(err).slice(0, 160); }
+    try {
+      const { deliverArrivalEstimates } = await import('$lib/home/presence/eta-alerts.server');
+      details.arrivals = await deliverArrivalEstimates();
+    } catch (err) { details.arrivalsError = errMsg(err).slice(0, 160); }
+
     return { outcome, summary: bits.join(' · ') || 'nothing to record', details };
   },
 };

@@ -46,6 +46,8 @@ export const homePlaces: ActivityHandler = {
     const cfg = { ...DEFAULTS, ...(ctx.config as PlacesConfig) };
 
     const refresh = await refreshPlaces({ windowDays: cfg.windowDays });
+    const { geocodePendingPlaces } = await import('$lib/home/presence/geocode.server');
+    await geocodePendingPlaces();
     const pruned = cfg.prune ? await pruneTrail(cfg.retentionDays) : 0;
 
     if (refresh.fixes === 0) {
