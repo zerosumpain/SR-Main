@@ -71,7 +71,8 @@
       {#if loopIndex >= 0}
         {@const lx = PAD.l + loopIndex * slot + 1}
         <line class="loop" x1={lx} x2={lx} y1={PAD.t - 8} y2={PAD.t + ih} />
-        <text class="loop-t" x={lx + 5} y={PAD.t - 10}>{narrow ? 'New loop →' : 'New question-led loop →'}</text>
+        {@const flip = lx > W - (narrow ? 90 : 190)}
+        <text class="loop-t" x={flip ? lx - 5 : lx + 5} y={PAD.t - 10} text-anchor={flip ? 'end' : 'start'}>{flip ? 'New loop starts →' : narrow ? 'New loop →' : 'New question-led loop →'}</text>
       {/if}
       {#each weeks as w, i (w.start)}
         {@const x = PAD.l + i * slot + (slot - bw) / 2}
