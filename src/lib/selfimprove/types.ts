@@ -529,6 +529,9 @@ export interface BacklogCitation {
 
 /** Shape of an `improvement_backlog` record's `data`. */
 export interface BacklogItemData {
+  /** Commissioning owns this proposal; legacy nightly lanes must not dispatch it. */
+  commissionId?: string;
+  commissioningState?: string;
   /** Retained requirements from consolidated stories, appended to every build brief. */
   absorbedRequirements?: Record<string, string>;
   mergedBrief?: string;

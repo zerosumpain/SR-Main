@@ -376,6 +376,10 @@
   {/snippet}
 
 {#snippet editorContent()}
+  {#if item?.commissionId}
+    <p>This proposal is managed in Daydream. Its approval, progress and outcome stay with the original suggestion.</p>
+    <a class="clean-button primary" href={`/jkai/daydreams?commission=${encodeURIComponent(item.commissionId)}`}>Open Daydream improvement</a>
+  {:else}
     <nav class="journey" class:with-discuss={!creating} aria-label="Feature editor steps">
       <button type="button" class:active={step === 'brief'} onclick={() => go('brief')}>
         <span>1</span><b>Definition</b><small>Frame the need</small>
@@ -763,6 +767,7 @@
         {/if}
       </section>
     {/if}
+  {/if}
 {/snippet}
 
   {#snippet foot()}

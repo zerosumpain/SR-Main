@@ -58,6 +58,8 @@ export function messageFor(row: LedgerRow): PushMessage {
   const gate = str(data.gate);
   const userInfo: Record<string, string> = { id: row.id, category: row.category };
   if (row.url) userInfo.url = row.url;
+  const commissionId = data.destination === 'daydream_commission' && data.schemaVersion === 1 ? str(data.commissionId) : undefined;
+  if (commissionId) userInfo.commissionId = commissionId;
 
   if (gate && GATES.has(gate) && str(data.jobId)) {
     for (const key of ['gate', 'jobId', 'planId', 'confirmId', 'clarifyId', 'questionId', 'conversationId']) {
@@ -85,7 +87,7 @@ export function messageFor(row: LedgerRow): PushMessage {
     title: row.title,
     body: row.body,
     category: connections ? 'sr.connections' : 'sr.alert',
-    threadId: row.category,
+    threadId: commissionId ? `commission:${commissionId}` : row.category,
     level,
     relevance: connections ? 1 : loud ? 0.8 : 0.2,
     collapseId: row.id,

@@ -193,8 +193,10 @@ rsync -a src/lib/workflows/scraper/python/ "$VPS_DIR/src/lib/workflows/scraper/p
 rsync -a scripts/server-with-ws.mjs "$VPS_DIR/scripts/"
 rsync -a scripts/check-retired-integration-storage.mjs "$VPS_DIR/scripts/"
 rsync -a scripts/apply-security-lifecycle.mjs "$VPS_DIR/scripts/"
+rsync -a scripts/apply-daydream-commissions.mjs "$VPS_DIR/scripts/"
 mkdir -p "$VPS_DIR/scripts/migrations"
 rsync -a scripts/migrations/2026-09-28-security-lifecycle.sql "$VPS_DIR/scripts/migrations/"
+rsync -a scripts/migrations/2026-09-28-daydream-commissions.sql "$VPS_DIR/scripts/migrations/"
 # The build smoke harness. `runStaticSmoke` shells out to this by path, and it
 # must live inside the repo — `import('playwright')` resolves from the script's
 # own directory. Shipped in #144 without this line, so the check reported
@@ -284,6 +286,13 @@ else
     echo "    installed in place"
   fi
 fi
+
+# Install the additive commissioning schema before Drizzle so its SQL-only
+# constraints and restricted-role grants exist on the first release as well.
+(
+  set -a; . /etc/strange-ramblings/main-migrations.env; set +a
+  node "$VPS_DIR/scripts/apply-daydream-commissions.mjs"
+)
 
 # Same shape for the schema. Measured: 7 of 140 master commits touch schema.ts.
 # This is the one guard that genuinely trades reconciliation for time — if the

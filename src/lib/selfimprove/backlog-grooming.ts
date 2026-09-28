@@ -37,6 +37,8 @@ function requirementsCovered(request: string, existing: string): boolean {
 
 /** Related work can share a brief; retiring work additionally requires coverage. */
 export function suggestBacklogGrooming(items: WorkItem[], tools: ToolHealth[] = [], overrides: ReadonlySet<string> = new Set()): GroomingSuggestion[] {
+  // A commission's immutable scope belongs to its own approval/history chain.
+  items = items.filter(i => !i.commissionId);
   const waiting = items.filter((i) => !overrides.has(i.id) && !i.foldedInto && i.attempts === 0 &&
     i.backlogStatus === 'open' && (i.stage === 'accepted' || i.stage === 'proposed'))
     .sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));

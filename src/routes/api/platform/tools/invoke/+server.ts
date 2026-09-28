@@ -83,6 +83,15 @@ export const POST: RequestHandler = async ({ request }) => {
 		throw error(400, 'body must be JSON');
 	}
 	const { name, args, context } = parsed;
+	if (name === '__daydream_commission_v1') {
+		if (lane !== 'destructive' || context.principalId !== 'owner') throw error(403, 'Commission runtime requires the owner service lane');
+		const { invokeCommissionOperation } = await import('$lib/daydream/commission-executor.server');
+		const framed = wantsNdjson(request.headers.get('accept'));
+		let result: ToolResult;
+		try { result = await invokeCommissionOperation(args); }
+		catch { result = { success: false, error: 'Commission runtime could not complete this operation.' }; }
+		return framed ? new Response(resultLine(result), { headers: { 'content-type': NDJSON_CONTENT_TYPE, 'cache-control': 'no-store' } }) : json(result);
+	}
 	const registry = await loadToolRegistry();
 
 	/**

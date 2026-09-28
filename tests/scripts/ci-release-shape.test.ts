@@ -40,6 +40,15 @@ function job(name: string): string {
 }
 
 describe('the prebuild/release split across two machines', () => {
+  it('installs commissioning constraints and runtime grants before generic schema reconciliation and activation', () => {
+    const release = readFileSync(join(ROOT, 'scripts/ci-release.sh'), 'utf8');
+    const installer = 'node "$VPS_DIR/scripts/apply-daydream-commissions.mjs"';
+    expect(release).toContain('rsync -a scripts/apply-daydream-commissions.mjs');
+    expect(release).toContain('rsync -a scripts/migrations/2026-09-28-daydream-commissions.sql');
+    expect(release.indexOf(installer)).toBeGreaterThan(release.indexOf('main-migrations.env'));
+    expect(release.indexOf(installer)).toBeLessThan(release.indexOf('node_modules/.bin/drizzle-kit push'));
+    expect(release.indexOf(installer)).toBeLessThan(release.indexOf('./scripts/ci-development.sh pre'));
+  });
   it('leaves an extracted application’s envelopes recoverable through lease expiry during deployment', () => {
     const release = readFileSync(join(ROOT, 'scripts/ci-release.sh'), 'utf8');
     // The excluded lanes used to be the literal `trigger <> 'policy-analysis'`,
