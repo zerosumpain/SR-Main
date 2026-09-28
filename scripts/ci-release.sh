@@ -411,6 +411,9 @@ echo "==> Draining in-flight runs (running -> paused) before restart..."
 # deploy.sh, and in the TypeScript queue separately.
 source ./scripts/lib/queue-triggers.sh
 queue_triggers_clause ./scripts/external-queue-triggers.txt
+# These reserved workflows always execute in SR-Workflows, including cron
+# maintenance. A Main restart must not pause a lease held by that worker.
+QUEUE_MINE_SQL="$QUEUE_MINE_SQL AND workflow_id NOT IN ('daydream-commission-execution-v1', 'daydream-commission-maintenance-v1')"
 PG_CTR=$(docker ps --filter "name=strange-rambling-app-db" --format '{{.Names}}' | head -1 || true)
 if [ -n "$PG_CTR" ]; then
   docker exec "$PG_CTR" psql -U app -d strange_rambling \

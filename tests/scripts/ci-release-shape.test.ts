@@ -57,6 +57,7 @@ describe('the prebuild/release split across two machines', () => {
     // from the generated lane list.
     expect(release).toContain('queue_triggers_clause ./scripts/external-queue-triggers.txt');
     expect(release).toContain("WHERE status='running' $QUEUE_MINE_SQL");
+    expect(release).toContain("AND workflow_id NOT IN ('daydream-commission-execution-v1', 'daydream-commission-maintenance-v1')");
     expect(release).not.toContain("trigger <> 'policy-analysis'");
   });
 
