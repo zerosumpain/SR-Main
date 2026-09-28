@@ -7,7 +7,7 @@
   <meta name="description" content="What strangeramblings.com collects, why, and what it does with it." />
 </svelte:head>
 
-<LegalPage title="Privacy" updated="27 September 2026">
+<LegalPage title="Privacy" updated="28 September 2026">
   <p>
     Strange Ramblings is my personal website, run by me, John Kelly, in the UK. It isn't a business and
     it doesn't sell anything, least of all you. This page says what the site collects, why, and what I do
@@ -41,6 +41,45 @@
     invited. If you aren't on that list you're turned away and nothing is kept, apart from a line in the
     server log saying the address tried and was refused. If you are, the site sets a session cookie so
     you stay signed in, and that's the only cookie it uses.
+  </p>
+
+  <h2>If you use the iPhone app</h2>
+  <p>
+    SR Companion is the site's iPhone app, and like the site it's invitation only. You can sign in with
+    Apple or Google, which tells me your name and email address (or the private relay address Apple
+    makes if you ask it to hide yours), and I look at every request by hand before the account opens. If
+    I turn a request down, or you withdraw it, the request is all that's kept.
+  </p>
+  <p>
+    If you choose to share your location, the app sends where your phone is to my server so the people
+    in the family I've approved can see where you are, how charged your battery is and where you've been
+    today. It keeps doing that in the background, and after you leave a place you've picked it records
+    the journey more closely until you arrive — you can pause sharing whenever you like from Settings.
+    The phone's motion sensor is only read on the phone, to switch the GPS off while you're sitting still,
+    and none of that leaves it.
+  </p>
+  <p>
+    Apple Health data only goes up for the categories you pick, and it lands on your own health page,
+    which nobody else in the family can open. The one exception is your step total for the day, which
+    sits on the family steps leaderboard for everyone on it to see. The app reads from Apple Health and
+    never writes to it.
+  </p>
+  <p>
+    Family tasks — what the job is, who it's for, who did it and any reward attached — are seen by the
+    family, and a reward is just a note of what's owed, the app doesn't handle money. If you chat to jkai
+    from the app, your messages, photos and voice notes are stored with your account and sent to the AI
+    model providers the site uses to answer them, the same as on the site; voice notes are turned into
+    text on your phone first, and the recording is kept alongside so you can play it back. To send you
+    notifications your phone gets a push token from Apple, which I keep against your account.
+  </p>
+  <p>
+    It all sits on the same servers in the EU as the rest of the site. None of it is sold, used for
+    advertising or shared with anyone outside the family, and because it's my server I could technically
+    read it, which I don't. You can delete your account from the app, in Settings, and that removes your
+    account, your phones, the location history and health data your phone sent, your chats and anything
+    you saved on the site, straight away. Tasks you wrote for someone else stay on the family's list
+    with your name taken off, and if you share your location through Life360 as well, the family's
+    record of that isn't part of the app and stays until you ask me. Backups roll over as described below.
   </p>
 
   <h2>If you connect a Gmail account</h2>
