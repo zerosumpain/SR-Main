@@ -1,6 +1,7 @@
 /** Pure, observation-bounded household analysis. No extrapolation across gaps. */
 import { metresBetween } from './cluster';
-import { LOCAL_TZ, MAX_USABLE_ACCURACY_M, MIN_DWELL_MINS, STILL_MAX_GAP_MINS, STILL_RADIUS_M } from './types';
+import { circularMedianMinute, hhmm } from './stats';
+import { LOCAL_TZ, MAX_USABLE_ACCURACY_M, MIN_DWELL_MINS, MIN_JOURNEY_METRES, STILL_MAX_GAP_MINS, STILL_RADIUS_M } from './types';
 
 const MINUTE = 60_000;
 const DAY = 86_400_000;
@@ -24,6 +25,10 @@ export interface RouteInsight {
   id: string; subject: string; person: string; fromId: string; toId: string;
   from: string; to: string; samples: number; average: number; median: number; low: number; high: number;
   departure: string; morning: number; mode: string;
+  /** Trips far beyond the usual time — an arrival the trail missed. Drawn, never averaged. */
+  broken: number;
+  /** Every trip, oldest first, for the dot strip. */
+  trips: Array<{ start: string; minutes: number; broken: boolean }>;
 }
 export interface ArrivalInsight {
   id: string; subject: string; person: string; from: string; to: string; toId: string;
@@ -125,7 +130,15 @@ function located(f: Fix, places: InsightPlace[]): Fix {
   // Recheck geometry: place ids on historical rows can predate an edited boundary.
   return { ...f, placeId: candidates[0]?.id ?? null };
 }
-/** Completed trips require a ten-minute stay at both ends and an unbroken trail. */
+/** Two places whose circles overlap: drift at one door "arrives" at the other.
+ *  A home drawn at 50 m beside a 200 m street cluster produced a daily
+ *  three-minute "trip" between them for every person in the house. */
+function adjacent(a: string, b: string, places: InsightPlace[]): boolean {
+  const pa = places.find(p => p.id === a), pb = places.find(p => p.id === b);
+  return !!pa && !!pb && metresBetween(pa.lat, pa.lon, pb.lat, pb.lon) < pa.radiusM + pb.radiusM;
+}
+/** Completed trips require a ten-minute stay at both ends, an unbroken trail,
+ *  and a real journey: not between overlapping places, not under 300 m. */
 export function extractTrips(rows: InsightFix[], places: InsightPlace[], now: Date): { trips: Trip[]; active: Fix[] } {
   const trips: Trip[] = [];
   let origin: string | null = null, pending: Fix[] = [], path: Fix[] = [], prev: Fix | null = null;
@@ -141,7 +154,8 @@ export function extractTrips(rows: InsightFix[], places: InsightPlace[], now: Da
       if (origin && origin !== f.placeId && path.length > 1) {
         const end = +pending[0].ts, start = +path[0].ts;
         const moving = path.filter(p => +p.ts <= end);
-        if (end - start >= 2 * MINUTE && end - start <= 4 * 60 * MINUTE) {
+        if (end - start >= 2 * MINUTE && end - start <= 4 * 60 * MINUTE && !adjacent(origin, f.placeId!, places)
+          && metresBetween(path[0].lat, path[0].lon, pending[0].lat, pending[0].lon) >= MIN_JOURNEY_METRES) {
           const fast = moving.filter(p => (p.speedKmh ?? 0) > 18 || p.mode === 'vehicle' || p.mode === 'rail').length;
           trips.push({ subject: f.subject, from: origin, to: f.placeId!, start, end, minutes: (end - start) / MINUTE,
             mode: fast > moving.length / 3 ? 'vehicle' : 'active', path: moving });
@@ -154,6 +168,71 @@ export function extractTrips(rows: InsightFix[], places: InsightPlace[], now: Da
   }
   return { trips, active: origin && path.length >= 3 && !path.at(-1)?.placeId ? path : [] };
 }
+/**
+ * How long a repeated provider reading still says "they are still there".
+ *
+ * Life360 (via Home Assistant) only checks in when the phone moves, so a
+ * two-minute poll of a still phone returns the SAME reading for hours, its
+ * age (`last_seen`) climbing — median 16–36 minutes across the household,
+ * measured 2026-09-28. Refusing every reading over 120 s threw away 92% of
+ * the Life360 trail: 28-day coverage read 1–5% and not one route was learned.
+ * Six hours covers a still night or a school day; past it, a silent phone is
+ * a gap, never a stay.
+ */
+export const HEARTBEAT_MAX_S = 6 * 3600;
+
+/**
+ * Put provider readings back on the clock they were taken at. PURE.
+ *
+ * A NEW reading (its seen time differs from the last one) moves to that seen
+ * time — `ts − readingAgeS` — which is when the phone was actually there. A
+ * REPEAT of the last reading is a heartbeat at the poll time: still here, not
+ * moving. A repeat older than `HEARTBEAT_MAX_S` becomes a gap. A heartbeat
+ * that a newer reading proves was already out of date (the phone had moved by
+ * then) is dropped, so a stale position never follows a fresh one.
+ * Readings with no age (the app, backfill) pass through untouched.
+ */
+export function normaliseReadings(rows: InsightFix[], heartbeatMaxS = HEARTBEAT_MAX_S): InsightFix[] {
+  const bySubject = new Map<string, InsightFix[]>();
+  for (const r of rows) {
+    const list = bySubject.get(r.subject) ?? [];
+    list.push(r); bySubject.set(r.subject, list);
+  }
+  const out: InsightFix[] = [];
+  for (const list of bySubject.values()) {
+    list.sort((a, b) => +a.ts - +b.ts);
+    const kept: InsightFix[] = [], beats = new Set<InsightFix>();
+    let lastSeen = -Infinity;
+    for (const r of list) {
+      if (!r.readingAgeS || r.readingAgeS < 0 || r.lat == null || r.lon == null) { kept.push(r); continue; }
+      const seen = +r.ts - r.readingAgeS * 1000;
+      if (Math.abs(seen - lastSeen) > 5_000) {
+        while (kept.length && beats.has(kept.at(-1)!) && +kept.at(-1)!.ts > seen) kept.pop();
+        lastSeen = seen;
+        kept.push({ ...r, ts: new Date(seen), readingAgeS: 0 });
+      } else if (r.readingAgeS <= heartbeatMaxS) {
+        const beat: InsightFix = { ...r, readingAgeS: 0, speedKmh: 0, mode: 'still' };
+        beats.add(beat); kept.push(beat);
+      } else {
+        kept.push({ ...r, lat: null, lon: null });
+      }
+    }
+    out.push(...kept.sort((a, b) => +a.ts - +b.ts));
+  }
+  return out;
+}
+
+/** Trips far beyond a route's usual time missed their arrival (a stay the
+ *  trail did not see) — they are shown, never averaged. */
+export const BROKEN_TRIP_FACTOR = 3;
+
+/** Durations of the trips that are not broken, judged against the median of all. */
+export function cleanDurations(minutes: number[]): { clean: number[]; broken: boolean[] } {
+  const median = percentile(minutes, 0.5);
+  const broken = minutes.map(m => minutes.length >= 3 && m > median * BROKEN_TRIP_FACTOR);
+  return { clean: minutes.filter((_, i) => !broken[i]), broken };
+}
+
 function routeKey(t: Trip) { return `${t.subject}:${t.from}:${t.to}:${t.mode}`; }
 /** Match a fix to a historical polyline, returning progress and cross-track distance. */
 function progressOn(f: Fix, path: Fix[]): { fraction: number; distance: number } {
@@ -202,7 +281,7 @@ export function predictArrival(active: Fix[], trips: Trip[], places: InsightPlac
   }
   // Two plausible destinations on the same road are ambiguity, not two notifications.
   if (matches.length !== 1) return null;
-  const match = matches[0], durations = match.samples.map(t => t.minutes);
+  const match = matches[0], durations = cleanDurations(match.samples.map(t => t.minutes)).clean;
   const elapsed = (+now - +first.ts) / MINUTE;
   const usual = percentile(durations, 0.5);
   if (elapsed > percentile(durations, 0.9) * 1.75) return null;
@@ -218,6 +297,7 @@ export function predictArrival(active: Fix[], trips: Trip[], places: InsightPlac
 }
 export function analysePresence(rows: InsightFix[], places: InsightPlace[], people: InsightPerson[], now: Date, days: number): PresenceInsights {
   const start = +now - days * DAY;
+  rows = normaliseReadings(rows);
   const daily = new Map<string, { date: string; observed: number; wander: number; daylight: number }>();
   const legsByPerson = new Map<string, Leg[]>(), allTrips: Trip[] = [], activeByPerson = new Map<string, Fix[]>();
   const summaries: PersonInsight[] = [];
@@ -293,13 +373,15 @@ export function analysePresence(rows: InsightFix[], places: InsightPlace[], peop
     daily: [...daily.values()].sort((a, b) => a.date.localeCompare(b.date)).map(d => ({ ...d, observed: round(d.observed), wander: round(d.wander), daylight: round(d.daylight) })),
     groups: [...groups].map(([key, minutes]) => ({ subjects: key.split('|'), names: key.split('|').map(s => people.find(p => p.subject === s)?.displayName ?? s), minutes: round(minutes) })).sort((a, b) => b.minutes - a.minutes),
     routes: [...routes].map(([id, list]): RouteInsight => {
-      const first = list[0], values = list.map(t => t.minutes);
+      const first = list[0], { clean: values, broken } = cleanDurations(list.map(t => t.minutes));
       const morning = list.filter(t => minuteOfDay(t.start) >= 480 && minuteOfDay(t.start) < 540 && !weekend(t.start)).length;
       return { id, subject: first.subject, person: people.find(p => p.subject === first.subject)?.displayName ?? first.subject,
         fromId: first.from, toId: first.to, from: placeTitle(places.find(p => p.id === first.from)), to: placeTitle(places.find(p => p.id === first.to)),
         samples: list.length, average: round(values.reduce((a, b) => a + b, 0) / values.length), median: round(percentile(values, 0.5)),
         low: round(percentile(values, 0.1)), high: round(percentile(values, 0.9)), mode: first.mode,
-        departure: clockFmt.format(first.start), morning };
+        departure: hhmm(circularMedianMinute(list.map(t => minuteOfDay(t.start)))), morning,
+        broken: broken.filter(Boolean).length,
+        trips: list.map((t, i) => ({ start: new Date(t.start).toISOString(), minutes: round(t.minutes), broken: broken[i] })) };
     }).sort((a, b) => b.samples - a.samples),
     arrivals: people.map(p => predictArrival(activeByPerson.get(p.subject) ?? [], allTrips, places, p, now)).filter((a): a is ArrivalInsight => a != null) };
 }

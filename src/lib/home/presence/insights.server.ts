@@ -32,8 +32,9 @@ export async function loadPresenceInsights(viewer: PeopleViewer, days = 28, pers
         select subject, ts, lat, lon, accuracy_m as "accuracyM", reading_age_s as "readingAgeS",
           place_id as "placeId", mode, speed_kmh as "speedKmh", is_home as "isHome", id,
           date_bin('2 minutes', ts, timestamptz '2000-01-01') as bin,
-          (lat is null or lon is null or coalesce(accuracy_m > 150, false)
-            or coalesce(reading_age_s > 120, false)) as unusable
+          -- A provider reading's age is NOT unusability: a still Life360 phone
+          -- repeats one reading for hours. normaliseReadings re-dates them.
+          (lat is null or lon is null or coalesce(accuracy_m > 150, false)) as unusable
         from daydream_trail where subject in (${sql.join(subjects.map(s => sql`${s}`), sql`, `)})
           and ts >= ${new Date(+now - days * 86_400_000)} and ts <= ${now}
       ), sampled as (
