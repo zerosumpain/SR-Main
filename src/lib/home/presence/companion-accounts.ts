@@ -110,6 +110,24 @@ export async function upsertPilotUser(
   };
 }
 
+/**
+ * Move a person in the family to another address (their id, phones and data
+ * stay). 404 = not in the family, 409 = the owner, or the address is taken.
+ */
+export async function renamePilotUser(
+  from: string,
+  to: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<PilotResult<null>> {
+  const r = await call(
+    'PUT',
+    '/api/apple/household/users/email',
+    { from: from.trim().toLowerCase(), to: to.trim().toLowerCase() },
+    fetchImpl,
+  );
+  return r.ok ? { ok: true, value: null } : r;
+}
+
 /** A fresh ten-minute pairing code for a person in the family; the old one stops working. */
 export async function pilotPairCode(email: string, fetchImpl: typeof fetch = fetch): Promise<PilotResult<PilotPairCode>> {
   const r = await call('POST', '/api/apple/household/pair-code', { email: email.trim().toLowerCase() }, fetchImpl);

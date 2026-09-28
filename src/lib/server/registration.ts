@@ -11,10 +11,10 @@
 // Spec: docs/superpowers/specs/2026-09-28-people-and-app-registration.md (P2)
 
 import { createHash, createPublicKey, randomBytes, verify as verifySignature, type webcrypto } from 'node:crypto';
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
 import { db } from '$lib/db';
-import { accessRequest, nativeCredentials } from '$lib/db/schema';
+import { accessRequest, allowedUser, nativeCredentials } from '$lib/db/schema';
 import { isEmailAllowedToSignIn } from './access';
 import { notifyOwner } from './notify';
 
@@ -46,6 +46,22 @@ export interface Registration {
   name: string;
   email: string;
   decidedAt: Date | null;
+}
+
+/**
+ * The address a sign-in from the app stands for. Someone whose Google address
+ * was linked on their person page is known by it now; their Apple relay
+ * address is kept as an alias (`allowed_user.aliases`) and resolves here, so
+ * a new phone signed in with Apple finds them rather than filing a request.
+ */
+export async function canonicalEmail(email: string): Promise<string> {
+  const e = email.trim().toLowerCase();
+  const [row] = await db
+    .select({ email: allowedUser.email })
+    .from(allowedUser)
+    .where(sql`${allowedUser.aliases} ? ${e}`)
+    .limit(1);
+  return row?.email ?? e;
 }
 
 /** The latest request this email made, if any. */

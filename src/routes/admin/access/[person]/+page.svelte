@@ -109,6 +109,45 @@
     {/if}
   </section>
 
+  {#if person.kind === 'account' && person.email}
+    {@const relay = person.email.endsWith('@privaterelay.appleid.com')}
+    <section class="nm-sec" data-section="sign-in">
+      <div class="nm-sec-hd"><span class="sr-label-tight">Sign-in</span></div>
+      <p class="muted">
+        {#if relay}
+          They registered from the app with Apple and hid their address, so this is Apple's relay. The website signs
+          in with Google only: link their Google address and they can use it too.
+        {:else}
+          The website and the app both know them by <strong>{person.email}</strong>.
+        {/if}
+      </p>
+      {#if person.aliases.length}
+        <p class="muted small">Also them, when signing in to the app: {person.aliases.join(', ')}</p>
+      {/if}
+      <form
+        method="POST"
+        action="?/linkEmail"
+        class="inline-form"
+        use:enhance={() => async ({ result, update }) => {
+          if (result.type === 'success') {
+            const key = (result.data as { linked?: string } | undefined)?.linked;
+            if (key) await goto(`/admin/access/${encodeURIComponent(key)}`, { invalidateAll: true });
+          } else await update({ reset: false });
+        }}
+      >
+        <label class="nm-field">
+          <span class="sr-label-tight">{relay ? 'Their Google address' : 'Move them to another Google address'}</span>
+          <input class="nm-text-input" type="email" name="email" placeholder="name@gmail.com" required />
+        </label>
+        <button class="nm-save-btn" type="submit">Link Google address</button>
+      </form>
+      <p class="muted small">
+        Their phones, chat, notes, files and household place all move with them. The current address stays on as an
+        alias, so signing in with Apple on a new phone still finds them.
+      </p>
+    </section>
+  {/if}
+
   <section class="nm-sec" data-section="household">
     <div class="nm-sec-hd">
       <span class="sr-label-tight">Household</span>
