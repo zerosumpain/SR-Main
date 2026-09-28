@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { rateLimit } from '$lib/server/rate-limit';
 import { isOwnerEmail } from '$lib/server/access';
 import { createPairingCode } from '$lib/server/native-auth';
-import { ensureAppRequest, verifyAppleIdentityToken } from '$lib/server/registration';
+import { canonicalEmail, ensureAppRequest, verifyAppleIdentityToken } from '$lib/server/registration';
 
 /**
  * POST /api/native/register/apple { identityToken, nonce, name? } — Sign in with Apple
@@ -45,11 +45,13 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 
   // The owner's phone opens every owner route; it is paired from an owner
   // web session (a QR), never from an Apple sign-in, whatever Apple vouches.
-  if (isOwnerEmail(identity.email)) {
+  // A relay address whose Google address was linked is that person now.
+  const email = await canonicalEmail(identity.email);
+  if (isOwnerEmail(email)) {
     return json({ error: 'Pair the owner’s iPhone from the website.' }, { status: 403 });
   }
   const name = typeof body.name === 'string' ? body.name : null;
-  await ensureAppRequest({ email: identity.email, name, via: 'apple' });
-  const { code } = await createPairingCode(identity.email);
+  await ensureAppRequest({ email, name, via: 'apple' });
+  const { code } = await createPairingCode(email);
   return json({ code });
 };

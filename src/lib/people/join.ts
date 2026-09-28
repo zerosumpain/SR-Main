@@ -27,6 +27,7 @@ export interface AccountIn {
   role: string;
   groups: unknown;
   grants: unknown;
+  aliases?: unknown;
   createdAt: Date;
 }
 
@@ -51,6 +52,8 @@ export interface Person {
   summary: string[];
   household: HouseholdMember | null;
   devices: DeviceRow[];
+  /** Other addresses that are this person (an Apple relay, once a Google one was linked). */
+  aliases: string[];
 }
 
 /** What a pre-groups `role` held, carried in so the editor starts from the truth. */
@@ -96,6 +99,7 @@ export function joinPeople(input: {
       summary: [],
       household,
       devices: devicesOf(email),
+      aliases: [],
     });
   }
 
@@ -125,6 +129,7 @@ export function joinPeople(input: {
       summary: summarise(effective),
       household,
       devices: devicesOf(email),
+      aliases: asList(a.aliases).filter((x): x is string => typeof x === 'string'),
     });
   }
 
@@ -144,6 +149,7 @@ export function joinPeople(input: {
       summary: [],
       household: m,
       devices: devicesOf(m.email),
+      aliases: [],
     });
   }
 

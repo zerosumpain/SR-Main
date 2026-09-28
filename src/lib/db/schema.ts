@@ -1651,6 +1651,14 @@ export const allowedUser = pgTable('allowed_user', {
    */
   groups: jsonb('groups').$type<string[]>().notNull().default([]),
   grants: jsonb('grants').$type<string[]>().notNull().default([]),
+  /**
+   * Other addresses that are this person, lower-cased: the Apple relay
+   * address someone registered from the app with, once the owner linked their
+   * Google address (which became `email`). A sign-in from the app under an
+   * alias resolves to `email` ($lib/server/registration). Never a way onto
+   * the website: web sign-in checks `email` alone.
+   */
+  aliases: jsonb('aliases').$type<string[]>().notNull().default([]),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -124,7 +124,7 @@ describe('every native route gates itself', () => {
     const src = readFileSync(join(process.cwd(), `${NATIVE_ROUTES}/register/apple/+server.ts`), 'utf8');
     expect(src).toContain('verifyAppleIdentityToken');
     expect(src).toContain('rateLimit(');
-    expect(src).toMatch(/isOwnerEmail\(identity\.email\)\)\s*\{\s*\n?\s*(\/\/[^\n]*\n\s*)*return json/);
+    expect(src).toMatch(/isOwnerEmail\((identity\.)?email\)\)\s*\{\s*\n?\s*(\/\/[^\n]*\n\s*)*return json/);
   });
 
   it('keeps /pair as the only ungated path, and gates it another way', () => {

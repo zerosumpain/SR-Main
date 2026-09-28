@@ -7,6 +7,7 @@ import { addToAllowList } from '$lib/server/allow-list';
 import { setUserAccess } from '$lib/server/grants';
 import { revokeDevice } from '$lib/server/native-auth';
 import { loadPerson, removePerson } from '$lib/people/people.server';
+import { linkSignInEmail } from '$lib/people/link-email';
 import { setSetting } from '$lib/server/models/settings';
 import { COMPANION_CURSOR_KEY } from '$lib/home/presence/companion';
 import { createMember, listMembers, updateMember } from '$lib/home/presence/members';
@@ -139,6 +140,21 @@ export const actions: Actions = {
     }
     await addToAllowList({ email, note: person.name, addedBy: owner });
     return { saved: 'account' };
+  },
+
+  /**
+   * Their Google address, for the website: the person moves to it and the
+   * old address (an Apple relay, usually) stays as an alias for the app.
+   * Answers the page's new key — it is the email when they have no
+   * household row.
+   */
+  linkEmail: async (event) => {
+    const { person } = await personOr404(event);
+    if (person.kind !== 'account' || !person.email) return fail(400, { error: 'Only an account can link an address.' });
+    const to = String((await event.request.formData()).get('email') ?? '');
+    const r = await linkSignInEmail(person.email, to);
+    if (!r.ok) return fail(400, { error: r.error });
+    return { linked: person.household?.subject ?? r.email };
   },
 
   revoke: async (event) => {
