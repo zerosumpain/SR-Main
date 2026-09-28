@@ -7213,3 +7213,74 @@ export const alexaSignals = pgTable(
 );
 
 export type AlexaSignal = typeof alexaSignals.$inferSelect;
+
+// ── Family steps + tasks (spec: docs/superpowers/specs/2026-09-28-family-steps-and-tasks.md) ──
+//
+// One row per person per London day: their step count from the iPhone app's
+// pilot, upserted by the `family-steps` heartbeat. Kept as history, so
+// yesterday's winner is a read. `updated_at` moves only when the COUNT moves —
+// it is when they reached this number, and it breaks a tie at the top (who
+// got there first). `checked_at` is the last time the poll looked at all.
+export const familyStepsDay = pgTable(
+  'family_steps_day',
+  {
+    day: date('day', { mode: 'string' }).notNull(),
+    email: text('email').notNull(),
+    steps: integer('steps').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    checkedAt: timestamp('checked_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.day, t.email] })],
+);
+
+export type FamilyStepsDay = typeof familyStepsDay.$inferSelect;
+
+// Pushes the steps board has sent: `dethroned` (at most two a day per person)
+// and `standings` (the 4pm place, one a day per person). The cap and the
+// dedupe both read this.
+export const familyStepsEvent = pgTable(
+  'family_steps_event',
+  {
+    id: serial('id').primaryKey(),
+    day: date('day', { mode: 'string' }).notNull(),
+    email: text('email').notNull(),
+    /** 'dethroned' | 'standings' */
+    kind: text('kind').notNull(),
+    at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('family_steps_event_day_email_idx').on(t.day, t.email, t.kind)],
+);
+
+// The family task list. Status: open → done (awaiting a parent) → confirmed,
+// or back to open with a note; `deleted` is a soft delete. A confirmed task's
+// reward is OWED until a parent marks it paid.
+export const familyTask = pgTable(
+  'family_task',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    title: text('title').notNull(),
+    notes: text('notes'),
+    deadline: date('deadline', { mode: 'string' }),
+    assigneeEmail: text('assignee_email'),
+    createdByEmail: text('created_by_email').notNull(),
+    /** 'open' | 'done' | 'confirmed' | 'deleted' */
+    status: text('status').notNull().default('open'),
+    doneByEmail: text('done_by_email'),
+    doneAt: timestamp('done_at', { withTimezone: true }),
+    sentBackNote: text('sent_back_note'),
+    sentBackAt: timestamp('sent_back_at', { withTimezone: true }),
+    confirmedByEmail: text('confirmed_by_email'),
+    confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+    /** 'cash' | 'day_out' | 'game_time' | 'lunch_out' | 'other' */
+    rewardKind: text('reward_kind'),
+    rewardPence: integer('reward_pence'),
+    rewardNote: text('reward_note'),
+    rewardPaidAt: timestamp('reward_paid_at', { withTimezone: true }),
+    rewardPaidByEmail: text('reward_paid_by_email'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('family_task_status_idx').on(t.status)],
+);
+
+export type FamilyTask = typeof familyTask.$inferSelect;

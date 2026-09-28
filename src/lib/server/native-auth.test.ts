@@ -101,6 +101,11 @@ describe('every native route gates itself', () => {
         '/chat/conversations/[id]/messages/+server.ts',
         '/chat/conversations/[id]/model/+server.ts',
         '/companion-pair/+server.ts',
+        // Family steps and tasks: the owner or a family:circle/admin grant,
+        // checked by `familyCaller` in each handler; everyone else 403s.
+        '/family/steps/+server.ts',
+        '/family/tasks/+server.ts',
+        '/family/tasks/[id]/+server.ts',
         '/games/+server.ts',
         '/games/[id]/+server.ts',
         '/games/[id]/stream/+server.ts',

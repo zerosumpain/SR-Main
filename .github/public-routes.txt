@@ -45,6 +45,9 @@
 /api/native/connections
 /api/native/daydream
 /api/native/daydream/feedback
+/api/native/family/steps
+/api/native/family/tasks
+/api/native/family/tasks/[id]
 /api/native/games
 /api/native/games/[id]
 /api/native/games/[id]/stream
