@@ -250,6 +250,8 @@ export function kindLabel(kind: string): string {
 }
 
 export interface WorkItem {
+  commissionId?: string;
+  commissioningState?: string;
   /** `backlog:<slug>`. Capability leads (`capability:<slug>`) were retired
    *  with the appetite ledger in D3 (2026-09-26). */
   id: string;
@@ -589,6 +591,8 @@ export function buildBoard(input: BoardInput): BoardView {
     const epicSlug = b.epicSlug ?? (b.capabilitySlug ? `cap:${b.capabilitySlug}` : null);
     items.push({
       id: `backlog:${b.slug}`,
+      commissionId: b.commissionId,
+      commissioningState: b.commissioningState,
       source: 'backlog',
       slug: b.slug,
       title: b.title,
@@ -630,7 +634,7 @@ export function buildBoard(input: BoardInput): BoardView {
       noteCount: b.notes?.length ?? 0,
       lastNoteAt: b.notes?.length ? (b.notes[b.notes.length - 1].at ?? null) : null,
       settledAt: b.status === 'open' ? null : (b.settledAt ?? null),
-      actionable: true,
+      actionable: !b.commissionId,
     });
   }
 

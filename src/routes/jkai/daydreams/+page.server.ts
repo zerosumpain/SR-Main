@@ -4,6 +4,8 @@ import { isLegacyLink, legacyTabTarget } from '$lib/daydream/hub';
 import { errMsg } from '$lib/daydream/types';
 import { DAILY_RAISE_CAP, type FeedNote } from '$lib/daydream/think/notes';
 import { loadEngineStrip, loadFeedNote, loadFeedNotes, type EngineStrip } from '$lib/daydream/think/notes.server';
+import { commissioningEnabled } from '$lib/daydream/commission-service.server';
+import { listCommissions, loadCommission } from '$lib/daydream/commission-store.server';
 
 // The one feed (spec 2026-09-25, P2): the think loop's notes, newest first,
 // with a one-line engine strip above them.
@@ -15,6 +17,14 @@ export const load: PageServerLoad = async ({ url }) => {
   if (isLegacyLink(url)) throw redirect(307, legacyTabTarget(url));
 
   const focus = url.searchParams.get('note');
+  const commissionFocus = url.searchParams.get('commission');
+  const commissionEnabled = commissioningEnabled();
+  let commissionError: string | null = null;
+  const commissions = commissionEnabled ? await listCommissions().catch(() => { commissionError = 'Improvement history could not be loaded. Your decisions are retained.'; return []; }) : [];
+  if (commissionFocus && commissionEnabled && !commissions.some(c => c.id === commissionFocus)) {
+    const one = await loadCommission(commissionFocus).catch(() => null);
+    if (one) commissions.unshift(one);
+  }
   // Each read degrades on its own: a strip that cannot be read costs the
   // strip, never the notes.
   const [notesResult, stripResult] = await Promise.allSettled([loadFeedNotes({ days: 30 }), loadEngineStrip()]);
@@ -31,6 +41,7 @@ export const load: PageServerLoad = async ({ url }) => {
   }
 
   return {
+    commissionEnabled, commissions, commissionFocus, commissionError,
     notes,
     strip,
     cap: DAILY_RAISE_CAP,

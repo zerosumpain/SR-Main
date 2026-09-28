@@ -9,6 +9,12 @@ const row = (slug: string, title: string, extra: Partial<BacklogItemData> = {}):
 });
 const board = (rows: BacklogItemData[]) => buildBoard({ backlog: rows, tools: [], attemptCeiling: 4, settledLimit: null }).items;
 describe('automatic grooming suggestions', () => {
+  it('keeps commissioned scope out of automatic merging and coverage decisions', () => {
+    const items = board([row('commission', 'Apple calendar event reminders', { commissionId: 'c1' }),
+      row('ordinary', 'Apple calendar event reminders')]);
+    expect(suggestBacklogGrooming(items)).toEqual([]);
+    expect(items.find(item => item.commissionId)?.actionable).toBe(false);
+  });
   it('suggests a stable surviving request instead of circular merges', () => {
     const items = board(['a', 'b', 'c'].map((id) => row(id, 'Apple calendar event reminders')));
     const suggestions = suggestBacklogGrooming(items);

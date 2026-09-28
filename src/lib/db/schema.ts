@@ -11,6 +11,7 @@ import {
   doublePrecision,
   boolean,
   uniqueIndex,
+  unique,
   index,
   jsonb,
   numeric,
@@ -7319,3 +7320,56 @@ export const companionDeletionFloor = pgTable('companion_deletion_floor', {
   subject: text('subject'),
   deletedAt: timestamp('deleted_at', { withTimezone: true }).notNull(),
 }, (t) => [index('companion_deletion_floor_subject_idx').on(t.subject)]);
+
+// Daydream commissioning: an unauthorised proposal is not an executed action.
+export const daydreamCommissions = pgTable('daydream_commissions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  principalId: text('principal_id').notNull(),
+  thoughtId: text('thought_id').notNull().references(() => daydreamThoughts.id, { onDelete: 'cascade' }),
+  backlogSlug: text('backlog_slug').notNull(),
+  state: text('state').notNull().default('awaiting_approval'),
+  revision: integer('revision').notNull().default(1),
+  specHash: text('spec_hash').notNull(),
+  spec: jsonb('spec').notNull(),
+  approvedAt: timestamp('approved_at', { withTimezone: true }),
+  approvedBy: text('approved_by'),
+  attempts: integer('attempts').notNull().default(0),
+  generation: integer('generation').notNull().default(0),
+  workflowRunId: text('workflow_run_id'),
+  result: jsonb('result'),
+  lastError: text('last_error'),
+  deferredUntil: timestamp('deferred_until', { withTimezone: true }),
+  leaseToken: uuid('lease_token'),
+  leaseUntil: timestamp('lease_until', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [
+  unique('daydream_commissions_origin_unique').on(t.principalId, t.thoughtId, t.specHash),
+  index('daydream_commissions_principal_updated_idx').on(t.principalId, t.updatedAt.desc()),
+  check('daydream_commissions_state_check', sql`${t.state} IN ('awaiting_approval','deferred','declined','queued','running','needs_attention','completed','cancelled')`),
+  check('daydream_commissions_revisions_check', sql`${t.revision}>0 AND ${t.attempts}>=0 AND ${t.generation}>=0`),
+]);
+export const daydreamCommissionEvents = pgTable('daydream_commission_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  commissionId: uuid('commission_id').notNull().references(() => daydreamCommissions.id, { onDelete: 'cascade' }),
+  sequence: integer('sequence').notNull(), kind: text('kind').notNull(), actor: text('actor').notNull(), summary: text('summary').notNull(),
+  data: jsonb('data').notNull().default(sql`'{}'::jsonb`),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [unique('daydream_commission_events_commission_id_sequence_key').on(t.commissionId, t.sequence)]);
+export const daydreamCommissionCommands = pgTable('daydream_commission_commands', {
+  principalId: text('principal_id').notNull(), operationKey: text('operation_key').notNull(),
+  commissionId: uuid('commission_id').notNull().references(() => daydreamCommissions.id, { onDelete: 'cascade' }),
+  inputHash: text('input_hash').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [primaryKey({ columns: [t.principalId, t.operationKey] })]);
+export const daydreamCommissionOutbox = pgTable('daydream_commission_outbox', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  commissionId: uuid('commission_id').notNull().references(() => daydreamCommissions.id, { onDelete: 'cascade' }),
+  eventId: uuid('event_id').notNull().references(() => daydreamCommissionEvents.id, { onDelete: 'cascade' }),
+  kind: text('kind').notNull(), payload: jsonb('payload').notNull(), attempts: integer('attempts').notNull().default(0),
+  availableAt: timestamp('available_at', { withTimezone: true }).notNull().defaultNow(),
+  deliveredAt: timestamp('delivered_at', { withTimezone: true }), lastError: text('last_error'),
+}, t => [unique('daydream_commission_outbox_event_id_kind_key').on(t.eventId, t.kind),
+  check('daydream_commission_outbox_kind_check', sql`${t.kind} IN ('notification','dispatch')`),
+  index('daydream_commission_outbox_pending_idx').on(t.availableAt).where(sql`${t.deliveredAt} IS NULL`),
+]);

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { PageData } from './$types';
   import { invalidateAll } from '$app/navigation';
+  import { page } from '$app/state';
   import DaydreamShell from '$lib/components/jkai/daydream/hub/DaydreamShell.svelte';
   import DsVocab from '$lib/components/jkai/daydream/hub/DsVocab.svelte';
   import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
@@ -21,6 +22,10 @@
    *  handle, and it is a slug rather than an object for the same reason the
    *  board's own is — `invalidateAll()` replaces every epic. */
   let openFromReview = $state<string | null>(null);
+  $effect(() => {
+    const slug = page.url.searchParams.get('item');
+    if (slug) openFromReview = data.epics.find(epic => epic.deliverables.some(item => item.slug === slug))?.slug ?? null;
+  });
 
   async function act(body: Record<string, unknown>, key: string) {
     busy = key;

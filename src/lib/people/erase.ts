@@ -150,6 +150,8 @@ export const ACCOUNT_COLUMNS: Record<string, Record<string, Fate | `kept: ${stri
   datastore_records: { created_by: 'kept: owner-only (datastore)' },
   custom_tools: { created_by: 'kept: agent tag, never a person' },
   daydream_capabilities: { decided_by: 'kept: owner-only (daydream)' },
+  daydream_commissions: { principal_id: 'kept: owner-only commissioning; reserved owner principal, never a member' },
+  daydream_commission_commands: { principal_id: 'kept: owner-only commissioning command receipts' },
 };
 
 export interface EraseTarget {

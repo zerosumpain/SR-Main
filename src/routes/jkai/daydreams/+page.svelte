@@ -13,7 +13,8 @@
   // category is the mark in the kicker.
   import { tick, untrack } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
-  import { invalidateAll } from '$app/navigation';
+  import { invalidateAll, goto } from '$app/navigation';
+  import CommissionPanel from '$lib/components/jkai/daydream/CommissionPanel.svelte';
   import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
   import LoadErrorCard from '$lib/components/jkai/daydream/hub/LoadErrorCard.svelte';
   import { noteTone } from '$lib/daydream/priority';
@@ -53,6 +54,16 @@
   // ── Saying something back ─────────────────────────────────────────────────
   let busy = $state<string | null>(null);
   let actionError = $state<string | null>(null);
+  async function prepare(n: FeedNote) {
+    busy = `${n.id}:prepare`; actionError = null;
+    try {
+      const response = await fetch('/api/daydream/commissions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'prepare', thoughtId: n.id }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? 'The proposal could not be prepared.');
+      await goto(result.commission.url, { invalidateAll: true });
+    } catch (e) { actionError = e instanceof Error ? e.message : 'The proposal could not be prepared.'; }
+    finally { busy = null; }
+  }
   async function act(body: Record<string, unknown>, key: string): Promise<boolean> {
     busy = key;
     actionError = null;
@@ -121,6 +132,9 @@
 {/if}
 
 <!-- ── The notes ──────────────────────────────────────────────────────────── -->
+{#if data.commissionEnabled}
+  <CommissionPanel commissions={data.commissions} focus={data.commissionFocus} loadError={data.commissionError} />
+{/if}
 <section class="band">
   <div class="inner">
     <SectionHead
@@ -181,6 +195,11 @@
               </div>
 
               <div class="card-actions">
+                {#if data.commissionEnabled}
+                  {@const existing = data.commissions.find(c => c.thoughtId === n.id)}
+                  {#if existing}<a class="btn sm" href={existing.url}>View improvement</a>
+                  {:else}<button type="button" class="btn sm" disabled={busy?.startsWith(n.id)} onclick={() => prepare(n)}>Investigate first</button>{/if}
+                {/if}
                 {#if !n.verdict}
                   <button type="button" class="btn sm" disabled={busy?.startsWith(n.id)} onclick={() => rate(n, 'useful')}>Useful</button>
                   <button type="button" class="btn sm" disabled={busy?.startsWith(n.id)} onclick={() => rate(n, 'not_useful')}>Not useful</button>

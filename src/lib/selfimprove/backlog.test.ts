@@ -130,6 +130,18 @@ describe('addIdeas — dedupe is what stops nightly re-invention', () => {
 });
 
 describe('pickWork', () => {
+  it('refuses legacy edits and parking of a commissioned proposal', async () => {
+    const data = item({ slug: 'commission', commissionId: 'c1' });
+    h.records = [{ key: data.slug, data }];
+    await expect(setParked(data.slug, true)).rejects.toThrow('Daydream');
+    await expect(setPriority(data.slug, 1)).rejects.toThrow('Daydream');
+    expect(h.records[0].data).toEqual(data);
+  });
+  it('never sends commission-owned proposals into the legacy build lane', () => {
+    const rows = [item({ slug: 'proposal', kind: 'feature', commissionId: 'approved-or-unapproved', priority: 1 }),
+      item({ slug: 'ordinary', kind: 'feature', priority: 5 })];
+    expect(pickWork(rows, 'feature', 2).map(row => row.slug)).toEqual(['ordinary']);
+  });
   it('leads with never-attempted items, by priority', () => {
     const items = [
       item({ slug: 'a', attempts: 2, priority: 1 }),

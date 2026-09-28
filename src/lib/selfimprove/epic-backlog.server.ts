@@ -73,7 +73,7 @@ export async function updateEpic(slug: string, title: string, summary: string, p
     ownerTitle: title.trim().slice(0, 200), summary: summary.trim().slice(0, 2000), updatedAt: new Date().toISOString(),
   }) }, SYSTEM_ACTOR);
   if (priority != null) for (const item of [...current.deliverables, ...current.combinedDeliveries]) {
-    if (item.backlogStatus === 'open' && !item.foldedInto) await setPriority(item.slug, priority);
+    if (item.actionable && item.backlogStatus === 'open' && !item.foldedInto) await setPriority(item.slug, priority);
   }
 }
 
@@ -107,7 +107,7 @@ export async function decideBacklogGrooming(id: string, decision: 'apply' | 'kee
   if (suggestion.kind === 'covered') {
     const reason = `Covered by ${suggestion.targetTitle} (${suggestion.targetId}); ${by === 'engine' ? 'automatically consolidated' : 'reviewed by owner'}`;
     const source = await getBacklogItem(item.slug);
-    if (!source || source.status !== 'open' || source.attempts || source.title !== item.title || source.detail !== item.detail || JSON.stringify(source.grooming ?? null) !== JSON.stringify(item.grooming)) throw new Error('Suggestion changed; delivery or requirements changed');
+    if (!source || source.commissionId || source.status !== 'open' || source.attempts || source.title !== item.title || source.detail !== item.detail || JSON.stringify(source.grooming ?? null) !== JSON.stringify(item.grooming)) throw new Error('Suggestion changed; delivery or requirements changed');
     await setParked(item.slug, true, reason);
     await audit('applied');
     return;
@@ -119,7 +119,7 @@ export async function decideBacklogGrooming(id: string, decision: 'apply' | 'kee
   }
   const targetSlug = suggestion.targetId.replace(/^backlog:/, '');
   const [source, target] = await Promise.all([getBacklogItem(item.slug), getBacklogItem(targetSlug)]);
-  if (!source || !target || source.status !== 'open' || target.status !== 'open' || source.attempts || target.attempts) {
+  if (!source || !target || source.commissionId || target.commissionId || source.status !== 'open' || target.status !== 'open' || source.attempts || target.attempts) {
     throw new Error('Suggestion changed; delivery started building');
   }
   const { renderBacklogBrief } = await import('./grooming');

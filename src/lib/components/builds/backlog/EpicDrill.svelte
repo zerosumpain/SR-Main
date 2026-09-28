@@ -20,6 +20,8 @@
   import type { BacklogEpic } from '$lib/selfimprove/epic-backlog';
   import { ago } from '$lib/daydream/format';
 
+  import { COMMISSION_LABELS, type CommissionState } from '$lib/daydream/commissioning';
+
   interface Props {
     epic: BacklogEpic;
     busy: string | null;
@@ -46,7 +48,7 @@
    *  control, because "set priority" over a mixed epic silently skipping the
    *  shipped half is the ambiguity this panel had. */
   const repriced = $derived(
-    epic.deliverables.filter((i) => i.source === 'backlog' && i.backlogStatus === 'open' && !i.foldedInto),
+    epic.deliverables.filter((i) => i.actionable && i.source === 'backlog' && i.backlogStatus === 'open' && !i.foldedInto),
   );
 
   async function save() {
@@ -95,6 +97,7 @@
   }
 
   function itemState(item: WorkItem): { label: string; tone: string } {
+    if (item.commissionId) return { label: COMMISSION_LABELS[item.commissioningState as CommissionState] ?? 'Managed in Daydream', tone: 'quiet' };
     if (item.foldedInto) return { label: 'COMBINED', tone: 'quiet' };
     return { label: STAGE_META[item.stage].label.toUpperCase(), tone: STAGE_META[item.stage].tone };
   }
@@ -180,7 +183,7 @@
           </div>
           <span class="hint">
             {#if repriced.length === 0}
-              Nothing open here to rank — every deliverable has shipped or been parked.
+              No deliverables in this group can be ranked here.
             {:else}
               Writes to {repriced.length} open deliverable{repriced.length === 1 ? '' : 's'}. It is
               the field <code>pickWork</code> ranks on, so it decides what gets built tonight.
@@ -269,7 +272,9 @@
                   {/if}
                 </td>
                 <td class="right"><div class="act-stack">
-                  {#if item.source === 'backlog' && !item.foldedInto}
+                  {#if item.commissionId}
+                    <a class="btn sm" href={`/jkai/daydreams?commission=${encodeURIComponent(item.commissionId)}`}>Open Daydream</a>
+                  {:else if item.source === 'backlog' && !item.foldedInto}
                     <div class="pri sm">
                       <button
                         type="button"

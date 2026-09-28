@@ -35,6 +35,8 @@ import { kickPushDispatch } from './push-dispatch';
 const SITE_URL = 'https://strangeramblings.com';
 
 export interface NotifyInput {
+  /** Durable domain-event identity. Retries project the same ledger row. */
+  eventId?: string;
   category: string;
   title: string;
   body: string;
@@ -162,6 +164,11 @@ function stripUndefined<T extends Record<string, unknown>>(value: T): Partial<T>
  */
 export async function notifyOwner(input: NotifyInput): Promise<NotifyResult> {
   try {
+    if (input.eventId) {
+      const [existing] = await db.select({ id: notificationEvents.id }).from(notificationEvents)
+        .where(eq(notificationEvents.id, input.eventId)).limit(1);
+      if (existing) return { raised: false, reason: 'duplicate', id: existing.id };
+    }
     const routed = await routeFor(input.category);
     const route = {
       ...routed,
@@ -203,9 +210,10 @@ export async function notifyOwner(input: NotifyInput): Promise<NotifyResult> {
     // is stamped collected on the way in, so the phone never raises it.
     const silent = !route.whatsapp && !route.native;
 
-    const [row] = await db
+    const insert = db
       .insert(notificationEvents)
       .values({
+        ...(input.eventId ? { id: input.eventId } : {}),
         category: route.category.id,
         title: input.title.slice(0, 200),
         body: input.body.slice(0, 2000),
@@ -220,8 +228,11 @@ export async function notifyOwner(input: NotifyInput): Promise<NotifyResult> {
         nativeAt: route.native && !silent ? null : new Date(),
         // A silent row is read, because nobody was ever going to be shown it.
         readAt: silent ? new Date() : null,
-      })
+      });
+    const [row] = await (input.eventId ? insert.onConflictDoNothing({ target: notificationEvents.id }) : insert)
       .returning({ id: notificationEvents.id });
+
+    if (!row) return { raised: false, reason: 'duplicate', id: input.eventId };
 
     await db
       .insert(notificationRoutes)

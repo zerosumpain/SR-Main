@@ -17,6 +17,14 @@ const row = (extra: Record<string, unknown> = {}) => ({
 });
 
 describe('messageFor', () => {
+  it('groups commission milestones without collapsing distinct events', () => {
+    const id = '22222222-2222-4222-8222-222222222222';
+    const m = messageFor(row({ category: 'daydream', data: { schemaVersion: 1, destination: 'daydream_commission', commissionId: id } }));
+    expect(m.userInfo?.commissionId).toBe(id);
+    expect(m.threadId).toBe(`commission:${id}`);
+    expect(m.collapseId).toBe(row().id);
+    expect(m.category).toBe('sr.alert');
+  });
   it('turns a chat gate into an answerable, time-sensitive push carrying its ids', () => {
     const m = messageFor(row({ data: { gate: 'confirm', jobId: 'job-1', confirmId: 'c-1', conversationId: 'conv-1' } }));
     expect(m.category).toBe('sr.gate.confirm');

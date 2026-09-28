@@ -90,6 +90,7 @@ export async function listBacklog(status?: BacklogStatus, opts: { strict?: boole
 }
 
 async function put(item: BacklogItemData): Promise<void> {
+  if (item.commissionId) throw new Error('Manage this commissioned proposal in Daydream so its approval and history stay together.');
   await upsertRecord(COLLECTIONS.backlog, { key: item.slug, data: asData(item) }, SYSTEM_ACTOR);
 }
 
@@ -245,6 +246,7 @@ export function findIntakeTwin(
     return mine.length > 0 && !mine.some((c) => c.ref === arrival.ref);
   };
   const live = items.filter((i) => {
+    if (i.commissionId) return false;
     if (ownSibling(i)) return false;
     if (i.status === 'open') return true;
     const t = Date.parse(i.settledAt ?? i.updatedAt ?? '');
@@ -467,7 +469,7 @@ export function pickWork(
   if (limit <= 0) return [];
   const kinds: ReadonlyArray<BacklogItemData['kind']> = typeof kind === 'string' ? [kind] : kind;
   const open = items.filter(
-    (i) => i.status === 'open' && !i.buildRef && kinds.includes(i.kind) && i.attempts < MAX_ATTEMPTS,
+    (i) => i.status === 'open' && !i.commissionId && !i.buildRef && kinds.includes(i.kind) && i.attempts < MAX_ATTEMPTS,
   );
   const rank = (a: BacklogItemData, b: BacklogItemData) =>
     a.priority - b.priority || (a.updatedAt ?? '').localeCompare(b.updatedAt ?? '');
@@ -865,6 +867,7 @@ export async function foldItems(slugs: string[], into?: string): Promise<FoldRes
   const unique = [...new Set(slugs.filter(Boolean))];
   if (unique.length < 2) throw new Error('folding needs at least two items');
   const items = await Promise.all(unique.map((s) => mustGet(s)));
+  if (items.some(item => item.commissionId)) throw new Error('Manage commissioned proposals in Daydream; their approved scope cannot be folded into another build.');
 
   // Same reason `setParked` refuses one: the losers of a fold are marked
   // `abandoned`, and doing that to a shipped row would erase the fact that it
