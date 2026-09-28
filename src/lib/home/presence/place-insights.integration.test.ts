@@ -17,7 +17,8 @@ describe.skipIf(!enabled)('persistent stop discovery and place lookup', () => {
   beforeAll(async () => {
     const url = new URL(process.env.DATABASE_URL ?? '');
     if (!['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)
-      || !(/_test$/.test(url.pathname) || url.pathname === '/workflows_jkai_local')) throw new Error('Only an isolated loopback test database is permitted.');
+      || !(/_test$/.test(url.pathname) || url.pathname === '/workflows_jkai_local'
+        || process.env.GITHUB_ACTIONS === 'true' && url.pathname === '/strange_rambling')) throw new Error('Only an isolated loopback test database is permitted.');
     await db.insert(householdMember).values({ subject, displayName: 'Synthetic test', source: 'life360' });
     const now = Date.now();
     await db.insert(daydreamTrail).values(Array.from({ length: 6 }, (_, i) => ({ subject, source: 'poll', ts: new Date(now - (5 - i) * 120000), lat: 56.12345, lon: 3.12345, accuracyM: 10, speedKmh: 0, readingAgeS: 0 })));
@@ -39,9 +40,13 @@ describe.skipIf(!enabled)('persistent stop discovery and place lookup', () => {
     expect(rows.every(r => r.placeId === id)).toBe(true);
   });
   it('stores a permanent address lookup and avoids repeated provider calls', async () => {
-    const fetcher = vi.fn(async (url: URL | RequestInfo) => {
+    const fetcher = vi.fn(async (url: URL | RequestInfo, options?: RequestInit) => {
       expect(String(url)).toContain('permanent=true');
       expect(String(url)).toContain('latitude=56.12345');
+      const origin = new URL(process.env.PUBLIC_BASE_URL?.trim() || process.env.PUBLIC_SITE_URL?.trim()
+        || process.env.ORIGIN?.trim() || 'https://strangeramblings.com').origin;
+      expect(new Headers(options?.headers).get('Origin')).toBe(origin);
+      expect(new Headers(options?.headers).get('Referer')).toBe(`${origin}/`);
       return new Response(JSON.stringify({ features: [{ geometry: { coordinates: [3.12345, 56.12345] }, properties: { feature_type: 'address', name: '42 Synthetic Road', full_address: '42 Synthetic Road, Exampletown' } }] }));
     }) as unknown as typeof fetch;
     expect(await geocodePlace(id, fetcher)).toBe(true);

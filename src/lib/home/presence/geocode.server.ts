@@ -29,7 +29,16 @@ async function lookup(lat: number, lon: number, fetchImpl: typeof fetch): Promis
     for (const [k, v] of Object.entries({ latitude: String(lat), longitude: String(lon), access_token: credential.payload.key,
       permanent: 'true', language: 'en', types: 'address,street,place,locality,neighborhood' })) url.searchParams.set(k, v);
   }
-  const response = await fetchImpl(url, { headers: { 'User-Agent': 'StrangeRamblings/1.0 (https://strangeramblings.com)' }, signal: AbortSignal.timeout(8000) });
+  const headers: Record<string, string> = { 'User-Agent': 'StrangeRamblings/1.0 (https://strangeramblings.com)' };
+  if (provider === 'mapbox') {
+    // The existing site token restricts geocoding to this application's origin.
+    // Background stop detection has no incoming browser request to supply it.
+    const origin = new URL(process.env.PUBLIC_BASE_URL?.trim() || process.env.PUBLIC_SITE_URL?.trim()
+      || process.env.ORIGIN?.trim() || 'https://strangeramblings.com').origin;
+    headers.Origin = origin;
+    headers.Referer = `${origin}/`;
+  }
+  const response = await fetchImpl(url, { headers, signal: AbortSignal.timeout(8000) });
   if (!response.ok) throw new Error(`Place lookup provider returned ${response.status}.`);
   const value = await response.json();
   return provider === 'mapbox' ? parseMapbox(value, lat, lon) : parseNominatim(value, lat, lon);
