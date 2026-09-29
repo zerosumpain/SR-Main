@@ -29,3 +29,11 @@ export function currentIsOwner(): boolean {
     return false;
   }
 }
+
+export function currentIsSignedIn(): boolean {
+  try {
+    return page.data?.signedIn !== false;
+  } catch {
+    return false;
+  }
+}

@@ -22,7 +22,11 @@ export const load: LayoutServerLoad = async (event) => {
   // While the owner views the site as someone else, the chrome says so on every
   // page ($lib/server/view-as). Only ever set for the owner's own session.
   const viewingAs = locals.viewingAs ? { email: locals.viewingAs.email, kind: locals.viewingAs.kind } : null;
-  return { isOwner, navReach: isOwner ? [] : await memberReach(event), viewingAs };
+  // Any session at all, owner or member. The home page's top-left cell reads
+  // it: a signed-out visitor is shown none of the gated sections, so without a
+  // "Sign in" there they have no route in.
+  const signedIn = isOwner || !!(await locals.auth().catch(() => null))?.user;
+  return { isOwner, signedIn, navReach: isOwner ? [] : await memberReach(event), viewingAs };
 };
 
 /**
