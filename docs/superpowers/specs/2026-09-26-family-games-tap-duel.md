@@ -335,3 +335,58 @@ Wire (GameRoom additions; lobby verbs, invites, stream as every other game):
   "winnerIds": [], "serverNow":… }
 ```
 The invite's `about` reads "8 categories · 2 minutes".
+
+## Game 9 — Liar's Dice (added 2026-09-29)
+
+`game:'liars-dice'`. Perudo-style: everyone rolls dice under a cup, bids on what the WHOLE table
+holds, and calls "liar" on a bid they don't believe. The first turn-based, hidden-information
+game — the per-viewer `toWire(room, meId, now)` is what keeps each cup private; `rooms.server.ts`
+is unchanged.
+
+**The host picks the table** on create (optional, default in bold): `dice`: 3 | **5** each.
+2–5 players; **no solo** — `start` refuses a table of one (409 "Liar's Dice needs at least two players.").
+
+**Difficulty** = the wild rule and the clock:
+easy — ones are NOT wild (a 1 is a 1, and may be bid), 45 s a turn;
+medium — ones are wild (count as any face; nobody bids on ones), 45 s;
+hard — ones wild, 30 s. The sentence is on the wire as `rule`.
+
+**A round.** The server rolls every cup still in play. The first round is opened by the **host**;
+every later round by the previous call's loser (or, if that took their last die, the next player
+in). Turns pass in seat order (the room's `players` order), skipping anyone out.
+On your turn: `{action:'bid', quantity, face}` — strictly higher than the standing bid (more dice
+of any face, or as many of a higher face), `quantity` ≤ dice in play, `face` 1–6 (2–6 when wild) —
+or `{action:'liar'}` once somebody has bid. A bad bid is 400 with a sentence and costs nothing;
+off-turn is 409 "It's not your turn."
+
+**A call** lifts every cup for `REVEAL_MS` (6 s): count the dice showing the bid's face (plus ones,
+when wild). Count ≥ quantity → the caller loses a die; otherwise the bidder does. No dice left =
+out. The last player with dice wins (`winnerIds:[them]`); standings are the winner, then the order
+of going out, last out second.
+
+**The turn clock.** When it runs out the server moves for you, marked `auto:true`: opening — one of
+your own most common face (never ones; ties → higher face); otherwise one more of the standing face,
+or a call when that would be more dice than the table holds. Every deadline after a step is set
+from `now`, so one `advance` takes ONE step — a stale timestamp cannot auto-play a whole game — and
+a non-finite `now` does nothing.
+
+**Leaving** mid-game takes your dice out of play and counts as going out. Your turn passes to the
+next player with a fresh clock; one player left wins. Bids already made stand — a leaver's bid can
+still be called, and if it was a lie nobody loses a die. "Play again" is Boggle's.
+
+Wire (GameRoom additions; lobby verbs, invites, stream as every other game):
+```jsonc
+{ "game":"liars-dice", "phase":"lobby|countdown|bidding|reveal|finished|closed",
+  "dicePerPlayer":5, "wildOnes":true, "rule":"Ones are wild: …", "minFace":2, "turnMs":45000,
+  "round":3, "starterId":"p_…", "turnId": null | "p_…",       // turnId only while bidding
+  "totalDice":12, "startedAt":…, "phaseEndsAt":…,              // the turn clock while bidding, reveal end while revealing
+  "bid":  null | {"playerId","quantity":4,"face":3,"auto":false},   // the standing bid
+  "bids": [{"playerId","quantity","face","auto"}],             // this round's table talk, oldest first
+  "players":[{"id","name","status","isHost","seated":true,"diceCount":4,"out":false,
+              "dice": null | [1,3,3,5]}],   // MINE always; everyone's once finished; null otherwise
+  "reveal": null | {"bid":{…},"challengerId","auto":false,"count":5,"loserId","eliminated":false,
+                    "dice":[{"playerId","dice":[…]}]},        // from a call until the next roll (and at the finish)
+  "standings": null | [{"id","name","place":1,"dice":2,"outRound":null,"left":false}],
+  "winnerIds": [], "serverNow":… }
+```
+The invite's `about` reads "5 dice each · ones wild" (or "· no wilds").
