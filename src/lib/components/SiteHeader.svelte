@@ -41,6 +41,7 @@
     items,
     isOwner = true,
     reach = [],
+    signedIn = true,
     showBack = true,
     meta,
     before,
@@ -54,6 +55,8 @@
     isOwner?: boolean;
     /** Pages a member's permissions open: their owner-only cells stay. */
     reach?: readonly string[];
+    /** Signed out on the home page, the home cell becomes "Sign in". */
+    signedIn?: boolean;
     showBack?: boolean;
     /** Small metadata beside the section cell (counts, sync status). */
     meta?: Snippet;
@@ -73,6 +76,13 @@
     items ? visibleItems(items, isOwner, reach) : navCellsFor(path, isOwner, reach),
   );
   const atHome = $derived(path === '/');
+  /**
+   * On the home page the home icon points at the page you are already on, and
+   * a signed-out visitor sees none of the gated sections — so nothing on the
+   * site says there is anything to sign in to. There, and only there, the
+   * cell becomes the way in.
+   */
+  const showSignIn = $derived(atHome && !signedIn);
 
   /**
    * The section cell is dropped when the back cell already points at it.
@@ -100,23 +110,27 @@
   <!-- Top-left on every page. An icon, not a word: it is the one destination
        that never needs naming, and the width it gives back is what lets the
        section's own cells fit on a phone. -->
-  <a
-    href="/"
-    class="hdr-home"
-    aria-label="Home"
-    aria-current={atHome ? 'page' : undefined}
-    title="Home"
-  >
-    <svg viewBox="0 0 16 16" width="15" height="15" fill="none" aria-hidden="true">
-      <path
-        d="M2 7.2 8 2.2l6 5M3.4 6v7.3h9.2V6"
-        stroke="currentColor"
-        stroke-width="1.4"
-        stroke-linecap="square"
-        stroke-linejoin="miter"
-      />
-    </svg>
-  </a>
+  {#if showSignIn}
+    <a href="/login" class="hdr-home hdr-signin" title="Sign in">Sign in</a>
+  {:else}
+    <a
+      href="/"
+      class="hdr-home"
+      aria-label="Home"
+      aria-current={atHome ? 'page' : undefined}
+      title="Home"
+    >
+      <svg viewBox="0 0 16 16" width="15" height="15" fill="none" aria-hidden="true">
+        <path
+          d="M2 7.2 8 2.2l6 5M3.4 6v7.3h9.2V6"
+          stroke="currentColor"
+          stroke-width="1.4"
+          stroke-linecap="square"
+          stroke-linejoin="miter"
+        />
+      </svg>
+    </a>
+  {/if}
 
   {#if backHref}
     <a class="hdr-back" href={backHref} title="Back to {backLabel}">
@@ -193,6 +207,13 @@
   }
   .hdr-home svg {
     display: block;
+  }
+  .hdr-signin {
+    font-family: var(--font-code);
+    font-size: var(--fs-label-xs);
+    font-weight: 500;
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
   }
 
   .hdr-back {
