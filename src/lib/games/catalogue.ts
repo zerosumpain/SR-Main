@@ -12,6 +12,7 @@ import * as anagramBlitz from './anagram-blitz';
 import * as mathsSprint from './maths-sprint';
 import * as sequenceMemory from './sequence-memory';
 import * as boggle from './boggle';
+import * as categories from './categories';
 import { writeQuiz } from './quiz-night.server';
 import type { Difficulty, PlayerStatus, Rng } from './tap-duel';
 
@@ -23,6 +24,7 @@ export const GAME_IDS = [
   'maths-sprint',
   'sequence-memory',
   'boggle',
+  'categories',
 ] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
@@ -132,6 +134,19 @@ export const GAMES: Record<GameId, GameRules> = {
     moves: {
       word: (room, playerId, body, now) =>
         boggle.word(room as boggle.Room, playerId, { word: body.word, path: body.path }, now),
+    },
+  },
+  categories: {
+    ...categories,
+    moves: {
+      // Raw on purpose: each types its own fields (400 for a slot off the card).
+      answer: (room, playerId, body, now) =>
+        categories.answer(room as categories.Room, playerId, { index: body.index, text: body.text }, now),
+      veto: (room, playerId, body, now) =>
+        categories.veto(room as categories.Room, playerId, { playerId: body.playerId, index: body.index }, now),
+      unveto: (room, playerId, body, now) =>
+        categories.unveto(room as categories.Room, playerId, { playerId: body.playerId, index: body.index }, now),
+      done: (room, playerId, _body, now) => categories.done(room as categories.Room, playerId, now),
     },
   },
 };

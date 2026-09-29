@@ -282,3 +282,56 @@ Wire (GameRoom additions; lobby verbs, invites, stream as every other game):
 ```
 `score` mid-game is the raw points so far (crossing-out only happens at the finish).
 The invite's `about` reads "5×5 · 2 minutes" (+ " · every word counts").
+
+## Game 8 — Categories (added 2026-09-29)
+
+`game:'categories'`. Scattergories-style: one letter and one card of categories, the same for
+everyone; write an answer to each category that starts with the letter before the clock runs out.
+No model is called — the card comes from a curated list (`words/categories.ts`, 187 family-safe
+prompts) and the checking is a letter test plus the family's own vetoes.
+
+**The host picks the round** on create (all optional, defaults in bold):
+- `categoryCount`: 6 | **8** | 10.
+- `seconds`: 90 | **120** | 180.
+
+**Difficulty** = the letter pool: easy `abcdefghlmnprstw`; medium adds `i j k o u v`;
+hard is everything but X and Z. "Again" never repeats the last letter, and keeps the last
+card's categories off the next card.
+
+Moves, while `playing` (1 s grace after the limit):
+- `{action:'answer', index, text}` — upsert my answer to category `index`; `""` clears it.
+  Trimmed, whitespace collapsed, cut to 40 characters. A wrong letter is accepted (the review
+  shows it, it scores 0). 400 "That isn't one of the categories." / "An answer is some text.";
+  409 time's up / not started.
+
+Then a **review** (60 s, `phaseEndsAt` its end), skipped when only one player is still in:
+- `{action:'veto', playerId, index}` / `{action:'unveto', playerId, index}` — idempotent.
+  400 "You can't veto your own answer." / "There is nothing there to veto."; 409 outside review.
+  An answer is **struck** once its vetoes reach half the *other* joined players, rounded up
+  (2 players: the other's one veto). A leaver's vetoes stop counting and the bar drops with them.
+- `{action:'done'}` — ends the review as soon as every joined player has sent it (or the last
+  undecided one leaves).
+
+**Checking** (at review and finish): an answer is normalised — lower case, accents off,
+punctuation gone, a leading "a"/"an"/"the" dropped — and must start with the letter.
+Two or more contenders writing the same normalised answer (spaces ignored) for the same
+category are all `shared` (solo: never). Status order: `empty`, `wrong-letter`, `struck`,
+`shared`, `ok`. **1 point per `ok`.** Standings/winners as Boggle's (score, then categories
+filled; nobody wins alone or on nothing; ties share).
+
+Wire (GameRoom additions; lobby verbs, invites, stream as every other game):
+```jsonc
+{ "game":"categories", "phase":"lobby|countdown|playing|review|finished|closed",
+  "categoryCount":8, "timeLimitMs":120000, "reviewMs":60000, "maxAnswer":40,
+  "startedAt":…, "phaseEndsAt":…,                 // the limit while playing, the review's end in review
+  "letter": null | "b",                            // lower case; null before play
+  "categories": null | ["An animal", "A food", …],
+  "players":[{"id","name","status","isHost","filled":3,"done":false,"score":2,
+              "answers": null | [{"index":0,"text":"Badger","status":"ok",
+                                  "points":1,"vetoes":0,"strikeAt":1,"vetoed":false}]}],
+              // playing: mine only, `status` null, `score` 0; others null (just `filled`).
+              // review/finished: every contender's, judged; `vetoed` = I vetoed it.
+  "standings": null | [{"id","name","score","filled"}],   // finished
+  "winnerIds": [], "serverNow":… }
+```
+The invite's `about` reads "8 categories · 2 minutes".
