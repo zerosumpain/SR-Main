@@ -81,7 +81,7 @@
   });
 </script>
 
-<SiteHeader title={sectionTitle} {items} {isOwner} {reach} {meta} {before}>
+<SiteHeader title={sectionTitle} {items} {isOwner} {signedIn} {reach} {meta} {before}>
   {#snippet right()}
     {#if live}
       <div class="hdr-live" aria-label="Live signal">
