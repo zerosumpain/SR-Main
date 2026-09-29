@@ -12,6 +12,8 @@ import {
   missedWords,
   neighbours,
   points,
+  POINTS,
+  MAX_LENGTH,
   roll,
   roundOptions,
   solve,
@@ -143,7 +145,7 @@ describe("the board", () => {
     expect(trace(BOARD, "quest")).toEqual([4, 5, 0, 1]);
     expect(spells(BOARD, [4, 5, 0, 1], "quest")).toBe(true);
     expect(spells(BOARD, [4, 5, 0, 1], "qest")).toBe(false);
-    expect(points("quest")).toBe(2);
+    expect(points("quest")).toBe(3);
   });
 
   it("refuses a path that jumps or doubles back", () => {
@@ -174,10 +176,13 @@ describe("the board", () => {
   });
 
   it("scores by length, qu as two letters", () => {
-    expect([3, 4, 5, 6, 7, 8, 12].map((n) => points("a".repeat(n)))).toEqual([
-      1, 1, 2, 3, 5, 11, 11,
-    ]);
-    expect(points("quit")).toBe(1);
+    expect([2, 3, 4, 5, 6, 7, 8, 12].map((n) => points("a".repeat(n)))).toEqual(
+      [0, 1, 2, 3, 4, 5, 6, 10],
+    );
+    expect(points("quit")).toBe(2);
+    // The wire table agrees with the rule for every length a board allows.
+    for (let n = 3; n <= MAX_LENGTH; n++)
+      expect(POINTS[n]).toBe(points("a".repeat(n)));
   });
 });
 
@@ -285,11 +290,11 @@ describe("the finish", () => {
       shared: true,
     });
     expect(mine.find((s) => s.word === "stale")).toMatchObject({
-      points: 2,
+      points: 3,
       shared: false,
     });
     expect(w.standings!.map((s) => [s.id, s.score])).toEqual([
-      ["p_john", 2],
+      ["p_john", 3],
       ["p_sam", 0],
     ]);
     expect(w.winnerIds).toEqual(["p_john"]);
@@ -302,7 +307,7 @@ describe("the finish", () => {
 
   it("counts every word when the host said so", () => {
     const w = toWire(finished("every"), "p_john", T0);
-    expect(w.standings!.map((s) => s.score)).toEqual([3, 1]);
+    expect(w.standings!.map((s) => s.score)).toEqual([5, 2]);
   });
 
   it("never crosses out a word played solo", () => {
@@ -310,7 +315,7 @@ describe("the finish", () => {
     const t = playing(r);
     word(r, "p_john", { word: "star" }, t);
     advance(r, r.phaseEndsAt! + GRACE_MS, half);
-    expect(toWire(r, "p_john", T0).players[0].score).toBe(1);
+    expect(toWire(r, "p_john", T0).players[0].score).toBe(2);
   });
 
   it("shows the best words nobody found, with how to trace them, and what the board held", () => {
@@ -334,7 +339,7 @@ describe("what a phone sees", () => {
     word(r, "p_sam", { word: "star" }, t);
     const w = toWire(r, "p_john", t);
     expect(w.grid).toHaveLength(16);
-    expect(w.players[1]).toMatchObject({ wordCount: 1, score: 1, words: null });
+    expect(w.players[1]).toMatchObject({ wordCount: 1, score: 2, words: null });
     expect(w.found).toBeNull();
     expect(w.missed).toBeNull();
     expect(w.possible).toBeNull();

@@ -57,16 +57,15 @@ export const DEFAULT_SIZE: Size = 4;
 export const DEFAULT_SECONDS: Seconds = 120;
 export const DEFAULT_SCORING: Scoring = "classic";
 
-/** Points by length in letters; 8 stands for eight or more. */
-export const POINTS: Readonly<Record<number, number>> = {
-  3: 1,
-  4: 1,
-  5: 2,
-  6: 3,
-  7: 5,
-  8: 11,
-};
 export const MAX_LENGTH = 16;
+/**
+ * Points by length in letters: a point a letter past two, so 3 → 1, 4 → 2,
+ * 5 → 3 and on up to the longest word a board allows. Sent whole on the wire
+ * so a phone never has to know the rule.
+ */
+export const POINTS: Readonly<Record<number, number>> = Object.fromEntries(
+  Array.from({ length: MAX_LENGTH - 2 }, (_, i) => [i + 3, i + 1]),
+);
 /** After the time limit, how long a word already in flight may still land. */
 export const GRACE_MS = 1_000;
 /** How many of the best words nobody found are shown at the finish. */
@@ -352,8 +351,7 @@ export function deal(
 }
 
 export function points(word: string): number {
-  if (word.length < 3) return 0;
-  return POINTS[Math.min(word.length, 8)];
+  return Math.max(0, word.length - 2);
 }
 
 // ---- The room ------------------------------------------------------------

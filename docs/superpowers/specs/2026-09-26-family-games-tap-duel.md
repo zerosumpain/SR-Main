@@ -257,7 +257,7 @@ touching tiles (8 directions, each tile once per word) before the clock runs out
 easy 3+ letters and the dice are rerolled until the board is rich in common words;
 medium 3+ letters, any board that is not a dud; hard 4+ letters, any board that is not a dud.
 
-**Points** by length in letters (`qu` is two): 3–4 → 1, 5 → 2, 6 → 3, 7 → 5, 8+ → 11.
+**Points** by length in letters (`qu` is two): a point a letter past two — 3 → 1, 4 → 2, 5 → 3, 6 → 4 and so on, uncapped. The room sends the whole table (3–16).
 
 Move `{action:'word', word, path?:[tileIndex,…]}` — the phone sends the tiles it traced
 (row-major indices); the server uses a valid path that spells the word, else finds one itself,
