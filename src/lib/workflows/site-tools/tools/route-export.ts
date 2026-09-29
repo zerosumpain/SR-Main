@@ -1,6 +1,5 @@
 import { register } from '../registry-internal';
 import { createRouteExport } from '$lib/route-exports';
-import { getOwnerPhone } from '$lib/workflows/whatsapp/approval-notify';
 
 function routeMessage(activity: string, distanceMiles: number, downloadUrl: string): string {
   return `${activity === 'mountain-biking' ? 'Mountain-bike' : 'Running'} route ready — ${distanceMiles} mi. Download GPX: ${downloadUrl}`;
@@ -36,10 +35,25 @@ register({
 
     let whatsapp: unknown = null;
     if (args.sendWhatsapp !== false) {
-      const { getWhatsAppService } = await import('$lib/workflows/whatsapp/service');
-      const result = await getWhatsAppService().sendMessage(getOwnerPhone(), routeMessage(activity, distanceMiles, exported.downloadUrl));
-      if (!result.sent) return { success: false, error: 'route saved but WhatsApp delivery failed', data: { ...exported, whatsapp: result } };
-      whatsapp = result;
+      // The owner asked for WhatsApp by name, so it goes there whatever the
+      // category routes to; the notifier adds the ledger row and the phone.
+      const { notifyOwner, deliveryReport } = await import('$lib/server/notify');
+      const text = routeMessage(activity, distanceMiles, exported.downloadUrl);
+      const report = deliveryReport(
+        await notifyOwner({
+          category: 'system',
+          title: 'Route ready',
+          body: text,
+          url: exported.downloadUrl,
+          whatsappText: text,
+          dedupeKey: `route-export:${exported.fileId}`,
+          channels: { whatsapp: true },
+        }),
+      );
+      if (report.whatsapp !== 'sent') {
+        return { success: false, error: `route saved but WhatsApp delivery failed (${report.channels})`, data: { ...exported, whatsapp: report } };
+      }
+      whatsapp = report;
     }
     return { success: true, data: { ...exported, whatsapp } };
   },

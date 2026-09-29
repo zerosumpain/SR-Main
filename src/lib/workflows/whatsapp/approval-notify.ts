@@ -64,14 +64,28 @@ function summarisePrompt(prompt: string): string {
   return clean.length > MAX_PROMPT_CHARS ? `${clean.slice(0, MAX_PROMPT_CHARS - 1)}…` : clean;
 }
 
-/** Lazy-imported best-effort WhatsApp send. Never throws. */
-async function sendWhatsApp(text: string): Promise<void> {
+/**
+ * Best-effort send through the notifier. Never throws.
+ *
+ * Lazy-imported so this eagerly-loaded module stays off the notifier's import
+ * graph. WhatsApp is forced open: the workflow opted into WhatsApp approvals
+ * and the reply (APPROVE <code>) comes back that way.
+ */
+async function sendWhatsApp(text: string, code: string): Promise<void> {
   try {
-    const { getWhatsAppService } = await import('$lib/workflows/whatsapp/service');
-    const wa = getWhatsAppService();
-    const result = await wa.sendMessage(getOwnerPhone(), text);
-    if (!result.sent) {
-      console.warn(`[approval-notify] WhatsApp send failed: ${result.error ?? 'unknown error'}`);
+    const { notifyOwner, deliveryReport } = await import('$lib/server/notify');
+    const report = deliveryReport(
+      await notifyOwner({
+        category: 'build',
+        title: 'Workflow awaiting approval',
+        body: text,
+        whatsappText: text,
+        dedupeKey: `approval:${code}`,
+        channels: { whatsapp: true },
+      }),
+    );
+    if (report.whatsapp !== 'sent') {
+      console.warn(`[approval-notify] WhatsApp send failed: ${report.channels}`);
     }
   } catch (err) {
     console.error('[approval-notify] WhatsApp send threw:', err instanceof Error ? err.message : err);
@@ -125,5 +139,5 @@ export async function sendApprovalPendingMessage(
   const text =
     `⏸ ${plan.display} awaiting approval: ${summarisePrompt(prompt)}. ` +
     `Reply APPROVE ${plan.code} or DENY ${plan.code}`;
-  await sendWhatsApp(text);
+  await sendWhatsApp(text, plan.code);
 }

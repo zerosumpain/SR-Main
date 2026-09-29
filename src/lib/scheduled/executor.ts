@@ -22,16 +22,22 @@ import type { FireResult, ReplyPayload, ToolPayload, OrchestratorTurnPayload } f
  */
 async function warnOwner(row: ScheduledCallback, error: string): Promise<void> {
   try {
-    const { ownerPhone } = await import('$lib/config/owner');
-    const to = ownerPhone();
-    if (!to) return;
-    const { getWhatsAppService } = await import('$lib/workflows/whatsapp/service');
-    const result = await getWhatsAppService().sendMessage(
-      to,
-      `⚠ Scheduled callback "${row.name}" failed and will not arrive: ${error.slice(0, 200)}`,
+    // Through the notifier, so the warning is in the ledger (and on the phone)
+    // even when the WhatsApp session is the thing that is down.
+    const { notifyOwner, deliveryReport } = await import('$lib/server/notify');
+    const text = `⚠ Scheduled callback "${row.name}" failed and will not arrive: ${error.slice(0, 200)}`;
+    const report = deliveryReport(
+      await notifyOwner({
+        category: 'system',
+        title: 'Scheduled callback failed',
+        body: text,
+        severity: 'warn',
+        whatsappText: text,
+        dedupeKey: `scheduled:${row.id}`,
+      }),
     );
-    if (!result.sent) {
-      console.warn(`[scheduled] could not warn about ${row.name}: ${result.error ?? 'unknown error'}`);
+    if (!report.raised || report.whatsapp === 'failed') {
+      console.warn(`[scheduled] warning about ${row.name}: ${report.channels}`);
     }
   } catch (err) {
     console.error('[scheduled] warnOwner threw:', err instanceof Error ? err.message : err);
