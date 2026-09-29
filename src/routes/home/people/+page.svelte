@@ -95,6 +95,45 @@
   const names = $derived(new Map<string, string>(data.movement.map((p) => [p.subject, p.displayName])));
   const nameOf = (s: string) => names.get(s) ?? cap(s);
 
+  let liveFixes = $state<Record<string, { lat: number; lon: number; at: string }>>({});
+  let liveRevoked = $state(false);
+  const mapPositions = $derived(liveRevoked ? [] : data.positions.map(p => {
+    const fix = liveFixes[p.subject];
+    return fix && fix.at > p.at ? { ...p, ...fix } : p;
+  }));
+  onMount(() => {
+    let stopped = false;
+    let controller: AbortController | undefined;
+    let revision = '';
+    const visibility = () => { if (document.hidden) controller?.abort(); };
+    const follow = async () => {
+      while (!stopped) {
+        if (document.hidden) { await new Promise(resolve => setTimeout(resolve, 1000)); continue; }
+        controller = new AbortController();
+        try {
+          const response = await fetch(`/api/apple/household/live?since=${encodeURIComponent(revision)}`, { signal: controller.signal });
+          if (response.status === 401 || response.status === 403) {
+            liveFixes = {}; liveRevoked = true;
+            await invalidate('home:people');
+            return;
+          }
+          if (!response.ok) throw new Error('Live positions unavailable');
+          const result = await response.json();
+          if (stopped || document.hidden) continue;
+          revision = String(result.revision ?? '');
+          liveRevoked = revision === 'unavailable';
+          liveFixes = Object.fromEntries((result.positions ?? []).map((fix: { subject: string; position: { lat: number; lon: number; at: string } }) => [fix.subject, fix.position]));
+          if (liveRevoked) await new Promise(resolve => setTimeout(resolve, 5000));
+        } catch {
+          if (!stopped) await new Promise(resolve => setTimeout(resolve, 5000));
+        }
+      }
+    };
+    void follow();
+    document.addEventListener('visibilitychange', visibility);
+    return () => { stopped = true; controller?.abort(); document.removeEventListener('visibilitychange', visibility); };
+  });
+
   onMount(() => {
     clockNow = new Date();
     const tick = setInterval(() => (clockNow = new Date()), 30_000);
@@ -219,7 +258,7 @@
 
   <NowBoard
     {members}
-    positions={data.positions}
+    positions={mapPositions}
     {names}
     links={data.links}
     next={fc?.forecast.next ?? null}

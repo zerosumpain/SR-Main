@@ -176,6 +176,21 @@ describe('PATCH /api/native/family/tasks/[id]', () => {
     ]);
   });
 
+  it('refuses a saved action against a changed version without notifying twice', async () => {
+    const before = h.tasks.get('t1')!;
+    const version = before.updatedAt.toISOString();
+    h.tasks.set('t1', { ...before, updatedAt: new Date(before.updatedAt.getTime() + 1000) });
+    const stale = await call(one.PATCH, { method: 'PATCH', body: { action: 'done', expectedUpdatedAt: version } });
+    expect(stale.status).toBe(409);
+    expect(h.tasks.get('t1')!.status).toBe('open');
+    expect(h.notified).toEqual([]);
+    const current = h.tasks.get('t1')!.updatedAt.toISOString();
+    const accepted = await call(one.PATCH, { method: 'PATCH', body: { action: 'done', expectedUpdatedAt: current } });
+    expect(accepted.status).toBe(200);
+    expect((await call(one.PATCH, { method: 'PATCH', body: { action: 'done', expectedUpdatedAt: current } })).status).toBe(409);
+    expect(h.notified).toHaveLength(1);
+  });
+
   it('a family:admin member is a parent', async () => {
     h.tasks.set('t1', base({ status: 'done', doneByEmail: 'kid@example.test' }));
     asMember('parent2@example.test', ['family:circle', 'family:admin']);

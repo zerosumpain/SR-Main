@@ -159,6 +159,7 @@
     user-select: none;
   }
   .dot {
+    transition: left 1s linear, top 1s linear;
     position: absolute;
     transform: translate(-50%, -50%);
     display: flex;
@@ -207,4 +208,5 @@
     color: var(--text-ghost);
     text-align: right;
   }
+  @media (prefers-reduced-motion: reduce) { .dot { transition: none; } }
 </style>

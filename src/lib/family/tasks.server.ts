@@ -67,11 +67,11 @@ export async function createTask(fields: TaskFields & { title: string }, created
  * in: two parents confirming at once get one confirm and one 409. Null = the
  * row moved underneath us.
  */
-export async function applyTransition(id: string, t: Transition, now = new Date()): Promise<TaskRecord | null> {
+export async function applyTransition(id: string, t: Transition, now = new Date(), expectedUpdatedAt?: Date): Promise<TaskRecord | null> {
   const [row] = await db
     .update(familyTask)
     .set({ ...t.patch, updatedAt: now })
-    .where(and(eq(familyTask.id, id), eq(familyTask.status, t.from)))
+    .where(and(eq(familyTask.id, id), eq(familyTask.status, t.from), expectedUpdatedAt ? eq(familyTask.updatedAt, expectedUpdatedAt) : undefined))
     .returning();
   return row ?? null;
 }
