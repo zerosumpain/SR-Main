@@ -23,6 +23,8 @@ vi.mock('$lib/server/models/settings', () => ({ getSetting: async () => null }))
 vi.mock('$lib/workflows/chat/job-store', () => ({ getJob: () => null }));
 vi.mock('$lib/games/players.server', () => ({
   playerFor: async (email: string) => ({ id: `p_${email.split('@')[0]}`, email, name: email }),
+  playerId: (email: string) => `p_${email.split('@')[0]}`,
+  gamePlayers: async () => [],
 }));
 vi.mock('$lib/games/results.server', () => ({
   leaderboard: async (window: string) => {
