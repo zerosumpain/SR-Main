@@ -720,7 +720,7 @@ export async function pushAppViews(
     const res = await fetchImpl(`${companionUrl()}/api/apple/household/views`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ views: withPreviews, revision: snapshot.revision }),
+      body: JSON.stringify({ views: withPreviews.map(v => ({ ...v, sources: members.filter(m => m.source === 'companion' && m.email && v.view.people.some(p => p.subject === m.subject && p.status !== 'off')).map(m => ({ subject: m.subject, email: m.email })) })), revision: snapshot.revision }),
       signal: AbortSignal.timeout(PUSH_TIMEOUT_MS),
     });
     if (!res.ok) return { stored: 0, refused, error: `views answered ${res.status}` };

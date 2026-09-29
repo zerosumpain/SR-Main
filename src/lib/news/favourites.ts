@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { newsFavourites } from '$lib/db/schema';
 import type { NewsStory } from './types';
@@ -103,4 +103,12 @@ export async function toggleNewsFavourite(
     })
     .onConflictDoNothing({ target: [newsFavourites.ownerKey, newsFavourites.newsKey] });
   return { favourited: true, href: '/news?view=favourites' };
+}
+
+/** Authoritative saved flags for a rendered page, scoped to this reader. */
+export async function favouriteKeysFor(ownerKey: string, keys: string[]): Promise<Set<string>> {
+  if (!keys.length) return new Set();
+  const rows = await db.select({ key: newsFavourites.newsKey }).from(newsFavourites)
+    .where(and(eq(newsFavourites.ownerKey, ownerKey), inArray(newsFavourites.newsKey, keys)));
+  return new Set(rows.map(row => row.key));
 }

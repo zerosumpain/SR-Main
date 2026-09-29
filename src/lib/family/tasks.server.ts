@@ -67,11 +67,16 @@ export async function createTask(fields: TaskFields & { title: string }, created
  * in: two parents confirming at once get one confirm and one 409. Null = the
  * row moved underneath us.
  */
-export async function applyTransition(id: string, t: Transition, now = new Date()): Promise<TaskRecord | null> {
+export async function applyTransition(id: string, t: Transition, now = new Date(), expectedUpdatedAt?: Date): Promise<TaskRecord | null> {
   const [row] = await db
     .update(familyTask)
-    .set({ ...t.patch, updatedAt: now })
-    .where(and(eq(familyTask.id, id), eq(familyTask.status, t.from)))
+    // PostgreSQL defaults carry microseconds; the Date/JSON contract carries
+    // milliseconds. Compare at that precision and advance monotonically, so
+    // two writes in the same millisecond still cannot reuse one version.
+    .set({ ...t.patch, updatedAt: sql`greatest(${now.toISOString()}::timestamptz, date_trunc('milliseconds', ${familyTask.updatedAt}) + interval '1 millisecond')` })
+    .where(and(eq(familyTask.id, id), eq(familyTask.status, t.from), expectedUpdatedAt
+      ? sql`date_trunc('milliseconds', ${familyTask.updatedAt}) = ${expectedUpdatedAt.toISOString()}::timestamptz`
+      : undefined))
     .returning();
   return row ?? null;
 }

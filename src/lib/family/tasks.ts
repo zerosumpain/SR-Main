@@ -246,6 +246,7 @@ export interface TaskWire {
   confirmedAt: string | null;
   reward: { kind: string; pence: number | null; note: string | null; paidAt: string | null } | null;
   createdAt: string;
+  updatedAt: string;
 }
 
 const iso = (d: Date | null): string | null => (d ? d.toISOString() : null);
@@ -269,6 +270,7 @@ export function toWire(t: TaskRecord, idOf: (email: string) => string): TaskWire
       ? { kind: t.rewardKind, pence: t.rewardPence, note: t.rewardNote, paidAt: iso(t.rewardPaidAt) }
       : null,
     createdAt: t.createdAt.toISOString(),
+    updatedAt: t.updatedAt.toISOString(),
   };
 }
 

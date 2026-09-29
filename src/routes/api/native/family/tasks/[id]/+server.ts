@@ -27,20 +27,23 @@ export const PATCH: RequestHandler = withNativeAccess('any', async (event, ident
   const before = await getTask(event.params.id);
   if (!before) return json({ error: 'No such task.' }, { status: 404 });
 
+  if (body.expectedUpdatedAt !== undefined && (typeof body.expectedUpdatedAt !== 'string' || body.expectedUpdatedAt !== before.updatedAt.toISOString())) {
+    return json({ error: 'That task changed meanwhile. Refresh before trying again.', task: toWire(before, familyId) }, { status: 409 });
+  }
   const now = new Date();
   const allowed = transition(before, action, caller, now, { note: body.note });
   if (!allowed.ok) return json({ error: allowed.error }, { status: allowed.status });
 
   let step = allowed.value;
   if (action === 'edit') {
-    const { action: _drop, ...rest } = body;
+    const { action: _drop, expectedUpdatedAt: _version, ...rest } = body;
     const roster = new Map((await familyRoster()).map((p) => [p.id, p.email]));
     const fields = validateFields(rest, (id) => roster.get(id) ?? null, 'edit');
     if (!fields.ok) return json({ error: fields.error }, { status: fields.status });
     step = { ...step, patch: { ...fields.value } };
   }
 
-  const after = await applyTransition(before.id, step, now);
+  const after = await applyTransition(before.id, step, now, before.updatedAt);
   if (!after) return json({ error: 'That task changed meanwhile. Pull to refresh.' }, { status: 409 });
 
   if (action === 'done') void notifyTaskChange('done', after, caller.email);

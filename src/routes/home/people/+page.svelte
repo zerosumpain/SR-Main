@@ -95,6 +95,66 @@
   const names = $derived(new Map<string, string>(data.movement.map((p) => [p.subject, p.displayName])));
   const nameOf = (s: string) => names.get(s) ?? cap(s);
 
+  let liveFixes = $state<Record<string, { lat: number; lon: number; at: string }>>({});
+  let liveRevoked = $state(false);
+  const mapPositions = $derived.by(() => {
+    if (liveRevoked) return [];
+    const positions = new Map(data.positions.map(p => [p.subject, p]));
+    for (const [subject, fix] of Object.entries(liveFixes)) {
+      const previous = positions.get(subject);
+      if (previous && Date.parse(previous.at) >= Date.parse(fix.at)) continue;
+      positions.set(subject, previous ? { ...previous, ...fix }
+        : { subject, ...fix, isHome: null });
+    }
+    return [...positions.values()];
+  });
+  onMount(() => {
+    let stopped = false;
+    let controller: AbortController | undefined;
+    let revision = '';
+    let scope: string | undefined;
+    const visibility = () => { if (document.hidden) controller?.abort(); };
+    const follow = async () => {
+      while (!stopped) {
+        if (document.hidden) { await new Promise(resolve => setTimeout(resolve, 1000)); continue; }
+        controller = new AbortController();
+        try {
+          const response = await fetch(`/api/apple/household/live?since=${encodeURIComponent(revision)}`, { signal: controller.signal });
+          if (response.status === 401 || response.status === 403) {
+            liveFixes = {}; liveRevoked = true;
+            await invalidate('home:people');
+            return;
+          }
+          if (!response.ok) throw new Error('Live positions unavailable');
+          const result = await response.json();
+          if (stopped || document.hidden) continue;
+          revision = String(result.revision ?? '');
+          if (revision === 'unavailable') {
+            liveRevoked = true; liveFixes = {};
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            continue;
+          }
+          if (result.scope && result.scope !== scope) {
+            liveRevoked = true; liveFixes = {};
+            await invalidate('home:people');
+            scope = result.scope;
+          }
+          const next = { ...liveFixes };
+          for (const fix of result.positions ?? []) {
+            if (!next[fix.subject] || Date.parse(next[fix.subject].at) < Date.parse(fix.position.at)) next[fix.subject] = fix.position;
+          }
+          liveFixes = next;
+          liveRevoked = false;
+        } catch {
+          if (!stopped) await new Promise(resolve => setTimeout(resolve, 5000));
+        }
+      }
+    };
+    void follow();
+    document.addEventListener('visibilitychange', visibility);
+    return () => { stopped = true; controller?.abort(); document.removeEventListener('visibilitychange', visibility); };
+  });
+
   onMount(() => {
     clockNow = new Date();
     const tick = setInterval(() => (clockNow = new Date()), 30_000);
@@ -219,7 +279,7 @@
 
   <NowBoard
     {members}
-    positions={data.positions}
+    positions={mapPositions}
     {names}
     links={data.links}
     next={fc?.forecast.next ?? null}

@@ -1,3 +1,4 @@
+import { favouriteKeysFor } from '$lib/news/favourites';
 import type { RequestHandler } from './$types';
 import { clampLimit, withNativeAccess } from '$lib/server/native-handler';
 import { loadNewsDesk, parseNewsSort, parseNewsView } from '$lib/news/desk';
@@ -43,6 +44,7 @@ export const GET: RequestHandler = withNativeAccess('news', async (event, identi
     ownerData: can.ownerData,
   });
 
+  const saved = await favouriteKeysFor(identity.ownerEmail, desk.feed.stories.map(s => s.key));
   const read = new Set(desk.readKeys);
   const kept = new Set(desk.keptKeys);
 
@@ -77,6 +79,7 @@ export const GET: RequestHandler = withNativeAccess('news', async (event, identi
         rank: index + 1,
         read: read.has(story.key),
         kept: kept.has(story.key),
+        favourite: saved.has(story.key),
         alsoOn: story.alsoOn.map((also) => ({
           source: also.source,
           sourceLabel: also.sourceLabel,
