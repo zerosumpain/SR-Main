@@ -220,12 +220,50 @@ describe('rooms', () => {
     expect(first.path.map((i) => done.grid[i]).join('')).toBe(first.word);
   });
 
+  it('hosts Categories: answers while playing, a veto in the review, then the finish', () => {
+    type Wire = Record<string, any>;
+    const { id } = createGame({
+      game: 'categories',
+      host: john,
+      invite: [sam],
+      difficulty: 'easy',
+      options: { categoryCount: 6, seconds: 90 },
+    });
+    act(id, 'p_sam', 'join');
+    act(id, 'p_john', 'start');
+    vi.advanceTimersByTime(COUNTDOWN_MS);
+    const room = roomFor(id, 'p_john') as unknown as Wire;
+    expect(room.phase).toBe('playing');
+    expect(room.categories).toHaveLength(6);
+    expect(room.timeLimitMs).toBe(90_000);
+    const word = `${room.letter}ertie`;
+    act(id, 'p_john', 'answer', { index: 0, text: word });
+    act(id, 'p_sam', 'answer', { index: 1, text: `${room.letter}ob` });
+    expect(() => asHttp(() => act(id, 'p_john', 'answer', { index: 6, text: 'x' }))).toThrow(
+      expect.objectContaining({ status: 400 }),
+    );
+    expect((roomFor(id, 'p_sam') as unknown as Wire).players[0].answers).toBeNull();
+    vi.advanceTimersByTime(91_000);
+    const review = roomFor(id, 'p_sam') as unknown as Wire;
+    expect(review.phase).toBe('review');
+    expect(review.players[0].answers[0]).toMatchObject({ text: word, status: 'ok' });
+    act(id, 'p_sam', 'veto', { playerId: 'p_john', index: 0 });
+    act(id, 'p_john', 'done');
+    const done = act(id, 'p_sam', 'done') as unknown as Wire;
+    expect(done.phase).toBe('finished');
+    expect(done.standings.map((s: Wire) => [s.id, s.score])).toEqual([
+      ['p_sam', 1],
+      ['p_john', 0],
+    ]);
+    expect(done.winnerIds).toEqual(['p_sam']);
+  });
+
   describe('inviting from the lobby', () => {
     const kim = { id: 'p_kim', name: 'Kim' };
     type Seen = { players: { id: string; status: string; sawInvite: boolean }[]; phaseEndsAt: number | null };
 
     it('asks somebody in after the room opened, in every game', () => {
-      for (const game of ['tap-duel', 'wordle-race', 'anagram-blitz', 'maths-sprint', 'sequence-memory', 'boggle'] as const) {
+      for (const game of ['tap-duel', 'wordle-race', 'anagram-blitz', 'maths-sprint', 'sequence-memory', 'boggle', 'categories'] as const) {
         const { id } = createGame({ game, host: john, invite: [], difficulty: 'easy' });
         const room = inviteTo(id, 'p_john', [sam]) as unknown as Seen;
         expect(room.players.map((p) => [p.id, p.status])).toEqual([['p_john', 'joined'], ['p_sam', 'invited']]);

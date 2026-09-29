@@ -26,6 +26,7 @@ const TITLES: Record<GameId, string> = {
   'maths-sprint': 'Quick Maths Sprint',
   'sequence-memory': 'Sequence Memory',
   boggle: 'Boggle',
+  categories: 'Categories',
 };
 
 const LEVELS: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
