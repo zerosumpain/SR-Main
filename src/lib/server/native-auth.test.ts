@@ -112,6 +112,8 @@ describe('every native route gates itself', () => {
         '/games/+server.ts',
         '/games/[id]/+server.ts',
         '/games/[id]/stream/+server.ts',
+        // The family games leaderboard: names and hashed player ids, games:self.
+        '/games/leaderboard/+server.ts',
         '/me/+server.ts',
         // A member's phone registers its APNs token here so their game
         // invites and household departures can be pushed to it. It stores a

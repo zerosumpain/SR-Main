@@ -20,18 +20,39 @@ vi.mock('./quiz-night.server', () => ({
     );
   },
 }));
-import { _resetRooms, act, asHttp, createGame, inviteTo, invitesFor, roomFor, roomsFor, subscribe } from './rooms.server';
+import {
+  _resetRooms,
+  _setRecorder,
+  act,
+  asHttp,
+  createGame,
+  inviteTo,
+  invitesFor,
+  roomFor,
+  roomsFor,
+  subscribe,
+} from './rooms.server';
+import type { RoundRow } from './results';
 import { COUNTDOWN_MS, LOBBY_MS, RESULT_MS, type WireRoom } from './tap-duel';
 
 const john = { id: 'p_john', name: 'John' };
 const sam = { id: 'p_sam', name: 'Sam' };
 
+// Every finish goes to the recorder; here it goes into this list.
+const recorded: RoundRow[][] = [];
+
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(1_790_000_000_000);
+  recorded.length = 0;
+  _setRecorder(async (rows) => {
+    recorded.push(rows);
+    return {};
+  });
 });
 afterEach(() => {
   _resetRooms();
+  _setRecorder(null);
   vi.useRealTimers();
 });
 
@@ -332,6 +353,70 @@ describe('rooms', () => {
     const guessed = act(id, 'p_sam', 'guess', { text: word }) as unknown as Wire;
     expect(guessed.phase).toBe('reveal');
     expect(guessed.turn.word).toBe(word);
+  });
+
+  describe('recording results for the leaderboard', () => {
+    type Wire = Record<string, any>;
+    const solo = (options = { size: 4, seconds: 30 }) => {
+      const { id } = createGame({ game: 'boggle', host: john, invite: [], difficulty: 'easy', options });
+      act(id, 'p_john', 'start');
+      vi.advanceTimersByTime(COUNTDOWN_MS + 31_000);
+      return id;
+    };
+
+    it('records a finished round once, however often the room is read or ticks', () => {
+      const id = solo();
+      expect(roomFor(id, 'p_john').phase).toBe('finished');
+      roomFor(id, 'p_john');
+      subscribe(id, 'p_john', () => {}, () => {});
+      vi.advanceTimersByTime(60_000);
+      expect(recorded).toHaveLength(1);
+      expect(recorded[0]).toEqual([
+        expect.objectContaining({ game: 'boggle', roomId: id, round: 1, playerId: 'p_john', won: false, players: 1 }),
+      ]);
+      expect(recorded[0][0].options).toMatchObject({ size: 4, seconds: 30, label: '4×4 · 30 seconds' });
+    });
+
+    it('records "Play again" in the same room as the next round', () => {
+      const id = solo();
+      act(id, 'p_john', 'again');
+      act(id, 'p_john', 'start');
+      vi.advanceTimersByTime(COUNTDOWN_MS + 31_000);
+      expect(recorded.map((rows) => rows[0].round)).toEqual([1, 2]);
+      expect(recorded.every((rows) => rows[0].roomId === id)).toBe(true);
+    });
+
+    it('records a round that finished in the catch-up before "Play again" moved it on', () => {
+      const { id } = createGame({ game: 'boggle', host: john, invite: [], difficulty: 'easy', options: { seconds: 30 } });
+      act(id, 'p_john', 'start');
+      // The deadline has passed but its timer has not run yet.
+      vi.setSystemTime(Date.now() + COUNTDOWN_MS + 31_000);
+      act(id, 'p_john', 'again');
+      expect(recorded).toHaveLength(1);
+      expect(roomFor(id, 'p_john').phase).toBe('lobby');
+    });
+
+    it('never lets a database failure touch the game', async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+      _setRecorder(async () => {
+        throw new Error('db down');
+      });
+      const id = solo();
+      await vi.waitFor(() => expect(error).toHaveBeenCalledWith(expect.stringContaining('could not record'), expect.any(Error)));
+      expect(roomFor(id, 'p_john').phase).toBe('finished');
+      expect(() => act(id, 'p_john', 'again')).not.toThrow();
+      error.mockRestore();
+    });
+
+    it('tells the room who set a new high score, and forgets it on "Play again"', async () => {
+      _setRecorder(async (rows) => ({ [rows[0].playerId]: 'week' as const }));
+      const id = solo();
+      const seen: Wire[] = [];
+      subscribe(id, 'p_john', (r) => seen.push(r as unknown as Wire), () => {});
+      await vi.waitFor(() => expect(seen.at(-1)!.records).toEqual({ p_john: 'week' }));
+      act(id, 'p_john', 'again');
+      expect((roomFor(id, 'p_john') as unknown as Wire).records).toBeUndefined();
+    });
   });
 
   describe('inviting from the lobby', () => {

@@ -432,7 +432,10 @@ const ROUTES: Record<string, Partial<Record<Method, Permission>>> = {
   // or invited in it, so reaching the route is not reaching anyone's game.
   '/games': { GET: 'games:self' },
   '/games/[id]': { GET: 'games:self' },
+  // The leaderboard: names and the games' hashed ids, no emails.
+  '/games/leaderboard': { GET: 'games:self' },
   '/api/games': { GET: 'games:self', POST: 'games:self' },
+  '/api/games/leaderboard': { GET: 'games:self' },
   '/api/games/[id]': { GET: 'games:self', POST: 'games:self' },
   '/api/games/[id]/stream': { GET: 'games:self' },
 };

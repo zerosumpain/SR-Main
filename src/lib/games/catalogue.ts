@@ -91,6 +91,12 @@ export interface GameRules {
   revision?(room: RoomBase): number;
   /** The game's own actions, by the name the phone posts. */
   moves: Record<string, Move>;
+  /**
+   * The leaderboard's high score for one row of this game's finished
+   * `standings`, when it is not the row's own numeric `score` (the default).
+   * Null: this game has no score, and its board ranks by wins.
+   */
+  resultScore?(standing: { id: string; [key: string]: unknown }): number | null;
 }
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
@@ -138,6 +144,8 @@ export const GAMES: Record<GameId, GameRules> = {
   },
   'sequence-memory': {
     ...sequenceMemory,
+    // The longest sequence repeated: its standings carry no `score`.
+    resultScore: (s) => (typeof s.best === 'number' ? s.best : null),
     moves: {
       attempt: (room, playerId, body, now) =>
         sequenceMemory.attempt(room as sequenceMemory.Room, playerId, { round: num(body.round) ?? -1, taps: body.taps }, now),

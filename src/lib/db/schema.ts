@@ -7297,6 +7297,43 @@ export const familyTask = pgTable(
 
 export type FamilyTask = typeof familyTask.$inferSelect;
 
+// Every finished round of a family game, one row per contender — what the
+// games leaderboard (daily / weekly / all-time bests) reads. Written once per
+// round by `$lib/games/results.server` when a room reaches `finished`; a replay
+// of the same round is a no-op on the unique key. `player_id` is the games'
+// keyed hash of the email (`playerId`), never the address itself.
+export const gameResults = pgTable(
+  'game_results',
+  {
+    id: serial('id').primaryKey(),
+    /** A `GameId` from `$lib/games/catalogue`. */
+    game: text('game').notNull(),
+    roomId: text('room_id').notNull(),
+    /** 1 for a room's first finish, 2 after "Play again", and so on. */
+    round: integer('round').notNull(),
+    playerId: text('player_id').notNull(),
+    /** The name shown at the time, so the board reads without the roster. */
+    playerName: text('player_name').notNull(),
+    /** Null for a game with no numeric score (Liar's Dice): it ranks by wins. */
+    score: integer('score'),
+    rank: integer('rank').notNull(),
+    won: boolean('won').notNull(),
+    /** Contenders in the round; 1 is a solo game, which nobody wins. */
+    players: integer('players').notNull(),
+    difficulty: text('difficulty').notNull(),
+    /** What the host picked that changes what is reachable (Boggle's size and time), plus `label`. */
+    options: jsonb('options').notNull().default(sql`'{}'::jsonb`),
+    finishedAt: timestamp('finished_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('game_results_room_round_player_idx').on(t.roomId, t.round, t.playerId),
+    index('game_results_game_finished_idx').on(t.game, t.finishedAt),
+    index('game_results_player_game_idx').on(t.playerId, t.game),
+  ],
+);
+
+export type GameResult = typeof gameResults.$inferSelect;
+
 // Permission epochs survive removal/re-add; triggers in the security migration
 // revoke device capabilities in the same transaction as access changes.
 export const companionAccessVersion = pgTable('companion_access_version', {

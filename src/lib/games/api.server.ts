@@ -11,7 +11,9 @@
 
 import { error } from '@sveltejs/kit';
 import type { RequestEvent } from '@sveltejs/kit';
-import { gamePlayers, playerFor } from './players.server';
+import { gamePlayers, playerFor, playerId } from './players.server';
+import { leaderboard } from './results.server';
+import { isWindow } from './results';
 import { act, asHttp, canCreate, createGame, inviteTo, invitesFor, roomFor, roomsFor, subscribe } from './rooms.server';
 import { pushInvites } from './invite-push.server';
 import { isDifficulty, MAX_PLAYERS } from './tap-duel';
@@ -233,4 +235,15 @@ export async function roomStream(caller: GameCaller, id: string): Promise<Respon
 export async function jsonBody(request: Request): Promise<Record<string, unknown> | null> {
   const body = await request.json().catch(() => null);
   return body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
+}
+
+/**
+ * The family's games boards for `?window=day|week|all` (default `week`):
+ * overall wins, then per game each person's best, wins and games. `me` is
+ * the caller's player id. Names and hashed ids only — never an email.
+ */
+export async function leaderboardFor(caller: GameCaller, window: string | null) {
+  const asked = window ?? 'week';
+  if (!isWindow(asked)) error(400, 'Pick day, week or all.');
+  return { me: { id: playerId(caller.email) }, ...(await leaderboard(asked)) };
 }

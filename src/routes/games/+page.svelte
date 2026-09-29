@@ -118,7 +118,9 @@
     ]}
     {night}
     onnight={(n) => (nightChoice = n)}
-  />
+  >
+    <a class="board-link" href="/games/leaderboard">Leaderboard — today, this week, all time →</a>
+  </GamesCover>
 
   {#if problem}
     <p class="problem" role="alert">{problem}</p>
@@ -236,6 +238,19 @@
 </GamesFrame>
 
 <style>
+  .board-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+    margin-top: 16px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: var(--tracking-label-wide);
+    text-transform: uppercase;
+    color: var(--chrome-accent);
+    text-decoration: none;
+    border-bottom: 1px solid currentColor;
+  }
   .band {
     padding: clamp(32px, 4.5vw, 64px) clamp(16px, 3vw, 44px);
     border-bottom: 2px solid var(--line-strong);
