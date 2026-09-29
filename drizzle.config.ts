@@ -21,6 +21,9 @@ export default defineConfig({
   //
   // Do not remove an exclusion without an explicit data migration or deletion.
   tablesFilter: [
+    // Core owns this SQL-migrated retry ledger. Main must never reconcile it
+    // away when adding another table; conversation deletion uses its FK.
+    '!chat_request_receipts',
     // Parked module data, retained in place outside this application's schema.
     '!policy_lab_projects',
     '!policy_lab_versions',
