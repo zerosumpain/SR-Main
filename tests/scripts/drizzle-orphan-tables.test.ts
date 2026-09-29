@@ -21,6 +21,7 @@ describe('drizzle tablesFilter', () => {
 
   it('names every known undeclared table', () => {
     for (const t of [
+      'chat_request_receipts',
       'policy_lab_projects',
       'policy_lab_versions',
       'policy_lab_runs',
