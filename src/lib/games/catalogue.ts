@@ -14,6 +14,7 @@ import * as sequenceMemory from './sequence-memory';
 import * as boggle from './boggle';
 import * as categories from './categories';
 import * as liarsDice from './liars-dice';
+import * as drawGuess from './draw-guess';
 import { writeQuiz } from './quiz-night.server';
 import type { Difficulty, PlayerStatus, Rng } from './tap-duel';
 
@@ -27,6 +28,7 @@ export const GAME_IDS = [
   'boggle',
   'categories',
   'liars-dice',
+  'draw-guess',
 ] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
@@ -76,7 +78,17 @@ export interface GameRules {
   again(room: RoomBase, playerId: string, now: number): void;
   advance(room: RoomBase, now: number, rng: Rng): boolean;
   deadline(room: RoomBase): number | null;
-  toWire(room: RoomBase, meId: string, now: number): { id: string; phase: string; serverNow: number };
+  /**
+   * `since` is what a phone already holds of a game that can send itself as
+   * changes (Draw & Guess's drawing revision); a game without that ignores it.
+   */
+  toWire(room: RoomBase, meId: string, now: number, since?: number | null): { id: string; phase: string; serverNow: number };
+  /**
+   * The cursor a phone holds after this room's wire — what it would send back
+   * as `since`. Only games that send changes have one; the stream keeps it per
+   * subscriber, so each frame after the first carries only what is new.
+   */
+  revision?(room: RoomBase): number;
   /** The game's own actions, by the name the phone posts. */
   moves: Record<string, Move>;
 }
@@ -158,6 +170,22 @@ export const GAMES: Record<GameId, GameRules> = {
       bid: (room, playerId, body, now) =>
         liarsDice.bid(room as liarsDice.Room, playerId, { quantity: body.quantity, face: body.face }, now),
       liar: (room, playerId, _body, now) => liarsDice.liar(room as liarsDice.Room, playerId, now),
+    },
+  },
+  'draw-guess': {
+    ...drawGuess,
+    moves: {
+      pick: (room, playerId, body, now) => drawGuess.pick(room as drawGuess.Room, playerId, { index: body.index }, now),
+      stroke: (room, playerId, body, now) =>
+        drawGuess.stroke(
+          room as drawGuess.Room,
+          playerId,
+          { id: body.id, color: body.color, width: body.width, points: body.points },
+          now,
+        ),
+      undo: (room, playerId, _body, now) => drawGuess.undo(room as drawGuess.Room, playerId, now),
+      clear: (room, playerId, _body, now) => drawGuess.clear(room as drawGuess.Room, playerId, now),
+      guess: (room, playerId, body, now) => drawGuess.guess(room as drawGuess.Room, playerId, { text: body.text }, now),
     },
   },
 };

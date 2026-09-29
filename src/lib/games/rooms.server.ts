@@ -41,9 +41,12 @@ interface Live {
   pushed: Set<string>;
 }
 
-/** The room as `playerId` sees it, with who has had their invite. */
-function wire(live: Live, playerId: string, now = Date.now()): WireRoom {
-  const out = live.rules.toWire(live.room, playerId, now) as WireRoom & { players?: { id: string }[] };
+/**
+ * The room as `playerId` sees it, with who has had their invite. `since` is
+ * what their phone already holds, for a game that sends itself as changes.
+ */
+function wire(live: Live, playerId: string, now = Date.now(), since: number | null = null): WireRoom {
+  const out = live.rules.toWire(live.room, playerId, now, since) as WireRoom & { players?: { id: string }[] };
   if (!Array.isArray(out.players)) return out;
   return { ...out, players: out.players.map((p) => ({ ...p, sawInvite: live.sawInvite.has(p.id) })) } as WireRoom;
 }
@@ -190,7 +193,9 @@ export function act(id: string, playerId: string, action: string, body: Record<s
     throw err;
   }
   settle(live, true);
-  return wire(live, playerId);
+  // A phone that says what it holds (`since`) is answered with only what is new.
+  const since = typeof body.since === 'number' && Number.isInteger(body.since) ? body.since : null;
+  return wire(live, playerId, Date.now(), since);
 }
 
 /**
@@ -318,7 +323,13 @@ export function subscribe(
 ): () => void {
   const live = get(id);
   if (!inRoom(live.room, playerId)) throw new GameError(403, 'You are not in this game.');
-  const change = () => onRoom(wire(live, playerId));
+  // Frames on one stream arrive in order, so after the first (the whole room)
+  // each can carry only what changed since the last — for a game that can.
+  let since: number | null = null;
+  const change = () => {
+    onRoom(wire(live, playerId, Date.now(), since));
+    since = live.rules.revision?.(live.room) ?? null;
+  };
   live.emitter.on('change', change);
   live.emitter.once('gone', onGone);
   change();

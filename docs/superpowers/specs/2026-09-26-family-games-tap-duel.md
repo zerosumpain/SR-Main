@@ -390,3 +390,72 @@ Wire (GameRoom additions; lobby verbs, invites, stream as every other game):
   "winnerIds": [], "serverNow":… }
 ```
 The invite's `about` reads "5 dice each · ones wild" (or "· no wilds").
+
+## Game 10 — Draw & Guess (added 2026-09-29)
+
+`game:'draw-guess'`. Pictionary: everybody draws in turn while the others guess. 2–5 players;
+`start` with fewer than two joined is 409 "Draw & Guess needs at least two players."
+
+**The host picks** on create (defaults in bold): `turnsEach` **1** | 2 (times round the table,
+seat order) and `seconds` 60 | **80** | 100 per drawing. `difficulty` picks the word pool
+(`words/draw-guess.ts`, 318 hand-picked words): easy = simple concrete nouns; medium adds
+fussier things and a few actions; hard = medium + actions, places and ideas. No word is dealt
+twice in a game.
+
+**A turn:** `picking` (10 s: the drawer alone sees three words; `{action:'pick', index}`, else
+the first is taken) → `drawing` (the clock) → `reveal` (5 s: the word, who got it, the drawing
+stays up) → the next drawer, or `finished`. Letters are given away at 50% and 75% of the clock
+(none for words of three letters or fewer); each is its own push.
+
+**Moves** (drawer only, while drawing): `stroke {id, color, width, points:[[x,y],…]}` — the
+canvas is 0…1000 square, points are rounded and clamped; an id the drawing already has
+APPENDS to that stroke (its colour and width kept), so a line streams in pieces. Palette
+black red orange yellow green blue purple brown, and `white` (the eraser); widths 6 | 14 | 32.
+At most 300 points a post (400) and 5000 in a drawing (409 "The drawing is full…" — undo or
+clear frees room). `undo` takes off the last stroke; `clear` wipes it.
+
+`guess {text}` (anyone else, while drawing): normalised (case, accents, punctuation, spacing, a
+leading a/an/the, a trailing plural s). Right → scored and marked solved; the feed says
+"Sam got it!" and never shows the text. Wrong → the feed, for everyone. One letter off → a
+`close` entry only the guesser sees (the near-miss would give the word away). One guess per
+700 ms (409), solvers and the drawer 409.
+
+**Scoring:** guessers 5 / 4 / 3 by order solved, then 2; the drawer 2 per solver, settled when
+the drawing ends. It ends early when every guesser has it. A drawer leaving ends their turn
+(reveal, no drawer points); fewer than two left → `finished`. Standings by score, ties share.
+
+**Why the drawing is sent as changes.** Every change to a room pushes each phone its whole
+`toWire` over SSE. Measured (`draw-guess.test.ts`): a drawing at its 5000-point cap is ~51 KB a
+push; the drawer's 200 ms batches plus four guessers at their rate limit are ~10.7 pushes a
+second, so ~540 KB/s per phone and ~2.7 MB/s out of the server for a family of five — for a
+drawing that changed by a dozen points. So the drawing carries a `revision`, and a phone that
+says what it holds gets only the changes after it (~1.1 KB a push, ~12 KB/s). The contract
+barely moves: `toWire` takes an optional `since`; a game may export `revision(room)`; the SSE
+stream keeps the cursor per subscriber (frames on one stream arrive in order, so the first is
+whole and the rest are changes), and a POST may carry `since`. GET is always whole. A cursor
+from before this drawing, past the 400-change log, or ahead of the room gets the whole drawing.
+
+Wire (GameRoom additions; lobby verbs, invites, stream as every other game):
+```jsonc
+{ "game":"draw-guess", "phase":"lobby|countdown|picking|drawing|reveal|finished|closed",
+  "turnsEach":1, "timeLimitMs":80000, "pickMs":10000, "revealMs":5000, "phaseEndsAt":…,
+  "turn": null | {                                   // null in the lobby and countdown
+    "index":0, "of":6, "drawerId":"…", "startedAt": null | …,   // startedAt: the drawing's start
+    "choices": null | ["apple","kite","owl"],        // the drawer, while picking
+    "word": null | "apple",                          // drawer + solvers while drawing; everyone at reveal
+    "hint": null | "a___e",                          // while drawing: letters `_` until given away
+    "solvers":[{"id","points"}], "drawerPoints": null | 4,     // drawerPoints once it ends
+    "ended": null | "time|solved|left",
+    "feed":[{"n":7,"playerId","name","kind":"guess|solved|close","text": null | "pear"}] },
+  "drawing": null | { "revision":42,
+    "since": null | 40,                              // null: `strokes` is the whole drawing
+    "strokes": null | [{"id":1,"color":"red","width":6,"points":[[10,20],…]}],
+    "ops": null | [{"seq":41,"op":"stroke","id":1,"color":"red","width":6,"points":[[…]]},
+                   {"seq":42,"op":"undo"} | {"seq":…,"op":"clear"}] },
+  "palette":["black",…,"white"], "widths":[6,14,32],
+  "players":[{"id","name","status","isHost","score":9,"solved":true,"isDrawing":false}],
+  "standings": null | [{"id","name","score"}], "winnerIds": [], "serverNow":… }
+```
+A phone applies `ops` with `seq` above its own revision when `since` ≤ its revision; if
+`since` is above it, it missed something and fetches `GET /api/native/games/[id]` (whole).
+The invite's `about` reads "80 seconds a drawing" (+ " · twice round").
