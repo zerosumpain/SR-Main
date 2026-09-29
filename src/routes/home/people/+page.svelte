@@ -97,14 +97,22 @@
 
   let liveFixes = $state<Record<string, { lat: number; lon: number; at: string }>>({});
   let liveRevoked = $state(false);
-  const mapPositions = $derived(liveRevoked ? [] : data.positions.map(p => {
-    const fix = liveFixes[p.subject];
-    return fix && fix.at > p.at ? { ...p, ...fix } : p;
-  }));
+  const mapPositions = $derived.by(() => {
+    if (liveRevoked) return [];
+    const positions = new Map(data.positions.map(p => [p.subject, p]));
+    for (const [subject, fix] of Object.entries(liveFixes)) {
+      const previous = positions.get(subject);
+      if (previous && Date.parse(previous.at) >= Date.parse(fix.at)) continue;
+      positions.set(subject, previous ? { ...previous, ...fix }
+        : { subject, ...fix, isHome: null });
+    }
+    return [...positions.values()];
+  });
   onMount(() => {
     let stopped = false;
     let controller: AbortController | undefined;
     let revision = '';
+    let scope: string | undefined;
     const visibility = () => { if (document.hidden) controller?.abort(); };
     const follow = async () => {
       while (!stopped) {
@@ -121,9 +129,22 @@
           const result = await response.json();
           if (stopped || document.hidden) continue;
           revision = String(result.revision ?? '');
-          liveRevoked = revision === 'unavailable';
-          liveFixes = Object.fromEntries((result.positions ?? []).map((fix: { subject: string; position: { lat: number; lon: number; at: string } }) => [fix.subject, fix.position]));
-          if (liveRevoked) await new Promise(resolve => setTimeout(resolve, 5000));
+          if (revision === 'unavailable') {
+            liveRevoked = true; liveFixes = {};
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            continue;
+          }
+          if (result.scope && result.scope !== scope) {
+            liveRevoked = true; liveFixes = {};
+            await invalidate('home:people');
+            scope = result.scope;
+          }
+          const next = { ...liveFixes };
+          for (const fix of result.positions ?? []) {
+            if (!next[fix.subject] || Date.parse(next[fix.subject].at) < Date.parse(fix.position.at)) next[fix.subject] = fix.position;
+          }
+          liveFixes = next;
+          liveRevoked = false;
         } catch {
           if (!stopped) await new Promise(resolve => setTimeout(resolve, 5000));
         }

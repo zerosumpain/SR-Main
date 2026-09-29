@@ -40,7 +40,7 @@
   }
 
   /** The zoom and centre that fit every dot, in pixel space at that zoom. */
-  const view = $derived.by(() => {
+  const fittedView = $derived.by(() => {
     if (!positions.length || width <= 0) return null;
     let zoom = MAX_ZOOM;
     for (; zoom > 2; zoom--) {
@@ -53,6 +53,26 @@
     const cx = (Math.max(...pts.map((p) => p[0])) + Math.min(...pts.map((p) => p[0]))) / 2;
     const cy = (Math.max(...pts.map((p) => p[1])) + Math.min(...pts.map((p) => p[1]))) / 2;
     return { zoom, left: cx - width / 2, top: cy - height / 2 };
+  });
+
+  // Keep the camera stable between fixes so a walk moves the pin across the
+  // map. Refit only for a changed roster/size or when a person leaves the edge.
+  let view = $state<{ zoom: number; left: number; top: number } | null>(null);
+  let viewIdentity = $state('');
+  let now = $state(Date.now());
+  $effect(() => {
+    const next = fittedView;
+    const identity = `${width}:${height}:${positions.map(p => p.subject).sort().join(',')}`;
+    const current = view;
+    const outside = current && positions.some(p => {
+      const [x, y] = project(p.lon, p.lat, current.zoom);
+      return x < current.left + 12 || x > current.left + width - 12
+        || y < current.top + 12 || y > current.top + height - 12;
+    });
+    if (next && (!current || identity !== viewIdentity || outside)) {
+      view = next;
+      viewIdentity = identity;
+    } else if (!next && current) { view = null; }
   });
 
   const tiles = $derived.by(() => {
@@ -82,7 +102,7 @@
   });
 
   function ago(iso: string): string {
-    const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+    const mins = Math.max(0, Math.round((now - new Date(iso).getTime()) / 60000));
     if (mins < 60) return `${mins} min ago`;
     const h = Math.round(mins / 60);
     return h < 48 ? `${h} h ago` : `${Math.round(h / 24)} d ago`;
@@ -94,7 +114,8 @@
     const onChange = (e: MediaQueryListEvent) => (narrow = e.matches);
     mq.addEventListener('change', onChange);
     void loadTiles();
-    return () => mq.removeEventListener('change', onChange);
+    const tick = setInterval(() => { now = Date.now(); }, 15_000);
+    return () => { mq.removeEventListener('change', onChange); clearInterval(tick); };
   });
 
   async function loadTiles() {
