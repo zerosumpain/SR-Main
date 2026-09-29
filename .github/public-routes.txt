@@ -56,6 +56,7 @@
 /api/native/games
 /api/native/games/[id]
 /api/native/games/[id]/stream
+/api/native/games/leaderboard
 /api/native/health/activities
 /api/native/health/activities/[id]
 /api/native/health/hub

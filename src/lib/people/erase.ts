@@ -47,6 +47,7 @@ import {
   familyStepsEvent,
   familyTask,
   fileShareTokens,
+  gameResults,
   gmailAccounts,
   householdMember,
   jkaiAttachments,
@@ -75,6 +76,7 @@ import {
 } from '$lib/home/presence/companion-accounts';
 import { defaultDeleteDeps } from '$lib/home/presence/delete-my-data';
 import { memberByEmail } from '$lib/home/presence/members';
+import { playerId } from '$lib/games/players.server';
 import { removePerson, type RemoveReport } from './people.server';
 
 /** What `created_by_email` becomes on a task they wrote for someone else. Not an address: it matches nobody. */
@@ -101,6 +103,8 @@ export const ACCOUNT_COLUMNS: Record<string, Record<string, Fate | `kept: ${stri
   news_reads: { owner_key: 'erase' },
   family_steps_day: { email: 'erase' },
   family_steps_event: { email: 'erase' },
+  // Keyed by the games' hash of the address (`playerId`), never the address.
+  game_results: { player_id: 'erase' },
   family_task: {
     assignee_email: 'scrub',
     created_by_email: 'scrub',
@@ -212,6 +216,9 @@ export async function eraseRows(target: EraseTarget, executor: typeof db = db): 
     const days = await tx.delete(familyStepsDay).where(inArray(familyStepsDay.email, addrs)).returning({ d: familyStepsDay.day });
     await tx.delete(familyStepsEvent).where(inArray(familyStepsEvent.email, addrs));
     out.stepDays = days.length;
+
+    // Their games on the family leaderboard.
+    await tx.delete(gameResults).where(inArray(gameResults.playerId, addrs.map((a) => playerId(a))));
 
     const removed = await tx
       .update(familyTask)

@@ -1,9 +1,11 @@
 // The live rooms: an in-memory map, one timer per room, one emitter per room.
 //
-// In memory on purpose. Production is a single node process, a room lives for
-// minutes, and results are per game only — a table would hold nothing anyone
-// reads later. The cost is that a deploy ends the games in progress, which the
-// phone reads as the room going away.
+// In memory on purpose. Production is a single node process and a room lives
+// for minutes. The cost is that a deploy ends the games in progress, which the
+// phone reads as the room going away. What outlives a room is its RESULT: each
+// time a room reaches `finished`, its standings are recorded once for the
+// leaderboard (`results.server`), fire-and-forget, so a database that is down
+// never touches a game.
 //
 // The shape copies `$lib/workflows/events.ts`: a map of emitters keyed by id,
 // `subscribe` returning its own unsubscribe.
@@ -13,6 +15,7 @@ import { EventEmitter } from 'node:events';
 import { randomBytes } from 'node:crypto';
 import { GameError, MAX_PLAYERS, type Difficulty } from './tap-duel';
 import { GAMES, type GameId, type GameRules, type RoomBase } from './catalogue';
+import { roundRows, type RoundRow, type Window } from './results';
 
 type WireRoom = ReturnType<GameRules['toWire']>;
 
@@ -39,6 +42,24 @@ interface Live {
    * with the invite, so its poll does not raise a second banner for it.
    */
   pushed: Set<string>;
+  /** The create request's option keys: what the recorder reads back off the room. */
+  optionKeys: string[];
+  /** Finishes so far: "Play again" in the same room records the next round. */
+  round: number;
+  /** This finish has been handed to the recorder; cleared when the room leaves `finished`. */
+  recorded: boolean;
+  /** Who set a new family high score in this finish, once the recorder has said. */
+  records: Record<string, Window> | null;
+}
+
+/** Writes a finished round and says who set a record; `results.server` unless a test swaps it. */
+type Recorder = (rows: RoundRow[]) => Promise<Record<string, Window>>;
+const defaultRecorder: Recorder = async (rows) => (await import('./results.server')).recordRound(rows);
+let recorder: Recorder = defaultRecorder;
+
+/** Tests only: swap the recorder (null puts the database one back). */
+export function _setRecorder(fn: Recorder | null): void {
+  recorder = fn ?? defaultRecorder;
 }
 
 /**
@@ -46,9 +67,51 @@ interface Live {
  * what their phone already holds, for a game that sends itself as changes.
  */
 function wire(live: Live, playerId: string, now = Date.now(), since: number | null = null): WireRoom {
-  const out = live.rules.toWire(live.room, playerId, now, since) as WireRoom & { players?: { id: string }[] };
+  let out = live.rules.toWire(live.room, playerId, now, since) as WireRoom & {
+    players?: { id: string }[];
+    records?: Record<string, Window>;
+  };
+  // A finished room says who set a new family high score, once the recorder has answered.
+  if (live.room.phase === 'finished' && live.records) out = { ...out, records: live.records };
   if (!Array.isArray(out.players)) return out;
   return { ...out, players: out.players.map((p) => ({ ...p, sawInvite: live.sawInvite.has(p.id) })) } as WireRoom;
+}
+
+/**
+ * Hand a room that has just reached `finished` to the recorder, once per
+ * finish. Fire-and-forget: a failure is logged and the game never hears of
+ * it. When the recorder names a record the room is re-sent with it.
+ */
+function record(live: Live, now: number): void {
+  const { room } = live;
+  if (room.phase !== 'finished') {
+    if (live.recorded) {
+      live.recorded = false;
+      live.records = null;
+    }
+    return;
+  }
+  if (live.recorded) return;
+  live.recorded = true;
+  live.round += 1;
+  let rows: RoundRow[];
+  try {
+    rows = roundRows(room, live.rules, live.round, now, live.optionKeys);
+  } catch (err) {
+    console.error(`[games] ${room.id}: could not read the result`, err);
+    return;
+  }
+  if (!rows.length) return;
+  const round = live.round;
+  void recorder(rows)
+    .then((records) => {
+      if (!Object.keys(records).length) return;
+      // Still the same finish: a room that went again, or went away, is not told.
+      if (rooms.get(room.id) !== live || live.round !== round || live.room.phase !== 'finished') return;
+      live.records = records;
+      emit(live);
+    })
+    .catch((err) => console.error(`[games] ${room.id}: could not record round ${round}`, err));
 }
 
 const rooms = new Map<string, Live>();
@@ -70,6 +133,7 @@ function emit(live: Live): void {
 function settle(live: Live, changed: boolean): void {
   const now = Date.now();
   if (live.rules.advance(live.room, now, Math.random)) changed = true;
+  record(live, now);
   if (changed) emit(live);
   const { room } = live;
   if (room.phase === 'closed' && live.timer && !changed) return;
@@ -139,7 +203,18 @@ export function createGame(input: {
     options: input.options,
     now,
   });
-  const live: Live = { room, rules, emitter: new EventEmitter(), timer: null, sawInvite: new Set(), pushed: new Set() };
+  const live: Live = {
+    room,
+    rules,
+    emitter: new EventEmitter(),
+    timer: null,
+    sawInvite: new Set(),
+    pushed: new Set(),
+    optionKeys: Object.keys(input.options ?? {}),
+    round: 0,
+    recorded: false,
+    records: null,
+  };
   live.emitter.setMaxListeners(20);
   rooms.set(room.id, live);
   settle(live, true);
@@ -175,6 +250,9 @@ export function act(id: string, playerId: string, action: string, body: Record<s
   // that moved is sent whether or not the action itself is then refused —
   // otherwise the round's result goes to nobody.
   const moved = rules.advance(live.room, now, Math.random);
+  // A round that finished in that catch-up is recorded before the action can
+  // move the room on ("Play again" leaves `finished` at once).
+  record(live, now);
   const { room } = live;
   if (room.phase === 'closed') {
     settle(live, moved);

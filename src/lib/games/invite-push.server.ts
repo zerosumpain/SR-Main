@@ -18,7 +18,7 @@ import { pushToEmails } from '$lib/server/push-devices';
 import type { PushMessage } from '$lib/server/apns';
 
 /** The app's names (`GameKind.title` in SR-AppleApp). */
-const TITLES: Record<GameId, string> = {
+export const TITLES: Record<GameId, string> = {
   'tap-duel': 'Tap Duel',
   'wordle-race': 'Wordle Race',
   'quiz-night': 'Quiz Night',
