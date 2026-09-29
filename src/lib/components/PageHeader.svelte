@@ -24,6 +24,7 @@
    */
   import type { Snippet } from 'svelte';
   import { getContext, onMount } from 'svelte';
+  import { page } from '$app/state';
   import { currentIsOwner } from '$lib/nav/page-path';
   import { currentReach } from '$lib/nav/reach';
   import SiteHeader from './SiteHeader.svelte';
@@ -52,6 +53,15 @@
   const sectionTitle = $derived(title && !WORDMARK.test(title.trim()) ? title : undefined);
 
   const isOwner = $derived(currentIsOwner());
+  // From the root layout. Outside a request (tests, harnesses) there is no
+  // page to read, and "signed in" is the answer that changes nothing.
+  const signedIn = $derived.by(() => {
+    try {
+      return page.data?.signedIn !== false;
+    } catch {
+      return true;
+    }
+  });
   const reach = $derived(currentReach());
 
   const store = getContext<VitalsStore>('vitals');

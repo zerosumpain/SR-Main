@@ -25,7 +25,7 @@
    * `--accent` scores 2.6:1 on #1a1008), and cream-alpha for the hairlines.
    */
   import type { Snippet } from 'svelte';
-  import { currentIsSignedIn, currentPath } from '$lib/nav/page-path';
+  import { currentPath } from '$lib/nav/page-path';
   import {
     activeSection,
     isItemActive,
@@ -41,6 +41,7 @@
     items,
     isOwner = true,
     reach = [],
+    signedIn = true,
     showBack = true,
     meta,
     before,
@@ -54,6 +55,8 @@
     isOwner?: boolean;
     /** Pages a member's permissions open: their owner-only cells stay. */
     reach?: readonly string[];
+    /** Signed out on the home page, the home cell becomes "Sign in". */
+    signedIn?: boolean;
     showBack?: boolean;
     /** Small metadata beside the section cell (counts, sync status). */
     meta?: Snippet;
@@ -79,7 +82,7 @@
    * site says there is anything to sign in to. There, and only there, the
    * cell becomes the way in.
    */
-  const showSignIn = $derived(atHome && !currentIsSignedIn());
+  const showSignIn = $derived(atHome && !signedIn);
 
   /**
    * The section cell is dropped when the back cell already points at it.
