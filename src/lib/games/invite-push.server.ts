@@ -27,6 +27,7 @@ const TITLES: Record<GameId, string> = {
   'sequence-memory': 'Sequence Memory',
   boggle: 'Boggle',
   categories: 'Categories',
+  'liars-dice': "Liar's Dice",
 };
 
 const LEVELS: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };

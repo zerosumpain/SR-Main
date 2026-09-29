@@ -258,12 +258,44 @@ describe('rooms', () => {
     expect(done.winnerIds).toEqual(['p_sam']);
   });
 
+  it('hosts Liar\'s Dice: no solo table, hidden cups, and a turn clock that plays for you', () => {
+    type Wire = Record<string, any>;
+    const { id } = createGame({ game: 'liars-dice', host: john, invite: [sam], difficulty: 'hard', options: { dice: 3 } });
+    expect(() => asHttp(() => act(id, 'p_john', 'start'))).toThrow(expect.objectContaining({ status: 409 }));
+    act(id, 'p_sam', 'join');
+    act(id, 'p_john', 'start');
+    vi.advanceTimersByTime(COUNTDOWN_MS);
+    const mine = roomFor(id, 'p_john') as unknown as Wire;
+    expect(mine.phase).toBe('bidding');
+    expect(mine.turnId).toBe('p_john');
+    expect(mine.totalDice).toBe(6);
+    expect(mine.players[0].dice).toHaveLength(3);
+    expect(mine.players[1].dice).toBeNull();
+    expect(() => asHttp(() => act(id, 'p_sam', 'bid', { quantity: 1, face: 3 }))).toThrow(
+      expect.objectContaining({ status: 409 }),
+    );
+    act(id, 'p_john', 'bid', { quantity: 2, face: 4 });
+    const theirs = roomFor(id, 'p_sam') as unknown as Wire;
+    expect(theirs.turnId).toBe('p_sam');
+    expect(theirs.players[0].dice).toBeNull();
+    expect(theirs.bid).toEqual({ playerId: 'p_john', quantity: 2, face: 4, auto: false });
+    // Hard: 30 s a turn. Sam lets it run out and the server raises for him.
+    vi.advanceTimersByTime(30_000);
+    const timed = roomFor(id, 'p_sam') as unknown as Wire;
+    expect(timed.bids.at(-1)).toEqual({ playerId: 'p_sam', quantity: 3, face: 4, auto: true });
+    expect(timed.turnId).toBe('p_john');
+    act(id, 'p_john', 'liar');
+    const shown = roomFor(id, 'p_sam') as unknown as Wire;
+    expect(shown.phase).toBe('reveal');
+    expect(shown.reveal.dice).toHaveLength(2);
+  });
+
   describe('inviting from the lobby', () => {
     const kim = { id: 'p_kim', name: 'Kim' };
     type Seen = { players: { id: string; status: string; sawInvite: boolean }[]; phaseEndsAt: number | null };
 
     it('asks somebody in after the room opened, in every game', () => {
-      for (const game of ['tap-duel', 'wordle-race', 'anagram-blitz', 'maths-sprint', 'sequence-memory', 'boggle', 'categories'] as const) {
+      for (const game of ['tap-duel', 'wordle-race', 'anagram-blitz', 'maths-sprint', 'sequence-memory', 'boggle', 'categories', 'liars-dice'] as const) {
         const { id } = createGame({ game, host: john, invite: [], difficulty: 'easy' });
         const room = inviteTo(id, 'p_john', [sam]) as unknown as Seen;
         expect(room.players.map((p) => [p.id, p.status])).toEqual([['p_john', 'joined'], ['p_sam', 'invited']]);

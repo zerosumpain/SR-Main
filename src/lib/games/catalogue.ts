@@ -13,6 +13,7 @@ import * as mathsSprint from './maths-sprint';
 import * as sequenceMemory from './sequence-memory';
 import * as boggle from './boggle';
 import * as categories from './categories';
+import * as liarsDice from './liars-dice';
 import { writeQuiz } from './quiz-night.server';
 import type { Difficulty, PlayerStatus, Rng } from './tap-duel';
 
@@ -25,6 +26,7 @@ export const GAME_IDS = [
   'sequence-memory',
   'boggle',
   'categories',
+  'liars-dice',
 ] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
@@ -147,6 +149,15 @@ export const GAMES: Record<GameId, GameRules> = {
       unveto: (room, playerId, body, now) =>
         categories.unveto(room as categories.Room, playerId, { playerId: body.playerId, index: body.index }, now),
       done: (room, playerId, _body, now) => categories.done(room as categories.Room, playerId, now),
+    },
+  },
+  'liars-dice': {
+    ...liarsDice,
+    moves: {
+      // Raw on purpose: `bid` types its own fields (400 with a sentence for a bad bid).
+      bid: (room, playerId, body, now) =>
+        liarsDice.bid(room as liarsDice.Room, playerId, { quantity: body.quantity, face: body.face }, now),
+      liar: (room, playerId, _body, now) => liarsDice.liar(room as liarsDice.Room, playerId, now),
     },
   },
 };
