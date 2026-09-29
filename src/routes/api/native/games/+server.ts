@@ -39,7 +39,8 @@ export const GET: RequestHandler = withNativeAccess('games', async (_event, iden
  * plus `topic` (optional) and `audience` (kids | family | adults) for Quiz Night, and
  * `size` (4 | 5 | 6), `seconds` (30 | 90 | 120 | 180) and `scoring` (classic | every)
  * for Boggle, and `categoryCount` (6 | 8 | 10) and `seconds` (90 | 120 | 180) for
- * Categories, and `dice` (3 | 5) for Liar's Dice — an unknown value is that game's default.
+ * Categories, `dice` (3 | 5) for Liar's Dice, and `turnsEach` (1 | 2) with `seconds`
+ * (60 | 80 | 100) for Draw & Guess — an unknown value is that game's default.
  */
 export const POST: RequestHandler = withNativeAccess('games', async (event, identity, role) => {
   const body = (await event.request.json().catch(() => null)) as Record<string, unknown> | null;
@@ -83,6 +84,7 @@ export const POST: RequestHandler = withNativeAccess('games', async (event, iden
     scoring: body.scoring,
     categoryCount: body.categoryCount,
     dice: body.dice,
+    turnsEach: body.turnsEach,
   };
   const room = asHttp(() => createGame({ game, host: { id: me.id, name: me.name }, invite, difficulty, options }));
   // Not awaited: the host's screen should not wait on Apple. An invite whose

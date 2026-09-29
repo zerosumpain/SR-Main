@@ -16,7 +16,8 @@ export const GET: RequestHandler = withNativeAccess('games', async (event, ident
  * Lobby verbs join | decline | leave | start | again, `invite` {invite: [playerId]}
  * (the host, while the lobby is open), or the game's own move
  * (Tap Duel `tap` {round, reactionMs, early}; Wordle Race `guess` {word}).
- * Answers with the room after it.
+ * Answers with the room after it; a `since` (Draw & Guess's drawing revision)
+ * asks for the drawing as the changes after it.
  */
 export const POST: RequestHandler = withNativeAccess('games', async (event, identity) => {
   const body = (await event.request.json().catch(() => null)) as Record<string, unknown> | null;

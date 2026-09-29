@@ -290,12 +290,56 @@ describe('rooms', () => {
     expect(shown.reveal.dice).toHaveLength(2);
   });
 
+  it('hosts Draw & Guess, and streams the drawing as changes after the first frame', () => {
+    type Wire = Record<string, any>;
+    const { id } = createGame({
+      game: 'draw-guess',
+      host: john,
+      invite: [sam],
+      difficulty: 'easy',
+      options: { turnsEach: 2, seconds: 60 },
+    });
+    expect(() => asHttp(() => act(id, 'p_john', 'start'))).toThrow(expect.objectContaining({ status: 409 }));
+    act(id, 'p_sam', 'join');
+    act(id, 'p_john', 'start');
+    vi.advanceTimersByTime(COUNTDOWN_MS);
+    const seen: Wire[] = [];
+    subscribe(id, 'p_sam', (r) => seen.push(r as unknown as Wire), () => {});
+    expect(seen[0].phase).toBe('picking');
+    expect(seen[0].turn.choices).toBeNull();
+    const picking = roomFor(id, 'p_john') as unknown as Wire;
+    const word = picking.turn.choices[0];
+    act(id, 'p_john', 'pick', { index: 0 });
+    const drawing = act(id, 'p_john', 'stroke', {
+      id: 1,
+      color: 'red',
+      width: 6,
+      points: [
+        [1, 1],
+        [2, 2],
+      ],
+    }) as unknown as Wire;
+    expect(drawing.drawing.strokes).toHaveLength(1);
+    // The guesser's stream: whole on connect, then changes only.
+    const last = seen[seen.length - 1];
+    expect(last.drawing.since).not.toBeNull();
+    expect(last.drawing.ops).toEqual([expect.objectContaining({ op: 'stroke', id: 1, points: [[1, 1], [2, 2]] })]);
+    // (The palette is sent to everyone and holds "orange", a word too.)
+    expect(JSON.stringify(seen.map((r) => ({ ...r, palette: null })))).not.toContain(`"${word}"`);
+    // A post that says what it holds gets only what is new.
+    const reply = act(id, 'p_john', 'undo', { since: drawing.drawing.revision }) as unknown as Wire;
+    expect(reply.drawing.ops).toEqual([expect.objectContaining({ op: 'undo' })]);
+    const guessed = act(id, 'p_sam', 'guess', { text: word }) as unknown as Wire;
+    expect(guessed.phase).toBe('reveal');
+    expect(guessed.turn.word).toBe(word);
+  });
+
   describe('inviting from the lobby', () => {
     const kim = { id: 'p_kim', name: 'Kim' };
     type Seen = { players: { id: string; status: string; sawInvite: boolean }[]; phaseEndsAt: number | null };
 
     it('asks somebody in after the room opened, in every game', () => {
-      for (const game of ['tap-duel', 'wordle-race', 'anagram-blitz', 'maths-sprint', 'sequence-memory', 'boggle', 'categories', 'liars-dice'] as const) {
+      for (const game of ['tap-duel', 'wordle-race', 'anagram-blitz', 'maths-sprint', 'sequence-memory', 'boggle', 'categories', 'liars-dice', 'draw-guess'] as const) {
         const { id } = createGame({ game, host: john, invite: [], difficulty: 'easy' });
         const room = inviteTo(id, 'p_john', [sam]) as unknown as Seen;
         expect(room.players.map((p) => [p.id, p.status])).toEqual([['p_john', 'joined'], ['p_sam', 'invited']]);

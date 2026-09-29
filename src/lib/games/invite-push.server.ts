@@ -28,6 +28,7 @@ const TITLES: Record<GameId, string> = {
   boggle: 'Boggle',
   categories: 'Categories',
   'liars-dice': "Liar's Dice",
+  'draw-guess': 'Draw & Guess',
 };
 
 const LEVELS: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
