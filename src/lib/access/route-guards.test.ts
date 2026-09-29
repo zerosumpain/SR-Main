@@ -15,6 +15,7 @@ const GUARDS: Partial<Record<AreaId, RegExp>> = {
   'jkai.notes': /\b(notesAccess|requireNote|requireRecording)\b/,
   home: /\bareaAccess\(\s*event,\s*'home'\s*\)/,
   news: /\bnewsCapabilities\b|\bnewsOwnerKey\b/,
+  games: /\b(withGamesSession|gamesCaller)\b/,
 };
 
 function fileFor(routeId: string): string {
