@@ -52,6 +52,7 @@
   let {
     places,
     selectedId = null,
+    focusId = null,
     draft = null,
     placing = false,
     onselect,
@@ -61,6 +62,10 @@
   }: {
     places: MapPlace[];
     selectedId?: string | null;
+    /** A place the list is pointing at (a row hovered or its name field
+     *  focused): drawn as selected and flown to, but with no handles. The
+     *  selection wins while there is one. */
+    focusId?: string | null;
     /** The geometry being edited: the selected place's, or a new place's
      *  when `selectedId` is null. Null = not editing, no handles. */
     draft?: Geometry | null;
@@ -138,9 +143,13 @@
     return near.length >= NEAR_MIN ? [home, ...near] : all;
   }
 
+  /** The place drawn as selected: the selection, else the list's focus. */
+  const lit = () => selectedId ?? (draft ? null : focusId);
+
   function shown(): Array<MapPlace & { selected: boolean; draftNew?: boolean }> {
+    const on = lit();
     const out: Array<MapPlace & { selected: boolean; draftNew?: boolean }> = places.map((p) =>
-      p.id === selectedId && draft ? { ...p, ...draft, selected: true } : { ...p, selected: p.id === selectedId },
+      p.id === selectedId && draft ? { ...p, ...draft, selected: true } : { ...p, selected: p.id === on },
     );
     if (draft && !selectedId) {
       out.push({ id: '__new', label: null, isHome: false, ...draft, selected: true, draftNew: true });
@@ -309,10 +318,12 @@
     declutter();
     syncHandles(draft);
     map.getCanvas().style.cursor = placing ? 'crosshair' : '';
-    // Fly to a newly selected place; not on every drag of it.
-    if (selectedId !== lastFitted) {
-      lastFitted = selectedId;
-      const p = places.find((x) => x.id === selectedId);
+    // Fly to a newly selected (or focused) place; not on every drag of it,
+    // and not back out when the focus clears.
+    const on = lit();
+    if (on !== lastFitted) {
+      lastFitted = on;
+      const p = places.find((x) => x.id === on);
       if (p) fit([draft && selectedId === p.id ? draft : p], true);
     }
   }
@@ -321,7 +332,7 @@
     // Tracked: the props that change what is drawn. The body reads nothing
     // it writes to (it writes no state at all), but untrack keeps the map
     // calls from subscribing to anything else by accident.
-    void [places, selectedId, draft, placing];
+    void [places, selectedId, focusId, draft, placing];
     untrack(render);
   });
 
@@ -430,7 +441,7 @@
               if (map) map.getCanvas().style.cursor = placing ? 'crosshair' : '';
             });
           }
-          lastFitted = selectedId;
+          lastFitted = lit();
           const start = openingView();
           if (start.length) fit(start, false);
           render();
