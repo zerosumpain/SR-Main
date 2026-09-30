@@ -377,3 +377,49 @@ export function deleteNativeRoute(id: string) {
     timeoutMs: READ_TIMEOUT_MS,
   });
 }
+
+// ——— a walked route ————————————————————————————————————————————————————————
+
+/** 6 h at one point every 3 s; Health decimates to 3 m anyway. */
+export const RECORDING_MAX_POINTS = 7200;
+
+/**
+ * A recording from the phone, checked and passed on in Health's own shape —
+ * the track is already `[lng, lat, ele, secondsFromStart]`, Health's
+ * `TrackPoint`, because Health is the only reader.
+ */
+export function readRecording(body: unknown): Record<string, unknown> | string {
+  const b = (body ?? {}) as Record<string, unknown>;
+  if (typeof b.clientId !== 'string' || !/^[0-9a-f-]{8,64}$/i.test(b.clientId)) return 'That walk has no id.';
+  if (!isSport(b.sport)) return 'Pick a sport.';
+  const started = finite(b.startedAt);
+  const finished = finite(b.finishedAt);
+  if (started === undefined || finished === undefined || finished < started) return 'That walk has no time.';
+  if (!Array.isArray(b.track) || b.track.length < 2) return 'A walk needs at least two points.';
+  if (b.track.length > RECORDING_MAX_POINTS) return 'That walk has too many points.';
+  const track: [number, number, number | null, number][] = [];
+  for (const p of b.track) {
+    if (!Array.isArray(p) || !isLng(p[0]) || !isLat(p[1]) || finite(p[3]) === undefined) continue;
+    track.push([p[0], p[1], elevation(p[2]), p[3] as number]);
+  }
+  if (track.length < 2) return 'A walk needs at least two points.';
+  return {
+    clientId: b.clientId.toLowerCase(),
+    name: typeof b.name === 'string' ? b.name.slice(0, 200) : undefined,
+    sport: b.sport,
+    startedAt: started,
+    finishedAt: finished,
+    track,
+    movingS: finite(b.movingS) ?? null,
+    routeId: typeof b.routeId === 'string' && isRouteId(b.routeId) ? b.routeId : null,
+  };
+}
+
+export function saveNativeRecording(payload: Record<string, unknown>) {
+  return postToExtracted<{ activityId: string; distanceM: number; pointCount: number }>(
+    'health',
+    '/api/trails/recordings',
+    payload,
+    { timeoutMs: 20_000 },
+  );
+}

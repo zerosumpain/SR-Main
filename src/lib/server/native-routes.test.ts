@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ROUTE_FOLLOW_MAX,
   isRouteId,
+  readRecording,
   projectDetail,
   projectPlan,
   projectSummary,
@@ -147,5 +148,38 @@ describe('failures', () => {
   it('reads the status Health answered with', () => {
     expect(upstreamStatus(new Error('health/api/trails/plan returned 429'))).toBe(429);
     expect(upstreamStatus(new Error('socket hang up'))).toBeNull();
+  });
+});
+
+describe('a walked route', () => {
+  const walk = {
+    clientId: '3f2b8c1e-0d4a-4b6e-9c7f-1a2b3c4d5e6f',
+    sport: 'walk',
+    startedAt: 1_790_000_000,
+    finishedAt: 1_790_003_600,
+    track: [
+      [-73.97, 40.78, 30, 0],
+      [-73.969, 40.781, null, 3],
+      ['x', 40.7, 1, 6],
+    ],
+    movingS: 3400,
+    routeId: '1b4e28ba-2fa1-11d2-883f-0016d3cca427',
+  };
+
+  it('passes a walk on in Health’s shape and drops an unreadable point', () => {
+    const out = readRecording(walk) as Record<string, unknown>;
+    expect(out.track).toEqual([
+      [-73.97, 40.78, 30, 0],
+      [-73.969, 40.781, null, 3],
+    ]);
+    expect(out.routeId).toBe(walk.routeId);
+  });
+
+  it('refuses a walk with no id, since the id is what makes a retry safe', () => {
+    expect(readRecording({ ...walk, clientId: undefined })).toBeTypeOf('string');
+  });
+
+  it('refuses one that ends before it starts', () => {
+    expect(readRecording({ ...walk, finishedAt: 1 })).toBeTypeOf('string');
   });
 });
