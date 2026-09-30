@@ -122,6 +122,13 @@ describe('every native route gates itself', () => {
         '/news/+server.ts',
         '/news/actions/+server.ts',
         '/news/story/[source]/[id]/+server.ts',
+        // A route walk shared live: whoever walks (owner or member) starts,
+        // feeds and ends their own session (device-checked); reading one is
+        // the walker, the owner, or the walker's followers via `journeyAccess`.
+        '/route-session/+server.ts',
+        '/route-session/[id]/+server.ts',
+        '/route-session/[id]/end/+server.ts',
+        '/route-session/[id]/fixes/+server.ts',
       ].sort(),
     );
     // And none of them keeps an owner-only handler beside it by accident.

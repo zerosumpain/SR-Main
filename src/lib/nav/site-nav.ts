@@ -331,8 +331,6 @@ const GROUPING_SEGMENTS: (string | RegExp)[] = [
   '/blog/preview',
   '/blog/tag',
   '/jkai/shared',
-  // /follow/<token> — a live route walk shared by link — has no index page.
-  '/follow',
   // A shared, read-only policy assessment lives one level under a namespace with
   // no page of its own — the same shape as /jkai/shared above it.
   '/projects/policy-analysis/shared',
