@@ -185,6 +185,7 @@ export const SECTIONS: NavSection[] = [
       { label: 'Noticed', href: '/jkai/daydreams', match: (p) => p === '/jkai/daydreams' },
       { label: 'Watches', href: '/jkai/daydreams/watches' },
       { label: 'Briefing', href: '/jkai/daydreams/briefing' },
+      { label: 'Impact', href: '/jkai/daydreams/impact' },
     ],
   },
   {
@@ -401,9 +402,20 @@ export function visibleItems(items: NavItem[], isOwner: boolean, reach: readonly
  */
 function sectionItems(section: NavSection, isOwner: boolean, reach: readonly string[] = []): NavItem[] {
   if (section.ownerOnly && !isOwner) {
-    // A member sees exactly the cells they can reach, never a rewritten one:
-    // inside a section every cell is already a page of its own.
-    return section.items.filter((i) => reach.includes(i.href));
+    // A member sees the cells they can reach. A cell whose own page is not
+    // theirs but which holds one that is (jkai's Daydreams, when only Impact is
+    // open) links to that page, the same rewrite `visibleItems` makes.
+    const out: NavItem[] = [];
+    for (const i of section.items) {
+      if (reach.includes(i.href)) out.push(i);
+      // Never the section's own root cell: everything in the section is under
+      // it, so "Chat" would become a link to whatever jkai page came first.
+      else if (i.href !== section.rootHref) {
+        const inside = reach.find((r) => under(i.href, r));
+        if (inside) out.push({ ...i, href: inside });
+      }
+    }
+    return out;
   }
   return visibleItems(section.items, isOwner, reach);
 }

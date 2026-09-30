@@ -19,6 +19,10 @@
   import RailSection from '$lib/components/intel/RailSection.svelte';
   import { GROUP_BY, type GroupBy } from '$lib/codegraph/network';
   import type { NetworkPayload } from '$lib/codegraph/types';
+  import { mayFollow } from '$lib/member-view';
+  import type { PageData } from './$types';
+
+  let { data }: { data: PageData } = $props();
 
   /** 3D is the default, and the choice persists — same key idiom as intel so
    *  the two graphs do not disagree about what "the view" means. */
@@ -415,12 +419,14 @@
           <p class="hint">Double-click the node to load its full record.</p>
         {/if}
 
-        <a
-          class="ask"
-          href="/jkai/codegraph/ask?q={encodeURIComponent(`file:${selected.type} | hops 1`)}"
-        >
-          Ask the graph about this file →
-        </a>
+        {#if mayFollow('/jkai/codegraph/ask', 'memberReach' in data ? data.memberReach : undefined)}
+          <a
+            class="ask"
+            href="/jkai/codegraph/ask?q={encodeURIComponent(`file:${selected.type} | hops 1`)}"
+          >
+            Ask the graph about this file →
+          </a>
+        {/if}
       {:else}
         <h2>Pick a file</h2>
         <p class="hint">

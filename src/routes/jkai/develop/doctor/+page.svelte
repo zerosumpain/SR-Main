@@ -6,9 +6,12 @@
   import { runIdFromHash } from '$lib/daydream/run-ref';
   import DaydreamShell from '$lib/components/jkai/daydream/hub/DaydreamShell.svelte';
   import { developRoomRail } from '$lib/builds/develop-nav';
+  import { mayFollow } from '$lib/member-view';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
+  // A member's reachable pages; undefined for the owner, who follows every link.
+  const reach = $derived('memberReach' in data ? data.memberReach : undefined);
 
   type Story = PageData['stories'][number];
   type Signature = PageData['signatures'][number];
@@ -183,7 +186,7 @@
 >
 <div class="wrap">
   <nav class="hdr-links" aria-label="Related">
-    <a class="rel-link" href="/jkai/canvas">Canvases →</a>
+    {#if mayFollow('/jkai/canvas', reach)}<a class="rel-link" href="/jkai/canvas">Canvases →</a>{/if}
     <a class="rel-link" href="/jkai/develop/backlog">Build backlog →</a>
     {#if !data.member}<a class="rel-link" href="/admin/ai/doctor">Controls →</a>{/if}
   </nav>
@@ -201,7 +204,7 @@
   {#if !data.switches.enabled}
     <div class="alert warn">
       <strong>The nightly run is switched off.</strong> Nothing below will change until the kill
-      switch is back on in <a href="/admin/ai/doctor">Controls</a>.
+      switch is back on{#if !data.member} in <a href="/admin/ai/doctor">Controls</a>{/if}.
     </div>
   {/if}
 
@@ -347,7 +350,7 @@
                 <span class="story-title mono">{s.subject}</span>
                 <span class="story-sub">
                   {s.fixKindLabel}
-                  {#if s.canvasSlug}
+                  {#if s.canvasSlug && mayFollow(`/jkai/canvas/${s.canvasSlug}`, reach)}
                     · <a class="canvas-link" href="/jkai/canvas/{s.canvasSlug}">open canvas →</a>
                   {/if}
                 </span>
@@ -481,7 +484,7 @@
                 <ul class="affected">
                   {#each g.workflows as w}
                     <li>
-                      {#if w.canvasSlug}
+                      {#if w.canvasSlug && mayFollow(`/jkai/canvas/${w.canvasSlug}`, reach)}
                         <a class="canvas-link" href="/jkai/canvas/{w.canvasSlug}">{w.workflowName}</a>
                       {:else}
                         <span class="mono">{w.workflowName}</span>
@@ -523,7 +526,7 @@
             <div class="row-head as-row">
               <span class="status-dot" data-status="warn"></span>
               <span class="row-title">
-                {#if s.canvasSlug}
+                {#if s.canvasSlug && mayFollow(`/jkai/canvas/${s.canvasSlug}`, reach)}
                   <a class="canvas-link" href="/jkai/canvas/{s.canvasSlug}">{s.workflowName}</a>
                 {:else}{s.workflowName}{/if}
               </span>

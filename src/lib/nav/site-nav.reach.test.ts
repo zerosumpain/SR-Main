@@ -21,6 +21,17 @@ describe('a member is offered exactly what they can reach', () => {
     expect(subnavFor('/home/people', false, [])).toEqual([]);
   });
 
+  it('links a section cell to the one page inside it they reach, never the root cell', () => {
+    const reach = ['/jkai/codegraph', '/jkai/develop', '/jkai/daydreams/impact'];
+    const cells = subnavFor('/jkai/develop', false, reach);
+    expect(cells.map((i) => [i.label, i.href])).toEqual([
+      ['Codegraph', '/jkai/codegraph'],
+      ['Develop', '/jkai/develop'],
+      ['Daydreams', '/jkai/daydreams/impact'],
+    ]);
+    expect(subnavFor('/jkai/daydreams/impact', false, reach).map((i) => i.href)).toEqual(['/jkai/daydreams/impact']);
+  });
+
   it('changes nothing for the owner or a signed-out visitor', () => {
     expect(navCellsFor('/', true)).toEqual(navCellsFor('/', true, ['/research']));
     expect(navCellsFor('/', false).some((c) => c.ownerOnly)).toBe(false);
