@@ -6,7 +6,8 @@ import { isOwnerEmail } from '$lib/server/access';
 import { db } from '$lib/db';
 import { routeGift } from '$lib/db/schema';
 import { listMembers } from '$lib/home/presence/members';
-import { isRouteId, sendRouteGift } from '$lib/server/native-routes';
+import { isRouteId } from '$lib/server/native-routes';
+import { sendRouteGift } from '$lib/home/presence/route-gifts';
 import { isUpstreamNotFound } from '$lib/server/native-trails';
 
 /**
