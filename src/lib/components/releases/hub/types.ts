@@ -18,6 +18,12 @@ export interface PublicReleasesData {
   /** The kinds the whole safe corpus contains — what the picker may offer. */
   kindOptions: string[];
   items: ShowcaseItem[];
+  /**
+   * The surfaces on this page the viewer can open: public pages, and a
+   * member's granted ones. Every other surface prints as text, so a
+   * route pattern (`/jkai/canvas/[slug]`) or an owner page is never a link.
+   */
+  linkable: string[];
   filters: { kind: string; q: string; from: string; to: string };
 }
 

@@ -63,6 +63,7 @@ function publicData(over: Partial<PublicReleasesData> = {}): PublicReleasesData 
         deployedAt: '2026-07-11T23:37:00.000Z',
       },
     ],
+    linkable: ['/decks'],
     filters: { kind: 'all', q: '', from: '', to: '' },
     ...over,
   };
@@ -177,6 +178,15 @@ describe('the public document', () => {
     // The two unfiltered release-level figures plus the one filtered item count.
     expect(body).toContain('1,004');
     expect(body).toContain('357');
+  });
+
+  it('links only the surfaces the reader can open', () => {
+    const item = { ...publicData().items[0], surfaces: ['/decks', '/jkai/canvas/[slug]', '/jkai/daydreams'] };
+    const out = html(publicData({ items: [item], linkable: ['/decks'] }));
+    expect(out).toContain('href="/decks"');
+    expect(out).not.toContain('href="/jkai/canvas/[slug]"');
+    expect(out).not.toContain('href="/jkai/daydreams"');
+    expect(out).toContain('/jkai/daydreams');
   });
 
   it('carries the console furniture an anonymous reader is allowed', () => {

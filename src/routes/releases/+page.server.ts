@@ -4,6 +4,9 @@ import { getReleaseConsole, monthlyReleaseBuckets, parseConsoleFilters, weeklyCa
 import { isOwnerRequest } from '$lib/server/owner';
 import { getReleaseSessions } from '$lib/releases/sessions.server';
 import { withPrivateFootprint } from '$lib/releases/private-footprint.server';
+import { isPublicPath } from '$lib/auth';
+import { reachablePages } from '$lib/access/catalogue';
+import { viewerOf } from '$lib/server/viewer';
 import type { PageServerLoad } from './$types';
 
 /**
@@ -79,6 +82,14 @@ export const load: PageServerLoad = async (event) => {
   const mix = new Map<string, number>();
   for (const i of items) mix.set(i.kind, (mix.get(i.kind) ?? 0) + 1);
 
+  // A surface is a link only where this reader can go: a public page, or one a
+  // member's grants open. Route patterns and owner pages print as text.
+  const viewer = await viewerOf(event).catch(() => null);
+  const reach = viewer?.kind === 'member' ? reachablePages(viewer.grants) : [];
+  const linkable = [...new Set(items.flatMap((i) => i.surfaces))].filter(
+    (s) => s.startsWith('/') && !s.includes('[') && (isPublicPath(s) || reach.includes(s)),
+  );
+
   return {
     mode: 'public' as const,
     // External service repositories are private. Keep their names and sizes
@@ -105,6 +116,7 @@ export const load: PageServerLoad = async (event) => {
       .sort((a, b) => b.count - a.count),
     kindOptions: data.kindMix.map((k) => String(k.kind)),
     items,
+    linkable,
     filters: { kind: filters.kind, q: filters.q, from: filters.from, to: filters.to },
   };
 };

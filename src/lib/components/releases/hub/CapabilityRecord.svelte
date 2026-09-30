@@ -16,9 +16,12 @@
 
   interface Props {
     items: ShowcaseItem[];
+    /** Surfaces this viewer can open; the rest print as text (see the loader). */
+    linkable: readonly string[];
   }
 
-  let { items }: Props = $props();
+  let { items, linkable }: Props = $props();
+  const openable = $derived(new Set(linkable));
 
   const groups = $derived.by(() => {
     const by = new Map<string, ShowcaseItem[]>();
@@ -51,7 +54,7 @@
               {#if item.surfaces.length}
                 <p class="item-surfaces">
                   {#each item.surfaces.slice(0, 5) as s, si (s)}
-                    {#if s.startsWith('/')}
+                    {#if openable.has(s)}
                       <a href={s}>{s}</a>
                     {:else}
                       <span>{s}</span>
