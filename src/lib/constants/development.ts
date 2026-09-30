@@ -93,6 +93,14 @@ export interface DeliveryState {
     stopReason?: string;
     /** The adversary's standing objection, when it vetoed an all-pass round. */
     veto?: { reason: string; evidence: string; model: string; revision: string; at: string };
+    /**
+     * Consecutive restarts after an INFRASTRUCTURE failure. These do not spend
+     * rounds — the candidate did not cause them — but they are bounded, or a
+     * dead broker would be retried for ever.
+     */
+    infraRetries?: number;
+    /** The last feature failure, so the same one recurring can end the run. */
+    lastFailure?: { signature: string; count: number };
   };
   /** Everything after the batch: the branch, its PR, CI, and the serving sha. */
   release?: {
@@ -102,6 +110,20 @@ export interface DeliveryState {
     prNumber?: number;
     requestedAt?: string;
     ci?: 'pending' | 'success' | 'failure';
+    /** When CI first reported every check green on this pull request. */
+    ciGreenAt?: string;
+    /** The failing checks and the part of their logs worth reading. */
+    ciFailure?: string;
+    /** The candidate CI failed on. It may not be released again unchanged. */
+    failedRevision?: string;
+    /** Pull requests this feature opened and then closed to repair a red CI run. */
+    supersededPrs?: number[];
+    /** CI's merge policy for this change: `high` touches a protected path and waits for a person. */
+    tier?: 'low' | 'high';
+    /** The protected paths that made it `high`. */
+    protectedPaths?: string[];
+    /** Set once the owner has been told this release is waiting on them. */
+    awaitingOwner?: string;
     mergedAt?: string;
     mergeSha?: string;
     deployedSha?: string;

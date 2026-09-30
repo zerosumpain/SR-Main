@@ -9,15 +9,24 @@ const { loadFeedChecks } = await import('./feed-checks');
 // Temporary tables on one connection exercise the real query without changing
 // the cumulative preview's household or activity history. CI supplies the
 // same disposable PostgreSQL as the rest of the merge-gate tests.
-describe.skipIf(!process.env.DATABASE_URL)('feed checks against test PostgreSQL', () => {
+//
+// SKIP, never throw, on any other database. The development broker verifies
+// candidates against a preview database on a docker network, not loopback; a
+// throw there failed the tests step of EVERY development candidate from
+// 2026-09-26, and autopilot spent its rounds coaching features to fix it.
+function loopbackTestDatabase(): URL | null {
+  try {
+    const url = new URL(process.env.DATABASE_URL ?? '');
+    return ['127.0.0.1', 'localhost'].includes(url.hostname) && ['/strange_rambling', '/workflows_jkai_local'].includes(url.pathname) ? url : null;
+  } catch { return null; }
+}
+
+describe.skipIf(!loopbackTestDatabase())('feed checks against test PostgreSQL', () => {
   let pool: Pool;
   let client: PoolClient;
   const stamp = new Date(Date.now() - 60_000);
   beforeAll(async () => {
-    const url = new URL(process.env.DATABASE_URL ?? '');
-    if (!['127.0.0.1', 'localhost'].includes(url.hostname) || !['/strange_rambling', '/workflows_jkai_local'].includes(url.pathname)) {
-      throw new Error('Requires a loopback test database');
-    }
+    const url = loopbackTestDatabase()!;
     pool = new Pool({ connectionString: url.toString() });
     client = await pool.connect();
     await client.query(`begin;

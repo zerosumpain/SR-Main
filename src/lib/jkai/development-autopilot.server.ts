@@ -29,7 +29,7 @@ import { coerceModelContext } from '$lib/constants/default-models';
 import { withActivity } from '$lib/context/activity';
 import { notifyAllSubscribers } from '$lib/server/push';
 import { loadDelivery, mutateDelivery } from './development-state.server';
-import { autopilotActive, type DeliveryState } from './development';
+import { autopilotActive, failureSignature, type DeliveryState } from './development';
 import { emitLog } from './log-emitter';
 
 export type AutopilotOutcome = 'idle' | 'started' | 'assessed' | 'building' | 'released' | 'shipped' | 'stopped';
@@ -39,6 +39,18 @@ const ESCALATE = 'ESCALATE';
 
 /** How long a run may make no progress before it is treated as stuck. */
 const STALL_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * Infrastructure failures are retried WITHOUT spending a round, on a widening
+ * back-off, and at most this many times in a row. The candidate did not cause a
+ * full disk or a dead broker, and counting them is how a 2026-09 run spent all
+ * six rounds restarting into the same broken preview database.
+ */
+const INFRA_RETRIES = 3;
+const INFRA_BACKOFF_MS = 5 * 60 * 1000;
+
+/** The same feature failure this many rounds running ends the run. */
+const SAME_FAILURE_LIMIT = 3;
 
 const DECISION_SYSTEM = `You answer a coding agent's question on behalf of a site owner who is away, using ONLY the accepted brief supplied to you.
 Answer in one or two sentences, decisively, when the brief's outcome, scope, constraints or assumptions settle the question — including when they settle it by implication and a reasonable person would read it the same way.
@@ -98,12 +110,15 @@ export async function autopilotStep(buildId: string): Promise<AutopilotOutcome> 
   // A run that has taken no round for hours is not running, it is stuck: a
   // preview that never came back, or a merge that never reached production.
   // Idling on that forever is the one failure nobody would ever be told about.
+  // A release the owner has been told is waiting on them is not stuck — it is
+  // parked on a person, and the watcher must stay on it to see the merge land.
   const lastMoved = Date.parse(state.autopilot.lastRoundAt ?? state.autopilot.startedAt);
-  if (Number.isFinite(lastMoved) && Date.now() - lastMoved > STALL_MS) {
+  if (!state.release?.awaitingOwner && Number.isFinite(lastMoved) && Date.now() - lastMoved > STALL_MS) {
     return stop(buildId, 'Autopilot has made no progress for six hours. The saved work, preview and evidence are retained.');
   }
 
-  // Already shipped: the only work left is confirming it is serving.
+  // Already shipped: the only work left is confirming it is serving — or, when
+  // CI goes red, taking the failure back to the worker.
   if (state.stage === 'pr_open' || state.stage === 'deployed') {
     const { watchDevelopmentRelease } = await import('./development-release.server');
     const result = await watchDevelopmentRelease(buildId).catch(() => 'pending' as const);
@@ -113,6 +128,15 @@ export async function autopilotStep(buildId: string): Promise<AutopilotOutcome> 
       return 'shipped';
     }
     if (result === 'closed') return stop(buildId, 'The pull request was closed without merging.');
+    if (result === 'ci_failed') return repairAfterCi(buildId, build.modelId);
+    if (result === 'awaiting_owner') {
+      const fresh = await loadDelivery(buildId);
+      const reason = fresh?.state.release?.awaitingOwner;
+      if (reason && reason !== state.release?.awaitingOwner) {
+        await notifyAllSubscribers({ title: 'Pull request needs you', body: reason.slice(0, 140), url: `/jkai/develop/${buildId}` }).catch(() => {});
+        await emitLog(buildId, 'system', `Autopilot is waiting on the owner: ${reason}`);
+      }
+    }
     return 'idle';
   }
 
@@ -168,7 +192,10 @@ export async function autopilotStep(buildId: string): Promise<AutopilotOutcome> 
     return 'assessed';
   }
 
-  const readyForReview = Boolean(state.candidate) && state.preview.status === 'ready' && state.preview.revision === state.candidate && !state.acceptedAt;
+  // A candidate CI already failed is not reviewable again unchanged: re-judging
+  // it passes on the same evidence and re-releases the same red commit.
+  const readyForReview = Boolean(state.candidate) && state.preview.status === 'ready' && state.preview.revision === state.candidate && !state.acceptedAt
+    && state.release?.failedRevision !== state.candidate;
 
   try {
     if (readyForReview) {
@@ -176,18 +203,24 @@ export async function autopilotStep(buildId: string): Promise<AutopilotOutcome> 
       // Use the revision the mutation actually returned. Assuming `+ 1` throws
       // away a whole round the moment anything else writes to this workspace
       // between the two calls — the page's own 3-second poll is a writer.
-      const counted = await mutateDelivery(buildId, 'autopilot_round', s => ({ ...s, autopilot: s.autopilot ? { ...s.autopilot, rounds: s.autopilot.rounds + 1, lastRoundAt: new Date().toISOString() } : s.autopilot }));
-      const next = await continueDevelopment(buildId, counted.revision);
+      // A reviewable candidate is progress: the failure streaks start again.
+      const counted = await mutateDelivery(buildId, 'autopilot_round', s => ({ ...s, autopilot: s.autopilot ? { ...s.autopilot, rounds: s.autopilot.rounds + 1, lastRoundAt: new Date().toISOString(), infraRetries: 0, lastFailure: undefined } : s.autopilot }));
+      const next = await continueDevelopment(buildId, counted.revision, { unattended: true });
       return next === 'released' ? 'released' : next === 'accepted' ? 'assessed' : 'building';
     }
     // Paused with no reviewable candidate: the last turn failed its checks or
-    // changed nothing. Restart the worker with whatever the cycle recorded.
+    // changed nothing. Decide whether that was the feature's fault before
+    // spending a round on it.
+    const next = restartDecision(state, Date.now());
+    if (next.action === 'wait') return 'idle';
+    if (next.action === 'stop') return stop(buildId, next.reason);
     const { builderClient } = await import('./builder-client');
     const capabilities = await builderClient.developmentCapabilities().catch(() => null);
     if (!capabilities?.persistentSessions || !capabilities.brokerConfigured) return stop(buildId, 'The development worker is not available.');
-    await mutateDelivery(buildId, 'autopilot_round', s => ({ ...s, stage: 'queued', autopilot: s.autopilot ? { ...s.autopilot, rounds: s.autopilot.rounds + 1, lastRoundAt: new Date().toISOString() } : s.autopilot, cycle: {
+    await mutateDelivery(buildId, next.action === 'retry' ? 'autopilot_infra_retry' : 'autopilot_round', s => ({ ...s, stage: 'queued', autopilot: s.autopilot ? { ...s.autopilot, ...next.autopilot, lastRoundAt: new Date().toISOString() } : s.autopilot, cycle: {
       startedAt: new Date().toISOString(), modelId: build.modelId ?? undefined, startingCandidate: s.candidate, repairAttempts: 0, modelMs: 0, previewMs: 0, verificationMs: 0,
     } }), delivery.revision);
+    if (next.action === 'retry') await emitLog(buildId, 'system', `Autopilot is retrying after an infrastructure failure (${next.autopilot.infraRetries} of ${INFRA_RETRIES}); no round is spent on it.`);
     if (state.session.id) await builderClient.restartBuild(buildId);
     else await builderClient.startBuild(buildId);
     return state.session.id ? 'building' : 'started';
@@ -201,6 +234,82 @@ export async function autopilotStep(buildId: string): Promise<AutopilotOutcome> 
     if (/workspace changed|already active|already being reviewed|integration is in progress/i.test(message)) return 'idle';
     return stop(buildId, message.slice(0, 400));
   }
+}
+
+type Pilot = NonNullable<DeliveryState['autopilot']>;
+export type RestartDecision =
+  | { action: 'wait' }
+  | { action: 'stop'; reason: string }
+  | { action: 'retry' | 'round'; autopilot: Partial<Pilot> };
+
+/**
+ * What to do with a paused worker that has nothing to review. Pure, so the
+ * three ways a round used to be wasted can each be pinned by a test:
+ *
+ *  - an INFRASTRUCTURE failure is retried on a back-off without a round, up to
+ *    INFRA_RETRIES in a row;
+ *  - the SAME feature failure SAME_FAILURE_LIMIT rounds running ends the run —
+ *    either the worker cannot fix it or it is not the feature's to fix (a
+ *    broken test on master failed every candidate for four days in 2026-09);
+ *  - anything else spends a round, as before.
+ */
+export function restartDecision(state: DeliveryState, now: number): RestartDecision {
+  const pilot = state.autopilot!;
+  const failure = state.cycle?.failure;
+  if (state.cycle?.failureKind === 'infrastructure') {
+    const retries = (pilot.infraRetries ?? 0) + 1;
+    if (retries > INFRA_RETRIES) return { action: 'stop', reason: `The development infrastructure failed ${INFRA_RETRIES} times in a row, so this is not something another round will fix. Last failure: ${(failure ?? 'unrecorded').slice(0, 280)}` };
+    const since = Date.parse(pilot.lastRoundAt ?? pilot.startedAt);
+    if (Number.isFinite(since) && now - since < INFRA_BACKOFF_MS * retries) return { action: 'wait' };
+    return { action: 'retry', autopilot: { infraRetries: retries } };
+  }
+  const signature = failureSignature(failure);
+  const count = signature && pilot.lastFailure?.signature === signature ? pilot.lastFailure.count + 1 : 1;
+  if (signature && count >= SAME_FAILURE_LIMIT) {
+    return { action: 'stop', reason: `The same failure came back ${count} rounds running, so it may not be this feature's to fix: ${(failure ?? '').slice(0, 280)}` };
+  }
+  return { action: 'round', autopilot: { rounds: pilot.rounds + 1, infraRetries: 0, lastFailure: signature ? { signature, count } : undefined } };
+}
+
+/**
+ * CI went red on the pull request. Close it — a stale red proposal is noise on
+ * GitHub and CI would merge nothing from it — and send the failure back to the
+ * worker as a coached round. The next accepted candidate opens a new pull
+ * request on its own branch.
+ */
+async function repairAfterCi(buildId: string, modelId: string | null): Promise<AutopilotOutcome> {
+  const delivery = await loadDelivery(buildId);
+  if (!delivery) return 'idle';
+  const state = delivery.state;
+  const release = state.release;
+  const summary = (release?.ciFailure ?? 'CI reported a failure without a readable log.').slice(0, 2400);
+  if (!autopilotActive(state)) return stop(buildId, `CI failed on ${release?.prUrl ?? 'the pull request'} and autopilot has no rounds left. ${summary.slice(0, 200)}`);
+  const { builderClient } = await import('./builder-client');
+  const capabilities = await builderClient.developmentCapabilities().catch(() => null);
+  if (!capabilities?.persistentSessions || !capabilities.brokerConfigured) return stop(buildId, 'CI failed and the development worker is not available to repair it.');
+  const { coachingInstruction } = await import('./development-review.server');
+  const { enqueuePendingMessage } = await import('./pending-messages');
+  const { relevantLessons } = await import('./development-state.server');
+  // State first, then GitHub. If this write loses a revision race the PR is
+  // still open and the next sweep simply tries again; closing first would leave
+  // a closed PR that the next sweep reads as "closed without merging".
+  await mutateDelivery(buildId, 'autopilot_ci_repair', s => ({
+    ...s, stage: 'queued', acceptedAt: null,
+    release: s.release ? { ...s.release, prUrl: undefined, awaitingOwner: undefined, ciGreenAt: undefined, failedRevision: s.release.revision, supersededPrs: [...(s.release.supersededPrs ?? []), ...(s.release.prNumber ? [s.release.prNumber] : [])], detail: 'CI failed; the pull request is closed and the worker is repairing the cause.' } : s.release,
+    autopilot: s.autopilot ? { ...s.autopilot, rounds: s.autopilot.rounds + 1, lastRoundAt: new Date().toISOString() } : s.autopilot,
+    cycle: { startedAt: new Date().toISOString(), modelId: modelId ?? undefined, startingCandidate: s.candidate, repairAttempts: 0, modelMs: 0, previewMs: 0, verificationMs: 0 },
+  }), delivery.revision);
+  const { closeDevelopmentPullRequest } = await import('./development-release.server');
+  await closeDevelopmentPullRequest(buildId, 'CI failed on this candidate. Autopilot has closed it and is repairing the cause; a new pull request will follow.')
+    .catch((error) => console.warn('[autopilot] could not close the red pull request', error));
+  await enqueuePendingMessage(buildId, coachingInstruction({
+    criteria: [], blocker: null, lessons: await relevantLessons(state.area).catch(() => []),
+    round: (state.autopilot?.rounds ?? 0) + 1, maxRounds: state.autopilot?.maxRounds ?? 1, ciFailure: summary,
+  }));
+  if (state.session.id) await builderClient.restartBuild(buildId);
+  else await builderClient.startBuild(buildId);
+  await emitLog(buildId, 'system', `CI failed on ${release?.prUrl ?? 'the pull request'}; autopilot closed it and sent the failure back to the worker.`);
+  return 'building';
 }
 
 /**

@@ -160,6 +160,23 @@ export async function openPullRequest(args: OpenPullRequestArgs): Promise<PullRe
   throw new Error(redactGitHubSecrets(`GitHub refused the pull request (${created.status}): ${text.slice(0, 1000)}`, token));
 }
 
+/**
+ * Close a pull request, leaving a comment that says why. The one closer, beside
+ * the one opener, so a lane retiring its own proposal never needs a second
+ * GitHub client. Never deletes the branch: the commit stays reviewable.
+ */
+export async function closePullRequest(args: { repo?: string; number: number; comment?: string; token?: string; userAgent?: string }): Promise<void> {
+  const repo = args.repo ?? REPO_SLUG;
+  const token = args.token ?? githubToken();
+  if (!token) throw new Error('GitHub is not configured (no token in env)');
+  const h = headers(token, args.userAgent);
+  if (args.comment) {
+    await fetch(`${API}/repos/${repo}/issues/${args.number}/comments`, { method: 'POST', headers: h, body: JSON.stringify({ body: args.comment.slice(0, 4000) }) }).catch(() => null);
+  }
+  const res = await fetch(`${API}/repos/${repo}/pulls/${args.number}`, { method: 'PATCH', headers: h, body: JSON.stringify({ state: 'closed' }) });
+  if (!res.ok) throw new Error(redactGitHubSecrets(`GitHub refused to close #${args.number} (${res.status}): ${(await res.text().catch(() => '')).slice(0, 500)}`, token));
+}
+
 async function gh<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!prConfigured()) throw new Error('GitHub is not configured (no token in env)');
   const res = await fetch(`${API}${path}`, { ...init, headers: headers() });
