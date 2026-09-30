@@ -237,7 +237,7 @@
           onRegenerate={(id, version) => summarise({ id, force: true }, `re-summarising ${version}…`)}
         />
       {:else}
-        <CapabilityRecord items={data.items} />
+        <CapabilityRecord items={data.items} linkable={data.linkable} />
       {/if}
     </div>
   </section>
