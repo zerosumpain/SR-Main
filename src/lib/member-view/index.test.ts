@@ -4,6 +4,7 @@ import type { BacklogEpic } from '$lib/selfimprove/epic-backlog';
 import type { BoardView, WorkItem } from '$lib/selfimprove/board';
 import type { NarrativeRun } from '$lib/workflowdoctor/narrative';
 import {
+  mayFollow,
   memberArchiveRow,
   memberBacklog,
   memberDeliveryState,
@@ -168,5 +169,20 @@ describe('codegraph', () => {
     const o = memberOutcome({ model_id: 'm', budget_config: { cap: SECRET }, mean_cost: 3 });
     clean(o);
     expect(o.mean_cost).toBeNull();
+  });
+});
+
+describe('mayFollow', () => {
+  it('lets the owner (no reach) follow anything', () => {
+    expect(mayFollow('/admin/ai/doctor', undefined)).toBe(true);
+  });
+
+  it('lets a member follow only a page in reach, ignoring the query', () => {
+    const reach = ['/jkai/codegraph', '/jkai/develop/backlog'];
+    expect(mayFollow('/jkai/develop/backlog', reach)).toBe(true);
+    expect(mayFollow('/jkai/codegraph?repo=SR-Main#x', reach)).toBe(true);
+    expect(mayFollow('/jkai/codegraph/ask?q=file', reach)).toBe(false);
+    expect(mayFollow('/jkai/canvas/monthly-burn', reach)).toBe(false);
+    expect(mayFollow('/jkai/daydreams', reach)).toBe(false);
   });
 });

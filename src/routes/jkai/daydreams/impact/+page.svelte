@@ -11,6 +11,7 @@
   import type { DeckTile } from '$lib/components/jkai/daydream/hub/types';
   import type { Breakdown } from '$lib/daydream/impact';
   import { ago, pct, stamp } from '$lib/daydream/format';
+  import { mayFollow } from '$lib/member-view';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
@@ -171,7 +172,7 @@
           {#each data.results as r (r.href)}
             <li>
               <span class="res-kind">{r.kind === 'check' ? 'Report back' : 'Shipped'}</span>
-              <a href={r.href}>{r.title}</a>
+              {#if mayFollow(r.href, 'memberReach' in data ? data.memberReach : undefined)}<a href={r.href}>{r.title}</a>{:else}<span>{r.title}</span>{/if}
               <span class="res-at" title={stamp(r.at)}>{ago(r.at)}</span>
             </li>
           {/each}

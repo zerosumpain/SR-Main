@@ -3,6 +3,7 @@
   // self-improvement engine — runs, phases, budget, generated code — and
   // neither showed whether anything it built was ever used. On the day the
   // merge started: 33 tools shipped in a fortnight, none ever called.
+  import { mayFollow } from '$lib/member-view';
   import type { PageData } from './$types';
   import DaydreamShell from '$lib/components/jkai/daydream/hub/DaydreamShell.svelte';
   import DsVocab from '$lib/components/jkai/daydream/hub/DsVocab.svelte';
@@ -75,7 +76,8 @@
       value: String(story.thoughts7d),
       sub: 'notes the think loop wrote',
       tone: story.thoughts7d ? 'steady' : 'quiet',
-      href: '/jkai/daydreams',
+      // The daydream inbox is the owner's; a member's tile links nowhere.
+      href: mayFollow('/jkai/daydreams', 'memberReach' in data ? data.memberReach : undefined) ? '/jkai/daydreams' : undefined,
     },
   ]);
 

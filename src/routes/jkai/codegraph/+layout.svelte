@@ -6,6 +6,7 @@
   import { onDestroy } from 'svelte';
   import { setPageMenu, clearPageMenu, type PageMenu } from '$lib/jkai/hub-bus.svelte';
   import { SURFACES, type CodegraphCounts } from '$lib/components/codegraph/workbench';
+  import { mayFollow } from '$lib/member-view';
   import type { LayoutData } from './$types';
 
   let { children, data }: { children: Snippet; data: LayoutData } = $props();
@@ -15,6 +16,10 @@
     const value = counts?.[key];
     return typeof value === 'number' ? value : null;
   }
+
+  // A member's reachable pages (undefined for the owner): the menu offers only
+  // those, so Ask and Review never show as doors that 403.
+  const reach = $derived('memberReach' in data ? data.memberReach : undefined);
 
   const menu = $derived<PageMenu>({
     label: 'codegraph',
@@ -26,7 +31,7 @@
     groups: [
       {
         heading: 'The loop',
-        rows: SURFACES.map((s) => {
+        rows: SURFACES.filter((s) => mayFollow(s.href, reach)).map((s) => {
           const n = badge(data.codegraphCounts, s.count);
           return {
             label: s.label,
@@ -43,7 +48,7 @@
           { label: 'Chat', href: '/jkai', meta: 'THREAD' },
           { label: 'Intel', href: '/jkai/intel', meta: 'THE WORLD' },
           { label: 'Develop', href: '/jkai/develop', meta: 'AUTONOMOUS' },
-        ],
+        ].filter((r) => mayFollow(r.href, reach)),
       },
     ],
   });

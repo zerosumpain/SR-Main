@@ -355,3 +355,17 @@ export function memberSuggestion<T extends { kind: string; reason: string }>(s: 
 export function memberOutcome(o: Row): Row {
   return { ...o, budget_config: null, mean_cost: null };
 }
+
+// ── links ────────────────────────────────────────────────────────────────────
+
+/**
+ * True when a link on an opened page leads somewhere this viewer can go. The
+ * owner passes no `reach` and follows everything; a member follows only a page
+ * their grants open (`memberReach`, from the /jkai layout). A `[param]` page
+ * is never in reach, so a link into the owner's rows (a canvas, a feature
+ * workspace) is hidden rather than left to 403.
+ */
+export function mayFollow(href: string, reach: readonly string[] | null | undefined): boolean {
+  if (!reach) return true;
+  return reach.includes(href.split(/[?#]/)[0]);
+}
