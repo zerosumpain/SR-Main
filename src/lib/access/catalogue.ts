@@ -29,6 +29,7 @@ export const AREA_IDS = [
   'health',
   'workflows',
   'admin',
+  'shipped',
 ] as const;
 export type AreaId = (typeof AREA_IDS)[number];
 
@@ -65,7 +66,7 @@ export const AREAS: readonly AreaInfo[] = [
     label: 'Research',
     blurb: 'Deep research runs, up to brief depth and 5 a day.',
     open: true,
-    levels: { self: 'Run and read own research', all: "Also read everyone's", admin: "Also edit everyone's" },
+    levels: { self: 'Run and read own research', all: "Also read other members' (never yours)", admin: "Also edit other members'" },
   },
   {
     id: 'drive',
@@ -74,7 +75,7 @@ export const AREAS: readonly AreaInfo[] = [
     open: true,
     levels: {
       self: 'Own files; read household files',
-      all: "Also read every member's files",
+      all: "Also read other members' files (never yours)",
       admin: 'Also edit them',
     },
   },
@@ -94,14 +95,14 @@ export const AREAS: readonly AreaInfo[] = [
     label: 'jkai · chat',
     blurb: 'Chat with jkai: web search, news and charts only — none of your data or tools. 50 messages a day.',
     open: true,
-    levels: { self: 'Own threads', all: "Also read everyone's", admin: "Also manage everyone's" },
+    levels: { self: 'Own threads', all: "Also read other members' (never yours)", admin: "Also manage other members'" },
   },
   {
     id: 'jkai.notes',
     label: 'jkai · notes',
     blurb: 'The notebook, with voice notes. Reviews and weaving stay yours.',
     open: true,
-    levels: { self: 'Own notebook', all: "Also read everyone's", admin: "Also edit everyone's" },
+    levels: { self: 'Own notebook', all: "Also read other members' (never yours)", admin: "Also edit other members'" },
   },
   {
     id: 'jkai.intel',
@@ -110,8 +111,8 @@ export const AREAS: readonly AreaInfo[] = [
     open: true,
     levels: {
       self: 'Own space + household; correct and delete in them',
-      all: "Also read every other user's graph (corrections stay their own)",
-      admin: "Also correct and delete in everyone's",
+      all: "Also read other members' graphs, never yours (corrections stay their own)",
+      admin: "Also correct and delete in other members'",
     },
   },
   {
@@ -152,7 +153,7 @@ export const AREAS: readonly AreaInfo[] = [
     label: 'Workflows',
     blurb: 'Build and run their own workflows on the canvas, with safe nodes only (fetch, model calls, text, timing): none of your data, accounts or credentials. 50 runs and 100 model calls a day.',
     open: true,
-    levels: { self: 'Own workflows', all: "Also read everyone's", admin: "Also edit everyone's" },
+    levels: { self: 'Own workflows', all: "Also read other members' (never yours)", admin: "Also edit other members'" },
   },
   {
     // A read-only tour of the admin pages that hold nothing personal and no
@@ -163,6 +164,17 @@ export const AREAS: readonly AreaInfo[] = [
     blurb: 'Browse the admin pages read-only, to see how the site runs: nothing personal, no secrets, no edits.',
     open: true,
     levels: { self: 'Browse the showcase', all: 'Same as self', admin: 'Same as self' },
+  },
+  {
+    // The release log at /releases. A non-owner gets the same scrubbed
+    // showcase the page was built to publish ($lib/releases/public-filter):
+    // the load decides it on `isOwnerRequest`, so the owner console — commits,
+    // files, session prose, costs — is never in their payload.
+    id: 'shipped',
+    label: 'Shipped',
+    blurb: 'The release log: what shipped and when, with the cadence chart. No commits, files, sessions or costs.',
+    open: true,
+    levels: { self: 'Read the release log', all: 'Same as self', admin: 'Same as self' },
   },
 ];
 
@@ -421,6 +433,10 @@ const ROUTES: Record<string, Partial<Record<Method, Permission>>> = {
   '/admin/ops/tool-usage': { GET: 'admin:self' },
   // The model browser on /admin/ai/models: OpenRouter's public catalogue.
   '/api/admin/models/openrouter': { GET: 'admin:self' },
+
+  // ── shipped — the release log, GET only. The load hands a non-owner the
+  // public showcase, never the console (see its note).
+  '/releases': { GET: 'shipped:self' },
 
   '/news': { GET: 'news:self' },
   '/news/[source]/[id]': { GET: 'news:self' },
