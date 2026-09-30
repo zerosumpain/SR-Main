@@ -185,7 +185,7 @@
   <nav class="hdr-links" aria-label="Related">
     <a class="rel-link" href="/jkai/canvas">Canvases →</a>
     <a class="rel-link" href="/jkai/develop/backlog">Build backlog →</a>
-    <a class="rel-link" href="/admin/ai/doctor">Controls →</a>
+    {#if !data.member}<a class="rel-link" href="/admin/ai/doctor">Controls →</a>{/if}
   </nav>
 
   <!-- A dead WhatsApp bridge is invisible on every other nightly job, because

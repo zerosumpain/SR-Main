@@ -10,9 +10,12 @@ import { json, error } from '@sveltejs/kit';
 import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { codegraphNodes } from '$lib/db/schema';
+import { isOwnerRequest } from '$lib/server/owner';
+import { memberEpisodeRow, memberLessonRow, memberMayReadRepo } from '$lib/member-view';
 import type { RequestHandler } from './$types';
 
-export const GET: RequestHandler = async ({ params }) => {
+export const GET: RequestHandler = async (event) => {
+  const { params } = event;
   const id = params.id;
   if (!id) throw error(400, 'missing id');
 
@@ -22,6 +25,11 @@ export const GET: RequestHandler = async ({ params }) => {
     .where(and(eq(codegraphNodes.id, id), isNull(codegraphNodes.mergedIntoId)))
     .limit(1);
   if (!node) throw error(404, 'no such node');
+  // jkai · codegraph, for a member: a public repository's files only, and never
+  // a lesson's words — lessons are the owner's memory notes verbatim
+  // (scripts/codegraph-backfill.mjs) — nor an episode's verification prose.
+  const member = !(await isOwnerRequest(event));
+  if (member && !memberMayReadRepo(node.repo)) throw error(404, 'no such node');
 
   const episodes = await db
     .execute(sql`
@@ -78,8 +86,8 @@ export const GET: RequestHandler = async ({ params }) => {
     existsOnHead: node.existsOnHead,
     episodeCount: node.episodeCount,
     lessonCount: node.lessonCount,
-    episodes,
-    lessons,
+    episodes: member ? episodes.map((e) => memberEpisodeRow(e as Record<string, unknown>)) : episodes,
+    lessons: member ? lessons.map((l, n) => memberLessonRow(l as Record<string, unknown>, n)) : lessons,
     neighbours,
   });
 };

@@ -67,6 +67,7 @@
     buildVersion={data.deploy.short}
     {member}
     memberHome={data.memberHome}
+    memberReach={data.memberReach}
   />
 
   <div class="jkai-body">

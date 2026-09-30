@@ -21,6 +21,20 @@ export interface BacklogRoom {
   board: BoardView;
 }
 
+/**
+ * The room as it stands, read-only: the same board and epics `loadBacklogRoom`
+ * folds, without saving the epics back or seeding the collections. For a
+ * reader who must change nothing (a member on /jkai/develop/backlog). No
+ * grooming suggestions: those are the owner's to act on.
+ */
+export async function readBacklogRoom(): Promise<BacklogRoom> {
+  const [backlog, tools, saved] = await Promise.all([
+    listBacklog(undefined, { strict: true }), loadCustomToolHealth(), listEpics(),
+  ]);
+  const board = buildBoard({ backlog, tools, attemptCeiling: MAX_ATTEMPTS, settledLimit: null });
+  return { epics: buildEpicBacklog(board.items, saved), board };
+}
+
 /** Reconcile from the backlog — the one intake queue since D3 (2026-09-26), when
  * the appetite ledger's capability leads were retired. Every arrival is assigned automatically;
  * grouping never abandons deliverables, changes their status or starts a build.

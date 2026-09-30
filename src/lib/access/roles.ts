@@ -133,6 +133,9 @@ export const AREA_CHOICES: Record<AreaId, readonly AreaChoice[]> = {
   ],
   admin: [{ level: null, label: 'Off' }, { level: 'self', label: 'On' }],
   shipped: [{ level: null, label: 'Off' }, { level: 'self', label: 'On' }],
+  'jkai.develop': [{ level: null, label: 'Off' }, { level: 'self', label: 'On' }],
+  'jkai.codegraph': [{ level: null, label: 'Off' }, { level: 'self', label: 'On' }],
+  'jkai.daydreams': [{ level: null, label: 'Off' }, { level: 'self', label: 'On' }],
 };
 
 /** Short names for a one-line summary of what someone holds. */
@@ -150,6 +153,9 @@ const SHORT: Record<AreaId, string> = {
   workflows: 'workflows',
   admin: 'showcase',
   shipped: 'shipped',
+  'jkai.develop': 'develop',
+  'jkai.codegraph': 'codegraph',
+  'jkai.daydreams': 'daydream impact',
 };
 
 /** The areas the editor draws, in catalogue order. */

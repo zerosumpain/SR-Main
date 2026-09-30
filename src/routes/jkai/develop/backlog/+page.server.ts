@@ -2,6 +2,9 @@ import type { PageServerLoad } from './$types';
 import { autoGroomBacklog } from '$lib/workflows/backlog-grooming.server';
 import { EMPTY_BOARD } from '$lib/selfimprove/board';
 import { errMsg } from '$lib/selfimprove/types';
+import { readBacklogRoom } from '$lib/selfimprove/epic-backlog.server';
+import { isOwnerRequest } from '$lib/server/owner';
+import { memberBacklog } from '$lib/member-view';
 
 /**
  * The room reads one thing.
@@ -11,14 +14,26 @@ import { errMsg } from '$lib/selfimprove/types';
  * is a second full pass over the same 470 rows to recompute what the first one
  * threw away.
  */
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async (event) => {
+  if (!(await isOwnerRequest(event))) {
+    // jkai · develop, read-only. Never `autoGroomBacklog`: it applies the
+    // engine's grooming decisions, and a member's page view must write nothing.
+    // `readBacklogRoom` reads and folds, and the result is redacted.
+    try {
+      const { epics, board } = await readBacklogRoom();
+      return { ...memberBacklog(epics, board), error: null, member: true };
+    } catch (error) {
+      console.error('[backlog] member read failed:', errMsg(error));
+      return { epics: [], board: EMPTY_BOARD, error: 'The backlog could not be read.', member: true };
+    }
+  }
   try {
     const { epics, board } = await autoGroomBacklog();
-    return { epics, board, error: null };
+    return { epics, board, error: null, member: false };
   } catch (error) {
     // EMPTY_BOARD rather than null, for the reason it exists: every consumer
     // can then read `board.totals` without a guard, and the room says out loud
     // that it could not read rather than drawing a deck of measured zeros.
-    return { epics: [], board: EMPTY_BOARD, error: errMsg(error) };
+    return { epics: [], board: EMPTY_BOARD, error: errMsg(error), member: false };
   }
 };

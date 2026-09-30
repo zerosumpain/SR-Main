@@ -4,6 +4,8 @@ import { sql } from 'drizzle-orm';
 import { getBuildList } from '$lib/jkai/queries';
 import { laneStats } from '$lib/builds/lane-stats';
 import { isCommissioned } from '$lib/jkai/development';
+import { isOwnerRequest } from '$lib/server/owner';
+import { memberArchiveRow } from '$lib/member-view';
 import type { PageServerLoad } from './$types';
 
 /**
@@ -19,7 +21,7 @@ import type { PageServerLoad } from './$types';
  * The live portfolio stays a client fetch of `/api/jkai/development`, which is
  * what the release smoke asserts and what the workspace's own poll refreshes.
  */
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async (event) => {
   const [all, counts, deliveries] = await Promise.all([
     getBuildList(),
     db
@@ -49,8 +51,9 @@ export const load: PageServerLoad = async () => {
     })),
   );
 
-  return {
-    archive: builds.map((b) => ({ ...b, iterationCount: byBuild.get(b.id) ?? 0 })),
-    lanes,
-  };
+  const archive = builds.map((b) => ({ ...b, iterationCount: byBuild.get(b.id) ?? 0 }));
+  // jkai · develop, read-only for a member: the archive's shape, never its
+  // prompts, config or cost ($lib/member-view). The lane table is counts.
+  if (!(await isOwnerRequest(event))) return { archive: archive.map(memberArchiveRow), lanes, member: true };
+  return { archive, lanes, member: false };
 };

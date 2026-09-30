@@ -12,8 +12,10 @@ import { db } from '$lib/db';
 import { codegraphEpisodes, codegraphLessons, codegraphQueries } from '$lib/db/schema';
 import { and, desc, isNull, sql } from 'drizzle-orm';
 import { relevanceOf, rankingRegime } from '$lib/codegraph/relevance';
+import { isOwnerRequest } from '$lib/server/owner';
+import { memberRelevanceUnit } from '$lib/member-view';
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async (event) => {
   const [lessonRows, episodeRows] = await Promise.all([
     db.select().from(codegraphLessons)
       .where(and(isNull(codegraphLessons.retiredAt), isNull(codegraphLessons.supersededById)))
@@ -72,12 +74,17 @@ export const load: PageServerLoad = async () => {
 
   const totalObservations = scored.reduce((a, s) => a + s.relevance.observations, 0);
 
+  // jkai · codegraph, for a member: a lesson's title is a memory note's
+  // description ($lib/member-view), so it is numbered instead. Scores stay.
+  const member = !(await isOwnerRequest(event));
+  const shown = member ? scored.map(memberRelevanceUnit) : scored;
+
   return {
-    top: scored.slice(0, 40),
+    top: shown.slice(0, 40),
     // The tail matters as much as the head: these are the units the budget will
     // never reach, and seeing them is how you notice something good has decayed
     // or something useless is still being carried.
-    bottom: scored.slice(-15).reverse(),
+    bottom: shown.slice(-15).reverse(),
     regime: rankingRegime(totalObservations),
     counts: {
       units: scored.length,

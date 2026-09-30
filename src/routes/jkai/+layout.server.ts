@@ -48,13 +48,14 @@ export const load: LayoutServerLoad = async (event) => {
   const viewer = await viewerOf(event).catch(() => null);
   if (viewer?.kind === 'member') {
     // `/jkai` itself counts: with chat open to them, the hub's own page is theirs.
-    const jkai = reachablePages(viewer.grants).filter((p) => p === '/jkai' || p.startsWith('/jkai/'));
+    const reach = reachablePages(viewer.grants);
+    const jkai = reach.filter((p) => p === '/jkai' || p.startsWith('/jkai/'));
     const memberHome = jkai.includes('/jkai/intel')
       ? '/jkai/intel'
       : jkai.includes('/jkai')
         ? '/jkai'
         : (jkai[0] ?? '/');
-    return { deploy: getDeployVersion(), member: true as const, memberHome, hub: MEMBER_HUB };
+    return { deploy: getDeployVersion(), member: true as const, memberHome, memberReach: reach, hub: MEMBER_HUB };
   }
   // Midnight in the database's timezone, the same boundary the spend ledger
   // uses — this was a rolling 24 hours while everything beside it in the header
@@ -136,6 +137,7 @@ export const load: LayoutServerLoad = async (event) => {
     deploy: getDeployVersion(),
     member: false as const,
     memberHome: undefined as string | undefined,
+    memberReach: [] as string[],
     hub: {
       tokensToday: today?.tokens ?? 0,
       spendTodayUsd: today?.spendUsd ?? 0,

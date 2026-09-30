@@ -1,4 +1,6 @@
 import type { PageServerLoad } from './$types';
+import { isOwnerRequest } from '$lib/server/owner';
+import { memberDoctorRun } from '$lib/member-view';
 import { getCollectionBySlug, queryRecords } from '$lib/datastore';
 import { getSetting } from '$lib/server/models/settings';
 import { isAutoApplyEnabled, isBreakerEnabled } from '$lib/workflowdoctor/fix';
@@ -106,7 +108,7 @@ function nightsSinceClean(runs: NarrativeRun[]): number | null {
   return null;
 }
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async (event) => {
   const [runs, findings, live, switches, schedule] = await Promise.all([
     loadRuns().catch((err) => {
       console.error('[workflowdoctor] page: runs read failed:', errMsg(err));
@@ -168,8 +170,9 @@ export const load: PageServerLoad = async () => {
   const workflowsFailing = live?.workflowsFailing ?? Number(latest?.data?.workflowsFailing ?? 0);
 
   const stories = buildDoctorStories({ runs, findings });
+  const member = !(await isOwnerRequest(event));
 
-  return {
+  const page = {
     runs,
     stories,
     storySummary: summariseDoctorStories(stories),
@@ -230,5 +233,22 @@ export const load: PageServerLoad = async () => {
     // hardcoded '05:00 Europe/London' here would be wrong within one click.
     schedule: { expr: schedule.window, tz: schedule.window.split(' ').slice(-1)[0], display: schedule.display },
     running: getDoctorStatus().running,
+  };
+
+  if (!member) return { ...page, member };
+  // jkai · develop, read-only for a member: the numbers of each night, never
+  // WHICH workflows failed or why. Stories, signatures, silent failures and
+  // runaways name the owner's canvases and quote their errors, which touch his
+  // mail, health and money; the summary line is counts only, so it stays.
+  return {
+    ...page,
+    member,
+    runs: runs.map(memberDoctorRun),
+    stories: [],
+    stats: { ...page.stats, costUsd: 0 },
+    signatures: [],
+    silent: [],
+    runaways: [],
+    deadNodeTypes: [],
   };
 };

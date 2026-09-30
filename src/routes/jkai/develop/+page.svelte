@@ -343,6 +343,9 @@
   ]}
 >
   {#snippet masthead()}
+    {#if data.member}
+      <p class="dv-note">A read-only view of what jkai is building for this site. Briefs, questions and costs stay John's.</p>
+    {:else}
     <div class="dv-commission">
       <div class="dv-compose">
       <form class="dv-form" onsubmit={(e) => { e.preventDefault(); void create(); }}>
@@ -413,6 +416,7 @@
         </ol>
       </aside>
     </div>
+    {/if}
   {/snippet}
 
   {#if lane === 'archive'}
@@ -470,10 +474,15 @@
                 <p class="dv-rank">{String(i + 1).padStart(2, '0')}</p>
                 <div class="dv-cell">
                   <p class="dv-area-mark">{sourceOf(b)} · {formatDay(b.createdAt)}</p>
-                  <p class="dv-title"><a class="dv-open" href={`/jkai/builds/${b.id}`}>{b.title ?? b.prompt.slice(0, 70)}</a></p>
+                  {#if data.member}
+                    <p class="dv-title">{b.title ?? 'Untitled build'}</p>
+                  {:else}
+                    <p class="dv-title"><a class="dv-open" href={`/jkai/builds/${b.id}`}>{b.title ?? b.prompt.slice(0, 70)}</a></p>
+                  {/if}
                 </div>
                 <div class="dv-cell dv-outcome-cell">
                   <p class="dv-blurb">{b.prompt.slice(0, 180)}</p>
+                  {#if !data.member}
                   <p class="dv-acts">
                     {#if canPromote(b)}<button class="dv-act" onclick={() => (promoting = b)}>{promoteKind(b) === 'repo' ? 'Add card' : 'Promote'}</button>{/if}
                     {#if b.publishedSlug || b.projectSlug}
@@ -486,6 +495,7 @@
                     <a class="dv-act" href={`/jkai/builds/${b.id}`}>Console</a>
                     <button class="dv-act dv-danger" disabled={removing === b.id} onclick={() => removeBuild(b)}>Delete</button>
                   </p>
+                  {/if}
                 </div>
                 <div class="dv-cell dv-status">
                   <span class="dv-pill tone-{bucket === 'delivered' ? 'good' : bucket === 'failed' ? 'urgent' : bucket === 'running' ? 'steady' : bucket === 'capped' || bucket === 'stopped' ? 'watch' : 'quiet'}">{bucketLabel(bucket)}</span>
@@ -527,7 +537,9 @@
             {#each visible as row, i (row.buildId)}
               {@const stage = stageOf(row)}
               {@const pilot = row.state.autopilot}
-              <a class="dv-row" href={`/jkai/develop/${row.buildId}`}>
+              <!-- A feature's workspace (/jkai/develop/[id]) is the owner's: a
+                   member's row links nowhere. -->
+              <svelte:element this={data.member ? 'div' : 'a'} class="dv-row" href={data.member ? undefined : `/jkai/develop/${row.buildId}`}>
                 <p class="dv-rank">{String(i + 1).padStart(2, '0')}</p>
                 <div class="dv-cell">
                   <p class="dv-area-mark">{row.state.area}</p>
@@ -550,7 +562,7 @@
                     <p class="dv-meta">pull request open</p>
                   {/if}
                 </div>
-              </a>
+              </svelte:element>
             {/each}
           </div>
         {/if}
