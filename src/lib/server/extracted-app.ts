@@ -44,7 +44,7 @@ export class ExtractedAppError extends Error {}
 
 async function call<T>(
 	app: ExtractedApp,
-	method: 'GET' | 'POST',
+	method: 'GET' | 'POST' | 'DELETE',
 	path: string,
 	payload: unknown,
 	{ timeoutMs = 4000, port = APPS[app].port }: { timeoutMs?: number; port?: number },
@@ -80,7 +80,9 @@ async function call<T>(
 				response.setEncoding('utf8');
 				response.on('data', (chunk) => (text += chunk));
 				response.on('end', () => {
-					if (response.statusCode === 200) resolve(text);
+					// 2xx, not 200: a save answers 201 Created.
+					const status = response.statusCode ?? 0;
+					if (status >= 200 && status < 300) resolve(text);
 					else reject(new ExtractedAppError(`${app}${path} returned ${response.statusCode}`));
 				});
 			},
@@ -125,4 +127,12 @@ export function postToExtracted<T>(
 	options: { timeoutMs?: number; port?: number } = {},
 ): Promise<T> {
 	return call<T>(app, 'POST', path, payload, options);
+}
+
+export function deleteFromExtracted<T>(
+	app: ExtractedApp,
+	path: string,
+	options: { timeoutMs?: number; port?: number } = {},
+): Promise<T> {
+	return call<T>(app, 'DELETE', path, undefined, options);
 }
