@@ -63,7 +63,7 @@ now is the app's close-tracking mode (`Outing.swift`) and the family-journey Liv
 - All `withDevice` (owner-only) in P1. Unit tests beside `native-trails.test.ts`.
 
 **App**
-- `HealthRoute.routes` → `RoutesScreen`: saved routes (name, sport, km, climb, difficulty chip) plus "Plan a route".
+- `HealthRoute.routes` → `RoutesScreen`: saved routes (name, sport, km, climb, time). No difficulty chip in P1: Health grades only discovered routes, and Main does not recompute Health's numbers — adding `difficulty` to Health's plan/list responses is a small SR-Health follow-up plus "Plan a route".
 - `PlanRouteSheet`: typed request *or* form (sport, distance with the suggested value filled in, loop / to a place,
   climb, steady/spiky, out-and-back allowed); start is your location, which you can move.
 - `RouteCandidatesScreen`: the 3 candidates on one map, each with score, difficulty and notes; save one with a name.

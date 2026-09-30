@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import http from 'node:http';
-import { ExtractedAppError, getFromExtracted, postToExtracted } from './extracted-app';
+import { ExtractedAppError, deleteFromExtracted, getFromExtracted, postToExtracted } from './extracted-app';
 
 const servers: http.Server[] = [];
 afterEach(() => {
@@ -115,5 +115,29 @@ describe('posting to an extracted application', () => {
       res.end('{"error":"unknown sport"}');
     });
     await expect(postToExtracted('health', '/x', {}, { port })).rejects.toThrow(/returned 400/);
+  });
+
+  it('reads a 201 as success — a save answers Created, not OK', async () => {
+    process.env.HEALTH_SERVICE_TOKEN = 'x'.repeat(64);
+    const port = await stub((_req, res) => {
+      res.writeHead(201, { 'content-type': 'application/json' });
+      res.end('{"id":"r1"}');
+    });
+    await expect(postToExtracted('health', '/api/trails/routes', {}, { port })).resolves.toEqual({ id: 'r1' });
+  });
+
+  it('sends a DELETE with no body', async () => {
+    process.env.HEALTH_SERVICE_TOKEN = 'x'.repeat(64);
+    let method = '';
+    let length: string | undefined;
+    const port = await stub((req, res) => {
+      method = req.method ?? '';
+      length = req.headers['content-length'];
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end('{"deleted":true}');
+    });
+    await expect(deleteFromExtracted('health', '/api/trails/routes/r1', { port })).resolves.toEqual({ deleted: true });
+    expect(method).toBe('DELETE');
+    expect(length).toBeUndefined();
   });
 });

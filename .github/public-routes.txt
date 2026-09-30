@@ -60,6 +60,11 @@
 /api/native/health/activities
 /api/native/health/activities/[id]
 /api/native/health/hub
+/api/native/health/routes
+/api/native/health/routes/[id]
+/api/native/health/routes/discover
+/api/native/health/routes/interpret
+/api/native/health/routes/plan
 /api/native/health/segments
 /api/native/health/segments/[id]
 /api/native/health/summary
