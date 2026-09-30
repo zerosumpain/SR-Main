@@ -56,6 +56,8 @@ vi.mock('./sandbox', () => ({
   syncDesignAssets: async () => '/ds',
   syncJkaiExtension: async () => '/ext',
   syncExplainerKit: async () => '/kit',
+  readDevFile: async () => '',
+  execInSandbox: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
 }));
 
 // preflightToolBridge fetches the manifest; it swallows every error, but a real
