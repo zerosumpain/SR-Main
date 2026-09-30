@@ -33,9 +33,9 @@ import { execInSandbox } from './sandbox';
 import { emitLog } from './log-emitter';
 import { loadDelivery, mutateDelivery } from './development-state.server';
 import { workspaceBroker } from './development-workspace.server';
-import { criterionResult, releaseBlocker } from './development';
+import { criterionResult, releaseBlocker, type DeliveryState } from './development';
 import { SR_MAIN_GIT_TARGET } from './git-targets';
-import { openPullRequest, repoSlugFromUrl } from '$lib/github/pr';
+import { openPullRequest, closePullRequest, repoSlugFromUrl } from '$lib/github/pr';
 import { redactGitHubSecrets } from '$lib/github/redact';
 
 /** `owner/repo` of the target, derived rather than restated so the release and
@@ -55,18 +55,22 @@ const MAX_PATCH_BYTES = 4_000_000;
  * works, a re-release after a closed pull request is a new proposal rather than
  * a rewrite of the old one, and the branch says which candidate it carries.
  */
-export function releaseBranchFor(buildId: string, revision: string): string {
-  return `${SR_MAIN_GIT_TARGET.branchPrefix}dev-${buildId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}-${revision.slice(0, 8)}`;
+export function releaseBranchFor(buildId: string, revision: string, attempt = 0): string {
+  // A candidate re-released after its red pull request was closed needs a new
+  // branch: the old one still holds the previous commit, and a plain push of a
+  // fresh commit onto it is a non-fast-forward.
+  return `${SR_MAIN_GIT_TARGET.branchPrefix}dev-${buildId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}-${revision.slice(0, 8)}${attempt ? `-r${attempt}` : ''}`;
 }
 
 function tokenRemote(token: string): string {
   return `https://x-access-token:${token}@github.com/${REPO}.git`;
 }
 
-export function prBody(input: { outcome: string; criteria: Array<{ text: string; verdict: string; evidence: string }>; gateEvidence: string; buildId: string; independent: boolean }): string {
+export function prBody(input: { outcome: string; criteria: Array<{ text: string; verdict: string; evidence: string }>; gateEvidence: string; buildId: string; independent: boolean; tier?: 'low' | 'high'; protectedPaths?: string[] }): string {
   return [
     'Autonomous site development, proposed from `/jkai/develop`.',
     '',
+    ...(input.tier === 'high' ? [`**Needs owner review:** this change touches protected paths, so CI will not merge it — ${(input.protectedPaths ?? []).slice(0, 12).map(p => `\`${p}\``).join(', ') || 'see the Risk tier check'}.`, ''] : []),
     `**Outcome:** ${input.outcome.slice(0, 1500)}`,
     '',
     '**Acceptance criteria and the evidence behind each verdict:**',
@@ -105,7 +109,7 @@ export async function releaseDevelopment(buildId: string, expectedRevision: numb
   const token = process.env.FORGE_GITHUB_TOKEN;
   if (!token) throw new Error('Releasing needs FORGE_GITHUB_TOKEN on this host. The candidate and its batch are unchanged.');
 
-  const branch = releaseBranchFor(buildId, candidate);
+  const branch = releaseBranchFor(buildId, candidate, state.release?.supersededPrs?.length ?? 0);
   await mutateDelivery(buildId, 'release_started', s => ({ ...s, release: { revision: candidate, branch, requestedAt: new Date().toISOString(), detail: 'Replaying the candidate onto a fresh clone of master.' } }), expectedRevision);
 
   try {
@@ -144,6 +148,11 @@ export async function releaseDevelopment(buildId: string, expectedRevision: numb
       );
     }
 
+    // CI's own classifier, run on the same change before anyone sees it, so a
+    // protected-path change is known to need a person from the moment the pull
+    // request exists instead of sitting green and unmerged with no explanation.
+    const risk = await classifyRelease(`${root}/repo`);
+
     const title = `Develop: ${(build.title ?? state.brief.outcome ?? 'site feature').replace(/\s+/g, ' ').trim().slice(0, 110)}`;
     const titleB64 = Buffer.from(title, 'utf8').toString('base64');
     const committed = await execInSandbox(
@@ -155,7 +164,7 @@ export async function releaseDevelopment(buildId: string, expectedRevision: numb
 
     const independent = state.criteria.some(c => c.assessment?.independent);
     const body = prBody({
-      outcome: state.brief.outcome, buildId, independent,
+      outcome: state.brief.outcome, buildId, independent, tier: risk.tier, protectedPaths: risk.matched,
       gateEvidence: state.gate?.evidence ?? 'Isolated repository verification passed for this candidate.',
       // criterionResult, not the assessment: an owner who recorded a verdict
       // outranks the reviewer everywhere else, and a pull request that says
@@ -175,7 +184,7 @@ export async function releaseDevelopment(buildId: string, expectedRevision: numb
     const prUrl = pr.url;
     const prNumber = pr.number;
     await mutateDelivery(buildId, 'release_pr_open', s => ({ ...s, stage: 'pr_open',
-      release: { ...(s.release ?? { revision: candidate }), revision: candidate, branch, prUrl, prNumber, ci: 'pending',
+      release: { ...(s.release ?? { revision: candidate }), revision: candidate, branch, prUrl, prNumber, ci: 'pending', ciFailure: undefined, ciGreenAt: undefined, awaitingOwner: undefined, tier: risk.tier, protectedPaths: risk.matched,
         detail: draft ? 'Draft pull request open. Mark it ready on GitHub when you want CI to consider merging it.' : 'Pull request open. CI decides whether it merges.' } }));
     await db.update(jkaiBuilds).set({ publishedSlug: prUrl, outcome: 'pr_open', updatedAt: new Date() }).where(eq(jkaiBuilds.id, buildId));
     await emitLog(buildId, 'system', `Release proposed: ${prUrl}. Merging is CI's decision, not the builder's.`);
@@ -189,6 +198,88 @@ export async function releaseDevelopment(buildId: string, expectedRevision: numb
 }
 
 /**
+ * Run `scripts/classify-pr-risk.sh` over the applied, uncommitted change.
+ *
+ * Merge base HEAD with itself is HEAD, and the script diffs the working tree
+ * against it, so the answer is exactly what CI's Risk tier job will say. A
+ * failure to classify reports `high`: the cost of a wrong `low` is a stalled
+ * pull request nobody was told about, the cost of a wrong `high` is a push.
+ */
+async function classifyRelease(repo: string): Promise<{ tier: 'low' | 'high'; matched: string[] }> {
+  const out = `${repo}/../risk-tier.out`;
+  const run = await execInSandbox(`cd ${repo} && GITHUB_OUTPUT=${out} bash scripts/classify-pr-risk.sh HEAD >/dev/null 2>&1; cat ${out} 2>/dev/null`, 60_000).catch(() => null);
+  return parseRiskOutput(run?.stdout ?? '');
+}
+
+/** Parse the `tier=` / `matched=` lines the classifier writes to GITHUB_OUTPUT. */
+export function parseRiskOutput(text: string): { tier: 'low' | 'high'; matched: string[] } {
+  const tier = /^tier=(low|high)$/m.exec(text)?.[1] as 'low' | 'high' | undefined;
+  // `matched` may be a heredoc block (matched<<EOF … EOF) or a single line.
+  const block = /^matched<<(\S+)\n([\s\S]*?)\n\1$/m.exec(text)?.[2] ?? /^matched=(.*)$/m.exec(text)?.[1] ?? '';
+  const matched = block.split(/\n|,\s*/).map(line => line.replace(/\s*\(rule:.*$/, '').trim()).filter(Boolean);
+  return { tier: tier ?? 'high', matched: [...new Set(matched)] };
+}
+
+/** Close this feature's open pull request, for a repair round. */
+export async function closeDevelopmentPullRequest(buildId: string, comment: string): Promise<void> {
+  const delivery = await loadDelivery(buildId);
+  const number = delivery?.state.release?.prNumber;
+  const token = process.env.FORGE_GITHUB_TOKEN;
+  if (!number || !token) return;
+  await closePullRequest({ repo: REPO, number, comment, token, userAgent: 'jkai-develop' });
+}
+
+type CheckRun = { id: number; name: string; status: string; conclusion: string | null; app?: { slug?: string }; output?: { title?: string | null; summary?: string | null } };
+
+/**
+ * One verdict over every check on the head commit.
+ *
+ * `cancelled` and `skipped` are not failures: CI cancels a superseded run, and
+ * the auto-merge job skips itself on anything that is not a low-tier agent
+ * branch. Anything still queued or running means pending.
+ */
+export function ciVerdict(runs: CheckRun[]): { state: 'pending' | 'success' | 'failure'; failed: CheckRun[] } {
+  if (!runs.length) return { state: 'pending', failed: [] };
+  const failed = runs.filter(r => r.status === 'completed' && ['failure', 'timed_out', 'action_required', 'startup_failure'].includes(r.conclusion ?? ''));
+  if (failed.length) return { state: 'failure', failed };
+  if (runs.some(r => r.status !== 'completed')) return { state: 'pending', failed: [] };
+  return { state: 'success', failed: [] };
+}
+
+/**
+ * The part of a GitHub Actions job log worth a model's attention: the lines
+ * around each `##[error]`, with timestamps and colour codes stripped.
+ */
+export function ciLogExcerpt(log: string, limit = 1800): string {
+  const lines = log.split('\n').map(l => l.replace(/^\d{4}-\d\d-\d\dT[\d:.]+Z\s?/, '').replace(/\x1b\[[0-9;]*m/g, ''));
+  const errors = lines.flatMap((l, i) => l.includes('##[error]') ? [i] : []);
+  if (!errors.length) return lines.slice(-30).join('\n').slice(-limit);
+  const first = errors[0];
+  return [...lines.slice(Math.max(0, first - 25), first), ...errors.map(i => lines[i])]
+    .filter((l, i, all) => all.indexOf(l) === i).join('\n').slice(-limit);
+}
+
+async function ciFailureSummary(failed: CheckRun[], headers: Record<string, string>): Promise<string> {
+  const parts: string[] = [];
+  for (const run of failed.slice(0, 2)) {
+    let excerpt = [run.output?.title, run.output?.summary].filter(Boolean).join('\n').slice(0, 600);
+    if (run.app?.slug === 'github-actions') {
+      // The job log redirects to a signed URL; fetch drops the Authorization
+      // header on that cross-origin hop, which the signed URL does not need.
+      const log = await fetch(`https://api.github.com/repos/${REPO}/actions/jobs/${run.id}/logs`, { headers, signal: AbortSignal.timeout(20_000) })
+        .then(r => r.ok ? r.text() : '').catch(() => '');
+      if (log) excerpt = ciLogExcerpt(log);
+    }
+    parts.push(`Check "${run.name}" ${run.conclusion}:\n${excerpt || '(no log available)'}`);
+  }
+  const more = failed.length > 2 ? `\nAlso failed: ${failed.slice(2).map(r => r.name).join(', ')}` : '';
+  return (parts.join('\n\n') + more).slice(0, 4000);
+}
+
+/** CI green but unmerged this long means auto-merge declined it. */
+const MERGE_GRACE_MS = 20 * 60 * 1000;
+
+/**
  * Has the proposal actually shipped?
  *
  * Three separate facts, recorded separately, because conflating them is how a
@@ -196,7 +287,7 @@ export async function releaseDevelopment(buildId: string, expectedRevision: numb
  * commit exists, and the site is serving it. The last one comes from the same
  * public `/api/version` stamp a person would check.
  */
-export async function watchDevelopmentRelease(buildId: string): Promise<'pending' | 'merged' | 'deployed' | 'closed'> {
+export async function watchDevelopmentRelease(buildId: string): Promise<'pending' | 'merged' | 'deployed' | 'closed' | 'ci_failed' | 'awaiting_owner'> {
   const delivery = await loadDelivery(buildId);
   const release = delivery?.state.release;
   if (!delivery || !release?.prNumber) return 'pending';
@@ -205,8 +296,9 @@ export async function watchDevelopmentRelease(buildId: string): Promise<'pending
   const headers = { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'User-Agent': 'jkai-develop' };
   const response = await fetch(`https://api.github.com/repos/${REPO}/pulls/${release.prNumber}`, { headers });
   if (!response.ok) return 'pending';
-  const pr = (await response.json()) as { merged?: boolean; merge_commit_sha?: string; state?: string; merged_at?: string };
+  const pr = (await response.json()) as { merged?: boolean; merge_commit_sha?: string; state?: string; merged_at?: string; draft?: boolean; head?: { sha?: string }; mergeable_state?: string };
   if (!pr.merged) {
+    if (pr.state === 'open' && pr.head?.sha) return watchOpenPullRequest(buildId, release, pr as { draft?: boolean; head: { sha: string }; mergeable_state?: string }, headers);
     if (pr.state === 'closed') {
       // Back to review, not left at pr_open: developmentLane reads that stage as
       // shipped, so a rejected proposal would sit in the Shipped column and
@@ -232,6 +324,51 @@ export async function watchDevelopmentRelease(buildId: string): Promise<'pending
   }));
   if (isLive) await db.update(jkaiBuilds).set({ outcome: 'delivered', updatedAt: new Date() }).where(eq(jkaiBuilds.id, buildId));
   return isLive ? 'deployed' : 'merged';
+}
+
+/**
+ * An open pull request: read its checks, and say whether it is progressing,
+ * failed, or parked on a person. Every transition is written to the delivery
+ * so the page shows the same thing autopilot acted on.
+ */
+async function watchOpenPullRequest(
+  buildId: string,
+  release: NonNullable<DeliveryState['release']>,
+  pr: { draft?: boolean; head: { sha: string }; mergeable_state?: string },
+  headers: Record<string, string>,
+): Promise<'pending' | 'ci_failed' | 'awaiting_owner'> {
+  const checks = await fetch(`https://api.github.com/repos/${REPO}/commits/${pr.head.sha}/check-runs?per_page=100`, { headers, signal: AbortSignal.timeout(15_000) })
+    .then(r => r.ok ? r.json() as Promise<{ check_runs?: CheckRun[] }> : { check_runs: [] }).catch(() => ({ check_runs: [] as CheckRun[] }));
+  const verdict = ciVerdict(checks.check_runs ?? []);
+
+  if (verdict.state === 'failure') {
+    if (release.ci === 'failure' && release.ciFailure) return 'ci_failed';
+    const summary = await ciFailureSummary(verdict.failed, headers);
+    await mutateDelivery(buildId, 'release_ci_failed', s => ({ ...s, release: { ...(s.release ?? release), ci: 'failure', ciFailure: summary, detail: `CI failed: ${verdict.failed.map(r => r.name).join(', ')}.` } }));
+    await emitLog(buildId, 'error', `CI failed on ${release.prUrl}: ${verdict.failed.map(r => r.name).join(', ')}`);
+    return 'ci_failed';
+  }
+
+  if (pr.mergeable_state === 'dirty') {
+    return parkOnOwner(buildId, release, 'The pull request conflicts with master. It needs a rebase by hand; autopilot does not rewrite history.');
+  }
+  if (verdict.state !== 'success') return 'pending';
+
+  const greenAt = release.ciGreenAt ?? new Date().toISOString();
+  if (!release.ciGreenAt || release.ci !== 'success') {
+    await mutateDelivery(buildId, 'release_ci_green', s => ({ ...s, release: { ...(s.release ?? release), ci: 'success', ciGreenAt: greenAt, detail: 'CI passed. Waiting for the merge.' } }));
+  }
+  if (pr.draft) return parkOnOwner(buildId, release, 'CI passed on a draft pull request. Mark it ready for review on GitHub when you want it merged.');
+  if (release.tier === 'high') return parkOnOwner(buildId, release, `CI passed, but the change touches protected paths (${(release.protectedPaths ?? []).slice(0, 6).join(', ') || 'see the Risk tier check'}), so it waits for your review and merge.`);
+  if (Date.now() - Date.parse(greenAt) > MERGE_GRACE_MS) return parkOnOwner(buildId, release, 'CI passed twenty minutes ago and the pull request has not merged. Check the Auto-merge job on GitHub.');
+  return 'pending';
+}
+
+async function parkOnOwner(buildId: string, release: NonNullable<DeliveryState['release']>, reason: string): Promise<'awaiting_owner'> {
+  if (release.awaitingOwner !== reason) {
+    await mutateDelivery(buildId, 'release_awaiting_owner', s => ({ ...s, release: { ...(s.release ?? release), awaitingOwner: reason, detail: reason } }));
+  }
+  return 'awaiting_owner';
 }
 
 /**

@@ -84,6 +84,7 @@ export function deliveryPrompt(state: DeliveryState): string {
     'The broker runs repository gates in an isolated container that supports Bubblewrap. Do not weaken isolation tests or worker restrictions, or spend iterations retrying namespace-dependent repository gates inside the restricted worker. Use focused checks while implementing; report infrastructure failures.',
     state.preview.url ? `Working preview revision: ${state.preview.revision ?? 'legacy'}; ${state.preview.detail}` : 'No working preview yet: prioritize the first runnable slice.',
     state.preview.lastError ? `Last preview/check failure to address: ${state.preview.lastError}` : '',
+    'Paths listed in .github/protected-paths.txt (the data model in src/lib/db/schema.ts, auth, src/lib/server/**, scripts/**, package.json, build configuration, CI) make the pull request high risk: CI will not merge it and it waits for the owner. Prefer a design that stays out of them unless the brief needs it.',
     'Prepare the change for local preview. Do not push, create a PR, merge or deploy.',
     'On continuation, inspect git status and unfinished commands before acting. Do not repeat external side effects from the transcript.',
   ].join('\n');
@@ -112,4 +113,26 @@ export function inspectionCandidate(state: DeliveryState, revision: string, chan
     gate: { passed: false, revision, evidence: 'Inspection snapshot only. Repository checks have not passed for this candidate.' },
     criteria: state.criteria.map(c => ({ ...c, verdict: 'unverified', revision: null })),
   };
+}
+
+/**
+ * A failure reduced to what would be the same next round: the failing step and
+ * the first file or error named, with revisions, log paths, line numbers and
+ * timings stripped. Two rounds with one signature made no progress on it.
+ */
+export function failureSignature(failure: string | null | undefined): string | null {
+  const text = (failure ?? '').replace(/\x1b\[[0-9;]*m|\[[0-9;]{1,8}m/g, '').trim();
+  if (!text) return null;
+  const step = /(\w[\w-]{0,30}) failed in isolated verification/.exec(text)?.[1]
+    ?? /(Feature build|Feature browser check|Browser scenario|Preview readiness) failed/.exec(text)?.[1]
+    ?? 'failure';
+  const subject = /FAIL\s+(\S+\.test\.[jt]sx?)/.exec(text)?.[1]
+    ?? /(?:^|\n)\s*(?:\w*Error|error TS\d+):\s*([^\n]{1,160})/.exec(text)?.[1]
+    ?? text.split('\n')[0];
+  return `${step.toLowerCase()}|${subject}`
+    .replace(/[0-9a-f]{12,40}/g, '<sha>')
+    .replace(/\/var\/lib\/development-broker\/\S+/g, '<log>')
+    .replace(/:\d+(?::\d+)?/g, '')
+    .replace(/\d+(?:\.\d+)?\s*m?s\b/g, '<t>')
+    .slice(0, 240);
 }

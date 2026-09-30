@@ -3,6 +3,7 @@ import { snapshotTree } from './lib/codegraph-snapshot.mjs';
 import http from 'node:http';
 import { previewPlan, readPreviewManifest } from './development-preview-check.mjs';
 import { previewAccessUrl } from './development-preview-access.mjs';
+import { failureKindFor, verificationExcerpt } from './development-verification.mjs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdir, readdir, readFile, writeFile, stat, realpath, rename } from 'node:fs/promises';
@@ -326,7 +327,7 @@ async function provisionPreview(id, revision, path, plan, options) {
   await docker('exec', name, 'npx', 'drizzle-kit', 'push', '--force');
   await docker('cp', `${source}/scripts/local-preview-proxy.mjs`, `${name}:/tmp/sr-preview-proxy.mjs`);
   if (options.verify) await verifyRuntime(id, name);
-  else try { await docker('exec', name, 'npm', 'run', 'build'); } catch (error) { throw error.kind ? error : failure(`Feature build failed: ${(error.stderr || error.stdout || error.message).slice(-1600)}`, 'feature'); }
+  else try { await docker('exec', name, 'npm', 'run', 'build'); } catch (error) { if (error.kind) throw error; const output = error.stderr || error.stdout || error.message; throw failure(`Feature build failed: ${output.slice(-1600)}`, failureKindFor(output)); }
   await docker('exec', '-d', name, 'sh', '-c', 'node build > /tmp/site.log 2>&1');
   await docker('exec', '-d', name, 'node', '/tmp/sr-preview-proxy.mjs');
   await docker('run', '-d', '--name', gateway, '--user', '1000:1000', '--memory', '128m', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
@@ -372,7 +373,7 @@ async function verifyRuntime(id, container) {
     catch (error) {
       const output = `${error.stdout ?? ''}\n${error.stderr ?? error.message}`;
       await writeFile(log, output);
-      throw failure(`${step} failed in isolated verification; full output retained in ${log}. ${output.replace(/\x1b\[[0-9;]*m/g, '').slice(-1600)}`, error.kind ?? 'feature');
+      throw failure(`${step} failed in isolated verification; full output retained in ${log}. ${verificationExcerpt(output)}`, error.kind ?? failureKindFor(output));
     }
   };
   await verify('structural', ['bash', './scripts/gate-structural.sh']);

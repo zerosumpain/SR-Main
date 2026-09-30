@@ -31,9 +31,12 @@ import { jkaiBuilds } from '$lib/db/schema';
 import { getLLMClient } from '$lib/llm/client';
 import { coerceModelContext } from '$lib/constants/default-models';
 import { resolveDevelopmentAssessorModel } from '$lib/server/models/workload-settings';
+import { resolveChatAltOpenRouterModel } from '$lib/server/models/settings';
+import { resolveModelForProfile } from '$lib/routing/events';
 import { withActivity } from '$lib/context/activity';
 import { loadDelivery, mutateDelivery, relevantLessons } from './development-state.server';
 import { workspaceBroker } from './development-workspace.server';
+import type { DeliveryState } from './development';
 
 const schema = z.object({ criteria: z.array(z.object({
   id: z.string(), verdict: z.enum(['passed', 'failed', 'blocked']),
@@ -65,15 +68,38 @@ export function parseReleaseVeto(content: string): { veto: boolean; reason: stri
 }
 
 /**
+ * The first candidate that is not the builder's own model.
+ *
+ * Order is the precedence: the role's own resolution (pin → registry fallback →
+ * site default), then the agentic routing profile, then the owner's chosen
+ * alternate model. Every one of them is an operator setting or the nightly
+ * router's pick — none is a constant in code. When all of them are the
+ * builder's model the first is returned, marked not independent.
+ */
+export function pickIndependentAssessor<T extends { modelId?: string | null }>(candidates: Array<T | null | undefined>, buildModelId: string | null): T & { independent: boolean } {
+  const usable = candidates.filter((c): c is T => Boolean(c?.modelId));
+  const different = usable.find(c => c.modelId !== buildModelId);
+  if (different) return { ...different, independent: true };
+  return { ...(usable[0] ?? ({} as T)), independent: false };
+}
+
+/**
  * The adversary's model, and whether it is genuinely a second opinion.
  *
- * Never throws for want of a pin: an unpinned role follows the site default,
- * which may be the model the build is already using. That is worth saying out
- * loud on the page rather than refusing to assess.
+ * Never throws for want of a pin. Until 2026-09-30 an unpinned role simply
+ * followed the site default, and with the builder on the same default every
+ * verdict ever recorded was the builder marking its own work (8 of 8, then 5 of
+ * 5 passes on a candidate whose gate was red). Now it looks further down the
+ * operator's own settings for a model that is not the builder's.
  */
 export async function developmentAssessor(buildModelId: string | null) {
   const role = await resolveDevelopmentAssessorModel();
-  return { ...role, independent: Boolean(role.modelId && role.modelId !== buildModelId) };
+  if (role.modelId && role.modelId !== buildModelId) return { ...role, independent: true };
+  const [routed, alternate] = await Promise.all([
+    resolveModelForProfile('agentic').then(({ source: _source, ...model }) => model).catch(() => null),
+    resolveChatAltOpenRouterModel().catch(() => null),
+  ]);
+  return pickIndependentAssessor<{ provider?: string; modelId: string }>([role, routed, alternate], buildModelId);
 }
 
 const ASSESS_SYSTEM = `You are an adversarial reviewer for a website feature. Your job is to find out whether the supplied candidate REALLY satisfies each acceptance criterion, not to help it pass.
@@ -176,10 +202,15 @@ export function coachingInstruction(input: {
   lessons: Array<{ lesson: string; evidence: string }>;
   round: number;
   maxRounds: number;
+  /** False when the reviewer resolved to the builder's own model. Never claim otherwise. */
+  independent?: boolean;
+  /** A red CI run on the pull request this candidate became. */
+  ciFailure?: string;
 }): string {
   const failing = input.criteria.filter(c => c.verdict !== 'passed');
   return [
-    `Continue autonomously within the accepted brief. This is round ${input.round} of at most ${input.maxRounds}; unanswered criteria were judged by an independent reviewer, not by you.`,
+    `Continue autonomously within the accepted brief. This is round ${input.round} of at most ${input.maxRounds}; ${input.independent === false ? 'unanswered criteria were judged by a separate review pass on the same model that wrote the code, so treat a pass as provisional.' : 'unanswered criteria were judged by an independent reviewer, not by you.'}`,
+    input.ciFailure ? `CI failed on the pull request opened for the last accepted candidate. That pull request is closed; fix the cause here and a new one will be opened.\n${input.ciFailure}` : '',
     input.blocker ? `What is blocking release: ${input.blocker}` : '',
     input.veto?.reason ? `A reviewer vetoed the release: ${input.veto.reason}\nEvidence: ${input.veto.evidence}` : '',
     failing.length ? ['Criteria still to satisfy — address these specifically, do not restate them as done:',
@@ -201,6 +232,17 @@ export function coachingInstruction(input: {
 }
 
 /**
+ * Did someone other than the builder judge every criterion on this candidate?
+ * An owner verdict counts; a model assessment counts only when independent.
+ */
+export function independentlyJudged(state: DeliveryState): boolean {
+  return state.criteria.every(c => {
+    if (state.candidate && c.revision === state.candidate && c.verdict !== 'unverified') return true;
+    return c.assessment?.revision === state.candidate && c.assessment.independent === true;
+  });
+}
+
+/**
  * One step of the loop: assess what is unanswered, then act on the result.
  *
  * Returns what it did, which is also what the owner-facing button reports:
@@ -219,6 +261,11 @@ export async function continueDevelopment(buildId: string, expectedRevision: num
   let veto: { reason: string; evidence: string } | undefined;
 
   if (!pending && !acceptanceBlocker(current.state)) {
+    // Unattended acceptance needs a second opinion that really is one. An owner
+    // pressing Continue is their own reviewer; autopilot has nobody else.
+    if (autopilotActive(current.state) && !independentlyJudged(current.state)) {
+      throw new Error('Every criterion passed, but only on the builder\'s own model. Pin a different Development adversary model in Settings → Models, or accept this candidate yourself.');
+    }
     // Everything passes. That is exactly when a false pass is expensive, so the
     // adversary gets one more look before the work leaves the machine.
     const decision = await vetoDevelopmentRelease(buildId, current.revision);
@@ -256,6 +303,7 @@ export async function continueDevelopment(buildId: string, expectedRevision: num
       lessons: await relevantLessons(current.state.area).catch(() => []),
       round: (pilot?.rounds ?? 0) + 1,
       maxRounds: pilot?.maxRounds ?? 1,
+      independent: independentlyJudged(current.state),
     });
     await enqueuePendingMessage(buildId, instruction);
     if (current.state.session.id) await builderClient.restartBuild(buildId);
