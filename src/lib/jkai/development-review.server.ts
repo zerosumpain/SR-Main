@@ -250,7 +250,7 @@ export function independentlyJudged(state: DeliveryState): boolean {
  * `building` (the worker was restarted with feedback), or `blocked` when it
  * stopped and needs a person.
  */
-export async function continueDevelopment(buildId: string, expectedRevision: number): Promise<'accepted' | 'released' | 'building'> {
+export async function continueDevelopment(buildId: string, expectedRevision: number, options: { unattended?: boolean } = {}): Promise<'accepted' | 'released' | 'building'> {
   const { acceptanceBlocker, criterionResult, autopilotActive } = await import('./development');
   const { acceptDevelopment } = await import('./development-workspace.server');
   const { builderClient } = await import('./builder-client');
@@ -262,8 +262,10 @@ export async function continueDevelopment(buildId: string, expectedRevision: num
 
   if (!pending && !acceptanceBlocker(current.state)) {
     // Unattended acceptance needs a second opinion that really is one. An owner
-    // pressing Continue is their own reviewer; autopilot has nobody else.
-    if (autopilotActive(current.state) && !independentlyJudged(current.state)) {
+    // pressing Continue is their own reviewer; autopilot has nobody else. Keyed
+    // on the CALLER, not autopilotActive: the round is counted before this
+    // runs, so on the last round autopilotActive is already false.
+    if (options.unattended && !independentlyJudged(current.state)) {
       throw new Error('Every criterion passed, but only on the builder\'s own model. Pin a different Development adversary model in Settings → Models, or accept this candidate yourself.');
     }
     // Everything passes. That is exactly when a false pass is expensive, so the

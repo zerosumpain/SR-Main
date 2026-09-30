@@ -107,13 +107,14 @@ function describeStep(step) {
  * the page had named differently read as a crash, not a naming mismatch.
  */
 export async function scenarioFailure(page, where, error) {
-  const first = String(error?.message ?? error).split('\n')[0].slice(0, 300);
+  // Bounded to fit whole inside the 1,600 characters the broker keeps.
+  const first = String(error?.message ?? error).split('\n')[0].slice(0, 200);
   const text = await page.locator('body').innerText({ timeout: 2000 }).catch(() => '');
   const controls = await page.evaluate(() => [...document.querySelectorAll('button, a[href], input, select, textarea, [role=button], [role=tab], [role=link]')]
-    .slice(0, 40)
-    .map((el) => `${el.getAttribute('role') ?? el.tagName.toLowerCase()} "${(el.getAttribute('aria-label') ?? el.textContent ?? el.getAttribute('placeholder') ?? '').trim().replace(/\s+/g, ' ').slice(0, 60)}"`)).catch(() => []);
+    .slice(0, 15)
+    .map((el) => `${el.getAttribute('role') ?? el.tagName.toLowerCase()} "${(el.getAttribute('aria-label') ?? el.textContent ?? el.getAttribute('placeholder') ?? '').trim().replace(/\s+/g, ' ').slice(0, 40)}"`)).catch(() => []);
   return [`Browser scenario failed at ${where}: ${first}`,
-    `Page text: ${text.replace(/\s+/g, ' ').trim().slice(0, 1200) || '(empty)'}`,
+    `Page text: ${text.replace(/\s+/g, ' ').trim().slice(0, 550) || '(empty)'}`,
     controls.length ? `Controls on the page: ${controls.join(', ')}` : 'No interactive controls were found on the page.'].join('\n');
 }
 

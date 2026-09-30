@@ -114,6 +114,8 @@ export interface DeliveryState {
     ciGreenAt?: string;
     /** The failing checks and the part of their logs worth reading. */
     ciFailure?: string;
+    /** The candidate CI failed on. It may not be released again unchanged. */
+    failedRevision?: string;
     /** Pull requests this feature opened and then closed to repair a red CI run. */
     supersededPrs?: number[];
     /** CI's merge policy for this change: `high` touches a protected path and waits for a person. */

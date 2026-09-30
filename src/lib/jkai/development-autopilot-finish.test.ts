@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { newDelivery, failureSignature, deliveryPrompt } from './development';
+import { newDelivery, failureSignature, deliveryPrompt, releaseBlocker } from './development';
 import { restartDecision } from './development-autopilot.server';
 import { pickIndependentAssessor, independentlyJudged, coachingInstruction } from './development-review.server';
 import { ciVerdict, ciLogExcerpt, parseRiskOutput, prBody, releaseBranchFor } from './development-release.server';
@@ -106,6 +106,28 @@ describe('CI after the pull request opens', () => {
     expect(ciVerdict([run('Gate', 'completed', 'success'), run('Auto-merge', 'completed', 'skipped'), run('Old', 'completed', 'cancelled')]).state).toBe('success');
     expect(ciVerdict([run('Gate', 'in_progress', null)]).state).toBe('pending');
     expect(ciVerdict([]).state).toBe('pending');
+  });
+
+  it('treats a failed Auto-merge job as a merge for the owner, not code to fix', () => {
+    const verdict = ciVerdict([run('Gate (check + test)', 'completed', 'success'), run('Auto-merge (low tier, agent branches)', 'completed', 'failure')]);
+    expect(verdict).toMatchObject({ state: 'success', mergeFailed: true, failed: [] });
+  });
+
+  it('reads the failing shard before the aggregate Gate job', () => {
+    const verdict = ciVerdict([run('Gate (check + test)', 'completed', 'failure'), run('Tests (2)', 'completed', 'failure')]);
+    expect(verdict.failed.map(r => r.name)).toEqual(['Tests (2)', 'Gate (check + test)']);
+  });
+
+  it('will not release the exact candidate CI already failed', () => {
+    const state = newDelivery('x', 'Platform', ['a'], { releasePolicy: 'production' });
+    state.candidate = 'c'.repeat(40);
+    state.acceptedAt = 'now'; state.batch = 'b'.repeat(40);
+    state.gate = { passed: true, revision: state.candidate, evidence: 'ok' };
+    expect(releaseBlocker(state)).toBeNull();
+    state.release = { revision: state.candidate, failedRevision: state.candidate };
+    expect(releaseBlocker(state)).toContain('CI failed on this exact candidate');
+    state.candidate = 'd'.repeat(40); state.gate = { passed: true, revision: state.candidate, evidence: 'ok' };
+    expect(releaseBlocker(state)).toBeNull();
   });
 
   it('extracts the lines before the first error from a job log', () => {

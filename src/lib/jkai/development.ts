@@ -45,6 +45,7 @@ export function releaseBlocker(state: DeliveryState): string | null {
   if (!state.acceptedAt || !state.batch) return 'Accept the candidate into the batch first.';
   if (!state.candidate || !state.gate?.passed || state.gate.revision !== state.candidate) return 'The accepted candidate needs a passing repository gate.';
   if (state.release?.prUrl && state.release.revision === state.candidate) return 'This candidate already has a pull request open.';
+  if (state.release?.failedRevision && state.release.failedRevision === state.candidate) return 'CI failed on this exact candidate. It needs a change before it is proposed again.';
   return null;
 }
 /** Explicit owner verdicts win; model inference is tied to the inspected revision. */

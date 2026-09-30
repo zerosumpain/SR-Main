@@ -50,3 +50,16 @@ the loop fails before retrieval quality can matter:
 - Unit: `development-autopilot-finish.test.ts`, `tests/scripts/development-verification.test.ts`, the existing development suites.
 - Gate: `./scripts/gate-remote.sh --build`.
 - Live: after deploy, confirm the broker runs the new scripts (`/opt/sr-development/sources/<sha>`), and that `developmentAssessor` resolves independent on production.
+
+## Review fixes (same PR)
+
+An independent review of the first cut found five bugs, all fixed before merge:
+the risk classifier ran the CANDIDATE's copy of the script on the builder host
+(now taken from master, as CI does); an unchanged red candidate could be
+re-accepted and re-released (`release.failedRevision` now blocks it); the
+self-review guard keyed on `autopilotActive`, which is false on the last round
+(now an explicit `unattended` flag, which also stops it blocking the owner's
+own Continue); `release_started` wiped the superseded-PR list that numbers the
+next branch; a failed Auto-merge job read as a code failure (now parks on the
+owner). The browser-failure message is bounded to fit the broker's 1,600-char
+tail, and the repair writes state before closing the pull request.

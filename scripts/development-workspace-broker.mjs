@@ -85,7 +85,7 @@ async function preflight(id) {
 }
 async function runtimeFingerprint() {
   const hash = createHash('sha256').update(activeBrokerHash);
-  for (const file of ['scripts/development-workspace-broker.mjs', 'scripts/lib/codegraph-snapshot.mjs', 'scripts/development-preview-check.mjs', 'scripts/development-seccomp.json', 'scripts/local-preview-proxy.mjs', 'scripts/local-preview-ingress.mjs', 'package-lock.json']) hash.update(await readFile(join(source, file)));
+  for (const file of ['scripts/development-workspace-broker.mjs', 'scripts/lib/codegraph-snapshot.mjs', 'scripts/development-preview-check.mjs', 'scripts/development-verification.mjs', 'scripts/development-seccomp.json', 'scripts/local-preview-proxy.mjs', 'scripts/local-preview-ingress.mjs', 'package-lock.json']) hash.update(await readFile(join(source, file)));
   hash.update(await docker('image', 'inspect', 'sr-development-preview:v4', 'pgvector/pgvector:pg16', '--format', '{{.Id}}'));
   return hash.digest('hex');
 }

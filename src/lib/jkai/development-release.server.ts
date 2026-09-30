@@ -110,7 +110,9 @@ export async function releaseDevelopment(buildId: string, expectedRevision: numb
   if (!token) throw new Error('Releasing needs FORGE_GITHUB_TOKEN on this host. The candidate and its batch are unchanged.');
 
   const branch = releaseBranchFor(buildId, candidate, state.release?.supersededPrs?.length ?? 0);
-  await mutateDelivery(buildId, 'release_started', s => ({ ...s, release: { revision: candidate, branch, requestedAt: new Date().toISOString(), detail: 'Replaying the candidate onto a fresh clone of master.' } }), expectedRevision);
+  // History survives a new release: the superseded list is what numbers the
+  // next branch, and the failed revision is what stops an unchanged re-release.
+  await mutateDelivery(buildId, 'release_started', s => ({ ...s, release: { revision: candidate, branch, requestedAt: new Date().toISOString(), supersededPrs: s.release?.supersededPrs, failedRevision: s.release?.failedRevision, detail: 'Replaying the candidate onto a fresh clone of master.' } }), expectedRevision);
 
   try {
     // The full diff, not the review excerpt: /snapshot and /inspect cap their
@@ -151,7 +153,7 @@ export async function releaseDevelopment(buildId: string, expectedRevision: numb
     // CI's own classifier, run on the same change before anyone sees it, so a
     // protected-path change is known to need a person from the moment the pull
     // request exists instead of sitting green and unmerged with no explanation.
-    const risk = await classifyRelease(`${root}/repo`);
+    const risk = await classifyRelease(root);
 
     const title = `Develop: ${(build.title ?? state.brief.outcome ?? 'site feature').replace(/\s+/g, ' ').trim().slice(0, 110)}`;
     const titleB64 = Buffer.from(title, 'utf8').toString('base64');
@@ -198,16 +200,28 @@ export async function releaseDevelopment(buildId: string, expectedRevision: numb
 }
 
 /**
- * Run `scripts/classify-pr-risk.sh` over the applied, uncommitted change.
+ * Run CI's risk classifier over the applied, uncommitted change.
  *
- * Merge base HEAD with itself is HEAD, and the script diffs the working tree
- * against it, so the answer is exactly what CI's Risk tier job will say. A
- * failure to classify reports `high`: the cost of a wrong `low` is a stalled
- * pull request nobody was told about, the cost of a wrong `high` is a push.
+ * The classifier and its rules come from MASTER (`git show HEAD:…`, before the
+ * commit), never from the candidate's working tree — exactly as ci.yml's Risk
+ * tier job does. The candidate's copy is worker-written: running it would
+ * execute the worker's code on this host, and an emptied rules file would
+ * report `low`. Merge base HEAD with itself is HEAD and the script diffs the
+ * working tree against it, so the answer is what CI will say.
+ *
+ * A failure to classify reports `high`: a wrong `low` is a stalled pull request
+ * nobody was told about, a wrong `high` is one extra push notification.
  */
-async function classifyRelease(repo: string): Promise<{ tier: 'low' | 'high'; matched: string[] }> {
-  const out = `${repo}/../risk-tier.out`;
-  const run = await execInSandbox(`cd ${repo} && GITHUB_OUTPUT=${out} bash scripts/classify-pr-risk.sh HEAD >/dev/null 2>&1; cat ${out} 2>/dev/null`, 60_000).catch(() => null);
+async function classifyRelease(root: string): Promise<{ tier: 'low' | 'high'; matched: string[] }> {
+  const rules = `${root}/rules`;
+  const out = `${root}/risk-tier.out`;
+  const run = await execInSandbox(
+    `rm -rf ${rules} ${out} && mkdir -p ${rules}/scripts ${rules}/.github && cd ${root}/repo && ` +
+      `git show HEAD:scripts/classify-pr-risk.sh > ${rules}/scripts/classify-pr-risk.sh && ` +
+      `git show HEAD:.github/protected-paths.txt > ${rules}/.github/protected-paths.txt && ` +
+      `GITHUB_OUTPUT=${out} bash ${rules}/scripts/classify-pr-risk.sh HEAD >/dev/null 2>&1; cat ${out} 2>/dev/null`,
+    60_000,
+  ).catch(() => null);
   return parseRiskOutput(run?.stdout ?? '');
 }
 
@@ -238,13 +252,21 @@ type CheckRun = { id: number; name: string; status: string; conclusion: string |
  * the auto-merge job skips itself on anything that is not a low-tier agent
  * branch. Anything still queued or running means pending.
  */
-export function ciVerdict(runs: CheckRun[]): { state: 'pending' | 'success' | 'failure'; failed: CheckRun[] } {
-  if (!runs.length) return { state: 'pending', failed: [] };
-  const failed = runs.filter(r => r.status === 'completed' && ['failure', 'timed_out', 'action_required', 'startup_failure'].includes(r.conclusion ?? ''));
-  if (failed.length) return { state: 'failure', failed };
-  if (runs.some(r => r.status !== 'completed')) return { state: 'pending', failed: [] };
-  return { state: 'success', failed: [] };
+export function ciVerdict(runs: CheckRun[]): { state: 'pending' | 'success' | 'failure'; failed: CheckRun[]; mergeFailed: boolean } {
+  const failedRun = (r: CheckRun) => r.status === 'completed' && ['failure', 'timed_out', 'action_required', 'startup_failure'].includes(r.conclusion ?? '');
+  // The Auto-merge job failing is a merge that did not happen — branch
+  // protection, a PR behind master — not code the worker can fix.
+  const mergeFailed = runs.some(r => AUTO_MERGE.test(r.name) && failedRun(r));
+  const verdictRuns = runs.filter(r => !AUTO_MERGE.test(r.name));
+  if (!verdictRuns.length) return { state: 'pending', failed: [], mergeFailed };
+  // The aggregate Gate job fails whenever a shard does, carrying only its
+  // verdict; the shard's own log is the one worth reading, so it goes first.
+  const failed = verdictRuns.filter(failedRun).sort((a, b) => Number(/^Gate\b/.test(a.name)) - Number(/^Gate\b/.test(b.name)));
+  if (failed.length) return { state: 'failure', failed, mergeFailed };
+  if (verdictRuns.some(r => r.status !== 'completed')) return { state: 'pending', failed: [], mergeFailed };
+  return { state: 'success', failed: [], mergeFailed };
 }
+const AUTO_MERGE = /^Auto-merge\b/i;
 
 /**
  * The part of a GitHub Actions job log worth a model's attention: the lines
@@ -352,7 +374,12 @@ async function watchOpenPullRequest(
   if (pr.mergeable_state === 'dirty') {
     return parkOnOwner(buildId, release, 'The pull request conflicts with master. It needs a rebase by hand; autopilot does not rewrite history.');
   }
-  if (verdict.state !== 'success') return 'pending';
+  if (verdict.mergeFailed) return parkOnOwner(buildId, release, 'CI passed but the Auto-merge job failed. Check it on GitHub.');
+  if (verdict.state !== 'success') {
+    // Moving again (a re-run, a push by hand): no longer parked.
+    if (release.awaitingOwner) await mutateDelivery(buildId, 'release_resumed', s => ({ ...s, release: { ...(s.release ?? release), awaitingOwner: undefined } }));
+    return 'pending';
+  }
 
   const greenAt = release.ciGreenAt ?? new Date().toISOString();
   if (!release.ciGreenAt || release.ci !== 'success') {

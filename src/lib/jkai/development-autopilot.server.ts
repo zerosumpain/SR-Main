@@ -132,7 +132,7 @@ export async function autopilotStep(buildId: string): Promise<AutopilotOutcome> 
     if (result === 'awaiting_owner') {
       const fresh = await loadDelivery(buildId);
       const reason = fresh?.state.release?.awaitingOwner;
-      if (reason && !state.release?.awaitingOwner) {
+      if (reason && reason !== state.release?.awaitingOwner) {
         await notifyAllSubscribers({ title: 'Pull request needs you', body: reason.slice(0, 140), url: `/jkai/develop/${buildId}` }).catch(() => {});
         await emitLog(buildId, 'system', `Autopilot is waiting on the owner: ${reason}`);
       }
@@ -192,7 +192,10 @@ export async function autopilotStep(buildId: string): Promise<AutopilotOutcome> 
     return 'assessed';
   }
 
-  const readyForReview = Boolean(state.candidate) && state.preview.status === 'ready' && state.preview.revision === state.candidate && !state.acceptedAt;
+  // A candidate CI already failed is not reviewable again unchanged: re-judging
+  // it passes on the same evidence and re-releases the same red commit.
+  const readyForReview = Boolean(state.candidate) && state.preview.status === 'ready' && state.preview.revision === state.candidate && !state.acceptedAt
+    && state.release?.failedRevision !== state.candidate;
 
   try {
     if (readyForReview) {
@@ -200,8 +203,9 @@ export async function autopilotStep(buildId: string): Promise<AutopilotOutcome> 
       // Use the revision the mutation actually returned. Assuming `+ 1` throws
       // away a whole round the moment anything else writes to this workspace
       // between the two calls — the page's own 3-second poll is a writer.
-      const counted = await mutateDelivery(buildId, 'autopilot_round', s => ({ ...s, autopilot: s.autopilot ? { ...s.autopilot, rounds: s.autopilot.rounds + 1, lastRoundAt: new Date().toISOString() } : s.autopilot }));
-      const next = await continueDevelopment(buildId, counted.revision);
+      // A reviewable candidate is progress: the failure streaks start again.
+      const counted = await mutateDelivery(buildId, 'autopilot_round', s => ({ ...s, autopilot: s.autopilot ? { ...s.autopilot, rounds: s.autopilot.rounds + 1, lastRoundAt: new Date().toISOString(), infraRetries: 0, lastFailure: undefined } : s.autopilot }));
+      const next = await continueDevelopment(buildId, counted.revision, { unattended: true });
       return next === 'released' ? 'released' : next === 'accepted' ? 'assessed' : 'building';
     }
     // Paused with no reviewable candidate: the last turn failed its checks or
@@ -280,20 +284,24 @@ async function repairAfterCi(buildId: string, modelId: string | null): Promise<A
   const release = state.release;
   const summary = (release?.ciFailure ?? 'CI reported a failure without a readable log.').slice(0, 2400);
   if (!autopilotActive(state)) return stop(buildId, `CI failed on ${release?.prUrl ?? 'the pull request'} and autopilot has no rounds left. ${summary.slice(0, 200)}`);
-  const { closeDevelopmentPullRequest } = await import('./development-release.server');
-  await closeDevelopmentPullRequest(buildId, 'CI failed on this candidate. Autopilot has closed it and is repairing the cause; a new pull request will follow.').catch((error) => console.warn('[autopilot] could not close the red pull request', error));
   const { builderClient } = await import('./builder-client');
   const capabilities = await builderClient.developmentCapabilities().catch(() => null);
   if (!capabilities?.persistentSessions || !capabilities.brokerConfigured) return stop(buildId, 'CI failed and the development worker is not available to repair it.');
   const { coachingInstruction } = await import('./development-review.server');
   const { enqueuePendingMessage } = await import('./pending-messages');
   const { relevantLessons } = await import('./development-state.server');
+  // State first, then GitHub. If this write loses a revision race the PR is
+  // still open and the next sweep simply tries again; closing first would leave
+  // a closed PR that the next sweep reads as "closed without merging".
   await mutateDelivery(buildId, 'autopilot_ci_repair', s => ({
     ...s, stage: 'queued', acceptedAt: null,
-    release: s.release ? { ...s.release, prUrl: undefined, awaitingOwner: undefined, ciGreenAt: undefined, supersededPrs: [...(s.release.supersededPrs ?? []), ...(s.release.prNumber ? [s.release.prNumber] : [])], detail: 'CI failed; the pull request is closed and the worker is repairing the cause.' } : s.release,
+    release: s.release ? { ...s.release, prUrl: undefined, awaitingOwner: undefined, ciGreenAt: undefined, failedRevision: s.release.revision, supersededPrs: [...(s.release.supersededPrs ?? []), ...(s.release.prNumber ? [s.release.prNumber] : [])], detail: 'CI failed; the pull request is closed and the worker is repairing the cause.' } : s.release,
     autopilot: s.autopilot ? { ...s.autopilot, rounds: s.autopilot.rounds + 1, lastRoundAt: new Date().toISOString() } : s.autopilot,
     cycle: { startedAt: new Date().toISOString(), modelId: modelId ?? undefined, startingCandidate: s.candidate, repairAttempts: 0, modelMs: 0, previewMs: 0, verificationMs: 0 },
   }), delivery.revision);
+  const { closeDevelopmentPullRequest } = await import('./development-release.server');
+  await closeDevelopmentPullRequest(buildId, 'CI failed on this candidate. Autopilot has closed it and is repairing the cause; a new pull request will follow.')
+    .catch((error) => console.warn('[autopilot] could not close the red pull request', error));
   await enqueuePendingMessage(buildId, coachingInstruction({
     criteria: [], blocker: null, lessons: await relevantLessons(state.area).catch(() => []),
     round: (state.autopilot?.rounds ?? 0) + 1, maxRounds: state.autopilot?.maxRounds ?? 1, ciFailure: summary,
