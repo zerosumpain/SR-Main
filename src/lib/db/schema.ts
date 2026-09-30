@@ -5502,6 +5502,25 @@ export const routeSession = pgTable(
   (t) => [index('route_session_open_idx').on(t.endedAt, t.startedAt), index('route_session_share_idx').on(t.shareTokenHash)],
 );
 
+/**
+ * A saved route the owner sent to a family member's phone to walk
+ * (`/api/native/route-gifts`). The route is copied whole at sending — a
+ * member cannot read the owner's routes in SR-Health, only what was sent.
+ */
+export const routeGift = pgTable(
+  'route_gift',
+  {
+    id: text('id').primaryKey(),
+    toSubject: text('to_subject').notNull(),
+    toEmail: text('to_email').notNull(),
+    routeId: text('route_id').notNull(),
+    route: jsonb('route').$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    dismissedAt: timestamp('dismissed_at', { withTimezone: true }),
+  },
+  (t) => [index('route_gift_to_idx').on(t.toEmail, t.dismissedAt)],
+);
+
 export type HouseholdEventRow = typeof householdEvent.$inferSelect;
 export type NewHouseholdEventRow = typeof householdEvent.$inferInsert;
 

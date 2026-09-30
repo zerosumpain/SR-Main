@@ -44,6 +44,7 @@ import {
   daydreamNotebook,
   driveFolderSettings,
   familyStepsDay,
+  routeGift,
   routeSession,
   householdJourney,
   householdJourneyViewer,
@@ -105,6 +106,8 @@ export const ACCOUNT_COLUMNS: Record<string, Record<string, Fate | `kept: ${stri
   news_favourites: { owner_key: 'erase' },
   news_reads: { owner_key: 'erase' },
   family_steps_day: { email: 'erase' },
+  // Routes the owner sent them to walk.
+  route_gift: { to_email: 'erase' },
   // Their route walks shared live, with the Lock Screen journey each one is.
   route_session: { walker_email: 'erase' },
   family_steps_event: { email: 'erase' },
@@ -230,6 +233,8 @@ export async function eraseRows(target: EraseTarget, executor: typeof db = db): 
       await tx.delete(householdJourneyViewer).where(inArray(householdJourneyViewer.journeyId, ids));
       await tx.delete(householdJourney).where(inArray(householdJourney.id, ids));
     }
+
+    await tx.delete(routeGift).where(inArray(routeGift.toEmail, addrs));
 
     // Their games on the family leaderboard.
     await tx.delete(gameResults).where(inArray(gameResults.playerId, addrs.map((a) => playerId(a))));

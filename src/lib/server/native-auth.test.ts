@@ -125,6 +125,10 @@ describe('every native route gates itself', () => {
         // A route walk shared live: whoever walks (owner or member) starts,
         // feeds and ends their own session (device-checked); reading one is
         // the walker, the owner, or the walker's followers via `journeyAccess`.
+        // Routes the owner sent a member: each phone reads its own; sending is
+        // refused in the handler unless the caller is the owner.
+        '/route-gifts/+server.ts',
+        '/route-gifts/[id]/+server.ts',
         '/route-session/+server.ts',
         '/route-session/[id]/+server.ts',
         '/route-session/[id]/end/+server.ts',
