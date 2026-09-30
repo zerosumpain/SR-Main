@@ -130,12 +130,12 @@
     {:else}
       <StatDeck {tiles} min={210} />
       {#if actionError}<p class="err" role="alert">{actionError}</p>{/if}
-      <QueueBoard epics={data.epics} {busy} {act} bind:openSlug={openFromReview} />
+      <QueueBoard epics={data.epics} {busy} {act} bind:openSlug={openFromReview} readonly={data.member} />
     {/if}
   </div>
 </section>
 
-{#if !data.error}
+{#if !data.error && !data.member}
   <section class="band sunken" id="review">
     <div class="inner">
       <SectionHead
@@ -147,6 +147,9 @@
       <ReviewLane epics={data.epics} {busy} {act} onopen={(slug) => (openFromReview = slug)} />
     </div>
   </section>
+{/if}
+
+{#if !data.error}
 
   <section class="band" id="burndown">
     <div class="inner">

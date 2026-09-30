@@ -24,6 +24,7 @@
     buildVersion = 'development',
     member = false,
     memberHome = '/jkai/intel',
+    memberReach = [],
   }: {
     tokensToday: number;
     spendTodayUsd: number;
@@ -50,6 +51,8 @@
     member?: boolean;
     /** Where a member's hub starts: the first jkai surface their permissions open. */
     memberHome?: string;
+    /** The pages a member's permissions open (`reachablePages`): the menu offers only these. */
+    memberReach?: readonly string[];
   } = $props();
 
   /**
@@ -111,9 +114,9 @@
       // Up to the root of the surface they are in, and no further: /jkai
       // itself is not theirs.
       const path = page.url.pathname;
-      const root = path.startsWith('/jkai/notes') ? '/jkai/notes' : path.startsWith('/jkai/intel') ? '/jkai/intel' : memberHome;
-      if (path === root) return root === memberHome ? null : { href: memberHome, label: 'Back' };
-      return { href: root, label: root === '/jkai/notes' ? 'Notes' : 'Intel' };
+      const root = MEMBER_ROOTS.find((r) => path === r.href || path.startsWith(`${r.href}/`));
+      if (!root || path === root.href) return path === memberHome ? null : { href: memberHome, label: 'Back' };
+      return root;
     }
     if (pageMenu?.back) return pageMenu.back;
     const path = page.url.pathname;
@@ -132,6 +135,32 @@
   const runs = $derived(hub.liveRuns ?? activeRuns);
 
   type MenuRow = { label: string; href: string; meta: string };
+
+  /** The surfaces a member can be inside, for their back chip: up to the root, no further. */
+  const MEMBER_ROOTS = [
+    { href: '/jkai/notes', label: 'Notes' },
+    { href: '/jkai/intel', label: 'Intel' },
+    { href: '/jkai/develop', label: 'Develop' },
+    { href: '/jkai/codegraph', label: 'Codegraph' },
+  ];
+
+  /**
+   * A member's menu: only the rows their permissions reach, and a row whose
+   * own page they cannot open but a page under it they can (Daydreams → its
+   * Impact room) links there — the rule `visibleItems` applies to the site nav.
+   */
+  function reachableRows(rows: MenuRow[]): MenuRow[] {
+    if (!member) return rows;
+    const out: MenuRow[] = [];
+    for (const r of rows) {
+      if (r.href === '/' || memberReach.includes(r.href)) out.push(r);
+      else {
+        const inside = memberReach.find((p) => p.startsWith(`${r.href}/`));
+        if (inside) out.push({ ...r, href: inside });
+      }
+    }
+    return out;
+  }
   // Canvas carries the workflow counts directly — there used to be a second
   // `Workflows` row under System pointing at the same href, which read as two
   // destinations when it was always one.
@@ -334,7 +363,7 @@
             {:else}
               <div class="menu-group">
                 <div class="menu-heading">Surfaces</div>
-                {#each surfaces as row (row.href + row.label)}
+                {#each reachableRows(surfaces) as row (row.href + row.label)}
                   <a class="menu-row" class:current={isCurrent(row.href)} href={row.href} onclick={closeHubMenu} role="menuitem">
                     <span class="menu-label">{row.label}</span>
                     <span class="menu-meta">{row.meta}</span>
@@ -343,7 +372,7 @@
               </div>
               <div class="menu-group">
                 <div class="menu-heading">Library</div>
-                {#each library as row (row.href + row.label)}
+                {#each reachableRows(library) as row (row.href + row.label)}
                   <a class="menu-row" class:current={isCurrent(row.href)} href={row.href} onclick={closeHubMenu} role="menuitem">
                     <span class="menu-label">{row.label}</span>
                     <span class="menu-meta">{row.meta}</span>
@@ -352,7 +381,7 @@
               </div>
               <div class="menu-group last">
                 <div class="menu-heading">System</div>
-                {#each system as row (row.href + row.label)}
+                {#each reachableRows(system) as row (row.href + row.label)}
                   <a class="menu-row" class:current={isCurrent(row.href)} href={row.href} onclick={closeHubMenu} role="menuitem">
                     <span class="menu-label">{row.label}</span>
                     <span class="menu-meta">{row.meta}</span>

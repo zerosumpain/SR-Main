@@ -23,6 +23,8 @@ import {
   type GroupBy,
   type NodeRow,
 } from '$lib/codegraph/network';
+import { isOwnerRequest } from '$lib/server/owner';
+import { memberMayReadRepo } from '$lib/member-view';
 import type { RequestHandler } from './$types';
 
 const GROUPS: GroupBy[] = ['directory', 'layer', 'gate', 'verdict', 'activity'];
@@ -33,7 +35,8 @@ function list(url: URL, key: string): string[] {
   return raw.split(',').map((s) => s.trim()).filter(Boolean).slice(0, 20);
 }
 
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async (event) => {
+  const { url } = event;
   // No auth check here, deliberately: the `/api` catch-all in hooks.server.ts
   // already owner-gates everything not on its exact-match bypass list, and this
   // route is not on it (`gate:public-routes` proves the anonymous surface is
@@ -44,6 +47,9 @@ export const GET: RequestHandler = async ({ url }) => {
   // also bypasses `AUTH_BYPASS=1`, so it breaks the graph on homeserv while
   // looking correct in review.
   const repo = url.searchParams.get('repo') || 'SR-Main';
+  // jkai · codegraph: a member reads only a public repository's graph, whose
+  // paths and summaries are on GitHub already ($lib/member-view).
+  if (!memberMayReadRepo(repo) && !(await isOwnerRequest(event))) return json({ error: 'Not found' }, { status: 404 });
   const groupByRaw = url.searchParams.get('groupBy') as GroupBy | null;
   const groupBy: GroupBy = groupByRaw && GROUPS.includes(groupByRaw) ? groupByRaw : 'directory';
   const livenessRaw = url.searchParams.get('liveness');

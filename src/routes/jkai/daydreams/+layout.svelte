@@ -23,6 +23,9 @@
   let { data, children }: { data: LayoutData; children: Snippet } = $props();
 
   const counts = $derived(data.counts);
+  // A member holding jkai · daydreams reaches the Impact room only: the rest
+  // of the rail and the on/off are the owner's.
+  const member = $derived(data.member === true);
   const active = $derived.by(() => {
     const seg = page.url.pathname.slice(HUB_BASE.length + 1).split('/')[0];
     return isRoom(seg) ? seg : 'feed';
@@ -95,8 +98,8 @@
   {readout}
   live={data.enabled}
   liveBusy={togglingEnabled}
-  ontoggleLive={toggleEnabled}
-  {tabs}
+  ontoggleLive={member ? undefined : toggleEnabled}
+  tabs={member ? tabs.filter((t) => t.id === 'impact') : tabs}
   {active}
   footer={[
     'strangeramblings.com/jkai/daydreams',

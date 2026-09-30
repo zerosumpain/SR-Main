@@ -10,9 +10,13 @@
 import type { PageServerLoad } from './$types';
 import { db } from '$lib/db';
 import { sql } from 'drizzle-orm';
+import { isOwnerRequest } from '$lib/server/owner';
+import { memberServeRow, memberServesBuild } from '$lib/member-view';
 
-export const load: PageServerLoad = async ({ url }) => {
-  const buildFilter = url.searchParams.get('build');
+export const load: PageServerLoad = async (event) => {
+  const member = !(await isOwnerRequest(event));
+  // A member cannot filter by build: build ids are dropped from what they see.
+  const buildFilter = member ? null : event.url.searchParams.get('build');
   const recent = await db.execute(sql`
     SELECT channel, query, outcome, chars_served, duration_ms, build_id, error_message, created_at
     FROM codegraph_queries WHERE (${buildFilter}::text IS NULL OR build_id = ${buildFilter}) ORDER BY created_at DESC LIMIT 50
@@ -153,5 +157,10 @@ export const load: PageServerLoad = async ({ url }) => {
     ORDER BY p.served
   `).then((r) => r.rows as Array<Record<string, unknown>>);
 
-  return { buildFilter, recent, byChannel, iterations, perBuild, discovery, impact: impact ?? {}, resolution: resolution ?? {} };
+  const page = { buildFilter, recent, byChannel, iterations, perBuild, discovery, impact: impact ?? {}, resolution: resolution ?? {} };
+  // jkai · codegraph, for a member: the aggregates, not what was asked or what
+  // broke. A serve's query and error are what a build read; a build's title
+  // falls back to its prompt ($lib/member-view).
+  if (!member) return { ...page, member };
+  return { ...page, member, recent: recent.map(memberServeRow), perBuild: perBuild.map(memberServesBuild) };
 };

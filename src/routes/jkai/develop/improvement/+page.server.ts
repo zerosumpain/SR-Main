@@ -7,6 +7,7 @@ import { loadLoopHealth, loopVerdict } from '$lib/builds/loop-health';
 import { MIN_PAIRS } from '$lib/daydream/stats/tests';
 import { loadImprovementDashboard } from '$lib/dashboard/improvement.server';
 import { loadOvernight } from '$lib/builds/overnight.server';
+import { isOwnerRequest } from '$lib/server/owner';
 
 /** The loop, end to end: ideas in → waiting for a tap → queued → built → notes. */
 export interface LoopStory {
@@ -63,7 +64,28 @@ async function loadLoopStory(loop: Awaited<ReturnType<typeof loadLoopHealth>>): 
   }
 }
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async (event) => {
+  if (!(await isOwnerRequest(event))) {
+    // jkai · develop, read-only for a member: the loop's counts and the
+    // night's timeline as passes and timings. Never the improvement ledger —
+    // its insights are mined from the owner's own chat questions and its
+    // attempts carry tool arguments and results — nor a pass's summary or cost.
+    const loop = await loadLoopHealth(MIN_PAIRS);
+    const [story, night] = await Promise.all([loadLoopStory(loop), loadOvernight()]);
+    return {
+      loop,
+      loopVerdict: loopVerdict(loop),
+      improvement: null,
+      story,
+      night: {
+        ...night,
+        costUsd: 0,
+        dearest: null,
+        passes: night.passes.map((p) => ({ ...p, summary: '', costUsd: 0, href: null })),
+      },
+      member: true,
+    };
+  }
   const [loop, improvement] = await Promise.all([
     loadLoopHealth(MIN_PAIRS),
     loadImprovementDashboard().catch((err) => {
@@ -77,5 +99,5 @@ export const load: PageServerLoad = async () => {
     // that cannot be read must not take the whole room down with it.
     loadOvernight(),
   ]);
-  return { loop, loopVerdict: loopVerdict(loop), improvement, story, night };
+  return { loop, loopVerdict: loopVerdict(loop), improvement, story, night, member: false };
 };

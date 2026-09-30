@@ -8,10 +8,12 @@ import type { ReleasePolicy } from '$lib/jkai/development';
 import { SR_MAIN_GIT_TARGET } from '$lib/jkai/git-targets';
 import { CHANGE_REQUEST_BUDGET } from '$lib/jkai/change-request';
 import { resolveDevelopmentModel } from '$lib/jkai/development-models.server';
+import { isOwnerRequest } from '$lib/server/owner';
+import { memberDeliveryState } from '$lib/member-view';
 import type { RequestHandler } from './$types';
 
 // /api/jkai inherits the owner gate in hooks.server.ts.
-export const GET: RequestHandler = async () => {
+export const GET: RequestHandler = async (event) => {
   // The commissioned test runs in SQL, BEFORE the limit. Filtering a capped page
   // in JavaScript would drop rows the archive has already excluded, so a
   // feature could fall through the gap and appear in neither half of the page.
@@ -22,6 +24,9 @@ export const GET: RequestHandler = async () => {
   }).from(jkaiBuildDeliveries).innerJoin(jkaiBuilds, eq(jkaiBuilds.id, jkaiBuildDeliveries.buildId))
     .where(sql`${jkaiBuildDeliveries.state}->>'commissioned' IS DISTINCT FROM 'false'`)
     .orderBy(desc(jkaiBuildDeliveries.updatedAt)).limit(200);
+  // A member (jkai · develop) reads the portfolio's shape: no brief, criteria
+  // text, questions, session or evidence ($lib/member-view). POST stays owner-only.
+  if (!(await isOwnerRequest(event))) return json(rows.map((r) => ({ ...r, state: memberDeliveryState(r.state) })));
   return json(rows);
 };
 

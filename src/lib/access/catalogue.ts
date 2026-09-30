@@ -30,6 +30,9 @@ export const AREA_IDS = [
   'workflows',
   'admin',
   'shipped',
+  'jkai.develop',
+  'jkai.codegraph',
+  'jkai.daydreams',
 ] as const;
 export type AreaId = (typeof AREA_IDS)[number];
 
@@ -175,6 +178,36 @@ export const AREAS: readonly AreaInfo[] = [
     blurb: 'The release log: what shipped and when, with the cadence chart. No commits, files, sessions or costs.',
     open: true,
     levels: { self: 'Read the release log', all: 'Same as self', admin: 'Same as self' },
+  },
+  {
+    // The owner's build machinery, read-only: each opened page's LOAD redacts
+    // for a non-owner ($lib/member-view) and ROUTES opens GET only. A feature's
+    // workspace (/jkai/develop/[id]) stays his: its logs and source can target
+    // private repositories.
+    id: 'jkai.develop',
+    label: 'jkai · develop',
+    blurb: 'What jkai is building for this site, read-only: features, the archive, the backlog, the workflow doctor and the overnight loop. No briefs, questions, prompts, costs or failing-workflow detail.',
+    open: true,
+    levels: { self: 'Browse, read-only', all: 'Same as self', admin: 'Same as self' },
+  },
+  {
+    // The code graph of the PUBLIC repositories, read-only. Lessons are the
+    // owner's memory notes word for word, so no page shows their text, and
+    // Ask and Review (which do) stay his.
+    id: 'jkai.codegraph',
+    label: 'jkai · codegraph',
+    blurb: "The map of this site's code and how builds used it, read-only. Public repositories only; the lessons' text stays yours.",
+    open: true,
+    levels: { self: 'Browse, read-only', all: 'Same as self', admin: 'Same as self' },
+  },
+  {
+    // Daydream reads the owner's mail, calendar, spend, health and chats, so
+    // only its Impact room opens: aggregates, never a note.
+    id: 'jkai.daydreams',
+    label: 'jkai · daydreams',
+    blurb: 'Whether daydreaming is worth having: hit rate and what was acted on, as numbers. Never a note, a watch or a briefing.',
+    open: true,
+    levels: { self: 'The Impact room', all: 'Same as self', admin: 'Same as self' },
   },
 ];
 
@@ -437,6 +470,26 @@ const ROUTES: Record<string, Partial<Record<Method, Permission>>> = {
   // ── shipped — the release log, GET only. The load hands a non-owner the
   // public showcase, never the console (see its note).
   '/releases': { GET: 'shipped:self' },
+
+  // ── jkai.develop / jkai.codegraph / jkai.daydreams — the build machinery,
+  // GET only, each route's load or handler redacting for a non-owner
+  // ($lib/member-view; ratchet: build-rooms-routes.test). Never opened: a
+  // feature's workspace and its APIs, codegraph Ask and Review (lesson text),
+  // the daydream Inbox, Watches and Briefing, and /jkai/activity.
+  '/jkai/develop': { GET: 'jkai.develop:self' },
+  '/jkai/develop/backlog': { GET: 'jkai.develop:self' },
+  '/jkai/develop/doctor': { GET: 'jkai.develop:self' },
+  '/jkai/develop/improvement': { GET: 'jkai.develop:self' },
+  '/api/jkai/development': { GET: 'jkai.develop:self' },
+  '/api/jkai/development/models': { GET: 'jkai.develop:self' },
+  '/jkai/codegraph': { GET: 'jkai.codegraph:self' },
+  '/jkai/codegraph/relevance': { GET: 'jkai.codegraph:self' },
+  '/jkai/codegraph/serves': { GET: 'jkai.codegraph:self' },
+  '/jkai/codegraph/sources': { GET: 'jkai.codegraph:self' },
+  '/jkai/codegraph/improvement': { GET: 'jkai.codegraph:self' },
+  '/api/jkai/codegraph/network': { GET: 'jkai.codegraph:self' },
+  '/api/jkai/codegraph/node/[id]': { GET: 'jkai.codegraph:self' },
+  '/jkai/daydreams/impact': { GET: 'jkai.daydreams:self' },
 
   '/news': { GET: 'news:self' },
   '/news/[source]/[id]': { GET: 'news:self' },

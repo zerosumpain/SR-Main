@@ -156,7 +156,7 @@
         <div class="now-col">
           <h3 class="col-h">Double-checks</h3>
           <p><strong>{i.checks.awaiting}</strong> waiting for your OK · <strong>{i.checks.running}</strong> running · <strong>{i.checks.completed}</strong> reported back</p>
-          <a href="/jkai/daydreams">Open the Inbox</a>
+          {#if !data.member}<a href="/jkai/daydreams">Open the Inbox</a>{/if}
         </div>
         <div class="now-col">
           <h3 class="col-h">Build ideas it proposed</h3>

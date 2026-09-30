@@ -53,9 +53,11 @@
      * close it.
      */
     openSlug?: string | null;
+    /** A member's read-only view (jkai · develop): no add, move, reprioritise or drill. */
+    readonly?: boolean;
   }
 
-  let { epics, busy, act, openSlug = $bindable(null) }: Props = $props();
+  let { epics, busy, act, openSlug = $bindable(null), readonly = false }: Props = $props();
 
   // ── Controls ────────────────────────────────────────────────────────────
   let level = $state<BoardLevel>('epic');
@@ -273,7 +275,7 @@
   <button type="button" class="btn sm" disabled={activeFilters === 0} onclick={reset}>
     Reset{#if activeFilters}&nbsp;({activeFilters}){/if}
   </button>
-  <button type="button" class="cta sm" onclick={() => (creating = true)}>+ Add a deliverable</button>
+  {#if !readonly}<button type="button" class="cta sm" onclick={() => (creating = true)}>+ Add a deliverable</button>{/if}
 </div>
 
 <div class="facets">
@@ -379,7 +381,7 @@
                 class="wc t-{cardTone(card)}"
                 class:busy={moving}
                 class:lifted={liftedKey === card.key}
-                draggable={card.actionable && !stuck}
+                draggable={!readonly && card.actionable && !stuck}
                 ondragstart={(ev) => onDragStart(card, ev)}
                 ondragend={endDrag}
               >
@@ -409,6 +411,7 @@
 
                 {#if card.note}<p class="wc-note">{card.note}</p>{/if}
 
+                {#if !readonly}
                 <div class="wc-acts">
                   <div class="step" role="group" aria-label="Priority for {card.title}">
                     <button
@@ -469,6 +472,7 @@
                     </span>
                   {/if}
                 </div>
+                {/if}
               </article>
             {:else}
               <p class="col-empty">—</p>
@@ -490,7 +494,7 @@
   </div>
 {/if}
 
-{#if open}
+{#if open && !readonly}
   {#key open.slug}
     <EpicDrill epic={open} {busy} {act} onclose={() => (openSlug = null)} />
   {/key}

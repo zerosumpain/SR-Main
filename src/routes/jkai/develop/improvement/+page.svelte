@@ -104,7 +104,7 @@
 <DsVocab>
 <nav class="improvement-actions" aria-label="Improvement actions">
   <a class="cta" href="/jkai/develop/doctor">Open Doctor →</a>
-  <a class="btn" href="/admin/ai/improvement">Controls →</a>
+  {#if !data.member}<a class="btn" href="/admin/ai/improvement">Controls →</a>{/if}
   <a class="btn" href="/jkai/develop/backlog">Epic backlog →</a>
 </nav>
 
@@ -147,6 +147,8 @@
       <div class="ledger" id="improvement-ledger">
         <ImprovementPanel data={data.improvement} embedded />
       </div>
+    {:else if data.member}
+      <div class="card"><p class="card-body">The improvement ledger is John's: it is read from his own questions.</p></div>
     {:else}
       <div class="card t-urgent"><p class="card-body">The improvement ledger could not be read.</p></div>
     {/if}

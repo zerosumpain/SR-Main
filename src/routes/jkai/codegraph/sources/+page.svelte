@@ -4,10 +4,10 @@
 </script>
 <svelte:head><title>CodeGraph — sources</title></svelte:head>
 <section class="wrap"><h1>Code sources</h1><p>Versioned references for development. External text stays reference material; it does not establish a verified local lesson.</p>
-  <details><summary>Add a reference</summary><form method="POST">
+  {#if !data.member}<details><summary>Add a reference</summary><form method="POST">
     <label>Repository<input name="repo" value="SR-Main" required /></label><label>Kind<select name="kind"><option value="documentation">Official documentation</option><option value="upstream-fix">Upstream fix</option><option value="example">Code example</option><option value="owned-repository">Owned repository</option></select></label>
     <label>Title<input name="title" required maxlength="200" /></label><label>Source URL<input type="url" name="url" required /></label><label>Commit or package version<input name="revision" required /></label><label>Licence or reuse terms<input name="license" required /></label><label>Package name, if relevant<input name="packageName" /></label><label>Relevant source excerpt<textarea name="text" required maxlength="50000" rows="7"></textarea></label><button>Save reference</button>
-  </form></details>
+  </form></details>{/if}
   {#if form && 'error' in form}<p role="alert">{form.error}</p>{/if}{#if form && 'saved' in form}<p role="status">Reference saved with version and provenance.</p>{/if}
   <h2>References</h2>{#each data.sources as source}<article><h3><a href={source.url ?? '#'} rel="noreferrer">{source.title}</a></h3><p>{source.repo} · {source.revision} · {source.license} · {source.status}</p><details><summary>Evidence and provenance</summary><pre>{String(source.payload.text ?? '')}</pre><p>Imported {new Date(source.createdAt).toLocaleString()}; access: {source.access}</p></details></article>{:else}<p>No external references registered. Lockfile dependencies appear in each indexed build’s Code context.</p>{/each}
   <h2>Indexed revisions</h2>{#each data.snapshots as snapshot}<p>{snapshot.repo} · {snapshot.scope} · <code>{snapshot.revision.slice(0, 12)}</code> · {new Date(snapshot.createdAt).toLocaleString()}</p>{:else}<p>No revision snapshots yet.</p>{/each}

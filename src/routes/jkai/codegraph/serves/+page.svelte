@@ -15,7 +15,7 @@
   </p>
 
   <p>Historical before/after comparisons below are descriptive, not causal evidence. Model, task and workflow changes can explain differences.</p>
-  <form method="GET"><label>Filter recent retrievals by build <input name="build" value={data.buildFilter ?? ''} /></label><button>Filter</button></form>
+  {#if !data.member}<form method="GET"><label>Filter recent retrievals by build <input name="build" value={data.buildFilter ?? ''} /></label><button>Filter</button></form>{/if}
   <h2>Last 30 days, by channel</h2>
   {#if !data.byChannel.length}
     <p class="alarm">
