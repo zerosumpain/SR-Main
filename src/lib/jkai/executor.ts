@@ -14,6 +14,8 @@ import {
   ensureDepsInstalled,
   syncDesignAssets,
   syncJkaiExtension,
+  readDevFile,
+  execInSandbox,
 } from './sandbox';
 import { signBridgeToken } from './bridge-token';
 import { emitLog } from './log-emitter';
@@ -23,6 +25,27 @@ import { runPi } from './pi-runner';
 import { consumePendingDeliveries } from './workflow-deliveries';
 import { buildAttachedWorkflowGrounding, buildDeliveriesBlock } from './workflow-grounding';
 import { formatBriefForPrompt, type ResearchBrief } from './research-brief';
+
+/** Enough for a real guidance file; a runaway one cannot crowd out the task. */
+const REPO_GUIDANCE_CHARS = 8000;
+
+/**
+ * The repository's own skills a builder should have, by name. `ship` and
+ * `local-qa` are left out: they are runbooks for a person's machine (dev
+ * servers, porkserv, deploy checks), and a builder following them would try
+ * to run things it must not.
+ */
+export const BUILDER_REPO_SKILLS = ['sr-design', 'svelte5-pitfalls', 'workflow-node', 'project-page'] as const;
+
+/** Paths of the builder skills that exist in this build's clone. */
+async function repoSkillDirs(buildId: string): Promise<string[]> {
+  const root = `/home/jkai/workspace/${buildId}/dev/.claude/skills`;
+  const found = await execInSandbox(
+    BUILDER_REPO_SKILLS.map((name) => `[ -f ${root}/${name}/SKILL.md ] && echo ${root}/${name}`).join('; ') + '; true',
+    10_000,
+  ).catch(() => null);
+  return (found?.stdout ?? '').split('\n').map((line) => line.trim()).filter(Boolean);
+}
 
 /**
  * Ask the tool bridge for its manifest exactly as the sandboxed agent will.
@@ -167,6 +190,12 @@ export async function executeIteration(
   if (enforceDesign && !isStudio) {
     systemPrompt += designSystemPromptBlock(promptMode);
   }
+  // The repository's own guidance, read from the build's clone. `runPi` keeps
+  // `--no-context-files` — in host mode pi would otherwise walk up from the
+  // workspace into whatever AGENTS.md or CLAUDE.md the host user has — so the
+  // one file meant for builders is appended here, deliberately and bounded.
+  const repoGuidance = promptMode === 'repo' ? await readDevFile(build.id, 'AGENTS.md').catch(() => '') : '';
+  if (repoGuidance.trim()) systemPrompt += `\n\n## Repository guidance (AGENTS.md)\n${repoGuidance.slice(0, REPO_GUIDANCE_CHARS)}`;
   if (systemPromptSuffix) systemPrompt = `${systemPrompt}\n\n${systemPromptSuffix}`;
 
   // Sync design assets + jkai-tools extension into the sandbox before each run.
@@ -220,6 +249,7 @@ export async function executeIteration(
       );
     }
   }
+  if (promptMode === 'repo') skillDirs.push(...(await repoSkillDirs(build.id)));
   try {
     const extPath = await syncJkaiExtension(build.id);
     extensions.push(extPath);
