@@ -199,6 +199,16 @@ export const homeObserve: ActivityHandler = {
       details.liveJourneysError = errMsg(err).slice(0, 200);
     }
 
+    // Routes being walked: close the ones that went quiet or ran too long.
+    try {
+      const { sweepRouteSessions } = await import('$lib/home/presence/route-session');
+      const swept = await sweepRouteSessions(members);
+      if (swept.ended) bits.push(`routes: ${swept.ended} ended`);
+      if (swept.errors.length) details.routeSessionErrors = swept.errors;
+    } catch (err) {
+      details.routeSessionError = errMsg(err).slice(0, 200);
+    }
+
     if (fixes.length) bits.push(`fixes: ${fixes.join(', ')}`);
     if (gaps.length) bits.push(`gaps: ${gaps.join(', ')}`);
     if (errors.length) bits.push(`rejected: ${errors.join('; ')}`);
