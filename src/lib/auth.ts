@@ -86,6 +86,12 @@ const PUBLIC_PATHS = [
   // neither repository's build could see it. Pinned by a test in auth.test.ts
   // and by the public-routes lockfile, so the next prune has to argue with both.
   '/api/maps/config',
+  // Somebody walking a route, for a person without the app: /follow/<token>.
+  // The token is the permission — 256 bits, stored hashed, minted only when
+  // the walker asked, dead when the walk ends or at six hours; unknown, ended
+  // and expired all 404 alike ($lib/home/presence/route-session). A PREFIX, so
+  // check-public-routes.mjs is what stops a sibling becoming anonymous.
+  '/follow',
 ];
 
 export function isPublicPath(pathname: string): boolean {

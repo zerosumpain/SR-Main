@@ -80,6 +80,10 @@
 /api/native/register
 /api/native/register/apple
 /api/native/review-demo
+/api/native/route-session
+/api/native/route-session/[id]
+/api/native/route-session/[id]/end
+/api/native/route-session/[id]/fixes
 /api/native/session
 /api/native/today
 /api/platform/tools/catalogue
@@ -107,6 +111,7 @@
 /decks/[slug]/edit
 /decks/[slug]/print
 /decks/[slug]/track
+/follow/[token]
 /login
 /privacy
 /projects

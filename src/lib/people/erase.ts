@@ -44,6 +44,9 @@ import {
   daydreamNotebook,
   driveFolderSettings,
   familyStepsDay,
+  routeSession,
+  householdJourney,
+  householdJourneyViewer,
   familyStepsEvent,
   familyTask,
   fileShareTokens,
@@ -102,6 +105,8 @@ export const ACCOUNT_COLUMNS: Record<string, Record<string, Fate | `kept: ${stri
   news_favourites: { owner_key: 'erase' },
   news_reads: { owner_key: 'erase' },
   family_steps_day: { email: 'erase' },
+  // Their route walks shared live, with the Lock Screen journey each one is.
+  route_session: { walker_email: 'erase' },
   family_steps_event: { email: 'erase' },
   // Keyed by the games' hash of the address (`playerId`), never the address.
   game_results: { player_id: 'erase' },
@@ -216,6 +221,15 @@ export async function eraseRows(target: EraseTarget, executor: typeof db = db): 
     const days = await tx.delete(familyStepsDay).where(inArray(familyStepsDay.email, addrs)).returning({ d: familyStepsDay.day });
     await tx.delete(familyStepsEvent).where(inArray(familyStepsEvent.email, addrs));
     out.stepDays = days.length;
+
+    // Route walks they shared live: the sessions, and the journeys and viewer
+    // rows that put each on a follower's Lock Screen.
+    const walks = await tx.delete(routeSession).where(inArray(routeSession.walkerEmail, addrs)).returning({ id: routeSession.id });
+    if (walks.length) {
+      const ids = walks.map((w) => w.id);
+      await tx.delete(householdJourneyViewer).where(inArray(householdJourneyViewer.journeyId, ids));
+      await tx.delete(householdJourney).where(inArray(householdJourney.id, ids));
+    }
 
     // Their games on the family leaderboard.
     await tx.delete(gameResults).where(inArray(gameResults.playerId, addrs.map((a) => playerId(a))));

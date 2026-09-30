@@ -25,7 +25,7 @@
 // Distances are straight lines and the ETA is a straight line at the current
 // speed with a 1.3 road factor. Both say "~" on the phone; neither is routing.
 
-import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, ne } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, ne, notLike } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
 import { db } from '$lib/db';
 import { daydreamTrail, householdEvent, householdJourney, householdJourneyViewer, nativeCredentials } from '$lib/db/schema';
@@ -333,6 +333,20 @@ async function startOn(
   return started;
 }
 
+/**
+ * Start a journey that is not a departure — a route being walked
+ * (`./route-session`) — on the phones of these followers, under the same
+ * consent checks as any other.
+ */
+export async function startJourneyOn(
+  journeyId: string,
+  emails: readonly string[],
+  aps: Record<string, unknown>,
+  send: LiveSender = (t, a, env) => sendLiveActivity(t, a, env),
+): Promise<number> {
+  return startOn(journeyId, await startTargets(emails), aps, send);
+}
+
 /** Push to every phone showing this journey that reported an update token. */
 export async function pushToViewers(journeyId: string, aps: Record<string, unknown>, send: LiveSender): Promise<number> {
   const viewers = await db
@@ -454,10 +468,12 @@ export async function runLiveJourneys(
       const name = displayNameOf(members, ev.subject);
       const fromPlace = placeName(place);
       // A newer departure replaces whatever journey they were on.
+      // Not a route being walked: that is its own session (`./route-session`),
+      // and leaving a place mid-walk is part of the walk.
       const open = await db
         .select()
         .from(householdJourney)
-        .where(and(eq(householdJourney.subject, ev.subject), isNull(householdJourney.endedAt)));
+        .where(and(eq(householdJourney.subject, ev.subject), isNull(householdJourney.endedAt), notLike(householdJourney.id, 'route-%')));
       for (const j of open) {
         await close(j, 'superseded', endContent({ name, fromPlace, last: (j.state as unknown as JourneyContent) ?? null }, { kind: 'ended', lastSeen: null }), 0, now, send);
         result.ended++;
@@ -494,7 +510,10 @@ export async function runLiveJourneys(
   const open = await db
     .select()
     .from(householdJourney)
-    .where(and(isNull(householdJourney.endedAt), ne(householdJourney.subject, TEST_SUBJECT)));
+    // Route sessions move on their walker's own fixes and end by their own
+    // rules (`./route-session`); an arrival or this module's two hours must not
+    // close them, nor a straight-line-home reading overwrite their card.
+    .where(and(isNull(householdJourney.endedAt), ne(householdJourney.subject, TEST_SUBJECT), notLike(householdJourney.id, 'route-%')));
   for (const j of open) {
     try {
       const name = displayNameOf(members, j.subject);

@@ -5465,6 +5465,43 @@ export const householdJourneyViewer = pgTable(
   (t) => [primaryKey({ columns: [t.journeyId, t.deviceId] })],
 );
 
+/**
+ * A saved route being walked with the SR app, followed live by the walker's
+ * family (`$lib/home/presence/route-session`). The id is also a
+ * `household_journey` id (`route-…`), which is what puts it on followers'
+ * Lock Screens through the family-journey Live Activity.
+ *
+ * `route` is the line followers draw, as the walker's phone sent it
+ * (`[lat, lng]`, thinned); `trail` is where they have been (`[lat, lng, t]`,
+ * capped). `share_token_hash` is the optional link for someone without the
+ * app: sha256 of a 32-byte token, dead the moment the session ends.
+ */
+export const routeSession = pgTable(
+  'route_session',
+  {
+    id: text('id').primaryKey(),
+    subject: text('subject').notNull(),
+    walkerEmail: text('walker_email').notNull(),
+    deviceId: uuid('device_id').notNull(),
+    routeId: text('route_id'),
+    routeName: text('route_name').notNull(),
+    sport: text('sport').notNull(),
+    route: jsonb('route').$type<[number, number][]>().notNull(),
+    totalM: doublePrecision('total_m').notNull(),
+    trail: jsonb('trail').$type<[number, number, number][]>().notNull().default([]),
+    /** The walker's own phone's reading: along, left, off the line, time left. */
+    progress: jsonb('progress').$type<Record<string, unknown>>(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    lastFixAt: timestamp('last_fix_at', { withTimezone: true }),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+    /** 'finished' | 'stopped' | 'stale' | 'timeout' */
+    endReason: text('end_reason'),
+    shareTokenHash: text('share_token_hash'),
+    shareExpiresAt: timestamp('share_expires_at', { withTimezone: true }),
+  },
+  (t) => [index('route_session_open_idx').on(t.endedAt, t.startedAt), index('route_session_share_idx').on(t.shareTokenHash)],
+);
+
 export type HouseholdEventRow = typeof householdEvent.$inferSelect;
 export type NewHouseholdEventRow = typeof householdEvent.$inferInsert;
 
