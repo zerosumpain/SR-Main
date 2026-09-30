@@ -102,7 +102,7 @@ describe('summary', () => {
   it('names areas in catalogue order, with the reach of multi-step ones', () => {
     expect(summarise(['jkai.chat:self', 'news:all', 'research:all', 'jkai.knowledge:self'])).toEqual([
       'news',
-      'research (+ read everyone’s)',
+      'research (+ read other members’)',
       'chat',
     ]);
   });

@@ -90,14 +90,14 @@ export const AREA_CHOICES: Record<AreaId, readonly AreaChoice[]> = {
   research: [
     { level: null, label: 'Off' },
     { level: 'self', label: 'Own' },
-    { level: 'all', label: '+ read everyone’s' },
-    { level: 'admin', label: '+ edit everyone’s' },
+    { level: 'all', label: '+ read other members’' },
+    { level: 'admin', label: '+ edit other members’' },
   ],
   drive: [
     { level: null, label: 'Off' },
     { level: 'self', label: 'Own' },
-    { level: 'all', label: '+ read everyone’s' },
-    { level: 'admin', label: '+ edit everyone’s' },
+    { level: 'all', label: '+ read other members’' },
+    { level: 'admin', label: '+ edit other members’' },
   ],
   home: [
     { level: null, label: 'Off' },
@@ -107,20 +107,20 @@ export const AREA_CHOICES: Record<AreaId, readonly AreaChoice[]> = {
   'jkai.chat': [
     { level: null, label: 'Off' },
     { level: 'self', label: 'Own' },
-    { level: 'all', label: '+ read everyone’s' },
-    { level: 'admin', label: '+ manage everyone’s' },
+    { level: 'all', label: '+ read other members’' },
+    { level: 'admin', label: '+ manage other members’' },
   ],
   'jkai.notes': [
     { level: null, label: 'Off' },
     { level: 'self', label: 'Own' },
-    { level: 'all', label: '+ read everyone’s' },
-    { level: 'admin', label: '+ edit everyone’s' },
+    { level: 'all', label: '+ read other members’' },
+    { level: 'admin', label: '+ edit other members’' },
   ],
   'jkai.intel': [
     { level: null, label: 'Off' },
     { level: 'self', label: 'Own' },
-    { level: 'all', label: '+ read everyone’s' },
-    { level: 'admin', label: '+ edit everyone’s' },
+    { level: 'all', label: '+ read other members’' },
+    { level: 'admin', label: '+ edit other members’' },
   ],
   'jkai.knowledge': [{ level: null, label: 'Off' }, { level: 'self', label: 'On' }],
   games: [{ level: null, label: 'Off' }, { level: 'self', label: 'On' }],
@@ -128,10 +128,11 @@ export const AREA_CHOICES: Record<AreaId, readonly AreaChoice[]> = {
   workflows: [
     { level: null, label: 'Off' },
     { level: 'self', label: 'Own' },
-    { level: 'all', label: '+ read everyone’s' },
-    { level: 'admin', label: '+ edit everyone’s' },
+    { level: 'all', label: '+ read other members’' },
+    { level: 'admin', label: '+ edit other members’' },
   ],
   admin: [{ level: null, label: 'Off' }, { level: 'self', label: 'On' }],
+  shipped: [{ level: null, label: 'Off' }, { level: 'self', label: 'On' }],
 };
 
 /** Short names for a one-line summary of what someone holds. */
@@ -148,6 +149,7 @@ const SHORT: Record<AreaId, string> = {
   health: 'your health',
   workflows: 'workflows',
   admin: 'showcase',
+  shipped: 'shipped',
 };
 
 /** The areas the editor draws, in catalogue order. */
@@ -227,7 +229,7 @@ export function summarise(grants: Iterable<Permission>): string[] {
   return EDITABLE_AREAS.filter((a) => heldChoice(list, a.id) !== null).map((a) => {
     const level = heldChoice(list, a.id);
     const choices = AREA_CHOICES[a.id];
-    // Only multi-step areas say how far: "research (+ read everyone’s)".
+    // Only multi-step areas say how far: "research (+ read other members’)".
     const extra = choices.length > 2 && level && level !== 'self' ? ` (${choices.find((c) => c.level === level)?.label})` : '';
     return `${SHORT[a.id]}${extra}`;
   });
