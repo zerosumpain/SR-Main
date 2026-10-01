@@ -13,16 +13,18 @@
  *
  * `dry: true` returns what it WOULD write and touches nothing.
  */
-import { and, eq, inArray, like, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, like, ne, or, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { codegraphEpisodes, codegraphLessons, codegraphNodeLessons, codegraphNodes, codegraphSnapshots, jkaiBuildDeliveries,
   jkaiBuildDeliveryEvents, jkaiBuilds, jkaiIterations, jkaiLogs } from '$lib/db/schema';
-import { extractBuildHistory, historyReport, liveLessons, pullRequestRef, relatedBySnapshot, type HistoryBuild, type HistoryEvent, type HistoryUnits, type LessonUnit, type PullRequestFact } from './build-history';
+import { extractBuildHistory, historyReport, liveLessons, pullRequestRef, relatedBySnapshot, type HistoryBuild, type HistoryEvent, type LessonUnit, type PullRequestFact } from './build-history';
 import type { StructuralSnapshot } from './snapshot';
 import { familyOf } from './family';
 
 /** Bounded per run so a cold start cannot spend the release job on GitHub. */
 const MAX_PR_LOOKUPS = 60;
+/** Well inside the release job's 300-second curl, with the writes still to come. */
+const LOOKUP_BUDGET_MS = 90_000;
 
 export async function learnFromBuildHistory(opts: { dry?: boolean } = {}) {
   // Repo builds (a JSON-literal null is an app/studio build) and develop
@@ -32,9 +34,13 @@ export async function learnFromBuildHistory(opts: { dry?: boolean } = {}) {
     publishedSlug: jkaiBuilds.publishedSlug, createdAt: jkaiBuilds.createdAt, delivery: jkaiBuildDeliveries.state })
     .from(jkaiBuilds).leftJoin(jkaiBuildDeliveries, eq(jkaiBuildDeliveries.buildId, jkaiBuilds.id))
     .where(and(sql`${jkaiBuilds.status} NOT IN ('running', 'queued')`,
-      or(sql`${jkaiBuilds.gitTargetConfig} IS NOT NULL AND ${jkaiBuilds.gitTargetConfig}::text <> 'null'`, sql`${jkaiBuildDeliveries.buildId} IS NOT NULL`)));
+      or(sql`${jkaiBuilds.gitTargetConfig} IS NOT NULL AND ${jkaiBuilds.gitTargetConfig}::text <> 'null'`, sql`${jkaiBuildDeliveries.buildId} IS NOT NULL`)))
+    // Newest first: the GitHub lookups are budgeted, and the build that just
+    // ran is the one worth learning from this deploy.
+    .orderBy(desc(jkaiBuilds.createdAt));
   const ids = builds.map(b => b.id);
-  if (!ids.length) return report(opts.dry, { episodes: [], lessons: [], counts: { builds: 0, gateResults: 0, failFix: 0, outcomes: 0, unkeyedFailures: 0, unmergedPrs: 0, prsWithoutFacts: 0 } }, 0);
+  if (!ids.length) return historyReport({ episodes: [], lessons: [], counts: { builds: 0, gateResults: 0, failFix: 0, outcomes: 0, unkeyedFailures: 0, abandonedPrs: 0, openPrs: 0, prsWithoutFacts: 0 } },
+    Boolean(opts.dry), { lookups: 0, settled: 0, deferred: 0, token: Boolean(process.env.FORGE_GITHUB_TOKEN) });
 
   const iterations = await db.select({ id: jkaiIterations.id, buildId: jkaiIterations.buildId, number: jkaiIterations.number, createdAt: jkaiIterations.createdAt, actions: jkaiIterations.actions })
     .from(jkaiIterations).where(inArray(jkaiIterations.buildId, ids));
@@ -62,57 +68,65 @@ export async function learnFromBuildHistory(opts: { dry?: boolean } = {}) {
   });
   units.lessons = liveLessons(units.lessons, snapshot);
 
+  // One bad unit must not fail the pass for ever: every deploy would rerun the
+  // same failing write first and learn nothing behind it. Counted instead,
+  // and the report's `ok` goes false so the release log shows it.
+  let writeFailures = 0;
   if (!opts.dry) {
     const { writeEpisode } = await import('./development.server');
-    for (const episode of units.episodes) await writeEpisode(episode);
-    for (const lesson of units.lessons) await writeLesson(lesson);
+    for (const episode of units.episodes) await writeEpisode(episode).catch(error => { writeFailures++; console.warn('[codegraph] build-history episode', episode.dedupeKey, error); });
+    for (const lesson of units.lessons) await writeLesson(lesson).catch(error => { writeFailures++; console.warn('[codegraph] build-history lesson', lesson.slug, error); });
   }
-  return report(opts.dry, units, pullRequests.lookups, pullRequests.skipped);
-}
-
-function report(dry: boolean | undefined, units: HistoryUnits, prLookups: number, prSettled = 0) {
-  return historyReport(units, Boolean(dry), prLookups, prSettled);
+  return historyReport(units, Boolean(opts.dry), pullRequests, writeFailures);
 }
 
 /**
- * GitHub's word on each proposal. A build whose outcome episode is already
- * `verified` is settled — nothing GitHub says can move it — so it is not asked
- * again; everything else is, up to `MAX_PR_LOOKUPS`.
+ * GitHub's word on each proposal, inside a time budget.
+ *
+ * A build whose outcome episode already carries any verdict but `unverified`
+ * is SETTLED — merged (`landed`), closed or never proposed (`abandoned`) — and
+ * nothing GitHub could say would move it, so it is not asked again. Only open
+ * proposals and new builds are looked up, newest first, and the loop stops at
+ * `LOOKUP_BUDGET_MS` so the release job's 300-second curl is never the thing
+ * that ends the pass; what is left is counted as deferred and taken next deploy.
  */
 async function pullRequestFacts(builds: HistoryBuild[]) {
   const facts = new Map<string, PullRequestFact>();
   const token = process.env.FORGE_GITHUB_TOKEN;
   const proposing = builds.filter(b => pullRequestRef(b));
-  if (!token || !proposing.length) return { facts, lookups: 0, skipped: 0 };
+  if (!token || !proposing.length) return { facts, lookups: 0, settled: 0, deferred: 0, token: Boolean(token) };
   const settled = new Set((await db.select({ sourceId: codegraphEpisodes.sourceId }).from(codegraphEpisodes).where(and(
-    inArray(codegraphEpisodes.sourceId, proposing.map(b => b.id)), eq(codegraphEpisodes.verdict, 'verified'),
+    inArray(codegraphEpisodes.sourceId, proposing.map(b => b.id)), ne(codegraphEpisodes.verdict, 'unverified'),
     or(like(codegraphEpisodes.dedupeKey, 'change-request:%'), like(codegraphEpisodes.dedupeKey, 'development:%'))))).map(r => r.sourceId));
   const { SR_MAIN_GIT_TARGET } = await import('$lib/jkai/git-targets');
   const { repoSlugFromUrl } = await import('$lib/github/pr');
-  const { servingSha, commitContains } = await import('$lib/jkai/development-release.server');
   const repo = repoSlugFromUrl(SR_MAIN_GIT_TARGET.repoUrl);
   const headers = { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'User-Agent': 'codegraph-build-history' };
   const get = async <T>(path: string): Promise<T | null> => {
-    const r = await fetch(`https://api.github.com/repos/${repo}/${path}`, { headers, signal: AbortSignal.timeout(15_000) }).catch(() => null);
+    const r = await fetch(`https://api.github.com/repos/${repo}/${path}`, { headers, signal: AbortSignal.timeout(10_000) }).catch(() => null);
     return r?.ok ? (r.json() as Promise<T>) : null;
   };
-  const serving = await servingSha();
-  let lookups = 0;
+  const started = Date.now();
+  let lookups = 0, deferred = 0;
   for (const build of proposing) {
-    if (settled.has(build.id) || lookups >= MAX_PR_LOOKUPS) continue;
+    if (settled.has(build.id)) continue;
+    if (lookups >= MAX_PR_LOOKUPS || Date.now() - started > LOOKUP_BUDGET_MS) { deferred++; continue; }
     lookups++;
     const ref = pullRequestRef(build)!;
-    const number = 'number' in ref ? ref.number
-      : (await get<Array<{ number: number }>>(`pulls?state=all&head=${repo.split('/')[0]}:${encodeURIComponent(ref.branch)}`))?.[0]?.number;
-    if (!number) continue;
-    const pr = await get<{ merged?: boolean; merge_commit_sha?: string | null; merged_at?: string | null }>(`pulls/${number}`);
+    let number: number | null;
+    if ('number' in ref) number = ref.number;
+    else {
+      const found = await get<Array<{ number: number }>>(`pulls?state=all&head=${repo.split('/')[0]}:${encodeURIComponent(ref.branch)}`);
+      if (!found) continue; // the lookup failed, which is not the same as "none"
+      number = found[0]?.number ?? null;
+    }
+    if (number === null) { facts.set(build.id, { number: null, merged: false, closed: true, files: [] }); continue; }
+    const pr = await get<{ merged?: boolean; state?: string; merge_commit_sha?: string | null; merged_at?: string | null }>(`pulls/${number}`);
     if (!pr) continue;
     const files = pr.merged ? ((await get<Array<{ filename: string }>>(`pulls/${number}/files?per_page=100`)) ?? []).map(f => f.filename) : [];
-    const mergeSha = pr.merge_commit_sha ?? null;
-    const deployed = Boolean(pr.merged && mergeSha && serving && (serving === mergeSha || await commitContains(mergeSha, serving, headers)));
-    facts.set(build.id, { number, merged: Boolean(pr.merged), deployed, mergeSha, mergedAt: pr.merged_at ?? null, files });
+    facts.set(build.id, { number, merged: Boolean(pr.merged), closed: pr.state === 'closed', mergeSha: pr.merge_commit_sha ?? null, mergedAt: pr.merged_at ?? null, files });
   }
-  return { facts, lookups, skipped: settled.size };
+  return { facts, lookups, settled: settled.size, deferred, token: true };
 }
 
 /**

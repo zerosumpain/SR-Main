@@ -1,9 +1,9 @@
 /** Observed check outcomes, not causal claims about the retrieved guidance. */
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, lt, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { codegraphEpisodes, codegraphLessons, codegraphQueries } from '$lib/db/schema';
+import { codegraphEpisodes, codegraphLessons, codegraphQueries, jkaiBuildDeliveries, jkaiIterations } from '$lib/db/schema';
 import { fingerprintsIn } from './fingerprint';
-import { resolveServe } from './relevance';
+import { attributablePullFingerprints, resolveServe } from './relevance';
 
 export interface ResolveResult {
   resolved: number;
@@ -23,6 +23,24 @@ export interface ResolveResult {
  * credit. `chat` and `precedent` stay out — neither belongs to an iteration.
  */
 export const RESOLVABLE_CHANNELS = ['push', 'pull'] as const;
+
+/**
+ * `servedFor` for a pull query: only fingerprints the build's newest failure
+ * actually carried, and each at most once per iteration. See
+ * `attributablePullFingerprints` for why the agent's own word is not enough.
+ */
+export async function pullServedFor(buildId: string, iterationId: string | null, asked: string[]): Promise<string[]> {
+  if (!asked.length || !iterationId) return [];
+  const [current] = await db.select({ number: jkaiIterations.number }).from(jkaiIterations).where(eq(jkaiIterations.id, iterationId));
+  if (!current) return [];
+  const [previous] = await db.select({ evaluation: jkaiIterations.evaluation }).from(jkaiIterations)
+    .where(and(eq(jkaiIterations.buildId, buildId), lt(jkaiIterations.number, current.number))).orderBy(desc(jkaiIterations.number)).limit(1);
+  const [delivery] = await db.select({ state: jkaiBuildDeliveries.state }).from(jkaiBuildDeliveries).where(eq(jkaiBuildDeliveries.buildId, buildId));
+  const claimed = await db.select({ servedFor: codegraphQueries.servedFor }).from(codegraphQueries)
+    .where(and(eq(codegraphQueries.buildId, buildId), eq(codegraphQueries.iterationId, iterationId), eq(codegraphQueries.channel, 'pull')));
+  return attributablePullFingerprints(asked, { evaluation: previous?.evaluation, parked: (delivery?.state.codegraph?.pending ?? []).map(p => p.excerpt) },
+    claimed.flatMap(r => r.servedFor));
+}
 
 /** Lock and resolve the exact iteration's injected evidence in one transaction. */
 export async function resolveBuildServes(input: {

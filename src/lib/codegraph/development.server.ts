@@ -211,8 +211,15 @@ async function changedBetween(buildId: string, from: string, to: string): Promis
  */
 export async function writeEpisode(episode: DevelopmentEpisode) {
   const { nodes: paths, ...values } = episode;
+  // `verdictWins` in SQL — keep the two in step. A losing write keeps the
+  // whole row, not just the verdict: the live writer's verification text
+  // explains its verdict, and pairing it with the backfill's would describe
+  // neither.
+  const wins = sql`(codegraph_episodes.verdict = 'unverified' OR (excluded.verdict = 'verified' AND codegraph_episodes.verdict <> 'verified'))`;
+  const pick = (column: string) => sql`CASE WHEN ${wins} THEN ${sql.raw(`excluded.${column}`)} ELSE ${sql.raw(`codegraph_episodes.${column}`)} END`;
   const [row] = await db.insert(codegraphEpisodes).values(values).onConflictDoUpdate({ target: codegraphEpisodes.dedupeKey,
-    set: { problem: values.problem, resolution: values.resolution, verification: values.verification, verdict: values.verdict, prNumber: values.prNumber } }).returning({ id: codegraphEpisodes.id });
+    set: { problem: pick('problem'), resolution: pick('resolution'), verification: pick('verification'), verdict: pick('verdict'),
+      prNumber: sql`coalesce(excluded.pr_number, codegraph_episodes.pr_number)` } }).returning({ id: codegraphEpisodes.id });
   await linkEpisode(row.id, paths, values.repo);
 }
 

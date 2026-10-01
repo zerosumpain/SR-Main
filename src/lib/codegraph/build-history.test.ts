@@ -60,7 +60,6 @@ describe('gateResults reads both lanes as the orchestrator wrote them', () => {
     // The deadline failure is the broker's, not the code's.
     expect(results.map(r => [r.kind, r.source, r.revision])).toEqual([
       ['fail', 'verification', CAND_A], ['fail', 'verification', CAND_B], ['fail', 'verification', CAND_B], ['fail', 'verification', CAND_B]]);
-    expect(results[0].text).not.toMatch(/Fix this before expanding/);
     expect(results[0].text).toContain('Requires a loopback test database');
   });
 
@@ -120,7 +119,7 @@ describe('fail→fix from a change request', () => {
   });
 });
 
-describe('outcome episodes: merged is landed, serving is verified, closed is nothing', () => {
+describe('outcome episodes: merged is landed, closed is a settled marker, open is asked again', () => {
   it('finds the pull request in every form a build recorded it', () => {
     expect(pullRequestRef({ publishedSlug: 'https://github.com/zerosumpain/SR-Main/pull/292', delivery: null })).toEqual({ number: 292 });
     expect(pullRequestRef({ publishedSlug: 'master...agent/ab2-15288c4c', delivery: null })).toEqual({ branch: 'agent/ab2-15288c4c' });
@@ -128,13 +127,21 @@ describe('outcome episodes: merged is landed, serving is verified, closed is not
     expect(pullRequestRef({ publishedSlug: null, delivery: null })).toBeNull();
   });
 
-  const fact = { number: 292, merged: true, deployed: true, mergeSha: 'c39b8e3fc29a'.padEnd(40, '0'), mergedAt: t(20), files: ['src/x.ts'] };
+  const fact = { number: 292, merged: true, closed: true, mergeSha: 'c39b8e3fc29a'.padEnd(40, '0'), mergedAt: t(20), files: ['src/x.ts'] };
 
-  it('keys a change request on its build and pull request', () => {
+  it('never grades a backfilled merge verified: serving it was not watched', () => {
     const e = outcomeEpisodeFrom(build('cr'), fact)!;
-    expect(e).toMatchObject({ dedupeKey: 'change-request:cr:pr-292', verdict: 'verified', prNumber: 292, fingerprint: null, gate: null, filesTouched: ['src/x.ts'] });
-    expect(outcomeEpisodeFrom(build('cr'), { ...fact, deployed: false })!.verdict).toBe('landed');
-    expect(outcomeEpisodeFrom(build('cr'), { ...fact, merged: false })).toBeNull();
+    expect(e).toMatchObject({ dedupeKey: 'change-request:cr:pr-292', verdict: 'landed', prNumber: 292, fingerprint: null, gate: null, filesTouched: ['src/x.ts'] });
+  });
+
+  it('settles a closed proposal, or a branch never proposed, as abandoned and unreachable', () => {
+    const closed = outcomeEpisodeFrom(build('cr'), { ...fact, merged: false })!;
+    expect(closed).toMatchObject({ verdict: 'abandoned', filesTouched: [], nodes: [], fingerprint: null });
+    expect(outcomeEpisodeFrom(build('cr'), { number: null, merged: false, closed: true, files: [] })!.dedupeKey).toBe('change-request:cr:unproposed');
+  });
+
+  it('leaves an open proposal to be asked again', () => {
+    expect(outcomeEpisodeFrom(build('cr'), { ...fact, merged: false, closed: false })).toBeNull();
   });
 
   it('keys a develop feature exactly as its acceptance episode, so the two are one row', () => {

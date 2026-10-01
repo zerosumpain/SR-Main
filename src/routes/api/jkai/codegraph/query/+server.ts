@@ -31,6 +31,7 @@ import {
 } from '$lib/codegraph/auth';
 import { CgqlError, parseCgql, servedForPlan } from '$lib/codegraph/query';
 import { renderContext, runPlan } from '$lib/codegraph/retrieve';
+import { pullServedFor } from '$lib/codegraph/feedback';
 import { isOwnerEmail } from '$lib/server/access';
 import type { RequestHandler } from './$types';
 
@@ -121,9 +122,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
       query: queryText,
       outcome: result.outcome,
       // What a gate receipt can judge this serve by. Only a fingerprint seed
-      // says "I was asking about THIS error"; every other seed stays empty and
-      // is closed `unattributable` — see `serveIsAttributable`.
-      servedFor: servedForPlan(plan),
+      // says "I was asking about THIS error", and only an error the build had
+      // really hit counts — once per iteration (`pullServedFor`). Every other
+      // seed stays empty and is closed `unattributable`.
+      servedFor: channel === 'pull' && attributedBuildId
+        ? await pullServedFor(attributedBuildId, iterationId, servedForPlan(plan)).catch(() => [])
+        : servedForPlan(plan),
       episodeIds: rendered.episodeIds,
       lessonIds: rendered.lessonIds,
       evidence: rendered,

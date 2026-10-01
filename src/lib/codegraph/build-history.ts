@@ -43,7 +43,8 @@ export interface HistoryIteration { id: string; buildId: string; number: number;
 export interface HistoryLog { buildId: string; iterationId: string | null; type: string; content: string; createdAt: string }
 export interface HistoryEvent { buildId: string; id: number; kind: string; createdAt: string; detail: { candidate?: string | null; cycle?: { failureKind?: string; failure?: string } | null } }
 /** What GitHub says about a build's pull request, looked up by the server half. */
-export interface PullRequestFact { number: number; merged: boolean; deployed: boolean; mergeSha?: string | null; mergedAt?: string | null; files: string[] }
+/** `number: null` means the branch was found but no pull request was ever opened for it. */
+export interface PullRequestFact { number: number | null; merged: boolean; closed: boolean; mergeSha?: string | null; mergedAt?: string | null; files: string[] }
 
 /** One gate verdict in a build's history, in time order. */
 export interface GateResult {
@@ -55,8 +56,6 @@ export interface GateResult {
 const CHANGE_REQUEST_FAIL = /^FAIL Tests:/;
 const CHANGE_REQUEST_PASS = /^PASS Tests:/;
 const DEVELOP_FAIL = /^Preview\/check failure:/;
-/** The orchestrator's own tail on a develop failure; not part of the failure. */
-const DEVELOP_TAIL = /\.\s*Fix this before expanding the feature\.[\s\S]*$/;
 /** Isolated verification's own words when it passes (development-workspace.server.ts). */
 export const ISOLATED_PASS_EVIDENCE = 'Isolated structural, type, repository test, production build, release sidecar and feature browser checks passed.';
 
@@ -96,7 +95,9 @@ export function gateResults(iterations: HistoryIteration[], logs: HistoryLog[], 
       const cycle = cycles.find(e => Date.parse(e.createdAt) >= Date.parse(log.createdAt) - 2000 && Date.parse(e.createdAt) - Date.parse(log.createdAt) < 60_000);
       if (cycle?.detail.cycle?.failureKind !== 'feature' || !cycle.detail.candidate) continue;
       out.push({ kind: 'fail', source: 'verification', revision: cycle.detail.candidate, at: log.createdAt, iteration,
-        text: log.content.replace(DEVELOP_FAIL, '').replace(DEVELOP_TAIL, '').trim() });
+        // Raw: `pendingFailureFrom` normalises it through `failureExcerpt`,
+        // the same function the live path's `String(error)` goes through.
+        text: log.content });
     }
   }
   for (const e of events) {
@@ -149,29 +150,43 @@ export function pullRequestRef(build: Pick<HistoryBuild, 'publishedSlug' | 'deli
 }
 
 /**
- * What a merged proposal teaches: here is a task, here is the change that
- * shipped for it.
+ * What a settled proposal teaches, and the record that it IS settled.
  *
- * `landed` when merged, `verified` only when production serves it — the
- * backfill's own rule (a merged PR is `landed`: 17.1% of them were repairs)
- * and the live path's (`acceptanceVerdict`). A develop feature keeps the key
- * its acceptance episode has, so the live row and this one are the same row.
+ * MERGED IS `landed`, NEVER `verified`, from here. "Production serves a commit
+ * containing the merge" is true of every merge ever made that was not
+ * reverted by force-push — including the 17.1% of merged PRs that were
+ * themselves repaired later — so asking it after the fact grades almost
+ * everything `verified` for free. `verified` is earned only where the merge
+ * reaching production was WATCHED, which is the live develop path
+ * (`observeDevelopmentRelease`); `writeEpisode` will not lower that to
+ * `landed` when this pass meets the same row.
+ *
+ * CLOSED UNMERGED, or a branch nobody proposed, is `abandoned` — written as a
+ * marker so the next deploy does not ask GitHub again, and harmless to
+ * retrieval: no files, no fingerprint, no gate, so no seed can reach it. For a
+ * develop feature it lands on the acceptance episode's key, where it is the
+ * same verdict `acceptanceVerdict` gives a closed pull request.
+ *
+ * Still open: null, and asked again next time.
  */
 export function outcomeEpisodeFrom(build: HistoryBuild, fact: PullRequestFact): DevelopmentEpisode | null {
-  if (!fact.merged) return null;
-  const files = [...new Set(fact.files.filter(Boolean))].slice(0, 40);
+  if (!fact.merged && !fact.closed) return null;
+  const files = fact.merged ? [...new Set(fact.files.filter(Boolean))].slice(0, 40) : [];
   const revision = build.delivery?.release?.revision ?? build.delivery?.candidate ?? null;
-  const dedupeKey = build.delivery && revision ? `development:${build.id}:${revision}` : `change-request:${build.id}:pr-${fact.number}`;
+  const dedupeKey = build.delivery && revision ? `development:${build.id}:${revision}`
+    : `change-request:${build.id}:${fact.number ? `pr-${fact.number}` : 'unproposed'}`;
   const sha = fact.mergeSha?.slice(0, 12) ?? 'unknown';
+  const pr = fact.number ? `pull request #${fact.number}` : 'no pull request';
   return {
     dedupeKey, repo: 'SR-Main', sourceKind: 'development', sourceId: build.id,
     title: (build.title ?? build.prompt).replace(/\s+/g, ' ').trim().slice(0, 200),
     problem: (build.delivery?.originalAsk ?? build.prompt).slice(0, 1500),
-    resolution: `Merged as pull request #${fact.number} (${sha}), changing ${files.length} file(s): ${files.join(', ')}.`.slice(0, 4000),
-    verification: fact.deployed ? `Pull request #${fact.number} merged as ${sha} and production serves a commit containing it.` : `Pull request #${fact.number} merged as ${sha}; production serving it was not confirmed.`,
+    resolution: (fact.merged ? `Merged as ${pr} (${sha}), changing ${files.length} file(s): ${files.join(', ')}.`
+      : fact.number ? `Proposed as ${pr} and closed without merging.` : 'The branch was pushed but never proposed as a pull request.').slice(0, 4000),
+    verification: fact.merged ? `${pr} merged as ${sha}. Not watched reaching production, so graded landed, not verified.` : 'Not merged.',
     // Not gate-derived, so no fingerprint and no gate node: hanging every merged
     // proposal off `gate:gate` would make it the largest hub in the graph.
-    fingerprint: null, gate: null, verdict: fact.deployed ? 'verified' : 'landed',
+    fingerprint: null, gate: null, verdict: fact.merged ? 'landed' : 'abandoned',
     filesTouched: files, prNumber: fact.number, occurredAt: new Date(fact.mergedAt ?? build.createdAt),
     nodes: files,
   };
@@ -270,7 +285,7 @@ export function blockerLessons(
 export interface HistoryUnits {
   episodes: DevelopmentEpisode[];
   lessons: LessonUnit[];
-  counts: { builds: number; gateResults: number; failFix: number; outcomes: number; unkeyedFailures: number; unmergedPrs: number; prsWithoutFacts: number };
+  counts: { builds: number; gateResults: number; failFix: number; outcomes: number; unkeyedFailures: number; abandonedPrs: number; openPrs: number; prsWithoutFacts: number };
 }
 
 /** Everything the graph should learn from these builds. Deterministic, so a re-run writes the same rows. */
@@ -279,7 +294,7 @@ export function extractBuildHistory(input: {
   pullRequests: Map<string, PullRequestFact>;
   related?: (test: string, edits: string[]) => boolean;
 }): HistoryUnits {
-  const counts = { builds: input.builds.length, gateResults: 0, failFix: 0, outcomes: 0, unkeyedFailures: 0, unmergedPrs: 0, prsWithoutFacts: 0 };
+  const counts = { builds: input.builds.length, gateResults: 0, failFix: 0, outcomes: 0, unkeyedFailures: 0, abandonedPrs: 0, openPrs: 0, prsWithoutFacts: 0 };
   const episodes: DevelopmentEpisode[] = [];
   const failures: Array<{ buildId: string; revision: string; at: string; text: string }> = [];
   const editsByBuild = new Map<string, string[]>();
@@ -299,7 +314,8 @@ export function extractBuildHistory(input: {
       if (!fact) counts.prsWithoutFacts++;
       else {
         const outcome = outcomeEpisodeFrom(build, fact);
-        if (outcome) { episodes.push(outcome); counts.outcomes++; } else counts.unmergedPrs++;
+        if (!outcome) counts.openPrs++;
+        else { episodes.push(outcome); if (outcome.verdict === 'abandoned') counts.abandonedPrs++; else counts.outcomes++; }
       }
     }
   }
@@ -326,10 +342,16 @@ export function liveLessons(lessons: LessonUnit[], snapshot: StructuralSnapshot 
 }
 
 /** What a pass did — or, dry, would do. The release job prints the head of it. */
-export function historyReport(units: HistoryUnits, dry: boolean, prLookups: number, prSettled: number) {
+export function historyReport(units: HistoryUnits, dry: boolean, github: { lookups: number; settled: number; deferred: number; token: boolean }, writeFailures = 0) {
   const byKind: Record<string, number> = {};
   for (const e of units.episodes) { const k = `${e.dedupeKey.split(':')[0]}/${e.verdict}`; byKind[k] = (byKind[k] ?? 0) + 1; }
-  return { ok: true, dry, counts: { ...units.counts, lessons: units.lessons.length, prLookups, prSettled }, byKind,
+  // FIRST in the object, because the release job prints only the head of it:
+  // a pass that cannot see GitHub learns nothing about outcomes and must say
+  // so where someone will read it, not skip quietly.
+  const warning = github.token ? (github.deferred ? `${github.deferred} pull request lookup(s) deferred to the next deploy (time budget)` : null)
+    : 'FORGE_GITHUB_TOKEN MISSING on this host: no pull request outcomes were learned';
+  return { warning, ok: writeFailures === 0, dry, counts: { ...units.counts, lessons: units.lessons.length, writeFailures,
+    prLookups: github.lookups, prSettled: github.settled, prDeferred: github.deferred }, byKind,
     samples: [...units.episodes.filter(e => e.fingerprint).slice(0, 3), ...units.episodes.filter(e => !e.fingerprint).slice(0, 2)]
       .map(e => ({ ...e, problem: e.problem.slice(0, 500) })),
     lessons: units.lessons };

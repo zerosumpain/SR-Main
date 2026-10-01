@@ -46,16 +46,60 @@ export function pendingFailureFrom(input: {
   source: PendingFailure['source']; revision: string | null | undefined; diagnostics: string; at?: string; prNumber?: number;
 }): PendingFailure | null {
   if (!input.revision) return null;
+  // Fingerprinted from the WHOLE normalised text, stored trimmed: the class
+  // that names the failure is often past the first 1,500 characters of a
+  // vitest run, and cutting first lost two of them in the backfill dry run.
+  const normalised = failureExcerpt(input.diagnostics, Infinity);
+  const excerpt = normalised.slice(0, 1500);
   // `fingerprintsIn`, NOT `fingerprintOf`, and the difference is the whole
   // point of the row. The hot lane plans its query with `fingerprintsIn` under
   // the same gate command, and the two disagree on TypeScript: `fingerprintOf`
   // prefixes the code with the command's gate (`gate:TS2345`), `fingerprintsIn`
   // always says `typecheck:TS2345`. An episode keyed the first way is one the
   // next build hitting that exact error can never be served.
-  const fingerprint = fingerprintsIn(input.diagnostics, DEVELOPMENT_GATE)[0] ?? null;
+  const fingerprint = fingerprintsIn(normalised, DEVELOPMENT_GATE)[0] ?? null;
   if (!fingerprint) return null;
-  return { source: input.source, revision: input.revision, fingerprint, excerpt: input.diagnostics.trim().slice(0, 1500),
+  return { source: input.source, revision: input.revision, fingerprint, excerpt,
     at: input.at ?? new Date().toISOString(), ...(input.prNumber ? { prNumber: input.prNumber } : {}) };
+}
+
+/** What the orchestrator wraps a develop failure in, on the way into the log. */
+const LOG_PREFIX = /^\s*Preview\/check failure:\s*/;
+const LOG_TAIL = /\.\s*Fix this before expanding the feature\.[\s\S]*$/;
+/** What `String(error)` puts in front of the same message on the live path. */
+const ERROR_PREFIX = /^\s*(?:\w*Error|DevelopmentFailure):\s*/;
+
+/**
+ * One failure, one stored text — whichever path read it.
+ *
+ * The live path sees `String(error)` ("Error: tests failed in isolated
+ * verification; …"); the backfill reads the log line the orchestrator wrote
+ * from the same error ("Preview/check failure: tests failed … . Fix this
+ * before expanding the feature. …"). Both are the same failure, and an
+ * episode's `problem` must not depend on which writer got there first — the
+ * upsert refreshes it, so two spellings would flip-flop on every pass.
+ */
+export function failureExcerpt(text: string, max = 1500): string {
+  return String(text ?? '').replace(LOG_PREFIX, '').replace(ERROR_PREFIX, '').replace(LOG_TAIL, '').trim().slice(0, max);
+}
+
+/**
+ * Should an upsert replace the stored verdict with the incoming one?
+ *
+ * Not by `VERDICT_WEIGHT`, though that is the obvious ordering: it ranks
+ * `landed` above `repaired`, so a backfill writing "merged" would erase a live
+ * writer's "CI went red on this" — the weight orders how much to TRUST a
+ * verdict, not how much was KNOWN when it was written. The rule instead:
+ *
+ *  - `unverified` is the placeholder acceptance writes before anything is
+ *    known, and anything may replace it;
+ *  - `verified` replaces anything but itself: it is the only verdict that
+ *    rests on having watched production serve the change;
+ *  - nothing else replaces anything.
+ */
+export function verdictWins(current: string | null | undefined, incoming: string): boolean {
+  if (!current || current === 'unverified') return true;
+  return incoming === 'verified' && current !== 'verified';
 }
 
 /**
@@ -76,7 +120,7 @@ export function queuePendingFailure(pending: PendingFailure[], failure: PendingF
 export interface DevelopmentEpisode {
   dedupeKey: string; repo: string; sourceKind: 'development'; sourceId: string; title: string;
   problem: string; resolution: string; verification: string; fingerprint: string | null; gate: string | null;
-  verdict: 'verified' | 'landed'; filesTouched: string[]; prNumber: number | null; occurredAt: Date;
+  verdict: 'verified' | 'landed' | 'abandoned'; filesTouched: string[]; prNumber: number | null; occurredAt: Date;
   /** Node paths to link: the files, then the gate node — as ingest links them. */
   nodes: string[];
 }
@@ -106,7 +150,9 @@ export function fixEpisodeFrom(input: {
 }): DevelopmentEpisode | null {
   const { failure } = input;
   if (!input.passRevision || input.passRevision === failure.revision) return null;
-  const files = [...new Set(input.changedFiles.filter(Boolean))].slice(0, MAX_FIX_FILES);
+  // The develop lane's own control file says "the brief is done", not how the
+  // error was fixed; crediting it would hang every fix off one meaningless node.
+  const files = [...new Set(input.changedFiles.filter(f => f && f !== '.development-preview.json'))].slice(0, MAX_FIX_FILES);
   if (!files.length) return null;
   // The fingerprint's own prefix is the gate it names (`typecheck:TS2345`,
   // `gate:TypeError`), normalised through the one vocabulary gate nodes use.

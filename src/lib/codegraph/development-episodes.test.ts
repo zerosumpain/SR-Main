@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { acceptanceVerdict, fixEpisodeFrom, pendingFailureFrom, queuePendingFailure, MAX_PENDING } from './development-episodes';
+import { acceptanceVerdict, failureExcerpt, fixEpisodeFrom, pendingFailureFrom, queuePendingFailure, verdictWins, MAX_PENDING } from './development-episodes';
 import type { PendingFailure } from '$lib/constants/development';
 
 const RED = 'a'.repeat(40);
@@ -100,5 +100,34 @@ describe('acceptanceVerdict: acceptance is local, production is proof', () => {
     ['verified', 'ci_failed', null],
   ] as const)('%s + %s -> %s', (current, event, expected) => {
     expect(acceptanceVerdict(current, event)).toBe(expected);
+  });
+});
+
+describe('failureExcerpt: one failure, one stored text, whichever path read it', () => {
+  it('reads String(error) on the live path and the log line on the backfill the same', () => {
+    const message = 'tests failed in isolated verification; full output retained in /var/lib/x.log. Error: Requires a loopback test database';
+    const live = failureExcerpt(`Error: ${message}`);
+    const logged = failureExcerpt(`Preview/check failure: ${message}. Fix this before expanding the feature. The last successful preview is retained.`);
+    expect(live).toBe(logged);
+    expect(pendingFailureFrom({ source: 'verification', revision: RED, diagnostics: `Error: ${message}`, at: 'x' }))
+      .toEqual(pendingFailureFrom({ source: 'verification', revision: RED, diagnostics: `Preview/check failure: ${message}. Fix this before expanding the feature.`, at: 'x' }));
+  });
+});
+
+describe('verdictWins: an upsert never lowers a verdict', () => {
+  it.each([
+    ['unverified', 'landed', true],
+    ['unverified', 'abandoned', true],
+    ['landed', 'verified', true],
+    ['repaired', 'verified', true],
+    ['verified', 'landed', false],
+    // What a live writer learned outranks what the backfill can see, even
+    // though VERDICT_WEIGHT ranks landed above both.
+    ['repaired', 'landed', false],
+    ['abandoned', 'landed', false],
+    ['landed', 'abandoned', false],
+    ['verified', 'verified', false],
+  ] as const)('%s <- %s: %s', (current, incoming, expected) => {
+    expect(verdictWins(current, incoming)).toBe(expected);
   });
 });
