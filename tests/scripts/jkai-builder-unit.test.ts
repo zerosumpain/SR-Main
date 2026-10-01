@@ -101,3 +101,23 @@ describe('jkai-builder.service', () => {
     expect(statSync(join(ROOT, repoPath)).mode & 0o111, `${repoPath} is not executable`).toBeGreaterThan(0);
   });
 });
+
+describe('the web app can reach the builder', () => {
+  // 2026-10-01: since the web app moved to its own `sr-main` account, an
+  // owner-only socket left every Start/Resume/Continue on /jkai/develop
+  // answering "the development worker is not ready".
+  it('names the one group allowed to drive the socket', () => {
+    const envLines = unit().split('\n').map((l) => l.trim()).filter((l) => l.startsWith('Environment='));
+    expect(envLines).toContain('Environment=JKAI_BUILDER_SOCKET_GROUP=jkai-builder-rpc');
+  });
+
+  it('resolves that group from /etc/group, and declines a missing one', async () => {
+    const { mkdtempSync, writeFileSync } = await import('fs');
+    const { tmpdir } = await import('os');
+    const { groupId } = await import('../../packages/jkai-builder/src/server');
+    const file = join(mkdtempSync(join(tmpdir(), 'grp-')), 'group');
+    writeFileSync(file, 'johnk:x:1000:\njkai-builder-rpc:x:986:johnk,sr-main\n');
+    expect(groupId('jkai-builder-rpc', file)).toBe(986);
+    expect(groupId('nope', file)).toBeNull();
+  });
+});

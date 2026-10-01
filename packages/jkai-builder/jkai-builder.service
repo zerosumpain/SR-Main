@@ -9,6 +9,10 @@ Group=johnk
 WorkingDirectory=/opt/strange-rambling-svelte
 Environment=NODE_ENV=production
 Environment=JKAI_BUILDER_SOCKET=/run/jkai-builder/jkai-builder.sock
+# The web app (account sr-main) drives the builder over this socket. Only this
+# group may connect; the web account is a member of it and of nothing else of
+# the builder's. See packages/jkai-builder/src/server.ts.
+Environment=JKAI_BUILDER_SOCKET_GROUP=jkai-builder-rpc
 Environment=JKAI_BUILDS_ROOT=/opt/jkai-builds
 Environment=JKAI_BUILDS_HOSTMODE=1
 Environment=JKAI_BUILDER_PROCESS=1
