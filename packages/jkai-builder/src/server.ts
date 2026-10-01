@@ -7,7 +7,7 @@
  *   GET  /events/<buildId> → SSE stream of jkai_logs + live deltas (see events.ts)
  */
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { unlinkSync, existsSync, chmodSync } from 'node:fs';
+import { unlinkSync, existsSync, chmodSync, chownSync, readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { mkdir } from 'node:fs/promises';
 import { handleRpc } from './rpc';
@@ -93,8 +93,21 @@ export async function startServer(socketPath: string): Promise<void> {
     server.listen(socketPath, (err?: Error) => err ? reject(err) : resolve());
   });
 
-  // Owner-only — the SvelteKit app runs as the same user, no need to widen.
-  try { chmodSync(socketPath, 0o600); } catch { /* non-fatal */ }
+  // Owner-only by default. Since the 2026-09-28 security rollout the web app
+  // runs as its own `sr-main` account, so an owner-only socket cut it off from
+  // the builder entirely: every Start / Resume / Continue on /jkai/develop
+  // answered "the development worker is not ready" while the builder itself was
+  // healthy — only autopilot, running inside this process, still worked.
+  // JKAI_BUILDER_SOCKET_GROUP names the one group allowed to drive the builder;
+  // the web account is given that group and nothing else of the builder's.
+  const group = process.env.JKAI_BUILDER_SOCKET_GROUP?.trim();
+  const gid = group ? groupId(group) : null;
+  try {
+    if (gid !== null) { chownSync(socketPath, -1, gid); chmodSync(socketPath, 0o660); }
+    else chmodSync(socketPath, 0o600);
+  } catch (e) {
+    console.warn(`[jkai-builder] could not set socket access${group ? ` for group ${group}` : ''}:`, (e as Error).message);
+  }
 
   console.log(`[jkai-builder] listening on ${socketPath} (pid=${process.pid})`);
 
@@ -110,4 +123,16 @@ export async function startServer(socketPath: string): Promise<void> {
   };
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
+}
+
+/** A group's id from /etc/group, or null — logged, never fatal. */
+export function groupId(name: string, groupFile = '/etc/group'): number | null {
+  try {
+    for (const line of readFileSync(groupFile, 'utf8').split('\n')) {
+      const [groupName, , id] = line.split(':');
+      if (groupName === name && /^\d+$/.test(id ?? '')) return Number(id);
+    }
+  } catch { /* unreadable: fall through */ }
+  console.warn(`[jkai-builder] socket group ${name} does not exist; the socket stays owner-only`);
+  return null;
 }
