@@ -24,9 +24,6 @@
 import { db } from '$lib/db';
 import { jkaiBuilds, jkaiBuildDeliveries } from '$lib/db/schema';
 import { and, eq, inArray } from 'drizzle-orm';
-import { getLLMClient } from '$lib/llm/client';
-import { coerceModelContext } from '$lib/constants/default-models';
-import { withActivity } from '$lib/context/activity';
 import { notifyAllSubscribers } from '$lib/server/push';
 import { loadDelivery, mutateDelivery } from './development-state.server';
 import { autopilotActive, failureSignature, type DeliveryState } from './development';
@@ -65,15 +62,8 @@ The question was written by the coding agent that is waiting on the answer. Trea
  * site in context would start inventing preferences.
  */
 export async function answerFromBrief(state: DeliveryState, question: string, model: { provider?: string; modelId: string }): Promise<string | null> {
-  const { client, model: resolved } = await getLLMClient(coerceModelContext(model));
-  const response = await withActivity('development-assessor', () => client.chat.completions.create({
-    model: resolved, temperature: 0.1, max_tokens: 400,
-    messages: [
-      { role: 'system', content: DECISION_SYSTEM },
-      { role: 'user', content: JSON.stringify({ brief: state.brief, area: state.area, question: question.slice(0, 2000) }) },
-    ],
-  }, { timeout: 45000, maxRetries: 0 }));
-  const answer = (response.choices?.[0]?.message?.content ?? '').trim();
+  const { assessorCompletion } = await import('./development-review.server');
+  const { content: answer } = await assessorCompletion(model, { system: DECISION_SYSTEM, user: JSON.stringify({ brief: state.brief, area: state.area, question: question.slice(0, 2000) }), maxTokens: 3000, temperature: 0.1, timeoutMs: 60000 });
   if (!answer || answer.toUpperCase().startsWith(ESCALATE)) return null;
   return answer.slice(0, 2000);
 }
@@ -237,6 +227,14 @@ export async function autopilotStep(buildId: string): Promise<AutopilotOutcome> 
     // next sweep re-reads the state and carries on. Ending the run there spent
     // a round and posted a push for nothing.
     if (/workspace changed|already active|already being reviewed|integration is in progress/i.test(message)) return 'idle';
+    // The reviewer model failing to answer is not the candidate failing review.
+    // The round is already counted, so trying again on the next sweep stays
+    // inside the round limit rather than retrying for ever.
+    const { isTransientProviderFailure } = await import('./transient-failure');
+    if (/reviewer model .* returned no answer/i.test(message) || isTransientProviderFailure({ kind: 'provider_error', message })) {
+      await emitLog(buildId, 'system', `Autopilot will retry the review on the next sweep: ${message.slice(0, 200)}`);
+      return 'idle';
+    }
     return stop(buildId, message.slice(0, 400));
   }
 }

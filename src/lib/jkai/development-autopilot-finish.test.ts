@@ -172,3 +172,22 @@ describe('protected paths are known before the pull request', () => {
     expect(deliveryPrompt(newDelivery('x'))).toContain('.github/protected-paths.txt');
   });
 });
+
+describe('the adversary always answers or says why', () => {
+  it('retries with reasoning off when reasoning ate the whole budget', async () => {
+    const { vi } = await import('vitest');
+    const calls: Array<Record<string, unknown>> = [];
+    vi.resetModules();
+    vi.doMock('$lib/llm/client', () => ({ getLLMClient: async () => ({ model: 'deepseek/x', client: { chat: { completions: { create: async (body: Record<string, unknown>) => {
+      calls.push(body);
+      // 2026-10-01: reasoning_tokens 6000 of max_tokens 6000, content empty.
+      return { choices: [{ message: { content: calls.length === 1 ? '' : '{"ok":true}' } }] };
+    } } } } }) }));
+    const { assessorCompletion } = await import('./development-review.server');
+    const result = await assessorCompletion({ provider: 'openrouter', modelId: 'deepseek/x' }, { system: 's', user: 'u', maxTokens: 100, temperature: 0, timeoutMs: 1000 });
+    expect(result.content).toBe('{"ok":true}');
+    expect(calls[0].reasoning).toEqual({ effort: 'low' });
+    expect(calls[1].reasoning).toEqual({ enabled: false });
+    vi.doUnmock('$lib/llm/client');
+  });
+});
