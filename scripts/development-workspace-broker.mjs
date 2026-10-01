@@ -1,12 +1,12 @@
 import { snapshotTree } from './lib/codegraph-snapshot.mjs';
 /** Trusted local broker. Docker points exclusively at the isolated DinD daemon. */
 import http from 'node:http';
-import { previewPlan, readPreviewManifest } from './development-preview-check.mjs';
+import { previewPlan, readPreviewManifest, parseCheckOutput, reviewScreenshotChoice } from './development-preview-check.mjs';
 import { previewAccessUrl } from './development-preview-access.mjs';
 import { failureKindFor, verificationExcerpt } from './development-verification.mjs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, readdir, readFile, writeFile, stat, realpath, rename } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile, stat, realpath, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomBytes, createHash } from 'node:crypto';
@@ -206,9 +206,10 @@ async function resetBatch() {
   if (dirty.length) throw new Error(`These workspaces hold uncommitted work and would lose it: ${dirty.join(', ')}. Let each finish or stop its build, then try again.`);
   for (const entry of rebuilt) {
     await command('rm', ['-rf', join(root, entry, 'dev')]);
-    await command('rm', ['-f', join(trustedRoot, `${entry}-base`)]);
+    await command('rm', ['-rf', join(trustedRoot, `${entry}-base`), join(trustedRoot, `${entry}-shots`), join(trustedRoot, `batch-${entry}-shots`)]);
   }
   await command('rm', ['-rf', batch, join(trustedRoot, 'source'), join(trustedRoot, 'batch-preview.json')]);
+  for (const entry of await readdir(trustedRoot).catch(() => [])) if (/^batch-[a-zA-Z0-9-]+-shots$/.test(entry)) await command('rm', ['-rf', join(trustedRoot, entry)]);
   await ensureBatch();
   return { batch: await git(batch, 'rev-parse', 'HEAD'), reset: true, rebuilt };
 }
@@ -245,17 +246,47 @@ async function codeSource(id, revision, file) {
   const text = await git(path, 'show', `${revision}:${file}`);
   return { revision, file, text: text.slice(0, 24000), truncated: text.length > 24000 };
 }
+/**
+ * Keep the check's screenshots in the trusted root and hand back observations
+ * that name a file instead of carrying its bytes.
+ *
+ * The bytes arrive inside the check's stdout — the same channel as the page
+ * text — rather than by `docker cp` out of the preview container. That
+ * container runs the candidate's own server as the same user, so anything in
+ * its filesystem could be a symlink or a directory swapped in under the name
+ * we asked for; stdout is already the trust boundary, and `parseCheckOutput`
+ * has bounded and shape-checked every image before it reaches here. Names are
+ * ours, and there is one directory per id holding only the latest inspect —
+ * replaced whole by each inspect, removed when a new preview is provisioned,
+ * closed or the batch is reset. The names are returned to the caller and never
+ * written to the preview receipt, which a later inspect would contradict.
+ */
+async function storeScreenshots(id, observations) {
+  const dir = join(trustedRoot, `${id}-shots`);
+  await rm(dir, { recursive: true, force: true });
+  await mkdir(dir, { recursive: true });
+  return Promise.all(observations.map(async (observation, index) => {
+    if (typeof observation.screenshot !== 'object' || !observation.screenshot) return { ...observation, screenshot: undefined };
+    const name = `${index}-${observation.width}.jpg`;
+    await writeFile(join(dir, name), Buffer.from(observation.screenshot.base64, 'base64'));
+    return { ...observation, screenshot: name };
+  }));
+}
 /** Inspect the published revision without replacing its runtime or snapshot. */
 async function inspectPreview(id, revision) {
   const path = await assertCandidate(id, revision);
   const receipt = JSON.parse(await readFile(join(trustedRoot, `${id}-preview.json`), 'utf8'));
   if (receipt.revision !== revision || !receipt.name || !receipt.plan?.scenarios?.length) throw new Error('A browser-checked preview of the current revision is required.');
   await docker('cp', `${source}/scripts/development-preview-check.mjs`, `${receipt.name}:/tmp/development-preview-check.mjs`);
-  const evidence = JSON.parse(await docker('exec', receipt.name, 'node', '/tmp/development-preview-check.mjs'));
+  const { evidence, observations } = parseCheckOutput(await docker('exec', receipt.name, 'node', '/tmp/development-preview-check.mjs', '--screenshots'));
   const base = (await readFile(join(trustedRoot, `${id}-base`), 'utf8')).trim();
   if (!/^[a-f0-9]{40}$/.test(base)) throw new Error('Invalid base revision');
   const patch = (await git(path, 'diff', '--no-ext-diff', '--no-textconv', base, revision, '--')).slice(0, 40000);
-  return { revision, evidence, changes: { files: (await git(path, 'diff', '--name-only', base, revision, '--')).split('\n').filter(Boolean), patch } };
+  // Only the reviewer's two images travel back as bytes; the rest stay on disk
+  // here for anyone auditing the run. Whether the reviewing model can read an
+  // image at all is decided by the caller, which knows the model.
+  const screenshots = reviewScreenshotChoice(observations).map(o => ({ width: o.width, route: o.route, text: o.text, mediaType: 'image/jpeg', base64: o.screenshot.base64 }));
+  return { revision, evidence, observations: await storeScreenshots(id, observations), screenshots, changes: { files: (await git(path, 'diff', '--name-only', base, revision, '--')).split('\n').filter(Boolean), patch } };
 }
 async function preview(id, revision, options = {}) {
   const required = Boolean(options.working || options.verify);
@@ -283,6 +314,9 @@ async function provisionPreview(id, revision, path, plan, options) {
   const target = join(root, id, 'preview');
   const receiptFile = join(trustedRoot, `${id}-preview.json`);
   const old = JSON.parse(await readFile(receiptFile, 'utf8').catch(() => '{}'));
+  // Screenshots belong to the inspect of an earlier revision; whether this
+  // preview passes or fails, they no longer describe the candidate.
+  await rm(join(trustedRoot, `${id}-shots`), { recursive: true, force: true });
   await ensureRuntimeImage();
   const fingerprint = await runtimeFingerprint();
   if (!options.verify && !options.verifyAs && old.fingerprint === fingerprint && old.revision === revision && old.url && old.port && old.runtimeVersion === 4 && JSON.stringify(old.plan) === JSON.stringify(plan)) {
@@ -349,12 +383,12 @@ async function provisionPreview(id, revision, path, plan, options) {
   await writeFile(join(target, 'preview-plan.json'), JSON.stringify(plan));
   await docker('cp', `${target}/preview-plan.json`, `${name}:/tmp/preview-plan.json`);
   await docker('cp', `${source}/scripts/development-preview-check.mjs`, `${name}:/tmp/development-preview-check.mjs`);
-  let evidence;
-  try { evidence = JSON.parse(await docker('exec', name, 'node', '/tmp/development-preview-check.mjs')); }
+  let evidence, observations;
+  try { ({ evidence, observations } = parseCheckOutput(await docker('exec', name, 'node', '/tmp/development-preview-check.mjs'))); }
   catch (error) { throw error.kind ? error : failure(`Feature browser check failed: ${(error.stderr || error.stdout || error.message).slice(-1600)}`, 'feature'); }
   await assertCandidate(id, revision);
   const url = previewLink(id, revision, port);
-  const receipt = { revision, port, url, name, plan, evidence, proxyVersion: 2, runtimeVersion: 4, fingerprint, verified: options.verify === true };
+  const receipt = { revision, port, url, name, plan, evidence, observations, proxyVersion: 2, runtimeVersion: 4, fingerprint, verified: options.verify === true };
   await writeFile(receiptFile + '.next', JSON.stringify(receipt));
   await rename(receiptFile + '.next', receiptFile);
   if (old.port) await removeRuntime(old.name ?? `sr-preview-${id}`);
@@ -365,6 +399,7 @@ async function closePreview(id) {
   const receiptFile = join(trustedRoot, `${id}-preview.json`);
   const receipt = JSON.parse(await readFile(receiptFile, 'utf8').catch(() => '{}'));
   await removeRuntime(receipt.name ?? `sr-preview-${id}`);
+  await rm(join(trustedRoot, `${id}-shots`), { recursive: true, force: true });
   await writeFile(receiptFile, '{}');
   return { closed: true };
 }

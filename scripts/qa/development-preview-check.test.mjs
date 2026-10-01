@@ -14,12 +14,12 @@ test('rejects external routes and plans without an observable interaction outcom
   assert.throws(() => previewPlan({ complete: false, scenarios: [scenario] }, ['/different']));
 });
 test('real browser checks fail on missing routes, broken interactions and runtime errors', async () => {
-  let broken = false, runtime = false;
+  let broken = false, runtime = false, noisy = false;
   const server = http.createServer((req, res) => {
     if (req.url === '/events') { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.write('data: connected\n\n'); return; }
     if (req.url !== '/feature') { res.writeHead(404); return res.end('Missing'); }
     res.setHeader('content-type', 'text/html');
-    res.end(`<script>new EventSource("/events")</script><h1>Synthetic preference</h1><button onclick="${broken ? '' : "document.querySelector('p').textContent='Saved preference'"}">Save</button><p>Unsaved</p>${runtime ? '<script>throw new Error("Synthetic runtime failure")</script>' : ''}`);
+    res.end(`<script>new EventSource("/events")</script><h1>Synthetic preference</h1><button onclick="${broken ? '' : "document.querySelector('p').textContent='Saved preference'"}">Save</button><p>Unsaved</p>${noisy ? '<script>console.error("Synthetic console failure"); fetch("/api/missing")</script>' : ''}${runtime ? '<script>throw new Error("Synthetic runtime failure")</script>' : ''}`);
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const browser = await chromium.launch({ headless: true });
@@ -27,6 +27,26 @@ test('real browser checks fail on missing routes, broken interactions and runtim
   const plan = previewPlan({ complete: false, scenarios: [scenario] }, ['/feature']);
   try {
     assert.equal((await checkPage(browser, base, plan)).length, 2);
+    // The structured half: a logged error and a same-origin 404 are recorded
+    // against the scenario without failing it; the outline names the control.
+    noisy = true;
+    const report = { observations: [], screenshots: true };
+    assert.equal((await checkPage(browser, base, plan, report)).length, 2);
+    assert.deepEqual(report.observations.map(o => o.width), [1440, 390]);
+    for (const o of report.observations) {
+      assert.ok(o.consoleErrors.some(m => m.includes('Synthetic console failure')), o.consoleErrors.join('|'));
+      assert.ok(o.failedRequests.includes('404 GET /api/missing'), o.failedRequests.join('|'));
+      assert.match(o.outline, /button "Save"/);
+      assert.equal(o.screenshot.mediaType, 'image/jpeg');
+      assert.ok(Buffer.from(o.screenshot.base64, 'base64').subarray(0, 2).equals(Buffer.from([0xff, 0xd8])));
+    }
+    // A spent budget skips the outline and screenshot but keeps the cheap lists.
+    const starved = { observations: [], screenshots: true, budgetMs: 0 };
+    await checkPage(browser, base, plan, starved);
+    assert.match(starved.observations[0].outline, /budget was spent/);
+    assert.equal(starved.observations[0].screenshot, undefined);
+    assert.ok(starved.observations[0].failedRequests.includes('404 GET /api/missing'));
+    noisy = false;
     await assert.rejects(checkPage(browser, base, { ...plan, routes: ['/missing'] }), /did not open/);
     broken = true; await assert.rejects(checkPage(browser, base, plan), /Timeout/);
     broken = false; runtime = true; await assert.rejects(checkPage(browser, base, plan), /runtime error/);
