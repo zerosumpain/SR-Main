@@ -204,6 +204,17 @@ async function summariseDiff(currentPath: string, snapshotPath: string): Promise
   }
 }
 
+/** Which files the digest describes: relevant, readable sizes, priority paths
+ *  first, then newest first, capped at MAX_FILES. */
+export function selectDigestCandidates(files: FileEntry[], priority: ReadonlySet<string> = new Set()): FileEntry[] {
+  return files
+    .filter((f) => !/node_modules|\.git|\.cache|\.venv|__pycache__|dist\/|build\/|\.next\/|\.svelte-kit/.test(f.path))
+    .filter((f) => f.size <= MAX_FILE_BYTES)
+    .filter((f) => /\.(js|ts|mjs|tsx|jsx|svelte|py|html|css|json|md|yml|yaml|sh)$/i.test(f.path))
+    .sort((a, b) => Number(priority.has(b.path)) - Number(priority.has(a.path)) || b.mtime - a.mtime)
+    .slice(0, MAX_FILES);
+}
+
 /** Walk the workspace's listDevFiles output, read each candidate, summarise.
  *  Designed to be called every iteration before pi spawns. Cost: a few ms
  *  of disk I/O on a typical project. Returns a single markdown block to
@@ -211,7 +222,7 @@ async function summariseDiff(currentPath: string, snapshotPath: string): Promise
 export async function buildCodebaseDigest(
   buildId: string,
   files: FileEntry[],
-  opts: { sharingBudgetWithPrecedent?: boolean } = {},
+  opts: { sharingBudgetWithPrecedent?: boolean; priorityPaths?: ReadonlySet<string> } = {},
 ): Promise<string> {
   const budget = opts.sharingBudgetWithPrecedent ? MAX_SUMMARY_BYTES_WITH_PRECEDENT : MAX_SUMMARY_BYTES;
   if (files.length === 0) {
@@ -226,13 +237,11 @@ export async function buildCodebaseDigest(
 
   // Skip noisy / binary files. Pick the most-recently-modified first so we
   // describe the iteration's working set even if the project has ballooned
-  // into a node_modules-ish tree.
-  const candidates = files
-    .filter((f) => !/node_modules|\.git|\.cache|\.venv|__pycache__|dist\/|build\/|\.next\/|\.svelte-kit/.test(f.path))
-    .filter((f) => f.size <= MAX_FILE_BYTES)
-    .filter((f) => /\.(js|ts|mjs|tsx|jsx|svelte|py|html|css|json|md|yml|yaml|sh)$/i.test(f.path))
-    .sort((a, b) => b.mtime - a.mtime)
-    .slice(0, MAX_FILES);
+  // into a node_modules-ish tree. A repository build's diff against its base
+  // (`priorityPaths`) goes ahead of that: mtime alone cannot tell the agent's
+  // files from a fresh clone's, which all share the clone's timestamp.
+  const priority = opts.priorityPaths ?? new Set<string>();
+  const candidates = selectDigestCandidates(files, priority);
 
   const root = `${BUILDS_ROOT}/${buildId}/dev`;
   const lines: string[] = ['## Codebase Digest'];

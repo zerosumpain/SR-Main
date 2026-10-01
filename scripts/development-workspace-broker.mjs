@@ -28,7 +28,7 @@ const command = async (file, args, options = {}) => {
     const timings = operation.getStore()?.timings;
     if (timings) {
       const commandText = args.join(' ');
-      const phase = /svelte-check/.test(commandText) ? 'types' : /vitest/.test(commandText) ? 'tests' : /development-preview-check/.test(commandText) ? 'browser' : /gate:build|npm run build$/.test(commandText) ? 'build' : /build:release-sidecars/.test(commandText) ? 'sidecars' : 'setup';
+      const phase = /svelte-check/.test(commandText) ? 'types' : /gate-db-contracts/.test(commandText) ? 'contracts' : /vitest/.test(commandText) ? 'tests' : /ci-prebuild/.test(commandText) ? 'prebuild' : /development-preview-check/.test(commandText) ? 'browser' : /gate:build|npm run build$/.test(commandText) ? 'build' : /build:release-sidecars/.test(commandText) ? 'sidecars' : 'setup';
       timings[phase] = (timings[phase] ?? 0) + Date.now() - started;
     }
   }
@@ -85,7 +85,7 @@ async function preflight(id) {
 }
 async function runtimeFingerprint() {
   const hash = createHash('sha256').update(activeBrokerHash);
-  for (const file of ['scripts/development-workspace-broker.mjs', 'scripts/lib/codegraph-snapshot.mjs', 'scripts/development-preview-check.mjs', 'scripts/development-verification.mjs', 'scripts/development-seccomp.json', 'scripts/local-preview-proxy.mjs', 'scripts/local-preview-ingress.mjs', 'package-lock.json']) hash.update(await readFile(join(source, file)));
+  for (const file of ['scripts/development-workspace-broker.mjs', 'scripts/lib/codegraph-snapshot.mjs', 'scripts/development-preview-check.mjs', 'scripts/development-verification.mjs', 'scripts/development-seccomp.json', 'scripts/gate-db-contracts.sh', 'scripts/ci-prebuild.sh', 'scripts/check-built-extract.mjs', 'scripts/check-authored-runner.sh', 'scripts/local-preview-proxy.mjs', 'scripts/local-preview-ingress.mjs', 'package-lock.json']) hash.update(await readFile(join(source, file)));
   hash.update(await docker('image', 'inspect', 'sr-development-preview:v4', 'pgvector/pgvector:pg16', '--format', '{{.Id}}'));
   return hash.digest('hex');
 }
@@ -366,21 +366,65 @@ async function closePreview(id) {
   await writeFile(receiptFile, '{}');
   return { closed: true };
 }
+/**
+ * The repository gate, run in the candidate's preview container.
+ *
+ * A green verification here should predict a green CI, so every step is the
+ * command `.github/workflows/ci.yml` runs, in CI's order, rather than a
+ * re-listing of what it checks. Parity, step by step:
+ *
+ *   runner     `Install isolated handler runner`. bubblewrap is baked into the
+ *              image, so this is the smoke half only; a failure is the
+ *              sandbox, not the candidate, unless the candidate edited it.
+ *   structural `Lint gates` (gate level job)
+ *   sync/types `Type check` runs gate-check.sh = sync + svelte-check + a
+ *              liveness check. Run by its parts so the failure names the half
+ *              that broke, and at the container's 6GB heap: gate:check:only
+ *              asks for 8GB, which an 8GB container cannot give.
+ *   tests      `Tests`, the whole suite in one shard.
+ *   contracts  `Memory and evidence database contracts`, via the same script.
+ *              They need only DATABASE_URL, so the preview database serves.
+ *   build      `Build the real release candidate`
+ *   prebuild   `Verify and stamp the candidate`: it imports the BUILT server
+ *              chunks and extracts a real PDF — the check that would have
+ *              caught the four-day pdf.js outage. It fingerprints the build
+ *              `.env` for provenance; the container has none (public env is
+ *              passed with -e), so an empty one stands in and is removed again
+ *              before the clean check and the restarted server.
+ *   sidecars   `Build candidate sidecars`
+ *   clean      no CI twin: proves the gate rewrote no tracked file.
+ *
+ * Deliberately NOT run, and why:
+ *   - `Audit production dependencies` (npm audit) needs the live advisory
+ *     service; the preview network is `--internal`, so it could only fail.
+ *     CI skips it anyway unless package.json/package-lock.json changed, and
+ *     the broker refuses a candidate that changes package scripts.
+ *   - the gate LEVEL (L1/L2 scoping) and certified-candidate reuse: they only
+ *     ever run LESS than this, never more.
+ *   - Release/promote/stage steps: deployment, not verification.
+ *   - CI's runner is uid 1001 with sudo; this one is uid 1000 without. A
+ *     candidate depending on sudo fails here and would pass there — the safe
+ *     direction.
+ */
 async function verifyRuntime(id, container) {
-  const verify = async (step, args, environment = []) => {
+  /** @param {string} step @param {string[]} args @param {string[]} [environment] @param {string} [fallbackKind] */
+  const verify = async (step, args, environment = [], fallbackKind = 'feature') => {
     const log = join(trustedRoot, `${id}-gate-${step}.log`);
     try { await writeFile(log, await docker('exec', ...environment, container, ...args)); }
     catch (error) {
       const output = `${error.stdout ?? ''}\n${error.stderr ?? error.message}`;
       await writeFile(log, output);
-      throw failure(`${step} failed in isolated verification; full output retained in ${log}. ${verificationExcerpt(output)}`, error.kind ?? failureKindFor(output));
+      throw failure(`${step} failed in isolated verification; full output retained in ${log}. ${verificationExcerpt(output)}`, error.kind ?? failureKindFor(output, fallbackKind));
     }
   };
+  await verify('runner', ['bash', './scripts/check-authored-runner.sh'], [], 'infrastructure');
   await verify('structural', ['bash', './scripts/gate-structural.sh']);
   await verify('sync', ['npm', 'run', 'gate:sync']);
   await verify('types', ['npx', '--no-install', 'svelte-check', '--tsconfig', './tsconfig.json', '--threshold', 'error']);
   await verify('tests', ['npx', '--no-install', 'vitest', 'run', '--exclude', '**/*.integration.test.ts', '--maxWorkers', '2'], ['-e', 'JKAI_SERVICE_ROLE=web']);
+  await verify('contracts', ['bash', './scripts/gate-db-contracts.sh'], ['-e', 'JKAI_SERVICE_ROLE=web']);
   await verify('build', ['npm', 'run', 'gate:build']);
+  await verify('prebuild', ['bash', '-c', '[ -e .env ] && exec bash ./scripts/ci-prebuild.sh; : > .env; bash ./scripts/ci-prebuild.sh; status=$?; rm -f .env; exit $status']);
   await verify('sidecars', ['npm', 'run', 'build:release-sidecars']);
   await verify('clean', ['git', 'diff', '--exit-code']);
 }
