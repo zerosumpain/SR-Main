@@ -35,9 +35,9 @@ import { fileURLToPath } from 'node:url';
 
 const REPO = join(fileURLToPath(import.meta.url), '..', '..');
 
-const ROOTS = [
-  'src/lib/fieldstudy',
-];
+// The Svelte primitives (src/lib/fieldstudy) were deleted unused on
+// 2026-10-01; what remains in scope is the `.fs-*` CSS in app.css.
+const ROOTS = [];
 
 /** `max-width: 72ch`, `max-inline-size: 60ch`, `width: 44ch` — any of them cap text. */
 const CAP = /(max-width|max-inline-size|width)\s*:\s*[0-9.]+ch\b/g;

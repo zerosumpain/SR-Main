@@ -51,7 +51,6 @@ const SCOPE = [
   ['src/routes/capture', true],
   ['src/routes/research', true],
   ['src/lib/components', true],
-  ['src/lib/fieldstudy', true],
   ['src/lib/components/jkai', true],
   ['src/lib/components/intel', true],
   ['src/lib/canvas', true],

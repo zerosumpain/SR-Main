@@ -41,9 +41,6 @@ here is one a real build broke. `CLAUDE.md` has the wider picture.
   access to make a page render.
 - **All model calls go through `$lib/llm/client`.** No provider SDK imports and
   no hard-coded model ids; model choice belongs to the workload registry.
-- **Field studies** (`/projects/<slug>` research pages) follow
-  `field-study-system/INSTRUCTIONS.md`: content as data in `study.ts`, every
-  beat on a template. Never a bespoke layout.
 - **Module layers:** `foundation < platform < domain < ui < routes`. A module
   imports its own layer or below, never above, and no route imports another
   route. `scripts/check-module-boundaries.mjs` enforces it.
