@@ -3,6 +3,9 @@
   import { previewAccess } from '$lib/builds/preview-access';
   import DevelopmentCodeContext from './DevelopmentCodeContext.svelte';
   import DevelopmentModelSelect from './DevelopmentModelSelect.svelte';
+  import DevelopmentBriefCheck from './DevelopmentBriefCheck.svelte';
+  import { acknowledgementKeys } from '$lib/jkai/development-brief';
+  import type { BriefLint } from '$lib/constants/development';
   let modelId = $state('');
   // The shared ink cover orients the journey; the sticky rail keeps build
   // controls reachable while the paper workspace holds the current task.
@@ -30,10 +33,14 @@
   let snapshot = $state<Snapshot | null>(null);
   let tab = $state('Brief'); let busy = $state(false); let error = $state(''); let connection = $state('Loading');
   let previewPending = $state(false);
-  let outcome = $state(''); let constraints = $state(''); let routes = $state(''); let criteria = $state(''); let area = $state('Platform');
+  let outcome = $state(''); let constraints = $state(''); let routes = $state(''); let newRoutes = $state(''); let criteria = $state(''); let area = $state('Platform');
+  let overrideLane = $state(false); let overrideLint = $state(false);
+  // The check of an edit to an ACCEPTED brief, which the server refuses without
+  // saving — so it never reaches the stored state, and lives here instead.
+  let editLint = $state<BriefLint | null>(null);
   let scope = $state(''); let dependencies = $state(''); let assumptions = $state(''); let questions = $state(''); let validation = $state('');
   let feedback = $state(''); let grooming = $state(false);
-  const briefFields = () => ({ outcome, constraints, routes, criteria, area, scope, dependencies, assumptions, questions, validation, modelId });
+  const briefFields = () => ({ outcome, constraints, routes, newRoutes, criteria, area, scope, dependencies, assumptions, questions, validation, modelId });
   let instruction = $state(''); let question = $state(''); let answers = $state<Record<string, string>>({});
   let evidence = $state<Record<string, string>>({}); let verdicts = $state<Record<string, string>>({});
   let lesson = $state(''); let lessonEvidence = $state(''); let note = $state('');
@@ -75,7 +82,8 @@
       snapshot = await response.json(); connection = 'Connected';
       if (!initialized && snapshot) tab = requestedTab ?? (snapshot.delivery.state.preview.url || ['failed', 'starting'].includes(snapshot.delivery.state.preview.status) ? 'Preview' : snapshot.delivery.state.brief.acceptedAt ? 'Build' : 'Brief');
       if (snapshot && (!initialized || (snapshot.delivery.state.brief.revision !== briefRevision && JSON.stringify(briefFields()) === loadedBrief))) {
-        const s = snapshot.delivery.state; briefRevision = s.brief.revision; outcome = s.brief.outcome; constraints = s.brief.constraints; routes = s.brief.routes.join('\n');
+        const s = snapshot.delivery.state; briefRevision = s.brief.revision; outcome = s.brief.outcome; constraints = s.brief.constraints; routes = s.brief.routes.join('\n'); newRoutes = (s.brief.newRoutes ?? []).join('\n');
+        overrideLane = false; overrideLint = false;
         scope = s.brief.scope ?? ''; dependencies = s.brief.dependencies ?? ''; assumptions = s.brief.assumptions ?? ''; questions = s.brief.questions ?? ''; validation = s.brief.validation ?? '';
         modelId = snapshot.build.modelId;
         criteria = s.criteria.map((c) => c.text).join('\n'); area = s.area;
@@ -119,7 +127,12 @@
     try {
       const response = await fetch(`/api/jkai/development/${buildId}`, { method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action, revision: snapshot.delivery.revision, briefRevision, candidate: snapshot.delivery.state.candidate, ...fields }) });
-      const result = await response.json(); if (!response.ok) throw new Error(result.error ?? 'Operation failed');
+      const result = await response.json();
+      // A brief that fails its check is saved as a draft with the findings, so
+      // reload the fields from it: the revision moved, and the boxes already
+      // hold exactly what was saved.
+      if (!response.ok) { if (result.lint) { if (result.saved) initialized = false; else editLint = result.lint; } throw new Error(result.error ?? 'Operation failed'); }
+      if (action === 'brief') editLint = null;
       if (action === 'inspect_preview' || action === 'preview') selectTab('Preview');
       if (action === 'start' || action === 'resume' || result.next === 'building') selectTab('Build');
       if (result.next === 'accepted') selectTab('Delivery');
@@ -179,6 +192,12 @@
     { id: 'Delivery', label: 'Delivery', tone: 'quiet' },
   ]);
   const nextStep = $derived(!deliveryState?.brief.acceptedAt ? 'Review the brief, then start building.' : preparing ? 'Your preview is being prepared. Saved progress will appear here.' : expiredPreview ? 'Your preview access has expired. Refresh it to test the saved build.' : deliveryState?.preview.url ? 'Try the preview and record what should change.' : running ? 'Follow the first version as it builds. Answer any questions below.' : deliveryState?.candidate || canInspect ? 'Prepare the saved work as a preview and try it.' : 'Your brief is accepted. Build the first working page.');
+  const shownLint = $derived(deliveryState && !deliveryState.brief.acceptedAt ? deliveryState.brief.lint ?? null : editLint);
+  // Commissioned in another lane: an armed run here would otherwise wake up
+  // later and push "needs you" about work that has already gone elsewhere.
+  function disarmAfterCommission(label: string, href: string) {
+    if (flying) void act('autopilot', { enabled: false, reason: `Commissioned as a ${label} instead: ${href}. The unattended run on this feature is off.` });
+  }
   function preparePreview() { void act(deliveryState?.candidate ? 'preview' : 'inspect_preview'); }
 </script>
 
@@ -225,7 +244,7 @@
     <button
       class="wk-ghost"
       class:on={flying}
-      disabled={busy || preparing || !deliveryState?.brief.acceptedAt}
+      disabled={busy || preparing}
       aria-pressed={flying}
       onclick={() => act('autopilot', { enabled: !flying, maxRounds: rounds })}
     >{flying ? 'Stop autopilot' : 'Autopilot'}</button>
@@ -279,17 +298,22 @@
           </aside>
         {/if}
 
+        {#if shownLint}
+          <DevelopmentBriefCheck lint={shownLint} ask={deliveryState.originalAsk ?? snapshot.build.prompt} title={snapshot.build.title} {busy} revision={deliveryState.brief.acceptedAt ? shownLint.revision : deliveryState.brief.revision} bind:overrideLane bind:overrideLint oncommissioned={disarmAfterCommission} />
+        {/if}
+
         <details class="wk-fold"><summary>Original ask</summary><p class="wk-pre">{deliveryState.originalAsk ?? snapshot.build.prompt}</p></details>
 
-        <form class="wk-form" onsubmit={(e) => { e.preventDefault(); void act('brief', briefFields()); }}>
+        <form class="wk-form" onsubmit={(e) => { e.preventDefault(); void act('brief', { ...briefFields(), override: { lane: overrideLane, lint: overrideLint, acknowledged: shownLint && (overrideLane || overrideLint) ? acknowledgementKeys(shownLint) : [] } }); }}>
           <fieldset disabled={busy || running}>
             <div class="wk-cols wk-brief-options"><label class="wk-field"><span class="wk-label">Product area</span><select aria-label="Product area" bind:value={area}>{#each PRODUCT_AREAS as value (value)}<option>{value}</option>{/each}</select></label>
             <DevelopmentModelSelect bind:value={modelId} disabled={busy || running} /></div>
             <label class="wk-field"><span class="wk-label">Intended outcome</span><textarea required bind:value={outcome} rows="4"></textarea></label>
             <div class="wk-cols">
               <label class="wk-field"><span class="wk-label">Constraints</span><textarea bind:value={constraints} rows="4" placeholder="Behaviour, audience, design and data constraints"></textarea></label>
-              <label class="wk-field"><span class="wk-label">Target routes</span><textarea bind:value={routes} rows="4" placeholder="One site path per line, for example /health"></textarea></label>
+              <label class="wk-field"><span class="wk-label">Target routes</span><textarea bind:value={routes} rows="4" placeholder="Existing site paths this changes, one per line, for example /blog"></textarea></label>
             </div>
+            <label class="wk-field"><span class="wk-label">New routes</span><textarea bind:value={newRoutes} rows="2" placeholder="Paths this feature creates, one per line. A target route that does not exist yet belongs here."></textarea></label>
             <label class="wk-field"><span class="wk-label">Acceptance criteria</span><textarea required bind:value={criteria} rows="5" placeholder="One observable outcome per line"></textarea></label>
             <label class="wk-field"><span class="wk-label">Scope and exclusions</span><textarea bind:value={scope} rows="3"></textarea></label>
             <div class="wk-cols">
@@ -298,10 +322,10 @@
             </div>
             <label class="wk-field"><span class="wk-label">Validation plan</span><textarea bind:value={validation} rows="4"></textarea></label>
             <label class="wk-field"><span class="wk-label">Open questions</span><textarea bind:value={questions} rows="3" placeholder="Answer these with the model, or accept the brief and retain them for the builder."></textarea></label>
-            <p class="wk-muted">You can accept this brief now. Remaining questions travel with it; the builder will ask if a decision blocks implementation.</p>
+            <p class="wk-muted">Accepting checks the brief first: the lane, that each target route exists, and that every criterion can be confirmed in the preview or the diff. Remaining questions travel with it; the builder will ask if a decision blocks implementation.</p>
             <div class="wk-actions">
               <button class="wk-run" disabled={busy || running || !outcome.trim() || !criteria.trim()}>{questions.trim() ? 'Accept brief with open questions' : 'Accept brief'}</button>
-              <span class="wk-stamp">Revision {deliveryState.brief.revision}{deliveryState.brief.acceptedAt ? ' · accepted' : ' · draft'}</span>
+              <span class="wk-stamp">Revision {deliveryState.brief.revision}{deliveryState.brief.acceptedAt ? (deliveryState.brief.acceptedBy === 'autopilot' ? ' · accepted by autopilot' : ' · accepted') : ' · draft'}{deliveryState.brief.acceptedAt && deliveryState.brief.override ? ` · past ${[deliveryState.brief.override.lane ? 'the lane check' : '', deliveryState.brief.override.lint ? 'the brief check' : ''].filter(Boolean).join(' and ')}` : ''}</span>
             </div>
           </fieldset>
         </form>

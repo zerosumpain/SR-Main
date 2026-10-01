@@ -35,7 +35,11 @@ export function analyseSources(files, contents) {
     const entry = lock.packages?.[`node_modules/${name}`];
     return { name, version: entry?.version ?? null, license: entry?.license ?? null, integrity: entry?.integrity ?? null, usedBy };
   });
-  const routes = files.filter(p => /^src\/routes\/.*\+(page\.svelte|server\.ts)$/.test(p)).map(path => ({ path,
+  // A route is any directory SvelteKit serves: a page, a layout-reset page
+  // (`+page@.svelte`, e.g. /jkai/run), a load-only redirect (`+page.server.ts`
+  // with no page, e.g. /deepdive) or an endpoint. The brief check reads this
+  // list, and a missing shape there reads as "this route does not exist".
+  const routes = files.filter(p => /^src\/routes\/.*\+(page(@[^/]*)?\.svelte|page\.server\.ts|server\.ts)$/.test(p)).map(path => ({ path,
     route: '/' + path.slice('src/routes/'.length).split('/').slice(0, -1).filter(s => !/^\(.*\)$/.test(s)).join('/') }));
   return { edges: [...new Map(edges.map(e => [JSON.stringify(e), e])).values()], unresolved, dependencies, routes };
 }

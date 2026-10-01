@@ -72,6 +72,7 @@ export function candidateChanged(state: DeliveryState, revision: string): Delive
 export function deliveryPrompt(state: DeliveryState): string {
   return ['Accepted product brief (revision ' + state.brief.revision + '):', state.brief.outcome,
     'Constraints: ' + state.brief.constraints, 'Target routes: ' + state.brief.routes.join(', '),
+    ...(state.brief.newRoutes?.length ? ['New routes this feature creates: ' + state.brief.newRoutes.join(', ')] : []),
     'Scope: ' + (state.brief.scope ?? ''), 'Dependencies to verify: ' + (state.brief.dependencies ?? ''),
     'Assumptions: ' + (state.brief.assumptions ?? ''), 'Validation plan: ' + (state.brief.validation ?? ''),
     'Remaining questions to resolve during implementation: ' + (state.brief.questions ?? ''),

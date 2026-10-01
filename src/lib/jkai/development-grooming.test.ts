@@ -16,6 +16,10 @@ it('calls the selected model with edited draft, owner answers and bounded site c
   expect(context.earlierAnswers).toEqual([{ questions: 'Which metrics?', answer: 'Steps only' }]);
   expect(context.draft.dependencies).toBe('Keep my data source');
   expect(context.navigation).toContainEqual(expect.objectContaining({ href: '/health' }));
+  // The lane check needs to know what the site does NOT own.
+  expect(context.separateRepos).toContainEqual(expect.objectContaining({ repo: 'zerosumpain/marble-run' }));
+  expect(context.separateRepos).toContainEqual(expect.objectContaining({ repo: 'zerosumpain/SR-Health', paths: ['/health'] }));
+  expect(request.messages[0].content).toContain('newRoutes');
   expect(result.brief.dependencies).toContain('Verify health data');
   expect(result.criteria).toEqual(proposal.criteria);
   expect(result.grooming.model).toBe('owner-model');

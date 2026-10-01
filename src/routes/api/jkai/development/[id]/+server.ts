@@ -11,7 +11,9 @@ import { builderClient } from '$lib/jkai/builder-client';
 import { acceptDevelopment, prepareDevelopmentPreview, workspaceBroker } from '$lib/jkai/development-workspace.server';
 import { AUTOPILOT_ROUNDS, PRODUCT_AREAS, RELEASE_POLICIES, acceptanceBlocker, inspectionCandidate, releaseBlocker } from '$lib/jkai/development';
 import type { ReleasePolicy } from '$lib/jkai/development';
-import { groomDevelopmentBrief, readBriefFields } from '$lib/jkai/development-grooming.server';
+import { readBriefFields } from '$lib/jkai/development-grooming.server';
+import { checkBrief, groomDelivery } from '$lib/jkai/development-brief.server';
+import { briefAcceptanceBlocker } from '$lib/jkai/development-brief';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ params }) => {
@@ -54,15 +56,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
         if (body.briefRevision !== delivery.state.brief.revision) throw new Error('The brief changed; reload before refining.');
         if (!PRODUCT_AREAS.includes(body.area)) throw new Error('Choose a product area');
         const model = body.modelId === undefined || body.modelId === build.modelId ? { provider: build.modelProvider, modelId: build.modelId } : await resolveDevelopmentModel(body.modelId);
-        const draft = readBriefFields(body);
-        const message = text(body.message ?? '', 5000);
-        const turns = delivery.state.grooming?.turns ?? [];
-        const proposal = await groomDevelopmentBrief({ ...draft, area: body.area }, message, await relevantLessons(body.area), turns, await (await import('$lib/codegraph/development.server')).contextForBuild(id).then(r => r.block).catch(() => 'Code context unavailable; do not invent repository dependencies.'));
-        await mutateDelivery(id, 'brief_groomed', (s) => ({ ...s, originalAsk: s.originalAsk ?? build.prompt, area: body.area,
-          brief: { ...proposal.brief, revision: s.brief.revision + 1, acceptedAt: null },
-          criteria: proposal.criteria.map((text, i) => ({ id: `criterion-${i + 1}`, text, verdict: 'unverified', evidence: '', revision: null })),
-          grooming: { ...proposal.grooming, turns: [...turns, ...(message ? [{ questions: draft.questions, answer: message }] : [])].slice(-12) },
-        }), revision, { modelProvider: model.provider, modelId: model.modelId });
+        await groomDelivery(id, delivery.state, { area: body.area, draft: readBriefFields(body), message: text(body.message ?? '', 5000), revision, by: 'owner',
+          prompt: build.prompt, buildModelId: build.modelId, buildChange: { modelProvider: model.provider, modelId: model.modelId } });
         break;
       }
       case 'brief': {
@@ -73,12 +68,34 @@ export const POST: RequestHandler = async ({ params, request }) => {
         const constraints = text(body.constraints, 20000);
         const criteria = text(body.criteria, 30000).split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 30);
         const routes = text(body.routes).split('\n').map((s) => s.trim()).filter(Boolean);
-        if (!outcome || !criteria.length || routes.some((r) => !r.startsWith('/') || r.startsWith('//'))) throw new Error('Provide an outcome, acceptance criteria and valid local route paths.');
+        if (!outcome || !criteria.length || [...routes, ...extra.newRoutes].some((r) => !r.startsWith('/') || r.startsWith('//'))) throw new Error('Provide an outcome, acceptance criteria and valid local route paths.');
         if (!PRODUCT_AREAS.includes(body.area)) throw new Error('Choose a product area');
         const model = body.modelId === undefined || body.modelId === build.modelId ? { provider: build.modelProvider, modelId: build.modelId } : await resolveDevelopmentModel(body.modelId);
+        // The brief check runs on what was submitted, not on what was last
+        // groomed: the owner may have fixed a route or a criterion by hand. A
+        // failing brief is still SAVED as a draft, so the findings on screen
+        // sit beside the text they are about and nothing typed is lost.
+        const acknowledged = Array.isArray(body.override?.acknowledged) ? body.override.acknowledged.filter((k: unknown): k is string => typeof k === 'string').slice(0, 60) : [];
+        const override = { lane: body.override?.lane === true, lint: body.override?.lint === true, acknowledged };
+        const lint = await checkBrief({ outcome, criteria, routes, newRoutes: extra.newRoutes, lane: delivery.state.brief.lane }, delivery.state.brief.revision + 1,
+          { buildModelId: build.modelId, previous: delivery.state.brief.lint });
+        const blocked = briefAcceptanceBlocker(lint, override);
+        const at = new Date().toISOString();
+        const nextBrief = (s: typeof delivery.state) => ({ ...extra, lane: s.brief.lane, revision: s.brief.revision + 1, outcome, constraints, routes, lint: { ...lint, revision: s.brief.revision + 1, by: 'owner' as const } });
+        const nextCriteria = criteria.map((text, i) => ({ id: `criterion-${i + 1}`, text, verdict: 'unverified' as const, evidence: '', revision: null }));
+        // An accepted brief being edited is left accepted when the edit fails:
+        // the check refuses the change, it does not un-accept the work in hand.
+        // The findings go back with the refusal, so the page can show them and
+        // offer the overrides without un-accepting anything.
+        if (blocked && delivery.state.brief.acceptedAt) return json({ error: blocked, lint, saved: false }, { status: 400 });
+        if (blocked) {
+          await mutateDelivery(id, 'brief_check_failed', (s) => ({ ...s, originalAsk: s.originalAsk ?? build.prompt, area: body.area,
+            brief: { ...nextBrief(s), acceptedAt: null }, criteria: nextCriteria }), revision);
+          return json({ error: blocked, lint, saved: true }, { status: 400 });
+        }
         await mutateDelivery(id, 'brief_accepted', (s) => ({ ...s, originalAsk: s.originalAsk ?? build.prompt, area: body.area, stage: 'brief', acceptedAt: null, batch: null, gate: null, preview: { url: null, status: 'unavailable', detail: 'The brief changed; build and verify it again.' },
-          brief: { ...extra, revision: s.brief.revision + 1, outcome, constraints, routes, acceptedAt: new Date().toISOString() },
-          criteria: criteria.map((text, i) => ({ id: `criterion-${i + 1}`, text, verdict: 'unverified', evidence: '', revision: null })) }), revision, { prompt: outcome, modelProvider: model.provider, modelId: model.modelId });
+          brief: { ...nextBrief(s), acceptedAt: at, acceptedBy: 'owner', ...(override.lane || override.lint ? { override: { lane: override.lane, lint: override.lint, acknowledged, at } } : {}) },
+          criteria: nextCriteria }), revision, { prompt: outcome, modelProvider: model.provider, modelId: model.modelId });
         break;
       }
       case 'start':
@@ -203,13 +220,18 @@ export const POST: RequestHandler = async ({ params, request }) => {
         // Turning it on clears a previous stop reason and its round counter:
         // this is the owner saying "go again", not a resume of the run that
         // already gave up.
+        // An unaccepted brief no longer refuses: autopilot grooms, checks and
+        // accepts it itself when the check is clean, or stops and says why
+        // (`autopilotBriefDecision`).
         const on = body.enabled === true;
-        if (on && !delivery.state.brief.acceptedAt) throw new Error('Accept the brief before starting an autonomous run.');
+        // The brief page disarms a run when the ask is commissioned in another
+        // lane, and says where it went, so the run does not later push "needs you".
+        const stopReason = typeof body.reason === 'string' && body.reason.trim() ? body.reason.trim().slice(0, 400) : undefined;
         const maxRounds = Math.min(AUTOPILOT_ROUNDS.max, Math.max(1, Math.round(Number(body.maxRounds) || AUTOPILOT_ROUNDS.default)));
         await mutateDelivery(id, on ? 'autopilot_started' : 'autopilot_paused', (s) => ({ ...s,
           autopilot: on
             ? { enabled: true, rounds: 0, maxRounds, startedAt: new Date().toISOString() }
-            : s.autopilot ? { ...s.autopilot, enabled: false, stopReason: 'Stopped by you.' } : undefined }), revision);
+            : s.autopilot ? { ...s.autopilot, enabled: false, stopReason: stopReason ?? 'Stopped by you.' } : undefined }), revision);
         break;
       }
       case 'release_policy': {
