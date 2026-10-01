@@ -4,6 +4,8 @@
   import DevelopmentCodeContext from './DevelopmentCodeContext.svelte';
   import DevelopmentModelSelect from './DevelopmentModelSelect.svelte';
   import DevelopmentBriefCheck from './DevelopmentBriefCheck.svelte';
+  import { acknowledgementKeys } from '$lib/jkai/development-brief';
+  import type { BriefLint } from '$lib/constants/development';
   let modelId = $state('');
   // The shared ink cover orients the journey; the sticky rail keeps build
   // controls reachable while the paper workspace holds the current task.
@@ -33,6 +35,9 @@
   let previewPending = $state(false);
   let outcome = $state(''); let constraints = $state(''); let routes = $state(''); let newRoutes = $state(''); let criteria = $state(''); let area = $state('Platform');
   let overrideLane = $state(false); let overrideLint = $state(false);
+  // The check of an edit to an ACCEPTED brief, which the server refuses without
+  // saving — so it never reaches the stored state, and lives here instead.
+  let editLint = $state<BriefLint | null>(null);
   let scope = $state(''); let dependencies = $state(''); let assumptions = $state(''); let questions = $state(''); let validation = $state('');
   let feedback = $state(''); let grooming = $state(false);
   const briefFields = () => ({ outcome, constraints, routes, newRoutes, criteria, area, scope, dependencies, assumptions, questions, validation, modelId });
@@ -126,7 +131,8 @@
       // A brief that fails its check is saved as a draft with the findings, so
       // reload the fields from it: the revision moved, and the boxes already
       // hold exactly what was saved.
-      if (!response.ok) { if (result.lint) initialized = false; throw new Error(result.error ?? 'Operation failed'); }
+      if (!response.ok) { if (result.lint) { if (result.saved) initialized = false; else editLint = result.lint; } throw new Error(result.error ?? 'Operation failed'); }
+      if (action === 'brief') editLint = null;
       if (action === 'inspect_preview' || action === 'preview') selectTab('Preview');
       if (action === 'start' || action === 'resume' || result.next === 'building') selectTab('Build');
       if (result.next === 'accepted') selectTab('Delivery');
@@ -186,6 +192,12 @@
     { id: 'Delivery', label: 'Delivery', tone: 'quiet' },
   ]);
   const nextStep = $derived(!deliveryState?.brief.acceptedAt ? 'Review the brief, then start building.' : preparing ? 'Your preview is being prepared. Saved progress will appear here.' : expiredPreview ? 'Your preview access has expired. Refresh it to test the saved build.' : deliveryState?.preview.url ? 'Try the preview and record what should change.' : running ? 'Follow the first version as it builds. Answer any questions below.' : deliveryState?.candidate || canInspect ? 'Prepare the saved work as a preview and try it.' : 'Your brief is accepted. Build the first working page.');
+  const shownLint = $derived(deliveryState && !deliveryState.brief.acceptedAt ? deliveryState.brief.lint ?? null : editLint);
+  // Commissioned in another lane: an armed run here would otherwise wake up
+  // later and push "needs you" about work that has already gone elsewhere.
+  function disarmAfterCommission(label: string, href: string) {
+    if (flying) void act('autopilot', { enabled: false, reason: `Commissioned as a ${label} instead: ${href}. The unattended run on this feature is off.` });
+  }
   function preparePreview() { void act(deliveryState?.candidate ? 'preview' : 'inspect_preview'); }
 </script>
 
@@ -286,13 +298,13 @@
           </aside>
         {/if}
 
-        {#if !deliveryState.brief.acceptedAt && deliveryState.brief.lint}
-          <DevelopmentBriefCheck lint={deliveryState.brief.lint} ask={deliveryState.originalAsk ?? snapshot.build.prompt} title={snapshot.build.title} {busy} revision={deliveryState.brief.revision} bind:overrideLane bind:overrideLint />
+        {#if shownLint}
+          <DevelopmentBriefCheck lint={shownLint} ask={deliveryState.originalAsk ?? snapshot.build.prompt} title={snapshot.build.title} {busy} revision={deliveryState.brief.acceptedAt ? shownLint.revision : deliveryState.brief.revision} bind:overrideLane bind:overrideLint oncommissioned={disarmAfterCommission} />
         {/if}
 
         <details class="wk-fold"><summary>Original ask</summary><p class="wk-pre">{deliveryState.originalAsk ?? snapshot.build.prompt}</p></details>
 
-        <form class="wk-form" onsubmit={(e) => { e.preventDefault(); void act('brief', { ...briefFields(), override: { lane: overrideLane, lint: overrideLint } }); }}>
+        <form class="wk-form" onsubmit={(e) => { e.preventDefault(); void act('brief', { ...briefFields(), override: { lane: overrideLane, lint: overrideLint, acknowledged: shownLint && (overrideLane || overrideLint) ? acknowledgementKeys(shownLint) : [] } }); }}>
           <fieldset disabled={busy || running}>
             <div class="wk-cols wk-brief-options"><label class="wk-field"><span class="wk-label">Product area</span><select aria-label="Product area" bind:value={area}>{#each PRODUCT_AREAS as value (value)}<option>{value}</option>{/each}</select></label>
             <DevelopmentModelSelect bind:value={modelId} disabled={busy || running} /></div>

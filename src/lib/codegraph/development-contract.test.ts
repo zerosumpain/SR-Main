@@ -36,6 +36,11 @@ describe('development code evidence', () => {
     expect(analysed.dependencies[0]).toMatchObject({ name: 'example', version: '1.2.3', license: 'MIT' });
     expect(analysed.routes).toContainEqual({ path: 'src/routes/x/+page.svelte', route: '/x' });
   });
+  it('indexes layout-reset pages and load-only redirect routes, not layouts', () => {
+    const files = ['src/routes/jkai/run/+page@.svelte', 'src/routes/deepdive/+page.server.ts', 'src/routes/(app)/api/y/+server.ts', 'src/routes/z/+layout.svelte'];
+    const routes = analyseSources(files, {}).routes.map(r => r.route);
+    expect(routes).toEqual(['/jkai/run', '/deepdive', '/api/y']);
+  });
   it('imports SCIP reference direction without treating local symbols as cross-file facts', () => {
     const semantic = scipRelationships({ documents: [
       { relative_path: 'src/a.ts', occurrences: [{ symbol: 'package a', symbol_roles: 1 }, { symbol: 'local 1', symbol_roles: 1 }] },

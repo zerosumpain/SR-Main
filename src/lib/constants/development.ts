@@ -80,6 +80,8 @@ export interface BriefLint {
   findings: BriefFinding[];
   /** False when no route manifest was available, so routes went unchecked. */
   routesChecked: boolean;
+  /** Who caused this check: the owner's page (groom or Accept) or an unattended run. */
+  by?: 'owner' | 'autopilot';
   /** The criteria the model pass judged, so an unchanged set is not paid for twice. */
   judged?: { key: string; model: string };
 }
@@ -117,7 +119,7 @@ export interface DeliveryState {
     /** The last brief check, written at grooming and at every acceptance attempt. */
     lint?: BriefLint;
     /** What the owner chose to accept past, recorded so the history says so. */
-    override?: { lane?: boolean; lint?: boolean; at: string };
+    override?: { lane?: boolean; lint?: boolean; acknowledged?: string[]; at: string };
     acceptedAt: string | null;
     /** Absent on briefs accepted before autopilot could accept one. */
     acceptedBy?: 'owner' | 'autopilot';

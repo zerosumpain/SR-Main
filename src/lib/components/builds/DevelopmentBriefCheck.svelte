@@ -9,9 +9,10 @@
   // than a new lane.
   import type { BriefLint } from '$lib/constants/development';
   let {
-    lint, ask, title, busy, revision,
+    lint, ask, title, busy, revision, oncommissioned,
     overrideLane = $bindable(false), overrideLint = $bindable(false),
-  }: { lint: BriefLint; ask: string; title: string; busy: boolean; revision: number; overrideLane?: boolean; overrideLint?: boolean } = $props();
+  }: { lint: BriefLint; ask: string; title: string; busy: boolean; revision: number; overrideLane?: boolean; overrideLint?: boolean;
+    oncommissioned?: (label: string, href: string) => void } = $props();
 
   const LANE_LABEL = { site: 'The site', studio: 'Studio', 'other-repo': 'Another repository' } as const;
   const blocking = $derived(lint.findings.filter((f) => f.severity === 'block' && f.kind !== 'lane'));
@@ -36,6 +37,7 @@
       if (!response.ok) throw new Error(result.error ?? 'The build could not be started.');
       const id = result.buildId ?? result.id;
       commissioned = { label: kind === 'studio' ? 'Studio explainer' : 'standalone app', href: result.url ?? `/jkai/builds/${id}` };
+      oncommissioned?.(commissioned.label, commissioned.href);
     } catch (e) { failure = e instanceof Error ? e.message : 'The build could not be started.'; }
     finally { commissioning = false; }
   }

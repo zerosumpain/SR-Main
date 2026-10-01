@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  BRIEF_GRACE_MS, autopilotBriefDecision, briefAcceptanceBlocker, briefLane, criterionFindings, lintBrief,
+  BRIEF_GRACE_MS, acknowledgementKeys, autopilotBriefDecision, briefAcceptanceBlocker, briefLane, criterionFindings, lintBrief,
   parseCriteriaJudgement, parseLane, routeExists, routeOwner,
 } from './development-brief';
 import { parseDevelopmentProposal } from './development-grooming.server';
@@ -115,37 +115,66 @@ describe('criteria', () => {
 describe('acceptance', () => {
   it('needs an explicit lane override for anything that is not the site, separately from the lint override', () => {
     const studio = lintBrief({ ...clean, lane: { lane: 'studio', reason: 'A standalone explainer.' } }, MANIFEST, 1);
+    const seen = acknowledgementKeys(studio);
     expect(briefAcceptanceBlocker(studio)).toMatch(/Studio lane/);
-    expect(briefAcceptanceBlocker(studio, { lint: true })).toMatch(/Studio lane/);
-    expect(briefAcceptanceBlocker(studio, { lane: true })).toBeNull();
+    expect(briefAcceptanceBlocker(studio, { lint: true, acknowledged: seen })).toMatch(/Studio lane/);
+    expect(briefAcceptanceBlocker(studio, { lane: true, acknowledged: seen })).toBeNull();
     const vague = lintBrief({ ...clean, criteria: ['It looks nice'] }, MANIFEST, 1);
     expect(briefAcceptanceBlocker(vague)).toMatch(/1 problem/);
-    expect(briefAcceptanceBlocker(vague, { lane: true })).toMatch(/1 problem/);
-    expect(briefAcceptanceBlocker(vague, { lint: true })).toBeNull();
+    expect(briefAcceptanceBlocker(vague, { lane: true, acknowledged: acknowledgementKeys(vague) })).toMatch(/1 problem/);
+    expect(briefAcceptanceBlocker(vague, { lint: true, acknowledged: acknowledgementKeys(vague) })).toBeNull();
     expect(briefAcceptanceBlocker(lintBrief(clean, MANIFEST, 1))).toBeNull();
+  });
+
+  it('binds an override to the findings the owner saw', () => {
+    const before = lintBrief({ ...clean, criteria: ['It looks nice'] }, MANIFEST, 1);
+    const seen = acknowledgementKeys(before);
+    // An edit that adds a second problem is not covered by the old tick.
+    const after = lintBrief({ ...clean, criteria: ['It looks nice'], routes: ['/sausages'] }, MANIFEST, 2);
+    expect(briefAcceptanceBlocker(after, { lint: true, acknowledged: seen })).toMatch(/1 new problem.*does not exist/);
+    // A tick with no acknowledged set covers nothing.
+    expect(briefAcceptanceBlocker(before, { lint: true })).toMatch(/new problem/);
+    // Nor does a lane confirmation carry over to a different lane.
+    const studio = lintBrief({ ...clean, lane: { lane: 'studio', reason: 'x' } }, MANIFEST, 1);
+    const marble = lintBrief({ ...clean, routes: ['/marble-run'] }, MANIFEST, 2);
+    expect(briefAcceptanceBlocker(marble, { lane: true, acknowledged: acknowledgementKeys(studio) })).toMatch(/changed since you confirmed/);
   });
 });
 
 describe('autopilot on an unaccepted brief', () => {
   const NOW = Date.parse('2026-10-01T12:00:00Z');
   const ago = (ms: number) => new Date(NOW - ms).toISOString();
+  const LONG = BRIEF_GRACE_MS + 1;
   const draft = (lint?: Partial<BriefLint>, extra: { questions?: string; by?: 'owner' | 'autopilot'; groomedAgo?: number } = {}) => {
     const state = newDelivery(clean.outcome, 'Public site', clean.criteria, { autopilot: true });
+    state.autopilot!.startedAt = ago(LONG);
     state.brief.routes = clean.routes;
     state.brief.questions = extra.questions ?? '';
-    state.grooming = { model: 'm', at: ago(extra.groomedAgo ?? BRIEF_GRACE_MS + 1), summary: 's', by: extra.by ?? 'owner' };
-    if (lint) state.brief.lint = { ...lintBrief(clean, MANIFEST, state.brief.revision, ago(extra.groomedAgo ?? BRIEF_GRACE_MS + 1)), ...lint };
+    state.grooming = { model: 'm', at: ago(extra.groomedAgo ?? LONG), summary: 's', by: extra.by ?? 'owner' };
+    if (lint) {
+      const base = lintBrief({ ...clean, lane: { lane: 'site', reason: 'Reads site data' } }, MANIFEST, state.brief.revision, ago(extra.groomedAgo ?? LONG));
+      state.brief.lint = { ...base, judged: { key: 'k', model: 'judge' }, by: extra.by ?? 'owner', ...lint };
+    }
     return state;
   };
 
-  it('grooms a brief nobody has groomed', () => {
+  it('grooms a brief nobody has groomed, but not inside the grace period after commission', () => {
     const state = newDelivery('A thing', 'Public site', [], { autopilot: true });
+    state.autopilot!.startedAt = ago(60_000);
+    // The owner's page grooms on mount; racing it would make the brief look like autopilot's own.
+    expect(autopilotBriefDecision(state, NOW)).toEqual({ action: 'wait' });
+    state.autopilot!.startedAt = ago(LONG);
     expect(autopilotBriefDecision(state, NOW)).toEqual({ action: 'groom' });
   });
 
-  it('leaves an owner-groomed brief alone for the grace period, but not its own', () => {
+  it('leaves an owner-touched brief alone for the grace period, but not its own writes', () => {
     expect(autopilotBriefDecision(draft({}, { groomedAgo: 60_000 }), NOW)).toEqual({ action: 'wait' });
     expect(autopilotBriefDecision(draft({}, { groomedAgo: 60_000, by: 'autopilot' }), NOW)).toEqual({ action: 'accept' });
+    // Autopilot's own re-check of an old owner grooming does not restart the clock.
+    const rechecked = draft({ by: 'autopilot', at: ago(1000) });
+    expect(autopilotBriefDecision(rechecked, NOW)).toEqual({ action: 'accept' });
+    // An owner's failed Accept does.
+    expect(autopilotBriefDecision(draft({ by: 'owner', at: ago(1000) }), NOW)).toEqual({ action: 'wait' });
   });
 
   it('checks a brief whose check is missing or older than the brief', () => {
@@ -153,19 +182,22 @@ describe('autopilot on an unaccepted brief', () => {
     expect(autopilotBriefDecision(draft({ revision: 0 }), NOW)).toEqual({ action: 'lint' });
   });
 
-  it('accepts only a site-lane brief with a clean check, checked routes and no open question', () => {
+  it('accepts only a site-lane brief with a clean, model-read check, checked routes and no open question', () => {
     expect(autopilotBriefDecision(draft({}), NOW)).toEqual({ action: 'accept' });
     expect(autopilotBriefDecision(draft({}, { questions: 'Which colour?\n' }), NOW)).toEqual({ action: 'answer', questions: ['Which colour?'] });
   });
 
-  it('stops, with the reason, on a wrong lane, a blocking finding or unchecked routes', () => {
+  it('stops, with the reason, on a wrong or unchecked lane, a blocking finding, unchecked routes or an unread criteria set', () => {
     const studio = autopilotBriefDecision(draft({ lane: { lane: 'studio', reason: 'A toy.', source: 'grooming' } }), NOW);
     expect(studio).toMatchObject({ action: 'stop', reason: expect.stringMatching(/Studio lane/) });
+    const unchecked = autopilotBriefDecision(draft({ lane: { lane: 'site', reason: 'never groomed', source: 'unchecked' } }), NOW);
+    expect(unchecked).toMatchObject({ action: 'stop', reason: expect.stringMatching(/lane was never checked/) });
     const vague = autopilotBriefDecision(draft({ findings: [{ kind: 'criterion', severity: 'block', subject: 'It looks nice', message: 'A judgement.' }] }), NOW);
     expect(vague).toMatchObject({ action: 'stop', reason: expect.stringMatching(/It looks nice.*A judgement/) });
     // A warning alone does not stop the run.
     expect(autopilotBriefDecision(draft({ findings: [{ kind: 'route', severity: 'warn', subject: '', message: 'No route' }] }), NOW)).toEqual({ action: 'accept' });
     expect(autopilotBriefDecision(draft({ routesChecked: false }), NOW)).toMatchObject({ action: 'stop', reason: expect.stringMatching(/route manifest/) });
+    expect(autopilotBriefDecision(draft({ judged: undefined }), NOW)).toMatchObject({ action: 'stop', reason: expect.stringMatching(/reviewer model could not check/) });
   });
 
   it('does nothing once the brief is accepted', () => {

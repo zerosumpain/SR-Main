@@ -210,21 +210,42 @@ export function parseCriteriaJudgement(content: string, criteria: string[]): Bri
 
 export const blockingFindings = (lint: BriefLint) => lint.findings.filter(f => f.severity === 'block');
 
+/** A finding's identity, so an override can name exactly what it was given for. */
+export const findingKey = (f: Pick<BriefFinding, 'kind' | 'subject' | 'message'>) => `${f.kind}|${f.subject}|${f.message}`;
+export const laneKey = (lane: Pick<BriefLane, 'lane' | 'repo'>) => `lane|${lane.lane}|${lane.repo ?? ''}`;
+/**
+ * What ticking the overrides acknowledges: the lane as shown and each blocking
+ * finding as shown. The page sends this with Accept, so an override covers the
+ * problems the owner actually read — an edit that introduces a new one is
+ * checked afresh rather than waved through by an old tick.
+ */
+export function acknowledgementKeys(lint: BriefLint): string[] {
+  return [...(lint.lane.lane !== 'site' ? [laneKey(lint.lane)] : []), ...blockingFindings(lint).filter(f => f.kind !== 'lane').map(findingKey)];
+}
+
+function laneMessage(lint: BriefLint): string {
+  return lint.lane.lane === 'studio'
+    ? `This looks like a standalone piece for the Studio lane, not a site change: ${lint.lane.reason} Commission it there, or confirm it belongs on the site.`
+    : `This belongs in ${lint.lane.repo ?? 'another repository'}: ${lint.lane.reason} Commission it there, or confirm it belongs on the site.`;
+}
+
 /**
  * Why the owner may not accept this brief yet, or null. The lane and the lint
  * are separate overrides on purpose: "build it on the site anyway" is a
  * decision about where the work belongs, and "accept despite these findings"
- * is one about how well it is specified — ticking one is not the other.
+ * is one about how well it is specified — ticking one is not the other. Each
+ * covers only what `acknowledged` names (see `acknowledgementKeys`).
  */
-export function briefAcceptanceBlocker(lint: BriefLint, override: { lane?: boolean; lint?: boolean } = {}): string | null {
-  if (lint.lane.lane !== 'site' && !override.lane) {
-    return lint.lane.lane === 'studio'
-      ? `This looks like a standalone piece for the Studio lane, not a site change: ${lint.lane.reason} Commission it there, or confirm it belongs on the site.`
-      : `This belongs in ${lint.lane.repo ?? 'another repository'}: ${lint.lane.reason} Commission it there, or confirm it belongs on the site.`;
+export function briefAcceptanceBlocker(lint: BriefLint, override: { lane?: boolean; lint?: boolean; acknowledged?: string[] } = {}): string | null {
+  const seen = new Set(override.acknowledged ?? []);
+  if (lint.lane.lane !== 'site' && !(override.lane && seen.has(laneKey(lint.lane)))) {
+    return override.lane ? `The lane check changed since you confirmed it. ${laneMessage(lint)}` : laneMessage(lint);
   }
   const blocking = blockingFindings(lint).filter(f => f.kind !== 'lane');
-  if (blocking.length && !override.lint) return `The brief has ${blocking.length} problem${blocking.length === 1 ? '' : 's'} to fix before it is built: ${blocking[0].message}${blocking.length > 1 ? ' See the brief check for the rest.' : ''}`;
-  return null;
+  const unseen = override.lint ? blocking.filter(f => !seen.has(findingKey(f))) : blocking;
+  if (!unseen.length) return null;
+  const count = `${unseen.length} ${override.lint ? 'new ' : ''}problem${unseen.length === 1 ? '' : 's'}`;
+  return `The brief has ${count} to fix before it is built${override.lint ? ' (your override covered only the ones you saw)' : ''}: ${unseen[0].message}${unseen.length > 1 ? ' See the brief check for the rest.' : ''}`;
 }
 
 // ── the unattended path ─────────────────────────────────────────────────────
@@ -257,16 +278,29 @@ export const briefQuestions = (state: DeliveryState) => (state.brief.questions ?
  */
 export function autopilotBriefDecision(state: DeliveryState, now: number): BriefDecision {
   if (state.brief.acceptedAt) return { action: 'wait' };
-  if (!state.grooming) return { action: 'groom' };
-  const touched = Math.max(0, ...[state.grooming.at, state.brief.lint?.at].map(at => Date.parse(at ?? '')).filter(Number.isFinite));
-  if (state.grooming.by !== 'autopilot' && now - touched < BRIEF_GRACE_MS) return { action: 'wait' };
+  // The grace starts at commission, not at the first grooming: the owner's page
+  // grooms on mount, and if this run's grooming won that race the brief would
+  // read as autopilot's own and be accepted while the owner was reading it.
+  const since = (at: string | undefined) => { const t = Date.parse(at ?? ''); return Number.isFinite(t) ? t : 0; };
+  if (!state.grooming) return now - since(state.autopilot?.startedAt) < BRIEF_GRACE_MS ? { action: 'wait' } : { action: 'groom' };
+  // Only the OWNER's writes restart the grace; autopilot's own check does not.
+  const ownerTouched = Math.max(state.grooming.by !== 'autopilot' ? since(state.grooming.at) : 0,
+    state.brief.lint && state.brief.lint.by !== 'autopilot' ? since(state.brief.lint.at) : 0);
+  if (now - ownerTouched < BRIEF_GRACE_MS) return { action: 'wait' };
   const lint = state.brief.lint;
   if (!lint || lint.revision !== state.brief.revision) return { action: 'lint' };
-  const lane = briefAcceptanceBlocker(lint, { lint: true });
-  if (lane) return { action: 'stop', reason: `Autopilot will not accept this brief on its own. ${lane}` };
+  const refuse = (why: string): BriefDecision => ({ action: 'stop', reason: `Autopilot will not accept this brief on its own${why}` });
+  if (lint.lane.lane !== 'site') return refuse(`. ${laneMessage(lint)}`);
+  // "site" by default is not a verdict. An old brief or a grooming that returned
+  // no readable lane has never been asked where it belongs.
+  if (lint.lane.source === 'unchecked') return refuse(': its lane was never checked. Refine the brief so grooming proposes one, or accept it yourself.');
   const blocking = blockingFindings(lint);
-  if (blocking.length) return { action: 'stop', reason: `Autopilot will not accept this brief on its own: ${blocking.length} problem${blocking.length === 1 ? '' : 's'} in the brief check. ${blocking[0].subject ? `"${blocking[0].subject.slice(0, 80)}": ` : ''}${blocking[0].message}` };
-  if (!lint.routesChecked) return { action: 'stop', reason: 'Autopilot will not accept this brief on its own: no route manifest was available, so its target routes could not be checked.' };
+  if (blocking.length) return refuse(`: ${blocking.length} problem${blocking.length === 1 ? '' : 's'} in the brief check. ${blocking[0].subject ? `"${blocking[0].subject.slice(0, 80)}": ` : ''}${blocking[0].message}`);
+  if (!lint.routesChecked) return refuse(': no route manifest was available, so its target routes could not be checked.');
+  // The model pass is optional for a person, who reads the criteria; for an
+  // unattended run it is the only reader, so a pass that errored or timed out
+  // is a reason to stop, not something to skip quietly.
+  if (state.criteria.length && !lint.judged) return refuse(': the reviewer model could not check its criteria. Check them and accept it yourself.');
   const questions = briefQuestions(state);
   if (questions.length) return { action: 'answer', questions };
   return { action: 'accept' };

@@ -75,23 +75,26 @@ export const POST: RequestHandler = async ({ params, request }) => {
         // groomed: the owner may have fixed a route or a criterion by hand. A
         // failing brief is still SAVED as a draft, so the findings on screen
         // sit beside the text they are about and nothing typed is lost.
-        const override = { lane: body.override?.lane === true, lint: body.override?.lint === true };
+        const acknowledged = Array.isArray(body.override?.acknowledged) ? body.override.acknowledged.filter((k: unknown): k is string => typeof k === 'string').slice(0, 60) : [];
+        const override = { lane: body.override?.lane === true, lint: body.override?.lint === true, acknowledged };
         const lint = await checkBrief({ outcome, criteria, routes, newRoutes: extra.newRoutes, lane: delivery.state.brief.lane }, delivery.state.brief.revision + 1,
           { buildModelId: build.modelId, previous: delivery.state.brief.lint });
         const blocked = briefAcceptanceBlocker(lint, override);
         const at = new Date().toISOString();
-        const nextBrief = (s: typeof delivery.state) => ({ ...extra, lane: s.brief.lane, revision: s.brief.revision + 1, outcome, constraints, routes, lint: { ...lint, revision: s.brief.revision + 1 } });
+        const nextBrief = (s: typeof delivery.state) => ({ ...extra, lane: s.brief.lane, revision: s.brief.revision + 1, outcome, constraints, routes, lint: { ...lint, revision: s.brief.revision + 1, by: 'owner' as const } });
         const nextCriteria = criteria.map((text, i) => ({ id: `criterion-${i + 1}`, text, verdict: 'unverified' as const, evidence: '', revision: null }));
         // An accepted brief being edited is left accepted when the edit fails:
         // the check refuses the change, it does not un-accept the work in hand.
-        if (blocked && delivery.state.brief.acceptedAt) throw new Error(blocked);
+        // The findings go back with the refusal, so the page can show them and
+        // offer the overrides without un-accepting anything.
+        if (blocked && delivery.state.brief.acceptedAt) return json({ error: blocked, lint, saved: false }, { status: 400 });
         if (blocked) {
           await mutateDelivery(id, 'brief_check_failed', (s) => ({ ...s, originalAsk: s.originalAsk ?? build.prompt, area: body.area,
             brief: { ...nextBrief(s), acceptedAt: null }, criteria: nextCriteria }), revision);
-          return json({ error: blocked, lint }, { status: 400 });
+          return json({ error: blocked, lint, saved: true }, { status: 400 });
         }
         await mutateDelivery(id, 'brief_accepted', (s) => ({ ...s, originalAsk: s.originalAsk ?? build.prompt, area: body.area, stage: 'brief', acceptedAt: null, batch: null, gate: null, preview: { url: null, status: 'unavailable', detail: 'The brief changed; build and verify it again.' },
-          brief: { ...nextBrief(s), acceptedAt: at, acceptedBy: 'owner', ...(override.lane || override.lint ? { override: { ...override, at } } : {}) },
+          brief: { ...nextBrief(s), acceptedAt: at, acceptedBy: 'owner', ...(override.lane || override.lint ? { override: { lane: override.lane, lint: override.lint, acknowledged, at } } : {}) },
           criteria: nextCriteria }), revision, { prompt: outcome, modelProvider: model.provider, modelId: model.modelId });
         break;
       }
@@ -221,11 +224,14 @@ export const POST: RequestHandler = async ({ params, request }) => {
         // accepts it itself when the check is clean, or stops and says why
         // (`autopilotBriefDecision`).
         const on = body.enabled === true;
+        // The brief page disarms a run when the ask is commissioned in another
+        // lane, and says where it went, so the run does not later push "needs you".
+        const stopReason = typeof body.reason === 'string' && body.reason.trim() ? body.reason.trim().slice(0, 400) : undefined;
         const maxRounds = Math.min(AUTOPILOT_ROUNDS.max, Math.max(1, Math.round(Number(body.maxRounds) || AUTOPILOT_ROUNDS.default)));
         await mutateDelivery(id, on ? 'autopilot_started' : 'autopilot_paused', (s) => ({ ...s,
           autopilot: on
             ? { enabled: true, rounds: 0, maxRounds, startedAt: new Date().toISOString() }
-            : s.autopilot ? { ...s.autopilot, enabled: false, stopReason: 'Stopped by you.' } : undefined }), revision);
+            : s.autopilot ? { ...s.autopilot, enabled: false, stopReason: stopReason ?? 'Stopped by you.' } : undefined }), revision);
         break;
       }
       case 'release_policy': {

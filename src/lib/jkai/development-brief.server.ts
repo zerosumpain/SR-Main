@@ -112,7 +112,7 @@ export async function groomDelivery(buildId: string, state: DeliveryState, optio
   const lint = await checkBrief({ outcome: proposal.brief.outcome, criteria: proposal.criteria, routes: proposal.brief.routes, newRoutes: proposal.brief.newRoutes, lane: proposal.brief.lane },
     next, { buildModelId: options.buildModelId, previous: state.brief.lint });
   return mutateDelivery(buildId, 'brief_groomed', (s) => ({ ...s, originalAsk: s.originalAsk ?? options.prompt, area: options.area,
-    brief: { ...proposal.brief, revision: s.brief.revision + 1, acceptedAt: null, lint: { ...lint, revision: s.brief.revision + 1 } },
+    brief: { ...proposal.brief, revision: s.brief.revision + 1, acceptedAt: null, lint: { ...lint, revision: s.brief.revision + 1, by: options.by } },
     criteria: proposal.criteria.map((text, i) => ({ id: `criterion-${i + 1}`, text, verdict: 'unverified', evidence: '', revision: null })),
     grooming: { ...proposal.grooming, by: options.by, turns: [...turns, ...(options.message ? [{ questions: options.draft.questions, answer: options.message }] : [])].slice(-12) },
   }), options.revision, options.buildChange as Parameters<typeof mutateDelivery>[4]);
@@ -145,7 +145,7 @@ export async function autopilotBrief(
       }
       case 'lint': {
         const lint = await checkBrief(briefInput(state), state.brief.revision, { buildModelId: build.modelId, previous: state.brief.lint });
-        await mutateDelivery(buildId, 'brief_checked', s => ({ ...s, brief: { ...s.brief, lint } }), delivery.revision);
+        await mutateDelivery(buildId, 'brief_checked', s => ({ ...s, brief: { ...s.brief, lint: { ...lint, by: 'autopilot' } } }), delivery.revision);
         return 'assessed';
       }
       case 'answer': {
