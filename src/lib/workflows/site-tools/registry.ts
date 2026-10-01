@@ -54,7 +54,6 @@ import './tools/apple-calendar';
 import './tools/node-call';
 import './tools/custom-tool-admin';
 import './tools/web';
-import './tools/node-builder';
 import './tools/news';
 import './tools/presentations';
 import './tools/datastore';
@@ -145,7 +144,6 @@ export function getToolsetManifest(): Array<{
     gmail: 'Gmail — search/read messages and threads on connected accounts, list labels, send/reply/modify-labels (write actions require user confirmation)',
     'apple-calendar': 'Apple Calendar — list iCloud calendars/events and create events on a selected calendar (creation requires user confirmation)',
     web: 'Web — fetch the readable contents of a public HTTP/HTTPS URL (HTML or plain text). Use when the user shares a link or you need to look up the page behind a URL.',
-    'node-builder': 'Workflow node codegen — scaffold, validate, and commit/deploy new canvas node types (repo-modifying; deploy ships to production and is confirmation-gated)',
     'custom-tools': 'Custom/ephemeral tools — author a throwaway tool for the current turn and promote a useful one into a persistent tool',
     news: 'Live technical news — search the current Hacker News and Lobsters wires and return source links',
     decks: 'sr. decks presentations — list, build from a spec, inspect, and manage block-based slide decks',

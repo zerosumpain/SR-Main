@@ -66,16 +66,17 @@ export function amendOpNodeSpec(op: AmendOp): { type: string; config: Record<str
  * error listing the valid types.
  */
 export async function validateNodeType(type: string): Promise<string | null> {
-  const { registry } = await import('$lib/workflows');
-  if (registry.getDefinition(type)) return null;
-  const valid = registry.listDefinitions().map((d) => d.type).sort();
+  // Asked of SR-Workflows, which runs the graph: dynamic nodes count as valid.
+  const { invokeWorkflowRuntime } = await import('$lib/workflows/runtime-client');
+  const valid = await invokeWorkflowRuntime<string[]>({ action: 'node_types' });
+  if (valid.includes(type)) return null;
   return `Unknown node type "${type}". Valid types: ${valid.join(', ')}. If you need a new integration, use create_node via workflow_create instead of inventing a type name.`;
 }
 
 /** Validate config against a node's configSchema + semantic rules. Null if OK, else an error string. */
 export async function validateNodeConfig(type: string, config: Record<string, unknown>): Promise<string | null> {
-  const { registry } = await import('$lib/workflows');
-  const def = registry.getDefinition(type);
+  const { getDefinition } = await import('$lib/workflows/registry-client');
+  const def = getDefinition(type);
   // Defer to the shared validator from the orchestrator — same checks on every
   // entry point (unknown keys, unsupported templates, code-execute typos,
   // per-operation semantic gaps).

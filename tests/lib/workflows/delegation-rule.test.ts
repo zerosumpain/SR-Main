@@ -14,7 +14,7 @@ const ROOT = process.cwd();
 
 describe('the delegation rule is not duplicated', () => {
   const files = [
-    'src/lib/workflows/index.ts',
+    'src/lib/workflows/platform-boot.ts',
     'src/lib/workflows/whatsapp/service.ts',
   ];
 
@@ -35,7 +35,7 @@ describe('the delegation rule is not duplicated', () => {
   });
 
   it('bootWhatsApp gates the inbound bridge on the same rule', () => {
-    const src = readFileSync(join(ROOT, 'src/lib/workflows/index.ts'), 'utf8');
+    const src = readFileSync(join(ROOT, 'src/lib/workflows/platform-boot.ts'), 'utf8');
     const line = src.split('\n').find((l) => l.includes('const delegated ='));
     expect(line, 'bootWhatsApp must compute `delegated`').toBeDefined();
     expect(line).toMatch(/ownsWhatsAppSession\(\)/);

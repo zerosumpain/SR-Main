@@ -188,7 +188,6 @@ const BASELINE_CYCLES = [
   'mcp <-> toolpolicy',
   'models <-> server',
   'monitors <-> workflows',
-  'node-builder <-> workflows',
   'routing <-> server',
   'selfimprove <-> workflows',
 ];
