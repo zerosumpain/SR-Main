@@ -35,6 +35,10 @@ const command = async (file, args, options = {}) => {
 };
 const git = (cwd, ...args) => command('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', `safe.directory=${cwd}`, '-c', 'user.name=SR local builder', '-c', 'user.email=builder@example.test', '-C', cwd, ...args]);
 const docker = (...args) => command('docker', args);
+/** Per-preview network aliases; see provisionPreview for why not the names. */
+const PREVIEW_DB_HOST = 'sr-preview-db';
+// Matches local-preview-ingress.mjs's upstream check (^sr-preview-).
+const PREVIEW_APP_HOST = 'sr-preview-app';
 const validId = (id) => { if (typeof id !== 'string' || !/^[a-zA-Z0-9-]{1,80}$/.test(id)) throw new Error('Invalid build id'); return id; };
 const excluded = ['core', 'core.*', '.env', '.env.*', 'keys.json', 'node_modules', '.svelte-kit', '/build', '.git', '/data', '.pi', '/sessions'];
 async function copySource(from, to, removeMissing = false) {
@@ -355,15 +359,22 @@ async function provisionPreview(id, revision, path, plan, options) {
   if (!port) throw new Error('All eight preview slots are occupied; the previous working preview is retained. Close another preview to make room.');
   try {
   await docker('network', 'create', '--internal', network);
-  await docker('run', '-d', '--name', dbName, '--network', network, '--memory', '512m',
+  // Containers reach each other by SHORT aliases, never by container name. A
+  // name is a DNS label, capped at 63 characters, and a batch trial's database
+  // is `sr-preview-batch-<uuid>-<hex>-db` — 65. It never resolved, drizzle-kit
+  // exited on the connection without a word, and every batch integration
+  // failed at "schema push": no development feature could ever be accepted
+  // (found on 29915e85, 2026-10-01). The network is per preview, so the aliases
+  // are unique where they are used.
+  await docker('run', '-d', '--name', dbName, '--network', network, '--network-alias', PREVIEW_DB_HOST, '--memory', '512m',
     '-e', 'POSTGRES_USER=preview', '-e', `POSTGRES_PASSWORD=${credentials}`, '-e', 'POSTGRES_DB=preview', 'pgvector/pgvector:pg16');
   const image = 'sr-development-preview:v4';
-  await docker('run', '-d', '--name', name, '--network', network, '--memory', '8g', '--cpus', '4', '--pids-limit', '256',
+  await docker('run', '-d', '--name', name, '--network', network, '--network-alias', PREVIEW_APP_HOST, '--memory', '8g', '--cpus', '4', '--pids-limit', '256',
     '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
     // Nested Bubblewrap needs user namespaces and an unmasked /proc to mount its own.
     '--security-opt', `seccomp=${source}/scripts/development-seccomp.json`, '--security-opt', 'systempaths=unconfined',
     '-w', '/workspace',
-    '-e', `DATABASE_URL=postgresql://preview:${credentials}@${dbName}:5432/preview`,
+    '-e', `DATABASE_URL=postgresql://preview:${credentials}@${PREVIEW_DB_HOST}:5432/preview`,
     '-e', 'NODE_OPTIONS=--max-old-space-size=6144', '-e', `PREVIEW_PARENT_ORIGIN=${process.env.BUILDER_PREVIEW_PARENT_ORIGIN ?? 'http://127.0.0.1:5275'}`, '-e', 'PORT=5276', '-e', 'HOST=127.0.0.1',
     '-e', 'AUTH_SECRET=isolated-preview-only', '-e', 'AUTH_TRUST_HOST=true', '-e', 'AUTH_ALLOWED_EMAILS=preview@example.test',
     '-e', 'PUBLIC_VAPID_PUBLIC_KEY=', '-e', `INTEGRATION_CREDENTIALS_KEY=${randomBytes(32).toString('hex')}`, '-e', 'JKAI_SERVICE_ROLE=builder',
@@ -396,7 +407,7 @@ async function provisionPreview(id, revision, path, plan, options) {
   await docker('exec', '-d', name, 'sh', '-c', 'node build > /tmp/site.log 2>&1');
   await docker('exec', '-d', name, 'node', '/tmp/sr-preview-proxy.mjs');
   await docker('run', '-d', '--name', gateway, '--user', '1000:1000', '--memory', '128m', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
-    '-p', `0.0.0.0:${port}:5275`, '-e', `PREVIEW_UPSTREAM=${name}`, 'node:22.23.2-bookworm-slim', 'sleep', 'infinity');
+    '-p', `0.0.0.0:${port}:5275`, '-e', `PREVIEW_UPSTREAM=${PREVIEW_APP_HOST}`, 'node:22.23.2-bookworm-slim', 'sleep', 'infinity');
   await docker('network', 'connect', network, gateway);
   await docker('cp', `${source}/scripts/local-preview-ingress.mjs`, `${gateway}:/tmp/ingress.mjs`);
   await docker('exec', '-d', gateway, 'node', '/tmp/ingress.mjs');
