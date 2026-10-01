@@ -7,7 +7,8 @@ description: "Use current site tools for documents, visualizations, saved APIs a
 
 Discover the appropriate capability through `tool_search` and read its current
 arguments with `tool_describe`. Use `write_document` for files and
-`render_table`, `render_chart` or `render_diagram` when they help the answer.
+`render_table`, `render_chart`, `render_map` or `render_diagram` when they help the answer
+(`render_map` takes place names, not remembered coordinates).
 Check returned artifact IDs and links before reporting success.
 
 For authenticated APIs, inspect saved API definitions and credential handles.
