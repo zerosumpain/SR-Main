@@ -84,7 +84,11 @@ export async function contextForBuild(buildId: string, iterationId?: string, pre
         sourceIds: external.map(s => s.id), snapshotId: context.snapshot?.id ?? null, reason: plan?.reason ?? 'accepted brief', status: context.status, files: context.files } });
     await recordServed({ lessonIds: rendered?.lessonIds ?? [], episodeIds: rendered?.episodeIds ?? [] }).catch(() => {});
   }
-  return { block, context };
+  // `lessons` is the ranked, owner-filtered set behind `block`, for a caller
+  // that needs them as data — the development reviewer quotes them as house
+  // rules. Called without an iterationId this writes nothing: no serve row, no
+  // served-count bump, so a review does not read as the builder being served.
+  return { block, context, lessons: retrieved?.lessons ?? [] };
 }
 
 /** Copy accepted, owner-authored lessons using stable identity and original evidence. */

@@ -15,7 +15,7 @@ export async function workspaceBroker(action: string, buildId: string, extra: Re
   } as RequestInit & { dispatcher: Agent });
   const result = await response.json();
   if (!response.ok) throw new DevelopmentFailure(result.error ?? 'Workspace operation failed', ['feature', 'deadline'].includes(result.kind) ? result.kind : 'infrastructure');
-  return result as { file?: string; text?: string; truncated?: boolean; codegraph?: import('$lib/codegraph/snapshot').StructuralSnapshot; baseline?: string; revision: string; url: string; batch: string; complete?: boolean; evidence?: string[]; detail?: string; timings?: Record<string, number>; changes?: { files: string[]; patch: string } };
+  return result as { file?: string; text?: string; truncated?: boolean; codegraph?: import('$lib/codegraph/snapshot').StructuralSnapshot; baseline?: string; revision: string; url: string; batch: string; complete?: boolean; evidence?: string[]; observations?: import('./development-review.server').PreviewObservation[]; screenshots?: import('./development-review.server').ReviewScreenshot[]; detail?: string; timings?: Record<string, number>; changes?: { files: string[]; patch: string } };
 }
 export async function snapshotCandidate(buildId: string) {
   const result = await workspaceBroker('snapshot', buildId);
