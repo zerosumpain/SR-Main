@@ -1,3 +1,4 @@
+import { parsePage, type PanelBlock, type PanelPage } from '$lib/jkai/panel/schema';
 import { isArtifact, type Artifact } from '$lib/workflows/site-tools/artifact-types';
 
 /**
@@ -204,3 +205,40 @@ export function nativeSources(metadata: Record<string, unknown>): NativeSource[]
   }
   return out;
 }
+
+/**
+ * The turn's desk page (SR-Jkai-Core's right-hand panel), for the app's drawer.
+ *
+ * Read with the schema the desk itself draws with (`$lib/jkai/panel/schema`,
+ * shared byte for byte with Core), so a row written by an older or newer Core
+ * that no longer validates reaches the phone as nothing rather than as a shape
+ * it would mis-draw. Two things are taken out for the phone:
+ *
+ * - `artifact` blocks — the raw Vega/Mermaid spec. The app already gets those
+ *   reduced in `artifacts`; a second, unreduced copy is weight it cannot draw.
+ * - action buttons other than `ask` and `link` — the phone has no confirm
+ *   flow, and a desk button that posts is not something to tap on a lock screen.
+ *
+ * A section left empty is dropped; a page left empty is null.
+ */
+export function nativePanel(metadata: Record<string, unknown>): PanelPage | null {
+  const page = parsePage(metadata.panel);
+  if (!page) return null;
+  const keep = (b: PanelBlock): PanelBlock | null => {
+    if (b.type === 'artifact') return null;
+    if (b.type === 'actions') {
+      const items = b.items.filter((a) => a.kind === 'ask' || a.kind === 'link');
+      return items.length ? { ...b, items } : null;
+    }
+    if (b.type === 'group') {
+      const blocks = b.blocks.map(keep).filter((x): x is Exclude<PanelBlock, { type: 'group' }> => !!x && x.type !== 'group');
+      return blocks.length ? { ...b, blocks } : null;
+    }
+    return b;
+  };
+  const sections = page.sections
+    .map((s) => ({ ...s, blocks: s.blocks.map(keep).filter((b): b is PanelBlock => b !== null) }))
+    .filter((s) => s.blocks.length > 0);
+  return sections.length ? { ...page, sections } : null;
+}
+
