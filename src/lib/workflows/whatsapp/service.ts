@@ -1,6 +1,7 @@
 import makeWASocket, {
 	useMultiFileAuthState,
 	fetchLatestBaileysVersion,
+	fetchLatestWaWebVersion,
 	makeCacheableSignalKeyStore,
 	DisconnectReason,
 	downloadMediaMessage
@@ -115,7 +116,12 @@ export class WhatsAppService {
 		const { state, saveCreds } = await useMultiFileAuthState(authDir);
 		this.saveCreds = saveCreds;
 
-		const { version } = await fetchLatestBaileysVersion();
+		// Baileys' own version file lags WhatsApp Web by months, and WhatsApp
+		// refuses to link a client that old ("can't link new devices right
+		// now"). Ask web.whatsapp.com first; the Baileys file is the fallback.
+		const web = await fetchLatestWaWebVersion().catch(() => null);
+		const { version } = web?.isLatest ? web : await fetchLatestBaileysVersion();
+		console.log(`[whatsapp] Using WA Web version ${version.join('.')}`);
 
 		this.sock = makeWASocket({
 			auth: {
@@ -172,6 +178,7 @@ export class WhatsAppService {
 				// Always mark as disconnected so reconnect guard doesn't block
 				this.status = 'disconnected';
 				this.connectedNumber = null;
+				this.qrCode = null; // a dead socket's QR can never be scanned
 				this.sock = null;
 
 				if (isLoggedOut) {
