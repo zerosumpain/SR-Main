@@ -18,6 +18,7 @@ import { toCodexSlug } from '$lib/server/models/codex-catalogue';
 import { registerActiveChild, clearActiveChild } from './interrupt-registry';
 import { stripNulls } from './strip-nulls';
 import { describeDbError } from './db-error';
+import { ensurePiCodexAuth, isCodexAuthRejection } from './pi-codex-auth';
 import { buildChildEnvironment } from './sandbox';
 
 /** pi's built-ins the agent always needs. Never narrowed at runtime. */
@@ -458,11 +459,19 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
     };
   }
 
+  // The token this run starts with, so a refusal can be matched to it.
+  let codexAccess: string | null = null;
   if (provider === 'openai-codex' && HOST_MODE) {
     // Host mode only: in container mode `workdir` is a path inside the sandbox,
     // not one this process can write to. Codex builds need host mode anyway —
     // the ChatGPT OAuth lives in the host user's ~/.pi/agent/auth.json.
     await pinCodexTransport(workdir);
+    // pi refreshes only on its own stored expiry, which the server does not
+    // honour; see pi-codex-auth.ts for the run this cost.
+    const auth = await ensurePiCodexAuth();
+    codexAccess = auth.access;
+    if (auth.refreshed) await emitLog(build.id, 'system', 'Refreshed the Codex sign-in before starting pi (it was close to expiring).', iteration.id);
+    if (auth.error) await emitLog(build.id, 'system', `Codex sign-in check: ${auth.error}`, iteration.id);
   }
 
   const piParts = [
@@ -994,6 +1003,20 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
     maxWallClockMs,
   });
 
+  // The server refused the sign-in. Refresh it now — only if the refused token
+  // is still the one on disk — and say so in the message, which is what makes
+  // `isTransientProviderFailure` retry rather than abort. Before this the run
+  // failed, and every retry handed pi the same refused token.
+  if (failure && codexAccess && (failure.kind === 'provider_error' || failure.kind === 'nonzero_exit') && isCodexAuthRejection(failure.message, failure.httpStatus)) {
+    const renewed = await ensurePiCodexAuth({ rejectedAccess: codexAccess });
+    if (renewed.refreshed === 'rejected') {
+      failure.message = `${failure.message} ${CODEX_SIGNIN_RENEWED}`;
+      await emitLog(build.id, 'system', 'The Codex sign-in was refused; it has been refreshed and the next attempt will use the new one.', iteration.id);
+    } else if (renewed.error) {
+      await emitLog(build.id, 'error', `The Codex sign-in was refused and could not be refreshed: ${renewed.error}`, iteration.id);
+    }
+  }
+
   return {
     actions,
     messages,
@@ -1003,6 +1026,10 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
     failure,
   };
 }
+
+/** Appended to a refused-sign-in failure once the credential is renewed; the
+ *  transient patterns match it. */
+export const CODEX_SIGNIN_RENEWED = '(Codex sign-in renewed; retry.)';
 
 export interface ClassifyInput {
   stalled: boolean;
