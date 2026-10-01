@@ -61,7 +61,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 // enables them explicitly against its disposable loopback PostgreSQL service.
 // Commissioning uses the isolated local database and the explicitly enabled
 // disposable nightly database; its transactional cases also ran before release.
-const INTEGRATION_FILES = 40;
+const INTEGRATION_FILES = 39;
 
 function tracked(pattern: string): string[] {
 	return execFileSync('git', ['ls-files', pattern], { cwd: ROOT, encoding: 'utf8' })

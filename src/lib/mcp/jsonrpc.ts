@@ -28,16 +28,12 @@ import { dispatchMetaTool, JKAI_EXTENDED_TOOL } from './meta-tool';
 // it so unit tests (which use plain process.env via beforeAll) don't need to
 // stub the $env module. In SvelteKit runtime, `env` wins; in vitest,
 // `process.env` is the fallback.
-//
-// `HERMES_BRIDGE_SECRET` is the OLD name, read second so a host that has not
-// yet had the new one written keeps working. Drop the fallback once both
-// hosts' .env files carry SERVICE_BRIDGE_SECRET — see $lib/config/service-secret.
 async function resolveSecret(): Promise<string> {
-  const fromProcess = process.env.SERVICE_BRIDGE_SECRET ?? process.env.HERMES_BRIDGE_SECRET;
+  const fromProcess = process.env.SERVICE_BRIDGE_SECRET;
   if (fromProcess) return fromProcess;
   try {
     const mod = await import('$env/dynamic/private');
-    return mod.env.SERVICE_BRIDGE_SECRET ?? mod.env.HERMES_BRIDGE_SECRET ?? '';
+    return mod.env.SERVICE_BRIDGE_SECRET ?? '';
   } catch {
     return '';
   }

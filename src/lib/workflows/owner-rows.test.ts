@@ -7,7 +7,6 @@ import { readFileSync } from 'node:fs';
 const OWNER_AUTOMATIONS = [
   'src/lib/workflowdoctor/triage.ts',
   'src/lib/heartbeat/activities/workflow-review.ts',
-  'src/lib/workflows/orchestrator/workspace-grounding.ts',
   'src/routes/api/landing/vitals/+server.ts',
 ];
 

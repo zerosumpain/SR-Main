@@ -9,11 +9,11 @@
 // (/health /send /typing /send-media /qr), and the name is the last thing
 // pointing at a process that no longer exists.
 //
-// The old name is read SECOND rather than dropped: a deploy and an `.env` edit
-// do not land at the same instant, and an unset bridge URL does not fail loudly
-// — it makes the web app think it owns a session it does not have, and outbound
-// WhatsApp stops without an error. Delete the fallback once both hosts carry
-// `WHATSAPP_BRIDGE_URL`.
+// The old name was read as a fallback until both hosts carried
+// `WHATSAPP_BRIDGE_URL` with the same value (checked 2026-10-01). Never unset
+// it: an unset bridge URL does not fail loudly — it makes the process think it
+// owns a session it does not have. homeserv points it at a dead port on
+// purpose, so it stays delegated rather than starting a second WhatsApp client.
 
 /**
  * The bridge URL as configured, trailing slash stripped, or null when unset.
@@ -23,6 +23,6 @@
  * itself. Callers must gate on `ownsWhatsAppSession()` as well.
  */
 export function whatsappBridgeUrl(env: NodeJS.ProcessEnv = process.env): string | null {
-  const raw = env.WHATSAPP_BRIDGE_URL ?? env.WHATSAPP_HERMES_BRIDGE_URL ?? '';
+  const raw = env.WHATSAPP_BRIDGE_URL ?? '';
   return raw ? raw.replace(/\/+$/, '') : null;
 }

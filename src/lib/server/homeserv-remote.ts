@@ -18,7 +18,7 @@ export const IS_HOMESERV = os.hostname() === 'homeserv';
  *  HOMESERV_ADMIN_URL; else derive from SCRAPER_SERVICE_URL (the VPS already
  *  sets it to the homeserv :5173 host). Null on homeserv → use the local path. */
 export function homeservBase(): string | null {
-  const explicit = env.HOMESERV_ADMIN_URL ?? env.HERMES_ADMIN_SERVICE_URL;
+  const explicit = env.HOMESERV_ADMIN_URL;
   if (explicit) return explicit.replace(/\/+$/, '');
   const svc = env.SCRAPER_SERVICE_URL;
   if (!svc) return null;
