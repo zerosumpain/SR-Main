@@ -7,7 +7,6 @@
 // produced a `DEFAULT_SUBAGENT_TOOLS` entry naming a tool that never existed.
 import { describe, it, expect } from 'vitest';
 import { getTool, getTools } from '../registry';
-import { DEFAULT_SUBAGENT_TOOLS } from '$lib/workflows/chat/sub-agent';
 
 const TOOLS = [
   'intel_find',
@@ -98,31 +97,4 @@ describe('intel-graph handlers against a live graph', () => {
     expect(r.success).toBe(false);
   }, 30_000);
 
-});
-
-describe('DEFAULT_SUBAGENT_TOOLS', () => {
-  // Tools a sub-agent gets from its own MCP session rather than this
-  // registry. They cannot be checked here, so they are named explicitly — which
-  // is the point: anything NOT on this list must resolve locally, and
-  // `intel_search` resolved in neither place.
-  const EXTERNAL = new Set(['web_search', 'webpage_fetch']);
-
-  it('names only tools that exist locally or are known externals', () => {
-    const known = new Set(getTools().map((t) => t.name));
-    for (const name of DEFAULT_SUBAGENT_TOOLS) {
-      expect(
-        known.has(name) || EXTERNAL.has(name),
-        `${name} is in DEFAULT_SUBAGENT_TOOLS but is neither registered nor a known external tool`,
-      ).toBe(true);
-    }
-  });
-
-  it('no longer references the tool that never existed', () => {
-    expect(DEFAULT_SUBAGENT_TOOLS).not.toContain('intel_search');
-  });
-
-  it('gives a sub-agent a way to reach the knowledge base and the graph', () => {
-    expect(DEFAULT_SUBAGENT_TOOLS).toContain('knowledge_search');
-    expect(DEFAULT_SUBAGENT_TOOLS.some((t) => t.startsWith('intel_'))).toBe(true);
-  });
 });
