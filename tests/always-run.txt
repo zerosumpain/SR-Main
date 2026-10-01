@@ -73,6 +73,7 @@ tests/scripts/classify-pr-risk.test.ts
 tests/scripts/coverage-census.test.ts
 tests/scripts/deploy-refuses.test.ts
 tests/scripts/development-gate-parity.test.ts
+tests/scripts/development-preview-hostnames.test.ts
 tests/scripts/development-install.test.ts
 tests/scripts/drizzle-orphan-tables.test.ts
 tests/scripts/gate-level.test.ts
