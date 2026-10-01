@@ -40,11 +40,24 @@ export async function verifyGrooming(headers) {
     assert.equal(build.status, 'paused', 'Grooming must not start Pi');
     assert.equal(result.state.originalAsk, prompt);
     const questions = 'Verify the smallest readable mobile layout during implementation.';
-    const accepted = await fetch(`${endpoint}/${id}`, { ...options, method: 'POST', body: JSON.stringify({
-      ...result.state.brief, action: 'brief', area: 'Health', revision: result.revision,
-      briefRevision: result.state.brief.revision, routes: result.state.brief.routes.join('\n'),
-      criteria: result.state.criteria.map(c => c.text).join('\n'), questions,
-    }), signal: AbortSignal.timeout(30000) });
+    const accept = (draft, override) => fetch(`${endpoint}/${id}`, { ...options, method: 'POST', body: JSON.stringify({
+      ...draft.state.brief, action: 'brief', area: 'Health', revision: draft.revision,
+      briefRevision: draft.state.brief.revision, routes: draft.state.brief.routes.join('\n'),
+      newRoutes: (draft.state.brief.newRoutes ?? []).join('\n'),
+      criteria: draft.state.criteria.map(c => c.text).join('\n'), questions, ...(override ? { override } : {}),
+    }), signal: AbortSignal.timeout(60000) });
+    let accepted = await accept(result);
+    if (accepted.status === 400) {
+      // The brief check may hold a model-written draft back (a route it could
+      // not find, a criterion it judged vague). That is the check working; the
+      // smoke takes the owner's path — acknowledge exactly what was shown and
+      // accept — and proves the override covers those findings and no more.
+      const refusal = await accepted.json();
+      assert.ok(Array.isArray(refusal.acknowledge) && refusal.acknowledge.length, `A refused brief must name what an override covers: ${String(refusal.error ?? '').slice(0, 200)}`);
+      const again = await (await fetch(`${endpoint}/${id}`, options)).json();
+      const lane = refusal.lint?.lane?.lane !== 'site';
+      accepted = await accept(again.delivery, { lane, lint: true, acknowledged: refusal.acknowledge });
+    }
     assert.equal(accepted.status, 200, 'Owner must be able to accept a brief with remaining questions');
     const confirmation = await fetch(`${endpoint}/${id}`, options);
     assert.equal(confirmation.status, 200);

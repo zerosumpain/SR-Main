@@ -13,7 +13,7 @@ import { AUTOPILOT_ROUNDS, PRODUCT_AREAS, RELEASE_POLICIES, acceptanceBlocker, i
 import type { ReleasePolicy } from '$lib/jkai/development';
 import { readBriefFields } from '$lib/jkai/development-grooming.server';
 import { checkBrief, groomDelivery } from '$lib/jkai/development-brief.server';
-import { briefAcceptanceBlocker } from '$lib/jkai/development-brief';
+import { briefAcceptanceBlocker, acknowledgementKeys } from '$lib/jkai/development-brief';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ params }) => {
@@ -87,11 +87,14 @@ export const POST: RequestHandler = async ({ params, request }) => {
         // the check refuses the change, it does not un-accept the work in hand.
         // The findings go back with the refusal, so the page can show them and
         // offer the overrides without un-accepting anything.
-        if (blocked && delivery.state.brief.acceptedAt) return json({ error: blocked, lint, saved: false }, { status: 400 });
+        if (blocked && delivery.state.brief.acceptedAt) return json({ error: blocked, lint, acknowledge: acknowledgementKeys(lint), saved: false }, { status: 400 });
         if (blocked) {
           await mutateDelivery(id, 'brief_check_failed', (s) => ({ ...s, originalAsk: s.originalAsk ?? build.prompt, area: body.area,
             brief: { ...nextBrief(s), acceptedAt: null }, criteria: nextCriteria }), revision);
-          return json({ error: blocked, lint, saved: true }, { status: 400 });
+          // `acknowledge` names exactly what an override would have to cover, so
+          // a client without the brief module (the release smoke) can take the
+          // owner's path rather than guess at finding keys.
+          return json({ error: blocked, lint, acknowledge: acknowledgementKeys(lint), saved: true }, { status: 400 });
         }
         await mutateDelivery(id, 'brief_accepted', (s) => ({ ...s, originalAsk: s.originalAsk ?? build.prompt, area: body.area, stage: 'brief', acceptedAt: null, batch: null, gate: null, preview: { url: null, status: 'unavailable', detail: 'The brief changed; build and verify it again.' },
           brief: { ...nextBrief(s), acceptedAt: at, acceptedBy: 'owner', ...(override.lane || override.lint ? { override: { lane: override.lane, lint: override.lint, acknowledged, at } } : {}) },
