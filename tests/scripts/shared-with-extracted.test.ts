@@ -77,6 +77,7 @@ describe('modules shared with the extracted applications', () => {
       'src/lib/file-shares.ts',
       'src/lib/file-store/storage.ts',
       'src/lib/health-sync/types.ts',
+      'src/lib/jkai/panel/schema.ts',
       'src/lib/llm/client.ts',
       'src/lib/llm/keys.ts',
       'src/lib/llm/pricing.ts',
