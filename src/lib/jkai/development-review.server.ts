@@ -43,6 +43,7 @@ import { resolveDevelopmentAssessorModel } from '$lib/server/models/workload-set
 import { resolveChatAltOpenRouterModel } from '$lib/server/models/settings';
 import { resolveModelForProfile } from '$lib/routing/events';
 import { withActivity } from '$lib/context/activity';
+import { thinkingRequestParams } from '$lib/models/thinking';
 import { loadDelivery, mutateDelivery, relevantLessons } from './development-state.server';
 import { workspaceBroker } from './development-workspace.server';
 import type { DeliveryState } from './development';
@@ -109,6 +110,40 @@ export async function developmentAssessor(buildModelId: string | null) {
     resolveChatAltOpenRouterModel().catch(() => null),
   ]);
   return pickIndependentAssessor<{ provider?: string; modelId: string }>([role, routed, alternate], buildModelId);
+}
+
+/**
+ * One adversary call that always comes back with an answer or a clear reason.
+ *
+ * The first unattended review (build 29915e85, 2026-10-01) failed with
+ * "Unexpected end of JSON input": the OpenRouter reviewer spent all 6,000 of
+ * its max_tokens on reasoning (reasoning_tokens 6000, content empty) and the
+ * parser met an empty string. That is the known reasoning-eats-the-budget
+ * trap, and `thinkingRequestParams` already carries its fix — so the call asks
+ * for low effort, and if the reply is still empty retries once with reasoning
+ * off. Every adversary call goes through here: the criteria review, the veto,
+ * the brief's model check and answering a question from the brief.
+ */
+export async function assessorCompletion(
+  assessor: { provider?: string; modelId: string },
+  request: { system: string; user: unknown; maxTokens: number; temperature: number; timeoutMs: number },
+): Promise<{ content: string; model: string }> {
+  const ctx = coerceModelContext(assessor);
+  const { client, model } = await getLLMClient(ctx);
+  for (const level of ['low', 'off'] as const) {
+    const response = await withActivity('development-assessor', () => client.chat.completions.create({
+      model, temperature: request.temperature, max_tokens: request.maxTokens,
+      ...thinkingRequestParams(ctx.provider, level, ctx.modelId),
+      messages: [
+        { role: 'system', content: request.system },
+        // Cast as in design-review.ts: our ContentPart is wider than the SDK's union.
+        { role: 'user', content: request.user as never },
+      ],
+    }, { timeout: request.timeoutMs, maxRetries: 0 }));
+    const content = (response.choices?.[0]?.message?.content ?? '').trim();
+    if (content) return { content, model };
+  }
+  throw new Error(`The reviewer model (${model}) returned no answer twice, even with reasoning off. The assessment is not recorded; it will be retried.`);
 }
 
 const ASSESS_SYSTEM = `You are an adversarial reviewer for a website feature. Your job is to find out whether the supplied candidate REALLY satisfies each acceptance criterion, not to help it pass.
@@ -291,18 +326,10 @@ export async function reviewDevelopmentCriteria(buildId: string, expectedRevisio
     const inspection = await workspaceBroker('inspect', buildId, { revision: candidate });
     if (inspection.revision !== candidate || !inspection.evidence?.length) throw new Error('Inspection did not return evidence for this candidate.');
     const assessor = await developmentAssessor(build.modelId);
-    const { client, model } = await getLLMClient(coerceModelContext(assessor));
     const { lessons, images } = await reviewInputs(buildId, state.area, inspection, assessor);
     const payload = reviewPayload({ base: { brief: state.brief, criteria }, inspection, images, lessons, repositoryGate: state.gate });
-    const response = await withActivity('development-assessor', () => client.chat.completions.create({
-      model, temperature: 0.2, max_tokens: 6000,
-      messages: [
-        { role: 'system', content: ASSESS_SYSTEM },
-        // Cast as in design-review.ts: our ContentPart is wider than the SDK's union.
-        { role: 'user', content: reviewContent(payload, images) as never },
-      ],
-    }, { timeout: 90000, maxRetries: 0 }));
-    const assessments = parseCriterionAssessment(response.choices?.[0]?.message?.content ?? '', criteria.map(c => c.id));
+    const { content, model } = await assessorCompletion(assessor, { system: ASSESS_SYSTEM, user: reviewContent(payload, images), maxTokens: 12000, temperature: 0.2, timeoutMs: 120000 });
+    const assessments = parseCriterionAssessment(content, criteria.map(c => c.id));
     return await mutateDelivery(buildId, 'criteria_assessed', s => {
       if (s.candidate !== candidate || s.preview.revision !== candidate) throw new Error('The candidate changed during review.');
       return { ...s, criteria: s.criteria.map(c => {
@@ -328,20 +355,13 @@ export async function vetoDevelopmentRelease(buildId: string, expectedRevision: 
   if (!build || !candidate) throw new Error('There is no candidate to review.');
   const inspection = await workspaceBroker('inspect', buildId, { revision: candidate });
   const assessor = await developmentAssessor(build.modelId);
-  const { client, model } = await getLLMClient(coerceModelContext(assessor));
   const { lessons, images } = await reviewInputs(buildId, state.area, inspection, assessor);
   const payload = reviewPayload({ base: {
     brief: state.brief,
     criteria: state.criteria.map(c => ({ text: c.text, verdict: c.assessment?.verdict ?? c.verdict, evidence: c.assessment?.evidence ?? c.evidence })),
   }, inspection, images, lessons, repositoryGate: state.gate });
-  const response = await withActivity('development-assessor', () => client.chat.completions.create({
-    model, temperature: 0.2, max_tokens: 1500,
-    messages: [
-      { role: 'system', content: VETO_SYSTEM },
-      { role: 'user', content: reviewContent(payload, images) as never },
-    ],
-  }, { timeout: 60000, maxRetries: 0 }));
-  const verdict = parseReleaseVeto(response.choices?.[0]?.message?.content ?? '');
+  const { content, model } = await assessorCompletion(assessor, { system: VETO_SYSTEM, user: reviewContent(payload, images), maxTokens: 6000, temperature: 0.2, timeoutMs: 90000 });
+  const verdict = parseReleaseVeto(content);
   if (!verdict.veto) return { vetoed: false as const, delivery };
   const saved = await mutateDelivery(buildId, 'release_vetoed', s => ({
     ...s, autopilot: s.autopilot ? { ...s.autopilot, veto: { reason: verdict.reason, evidence: verdict.evidence, model, revision: candidate, at: new Date().toISOString() } } : s.autopilot,

@@ -8,8 +8,10 @@ import { WORKLOADS } from '$lib/models/workloads';
 // switch changes a model the develop lane never uses. A tag is a workload id:
 // the spend has to land on the row that switches the model that spent it.
 const FILES: Record<string, string[]> = {
+  // Every adversary call (review, veto, brief check, answering from the brief)
+  // goes through `assessorCompletion` here, so the autopilot and brief modules
+  // no longer tag calls of their own.
   'development-review.server.ts': ['development-assessor'],
-  'development-autopilot.server.ts': ['development-assessor'],
   'development-grooming.server.ts': ['builder'],
   'planner.ts': ['builder'],
   'design-review.ts': ['design-review'],

@@ -14,9 +14,6 @@ import { createHash } from 'node:crypto';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { codegraphSnapshots } from '$lib/db/schema';
-import { getLLMClient } from '$lib/llm/client';
-import { coerceModelContext } from '$lib/constants/default-models';
-import { withActivity } from '$lib/context/activity';
 import type { BriefLint, DeliveryState } from '$lib/constants/development';
 import { mutateDelivery, relevantLessons } from './development-state.server';
 import { groomDevelopmentBrief, type readBriefFields } from './development-grooming.server';
@@ -74,12 +71,9 @@ export async function checkBrief(input: BriefInput, revision: number, options: {
   try {
     const { developmentAssessor } = await import('./development-review.server');
     const assessor = await developmentAssessor(options.buildModelId);
-    const { client, model } = await getLLMClient(coerceModelContext(assessor));
-    const response = await withActivity('development-assessor', () => client.chat.completions.create({
-      model, temperature: 0, max_tokens: 900,
-      messages: [{ role: 'system', content: JUDGE_SYSTEM }, { role: 'user', content: JSON.stringify({ criteria: input.criteria.map((text, index) => ({ index, text: text.slice(0, 1000) })) }) }],
-    }, { timeout: 30000, maxRetries: 0 }));
-    const findings = parseCriteriaJudgement(response.choices?.[0]?.message?.content ?? '', input.criteria);
+    const { assessorCompletion } = await import('./development-review.server');
+    const { content, model } = await assessorCompletion(assessor, { system: JUDGE_SYSTEM, user: JSON.stringify({ criteria: input.criteria.map((text, index) => ({ index, text: text.slice(0, 1000) })) }), maxTokens: 4000, temperature: 0, timeoutMs: 60000 });
+    const findings = parseCriteriaJudgement(content, input.criteria);
     return { ...lint, judged: { key, model }, findings: [...lint.findings, ...findings] };
   } catch (error) {
     // A missing key or a slow model must not stop the owner accepting a brief
