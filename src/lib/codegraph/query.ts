@@ -451,3 +451,15 @@ export function cgqlForTopic(text: string, opts: { limit?: number; budget?: numb
   // the `topic:"…"` literal cannot be broken out of.
   return `topic:"${tokens.join(' ')}" | lessons limit=${limit} | budget ${budget}`;
 }
+
+/**
+ * The fingerprints a serve can be judged by, from the query that made it.
+ *
+ * Only a `fingerprint:` seed names an error, so only it can answer "did that
+ * error recur". Everything else returns [] and stays unattributable — the
+ * planner's own rule for a file-set serve (`planBuildQuery`), applied to CGQL
+ * an agent wrote by hand.
+ */
+export function servedForPlan(plan: QueryPlan): string[] {
+  return plan.seed.type === 'fingerprint' ? plan.seed.fingerprints.slice(0, 8) : [];
+}

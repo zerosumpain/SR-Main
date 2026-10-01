@@ -194,4 +194,29 @@ export interface DeliveryState {
     detail?: string;
     blocker?: string;
   };
+  /**
+   * Failures the build-history graph is waiting to see fixed.
+   *
+   * A fail→fix episode needs both ends, and they arrive minutes or days apart —
+   * isolated verification fails on one candidate and passes on a later one, or
+   * CI goes red on one pull request and green on its replacement. The red end
+   * is parked here until a green one of the SAME source turns up. jsonb on the
+   * delivery rather than a table for the reason `autopilot` gives: no migration,
+   * nothing for a release-time `drizzle push` to do.
+   */
+  codegraph?: { pending: PendingFailure[] };
+}
+
+/** One red gate result, kept until a later green one proves what fixed it. */
+export interface PendingFailure {
+  /** Which gate failed. A CI failure is only ever paired with a CI pass. */
+  source: 'verification' | 'ci';
+  /** The candidate that failed: one end of the per-revision file diff. */
+  revision: string;
+  /** The episode's key: the most specific fingerprint, as the hot lane will ask for it. */
+  fingerprint: string;
+  /** The failure text, trimmed. Becomes the episode's `problem`. */
+  excerpt: string;
+  at: string;
+  prNumber?: number;
 }

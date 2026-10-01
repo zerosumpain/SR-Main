@@ -6,6 +6,7 @@ import {
   cgqlForTopic,
   cgqlForSiblings,
   cgqlForTests,
+  servedForPlan,
   CgqlError,
   MAX_HOPS,
   MAX_LIMIT,
@@ -246,5 +247,17 @@ describe('the tests seed', () => {
 
   it('is offered in the error when a query starts with nothing valid', () => {
     expect(() => parseCgql('nonsense')).toThrow(/tests:/);
+  });
+});
+
+describe('servedForPlan: only a fingerprint seed can be judged', () => {
+  it('records the fingerprints an agent asked about over the pull channel', () => {
+    expect(servedForPlan(parseCgql('fingerprint:typecheck:TS2345,gate:AssertionError | episodes limit=2'))).toEqual(['typecheck:TS2345', 'gate:AssertionError']);
+  });
+
+  it('records nothing for any other seed, so it stays unattributable', () => {
+    for (const q of ['file:src/lib/x.ts | hops 1', 'topic:"rome trip planner maps"', 'gate:vitest', 'siblings:src/lib/x.ts']) {
+      expect(servedForPlan(parseCgql(q)), q).toEqual([]);
+    }
   });
 });

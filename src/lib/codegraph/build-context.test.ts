@@ -6,6 +6,9 @@ import {
   bareNamesInText,
   dirHintsInText,
   pickNamedFiles,
+  planTopicTopUp,
+  mergeTopicTopUp,
+  TOPIC_TOP_UP_BELOW,
 } from './build-context';
 import { parseCgql } from './query';
 import { buildSystemPrompt } from '$lib/jkai/prompt';
@@ -271,5 +274,42 @@ describe('the file lane declines paths the graph does not know', () => {
     );
     expect(planned?.query).toContain('fingerprint:');
     expect(planned?.fingerprints.length).toBeGreaterThan(0);
+  });
+});
+
+describe('the develop lane tops a thin file-set result up from the brief', () => {
+  const brief = 'Add a Notion connector credential binding to the integrations page';
+  const filePlan = { fingerprints: [] as string[], reason: 'file set (2 path(s))' };
+
+  it('asks the brief as a topic, capped to the lessons still wanted', () => {
+    expect(planTopicTopUp(filePlan, brief, 0)).toMatch(/^topic:".+" \| lessons limit=2 \| budget \d+$/);
+    expect(planTopicTopUp(filePlan, brief, 1)).toMatch(/lessons limit=1/);
+  });
+
+  it('leaves a file lane that already served enough alone', () => {
+    expect(planTopicTopUp(filePlan, brief, TOPIC_TOP_UP_BELOW)).toBeNull();
+  });
+
+  it('never tops up a fingerprint plan — that serve is the attributable one', () => {
+    expect(planTopicTopUp({ fingerprints: ['typecheck:TS2345'], reason: 'gate failure (typecheck:TS2345)' }, brief, 0)).toBeNull();
+  });
+
+  it('keeps the topic floor: a thin brief asks nothing', () => {
+    expect(planTopicTopUp(filePlan, 'crack on', 0)).toBeNull();
+    expect(planTopicTopUp(null, brief, 0)).toBeNull();
+  });
+
+  const lesson = (id: string, score: number) => ({ id, relevance: { score, because: 'ranked' } });
+
+  it('appends topic lessons behind the file lane, deduped, never displacing one', () => {
+    const merged = mergeTopicTopUp([lesson('file-a', 0.3)], [lesson('file-a', 0.9), lesson('topic-b', 0.9), lesson('topic-c', 0.8)]);
+    expect(merged.map((l) => l.id)).toEqual(['file-a', 'topic-b']);
+    expect(merged[1].relevance.score).toBeLessThan(0.3);
+    expect(merged[1].relevance.because).toContain('topic match');
+  });
+
+  it('keeps topic scores as they are when the file lane served nothing', () => {
+    const merged = mergeTopicTopUp([], [lesson('topic-b', 0.9), lesson('topic-c', 0.8), lesson('topic-d', 0.7)]);
+    expect(merged.map((l) => [l.id, l.relevance.score])).toEqual([['topic-b', 0.9], ['topic-c', 0.8]]);
   });
 });

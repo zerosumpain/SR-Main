@@ -11,6 +11,19 @@ export interface ResolveResult {
   lessons: number; episodes: number; unattributable?: number;
 }
 
+/**
+ * The channels whose rows a gate receipt can judge.
+ *
+ * `push` alone until 2026-10: a fingerprint the AGENT asked about
+ * (`fingerprint:typecheck:TS2345` over the pull script) is the same claim as
+ * one the executor pushed — "here is what history says about this error" — and
+ * "did that error recur at the next gate" answers it the same way. The rule
+ * does not loosen: `resolveServe` still closes anything without fingerprints
+ * in `servedFor` as `unattributable`, so a `file:` or `topic:` pull earns no
+ * credit. `chat` and `precedent` stay out — neither belongs to an iteration.
+ */
+export const RESOLVABLE_CHANNELS = ['push', 'pull'] as const;
+
 /** Lock and resolve the exact iteration's injected evidence in one transaction. */
 export async function resolveBuildServes(input: {
   buildId: string; iterationId?: string; nextEvaluation: string | null; nextGatePassed: boolean | null;
@@ -18,7 +31,7 @@ export async function resolveBuildServes(input: {
 }): Promise<ResolveResult> {
   return db.transaction(async tx => {
     const pending = await tx.select().from(codegraphQueries).where(and(
-      eq(codegraphQueries.buildId, input.buildId), eq(codegraphQueries.channel, 'push'),
+      eq(codegraphQueries.buildId, input.buildId), inArray(codegraphQueries.channel, [...RESOLVABLE_CHANNELS]),
       isNull(codegraphQueries.resolution),
       input.iterationId ? eq(codegraphQueries.iterationId, input.iterationId) : undefined,
     )).orderBy(codegraphQueries.createdAt).limit(100).for('update');

@@ -327,6 +327,7 @@ export async function watchDevelopmentRelease(buildId: string): Promise<'pending
       // autopilot would never leave the branch that only watches for a merge.
       await mutateDelivery(buildId, 'release_closed', s => ({ ...s, stage: 'review',
         release: { ...(s.release ?? { revision: '' }), ci: 'failure', prUrl: undefined, detail: 'The pull request was closed without merging. The candidate and its batch are unchanged.' } }));
+      await (await import('$lib/codegraph/development.server')).observeDevelopmentRelease(buildId, release.revision, 'closed', `pull request #${release.prNumber} closed without merging`, release.prNumber).catch(() => {});
       return 'closed';
     }
     return 'pending';
@@ -344,7 +345,19 @@ export async function watchDevelopmentRelease(buildId: string): Promise<'pending
       deployedSha: deployed ?? undefined, deployedAt: isLive ? new Date().toISOString() : undefined,
       detail: isLive ? 'Merged and serving in production.' : 'Merged. Waiting for the deploy to report this commit.' },
   }));
-  if (isLive) await db.update(jkaiBuilds).set({ outcome: 'delivered', updatedAt: new Date() }).where(eq(jkaiBuilds.id, buildId));
+  // A merge is CI's green too — auto-merge can land between two sweeps, so the
+  // open-and-green state above may never have been seen. No-op once paired.
+  if (release.ci !== 'success') {
+    await (await import('$lib/codegraph/development.server')).observeDevelopmentCi(buildId, { passed: true, revision: release.revision, prNumber: release.prNumber,
+      detail: `CI passed and pull request #${release.prNumber} merged for candidate ${release.revision.slice(0, 12)}.` }).catch(() => {});
+  }
+  if (isLive) {
+    await db.update(jkaiBuilds).set({ outcome: 'delivered', updatedAt: new Date() }).where(eq(jkaiBuilds.id, buildId));
+    // Only now is the accepted feature's episode `verified`: merged AND serving,
+    // not merely accepted on a local batch.
+    await (await import('$lib/codegraph/development.server')).observeDevelopmentRelease(buildId, release.revision, 'deployed',
+      `pull request #${release.prNumber} merged as ${mergeSha?.slice(0, 12)}; production serving ${deployed?.slice(0, 12)}`, release.prNumber).catch(() => {});
+  }
   return isLive ? 'deployed' : 'merged';
 }
 
@@ -368,6 +381,7 @@ async function watchOpenPullRequest(
     const summary = await ciFailureSummary(verdict.failed, headers);
     await mutateDelivery(buildId, 'release_ci_failed', s => ({ ...s, release: { ...(s.release ?? release), ci: 'failure', ciFailure: summary, detail: `CI failed: ${verdict.failed.map(r => r.name).join(', ')}.` } }));
     await emitLog(buildId, 'error', `CI failed on ${release.prUrl}: ${verdict.failed.map(r => r.name).join(', ')}`);
+    await (await import('$lib/codegraph/development.server')).observeDevelopmentCi(buildId, { passed: false, revision: release.revision, prNumber: release.prNumber, detail: summary }).catch(() => {});
     return 'ci_failed';
   }
 
@@ -384,6 +398,9 @@ async function watchOpenPullRequest(
   const greenAt = release.ciGreenAt ?? new Date().toISOString();
   if (!release.ciGreenAt || release.ci !== 'success') {
     await mutateDelivery(buildId, 'release_ci_green', s => ({ ...s, release: { ...(s.release ?? release), ci: 'success', ciGreenAt: greenAt, detail: 'CI passed. Waiting for the merge.' } }));
+    // The other end of a red pull request this feature closed to repair.
+    await (await import('$lib/codegraph/development.server')).observeDevelopmentCi(buildId, { passed: true, revision: release.revision, prNumber: release.prNumber,
+      detail: `CI passed on pull request #${release.prNumber} for candidate ${release.revision.slice(0, 12)}.` }).catch(() => {});
   }
   if (pr.draft) return parkOnOwner(buildId, release, 'CI passed on a draft pull request. Mark it ready for review on GitHub when you want it merged.');
   if (release.tier === 'high') return parkOnOwner(buildId, release, `CI passed, but the change touches protected paths (${(release.protectedPaths ?? []).slice(0, 6).join(', ') || 'see the Risk tier check'}), so it waits for your review and merge.`);
