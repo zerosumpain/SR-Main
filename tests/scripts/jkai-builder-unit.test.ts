@@ -121,3 +121,17 @@ describe('the web app can reach the builder', () => {
     expect(groupId('nope', file)).toBeNull();
   });
 });
+
+describe('the launcher passes on what the unit sets', () => {
+  // jkai-builder-launch.sh runs the builder under `env -i` with an allowlist,
+  // so a variable set in the unit but missing from the list never arrives — and
+  // nothing says so. JKAI_BUILDER_SOCKET_GROUP shipped that way on 2026-10-01
+  // and the socket stayed owner-only after the fix "deployed".
+  it('keeps every Environment= the unit sets', () => {
+    const launcher = readFileSync(join(ROOT, 'scripts/jkai-builder-launch.sh'), 'utf8');
+    const passed = new Set((launcher.match(/(?:keep|allowed)=\(([\s\S]*?)\)/g) ?? []).join(' ').match(/[A-Z][A-Z0-9_]+/g) ?? []);
+    const set = unit().split('\n').map((l) => /^Environment=([A-Z0-9_]+)=/.exec(l.trim())?.[1]).filter((n): n is string => Boolean(n));
+    expect(set.length).toBeGreaterThan(3);
+    expect(set.filter((name) => !passed.has(name))).toEqual([]);
+  });
+});
