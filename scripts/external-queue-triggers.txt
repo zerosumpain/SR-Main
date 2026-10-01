@@ -10,4 +10,3 @@
 # This file exists because the deploy drain is bash and cannot import the
 # TypeScript registry. Read it with scripts/lib/queue-triggers.sh, which also
 # honours EXTERNAL_QUEUE_TRIGGERS so the override moves both halves at once.
-policy-analysis

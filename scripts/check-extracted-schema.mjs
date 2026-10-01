@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 export function checkExtractedSchema(manifest, source) {
   const errors = [];
   if (manifest.version !== 2 || !Array.isArray(manifest.modules)) return ['Expected generated ownership manifest version 2'];
-  for (const id of ['policy-analysis', 'health', 'drive']) {
+  for (const id of ['health', 'drive']) {
     if (manifest.modules.filter((m) => m.id === id).length !== 1) errors.push(`Expected one ownership entry for ${id}`);
   }
   // Matches the repository's exported pgTable declarations, including multiline calls.
