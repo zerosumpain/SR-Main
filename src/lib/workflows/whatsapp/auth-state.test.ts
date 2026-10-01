@@ -39,7 +39,7 @@ describe('useAtomicMultiFileAuthState', () => {
 		await saveCreds();
 		const before = readFileSync(join(dir, 'creds.json'), 'utf-8');
 
-		state.creds.registrationId = 42;
+		state.creds.accountSyncCounter = 42;
 		failNextWrite.on = true;
 		await expect(saveCreds()).rejects.toThrow('ENOSPC');
 
@@ -49,13 +49,13 @@ describe('useAtomicMultiFileAuthState', () => {
 
 	it('restores from creds.json.bak when creds.json was left empty', async () => {
 		const first = await useAtomicMultiFileAuthState(dir);
-		first.state.creds.registrationId = 1234;
+		first.state.creds.accountSyncCounter = 1234;
 		await first.saveCreds();
 
 		writeFileSync(join(dir, 'creds.json'), ''); // what the 2026-09-29 outage left behind
 
 		const second = await useAtomicMultiFileAuthState(dir);
-		expect(second.state.creds.registrationId).toBe(1234);
+		expect(second.state.creds.accountSyncCounter).toBe(1234);
 	});
 
 	it('writes key files 0600 and round-trips them', async () => {
