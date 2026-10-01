@@ -205,6 +205,10 @@
     "src/lib/nav/reach.ts": {
       "peer": "zerosumpain/SR-Drive",
       "sha256": "33ef10438ebf9daabaa5aa5c436bacf830a9b9a64002a26f1aa32d6f6b94e069"
+    },
+    "src/lib/jkai/panel/schema.ts": {
+      "peer": "zerosumpain/SR-Jkai-Core",
+      "sha256": "e0a550e772806d27b40b59ef165d9e10854b669730637fea2964af8b77a23d14"
     }
   }
 }

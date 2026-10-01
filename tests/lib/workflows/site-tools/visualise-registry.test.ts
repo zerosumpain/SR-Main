@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { getToolsetManifest } from '$lib/workflows/site-tools/registry';
 
 describe('visualise toolset', () => {
-  it('appears in the manifest with its three renderers', () => {
+  it('appears in the manifest with its three renderers and the desk page tool', () => {
     const m = getToolsetManifest();
     const v = m.find((t) => t.toolset === 'visualise');
     expect(v).toBeDefined();
@@ -13,6 +13,7 @@ describe('visualise toolset', () => {
       'render_chart',
       'render_diagram',
       'render_table',
+      'show_in_panel',
     ]);
   });
 });

@@ -29,6 +29,7 @@ import './tools/scheduled';
 import './tools/home-assistant';
 import './tools/alexa';
 import './tools/visualise';
+import './tools/desk';
 import './tools/ephemeral-tools';
 import './tools/media-write-document';
 import './tools/publish-page';
@@ -137,7 +138,7 @@ export function getToolsetManifest(): Array<{
     heartbeat: 'Heartbeat actions — register periodic agent check-ins on a long-running task and mark them complete',
     schedule: 'Scheduled callbacks — one-shot time-based fires (a fixed reply, a direct tool call, or a re-engagement) at a specific time',
     memory: 'Persistent memory — save, recall, and forget facts about the user',
-    visualise: 'Inline visual responses — render charts (Vega-Lite), diagrams (Mermaid), and tables directly in chat',
+    visualise: 'Inline visual responses — render charts (Vega-Lite), diagrams (Mermaid), and tables directly in chat, and lay out the /jkai desk page (show_in_panel)',
     media: 'Media generation — create downloadable files (markdown, code, CSV, JSON, text) as conversation attachments',
     scraper: 'Scraper intelligence — look up target domain knowledge (CAPTCHA requirements, CSS selectors, interactive hints) before planning scraper workflows',
     files: 'Workflow file store — list, read, and semantically SEARCH files uploaded via /drive (file_search finds files by their content, including image visuals/OCR and audio transcripts). PDFs, DOCX, audio, and video are auto-extracted to text on read.',
