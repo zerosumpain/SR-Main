@@ -28,11 +28,6 @@
 // build default would 404 it.
 export const STATIC_PROJECT_KEYS = [
   'hex',
-  // Not a page in this repo: cloudflared routes /projects/policy-analysis to
-  // SR-Policy-Analysis. The key is here so the card's own toggle works — it is
-  // the only thing it controls, since the application does its own owner check
-  // and never consults this table.
-  'policy-analysis',
   'engine-room',
   'scs-earnings',
   'data-standard-designer',

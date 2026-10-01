@@ -8,8 +8,9 @@ import {
 
 describe('queue trigger ownership', () => {
   it('defaults to the triggers whose applications have actually been extracted', () => {
-    expect(externalTriggers({})).toEqual(['policy-analysis']);
-    expect(isExternallyOwned('policy-analysis', {})).toBe(true);
+    // None since SR-Policy-Analysis was decommissioned (2026-10-01).
+    expect(externalTriggers({})).toEqual([]);
+    expect(isExternallyOwned('policy-analysis', {})).toBe(false);
     expect(isExternallyOwned('daydream', {})).toBe(false);
   });
 
@@ -86,10 +87,17 @@ describe('the bash copy of the lane list', () => {
       ['-c', `set -euo pipefail; source scripts/lib/queue-triggers.sh; queue_triggers_clause ${listPath}; printf '%s' "$QUEUE_MINE_SQL"`],
       { encoding: 'utf8' },
     );
+    // No application leases its own lane today, so the drain excludes nothing.
+    expect(clause).toBe('');
     // One spelling of the rule across TypeScript and both bash drains. The three
     // used to be `IS DISTINCT FROM`, `<>` and `<>`, which is how they drift.
-    expect(clause).toBe("AND (trigger IS NULL OR trigger NOT IN ('policy-analysis'))");
-    expect(clause).not.toContain('<>');
+    const withLane = execFileSync(
+      'bash',
+      ['-c', `set -euo pipefail; source scripts/lib/queue-triggers.sh; queue_triggers_clause ${listPath}; printf '%s' "$QUEUE_MINE_SQL"`],
+      { encoding: 'utf8', env: { ...process.env, EXTERNAL_QUEUE_TRIGGERS: 'policy-analysis' } },
+    );
+    expect(withLane).toBe("AND (trigger IS NULL OR trigger NOT IN ('policy-analysis'))");
+    expect(withLane).not.toContain('<>');
   });
 
   it('honours EXTERNAL_QUEUE_TRIGGERS too, so the override moves both halves', async () => {

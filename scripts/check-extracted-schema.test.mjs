@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { checkExtractedSchema } from './check-extracted-schema.mjs';
 
-const manifest = () => ({ version: 2, modules: ['policy-analysis', 'health', 'drive'].map((id) => ({ id, requiredTables: ['shared'] })) });
+const manifest = () => ({ version: 2, modules: ['health', 'drive'].map((id) => ({ id, requiredTables: ['shared'] })) });
 const schema = 'export const renamedSymbol = pgTable(\n "shared", {});\n';
 
 test('allows shared ownership and symbol renames while preserving physical tables', () => {
@@ -15,7 +15,7 @@ test('allows shared ownership and symbol renames while preserving physical table
 
 test('a commented-out table does not preserve any consumer', () => {
   const errors = checkExtractedSchema(manifest(), `/*\n${schema}*/\n// ${schema.trim()}\n`);
-  for (const id of ['policy-analysis', 'health', 'drive']) assert.ok(errors.includes(`${id}: Main must retain table shared`));
+  for (const id of ['health', 'drive']) assert.ok(errors.includes(`${id}: Main must retain table shared`));
 });
 
 test('omitting an app or its required tables fails closed', () => {
@@ -24,7 +24,7 @@ test('omitting an app or its required tables fails closed', () => {
   data.modules[0].requiredTables = [];
   const errors = checkExtractedSchema(data, schema).join('\n');
   assert.match(errors, /one ownership entry for drive/);
-  assert.match(errors, /policy-analysis: required table set is empty/);
+  assert.match(errors, /health: required table set is empty/);
   assert.match(checkExtractedSchema({ version: 1, modules: [] }, schema).join('\n'), /version 2/);
 });
 

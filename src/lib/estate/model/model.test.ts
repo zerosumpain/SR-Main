@@ -57,7 +57,7 @@ describe('estate model', () => {
       ).toBe(true);
     }
     // And the constant itself is untouched by the model.
-    expect([...EXTRACTED_TRIGGERS]).toEqual(['policy-analysis']);
+    expect([...EXTRACTED_TRIGGERS]).toEqual([]);
   });
 
   it('gives every feed a ledger row, and every node a feed that produced it', () => {

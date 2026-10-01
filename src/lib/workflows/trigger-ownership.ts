@@ -26,7 +26,10 @@ import { sql } from 'drizzle-orm';
  * Triggers whose work is executed outside this process. Add an entry when a
  * domain's dedicated worker goes live, not when its repository is created.
  */
-export const EXTRACTED_TRIGGERS = ['policy-analysis'] as const;
+// Empty since SR-Policy-Analysis, the one application that leased its own
+// lane, was decommissioned (2026-10-01). Every builder below handles an empty
+// list; the next extraction adds its trigger here.
+export const EXTRACTED_TRIGGERS: readonly string[] = [];
 
 function parse(env: NodeJS.ProcessEnv): string[] {
   const raw = env.EXTERNAL_QUEUE_TRIGGERS;

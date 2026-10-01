@@ -41,7 +41,6 @@ export const STANDALONE_REPOS: Array<{ slug: string; repo: string; names: RegExp
 
 /** Registry apps whose names are distinctive enough to recognise in prose. */
 const APP_NAMES: Record<string, RegExp> = {
-  'policy-analysis': /\bpolicy[\s-]analysis\b/i,
   'policy-engine': /\bpolicy[\s-]engine\b/i,
   'dfe-data-strategy': /\bdfe data strategy\b/i,
   'data-standard-designer': /\bdata[\s-]standard[\s-]designer\b/i,
