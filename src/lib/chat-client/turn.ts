@@ -8,7 +8,7 @@
 //
 //   POST /api/jkai/service/turn
 //   Authorization: Bearer <JKAI_INVOKE_TOKEN>
-//   { input: { text, attachmentIds? }, history, options }
+//   { input: { text, attachmentIds? }, history: [{ role, content, createdAt, attachmentIds? }], options }
 //   → 200 { response, memory }
 //
 // Core's gateway passes the path through without a session and the route checks
@@ -21,11 +21,38 @@
 // Unlike chat-context this IS the reply, so a failure throws: each caller already
 // has its own answer for a turn that failed.
 import { postToExtracted } from '$lib/server/extracted-app';
-import type { HistoryMessage } from '$lib/workflows/chat/conversation-history';
 import type { JkaiAttachment } from '$lib/db/schema';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 import type { ThinkingLevel } from '$lib/models/thinking';
 import type { MemoryTurnStamp } from '$lib/jkai/memory/contracts';
+
+/**
+ * A history message as the callers hold it. Declared here rather than imported
+ * from the chat engine, which this client exists to stop depending on.
+ */
+export interface TurnHistoryMessage {
+  role: string;
+  content: string;
+  createdAt: Date;
+  attachments?: readonly Pick<JkaiAttachment, 'id'>[];
+  evidence?: unknown;
+}
+
+/**
+ * How a message travels: ISO dates (JSON has no Date) and attachment IDS only.
+ * An attachment row carries the disk path the engine reads, so Core loads the
+ * rows itself, from the thread's own conversation, and never takes one from here.
+ */
+function toWire(m: TurnHistoryMessage) {
+  const attachmentIds = (m.attachments ?? []).map((a) => a.id);
+  return {
+    role: m.role,
+    content: m.content,
+    createdAt: m.createdAt.toISOString(),
+    ...(attachmentIds.length ? { attachmentIds } : {}),
+    ...(m.evidence !== undefined ? { evidence: m.evidence } : {}),
+  };
+}
 
 export interface RemoteTurnOptions {
   conversationId?: string | null;
@@ -54,7 +81,7 @@ const TIMEOUT_MS = 15 * 60_000;
 
 export async function chatTurn(
   input: { text: string; attachments?: readonly Pick<JkaiAttachment, 'id'>[] },
-  history: HistoryMessage[],
+  history: readonly TurnHistoryMessage[],
   options: RemoteTurnOptions,
   opts: { timeoutMs?: number; port?: number } = {},
 ): Promise<RemoteTurn> {
@@ -62,7 +89,7 @@ export async function chatTurn(
   const res = await postToExtracted<{ response?: unknown; memory?: unknown }>(
     'jkai-core',
     '/api/jkai/service/turn',
-    { input: { text: input.text, ...(attachmentIds.length ? { attachmentIds } : {}) }, history, options },
+    { input: { text: input.text, ...(attachmentIds.length ? { attachmentIds } : {}) }, history: history.map(toWire), options },
     { timeoutMs: opts.timeoutMs ?? TIMEOUT_MS, port: opts.port },
   );
   if (typeof res?.response !== 'string') throw new Error('chat turn: Core returned no response');

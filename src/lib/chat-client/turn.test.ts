@@ -14,7 +14,7 @@ describe('chatTurn', () => {
     post.mockResolvedValue({ response: 'hi', memory: { k: 1 } });
     const out = await chatTurn(
       { text: 'hello', attachments: [{ id: 'a1' }] },
-      [{ role: 'user', content: 'earlier' }] as never,
+      [{ role: 'user', content: 'earlier', createdAt: new Date('2026-10-01T10:00:00.000Z'), attachments: [{ id: 'h1', diskPath: '/x' } as never] }],
       { conversationId: 'c1', modelContext, priceSnapshot: null },
     );
     expect(out).toEqual({ response: 'hi', memory: { k: 1 } });
@@ -23,7 +23,7 @@ describe('chatTurn', () => {
     expect(path).toBe('/api/jkai/service/turn');
     expect(body).toEqual({
       input: { text: 'hello', attachmentIds: ['a1'] },
-      history: [{ role: 'user', content: 'earlier' }],
+      history: [{ role: 'user', content: 'earlier', createdAt: '2026-10-01T10:00:00.000Z', attachmentIds: ['h1'] }],
       options: { conversationId: 'c1', modelContext, priceSnapshot: null },
     });
   });
