@@ -103,3 +103,7 @@ const workerSrc = (() => {
 if (!workerSrc || !existsSync(workerSrc)) fail('pdfjs-dist/build/pdf.worker.mjs does not resolve to a real file');
 
 console.log(`✓ built-extract check passed — ${result.text.length} chars, ${result.meta.pageCount} pages, worker resolves`);
+// Explicitly: importing built server chunks can leave module-scope handles
+// (pools, timers) open, and a check that never exits hangs its caller instead
+// of passing.
+process.exit(0);

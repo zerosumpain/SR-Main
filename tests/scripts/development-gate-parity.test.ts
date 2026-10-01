@@ -52,6 +52,19 @@ describe('isolated verification and CI run the same gate', () => {
     expect(ci).not.toMatch(/vitest run[^\n]*\.integration\.test\.ts/);
   });
 
+  it('refuses a candidate that edits any script verification executes', () => {
+    const controls = broker.slice(broker.indexOf('async function assertVerificationControls'), broker.indexOf('async function accept'));
+    const pattern = new RegExp(controls.match(/const control = changed\.find\(\(file\) => (\/.+\/)\.test\(file\)\)/)![1].slice(1, -1));
+    for (const file of ['gate-db-contracts.sh', 'gate-structural.sh', 'ci-prebuild.sh', 'check-built-extract.mjs', 'check-authored-runner.sh']) expect(pattern.test(`scripts/${file}`), file).toBe(true);
+  });
+
+  it('accept gates inside its trial preview instead of building twice', () => {
+    const accept = broker.slice(broker.indexOf('async function accept'), broker.indexOf('let lane'));
+    expect(accept).toContain('verifyAs: id');
+    expect(accept).not.toContain('await verifyRuntime(');
+    expect(broker).toContain('options.verify || options.verifyAs) await verifyRuntime(');
+  });
+
   it('fingerprints the scripts verification now executes', () => {
     const fingerprint = broker.slice(broker.indexOf('async function runtimeFingerprint'), broker.indexOf('async function allocate'));
     for (const file of ['gate-db-contracts.sh', 'ci-prebuild.sh', 'check-built-extract.mjs', 'check-authored-runner.sh']) expect(fingerprint).toContain(`scripts/${file}`);

@@ -47,10 +47,11 @@ describe('changedDevFilesCommand', () => {
     sh(dev, `${git} add -A && ${git} commit -qm "Local feature candidate"`);
     writeFileSync(join(dev, 'src/old-3.ts'), 'export const v3 = 33;\n'); // uncommitted edit
     writeFileSync(join(dev, 'src/untracked.css'), '.a{}\n'); // never added
+    writeFileSync(join(dev, 'src/café.ts'), 'export const c = 1;\n'); // non-ASCII, untracked
     writeFileSync(join(dev, '.env'), 'SECRET=1\n'); // ignored
     rmSync(join(dev, 'src/old-4.ts')); // deletion
     const changed = run(dev, 'master');
-    expect(changed?.map((f) => f.path).sort()).toEqual(['src/old-3.ts', 'src/routes/new.svelte', 'src/untracked.css']);
+    expect(changed?.map((f) => f.path).sort()).toEqual(['src/café.ts', 'src/old-3.ts', 'src/routes/new.svelte', 'src/untracked.css'].sort());
     expect(changed?.every((f) => f.size > 0 && f.mtime > 0)).toBe(true);
   });
 

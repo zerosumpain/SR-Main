@@ -1002,7 +1002,9 @@ export function parseDevFileListing(stdout: string): DevFileEntry[] {
  *     "Local feature candidate" snapshot commits only add newer entries.
  * Tracked changes come from `git diff` (committed AND uncommitted, against
  * the work tree), new files from `ls-files --others` minus ignored ones;
- * deletions drop out at the `-f` test. `safe.directory` because the broker
+ * deletions drop out at the `-f` test. `core.quotePath=false` so a non-ASCII
+ * name arrives as itself, not a quoted octal escape no `-f` can find.
+ * `safe.directory` because the broker
  * lane's tree belongs to uid 1000, not necessarily the user this runs as.
  *
  * Prints NOTHING when no base resolves, and callers read empty-and-failed as
@@ -1011,7 +1013,7 @@ export function parseDevFileListing(stdout: string): DevFileEntry[] {
  */
 export function changedDevFilesCommand(dev: string, baseBranch?: string): string {
   const branch = baseBranch && /^[\w./-]+$/.test(baseBranch) && !baseBranch.includes('..') ? baseBranch : '';
-  const git = `git -c safe.directory='*' -C ${dev}`;
+  const git = `git -c safe.directory='*' -c core.quotePath=false -C ${dev}`;
   return (
     `base=$(${branch ? `${git} merge-base HEAD 'origin/${branch}' 2>/dev/null || ` : ''}${git} reflog show --format=%H HEAD 2>/dev/null | tail -1); ` +
     `[ -n "$base" ] || exit 0; echo "BASE\t$base"; cd ${dev} && ` +
