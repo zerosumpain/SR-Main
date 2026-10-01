@@ -162,13 +162,18 @@ export async function autopilotStep(buildId: string): Promise<AutopilotOutcome> 
   }
 
   if (!autopilotActive(state)) return stop(buildId, `Autopilot reached its limit of ${state.autopilot.maxRounds} rounds. The saved work, preview and evidence are retained.`);
-  // Waiting, not stopping. Arming autopilot at commission is the whole point of
-  // the checkbox, and a fresh delivery definitionally has no accepted brief —
-  // the owner accepts it on the next screen. Treating that as a failure fired an
-  // "Autopilot needs you" push within a minute of asking for an unattended run,
-  // which is the opposite of what was asked for. An unaccepted brief costs one
-  // row read per sweep and no round.
-  if (!state.brief.acceptedAt) return 'idle';
+  // An unaccepted brief. This used to wait for a person — so an unattended run
+  // could not start unattended, and a brief nobody accepted sat until the
+  // six-hour stall. Now autopilot grooms it, checks its lane, routes and
+  // criteria, and accepts it only when that check is clean; anything else ends
+  // the run with the reason. Its own branch and module, because none of the
+  // round machinery below applies until there is an accepted brief. It still
+  // leaves an owner-groomed brief alone for a grace period, so the page that
+  // commissioned the run is not overtaken while the owner reads it.
+  if (!state.brief.acceptedAt) {
+    const { autopilotBrief } = await import('./development-brief.server');
+    return autopilotBrief(buildId, delivery, build, reason => stop(buildId, reason));
+  }
 
   // A blocking question. Answer it from the brief, or hand it back.
   const pendingDecision = state.decisions.find(d => !d.answer);

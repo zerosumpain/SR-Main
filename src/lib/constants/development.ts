@@ -38,6 +38,51 @@ export interface Criterion {
    */
   assessment?: { basis: 'observed' | 'inferred'; verdict: 'passed' | 'failed' | 'blocked'; evidence: string; model: string; independent?: boolean; revision: string; at: string };
 }
+/**
+ * Which lane an ask belongs in, decided before anything is built.
+ *
+ * The 2026-09-25 review found five of six /jkai/develop asks were standalone
+ * explainers or toys, and one ("a random sausage generator") was groomed into
+ * a /marble-run feature although Marble Run lives in its own repository. The
+ * development lane is the only one that clones SR-Main, so it is the wrong
+ * place for anything that does not need the platform.
+ *
+ *  - `site`: needs the platform — Postgres, the auth gate, the LLM gateway, the
+ *    site's navigation or its data — so it belongs in SR-Main;
+ *  - `studio`: a standalone explainer, toy or app that needs none of that;
+ *  - `other-repo`: changes something that lives in another repository.
+ */
+export const BRIEF_LANES = ['site', 'studio', 'other-repo'] as const;
+export type BriefLaneKind = (typeof BRIEF_LANES)[number];
+export interface BriefLane {
+  lane: BriefLaneKind;
+  reason: string;
+  /** `owner/name` when the lane is `other-repo`. */
+  repo?: string;
+  /** Who decided: the grooming model, a deterministic rule, or nobody (an ungroomed brief). */
+  source: 'grooming' | 'rule' | 'unchecked';
+}
+/** One problem with a brief. `block` stops acceptance unless the owner overrides it. */
+export interface BriefFinding {
+  kind: 'route' | 'criterion' | 'preview' | 'lane';
+  severity: 'block' | 'warn';
+  /** The route or criterion text the finding is about. */
+  subject: string;
+  message: string;
+  /** `model` findings came from the one LLM pass; the rest are rules. */
+  source?: 'rule' | 'model';
+}
+export interface BriefLint {
+  /** The brief revision this judged. A newer brief needs judging again. */
+  revision: number;
+  at: string;
+  lane: BriefLane;
+  findings: BriefFinding[];
+  /** False when no route manifest was available, so routes went unchecked. */
+  routesChecked: boolean;
+  /** The criteria the model pass judged, so an unchanged set is not paid for twice. */
+  judged?: { key: string; model: string };
+}
 export interface DeliveryState {
   version: 1;
   /**
@@ -59,8 +104,24 @@ export interface DeliveryState {
   stage: DeliveryStage;
   originalAsk?: string;
   cycle?: { startedAt: string; modelId?: string; startingCandidate?: string | null; preflightAt?: string; firstPreviewAt?: string; candidateAt?: string; failureKind?: 'infrastructure' | 'feature' | 'deadline'; failure?: string; repairAttempts: number; modelMs: number; previewMs: number; verificationMs: number; phaseMs?: Record<string, number>; };
-  grooming?: { turns?: Array<{ questions: string; answer: string }>; model: string; at: string; summary: string };
-  brief: { scope?: string; dependencies?: string; assumptions?: string; questions?: string; validation?: string; revision: number; outcome: string; constraints: string; routes: string[]; acceptedAt: string | null };
+  /** `by: 'autopilot'` when an unattended run groomed it, which skips the owner's grace period. */
+  grooming?: { turns?: Array<{ questions: string; answer: string }>; model: string; at: string; summary: string; by?: 'owner' | 'autopilot' };
+  brief: {
+    scope?: string; dependencies?: string; assumptions?: string; questions?: string; validation?: string; revision: number; outcome: string; constraints: string;
+    /** Existing site paths the feature changes. Each must be in the route manifest. */
+    routes: string[];
+    /** Paths the feature proposes to create. Listed apart so a typo in `routes` cannot pass as a new page. */
+    newRoutes?: string[];
+    /** The grooming model's lane proposal, as it returned it. `lint.lane` is the verdict. */
+    lane?: Omit<BriefLane, 'source'>;
+    /** The last brief check, written at grooming and at every acceptance attempt. */
+    lint?: BriefLint;
+    /** What the owner chose to accept past, recorded so the history says so. */
+    override?: { lane?: boolean; lint?: boolean; at: string };
+    acceptedAt: string | null;
+    /** Absent on briefs accepted before autopilot could accept one. */
+    acceptedBy?: 'owner' | 'autopilot';
+  };
   criteria: Criterion[];
   /**
    * Blocking questions the worker asked. `answeredBy` matters: autopilot may
