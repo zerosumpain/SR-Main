@@ -206,9 +206,10 @@ async function resetBatch() {
   if (dirty.length) throw new Error(`These workspaces hold uncommitted work and would lose it: ${dirty.join(', ')}. Let each finish or stop its build, then try again.`);
   for (const entry of rebuilt) {
     await command('rm', ['-rf', join(root, entry, 'dev')]);
-    await command('rm', ['-f', join(trustedRoot, `${entry}-base`)]);
+    await command('rm', ['-rf', join(trustedRoot, `${entry}-base`), join(trustedRoot, `${entry}-shots`), join(trustedRoot, `batch-${entry}-shots`)]);
   }
   await command('rm', ['-rf', batch, join(trustedRoot, 'source'), join(trustedRoot, 'batch-preview.json')]);
+  for (const entry of await readdir(trustedRoot).catch(() => [])) if (/^batch-[a-zA-Z0-9-]+-shots$/.test(entry)) await command('rm', ['-rf', join(trustedRoot, entry)]);
   await ensureBatch();
   return { batch: await git(batch, 'rev-parse', 'HEAD'), reset: true, rebuilt };
 }
@@ -255,8 +256,10 @@ async function codeSource(id, revision, file) {
  * its filesystem could be a symlink or a directory swapped in under the name
  * we asked for; stdout is already the trust boundary, and `parseCheckOutput`
  * has bounded and shape-checked every image before it reaches here. Names are
- * ours, the directory is replaced whole on each run, so one candidate's
- * screenshots never outlive the run that took them.
+ * ours, and there is one directory per id holding only the latest inspect —
+ * replaced whole by each inspect, removed when a new preview is provisioned,
+ * closed or the batch is reset. The names are returned to the caller and never
+ * written to the preview receipt, which a later inspect would contradict.
  */
 async function storeScreenshots(id, observations) {
   const dir = join(trustedRoot, `${id}-shots`);
@@ -275,7 +278,7 @@ async function inspectPreview(id, revision) {
   const receipt = JSON.parse(await readFile(join(trustedRoot, `${id}-preview.json`), 'utf8'));
   if (receipt.revision !== revision || !receipt.name || !receipt.plan?.scenarios?.length) throw new Error('A browser-checked preview of the current revision is required.');
   await docker('cp', `${source}/scripts/development-preview-check.mjs`, `${receipt.name}:/tmp/development-preview-check.mjs`);
-  const { evidence, observations } = parseCheckOutput(await docker('exec', receipt.name, 'node', '/tmp/development-preview-check.mjs'));
+  const { evidence, observations } = parseCheckOutput(await docker('exec', receipt.name, 'node', '/tmp/development-preview-check.mjs', '--screenshots'));
   const base = (await readFile(join(trustedRoot, `${id}-base`), 'utf8')).trim();
   if (!/^[a-f0-9]{40}$/.test(base)) throw new Error('Invalid base revision');
   const patch = (await git(path, 'diff', '--no-ext-diff', '--no-textconv', base, revision, '--')).slice(0, 40000);
@@ -311,6 +314,9 @@ async function provisionPreview(id, revision, path, plan, options) {
   const target = join(root, id, 'preview');
   const receiptFile = join(trustedRoot, `${id}-preview.json`);
   const old = JSON.parse(await readFile(receiptFile, 'utf8').catch(() => '{}'));
+  // Screenshots belong to the inspect of an earlier revision; whether this
+  // preview passes or fails, they no longer describe the candidate.
+  await rm(join(trustedRoot, `${id}-shots`), { recursive: true, force: true });
   await ensureRuntimeImage();
   const fingerprint = await runtimeFingerprint();
   if (!options.verify && !options.verifyAs && old.fingerprint === fingerprint && old.revision === revision && old.url && old.port && old.runtimeVersion === 4 && JSON.stringify(old.plan) === JSON.stringify(plan)) {
@@ -380,7 +386,6 @@ async function provisionPreview(id, revision, path, plan, options) {
   let evidence, observations;
   try { ({ evidence, observations } = parseCheckOutput(await docker('exec', name, 'node', '/tmp/development-preview-check.mjs'))); }
   catch (error) { throw error.kind ? error : failure(`Feature browser check failed: ${(error.stderr || error.stdout || error.message).slice(-1600)}`, 'feature'); }
-  observations = await storeScreenshots(id, observations);
   await assertCandidate(id, revision);
   const url = previewLink(id, revision, port);
   const receipt = { revision, port, url, name, plan, evidence, observations, proxyVersion: 2, runtimeVersion: 4, fingerprint, verified: options.verify === true };

@@ -36,21 +36,29 @@ describe('reviewer evidence', () => {
 
   it('builds a bounded payload that says what is attached, and image parts only when there are images', () => {
     const inspection = { evidence: Array(30).fill('page text'), observations: [observation], screenshots: [shot(1440)], changes: { files: ['src/a.ts'], patch: '+x' } };
-    const lessons = [{ id: 'area-1', source: 'area' as const, lesson: 'Use HealthShell' }];
+    const lessons = [{ id: 'area-1', origin: 'area' as const, lesson: 'Use HealthShell' }, { id: 'L9', origin: 'codegraph' as const, lesson: 'Unverified note' }];
     const withImages = JSON.parse(reviewPayload({ base: { brief: 'b' }, inspection, images: [shot(1440)], lessons, repositoryGate: { passed: false } }));
     expect(withImages.inspection.evidence).toHaveLength(REVIEW_LIMITS.evidence);
     expect(withImages.inspection.observations[0].consoleErrors).toHaveLength(REVIEW_LIMITS.messages);
     expect(withImages.inspection.observations[0]).toMatchObject({ failedRequests: ['500 POST /api/stops'], outline: '- button "Save"', scenario: 'Save a stop' });
-    expect(withImages.inspection.screenshots).toMatch(/^Attached as images.*1440px \/feature/);
-    expect(withImages).toMatchObject({ brief: 'b', houseRules: lessons, repositoryGate: { passed: false } });
+    expect(withImages.inspection.screenshots).toEqual({ attached: [{ image: 1, width: 1440, route: '/feature', scenario: 'Save a stop' }] });
+    expect(withImages).toMatchObject({ brief: 'b', houseRules: [lessons[0]], precedents: [lessons[1]], repositoryGate: { passed: false } });
+    // Candidate-controlled strings are clipped, and the observation list is bounded in total.
+    const flood = JSON.parse(reviewPayload({ base: {}, inspection: { evidence: ['x'.repeat(20_000)],
+      observations: Array.from({ length: 24 }, () => ({ ...observation, outline: 'o'.repeat(5000) })) }, images: [], lessons: [], repositoryGate: null }));
+    expect(flood.inspection.evidence[0].length).toBe(REVIEW_LIMITS.evidenceChars);
+    expect(JSON.stringify(flood.inspection.observations).length).toBeLessThanOrEqual(REVIEW_LIMITS.observationsTotal);
+    expect(flood.inspection.observationsOmitted).toMatch(/omitted/);
     const textOnly = JSON.parse(reviewPayload({ base: {}, inspection, images: [], lessons: [], repositoryGate: null }));
-    expect(textOnly.inspection.screenshots).toMatch(/cannot read images/);
-    expect(JSON.parse(reviewPayload({ base: {}, inspection: { evidence: ['x'] }, images: [], lessons: [], repositoryGate: null })).inspection.screenshots).toMatch(/No screenshots/);
+    expect(textOnly.inspection.screenshots.note).toMatch(/cannot read images/);
+    expect(JSON.parse(reviewPayload({ base: {}, inspection: { evidence: ['x'] }, images: [], lessons: [], repositoryGate: null })).inspection.screenshots.note).toMatch(/No screenshots/);
 
     expect(reviewContent('payload', [])).toBe('payload');
     const parts = reviewContent('payload', [shot(1440), shot(390)]) as Array<{ type: string; image_url?: { url: string } }>;
     expect(parts.map(p => p.type)).toEqual(['text', 'text', 'image_url', 'text', 'image_url']);
     expect(parts[2].image_url?.url).toBe('data:image/jpeg;base64,QUJD');
+    // The worker-written scenario label never travels as a bare text part.
+    expect(JSON.stringify(parts.slice(1))).not.toContain('Save a stop');
   });
 
   it('puts area lessons first, drops synced duplicates and bounds the total', () => {
@@ -60,7 +68,7 @@ describe('reviewer evidence', () => {
       { id: 'L2', title: 'Two writers', body: 'They race on the cache.', citedPaths: ['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/d.ts', 'src/e.ts', 'src/f.ts'] },
     ];
     const lessons = reviewerLessons(area, files);
-    expect(lessons.map(l => [l.id, l.source])).toEqual([['area-7', 'area'], ['L2', 'files']]);
+    expect(lessons.map(l => [l.id, l.origin])).toEqual([['area-7', 'area'], ['L2', 'codegraph']]);
     expect(lessons[0].lesson).toBe('Never hard-code a model (evidence: PR #1)');
     expect(lessons[1]).toMatchObject({ lesson: 'Two writers: They race on the cache.', paths: ['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/d.ts', 'src/e.ts'] });
     const many = Array.from({ length: 30 }, (_, i) => ({ id: `L${i}`, title: '', body: 'y'.repeat(2000), citedPaths: [] }));

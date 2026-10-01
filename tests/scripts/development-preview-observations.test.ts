@@ -31,6 +31,9 @@ describe('preview observations', () => {
     const parsed = parseCheckOutput(JSON.stringify({ evidence: ['e'], observations: Array.from({ length: 40 }, (_, i) => ({ width: 1440, route: `/r${i}`, text: 't', consoleErrors: [], failedRequests: [], outline: '' })) }));
     expect(parsed.observations).toHaveLength(24);
     expect(() => parseCheckOutput('{"observations":[]}')).toThrow(/no evidence/);
+    const flooded = parseCheckOutput(JSON.stringify(Array.from({ length: 40 }, () => 'p'.repeat(10_000))));
+    expect(flooded.evidence).toHaveLength(OBSERVATION_LIMITS.evidence);
+    expect(flooded.evidence[0]).toHaveLength(OBSERVATION_LIMITS.evidenceChars);
   });
 
   it('gives the reviewer the first screenshot at each width, at most two', () => {

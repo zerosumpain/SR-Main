@@ -40,6 +40,12 @@ test('real browser checks fail on missing routes, broken interactions and runtim
       assert.equal(o.screenshot.mediaType, 'image/jpeg');
       assert.ok(Buffer.from(o.screenshot.base64, 'base64').subarray(0, 2).equals(Buffer.from([0xff, 0xd8])));
     }
+    // A spent budget skips the outline and screenshot but keeps the cheap lists.
+    const starved = { observations: [], screenshots: true, budgetMs: 0 };
+    await checkPage(browser, base, plan, starved);
+    assert.match(starved.observations[0].outline, /budget was spent/);
+    assert.equal(starved.observations[0].screenshot, undefined);
+    assert.ok(starved.observations[0].failedRequests.includes('404 GET /api/missing'));
     noisy = false;
     await assert.rejects(checkPage(browser, base, { ...plan, routes: ['/missing'] }), /did not open/);
     broken = true; await assert.rejects(checkPage(browser, base, plan), /Timeout/);

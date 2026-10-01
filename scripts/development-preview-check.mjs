@@ -72,10 +72,18 @@ export function previewPlan(input, routes, required = true) {
  *  - outline: the ARIA snapshot. ~1,500 characters holds a page's landmarks,
  *    headings and controls; past that it is the same list rows again.
  *  - screenshotsPerWidth/screenshotBytes: JPEG of the viewport, not the full
- *    page. Four per width x two widths x 300KB is 2.4MB raw, 3.2MB as base64 —
- *    well inside the buffer even at the cap, and a typical text page is ~80KB.
+ *    page, of the first scenario only — the one the reviewer is shown. One per
+ *    width x two widths x 300KB is 600KB raw; a typical text page is ~80KB.
+ *  - budgetMs: ONE allowance shared by every outline and screenshot in a run.
+ *    `/inspect` has 120s in all, and 24 outlines plus 8 screenshot retries at
+ *    5s each could spend 200s on a slow page and lose the whole review to a
+ *    deadline. Past the budget the cheap lists are still kept and the outline
+ *    says it was skipped, so an absence is never mistaken for an empty page.
+ *  - evidence/evidenceChars: the page-text strings. The check's stdout is
+ *    reachable by the candidate (playwright loads from its node_modules), so
+ *    what it prints is bounded here and again by every reader.
  */
-export const OBSERVATION_LIMITS = Object.freeze({ messages: 10, message: 300, outline: 1500, screenshotsPerWidth: 4, screenshotBytes: 300_000 });
+export const OBSERVATION_LIMITS = Object.freeze({ messages: 10, message: 300, outline: 1500, screenshotsPerWidth: 1, screenshotBytes: 300_000, budgetMs: 20_000, evidence: 24, evidenceChars: 4000 });
 
 /**
  * Append one message unless the list is full. Whitespace is collapsed so a
@@ -134,9 +142,11 @@ export function boundObservation(input) {
  */
 export function parseCheckOutput(stdout) {
   const parsed = JSON.parse(stdout);
-  if (Array.isArray(parsed)) return { evidence: parsed.map(String), observations: [] };
+  /** @param {unknown[]} list */
+  const clipped = list => list.slice(0, OBSERVATION_LIMITS.evidence).map(e => String(e).slice(0, OBSERVATION_LIMITS.evidenceChars));
+  if (Array.isArray(parsed)) return { evidence: clipped(parsed), observations: [] };
   if (!parsed || !Array.isArray(parsed.evidence)) throw new Error('The browser check returned no evidence.');
-  return { evidence: parsed.evidence.map(String), observations: (Array.isArray(parsed.observations) ? parsed.observations : []).slice(0, 24).map(boundObservation) };
+  return { evidence: clipped(parsed.evidence), observations: (Array.isArray(parsed.observations) ? parsed.observations : []).slice(0, 24).map(boundObservation) };
 }
 
 /**
@@ -175,11 +185,15 @@ export function reviewScreenshotChoice(observations, limit = 2) {
  * @param {import('playwright').Browser} browser
  * @param {string} base
  * @param {{ routes: string[], scenarios: Array<{ route: string, text: string, steps: Array<Record<string, any>> }> }} plan
- * @param {{ observations: PreviewObservation[], screenshots?: boolean }} [report]
+ * Screenshots only when `report.screenshots` is set: `/inspect` asks, the
+ * provision and verification previews do not — nothing reads them there.
+ * @param {{ observations: PreviewObservation[], screenshots?: boolean, budgetMs?: number }} [report]
  */
 export async function checkPage(browser, base, plan, report) {
   const evidence = [];
   const origin = new URL(base).origin;
+  const budgetEnds = Date.now() + (report?.budgetMs ?? OBSERVATION_LIMITS.budgetMs);
+  const remaining = () => Math.min(5000, budgetEnds - Date.now());
   for (const width of [1440, 390]) {
     const context = await browser.newContext({ viewport: { width, height: 900 } });
     await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
@@ -227,9 +241,12 @@ export async function checkPage(browser, base, plan, report) {
           throw new Error(await scenarioFailure(page, where, error));
         }
         evidence.push(`${width}px: ${scenario.route} — ${scenario.text}; interaction and visible result passed. Steps: ${JSON.stringify(scenario.steps)}. Observed page: ${(await page.locator('body').innerText()).slice(0, 3000)}`);
-        if (report) report.observations.push(boundObservation({ width, route: scenario.route, text: scenario.text, ...current,
-          outline: await page.locator('body').ariaSnapshot({ timeout: 5000 }).catch(() => '(accessibility outline unavailable)'),
-          screenshot: report.screenshots && scenarioIndex < OBSERVATION_LIMITS.screenshotsPerWidth ? await viewportShot(page) : undefined }));
+        if (report) {
+          const outline = remaining() > 0 ? await page.locator('body').ariaSnapshot({ timeout: remaining() }).catch(() => '(accessibility outline unavailable)')
+            : '(accessibility outline skipped: the observation time budget was spent)';
+          const screenshot = report.screenshots && scenarioIndex < OBSERVATION_LIMITS.screenshotsPerWidth ? await viewportShot(page, remaining) : undefined;
+          report.observations.push(boundObservation({ width, route: scenario.route, text: scenario.text, ...current, outline, screenshot }));
+        }
       }
       if (errors.length) throw new Error(`Browser runtime error: ${errors.join('; ').slice(0, 1000)}`);
     } finally { await context.close(); }
@@ -242,10 +259,12 @@ export async function checkPage(browser, base, plan, report) {
  * or will not fit is missing evidence, never a failed scenario: the page text
  * already proved the interaction.
  * @param {import('playwright').Page} page
+ * @param {() => number} remaining milliseconds left in the shared budget, capped per call
  */
-async function viewportShot(page) {
+async function viewportShot(page, remaining) {
   for (const quality of [60, 30]) {
-    const image = await page.screenshot({ type: 'jpeg', quality, timeout: 5000 }).catch(() => null);
+    if (remaining() <= 0) return undefined;
+    const image = await page.screenshot({ type: 'jpeg', quality, timeout: remaining() }).catch(() => null);
     if (!image) return undefined;
     if (image.length <= OBSERVATION_LIMITS.screenshotBytes) return { mediaType: 'image/jpeg', base64: image.toString('base64') };
   }
@@ -292,7 +311,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   // the structured observations (see `parseCheckOutput` for the old shape).
   try {
     /** @type {{ observations: PreviewObservation[], screenshots: boolean }} */
-    const report = { observations: [], screenshots: true };
+    const report = { observations: [], screenshots: process.argv.includes('--screenshots') };
     const evidence = await checkPage(browser, 'http://127.0.0.1:5275', JSON.parse(await readFile('/tmp/preview-plan.json', 'utf8')), report);
     console.log(JSON.stringify({ evidence, observations: report.observations }));
   }
