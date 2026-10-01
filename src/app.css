@@ -1027,9 +1027,9 @@ a {
    FIELD STUDY SYSTEM
    Research-paper projects under /projects/<slug>. Extends the
    warm-brutalist language with a reading serif, claim/evidence
-   structure and citation apparatus. The system, its nine templates
-   and its ship checklist live in field-study-system/ at the repo
-   root; the Svelte primitives live in src/lib/fieldstudy/.
+   structure and citation apparatus. Used by The Engine Room and by
+   the studio gate's checks. The authoring kit (field-study-system/,
+   src/lib/fieldstudy/) was deleted unused on 2026-10-01.
 
    Sizes are mapped onto the site type scale rather than the kit's
    own 8.5-11px literals: the 12px floor is gated sitewide by

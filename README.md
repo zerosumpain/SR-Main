@@ -26,8 +26,6 @@ npm run validate:change
 - [Extracted application ownership](docs/extracted-app-ownership.md): schema and
   cross-repository responsibilities.
 - [Agent guidance](CLAUDE.md): development constraints and domain conventions.
-- [Field Study System](field-study-system/INSTRUCTIONS.md): the page-authoring
-  procedure for research projects.
 
 Before changing an extracted feature, consult `docs/module-ownership.json` and
 SR-Infra's application registry. Removing Main's old routes does not remove
