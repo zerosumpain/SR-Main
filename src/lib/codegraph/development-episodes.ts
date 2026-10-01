@@ -72,11 +72,11 @@ export function queuePendingFailure(pending: PendingFailure[], failure: PendingF
   return [...pending, failure].slice(-MAX_PENDING);
 }
 
-/** The episode row a fail→fix pair becomes, in the ingest route's shape. */
+/** An episode a build writes — a fail→fix pair, or a merged outcome — in the ingest route's shape. */
 export interface DevelopmentEpisode {
   dedupeKey: string; repo: string; sourceKind: 'development'; sourceId: string; title: string;
-  problem: string; resolution: string; verification: string; fingerprint: string; gate: string;
-  verdict: 'verified'; filesTouched: string[]; prNumber: number | null; occurredAt: Date;
+  problem: string; resolution: string; verification: string; fingerprint: string | null; gate: string | null;
+  verdict: 'verified' | 'landed'; filesTouched: string[]; prNumber: number | null; occurredAt: Date;
   /** Node paths to link: the files, then the gate node — as ingest links them. */
   nodes: string[];
 }
@@ -111,14 +111,17 @@ export function fixEpisodeFrom(input: {
   // The fingerprint's own prefix is the gate it names (`typecheck:TS2345`,
   // `gate:TypeError`), normalised through the one vocabulary gate nodes use.
   const gate = normaliseGate(failure.fingerprint.split(':')[0]);
-  const where = failure.source === 'ci' ? `CI on pull request${failure.prNumber ? ` #${failure.prNumber}` : ''}` : 'isolated verification';
+  const where = failure.source === 'ci' ? `CI on pull request${failure.prNumber ? ` #${failure.prNumber}` : ''}` : failure.source === 'gate' ? 'The repository gate' : 'isolated verification';
+  // A change-request gate has no candidate sha, only iterations; naming an
+  // iteration id as a "candidate" would read as a commit nobody can find.
+  const span = failure.source === 'gate' ? 'after the failing gate run' : `between candidate ${failure.revision.slice(0, 12)} and ${input.passRevision.slice(0, 12)}`;
   return {
     dedupeKey: `development-fix:${input.buildId}:${failure.source}:${failure.revision}:${failure.fingerprint}`,
     repo: input.repo ?? 'SR-Main', sourceKind: 'development', sourceId: input.buildId,
     title: `${gate}: ${failure.fingerprint}`,
-    problem: `${where} failed on candidate ${failure.revision.slice(0, 12)}:\n${failure.excerpt}`.slice(0, 4000),
+    problem: `${where} failed${failure.source === 'gate' ? '' : ` on candidate ${failure.revision.slice(0, 12)}`}:\n${failure.excerpt}`.slice(0, 4000),
     resolution: (input.exact
-      ? `Fixed by changing ${files.length} file(s) between candidate ${failure.revision.slice(0, 12)} and ${input.passRevision.slice(0, 12)}: ${files.join(', ')}.`
+      ? `Fixed by changing ${files.length} file(s) ${span}: ${files.join(', ')}.`
       : `The passing candidate ${input.passRevision.slice(0, 12)} changes ${files.length} file(s) against its base: ${files.join(', ')}. The per-revision diff was unavailable, so this is the whole change set, not only the fix.`).slice(0, 4000),
     verification: input.passEvidence.slice(0, 1000),
     fingerprint: failure.fingerprint, gate, verdict: 'verified', filesTouched: files,

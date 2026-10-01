@@ -422,7 +422,7 @@ async function parkOnOwner(buildId: string, release: NonNullable<DeliveryState['
  * means base is an ancestor of head. A failed lookup returns false, so an API
  * hiccup reports "not yet live" rather than inventing a deployment.
  */
-async function commitContains(base: string, head: string, headers: Record<string, string>): Promise<boolean> {
+export async function commitContains(base: string, head: string, headers: Record<string, string>): Promise<boolean> {
   try {
     const response = await fetch(`https://api.github.com/repos/${REPO}/compare/${base}...${head}`, { headers, signal: AbortSignal.timeout(15_000) });
     if (!response.ok) return false;
@@ -432,7 +432,7 @@ async function commitContains(base: string, head: string, headers: Record<string
 }
 
 /** The sha production says it is serving, from the public stamp endpoint. */
-async function servingSha(): Promise<string | null> {
+export async function servingSha(): Promise<string | null> {
   try {
     const response = await fetch('https://strangeramblings.com/api/version', { signal: AbortSignal.timeout(15_000) });
     if (!response.ok) return null;

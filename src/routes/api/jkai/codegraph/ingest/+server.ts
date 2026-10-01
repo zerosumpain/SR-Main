@@ -105,9 +105,17 @@ export const POST: RequestHandler = async ({ request }) => {
 
   const body = (await request.json().catch(() => null)) as {
     snapshot?: import('$lib/codegraph/snapshot').StructuralSnapshot; scope?: 'deployed' | 'owned'; repo?: string; nodes?: NodeIn[]; edges?: EdgeIn[]; episodes?: EpisodeIn[]; lessons?: LessonIn[];
-    liveness?: { ref?: string; paths?: string[] };
+    liveness?: { ref?: string; paths?: string[] }; builds?: { dry?: boolean };
   } | null;
   if (!body) throw error(400, 'invalid json');
+  // The build-history pass: the release job asks this route to learn from
+  // every build already run, the way it asks it to index the tree. Same
+  // credential, same route, so it needs no bypass of its own. See
+  // `build-history.server.ts`.
+  if (body.builds) {
+    const { learnFromBuildHistory } = await import('$lib/codegraph/build-history.server');
+    return json(await learnFromBuildHistory({ dry: body.builds.dry === true }));
+  }
   if (body.snapshot) {
     const { saveSnapshot } = await import('$lib/codegraph/snapshot.server');
     try { return json({ ok: true, snapshotId: await saveSnapshot(body.snapshot, body.scope === 'owned' ? 'owned' : 'deployed') }); }

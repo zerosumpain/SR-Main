@@ -209,7 +209,7 @@ async function changedBetween(buildId: string, from: string, to: string): Promis
  * from the path), and the same rule on conflict: refresh the facts, never
  * `retiredAt` or the usage counters.
  */
-async function writeEpisode(episode: DevelopmentEpisode) {
+export async function writeEpisode(episode: DevelopmentEpisode) {
   const { nodes: paths, ...values } = episode;
   const [row] = await db.insert(codegraphEpisodes).values(values).onConflictDoUpdate({ target: codegraphEpisodes.dedupeKey,
     set: { problem: values.problem, resolution: values.resolution, verification: values.verification, verdict: values.verdict, prNumber: values.prNumber } }).returning({ id: codegraphEpisodes.id });

@@ -96,6 +96,15 @@ describe('path extraction', () => {
     ])).toEqual(['src/x.ts']);
   });
 
+  it('reads the {lang, code} shape jkai_iterations actually stores', () => {
+    expect(editedPathsFromActions([
+      { code: 'src/lib/jkai/orchestrator.ts', lang: 'edit', stderr: '', stdout: 'Successfully replaced 1 block(s)', exitCode: 0 },
+      { code: 'write src/routes/rome/+page.svelte\n<script lang="ts">\n</script>', lang: 'write', exitCode: 0 },
+      { code: 'src/lib/never-applied.ts', lang: 'edit', exitCode: 1 },
+      { code: 'ls src', lang: 'bash', exitCode: 0 },
+    ])).toEqual(['src/lib/jkai/orchestrator.ts', 'src/routes/rome/+page.svelte']);
+  });
+
   it('survives junk actions without throwing', () => {
     expect(editedPathsFromActions(null)).toEqual([]);
     expect(editedPathsFromActions([null, 'nope', {}, { tool: 'Edit' }])).toEqual([]);

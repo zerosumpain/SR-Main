@@ -209,8 +209,12 @@ export interface DeliveryState {
 
 /** One red gate result, kept until a later green one proves what fixed it. */
 export interface PendingFailure {
-  /** Which gate failed. A CI failure is only ever paired with a CI pass. */
-  source: 'verification' | 'ci';
+  /**
+   * Which gate failed. A CI failure is only ever paired with a CI pass. `gate`
+   * is the change-request lane's in-workspace `npm run gate`, which has no
+   * candidate sha — its `revision` is the failing iteration's id.
+   */
+  source: 'verification' | 'ci' | 'gate';
   /** The candidate that failed: one end of the per-revision file diff. */
   revision: string;
   /** The episode's key: the most specific fingerprint, as the hot lane will ask for it. */

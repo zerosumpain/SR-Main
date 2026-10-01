@@ -148,7 +148,19 @@ export function editedPathsFromActions(actions: unknown, max = 12): string[] {
     const tool = String(rec.tool ?? rec.name ?? rec.lang ?? '').toLowerCase();
     if (!/edit|write/.test(tool)) continue;
     const args = (rec.args ?? rec.input ?? rec.params) as Record<string, unknown> | undefined;
-    const p = args?.file_path ?? args?.path ?? rec.path ?? rec.file;
+    /*
+     * THE SHAPE PRODUCTION ACTUALLY RECORDS, which none of the keys above match.
+     *
+     * Every edit in `jkai_iterations.actions` (measured 2026-10-01, 155
+     * iterations) is `{ lang: 'edit', code: '<path>' }` or `{ lang: 'write',
+     * code: 'write <path>\n<body>' }`, with the tool's exit code beside it. So
+     * this function returned [] for every real iteration, and lane 2's "what
+     * was edited last" key never once fired outside its own tests. A failed
+     * edit changed nothing, so it does not count.
+     */
+    if (typeof rec.exitCode === 'number' && rec.exitCode !== 0) continue;
+    const recorded = typeof rec.code === 'string' ? /^(?:write\s+)?(\S+)/.exec(rec.code.split('\n', 1)[0].trim())?.[1] : undefined;
+    const p = args?.file_path ?? args?.path ?? rec.path ?? rec.file ?? recorded;
     if (typeof p === 'string' && p) {
       out.add(p.replace(/^\/home\/jkai\/workspace\/[^/]+\/dev\//, ''));
       if (out.size >= max) break;
