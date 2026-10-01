@@ -6,7 +6,7 @@ import { conversations } from '$lib/db/schema';
 import { getConversationMessages } from '$lib/jkai/queries';
 import { clampLimit, withNativeAccess } from '$lib/server/native-handler';
 import { requireConversation } from '$lib/jkai/chat-access.server';
-import { nativeArtifacts, nativeSources } from '$lib/jkai/native-rich';
+import { nativeArtifacts, nativePanel, nativeSources } from '$lib/jkai/native-rich';
 
 /**
  * GET /api/native/chat/conversations/[id]/messages — one thread's history.
@@ -24,6 +24,7 @@ import { nativeArtifacts, nativeSources } from '$lib/jkai/native-rich';
  * `artifacts` (charts, tables, diagrams from the visualise tools — see
  * `$lib/jkai/native-rich`) and `sources` (the files and research it cited).
  * Without these the phone showed "render_chart ✓" where the web shows a chart.
+ * `panel` is the turn's desk page (see `nativePanel`) for the app's drawer.
  *
  * A member reads a thread only if the web would let them
  * (`requireConversation` 'read'): one they may not see is a 404, exactly like
@@ -81,6 +82,9 @@ export const GET: RequestHandler = withNativeAccess('jkai.chat', async (event, _
         }),
         artifacts: nativeArtifacts(metadata.toolSteps),
         sources: nativeSources(metadata),
+        // The desk page for this turn, for the app's side drawer. Null when the
+        // turn put nothing on the desk (most turns: casual, or no evidence).
+        panel: message.role === 'assistant' ? nativePanel(metadata) : null,
         attachments: message.attachments.map((attachment) => ({
           id: attachment.id,
           /** The column is `originalName`; it is nullable for a pasted blob. */

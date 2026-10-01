@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nativeArtifacts, nativeSources, TABLE_ROW_CAP } from './native-rich';
+import { nativeArtifacts, nativePanel, nativeSources, TABLE_ROW_CAP } from './native-rich';
 
 const step = (artifact: unknown) => ({ tool: 'render_chart', status: 'done', result: { success: true, data: { artifact } } });
 
@@ -98,5 +98,40 @@ describe('sources', () => {
       { kind: 'research', title: 'Marathon taper', passage: 'Cut volume by 40%.', url: 'https://ex.org/t', domain: 'ex.org' },
       { kind: 'file', title: 'week-7.md', passage: 'Sat long run', url: null, domain: null },
     ]);
+  });
+});
+
+describe('the desk page for the drawer', () => {
+  const page = (blocks: unknown[]) => ({
+    panel: {
+      producer: 'turn',
+      head: { kicker: 'Health', context: ['health'], title: 'Readiness' },
+      sections: [{ id: 'health', label: 'Readiness', blocks }],
+    },
+  });
+
+  it('passes a valid page through', () => {
+    const p = nativePanel(page([{ id: 'f', type: 'figures', items: [{ label: 'Readiness', value: '73' }] }]));
+    expect(p?.head.title).toBe('Readiness');
+    expect(p?.sections[0].blocks.map((b) => b.id)).toEqual(['f']);
+  });
+
+  it('drops artifact blocks and actions the phone should not tap', () => {
+    const p = nativePanel(page([
+      { id: 'a', type: 'artifact', artifact: { type: 'chart', spec: {}, data: [] } },
+      { id: 'b', type: 'actions', items: [
+        { id: 'x', label: 'Ask', kind: 'ask', ask: { label: 'Ask', detail: 'Why?' } },
+        { id: 'y', label: 'Run', kind: 'post', endpoint: '/api/x' },
+      ] },
+    ]));
+    expect(p?.sections[0].blocks.map((b) => b.id)).toEqual(['b']);
+    const acts = p!.sections[0].blocks[0];
+    expect(acts.type === 'actions' && acts.items.map((a) => a.kind)).toEqual(['ask']);
+  });
+
+  it('is null for no page, an invalid page, or a page left empty', () => {
+    expect(nativePanel({})).toBeNull();
+    expect(nativePanel({ panel: { head: {} } })).toBeNull();
+    expect(nativePanel(page([{ id: 'a', type: 'artifact', artifact: {} }]))).toBeNull();
   });
 });
