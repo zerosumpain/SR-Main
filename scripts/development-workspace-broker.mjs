@@ -243,7 +243,10 @@ async function patch(id, revision) {
   // invocation needs `-c safe.directory` or git refuses with "dubious
   // ownership" — which is why that helper exists. Writing the patch with
   // writeFile rather than a shell redirection keeps it on that path.
-  const diff = await git(path, 'diff', '--no-ext-diff', '--no-textconv', '--binary', base, revision, '--');
+  // `.development-preview.json` is the worker's browser-scenario plan for the
+  // broker — build tooling, not part of the feature. Without the exclusion the
+  // first unattended feature (29915e85) would have proposed it to master.
+  const diff = await git(path, 'diff', '--no-ext-diff', '--no-textconv', '--binary', base, revision, '--', '.', ':(exclude).development-preview.json');
   await writeFile(target, diff.endsWith('\n') ? diff : diff + '\n');
   await command('chown', ['1000:1000', target]);
   const { size } = await stat(target);
