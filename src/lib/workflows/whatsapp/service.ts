@@ -7,7 +7,7 @@ import makeWASocket, {
 	downloadMediaMessage
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
-import { mkdirSync, readdirSync, chmodSync } from 'fs';
+import { mkdirSync, readdirSync, chmodSync, renameSync } from 'fs';
 import { join } from 'path';
 import { readBuffer } from '$lib/jkai/media/storage';
 import type { JkaiAttachment } from '$lib/db/schema';
@@ -115,6 +115,7 @@ export class WhatsAppService {
 
 		const { state, saveCreds } = await useMultiFileAuthState(authDir);
 		this.saveCreds = saveCreds;
+		const pairedAtConnect = Boolean(state.creds.registered || state.creds.me);
 
 		// Baileys' own version file lags WhatsApp Web by months, and WhatsApp
 		// refuses to link a client that old ("can't link new devices right
@@ -182,7 +183,29 @@ export class WhatsAppService {
 				this.sock = null;
 
 				if (isLoggedOut) {
-					console.log('[whatsapp] Logged out — clearing session');
+					// The creds belong to a device WhatsApp has removed; they will 401
+					// forever. Archive them (never delete) and offer a fresh QR.
+					const archived = `${authDir}-loggedout-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+					try {
+						renameSync(authDir, archived);
+						console.log(`[whatsapp] Logged out — session archived to ${archived}, offering a new QR`);
+					} catch (err) {
+						console.error('[whatsapp] Logged out — could not archive session:', err);
+						return;
+					}
+					this.reconnectAttempts = 0;
+					setTimeout(() => this.connect(authDir), 2000);
+				} else if (statusCode === DisconnectReason.restartRequired) {
+					// WhatsApp asks for exactly this right after a QR is scanned. It is
+					// the second half of pairing, not a failure, so it must never be
+					// refused by the attempt budget — that stranded a successful scan.
+					console.log('[whatsapp] Restart required (pairing step) — reconnecting');
+					setTimeout(() => this.connect(authDir), 500);
+				} else if (!pairedAtConnect) {
+					// Unpaired: the only "failure" is a QR nobody scanned yet. Keep
+					// offering codes indefinitely so /admin/connections/whatsapp always
+					// has one, instead of going dark after ~15 minutes.
+					setTimeout(() => this.connect(authDir), 5000);
 				} else if (this.reconnectAttempts < this.maxReconnectAttempts) {
 					this.reconnectAttempts++;
 					const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
