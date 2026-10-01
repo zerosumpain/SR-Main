@@ -3,7 +3,7 @@ import { customTools } from '$lib/db/schema';
 import { desc } from 'drizzle-orm';
 import { isShowcase } from '$lib/server/showcase';
 import type { PageServerLoad } from './$types';
-import { registry } from '$lib/workflows';
+import { nodeDefinitions } from '$lib/workflows/registry-client';
 import { getToolsetManifest } from '$lib/workflows/site-tools/registry';
 import type { NodeDefinition } from '$lib/workflows/types';
 
@@ -95,7 +95,7 @@ export const load: PageServerLoad = async (event) => {
   // Hidden defs (legacy multi-mode nodes superseded by per-operation splits)
   // remain executable but are filtered out so the admin UI matches what
   // the orchestrator actually sees.
-  const allDefs = registry.listDefinitions().filter((d) => !d.hidden);
+  const allDefs = nodeDefinitions.filter((d) => !d.hidden);
 
   const primitives = allDefs
     .filter((d) => !SITE_NODE_TYPES.has(d.type))

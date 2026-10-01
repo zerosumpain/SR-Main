@@ -458,9 +458,14 @@ export function pickSuccessor(
  * import-bound.
  */
 export async function detectDeadNodeTypes(workflowIds?: string[]): Promise<DeadNodeType[]> {
-  const { registry } = await import('$lib/workflows');
-  const defs = registry.listDefinitions();
-  const known = new Set(defs.map((d) => d.type));
+  // The types SR-Workflows can run, dynamic nodes included: it is the engine,
+  // so it is the only one that can say a type is dead.
+  const { invokeWorkflowRuntime } = await import('$lib/workflows/runtime-client');
+  const known = new Set(await invokeWorkflowRuntime<string[]>({ action: 'node_types' }));
+  // Successor candidates come from the built-in definitions Main keeps for the
+  // canvas; a rename always lands on a built-in type.
+  const { nodeDefinitions } = await import('$lib/workflows/registry-client');
+  const { searchNodeDefinitions } = await import('$lib/workflows/node-search');
 
   const rows = await db
     .select({
@@ -487,7 +492,7 @@ export async function detectDeadNodeTypes(workflowIds?: string[]): Promise<DeadN
       // matches nothing on its own — the fragment query is what finds the rename.
       const seen = new Set<string>();
       const candidates: SuccessorCandidate[] = [];
-      for (const def of [...registry.search(r.type), ...registry.search(deadTypeFragments(r.type).join(' '))]) {
+      for (const def of [...searchNodeDefinitions(nodeDefinitions, r.type), ...searchNodeDefinitions(nodeDefinitions, deadTypeFragments(r.type).join(' '))]) {
         // A hidden definition is one that was already superseded; proposing a
         // move to it would be proposing the previous mistake.
         if (def.hidden || seen.has(def.type)) continue;

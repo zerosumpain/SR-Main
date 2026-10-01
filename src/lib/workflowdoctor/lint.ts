@@ -55,58 +55,25 @@ export async function lintWorkflow(workflowId: string): Promise<WorkflowLint> {
   if (graph.nodes.length === 0) return emptyLint();
   const { nodes: nodeDefs, edges: edgeDefs } = graph;
 
-  // Lazy, and it must stay lazy: `$lib/workflows` eagerly registers ~130 server
-  // node modules, so a static import here would drag all of them into the
-  // doctor's module graph and into every test that touches it.
-  const { registry } = await import('$lib/workflows');
-  const { verifyWorkflow } = await import('$lib/workflows/orchestrator/verify');
-
-  // The dominant real failure: a node whose type was renamed out from under the
-  // stored row (`icloud-cal` → `apple-calendar`, 5,053 failed runs). verifyWorkflow
-  // is silent on it — `getDefinition` returns undefined and every rule guards with
-  // `def?.`, so the graph that can NEVER run lints clean. Synthesise the engine's
-  // own runtime error instead, so the signature the doctor sees at lint time is
-  // the signature it sees in `workflow_runs.error`.
-  const deadTypes: VerificationIssue[] = [];
-  for (const node of nodeDefs) {
-    if (registry.getDefinition(node.type) && registry.getExecutor(node.type)) continue;
-    deadTypes.push({
-      nodeId: node.id,
-      nodeLabel: node.label,
-      field: 'type',
-      issue:
-        `No executor found for node type: ${node.type}. This node type is not in the registry, so every ` +
-        `run of this workflow fails at this node. Either the type was renamed and the stored row was not ` +
-        `migrated, or the node was removed from the codebase — repoint the node at its successor type, or ` +
-        `delete it from the canvas.`,
-      severity: 'error',
-    });
-  }
-
-  const getOutputSchema = (type: string, config: Record<string, unknown>) => {
-    const executor = registry.getExecutor(type);
-    if (!executor) return { type: 'object' as const };
-    try {
-      return executor.getOutputSchema(config);
-    } catch {
-      // A schema getter that throws on a malformed stored config is itself a
-      // symptom, but it must not take the whole lint down with it.
-      return { type: 'object' as const };
-    }
-  };
-
-  // Deliberately not passing the workflow-level `trigger`: that only enables the
-  // graph-level dedupe rule, which fires on workflows that are SUCCEEDING while
-  // re-sending. The doctor triages failures, and a constant extra error would
-  // muddy the before/after error delta the fix phase measures.
-  const issues = verifyWorkflow(
-    nodeDefs,
-    edgeDefs,
-    (type) => registry.getDefinition(type),
-    getOutputSchema,
-  );
-
-  return summarise([...deadTypes, ...issues]);
+  // SR-Workflows lints: it holds the registry the graph will actually run
+  // against, dynamic nodes included. `deadTypes` adds the one check
+  // verifyWorkflow skips — a node whose type no longer exists, which every run
+  // fails on — as the engine's own runtime error, so the signature the doctor
+  // sees at lint time is the one it sees in `workflow_runs.error` (the
+  // `icloud-cal` → `apple-calendar` rename failed 5,053 runs).
+  //
+  // No workflow-level `trigger`: that only enables the graph-level dedupe rule,
+  // which fires on workflows that are SUCCEEDING while re-sending. The doctor
+  // triages failures, and a constant extra error would muddy the before/after
+  // error delta the fix phase measures.
+  const { invokeWorkflowRuntime } = await import('$lib/workflows/runtime-client');
+  const issues = await invokeWorkflowRuntime<VerificationIssue[]>({
+    action: 'lint',
+    nodes: nodeDefs,
+    edges: edgeDefs,
+    deadTypes: true,
+  });
+  return summarise(issues);
 }
 
 /**

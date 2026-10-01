@@ -58,7 +58,6 @@ export const MEMBER_FORBIDDEN_TOOLSETS = [
   'custom-tools',
   'scraper',
   'browser',
-  'node-builder',
   'intel-graph',
   'knowledge',
   'apis',

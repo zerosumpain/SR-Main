@@ -34,123 +34,22 @@
 // matched nothing, and stayed harmless right up until a UI could produce an
 // empty list (PR #203).
 
-import { register } from '../registry-internal';
-import type { ToolResult } from '../registry-internal';
-import { standaloneContext } from '$lib/workflows/standalone-context';
-
-interface StandaloneNode {
-  /** Why it is safe to run this one outside a graph, in one line. */
-  why: string;
-  /**
-   * Optional config check. Nodes that branch on an `operation` need one, since
-   * the type alone does not say whether this call reads or writes.
-   * Return an error string to refuse, or null to allow.
-   */
-  guard?: (config: Record<string, unknown>) => string | null;
-}
+import { registerWorkflowTool } from '../workflow-service';
 
 /**
- * The fast lane's whole surface. Adding a capability to chat is a line here
- * plus nothing else — which is the point of the file.
- *
- * Deliberately short, on two rules.
- *
- * Only nodes chat cannot ALREADY reach. Gmail, health, files, research and the
- * scraper all have their own toolsets with better-shaped tools than a generic
- * runner; duplicating them here would add a second way to do the same thing and
- * pay for it in the manifest every turn.
- *
- * Only nodes whose write surface is understood. Reading an executor is not
- * enough: `site-mapper` looked read-only at its own file and turned out to
- * insert `scraper_target_knowledge` two modules down, and to drive the
- * homeserv-only browser sandbox — which from the VPS would scrape production
- * traffic off a Hetzner IP. It is not here. Where a node refreshes an OAuth
- * token or reads an encrypted credential as part of reading (whoop,
- * apple-calendar), that is bookkeeping and is fine.
- *
- * Growing this list means tracing a candidate's imports, not glancing at it.
+ * The types SR-Workflows' node_call accepts (its ALLOWED map, which also holds
+ * each type's read-only guard). Only the names are needed here, for the
+ * description the model reads; the guards run where the node runs.
  */
-export const ALLOWED: Record<string, StandaloneNode> = {
-  'apple-calendar': {
-    why: 'Reads iCloud calendars and events over CalDAV.',
-    // The same executor creates, updates and deletes events. Only the read is
-    // on the fast lane; `apple_calendar_create` owns the write and is
-    // confirmation-gated.
-    guard: (config) =>
-      config.operation === 'list'
-        ? null
-        : `node_call runs apple-calendar in read-only mode: operation must be "list", not "${String(config.operation ?? 'unset')}". Use apple_calendar_create to add an event — it asks before writing.`,
-  },
-  'weather-brief': { why: 'Fetches a forecast. No store, no chat tool covers it.' },
-  'location-context': { why: 'Reads recent location history. No chat tool covers it.' },
-  whoop: { why: 'Reads recovery and sleep. Refreshes its own OAuth token, writes nothing else.' },
-  'tavily-search': { why: 'Web search against a different backend from the research tools.' },
-};
+const ALLOWED_TYPES = ['apple-calendar', 'location-context', 'tavily-search', 'weather-brief', 'whoop'];
 
-/** Names an allowed type, for error messages and the tool description. */
 function allowedList(): string {
-  return Object.keys(ALLOWED).sort().join(', ');
+  return ALLOWED_TYPES.join(', ');
 }
 
-export async function handleNodeCall(args: Record<string, unknown>): Promise<ToolResult> {
-  const type = typeof args.type === 'string' ? args.type.trim() : '';
-  if (!type) {
-    return { success: false, error: `\`type\` is required. Runnable node types: ${allowedList()}.` };
-  }
-
-  const entry = ALLOWED[type];
-  if (!entry) {
-    // Distinguish "no such node" from "that node exists but is not on the fast
-    // lane" — they need different next steps from the caller.
-    const { registry } = await import('$lib/workflows');
-    const exists = Boolean(registry.getDefinition(type));
-    return {
-      success: false,
-      error: exists
-        ? `Node type "${type}" exists but is not runnable outside a workflow. node_call is read-only; if this node writes, publishes or sends, use its own tool, or build a workflow. Runnable types: ${allowedList()}.`
-        : `No node type "${type}". Runnable types: ${allowedList()}. Call workflow_list_node_types to see everything the canvas offers.`,
-    };
-  }
-
-  const config = (args.config as Record<string, unknown>) ?? {};
-  if (typeof config !== 'object' || Array.isArray(config)) {
-    return { success: false, error: '`config` must be an object.' };
-  }
-
-  const refusal = entry.guard?.(config);
-  if (refusal) return { success: false, error: refusal };
-
-  const { registry } = await import('$lib/workflows');
-  const executor = registry.getExecutor(type);
-  if (!executor) {
-    return { success: false, error: `Node type "${type}" is allowed but has no registered executor.` };
-  }
-
-  const context = standaloneContext({ nodeId: `node_call:${type}` });
-  try {
-    const result = await executor.execute((args.input as Record<string, unknown>) ?? {}, config, context);
-    return {
-      success: true,
-      data: {
-        output: result.output,
-        rowCount: result.rowCount,
-        // Executors that report progress do it through `emit`; surfacing the
-        // buffer means a caller is not left guessing what a slow node was doing.
-        events: context.events.length ? context.events : undefined,
-      },
-    };
-  } catch (err) {
-    // A node's own error message is the useful one — it names the missing
-    // credential, the unknown calendar, the expired token. Pass it through
-    // rather than replacing it with a generic failure.
-    return {
-      success: false,
-      error: err instanceof Error ? `${type}: ${err.message}` : `${type}: ${String(err)}`,
-    };
-  }
-}
-
-register({
+// Runs in SR-Workflows, which owns the node executors; this registration only
+// describes the tool to Main's catalogue (MCP and chat both read it).
+registerWorkflowTool({
   name: 'node_call',
   description:
     'Run one workflow node directly, without building a workflow — the way to reach a capability that exists only as a canvas node. ' +
@@ -179,5 +78,4 @@ register({
   },
   category: 'Workflows',
   toolset: 'workflows',
-  handler: handleNodeCall,
 });

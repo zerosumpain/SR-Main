@@ -41,9 +41,9 @@ async function main(): Promise<void> {
   const { getWhatsAppService } = await import('$lib/workflows/whatsapp/service');
   const wa = getWhatsAppService() as unknown as Service;
 
-  // Importing the workflows barrel boots WhatsApp for this role. Give it a
-  // moment, then surface the QR — the only part of this that needs a human.
-  await import('$lib/workflows');
+  // Importing platform-boot boots WhatsApp for this role. Give it a moment,
+  // then surface the QR — the only part of this that needs a human.
+  await import('$lib/workflows/platform-boot');
 
   let lastQr: string | null = null;
   const watchQr = setInterval(() => {

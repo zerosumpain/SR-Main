@@ -20,6 +20,9 @@ import { startConnectorWatch, stopConnectorWatch } from '$lib/connectors/watch';
 // Side-effect import: every integration adapter registers itself on load.
 // The barrel is maintained by the node-builder codegen.
 import '$lib/integrations/adapters';
+// Boots WhatsApp (delegated to the worker), the owner WhatsApp channel and
+// Home Assistant, as the workflows barrel used to on import.
+import '$lib/workflows/platform-boot';
 import { isPublicPath, isGuestAllowedPath } from '$lib/auth';
 import { requiredFor, satisfies } from '$lib/access/catalogue';
 import { requestHost } from '$lib/request-host';
@@ -242,7 +245,6 @@ if (runsService('background')) {
 }
 
 // Graceful shutdown — stop schedulers so process can exit on SIGTERM
-import { engine as workflowEngine } from '$lib/workflows';
 
 let shuttingDown = false;
 async function gracefulShutdown() {
@@ -250,14 +252,7 @@ async function gracefulShutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log('[hooks.server] Shutting down...');
-  // #10 GRACEFUL DRAIN: let in-flight workflow runs finish (bounded) BEFORE we
-  // tear down schedulers and exit, so a deploy mid-run doesn't orphan it.
-  // Bounded at 25s so shutdown can never hang past the supervisor's kill grace.
-  try {
-    await workflowEngine.drain(25_000);
-  } catch (err) {
-    console.warn('[hooks.server] engine drain failed:', err);
-  }
+  // No workflow drain: this process runs no workflows (SR-Workflows does).
   stopHeartbeatEngine();
   stopScheduledEngine();
   stopForgeScheduler();

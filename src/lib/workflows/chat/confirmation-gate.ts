@@ -62,7 +62,6 @@ export function describeDestructiveAction(toolName: string, args: Record<string,
     case 'scraper_script_delete':    return `Delete scraper script "${args.scriptId ?? args.name ?? 'unknown'}"?`;
     case 'scraper_script_save':      return `Save/overwrite scraper script "${args.name ?? args.scriptId ?? 'unknown'}"?`;
     case 'publish_page':             return `Publish page "${(args.slug as string) ?? 'unknown'}" to the public site?`;
-    case 'node_builder_commit_and_deploy': return `Commit to origin/master and DEPLOY TO PRODUCTION? This ships live.`;
     case 'gmail_send':               return `Send email to ${(args.to as string) ?? 'unknown recipient'}?`;
     case 'gmail_reply':              return `Send reply on thread ${args.threadId ?? 'unknown'}?`;
     case 'apple_calendar_create':    return `Create calendar event "${args.title ?? 'untitled'}" on ${args.calendar ?? 'the selected calendar'} (${args.allDayStart ?? args.start ?? 'unknown start'} to ${args.allDayEnd ?? args.end ?? 'unknown end'})?`;
