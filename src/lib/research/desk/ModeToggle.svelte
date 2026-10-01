@@ -1,4 +1,4 @@
-<!-- src/lib/canvas/intelligence/desk/ModeToggle.svelte -->
+<!-- src/lib/research/desk/ModeToggle.svelte -->
 <script lang="ts">
   let {
     mode,

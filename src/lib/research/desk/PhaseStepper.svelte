@@ -1,4 +1,4 @@
-<!-- src/lib/canvas/intelligence/desk/PhaseStepper.svelte -->
+<!-- src/lib/research/desk/PhaseStepper.svelte -->
 <!-- Compact horizontal phase stepper showing the ordered research pipeline. -->
 <script lang="ts">
   import { PHASES, phaseStateFor } from './phases';

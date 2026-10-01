@@ -1,4 +1,4 @@
-<!-- src/lib/canvas/intelligence/desk/ArtefactCard.svelte -->
+<!-- src/lib/research/desk/ArtefactCard.svelte -->
 <script lang="ts">
   import type { DeskCard } from './store.svelte';
   import { confidenceColor, confidenceLabel, credibilityBadge } from '$lib/deepdive/display';

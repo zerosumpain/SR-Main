@@ -1,7 +1,7 @@
 <svelte:head><title>{data.session.topic} — The Desk (Shared)</title></svelte:head>
 <script lang="ts">
   import type { PageData } from './$types';
-  import ResearchDesk from '$lib/canvas/intelligence/ResearchDesk.svelte';
+  import ResearchDesk from '$lib/research/ResearchDesk.svelte';
 
   let { data }: { data: PageData } = $props();
 </script>

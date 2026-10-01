@@ -1,4 +1,4 @@
-<!-- src/lib/canvas/intelligence/desk/ActivityTicker.svelte -->
+<!-- src/lib/research/desk/ActivityTicker.svelte -->
 <script lang="ts">
   import { tick } from 'svelte';
   import type { FeedEvent } from './feedFormatter';

@@ -1,4 +1,4 @@
-// src/lib/canvas/intelligence/desk/phases.ts
+// src/lib/research/desk/phases.ts
 // Pure helpers for the ordered research phase model.
 import type { DeskStatus } from './deskControls';
 

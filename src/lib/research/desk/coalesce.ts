@@ -1,4 +1,4 @@
-// src/lib/canvas/intelligence/desk/coalesce.ts
+// src/lib/research/desk/coalesce.ts
 //
 // makeCoalescer — trailing debounce with a hard max-wait.
 //

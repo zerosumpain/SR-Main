@@ -1,4 +1,4 @@
-<!-- src/lib/canvas/intelligence/desk/ReportNode.svelte -->
+<!-- src/lib/research/desk/ReportNode.svelte -->
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import { buildReportView, type DeskCardLite, type ReportView } from './report-view';

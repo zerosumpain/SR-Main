@@ -1,4 +1,4 @@
-// src/lib/canvas/intelligence/desk/spread.ts
+// src/lib/research/desk/spread.ts
 //
 // Pure layout for the "click a group heading → spread its cards into open space
 // to explore them" interaction. Given the focused group's member ids and a

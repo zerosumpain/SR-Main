@@ -1,4 +1,4 @@
-// src/lib/canvas/intelligence/desk/synthesis-reducer.ts
+// src/lib/research/desk/synthesis-reducer.ts
 //
 // Pure reducer for synthesis.* SSE events → desk-side category + edge state.
 // Mirrors the synthesis event shape emitted by src/lib/deepdive/synthesis.ts:

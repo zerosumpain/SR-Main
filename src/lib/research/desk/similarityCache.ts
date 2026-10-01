@@ -1,4 +1,4 @@
-// src/lib/canvas/intelligence/desk/similarityCache.ts
+// src/lib/research/desk/similarityCache.ts
 //
 // Client-side wrapper around GET /api/deepdive/[id]/clusters?by=similarity.
 // The server clusters facts.embedding with greedy cosine and is itself cached

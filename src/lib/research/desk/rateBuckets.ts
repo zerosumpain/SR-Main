@@ -1,4 +1,4 @@
-// src/lib/canvas/intelligence/desk/rateBuckets.ts
+// src/lib/research/desk/rateBuckets.ts
 //
 // Pure helpers for the artefacts/sec ring buffer. No Svelte runes — unit-testable.
 // The store owns the actual state; these are the pure mutators.

@@ -1,4 +1,4 @@
-// src/lib/canvas/intelligence/desk/grouping.ts
+// src/lib/research/desk/grouping.ts
 //
 // Pure multi-dimension grouping for the Research Desk's "synthesize" pile view.
 //

@@ -1,4 +1,4 @@
-// src/lib/canvas/intelligence/desk/positioning.ts
+// src/lib/research/desk/positioning.ts
 //
 // The morph/sticky/pinned motion contract, as a pure function.
 // The component renders card transforms from effectivePosition() inside a

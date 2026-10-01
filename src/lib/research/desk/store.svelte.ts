@@ -1,4 +1,4 @@
-// src/lib/canvas/intelligence/desk/store.svelte.ts
+// src/lib/research/desk/store.svelte.ts
 //
 // Hydrate-then-stream desk store. On mount: GET /api/deepdive/[id]/data to
 // seed existing artefacts, THEN subscribe to /api/deepdive/[id]/stream for
