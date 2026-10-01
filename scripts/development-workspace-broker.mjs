@@ -134,10 +134,26 @@ async function workspace(id) {
   }
   return path;
 }
+/**
+ * What the builder mounts into a workspace and must never be committed: pi's
+ * project settings, and the read-only design kit `syncDesignAssets` copies into
+ * dev/design-system. The change-request clone always excluded the kit
+ * (sandbox.ts); this clone did not, so the first unattended feature (29915e85)
+ * committed 641 lines of it into its candidate and would have proposed them.
+ */
+const WORKER_MOUNTS = ['/.pi/', '/design-system/'];
 async function ignoreWorkerFiles(path) {
   const file = join(path, '.git/info/exclude');
   const existing = await readFile(file, 'utf8').catch(() => '');
-  if (!existing.split('\n').includes('/.pi/')) await writeFile(file, existing + '\n/.pi/\n');
+  const missing = WORKER_MOUNTS.filter((line) => !existing.split('\n').includes(line));
+  if (missing.length) await writeFile(file, existing + '\n' + missing.join('\n') + '\n');
+}
+/** Untrack a mount a candidate already committed — only if its base never had it. */
+async function untrackWorkerMounts(path, base) {
+  for (const mount of WORKER_MOUNTS.map((line) => line.replaceAll('/', ''))) {
+    const inBase = await git(path, 'cat-file', '-e', `${base}:${mount}`).then(() => true, () => false);
+    if (!inBase) await git(path, 'rm', '-r', '-q', '--cached', '--ignore-unmatch', '--', mount);
+  }
 }
 async function prepare(id) {
   await ensureBatch();
@@ -156,6 +172,9 @@ async function prepare(id) {
 }
 async function snapshot(id) {
   const path = await workspace(id);
+  await ignoreWorkerFiles(path);
+  const recordedBase = (await readFile(join(trustedRoot, `${id}-base`), 'utf8').catch(() => '')).trim();
+  if (/^[a-f0-9]{40}$/.test(recordedBase)) await untrackWorkerMounts(path, recordedBase);
   await git(path, 'add', '--all');
   const changed = await git(path, 'diff', '--cached', '--name-only');
   if (changed) await git(path, 'commit', '-m', 'Local feature candidate');
@@ -358,7 +377,14 @@ async function provisionPreview(id, revision, path, plan, options) {
     await new Promise((r) => setTimeout(r, 1000));
   }
   await docker('exec', dbName, 'psql', '-U', 'preview', '-d', 'preview', '-c', 'CREATE EXTENSION IF NOT EXISTS vector');
-  await docker('exec', name, 'npx', 'drizzle-kit', 'push', '--force');
+  // drizzle-kit reports on stdout behind a spinner; a bare rethrow kept only
+  // "Command failed: …", which is all build 29915e85's integration said.
+  try { await docker('exec', name, 'npx', 'drizzle-kit', 'push', '--force'); }
+  catch (error) {
+    if (error.kind) throw error;
+    const output = `${error.stdout ?? ''}\n${error.stderr ?? error.message}`.split('\n').filter((line) => !/Pulling schema from database|^\s*$/.test(line.replace(/\x1b\[[0-9;]*[A-Za-z]/g, ''))).join('\n');
+    throw failure(`Schema push failed in the preview database: ${verificationExcerpt(output)}`, failureKindFor(output, 'infrastructure'));
+  }
   await docker('cp', `${source}/scripts/local-preview-proxy.mjs`, `${name}:/tmp/sr-preview-proxy.mjs`);
   // Verification's gate:build is the production build, so a gated preview
   // serves that rather than paying for a second `npm run build` first.
