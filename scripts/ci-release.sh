@@ -582,6 +582,20 @@ VERIFY
     CODEGRAPH_TOKEN="$CODEGRAPH_TOKEN" \
       node scripts/codegraph-tree-pass.mjs --ref "${GITHUB_SHA:-HEAD}" \
       || echo "    warn: codegraph tree pass failed (deploy is fine)"
+    # Then teach it what the builds did: every jkai build's gate history and
+    # every merged proposal, upserted on stable keys, so the first deploy
+    # backfills and each later one catches up. AFTER the tree pass, because the
+    # pass reads the deployed snapshot to tell a build's own breakage from a
+    # test that fails whatever changes. Server-side, since the history is in
+    # this box's database — hence a POST rather than a script with its own
+    # rsync line. Non-fatal for the same reason as the tree.
+    echo "==> Teaching the codegraph from build history..."
+    if LEARNED="$(curl -fsS --max-time 300 -X POST -H "authorization: Bearer $CODEGRAPH_TOKEN" -H 'content-type: application/json' \
+      --data '{"builds":{}}' http://127.0.0.1:4173/api/jkai/codegraph/ingest)"; then
+      echo "    ${LEARNED:0:400}"
+    else
+      echo "    warn: codegraph build-history pass failed (deploy is fine)"
+    fi
   fi
 else
   echo "==> ERROR: $PUBLIC_URL did not serve candidate sha $SHA with a healthy root within 90s. Service state:" >&2

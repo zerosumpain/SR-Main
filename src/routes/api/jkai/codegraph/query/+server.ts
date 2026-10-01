@@ -21,7 +21,7 @@
  * be distinguished from one that is quietly doing nothing.
  */
 import { json, error } from '@sveltejs/kit';
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { codegraphQueries, jkaiIterations } from '$lib/db/schema';
 import {
@@ -29,8 +29,9 @@ import {
   codegraphBuildAuthorized,
   codegraphServiceAuthorized,
 } from '$lib/codegraph/auth';
-import { CgqlError, parseCgql } from '$lib/codegraph/query';
+import { CgqlError, parseCgql, servedForPlan } from '$lib/codegraph/query';
 import { renderContext, runPlan } from '$lib/codegraph/retrieve';
+import { pullServedFor } from '$lib/codegraph/feedback';
 import { isOwnerEmail } from '$lib/server/access';
 import type { RequestHandler } from './$types';
 
@@ -72,6 +73,23 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   const queryText = (body?.query ?? '').trim();
   if (!queryText) throw error(400, 'missing query');
 
+  /*
+   * Which iteration a build's pull belongs to, when it does not say.
+   *
+   * `scripts/codegraph-query.mjs` sends a build id and never an iteration id —
+   * pi gives the agent no way to know it — so 37 of the 62 pull rows in
+   * production had a build and no iteration, and `resolveBuildServes` filters
+   * on the iteration: those rows could never be judged. A build runs one
+   * iteration at a time and the pull happens inside it, so the newest
+   * iteration of the TOKEN's build is the one asking; that is the same rule
+   * `observeDevelopmentGate` uses to find the iteration a gate receipt judges.
+   * Only for a token-authenticated build: a body's build id is a claim.
+   */
+  const iterationId = body?.iterationId ?? (tokenBuildId
+    ? (await db.select({ id: jkaiIterations.id }).from(jkaiIterations).where(eq(jkaiIterations.buildId, tokenBuildId))
+      .orderBy(desc(jkaiIterations.createdAt)).limit(1).catch(() => []))[0]?.id ?? null
+    : null);
+
   const channel = tokenBuildId ? 'pull' : service && body?.channel === 'push' ? 'push' : 'chat';
   const started = Date.now();
 
@@ -83,7 +101,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
       // Log the parse failure too — a caller generating bad CGQL is a bug we
       // want visible in SQL, not a silent 400 nobody counts.
       await db.insert(codegraphQueries).values({
-        channel, buildId: attributedBuildId, iterationId: body?.iterationId ?? null,
+        channel, buildId: attributedBuildId, iterationId,
         query: queryText, outcome: 'failed', errorMessage: `${e.message} (at ${e.position})`,
         durationMs: Date.now() - started,
       }).catch(() => {});
@@ -100,9 +118,16 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     await db.insert(codegraphQueries).values({
       channel,
       buildId: attributedBuildId,
-      iterationId: body?.iterationId ?? null,
+      iterationId,
       query: queryText,
       outcome: result.outcome,
+      // What a gate receipt can judge this serve by. Only a fingerprint seed
+      // says "I was asking about THIS error", and only an error the build had
+      // really hit counts — once per iteration (`pullServedFor`). Every other
+      // seed stays empty and is closed `unattributable`.
+      servedFor: channel === 'pull' && attributedBuildId
+        ? await pullServedFor(attributedBuildId, iterationId, servedForPlan(plan)).catch(() => [])
+        : servedForPlan(plan),
       episodeIds: rendered.episodeIds,
       lessonIds: rendered.lessonIds,
       evidence: rendered,
@@ -122,7 +147,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   } catch (e) {
     const message = (e as Error).message ?? 'query failed';
     await db.insert(codegraphQueries).values({
-      channel, buildId: attributedBuildId, iterationId: body?.iterationId ?? null,
+      channel, buildId: attributedBuildId, iterationId,
       query: queryText, outcome: 'failed', errorMessage: message.slice(0, 500),
       durationMs: Date.now() - started,
     }).catch(() => {});

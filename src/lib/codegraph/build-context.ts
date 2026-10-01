@@ -148,7 +148,19 @@ export function editedPathsFromActions(actions: unknown, max = 12): string[] {
     const tool = String(rec.tool ?? rec.name ?? rec.lang ?? '').toLowerCase();
     if (!/edit|write/.test(tool)) continue;
     const args = (rec.args ?? rec.input ?? rec.params) as Record<string, unknown> | undefined;
-    const p = args?.file_path ?? args?.path ?? rec.path ?? rec.file;
+    /*
+     * THE SHAPE PRODUCTION ACTUALLY RECORDS, which none of the keys above match.
+     *
+     * Every edit in `jkai_iterations.actions` (measured 2026-10-01, 155
+     * iterations) is `{ lang: 'edit', code: '<path>' }` or `{ lang: 'write',
+     * code: 'write <path>\n<body>' }`, with the tool's exit code beside it. So
+     * this function returned [] for every real iteration, and lane 2's "what
+     * was edited last" key never once fired outside its own tests. A failed
+     * edit changed nothing, so it does not count.
+     */
+    if (typeof rec.exitCode === 'number' && rec.exitCode !== 0) continue;
+    const recorded = typeof rec.code === 'string' ? /^(?:write\s+)?(\S+)/.exec(rec.code.split('\n', 1)[0].trim())?.[1] : undefined;
+    const p = args?.file_path ?? args?.path ?? rec.path ?? rec.file ?? recorded;
     if (typeof p === 'string' && p) {
       out.add(p.replace(/^\/home\/jkai\/workspace\/[^/]+\/dev\//, ''));
       if (out.size >= max) break;
@@ -248,4 +260,67 @@ export function planBuildQuery(
   }
 
   return null;
+}
+
+/*
+ * THE TOPIC TOP-UP, for the develop lane.
+ *
+ * `planBuildQuery` runs ONE lane, and the file lane wins whenever any seed path
+ * is known. That is right for picking the query's KEY and wrong for coverage:
+ * 128 of ~519 lessons cite no file path at all (measured 2026-09-30), so they
+ * hang off no node and the file lane can never reach them, however well the
+ * task is described. A develop brief is the one input that reliably carries
+ * enough prose to ask with — an outcome, a scope and criteria, not "crack on" —
+ * so when the file lane comes back thin, the brief also gets asked as a topic.
+ *
+ * Every existing floor still applies, because this goes through the same
+ * builders: `cgqlForTopic` declines under `MIN_TOPIC_TOKENS`, `topicLessons`
+ * needs half the tokens to hit, and the merged result is rendered against the
+ * FILE plan's budget, so the block cannot grow.
+ *
+ * FILE-SET PLANS ONLY. A fingerprint plan is the one attributable serve there
+ * is: `resolveBuildServes` credits every lesson on that row when the error does
+ * not recur. Mixing prose matches into it would credit them for a fix they had
+ * nothing to do with — the exact defect `serveIsAttributable` exists to stop.
+ * A file-set serve carries no fingerprints and is never credited either way,
+ * so topping it up changes what the agent reads and nothing about the ledger.
+ */
+
+/** Below this many lessons from the file lane, the brief is also asked as a topic. */
+export const TOPIC_TOP_UP_BELOW = 2;
+
+/** The topic query to top a thin file-set result up with, or null to leave it alone. */
+export function planTopicTopUp(
+  plan: { fingerprints: string[]; reason: string } | null,
+  brief: string,
+  fileLaneLessons: number,
+): string | null {
+  if (!plan || plan.fingerprints.length || !plan.reason.startsWith('file set')) return null;
+  const wanted = TOPIC_TOP_UP_BELOW - fileLaneLessons;
+  if (wanted <= 0) return null;
+  return cgqlForTopic(brief, { limit: wanted });
+}
+
+/**
+ * Append topic lessons BEHIND the file lane's, never in front.
+ *
+ * `renderContext` packs by relevance score, and a prose match on a well-used
+ * note can outscore a structural hit on a new one. The topic lane is the weaker
+ * key by design (see lane 3 above), so its lessons are capped just under the
+ * weakest file-lane lesson: they fill the gap and cannot displace anything.
+ * Duplicates go, and the merge stops at `TOPIC_TOP_UP_BELOW` lessons in all.
+ */
+export function mergeTopicTopUp<L extends { id: string; relevance: { score: number; because: string } }>(
+  fileLessons: L[],
+  topicLessons: L[],
+  max = TOPIC_TOP_UP_BELOW,
+): L[] {
+  const seen = new Set(fileLessons.map((l) => l.id));
+  const ceiling = fileLessons.length ? Math.min(...fileLessons.map((l) => l.relevance.score)) * 0.99 : Infinity;
+  const extra = topicLessons
+    .filter((l) => !seen.has(l.id) && (seen.add(l.id), true))
+    .slice(0, Math.max(0, max - fileLessons.length))
+    .map((l) => ({ ...l, relevance: { ...l.relevance, score: Math.min(l.relevance.score, ceiling),
+      because: `${l.relevance.because} · topic match on the brief (cites no file the build touches)` } }));
+  return [...fileLessons, ...extra];
 }

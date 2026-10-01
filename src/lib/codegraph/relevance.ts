@@ -39,6 +39,8 @@
  * PURE — no db, no clock unless passed. `relevance.test.ts` pins the curve.
  */
 
+import { fingerprintsIn } from './fingerprint';
+
 /** Evidence accumulated about one unit of intelligence. */
 export interface Evidence {
   /** Times injected into a build's context. */
@@ -339,6 +341,29 @@ export type ServeOutcome = 'helpful' | 'unhelpful' | 'unresolved' | 'unattributa
  */
 export function serveIsAttributable(serve: { outcome: string; servedFor: string[] }): boolean {
   return serve.outcome === 'served' && serve.servedFor.length > 0;
+}
+
+/**
+ * Which of the fingerprints an AGENT asked about may stand as evidence.
+ *
+ * A push serve's fingerprints come from a gate that really failed — the
+ * planner reads them off the previous evaluation. A pull serve's come from
+ * whatever the agent typed, and `resolveServe` cannot tell the two apart: a
+ * curiosity query for `typecheck:TS2345` before anything had failed would be
+ * credited `helpful` the moment the gate went green, because "the error did
+ * not recur" is trivially true of an error that never happened. That is this
+ * corpus's recurring defect (see `serveIsAttributable`) arriving by a new door.
+ *
+ * So a pulled fingerprint counts only when the build's newest FAILURE carried
+ * it — the previous iteration's evaluation, or a failure parked on the
+ * delivery — and only once per iteration: a second pull for the same error is
+ * the same question asked twice, and crediting both would double one outcome.
+ * Everything else is dropped, which leaves the row unattributable.
+ */
+export function attributablePullFingerprints(asked: string[], failures: { evaluation?: string | null; parked?: string[] }, claimed: string[] = []): string[] {
+  const real = new Set([...fingerprintsIn(failures.evaluation ?? '', 'npm run gate'), ...(failures.parked ?? []).flatMap(t => [t, ...fingerprintsIn(t, 'npm run gate')])]);
+  const taken = new Set(claimed);
+  return [...new Set(asked)].filter(f => real.has(f) && !taken.has(f));
 }
 
 export function resolveServe(input: {

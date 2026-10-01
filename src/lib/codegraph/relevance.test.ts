@@ -12,6 +12,7 @@ import {
   RECENCY_FLOOR,
   EVIDENCE_MATURITY,
   serveIsAttributable,
+  attributablePullFingerprints,
 } from './relevance';
 
 const NOW = Date.UTC(2026, 7, 17);
@@ -333,5 +334,28 @@ describe('verdict weighting', () => {
     const a = relevanceOf({ ...proven, verdict: 'verified' }).score;
     const b = relevanceOf({ ...proven, verdict: 'unverified' }).score;
     expect(b).toBeCloseTo(a * 0.5, 10);
+  });
+});
+
+describe('attributablePullFingerprints: a pulled fingerprint counts only for an error that happened', () => {
+  const FAILED = 'The gate FAILED.\nsrc/a.ts:3:1 - error TS2345: Argument of type X';
+
+  it('drops a curiosity pull made before anything failed, so the serve is unattributable', () => {
+    const servedFor = attributablePullFingerprints(['typecheck:TS2345'], { evaluation: null, parked: [] });
+    expect(servedFor).toEqual([]);
+    // ...and the resolver then closes it without credit, however green the gate goes.
+    expect(resolveServe({ outcome: 'served', servedFor, nextFingerprints: [], nextGatePassed: true })).toBe('unattributable');
+  });
+
+  it('keeps a pull that matches the real previous failure, resolvable once', () => {
+    const first = attributablePullFingerprints(['typecheck:TS2345', 'vitest:TypeError'], { evaluation: FAILED });
+    expect(first).toEqual(['typecheck:TS2345']);
+    expect(resolveServe({ outcome: 'served', servedFor: first, nextFingerprints: [], nextGatePassed: true })).toBe('helpful');
+    // The same question again in the same iteration claims nothing new.
+    expect(attributablePullFingerprints(['typecheck:TS2345'], { evaluation: FAILED }, first)).toEqual([]);
+  });
+
+  it('accepts a failure parked on the delivery, as isolated verification records it', () => {
+    expect(attributablePullFingerprints(['typecheck:TS2345'], { parked: [FAILED] })).toEqual(['typecheck:TS2345']);
   });
 });
