@@ -46,8 +46,6 @@ vi.mock('$lib/workflows', () => ({ engine: { execute } }));
 const finaliseRun = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock('$lib/workflows/run-finalise', () => ({ finaliseRun, failRun: vi.fn(async () => {}) }));
 vi.mock('$lib/workflows/observability-bus', () => ({ emitObs: vi.fn() }));
-const enqueue = vi.hoisted(() => vi.fn(async () => {}));
-vi.mock('$lib/workflows/run-queue', () => ({ enqueue }));
 
 import {
   loadDefinition,
@@ -76,7 +74,6 @@ beforeEach(() => {
   state.inserts = [];
   execute.mockClear();
   finaliseRun.mockClear();
-  enqueue.mockClear();
 });
 afterEach(() => {
   delete process.env.JKAI_RUN_WORKER;

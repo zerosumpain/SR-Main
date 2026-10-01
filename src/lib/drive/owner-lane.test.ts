@@ -20,7 +20,6 @@ const OWNER_LANE = [
   'src/lib/workflows/nodes/file-build.ts',
   'src/lib/workflows/nodes/file-extract.ts',
   'src/lib/workflows/nodes/file-text-extract.ts',
-  'src/lib/workflows/orchestrator/workspace-grounding.ts',
   'src/routes/api/decks/media/drive/+server.ts',
   'src/lib/jkai/media/drive-link.ts',
   'src/routes/api/drive/folders/+server.ts',
