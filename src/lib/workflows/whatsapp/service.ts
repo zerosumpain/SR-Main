@@ -1,5 +1,4 @@
 import makeWASocket, {
-	useMultiFileAuthState,
 	fetchLatestBaileysVersion,
 	fetchLatestWaWebVersion,
 	makeCacheableSignalKeyStore,
@@ -7,8 +6,8 @@ import makeWASocket, {
 	downloadMediaMessage
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
-import { mkdirSync, readdirSync, chmodSync, renameSync } from 'fs';
-import { join } from 'path';
+import { mkdirSync, renameSync } from 'fs';
+import { useAtomicMultiFileAuthState } from './auth-state';
 import { readBuffer } from '$lib/jkai/media/storage';
 import type { JkaiAttachment } from '$lib/db/schema';
 import { whatsappBridgeUrl } from '$lib/config/whatsapp-bridge';
@@ -113,7 +112,7 @@ export class WhatsAppService {
 
 		mkdirSync(authDir, { recursive: true });
 
-		const { state, saveCreds } = await useMultiFileAuthState(authDir);
+		const { state, saveCreds } = await useAtomicMultiFileAuthState(authDir);
 		this.saveCreds = saveCreds;
 		const pairedAtConnect = Boolean(state.creds.registered || state.creds.me);
 
@@ -139,14 +138,8 @@ export class WhatsAppService {
 		this.sock.ev.on('creds.update', () => {
 			this.credsWriteQueue = this.credsWriteQueue.then(async () => {
 				try {
+					// Atomic and written 0600 — see ./auth-state.
 					await this.saveCreds?.();
-					// Best-effort chmod 600 on auth files
-					try {
-						const files = readdirSync(authDir);
-						for (const file of files) {
-							chmodSync(join(authDir, file), 0o600);
-						}
-					} catch {}
 				} catch (err) {
 					console.error('[whatsapp] Failed to save credentials:', err);
 				}
