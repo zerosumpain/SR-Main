@@ -40,6 +40,10 @@ const TRANSIENT_PATTERNS = [
   // dev/ either way. Worst case if this is ever something permanent, the six
   // -attempt ceiling and the growing backoff stop it inside a few minutes.
   /\bterminated\b/i,
+  // A refused Codex sign-in that pi-runner has already renewed (it appends
+  // CODEX_SIGNIN_RENEWED). The refusal itself is NOT transient — retried as
+  // is, pi would send the same dead token — only the renewed case is.
+  /Codex sign-in renewed; retry/,
 ];
 
 export function isTransientProviderFailure(failure: { kind: string; message?: string } | null): boolean {
