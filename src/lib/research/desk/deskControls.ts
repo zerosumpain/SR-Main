@@ -1,4 +1,4 @@
-// src/lib/canvas/intelligence/desk/deskControls.ts
+// src/lib/research/desk/deskControls.ts
 export type DeskStatus =
   | 'draft'
   | 'phase1'

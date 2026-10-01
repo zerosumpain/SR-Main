@@ -1,4 +1,4 @@
-// src/lib/canvas/intelligence/desk/report-view.ts
+// src/lib/research/desk/report-view.ts
 // Pure assembly of the ResearchReport jsonb + the desk's flat card list into a
 // render-ready view-model for ReportNode.svelte. No Svelte, no DOM — unit-tested.
 import { severityColor } from '$lib/deepdive/display';

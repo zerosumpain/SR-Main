@@ -1,4 +1,4 @@
-<!-- src/lib/canvas/intelligence/ResearchDesk.svelte -->
+<!-- src/lib/research/ResearchDesk.svelte -->
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import NodePalette, { type Mode as PaletteMode } from '$lib/canvas/NodePalette.svelte';

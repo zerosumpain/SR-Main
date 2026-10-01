@@ -1,4 +1,4 @@
-// src/lib/canvas/intelligence/desk/samePos.ts
+// src/lib/research/desk/samePos.ts
 //
 // Tiny pure helper for the Research Desk morph-gating optimisation.
 //

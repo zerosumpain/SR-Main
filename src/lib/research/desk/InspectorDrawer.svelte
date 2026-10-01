@@ -1,4 +1,4 @@
-<!-- src/lib/canvas/intelligence/desk/InspectorDrawer.svelte -->
+<!-- src/lib/research/desk/InspectorDrawer.svelte -->
 <script lang="ts">
   import { portal } from '$lib/canvas/portal';
   import { goto } from '$app/navigation';

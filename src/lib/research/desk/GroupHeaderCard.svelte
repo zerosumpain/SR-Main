@@ -1,4 +1,4 @@
-<!-- src/lib/canvas/intelligence/desk/GroupHeaderCard.svelte -->
+<!-- src/lib/research/desk/GroupHeaderCard.svelte -->
 <!--
   One unified "group heading" card for EVERY grouping dimension (cluster, theme,
   entity type, sentiment, co-occurrence, similarity). Bolder + slightly larger

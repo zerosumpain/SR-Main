@@ -1,4 +1,4 @@
-<!-- src/lib/canvas/intelligence/desk/CardLiveWrapper.svelte -->
+<!-- src/lib/research/desk/CardLiveWrapper.svelte -->
 <!--
   Liveness wrapper that sits INSIDE the position host (.desk-card-host) and
   OUTSIDE the ArtefactCard. This separation is deliberate:

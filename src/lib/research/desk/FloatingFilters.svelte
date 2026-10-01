@@ -1,4 +1,4 @@
-<!-- src/lib/canvas/intelligence/desk/FloatingFilters.svelte -->
+<!-- src/lib/research/desk/FloatingFilters.svelte -->
 <!--
   View-locked floating filter box, pinned top-left over the desk viewport.
   MUST be mounted as a SIBLING of the transformed .desk-world (a direct child

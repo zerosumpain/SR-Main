@@ -1,4 +1,4 @@
-<!-- src/lib/canvas/intelligence/desk/EntityRail.svelte
+<!-- src/lib/research/desk/EntityRail.svelte
      Zone-backdrop and section label only — entity cards are rendered as morphing
      ArtefactCard elements by ResearchDesk and must NOT be duplicated here. -->
 <script lang="ts">

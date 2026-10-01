@@ -1,4 +1,4 @@
-<!-- src/lib/canvas/intelligence/desk/CommandBar.svelte -->
+<!-- src/lib/research/desk/CommandBar.svelte -->
 <script lang="ts">
   import ModeToggle from './ModeToggle.svelte';
   import PhaseStepper from './PhaseStepper.svelte';

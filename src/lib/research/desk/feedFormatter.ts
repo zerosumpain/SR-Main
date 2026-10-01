@@ -1,4 +1,4 @@
-// src/lib/canvas/intelligence/desk/feedFormatter.ts
+// src/lib/research/desk/feedFormatter.ts
 //
 // Pure helpers: map artefact events and log messages to FeedEvent text + tone.
 // No Svelte runes — safe to unit-test in vitest.
