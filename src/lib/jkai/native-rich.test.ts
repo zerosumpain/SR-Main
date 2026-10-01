@@ -71,6 +71,14 @@ describe('tables and diagrams', () => {
     expect(out).toEqual([{ type: 'diagram', code: 'graph TD; A-->B', caption: 'Flow' }]);
   });
 
+  it('leaves a map to the web chat — the app has no map kind to decode', () => {
+    const out = nativeArtifacts([
+      step({ type: 'map', layers: [{ kind: 'points', points: [{ lat: 52.6, lng: 1.3 }] }] }),
+      step({ type: 'diagram', code: 'graph TD; A-->B' }),
+    ]);
+    expect(out.map((a) => a.type)).toEqual(['diagram']);
+  });
+
   it('survives metadata that is not what it expects', () => {
     expect(nativeArtifacts(undefined)).toEqual([]);
     expect(nativeArtifacts([null, 3, 'x'])).toEqual([]);

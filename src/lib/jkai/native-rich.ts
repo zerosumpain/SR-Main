@@ -149,7 +149,10 @@ export function nativeArtifacts(toolSteps: unknown): NativeArtifact[] {
     if (!isArtifact(artifact)) continue;
     if (artifact.type === 'chart') out.push(chart(artifact));
     else if (artifact.type === 'table') out.push(table(artifact));
-    else out.push({ type: 'diagram', code: artifact.code, caption: str(artifact.caption) });
+    else if (artifact.type === 'diagram') out.push({ type: 'diagram', code: artifact.code, caption: str(artifact.caption) });
+    // A map has no native projection yet: the iPhone app decodes only the three
+    // kinds above, so a map is left to the web chat rather than sent as a shape
+    // the app would reject. The turn's prose still says what the map shows.
   }
   return out;
 }
