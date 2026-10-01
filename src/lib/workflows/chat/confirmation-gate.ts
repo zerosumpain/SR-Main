@@ -1,6 +1,6 @@
-import { publishJobEvent, createWaiter, getJob } from './job-store';
+import { publishJobEvent, createWaiter } from './job-store';
 import { isDestructiveTool } from '$lib/workflows/site-tools/executor';
-import { notifyAllSubscribers } from '$lib/server/push';
+import { notifyGate } from './gate-notify';
 
 /**
  * Whether a tool must ask the user before running. Single source of truth is
@@ -99,16 +99,10 @@ export async function requireConfirmation(
     destructive: opts.destructive ?? true,
     details,
   });
-  try {
-    const conversationId = getJob(jobId)?.scope.conversationId ?? null;
-    void notifyAllSubscribers({
-      title: 'Confirmation needed',
-      body: prompt.slice(0, 200),
-      url: conversationId ? `/jkai?c=${conversationId}` : '/jkai',
-    }).catch((e) => console.warn('[jkai-pwa] approval push failed', e));
-  } catch (e) {
-    console.warn('[jkai-pwa] approval push failed', e);
-  }
+  // No gate ids: the phone answers a gate by PATCHing SR-Jkai-Core, and a turn
+  // running here (the WhatsApp worker) is not a job Core can find. A plain
+  // alert that opens the chat, owner turns only.
+  notifyGate(jobId, { title: 'Confirmation needed', body: prompt }, null);
   const { awaitResponse } = createWaiter<{ decision: 'approved' | 'rejected' }>(
     jobId,
     `confirm:${confirmId}`,

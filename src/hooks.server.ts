@@ -761,7 +761,9 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   // tree, so nothing new under /api/platform/tools is reachable by existing.
   if (
     ((pathname === '/api/platform/tools/invoke' && event.request.method === 'POST') ||
-      (pathname === '/api/platform/tools/catalogue' && event.request.method === 'GET')) &&
+      (pathname === '/api/platform/tools/catalogue' && event.request.method === 'GET') ||
+      (pathname === '/api/platform/daydream/briefing' && event.request.method === 'GET') ||
+      (pathname === '/api/platform/backlog/intake' && event.request.method === 'POST')) &&
     invokeLaneFor(event.request) !== 'none'
   ) {
     return resolve(event);

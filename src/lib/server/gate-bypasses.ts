@@ -70,6 +70,11 @@ export const HOOK_BYPASSES: string[] = [
   // What tools exist and which need a human — the other half of the same seam,
   // on the same credential. GET only, and it carries no descriptions or schemas.
   '/api/platform/tools/catalogue', // GET only, same credential
+  // Main-owned domains read and written by SR-Workflows and SR-Jkai-Core, on
+  // the same credential, so neither needs its own copy of the daydream or
+  // backlog code. Named one at a time; /api/platform is not a tree.
+  '/api/platform/daydream/briefing', // GET only, same credential
+  '/api/platform/backlog/intake', // POST only, same credential; trace ideas only
   // The two server-side calls chat makes to intel, cross-process now that
   // chat lives in SR-Jkai-Core. Same SR-JKAI credential; each also accepts an
   // owner session and re-checks it. Named one at a time — /api/jkai/intel is
@@ -187,6 +192,8 @@ export const BYPASS_GUARDS: Record<string, string> = {
   '/api/platform/tools/invoke':
     'POST only · JKAI_INVOKE_TOKEN; destructive tools need JKAI_INVOKE_DESTRUCTIVE_TOKEN, unset by default',
   '/api/platform/tools/catalogue': 'GET only · JKAI_INVOKE_TOKEN; tool names and their destructive flag',
+  '/api/platform/daydream/briefing': "GET only · JKAI_INVOKE_TOKEN; yesterday's daydream section for the morning briefing",
+  '/api/platform/backlog/intake': 'POST only · JKAI_INVOKE_TOKEN; trace findings into the build backlog intake',
   '/api/jkai/intel/chat-context': 'POST only · JKAI_INVOKE_TOKEN or owner session; intel context for a chat turn',
   '/api/jkai/intel/extract-thread': 'POST only · JKAI_INVOKE_TOKEN or owner session; fire-and-forget extraction',
   '/api/jkai/tools/manifest': 'JKAI_BRIDGE_TOKEN',

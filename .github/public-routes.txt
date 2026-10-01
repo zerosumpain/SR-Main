@@ -88,6 +88,8 @@
 /api/native/route-session/[id]/fixes
 /api/native/session
 /api/native/today
+/api/platform/backlog/intake
+/api/platform/daydream/briefing
 /api/platform/tools/catalogue
 /api/platform/tools/invoke
 /api/platform/workflow-engine
