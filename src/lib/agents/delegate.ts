@@ -1,9 +1,9 @@
-// Delegate a task to a named specialist agent. SERVER ONLY (runs the generalChat
+// Delegate a task to a named specialist agent. SERVER ONLY (runs the turn on SR-Jkai-Core's
 // agent loop). The agent turns run as a sub-agent (subagentDepth:1 — no plan/ack
 // gates, no nested spawning), restricted to the agent's allowedTools, and speak
 // through the agent's persona. Shared findings flow through the team-memory
 // datastore collection (all agents are the `jkai` actor).
-import { generalChat } from '$lib/workflows/chat/general-chat';
+import { chatTurn } from '$lib/chat-client/turn';
 import { resolveDelegationModel } from '$lib/server/models/workload-settings';
 import { coerceModelContext } from '$lib/constants/default-models';
 import type { JobEvent } from '$lib/workflows/chat/job-store';
@@ -25,7 +25,7 @@ export interface DelegationResult {
 export async function delegateToAgent(
   agentName: string,
   task: string,
-  onEvent?: (e: JobEvent) => void,
+  _onEvent?: (e: JobEvent) => void,
 ): Promise<DelegationResult> {
   const trimmed = (task ?? '').trim();
   if (!trimmed) throw new Error('task is required');
@@ -61,7 +61,9 @@ export async function delegateToAgent(
   // call it makes — lands on the row that sets its model, instead of the
   // untagged gateway bucket. The tag beats the ambient chat source, which is
   // what we want: this is the team member's spend, not the thread's.
-  const { response } = await withActivity('delegation', () => generalChat(
+  // Run by SR-Jkai-Core, which owns chat. `onEvent` cannot cross the wire; its
+  // one caller, the delegate-agent node, does not run in this process.
+  const { response } = await withActivity('delegation', () => chatTurn(
     { text: trimmed },
     [],
     {
@@ -76,7 +78,7 @@ export async function delegateToAgent(
       toolWhitelist: whitelist,
       personaPrompt: persona,
       useIntelContext: false,
-      onStreamEvent: onEvent,
+      activity: 'delegation',
     },
   ));
 

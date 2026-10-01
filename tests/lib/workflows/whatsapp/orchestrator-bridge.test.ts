@@ -72,9 +72,9 @@ vi.mock('$lib/jkai/media/mime', () => ({
 }));
 
 // Mock general chat
-const mockGeneralChat = vi.fn();
-vi.mock('$lib/workflows/chat/general-chat', () => ({
-	generalChat: (...args: unknown[]) => mockGeneralChat(...args),
+const mockChatTurn = vi.fn();
+vi.mock('$lib/chat-client/turn', () => ({
+	chatTurn: (...args: unknown[]) => mockChatTurn(...args),
 }));
 
 // Mock the D2 approval-reply interceptor. The real module (via engine-resume)
@@ -130,11 +130,11 @@ describe('OrchestratorBridge', () => {
 		await bridge.handleMessage(msg);
 
 		expect(sendFn).toHaveBeenCalledWith('447359228511', expect.stringContaining('cleared'));
-		expect(mockGeneralChat).not.toHaveBeenCalled();
+		expect(mockChatTurn).not.toHaveBeenCalled();
 	});
 
-	it('sends regular messages to generalChat and replies', async () => {
-		mockGeneralChat.mockResolvedValue({ response: 'The weather looks great today!' });
+	it('sends regular messages to the Core chat turn and replies', async () => {
+		mockChatTurn.mockResolvedValue({ response: 'The weather looks great today!' });
 
 		const msg: WhatsAppInboundMessage = {
 			from: '447359228511',
@@ -146,7 +146,7 @@ describe('OrchestratorBridge', () => {
 
 		await bridge.handleMessage(msg);
 
-		expect(mockGeneralChat).toHaveBeenCalledWith(
+		expect(mockChatTurn).toHaveBeenCalledWith(
 			{ text: "What's the weather like?", attachments: [] },
 			expect.any(Array),
 			expect.objectContaining({ conversationId: mockConvId }),
@@ -154,8 +154,8 @@ describe('OrchestratorBridge', () => {
 		expect(sendFn).toHaveBeenCalledWith('447359228511', 'The weather looks great today!');
 	});
 
-	it('handles generalChat errors gracefully', async () => {
-		mockGeneralChat.mockRejectedValue(new Error('LLM failed'));
+	it('handles chat turn errors gracefully', async () => {
+		mockChatTurn.mockRejectedValue(new Error('LLM failed'));
 
 		const msg: WhatsAppInboundMessage = {
 			from: '447359228511',
@@ -188,7 +188,7 @@ describe('OrchestratorBridge', () => {
 
 		expect(mockHandleApprovalReply).toHaveBeenCalledWith('447359228511', 'APPROVE ABC123');
 		expect(sendFn).toHaveBeenCalledWith('447359228511', 'Approved ABC123.');
-		expect(mockGeneralChat).not.toHaveBeenCalled();
+		expect(mockChatTurn).not.toHaveBeenCalled();
 	});
 
 	it('dispatches a matching whatsapp-trigger workflow and does not forward to chat', async () => {
@@ -206,7 +206,7 @@ describe('OrchestratorBridge', () => {
 
 		expect(mockDispatchWhatsAppWorkflow).toHaveBeenCalledWith('447359228511', 'news bitcoin');
 		expect(sendFn).toHaveBeenCalledWith('447359228511', '▶ Started News Digest');
-		expect(mockGeneralChat).not.toHaveBeenCalled();
+		expect(mockChatTurn).not.toHaveBeenCalled();
 	});
 
 	it('runs the approval intercept BEFORE workflow dispatch (approval wins)', async () => {
@@ -224,12 +224,12 @@ describe('OrchestratorBridge', () => {
 
 		expect(mockHandleApprovalReply).toHaveBeenCalled();
 		expect(mockDispatchWhatsAppWorkflow).not.toHaveBeenCalled();
-		expect(mockGeneralChat).not.toHaveBeenCalled();
+		expect(mockChatTurn).not.toHaveBeenCalled();
 		expect(sendFn).toHaveBeenCalledWith('447359228511', '✓ Approved.');
 	});
 
 	it('orders interceptors approval → workflow dispatch → chat for an unmatched message', async () => {
-		mockGeneralChat.mockResolvedValue({ response: 'Sure!' });
+		mockChatTurn.mockResolvedValue({ response: 'Sure!' });
 
 		const msg: WhatsAppInboundMessage = {
 			from: '447359228511',
@@ -244,17 +244,17 @@ describe('OrchestratorBridge', () => {
 		// All three ran, in order, and chat produced the reply.
 		expect(mockHandleApprovalReply).toHaveBeenCalled();
 		expect(mockDispatchWhatsAppWorkflow).toHaveBeenCalledWith('447359228511', 'hello there');
-		expect(mockGeneralChat).toHaveBeenCalled();
+		expect(mockChatTurn).toHaveBeenCalled();
 		const approvalOrder = mockHandleApprovalReply.mock.invocationCallOrder[0];
 		const dispatchOrder = mockDispatchWhatsAppWorkflow.mock.invocationCallOrder[0];
-		const chatOrder = mockGeneralChat.mock.invocationCallOrder[0];
+		const chatOrder = mockChatTurn.mock.invocationCallOrder[0];
 		expect(approvalOrder).toBeLessThan(dispatchOrder);
 		expect(dispatchOrder).toBeLessThan(chatOrder);
 		expect(sendFn).toHaveBeenCalledWith('447359228511', 'Sure!');
 	});
 
 	it('uses replyJid for LID messages', async () => {
-		mockGeneralChat.mockResolvedValue({ response: 'Hello!' });
+		mockChatTurn.mockResolvedValue({ response: 'Hello!' });
 
 		const msg: WhatsAppInboundMessage = {
 			from: '179598537011308',

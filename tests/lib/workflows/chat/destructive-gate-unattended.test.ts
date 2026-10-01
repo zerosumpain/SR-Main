@@ -82,8 +82,16 @@ describe('the callers that have no jobId still exist', () => {
     'src/lib/agents/delegate.ts',
   ];
 
-  it.each(callers)('%s calls generalChat', (rel) => {
+  // They run their turns on SR-Jkai-Core now, through the one client, which
+  // has no way to send a job: Core's engine sees exactly the jobless turn the
+  // in-process one did, and refuses destructive tools the same way.
+  it.each(callers)('%s runs its turn through chatTurn', (rel) => {
     const body = readFileSync(resolve(__dirname, '../../../../', rel), 'utf8');
-    expect(body).toContain('generalChat(');
+    expect(body).toContain('chatTurn(');
+  });
+
+  it('the turn client cannot send a job id', () => {
+    const client = readFileSync(resolve(__dirname, '../../../../', 'src/lib/chat-client/turn.ts'), 'utf8');
+    expect(client).not.toMatch(/jobId/i);
   });
 });

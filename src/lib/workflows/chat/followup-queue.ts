@@ -5,7 +5,7 @@
 import { db } from '$lib/db';
 import { orchestratorChats, conversations } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { generalChat } from './general-chat';
+import { chatTurn } from '$lib/chat-client/turn';
 import type { HistoryMessage } from './conversation-history';
 import { coerceModelContext } from '$lib/constants/default-models';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
@@ -282,7 +282,8 @@ async function deliverFollowUp(item: FollowUp, check: FollowUpCheck) {
       priceSnapshot = conv.priceSnapshot as PriceSnapshot | null;
     }
 
-    const { response, memory: turnMemory } = await generalChat({ text: followUpMessage }, recentHistory, {
+    // Run by SR-Jkai-Core, which owns chat; this queue only decides when.
+    const { response, memory: turnMemory } = await chatTurn({ text: followUpMessage }, recentHistory, {
       conversationId: item.conversationId,
       modelContext,
       sessionModel,

@@ -2,7 +2,7 @@ import { db } from '$lib/db';
 import { orchestratorChats, conversations, jkaiAttachments } from '$lib/db/schema';
 import type { JkaiAttachment } from '$lib/db/schema';
 import { eq, asc, desc } from 'drizzle-orm';
-import { generalChat } from '$lib/workflows/chat/general-chat';
+import { chatTurn } from '$lib/chat-client/turn';
 import type { HistoryMessage } from '$lib/workflows/chat/conversation-history';
 import { saveBuffer } from '$lib/jkai/media/storage';
 import { extensionForMime } from '$lib/jkai/media/mime';
@@ -138,7 +138,9 @@ export class OrchestratorBridge {
 			// `chat` workload — the same row on /admin/ops/costs that new web threads
 			// open on, rather than the raw site default every background role shares.
 			const modelContext = await resolveChatTurnModel();
-			const { response: responseText, memory: turnMemory } = await generalChat(
+			// The turn itself runs on SR-Jkai-Core, which owns chat. This bridge
+			// keeps what is WhatsApp's: the socket, the thread row and the media.
+			const { response: responseText, memory: turnMemory } = await chatTurn(
 				{ text: displayText, attachments: attachment ? [attachment] : [] },
 				priorHistory,
 				{ modelContext, priceSnapshot: null, conversationId: convId },
