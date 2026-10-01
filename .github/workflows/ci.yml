@@ -529,9 +529,9 @@ jobs:
 
       - name: Memory and evidence database contracts
         if: matrix.shard == 1
-        # These contracts share a database; consolidation scans pending memories.
-        # Do not let another file insert/delete memory fixtures during that scan.
-        run: npx vitest run --no-file-parallelism src/lib/jkai/memory/service.integration.test.ts src/lib/jkai/grounding/evidence.integration.test.ts src/lib/daydream/memory-consolidation.integration.test.ts
+        # The file list lives in the script so the /jkai/develop broker runs the
+        # same contracts in its isolated verification (see the script header).
+        run: ./scripts/gate-db-contracts.sh
 
   # ── the build ────────────────────────────────────────────────────────────────
   #

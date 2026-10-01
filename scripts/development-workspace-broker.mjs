@@ -28,7 +28,7 @@ const command = async (file, args, options = {}) => {
     const timings = operation.getStore()?.timings;
     if (timings) {
       const commandText = args.join(' ');
-      const phase = /svelte-check/.test(commandText) ? 'types' : /vitest/.test(commandText) ? 'tests' : /development-preview-check/.test(commandText) ? 'browser' : /gate:build|npm run build$/.test(commandText) ? 'build' : /build:release-sidecars/.test(commandText) ? 'sidecars' : 'setup';
+      const phase = /svelte-check/.test(commandText) ? 'types' : /check-authored-runner/.test(commandText) ? 'runner' : /gate-db-contracts/.test(commandText) ? 'contracts' : /vitest/.test(commandText) ? 'tests' : /ci-prebuild/.test(commandText) ? 'prebuild' : /development-preview-check/.test(commandText) ? 'browser' : /gate:build|npm run build$/.test(commandText) ? 'build' : /build:release-sidecars/.test(commandText) ? 'sidecars' : 'setup';
       timings[phase] = (timings[phase] ?? 0) + Date.now() - started;
     }
   }
@@ -85,7 +85,7 @@ async function preflight(id) {
 }
 async function runtimeFingerprint() {
   const hash = createHash('sha256').update(activeBrokerHash);
-  for (const file of ['scripts/development-workspace-broker.mjs', 'scripts/lib/codegraph-snapshot.mjs', 'scripts/development-preview-check.mjs', 'scripts/development-verification.mjs', 'scripts/development-seccomp.json', 'scripts/local-preview-proxy.mjs', 'scripts/local-preview-ingress.mjs', 'package-lock.json']) hash.update(await readFile(join(source, file)));
+  for (const file of ['scripts/development-workspace-broker.mjs', 'scripts/lib/codegraph-snapshot.mjs', 'scripts/development-preview-check.mjs', 'scripts/development-verification.mjs', 'scripts/development-seccomp.json', 'scripts/gate-db-contracts.sh', 'scripts/ci-prebuild.sh', 'scripts/check-built-extract.mjs', 'scripts/check-authored-runner.sh', 'scripts/local-preview-proxy.mjs', 'scripts/local-preview-ingress.mjs', 'package-lock.json']) hash.update(await readFile(join(source, file)));
   hash.update(await docker('image', 'inspect', 'sr-development-preview:v4', 'pgvector/pgvector:pg16', '--format', '{{.Id}}'));
   return hash.digest('hex');
 }
@@ -285,7 +285,7 @@ async function provisionPreview(id, revision, path, plan, options) {
   const old = JSON.parse(await readFile(receiptFile, 'utf8').catch(() => '{}'));
   await ensureRuntimeImage();
   const fingerprint = await runtimeFingerprint();
-  if (!options.verify && old.fingerprint === fingerprint && old.revision === revision && old.url && old.port && old.runtimeVersion === 4 && JSON.stringify(old.plan) === JSON.stringify(plan)) {
+  if (!options.verify && !options.verifyAs && old.fingerprint === fingerprint && old.revision === revision && old.url && old.port && old.runtimeVersion === 4 && JSON.stringify(old.plan) === JSON.stringify(plan)) {
     const healthy = await fetch(`http://${process.env.BUILDER_DOCKER_HOSTNAME ?? 'development-docker'}:${old.port}${plan.routes[0]}`, { headers: { host: `127.0.0.1:${old.port}` }, redirect: 'manual', signal: AbortSignal.timeout(5000) }).then(r => r.ok, () => false);
     if (healthy) {
       const url = previewLink(id, revision, old.port);
@@ -326,7 +326,9 @@ async function provisionPreview(id, revision, path, plan, options) {
   await docker('exec', dbName, 'psql', '-U', 'preview', '-d', 'preview', '-c', 'CREATE EXTENSION IF NOT EXISTS vector');
   await docker('exec', name, 'npx', 'drizzle-kit', 'push', '--force');
   await docker('cp', `${source}/scripts/local-preview-proxy.mjs`, `${name}:/tmp/sr-preview-proxy.mjs`);
-  if (options.verify) await verifyRuntime(id, name);
+  // Verification's gate:build is the production build, so a gated preview
+  // serves that rather than paying for a second `npm run build` first.
+  if (options.verify || options.verifyAs) await verifyRuntime(options.verifyAs ?? id, name);
   else try { await docker('exec', name, 'npm', 'run', 'build'); } catch (error) { if (error.kind) throw error; const output = error.stderr || error.stdout || error.message; throw failure(`Feature build failed: ${output.slice(-1600)}`, failureKindFor(output)); }
   await docker('exec', '-d', name, 'sh', '-c', 'node build > /tmp/site.log 2>&1');
   await docker('exec', '-d', name, 'node', '/tmp/sr-preview-proxy.mjs');
@@ -366,21 +368,67 @@ async function closePreview(id) {
   await writeFile(receiptFile, '{}');
   return { closed: true };
 }
+/**
+ * The repository gate, run in the candidate's preview container.
+ *
+ * A green verification here should predict a green CI, so every step is the
+ * command `.github/workflows/ci.yml` runs, in CI's order, rather than a
+ * re-listing of what it checks. Parity, step by step:
+ *
+ *   runner     `Install isolated handler runner`. bubblewrap is baked into the
+ *              image, so this is the smoke half only; a failure is the
+ *              sandbox, not the candidate, unless the candidate edited it.
+ *   structural `Lint gates` (gate level job)
+ *   sync/types `Type check` runs gate-check.sh = sync + svelte-check + a
+ *              liveness check. Run by its parts so the failure names the half
+ *              that broke, and at the container's 6GB heap: gate:check:only
+ *              asks for 8GB, which an 8GB container cannot give.
+ *   tests      `Tests`, the whole suite in one shard.
+ *   contracts  `Memory and evidence database contracts`, via the same script.
+ *              They need only DATABASE_URL, so the preview database serves.
+ *   build      `Build the real release candidate`
+ *   prebuild   `Verify and stamp the candidate`: it imports the BUILT server
+ *              chunks and extracts a real PDF — the check that would have
+ *              caught the four-day pdf.js outage. It fingerprints the build
+ *              `.env` for provenance; the container has none (public env is
+ *              passed with -e), so an empty one stands in and is removed again
+ *              before the clean check and the restarted server.
+ *   sidecars   `Build candidate sidecars`
+ *   clean      no CI twin: proves the gate rewrote no tracked file.
+ *
+ * Deliberately NOT run, and why:
+ *   - `Audit production dependencies` (npm audit) needs the live advisory
+ *     service; the preview network is `--internal`, so it could only fail.
+ *     CI skips it anyway unless package.json/package-lock.json changed, and
+ *     the broker refuses a candidate that changes package scripts.
+ *   - the gate LEVEL (L1/L2 scoping) and certified-candidate reuse: they only
+ *     ever run LESS than this, never more.
+ *   - Release/promote/stage steps: deployment, not verification.
+ *   - CI's runner is uid 1001 with sudo; this one is uid 1000 without. A
+ *     candidate depending on sudo fails here and would pass there — the safe
+ *     direction.
+ */
 async function verifyRuntime(id, container) {
-  const verify = async (step, args, environment = []) => {
+  /** @param {string} step @param {string[]} args @param {string[]} [environment] @param {string} [fallbackKind] */
+  const verify = async (step, args, environment = [], fallbackKind = 'feature') => {
     const log = join(trustedRoot, `${id}-gate-${step}.log`);
     try { await writeFile(log, await docker('exec', ...environment, container, ...args)); }
     catch (error) {
       const output = `${error.stdout ?? ''}\n${error.stderr ?? error.message}`;
       await writeFile(log, output);
-      throw failure(`${step} failed in isolated verification; full output retained in ${log}. ${verificationExcerpt(output)}`, error.kind ?? failureKindFor(output));
+      throw failure(`${step} failed in isolated verification; full output retained in ${log}. ${verificationExcerpt(output)}`, error.kind ?? failureKindFor(output, fallbackKind));
     }
   };
+  await verify('runner', ['bash', './scripts/check-authored-runner.sh'], [], 'infrastructure');
   await verify('structural', ['bash', './scripts/gate-structural.sh']);
   await verify('sync', ['npm', 'run', 'gate:sync']);
   await verify('types', ['npx', '--no-install', 'svelte-check', '--tsconfig', './tsconfig.json', '--threshold', 'error']);
   await verify('tests', ['npx', '--no-install', 'vitest', 'run', '--exclude', '**/*.integration.test.ts', '--maxWorkers', '2'], ['-e', 'JKAI_SERVICE_ROLE=web']);
+  await verify('contracts', ['bash', './scripts/gate-db-contracts.sh'], ['-e', 'JKAI_SERVICE_ROLE=web']);
   await verify('build', ['npm', 'run', 'gate:build']);
+  // CI's build job has no database and no service role; the built chunks this
+  // imports must not find the preview's and start talking to it.
+  await verify('prebuild', ['bash', '-c', '[ -e .env ] && exec bash ./scripts/ci-prebuild.sh; : > .env; bash ./scripts/ci-prebuild.sh; status=$?; rm -f .env; exit $status'], ['-e', 'DATABASE_URL=', '-e', 'JKAI_SERVICE_ROLE=']);
   await verify('sidecars', ['npm', 'run', 'build:release-sidecars']);
   await verify('clean', ['git', 'diff', '--exit-code']);
 }
@@ -391,7 +439,7 @@ async function assertVerificationControls(path, id) {
   const base = (await readFile(join(trustedRoot, `${id}-base`), 'utf8')).trim();
   if (!/^[a-f0-9]{40}$/.test(base)) throw new Error('Invalid verification base');
   const changed = (await git(path, 'diff', '--name-only', base, 'HEAD', '--')).split('\n');
-  const control = changed.find((file) => /^(?:scripts\/(?:gate|check-)|(?:vitest|vite|svelte)\.config\.|tsconfig\.json$)/.test(file));
+  const control = changed.find((file) => /^(?:scripts\/(?:gate|check-|ci-)|(?:vitest|vite|svelte)\.config\.|tsconfig\.json$)/.test(file));
   if (control) throw new Error(`Verification control changed: ${control}. Review it in the cumulative checkout before batch acceptance.`);
   const trusted = JSON.parse(await git(batch, 'show', `${base}:package.json`));
   const candidate = JSON.parse(await readFile(join(path, 'package.json'), 'utf8'));
@@ -429,14 +477,13 @@ async function accept(id, revision, routes) {
     if (!(await stat(join(trial, 'node_modules')).catch(() => null))) await command('cp', ['-a', `${path}/node_modules`, `${trial}/node_modules`]);
     await command('chown', ['-R', '1000:1000', join(root, trialId)]);
     const merged = await git(trial, 'rev-parse', 'HEAD');
-    const tested = await preview(trialId, merged, { routes });
-    const container = JSON.parse(await readFile(join(trustedRoot, `${trialId}-preview.json`), 'utf8')).name;
-    await verifyRuntime(id, container);
+    // The repository gate runs INSIDE the trial preview, before its server
+    // starts, as /verify does. It used to follow a finished preview: a full
+    // `npm run build` (300–350s) then gate:build again, plus a restart, inside
+    // the same 1,170s window that also counts queue time. The served site is
+    // now the gate's own build, so the browser check sees what was verified.
+    const tested = await preview(trialId, merged, { routes, verifyAs: id });
     await assertCandidate(trialId, merged);
-    // Build tools rewrote generated files; reopen the tested production server.
-    await docker('restart', container);
-    await docker('exec', '-d', container, 'sh', '-c', 'node build > /tmp/site.log 2>&1');
-    await docker('exec', '-d', container, 'node', '/tmp/sr-preview-proxy.mjs');
     if (await git(batch, 'rev-parse', 'HEAD') !== previous) throw new Error('The batch changed during verification; retry against its new base.');
     await git(trial, 'bundle', 'create', bundle, 'HEAD');
     await git(batch, 'fetch', bundle, 'HEAD');

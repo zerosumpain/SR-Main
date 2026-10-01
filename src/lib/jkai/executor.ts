@@ -293,15 +293,23 @@ export async function executeIteration(
   // phase. listDevFiles returns rich entries (path, size, mtime); the
   // digest helper picks the most-recently-modified relevant files,
   // summarises each, and produces a markdown block under 8 KB.
-  const { listDevFiles } = await import('./sandbox');
+  //
+  // A repository build leads with its diff against the base: the find list is
+  // capped at 500 entries in directory order, which on this site's clone is an
+  // arbitrary sixth of the tree and rarely the agent's own files.
+  const { listDevFiles, listChangedDevFiles, focusDevFiles } = await import('./sandbox');
   const { buildCodebaseDigest } = await import('./codebase-digest');
-  const devFiles = await listDevFiles(build.id).catch(() => []);
+  const { digest: devFiles, changedPaths } = focusDevFiles(
+    await listDevFiles(build.id).catch(() => []),
+    gitTarget ? await listChangedDevFiles(build.id, (gitTarget as { baseBranch?: string }).baseBranch).catch(() => null) : null,
+  );
   // The precedent channel spends ~4.8 KB of the same context. Shrink the digest
   // by the same amount rather than adding to a prompt that is already ~19 KB —
   // the digest's tail is its least relevant part.
   const precedentEnabled = promptMode === 'repo' && process.env.CODEGRAPH_PRECEDENT !== '0';
   const codebaseDigest = await buildCodebaseDigest(build.id, devFiles, {
     sharingBudgetWithPrecedent: precedentEnabled,
+    priorityPaths: changedPaths,
   }).catch(() => '');
 
   // Codegraph push — what this codebase has already learned about the files

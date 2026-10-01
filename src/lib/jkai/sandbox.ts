@@ -954,16 +954,21 @@ export async function syncJkaiExtension(buildId: string): Promise<string> {
 
 // --- Read-only file inspection (Watch pane) ---
 
-export async function listDevFiles(
-  buildId: string,
-): Promise<Array<{ path: string; size: number; mtime: number }>> {
+export type DevFileEntry = { path: string; size: number; mtime: number };
+
+export async function listDevFiles(buildId: string): Promise<DevFileEntry[]> {
   const root = `/home/jkai/workspace/${buildId}/dev`;
   const result = await execInSandbox(
     `find ${root} -maxdepth 6 -type f -not -path '*/node_modules/*' -not -path '*/.git/*' -printf '%P\\t%s\\t%T@\\n' 2>/dev/null | head -500`,
     10000,
   );
   if (result.exitCode !== 0) return [];
-  return result.stdout
+  return parseDevFileListing(result.stdout);
+}
+
+/** `path\tsize\tmtime-seconds` lines, as both listings print them. */
+export function parseDevFileListing(stdout: string): DevFileEntry[] {
+  return stdout
     .split('\n')
     .filter(Boolean)
     .map((line) => {
@@ -975,6 +980,83 @@ export async function listDevFiles(
       };
     })
     .filter((f) => f.path);
+}
+
+/**
+ * The files a repository build has changed against its base, listed like
+ * `listDevFiles`.
+ *
+ * `listDevFiles` is a `find | head -500` in directory order. On a ~3,100-file
+ * clone of this site that is an arbitrary sixth of the tree, and the agent's
+ * own new files were usually not in it — so the design linter judged files
+ * nobody had touched (and flagged their history as this build's fault) while
+ * the codebase digest described a random corner of the repo instead of the
+ * working set. The diff is what both actually need.
+ *
+ * The base, in order:
+ *   - `merge-base HEAD origin/<baseBranch>` — the legacy lane clones with an
+ *     origin, so this survives the agent committing;
+ *   - the OLDEST HEAD reflog entry — the broker lane clones the batch and
+ *     removes the origin, and its own `${id}-base` file is out of the worker's
+ *     reach, but the clone is the first thing the reflog records, and later
+ *     "Local feature candidate" snapshot commits only add newer entries.
+ * Tracked changes come from `git diff` (committed AND uncommitted, against
+ * the work tree), new files from `ls-files --others` minus ignored ones;
+ * deletions drop out at the `-f` test. `core.quotePath=false` so a non-ASCII
+ * name arrives as itself, not a quoted octal escape no `-f` can find.
+ * `safe.directory` because the broker
+ * lane's tree belongs to uid 1000, not necessarily the user this runs as.
+ *
+ * Prints NOTHING when no base resolves, and callers read empty-and-failed as
+ * "fall back to the find list" — an empty diff on a resolved base prints the
+ * BASE marker line so it is distinguishable.
+ */
+export function changedDevFilesCommand(dev: string, baseBranch?: string): string {
+  const branch = baseBranch && /^[\w./-]+$/.test(baseBranch) && !baseBranch.includes('..') ? baseBranch : '';
+  const git = `git -c safe.directory='*' -c core.quotePath=false -C ${dev}`;
+  return (
+    `base=$(${branch ? `${git} merge-base HEAD 'origin/${branch}' 2>/dev/null || ` : ''}${git} reflog show --format=%H HEAD 2>/dev/null | tail -1); ` +
+    `[ -n "$base" ] || exit 0; echo "BASE\t$base"; cd ${dev} && ` +
+    `{ ${git} diff --name-only "$base" --; ${git} ls-files --others --exclude-standard; } 2>/dev/null | sort -u | head -2000 | ` +
+    `while IFS= read -r f; do [ -f "$f" ] && stat --printf '%n\\t%s\\t%Y\\n' -- "$f"; done; true`
+  );
+}
+
+/**
+ * Parse `changedDevFilesCommand`: the changed entries, or null when no base
+ * resolved (or the command failed) and the caller should keep the find list.
+ */
+export function parseChangedDevFiles(stdout: string): DevFileEntry[] | null {
+  const lines = (stdout ?? '').split('\n');
+  if (!lines.some((line) => /^BASE\t[0-9a-f]{40}$/.test(line.trim()))) return null;
+  return parseDevFileListing(lines.filter((line) => !line.startsWith('BASE\t')).join('\n'));
+}
+
+export async function listChangedDevFiles(buildId: string, baseBranch?: string): Promise<DevFileEntry[] | null> {
+  const result = await execInSandbox(changedDevFilesCommand(`/home/jkai/workspace/${buildId}/dev`, baseBranch), 20000).catch(() => null);
+  return result && result.exitCode === 0 ? parseChangedDevFiles(result.stdout) : null;
+}
+
+/**
+ * What the design linter and the codebase digest should read.
+ *
+ * `changed` null — an app/studio build, or a repo whose base did not resolve —
+ * keeps the find list exactly as before. Otherwise:
+ *   lint    the changed files only: the build answers for its diff, not for
+ *           whatever the base already contained;
+ *   digest  the changed files first, then the rest of the find list for
+ *           orientation, without duplicates.
+ * `hasSvelte` is the linter's "is this a Svelte project" switch, so it reads
+ * BOTH lists: a diff touching only `.css` in a SvelteKit repo is still in scope.
+ */
+export function focusDevFiles(
+  all: DevFileEntry[],
+  changed: DevFileEntry[] | null,
+): { lint: DevFileEntry[]; digest: DevFileEntry[]; changedPaths: Set<string>; hasSvelte: boolean } {
+  const hasSvelte = [...all, ...(changed ?? [])].some((f) => f.path.endsWith('.svelte'));
+  if (!changed) return { lint: all, digest: all, changedPaths: new Set(), hasSvelte };
+  const changedPaths = new Set(changed.map((f) => f.path));
+  return { lint: changed, digest: [...changed, ...all.filter((f) => !changedPaths.has(f.path))], changedPaths, hasSvelte };
 }
 
 export async function readDevFile(buildId: string, relPath: string): Promise<string> {

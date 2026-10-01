@@ -22,6 +22,7 @@ src/lib/jkai/explainer-kit.test.ts
 src/lib/jkai/jkai-tools-extension.test.ts
 src/lib/jkai/pi-runner.invocation.test.ts
 src/lib/jkai/research-brief.test.ts
+src/lib/jkai/sandbox.changed-files.test.ts
 src/lib/jkai/sandbox.contained-lane.test.ts
 src/lib/jkai/studio-gate.test.ts
 src/lib/jkai/studio.test.ts
@@ -70,6 +71,7 @@ tests/scripts/ci-sidecars.test.ts
 tests/scripts/classify-pr-risk.test.ts
 tests/scripts/coverage-census.test.ts
 tests/scripts/deploy-refuses.test.ts
+tests/scripts/development-gate-parity.test.ts
 tests/scripts/development-install.test.ts
 tests/scripts/drizzle-orphan-tables.test.ts
 tests/scripts/gate-level.test.ts

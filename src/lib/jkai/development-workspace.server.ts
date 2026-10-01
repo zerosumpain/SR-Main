@@ -1,4 +1,4 @@
-import { DevelopmentFailure, DEVELOPMENT_LIMITS, developmentDeadline } from './development-cycle';
+import { DevelopmentFailure, DEVELOPMENT_LIMITS, developmentCeiling } from './development-cycle';
 import { Agent } from 'undici';
 const workspaceDispatcher = new Agent({ headersTimeout: 1_800_000, bodyTimeout: 1_800_000 });
 import { loadDelivery, mutateDelivery } from '$lib/jkai/development-state.server';
@@ -41,7 +41,7 @@ export async function prepareDevelopmentPreview(buildId: string, mode: 'inspecti
     preview: { ...s.preview, status: 'starting', lastError: undefined, detail: previous.url ? 'Checking the next revision; the previous working preview remains available.' : 'Preparing the first working page in an isolated site.' } }));
   const started = Date.now();
   let result;
-  try { result = await workspaceBroker(mode === 'release' ? 'verify' : 'preview', previewId, { revision, routes: delivery.state.brief.routes, working: mode !== 'inspection', ...(mode !== 'inspection' && delivery.state.cycle ? { deadline: developmentDeadline(delivery.state.cycle.startedAt, Boolean(previous.url && ['working', 'release'].includes(previous.kind ?? ''))) } : {}) }); }
+  try { result = await workspaceBroker(mode === 'release' ? 'verify' : 'preview', previewId, { revision, routes: delivery.state.brief.routes, working: mode !== 'inspection', ...(mode !== 'inspection' && delivery.state.cycle ? { deadline: developmentCeiling(delivery.state.cycle.startedAt, Boolean(previous.url && ['working', 'release'].includes(previous.kind ?? ''))) } : {}) }); }
   catch (error) {
     await mutateDelivery(buildId, 'preview_failed', s => s.candidate !== candidate ? s : ({ ...s,
       cycle: s.cycle ? { ...s.cycle, previewMs: s.cycle.previewMs + (mode !== 'release' ? Date.now() - started : 0), verificationMs: s.cycle.verificationMs + (mode === 'release' ? Date.now() - started : 0) } : undefined,

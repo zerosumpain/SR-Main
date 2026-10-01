@@ -1139,7 +1139,7 @@ class Orchestrator {
         if (!development.state.cycle) development = await mutateDelivery(buildId, 'cycle_started', s => ({ ...s, cycle: { startedAt: new Date().toISOString(), modelId: build.modelId ?? undefined, startingCandidate: s.candidate, repairAttempts: 0, modelMs: 0, previewMs: 0, verificationMs: 0 } }));
         const cycle = development.state.cycle!;
         let blocker = '';
-        const checkpointExpired = Date.now() >= developmentDeadline(cycle.startedAt, Boolean(development.state.preview.url && ['working', 'release'].includes(development.state.preview.kind ?? '')));
+        const checkpointExpired = Date.now() >= developmentDeadline(cycle, Boolean(development.state.preview.url && ['working', 'release'].includes(development.state.preview.kind ?? '')));
         if (checkpointExpired) blocker = 'Development checkpoint deadline reached. Review saved work before continuing.';
         else if (!cycle.preflightAt) {
           try {
@@ -1159,7 +1159,7 @@ class Orchestrator {
           this.activeBuildId = null; await this.dequeueNext(); return;
         }
       }
-      const deadlineRef = { current: development ? Math.min(Date.now() + DEVELOPMENT_LIMITS.turnMs, developmentDeadline(development.state.cycle!.startedAt, Boolean(development.state.preview.url && ['working', 'release'].includes(development.state.preview.kind ?? '')))) : Date.now() + 30 * 60 * 1000 };
+      const deadlineRef = { current: development ? Math.min(Date.now() + DEVELOPMENT_LIMITS.turnMs, developmentDeadline(development.state.cycle!, Boolean(development.state.preview.url && ['working', 'release'].includes(development.state.preview.kind ?? '')))) : Date.now() + 30 * 60 * 1000 };
       this.developmentDeadlineCap = development ? deadlineRef.current : Infinity;
       this.currentDeadline = deadlineRef;
 
@@ -1381,11 +1381,15 @@ class Orchestrator {
       // linter when the workspace contains no .svelte file.
       if ((build as any).enforceDesignSystem) {
         try {
-          const { listDevFiles, readDevFile } = await import('./sandbox');
+          const { listDevFiles, listChangedDevFiles, focusDevFiles, readDevFile } = await import('./sandbox');
           const { lintDesignSystem } = await import('./design-lint');
           const targetExts = ['.css', '.svelte', '.html', '.tsx', '.jsx', '.vue'];
-          const all = await listDevFiles(buildId);
-          const hasSvelte = all.some((f) => f.path.endsWith('.svelte'));
+          // A repository build answers for its diff, not for a truncated
+          // `find` over the whole clone — see focusDevFiles.
+          const { lint: all, hasSvelte } = focusDevFiles(
+            await listDevFiles(buildId),
+            build.gitTargetConfig ? await listChangedDevFiles(buildId, (build.gitTargetConfig as GitTargetConfig).baseBranch) : null,
+          );
           if (!hasSvelte) {
             await emitLog(
               buildId,
@@ -1501,7 +1505,7 @@ class Orchestrator {
           ready = await developmentCheckpoint(buildId, async run => {
             if (this.stopped || this.activeBuildId !== buildId) throw new Error('Build paused before release verification.');
             const started = Date.now();
-            for (const phase of ['feedback_gate', 'release_candidate'] as const) await emitRepoVerification(buildId, { phase, label: 'Isolated repository verification', status: 'running', command: 'Trusted broker: structural, types, tests, production build and sidecars' }, iteration.id);
+            for (const phase of ['feedback_gate', 'release_candidate'] as const) await emitRepoVerification(buildId, { phase, label: 'Isolated repository verification', status: 'running', command: 'Trusted broker: runner, structural, types, tests, database contracts, production build, built-bundle check and sidecars' }, iteration.id);
             try {
               const result = await run();
               if (this.stopped || this.activeBuildId !== buildId) throw new Error('Build paused during release verification.');
@@ -1526,7 +1530,7 @@ class Orchestrator {
         await db.update(jkaiIterations).set({ evaluation: `${result.evaluation ?? ''}\n\n${message}` }).where(eq(jkaiIterations.id, iteration.id));
         this.consecutiveIdleIterations = before && before === state.candidate ? this.consecutiveIdleIterations + 1 : 0;
         const cycle = state.cycle;
-        const expired = cycle && Date.now() >= developmentDeadline(cycle.startedAt, Boolean(state.preview.url && ['working', 'release'].includes(state.preview.kind ?? '')));
+        const expired = cycle && Date.now() >= developmentDeadline(cycle, Boolean(state.preview.url && ['working', 'release'].includes(state.preview.kind ?? '')));
         const repairs = failure ? (cycle?.repairAttempts ?? 0) + 1 : 0;
         const unchanged = !ready && this.consecutiveIdleIterations >= 1;
         const pauseReason = expired && !ready ? 'Development checkpoint deadline reached. The last working preview and source are retained.' : failure || (unchanged ? 'The last turn changed no files. Review the preview or refine the brief before continuing.' : undefined);
