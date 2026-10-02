@@ -1,6 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { emptyHouseSummary, houseSummary, searchUtterances } from '$lib/alexa/store.server';
-import { getHomeAssistantService } from '$lib/workflows/homeassistant/service';
+import { getHomeAssistantService } from '$lib/integrations/homeassistant/service';
 import { DEVICES_TEMPLATE, houseOnly, summariseDevices, type DevicesPayload } from '$lib/home/devices';
 import { errMsg } from '$lib/home/presence/types';
 import { loadHousehold } from '$lib/home/presence/household';

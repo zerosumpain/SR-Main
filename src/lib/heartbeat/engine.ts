@@ -9,7 +9,7 @@ import { prunePlatformEvents } from '$lib/events/store';
 import { seedDefaultActions } from './seed';
 import { runTargetedAction } from './handlers/targeted';
 import { withinActiveHours, rescheduleAfterWindowSkip } from './schedule';
-import { beginBatch } from '$lib/workflows/engine-runtime';
+import { beginBatch } from '$lib/server/runtime-monitor';
 import type { HeartbeatAction } from '$lib/db/schema';
 
 // The engine ticks at this cadence. Per-action `cadence_seconds` floors here

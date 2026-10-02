@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { listPolicyVersions, publishPolicy, revertPolicyTo } from '$lib/toolpolicy/policy';
 import { coerceOwnerPublish, needsMcpReconnect } from '$lib/toolpolicy/publish-input';
-import { getTools } from '$lib/workflows/site-tools/registry';
+import { getTools } from '$lib/tools/registry';
 import { measureEfficiency, snapshotOf } from '$lib/selfimprove/efficiency';
 import { getActivePolicy } from '$lib/toolpolicy/policy';
 

@@ -49,10 +49,8 @@ const PUBLIC_PATHS = [
   // canvas slugs. See src/routes/api/landing/vitals/+server.ts.
   '/api/landing/vitals',
   '/projects',
-  // sr. decks — presentations. The hook lets everyone through; per-deck privacy
-  // is enforced by requireDeckVisible in the route loads (private-by-default,
-  // owner or share-token; same two-layer design as /projects). The /decks index
-  // itself 404s non-owners in its own load.
+  // Retired decks (2026-10-02). The only route left under this prefix answers
+  // 410 Gone, so old share links reach that answer instead of a login page.
   '/decks',
   // Read-only shared jkai conversations. The /jkai/shared/<token> route
   // self-gates on shareVisibility ('public' → anyone; 'users' → requires a

@@ -1,15 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { BacklogItemData } from './types';
+import type { BacklogItemData, DeliveryRequest } from './types';
 
 const h = vi.hoisted(() => ({
   backlog: [] as BacklogItemData[],
   attempts: [] as Array<{ slug: string; status: string; error?: string }>,
   buildRefs: [] as Array<{ slug: string; ref: string }>,
-  changeRequests: [] as Array<{ title: string; request: string; backlogSlug?: string }>,
+  deliveries: [] as DeliveryRequest[],
   reuse: false,
   watches: [] as Array<{ description: string }>,
-  changeRequestThrows: false,
-  prConfigured: false,
+  deliveryThrows: false,
 }));
 
 vi.mock('./backlog', () => ({
@@ -26,17 +25,6 @@ vi.mock('./backlog', () => ({
   recordBuildRef: vi.fn(async (item: BacklogItemData, ref: string) => {
     h.buildRefs.push({ slug: item.slug, ref });
   }),
-}));
-
-vi.mock('$lib/github/pr', () => ({
-  prConfigured: vi.fn(() => h.prConfigured),
-  pathAllowed: vi.fn(() => true),
-  openDraftPr: vi.fn(async () => ({ number: 7, url: 'https://github.com/x/y/pull/7' })),
-}));
-
-vi.mock('./context', () => ({
-  buildContextPack: vi.fn(async () => ({})),
-  renderContext: vi.fn(() => 'context'),
 }));
 
 import { proposeFeatures } from './propose';
@@ -67,11 +55,11 @@ const budget = {
 };
 
 const lanes = {
-  changeRequest: vi.fn(async (input: { title: string; request: string; backlogSlug?: string }) => {
-    if (h.changeRequestThrows) throw new Error('builder unavailable');
-    h.changeRequests.push(input);
-    if (h.reuse) return { ref: 'build:old999', label: 'existing issue #3 → build old999', reused: true };
-    return { ref: 'build:abc123', label: 'issue #9 → build abc123' };
+  startDelivery: vi.fn(async (input: DeliveryRequest) => {
+    if (h.deliveryThrows) throw new Error('builder unavailable');
+    h.deliveries.push(input);
+    if (h.reuse) return { ref: 'delivery:old999', label: 'existing delivery old999', reused: true };
+    return { ref: 'delivery:abc123', label: 'delivery abc123' };
   }),
   createWatch: vi.fn(async (input: { description: string }) => {
     h.watches.push(input);
@@ -83,11 +71,10 @@ beforeEach(() => {
   h.backlog = [];
   h.attempts = [];
   h.buildRefs = [];
-  h.changeRequests = [];
+  h.deliveries = [];
   h.reuse = false;
   h.watches = [];
-  h.changeRequestThrows = false;
-  h.prConfigured = false;
+  h.deliveryThrows = false;
   vi.clearAllMocks();
 });
 
@@ -123,11 +110,11 @@ describe('the tap gate', () => {
 
     const actions = await proposeFeatures(budget, 'run1', { lanes });
 
-    expect(h.changeRequests).toHaveLength(1);
-    expect(h.changeRequests[0].title).toBe('A rail feed');
+    expect(h.deliveries).toHaveLength(1);
+    expect(h.deliveries[0].title).toBe('A rail feed');
     // The slug travels with the ask so the lane can find an open build for it.
-    expect(h.changeRequests[0].backlogSlug).toBe('rail');
-    expect(actions.map((a) => a.kind)).toContain('change_requested');
+    expect(h.deliveries[0].backlogSlug).toBe('rail');
+    expect(actions.map((a) => a.kind)).toContain('delivery_started');
     expect(h.attempts).toEqual([{ slug: 'rail', status: 'open', error: undefined }]);
   });
 
@@ -136,7 +123,7 @@ describe('the tap gate', () => {
 
     const actions = await proposeFeatures(budget, 'run1', { lanes });
 
-    expect(h.changeRequests).toHaveLength(0);
+    expect(h.deliveries).toHaveLength(0);
     expect(actions[0].detail).toContain('waiting for a tap');
     expect(actions[0].detail).toContain('accept its brief');
   });
@@ -146,7 +133,7 @@ describe('the tap gate', () => {
 
     await proposeFeatures(budget, 'run1', { lanes, autobuild: true });
 
-    expect(h.changeRequests).toHaveLength(1);
+    expect(h.deliveries).toHaveLength(1);
   });
 
   it('does not let untapped items crowd a tapped one out of the night', async () => {
@@ -158,7 +145,7 @@ describe('the tap gate', () => {
 
     await proposeFeatures(budget, 'run1', { lanes });
 
-    expect(h.changeRequests.map((c) => c.backlogSlug)).toEqual(['quiet-but-tapped']);
+    expect(h.deliveries.map((c) => c.backlogSlug)).toEqual(['quiet-but-tapped']);
   });
 
   it('builds tool and source items through the repo lane now the toolsmith is retired', async () => {
@@ -166,16 +153,15 @@ describe('the tap gate', () => {
 
     await proposeFeatures(budget, 'run1', { lanes });
 
-    expect(h.changeRequests.map((c) => c.backlogSlug)).toEqual(['a-tool']);
+    expect(h.deliveries.map((c) => c.backlogSlug)).toEqual(['a-tool']);
   });
 
-  it('stops at one change request a night, and never falls through to a blind PR', async () => {
+  it('stops at one delivery a night, and never falls through to a blind PR', async () => {
     h.backlog = [item({ slug: 'a', ...tap }), item({ slug: 'b', ...tap })];
-    h.prConfigured = true;
 
     const actions = await proposeFeatures(budget, 'run1', { lanes, autobuild: true });
 
-    expect(h.changeRequests).toHaveLength(1);
+    expect(h.deliveries).toHaveLength(1);
     expect(actions.map((a) => a.kind)).not.toContain('pr_opened');
   });
 
@@ -186,13 +172,13 @@ describe('the tap gate', () => {
     const actions = await proposeFeatures(budget, 'run1', { lanes });
 
     // Both asked; both were already building, so nothing new was spent.
-    expect(h.changeRequests.map((c) => c.backlogSlug)).toEqual(['a', 'b']);
+    expect(h.deliveries.map((c) => c.backlogSlug)).toEqual(['a', 'b']);
     expect(h.buildRefs).toEqual([
-      { slug: 'a', ref: 'build:old999' },
-      { slug: 'b', ref: 'build:old999' },
+      { slug: 'a', ref: 'delivery:old999' },
+      { slug: 'b', ref: 'delivery:old999' },
     ]);
     expect(h.attempts).toEqual([]);
-    expect(actions.some((a) => a.detail.includes('already building'))).toBe(true);
+    expect(actions.some((a) => a.detail.includes('already in development'))).toBe(true);
   });
 });
 
@@ -225,35 +211,23 @@ describe('watches', () => {
   });
 });
 
-describe('the fallback', () => {
-  it('writes a blind draft PR only when there is no build lane', async () => {
+describe('a host without the delivery lane', () => {
+  it('dispatches nothing, writes no code and says why', async () => {
     h.backlog = [item({ slug: 'rail', ...tap })];
-    h.prConfigured = true;
-    budget.call.mockResolvedValueOnce({
-      content: '',
-      json: { title: 'T', summary: 'S', wiringNotes: 'W', files: [{ path: 'src/lib/a.ts', content: 'x' }] },
-    });
 
     const actions = await proposeFeatures(budget, 'run1', { lanes: { createWatch: lanes.createWatch } });
 
-    expect(actions.map((a) => a.kind)).toContain('pr_opened');
-    expect(h.attempts).toEqual([{ slug: 'rail', status: 'shipped', error: undefined }]);
-  });
-
-  it('does nothing at all with no lane and no token', async () => {
-    h.backlog = [item({ slug: 'rail', ...tap })];
-
-    const actions = await proposeFeatures(budget, 'run1', {});
-
-    expect(actions.map((a) => a.detail)).toContain('no build lane and no GitHub token — nothing dispatched');
+    expect(actions.map((a) => a.detail)).toContain('no delivery lane on this host — nothing dispatched');
+    expect(actions.map((a) => a.kind)).not.toContain('pr_opened');
     expect(budget.call).not.toHaveBeenCalled();
+    expect(h.attempts).toEqual([]);
   });
 });
 
 describe('failures', () => {
   it('records a failed dispatch against the item instead of sinking the phase', async () => {
     h.backlog = [item({ slug: 'rail', ...tap })];
-    h.changeRequestThrows = true;
+    h.deliveryThrows = true;
 
     const actions = await proposeFeatures(budget, 'run1', { lanes });
 
@@ -262,13 +236,13 @@ describe('failures', () => {
   });
 });
 
-describe('the ask handed to the builder', () => {
+describe('the delivery handed to /jkai/develop', () => {
   it('names where it came from and refuses to license weakening a gate', async () => {
     h.backlog = [item({ slug: 'rail', source: 'think', ...tap })];
 
     await proposeFeatures(budget, 'run7', { lanes });
 
-    const req = h.changeRequests[0].request;
+    const req = h.deliveries[0].outcome;
     // The accepted brief, not the raw detail, is what the builder reads.
     expect(req).toContain('It is missing.');
     expect(req).toContain('`rail`');
@@ -306,11 +280,71 @@ describe('the ask handed to the builder', () => {
 
     await proposeFeatures(budget, 'run8', { lanes, autobuild: true });
 
-    const req = h.changeRequests[0].request;
+    const req = h.deliveries[0].outcome;
     expect(req).toContain('Acceptance criteria');
     expect(req).toContain('The user can ask the model questions');
     expect(req).toContain('Validation');
     expect(req).toContain('Use the configured default model');
     expect(req).toContain('Remaining open questions');
+  });
+});
+
+describe('the accepted brief becomes delivery fields', () => {
+  it('carries criteria and the brief sections the delivery holds, so grooming starts from them', async () => {
+    h.backlog = [item({
+      slug: 'shaped',
+      title: 'A shaped feature',
+      grooming: {
+        ...tap.grooming!,
+        acceptanceCriteria: ['The page lists every rail line', '  '],
+        constraints: ['Owner only'],
+        nonGoals: ['No live map'],
+        dependencies: ['The rail feed'],
+        validation: ['Route test'],
+        assumptions: ['Feed is daily'],
+        openQuestions: ['Which lines?'],
+      },
+    })];
+
+    await proposeFeatures(budget, 'run9', { lanes });
+
+    const d = h.deliveries[0];
+    expect(d.title).toBe('A shaped feature');
+    expect(d.backlogSlug).toBe('shaped');
+    expect(d.criteria).toEqual(['The page lists every rail line']);
+    expect(d.brief.constraints).toContain('- Owner only');
+    expect(d.brief.constraints).toContain('Not in scope: No live map');
+    expect(d.brief.dependencies).toBe('- The rail feed');
+    expect(d.brief.validation).toBe('- Route test');
+    expect(d.brief.assumptions).toBe('- Feed is daily');
+    expect(d.brief.questions).toBe('- Which lines?');
+    expect(d.outcome.length).toBeLessThanOrEqual(20_000);
+  });
+
+  it('sends an ungroomed autobuild item with its detail and no invented criteria', async () => {
+    h.backlog = [item({ slug: 'raw', detail: 'Plain words only' })];
+
+    await proposeFeatures(budget, 'run9', { lanes, autobuild: true });
+
+    expect(h.deliveries[0].criteria).toEqual([]);
+    expect(h.deliveries[0].brief).toEqual({});
+    expect(h.deliveries[0].outcome).toContain('Plain words only');
+  });
+
+  it('records the delivery on the item so the backlog links to /jkai/develop', async () => {
+    const { markAttempt } = await import('./backlog');
+    h.backlog = [item({ slug: 'rail', ...tap })];
+
+    await proposeFeatures(budget, 'run1', { lanes });
+
+    expect(vi.mocked(markAttempt).mock.calls[0][1]).toMatchObject({ status: 'open', runId: 'run1', buildRef: 'delivery:abc123' });
+  });
+
+  it('stops dispatching when the wall clock reserve is reached', async () => {
+    h.backlog = [item({ slug: 'rail', ...tap })];
+
+    await proposeFeatures({ ...budget, timeLeftMs: () => 1000 }, 'run1', { lanes });
+
+    expect(h.deliveries).toHaveLength(0);
   });
 });

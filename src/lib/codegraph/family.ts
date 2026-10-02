@@ -45,6 +45,8 @@ const RULES: Array<{ family: string; test: RegExp }> = [
   { family: 'workflow-node-def', test: /^src\/lib\/workflows\/nodes\/.*\.def\.ts$/ },
   { family: 'workflow-node', test: /^src\/lib\/workflows\/nodes\/[^/]+\.ts$/ },
   { family: 'site-tool', test: /^src\/lib\/workflows\/site-tools\/tools\/[^/]+\.ts$/ },
+  // Site tools moved out of the workflows folder on 2026-10-02; history keeps the old paths.
+  { family: 'site-tool', test: /^src\/lib\/tools\/tools\/[^/]+\.ts$/ },
 
   /*
    * Ambient type declarations are a shape of their own, and must be named

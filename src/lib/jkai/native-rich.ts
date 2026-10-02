@@ -1,5 +1,5 @@
 import { parsePage, type PanelBlock, type PanelPage } from '$lib/jkai/panel/schema';
-import { isArtifact, type Artifact } from '$lib/workflows/site-tools/artifact-types';
+import { isArtifact, type Artifact } from '$lib/tools/artifact-types';
 
 /**
  * The rich parts of a jkai turn, reduced to what the iPhone app can draw

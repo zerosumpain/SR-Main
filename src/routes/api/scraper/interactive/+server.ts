@@ -1,6 +1,6 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { startInteractiveSession, listInteractiveSessions } from '$lib/workflows/scraper/interactive';
-import { assertScraperServiceRequest } from '$lib/workflows/scraper/service-auth';
+import { startInteractiveSession, listInteractiveSessions } from '$lib/scraper/interactive';
+import { assertScraperServiceRequest } from '$lib/scraper/service-auth';
 
 export const GET: RequestHandler = async ({ request }) => {
   assertScraperServiceRequest(request);

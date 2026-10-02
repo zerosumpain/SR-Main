@@ -7,12 +7,12 @@ import {
 	resultLine,
 	statusLine,
 	wantsNdjson,
-} from '$lib/workflows/site-tools/invoke-contract';
-import { loadToolRegistry } from '$lib/workflows/site-tools/load-registry';
-import { remoteInvokeTarget } from '$lib/workflows/site-tools/remote';
+} from '$lib/tools/invoke-contract';
+import { loadToolRegistry } from '$lib/tools/load-registry';
+import { remoteInvokeTarget } from '$lib/tools/remote';
 import { rateLimit } from '$lib/server/rate-limit';
-import type { InvokeContext } from '$lib/workflows/site-tools/invoke-contract';
-import type { ToolExecContext, ToolResult } from '$lib/workflows/site-tools/registry-internal';
+import type { InvokeContext } from '$lib/tools/invoke-contract';
+import type { ToolExecContext, ToolResult } from '$lib/tools/registry-internal';
 import { coerceModelContext } from '$lib/constants/default-models';
 import { isThinkingLevel } from '$lib/models/thinking';
 import type { RequestHandler } from './$types';

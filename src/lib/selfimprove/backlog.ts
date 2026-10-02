@@ -27,7 +27,7 @@ import {
 // The channel vocabulary lives in the pure module — see `IDEA_SOURCES` there
 // for why it cannot live in `./types`.
 import { BACKLOG_KINDS, IDEA_SOURCES, type BacklogKind, type IdeaSource } from './board';
-import { MAX_BACKLOG_NOTES, acceptGrooming, normaliseNote } from './grooming';
+import { MAX_BACKLOG_NOTES, acceptGrooming, normaliseNote } from '$lib/jkai/development-brief';
 import { findSameIdea } from './same-idea';
 
 /** An idea as proposed by a producer, before it becomes a record. */
@@ -304,7 +304,7 @@ export async function intakeIdeas(ideas: IdeaInput[]): Promise<IntakeResult> {
     console.log(`[selfimprove] backlog intake capped — ${result.capped} new idea(s) dropped, ${recent} already added in the last 24h`);
   }
   if (result.added.length) {
-    const { groomAfterIntake } = await import('$lib/workflows/backlog-grooming.server');
+    const { groomAfterIntake } = await import('./backlog-room.server');
     await groomAfterIntake();
   }
   return result;
@@ -576,7 +576,7 @@ export async function createBacklogItem(input: OwnerBacklogInput): Promise<Backl
   if (input.epicSlug) item.epicSlug = input.epicSlug;
   if (input.grooming) item.grooming = acceptGrooming(input.grooming, now);
   await put(item);
-  const { groomAfterIntake } = await import('$lib/workflows/backlog-grooming.server');
+  const { groomAfterIntake } = await import('./backlog-room.server');
   await groomAfterIntake();
   return (await getBacklogItem(item.slug)) ?? item;
 }
@@ -914,7 +914,7 @@ export async function foldItems(slugs: string[], into?: string): Promise<FoldRes
 /**
  * Point an item at a build that already exists, without counting an attempt.
  *
- * `createChangeRequest` hands back the open build for the same idea rather
+ * The delivery lane hands back the live delivery for the same idea rather
  * than starting a second one; nothing new was tried, so the retry budget and
  * `lastError` stay exactly as they were. Best-effort.
  */

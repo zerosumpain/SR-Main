@@ -1,22 +1,28 @@
 // nav.ts — the information architecture, in one place.
 //
-// The first cut of this study was ten flat sections averaging 1,900 words each. That is a
-// seventy-minute read and nobody finishes it. This file replaces that with four parts, each
-// a short hub over three to five single-idea pages. Every page carries one instrument and a
-// caption; the nav, the hubs and the next/previous links all read from here, so the order of
-// the study is defined exactly once.
+// The study used to walk the whole site: five parts over twenty-nine pages, from how a chat
+// message is streamed to where the backups live. Most of that is ordinary engineering, and
+// all of it was hand-copied, so it went stale as fast as the site changed. It now covers the
+// three things here that are genuinely unusual — the daydream loop, a site that builds its
+// own changes, and the iPhone app around it — and reads its facts from the code that runs
+// them. The nav, the hubs and the next/previous links all read from this file.
+
+import { DAYDREAM_COPY } from './daydream';
+import { BUILD_COPY } from './build';
+import { APP_COPY } from './app';
 
 export const B = '/projects/engine-room';
 
-export type PartId = 'turn' | 'memory' | 'reach' | 'change' | 'ground';
+export type PartId = 'daydream' | 'build' | 'app';
 
 export interface Leaf {
   /** Path segment under the part. */
   slug: string;
+  /** The feature's name on the site. Also the page's H1 and browser title. */
   label: string;
-  /** One line for hubs and nav. Keep it under 15 words — it is a signpost, not a summary. */
+  /** One line for hubs and nav. Under 15 words. */
   blurb: string;
-  /** What you can actually operate on the page. Shown on hub cards. */
+  /** What you can operate on the page. Shown on hub cards. */
   instrument: string;
 }
 
@@ -26,130 +32,59 @@ export interface Part {
   name: string;
   /** The question the part answers, in plain words. */
   strap: string;
-  /** One line under the hub title. Under 25 words. */
+  /** One line under the hub title. */
   lede: string;
   /** CSS colour token for the part's accent. */
   tone: string;
   leaves: Leaf[];
 }
 
-// Leaf labels are FEATURE NAMES — the tab says what the thing is called on the site
-// (Decks, Drive, Codegraph), and the page's own H1 keeps the editorial headline. Leaf
-// ORDER follows the site's hierarchy (public site → assistant → admin/platform), not the
-// narrative arc. Both by John's instruction, 2026-08-18.
 export const PARTS: Part[] = [
   {
-    id: 'turn',
+    id: 'daydream',
+    ...DAYDREAM_COPY.hub,
     no: 'I',
-    name: 'A turn',
-    strap: 'What happens when you type',
-    lede: 'One message, from keystroke to answer: who picks the model, where the time goes, and who ends up paying for it.',
-    tone: 'var(--accent-ink)',
-    leaves: [
-      { slug: 'trace', label: 'Turn trace', instrument: 'Six stages × six layers, played back with a live clock',
-        blurb: 'The whole study as one instrument — press play' },
-      { slug: 'stream', label: 'Streaming', instrument: 'Step a real frame sequence through two accumulators',
-        blurb: 'How an answer arrives in pieces without mislaying any' },
-      { slug: 'routing', label: 'Model routing', instrument: 'Choose a seller by price, speed or precision',
-        blurb: 'Four ways a model gets picked, and who actually serves it' },
-      { slug: 'latency', label: 'Latency', instrument: 'A measured waterfall, and five calls plotted',
-        blurb: 'My code is 2% of the wait. The model is having a read' },
-      { slug: 'cost', label: 'Costs', instrument: 'A token budget you can re-spend',
-        blurb: 'The thinking is cheap. The remembering is what costs' },
-    ],
-  },
-  {
-    id: 'memory',
-    no: 'II',
-    name: 'Memory',
-    strap: 'What it knows',
-    lede: 'Eight doors in, documents, entities, a graph and a drawer for the odds and ends — plus the gap between keeping a thing and believing it.',
+    name: 'Daydream',
     tone: 'var(--accent)',
     leaves: [
-      // The intelligence pipeline first, in the order the intel centre itself runs
-      // (capture → triage → quality → explore → act), then search, storage, research.
-      { slug: 'channels', label: 'Channels', instrument: 'Compare eight doors on author, arrival and cost',
-        blurb: 'Eight channels feed one graph. They are not equals' },
-      { slug: 'entities', label: 'Entities', instrument: 'Toggle evidence, watch confidence cross the bar',
-        blurb: 'Ten signals, one threshold, and the safer mistake' },
-      { slug: 'trust', label: 'Trust', instrument: 'Grade a claim on two axes and watch the score assemble',
-        blurb: 'A number you cannot take apart is just an opinion' },
-      { slug: 'graph', label: 'Graph', instrument: 'Exact against sampled ranking, plotted',
-        blurb: 'Why the exact answer turned out to be the cheap one' },
-      { slug: 'watch', label: 'Watchlist', instrument: 'Move an entity overnight, see if it is worth saying',
-        blurb: 'Nine kinds of movement, and a bar built to stay quiet' },
-      { slug: 'retrieval', label: 'Retrieval', instrument: 'Watch a document become searchable chunks',
-        blurb: 'Two indexes kept deliberately apart, and why not one' },
-      { slug: 'store', label: 'Datastore', instrument: 'Ask as five principals, see who gets a yes',
-        blurb: 'The junk drawer, with a bouncer on the door' },
-      { slug: 'research', label: 'Research', instrument: 'Same sources, two ways of composing them',
-        blurb: 'Blend your sources and you will invent a fact' },
+      { slug: 'questions', label: 'Questions', instrument: 'The schedule of what it asks, and what it will ask next',
+        blurb: 'One narrow question per cycle, chosen by the clock' },
+      { slug: 'inbox', label: 'Inbox', instrument: 'Each stage and the double-check, with whose move it is',
+        blurb: 'Every note’s journey, and where I come in' },
+      { slug: 'impact', label: 'Impact', instrument: 'Live weekly verdicts and the funnel from spotted to done',
+        blurb: 'The only score that counts is whether it helped' },
     ],
   },
   {
-    id: 'reach',
+    id: 'build',
+    ...BUILD_COPY.hub,
+    no: 'II',
+    name: 'Build',
+    tone: 'var(--accent-ink)',
+    leaves: [
+      { slug: 'backlog', label: 'Backlog', instrument: 'Where ideas come from, and the nightly run that works them',
+        blurb: 'One queue for every idea, worked on overnight' },
+      { slug: 'develop', label: 'Develop', instrument: 'Step a delivery from brief to deployed',
+        blurb: 'An accepted idea, built, previewed and released' },
+      { slug: 'verify', label: 'Verification', instrument: 'The proof chain a build walks before it ships',
+        blurb: 'The same checks my own changes get, then again' },
+      { slug: 'codegraph', label: 'Codegraph', instrument: 'Edge kinds and the arithmetic that ranks a lesson',
+        blurb: 'Every build leaves notes for the next one' },
+    ],
+  },
+  {
+    id: 'app',
+    ...APP_COPY.hub,
     no: 'III',
-    name: 'Reach',
-    strap: 'What it can touch',
-    lede: 'Mail, files, decks, credentials, the house, the outdoors. Every new ability costs context before it has done a single useful thing.',
-    tone: 'var(--success)',
+    name: 'App',
+    tone: '#2d7a3a',
     leaves: [
-      // Site sections first (Decks, Drive, Trails), then the working layer
-      // (Workflows, House, Connectors), then the platform plumbing underneath.
-      { slug: 'decks', label: 'Decks', instrument: 'Pour words onto a fixed page until they fall off it',
-        blurb: 'Slides where too much text falls off, as nature intended' },
-      { slug: 'drive', label: 'Drive', instrument: 'Drop six kinds of file in and watch where each one goes',
-        blurb: 'The journey a photograph makes before it is searchable' },
-      { slug: 'trails', label: 'Trails', instrument: 'Budget an offline map, then grade a route by climb',
-        blurb: 'Route planning that keeps working where the phone does not' },
-      { slug: 'workflows', label: 'Workflows', instrument: 'Three wirings, two of which silently lose data',
-        blurb: 'Eighty-eight node types, and the join that eats a branch' },
-      { slug: 'house', label: 'House', instrument: 'Browse a house by room, and watch a dry run',
-        blurb: 'Several hundred identifiers, rearranged into a building' },
-      { slug: 'feeds', label: 'Connectors', instrument: 'Stored status against what a probe just observed',
-        blurb: 'A connector insisting it is fine is rarely evidence' },
-      { slug: 'tools', label: 'Tools', instrument: 'Spend the tool budget 155 ways or 21',
-        blurb: 'A catalogue too fat to send, and the fix for it' },
-      { slug: 'mcp', label: 'MCP', instrument: 'Send a call through the gate and try to break it',
-        blurb: 'How outside tools get in, and what stops the rough ones' },
-      { slug: 'keys', label: 'Credentials', instrument: 'Aim a credential somewhere it should not go',
-        blurb: 'Where a key may travel is baked into the key' },
-    ],
-  },
-  {
-    id: 'change',
-    no: 'IV',
-    name: 'Change',
-    strap: 'How it rebuilds itself',
-    lede: 'Every night it reads its own failures and writes improvements, and every build leaves a lesson behind. What it may install by itself, and what it very much may not.',
-    tone: '#8a2d3a',
-    leaves: [
-      // Builder-side first (Codegraph lives with the builds), then the nightly engine,
-      // its gate, the pipeline to production, and the standing guardrails.
-      { slug: 'lessons', label: 'Codegraph', instrument: 'Query the build-history graph, then run its ranking arithmetic yourself',
-        blurb: "The build's memory in full — schema, fingerprints, query language, ranking" },
-      { slug: 'nights', label: 'Self-improvement', instrument: 'Eight phases, and the six caps that bound them',
-        blurb: 'It marks its own homework at 3:30am, then acts on it' },
-      { slug: 'gate', label: 'Verification', instrument: 'Try to get generated code past the deny-list',
-        blurb: 'Fourteen patterns standing between a model and my server' },
-      { slug: 'shipping', label: 'Deployment', instrument: 'Push a change down the pipeline and break it',
-        blurb: 'Six stages between a good idea and a live one' },
-      { slug: 'limits', label: 'Guardrails', instrument: 'Every guardrail, plotted by whether it actually holds',
-        blurb: 'The difference between a wall and a strongly worded note' },
-    ],
-  },
-  {
-    id: 'ground',
-    no: 'V',
-    name: 'Ground',
-    strap: 'Where it actually runs',
-    lede: 'One codebase on two machines with different permissions, and four places a byte can end up. The unglamorous floor everything else is standing on.',
-    tone: '#5a6b7a',
-    leaves: [
-      { slug: 'estate', label: 'Estate', instrument: 'Pick a machine, see which subsystems wake up on it',
-        blurb: 'What a process may do depends on where it woke up' },
-      { slug: 'storage', label: 'Storage', instrument: 'Break something and see what actually recovers it',
-        blurb: 'Four stores, and the one loss no backup will save you from' },
+      { slug: 'surfaces', label: 'Surfaces', instrument: 'Pick a place on the phone or watch, see what lives there',
+        blurb: 'Tabs, widgets, the Lock Screen, the watch and Siri' },
+      { slug: 'api', label: 'Native API', instrument: 'Every endpoint the app can call, grouped by what it’s for',
+        blurb: 'One guarded doorway between the phone and the site' },
+      { slug: 'privacy', label: 'Permissions', instrument: 'Each permission and capability, and what it’s for',
+        blurb: 'What it asks the phone for, and why' },
     ],
   },
 ];
@@ -173,17 +108,36 @@ export const neighbours = (pathname: string) => {
   return { prev: i > 0 ? ORDER[i - 1] : null, next: i >= 0 && i < ORDER.length - 1 ? ORDER[i + 1] : null };
 };
 
-/** Old flat routes → their new home. Kept because the first version of this study was public. */
+/**
+ * Every public URL this study has ever had → where it lives now (308).
+ *
+ * Keyed by the path under the study, without a leading slash. The pages that covered the
+ * build carry on as the Build part; the offline maps carried on into the app; everything
+ * the study no longer covers goes to the index rather than to a 404.
+ */
 export const REDIRECTS: Record<string, string> = {
-  // Not a legacy route — a friendly name: the subsystem is called codegraph everywhere else.
-  codegraph: `${B}/change/lessons`,
-  trace: `${B}/turn/trace`,
-  chat: `${B}/turn/stream`,
-  models: `${B}/turn/routing`,
-  tools: `${B}/reach/tools`,
-  research: `${B}/memory/research`,
-  automation: `${B}/reach/workflows`,
-  building: `${B}/change/nights`,
-  shipping: `${B}/change/shipping`,
-  guardrails: `${B}/change/limits`,
+  // The study's first, flat version.
+  codegraph: href('build', 'codegraph'),
+  building: href('build', 'backlog'),
+  shipping: href('build', 'develop'),
+  guardrails: href('build', 'verify'),
+  trace: B, chat: B, models: B, tools: B, research: B, automation: B,
+  // The five-part version.
+  change: href('build'),
+  'change/lessons': href('build', 'codegraph'),
+  'change/nights': href('build', 'backlog'),
+  'change/gate': href('build', 'verify'),
+  'change/shipping': href('build', 'develop'),
+  'change/limits': href('build', 'verify'),
+  'reach/trails': href('app'),
+  ...Object.fromEntries(
+    [
+      'turn', 'turn/trace', 'turn/stream', 'turn/routing', 'turn/latency', 'turn/cost',
+      'memory', 'memory/channels', 'memory/entities', 'memory/trust', 'memory/graph', 'memory/watch',
+      'memory/retrieval', 'memory/store', 'memory/research',
+      'reach', 'reach/decks', 'reach/drive', 'reach/workflows', 'reach/house', 'reach/feeds',
+      'reach/tools', 'reach/mcp', 'reach/keys',
+      'ground', 'ground/estate', 'ground/storage',
+    ].map((k) => [k, B]),
+  ),
 };

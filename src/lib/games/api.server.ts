@@ -65,18 +65,15 @@ const stringIds = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x 
  * Start a game: `{ game, difficulty, invite: [playerId] }` plus that game's
  * options (Quiz Night `topic`/`audience`, Boggle `size`/`seconds`/`scoring`,
  * Categories `categoryCount`/`seconds`, Liar's Dice `dice`, Draw & Guess
- * `turnsEach`/`seconds`). `only` narrows which games this door may start — the
- * web plays Liar's Dice alone for now.
+ * `turnsEach`/`seconds`).
  */
 export async function startGame(
   event: Pick<RequestEvent, 'locals'>,
   caller: GameCaller,
   body: Record<string, unknown>,
-  only?: readonly GameId[],
 ) {
   const game = body.game;
   if (!isGameId(game)) error(400, 'Unknown game.');
-  if (only && !only.includes(game)) error(400, 'Start that game from the app.');
   if (!isDifficulty(body.difficulty)) error(400, 'Pick easy, medium or hard.');
   const ids = stringIds(body.invite);
   if (ids.length > MAX_PLAYERS - 1) error(400, `Up to ${MAX_PLAYERS} players.`);

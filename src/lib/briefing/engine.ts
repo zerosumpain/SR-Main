@@ -1,67 +1,41 @@
-// Briefing scheduler. Mirrors the self-improvement engine: seed the collection
-// on boot (host-agnostic), schedule the daily cron only in production
-// (hostname !== 'homeserv', unless BRIEFING_ALLOW_DEV=1), and re-check the kill
-// switch in the cron callback. Never throws into croner.
-import { Cron } from 'croner';
-import os from 'os';
-import { getSetting } from '$lib/server/models/settings';
-import { runBriefingNow, ensureBriefingsCollection } from './run';
-import { CRON_EXPR, CRON_TZ, SETTINGS_ENABLED_KEY, errMsg } from './types';
+// Briefing boot hook. The `canvas:morning-briefing` workflow in SR-Workflows
+// produces every briefing on its own schedule and writes it into the
+// `briefings` collection; Main only makes sure that collection exists with
+// permissions the workflow's actor can write through.
+import { ensureCollection, updateCollection } from '$lib/datastore';
+import { BRIEFINGS_COLLECTION, BRIEFING_PERMS, SYSTEM_ACTOR, errMsg } from './types';
 
-let cronJob: Cron | null = null;
 let started = false;
 
-export function isBriefingScheduled(): boolean {
-  return cronJob !== null;
+export async function ensureBriefingsCollection(): Promise<void> {
+  const existing = await ensureCollection(
+    BRIEFINGS_COLLECTION,
+    { name: 'Briefings', description: 'Personalised briefings', isSystem: true, defaultPermissions: BRIEFING_PERMS },
+    SYSTEM_ACTOR,
+  );
+
+  // ensureCollection is create-only, so a collection made before the workflow
+  // became the producer still carries the old permissions and rejects the
+  // `workflow:<id>` actor with `forbidden`. Reconcile on boot rather than
+  // requiring a manual DB edit on every environment.
+  const current = (existing.defaultPermissions ?? {}) as Record<string, string[] | undefined>;
+  const missing = (['read', 'write'] as const).some((cap) => !(current[cap] ?? []).includes('workflow:*'));
+  if (missing) {
+    try {
+      await updateCollection(BRIEFINGS_COLLECTION, { defaultPermissions: BRIEFING_PERMS }, SYSTEM_ACTOR);
+      console.log('[briefing] collection permissions reconciled (added workflow:*)');
+    } catch (err) {
+      console.error('[briefing] failed to reconcile collection permissions:', errMsg(err));
+    }
+  }
 }
 
 export function startBriefingEngine(): void {
   if (started) return;
   started = true;
-
-  // Ensure the collection exists everywhere (dev + prod).
   void ensureBriefingsCollection().catch((err) => console.error('[briefing] ensure collection failed:', errMsg(err)));
-
-  // The briefing is produced by the `canvas:morning-briefing` workflow, which
-  // gathers the signals, verifies them and sends the WhatsApp summary. This
-  // engine's own cron would be a second, competing producer writing into the
-  // same collection, so it stays off unless explicitly asked for (2026-07-29).
-  if (process.env.BRIEFING_ALLOW_DEV !== '1') {
-    console.log('[briefing] cron disabled — canvas:morning-briefing owns the schedule. Set BRIEFING_ALLOW_DEV=1 to override.');
-    return;
-  }
-
-  const host = os.hostname();
-  if (host === 'homeserv' && process.env.BRIEFING_ALLOW_DEV !== '1') {
-    console.log('[briefing] host is homeserv — daily cron disabled. Set BRIEFING_ALLOW_DEV=1 to enable locally.');
-    return;
-  }
-
-  try {
-    cronJob = new Cron(CRON_EXPR, { timezone: CRON_TZ }, () => {
-      void fireCron();
-    });
-    console.log(`[briefing] daily briefing scheduled (${CRON_EXPR} ${CRON_TZ})`);
-  } catch (err) {
-    console.error('[briefing] failed to schedule cron:', errMsg(err));
-  }
-}
-
-async function fireCron(): Promise<void> {
-  try {
-    const enabled = await getSetting<boolean>(SETTINGS_ENABLED_KEY);
-    if (enabled === false) {
-      console.log('[briefing] kill switch is off — skipping daily briefing');
-      return;
-    }
-    await runBriefingNow({ trigger: 'cron' });
-  } catch (err) {
-    console.error('[briefing] cron fire skipped/failed:', errMsg(err));
-  }
 }
 
 export function stopBriefingEngine(): void {
-  if (cronJob) cronJob.stop();
-  cronJob = null;
   started = false;
 }

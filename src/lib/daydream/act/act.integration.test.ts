@@ -8,10 +8,10 @@ const mock = vi.hoisted(() => ({ tool: vi.fn(), draft: vi.fn(), gmail: {
   listMessages: vi.fn(), fetchMessage: vi.fn(), createDraft: vi.fn(), sendDraft: vi.fn(), deleteDraft: vi.fn(),
 } }));
 vi.mock('$env/dynamic/private', () => ({ env: process.env }));
-vi.mock('$lib/workflows/site-tools/registry', () => ({ executeTool: mock.tool }));
+vi.mock('$lib/tools/registry', () => ({ executeTool: mock.tool }));
 vi.mock('./plan.server', () => ({ draftPlan: mock.draft }));
 // Gmail's API is faked; the account row it is called with is real.
-vi.mock('$lib/workflows/gmail/service', () => ({ gmailService: mock.gmail }));
+vi.mock('$lib/integrations/gmail/service', () => ({ gmailService: mock.gmail }));
 import { db } from '$lib/db';
 import { ACT_CALENDAR_KEY, doIt, reminderName, sendIt, undoIt } from './act.server';
 import { storeAction } from './plan';

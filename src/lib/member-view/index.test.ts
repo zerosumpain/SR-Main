@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { DeliveryState } from '$lib/constants/development';
-import type { BacklogEpic } from '$lib/selfimprove/epic-backlog';
+import type { BacklogEpic } from '$lib/selfimprove/backlog-room';
 import type { BoardView, WorkItem } from '$lib/selfimprove/board';
-import type { NarrativeRun } from '$lib/workflowdoctor/narrative';
+import type { NarrativeRun } from '$lib/workflows-client/doctor-client';
 import {
   mayFollow,
   memberArchiveRow,

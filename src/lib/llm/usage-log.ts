@@ -7,11 +7,15 @@
 // up. This helper is the single place the site records its own calls into the
 // same table, so the cost dashboards reflect real spend.
 //
-// Fire-and-forget: cost logging must NEVER break an LLM response, so the insert
+// Fire-and-forget: cost logging must NEVER break an LLM response, so the write
 // is best-effort and swallows its own errors.
+//
+// WHERE the row goes is `$lib/llm/model-source`, which differs per repository:
+// Main inserts it into `agent_actions` itself; an extracted application sends it
+// to Main's usage-ingest endpoint, which builds the same row with `llmCallRow`
+// below. One row builder, so a call costs the same wherever it was made.
 
-import { db } from '$lib/db';
-import { agentActions } from '$lib/db/schema';
+import { writeUsage } from '$lib/llm/model-source';
 
 export interface DurableLLMCall {
   provider: string;
@@ -88,31 +92,54 @@ function buildInput(call: DurableLLMCall): Record<string, unknown> | null {
   return Object.keys(input).length > 0 ? input : null;
 }
 
+/** The `agent_actions` columns one LLM call writes. */
+export interface LlmCallRow {
+  actionType: 'llm_call';
+  provider: string;
+  model: string;
+  tokensInput: number | null;
+  tokensOutput: number | null;
+  cacheReadTokens: number | null;
+  reasoningTokens: number | null;
+  costUsd: number | null;
+  sessionId: string | null;
+  durationMs: number | null;
+  input: Record<string, unknown> | null;
+  status: 'completed';
+}
+
+export function llmCallRow(call: DurableLLMCall): LlmCallRow {
+  return {
+    actionType: 'llm_call',
+    provider: call.provider,
+    model: call.model,
+    tokensInput: call.tokensInput ?? null,
+    tokensOutput: call.tokensOutput ?? null,
+    cacheReadTokens: call.cacheReadTokens ?? null,
+    reasoningTokens: call.reasoningTokens ?? null,
+    costUsd: call.costUsd ?? null,
+    sessionId: call.sessionId ?? null,
+    durationMs: call.durationMs ?? null,
+    // Both facets live in `input` rather than in new columns: this table is
+    // shared with the external-agent action log, which writes arbitrary
+    // payloads here already, and a jsonb key needs no migration on a table
+    // that is hot on every LLM call.
+    input: buildInput(call),
+    status: 'completed',
+  };
+}
+
 export function recordDurableLLMCall(call: DurableLLMCall): void {
-  void db
-    .insert(agentActions)
-    .values({
-      actionType: 'llm_call',
-      provider: call.provider,
-      model: call.model,
-      tokensInput: call.tokensInput ?? null,
-      tokensOutput: call.tokensOutput ?? null,
-      cacheReadTokens: call.cacheReadTokens ?? null,
-      reasoningTokens: call.reasoningTokens ?? null,
-      costUsd: call.costUsd ?? null,
-      sessionId: call.sessionId ?? null,
-      durationMs: call.durationMs ?? null,
-      // Both facets live in `input` rather than in new columns: this table is
-      // shared with the external-agent action log, which writes arbitrary
-      // payloads here already, and a jsonb key needs no migration on a table
-      // that is hot on every LLM call.
-      input: buildInput(call),
-      status: 'completed',
-    })
-    .catch((err: unknown) => {
-      console.error(
-        '[llm-usage-log] failed to record llm_call:',
-        err instanceof Error ? err.message : err,
-      );
-    });
+  let pending: Promise<void>;
+  try {
+    pending = writeUsage(call, llmCallRow(call));
+  } catch (err) {
+    pending = Promise.reject(err);
+  }
+  pending.catch((err: unknown) => {
+    console.error(
+      '[llm-usage-log] failed to record llm_call:',
+      err instanceof Error ? err.message : err,
+    );
+  });
 }

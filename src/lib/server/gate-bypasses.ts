@@ -75,6 +75,11 @@ export const HOOK_BYPASSES: string[] = [
   // backlog code. Named one at a time; /api/platform is not a tree.
   '/api/platform/daydream/briefing', // GET only, same credential
   '/api/platform/backlog/intake', // POST only, same credential; trace ideas only
+  // The model-plumbing lane for the extracted applications: per-application
+  // MODEL_SERVICE_TOKEN_<APP> Bearer, constant-time compared, refused when unset
+  // or under 32 chars. See $lib/server/model-service-auth.
+  '/api/platform/models/config', // GET only, MODEL_SERVICE_TOKEN_<APP>
+  '/api/platform/models/usage', // POST only, same credential; writes agent_actions llm_call rows
   // The two server-side calls chat makes to intel, cross-process now that
   // chat lives in SR-Jkai-Core. Same SR-JKAI credential; each also accepts an
   // owner session and re-checks it. Named one at a time — /api/jkai/intel is
@@ -194,6 +199,8 @@ export const BYPASS_GUARDS: Record<string, string> = {
   '/api/platform/tools/catalogue': 'GET only · JKAI_INVOKE_TOKEN; tool names and their destructive flag',
   '/api/platform/daydream/briefing': "GET only · JKAI_INVOKE_TOKEN; yesterday's daydream section for the morning briefing",
   '/api/platform/backlog/intake': 'POST only · JKAI_INVOKE_TOKEN; trace findings into the build backlog intake',
+  '/api/platform/models/config': 'GET only · MODEL_SERVICE_TOKEN_<APP>; an extracted app reads its model settings (secrets filtered)',
+  '/api/platform/models/usage': 'POST only · MODEL_SERVICE_TOKEN_<APP>; an extracted app records LLM usage in the cost ledger',
   '/api/jkai/intel/chat-context': 'POST only · JKAI_INVOKE_TOKEN or owner session; intel context for a chat turn',
   '/api/jkai/intel/extract-thread': 'POST only · JKAI_INVOKE_TOKEN or owner session; fire-and-forget extraction',
   '/api/jkai/tools/manifest': 'JKAI_BRIDGE_TOKEN',

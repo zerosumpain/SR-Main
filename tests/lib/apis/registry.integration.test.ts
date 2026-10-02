@@ -25,7 +25,7 @@ import {
   assertSecretAllowedForUrl,
   deleteSecret,
 } from '$lib/secrets/registry';
-import { handleApiRegister, handleApiCall, findApiEntry } from '$lib/workflows/site-tools/tools/apis';
+import { handleApiRegister, handleApiCall, findApiEntry } from '$lib/tools/tools/apis';
 import { saveIntegration, callIntegration, deleteIntegration } from '$lib/apis/integrations';
 import { runSeeds } from '$lib/selfimprove/seed-apis';
 import { getOpenRouterApiKey } from '$lib/server/models/settings';

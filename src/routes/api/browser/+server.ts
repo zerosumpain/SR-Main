@@ -1,5 +1,5 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { callVerb, closeSession, isOnHomeserv } from '$lib/workflows/browser/session';
+import { callVerb, closeSession, isOnHomeserv } from '$lib/browser/session';
 
 /**
  * homeserv's browser endpoint — the residential-IP half of the browser tools.

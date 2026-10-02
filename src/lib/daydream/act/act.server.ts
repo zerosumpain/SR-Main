@@ -56,7 +56,7 @@ type Outcome = Done | { ok: false; reason: string; needsCalendar?: boolean; cale
 async function tool(name: string, args: Record<string, unknown>) {
   // Dynamic for the reason `calendar/read.ts` gives: the registry boots
   // platform services on import.
-  const { executeTool } = await import('$lib/workflows/site-tools/registry');
+  const { executeTool } = await import('$lib/tools/registry');
   return executeTool(name, args);
 }
 
@@ -177,7 +177,7 @@ async function moveEntry(plan: MovePlan, now: Date): Promise<Outcome> {
 
 /** The owner's own sending mailbox: the most recently used active account. */
 async function ownerMailbox() {
-  const { ownerGmailWhere } = await import('$lib/workflows/gmail/owner-accounts');
+  const { ownerGmailWhere } = await import('$lib/integrations/gmail/owner-accounts');
   const [acct] = await db
     .select()
     .from(gmailAccounts)
@@ -197,7 +197,7 @@ export function addressOf(from: string): string {
 async function draftReply(plan: DraftPlan, thoughtId: string, now: Date): Promise<Outcome> {
   const acct = await ownerMailbox();
   if (!acct) return { ok: false, reason: 'No Gmail account is connected to draft from.' };
-  const { gmailService } = await import('$lib/workflows/gmail/service');
+  const { gmailService } = await import('$lib/integrations/gmail/service');
   // The recipient is FOUND, not written: the newest mail from the domain the
   // note's evidence names, replied to on its own thread.
   const ids = await gmailService.listMessages(acct, `from:${plan.domain} newer_than:180d`, 5);
@@ -316,7 +316,7 @@ export async function sendIt(thoughtId: string, now = new Date()): Promise<ActRe
     if (d.sentAt) return { ok: true, status: 'sent', label: doneLabel(found.stored, found.plan), already: true };
     const [acct] = await tx.select().from(gmailAccounts).where(eq(gmailAccounts.email, d.draft.accountEmail)).limit(1);
     if (!acct) return { ok: false, reason: 'The mailbox it was drafted in is no longer connected.' };
-    const { gmailService } = await import('$lib/workflows/gmail/service');
+    const { gmailService } = await import('$lib/integrations/gmail/service');
     try {
       await gmailService.sendDraft(acct, d.draft.id);
     } catch (err) {
@@ -373,7 +373,7 @@ export async function undoIt(thoughtId: string, now = new Date()): Promise<ActRe
         if (done.draft) {
           const [acct] = await tx.select().from(gmailAccounts).where(and(eq(gmailAccounts.email, done.draft.accountEmail))).limit(1);
           if (acct) {
-            const { gmailService } = await import('$lib/workflows/gmail/service');
+            const { gmailService } = await import('$lib/integrations/gmail/service');
             await gmailService.deleteDraft(acct, done.draft.id);
           }
         }

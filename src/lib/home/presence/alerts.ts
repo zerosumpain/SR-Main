@@ -762,7 +762,7 @@ export function attemptStoreFor(exec: DbExecutor): AttemptStore {
 
 /** The site's WhatsApp service, the way followup-queue reaches it. */
 async function defaultWhatsApp(to: string, text: string) {
-  const { getWhatsAppService } = await import('$lib/workflows/whatsapp/service');
+  const { getWhatsAppService } = await import('$lib/integrations/whatsapp/service');
   return getWhatsAppService().sendMessage(to, text);
 }
 

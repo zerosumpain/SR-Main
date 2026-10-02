@@ -59,7 +59,7 @@
 // needs a card on file and is not part of the free tier.
 //
 // So every Mapbox result carries `source: 'mapbox'`, and the caller in
-// `$lib/workflows/site-tools/geocode` refuses to persist one. Nominatim's results stay cacheable — its policy actively asks
+// `$lib/tools/geocode` refuses to persist one. Nominatim's results stay cacheable — its policy actively asks
 // for caching — which is why the fallback is worth keeping rather than being
 // dead weight. See MAPBOX_GEOCODES_ARE_TEMPORARY below.
 

@@ -1,7 +1,7 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { db } from '$lib/db';
 import { scraperCredentials } from '$lib/db/schema';
-import { saveCredential, deleteCredential } from '$lib/workflows/scraper/credentials';
+import { saveCredential, deleteCredential } from '$lib/scraper/credentials';
 
 export const GET: RequestHandler = async () => {
   const rows = await db.select({

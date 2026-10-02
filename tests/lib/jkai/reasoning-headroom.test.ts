@@ -15,21 +15,28 @@ vi.mock('$lib/context/execution', () => ({
   executionContext: { getStore: () => undefined },
 }));
 
-// Stand-in OpenRouter catalogue for the provider-cap clamp. `cap` is what
-// `raw->'top_provider'->>'max_completion_tokens'` yields — a string, or null
-// when the model advertises no completion ceiling. Read once per process and
-// cached, so every test here sees this one catalogue.
-vi.mock('$lib/db', () => ({
-  db: {
-    select: () => ({
-      from: async () => [
-        { id: 'openai/gpt-4o-mini', cap: '16384' },
-        { id: 'deepseek/deepseek-v4-flash', cap: null },
-        { id: 'z-ai/glm-5.2', cap: '131072' },
-        { id: 'z-ai/glm-pocket', cap: '1000' },
-      ],
-    }),
-  },
+// Stand-in OpenRouter catalogue for the provider-cap clamp, as
+// `$lib/llm/model-source` reduces it: `maxCompletionTokens` is
+// `raw->'top_provider'->>'max_completion_tokens'`, or null when the model
+// advertises no completion ceiling. Read once per process and cached, so every
+// test here sees this one catalogue.
+const row = (id: string, maxCompletionTokens: number | null) => ({
+  id,
+  maxCompletionTokens,
+  promptPrice: null,
+  completionPrice: null,
+  inputModalities: null,
+  modality: null,
+  supportedParameters: null,
+});
+vi.mock('$lib/llm/model-source', () => ({
+  loadCatalogue: async () => [
+    row('openai/gpt-4o-mini', 16384),
+    row('deepseek/deepseek-v4-flash', null),
+    row('z-ai/glm-5.2', 131072),
+    row('z-ai/glm-pocket', 1000),
+  ],
+  writeUsage: async () => undefined,
 }));
 
 /** Minimal fake SDK client — captures the params the wrapper actually sends. */

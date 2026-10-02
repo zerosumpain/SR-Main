@@ -16,7 +16,7 @@
 // Both are pure/side-effect-free apart from the tool invocation itself, so the
 // build and repair phases can share them.
 
-import type { ToolResult } from '$lib/workflows/site-tools/registry-internal';
+import type { ToolResult } from '$lib/tools/registry-internal';
 import { errMsg } from './types';
 
 /** Per-case wall clock. Short on purpose — a nightly tool must be fast. */

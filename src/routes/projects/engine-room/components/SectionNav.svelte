@@ -1,5 +1,5 @@
 <script lang="ts">
-  // SectionNav — two levels: the four parts, then the pages inside the current part.
+  // SectionNav — two levels: the parts, then the pages inside the current part.
   //
   // The first version was a single row of ten equal tabs, which told a reader nothing about
   // how the study was organised and left every page feeling like a peer of every other. The
@@ -18,9 +18,6 @@
     part ? part.leaves.find((l) => pathname === href(part.id, l.slug)) ?? null : null,
   );
 
-  const TRACE = href('turn', 'trace');
-  const onTrace = $derived(pathname === TRACE);
-
   const label = $derived(
     atIndex ? 'The Engine Room' : currentLeaf ? currentLeaf.label : part ? part.name : 'Sections',
   );
@@ -38,8 +35,6 @@
           <span class="t-no">{p.no}</span>{p.name}
         </a>
       {/each}
-      <a class="tab tracelink" class:active={onTrace} href={TRACE}
-         title="Follow one message through every stage and every layer">◧ Turn trace</a>
     </nav>
 
     <button class="burger" onclick={() => (menuOpen = !menuOpen)} aria-expanded={menuOpen} aria-label="Study menu">
@@ -102,10 +97,6 @@
   .tab.home { padding: 6px 11px; font-size: var(--fs-label-xs); color: rgba(28,22,17,0.6); }
   .tab.home.active { background: var(--text-primary); border-color: var(--text-primary); color: var(--bg); }
 
-  .tab.tracelink { background: var(--accent-ink); color: #fff; border-color: var(--accent-ink);
-    font-weight: 600; margin-left: 6px; }
-  .tab.tracelink:hover { background: #0b4a53; border-color: #0b4a53; color: #fff; }
-  .tab.tracelink.active { background: var(--text-primary); border-color: var(--text-primary); color: var(--bg); }
 
   .leaves { display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
     padding: 6px 32px 7px; border-top: 1px solid rgba(28,22,17,0.08);

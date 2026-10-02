@@ -2,7 +2,7 @@ import { json, type RequestHandler } from '@sveltejs/kit';
 import { db } from '$lib/db';
 import { driveIntelOutbox, gmailAccounts } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { ownerGmailWhere } from '$lib/workflows/gmail/owner-accounts';
+import { ownerGmailWhere } from '$lib/integrations/gmail/owner-accounts';
 
 export const GET: RequestHandler = async () => {
   const rows = await db.select({

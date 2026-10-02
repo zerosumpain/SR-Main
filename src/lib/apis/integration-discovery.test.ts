@@ -7,7 +7,7 @@ vi.mock('./integrations', () => ({ listIntegrations: vi.fn(async () => [
 ]) }));
 import { discoverIntegrations } from './integration-discovery';
 import { listIntegrations } from './integrations';
-import { getTools } from '$lib/workflows/site-tools/registry';
+import { getTools } from '$lib/tools/registry';
 import { resolveCapabilities } from '$lib/jkai/grounding/capabilities';
 import { dispatchMetaTool } from '$lib/mcp/meta-tool';
 describe('saved-operation discovery across domains', () => {

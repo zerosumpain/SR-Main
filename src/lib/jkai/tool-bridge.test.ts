@@ -11,11 +11,11 @@ import {
   manifestForBuild,
   invokeTool,
 } from './tool-bridge';
-import { getTool } from '$lib/workflows/site-tools/registry';
+import { getTool } from '$lib/tools/registry';
 
 beforeAll(async () => {
   // Populate the registry — the toolset helpers read from it.
-  await import('$lib/workflows/site-tools/registry');
+  await import('$lib/tools/registry');
 });
 
 describe('bridge tokens', () => {

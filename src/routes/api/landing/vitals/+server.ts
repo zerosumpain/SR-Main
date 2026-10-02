@@ -4,9 +4,9 @@ import { db } from '$lib/db';
 import { jkaiBuilds, jkaiBuildDeliveries, workflows, workflowRuns, projectVisibility } from '$lib/db/schema';
 import { and, desc, eq, inArray, isNull, like, or, sql } from 'drizzle-orm';
 import { STATIC_PROJECT_KEYS } from '$lib/projects/visibility';
-import { runningJobsByConversation } from '$lib/workflows/chat/activity';
+import { runningJobsByConversation } from '$lib/jkai/chat/activity';
 import { publishedLink } from '$lib/builds/published-link';
-import { ownerWorkflows } from '$lib/workflows/owner-rows';
+import { ownerWorkflows } from '$lib/workflows-client/owner-rows';
 
 /**
  * Public, read-only aggregator for the landing-page "Vital Signs" tiles.

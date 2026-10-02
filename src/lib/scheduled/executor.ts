@@ -103,7 +103,7 @@ async function fireReply(row: ScheduledCallback): Promise<FireResult> {
 
   if (payload.notifyWhatsApp) {
     try {
-      const { notifySubscribers } = await import('$lib/workflows/chat/followup-queue');
+      const { notifySubscribers } = await import('$lib/jkai/chat/followup-queue');
       notifySubscribers(row.conversationId, { role: 'assistant', content: payload.text, source: 'scheduled' });
     } catch {
       // noop — SSE delivery is best-effort
@@ -117,7 +117,7 @@ async function fireTool(row: ScheduledCallback): Promise<FireResult> {
   const payload = row.payload as ToolPayload;
   if (!payload.toolName) return { ok: false, summary: 'tool requires payload.toolName', error: 'no toolName' };
 
-  const { executeSiteTool, isRegisteredTool } = await import('$lib/workflows/site-tools/executor');
+  const { executeSiteTool, isRegisteredTool } = await import('$lib/tools/executor');
   if (!(await isRegisteredTool(payload.toolName))) {
     return { ok: false, summary: `unknown tool ${payload.toolName}`, error: `tool not registered` };
   }

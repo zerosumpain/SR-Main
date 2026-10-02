@@ -279,7 +279,7 @@
     </div>
     <div class="hdr-links">
       <a class="back-link" href="/jkai">JKAI</a>
-      <a class="back-link" href="/admin/ai/improvement">Controls →</a>
+      <a class="back-link" href="/jkai/develop/improvement#controls">Controls →</a>
     </div>
   </header>{/if}
 

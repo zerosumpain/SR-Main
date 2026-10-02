@@ -4,7 +4,8 @@
  * WHY A MODEL AND NOT THE FREE SERVICE
  *
  * The first version of this used pollinations.ai, keyless and free, following
- * the precedent in $lib/decks/image-sources.server.ts. Tested against the
+ * the precedent set by the deck editor's image sources (retired with decks on
+ * 2026-10-02). Tested against the
  * actual ask — "a simple side-view diagram of rainwater running off a roof
  * into a drain and out to a river" — it produced a moody painting of two roofs
  * against a teal sky, with no drain, no river and no process in it. Free is

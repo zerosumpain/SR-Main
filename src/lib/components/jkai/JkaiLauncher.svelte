@@ -13,10 +13,10 @@
 
   async function runBriefing() {
     actionBusy = true;
-    actionStatus = 'Generating briefing…';
+    actionStatus = 'Starting briefing…';
     try {
       const res = await fetch('/api/admin/briefing/run', { method: 'POST' });
-      actionStatus = res.ok ? 'Briefing generated ✓' : 'Briefing failed';
+      actionStatus = res.ok ? 'Briefing started ✓' : 'Briefing failed';
     } catch {
       actionStatus = 'Briefing failed';
     } finally {
@@ -29,7 +29,7 @@
   }
 
   const ACTIONS: NavItem[] = [
-    { code: '✦', label: 'Run briefing now', desc: "Generate today's digest", keywords: 'briefing run digest generate', run: runBriefing },
+    { code: '✦', label: 'Run briefing now', desc: "Run today's briefing workflow", keywords: 'briefing run digest generate', run: runBriefing },
     { code: '+', label: 'New chat', desc: 'Start a fresh conversation', keywords: 'new chat conversation', run: () => navTo('/jkai') },
     { code: '⊹', label: 'New monitor', desc: 'Watch something new', keywords: 'new monitor watch alert', run: () => navTo('/jkai/daydreams/watches') },
     { code: '⌕', label: 'Search knowledge', desc: 'Recall across everything', keywords: 'search knowledge recall find', run: () => navTo('/jkai/intel') },

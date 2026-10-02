@@ -2,13 +2,11 @@ import type { ActivityHandler } from './types';
 import { chatContinuation } from './activities/chat-continuation';
 import { conversationCheckin } from './activities/conversation-checkin';
 import { buildProgressCheck } from './activities/build-progress-check';
-import { workflowReview } from './activities/workflow-review';
 import { homeObserve } from './activities/home-observe';
 import { householdLive } from './activities/household-live';
 import { daydreamFeatures } from './activities/daydream-features';
 import { homePlaces } from './activities/home-places';
 import { daydreamBank } from './activities/daydream-bank';
-import { daydreamDoctor } from './activities/daydream-doctor';
 import { daydreamNotebook } from './activities/daydream-notebook';
 import { daydreamThink } from './activities/daydream-think';
 import { daydreamMemory } from './activities/daydream-memory';
@@ -17,6 +15,10 @@ import { activitySync } from './activities/activity-sync';
 import { alexaSignalsSync, alexaVoiceSync, alexaVoiceTopics } from './activities/alexa-voice';
 import { newsBrief } from './activities/news-brief';
 import { familySteps, familySteps4pm } from './activities/family-steps';
+import { backlogGrooming } from './activities/backlog-grooming';
+import { forgeSchedulesActivity } from './activities/forge-schedules';
+import { modelRouting } from './activities/model-routing';
+import { voiceDrift } from './activities/voice-drift';
 
 /**
  * The full set of available heartbeat activity handlers. The engine looks
@@ -28,13 +30,11 @@ const handlers: ActivityHandler[] = [
   chatContinuation,
   conversationCheckin,
   buildProgressCheck,
-  workflowReview,
   homeObserve,
   householdLive,
   daydreamFeatures,
   homePlaces,
   daydreamBank,
-  daydreamDoctor,
   daydreamNotebook,
   daydreamThink,
   daydreamMemory,
@@ -45,6 +45,10 @@ const handlers: ActivityHandler[] = [
   alexaVoiceTopics,
   familySteps,
   familySteps4pm,
+  backlogGrooming,
+  forgeSchedulesActivity,
+  modelRouting,
+  voiceDrift,
 ];
 
 const byName = new Map(handlers.map((h) => [h.name, h]));

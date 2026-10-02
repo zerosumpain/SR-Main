@@ -1,0 +1,162 @@
+{
+  "source": {
+    "commit": "bd8c20f3c47f"
+  },
+  "targets": [
+    {
+      "id": "SRAppleApp",
+      "type": "application",
+      "platform": "iOS"
+    },
+    {
+      "id": "SRAppleWatch",
+      "type": "application",
+      "platform": "watchOS"
+    },
+    {
+      "id": "SRAppleWatchWidgets",
+      "type": "app-extension",
+      "platform": "watchOS"
+    },
+    {
+      "id": "SRAppleLive",
+      "type": "app-extension",
+      "platform": "iOS"
+    }
+  ],
+  "tabs": [
+    "today",
+    "chat",
+    "health",
+    "family",
+    "games",
+    "news",
+    "flows",
+    "more"
+  ],
+  "morePages": [
+    "daydream"
+  ],
+  "watchPages": [
+    "today",
+    "alerts",
+    "flows",
+    "status"
+  ],
+  "widgets": [
+    {
+      "id": "JourneyLiveActivity",
+      "name": "Journey Live Activity",
+      "description": null,
+      "surface": "live-activity"
+    },
+    {
+      "id": "FamilyStepsWidget",
+      "name": "Family steps",
+      "description": "Your place on today's family step board.",
+      "surface": "home-screen"
+    },
+    {
+      "id": "FamilyTasksWidget",
+      "name": "Family tasks",
+      "description": "What's left to do, what's waiting on a parent, and what's owed.",
+      "surface": "home-screen"
+    }
+  ],
+  "complications": [
+    {
+      "id": "ReadinessComplication",
+      "name": "Readiness",
+      "description": "Today's readiness score from Strange Ramblings.",
+      "surface": "watch-face"
+    },
+    {
+      "id": "UnreadComplication",
+      "name": "Alerts",
+      "description": "Unread alerts from the site.",
+      "surface": "watch-face"
+    }
+  ],
+  "intents": [
+    {
+      "id": "HealthTodayIntent",
+      "title": "Health today"
+    },
+    {
+      "id": "AskJkaiIntent",
+      "title": "Ask jkai"
+    },
+    {
+      "id": "SyncNowIntent",
+      "title": "Sync now"
+    }
+  ],
+  "shortcuts": 3,
+  "games": [
+    {
+      "id": "tap-duel",
+      "title": "Tap Duel"
+    },
+    {
+      "id": "wordle-race",
+      "title": "Wordle Race"
+    },
+    {
+      "id": "quiz-night",
+      "title": "Quiz Night"
+    },
+    {
+      "id": "anagram-blitz",
+      "title": "Anagram Blitz"
+    },
+    {
+      "id": "maths-sprint",
+      "title": "Quick Maths Sprint"
+    },
+    {
+      "id": "sequence-memory",
+      "title": "Sequence Memory"
+    },
+    {
+      "id": "boggle",
+      "title": "Boggle"
+    },
+    {
+      "id": "categories",
+      "title": "Categories"
+    },
+    {
+      "id": "liars-dice",
+      "title": "Liar's Dice"
+    },
+    {
+      "id": "draw-guess",
+      "title": "Draw & Guess"
+    }
+  ],
+  "backgroundModes": [
+    "location",
+    "fetch",
+    "processing"
+  ],
+  "liveActivities": true,
+  "permissions": [
+    "HealthUpdate",
+    "Camera",
+    "HealthShare",
+    "LocationWhenInUse",
+    "LocationAlwaysAndWhenInUse",
+    "Motion",
+    "LocalNetwork",
+    "SpeechRecognition",
+    "Microphone"
+  ],
+  "entitlements": [
+    "push",
+    "time-sensitive",
+    "sign-in-with-apple",
+    "healthkit",
+    "healthkit-background",
+    "keychain-sharing"
+  ]
+}

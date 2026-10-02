@@ -366,7 +366,7 @@ export async function pollHomeAssistant(
   personEntity = 'person.john',
 ): Promise<{ fix: IncomingFix } | { error: string }> {
   try {
-    const { getHomeAssistantService } = await import('$lib/workflows/homeassistant/service');
+    const { getHomeAssistantService } = await import('$lib/integrations/homeassistant/service');
     const res = await getHomeAssistantService().queryState(personEntity);
     if (!res.success || !res.data) {
       return { error: `HA unreachable or entity missing: ${res.error ?? 'no data'}` };
@@ -392,7 +392,7 @@ export async function pollAllSubjects(
 ): Promise<Map<string, { fix: IncomingFix } | { error: string }>> {
   const out = new Map<string, { fix: IncomingFix } | { error: string }>();
   try {
-    const { getHomeAssistantService } = await import('$lib/workflows/homeassistant/service');
+    const { getHomeAssistantService } = await import('$lib/integrations/homeassistant/service');
     const res = await getHomeAssistantService().queryAllStates();
     if (!res.success || !Array.isArray(res.data)) {
       const error = `HA unreachable: ${res.error ?? 'no data'}`;

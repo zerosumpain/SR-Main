@@ -15,7 +15,7 @@
 
 import { extract as defaultTavilyExtract } from './tavily';
 import type { TavilyExtractResponse } from './tavily';
-import type { ScrapeResult } from '$lib/workflows/scraper/types';
+import type { ScrapeResult } from '$lib/scraper/types';
 
 const TAVILY_MIN_CHARS = 400;
 const RESIDENTIAL_MIN_CHARS = 200;

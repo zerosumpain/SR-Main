@@ -1,11 +1,21 @@
 <script lang="ts">
   // PageFoot — previous/next through the study's reading order, derived from lib/nav.ts so
   // the order lives in exactly one place.
+  //
+  // Every leaf ends with the routes on the real site it accounts for (OnTheSite). Native API
+  // lists all of the app's endpoints itself, so it doesn't repeat them here.
   import { page } from '$app/stores';
-  import { neighbours } from '../lib/nav';
+  import { B, neighbours } from '../lib/nav';
+  import OnTheSite from './OnTheSite.svelte';
 
   const nav = $derived(neighbours($page.url.pathname));
+  const leaf = $derived($page.url.pathname.replace(/\/$/, '').slice(B.length + 1));
+  const routes = $derived(
+    leaf === 'app/api' ? [] : (($page.data.facts?.routes ?? []) as Array<{ leaf: string; path: string; kind: 'api' | 'page'; methods: string[]; who: 'owner' | 'members' | 'phone' | 'service'; what: string }>).filter((r) => r.leaf === leaf),
+  );
 </script>
+
+<OnTheSite {routes} />
 
 <nav class="pf" aria-label="Study navigation">
   {#if nav.prev}

@@ -9,18 +9,18 @@
   interface Source { n: number; title: string; sourceType: string; url: string | null }
   interface Msg { role: 'user' | 'assistant'; content: string; sources?: Source[] }
 
-  const STORE_KEY = 'er-askmodel-v1';
+  const STORE_KEY = 'er-askmodel-v2';
   let messages = $state<Msg[]>([]);
   let input = $state('');
   let busy = $state(false);
   let scrollEl: HTMLDivElement | undefined;
 
   const SUGGESTIONS = [
-    'Where does the money actually go in an AI system like this?',
-    'What is the system allowed to change about itself without asking?',
-    'Why is the cheapest seller of a model usually the wrong one?',
-    'How does it decide two records are the same person?',
-    'Which guardrails exist because something went wrong?',
+    'How does daydream decide what to think about next?',
+    'What happens between me accepting an idea and it going live?',
+    'What may a build ship without a person pressing anything?',
+    'What does the iPhone app add that the website cannot do?',
+    'How do these pages keep up when the features change?',
   ];
 
   // Hydrate once in onMount — NOT an $effect (an effect reading + writing `messages` loops).

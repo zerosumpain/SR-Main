@@ -7,7 +7,7 @@
 
 import type { CustomToolHealth } from './context';
 import type { LiveToolTest, ToolAttemptData } from './types';
-import type { ToolResult } from '$lib/workflows/site-tools/registry-internal';
+import type { ToolResult } from '$lib/tools/registry-internal';
 
 export interface AttemptEvidenceRow {
   key: string;

@@ -1,8 +1,5 @@
-// Personalized Briefing Engine — a scheduled digest that gathers what you care
-// about (question intents, recent research, live vitals/signals), synthesises it
-// with the LLM, stores it, and delivers it over WhatsApp. Mirrors the proven
-// self-improvement harness (host/kill gates, datastore dogfooding), trimmed to a
-// single gather→synthesise→deliver flow.
+// Briefing types and settings. The `canvas:morning-briefing` workflow produces
+// the briefing; Main stores its collection, shows it and records feedback.
 
 import type { BriefingMemoryRow } from '$lib/constants/briefing';
 export {
@@ -13,9 +10,6 @@ export {
 
 // Re-exported so nothing that already imported them from here had to change.
 export { BRIEFINGS_COLLECTION, FEEDBACK_COLLECTION, briefingDateLabel } from '$lib/constants/briefing';
-
-export const CRON_EXPR = '30 6 * * *'; // 06:30 daily
-export const CRON_TZ = 'Europe/London';
 
 /**
  * The canvas workflow that actually produces the briefing. It gathers the
@@ -106,11 +100,6 @@ export interface BriefingData {
 
 export function errMsg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
-}
-
-/** Cast a typed record to the datastore's generic data bag. */
-export function asData<T>(value: T): Record<string, unknown> {
-  return value as unknown as Record<string, unknown>;
 }
 
 /** e.g. "Fri 19 Jul" for a briefing title. */

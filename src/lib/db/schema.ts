@@ -1,5 +1,6 @@
 import {
   pgTable,
+  pgSchema,
   serial,
   bigserial,
   text,
@@ -1029,7 +1030,16 @@ export const researchSessions = pgTable('research_session', {
   timeLimitMinutes: integer('time_limit_minutes'),
   config: jsonb('config').notNull().default(sql`'{}'::jsonb`),
   report: jsonb('report'),
+  /**
+   * LEGACY plaintext share token, from before links were hashed (2026-10-02).
+   * Nothing writes a new value here: $lib/deepdive/share moves a legacy token
+   * into `shareTokenHash` (and nulls this) the first time it is used or
+   * re-issued, and scripts/migrations/2026-10-02-research-share-token-hash.sql
+   * does the same for the rest. Kept declared so the push never drops it.
+   */
   shareToken: text('share_token').unique(),
+  /** sha256 (hex) of the share link's token — the raw token is shown once. */
+  shareTokenHash: text('share_token_hash').unique(),
   parentSessionId: text('parent_session_id'),
   seedContext: jsonb('seed_context'),
   /**
@@ -3036,7 +3046,15 @@ export type IntelRelationship = typeof intelRelationships.$inferSelect;
 // this table has NO `vector` column and drizzle-kit push never depends on the
 // pgvector extension for it, and a quality 3072-dim embedding model has a home.
 // ==========================================
-export const ragCollections = pgTable(
+// Owned by SR-Drive and kept in its own Postgres schema since
+// scripts/migrations/2026-10-02-app-owned-schemas.sql. Main has no reader or
+// writer: drizzle.config.ts's schemaFilter (public only) keeps push from
+// managing or recreating it. Declared here for one more release only, so the
+// declaration can be removed without a drop; SR-Drive's own schema slice is the
+// description it reads.
+export const driveSchema = pgSchema('drive');
+
+export const ragCollections = driveSchema.table(
   'rag_collections',
   {
     id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
@@ -3062,7 +3080,7 @@ export type NewRagCollection = typeof ragCollections.$inferInsert;
 // One row per chat turn against a collection. Kept deliberately separate from
 // jkai_conversations/orchestrator_chats so the RAG feature is self-contained
 // and does not show up in the jkai cost/metrics ledgers.
-export const ragMessages = pgTable(
+export const ragMessages = driveSchema.table(
   'rag_messages',
   {
     id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
@@ -4259,7 +4277,15 @@ export type NewForgeSchedule = typeof forgeSchedules.$inferInsert;
 // announced-policy scenarios, plus a freshness stamp. Written by the ingest route
 // (driven by jkai cron workflows); read by the /monitor page. Mirrors the
 // openrouter_models cached-external-data precedent (raw jsonb + fetchedAt).
-export const policyIndicatorSnapshots = pgTable(
+// Owned by SR-Policy-Engine and kept in its own Postgres schema since
+// scripts/migrations/2026-10-02-app-owned-schemas.sql. Main has no reader or
+// writer: drizzle.config.ts's schemaFilter (public only) keeps push from
+// managing or recreating it. Declared here for one more release only, so the
+// declaration can be removed without a drop; SR-Policy-Engine's own schema slice is the
+// description it reads.
+export const policySchema = pgSchema('policy');
+
+export const policyIndicatorSnapshots = policySchema.table(
   'policy_indicator_snapshots',
   {
     id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
@@ -4292,7 +4318,15 @@ export type NewPolicyIndicatorSnapshot = typeof policyIndicatorSnapshots.$inferI
 // discovery is index-driven (GOV.UK Search API etc.), deduped on canonicalId,
 // with cheap change-detection via contentHash. LLM classification only sets
 // kind/confidence/summary — never whether the row exists.
-export const standardRegistryEntries = pgTable(
+// Owned by SR-Data-Standard-Designer and kept in its own Postgres schema since
+// scripts/migrations/2026-10-02-app-owned-schemas.sql. Main has no reader or
+// writer: drizzle.config.ts's schemaFilter (public only) keeps push from
+// managing or recreating it. Declared here for one more release only, so the
+// declaration can be removed without a drop; SR-Data-Standard-Designer's own schema slice is the
+// description it reads.
+export const dsdSchema = pgSchema('dsd');
+
+export const standardRegistryEntries = dsdSchema.table(
   'standard_registry_entries',
   {
     id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
@@ -4323,7 +4357,7 @@ export type NewStandardRegistryEntry = typeof standardRegistryEntries.$inferInse
 // Per-source run telemetry — the coverage-health signal. A source that
 // normally returns N and suddenly returns 0 (or errors) shows up here, so a
 // silently-broken feed is visible rather than mistaken for "nothing new".
-export const standardRegistrySourceRuns = pgTable(
+export const standardRegistrySourceRuns = dsdSchema.table(
   'standard_registry_source_runs',
   {
     id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
@@ -4345,7 +4379,15 @@ export type StandardRegistrySourceRun = typeof standardRegistrySourceRuns.$infer
 // the LLM classifies each item AGAINST the strategy: how it influences which
 // strategies/pressures, and any considerations / misalignments. Index-driven +
 // deduped on canonicalId; classification enriches, never gates existence.
-export const keystoneIntel = pgTable(
+// Owned by SR-DfE-Data-Strategy and kept in its own Postgres schema since
+// scripts/migrations/2026-10-02-app-owned-schemas.sql. Main has no reader or
+// writer: drizzle.config.ts's schemaFilter (public only) keeps push from
+// managing or recreating it. Declared here for one more release only, so the
+// declaration can be removed without a drop; SR-DfE-Data-Strategy's own schema slice is the
+// description it reads.
+export const dfeSchema = pgSchema('dfe');
+
+export const keystoneIntel = dfeSchema.table(
   'keystone_intel',
   {
     id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
@@ -4373,7 +4415,7 @@ export const keystoneIntel = pgTable(
 );
 export type KeystoneIntel = typeof keystoneIntel.$inferSelect;
 
-export const keystoneIntelRuns = pgTable('keystone_intel_runs', {
+export const keystoneIntelRuns = dfeSchema.table('keystone_intel_runs', {
   id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
   runAt: timestamp('run_at', { withTimezone: true }).notNull().defaultNow(),
   ok: boolean('ok').notNull().default(true),

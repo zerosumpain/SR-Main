@@ -15,7 +15,7 @@
   import ResearchChatNode from './desk/ResearchChatNode.svelte';
   import ReportNode from './desk/ReportNode.svelte';
   import WebpageNode, { type WebpageConfig } from '$lib/canvas/nodes/WebpageNode.svelte';
-  import { createDeskStore, type DeskCard, type QuickInitial } from './desk/store.svelte';
+  import { createDeskStore, type DeskCard } from './desk/store.svelte';
   import {
     pileLayout,
     ORG,
@@ -56,20 +56,16 @@
 
   let {
     sessionId,
-    mode: deskMode = 'deep',
     readonly = false,
     embedded = false,
     initialTopic = '',
     initialStatus = 'draft',
-    quickInitial = undefined,
   } = $props<{
     sessionId: string;
-    mode?: 'deep' | 'quick';
     readonly?: boolean;
     embedded?: boolean;
     initialTopic?: string;
     initialStatus?: string;
-    quickInitial?: QuickInitial;
   }>();
 
   // Topic shown in the command bar (kept as a derived const so the prop read
@@ -77,7 +73,7 @@
   const topic = $derived(initialTopic);
 
   // ——— store ———
-  const store = createDeskStore(sessionId, { mode: deskMode, quickInitial });
+  const store = createDeskStore(sessionId);
   onMount(() => {
     store.start();
     return () => store.dispose();
@@ -212,9 +208,9 @@
 
   async function goSynthesize() {
     mode = 'synthesize';
-    // Readonly desks (share view) and quick desks never trigger a synthesis run;
+    // Readonly desks (share view) never trigger a synthesis run;
     // they only re-cluster the already-streamed state locally.
-    if (readonly || deskMode === 'quick') return;
+    if (readonly) return;
     if (synthesizing || store.synthStatus === 'running') return;
     // Clear transient drag positions — cards rejoin their new piles after a synthesize.
     manualPos = new Map();
@@ -248,7 +244,7 @@
 
   // ⏭ → engine "skip" (advance phase). Engine has no true pause.
   async function handleSkip() {
-    if (readonly || deskMode === 'quick') return;
+    if (readonly) return;
     await fetch(`/api/deepdive/${sessionId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -257,7 +253,7 @@
   }
 
   async function handleStop() {
-    if (readonly || deskMode === 'quick') return;
+    if (readonly) return;
     await fetch(`/api/deepdive/${sessionId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -272,8 +268,18 @@
   }
 
   async function handleShare() {
-    if (readonly || deskMode === 'quick') return;
-    const res = await fetch(`/api/deepdive/${sessionId}/share`, { method: 'POST' });
+    if (readonly) return;
+    let res = await fetch(`/api/deepdive/${sessionId}/share`, { method: 'POST' });
+    // The token is stored hashed, so a live link cannot be copied again; a new
+    // one replaces it (and the old link stops working) only on confirmation.
+    if (res.status === 409) {
+      if (!confirm('This run already has a share link, which cannot be shown again. Replace it? The old link will stop working.')) return;
+      res = await fetch(`/api/deepdive/${sessionId}/share`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ rotate: true }),
+      });
+    }
     if (!res.ok) return;
     const { token } = await res.json() as { token: string };
     const url = `${location.origin}/deepdive/share/${token}`;
@@ -284,15 +290,8 @@
     }
   }
 
-  function handleExport(kind: 'docx' | 'narrative-docx' | 'narrative-md' | 'md') {
-    const path =
-      kind === 'docx'
-        ? `/api/deepdive/${sessionId}/export/docx`
-        : kind === 'md'
-          ? `/api/deepdive/${sessionId}/export/md`
-          : kind === 'narrative-docx'
-            ? `/api/deepdive/${sessionId}/export/narrative-docx`
-            : `/api/deepdive/${sessionId}/export/narrative-md`;
+  function handleExport(kind: 'docx' | 'md') {
+    const path = `/api/deepdive/${sessionId}/export/${kind}`;
     const a = document.createElement('a');
     a.href = path;
     a.rel = 'noopener';
@@ -694,7 +693,7 @@
   );
 
   // Report node: regenerate + downloads are gated exactly like handleExport/handleShare.
-  const canRegenerate = $derived(!readonly && deskMode !== 'quick');
+  const canRegenerate = $derived(!readonly);
 
   // ——— Feature 1 liveness view state (entrance stagger + fresh-pulse) ———
   // Pure VIEW state derived from arrival metadata (the store's non-reactive side
@@ -1102,8 +1101,8 @@
   }
 
   // Which node types the desk palette offers — scoped to the research set, not
-  // the full workflow palette. 'intelligence' and 'research-result' are excluded
-  // as they render as do-nothing placeholders on the desk.
+  // the full workflow palette. These three are live desk nodes with no workflow
+  // executor; keep them in $lib/canvas/adapter's curated list.
   const DESK_PALETTE_TYPES = [
     'research-chat',
     'research-report',
@@ -1188,7 +1187,7 @@
     mode: PaletteMode;
     worldPosition?: { x: number; y: number } | null;
   }) {
-    if (readonly || deskMode === 'quick') return;
+    if (readonly) return;
     paletteAnchor = opts.anchor;
     paletteMode = opts.mode;
     palettePositionOverride = opts.worldPosition ?? null;
@@ -1651,7 +1650,7 @@
     {synthesising}
     {counts}
     compact={embedded}
-    controlsHidden={readonly || deskMode === 'quick'}
+    controlsHidden={readonly}
     onmode={handleMode}
     onskip={handleSkip}
     onstop={handleStop}
@@ -1682,7 +1681,7 @@
       ontouchcancel={onViewportTouchEnd}
       onwheel={onWheel}
       oncontextmenu={(e) => {
-        if (readonly || deskMode === 'quick') return;
+        if (readonly) return;
         const target = e.target as HTMLElement;
         // Don't hijack right-clicks landing on a card or an existing desk node.
         if (target.closest('.desk-card-host, .desk-node-host')) return;
@@ -1806,7 +1805,7 @@
               onpointermove={onCardPointerMove}
               onpointerup={(e) => onCardPointerUp(e, c)}
               onpointercancel={(e) => onCardPointerUp(e, c)}
-              oncontextmenu={(e) => { if (readonly || deskMode === 'quick') return; openCardContextMenu(e, c); }}
+              oncontextmenu={(e) => { if (readonly) return; openCardContextMenu(e, c); }}
             >
               {#if lowDetail}
                 <!-- Zoomed out past readability: a block of the card's size and

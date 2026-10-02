@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 
-vi.mock('$lib/workflows/site-tools/registry', async (importOriginal) => {
+vi.mock('$lib/tools/registry', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,

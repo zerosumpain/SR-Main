@@ -2,8 +2,8 @@
   // Layout chrome for The Engine Room — field-study shell, adapted from data-spine:
   // fonts, masthead, SectionNav, .pe-* route helpers, references footer, Ask dock.
   //
-  // The Ask dock is deliberately the same machinery this study describes: retrieval over a
-  // local corpus, streamed, with its sources shown. The /memory section points at it.
+  // The Ask dock answers from this study's own corpus, which lib/retrieval.server.ts builds
+  // from the same facts and copy the pages render.
   import { onMount } from 'svelte';
   import { app } from './lib/appState.svelte';
   import { REFERENCES } from './lib/references';
@@ -55,10 +55,10 @@
     <details class="sources-foot"><summary>Technologies and specifications referenced ({REFERENCES.length})</summary>
       <ul>{#each REFERENCES as r}<li><a href={r.url} target="_blank" rel="noopener">{r.name} ↗</a> — {r.what}</li>{/each}</ul>
     </details>
-    <p class="foot-disc">The Engine Room · <code>/projects/engine-room</code> · a walkthrough of the architecture behind this site.
+    <p class="foot-disc">The Engine Room · <code>/projects/engine-room</code> · how three parts of this site work.
       <b>Deliberately incomplete:</b> credentials, keys, personal data, addresses and anything else that would be unsafe to publish are
-      omitted by design. What is here is the <i>how</i> and the <i>why</i> — the mechanisms, the trade-offs, and the reasoning that put each one where it is.
-      Every figure was counted from the source — most on 5 August 2026, the newest pages on 17 August 2026. Companion studies:
+      left out by design. Live figures are totals only. Stage names, limits and schedules are read from the running code at each deploy,
+      counts from the database every few minutes, and the app’s make-up from its own source. Companion studies:
       <a href="/projects/policy-engine">The Policy Engine</a> · <a href="/projects/dfe-data-strategy">Keystone</a>.
       Built with Claude Code.</p>
   </footer>
@@ -73,7 +73,7 @@
     <aside class="ask-dock" role="dialog" aria-label="Ask the system">
       <header class="ask-dock-head">
         <span class="adh-title">✦ Ask the system</span>
-        <span class="adh-sub">retrieval, streamed — the thing it describes</span>
+        <span class="adh-sub">answers from this study only</span>
         <button class="adh-close" onclick={() => (askOpen = false)} aria-label="Close">✕</button>
       </header>
       <div class="ask-dock-body"><AskModel /></div>

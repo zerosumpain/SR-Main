@@ -128,7 +128,7 @@ export const AREAS: readonly AreaInfo[] = [
   {
     id: 'games',
     label: 'Games',
-    blurb: 'Family games in the iPhone app and at /games on the web: start one, invite the family, join when invited.',
+    blurb: 'Family games in the iPhone app: start one, invite the family, join when invited.',
     open: true,
     levels: { self: 'Play, start games and invite', all: 'Same as self', admin: 'Same as self' },
   },
@@ -366,9 +366,8 @@ const ROUTES: Record<string, Partial<Record<Method, Permission>>> = {
   // resolves the session through `requireResearchSession` (or the list through
   // `readable`), which decides own / household / everyone's and read / write;
   // so the gate asks only for the area, at `self`. Left out, owner-only: the
-  // two that write into John's own stores (to-drive, to-intel), the legacy
-  // `/api/deepdive` root and `/api/quickanswer`, maintenance re-indexing, the
-  // Tavily key admin and the image proxy.
+  // two that write into John's own stores (to-drive, to-intel), maintenance
+  // re-indexing, the Tavily key admin and the image proxy.
   '/research': { GET: 'research:self' },
   '/research/[id]': { GET: 'research:self' },
   '/research/[id]/desk': { GET: 'research:self' },
@@ -377,7 +376,6 @@ const ROUTES: Record<string, Partial<Record<Method, Permission>>> = {
   '/api/research/[id]/control': { POST: 'research:self' },
   '/api/research/[id]/spend': { GET: 'research:self' },
   '/api/research/[id]/network': { GET: 'research:self' },
-  '/api/research/source/[id]': { GET: 'research:self' },
   '/api/deepdive/[id]': { GET: 'research:self', PATCH: 'research:self', DELETE: 'research:self' },
   '/api/deepdive/[id]/data': { GET: 'research:self' },
   '/api/deepdive/[id]/clusters': { GET: 'research:self' },
@@ -385,15 +383,12 @@ const ROUTES: Record<string, Partial<Record<Method, Permission>>> = {
   '/api/deepdive/[id]/stream': { GET: 'research:self' },
   '/api/deepdive/[id]/export/docx': { GET: 'research:self' },
   '/api/deepdive/[id]/export/md': { GET: 'research:self' },
-  '/api/deepdive/[id]/export/narrative-docx': { GET: 'research:self' },
-  '/api/deepdive/[id]/export/narrative-md': { GET: 'research:self' },
   '/api/deepdive/[id]/chat': { POST: 'research:self' },
   '/api/deepdive/[id]/report/custom': { POST: 'research:self' },
   '/api/deepdive/[id]/report/regenerate': { POST: 'research:self' },
   '/api/deepdive/[id]/synthesize': { POST: 'research:self' },
   '/api/deepdive/[id]/source-summary': { POST: 'research:self' },
   '/api/deepdive/[id]/explore': { POST: 'research:self' },
-  '/api/deepdive/[id]/narrative': { GET: 'research:self', POST: 'research:self' },
   '/api/deepdive/[id]/artefacts/[artefactId]/position': { PATCH: 'research:self' },
   '/api/deepdive/[id]/share': { POST: 'research:self', DELETE: 'research:self' },
 
@@ -494,19 +489,6 @@ const ROUTES: Record<string, Partial<Record<Method, Permission>>> = {
   '/news': { GET: 'news:self' },
   '/news/[source]/[id]': { GET: 'news:self' },
   '/api/news/actions': { POST: 'news:self' },
-
-  // ── games — the web lobby and a table, into the same in-memory rooms the
-  // app plays in. Every route resolves its player through `gamesCaller`
-  // ($lib/games/site-access.server): a room answers only to somebody seated
-  // or invited in it, so reaching the route is not reaching anyone's game.
-  '/games': { GET: 'games:self' },
-  '/games/[id]': { GET: 'games:self' },
-  // The leaderboard: names and the games' hashed ids, no emails.
-  '/games/leaderboard': { GET: 'games:self' },
-  '/api/games': { GET: 'games:self', POST: 'games:self' },
-  '/api/games/leaderboard': { GET: 'games:self' },
-  '/api/games/[id]': { GET: 'games:self', POST: 'games:self' },
-  '/api/games/[id]/stream': { GET: 'games:self' },
 };
 
 /**

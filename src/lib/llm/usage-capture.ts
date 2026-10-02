@@ -1,7 +1,5 @@
 import type OpenAI from 'openai';
-import { sql } from 'drizzle-orm';
-import { db } from '$lib/db';
-import { openrouterModels } from '$lib/db/schema';
+import { loadCatalogue } from '$lib/llm/model-source';
 import { recordLLMCall, type LLMCallRecord, executionContext } from '$lib/context/execution';
 import { priceFor, computeCost } from '$lib/llm/pricing';
 import { recordDurableLLMCall } from '$lib/llm/usage-log';
@@ -222,7 +220,7 @@ function withReasoningHeadroom<T extends { model?: string; max_tokens?: number |
 }
 
 /** Per-model completion ceilings from the OpenRouter catalogue, keyed by model
- *  id. Loaded once per process and refreshed on a TTL (same shape as the
+ *  id (Main's table, or Main's served copy — `$lib/llm/model-source`). Loaded once per process and refreshed on a TTL (same shape as the
  *  settings cache in server/models/settings.ts) — the catalogue only moves when
  *  the nightly model sync runs. */
 const CAP_TTL_MS = 5 * 60_000;
@@ -233,14 +231,8 @@ async function getProviderCaps(): Promise<Map<string, number>> {
 
   const caps = new Map<string, number>();
   try {
-    const rows = await db
-      .select({
-        id: openrouterModels.id,
-        cap: sql<string | null>`${openrouterModels.raw} -> 'top_provider' ->> 'max_completion_tokens'`,
-      })
-      .from(openrouterModels);
-    for (const r of rows) {
-      const n = r.cap === null ? NaN : Number(r.cap);
+    for (const r of await loadCatalogue()) {
+      const n = r.maxCompletionTokens === null ? NaN : Number(r.maxCompletionTokens);
       if (Number.isFinite(n) && n >= 1) caps.set(r.id, Math.floor(n));
     }
   } catch (err) {

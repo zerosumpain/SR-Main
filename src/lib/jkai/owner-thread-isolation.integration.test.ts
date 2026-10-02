@@ -72,15 +72,9 @@ describe.skipIf(!process.env.DATABASE_URL)('background readers see only the owne
     expect(out).not.toContain(MEMBER_WORD);
   });
 
-  it('the briefing never gathers a member\'s questions', async () => {
-    const { gatherBriefingSignals } = await import('$lib/briefing/gather');
-    const out = JSON.stringify(await gatherBriefingSignals());
-    expect(out).not.toContain(MEMBER_WORD);
-  });
-
   it('session_search returns no member messages', async () => {
-    await import('$lib/workflows/site-tools/tools/recall');
-    const { tools } = await import('$lib/workflows/site-tools/registry-internal');
+    await import('$lib/tools/tools/recall');
+    const { tools } = await import('$lib/tools/registry-internal');
     const tool = tools.find((t) => t.name === 'session_search')!;
     const res = (await tool.handler({ query: TAG, limit: 50 })) as { success: boolean; data: { matches: unknown[] } };
     expect(res.success).toBe(true);

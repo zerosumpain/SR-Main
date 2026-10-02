@@ -2,8 +2,8 @@
 vi.mock('$env/dynamic/private', () => ({ env: process.env }));
 // MCP still dispatches the real registry adapter; the owner service is remote.
 const workflowInvoke = vi.hoisted(() => vi.fn(async () => ({ success: true, data: { matched: 1, total: 1, types: [{ type: 'trigger' }] } })));
-vi.mock('$lib/workflows/site-tools/remote', async (importOriginal) => ({
-  ...await importOriginal<typeof import('$lib/workflows/site-tools/remote')>(),
+vi.mock('$lib/tools/remote', async (importOriginal) => ({
+  ...await importOriginal<typeof import('$lib/tools/remote')>(),
   invokeRemoteTool: workflowInvoke,
 }));
 beforeAll(() => {
@@ -16,12 +16,12 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { JKAI_EXTENDED_TOOL, dispatchMetaTool } from './meta-tool';
 import { ESSENTIAL_TOOL_NAMES } from './essentials';
 import { listMcpTools } from './server';
-import type { ToolExecContext } from '$lib/workflows/site-tools/registry-internal';
+import type { ToolExecContext } from '$lib/tools/registry-internal';
 
 // Tests need the registry populated. Importing registry.ts pulls in the
 // side-effect tool registrations.
 beforeAll(async () => {
-  await import('$lib/workflows/site-tools/registry');
+  await import('$lib/tools/registry');
 });
 
 const fakeCtx: ToolExecContext = { emit: () => {} };
@@ -348,7 +348,7 @@ describe('the domain map the model navigates by', () => {
     const d = JKAI_EXTENDED_TOOL.description.toLowerCase();
     // Calendar and payments were both missing while `gmail` was present, and
     // both produced a wrong-source turn in the same week.
-    for (const domain of ['calendar', 'payments', 'datastore', 'intel knowledge graph', 'decks', 'monitors']) {
+    for (const domain of ['calendar', 'payments', 'datastore', 'intel knowledge graph', 'monitors']) {
       expect(d, domain).toContain(domain);
     }
   });

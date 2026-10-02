@@ -24,7 +24,6 @@ import { eq } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { heartbeatActions } from '$lib/db/schema';
 import { daydreamImprove } from './activities/daydream-improve';
-import { daydreamDoctor } from './activities/daydream-doctor';
 import type { ActivityHandler } from './types';
 
 export interface ImprovementSchedule {
@@ -90,16 +89,4 @@ async function scheduleOf(handler: ActivityHandler): Promise<ImprovementSchedule
  */
 export async function improvementSchedule(): Promise<ImprovementSchedule> {
   return scheduleOf(daydreamImprove);
-}
-
-/**
- * The live schedule of the `daydream-doctor` activity.
- *
- * `/jkai/develop/doctor` and `/admin/ai/doctor` printed `CRON_EXPR` and a
- * hardcoded '05:00 Europe/London' until 2026-09-04. The moment the croner
- * retired, both became a confident statement of a schedule nothing keeps —
- * which is exactly the failure this module was written for the first time.
- */
-export async function doctorSchedule(): Promise<ImprovementSchedule> {
-  return scheduleOf(daydreamDoctor);
 }

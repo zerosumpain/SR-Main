@@ -36,6 +36,36 @@ test('database-free extracted applications require an explicit empty table set',
   assert.ok(checkExtractedSchema(data, schema).includes('local-plan-navigator: database-free application declares tables'));
 });
 
+test('an application that owns its schema may require nothing else from Main', () => {
+  const data = manifest();
+  const owned = `${schema}export const policySchema = pgSchema('policy');\nexport const snapshots = policySchema.table(\n  'snapshots', {});\n`;
+  const config = "export default { schemaFilter: ['public'], tablesFilter: ['!snapshots'] };\n";
+  data.modules.push({ id: 'policy-engine', requiredTables: [], ownedSchema: 'policy', ownedTables: ['snapshots'] });
+  assert.deepEqual(checkExtractedSchema(data, owned, config), []);
+  delete data.modules.at(-1).ownedTables;
+  assert.ok(checkExtractedSchema(data, owned, config).includes('policy-engine: required table set is empty'));
+});
+
+test('app-owned tables must stay out of public and out of Main\'s push', () => {
+  const data = manifest();
+  data.modules.push({ id: 'policy-engine', requiredTables: ['shared'], ownedSchema: 'policy', ownedTables: ['snapshots'] });
+  const owned = `${schema}export const policySchema = pgSchema('policy');\nexport const snapshots = policySchema.table(\n  'snapshots', {});\n`;
+  const config = "export default { schemaFilter: ['public'], tablesFilter: ['!snapshots'] };\n";
+  assert.deepEqual(checkExtractedSchema(data, owned, config), []);
+  // Removing Main's declaration entirely is also fine: push cannot see the schema.
+  assert.deepEqual(checkExtractedSchema(data, schema, config), []);
+  assert.match(checkExtractedSchema(data, `${schema}export const snapshots = pgTable('snapshots', {});\n`, config).join('\n'),
+    /main: declares policy-engine-owned table snapshots in public/);
+  assert.match(checkExtractedSchema(data, owned.replace("pgSchema('policy')", "pgSchema('dsd')"), config).join('\n'),
+    /declares snapshots in dsd, but policy-engine owns it in policy/);
+  assert.match(checkExtractedSchema(data, owned, "export default { schemaFilter: ['public', 'policy'] };").join('\n'),
+    /schemaFilter hands application schema policy to Main's push/);
+  assert.match(checkExtractedSchema(data, owned, "export default { /* schemaFilter: ['public'] */ };").join('\n'),
+    /schemaFilter must be explicit/);
+  data.modules[0].requiredTables.push('snapshots');
+  assert.match(checkExtractedSchema(data, owned, config).join('\n'), /health: requires snapshots, which policy-engine owns/);
+});
+
 test('CLI exits unsuccessfully before a release can proceed with a removed table', (t) => {
   const root = mkdtempSync(join(tmpdir(), 'sr-table-retention-'));
   t.after(() => rmSync(root, { recursive: true }));
