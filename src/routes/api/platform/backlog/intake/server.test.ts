@@ -49,11 +49,31 @@ describe('POST /api/platform/backlog/intake', () => {
   it('passes trace ideas to the one intake', async () => {
     const res = (await call({ ideas: [idea] })) as Response;
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ added: ['reduce-x'], considered: 1 });
+    expect(await res.json()).toEqual({ added: ['reduce-x'], considered: 1, outcomes: ['added'] });
     expect(intakeIdeas).toHaveBeenCalledWith([idea]);
   });
 
-  it('drops any source other than trace, so this lane cannot stand in for the engine', async () => {
+  it('accepts the workflow doctor, escalating from SR-Workflows, and reports each outcome', async () => {
+    const finding = {
+      title: 'Fix Morning briefing / Read the diary (dead-node-type)',
+      detail: 'It failed every run.',
+      kind: 'feature',
+      priority: 1,
+      source: 'doctor',
+      ref: 'doctor:w1/n1/dead-node-type',
+    };
+    const res = (await call({ ideas: [finding] })) as Response;
+    expect(res.status).toBe(200);
+    expect((await res.json()).outcomes).toEqual(['added']);
+    expect(intakeIdeas).toHaveBeenCalledWith([finding]);
+  });
+
+  it('still refuses the doctor without the invoke token', async () => {
+    expect((await call({ ideas: [{ ...idea, source: 'doctor' }] }, 'x'.repeat(48))).status).toBe(401);
+    expect(intakeIdeas).not.toHaveBeenCalled();
+  });
+
+  it('drops any source other than trace and doctor, so this lane cannot stand in for the engine', async () => {
     const res = await call({ ideas: [{ ...idea, source: 'owner' }, { ...idea, kind: 'engine' }] });
     expect((res as { status: number }).status).toBe(400);
     expect(intakeIdeas).not.toHaveBeenCalled();

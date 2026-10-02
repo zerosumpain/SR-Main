@@ -5,7 +5,7 @@
   // The page renders this only for the owner, and a member's load never
   // carries the findings it lists.
   import { invalidateAll } from '$app/navigation';
-  import type { FindingView } from '$lib/workflowdoctor/finding-view';
+  import type { FindingView } from '$lib/workflows/doctor-client';
 
   type Switch = 'enabled' | 'autoApply' | 'breaker';
 

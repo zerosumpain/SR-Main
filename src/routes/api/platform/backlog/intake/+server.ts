@@ -12,11 +12,18 @@ import type { RequestHandler } from './$types';
  * on five traces became five rows. There is one backlog and one intake; the
  * other process hands its ideas here.
  *
- * Narrow on purpose: only the `trace` source is accepted, so this lane cannot
- * stand in for the engine's own nightly producers. Same credential as the tool
- * catalogue.
+ * The workflow doctor escalates here too since it moved to SR-Workflows
+ * (2026-10-02): a finding that needs repo code becomes a `feature` item from
+ * source `doctor`, deduped and cited by the same `intakeIdeas`.
+ *
+ * Narrow on purpose: only the `trace` and `doctor` sources are accepted, so
+ * this lane cannot stand in for the engine's own nightly producers. Same
+ * credential as the tool catalogue.
+ *
+ * `outcomes` is one entry per accepted idea, in order (`added`, `merged`,
+ * `capped`, …), so a producer can say what actually landed.
  */
-const ACCEPTED_SOURCES = new Set(['trace']);
+const ACCEPTED_SOURCES = new Set(['trace', 'doctor']);
 const MAX_IDEAS = 20;
 const KINDS = new Set(['tool', 'feature']);
 
@@ -46,5 +53,5 @@ export const POST: RequestHandler = async ({ request }) => {
 	const ideas = raw.map(coerce).filter((i): i is IdeaInput => i !== null);
 	if (!ideas.length) throw error(400, 'no usable ideas');
 	const result = await intakeIdeas(ideas);
-	return json({ added: result.added, considered: ideas.length });
+	return json({ added: result.added, considered: ideas.length, outcomes: result.outcomes });
 };

@@ -209,7 +209,19 @@
     </div>
   {/if}
 
-  {#if data.liveFailed}
+  {#if data.unavailable}
+    <div class="alert warn">
+      <strong>The workflow doctor could not be reached.</strong> It runs in the Workflows service;
+      nothing below is current until that answers again.
+    </div>
+  {:else if !data.schedule.armed}
+    <div class="alert warn">
+      <strong>The nightly run is not armed on the Workflows worker.</strong> Run now still works;
+      the {data.schedule.display} night waits for the worker's doctor setting.
+    </div>
+  {/if}
+
+  {#if data.liveFailed && !data.unavailable}
     <div class="alert warn">
       <strong>The live triage query failed.</strong> The figures below are from the last recorded
       run, not from right now.

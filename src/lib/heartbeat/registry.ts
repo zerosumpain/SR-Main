@@ -2,13 +2,11 @@ import type { ActivityHandler } from './types';
 import { chatContinuation } from './activities/chat-continuation';
 import { conversationCheckin } from './activities/conversation-checkin';
 import { buildProgressCheck } from './activities/build-progress-check';
-import { workflowReview } from './activities/workflow-review';
 import { homeObserve } from './activities/home-observe';
 import { householdLive } from './activities/household-live';
 import { daydreamFeatures } from './activities/daydream-features';
 import { homePlaces } from './activities/home-places';
 import { daydreamBank } from './activities/daydream-bank';
-import { daydreamDoctor } from './activities/daydream-doctor';
 import { daydreamNotebook } from './activities/daydream-notebook';
 import { daydreamThink } from './activities/daydream-think';
 import { daydreamMemory } from './activities/daydream-memory';
@@ -28,13 +26,11 @@ const handlers: ActivityHandler[] = [
   chatContinuation,
   conversationCheckin,
   buildProgressCheck,
-  workflowReview,
   homeObserve,
   householdLive,
   daydreamFeatures,
   homePlaces,
   daydreamBank,
-  daydreamDoctor,
   daydreamNotebook,
   daydreamThink,
   daydreamMemory,

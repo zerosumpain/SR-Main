@@ -1,41 +1,15 @@
 // src/lib/workflowdoctor/engine.ts
 //
-// Boot seed only. The nightly schedule is the `daydream-doctor` heartbeat
-// activity — see `$lib/heartbeat/activities/daydream-doctor.ts` for the window
-// and the gates.
-//
-// ── What used to be here ────────────────────────────────────────────────────
-//
-// A private `croner` at 05:00 Europe/London with its own host gate, its own
-// kill-switch read and its own idle gate, none of which anything else could
-// see. Self-improvement gave up the identical arrangement on 2026-08-30; this
-// one followed on 2026-09-04, so the site now has ONE scheduler. Nothing about
-// the run changed: `runDoctorNow` is untouched, the advisory lock still holds
-// the lane, and both switches mean what they meant.
-//
-// The seed stays host-agnostic and stays here, because `/jkai/develop/doctor` and the
-// admin page need the two datastore collections to exist even on a host that
-// never runs the doctor.
+// Compatibility stub. The workflow doctor moved to SR-Workflows on 2026-10-02
+// (its worker runs the night and a queued "Run now"; Main reads and drives it
+// through `$lib/workflows/doctor-client`). This file only keeps the existing
+// `startWorkflowDoctor` / `stopWorkflowDoctor` import and calls in
+// `src/hooks.server.ts` working until that protected file is next edited: the
+// hook edit should delete the import and both calls, and then this file and
+// the `src/lib/workflowdoctor/` directory.
 
-import { ensureDoctorCollections } from './findings';
-import { errMsg } from './types';
+/** No-op: SR-Workflows seeds the doctor's datastore collections. */
+export function startWorkflowDoctor(): void {}
 
-let seeded = false;
-
-/**
- * Ensure the doctor's two datastore collections exist. Idempotent, and safe to
- * call once from hooks.server.ts. Fire-and-forget; failures are logged.
- */
-export function startWorkflowDoctor(): void {
-  if (seeded) return;
-  seeded = true;
-  void ensureDoctorCollections().catch((err) =>
-    console.error('[workflowdoctor] boot seed failed:', errMsg(err)),
-  );
-}
-
-/** Kept so hooks.server.ts's shutdown path has something to call, and so a
- *  test can re-arm the seed. There is no longer a timer to stop. */
-export function stopWorkflowDoctor(): void {
-  seeded = false;
-}
+/** No-op: there is nothing in Main to stop. */
+export function stopWorkflowDoctor(): void {}

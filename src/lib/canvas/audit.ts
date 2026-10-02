@@ -12,7 +12,7 @@ export type AuditAction = 'create' | 'delete' | 'rename' | 'config' | 'update';
  * canvas recently, and holds off its auto-fix if so. Clearing a memory key edits
  * no config — and someone clearing a dedupe key to debug a canvas is exactly who
  * wants the doctor to keep working — so the doctor excludes this actor from that
- * check (see `humanEditedRecently` in `$lib/workflowdoctor/fix`).
+ * check (see `humanEditedRecently` in SR-Workflows' `$lib/workflowdoctor/fix`).
  */
 export const MEMORY_CLEAR_ACTOR = 'memory-clear';
 
