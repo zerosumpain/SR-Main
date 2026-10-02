@@ -20,11 +20,11 @@
 
   // The loop, in the features' own vocabulary. Each step links to where it's explained.
   const loop = $derived([
-    { id: 'notice', label: 'Daydream notices', sub: `one question every ${f.daydream.cadenceMinutes} min`, href: href('daydream', 'questions') },
-    { id: 'decide', label: 'I decide', sub: f.daydream.stages.map((s) => s.label).join(' → '), href: href('daydream', 'inbox') },
-    { id: 'queue', label: 'Ideas queue', sub: `${f.build.ideaSources.length} ways in, one backlog`, href: href('build', 'backlog') },
-    { id: 'build', label: 'It builds', sub: `brief → preview → ${f.build.releasePolicies.at(-1)?.label.toLowerCase()}`, href: href('build', 'develop') },
-    { id: 'pocket', label: 'In my pocket', sub: `${APP.tabs.length} tabs, ${APP.widgets.length + APP.complications.length} widgets`, href: href('app', 'surfaces') },
+    { id: 'notice', label: 'Daydream notices', sub: `every ${f.daydream.cadenceMinutes} min`, href: href('daydream', 'questions') },
+    { id: 'decide', label: 'I decide', sub: `${f.daydream.stages.length} stages`, href: href('daydream', 'inbox') },
+    { id: 'queue', label: 'Ideas queue', sub: 'one backlog', href: href('build', 'backlog') },
+    { id: 'build', label: 'It builds', sub: 'brief to deployed', href: href('build', 'develop') },
+    { id: 'pocket', label: 'In my pocket', sub: `${APP.tabs.length} tabs`, href: href('app', 'surfaces') },
   ]);
   let picked = $state<string | null>(null);
   const pickedStep = $derived(loop.find((s) => s.id === picked) ?? null);

@@ -52,26 +52,19 @@
     takeaway={t(C.questions.why)}
   >
     <div class="grid-wrap">
-      <table class="grid">
-        <thead>
-          <tr><th></th>{#each f.outcomes as o (o.id)}<th scope="col"><span>{o.label}</span></th>{/each}</tr>
-        </thead>
-        <tbody>
-          {#each f.channels as c (c.id)}
-            <tr>
-              <th scope="row">{c.label}</th>
-              {#each f.outcomes as o (o.id)}
-                {@const on = scheduled(c.id, o.id)}
-                <td>
-                  <button class="cell" class:on class:sel={cell?.c === c.id && cell?.o === o.id}
-                    aria-label="{c.label} × {o.label}: {on ? 'asked' : 'never asked'}"
-                    onclick={() => (cell = { c: c.id, o: o.id })}>{on ? '●' : '·'}</button>
-                </td>
-              {/each}
-            </tr>
+      <div class="grid" style="--n:{f.outcomes.length}">
+        <span class="corner"></span>
+        {#each f.outcomes as o (o.id)}<span class="col">{o.label}</span>{/each}
+        {#each f.channels as c (c.id)}
+          <span class="row">{c.label}</span>
+          {#each f.outcomes as o (o.id)}
+            {@const on = scheduled(c.id, o.id)}
+            <button class="cell" class:on class:sel={cell?.c === c.id && cell?.o === o.id}
+              aria-label="{c.label} × {o.label}: {on ? 'asked' : 'never asked'}"
+              onclick={() => (cell = { c: c.id, o: o.id })}>{on ? '●' : '·'}</button>
           {/each}
-        </tbody>
-      </table>
+        {/each}
+      </div>
     </div>
     <p class="why" aria-live="polite">{cellText ?? `${f.skipped.length} of the ${f.pairCount} pairings are ruled out, each with a reason.`}</p>
   </Instrument>
@@ -101,17 +94,15 @@
 <style>
   .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; margin: 0 0 18px; }
   .grid-wrap { overflow-x: auto; }
-  .grid { border-collapse: collapse; font-size: var(--fs-label); }
-  .grid th { font-weight: 500; text-align: left; padding: 4px 8px; color: rgba(28,22,17,0.7); white-space: nowrap; }
-  .grid thead th { vertical-align: bottom; font-family: var(--font-mono); font-size: var(--fs-label-xs); }
-  .grid thead th span { display: inline-block; max-width: 9ch; white-space: normal; }
-  .grid td { padding: 2px; text-align: center; }
-  .cell { width: 34px; height: 30px; border: 1px solid rgba(28,22,17,0.14); background: rgba(255,255,255,0.4); border-radius: var(--radius-sharp);
+  .grid { display: grid; grid-template-columns: max-content repeat(var(--n), minmax(44px, 1fr)); gap: 3px; align-items: end; min-width: max-content; }
+  .col { font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.25; color: rgba(28,22,17,0.7); text-align: center; padding-bottom: 4px; max-width: 11ch; justify-self: center; }
+  .row { font-size: var(--fs-label); color: rgba(28,22,17,0.75); padding-right: 10px; align-self: center; }
+  .cell { width: 100%; height: 30px; border: 1px solid rgba(28,22,17,0.14); background: rgba(255,255,255,0.4); border-radius: var(--radius-sharp);
     color: rgba(28,22,17,0.35); cursor: pointer; font-size: var(--fs-label); }
   .cell.on { background: color-mix(in srgb, var(--accent) 22%, white); color: var(--text-primary); border-color: var(--accent); }
   .cell.sel { outline: 2px solid var(--accent-ink); outline-offset: 1px; }
   .why { margin: 12px 0 0; font-size: var(--fs-label); color: rgba(28,22,17,0.78); min-height: 1.5em; }
   .next { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-  .next li { display: grid; grid-template-columns: 6ch 1fr 2fr; gap: 10px; font-size: var(--fs-label); padding: 4px 0; border-bottom: 1px dashed rgba(28,22,17,0.12); }
+  .next li { display: grid; grid-template-columns: 6ch minmax(8ch, 14ch) 1fr; gap: 10px; font-size: var(--fs-label); padding: 4px 0; border-bottom: 1px dashed rgba(28,22,17,0.12); }
   .next time { font-family: var(--font-mono); color: rgba(28,22,17,0.6); }
 </style>
