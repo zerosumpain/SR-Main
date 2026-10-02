@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('$lib/workflows/backlog-grooming.server', () => ({ groomAfterIntake: vi.fn(async () => {}) }));
-import { groomAfterIntake } from '$lib/workflows/backlog-grooming.server';
+vi.mock('./backlog-room.server', () => ({ groomAfterIntake: vi.fn(async () => {}) }));
+import { groomAfterIntake } from './backlog-room.server';
 
 const h = vi.hoisted(() => ({
   records: [] as Array<{ key: string; data: unknown }>,

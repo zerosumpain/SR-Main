@@ -304,7 +304,7 @@ export async function intakeIdeas(ideas: IdeaInput[]): Promise<IntakeResult> {
     console.log(`[selfimprove] backlog intake capped — ${result.capped} new idea(s) dropped, ${recent} already added in the last 24h`);
   }
   if (result.added.length) {
-    const { groomAfterIntake } = await import('$lib/workflows/backlog-grooming.server');
+    const { groomAfterIntake } = await import('./backlog-room.server');
     await groomAfterIntake();
   }
   return result;
@@ -576,7 +576,7 @@ export async function createBacklogItem(input: OwnerBacklogInput): Promise<Backl
   if (input.epicSlug) item.epicSlug = input.epicSlug;
   if (input.grooming) item.grooming = acceptGrooming(input.grooming, now);
   await put(item);
-  const { groomAfterIntake } = await import('$lib/workflows/backlog-grooming.server');
+  const { groomAfterIntake } = await import('./backlog-room.server');
   await groomAfterIntake();
   return (await getBacklogItem(item.slug)) ?? item;
 }

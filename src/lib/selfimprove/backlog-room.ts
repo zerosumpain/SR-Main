@@ -1,4 +1,17 @@
-// src/lib/selfimprove/cluster.ts
+// src/lib/selfimprove/backlog-room.ts
+//
+// The backlog room's grooming, pure half: finding themes (the clusterer),
+// suggesting consolidations (twin dedupe), and folding deliverables into
+// epics. One home since 2026-10-02 — it was `cluster.ts`, `backlog-grooming.ts`
+// and `epic-backlog.ts`. The half that reads and writes the ledgers is
+// `backlog-room.server.ts`; the heartbeat's `backlog-grooming` activity applies
+// the automatic decisions, so no page view writes.
+
+import type { WorkItem, WorkStage } from './board';
+import { contentWords, looksSameSubject, subjectOverlap, type ToolHealth } from './narrative';
+import type { BacklogItemData, EpicData } from './types';
+
+// ── Themes ──────────────────────────────────────────────────────────────────
 //
 // Finding the themes hiding in the queue.
 //
@@ -29,8 +42,6 @@
 // epic's label is the shortest member title, verbatim, and its keywords are
 // the words the members actually share.
 
-import { contentWords, looksSameSubject, subjectOverlap } from './narrative';
-import type { BacklogItemData } from './types';
 
 /**
  * A group of backlog items that appear to be the same subject.
@@ -371,4 +382,170 @@ export function clusterWeight(c: Cluster): { score: number; components: Record<s
   const shipped = c.shippedSlugs.length > 0 ? 0.1 : 0;
   const score = Math.min(1, Math.round((size + served + shipped) * 1000) / 1000);
   return { score, components: { size, served, shipped } };
+}
+
+// ── Consolidation suggestions (twin dedupe) ─────────────────────────────────
+
+export interface GroomingSuggestion {
+  automatic: boolean;
+  id: string;
+  itemId: string;
+  kind: 'merge' | 'covered';
+  targetId: string;
+  targetTitle: string;
+  targetHref: string | null;
+  reason: string;
+}
+
+export interface GroomingAction {
+  id: string;
+  itemId: string;
+  itemTitle: string;
+  targetId: string;
+  targetTitle: string;
+  kind: 'merge' | 'covered';
+  at: string;
+  by: 'owner' | 'engine';
+  state: 'pending' | 'applied' | 'undone';
+}
+
+/** Coverage requires the request's specific words to be present in the evidence. */
+function requirementsCovered(request: string, existing: string): boolean {
+  const words = (s: string) => s.toLowerCase().match(/[a-z0-9]+/g)?.filter((w) => w.length > 2 &&
+    !['the', 'and', 'for', 'with', 'that', 'this', 'should', 'must', 'please', 'support', 'add', 'provide', 'allow', 'enable'].includes(w)) ?? [];
+  const wanted = words(request);
+  const available = new Set(words(existing));
+  return wanted.length > 0 && wanted.every((w) => available.has(w));
+}
+
+/** Related work can share a brief; retiring work additionally requires coverage. */
+export function suggestBacklogGrooming(items: WorkItem[], tools: ToolHealth[] = [], overrides: ReadonlySet<string> = new Set()): GroomingSuggestion[] {
+  // A commission's immutable scope belongs to its own approval/history chain.
+  items = items.filter(i => !i.commissionId);
+  const waiting = items.filter((i) => !overrides.has(i.id) && !i.foldedInto && i.attempts === 0 &&
+    i.backlogStatus === 'open' && (i.stage === 'accepted' || i.stage === 'proposed'))
+    .sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+  const live = items.filter((i) => i.stage === 'live' && !i.foldedInto);
+  const out: GroomingSuggestion[] = [];
+  const score = (a: string, b: string) => {
+    const m = subjectOverlap(a, b);
+    return m.hits >= 3 && m.score >= 0.5 ? m.score : 0;
+  };
+  for (const [index, item] of waiting.entries()) {
+    // A request to repair existing behaviour is not satisfied by its existence.
+    const repair = ['fault', 'doctor', 'health'].includes(item.intake ?? '') || /\b(fix|repair|broken|failure|error|regression)\b/i.test(item.title);
+    const candidates = [
+      ...(!repair ? live.map((i) => ({ id: i.id, title: i.title, text: i.title, detail: [i.detail, JSON.stringify(i.grooming ?? {}), ...Object.values(i.absorbedRequirements ?? {})].join(' '),
+        href: i.artifactHref, kind: 'covered' as const, evidence: 'A matching deliverable is recorded as live.' })) : []),
+      ...(!repair ? tools.filter((t) => t.enabled && t.runCount > t.errorCount && t.errorCount / t.runCount < 0.25).map((t) => ({
+        id: `tool:${t.name}`, title: t.name.replace(/_/g, ' '), text: `${t.name.replace(/_/g, ' ')} ${t.description ?? ''}`,
+        detail: t.description ?? '', href: '/jkai/develop/improvement', kind: 'covered' as const,
+        evidence: `Existing tool: ${t.runCount - t.errorCount} successful calls recorded.` })) : []),
+      ...waiting.slice(0, index).filter((i) => i.kind === item.kind && !out.some((s) => s.itemId === i.id)).map((i) => ({
+        id: i.id, title: i.title, text: i.title, detail: i.detail, href: null,
+        kind: 'merge' as const, evidence: 'Another queued deliverable covers a similar request.' })),
+    ].map((c) => ({ ...c, score: score(item.title, c.text) })).filter((c) => c.score > 0)
+      .sort((a, b) => Number(b.kind === 'covered') - Number(a.kind === 'covered') || b.score - a.score || a.id.localeCompare(b.id));
+    const match = candidates[0];
+    if (!match) continue;
+    const automatic = match.kind === 'merge' || (!repair && requirementsCovered(
+      [item.title, item.detail, ...(item.grooming?.acceptanceCriteria ?? []), ...Object.values(item.absorbedRequirements ?? {})].join(' '),
+      `${match.text} ${match.detail}`));
+    out.push({ automatic, id: clusterSlug([item.id, item.title, item.detail, JSON.stringify(item.grooming), match.id, match.text, match.detail]),
+      itemId: item.id, kind: match.kind, targetId: match.id, targetTitle: match.title, targetHref: match.href,
+      reason: `${match.evidence} Related requirements are retained together; distinct functionality remains separately deliverable.` });
+  }
+  return out;
+}
+
+// ── Epics ───────────────────────────────────────────────────────────────────
+
+export interface BacklogEpic {
+  suggestions?: GroomingSuggestion[];
+  groomingHistory?: GroomingAction[];
+  groomingOverrides?: string[];
+  slug: string;
+  title: string;
+  summary: string;
+  priority: number;
+  stage: WorkStage;
+  deliverables: WorkItem[];
+  combinedDeliveries: WorkItem[];
+  categories: string[];
+  completed: number;
+  updatedAt: string;
+}
+
+/** Provider aliases refer to one functional area, not to everything from a vendor. */
+function calendarTopic(title: string): string | null {
+  const t = title.toLowerCase();
+  if (/\b(apple|icloud|caldav)\b/.test(t) && /\b(calendar|calendars|caldav)\b/.test(t)) return 'Apple Calendar integration';
+  return null;
+}
+function related(a: string, b: string): number {
+  const topic = calendarTopic(a);
+  if (topic && topic === calendarTopic(b)) return 2;
+  return looksSameSubject(a, b) ? subjectOverlap(a, b).score : 0;
+}
+
+/** One automatically maintained epic per functional area; work keeps its own lifecycle.
+ * Existing memberships and IDs survive later arrivals. Match against a group's anchor
+ * rather than chaining through every member, which joins unrelated subjects together.
+ */
+export function buildEpicBacklog(items: WorkItem[], saved: EpicData[] = []): BacklogEpic[] {
+  // Legacy combined build rows are execution receipts, not an extra deliverable.
+  const combined = new Map(items.filter((i) => i.mergedBrief && items.some((child) => child.foldedInto === i.slug)).map((i) => [i.slug, i]));
+  const deliverables = items.filter((i) => !combined.has(i.slug)).map((i) => {
+    const parent = i.foldedInto ? combined.get(i.foldedInto) : null;
+    return parent ? { ...i, stage: parent.stage, priority: parent.priority, epicSlug: parent.epicSlug, updatedAt: parent.updatedAt } : i;
+  });
+  const ordered = [...deliverables].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+  const metadata = new Map(saved.map((e) => [e.slug, e]));
+  const membership = new Map([...saved].sort((a, b) => a.updatedAt.localeCompare(b.updatedAt)).flatMap((e) => (e.deliverableIds ?? []).map((id) => [id, e.slug] as const)));
+  const groups = new Map<string, WorkItem[]>();
+  const pending: WorkItem[] = [];
+  for (const item of ordered) {
+    const key = membership.get(item.id) ?? (item.epicSlug && metadata.has(item.epicSlug) ? item.epicSlug : null);
+    if (key) groups.set(key, [...(groups.get(key) ?? []), item]);
+    else pending.push(item);
+  }
+  // Saved epics written before D3 (2026-09-26) may list a retired capability lead
+  // (`capability:<slug>`) whose backlog row carries `capabilitySlug`: retain
+  // that epic identity.
+  for (const item of pending) {
+    const inherited = item.capabilitySlug ? membership.get(`capability:${item.capabilitySlug}`) : null;
+    const foldedParent = item.foldedInto ? items.find((i) => i.slug === item.foldedInto) : null;
+    let target = inherited ?? (foldedParent ? membership.get(foldedParent.id) : null);
+    let best = 0;
+    if (!target) for (const [slug, members] of groups) {
+      const score = related(item.title, members[0].title);
+      if (score > best) { best = score; target = slug; }
+    }
+    target ??= clusterSlug([item.id]);
+    groups.set(target, [...(groups.get(target) ?? []), item]);
+  }
+  // Older accepted groupings may cover the same functionality. Automatically join
+  // those containers too, keeping the oldest identity and every deliverable.
+  const joined: Array<[string, WorkItem[]]> = [];
+  for (const [slug, members] of groups) {
+    const existing = joined.find(([, group]) => related(group[0].title, members[0].title) > 0);
+    if (existing) existing[1].push(...members);
+    else joined.push([slug, [...members]]);
+  }
+  return joined.map(([slug, members]) => {
+    const meta = metadata.get(slug);
+    const active = members.filter((i) => !i.foldedInto || combined.has(i.foldedInto));
+    const stage: WorkStage = active.some((i) => i.stage === 'building') ? 'building'
+      : active.some((i) => i.stage === 'accepted') ? 'accepted'
+      : active.some((i) => i.stage === 'proposed') ? 'proposed'
+      : active.some((i) => i.stage === 'verifying') ? 'verifying'
+      : active.some((i) => i.stage === 'live') ? 'live' : 'parked';
+    return {
+      slug, title: meta?.ownerTitle ?? calendarTopic(members[0].title) ?? labelFor(members.map((i) => i.title)).replace(/^Epic:\s*/i, ''),
+      summary: meta?.summary ?? '', priority: Math.min(...(active.length ? active : members).map((i) => i.priority)),
+      stage, deliverables: members, combinedDeliveries: [...new Set(members.map((i) => i.foldedInto))].flatMap((slug) => slug && combined.has(slug) ? [combined.get(slug)!] : []), categories: [...new Set(members.map((i) => i.kind))].sort(),
+      completed: active.filter((i) => i.stage === 'live').length,
+      updatedAt: members.reduce((latest, i) => i.updatedAt > latest ? i.updatedAt : latest, ''),
+    };
+  }).sort((a, b) => a.priority - b.priority || a.title.localeCompare(b.title));
 }

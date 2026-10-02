@@ -594,7 +594,7 @@ export type EpicStatus = 'proposed' | 'accepted' | 'declined';
  */
 export interface EpicData {
   groomingOverrides?: string[];
-  groomingHistory?: import('./backlog-grooming').GroomingAction[];
+  groomingHistory?: import('./backlog-room').GroomingAction[];
   groomingKept?: string[];
   automatic?: boolean;
   deliverableIds?: string[];
