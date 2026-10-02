@@ -58,12 +58,10 @@ describe('build-room routes', () => {
     }
   });
 
-  it('the backlog never grooms for a member', () => {
-    // `autoGroomBacklog` writes. The member branch must return before it.
+  it('the backlog never grooms on a page view, for a member or the owner', () => {
+    // `autoGroomBacklog` writes; it runs on the heartbeat (`backlog-grooming`).
     const src = sourceOf('/jkai/develop/backlog');
-    const member = src.indexOf('readBacklogRoom()');
-    const groom = src.indexOf('autoGroomBacklog()');
-    expect(member).toBeGreaterThan(-1);
-    expect(member).toBeLessThan(groom);
+    expect(src.indexOf('readBacklogRoom()')).toBeGreaterThan(-1);
+    expect(src).not.toContain('autoGroomBacklog');
   });
 });
