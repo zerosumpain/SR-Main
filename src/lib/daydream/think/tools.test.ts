@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-vi.mock('$lib/workflows/site-tools/executor', () => ({ executeSiteTool: vi.fn() }));
-vi.mock('$lib/workflows/site-tools/llm-tools', () => ({ getToolDefinitionsByName: vi.fn(async () => []) }));
+vi.mock('$lib/tools/executor', () => ({ executeSiteTool: vi.fn() }));
+vi.mock('$lib/tools/llm-tools', () => ({ getToolDefinitionsByName: vi.fn(async () => []) }));
 vi.mock('./health', () => ({
   HUB_SECTIONS: ['read'],
   healthHubTool: vi.fn(async () => 'hub text'),
@@ -17,7 +17,7 @@ vi.mock('./reads', () => ({
   chatThreadsTool: vi.fn(async () => 'chat'),
 }));
 
-import { executeSiteTool } from '$lib/workflows/site-tools/executor';
+import { executeSiteTool } from '$lib/tools/executor';
 import { healthHubTool } from './health';
 import {
   CARD_CHARS,
@@ -33,7 +33,7 @@ import {
   toolSetFor,
 } from './tools';
 
-const TOOLS_DIR = join(process.cwd(), 'src/lib/workflows/site-tools/tools');
+const TOOLS_DIR = join(process.cwd(), 'src/lib/tools/tools');
 const THINK_DIR = join(process.cwd(), 'src/lib/daydream/think');
 
 /** Every `name: '…'` registered in a tool module, and whether its block says destructive. */

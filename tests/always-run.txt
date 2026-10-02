@@ -35,8 +35,8 @@ src/lib/selfimprove/narrative.probe.test.ts
 src/lib/selfimprove/verify.test.ts
 src/lib/server/jsdom.test.ts
 src/lib/server/native-auth.test.ts
-src/lib/workflows/owner-rows.test.ts
-src/lib/workflows/whatsapp/auth-state.test.ts
+src/lib/workflows-client/owner-rows.test.ts
+src/lib/integrations/whatsapp/auth-state.test.ts
 src/routes/projects/engine-room/lib/tour-routes.test.ts
 tests/extract/docx.test.ts
 tests/extract/pdf.test.ts
@@ -47,9 +47,9 @@ tests/lib/events/platform-bus.test.ts
 tests/lib/jkai/media/storage.test.ts
 tests/lib/nav/nav-coverage.test.ts
 tests/lib/nav/nav-parents.test.ts
-tests/lib/workflows/chat/destructive-gate-unattended.test.ts
-tests/lib/workflows/delegation-rule.test.ts
-tests/lib/workflows/trigger-ownership.test.ts
+tests/lib/jkai/chat/destructive-gate-unattended.test.ts
+tests/lib/integrations/whatsapp/delegation-rule.test.ts
+tests/lib/workflows-client/trigger-ownership.test.ts
 tests/routes/admin-stale-stamps.test.ts
 tests/routes/api/native/chat-attachments.test.ts
 tests/scripts/authored-runner-install.test.ts

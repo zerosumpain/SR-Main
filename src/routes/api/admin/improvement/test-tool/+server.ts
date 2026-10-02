@@ -4,7 +4,7 @@ import { db } from '$lib/db';
 import { customTools } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { DatastoreError, getRecordByKey, upsertRecord } from '$lib/datastore';
-import { executeTool } from '$lib/workflows/site-tools/registry';
+import { executeTool } from '$lib/tools/registry';
 import { runLiveToolTest } from '$lib/selfimprove/deployment';
 import { COLLECTIONS, asData, type ToolAttemptData } from '$lib/selfimprove/types';
 

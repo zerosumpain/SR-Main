@@ -15,11 +15,11 @@ import { resolveCapabilities } from '$lib/jkai/grounding/capabilities';
 // Loaded on demand: importing the registry statically pulls all 52 tool
 // modules, and JKAI_EXTENDED_TOOL below is a plain definition that the chat
 // endpoint imports for its schema alone.
-import type { ToolExecContext } from '$lib/workflows/site-tools/registry-internal';
+import type { ToolExecContext } from '$lib/tools/registry-internal';
 import { isEssentialUnderPolicy } from './essentials';
-import { catalogueTools } from '$lib/workflows/site-tools/catalogue';
-import type { CatalogueTool } from '$lib/workflows/site-tools/invoke-contract';
-import { executeSiteTool } from '$lib/workflows/site-tools/executor';
+import { catalogueTools } from '$lib/tools/catalogue';
+import type { CatalogueTool } from '$lib/tools/invoke-contract';
+import { executeSiteTool } from '$lib/tools/executor';
 import { describeWithPolicy, getActivePolicy, type ToolPolicyVersion } from '$lib/toolpolicy/policy';
 import type { McpTool } from './server';
 export { JKAI_EXTENDED_TOOL } from './extended-tool';

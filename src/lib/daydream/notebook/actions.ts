@@ -183,7 +183,7 @@ export async function executeNoteAction(
   try {
     if (action.kind === 'research') {
       const { topic, depth, goals } = action.params as ResearchParams;
-      const { executeTool } = await import('$lib/workflows/site-tools/registry');
+      const { executeTool } = await import('$lib/tools/registry');
       // A budgeted depth runs SYNCHRONOUSLY inside research_start and returns
       // the answer, which is the whole reason only the short tiers are allowed:
       // there is no polling, no background task and no unbounded crawl.

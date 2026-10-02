@@ -14,7 +14,7 @@
 import type { DeliveryState } from '$lib/constants/development';
 import type { BacklogEpic } from '$lib/selfimprove/backlog-room';
 import type { BoardView, IdeaSource, WorkItem } from '$lib/selfimprove/board';
-import type { DoctorRunData, NarrativeRun, PhaseName, PhaseRecord } from '$lib/workflows/doctor-client';
+import type { DoctorRunData, NarrativeRun, PhaseName, PhaseRecord } from '$lib/workflows-client/doctor-client';
 
 // ── develop ──────────────────────────────────────────────────────────────────
 

@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { scraperTargetKnowledge } from '$lib/db/schema';
 import { desc } from 'drizzle-orm';
-import { upsertKnowledge, deleteKnowledge } from '$lib/workflows/scraper/target-knowledge';
+import { upsertKnowledge, deleteKnowledge } from '$lib/scraper/target-knowledge';
 
 export const GET: RequestHandler = async () => {
   const rows = await db.select().from(scraperTargetKnowledge).orderBy(desc(scraperTargetKnowledge.updatedAt));

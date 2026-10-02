@@ -21,7 +21,7 @@
 import { Cron } from 'croner';
 import { db } from '$lib/db';
 import { forgeSchedules, jkaiBuilds } from '$lib/db/schema';
-import { cronTimezone } from '$lib/workflows/cron-timezone';
+import { cronTimezone } from '$lib/utils/cron-timezone';
 import { eq, and } from 'drizzle-orm';
 import type { ForgeSchedule } from '$lib/db/schema';
 import { createForgeBuild } from '$lib/jkai/forge';
@@ -63,7 +63,7 @@ let leader: Promise<boolean> | null = null;
 /** One process owns Forge when the run-worker is enabled; decided once, as before. */
 function isForgeLeader(): Promise<boolean> {
   if (process.env.JKAI_RUN_WORKER !== '1') return Promise.resolve(true);
-  leader ??= import('$lib/workflows/leader-lock').then(({ tryAdvisoryLock, FORGE_SCHEDULER_LOCK_LANE }) => tryAdvisoryLock(FORGE_SCHEDULER_LOCK_LANE));
+  leader ??= import('$lib/server/leader-lock').then(({ tryAdvisoryLock, FORGE_SCHEDULER_LOCK_LANE }) => tryAdvisoryLock(FORGE_SCHEDULER_LOCK_LANE));
   return leader;
 }
 

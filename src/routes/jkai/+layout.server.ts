@@ -3,7 +3,7 @@ import { db } from '$lib/db';
 import { spendToday, DAY_START } from '$lib/costs/ledger.server';
 import { activityConnections, agentActions, workflows, workflowRuns, workflowSchedules } from '$lib/db/schema';
 import { and, eq, gte, sql } from 'drizzle-orm';
-import { runningJobsByConversation } from '$lib/workflows/chat/activity';
+import { runningJobsByConversation } from '$lib/jkai/chat/activity';
 import { getSetting, resolveDefaultModel } from '$lib/server/models/settings';
 import { getOpenRouterCredits } from '$lib/server/models/openrouter-credits';
 import { getCodexUsage } from '$lib/server/models/codex-usage';

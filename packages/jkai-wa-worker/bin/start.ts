@@ -11,7 +11,7 @@
  * changing nothing else.
  *
  * The unit sets JKAI_SERVICE_ROLE=whatsapp, which does two things
- * ($lib/workflows/service-role): this process runs the WhatsApp socket and NOT
+ * ($lib/server/service-role): this process runs the WhatsApp socket and NOT
  * the scheduler — two schedulers on one database fires every cron twice — and
  * it is never itself "delegated", so it cannot forward its sends to itself.
  */
@@ -38,12 +38,12 @@ type Service = {
 };
 
 async function main(): Promise<void> {
-  const { getWhatsAppService } = await import('$lib/workflows/whatsapp/service');
+  const { getWhatsAppService } = await import('$lib/integrations/whatsapp/service');
   const wa = getWhatsAppService() as unknown as Service;
 
   // Importing platform-boot boots WhatsApp for this role. Give it a moment,
   // then surface the QR — the only part of this that needs a human.
-  await import('$lib/workflows/platform-boot');
+  await import('$lib/integrations/platform-boot');
 
   let lastQr: string | null = null;
   const watchQr = setInterval(() => {

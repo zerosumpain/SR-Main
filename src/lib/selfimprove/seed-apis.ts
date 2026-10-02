@@ -21,7 +21,7 @@ import {
   getRecordByKey,
   upsertRecord,
 } from '$lib/datastore';
-import { slugifyName } from '$lib/workflows/site-tools/tools/apis';
+import { slugifyName } from '$lib/tools/tools/apis';
 import { apiRegistryDisabled } from '$lib/apis/registry-enabled';
 import { ensureToolPolicyCollection } from '$lib/toolpolicy/policy';
 import { COLLECTIONS, SYSTEM_ACTOR, SYSTEM_PERMISSIONS, errMsg, type SeedApiEntry } from './types';

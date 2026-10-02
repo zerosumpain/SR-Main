@@ -4,9 +4,9 @@ const { call, row, update } = vi.hoisted(() => ({
   row: { name: 'Fixture operation', api: 'fixture', method: 'GET', path: '/records/{station}', params: [{ name: 'station', in: 'path', required: true, type: 'string' }], outputs: [{ name: 'records', expr: 'json.records', type: 'array' }] },
 }));
 vi.mock('$lib/datastore', () => ({ DatastoreError: class extends Error {}, ensureCollection: vi.fn(), getRecordByKey: vi.fn(async () => ({ key: 'fixture', data: row })), queryRecords: vi.fn(async () => ({ records: [] })), updateRecord: update, upsertRecord: vi.fn(), deleteRecord: vi.fn() }));
-vi.mock('$lib/workflows/site-tools/tools/apis', () => ({ callCatalogApi: call, slugifyName: (s: string) => s.toLowerCase() }));
+vi.mock('$lib/tools/tools/apis', () => ({ callCatalogApi: call, slugifyName: (s: string) => s.toLowerCase() }));
 import { callIntegration } from './integrations';
-import { handleIntegrationCall } from '$lib/workflows/site-tools/tools/api-integrations';
+import { handleIntegrationCall } from '$lib/tools/tools/api-integrations';
 beforeEach(() => { call.mockReset(); update.mockClear(); });
 describe('saved integration dispatch boundary', () => {
   it('rejects unknown parameters without contacting the provider and supplies the repair schema', async () => {

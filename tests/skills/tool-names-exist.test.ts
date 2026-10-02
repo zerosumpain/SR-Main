@@ -41,7 +41,7 @@ function registeredToolNames(): Set<string> {
     'bash',
     [
       '-c',
-      `grep -rhoE "name: '[a-z0-9_]+'" src/lib/workflows/site-tools/tools/*.ts | sed "s/name: '//;s/'//" | sort -u`,
+      `grep -rhoE "name: '[a-z0-9_]+'" src/lib/tools/tools/*.ts | sed "s/name: '//;s/'//" | sort -u`,
     ],
     { cwd: ROOT, encoding: 'utf8' },
   );
@@ -125,7 +125,7 @@ describe('skill_view is asked for references the way it declares them', () => {
 
   it('still accepts file_path in the handler, for skills we do not own', () => {
     const src = readFileSync(
-      join(ROOT, 'src/lib/workflows/site-tools/tools/discovery.ts'),
+      join(ROOT, 'src/lib/tools/tools/discovery.ts'),
       'utf8',
     );
     expect(src).toMatch(/optionalString\(args, 'file_path'\)/);

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { notifyOwner } from '$lib/server/notify';
-import { invokeWorkflowRuntime } from '$lib/workflows/runtime-client';
+import { invokeWorkflowRuntime } from '$lib/workflows-client/runtime-client';
 import { createToolbox } from './think/tools';
 import { DEFAULT_SUBJECT } from './types';
 import { commissioningEnabled, sourceHash, thoughtSource } from './commission-service.server';

@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { isOwnerEmail } from '$lib/server/access';
-import { listCatalogApis, setCatalogAuth, type CatalogAuthChange } from '$lib/workflows/site-tools/tools/apis';
+import { listCatalogApis, setCatalogAuth, type CatalogAuthChange } from '$lib/tools/tools/apis';
 
 // Which credential a catalogued API uses was, until now, writable only by the
 // LLM's `api_register` tool — so "pick the credential for this service" was a

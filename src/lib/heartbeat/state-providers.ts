@@ -12,7 +12,7 @@ import { eq, desc } from 'drizzle-orm';
  *
  * Adding a new kind:
  *   - declare `producesLongRunningTask: { kind: 'foo', idPath: '...' }`
- *     on the tool that creates it (in src/lib/workflows/site-tools/tools/*)
+ *     on the tool that creates it (in src/lib/tools/tools/*)
  *   - add an entry here mapping that kind to a fetch+format function
  *
  * No other code change is needed — the auto-register wrapper and the

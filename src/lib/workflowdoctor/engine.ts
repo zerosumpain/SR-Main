@@ -2,7 +2,7 @@
 //
 // Compatibility stub. The workflow doctor moved to SR-Workflows on 2026-10-02
 // (its worker runs the night and a queued "Run now"; Main reads and drives it
-// through `$lib/workflows/doctor-client`). This file only keeps the existing
+// through `$lib/workflows-client/doctor-client`). This file only keeps the existing
 // `startWorkflowDoctor` / `stopWorkflowDoctor` import and calls in
 // `src/hooks.server.ts` working until that protected file is next edited: the
 // hook edit should delete the import and both calls, and then this file and

@@ -2,7 +2,7 @@ import { redirect, type RequestHandler } from '@sveltejs/kit';
 import { google } from 'googleapis';
 import { env } from '$env/dynamic/private';
 import { viewerOf } from '$lib/server/viewer';
-import { signConnectState } from '$lib/workflows/gmail/oauth-state';
+import { signConnectState } from '$lib/integrations/gmail/oauth-state';
 
 /** The owner's mailbox is read, labelled and sent from by workflows and chat. */
 const OWNER_SCOPES = [

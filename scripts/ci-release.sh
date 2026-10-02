@@ -183,13 +183,13 @@ rsync -a --delete data/skills/ "$VPS_DIR/data/skills/"
 
 echo "==> Placing runtime-read sources..."
 mkdir -p "$VPS_DIR/src/lib/db" "$VPS_DIR/src/lib/constants" \
-         "$VPS_DIR/src/lib/workflows/scraper/python" "$VPS_DIR/src/lib/styles" \
+         "$VPS_DIR/src/lib/scraper/python" "$VPS_DIR/src/lib/styles" \
          "$VPS_DIR/scripts"
 rsync -a src/lib/db/schema.ts "$VPS_DIR/src/lib/db/"
 rsync -a drizzle.config.ts "$VPS_DIR/"
 rsync -a src/app.css "$VPS_DIR/src/" 2>/dev/null || true
 rsync -a src/lib/styles/ "$VPS_DIR/src/lib/styles/" 2>/dev/null || true
-rsync -a src/lib/workflows/scraper/python/ "$VPS_DIR/src/lib/workflows/scraper/python/"
+rsync -a src/lib/scraper/python/ "$VPS_DIR/src/lib/scraper/python/"
 rsync -a scripts/server-with-ws.mjs "$VPS_DIR/scripts/"
 rsync -a scripts/check-retired-integration-storage.mjs "$VPS_DIR/scripts/"
 rsync -a scripts/apply-security-lifecycle.mjs "$VPS_DIR/scripts/"

@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
  * naming `principalId` has almost certainly dropped the filter.
  */
 const OWNER_LANE = [
-  'src/lib/workflows/site-tools/tools/files.ts',
+  'src/lib/tools/tools/files.ts',
   'src/lib/jkai/media/drive-link.ts',
   'src/routes/api/drive/folders/+server.ts',
   'src/lib/file-index/store.ts',

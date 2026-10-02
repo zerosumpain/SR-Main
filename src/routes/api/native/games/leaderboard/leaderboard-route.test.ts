@@ -20,7 +20,7 @@ vi.mock('$lib/server/native-auth', () => ({
 vi.mock('$lib/server/access', () => ({ isOwnerEmail: (e: string | null | undefined) => (e ?? '').trim().toLowerCase() === OWNER }));
 vi.mock('$lib/server/grants', () => ({ loadMember: async (e: string) => h.members.get(e) ?? null }));
 vi.mock('$lib/server/models/settings', () => ({ getSetting: async () => null }));
-vi.mock('$lib/workflows/chat/job-store', () => ({ getJob: () => null }));
+vi.mock('$lib/jkai/chat/job-store', () => ({ getJob: () => null }));
 vi.mock('$lib/games/players.server', () => ({
   playerFor: async (email: string) => ({ id: `p_${email.split('@')[0]}`, email, name: email }),
   playerId: (email: string) => `p_${email.split('@')[0]}`,

@@ -3,10 +3,10 @@
 // gates, no nested spawning), restricted to the agent's allowedTools, and speak
 // through the agent's persona. Shared findings flow through the team-memory
 // datastore collection (all agents are the `jkai` actor).
-import { chatTurn } from '$lib/chat-client/turn';
+import { chatTurn } from '$lib/jkai/chat/turn';
 import { resolveDelegationModel } from '$lib/server/models/workload-settings';
 import { coerceModelContext } from '$lib/constants/default-models';
-import type { JobEvent } from '$lib/workflows/chat/job-store';
+import type { JobEvent } from '$lib/jkai/chat/job-store';
 import { currentSessionModel, currentSessionThinkingLevel } from '$lib/context/chat';
 import { getAgent } from './store';
 import { TEAM_MEMORY_COLLECTION } from './types';

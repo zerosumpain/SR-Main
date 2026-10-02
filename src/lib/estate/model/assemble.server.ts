@@ -14,7 +14,7 @@ import { is, getTableName } from 'drizzle-orm';
 import { PgTable } from 'drizzle-orm/pg-core';
 import * as schema from '$lib/db/schema';
 import { readApiSurface } from '../api-surface.server';
-import { EXTRACTED_TRIGGERS } from '$lib/workflows/trigger-ownership';
+import { EXTRACTED_TRIGGERS } from '$lib/workflows-client/trigger-ownership';
 import { listHandlers } from '$lib/heartbeat/registry';
 import registry from '../registry/apps.generated.json';
 import {
@@ -354,7 +354,7 @@ const activitiesFeed: Feed = {
             title: `${app.key} declares the "${trigger}" queue trigger, and Main still claims that lane`,
             detail:
               `SR-Infra's registry lists "${trigger}" under ${app.key}, but EXTRACTED_TRIGGERS in ` +
-              `src/lib/workflows/trigger-ownership.ts does not, so this process still executes it. ` +
+              `src/lib/workflows-client/trigger-ownership.ts does not, so this process still executes it. ` +
               `That is correct while no ${app.key} worker is live — the two lists answer different ` +
               `questions, and only a human edit should change the claim predicate. Worth checking ` +
               `whether that worker has since gone live.`,

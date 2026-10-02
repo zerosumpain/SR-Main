@@ -7,7 +7,7 @@ const h = vi.hoisted(() => ({
   setDoctorSwitches: vi.fn(),
   actOnDoctorFinding: vi.fn(),
 }));
-vi.mock('$lib/workflows/doctor-client', () => h);
+vi.mock('$lib/workflows-client/doctor-client', () => h);
 
 import { POST as run } from './run/+server';
 import { POST as toggle } from './toggle/+server';

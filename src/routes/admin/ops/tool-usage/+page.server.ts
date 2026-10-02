@@ -4,7 +4,7 @@ import os from 'node:os';
 import { clampDays } from '$lib/selfimprove/call-efficiency';
 import { getToolAudit } from '$lib/server/tool-audit';
 import { getToolErrorRates } from '$lib/server/tool-error-rates';
-import { getTools } from '$lib/workflows/site-tools/registry';
+import { getTools } from '$lib/tools/registry';
 
 export const load: PageServerLoad = async (event) => {
   const { url } = event;

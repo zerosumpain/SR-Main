@@ -1,6 +1,6 @@
 // src/routes/api/jkai/tools/promote/+server.ts
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { executeSiteTool } from '$lib/workflows/site-tools/executor';
+import { executeSiteTool } from '$lib/tools/executor';
 
 type PromoteBody = {
   messageId?: string;

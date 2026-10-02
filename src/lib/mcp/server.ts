@@ -17,8 +17,8 @@
 
 import {
   getTools,
-} from '$lib/workflows/site-tools/registry';
-import type { ToolDefinition } from '$lib/workflows/site-tools/registry-internal';
+} from '$lib/tools/registry';
+import type { ToolDefinition } from '$lib/tools/registry-internal';
 import { isEssentialUnderPolicy, isMetaToolEnabled } from './essentials';
 import { JKAI_EXTENDED_TOOL } from './meta-tool';
 import {

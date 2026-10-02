@@ -3,9 +3,9 @@ import { customTools } from '$lib/db/schema';
 import { desc } from 'drizzle-orm';
 import { isShowcase } from '$lib/server/showcase';
 import type { PageServerLoad } from './$types';
-import { nodeDefinitions } from '$lib/workflows/registry-client';
-import { getToolsetManifest } from '$lib/workflows/site-tools/registry';
-import type { NodeDefinition } from '$lib/workflows/types';
+import { getToolsetManifest } from '$lib/tools/registry';
+import { invokeWorkflowRuntime } from '$lib/workflows-client/runtime-client';
+import type { NodeCatalogueEntry } from '$lib/workflows-client/types';
 
 // Workflow node primitives that are tied to specific site features or the
 // owner's connected accounts — not general building blocks. Surfaced under
@@ -50,7 +50,7 @@ const SITE_NODE_FAMILIES: Array<{ family: string; description: string; types: st
 
 const SITE_NODE_TYPES = new Set(SITE_NODE_FAMILIES.flatMap((g) => g.types));
 
-function toRow(d: NodeDefinition) {
+function toRow(d: NodeCatalogueEntry) {
   return {
     type: d.type,
     label: d.label,
@@ -86,11 +86,17 @@ export const load: PageServerLoad = async (event) => {
     .from(customTools)
     .orderBy(desc(customTools.createdAt));
 
-  // Workflow primitives — what the canvas builder can drop on the graph.
-  // Hidden defs (legacy multi-mode nodes superseded by per-operation splits)
-  // remain executable but are filtered out so the admin UI matches what
-  // the orchestrator actually sees.
-  const allDefs = nodeDefinitions.filter((d) => !d.hidden);
+  // Workflow primitives — what the canvas builder can drop on the graph. The
+  // node registry belongs to SR-Workflows, so the list is its own: it omits
+  // hidden and retired types. Unreachable means unavailable, never an empty
+  // registry.
+  let allDefs: NodeCatalogueEntry[] = [];
+  let nodesUnavailable = false;
+  try {
+    allDefs = await invokeWorkflowRuntime<NodeCatalogueEntry[]>({ action: 'node_catalogue' });
+  } catch {
+    nodesUnavailable = true;
+  }
 
   const primitives = allDefs
     .filter((d) => !SITE_NODE_TYPES.has(d.type))
@@ -103,7 +109,7 @@ export const load: PageServerLoad = async (event) => {
     description: g.description,
     nodes: g.types
       .map((t) => byType.get(t))
-      .filter((d): d is NodeDefinition => Boolean(d))
+      .filter((d): d is NodeCatalogueEntry => Boolean(d))
       .map(toRow),
   })).filter((g) => g.nodes.length > 0);
 
@@ -118,6 +124,7 @@ export const load: PageServerLoad = async (event) => {
     tools: showcase ? customRows.map((t) => ({ ...t, handlerCode: '', createdBy: t.createdBy?.includes('@') ? 'owner' : t.createdBy })) : customRows,
     primitives,
     siteNodeFamilies,
+    nodesUnavailable,
     toolsets,
   };
 };

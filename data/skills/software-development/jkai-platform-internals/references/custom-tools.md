@@ -2,7 +2,7 @@
 
 Custom tools are agent-callable site tools created at RUNTIME — mostly by the
 self-improve engine (`src/lib/selfimprove/`), optionally by `create_tool`. They
-are NOT static repo code and do NOT appear in `src/lib/workflows/site-tools/tools/`.
+are NOT static repo code and do NOT appear in `src/lib/tools/tools/`.
 A grep of the repo for their names returns nothing; don't conclude they don't
 exist. This is the map for recognising, inspecting, and (once the surface
 lands) retiring them.
@@ -13,7 +13,7 @@ lands) retiring them.
   Columns (snake_case in DB): `name`, `description`, `toolset`, `enabled`
   (boolean), `parameters` (jsonb), `handler_code`, `run_count` (CUMULATIVE,
   never reset), `error_count`, `last_run_at`, `created_at`.
-- **Loader:** `src/lib/workflows/site-tools/custom-tool-loader.ts`
+- **Loader:** `src/lib/tools/custom-tool-loader.ts`
   `loadCustomTools()` — runs ONCE at startup, registers only `enabled=true`
   rows. Disabling in DB alone does NOT unregister from the running process;
   the admin PATCH route handles the live `unregister()`.
@@ -24,7 +24,7 @@ lands) retiring them.
 ## The bridge gap (as of 2026-08-07)
 
 `create_tool`, `list_custom_tools`, `delete_tool` exist as handlers in
-`src/lib/workflows/site-tools/meta-tools.ts` but are wired ONLY into the
+`src/lib/tools/meta-tools.ts` but are wired ONLY into the
 general-chat toolset-activation surface (`META_TOOL_DEFINITIONS`) — they are
 NOT registered site-tools, so `jkai_extended({operation:'invoke', name:
 'list_custom_tools'})` returns `unknown tool`. There is NO bridge-callable way

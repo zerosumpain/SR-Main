@@ -85,7 +85,7 @@ export async function readCalendar(
     // Dynamically imported for the reason snapshot.ts already documents: a
     // static import of the registry boots platform services — WhatsApp
     // included — in any test that touches this module.
-    const { executeTool } = await import('$lib/workflows/site-tools/registry');
+    const { executeTool } = await import('$lib/tools/registry');
     const res = await executeTool('apple_calendar_list', args);
     const data = res?.data as
       | { events?: unknown[]; truncated?: unknown; unavailable?: unknown[] }

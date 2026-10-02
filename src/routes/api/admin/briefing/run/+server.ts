@@ -4,7 +4,7 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { workflows } from '$lib/db/schema';
 import { BRIEFING_WORKFLOW_NAME } from '$lib/briefing/types';
-import { startRun } from '$lib/workflows/start-run';
+import { startRun } from '$lib/workflows-client/start-run';
 
 // Owner-gated by hooks. Starts the morning-briefing workflow now, outside its
 // schedule. SR-Workflows runs it and writes the result into `briefings`.

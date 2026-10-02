@@ -11,8 +11,31 @@ import { ensureCollection, upsertRecord, queryRecords, deleteRecord, DatastoreEr
 // Re-exported so nothing that already imported it from here had to change.
 export { MONITORS_COLLECTION } from '$lib/constants/monitors';
 import { MONITORS_COLLECTION } from '$lib/constants/monitors';
+import { slugify } from '$lib/canvas/slug';
 const ACTOR = 'jkai';
 const DEFAULT_CRON = '0 */6 * * *'; // every 6 hours when the description gives no cadence
+
+/**
+ * Allocate a unique `canvas:<slug>` workflow name for a new monitor.
+ *
+ * The canvas index (SR-Workflows) lists workflows by the `canvas:` prefix, so a
+ * monitor without it would be invisible there. Moved here from the deleted
+ * `$lib/canvas/adapter.server` (2026-10-02), whose only other callers were the
+ * extracted Canvas routes. Clips the slug to 40 chars and appends `-2`, `-3`…
+ * on collision; falls back to a uuid-derived slug if the seed slugifies to empty.
+ */
+async function allocateCanvasName(seed: string): Promise<{ name: string; slug: string }> {
+  const nameFor = (slug: string) => `canvas:${slug}`;
+  const baseSlug = (slugify(seed) || `canvas-${crypto.randomUUID().slice(0, 8)}`).slice(0, 40);
+  let slug = baseSlug;
+  for (let attempt = 2; attempt <= 100; attempt++) {
+    const [clash] = await db.select({ id: workflows.id }).from(workflows).where(eq(workflows.name, nameFor(slug)));
+    if (!clash) return { name: nameFor(slug), slug };
+    slug = `${baseSlug}-${attempt}`;
+  }
+  slug = `${baseSlug}-${crypto.randomUUID().slice(0, 8)}`;
+  return { name: nameFor(slug), slug };
+}
 
 export interface MonitorMarker {
   workflowId: string;
@@ -102,7 +125,7 @@ export async function createMonitor(
   const desc = (description ?? '').trim();
   if (!desc) throw new Error('description is required');
 
-  const { generateWorkflow } = await import('$lib/workflows/orchestrator');
+  const { generateWorkflow } = await import('$lib/workflows-client/generate');
   const emit = onProgress ?? (() => {});
 
   // Nudge the generator toward the monitor shape (recurring check → notify).
@@ -118,7 +141,6 @@ export async function createMonitor(
     throw new Error('Could not generate a monitor workflow from that description — try being more specific about what to watch and when.');
   }
 
-  const { allocateCanvasName } = await import('$lib/canvas/adapter.server');
   const { name: canvasName, slug } = await allocateCanvasName(workflow.name || `monitor: ${desc.slice(0, 40)}`);
 
   // Prefer an explicit cron; else the generator's cron trigger; else the default.

@@ -1,5 +1,5 @@
-import { loadToolRegistry } from '$lib/workflows/site-tools/load-registry';
-import { executeSiteTool } from '$lib/workflows/site-tools/executor';
+import { loadToolRegistry } from '$lib/tools/load-registry';
+import { executeSiteTool } from '$lib/tools/executor';
 
 // The per-build credential lives in `bridge-token.ts` — re-exported here so
 // existing callers keep working, and importable on its own by anything that

@@ -1,7 +1,7 @@
 import { db } from '$lib/db';
 import { jkaiEvidenceResults } from '$lib/db/schema';
 import { and, eq } from 'drizzle-orm';
-import type { ToolResult, ToolExecContext } from '$lib/workflows/site-tools/registry-internal';
+import type { ToolResult, ToolExecContext } from '$lib/tools/registry-internal';
 import { sourceReferences, type EvidenceEnvelope } from './evidence';
 export async function retainEvidence(tool: string, result: ToolResult, ctx?: ToolExecContext): Promise<ToolResult> {
   if (tool === 'evidence_read' || !ctx?.conversationId || !result.success) return result;

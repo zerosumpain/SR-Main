@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { setDoctorSwitches } from '$lib/workflows/doctor-client';
+import { setDoctorSwitches } from '$lib/workflows-client/doctor-client';
 
 // Owner-only (enforced in hooks.server.ts for /api/admin/*). The doctor's three
 // switches — `enabled` (unset = ON), `breaker` (unset = ON) and `autoApply`

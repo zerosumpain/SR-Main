@@ -149,12 +149,13 @@ const rank = (layer) => LAYERS.indexOf(layer);
 // Each line is the debt, not the design. Fix one and delete the line.
 // ---------------------------------------------------------------------------
 const BASELINE_LAYER = [
-  // This is $lib/workflows/site-tools — the tool registry — which the
-  // platform layer reaches up for. site-tools is
-  // a registry of DOMAIN capabilities, so the fix is to invert it: let the
-  // domain register its tools with the platform rather than the platform
-  // importing the catalogue.
-  'routing -> workflows',
+  // The tool registry ($lib/tools, formerly $lib/workflows/site-tools), which
+  // the platform layer reaches up for. It is a registry of DOMAIN capabilities,
+  // so the fix is to invert it: let the domain register its tools with the
+  // platform rather than the platform importing the catalogue. Renamed from
+  // 'routing -> workflows' on 2026-10-02 when the registry left the workflows
+  // folder; 'llm -> workflows' disappeared with it.
+  'routing -> tools',
 
 ];
 
@@ -170,24 +171,24 @@ const BASELINE_ROUTE_CROSS = [];
 // Mutual imports between two lib modules, alphabetical, ' <-> ' separated.
 // Twenty pairs is the tangle this linter exists to stop growing.
 const BASELINE_CYCLES = [
-  'agents <-> workflows',
-  'apis <-> workflows',
+  // 2026-10-02: the workflows folder was sorted into $lib/tools (the site tool
+  // registry), $lib/integrations, $lib/jkai/chat, $lib/scraper and the thin
+  // $lib/workflows-client. Ten '<x> <-> workflows' pairs went; the four tool
+  // pairs below are the same debt under the registry's new name, and the
+  // rest disappeared with the deleted engine leftovers.
+  'apis <-> tools',
   'blog <-> voice',
-  'canvas <-> workflows',
   'codegraph <-> jkai',
-  'daydream <-> workflows',
-  'deepdive <-> workflows',
-  'heartbeat <-> workflows',
-  'jkai <-> workflows',
+  'heartbeat <-> tools',
+  'jkai <-> tools',
   // Was 'jkai <-> server' before the gateway moved down — the same knot, now
   // between two platform modules. $lib/llm/client asks server/models which
   // model to use; server/models/codex-catalogue asks $lib/llm what it cost.
   'llm <-> server',
   'mcp <-> toolpolicy',
   'models <-> server',
-  'monitors <-> workflows',
   'routing <-> server',
-  'selfimprove <-> workflows',
+  'selfimprove <-> tools',
 ];
 
 // Sanity floor. If the extraction stops matching — a syntax change, a bad
@@ -215,7 +216,16 @@ const BASELINE_CYCLES = [
 // deck routes, $lib/decks, $lib/presentation, the presentation components and
 // the deck site tools (67 files, ~13.8k lines) took it 5,847 → 5,664 across
 // 1,892 files. ~160 of headroom.
-const MIN_EDGES = 5500;
+//
+// Lowered on 2026-10-02 by the workflows-folder sort (5800 → 5400). Deleting
+// Main's copies of the node registry, node executors, graph verifier, mapping,
+// expression engine, the stealth-scrape/script chain and the Canvas server
+// leftovers (~130 files) took it 5,847 → 5,564 across 1,866 files. ~160 of
+// headroom.
+//
+// Both landed together on the slimdown branch: 5,380 imports across 1,800
+// files once merged, so the combined floor is 5200 (~180 of headroom).
+const MIN_EDGES = 5200;
 
 // ---------------------------------------------------------------------------
 

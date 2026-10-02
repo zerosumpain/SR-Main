@@ -16,10 +16,10 @@
 
 import { timingSafeEqual } from 'node:crypto';
 import { listMcpTools, todayLine } from './server';
-import { executeTool } from '$lib/workflows/site-tools/registry';
+import { executeTool } from '$lib/tools/registry';
 import { publishToolStep, requestToolConfirmation } from '$lib/jkai/tool-step-bus';
-import { isDestructive, describeDestructiveAction } from '$lib/workflows/chat/confirmation-gate';
-import { resolveDisplayTool, summarizeRunningTool, summarizeToolResult } from '$lib/workflows/chat/tool-summary';
+import { isDestructive, describeDestructiveAction } from '$lib/jkai/chat/confirmation-gate';
+import { resolveDisplayTool, summarizeRunningTool, summarizeToolResult } from '$lib/jkai/chat/tool-summary';
 import { dispatchMetaTool, JKAI_EXTENDED_TOOL } from './meta-tool';
 
 // Every registered tool is exposed via MCP. We don't gate at the MCP layer.

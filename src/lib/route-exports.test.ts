@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GPX_MIME_TYPE, routeExportName, validateRouteExport } from './route-exports';
 import { hashShareToken, shareDownloadUrl } from './file-shares';
-import { routeMessage } from './workflows/site-tools/tools/route-export';
+import { routeMessage } from './tools/tools/route-export';
 
 const GPX = '<?xml version="1.0"?><gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><trk/></gpx>';
 

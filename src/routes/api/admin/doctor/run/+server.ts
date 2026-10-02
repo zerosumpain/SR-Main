@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { requestDoctorRun } from '$lib/workflows/doctor-client';
+import { requestDoctorRun } from '$lib/workflows-client/doctor-client';
 
 // Owner-only (enforced in hooks.server.ts for /api/admin/*). "Run now" for the
 // workflow doctor, which SR-Workflows owns since 2026-10-02: this queues a
