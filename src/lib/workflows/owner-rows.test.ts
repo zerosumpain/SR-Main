@@ -5,8 +5,6 @@ import { readFileSync } from 'node:fs';
 // a member's workflow never enters an owner LLM context, never gets "fixed"
 // with owner authority, and never counts as the site's public work.
 const OWNER_AUTOMATIONS = [
-  'src/lib/workflowdoctor/triage.ts',
-  'src/lib/heartbeat/activities/workflow-review.ts',
   'src/routes/api/landing/vitals/+server.ts',
 ];
 
