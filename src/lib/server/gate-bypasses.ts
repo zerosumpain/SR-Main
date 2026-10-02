@@ -75,6 +75,11 @@ export const HOOK_BYPASSES: string[] = [
   // backlog code. Named one at a time; /api/platform is not a tree.
   '/api/platform/daydream/briefing', // GET only, same credential
   '/api/platform/backlog/intake', // POST only, same credential; trace ideas only
+  // The model-plumbing lane for the extracted applications: per-application
+  // MODEL_SERVICE_TOKEN_<APP> Bearer, constant-time compared, refused when unset
+  // or under 32 chars. See $lib/server/model-service-auth.
+  '/api/platform/models/config', // GET only, MODEL_SERVICE_TOKEN_<APP>
+  '/api/platform/models/usage', // POST only, same credential; writes agent_actions llm_call rows
   // The two server-side calls chat makes to intel, cross-process now that
   // chat lives in SR-Jkai-Core. Same SR-JKAI credential; each also accepts an
   // owner session and re-checks it. Named one at a time — /api/jkai/intel is

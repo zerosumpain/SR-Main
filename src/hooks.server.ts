@@ -22,7 +22,7 @@ import { startConnectorWatch, stopConnectorWatch } from '$lib/connectors/watch';
 import '$lib/integrations/adapters';
 // Boots WhatsApp (delegated to the worker), the owner WhatsApp channel and
 // Home Assistant, as the workflows barrel used to on import.
-import '$lib/workflows/platform-boot';
+import '$lib/integrations/platform-boot';
 import { isPublicPath, isGuestAllowedPath } from '$lib/auth';
 import { requiredFor, satisfies } from '$lib/access/catalogue';
 import { requestHost } from '$lib/request-host';
@@ -45,14 +45,15 @@ import { hasMaintenanceSecret } from '$lib/server/maintenance-auth';
 import { isPublicApiPath } from '$lib/server/public-api-paths';
 import { hasStudioServiceToken } from '$lib/server/studio-auth';
 import { invokeLaneFor, hasJkaiServiceToken } from '$lib/server/invoke-auth';
+import { modelServiceAppFor } from '$lib/server/model-service-auth';
 import { isLoopbackAddress, isPrivateAddress } from '$lib/server/client-address';
 import { SvelteKitAuth } from '@auth/sveltekit';
 import Google from '@auth/sveltekit/providers/google';
 import { isRedirect, redirect, type Handle } from '@sveltejs/kit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { env } from '$env/dynamic/private';
-import { runsService } from '$lib/workflows/service-role';
-import { initEventLoopMonitor, startBlockReporter } from '$lib/workflows/engine-runtime';
+import { runsService } from '$lib/server/service-role';
+import { initEventLoopMonitor, startBlockReporter } from '$lib/server/runtime-monitor';
 
 // Main's watchdog measures this process, independently of Workflows ownership.
 if (!building) {
@@ -760,6 +761,19 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
       (pathname === '/api/platform/daydream/briefing' && event.request.method === 'GET') ||
       (pathname === '/api/platform/backlog/intake' && event.request.method === 'POST')) &&
     invokeLaneFor(event.request) !== 'none'
+  ) {
+    return resolve(event);
+  }
+
+  // The model-plumbing lane: an extracted application (Drive, Health, Policy
+  // Engine, DfE Data Strategy, Data Standard Designer) reading its model
+  // configuration and sending LLM usage into the cost ledger. One credential
+  // per application (/server/model-service-auth), re-checked in each
+  // handler. Named one path and verb at a time, like the tool lane above.
+  if (
+    ((pathname === '/api/platform/models/config' && event.request.method === 'GET') ||
+      (pathname === '/api/platform/models/usage' && event.request.method === 'POST')) &&
+    modelServiceAppFor(event.request) !== null
   ) {
     return resolve(event);
   }
