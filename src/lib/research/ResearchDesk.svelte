@@ -280,15 +280,8 @@
     }
   }
 
-  function handleExport(kind: 'docx' | 'narrative-docx' | 'narrative-md' | 'md') {
-    const path =
-      kind === 'docx'
-        ? `/api/deepdive/${sessionId}/export/docx`
-        : kind === 'md'
-          ? `/api/deepdive/${sessionId}/export/md`
-          : kind === 'narrative-docx'
-            ? `/api/deepdive/${sessionId}/export/narrative-docx`
-            : `/api/deepdive/${sessionId}/export/narrative-md`;
+  function handleExport(kind: 'docx' | 'md') {
+    const path = `/api/deepdive/${sessionId}/export/${kind}`;
     const a = document.createElement('a');
     a.href = path;
     a.rel = 'noopener';
