@@ -5,7 +5,7 @@ import { daydreamThoughts } from '$lib/db/schema';
 import { errMsg } from '$lib/daydream/types';
 import { loadLoopHealth, loopVerdict } from '$lib/builds/loop-health';
 import { MIN_PAIRS } from '$lib/daydream/stats/tests';
-import { loadImprovementDashboard } from '$lib/dashboard/improvement.server';
+import { loadImprovementControls, loadImprovementDashboard } from '$lib/dashboard/improvement.server';
 import { loadOvernight } from '$lib/builds/overnight.server';
 import { isOwnerRequest } from '$lib/server/owner';
 
@@ -83,13 +83,19 @@ export const load: PageServerLoad = async (event) => {
         dearest: null,
         passes: night.passes.map((p) => ({ ...p, summary: '', costUsd: 0, href: null })),
       },
+      controls: null,
       member: true,
     };
   }
-  const [loop, improvement] = await Promise.all([
+  const [loop, improvement, controls] = await Promise.all([
     loadLoopHealth(MIN_PAIRS),
     loadImprovementDashboard().catch((err) => {
       console.error('[daydream] improvement load failed:', errMsg(err));
+      return null;
+    }),
+    // The switches folded in from /admin/ai/improvement — owner only.
+    loadImprovementControls().catch((err) => {
+      console.error('[daydream] improvement controls load failed:', errMsg(err));
       return null;
     }),
   ]);
@@ -99,5 +105,5 @@ export const load: PageServerLoad = async (event) => {
     // that cannot be read must not take the whole room down with it.
     loadOvernight(),
   ]);
-  return { loop, loopVerdict: loopVerdict(loop), improvement, story, night, member: false };
+  return { loop, loopVerdict: loopVerdict(loop), improvement, story, night, controls, member: false };
 };

@@ -55,7 +55,7 @@ describe('selfimprove finalizeAndNotify', () => {
     expect(notifyOwner).toHaveBeenCalledWith(
       expect.objectContaining({
         category: 'build',
-        url: '/admin/ai/improvement',
+        url: '/jkai/develop/improvement',
         whatsappText: buildWhatsappSummary(data),
       }),
     );
