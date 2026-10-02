@@ -15,7 +15,7 @@
     "@asamuzakjp/css-color": "^5.1.11",
     "@xmldom/xmldom": "0.8.15",
     "minimatch@<10": {
-      "brace-expansion": "2.1.4"
+      "brace-expansion": "2.1.7"
     },
     "minimatch@>=10": {
       "brace-expansion": "5.0.9"
@@ -138,7 +138,7 @@
     "mapbox-gl": "3.29.0",
     "marked": "^17.0.6",
     "mermaid": "^11.17.2",
-    "nodemailer": "^9.1.1",
+    "nodemailer": "^10.0.13",
     "openai": "^6.32.0",
     "pdfjs-dist": "^5.4.296",
     "pdfkit": "^0.18.0",
@@ -150,7 +150,7 @@
     "shiki": "^4.0.2",
     "three": "^0.183.2",
     "tsdav": "^2.2.2",
-    "undici": "^7.29.0",
+    "undici": "^7.30.0",
     "vega": "^6.4.0",
     "vega-embed": "^7.2.0",
     "vega-interpreter": "^2.3.2",
