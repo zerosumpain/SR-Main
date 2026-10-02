@@ -112,3 +112,24 @@ describe('filterForViewer', () => {
     expect(filterForViewer([{ key: 'graphing-calculator' }], {}, false)).toEqual([]);
   });
 });
+
+describe('private-by-default static key (field-study-8)', () => {
+  it('is a static key, so it gets a card, a toggle and share links', () => {
+    expect(isStaticProjectKey('field-study-8')).toBe(true);
+  });
+
+  it('defaults private with no project_visibility row', () => {
+    expect(defaultsPublic('field-study-8')).toBe(false);
+    expect(isProjectPublic({}, 'field-study-8')).toBe(false);
+  });
+
+  it('is hidden from the public listing and shown to the owner', () => {
+    const items = [{ key: 'field-study-8' }];
+    expect(filterForViewer(items, {}, false)).toEqual([]);
+    expect(filterForViewer(items, {}, true)).toEqual(items);
+  });
+
+  it('becomes public only through an explicit row', () => {
+    expect(isProjectPublic({ 'field-study-8': true }, 'field-study-8')).toBe(true);
+  });
+});
