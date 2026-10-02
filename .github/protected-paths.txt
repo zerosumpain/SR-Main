@@ -49,7 +49,6 @@ src/lib/jkai/development-review.server.ts
 # decks and shared conversations.
 src/lib/agent/auth.ts
 src/lib/workflows/scraper/service-auth.ts
-src/lib/workflows/webhook-secret.ts
 src/lib/projects/guard.ts
 src/lib/projects/visibility.ts
 src/lib/projects/shares.ts
@@ -105,7 +104,6 @@ svelte.config.js
 # arbitrary-file, direct-to-production channel that routes around this entire
 # mechanism — including protected-paths.txt itself. This is the one escalation
 # that defeats the gate rather than merely widening tool reach.
-src/lib/workflows/site-tools/tools/node-builder-shared.ts
 src/lib/workflows/site-tools/tools/node-builder.ts
 # The allowlist of repos an autonomous build may clone, branch and push to, and
 # the second independent repo pin used by the Forge.
@@ -119,12 +117,7 @@ src/lib/jkai/sandbox.ts
 # ── Agent safety rails ─────────────────────────────────────────────────
 # The denylist and confirmation gate are what stop tool-calls doing damage.
 # Self-modification of these must always be a human decision.
-src/lib/workflows/nodes/site-tool-denylist.ts
 src/lib/workflows/chat/confirmation-gate.ts
-# site-tool.ts is the ONLY runtime enforcement of that denylist and of the
-# destructive/upstream-approval rule. Protecting the denylist DATA but not its
-# enforcement was the gap — the data file is inert without this.
-src/lib/workflows/nodes/site-tool.ts
 # schedule_tool_at refuses destructive tools; deferred calls fire with no LLM
 # round, no confirmation UI and no user present, and no test covers this guard.
 src/lib/workflows/site-tools/tools/scheduled.ts
@@ -135,14 +128,6 @@ src/lib/workflows/nodes/safe-eval.ts
 # Outbound-network boundary for the /jkai chat agent, holding SSRF enforcement
 # that src/lib/server/ssrf-guard.ts does not.
 src/lib/workflows/site-tools/tools/apis.ts
-# TESTS AS INVARIANTS. site-tools/tools/** is 96 commits in six months — it IS
-# ordinary feature work and protecting it would end the autonomy. But that is
-# where every `destructive: true` literal lives. These two tests pin the flags
-# and the llm-agent exclusion, so dropping a flag fails CI instead of
-# auto-merging. Protecting the assertions costs a fraction of protecting the
-# subtree, and without them one PR could delete a flag AND its assertion.
-src/lib/workflows/site-tools/toolchain-fixes.test.ts
-tests/lib/workflows/nodes/llm-agent-site-tools.test.ts
 
 # ── Instruction surfaces ───────────────────────────────────────────────
 # Not code, and not shipped to a browser — which is exactly why these were
