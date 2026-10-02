@@ -70,7 +70,7 @@ export const SETTINGS_ENABLED_KEY = 'selfimprove.enabled';
  * retired (D3, 2026-09-26): it is a stored setting, and renaming it would
  * silently turn an explicit `true` back into the default off.
  *
- * With it on, `WORK_CAPS.maxChangeRequests` and `maxWatches` are the ceiling:
+ * With it on, `WORK_CAPS.maxDeliveries` and `maxWatches` are the ceiling:
  * one of each a night.
  */
 export const SETTINGS_AUTOBUILD_KEY = 'daydream.appetite.autobuild';
@@ -137,17 +137,19 @@ export const WORK_CAPS = {
   maxRepairRounds: 2,
   /** Existing broken tools re-authored per night. */
   maxToolsRepaired: 3,
-  /** Draft PRs opened per night (never merged). */
-  maxPullRequests: 2,
   /**
-   * Change requests handed to the autonomous builder per night.
+   * Development deliveries started from the backlog per night.
    *
-   * ONE. A change-request build runs up to 25 iterations against a £2 ceiling
-   * — roughly ten times what a whole self-improvement night costs — and it
-   * opens a PR a human then has to read. Two a night is a backlog of reviews
-   * by the weekend. Owner decision, 2026-09-04.
+   * ONE. A delivery's build runs against a £2 ceiling — roughly ten times what
+   * a whole self-improvement night costs — and ends in a PR a human then has to
+   * read. Two a night is a backlog of reviews by the weekend. Owner decision,
+   * 2026-09-04 (made for change requests, which deliveries replaced).
    */
-  maxChangeRequests: 1,
+  maxDeliveries: 1,
+  /** Tapped items examined per night for that one slot, so an item that is
+   *  already in development passes the slot to the next instead of ending the
+   *  night. */
+  deliveryCandidates: 2,
   /** Monitors generated per night. One workflow generation, and a watch that
    *  fires is a watch that can notify. */
   maxWatches: 1,
@@ -225,16 +227,17 @@ export type ActionKind =
   | 'tool_repaired'
   /** An idea was queued for a future night. */
   | 'backlog_added'
-  /** A draft PR was opened for review (never merged by the engine). */
+  /** HISTORICAL: a blind draft PR was opened (retired 2026-10-02). Kept so old
+   *  `improvement_runs` records still type and count. */
   | 'pr_opened'
-  /**
-   * A change request was handed to the autonomous builder: an issue opened, a
-   * branch cut from master, `npm run gate` per iteration, and a PR at the end.
-   * Distinct from `pr_opened` because the engine did not write the code — it
-   * wrote the ask, which is the difference between a patch nothing has run and
-   * one a gate has.
-   */
+  /** HISTORICAL: a change request was handed to the autonomous builder
+   *  (replaced by `delivery_started` 2026-10-02). Kept for old run records. */
   | 'change_requested'
+  /**
+   * An accepted backlog item became a `/jkai/develop` development delivery:
+   * groomed brief, criteria, autopilot, preview, review and a PR at the end.
+   */
+  | 'delivery_started'
   /** A recurring monitor was generated and scheduled. */
   | 'watch_created'
   /**
@@ -540,7 +543,7 @@ export interface BacklogItemData {
   title: string;
   detail: string;
   /** 'tool'    = buildable as a runtime custom tool;
-   *  'feature' = needs repo code — a change request to the autonomous builder;
+   *  'feature' = needs repo code — a /jkai/develop development delivery;
    *  'source'  = a data source to find, register and then sample daily;
    *  'watch'   = a recurring monitor, i.e. a scheduled workflow;
    *  'engine'  = a proposal about the daydream engine itself — never picked by
@@ -711,26 +714,37 @@ export interface EpicData {
  *
  * Declared here and IMPLEMENTED in `$lib/heartbeat/build-lanes.ts`, which is
  * the only direction the module boundaries allow: `$lib/jkai` already imports
- * `$lib/selfimprove`, so importing `$lib/jkai/change-request` from this module
- * would open a `jkai <-> selfimprove` cycle, and importing `$lib/heartbeat`
- * would open a `heartbeat <-> selfimprove` one. Injection also means a test can
- * hand the run fakes and assert what it dispatched without a GitHub token.
+ * `$lib/selfimprove`, so importing `$lib/jkai/development-create.server` from
+ * this module would open a `jkai <-> selfimprove` cycle, and importing
+ * `$lib/heartbeat` would open a `heartbeat <-> selfimprove` one. Injection also
+ * means a test can hand the run fakes and assert what it dispatched.
  */
 export interface LaneResult {
-  /** Stable reference to what the lane made — `build:<id>` or
-   *  `monitor:<workflowId>`. Stored on the item as `buildRef`. */
+  /** Stable reference to what the lane made — `delivery:<buildId>` or
+   *  `monitor:<workflowId>` (older items carry `build:<id>` from change
+   *  requests). Stored on the item as `buildRef`. */
   ref: string;
   /** What to show the owner. */
   label: string;
-  /** The lane handed back work that already existed for this idea (an open
-   *  change request) instead of starting more. Nothing new was spent. */
+  /** The lane handed back work that already existed for this idea (a live
+   *  delivery) instead of starting more. Nothing new was spent. */
   reused?: boolean;
 }
 
+/** An accepted backlog brief, shaped as a development delivery's fields. */
+export interface DeliveryRequest {
+  title: string;
+  /** The intended outcome; the delivery's brief and the build's prompt. */
+  outcome: string;
+  criteria: string[];
+  brief: Partial<Record<'constraints' | 'dependencies' | 'assumptions' | 'validation' | 'questions', string>>;
+  /** The backlog item's identity, so a second ask for it finds this delivery. */
+  backlogSlug: string;
+}
+
 export interface BuildLanes {
-  /** Open an issue and start a gated repo build. Absent when GitHub is not
-   *  configured; the propose phase then falls back to a draft PR. */
-  changeRequest?: (input: { title: string; request: string; backlogSlug?: string }) => Promise<LaneResult>;
+  /** Start a `/jkai/develop` development delivery from an accepted brief. */
+  startDelivery?: (input: DeliveryRequest) => Promise<LaneResult>;
   /** Turn a description into a recurring, scheduled monitor. */
   createWatch?: (input: { description: string }) => Promise<LaneResult>;
 }

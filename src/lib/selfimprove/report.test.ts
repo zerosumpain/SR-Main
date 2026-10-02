@@ -72,3 +72,12 @@ describe('selfimprove finalizeAndNotify', () => {
     expect(notifyOwner).not.toHaveBeenCalled();
   });
 });
+
+describe('buildWhatsappSummary — deliveries', () => {
+  it('leads with a delivery started from the backlog', () => {
+    const data = { ...run(), actions: [{ kind: 'delivery_started' as const, detail: 'delivery abc12345 — "A rail feed"' }] };
+    const msg = buildWhatsappSummary(data);
+    expect(msg).toContain('BUILDING: delivery abc12345 — "A rail feed".');
+    expect(msg).not.toContain('Nothing shipped.');
+  });
+});

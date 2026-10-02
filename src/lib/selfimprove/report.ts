@@ -66,7 +66,7 @@ export function buildWhatsappSummary(data: ImprovementRunData): string {
   const shipped = data.actions.filter((a) => a.kind === 'tool_shipped');
   const repaired = data.actions.filter((a) => a.kind === 'tool_repaired');
   const prs = data.actions.filter((a) => a.kind === 'pr_opened');
-  const builds = data.actions.filter((a) => a.kind === 'change_requested');
+  const builds = data.actions.filter((a) => a.kind === 'delivery_started' || a.kind === 'change_requested');
   const watches = data.actions.filter((a) => a.kind === 'watch_created');
   const apis = countActions(data, ['api_registered', 'api_verified']);
   const rejected = countActions(data, ['tool_rejected']);

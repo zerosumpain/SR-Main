@@ -6,7 +6,7 @@
 //
 // `$lib/jkai` already imports `$lib/selfimprove` (four files under
 // `jkai/intel`), so a `selfimprove -> jkai` import — the one needed to call
-// `createChangeRequest` — would put a fresh `jkai <-> selfimprove` cycle in
+// `createDevelopmentDelivery` — would put a fresh `jkai <-> selfimprove` cycle in
 // front of `check-module-boundaries`. `$lib/heartbeat -> $lib/jkai` is an
 // existing one-way edge, and `$lib/heartbeat -> $lib/monitors` is a new one
 // with nothing coming back. So the lanes are injected into the run from here,
@@ -18,19 +18,21 @@
 //
 // ── What a lane is ──────────────────────────────────────────────────────────
 //
-// Two calls, both fire-and-forget. `changeRequest` opens a GitHub issue and
-// starts a repo build that branches from master, runs `npm run gate` on every
-// iteration, and opens a PR — it never merges, and `risk-tier` refuses to
-// auto-merge anything touching a protected path. `createWatch` turns a
-// description into a scheduled workflow with a dedupe step and a notifier.
+// Two calls, both fire-and-forget. `startDelivery` creates a `/jkai/develop`
+// development delivery from an accepted backlog brief — the same creator as the
+// owner's "New feature" form — with autopilot on and release policy
+// `pull_request`: the builder sidecar's autopilot grooms it, builds it, runs the
+// gate, previews it, reviews it against its criteria and opens a PR. It never
+// merges, and `risk-tier` refuses to auto-merge anything touching a protected
+// path. `createWatch` turns a description into a scheduled workflow with a
+// dedupe step and a notifier.
 //
-// Neither blocks: `createChangeRequest` returns as soon as the build is
-// started, which matters because the improvement run has 25 minutes and a
-// change-request build has two hours.
+// Neither blocks: creating a delivery writes two rows and returns, which
+// matters because the improvement run has 25 minutes and a build has two hours.
 
-import { errMsg, type BuildLanes } from '$lib/selfimprove/types';
+import type { BuildLanes } from '$lib/selfimprove/types';
 
-export type { BuildLanes, LaneResult } from '$lib/selfimprove/types';
+export type { BuildLanes, DeliveryRequest, LaneResult } from '$lib/selfimprove/types';
 
 /**
  * The live lanes.
@@ -41,23 +43,22 @@ export type { BuildLanes, LaneResult } from '$lib/selfimprove/types';
  */
 export function liveBuildLanes(): BuildLanes {
   return {
-    async changeRequest({ title, request, backlogSlug }) {
-      const { createChangeRequest } = await import('$lib/jkai/change-request');
-      const res = await createChangeRequest({
-        title: title.slice(0, 120),
-        // The ask verbatim, so the issue records what was actually wanted
-        // rather than a paraphrase of it — the same reason `createChangeRequest`
-        // preserves the requester's words.
-        request,
-        labels: ['self-improvement'],
-        // The backlog item's identity, so a second ask for it finds this build.
-        backlogSlug,
+    async startDelivery({ title, outcome, criteria, brief, backlogSlug }) {
+      const { createDevelopmentDelivery, findBacklogDelivery } = await import('$lib/jkai/development-create.server');
+      // The same idea already in development? Hand it back rather than paying twice.
+      const live = await findBacklogDelivery(backlogSlug);
+      if (live) return { ref: `delivery:${live.buildId}`, label: `existing delivery ${live.buildId.slice(0, 8)}`, reused: true };
+      const { buildId } = await createDevelopmentDelivery({
+        title, outcome, criteria, brief, backlogSlug,
+        area: 'Platform',
+        // A change request opened a PR and stopped; this is the same stop.
+        releasePolicy: 'pull_request',
+        // The owner's accepted brief (or the autobuild override) was the tap
+        // to spend, so the run proceeds without a person, as the change
+        // request did — and stops to ask when the brief does not settle a question.
+        autopilot: true,
       });
-      return {
-        ref: `build:${res.buildId}`,
-        label: `${res.reused ? 'existing ' : ''}issue #${res.issueNumber} → build ${res.buildId.slice(0, 8)}`,
-        ...(res.reused ? { reused: true } : {}),
-      };
+      return { ref: `delivery:${buildId}`, label: `delivery ${buildId.slice(0, 8)}` };
     },
 
     async createWatch({ description }) {
@@ -69,21 +70,4 @@ export function liveBuildLanes(): BuildLanes {
       return { ref: `monitor:${marker.workflowId}`, label: `watch “${marker.slug}” on ${marker.cron}` };
     },
   };
-}
-
-/** A lane set with the change-request half removed, for when GitHub is not
- *  configured. Kept as a function so the reason is written down once. */
-export function lanesWithoutGithub(lanes: BuildLanes): BuildLanes {
-  const { changeRequest: _unused, ...rest } = lanes;
-  void _unused;
-  return rest;
-}
-
-/** Wrap a lane so a failure is a recorded outcome rather than a thrown phase. */
-export async function tryLane<T>(fn: () => Promise<T>): Promise<{ ok: true; value: T } | { ok: false; error: string }> {
-  try {
-    return { ok: true, value: await fn() };
-  } catch (err) {
-    return { ok: false, error: errMsg(err) };
-  }
 }
