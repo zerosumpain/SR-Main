@@ -36,6 +36,16 @@ test('database-free extracted applications require an explicit empty table set',
   assert.ok(checkExtractedSchema(data, schema).includes('local-plan-navigator: database-free application declares tables'));
 });
 
+test('an application that owns its schema may require nothing else from Main', () => {
+  const data = manifest();
+  const owned = `${schema}export const policySchema = pgSchema('policy');\nexport const snapshots = policySchema.table(\n  'snapshots', {});\n`;
+  const config = "export default { schemaFilter: ['public'], tablesFilter: ['!snapshots'] };\n";
+  data.modules.push({ id: 'policy-engine', requiredTables: [], ownedSchema: 'policy', ownedTables: ['snapshots'] });
+  assert.deepEqual(checkExtractedSchema(data, owned, config), []);
+  delete data.modules.at(-1).ownedTables;
+  assert.ok(checkExtractedSchema(data, owned, config).includes('policy-engine: required table set is empty'));
+});
+
 test('app-owned tables must stay out of public and out of Main\'s push', () => {
   const data = manifest();
   data.modules.push({ id: 'policy-engine', requiredTables: ['shared'], ownedSchema: 'policy', ownedTables: ['snapshots'] });

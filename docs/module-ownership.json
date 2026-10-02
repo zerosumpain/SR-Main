@@ -27,13 +27,10 @@
       "migrationAuthor": "zerosumpain/SR-Main",
       "schemaExecutor": "zerosumpain/SR-Main",
       "requiredTables": [
-        "agent_actions",
-        "app_settings",
         "drive_folder_settings",
         "drive_intel_outbox",
         "file_embeddings",
         "file_share_token",
-        "openrouter_models",
         "workflow_files"
       ],
       "ownedSchema": "drive",
@@ -76,11 +73,8 @@
         "activity_series",
         "activity_share_token",
         "activity_tracks",
-        "agent_actions",
-        "agent_tasks",
         "allowed_user",
         "api_secrets",
-        "app_settings",
         "apple_health_metrics",
         "apple_sleep_stages",
         "entity",
@@ -89,7 +83,6 @@
         "health_sync_state",
         "home_assistant_config",
         "oauth_tokens",
-        "openrouter_models",
         "planned_routes",
         "research_session",
         "route_waypoints",
@@ -122,11 +115,7 @@
       "executionOwner": "Policy Engine project pages and APIs",
       "migrationAuthor": "zerosumpain/SR-Main",
       "schemaExecutor": "zerosumpain/SR-Main",
-      "requiredTables": [
-        "agent_actions",
-        "app_settings",
-        "openrouter_models"
-      ],
+      "requiredTables": [],
       "ownedSchema": "policy",
       "ownedTables": [
         "policy_indicator_snapshots"
@@ -154,11 +143,7 @@
       "executionOwner": "DfE Data Strategy project pages and APIs",
       "migrationAuthor": "zerosumpain/SR-Main",
       "schemaExecutor": "zerosumpain/SR-Main",
-      "requiredTables": [
-        "agent_actions",
-        "app_settings",
-        "openrouter_models"
-      ],
+      "requiredTables": [],
       "ownedSchema": "dfe",
       "ownedTables": [
         "keystone_intel",
@@ -187,11 +172,7 @@
       "executionOwner": "Data Standard Designer project pages and APIs",
       "migrationAuthor": "zerosumpain/SR-Main",
       "schemaExecutor": "zerosumpain/SR-Main",
-      "requiredTables": [
-        "agent_actions",
-        "app_settings",
-        "openrouter_models"
-      ],
+      "requiredTables": [],
       "ownedSchema": "dsd",
       "ownedTables": [
         "standard_registry_entries",

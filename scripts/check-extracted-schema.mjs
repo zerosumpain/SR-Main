@@ -50,7 +50,12 @@ export function checkExtractedSchema(manifest, source, drizzleConfig) {
       }
       continue;
     }
-    if (!Array.isArray(module.requiredTables) || !module.requiredTables.length) {
+    if (!Array.isArray(module.requiredTables)) {
+      errors.push(`${module.id}: required table set is missing`);
+      continue;
+    }
+    // An application that owns its own schema may need nothing else from Main.
+    if (!module.requiredTables.length && !module.ownedTables?.length) {
       errors.push(`${module.id}: required table set is empty`);
       continue;
     }
