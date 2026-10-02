@@ -2,8 +2,8 @@ import { json, type RequestHandler } from '@sveltejs/kit';
 import { db } from '$lib/db';
 import { gmailAccounts } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { gmailService } from '$lib/workflows/gmail/service';
-import { ownerGmailWhere } from '$lib/workflows/gmail/owner-accounts';
+import { gmailService } from '$lib/integrations/gmail/service';
+import { ownerGmailWhere } from '$lib/integrations/gmail/owner-accounts';
 
 // Gmail system labels which cannot be added or removed via users.messages.modify.
 // Gmail API rejects requests that try to mutate these.

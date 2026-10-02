@@ -8,7 +8,7 @@ import {
   workflowNodes,
 } from '$lib/db/schema';
 import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
-import { on as onPlatformEvent } from '$lib/workflows/event-bus';
+import { on as onPlatformEvent } from '$lib/workflows-client/event-bus';
 
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'paused']);
 const MAX_DELIVERY_OUTPUT_BYTES = 16_000;

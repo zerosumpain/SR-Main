@@ -9,7 +9,7 @@ vi.mock('./run', () => ({
 vi.mock('$lib/server/models/settings', () => ({ getSetting: vi.fn().mockResolvedValue(null) }));
 
 // slugifyName without pulling the site-tool registry.
-vi.mock('$lib/workflows/site-tools/tools/apis', () => ({
+vi.mock('$lib/tools/tools/apis', () => ({
   slugifyName: (n: string) =>
     String(n).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80),
 }));

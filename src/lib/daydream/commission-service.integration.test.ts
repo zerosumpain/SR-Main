@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm';
 const mock = vi.hoisted(() => ({ read: vi.fn(), runtime: vi.fn() }));
 vi.mock('$env/dynamic/private', () => ({ env: process.env }));
 vi.mock('./think/tools', () => ({ PRIVATE_TOOLS: ['spend'], createToolbox: () => ({ call: mock.read }) }));
-vi.mock('$lib/workflows/runtime-client', () => ({ invokeWorkflowRuntime: mock.runtime }));
+vi.mock('$lib/workflows-client/runtime-client', () => ({ invokeWorkflowRuntime: mock.runtime }));
 vi.mock('$lib/server/notify/push-dispatch', () => ({ kickPushDispatch: vi.fn() }));
 vi.mock('$lib/events/platform-bus', () => ({ emit: vi.fn() }));
 import { db } from '$lib/db';

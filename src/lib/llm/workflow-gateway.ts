@@ -17,7 +17,7 @@
 
 import type OpenAI from 'openai';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
-import { resolveLLMClient } from '$lib/workflows/nodes/llm-helpers';
+import { resolveLLMClient } from '$lib/llm/workflow-node-client';
 import { getLLMClient } from '$lib/llm/client';
 import { getFallbackModel } from '$lib/llm/keys';
 import {

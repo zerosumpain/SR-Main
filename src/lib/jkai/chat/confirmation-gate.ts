@@ -1,0 +1,109 @@
+import { publishJobEvent, createWaiter } from './job-store';
+import { isDestructiveTool } from '$lib/tools/executor';
+import { notifyGate } from './gate-notify';
+
+/**
+ * Whether a tool must ask the user before running. Single source of truth is
+ * the `destructive` flag on each ToolDefinition (registry-internal.ts) — set
+ * it on the tool, not in a list here. The MCP layer surfaces the same flag to
+ * a client as `annotations.destructiveHint`.
+ */
+export async function isDestructive(toolName: string): Promise<boolean> {
+  // Through the executor seam, not the registry directly. The dynamic load is
+  // still what keeps the 52 tool modules off this gate's static import path —
+  // `executor.ts` does it — and going through there means this gate keeps
+  // working when the catalogue moves to another process. Reading the registry
+  // from here was the second reader that would have been left behind, and the
+  // failure is silent: every tool reports not-destructive and the confirmation
+  // card stops appearing.
+  return isDestructiveTool(toolName);
+}
+
+/**
+ * Render the arguments of an un-described tool into something a human can
+ * actually approve.
+ *
+ * The switch below is hand-maintained, so any destructive tool nobody added a
+ * case for used to fall through to a bare "Proceed with <name>?" — a consent
+ * prompt with no consent in it. `request_change` did exactly that: it asked
+ * permission to open a public GitHub issue and spend model budget while showing
+ * neither the title nor the request (reported 2026-08-07).
+ */
+function summariseArgs(args: Record<string, unknown>): string {
+  const parts: string[] = [];
+  for (const [key, value] of Object.entries(args ?? {})) {
+    if (value === undefined || value === null || value === '') continue;
+    if (key === 'workflow_id' || key === 'workflowId') continue; // routing, not intent
+    let rendered: string;
+    if (typeof value === 'string') rendered = value;
+    else if (typeof value === 'number' || typeof value === 'boolean') rendered = String(value);
+    else if (Array.isArray(value)) rendered = value.map((v) => String(v)).join(', ');
+    else continue; // nested objects add noise, not clarity
+    rendered = rendered.replace(/\s+/g, ' ').trim();
+    if (!rendered) continue;
+    if (rendered.length > 160) rendered = `${rendered.slice(0, 159)}…`;
+    parts.push(`${key}: ${rendered}`);
+    if (parts.length === 4) break;
+  }
+  return parts.join('\n');
+}
+
+/** Short user-facing description of what the tool is about to do. */
+export function describeDestructiveAction(toolName: string, args: Record<string, unknown>): string {
+  switch (toolName) {
+    case 'request_change':           return `Open a GitHub issue and start an autonomous build for "${(args.title as string) ?? 'untitled'}"? It will branch, implement, run the gate and open a PR.`;
+    case 'workflow_delete':          return `Delete workflow "${(args.name as string) ?? args.workflowId ?? 'unknown'}"? This cannot be undone.`;
+    case 'workflow_clear_data_store': return `Clear the data store for workflow "${args.workflowId ?? 'unknown'}"? Stored keys will be wiped.`;
+    case 'datastore_delete':          return `Delete datastore record ${args.id ? `"${args.id}"` : `key "${args.key ?? 'unknown'}"`} from collection "${args.collection ?? 'unknown'}"? This cannot be undone.`;
+    // `id` first: both tools take `id`, not `buildId`, so every one of these
+    // prompts used to read "unknown" — a consent prompt naming nothing.
+    case 'build_delete':             return `Delete build "${args.id ?? args.buildId ?? 'unknown'}"? This cannot be undone.`;
+    case 'build_control':            return args.action === 'publish' ? `Publish build "${args.id ?? args.buildId ?? 'unknown'}" to ${args.slug ? `/projects/${args.slug}/` : 'a public /projects page'}?` : `Run ${String(args.action ?? 'action')} on build "${args.id ?? args.buildId ?? 'unknown'}"?`;
+    case 'publish_page':             return `Publish page "${(args.slug as string) ?? 'unknown'}" to the public site?`;
+    case 'gmail_send':               return `Send email to ${(args.to as string) ?? 'unknown recipient'}?`;
+    case 'gmail_reply':              return `Send reply on thread ${args.threadId ?? 'unknown'}?`;
+    case 'apple_calendar_create':    return `Create calendar event "${args.title ?? 'untitled'}" on ${args.calendar ?? 'the selected calendar'} (${args.allDayStart ?? args.start ?? 'unknown start'} to ${args.allDayEnd ?? args.end ?? 'unknown end'})?`;
+    case 'apple_calendar_update':    return `Update calendar event "${args.eventId ?? 'unknown'}" on ${args.calendar ?? 'the selected calendar'}?`;
+    case 'apple_calendar_delete':    return `Delete calendar event "${args.eventId ?? 'unknown'}" from ${args.calendar ?? 'the selected calendar'}? This cannot be undone.`;
+    case 'whatsapp_send':            return `Send WhatsApp message to ${(args.to as string) ?? 'default contact'}?`;
+    default: {
+      // No hand-written case: show the arguments rather than nothing, so the
+      // prompt still says what is about to happen.
+      const summary = summariseArgs(args);
+      return summary
+        ? `Proceed with ${toolName}?\n${summary}`
+        : `Proceed with ${toolName}? (no arguments)`;
+    }
+  }
+}
+
+/**
+ * Emit a confirm event and await the user's decision. Returns true on
+ * approval, false on rejection. Rejects (throws) if the job is cancelled
+ * while the waiter is pending.
+ */
+export async function requireConfirmation(
+  jobId: string,
+  prompt: string,
+  details: Record<string, unknown>,
+  opts: { destructive?: boolean } = {},
+): Promise<boolean> {
+  const confirmId = crypto.randomUUID();
+  publishJobEvent(jobId, {
+    type: 'confirm',
+    confirmId,
+    prompt,
+    destructive: opts.destructive ?? true,
+    details,
+  });
+  // No gate ids: the phone answers a gate by PATCHing SR-Jkai-Core, and a turn
+  // running here (the WhatsApp worker) is not a job Core can find. A plain
+  // alert that opens the chat, owner turns only.
+  notifyGate(jobId, { title: 'Confirmation needed', body: prompt }, null);
+  const { awaitResponse } = createWaiter<{ decision: 'approved' | 'rejected' }>(
+    jobId,
+    `confirm:${confirmId}`,
+  );
+  const res = await awaitResponse();
+  return res.decision === 'approved';
+}

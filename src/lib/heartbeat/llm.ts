@@ -7,7 +7,7 @@ import { resolveHeartbeatModel } from '$lib/server/models/workload-settings';
 import { withActivity } from '$lib/context/activity';
 import { coerceModelContext } from '$lib/constants/default-models';
 import type { ModelContext } from '$lib/server/models/types';
-import { notifySubscribers } from '$lib/workflows/chat/followup-queue';
+import { notifySubscribers } from '$lib/jkai/chat/followup-queue';
 import { normaliseConversationId } from '$lib/jkai/conversation-id';
 import { assertOwnerThread } from '$lib/jkai/owner-threads';
 
@@ -123,7 +123,7 @@ async function heartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<HeartbeatTurnR
   // act on what was asked. (Formerly a single 'system' toolset.)
   let toolDefs: Array<{ type: 'function'; function: { name: string; description: string; parameters: unknown } }> | undefined;
   if (opts.toolsEnabled) {
-    const { getToolsetDefinitions } = await import('$lib/workflows/site-tools/llm-tools');
+    const { getToolsetDefinitions } = await import('$lib/tools/llm-tools');
     toolDefs = [
       ...(await getToolsetDefinitions('followups')),
       ...(await getToolsetDefinitions('heartbeat')),
@@ -150,7 +150,7 @@ async function heartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<HeartbeatTurnR
     maxTokens: opts.maxTokens ?? 600,
     forceFinal: false,
     execute: async (tc) => {
-      const { executeSiteTool, isRegisteredTool } = await import('$lib/workflows/site-tools/executor');
+      const { executeSiteTool, isRegisteredTool } = await import('$lib/tools/executor');
       let result: unknown = { error: 'tool not registered' };
       if (await isRegisteredTool(tc.name)) {
         result = await executeSiteTool(tc.name, tc.args, { emit: () => {}, conversationId: conversationId });

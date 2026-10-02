@@ -11,7 +11,7 @@ let primaryModel = 'z-ai/glm-5.2';
 let fallbackModel = 'google/gemini-3.1-flash-lite-preview';
 let fallbackAvailable = true;
 
-vi.mock('$lib/workflows/nodes/llm-helpers', () => ({
+vi.mock('$lib/llm/workflow-node-client', () => ({
   resolveLLMClient: vi.fn(async () => ({
     client: { chat: { completions: { create: mockPrimaryCreate } } },
     model: primaryModel,

@@ -2,7 +2,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { fail } from '@sveltejs/kit';
 import { probeAll } from '$lib/connectors/probes';
 import { needsResync, sortReports } from '$lib/connectors/types';
-import { ownerGmailWhere } from '$lib/workflows/gmail/owner-accounts';
+import { ownerGmailWhere } from '$lib/integrations/gmail/owner-accounts';
 
 // Owner-gated by hooks. Every row is probed live on load — the point of this
 // page is that it never repeats a stored status column back at you.
@@ -78,7 +78,7 @@ export const actions: Actions = {
     if (!acct) return fail(404, { ok: false, key, error: 'account not found' });
 
     try {
-      const { gmailService } = await import('$lib/workflows/gmail/service');
+      const { gmailService } = await import('$lib/integrations/gmail/service');
       const ids = await gmailService.listMessages(acct, 'newer_than:1d', 5);
       return done(key, `read ${ids.length} message${ids.length === 1 ? '' : 's'} from the last day`);
     } catch (err) {

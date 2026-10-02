@@ -1,6 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { listIntegrationsForPicker } from '$lib/apis/integrations';
-import { listCatalogApis } from '$lib/workflows/site-tools/tools/apis';
+import { listCatalogApis } from '$lib/tools/tools/apis';
 import { listRefSources, listSecrets } from '$lib/secrets/registry';
 import { CREDENTIAL_REQUEST_SPECS } from '$lib/secrets/credential-requests';
 

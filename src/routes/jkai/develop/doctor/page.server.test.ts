@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const h = vi.hoisted(() => ({ owner: true, fail: false }));
 
 vi.mock('$lib/server/owner', () => ({ isOwnerRequest: vi.fn(async () => h.owner) }));
-vi.mock('$lib/workflows/doctor-client', () => ({
+vi.mock('$lib/workflows-client/doctor-client', () => ({
   doctorOverview: vi.fn(async () => {
     if (h.fail) throw new Error('Workflows runtime unavailable');
     return {

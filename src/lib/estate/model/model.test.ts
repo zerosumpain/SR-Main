@@ -11,7 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import { assembleEstateModel } from './assemble.server';
 import registry from '../registry/apps.generated.json';
-import { EXTRACTED_TRIGGERS } from '$lib/workflows/trigger-ownership';
+import { EXTRACTED_TRIGGERS } from '$lib/workflows-client/trigger-ownership';
 
 const model = await assembleEstateModel();
 

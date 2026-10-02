@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { actOnDoctorFinding } from '$lib/workflows/doctor-client';
+import { actOnDoctorFinding } from '$lib/workflows-client/doctor-client';
 
 // Owner-only (enforced in hooks.server.ts for /api/admin/*). A verdict
 // (`accept` / `dismiss`, both sticky) or an undo (`revert`) on one doctor

@@ -231,8 +231,8 @@ export async function repairTools(budget: Budget, runId: string): Promise<RunAct
 
   const contextText = renderContext(await buildContextPack());
 
-  const { register, unregister } = await import('$lib/workflows/site-tools/registry-internal');
-  const { buildHandler } = await import('$lib/workflows/site-tools/custom-tool-loader');
+  const { register, unregister } = await import('$lib/tools/registry-internal');
+  const { buildHandler } = await import('$lib/tools/custom-tool-loader');
 
   for (const tool of targets) {
     if (budget.timeLeftMs() < WORK_CAPS.reserveWallMs) break;

@@ -10,7 +10,7 @@ vi.mock('$lib/db', () => ({
   },
 }));
 vi.mock('$lib/jkai/forge', () => ({ createForgeBuild: h.create }));
-vi.mock('$lib/workflows/leader-lock', () => ({ tryAdvisoryLock: h.lock, FORGE_SCHEDULER_LOCK_LANE: 'jkai:forge-scheduler' }));
+vi.mock('$lib/server/leader-lock', () => ({ tryAdvisoryLock: h.lock, FORGE_SCHEDULER_LOCK_LANE: 'jkai:forge-scheduler' }));
 
 import { AUTONOMOUS_PROMPT, cronFiredBetween, runForgeSchedules } from './forge-scheduler';
 import { forgeSchedulesActivity, forgeWindow, resetForgeWatermark } from '$lib/heartbeat/activities/forge-schedules';

@@ -6,7 +6,7 @@
 // probe says so via `live: false` rather than implying it verified something.
 import { whatsappBridgeUrl } from '$lib/config/whatsapp-bridge';
 import type { ConnectorReport, ConnectorStatus, ConnectorTier } from './types';
-import { ownerGmailWhere } from '$lib/workflows/gmail/owner-accounts';
+import { ownerGmailWhere } from '$lib/integrations/gmail/owner-accounts';
 
 const TIMEOUT_MS = 8000;
 
@@ -79,7 +79,7 @@ async function probeGmail(): Promise<ConnectorReport[]> {
   return Promise.all(
     accounts.map((acc) =>
       guard(`gmail:${acc.id}`, `Gmail · ${acc.email}`, 'Email', 'account', async () => {
-        const { gmailService } = await import('$lib/workflows/gmail/service');
+        const { gmailService } = await import('$lib/integrations/gmail/service');
         // Re-authorising is a consent redirect, so it has to be a real
         // navigation rather than a form post.
         const reconnect = {

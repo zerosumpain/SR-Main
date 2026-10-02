@@ -22,7 +22,7 @@
 // the metric unattributable, and an unattributable metric cannot roll anything
 // back.
 
-import { getTools, getToolsetManifest } from '$lib/workflows/site-tools/registry';
+import { getTools, getToolsetManifest } from '$lib/tools/registry';
 import {
   getActivePolicy,
   listPolicyVersions,

@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { customTools } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { unregister } from '$lib/workflows/site-tools/registry-internal';
+import { unregister } from '$lib/tools/registry-internal';
 
 export const DELETE: RequestHandler = async ({ params }) => {
   const name = params.name;

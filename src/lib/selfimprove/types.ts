@@ -673,7 +673,7 @@ export type ApiAuth =
    * allowlisted env var on the server; this needs no code change per credential.
    *
    * This union is NOT the one `resolveApiAuth` in
-   * `$lib/workflows/site-tools/tools/apis.ts` switches on — that is a separate
+   * `$lib/tools/tools/apis.ts` switches on — that is a separate
    * declaration of the same shape. Adding a kind here that it does not
    * implement produces an entry whose credential is silently never attached, so
    * anything new must be added in BOTH places.

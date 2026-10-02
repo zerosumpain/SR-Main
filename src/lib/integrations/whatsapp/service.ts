@@ -1,0 +1,503 @@
+import makeWASocket, {
+	fetchLatestBaileysVersion,
+	fetchLatestWaWebVersion,
+	makeCacheableSignalKeyStore,
+	DisconnectReason,
+	downloadMediaMessage
+} from '@whiskeysockets/baileys';
+import { Boom } from '@hapi/boom';
+import { mkdirSync, renameSync } from 'fs';
+import { useAtomicMultiFileAuthState } from './auth-state';
+import { readBuffer } from '$lib/jkai/media/storage';
+import type { JkaiAttachment } from '$lib/db/schema';
+import { whatsappBridgeUrl } from '$lib/config/whatsapp-bridge';
+import { ownsWhatsAppSession } from '$lib/server/service-role';
+import type {
+	WhatsAppServiceStatus,
+	WhatsAppServiceState,
+	WhatsAppInboundMessage,
+	WhatsAppSendResult
+} from './types';
+
+type MessageHandler = (msg: WhatsAppInboundMessage) => void;
+
+export class WhatsAppService {
+	private sock: ReturnType<typeof makeWASocket> | null = null;
+	private status: WhatsAppServiceStatus = 'disconnected';
+	private qrCode: string | null = null;
+	private connectedNumber: string | null = null;
+	private allowedNumbers: Set<string> = new Set();
+	private messageHandler: MessageHandler | null = null;
+	private reconnectAttempts = 0;
+	private maxReconnectAttempts = 5;
+	private saveCreds: (() => Promise<void>) | null = null;
+	private credsWriteQueue: Promise<void> = Promise.resolve();
+
+	// Delegated mode: when a bridge URL is set we don't run our own Baileys
+	// client (which would fight the owning process for the paired session and
+	// loop on failed QR-pair attempts). Instead, every outbound send POSTs to
+	// the bridge's HTTP API, and inbound is relayed back to us.
+	//
+	// A WhatsApp worker deployed beside the web app reads the SAME
+	// EnvironmentFile, so reading this variable alone would make it see a
+	// bridge URL and forward its sends — to itself. The process that OWNS the
+	// session is never delegated, whatever the environment says.
+	private bridgeUrl: string | null =
+		typeof process !== 'undefined' && !ownsWhatsAppSession() ? whatsappBridgeUrl() : null;
+	private get delegated(): boolean { return this.bridgeUrl !== null; }
+
+	getState(): WhatsAppServiceState {
+		return {
+			status: this.status,
+			qrCode: this.qrCode,
+			connectedNumber: this.connectedNumber
+		};
+	}
+
+	setAllowedNumbers(numbers: string[]): void {
+		this.allowedNumbers = new Set(numbers.map((n) => n.replace(/^\+/, '')));
+	}
+
+	isAllowed(number: string): boolean {
+		if (this.allowedNumbers.size === 0) return true;
+		const normalized = number.replace(/^\+/, '');
+		return this.allowedNumbers.has(normalized);
+	}
+
+	onMessage(handler: MessageHandler): void {
+		this.messageHandler = handler;
+	}
+
+	toJid(phoneNumber: string): string {
+		// Strip every non-digit so panel-formatted numbers (e.g. "+44 7359228511",
+		// "+44 (0) 7359 228511", "+44-7359-228511") all collapse to the
+		// digits-only form Baileys/WhatsApp expects. Leaving a space in here
+		// produces an invalid JID — the server silently drops the send and
+		// Baileys logs "timed out waiting for message".
+		const cleaned = phoneNumber.replace(/\D+/g, '');
+		return `${cleaned}@s.whatsapp.net`;
+	}
+
+	fromJid(jid: string): string {
+		return jid.split('@')[0].split(':')[0];
+	}
+
+	async connect(authDir: string): Promise<void> {
+		if (this.status === 'connected' || this.status === 'connecting') return;
+
+		// Delegated mode: don't pair our own Baileys. Probe the bridge once to
+		// surface a connected/disconnected status correctly; outbound sends
+		// will hit /send on every call regardless.
+		if (this.delegated) {
+			try {
+				const res = await fetch(`${this.bridgeUrl}/health`, { signal: AbortSignal.timeout(3000) });
+				// The worker answers 200 while LOGGED OUT, so res.ok alone reported a
+				// dead session as connected and the send path believed it could send
+				// while /admin/connections correctly said "scan a QR". The session
+				// state is in the body, not the status line — same read as
+				// $lib/connectors/probes.ts, which found this first.
+				const health = (await res.json().catch(() => null)) as { status?: string } | null;
+				this.status = res.ok && health?.status === 'connected' ? 'connected' : 'disconnected';
+			} catch {
+				// Bridge unreachable at boot is fine — it may still be coming up.
+				// Sends will fail per-call with a clear error until it is live.
+				this.status = 'disconnected';
+			}
+			this.qrCode = null;
+			return;
+		}
+
+		this.status = 'connecting';
+		this.qrCode = null;
+
+		mkdirSync(authDir, { recursive: true });
+
+		const { state, saveCreds } = await useAtomicMultiFileAuthState(authDir);
+		this.saveCreds = saveCreds;
+		const pairedAtConnect = Boolean(state.creds.registered || state.creds.me);
+
+		// Baileys' own version file lags WhatsApp Web by months, and WhatsApp
+		// refuses to link a client that old ("can't link new devices right
+		// now"). Ask web.whatsapp.com first; the Baileys file is the fallback.
+		const web = await fetchLatestWaWebVersion().catch(() => null);
+		const { version } = web?.isLatest ? web : await fetchLatestBaileysVersion();
+		console.log(`[whatsapp] Using WA Web version ${version.join('.')}`);
+
+		this.sock = makeWASocket({
+			auth: {
+				creds: state.creds,
+				keys: makeCacheableSignalKeyStore(state.keys, undefined as any)
+			},
+			version,
+			printQRInTerminal: false,
+			browser: ['strange-rambling', 'workflows', '1.0'],
+			syncFullHistory: false,
+			markOnlineOnConnect: true
+		});
+
+		this.sock.ev.on('creds.update', () => {
+			this.credsWriteQueue = this.credsWriteQueue.then(async () => {
+				try {
+					// Atomic and written 0600 — see ./auth-state.
+					await this.saveCreds?.();
+				} catch (err) {
+					console.error('[whatsapp] Failed to save credentials:', err);
+				}
+			});
+		});
+
+		this.sock.ev.on('connection.update', (update: any) => {
+			const { connection, lastDisconnect, qr } = update;
+
+			if (qr) {
+				this.status = 'qr_pending';
+				this.qrCode = qr;
+			}
+
+			if (connection === 'open') {
+				this.status = 'connected';
+				this.qrCode = null;
+				this.reconnectAttempts = 0;
+				const rawId = this.sock?.user?.id;
+				this.connectedNumber = rawId ? this.fromJid(rawId) : null;
+				console.log(`[whatsapp] Connected as ${this.connectedNumber}`);
+				// Show as online
+				this.sock?.sendPresenceUpdate('available').catch(() => {});
+			}
+
+			if (connection === 'close') {
+				const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+				const isLoggedOut = statusCode === DisconnectReason.loggedOut;
+
+				// Always mark as disconnected so reconnect guard doesn't block
+				this.status = 'disconnected';
+				this.connectedNumber = null;
+				this.qrCode = null; // a dead socket's QR can never be scanned
+				this.sock = null;
+
+				if (isLoggedOut) {
+					// The creds belong to a device WhatsApp has removed; they will 401
+					// forever. Archive them (never delete) and offer a fresh QR.
+					const archived = `${authDir}-loggedout-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+					try {
+						renameSync(authDir, archived);
+						console.log(`[whatsapp] Logged out — session archived to ${archived}, offering a new QR`);
+					} catch (err) {
+						console.error('[whatsapp] Logged out — could not archive session:', err);
+						return;
+					}
+					this.reconnectAttempts = 0;
+					setTimeout(() => this.connect(authDir), 2000);
+				} else if (statusCode === DisconnectReason.restartRequired) {
+					// WhatsApp asks for exactly this right after a QR is scanned. It is
+					// the second half of pairing, not a failure, so it must never be
+					// refused by the attempt budget — that stranded a successful scan.
+					console.log('[whatsapp] Restart required (pairing step) — reconnecting');
+					setTimeout(() => this.connect(authDir), 500);
+				} else if (!pairedAtConnect) {
+					// Unpaired: the only "failure" is a QR nobody scanned yet. Keep
+					// offering codes indefinitely so /admin/connections/whatsapp always
+					// has one, instead of going dark after ~15 minutes.
+					setTimeout(() => this.connect(authDir), 5000);
+				} else if (this.reconnectAttempts < this.maxReconnectAttempts) {
+					this.reconnectAttempts++;
+					const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+					console.log(
+						`[whatsapp] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`
+					);
+					setTimeout(() => this.connect(authDir), delay);
+				} else {
+					console.log('[whatsapp] Max reconnect attempts reached');
+				}
+			}
+		});
+
+		this.sock.ev.on('messages.upsert', async (upsert: any) => {
+			if (!this.messageHandler) return;
+			const { messages } = upsert;
+
+			for (const msg of messages) {
+				if (!msg.message || msg.key.fromMe) continue;
+
+				const content = msg.message;
+
+				// Extract text from standard text messages
+				const plainText =
+					content.conversation || content.extendedTextMessage?.text || '';
+
+				// Detect media messages
+				let mediaKind: 'image' | 'audio' | 'video' | 'document' | undefined;
+				let mediaMimeType: string | undefined;
+				let mediaFilename: string | undefined;
+				let mediaBuffer: Buffer | undefined;
+				let mediaDuration: number | undefined;
+				let caption = '';
+
+				if (content.imageMessage) {
+					mediaKind = 'image';
+					mediaMimeType = content.imageMessage.mimetype ?? 'image/jpeg';
+					caption = content.imageMessage.caption ?? '';
+				} else if (content.audioMessage) {
+					mediaKind = 'audio';
+					mediaMimeType = content.audioMessage.mimetype ?? 'audio/ogg';
+					mediaDuration = content.audioMessage.seconds ?? undefined;
+				} else if (content.videoMessage) {
+					mediaKind = 'video';
+					mediaMimeType = content.videoMessage.mimetype ?? 'video/mp4';
+					mediaDuration = content.videoMessage.seconds ?? undefined;
+					caption = content.videoMessage.caption ?? '';
+				} else if (content.documentMessage) {
+					mediaKind = 'document';
+					mediaMimeType = content.documentMessage.mimetype ?? 'application/octet-stream';
+					mediaFilename = content.documentMessage.fileName ?? undefined;
+					caption = content.documentMessage.caption ?? '';
+				}
+
+				// Use caption as text for media messages, otherwise use plain text
+				const text = caption || plainText;
+
+				// Skip messages with no text and no media
+				if (!text && !mediaKind) continue;
+
+				// Download media bytes if present
+				if (mediaKind) {
+					try {
+						const stream = await downloadMediaMessage(msg, 'buffer', {}, {
+							logger: undefined as any,
+							reuploadRequest: this.sock!.updateMediaMessage,
+						});
+						mediaBuffer = stream as Buffer;
+					} catch (err) {
+						console.warn('[whatsapp] media download failed:', err);
+					}
+				}
+
+				const remoteJid = msg.key.remoteJid || '';
+				const isGroup = remoteJid.endsWith('@g.us');
+				const isLid = remoteJid.endsWith('@lid');
+
+				if (isGroup) continue; // Skip group messages for now
+
+				// For LID JIDs (newer WhatsApp format), try to get phone from participant or notify
+				let from: string;
+				if (isLid) {
+					// LID JIDs don't contain the phone number directly.
+					// Use participant if available, otherwise use pushName/notify for logging
+					const participant = msg.key.participant;
+					if (participant && participant.includes('@s.whatsapp.net')) {
+						from = this.fromJid(participant);
+					} else {
+						// Accept LID messages — we can't resolve to phone but they're direct messages
+						from = this.fromJid(remoteJid);
+						console.log(`[whatsapp] LID message from ${from} (pushName: ${msg.pushName || 'unknown'})`);
+					}
+				} else {
+					from = this.fromJid(remoteJid);
+				}
+
+				if (!isLid && !this.isAllowed(from)) {
+					console.log(`[whatsapp] Blocked message from unapproved number: ${from}`);
+					continue;
+				}
+
+				this.messageHandler({
+					from,
+					replyJid: isLid ? remoteJid : undefined,
+					text,
+					timestamp: msg.messageTimestamp as number,
+					messageId: msg.key.id || '',
+					isGroup,
+					groupId: isGroup ? remoteJid : undefined,
+					mediaKind,
+					mediaMimeType,
+					mediaFilename,
+					mediaBuffer,
+					mediaDuration,
+				});
+			}
+		});
+	}
+
+	async disconnect(): Promise<void> {
+		if (this.sock) {
+			this.sock.end(undefined);
+			this.sock = null;
+		}
+		this.status = 'disconnected';
+		this.qrCode = null;
+		this.connectedNumber = null;
+		this.reconnectAttempts = 0;
+	}
+
+	async sendTyping(to: string): Promise<void> {
+		const jid = to.includes('@') ? to : this.toJid(to);
+		if (this.delegated) {
+			try {
+				await fetch(`${this.bridgeUrl}/typing`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ chatId: jid }),
+					signal: AbortSignal.timeout(3000),
+				});
+			} catch {}
+			return;
+		}
+		if (!this.sock || this.status !== 'connected') return;
+		try {
+			await this.sock.sendPresenceUpdate('composing', jid);
+		} catch {}
+	}
+
+	async sendTypingDone(to: string): Promise<void> {
+		// The bridge has no explicit "stop typing" endpoint; presence
+		// resets on its own. No-op in delegated mode.
+		if (this.delegated) return;
+		if (!this.sock || this.status !== 'connected') return;
+		try {
+			const jid = to.includes('@') ? to : this.toJid(to);
+			await this.sock.sendPresenceUpdate('paused', jid);
+		} catch {}
+	}
+
+	async sendMessage(to: string, text: string): Promise<WhatsAppSendResult> {
+		const jid = to.includes('@') ? to : this.toJid(to);
+
+		if (this.delegated) {
+			try {
+				const res = await fetch(`${this.bridgeUrl}/send`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ chatId: jid, message: text }),
+					signal: AbortSignal.timeout(15_000),
+				});
+				if (!res.ok) {
+					const body = await res.text().catch(() => '');
+					return { sent: false, error: `WhatsApp bridge /send returned ${res.status}: ${body.slice(0, 200)}` };
+				}
+				const json = (await res.json().catch(() => ({}))) as { messageId?: string; id?: string };
+				return { sent: true, messageId: json.messageId ?? json.id };
+			} catch (err: unknown) {
+				const msg = err instanceof Error ? err.message : 'Unknown error';
+				return { sent: false, error: `WhatsApp bridge unreachable: ${msg}` };
+			}
+		}
+
+		if (!this.sock || this.status !== 'connected') {
+			return { sent: false, error: 'WhatsApp not connected' };
+		}
+
+		try {
+			const result = await this.sock.sendMessage(jid, { text });
+			return { sent: true, messageId: result?.key?.id || undefined };
+		} catch (err: unknown) {
+			const message = err instanceof Error ? err.message : 'Unknown error';
+			console.error('[whatsapp] Send failed:', message);
+			return { sent: false, error: message };
+		}
+	}
+
+	async sendImage(to: string, att: JkaiAttachment, caption?: string): Promise<WhatsAppSendResult> {
+		if (!this.sock || this.status !== 'connected') return { sent: false, error: 'WhatsApp not connected' };
+		try {
+			const jid = to.includes('@') ? to : this.toJid(to);
+			const buf = await readBuffer(att.diskPath);
+			const result = await this.sock.sendMessage(jid, {
+				image: buf, mimetype: att.mimeType, caption: caption ?? undefined,
+			});
+			return { sent: true, messageId: result?.key?.id || undefined };
+		} catch (err: unknown) {
+			return { sent: false, error: err instanceof Error ? err.message : 'Unknown error' };
+		}
+	}
+
+	async sendAudio(to: string, att: JkaiAttachment): Promise<WhatsAppSendResult> {
+		if (!this.sock || this.status !== 'connected') return { sent: false, error: 'WhatsApp not connected' };
+		try {
+			const jid = to.includes('@') ? to : this.toJid(to);
+			const buf = await readBuffer(att.diskPath);
+			const result = await this.sock.sendMessage(jid, {
+				audio: buf, mimetype: att.mimeType, ptt: true,
+			});
+			return { sent: true, messageId: result?.key?.id || undefined };
+		} catch (err: unknown) {
+			return { sent: false, error: err instanceof Error ? err.message : 'Unknown error' };
+		}
+	}
+
+	async sendDocument(to: string, att: JkaiAttachment, caption?: string): Promise<WhatsAppSendResult> {
+		if (!this.sock || this.status !== 'connected') return { sent: false, error: 'WhatsApp not connected' };
+		try {
+			const jid = to.includes('@') ? to : this.toJid(to);
+			const buf = await readBuffer(att.diskPath);
+			const result = await this.sock.sendMessage(jid, {
+				document: buf, mimetype: att.mimeType,
+				fileName: att.originalName ?? 'document',
+				caption: caption ?? undefined,
+			});
+			return { sent: true, messageId: result?.key?.id || undefined };
+		} catch (err: unknown) {
+			return { sent: false, error: err instanceof Error ? err.message : 'Unknown error' };
+		}
+	}
+
+	async sendAttachment(to: string, att: JkaiAttachment, caption?: string): Promise<WhatsAppSendResult> {
+		// Delegated mode: route every attachment through the bridge's
+		// /send-media endpoint, which takes a filePath the bridge will read
+		// directly. Works for both processes on homeserv because they share
+		// the same user + filesystem.
+		if (this.delegated) {
+			const jid = to.includes('@') ? to : this.toJid(to);
+			const mediaType =
+				att.kind === 'image' ? 'image' :
+				att.kind === 'audio' ? 'audio' :
+				att.kind === 'video' ? 'video' : 'document';
+			try {
+				const res = await fetch(`${this.bridgeUrl}/send-media`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						chatId: jid,
+						filePath: att.diskPath,
+						mediaType,
+						caption: caption ?? undefined,
+						fileName: att.originalName ?? undefined,
+					}),
+					signal: AbortSignal.timeout(60_000),
+				});
+				if (!res.ok) {
+					const body = await res.text().catch(() => '');
+					return { sent: false, error: `WhatsApp bridge /send-media returned ${res.status}: ${body.slice(0, 200)}` };
+				}
+				const json = (await res.json().catch(() => ({}))) as { messageId?: string; id?: string };
+				return { sent: true, messageId: json.messageId ?? json.id };
+			} catch (err: unknown) {
+				const msg = err instanceof Error ? err.message : 'Unknown error';
+				return { sent: false, error: `WhatsApp bridge unreachable: ${msg}` };
+			}
+		}
+		if (att.kind === 'image') return this.sendImage(to, att, caption);
+		if (att.kind === 'audio') return this.sendAudio(to, att);
+		if (att.kind === 'video') {
+			if (!this.sock || this.status !== 'connected') return { sent: false, error: 'WhatsApp not connected' };
+			try {
+				const jid = to.includes('@') ? to : this.toJid(to);
+				const buf = await readBuffer(att.diskPath);
+				const result = await this.sock.sendMessage(jid, { video: buf, mimetype: att.mimeType, caption });
+				return { sent: true, messageId: result?.key?.id || undefined };
+			} catch (err: unknown) {
+				return { sent: false, error: err instanceof Error ? err.message : 'Unknown error' };
+			}
+		}
+		return this.sendDocument(to, att, caption);
+	}
+}
+
+// Singleton instance
+let _instance: WhatsAppService | null = null;
+
+export function getWhatsAppService(): WhatsAppService {
+	if (!_instance) {
+		_instance = new WhatsAppService();
+	}
+	return _instance;
+}

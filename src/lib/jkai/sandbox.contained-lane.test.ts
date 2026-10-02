@@ -23,9 +23,8 @@ const ROOT = join(process.cwd(), 'src');
 /** Call sites that run code or paths they did not author. */
 const UNTRUSTED_CALL_SITES = [
   'routes/api/scraper/profiles/+server.ts',
-  'lib/workflows/scraper/runner.ts',
-  'lib/workflows/scraper/interactive.ts',
-  'lib/workflows/scraper/agent-harness.ts',
+  'lib/scraper/runner.ts',
+  'lib/scraper/interactive.ts',
 ];
 
 /** Primitives that honour JKAI_BUILDS_HOSTMODE and may hit the host shell. */

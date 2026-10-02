@@ -10,7 +10,7 @@ import { env } from '$env/dynamic/private';
  * those local would fail loudly for the first and SILENTLY for the second.
  */
 
-vi.mock('$lib/workflows/site-tools/load-registry', () => ({
+vi.mock('$lib/tools/load-registry', () => ({
   loadToolRegistry: async () => ({
     getTools: () => [
       { name: 'site_blog_list', destructive: false, description: 'list posts', parameters: { type: 'object', properties: {} }, toolset: 'blog', category: 'content' },

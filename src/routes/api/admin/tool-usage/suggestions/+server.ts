@@ -2,7 +2,7 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { clampDays } from '$lib/selfimprove/call-efficiency';
 import { getToolAudit } from '$lib/server/tool-audit';
-import { getTools } from '$lib/workflows/site-tools/registry';
+import { getTools } from '$lib/tools/registry';
 import { getLLMClient } from '$lib/llm/client';
 import { resolveToolSuggestionsModel } from '$lib/server/models/workload-settings';
 import { withActivity } from '$lib/context/activity';

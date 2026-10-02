@@ -1,0 +1,199 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+let tmpRoot: string;
+const inserted: any[] = [];
+
+vi.mock('$lib/db', () => ({
+  db: {
+    insert: () => ({
+      // `.returning()` for the attachment write; `.catch()` because the cost
+      // ledger's fire-and-forget insert awaits nothing and only attaches a
+      // rejection handler (see $lib/llm/usage-log).
+      values: (v: any) => ({
+        returning: async () => { inserted.push(v); return [{ ...v, id: 'att-new', createdAt: new Date() }]; },
+        catch: () => {},
+      }),
+    }),
+    select: () => ({
+      from: () => ({
+        where: async () => [{ count: '0', total: '0' }],
+      }),
+    }),
+  },
+}));
+vi.mock('$lib/db/schema', () => ({ jkaiAttachments: {}, agentActions: {} }));
+vi.mock('$lib/server/models/settings', () => ({
+  getOpenRouterApiKey: async () => 'fake-or-key-for-test',
+  // generate_image resolves its model from the `image-tool` workload now, which
+  // reads app_settings. Unset here, so the registry fallback answers.
+  getSetting: async () => null,
+  setSetting: async () => {},
+  deleteSetting: async () => {},
+  clearSettingsCache: () => {},
+  resolveDefaultModel: async () => ({ provider: 'openrouter', modelId: 'deepseek/deepseek-v4-flash' }),
+}));
+vi.mock('$lib/llm/keys', () => ({
+  loadKeys: vi.fn(() => ({ elevenlabsApiKey: 'test-key' })),
+}));
+
+beforeEach(async () => {
+  tmpRoot = await mkdtemp(join(tmpdir(), 'jkai-tool-test-'));
+  vi.stubEnv('JKAI_MEDIA_ROOT', tmpRoot);
+  inserted.length = 0;
+});
+afterEach(async () => {
+  vi.unstubAllEnvs();
+  await rm(tmpRoot, { recursive: true, force: true });
+});
+
+describe('write_document', () => {
+  it('saves text to disk and returns attachment ref', async () => {
+    const { handleWriteDocument } = await import('$lib/tools/tools/media-write-document');
+    const out = await handleWriteDocument(
+      { filename: 'report.md', content: '# Hello', format: 'markdown' },
+      { conversationId: 'c1', messageId: null },
+    );
+    expect(out.success).toBe(true);
+    expect(out.attachments![0].kind).toBe('text');
+    expect(out.attachments![0].mimeType).toBe('text/markdown');
+    expect(inserted.length).toBe(1);
+  });
+
+  it('rejects filenames with path separators', async () => {
+    const { handleWriteDocument } = await import('$lib/tools/tools/media-write-document');
+    const out = await handleWriteDocument(
+      { filename: '../../etc/passwd', content: 'x' },
+      { conversationId: 'c1', messageId: null },
+    );
+    expect(out.success).toBe(false);
+    expect(out.error).toMatch(/filename/i);
+  });
+
+  it('infers format from extension', async () => {
+    const { handleWriteDocument } = await import('$lib/tools/tools/media-write-document');
+    const out = await handleWriteDocument(
+      { filename: 'data.csv', content: 'a,b\n1,2' },
+      { conversationId: 'c1', messageId: null },
+    );
+    expect(out.success).toBe(true);
+    expect(out.attachments![0].mimeType).toBe('text/csv');
+  });
+});
+
+describe('generate_image', () => {
+  it('calls OpenRouter, saves the image, returns attachment', async () => {
+    const fakePng = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    globalThis.fetch = vi.fn(async (url: RequestInfo | URL) => {
+      const urlStr = typeof url === 'string' ? url : url.toString();
+      if (urlStr.includes('openrouter.ai')) {
+        return new Response(JSON.stringify({
+          data: [{ url: 'https://fake.example/x.png' }],
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      // Image download
+      return new Response(fakePng, { status: 200, headers: { 'content-type': 'image/png' } });
+    }) as any;
+
+    const { handleGenerateImage } = await import('$lib/tools/tools/media-generate-image');
+    const out = await handleGenerateImage(
+      { prompt: 'a cat', aspect_ratio: '1:1', count: 1 },
+      { conversationId: 'c1', messageId: null },
+    );
+    expect(out.success).toBe(true);
+    expect(out.attachments?.[0].kind).toBe('image');
+    expect(inserted.length).toBeGreaterThanOrEqual(1);
+  });
+
+  // The regression test for a bug this suite could not have caught: the mock
+  // above never inspected the REQUEST, so it passed identically whether the
+  // aspect ratio was sent as a parameter or buried in the prompt text. It was
+  // buried in the prompt, the model ignored it, and every image came back
+  // 1024x1024 — the tool's `aspect_ratio` argument had never once worked.
+  it('sends aspect_ratio as a top-level parameter, not inside the prompt', async () => {
+    let sent: Record<string, unknown> | null = null;
+    const fakePng = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    globalThis.fetch = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      const urlStr = typeof url === 'string' ? url : url.toString();
+      if (urlStr.includes('openrouter.ai')) {
+        sent = JSON.parse(String(init?.body ?? '{}'));
+        return new Response(
+          JSON.stringify({ data: [{ b64_json: fakePng.toString('base64'), media_type: 'image/webp' }] }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response(fakePng, { status: 200, headers: { 'content-type': 'image/png' } });
+    }) as any;
+
+    const { handleGenerateImage } = await import('$lib/tools/tools/media-generate-image');
+    const out = await handleGenerateImage(
+      { prompt: 'a cat', aspect_ratio: '16:9', count: 1 },
+      { conversationId: 'c1', messageId: null },
+    );
+
+    expect(out.success).toBe(true);
+    expect(sent).not.toBeNull();
+    expect(sent!.aspect_ratio).toBe('16:9');
+    // The prompt must be the prompt and nothing else — an appended ratio line
+    // is what the model was ignoring.
+    expect(sent!.prompt).toBe('a cat');
+    expect(String(sent!.prompt)).not.toContain('aspect_ratio');
+
+    // And the reported media type is used rather than assuming PNG: a .png
+    // holding webp bytes serves with the wrong Content-Type.
+    expect(out.attachments?.[0].mimeType).toBe('image/webp');
+  });
+
+  it('defaults the aspect ratio rather than omitting it', async () => {
+    let sent: Record<string, unknown> | null = null;
+    const fakePng = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    globalThis.fetch = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      const urlStr = typeof url === 'string' ? url : url.toString();
+      if (urlStr.includes('openrouter.ai')) {
+        sent = JSON.parse(String(init?.body ?? '{}'));
+        return new Response(JSON.stringify({ data: [{ b64_json: fakePng.toString('base64') }] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(fakePng, { status: 200, headers: { 'content-type': 'image/png' } });
+    }) as any;
+
+    const { handleGenerateImage } = await import('$lib/tools/tools/media-generate-image');
+    await handleGenerateImage({ prompt: 'a cat' }, { conversationId: 'c1', messageId: null });
+    expect(sent!.aspect_ratio).toBe('1:1');
+  });
+});
+
+describe('generate_audio_tts', () => {
+  it('calls ElevenLabs and saves MP3', async () => {
+    const fakeAudio = Buffer.from([0xff, 0xfb, 0x90, 0x00]); // fake MP3 header
+    globalThis.fetch = vi.fn(async () => {
+      return new Response(fakeAudio, {
+        status: 200,
+        headers: { 'content-type': 'audio/mpeg' },
+      });
+    }) as any;
+
+    const { handleGenerateAudioTts } = await import('$lib/tools/tools/media-generate-audio-tts');
+    const out = await handleGenerateAudioTts(
+      { text: 'Hello world' },
+      { conversationId: 'c1', messageId: null },
+    );
+    expect(out.success).toBe(true);
+    expect(out.attachments?.[0].kind).toBe('audio');
+    expect(out.attachments?.[0].mimeType).toBe('audio/mpeg');
+  });
+
+  it('rejects text over 5000 chars', async () => {
+    const { handleGenerateAudioTts } = await import('$lib/tools/tools/media-generate-audio-tts');
+    const out = await handleGenerateAudioTts(
+      { text: 'x'.repeat(5001) },
+      { conversationId: 'c1', messageId: null },
+    );
+    expect(out.success).toBe(false);
+    expect(out.error).toMatch(/5000/);
+  });
+});

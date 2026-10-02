@@ -96,7 +96,7 @@ async function loadPlatformTools(): Promise<ToolSummary[]> {
     // `getTools()` rather than `getToolsetManifest()` because the manifest
     // carries no parameter schemas, and the required-argument names are half
     // the point of this section.
-    const { getTools } = await import('$lib/workflows/site-tools/registry');
+    const { getTools } = await import('$lib/tools/registry');
     return getTools()
       .filter((t) => !UNSAFE_TO_SUGGEST.has(t.name))
       .map((t) => {
@@ -151,7 +151,7 @@ async function loadCatalogApis(): Promise<CatalogApiSummary[]> {
 
 async function loadSecretHandles(): Promise<string[]> {
   try {
-    const { executeTool } = await import('$lib/workflows/site-tools/registry');
+    const { executeTool } = await import('$lib/tools/registry');
     const res = await executeTool('api_secrets_list', {});
     if (!res.success) return [];
     const data = res.data as { secrets?: Array<{ handle?: string; available?: boolean }> } | undefined;

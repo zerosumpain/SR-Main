@@ -277,7 +277,7 @@ export function createToolbox(opts: { set: ToolSet; now: Date; day: string; subj
       const siteNames = allowed.filter((n) => !isLocal(n));
       let site: ToolDefinition[] = [];
       if (siteNames.length) {
-        const { getToolDefinitionsByName } = await import('$lib/workflows/site-tools/llm-tools');
+        const { getToolDefinitionsByName } = await import('$lib/tools/llm-tools');
         site = (await getToolDefinitionsByName(siteNames)) as ToolDefinition[];
       }
       return [...local, ...site];
@@ -296,7 +296,7 @@ export function createToolbox(opts: { set: ToolSet; now: Date; day: string; subj
         if (isLocal(name)) {
           raw = await runLocal(name, args);
         } else {
-          const { executeSiteTool } = await import('$lib/workflows/site-tools/executor');
+          const { executeSiteTool } = await import('$lib/tools/executor');
           // The allow-list again, as the executor's own capability scope.
           const res = await executeSiteTool(name, args, { emit: () => {}, allowedTools: [...allowed] });
           if (!res?.success) {

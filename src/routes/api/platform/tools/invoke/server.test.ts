@@ -3,7 +3,7 @@ import http from 'node:http';
 import { Readable } from 'node:stream';
 import type { AddressInfo } from 'node:net';
 import { env } from '$env/dynamic/private';
-import type { ToolExecContext, ToolResult } from '$lib/workflows/site-tools/registry-internal';
+import type { ToolExecContext, ToolResult } from '$lib/tools/registry-internal';
 
 /**
  * The contract end to end: the real POST handler, on a real socket, driven by
@@ -46,7 +46,7 @@ const TOOLS: Record<string, { destructive?: boolean; run: (ctx?: ToolExecContext
   always_fails: { run: () => ({ success: false, error: 'the tool said no' }) },
 };
 
-vi.mock('$lib/workflows/site-tools/load-registry', () => ({
+vi.mock('$lib/tools/load-registry', () => ({
   loadToolRegistry: async () => ({
     getTool: (name: string) => (TOOLS[name] ? { name, destructive: TOOLS[name].destructive } : undefined),
     executeTool: async (name: string, args: Record<string, unknown>, ctx?: ToolExecContext) => {
@@ -59,7 +59,7 @@ vi.mock('$lib/workflows/site-tools/load-registry', () => ({
 }));
 
 const { POST } = await import('./+server');
-const { invokeRemoteTool, RemoteInvokeError } = await import('$lib/workflows/site-tools/remote');
+const { invokeRemoteTool, RemoteInvokeError } = await import('$lib/tools/remote');
 
 const STANDARD = 's'.repeat(48);
 const DESTRUCTIVE = 'd'.repeat(48);

@@ -291,9 +291,9 @@ export async function notifyOwner(input: NotifyInput): Promise<NotifyResult> {
 /**
  * The WhatsApp half — through the registered channel, not through an import.
  *
- * This used to `await import('$lib/workflows/whatsapp/service')`, which pointed
+ * This used to `await import('$lib/integrations/whatsapp/service')`, which pointed
  * a platform module at a domain one and made the two mutually dependent. The
- * sender registers itself at boot instead (`$lib/workflows/index.ts`), so this
+ * sender registers itself at boot instead (`$lib/integrations/platform-boot.ts`), so this
  * file names a channel and knows nothing about what fills it.
  *
  * An absent channel is an ordinary outcome, not a failure: the run worker and

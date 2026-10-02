@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { DatastoreError, getRecordByKey } from '$lib/datastore';
-import { executeTool } from '$lib/workflows/site-tools/registry';
+import { executeTool } from '$lib/tools/registry';
 import { COLLECTIONS } from '$lib/selfimprove/types';
 
 // Owner-only (enforced in hooks.server.ts for /api/admin/*). Verifies a single

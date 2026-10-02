@@ -1,7 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { isOwnerRequest } from '$lib/server/owner';
 import { memberDoctorRun } from '$lib/member-view';
-import { doctorOverview, type DoctorOverview } from '$lib/workflows/doctor-client';
+import { doctorOverview, type DoctorOverview } from '$lib/workflows-client/doctor-client';
 
 // Owner-gated by hooks (the whole /jkai area is owner-only, a member reads it
 // through the access catalogue). The workflow doctor lives in SR-Workflows

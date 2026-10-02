@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { decks, deckSlides } from '$lib/db/schema';
-import { tools } from '$lib/workflows/site-tools/registry-internal';
-import '$lib/workflows/site-tools/tools/presentations';
+import { tools } from '$lib/tools/registry-internal';
+import '$lib/tools/tools/presentations';
 
 describe.skipIf(process.env.JKAI_LOCAL_TESTS !== '1')('native deck commissioning', () => {
   it('persists a model-authored spec and returns the real deck link', async () => {

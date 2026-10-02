@@ -94,7 +94,7 @@ export async function discoverApis(
     .slice(0, MAX_NEEDS);
   if (needs.length === 0) return actions;
 
-  const { executeTool } = await import('$lib/workflows/site-tools/registry');
+  const { executeTool } = await import('$lib/tools/registry');
 
   for (const need of needs) {
     try {

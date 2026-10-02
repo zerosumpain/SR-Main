@@ -39,7 +39,7 @@ function buildWhatsapp(a: RoutingAssignments): string {
 
 async function notify(a: RoutingAssignments): Promise<boolean> {
   try {
-    const { executeTool } = await import('$lib/workflows/site-tools/registry');
+    const { executeTool } = await import('$lib/tools/registry');
     await executeTool('whatsapp_send', { to: ownerPhone() ?? '', message: buildWhatsapp(a) });
     return true;
   } catch (err) {

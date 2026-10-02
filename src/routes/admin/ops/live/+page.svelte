@@ -401,13 +401,13 @@
       name: 'Job heartbeat',
       cadence: '5s while a job is running',
       desc: 'Each chat job ticks a heartbeat into the SSE stream so the UI can show "thinking… 35s". Phase + summary + elapsedMs. Fires extra on phase change.',
-      file: 'src/lib/workflows/chat/job-store.ts:191',
+      file: 'src/lib/jkai/chat/job-store.ts:191',
     },
     {
       name: 'Job watchdog',
       cadence: '15s; kills at 120s idle / 600s total',
       desc: 'Per-job interval that aborts the job if no event has fired for 2 minutes (the idle ceiling) or the job has been alive for 10 minutes total.',
-      file: 'src/lib/workflows/chat/job-store.ts:142',
+      file: 'src/lib/jkai/chat/job-store.ts:142',
     },
     {
       name: 'Health sync',
@@ -419,13 +419,13 @@
       name: 'Follow-up queue worker',
       cadence: '15s, lazily started on first enqueue',
       desc: '"I\'ll check back in N minutes" pattern. In-memory queue; stops itself when empty. Re-checks task status with 1.2× exponential backoff capped at 5 min, max 40 retries.',
-      file: 'src/lib/workflows/chat/followup-queue.ts:124',
+      file: 'src/lib/jkai/chat/followup-queue.ts:124',
     },
     {
       name: 'Engine event-loop monitor',
       cadence: 'continuous histogram, read on each /api/health/workflow-engine probe',
       desc: 'perf_hooks.monitorEventLoopDelay({resolution:50}). The 60s systemd timer hits the probe; if loopMaxMs ≥ 5000 the probe returns 503 and systemd restarts the service.',
-      file: 'src/lib/workflows/engine-runtime.ts:19',
+      file: 'src/lib/server/runtime-monitor.ts:19',
     },
   ] as const;
 

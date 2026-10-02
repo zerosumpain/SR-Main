@@ -73,8 +73,8 @@ describe.skipIf(!process.env.DATABASE_URL)('background readers see only the owne
   });
 
   it('session_search returns no member messages', async () => {
-    await import('$lib/workflows/site-tools/tools/recall');
-    const { tools } = await import('$lib/workflows/site-tools/registry-internal');
+    await import('$lib/tools/tools/recall');
+    const { tools } = await import('$lib/tools/registry-internal');
     const tool = tools.find((t) => t.name === 'session_search')!;
     const res = (await tool.handler({ query: TAG, limit: 50 })) as { success: boolean; data: { matches: unknown[] } };
     expect(res.success).toBe(true);

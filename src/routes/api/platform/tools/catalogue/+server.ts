@@ -1,8 +1,8 @@
 import { json, error } from '@sveltejs/kit';
 import { invokeLaneFor } from '$lib/server/invoke-auth';
-import { loadToolRegistry } from '$lib/workflows/site-tools/load-registry';
-import { remoteInvokeTarget } from '$lib/workflows/site-tools/remote';
-import type { CataloguePayload } from '$lib/workflows/site-tools/invoke-contract';
+import { loadToolRegistry } from '$lib/tools/load-registry';
+import { remoteInvokeTarget } from '$lib/tools/remote';
+import type { CataloguePayload } from '$lib/tools/invoke-contract';
 import type { RequestHandler } from './$types';
 
 /**
