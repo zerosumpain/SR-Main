@@ -107,6 +107,12 @@
       say(verdict === 'useful' ? 'Kept — it will look for more like this.' : verdict === 'not_useful' ? 'Noted — fewer like this.' : `Muted — no more “${n.outcomeLabel.toLowerCase()}” notes.`);
     }
   }
+  async function rule(n: FeedNote, verdict: 'wrong' | 'right', why: string): Promise<boolean> {
+    recent.add(n.id);
+    const ok = await act({ action: 'owner_verdict', thoughtId: n.id, verdict, why }, `${n.id}:ruling`);
+    if (ok) say(verdict === 'wrong' ? 'Got it — it will keep that as a lesson and think twice next time.' : 'Got it — that lesson is withdrawn.');
+    return ok;
+  }
   async function prepare(n: FeedNote) {
     busy = `${n.id}:prepare`;
     actionError = null;
@@ -218,6 +224,7 @@
                 onrate={(v) => rate(n, v)}
                 onprepare={() => prepare(n)}
                 onsavenote={(text) => act({ action: 'add_note', thoughtId: n.id, text }, `${n.id}:note`)}
+                onruling={(verdict, why) => rule(n, verdict, why)}
                 onunmute={() => act({ action: 'unmute_kind', kind: n.kind }, `${n.id}:unmute`)}
               />
             </li>

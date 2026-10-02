@@ -8,6 +8,9 @@ import { DEFAULT_SUBJECT } from './types';
 import { commissioningEnabled, sourceHash, thoughtSource } from './commission-service.server';
 import { hash, recordEvent, rowFor, type CommissionRow } from './commission-store.server';
 import type { EvidenceResult } from './commissioning';
+import { describeSource, parseCardRef, sourceText } from './think/explain';
+import { STORED_VERDICT, VERDICT_LIKELIHOOD, VERDICT_WORDS, reviewSummary, type RedTeamReview } from './red-team';
+import { recordRuling } from './rulings.server';
 
 const EXECUTION_WORKFLOW = 'daydream-commission-execution-v1';
 const MAINTENANCE_WORKFLOW = 'daydream-commission-maintenance-v1';
@@ -70,19 +73,34 @@ async function trustedRun(runId: string, operation: string): Promise<RuntimeCont
   return context;
 }
 
-async function settle(row: CommissionRow, token: string, evidence: EvidenceResult[], failure: string | null) {
+interface SecondLook { review: RedTeamReview | null; tokens: { prompt: number; completion: number }; error: string | null }
+
+async function settle(row: CommissionRow, token: string, evidence: EvidenceResult[], failure: string | null, look: SecondLook | null = null) {
   return db.transaction(async tx => {
     const current = await rowFor(row.id, row.principal_id, tx, true);
     if (current.state !== 'running' || current.lease_token !== token || current.generation !== row.generation) return { revoked: true };
     const source = await thoughtSource(row.thought_id, tx);
     if (sourceHash(source) !== row.spec.sourceHash) failure = 'The note or your comment on it changed while this was running. Start a fresh double-check.';
     const missing = evidence.filter(e => e.status === 'unavailable').length;
-    const summary = failure ?? (missing ? `Re-read ${evidence.length - missing} of ${evidence.length} sources; ${missing} could not be reached. What came back shows today’s data — it does not independently verify the note.` : `${evidence.length === 1 ? 'Re-read the source' : `Re-read all ${evidence.length} sources`}. ${evidence.length === 1 ? 'It shows' : 'They show'} what the data says today — this does not independently verify the note.`);
+    const reread = missing ? `Re-read ${evidence.length - missing} of ${evidence.length} sources; ${missing} could not be reached.` : `${evidence.length === 1 ? 'Re-read the source' : `Re-read all ${evidence.length} sources`}.`;
+    const review = failure ? null : look?.review ?? null;
+    // The verdict leads. Without one (the second look failed) the report says
+    // so, and keeps the old honesty: a re-read alone verifies nothing.
+    const summary = failure ?? (review
+      ? `${reviewSummary(review)} ${reread}`
+      : `${reread} The second look${look?.error ? ` did not finish (${look.error})` : ' did not run'}, so this does not confirm or rule out the note.`);
     const state = failure ? 'needs_attention' : 'completed';
     await tx.execute(sql`UPDATE daydream_commissions SET state=${state},revision=revision+1,
-      result=${JSON.stringify({ summary, evidence })}::jsonb,last_error=${failure},lease_token=NULL,lease_until=NULL,updated_at=now() WHERE id=${row.id}::uuid`);
+      result=${JSON.stringify({ summary, evidence, review })}::jsonb,last_error=${failure},lease_token=NULL,lease_until=NULL,updated_at=now() WHERE id=${row.id}::uuid`);
+    // The verdict onto the note, and a wrong one into memory as a lesson.
+    if (review) await recordRuling(tx, {
+      thoughtId: row.thought_id, verdict: STORED_VERDICT[review.verdict], likelihood: VERDICT_LIKELIHOOD[review.verdict],
+      reasoning: review.reasoning, lesson: review.lesson, reviewer: review.model ?? 'double-check',
+      sources: evidence.map(e => e.sourceRef), tokens: look?.tokens,
+    });
     await recordEvent(tx, { ...current, revision: current.revision + 1 }, failure ? 'execution.blocked' : 'outcome.recorded',
-      failure ? 'A double-check needs your attention' : 'Your double-check report is ready', 'workflow', { runId: current.workflow_run_id, available: evidence.length - missing, unavailable: missing }, true);
+      failure ? 'A double-check needs your attention' : review ? `Double-check: ${VERDICT_WORDS[review.verdict].toLowerCase()}` : 'Your double-check report is ready', 'workflow',
+      { runId: current.workflow_run_id, available: evidence.length - missing, unavailable: missing, verdict: review?.verdict ?? null }, true);
     await tx.execute(sql`UPDATE datastore_records SET data=data || ${JSON.stringify({ commissioningState: state, updatedAt: new Date().toISOString() })}::jsonb,
       version=version+1,updated_at=now() WHERE key=${row.backlog_slug} AND collection_id=(SELECT id FROM datastore_collections WHERE slug='improvement_backlog')`);
     return { state, summary };
@@ -99,7 +117,7 @@ async function executeCommission(context: RuntimeContext, runId: string) {
     if (!['queued', 'running'].includes(current.state)) return null;
     if (current.attempts >= current.spec.budget.maxAttempts) throw new Error('Approved attempts exhausted.');
     await tx.execute(sql`UPDATE daydream_commissions SET state='running',revision=revision+1,attempts=attempts+1,
-      lease_token=${token}::uuid,lease_until=now()+interval '4 minutes',workflow_run_id=${runId},updated_at=now() WHERE id=${current.id}::uuid`);
+      lease_token=${token}::uuid,lease_until=now()+interval '6 minutes',workflow_run_id=${runId},updated_at=now() WHERE id=${current.id}::uuid`);
     await recordEvent(tx, { ...current, revision: current.revision + 1 }, 'execution.started', 'Re-reading the sources', 'workflow', { runId });
     return current;
   });
@@ -127,7 +145,38 @@ async function executeCommission(context: RuntimeContext, runId: string) {
   } catch {
     failure = 'The double-check could not finish within the limits you approved. What it did get is kept below; you can try again.';
   }
-  return settle(row, token, evidence, failure);
+  // ── The second look: argue against the note (`red-team.ts`) ──
+  // Its own failure never fails the check — the re-read stands, and the
+  // report says the verdict is missing rather than inventing one.
+  let look: SecondLook | null = null;
+  if (!failure && evidence.some(e => e.status === 'available')) {
+    look = { review: null, tokens: { prompt: 0, completion: 0 }, error: null };
+    try {
+      const current = await rowFor(row.id, 'owner');
+      if (current.generation !== row.generation || current.state !== 'running' || current.lease_token !== token) return { revoked: true };
+      const thought = await thoughtSource(row.thought_id);
+      const { runRedTeam } = await import('./red-team.server');
+      const run = await runRedTeam({
+        note: {
+          kind: String(thought.kind ?? ''), title: String(thought.title ?? ''),
+          body: String(thought.narrative || thought.explanation || ''),
+          ownerNote: typeof thought.note === 'string' ? thought.note : null,
+          tools: row.spec.reads.map(r => r.tool),
+        },
+        sources: evidence.filter(e => e.status === 'available').map(e => ({
+          label: sourceText(describeSource(e.tool, parseCardRef(e.sourceRef)?.args ?? {})), text: e.text,
+        })),
+        // Whatever the re-read left of the budget, but never less than enough
+        // for one considered answer; the lease covers the overrun.
+        timeoutMs: Math.max(45_000, deadline - Date.now()),
+      });
+      look.review = run.review;
+      look.tokens = run.tokens;
+    } catch (err) {
+      look.error = /abort|timeout/i.test(err instanceof Error ? err.message : '') ? 'it ran out of time' : 'the model could not be reached';
+    }
+  }
+  return settle(row, token, evidence, failure, look);
 }
 
 export async function reconcileCommissions(): Promise<void> {

@@ -2,10 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sql } from 'drizzle-orm';
 
-const mock = vi.hoisted(() => ({ read: vi.fn(), runtime: vi.fn() }));
+const mock = vi.hoisted(() => ({ read: vi.fn(), runtime: vi.fn(), redTeam: vi.fn() }));
 vi.mock('$env/dynamic/private', () => ({ env: process.env }));
 vi.mock('./think/tools', () => ({ PRIVATE_TOOLS: ['spend'], createToolbox: () => ({ call: mock.read }) }));
 vi.mock('$lib/workflows/runtime-client', () => ({ invokeWorkflowRuntime: mock.runtime }));
+// The sceptic's model call; everything it writes is real.
+vi.mock('./red-team.server', () => ({ runRedTeam: mock.redTeam }));
 vi.mock('$lib/server/notify/push-dispatch', () => ({ kickPushDispatch: vi.fn() }));
 vi.mock('$lib/events/platform-bus', () => ({ emit: vi.fn() }));
 import { db } from '$lib/db';
@@ -13,6 +15,8 @@ import { prepareCommission, decideCommission } from './commission-service.server
 import { loadCommission } from './commission-store.server';
 import { flushCommissionOutbox, invokeCommissionOperation, reconcileCommissions } from './commission-executor.server';
 import { notifyOwner } from '$lib/server/notify';
+import { loadLessons } from './lessons.server';
+import { recordOwnerVerdict } from './owner-verdict';
 
 const database = process.env.DATABASE_URL ?? '';
 const enabled = /(?:127\.0\.0\.1|localhost):15445\//.test(database)
@@ -47,6 +51,7 @@ describe.skipIf(!enabled)('commission transactions against isolated local Postgr
     process.env.DAYDREAM_COMMISSIONING = '1';
     mock.read.mockReset().mockResolvedValue({ failed: false, card: { text: 'Synthetic source: one payment and its receipt.' } });
     mock.runtime.mockReset().mockResolvedValue({ runId: 'synthetic-runtime-receipt' });
+    mock.redTeam.mockReset().mockRejectedValue(new Error('no model in this test'));
     await db.execute(sql`INSERT INTO datastore_collections(slug,name,is_system,created_by,default_permissions)
       VALUES ('improvement_backlog','Improvement backlog',true,'system',
         '{"read":["owner","jkai","system"],"write":["system","owner"],"delete":["owner","system"]}'::jsonb)
@@ -57,6 +62,7 @@ describe.skipIf(!enabled)('commission transactions against isolated local Postgr
       await db.execute(sql`DELETE FROM notification_events WHERE data->>'thoughtId'=${id}`);
       await db.execute(sql`DELETE FROM datastore_records WHERE data->>'commissionId' IN (SELECT id::text FROM daydream_commissions WHERE thought_id=${id})`);
       await db.execute(sql`DELETE FROM daydream_thoughts WHERE id=${id}`);
+      await db.execute(sql`DELETE FROM jkai_memories WHERE provenance->>'sourceId'=${id}`);
     }
     for (const id of runs) {
       await db.execute(sql`DELETE FROM workflow_versions WHERE id=(SELECT version_id FROM workflow_runs WHERE id=${id})`);
@@ -100,7 +106,44 @@ describe.skipIf(!enabled)('commission transactions against isolated local Postgr
     const result = await loadCommission(c.id);
     expect(result.state).toBe('completed'); expect(mock.read).toHaveBeenCalledTimes(1);
     expect(result.result?.evidence[0]).toMatchObject({ provenance: 'query_result', status: 'available' });
-    expect(result.result?.summary).toContain('does not independently verify');
+    expect(result.result?.summary).toContain('does not confirm or rule out the note');
+    expect(result.result?.summary).toContain('the model could not be reached');
+  });
+
+  it('a second look that finds the note wrong records the verdict and keeps the lesson', async () => {
+    const id = await thought();
+    mock.redTeam.mockResolvedValue({
+      review: { verdict: 'wrong', claim: 'Apple charged twice', challenges: [{ doubt: 'Is one an email?', finding: 'Yes.', survives: false }],
+        reasoning: 'One bank line; the other row is the receipt email.', lesson: 'Before calling a duplicate, I check each charge has its own bank line.',
+        overruled: null, model: 'synthetic-model', checkedAt: new Date().toISOString() },
+      tokens: { prompt: 10, completion: 5 },
+    });
+    const proposal = await prepareCommission(id);
+    const c = await decideCommission(proposal.id, approval(proposal)); const runId = await runFor(c);
+    await invokeCommissionOperation({ operation: 'execute', runId });
+    const result = await loadCommission(c.id);
+    expect(result.state).toBe('completed');
+    expect(result.result?.summary).toMatch(/^It was wrong\./);
+    expect(result.result?.review?.lesson).toContain('own bank line');
+    const row = (await db.execute(sql`SELECT review_verdict,review_narrative,review_model,review_memory_id FROM daydream_thoughts WHERE id=${id}`)).rows[0];
+    expect(row).toMatchObject({ review_verdict: 'refuted', review_model: 'synthetic-model', review_narrative: expect.stringContaining('own bank line') });
+    const memory = (await db.execute(sql`SELECT content,daydream_origin,category FROM jkai_memories WHERE id=${row.review_memory_id}`)).rows[0];
+    expect(memory).toMatchObject({ daydream_origin: 'ruling', category: 'patterns' });
+    expect(String(memory.content)).toContain('a double-check found it wrong');
+    expect((await loadLessons()).some((l) => l.lesson.includes('own bank line') && l.by === 'check')).toBe(true);
+  });
+
+  it('the owner saying it is wrong, then taking it back, leaves one current memory and no lesson', async () => {
+    const id = await thought();
+    await recordOwnerVerdict(id, 'wrong', 'One of those is the receipt email for the bank charge.');
+    let lessons = await loadLessons();
+    expect(lessons.find((l) => l.lesson.startsWith('One of those is the receipt'))?.by).toBe('owner');
+    await recordOwnerVerdict(id, 'right', 'It really was charged twice.');
+    lessons = await loadLessons();
+    expect(lessons.some((l) => l.lesson.startsWith('One of those is the receipt'))).toBe(false);
+    const live = await db.execute(sql`SELECT content FROM jkai_memories WHERE provenance->>'sourceId'=${id} AND superseded_by IS NULL`);
+    expect(live.rows).toHaveLength(1);
+    expect(String(live.rows[0].content)).toContain('John says it was right after all');
   });
   it('cancellation while a source read is in flight fences its completion', async () => {
     const proposal = await prepareCommission(await thought());

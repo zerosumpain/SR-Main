@@ -375,7 +375,10 @@ export async function persistCandidates(
           components,
           evidence: candidate.evidence,
           placeId: candidate.placeId ?? null,
-          proposedActions: candidate.proposedActions,
+          // A step already carried out ("Do it for me") keeps its record —
+          // Undo finds the diary entry through it.
+          proposedActions: sql`case when jsonb_path_exists(${daydreamThoughts.proposedActions}, '$[*] ? (exists(@.done))')
+            then ${daydreamThoughts.proposedActions} else ${JSON.stringify(candidate.proposedActions)}::jsonb end`,
           status,
           suppressedReason,
           runId: opts.runId,

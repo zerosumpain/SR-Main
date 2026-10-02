@@ -223,6 +223,8 @@ export interface StageInput {
   commissionState?: string | null;
   /** The build-queue item a build idea became, if any. */
   build?: { status: string; accepted: boolean } | null;
+  /** "Do it for me" carried the step out (and it was not undone). */
+  acted?: boolean;
 }
 
 /**
@@ -234,6 +236,8 @@ export interface StageInput {
  */
 export function noteStage(i: StageInput): { stage: Stage; bucket: Bucket } {
   const c = i.commissionState ?? null;
+  // Done is done: nothing left to decide or wait for.
+  if (i.acted) return { stage: 'result', bucket: 'done' };
   if (c && COMMISSION_NEEDS_YOU.has(c)) return { stage: 'decide', bucket: 'decide' };
   if (c && COMMISSION_RUNNING.has(c)) return { stage: 'motion', bucket: 'motion' };
   const shipped = i.build?.status === 'shipped';

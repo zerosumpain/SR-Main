@@ -13,6 +13,7 @@
 // The wire shape (`NativeNote`) is FIXED: the iPhone app was built against it.
 
 import { QUESTION_EVIDENCE_KIND } from './audit';
+import { noteAct, type NoteAct } from '../act/plan';
 import { describeSources, noteStage, sourceText, splitNarrative, type Bucket, type SourceLine, type Stage } from './explain';
 import { CHANNELS, type Channel, type Outcome } from './questions';
 
@@ -152,6 +153,38 @@ export interface ThinkRow {
   createdAt: Date;
   deliveredAt: Date | null;
   note: string | null;
+  /** The verdict on the claim (`rulings.server.ts`). Optional so readers that
+   *  never show it need not select it. */
+  reviewVerdict?: string | null;
+  reviewReasoning?: string | null;
+  reviewNarrative?: string | null;
+  reviewModel?: string | null;
+  /** `proposed_actions` — a "Do it for me" plan and what became of it. */
+  proposedActions?: unknown;
+}
+
+/** A ruling on a note's CLAIM — apart from feedback, which is about its kind. */
+export interface NoteReview {
+  verdict: 'holds' | 'wrong' | 'unclear';
+  /** Who ruled: the owner, or a double-check. */
+  by: 'owner' | 'check';
+  reasoning: string;
+  /** What it learned, when wrong. */
+  lesson: string | null;
+}
+
+const FROM_STORED: Record<string, NoteReview['verdict']> = { verified: 'holds', refuted: 'wrong', uncertain: 'unclear' };
+
+export function noteReview(row: Pick<ThinkRow, 'reviewVerdict' | 'reviewReasoning' | 'reviewNarrative' | 'reviewModel'>): NoteReview | null {
+  const verdict = row.reviewVerdict ? FROM_STORED[row.reviewVerdict] : undefined;
+  if (!verdict) return null;
+  return {
+    verdict,
+    // Literal, not imported: `lessons.ts`'s OWNER_REVIEWER, kept dependency-free here.
+    by: row.reviewModel === 'owner' ? 'owner' : 'check',
+    reasoning: row.reviewReasoning ?? '',
+    lesson: verdict === 'wrong' ? (row.reviewNarrative ?? null) : null,
+  };
 }
 
 /**
@@ -356,12 +389,23 @@ export interface FeedNote extends NativeNote {
   bucket: Bucket;
   commission: NoteContext['commission'];
   build: NoteContext['build'];
+  review: NoteReview | null;
+  /** "Do it for me": what it would do, or did. Null when the step is not
+   *  something it can carry out by itself. */
+  act: NoteAct | null;
+}
+
+/** His own ruling on the claim answers the note as surely as a rating does. */
+function answeredBy(row: ThinkRow, review: NoteReview | null): string | null {
+  return row.feedback ?? (review?.by === 'owner' ? `ruled_${review.verdict}` : null);
 }
 
 export function toFeedNote(row: ThinkRow, muted: ReadonlySet<string>, ctx: NoteContext = EMPTY_CONTEXT): FeedNote {
   const n = toNativeNote(row);
   const split = splitNarrative(n.body);
-  const where = noteStage({ verdict: row.feedback, commissionState: ctx.commission?.state, build: ctx.build });
+  const review = noteReview(row);
+  const act = noteAct(row.proposedActions, split.next);
+  const where = noteStage({ verdict: answeredBy(row, review), commissionState: ctx.commission?.state, build: ctx.build, acted: act?.status === 'done' });
   return {
     ...n,
     outcomeLabel: outcomeLabel(n.outcome),
@@ -381,6 +425,8 @@ export function toFeedNote(row: ThinkRow, muted: ReadonlySet<string>, ctx: NoteC
     bucket: where.bucket,
     commission: ctx.commission,
     build: ctx.build,
+    review,
+    act,
   };
 }
 
@@ -397,12 +443,16 @@ export interface NativeNoteDetail extends NativeNote {
   checkable: boolean;
   commissionId: string | null;
   commissionState: string | null;
+  review: NoteReview | null;
+  act: NoteAct | null;
 }
 
 export function toNativeDetail(row: ThinkRow, ctx: NoteContext = EMPTY_CONTEXT): NativeNoteDetail {
   const n = toNativeNote(row);
   const split = splitNarrative(n.body);
-  const where = noteStage({ verdict: row.feedback, commissionState: ctx.commission?.state, build: ctx.build });
+  const review = noteReview(row);
+  const act = noteAct(row.proposedActions, split.next);
+  const where = noteStage({ verdict: answeredBy(row, review), commissionState: ctx.commission?.state, build: ctx.build, acted: act?.status === 'done' });
   return {
     ...n,
     summary: split.summary,
@@ -413,5 +463,7 @@ export function toNativeDetail(row: ThinkRow, ctx: NoteContext = EMPTY_CONTEXT):
     checkable: ctx.checkable,
     commissionId: ctx.commission?.id ?? null,
     commissionState: ctx.commission?.state ?? null,
+    review,
+    act,
   };
 }
