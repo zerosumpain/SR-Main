@@ -60,42 +60,60 @@
     "src/lib/llm/pricing.ts": {
       "peer": [
         "zerosumpain/SR-Health",
-        "zerosumpain/SR-Drive"
+        "zerosumpain/SR-Drive",
+        "zerosumpain/SR-Policy-Engine",
+        "zerosumpain/SR-DfE-Data-Strategy",
+        "zerosumpain/SR-Data-Standard-Designer"
       ],
-      "sha256": "c1311b2d9c66a1ad15ebfc49b29245decc0edde8f8205ceee531277d63ceb555"
+      "sha256": "768cee2dfddad139dfdc7dccc4082fa875476c66025fd2a6aff9f007a2736fe3"
     },
     "src/lib/llm/usage-log.ts": {
       "peer": [
         "zerosumpain/SR-Health",
-        "zerosumpain/SR-Drive"
+        "zerosumpain/SR-Drive",
+        "zerosumpain/SR-Policy-Engine",
+        "zerosumpain/SR-DfE-Data-Strategy",
+        "zerosumpain/SR-Data-Standard-Designer"
       ],
-      "sha256": "e2a930de8fcfe53f67f5cc4592d0946db37771a4088158a4b2a70baefad6b540"
+      "sha256": "9951885a9faf87a7ce871b9b7e042925f1347ea7f2d81ddd4583798b4f26da22"
     },
     "src/lib/llm/usage-capture.ts": {
       "peer": [
         "zerosumpain/SR-Health",
-        "zerosumpain/SR-Drive"
+        "zerosumpain/SR-Drive",
+        "zerosumpain/SR-Policy-Engine",
+        "zerosumpain/SR-DfE-Data-Strategy",
+        "zerosumpain/SR-Data-Standard-Designer"
       ],
-      "sha256": "dc1bf86af6bf82f6c16726a0d465e2a339b399be3855d171f028b87a125bb4c7"
+      "sha256": "0bcb0a3f18976801a3355a09c9df0d075947f01dbdb2f8ab29186c5f977ad94f"
     },
     "src/lib/llm/usage-meter.ts": {
       "peer": [
         "zerosumpain/SR-Health",
-        "zerosumpain/SR-Drive"
+        "zerosumpain/SR-Drive",
+        "zerosumpain/SR-Policy-Engine",
+        "zerosumpain/SR-DfE-Data-Strategy",
+        "zerosumpain/SR-Data-Standard-Designer"
       ],
       "sha256": "d07c3871e7955bdadc717afd09c3a066a3041213bf89fde9ae9dec761ab908e8"
     },
     "src/lib/llm/keys.ts": {
       "peer": [
         "zerosumpain/SR-Health",
-        "zerosumpain/SR-Drive"
+        "zerosumpain/SR-Drive",
+        "zerosumpain/SR-Policy-Engine",
+        "zerosumpain/SR-DfE-Data-Strategy",
+        "zerosumpain/SR-Data-Standard-Designer"
       ],
       "sha256": "453630c914d4a57b45f12c767f7abf947d1d1cc434bdac6c68d0eb16e45ada21"
     },
     "src/lib/llm/client.ts": {
       "peer": [
         "zerosumpain/SR-Health",
-        "zerosumpain/SR-Drive"
+        "zerosumpain/SR-Drive",
+        "zerosumpain/SR-Policy-Engine",
+        "zerosumpain/SR-DfE-Data-Strategy",
+        "zerosumpain/SR-Data-Standard-Designer"
       ],
       "sha256": "8b34dee5cd4518f933615e06385f8c7a470007df0da00125c42580f5745e3551"
     },
@@ -205,6 +223,26 @@
     "src/lib/jkai/panel/schema.ts": {
       "peer": "zerosumpain/SR-Jkai-Core",
       "sha256": "e0a550e772806d27b40b59ef165d9e10854b669730637fea2964af8b77a23d14"
+    },
+    "src/lib/llm/model-service-contract.ts": {
+      "peer": [
+        "zerosumpain/SR-Health",
+        "zerosumpain/SR-Drive",
+        "zerosumpain/SR-Policy-Engine",
+        "zerosumpain/SR-DfE-Data-Strategy",
+        "zerosumpain/SR-Data-Standard-Designer"
+      ],
+      "sha256": "520441e3f1aa380c38e7318607936ee98ba825ae153ce7ecc17085febe95f2de"
+    },
+    "src/lib/llm/model-service-client.ts": {
+      "peer": [
+        "zerosumpain/SR-Health",
+        "zerosumpain/SR-Drive",
+        "zerosumpain/SR-Policy-Engine",
+        "zerosumpain/SR-DfE-Data-Strategy",
+        "zerosumpain/SR-Data-Standard-Designer"
+      ],
+      "sha256": "7041898ef576d29aa0dd3c9afde0ed6de25a7888bc2adac244eb661ed738be54"
     }
   }
 }
