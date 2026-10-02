@@ -41,10 +41,6 @@
       "peer": "zerosumpain/SR-Drive",
       "sha256": "1d244d37cedac5425d1af7e9290c6e5b691d677af303d9ad875cfd018e4dd1d2"
     },
-    "src/lib/file-index/jkai-mirror.ts": {
-      "peer": "zerosumpain/SR-Drive",
-      "sha256": "60eccfd63fc79f7a052a465b40b73dc74930e257102b629b595afbbe55dd7ca5"
-    },
     "src/lib/file-index/search.ts": {
       "peer": "zerosumpain/SR-Drive",
       "sha256": "903f54d493bd1abed2c25d20256e096c54b581be0714c7cdc4da669d6bbb3b7f"
