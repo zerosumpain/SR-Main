@@ -159,7 +159,7 @@
       ],
       "passthroughPatterns": [
         {
-          "pattern": "^/api/policy-engine/(?:ingest|seed-workflows)/?$",
+          "pattern": "^/api/policy-engine/ingest/?$",
           "methods": null
         }
       ],
@@ -197,7 +197,7 @@
       ],
       "passthroughPatterns": [
         {
-          "pattern": "^/api/dfe-data-strategy/(?:intel|seed-workflows)/?$",
+          "pattern": "^/api/dfe-data-strategy/intel/?$",
           "methods": null
         }
       ],
@@ -235,7 +235,7 @@
       ],
       "passthroughPatterns": [
         {
-          "pattern": "^/api/data-standard-designer/(?:ingest|seed-workflows)/?$",
+          "pattern": "^/api/data-standard-designer/ingest/?$",
           "methods": null
         }
       ],
@@ -412,6 +412,12 @@
           "pattern": "^/api/workflows/tools/invoke$",
           "methods": [
             "POST"
+          ]
+        },
+        {
+          "pattern": "^/api/workflows/schedules/registered$",
+          "methods": [
+            "PUT"
           ]
         },
         {
