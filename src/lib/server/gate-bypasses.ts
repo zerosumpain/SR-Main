@@ -199,6 +199,8 @@ export const BYPASS_GUARDS: Record<string, string> = {
   '/api/platform/tools/catalogue': 'GET only · JKAI_INVOKE_TOKEN; tool names and their destructive flag',
   '/api/platform/daydream/briefing': "GET only · JKAI_INVOKE_TOKEN; yesterday's daydream section for the morning briefing",
   '/api/platform/backlog/intake': 'POST only · JKAI_INVOKE_TOKEN; trace findings into the build backlog intake',
+  '/api/platform/models/config': 'GET only · MODEL_SERVICE_TOKEN_<APP>; an extracted app reads its model settings (secrets filtered)',
+  '/api/platform/models/usage': 'POST only · MODEL_SERVICE_TOKEN_<APP>; an extracted app records LLM usage in the cost ledger',
   '/api/jkai/intel/chat-context': 'POST only · JKAI_INVOKE_TOKEN or owner session; intel context for a chat turn',
   '/api/jkai/intel/extract-thread': 'POST only · JKAI_INVOKE_TOKEN or owner session; fire-and-forget extraction',
   '/api/jkai/tools/manifest': 'JKAI_BRIDGE_TOKEN',
