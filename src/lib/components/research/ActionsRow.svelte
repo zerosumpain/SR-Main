@@ -9,7 +9,9 @@
    *
    * Actions that leave the site or change what other people can see are the ones
    * worth being careful about, so `share` confirms before minting a link rather
-   * than doing it on a single click. Committing to the knowledge graph confirms
+   * than doing it on a single click. The link's token is stored hashed, so it can
+   * be copied only right after it is minted; later, a live link can be replaced
+   * (the old one stops working) or revoked. Committing to the knowledge graph confirms
    * for the same reason: the session's graph is its own until then, and merging
    * it changes what every other surface in jkai reasons over.
    */
@@ -19,13 +21,14 @@
     sessionId,
     depth,
     hasReport,
-    shareToken = null,
+    shared = false,
     canCommit = true,
   }: {
     sessionId: string;
     depth: string;
     hasReport: boolean;
-    shareToken?: string | null;
+    /** A share link is live. Its token is never sent back, only minted. */
+    shared?: boolean;
     /** False for a member: committing merges into the owner's durable graph. */
     canCommit?: boolean;
   } = $props();
@@ -33,7 +36,9 @@
   let busy = $state<string | null>(null);
   let message = $state<string | null>(null);
   let error = $state<string | null>(null);
-  let token = $state<string | null>(shareToken);
+  /** The raw token, known only in the page that minted it. */
+  let token = $state<string | null>(null);
+  let linkLive = $state(shared);
   let confirmingShare = $state(false);
   let confirmingCommit = $state(false);
 
@@ -97,12 +102,18 @@
 
   const share = () =>
     run('share', async () => {
-      const res = await fetch(`/api/deepdive/${sessionId}/share`, { method: 'POST' });
+      const res = await fetch(`/api/deepdive/${sessionId}/share`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        // Replacing a live link is the only way to get a copyable one again.
+        body: JSON.stringify({ rotate: linkLive }),
+      });
       if (!res.ok) throw new Error(`Could not create a share link (${res.status})`);
       const body = await res.json();
-      token = body.shareToken ?? body.token ?? null;
+      token = body.token ?? null;
+      linkLive = !!token;
       confirmingShare = false;
-      return token ? 'Share link created — anyone with it can read this.' : 'Shared.';
+      return token ? 'Share link created. Copy it now: it is not shown again.' : 'Shared.';
     });
 
   const unshare = () =>
@@ -110,6 +121,7 @@
       const res = await fetch(`/api/deepdive/${sessionId}/share`, { method: 'DELETE' });
       if (!res.ok) throw new Error(`Could not revoke the link (${res.status})`);
       token = null;
+      linkLive = false;
       return 'Share link revoked.';
     });
 
@@ -170,12 +182,18 @@
       </button>
     {:else if confirmingShare}
       <span class="confirm">
-        Anyone with the link can read this.
+        {linkLive ? 'A new link replaces the current one, which stops working.' : 'Anyone with the link can read this.'}
         <button class="act" type="button" disabled={busy === 'share'} onclick={share}>
-          {busy === 'share' ? 'Creating…' : 'Create link'}
+          {busy === 'share' ? 'Creating…' : linkLive ? 'Replace link' : 'Create link'}
         </button>
         <button class="act" type="button" onclick={() => (confirmingShare = false)}>Cancel</button>
       </span>
+    {:else if linkLive}
+      <span class="state">Shared by link</span>
+      <button class="act" type="button" onclick={() => (confirmingShare = true)}>New link…</button>
+      <button class="act danger" type="button" disabled={busy === 'share'} onclick={unshare}>
+        {busy === 'share' ? 'Revoking…' : 'Revoke link'}
+      </button>
     {:else}
       <button class="act" type="button" onclick={() => (confirmingShare = true)}>Share publicly…</button>
     {/if}

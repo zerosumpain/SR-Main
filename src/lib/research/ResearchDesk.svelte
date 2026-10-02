@@ -269,7 +269,17 @@
 
   async function handleShare() {
     if (readonly) return;
-    const res = await fetch(`/api/deepdive/${sessionId}/share`, { method: 'POST' });
+    let res = await fetch(`/api/deepdive/${sessionId}/share`, { method: 'POST' });
+    // The token is stored hashed, so a live link cannot be copied again; a new
+    // one replaces it (and the old link stops working) only on confirmation.
+    if (res.status === 409) {
+      if (!confirm('This run already has a share link, which cannot be shown again. Replace it? The old link will stop working.')) return;
+      res = await fetch(`/api/deepdive/${sessionId}/share`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ rotate: true }),
+      });
+    }
     if (!res.ok) return;
     const { token } = await res.json() as { token: string };
     const url = `${location.origin}/deepdive/share/${token}`;

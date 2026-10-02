@@ -1030,7 +1030,16 @@ export const researchSessions = pgTable('research_session', {
   timeLimitMinutes: integer('time_limit_minutes'),
   config: jsonb('config').notNull().default(sql`'{}'::jsonb`),
   report: jsonb('report'),
+  /**
+   * LEGACY plaintext share token, from before links were hashed (2026-10-02).
+   * Nothing writes a new value here: $lib/deepdive/share moves a legacy token
+   * into `shareTokenHash` (and nulls this) the first time it is used or
+   * re-issued, and scripts/migrations/2026-10-02-research-share-token-hash.sql
+   * does the same for the rest. Kept declared so the push never drops it.
+   */
   shareToken: text('share_token').unique(),
+  /** sha256 (hex) of the share link's token — the raw token is shown once. */
+  shareTokenHash: text('share_token_hash').unique(),
   parentSessionId: text('parent_session_id'),
   seedContext: jsonb('seed_context'),
   /**
