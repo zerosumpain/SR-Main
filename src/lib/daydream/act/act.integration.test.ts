@@ -19,7 +19,11 @@ import { persistCandidates } from '../thought-store';
 import { setSetting } from '$lib/server/models/settings';
 
 const database = process.env.DATABASE_URL ?? '';
-const enabled = /(?:127\.0\.0\.1|localhost):15445\//.test(database);
+// The isolated local database, or the nightly's disposable one — the same
+// gate `commission-service.integration.test.ts` uses.
+const enabled = /(?:127\.0\.0\.1|localhost):15445\//.test(database)
+  || (process.env.GITHUB_ACTIONS === 'true' && process.env.DAYDREAM_COMMISSION_TESTS === '1'
+    && /(?:127\.0\.0\.1|localhost):5432\/strange_rambling$/.test(database));
 const ids: string[] = [];
 const NOW = new Date('2026-10-02T09:00:00Z');
 const PLAN = { kind: 'calendar_event' as const, title: 'Chase the bike dispatch', date: '2026-10-10', time: null };
