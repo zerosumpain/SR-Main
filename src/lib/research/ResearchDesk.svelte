@@ -269,7 +269,17 @@
 
   async function handleShare() {
     if (readonly) return;
-    const res = await fetch(`/api/deepdive/${sessionId}/share`, { method: 'POST' });
+    let res = await fetch(`/api/deepdive/${sessionId}/share`, { method: 'POST' });
+    // The token is stored hashed, so a live link cannot be copied again; a new
+    // one replaces it (and the old link stops working) only on confirmation.
+    if (res.status === 409) {
+      if (!confirm('This run already has a share link, which cannot be shown again. Replace it? The old link will stop working.')) return;
+      res = await fetch(`/api/deepdive/${sessionId}/share`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ rotate: true }),
+      });
+    }
     if (!res.ok) return;
     const { token } = await res.json() as { token: string };
     const url = `${location.origin}/deepdive/share/${token}`;
@@ -280,15 +290,8 @@
     }
   }
 
-  function handleExport(kind: 'docx' | 'narrative-docx' | 'narrative-md' | 'md') {
-    const path =
-      kind === 'docx'
-        ? `/api/deepdive/${sessionId}/export/docx`
-        : kind === 'md'
-          ? `/api/deepdive/${sessionId}/export/md`
-          : kind === 'narrative-docx'
-            ? `/api/deepdive/${sessionId}/export/narrative-docx`
-            : `/api/deepdive/${sessionId}/export/narrative-md`;
+  function handleExport(kind: 'docx' | 'md') {
+    const path = `/api/deepdive/${sessionId}/export/${kind}`;
     const a = document.createElement('a');
     a.href = path;
     a.rel = 'noopener';
@@ -1098,8 +1101,8 @@
   }
 
   // Which node types the desk palette offers — scoped to the research set, not
-  // the full workflow palette. 'intelligence' and 'research-result' are excluded
-  // as they render as do-nothing placeholders on the desk.
+  // the full workflow palette. These three are live desk nodes with no workflow
+  // executor; keep them in $lib/canvas/adapter's curated list.
   const DESK_PALETTE_TYPES = [
     'research-chat',
     'research-report',

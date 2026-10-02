@@ -3,7 +3,7 @@
 //
 // A session a reader may not see is a 404, exactly like a session that does
 // not exist, so an id cannot be probed for. One they may see but not change
-// is a 403. Children (sources, facts, entities, narrative, synthesis) carry
+// is a 403. Children (sources, facts, entities, synthesis) carry
 // no owner of their own: a route reaches them through a session it has
 // already passed here.
 //
@@ -12,7 +12,7 @@
 import { error } from '@sveltejs/kit';
 import { and, count, eq, gte, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { accessUsage, researchSessions, sources } from '$lib/db/schema';
+import { accessUsage, researchSessions } from '$lib/db/schema';
 import { areaAccess, canRead, canWrite, type AreaAccess } from '$lib/server/area-scope';
 import type { ResearchDepth } from './depth';
 
@@ -31,24 +31,6 @@ export async function requireResearchSession(
   if (!session || !canRead(session.principalId, access)) throw error(404, 'Session not found');
   if (intent === 'write' && !canWrite(session.principalId, access)) throw error(403, 'Forbidden');
   return { session, access };
-}
-
-/** A source row, through the session it belongs to. */
-export async function requireSourceSession(
-  event: { locals: App.Locals },
-  sourceId: string,
-): Promise<{ sessionId: string; access: AreaAccess }> {
-  const access = await areaAccess(event, 'research');
-  const [row] = sourceId
-    ? await db
-        .select({ sessionId: sources.sessionId, principalId: researchSessions.principalId })
-        .from(sources)
-        .innerJoin(researchSessions, eq(researchSessions.id, sources.sessionId))
-        .where(eq(sources.id, sourceId))
-        .limit(1)
-    : [];
-  if (!row || !canRead(row.principalId, access)) throw error(404, 'Source not found');
-  return { sessionId: row.sessionId, access };
 }
 
 /** Depths a member may start. `investigation` has no wall-clock budget at all. */

@@ -484,7 +484,7 @@
                 sessionId={data.session.id}
                 depth={data.session.depth}
                 hasReport={!!summary}
-                shareToken={data.session.shareToken}
+                shared={data.session.shared}
                 canCommit={data.ownerTools}
               />
             </aside>

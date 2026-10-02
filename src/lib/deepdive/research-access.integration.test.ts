@@ -131,7 +131,6 @@ describe.skipIf(!process.env.DATABASE_URL)('research is scoped to the reader', (
       ['export md', async () => (await import('../../routes/api/deepdive/[id]/export/md/+server')).GET(e())],
       ['network', async () => (await import('../../routes/api/research/[id]/network/+server')).GET(e())],
       ['spend', async () => (await import('../../routes/api/research/[id]/spend/+server')).GET(e('http://test.local/?account=1'))],
-      ['narrative', async () => (await import('../../routes/api/deepdive/[id]/narrative/+server')).GET(e())],
     ];
     for (const [name, call] of cases) {
       const res = await run(call);
@@ -142,11 +141,6 @@ describe.skipIf(!process.env.DATABASE_URL)('research is scoped to the reader', (
     const page = await import('../../routes/research/[id]/+page.server');
     const res = await run(() => page.load(e()));
     expect(res.status).toBe(302); // back to /research, as for a run that does not exist
-
-    const source = await import('../../routes/api/research/source/[id]/+server');
-    const src = await run(() => source.GET(event(A_EMAIL, { params: { id: ids.ownerSource } })));
-    expect(src.status).toBe(404);
-    expect(leaks(src.body)).toEqual([]);
   });
 
   it('writes: deleting the owner run deletes nothing; their own is theirs', async () => {

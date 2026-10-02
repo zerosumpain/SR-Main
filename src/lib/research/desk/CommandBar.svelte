@@ -43,7 +43,7 @@
     onstop: () => void;
     ondeepen: () => void;
     onshare: () => void;
-    onexport: (kind: 'docx' | 'narrative-docx' | 'narrative-md') => void;
+    onexport: (kind: 'docx') => void;
   } = $props();
 
   let pill = $derived(statusPill(status, synthesising));
@@ -54,7 +54,7 @@
   );
 
   let exportOpen = $state(false);
-  function chooseExport(kind: 'docx' | 'narrative-docx' | 'narrative-md') {
+  function chooseExport(kind: 'docx') {
     exportOpen = false;
     onexport(kind);
   }
@@ -135,8 +135,6 @@
           <div class="export-menu" role="menu">
             <button role="menuitem" onclick={() => { exportOpen = false; onshare(); }}>Copy share link</button>
             <button role="menuitem" onclick={() => chooseExport('docx')}>Export report (.docx)</button>
-            <button role="menuitem" onclick={() => chooseExport('narrative-docx')}>Export narrative (.docx)</button>
-            <button role="menuitem" onclick={() => chooseExport('narrative-md')}>Export narrative (.md)</button>
           </div>
         {/if}
       </div>
