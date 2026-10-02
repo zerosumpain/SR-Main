@@ -93,6 +93,8 @@
 /api/native/today
 /api/platform/backlog/intake
 /api/platform/daydream/briefing
+/api/platform/models/config
+/api/platform/models/usage
 /api/platform/tools/catalogue
 /api/platform/tools/invoke
 /api/platform/workflow-engine
@@ -113,11 +115,7 @@
 /blog/[slug]/track
 /blog/preview/[token]
 /blog/tag/[tag]
-/decks
-/decks/[slug]
-/decks/[slug]/edit
-/decks/[slug]/print
-/decks/[slug]/track
+/decks/[...path]
 /follow/[token]
 /login
 /privacy
