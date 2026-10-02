@@ -1,6 +1,6 @@
 # Tool Description Patterns
 
-Tool descriptions (the `description` field in `register()` calls in `src/lib/workflows/site-tools/`) are the primary signal an agent uses to decide which tool to call. The framing of a description determines whether a tool gets used or ignored.
+Tool descriptions (the `description` field in `register()` calls in `src/lib/tools/`) are the primary signal an agent uses to decide which tool to call. The framing of a description determines whether a tool gets used or ignored.
 
 ## The Cardinal Rule: Lead with the Use Case, Not the Implementation
 
@@ -82,4 +82,4 @@ After writing a tool description, ask:
 'REQUIRED for topic-specific lookups: natural-language query for the entities you want. Uses semantic embeddings + name matching to find the most relevant entities, then returns them with their type, summary, connections, and any structural insights involving them. Omit for the full graph-wide analytics view.'
 ```
 
-## File: `src/lib/workflows/site-tools/tools/intel-graph.ts`
+## File: `src/lib/tools/tools/intel-graph.ts`
