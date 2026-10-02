@@ -14,14 +14,14 @@ export const siteToolDef: NodeDefinition = {
   label: 'Site Tool',
   category: 'integration',
   description:
-    'Invoke any registered site capability (a "site tool") by name — presentations/decks, publish page, media generation, personal memory, diagnostics, RAG search, and more. Args are JSON with {{input.*}} templates. Destructive tools require an upstream approval node.',
+    'Invoke any registered site capability (a "site tool") by name — publish page, media generation, personal memory, diagnostics, RAG search, and more. Args are JSON with {{input.*}} templates. Destructive tools require an upstream approval node.',
   configSchema: {
     type: 'object',
     properties: {
       toolName: {
         type: 'string',
         description:
-          'Exact registered tool name (e.g. "presentation_build_from_spec", "save_memory", "render_chart"). Must match the tool\'s registry name.',
+          'Exact registered tool name (e.g. "save_memory", "render_chart", "publish_page"). Must match the tool\'s registry name.',
       },
       args: {
         type: 'object',
@@ -40,7 +40,6 @@ export const siteToolDef: NodeDefinition = {
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Tool result' }],
   llmDescription: `Generic escape hatch onto the FULL site-tool catalogue for any capability that has no dedicated workflow node. Reach for this when the workflow needs a site capability such as:
-- presentations / decks (presentation_build_from_spec, presentation_update_from_spec, presentation_list)
 - publishing a page (publish_page)
 - media generation (generate_image, generate_audio_tts, write_document)
 - personal memory (save_memory, recall_memories, forget_memory)
@@ -60,11 +59,6 @@ TEST RUN: this node is stubbed in a test run — it NEVER invokes the tool, and 
 
 Prefer a dedicated node when one exists (whatsapp, blog-create, deep-research, file-search, tavily-search, …) — they have richer panels and schema hints. Use site-tool only for capabilities without a dedicated node. The generator grounding lists the available tools + their destructive flag.`,
   llmExamples: [
-    // Non-destructive: build a deck spec.
-    {
-      toolName: 'presentation_build_from_spec',
-      args: { title: 'Weekly Briefing', blocks: [] },
-    },
     // Non-destructive: persist a fact to personal memory.
     {
       toolName: 'save_memory',

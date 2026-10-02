@@ -3,11 +3,10 @@ import { describe, expect, it } from 'vitest';
 
 /**
  * The owner lane of `workflow_files`: every reader and writer here runs as John
- * (agent tools, search, intel, the deck editor, the chat's
- * drive link), so each must filter to `principal_id = 'owner'`. A member's
+ * (agent tools, search, intel, the chat's drive link), so each must filter to `principal_id = 'owner'`. A member's
  * files share the table, under `members/<id>/` (see ./namespace), and an
  * unfiltered listing in any of these would hand them to the owner's agent, his
- * graph or a public deck.
+ * graph.
  *
  * Static on purpose: the failure is a query that is MISSING a clause, which no
  * behavioural test of the existing clauses would notice. A file that stops
@@ -15,7 +14,6 @@ import { describe, expect, it } from 'vitest';
  */
 const OWNER_LANE = [
   'src/lib/workflows/site-tools/tools/files.ts',
-  'src/routes/api/decks/media/drive/+server.ts',
   'src/lib/jkai/media/drive-link.ts',
   'src/routes/api/drive/folders/+server.ts',
   'src/lib/file-index/store.ts',

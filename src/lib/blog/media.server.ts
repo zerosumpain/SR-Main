@@ -10,9 +10,9 @@
  * on `readdir` is really a gallery built on one of the two backends. It would
  * work on homeserv (fs) and come back empty in production (Azure).
  *
- * Worse than empty: the fs root is a SHARED namespace. The decks feature writes
- * video and image blocks into a reserved 'deck-media' bucket through the same
- * `saveBlogImage`, so a readdir-based listing is one wrong postId away from
+ * Worse than empty: the fs root is a SHARED namespace. The retired decks feature
+ * wrote video and image blocks into a reserved 'deck-media' bucket through the
+ * same `saveBlogImage` (those bytes remain), so a readdir-based listing is one wrong postId away from
  * showing another feature's assets inside the blog editor.
  *
  * A table answers both backends identically, and it is the only place alt text

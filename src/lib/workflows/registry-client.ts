@@ -38,7 +38,6 @@ import { blogDef } from './nodes/blog.def';
 import { jkaiDef } from './nodes/jkai.def';
 import { siteToolDef } from './nodes/site-tool.def';
 import { fileSearchDef } from './nodes/file-search.def';
-import { deckBuildDef } from './nodes/deck-build.def';
 import { apiCallDef } from './nodes/api-call.def';
 import { apiIntegrationDef } from './nodes/api-integration.def';
 import { delegateAgentDef } from './nodes/delegate-agent.def';
@@ -114,7 +113,6 @@ const builtInDefinitions: NodeDefinition[] = [
   jkaiDef,
   siteToolDef,
   fileSearchDef,
-  deckBuildDef,
   apiCallDef,
   apiIntegrationDef,
   delegateAgentDef,

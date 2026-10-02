@@ -612,18 +612,6 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     },
   },
   {
-    type: 'deck-build',
-    label: 'Deck build (presentation)',
-    kind: 'output',
-    group: 'Integrations',
-    description: 'Publish workflow results as an sr. decks presentation; returns the deck url + share link.',
-    defaultConfig: { title: '', description: '', spec: '[]', share: true, isPublic: false },
-    handles: {
-      inputs: [{ id: 'in', kinds: ['text', 'json', 'any'] }],
-      outputs: [{ id: 'out', kinds: ['json', 'text'] }],
-    },
-  },
-  {
     type: 'api-call',
     label: 'API call (catalogue)',
     kind: 'output',

@@ -56,7 +56,6 @@ import './tools/node-call';
 import './tools/custom-tool-admin';
 import './tools/web';
 import './tools/news';
-import './tools/presentations';
 import './tools/datastore';
 import './tools/apis';
 import './tools/api-integrations';
@@ -147,7 +146,6 @@ export function getToolsetManifest(): Array<{
     web: 'Web — fetch the readable contents of a public HTTP/HTTPS URL (HTML or plain text). Use when the user shares a link or you need to look up the page behind a URL.',
     'custom-tools': 'Custom/ephemeral tools — author a throwaway tool for the current turn and promote a useful one into a persistent tool',
     news: 'Live technical news — search the current Hacker News and Lobsters wires and return source links',
-    decks: 'sr. decks presentations — list, build from a spec, inspect, and manage block-based slide decks',
     datastore: 'Permanent sitewide datastore — full CRUD over collections of JSON records with filters/aggregates and row-level permissions (structured/queryable data that persists across chats and workflows)',
     apis: 'API catalogue + integration register — search catalogued external data sources, call them for live data (SSRF-guarded), authenticate with owner-registered secret handles you can use but never read (api_secrets_list), and RECORD a working call as a reusable named integration (api_integration_save/test) that also appears in the no-code canvas node',
     knowledge: 'Unified knowledge recall — one search across /drive files, deep-dive research facts, personal memory, and datastore records (the @knowledge mention)',

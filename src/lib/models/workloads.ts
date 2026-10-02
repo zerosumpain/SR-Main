@@ -43,7 +43,6 @@ import {
   DEFAULT_IMAGE_TOOL_MODEL_ID,
   DEFAULT_EMBEDDING_MODEL_ID,
   DEFAULT_AUDIO_MODEL_ID,
-  DEFAULT_ART_DIRECTOR_MODEL_ID,
   DEFAULT_DESIGN_REVIEW_MODEL_ID,
   DEFAULT_NOTE_REVIEW_MODEL_ID,
 } from '$lib/constants/default-models';
@@ -271,18 +270,6 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
     catalogue: 'tools',
     reason:
       "Must accept an `input_audio` content part. OpenAI's whisper endpoint is not reachable through this repo's OpenRouter-only gateway, so transcription rides a multimodal chat model rather than a dedicated speech API.",
-  },
-  {
-    id: 'art-director',
-    scope: 'site',
-    label: 'Deck art director',
-    blurb: 'Composing slide layouts and block choices in the decks builder.',
-    key: 'jkai.decks.art_director_model',
-    fallbackModelId: DEFAULT_ART_DIRECTOR_MODEL_ID,
-    requires: 'tools',
-    catalogue: 'tools',
-    reason:
-      'A one-shot composition, not an agentic loop, so a slower higher-quality model earns its latency here where the agentic roles cannot afford it.',
   },
   {
     id: 'image-tool',

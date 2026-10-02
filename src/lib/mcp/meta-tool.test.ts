@@ -348,7 +348,7 @@ describe('the domain map the model navigates by', () => {
     const d = JKAI_EXTENDED_TOOL.description.toLowerCase();
     // Calendar and payments were both missing while `gmail` was present, and
     // both produced a wrong-source turn in the same week.
-    for (const domain of ['calendar', 'payments', 'datastore', 'intel knowledge graph', 'decks', 'monitors']) {
+    for (const domain of ['calendar', 'payments', 'datastore', 'intel knowledge graph', 'monitors']) {
       expect(d, domain).toContain(domain);
     }
   });
