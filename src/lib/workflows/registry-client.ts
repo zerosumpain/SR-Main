@@ -72,7 +72,6 @@ import { inspectorDef } from './nodes/inspector';
 import { postitDef } from './nodes/postit';
 import { annotationDef } from './nodes/annotation';
 import type { NodeDefinition } from './types';
-import { quickAnswerDef } from './nodes/quick-answer.def';
 import { deepResearchDef } from './nodes/deep-research.def';
 import { chatDef } from './nodes/chat.def';
 import { builderChatDef, builderPiDef, buildViewDef } from './nodes/builder-canvas.def';
@@ -143,7 +142,6 @@ const builtInDefinitions: NodeDefinition[] = [
   builderPiDef,
   buildViewDef,
   researchResultDef,
-  quickAnswerDef,
   deepResearchDef,
   siteMapperDef,
   chatDef,

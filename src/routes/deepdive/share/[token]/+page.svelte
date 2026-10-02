@@ -9,7 +9,6 @@
 <div class="desk-host">
   <ResearchDesk
     sessionId={data.session.id}
-    mode="deep"
     readonly
     initialTopic={data.session.topic}
     initialStatus={data.session.status}

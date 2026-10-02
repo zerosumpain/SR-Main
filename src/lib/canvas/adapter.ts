@@ -422,18 +422,6 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     defaultWeight: 0.2,
   },
   {
-    type: 'quick-answer',
-    label: 'Quick Answer',
-    kind: 'intel',
-    group: 'Intelligence',
-    description: 'DAG-driven quick answer (Tavily + synthesis). Useful for per-item fan-out.',
-    defaultConfig: { topic: '{{item.title}}', goals: [], pollIntervalMs: 1500, maxWaitMs: 180000 },
-    handles: {
-      inputs: [{ id: 'in', kinds: ['text'] }],
-      outputs: [{ id: 'out', kinds: ['text'] }],
-    },
-  },
-  {
     type: 'deep-research',
     label: 'Deep Research',
     kind: 'intel',
@@ -1191,7 +1179,6 @@ export function mapTypeToKind(type: string): NodeKind {
   if (type === 'intelligence' || type === 'research-result') return 'intelligence';
   if (type === 'research-chat') return 'research-chat';
   if (type === 'research-report') return 'research-report';
-  if (type === 'quick-answer') return 'intel';
   if (type === 'deep-research') return 'intel';
   if (type === 'file-search' || type === 'research-search') return 'intel';
   if (type === 'webpage') return 'webpage';
