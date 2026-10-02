@@ -27,10 +27,7 @@
       "migrationAuthor": "zerosumpain/SR-Main",
       "schemaExecutor": "zerosumpain/SR-Main",
       "requiredTables": [
-        "access_group",
-        "activity_principals",
         "agent_actions",
-        "allowed_user",
         "app_settings",
         "drive_folder_settings",
         "drive_intel_outbox",
@@ -128,13 +125,7 @@
       "requiredTables": [
         "agent_actions",
         "app_settings",
-        "openrouter_models",
-        "project_share",
-        "project_visibility",
-        "workflow_edges",
-        "workflow_nodes",
-        "workflow_schedules",
-        "workflows"
+        "openrouter_models"
       ],
       "ownedSchema": "policy",
       "ownedTables": [
@@ -166,13 +157,7 @@
       "requiredTables": [
         "agent_actions",
         "app_settings",
-        "openrouter_models",
-        "project_share",
-        "project_visibility",
-        "workflow_edges",
-        "workflow_nodes",
-        "workflow_schedules",
-        "workflows"
+        "openrouter_models"
       ],
       "ownedSchema": "dfe",
       "ownedTables": [
@@ -205,13 +190,7 @@
       "requiredTables": [
         "agent_actions",
         "app_settings",
-        "openrouter_models",
-        "project_share",
-        "project_visibility",
-        "workflow_edges",
-        "workflow_nodes",
-        "workflow_schedules",
-        "workflows"
+        "openrouter_models"
       ],
       "ownedSchema": "dsd",
       "ownedTables": [

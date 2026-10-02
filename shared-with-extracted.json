@@ -132,10 +132,7 @@
       "sha256": "c8bb23e94f12b7aa7f7402eae2ea5e84de06fb18c7d286a8f740e2b41d5a95bf"
     },
     "src/lib/server/access.ts": {
-      "peer": [
-        "zerosumpain/SR-Health",
-        "zerosumpain/SR-Drive"
-      ],
+      "peer": "zerosumpain/SR-Health",
       "sha256": "1637e7a99119771b9977234e6df1e5a7a9e3cd23ed19d751058ca54256eb8baf"
     },
     "src/lib/server/access-util.ts": {
@@ -201,7 +198,6 @@
     },
     "src/lib/access/effective.ts": {
       "peer": [
-        "zerosumpain/SR-Drive",
         "zerosumpain/SR-Jkai-Core",
         "zerosumpain/SR-Health",
         "zerosumpain/SR-Workflows"
