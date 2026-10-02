@@ -179,6 +179,11 @@ const BASELINE_CYCLES = [
   'apis <-> tools',
   'blog <-> voice',
   'codegraph <-> jkai',
+  // 2026-10-02: master's daydream "Do it for me" (#1122) reads Gmail, and the
+  // WhatsApp inbound intercept hands feedback replies to daydream. Master already
+  // carried this as 'daydream <-> workflows'; the sort renamed it. Invert by
+  // having daydream register its intercept with integrations at boot.
+  'daydream <-> integrations',
   'heartbeat <-> tools',
   'jkai <-> tools',
   // Was 'jkai <-> server' before the gateway moved down — the same knot, now

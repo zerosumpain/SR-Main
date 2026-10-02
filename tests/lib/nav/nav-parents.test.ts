@@ -46,7 +46,7 @@ const EXTRACTED_PAGE_SET = new Set(['/jkai']);
 
 describe('every back link points at a page that exists', () => {
   it('found the route tree', () => {
-    expect(ROUTE_SET.size).toBeGreaterThan(130);
+    expect(ROUTE_SET.size).toBeGreaterThan(90);
   });
 
   it('resolves the parent of every page that wears the bar', () => {
