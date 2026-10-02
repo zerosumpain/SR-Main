@@ -11,7 +11,7 @@
 // diverge again. Order is editorial, and is the order they appear in.
 //
 // Visibility is NOT here. Whether a card is shown is the server's answer
-// (`data.visibility`), keyed by `key` — and every key must also appear in
+// (`data.cards`, filtered in +page.server.ts), keyed by `key` — and every key must also appear in
 // STATIC_PROJECT_KEYS or its toggle silently 400s. `registry-cards.test.ts`
 // guards that parity against this array.
 

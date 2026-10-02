@@ -4,6 +4,7 @@ import { isNotNull, or, desc } from 'drizzle-orm';
 import { resolveVisibilityMap, isProjectPublic, isProjectSlug } from '$lib/projects/visibility';
 import { isOwnerEmail } from '$lib/server/access';
 import { OWNER_ONLY_CARDS } from './owner-cards.server';
+import { PROJECT_CARDS } from './cards';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async (event) => {
@@ -75,7 +76,15 @@ export const load: PageServerLoad = async (event) => {
   }));
   const projects = authenticated ? withVis : withVis.filter((p) => p.isPublic);
 
+  // The hand-built cards are filtered HERE, against the real visibility map.
+  // The client must not decide: the public is sent an empty map (it names every
+  // private slug), and reading an empty map client-side resolves every static
+  // key to its default — public — so every private card rendered for anonymous
+  // visitors. Sending only the permitted cards also keeps private card copy out
+  // of the public page payload.
+  const cards = authenticated ? PROJECT_CARDS : PROJECT_CARDS.filter((c) => isProjectPublic(visibility, c.key));
+
   // The visibility map names every private project's slug: the owner's toggles
   // only, never the public's.
-  return { projects, authenticated, visibility: authenticated ? visibility : {}, ownerCards: authenticated ? OWNER_ONLY_CARDS : [] };
+  return { projects, cards, authenticated, visibility: authenticated ? visibility : {}, ownerCards: authenticated ? OWNER_ONLY_CARDS : [] };
 };
