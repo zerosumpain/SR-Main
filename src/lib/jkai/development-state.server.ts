@@ -1,6 +1,6 @@
 import { db } from '$lib/db';
-import { jkaiBuildDeliveries, jkaiBuildDeliveryEvents, jkaiBuilds, jkaiBuildLessons } from '$lib/db/schema';
-import { and, eq, desc, gt } from 'drizzle-orm';
+import { jkaiBuildDeliveries, jkaiBuildDeliveryEvents, jkaiBuilds } from '$lib/db/schema';
+import { eq, desc } from 'drizzle-orm';
 import { newDelivery, type DeliveryState } from './development';
 
 export async function loadDelivery(buildId: string) {
@@ -45,11 +45,4 @@ export async function mutateDelivery(buildId: string, kind: string, change: (sta
 }
 export async function deliveryEvents(buildId: string) {
   return db.select().from(jkaiBuildDeliveryEvents).where(eq(jkaiBuildDeliveryEvents.buildId, buildId)).orderBy(desc(jkaiBuildDeliveryEvents.id)).limit(80);
-}
-export async function relevantLessons(area: string) {
-  const rows = await db.select().from(jkaiBuildLessons).where(and(eq(jkaiBuildLessons.area, area), gt(jkaiBuildLessons.expiresAt, new Date())))
-    .orderBy(desc(jkaiBuildLessons.createdAt)).limit(8);
-  const { syncDevelopmentLesson } = await import('$lib/codegraph/development.server');
-  for (const row of rows) await syncDevelopmentLesson(row.id).catch(() => {});
-  return rows;
 }

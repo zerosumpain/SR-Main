@@ -61,18 +61,19 @@ describe('reviewer evidence', () => {
     expect(JSON.stringify(parts.slice(1))).not.toContain('Save a stop');
   });
 
-  it('puts area lessons first, drops synced duplicates and bounds the total', () => {
-    const area = [{ id: 7, lesson: 'Never hard-code a model', evidence: 'PR #1' }];
+  it('puts area lessons first, drops the same lesson retrieved by file and bounds the total', () => {
+    // One store: an area lesson IS the graph row the file retrieval also finds.
+    const area = [{ id: 'development-lesson:7', lesson: 'Never hard-code a model', evidence: 'PR #1' }];
     const files = [
       { id: 'development-lesson:7', title: 'Never hard-code a model', body: 'copy', citedPaths: [] },
       { id: 'L2', title: 'Two writers', body: 'They race on the cache.', citedPaths: ['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/d.ts', 'src/e.ts', 'src/f.ts'] },
     ];
     const lessons = reviewerLessons(area, files);
-    expect(lessons.map(l => [l.id, l.origin])).toEqual([['area-7', 'area'], ['L2', 'codegraph']]);
+    expect(lessons.map(l => [l.id, l.origin])).toEqual([['area-development-lesson:7', 'area'], ['L2', 'codegraph']]);
     expect(lessons[0].lesson).toBe('Never hard-code a model (evidence: PR #1)');
     expect(lessons[1]).toMatchObject({ lesson: 'Two writers: They race on the cache.', paths: ['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/d.ts', 'src/e.ts'] });
     const many = Array.from({ length: 30 }, (_, i) => ({ id: `L${i}`, title: '', body: 'y'.repeat(2000), citedPaths: [] }));
-    const manyArea = Array.from({ length: 30 }, (_, i) => ({ id: i, lesson: 'z'.repeat(2000), evidence: 'e' }));
+    const manyArea = Array.from({ length: 30 }, (_, i) => ({ id: `development-lesson:${i}`, lesson: 'z'.repeat(2000), evidence: 'e' }));
     const bounded = reviewerLessons(manyArea, many);
     expect(bounded.length).toBeLessThanOrEqual(REVIEW_LIMITS.areaLessons + REVIEW_LIMITS.fileLessons);
     expect(bounded.reduce((n, l) => n + l.lesson.length, 0)).toBeLessThanOrEqual(REVIEW_LIMITS.lessonsTotal);

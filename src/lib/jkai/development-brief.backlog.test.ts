@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 const h = vi.hoisted(() => ({ groom: vi.fn() }));
 vi.mock('$lib/db', () => ({ db: { select: () => { throw new Error('no database in a unit test'); } } }));
-vi.mock('./development-state.server', () => ({ mutateDelivery: vi.fn(), relevantLessons: vi.fn() }));
+vi.mock('./development-state.server', () => ({ mutateDelivery: vi.fn() }));
 vi.mock('./development-review.server', () => ({ developmentAssessor: vi.fn(async () => { throw new Error('no model'); }) }));
 vi.mock('./log-emitter', () => ({ emitLog: vi.fn() }));
 vi.mock('./development-grooming.server', () => ({ groomBacklogBrief: h.groom, groomDevelopmentBrief: vi.fn() }));

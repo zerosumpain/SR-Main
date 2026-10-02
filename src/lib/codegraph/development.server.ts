@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { codegraphSnapshots, codegraphQueries, codegraphNodeEpisodes, codegraphLessons, codegraphNodeLessons, codegraphNodes, codegraphEpisodes,
-  codegraphAssessments, codegraphSources, jkaiBuildDeliveries, jkaiBuildLessons, jkaiIterations } from '$lib/db/schema';
+import { codegraphSnapshots, codegraphQueries, codegraphNodeEpisodes, codegraphLessons, codegraphNodes, codegraphEpisodes,
+  codegraphAssessments, codegraphSources, jkaiBuildDeliveries, jkaiIterations } from '$lib/db/schema';
 import { loadDelivery, mutateDelivery } from '$lib/jkai/development-state.server';
 import { impactOf, diffSnapshots, type StructuralSnapshot } from './snapshot';
 import { mergeTopicTopUp, pathsInText, planBuildQuery, planTopicTopUp } from './build-context';
@@ -113,24 +113,6 @@ export async function contextForBuild(buildId: string, iterationId?: string, pre
   return { block, context, lessons: retrieved?.lessons ?? [] };
 }
 
-/** Copy accepted, owner-authored lessons using stable identity and original evidence. */
-export async function syncDevelopmentLesson(id: number) {
-  const [lesson] = await db.select().from(jkaiBuildLessons).where(eq(jkaiBuildLessons.id, id));
-  if (!lesson) return;
-  const delivery = await loadDelivery(lesson.buildId);
-  if (!delivery?.state.acceptedAt) return;
-  const graphId = `development-lesson:${id}`;
-  const paths = [...new Set([...pathsInText(lesson.evidence), ...(delivery.state.changes?.files ?? [])])].slice(0, 50);
-  await db.transaction(async tx => {
-    await tx.insert(codegraphLessons).values({ id: graphId, repo: 'SR-Main', slug: graphId, title: lesson.lesson.slice(0, 120),
-      body: `${lesson.lesson}\nEvidence: ${lesson.evidence}\nAccepted local candidate: ${lesson.revision}. Production deployment is not established.`,
-      origin: 'build', originRef: `/jkai/develop/${lesson.buildId}`, citedPaths: paths, observedAt: lesson.createdAt }).onConflictDoNothing();
-    if (paths.length) {
-      const nodes = await tx.select().from(codegraphNodes).where(and(eq(codegraphNodes.repo, 'SR-Main'), inArray(codegraphNodes.canonicalPath, paths)));
-      if (nodes.length) await tx.insert(codegraphNodeLessons).values(nodes.map(n => ({ nodeId: n.id, lessonId: graphId }))).onConflictDoNothing();
-    }
-  });
-}
 /**
  * A gate result from isolated verification: resolve what was served, and feed
  * the fail→fix pairing. A red result is parked on the delivery; a later green
@@ -256,8 +238,6 @@ export async function observeDevelopmentAcceptance(buildId: string) {
   // episode its release has already promoted.
   }).onConflictDoUpdate({ target: codegraphEpisodes.dedupeKey, set: { verification: delivery.state.gate?.evidence } }).returning();
   await linkEpisode(episode.id, delivery.state.changes?.files ?? []);
-  const lessons = await db.select().from(jkaiBuildLessons).where(eq(jkaiBuildLessons.buildId, buildId));
-  for (const l of lessons) await syncDevelopmentLesson(l.id);
 }
 
 /**

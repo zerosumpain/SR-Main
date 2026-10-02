@@ -292,7 +292,7 @@ async function repairAfterCi(buildId: string, modelId: string | null): Promise<A
   if (!capabilities?.persistentSessions || !capabilities.brokerConfigured) return stop(buildId, 'CI failed and the development worker is not available to repair it.');
   const { coachingInstruction } = await import('./development-review.server');
   const { enqueuePendingMessage } = await import('./pending-messages');
-  const { relevantLessons } = await import('./development-state.server');
+  const { areaLessons } = await import('$lib/codegraph/build-lessons.server');
   // State first, then GitHub. If this write loses a revision race the PR is
   // still open and the next sweep simply tries again; closing first would leave
   // a closed PR that the next sweep reads as "closed without merging".
@@ -306,7 +306,7 @@ async function repairAfterCi(buildId: string, modelId: string | null): Promise<A
   await closeDevelopmentPullRequest(buildId, 'CI failed on this candidate. Autopilot has closed it and is repairing the cause; a new pull request will follow.')
     .catch((error) => console.warn('[autopilot] could not close the red pull request', error));
   await enqueuePendingMessage(buildId, coachingInstruction({
-    criteria: [], blocker: null, lessons: await relevantLessons(state.area).catch(() => []),
+    criteria: [], blocker: null, lessons: await areaLessons(state.area).catch(() => []),
     round: (state.autopilot?.rounds ?? 0) + 1, maxRounds: state.autopilot?.maxRounds ?? 1, ciFailure: summary,
   }));
   if (state.session.id) await builderClient.restartBuild(buildId);

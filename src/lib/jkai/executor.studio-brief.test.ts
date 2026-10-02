@@ -43,7 +43,7 @@ vi.mock('./pending-messages', () => ({
   drainPendingMessages: async () => [],
   formatPendingForPrompt: () => '--- PENDING MESSAGE ---',
 }));
-vi.mock('$lib/jkai/development-state.server', () => ({ loadDelivery: async () => null, relevantLessons: async () => [] }));
+vi.mock('$lib/jkai/development-state.server', () => ({ loadDelivery: async () => null }));
 vi.mock('./codebase-digest', () => ({ buildCodebaseDigest: async () => '' }));
 vi.mock('./sandbox', () => ({
   writeFileInSandbox: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
