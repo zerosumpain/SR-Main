@@ -8,6 +8,9 @@
 //   * the heartbeat activities shown on the Build pages must exist in the scheduler;
 //   * the app manifest's names must all have copy, and the copy must not outlive them;
 //   * every native API area on disk must have copy;
+//   * every Daydream, Build and native route the build serves must be in the route ledger,
+//     pointing at a live page or hidden with a reason — a new capability usually arrives as a
+//     route, not a stage, so this is the check that catches it;
 //   * the explainer copy may not carry digits, because a number written into prose is a
 //     number that will go stale — figures come from facts.server.ts instead.
 
@@ -22,8 +25,12 @@ import { IDEA_SOURCES } from '$lib/selfimprove/board';
 import { RELEASE_POLICIES, BRIEF_LANES } from '$lib/constants/development';
 import { EDGE_KINDS } from '$lib/codegraph/query';
 import { GATE_NAMES } from '$lib/codegraph/gates';
+import { ACT_KINDS } from '$lib/daydream/act/plan';
+import { RED_TEAM_VERDICTS } from '$lib/daydream/red-team';
+import { ROUTE_MANIFEST } from 'virtual:sr-route-manifest';
 
-import { STAGE_ENG, COMMISSION_COPY, DAYDREAM_COPY } from './daydream';
+import { STAGE_ENG, COMMISSION_COPY, DAYDREAM_COPY, ACT_COPY, VERDICT_COPY } from './daydream';
+import { ROUTE_LEDGER, ROUTE_SCOPE } from './routes';
 import {
   SOURCE_COPY, POLICY_COPY, BRIEF_LANE_COPY, EDGE_COPY, GATE_COPY, HEARTBEAT_ACTIVITIES, HIDDEN_ACTIVITIES, ACTIVITY_COPY,
   BUILD_COPY, DELIVERY_COPY, VERIFY_COPY, PHASE_COPY, LANE_COPY,
@@ -41,6 +48,8 @@ describe('copy maps cover exactly what the feature declares', () => {
   it.each([
     ['daydream stages', STAGE_ENG, STAGES],
     ['double-check states', COMMISSION_COPY, COMMISSION_STATES],
+    ['do it for me kinds', ACT_COPY, ACT_KINDS],
+    ['double-check verdicts', VERDICT_COPY, RED_TEAM_VERDICTS],
     ['backlog idea sources', SOURCE_COPY, IDEA_SOURCES],
     ['release policies', POLICY_COPY, RELEASE_POLICIES],
     ['brief lanes', BRIEF_LANE_COPY, BRIEF_LANES],
@@ -100,6 +109,37 @@ describe('the native API', () => {
   });
 });
 
+describe('the route ledger', () => {
+  // The build's own route manifest — the same list the pages render from — so the test and
+  // the deployed study can't disagree about what exists.
+  const inScope = [...new Set(ROUTE_MANIFEST.map((r) => r.path).filter((p) => ROUTE_SCOPE.test(p)))].sort();
+  const live = new Set(PARTS.flatMap((p) => p.leaves.map((l) => `${p.id}/${l.slug}`)));
+
+  it('finds the routes it is meant to police', () => {
+    // Guards against a manifest that silently returns nothing, which would pass every check below.
+    expect(inScope.length).toBeGreaterThan(50);
+  });
+
+  it('accounts for every Daydream, Build and native route the site serves', () => {
+    const missing = inScope.filter((p) => !(p in ROUTE_LEDGER));
+    expect(missing, 'new route(s) with no entry in lib/routes.ts ROUTE_LEDGER — point each at the page that explains it and write that page a sentence, or hide it with a reason').toEqual([]);
+  });
+
+  it('lists no route the site no longer serves', () => {
+    const served = new Set(inScope);
+    const stale = Object.keys(ROUTE_LEDGER).filter((p) => !served.has(p));
+    expect(stale, 'ledger entries for routes that no longer exist — remove them, and any copy that described them').toEqual([]);
+  });
+
+  it('points every shown route at a page the study still has', () => {
+    for (const [path, e] of Object.entries(ROUTE_LEDGER)) if ('leaf' in e) expect(live, `${path} → ${e.leaf}`).toContain(e.leaf);
+  });
+
+  it('keeps every ledger key inside the scope it polices', () => {
+    for (const path of Object.keys(ROUTE_LEDGER)) expect(path, path).toMatch(ROUTE_SCOPE);
+  });
+});
+
 describe('explainer copy carries no figures', () => {
   const ALLOWED = /SHA-256/g;
   function strings(v: unknown, path: string, out: Array<[string, string]>) {
@@ -111,7 +151,8 @@ describe('explainer copy carries no figures', () => {
     const maps = {
       DAYDREAM_COPY, STAGE_ENG, COMMISSION_COPY, BUILD_COPY, DELIVERY_COPY, VERIFY_COPY, PHASE_COPY, LANE_COPY,
       SOURCE_COPY, POLICY_COPY, BRIEF_LANE_COPY, EDGE_COPY, GATE_COPY, ACTIVITY_COPY, APP_COPY, TAB_COPY, MORE_COPY,
-      WATCH_COPY, BACKGROUND_COPY, PERMISSION_COPY, ENTITLEMENT_COPY, SURFACE_COPY, AREA_COPY,
+      WATCH_COPY, BACKGROUND_COPY, PERMISSION_COPY, ENTITLEMENT_COPY, SURFACE_COPY, AREA_COPY, ACT_COPY, VERDICT_COPY,
+      ROUTE_LEDGER,
     };
     for (const [name, m] of Object.entries(maps)) strings(m, name, all);
     const offenders = all.filter(([, s]) => /\d/.test(s.replace(ALLOWED, '')));

@@ -7,6 +7,8 @@
 
 import type { Stage } from '$lib/daydream/think/explain';
 import type { CommissionState } from '$lib/daydream/commissioning';
+import type { ActKind } from '$lib/daydream/act/plan';
+import type { RedTeamVerdict } from '$lib/daydream/red-team';
 
 export interface Twin {
   /** Plain English — the default register. */
@@ -35,6 +37,42 @@ export const COMMISSION_COPY = {
   cancelled: { plain: 'Stopped before it finished.', eng: 'Terminal. Cancelled by the owner or superseded.' },
 } satisfies Record<CommissionState, Twin>;
 
+/** "Do it for me": each kind of step a note can carry out, and why it's allowed. */
+export const ACT_COPY = {
+  calendar_event: {
+    plain: 'Puts an entry in my own diary. Undo deletes it.',
+    eng: 'One tap. Creates an event on the owner’s calendar from the note’s own date. Undo deletes the event.',
+  },
+  reminder: {
+    plain: 'Sends me a reminder at a time the note named. Undo cancels it until it goes off.',
+    eng: 'One tap. Schedules a message to the owner. Undo cancels the scheduled callback up until it fires.',
+  },
+  calendar_move: {
+    plain: 'Moves one of my diary entries, but only one nobody else is invited to. Undo puts it back.',
+    eng: 'One tap. Moves an owner-only event the note names. Events with other attendees are refused. Undo restores the original slot.',
+  },
+  email_draft: {
+    plain: 'Writes a reply but stops at a draft, because it would reach another person. I read it and send it with a second tap.',
+    eng: 'Guided. Drafts a reply on the note’s source thread. The recipient is looked up by code from the evidence, never written by the model. Sending is a second tap and can’t be undone.',
+  },
+} satisfies Record<ActKind, Twin>;
+
+/** The double-check's three answers when it argues against its own note. */
+export const VERDICT_COPY = {
+  holds: {
+    plain: 'It tried to prove itself wrong and couldn’t. For money, that only counts if it actually saw the bank line.',
+    eng: 'Survived the red team. A money claim is downgraded to unclear unless a bank or PayPal ledger line was in front of the checker.',
+  },
+  wrong: {
+    plain: 'It found the mistake. The reason becomes a lesson so the next cycle thinks twice.',
+    eng: 'Refuted. The narrative is stored as a ruling memory and fed back into later cycles as a lesson.',
+  },
+  unclear: {
+    plain: 'It couldn’t tell either way, so it says so rather than guess.',
+    eng: 'Neither proven nor refuted. Anything the parser doesn’t recognise also lands here, never on holds.',
+  },
+} satisfies Record<RedTeamVerdict, Twin>;
+
 export const DAYDREAM_COPY = {
   hub: {
     strap: 'What it thinks about while I’m not looking',
@@ -47,6 +85,14 @@ export const DAYDREAM_COPY = {
   },
   inbox: {
     line: { plain: 'Every note goes through the same four stages, and the page always says whose move it is.', eng: 'One stage model shared by the web Inbox, the phone and the sign-off, derived from the note’s verdict, commission state and linked build.' },
+    act: {
+      plain: 'When a note suggests a step, I can tap Do it for me and it carries the step out. The tap is my yes, so it only does things that stay with me and can be taken back. Anything that reaches someone else stops at a draft.',
+      eng: 'A model drafts a plan from the note, and code checks every date, entry and recipient against the note’s own words before anything is written. A plan that fails a check is refused with the reason. Payments, bookings, cancellations and deletions are not on the list.',
+    },
+    ruling: {
+      plain: 'I can also rule on a note myself. Saying it’s wrong needs a reason, and that reason is remembered, so the same mistake is less likely next time.',
+      eng: 'An owner ruling goes through the same writer as the double-check. A wrong ruling requires a why, which is stored as a ruling memory; re-ruling supersedes the earlier memory rather than leaving two that disagree.',
+    },
     check: { plain: 'If I’m not sure a note is right, I can ask for a double-check. It re-reads its sources and argues against its own note before reporting back.', eng: 'A commission is an approval-gated re-run against the cited evidence, with its own state machine. It never runs without an owner approval.' },
   },
   impact: {

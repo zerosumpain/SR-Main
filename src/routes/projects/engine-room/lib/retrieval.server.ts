@@ -11,7 +11,8 @@
 
 import { loadFacts } from './facts.server';
 import { PARTS, href, B } from './nav';
-import { DAYDREAM_COPY, STAGE_ENG, COMMISSION_COPY } from './daydream';
+import { DAYDREAM_COPY, STAGE_ENG, COMMISSION_COPY, ACT_COPY, VERDICT_COPY } from './daydream';
+import { WHO_LABEL } from './routes';
 import {
   BUILD_COPY, DELIVERY_COPY, POLICY_COPY, BRIEF_LANE_COPY, VERIFY_COPY, GATE_COPY, PHASE_COPY,
   SOURCE_COPY, EDGE_COPY, ACTIVITY_COPY, LANE_COPY,
@@ -69,6 +70,10 @@ function buildChunks(): Chunk[] {
     `${both(DAYDREAM_COPY.inbox.line)} ` + d.stages.map((s) => `${s.label}: ${s.explain} ${STAGE_ENG[s.id as keyof typeof STAGE_ENG]}`).join(' '));
   add('daydream', 'inbox', 'The double-check (commissions)', I,
     `${both(DAYDREAM_COPY.inbox.check)} ` + d.commissions.map((c) => `${c.label} (next to act: ${c.actor}): ${both(COMMISSION_COPY[c.id as keyof typeof COMMISSION_COPY])}`).join(' '));
+  add('daydream', 'inbox', 'Do it for me', I,
+    `${both(DAYDREAM_COPY.inbox.act)} ` + d.actKinds.map((k) => `${k.replace(/_/g, ' ')}: ${both(ACT_COPY[k as keyof typeof ACT_COPY])}`).join(' '));
+  add('daydream', 'inbox', 'The double-check arguing back, and rulings', I,
+    `${both(DAYDREAM_COPY.inbox.ruling)} ` + d.checkVerdicts.map((v) => `${v}: ${both(VERDICT_COPY[v as keyof typeof VERDICT_COPY])}`).join(' '));
   add('daydream', 'impact', 'How daydream is judged', M,
     `${both(DAYDREAM_COPY.impact.line)} The window is ${d.impactWindowDays} days.`);
   add('daydream', 'impact', 'Daydream caps and limits', M,
@@ -119,6 +124,13 @@ function buildChunks(): Chunk[] {
   add('app', 'privacy', 'The app\'s permissions and capabilities', PR,
     `${both(APP_COPY.privacy.line)} Permissions: ${list(APP.permissions.map((p) => `${p} (${PERMISSION_COPY[p] ?? ''})`))}. ` +
     `Capabilities: ${list(APP.entitlements.map((e) => `${e} (${ENTITLEMENT_COPY[e] ?? ''})`))}.`);
+
+  // The routes each page accounts for, from the ledger joined to this build's manifest.
+  for (const p of PARTS) for (const l of p.leaves) {
+    const rs = f.routes.filter((r) => r.leaf === `${p.id}/${l.slug}`);
+    if (rs.length) add(p.id, l.slug, `${l.label} on the site`, href(p.id, l.slug),
+      rs.map((r) => `${r.path} (${WHO_LABEL[r.who]}) ${r.what}.`).join(' '));
+  }
 
   return out;
 }

@@ -20,6 +20,8 @@ import { MAX_TOOL_CALLS, LOCAL_TOOLS, PRIVATE_SITE_TOOLS, RESEARCH_SITE_TOOLS } 
 import { ACTIVE_HOURS } from '$lib/daydream/budget';
 import { COMMISSION_STATES, COMMISSION_LABELS, nextActor } from '$lib/daydream/commissioning';
 import { IMPACT_WINDOW_DAYS } from '$lib/daydream/impact';
+import { ACT_KINDS } from '$lib/daydream/act/plan';
+import { RED_TEAM_VERDICTS } from '$lib/daydream/red-team';
 import { IDEA_SOURCES, WORK_STAGES, STAGE_META } from '$lib/selfimprove/board';
 import { BUDGET_CAPS, WORK_CAPS } from '$lib/selfimprove/types';
 import { RELEASE_POLICIES, RELEASE_POLICY_LABELS, AUTOPILOT_ROUNDS, BRIEF_LANES } from '$lib/constants/development';
@@ -32,6 +34,7 @@ import { DEFAULT_IDLE_WINDOW_MS } from '$lib/heartbeat/idle';
 import { PAIR_CODE_TTL_MS, DEVICE_TOKEN_TTL_MS } from '$lib/server/native-auth';
 import { ROUTE_MANIFEST } from 'virtual:sr-route-manifest';
 import { HEARTBEAT_ACTIVITIES, type HeartbeatActivity } from './build';
+import { ROUTE_LEDGER, ROUTE_SCOPE, type LeafRef, type Who } from './routes';
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -49,6 +52,31 @@ export interface EndpointArea {
   area: string;
   endpoints: number;
   methods: number;
+}
+
+/** One route the study accounts for, as the deployed build serves it. */
+export interface RouteFact {
+  path: string;
+  kind: 'api' | 'page';
+  methods: string[];
+  leaf: LeafRef;
+  who: Who;
+  what: string;
+}
+
+/**
+ * The ledger joined to the build's own route manifest: only routes that exist in THIS build
+ * are listed, with the methods it actually exports. Hidden entries never leave the server.
+ */
+function routes(): RouteFact[] {
+  const out: RouteFact[] = [];
+  for (const r of ROUTE_MANIFEST) {
+    if (!ROUTE_SCOPE.test(r.path)) continue;
+    const e = ROUTE_LEDGER[r.path];
+    if (!e || !('leaf' in e)) continue;
+    out.push({ path: r.path, kind: r.kind, methods: [...r.methods], leaf: e.leaf, who: e.who, what: e.what });
+  }
+  return out.sort((a, b) => a.path.localeCompare(b.path));
 }
 
 function nativeAreas(): EndpointArea[] {
@@ -107,6 +135,8 @@ export function loadFacts(now = new Date()) {
       },
       commissions: COMMISSION_STATES.map((id) => ({ id, label: COMMISSION_LABELS[id], actor: nextActor(id) })),
       impactWindowDays: IMPACT_WINDOW_DAYS,
+      actKinds: [...ACT_KINDS],
+      checkVerdicts: [...RED_TEAM_VERDICTS],
       upcoming: upcoming(now, 8),
     },
     build: {
@@ -149,6 +179,7 @@ export function loadFacts(now = new Date()) {
       deviceTokenDays: DEVICE_TOKEN_TTL_MS / DAY,
       nativeAreas: nativeAreas(),
     },
+    routes: routes(),
   };
 }
 
