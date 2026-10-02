@@ -7,6 +7,7 @@
   import DaydreamShell from '$lib/components/jkai/daydream/hub/DaydreamShell.svelte';
   import { developRoomRail } from '$lib/builds/develop-nav';
   import { mayFollow } from '$lib/member-view';
+  import DoctorControls from '$lib/components/builds/doctor/DoctorControls.svelte';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
@@ -181,14 +182,14 @@
   footer={[
     'strangeramblings.com/jkai/develop/doctor',
     'escalations land in the build backlog, deduped at intake',
-    'switches and undo live in /admin/ai/doctor',
+    'switches and undo: the owner controls on this page',
   ]}
 >
 <div class="wrap">
   <nav class="hdr-links" aria-label="Related">
     {#if mayFollow('/jkai/canvas', reach)}<a class="rel-link" href="/jkai/canvas">Canvases →</a>{/if}
     <a class="rel-link" href="/jkai/develop/backlog">Build backlog →</a>
-    {#if !data.member}<a class="rel-link" href="/admin/ai/doctor">Controls →</a>{/if}
+    {#if data.controls}<a class="rel-link" href="#controls">Controls ↓</a>{/if}
   </nav>
 
   <!-- A dead WhatsApp bridge is invisible on every other nightly job, because
@@ -204,7 +205,7 @@
   {#if !data.switches.enabled}
     <div class="alert warn">
       <strong>The nightly run is switched off.</strong> Nothing below will change until the kill
-      switch is back on{#if !data.member} in <a href="/admin/ai/doctor">Controls</a>{/if}.
+      switch is back on{#if data.controls} in <a href="#controls">Controls</a>{/if}.
     </div>
   {/if}
 
@@ -410,6 +411,13 @@
       </div>
     {/if}
   </section>
+
+  <!-- ── Owner controls ── switches, Run now and the undo list, folded in
+       from /admin/ai/doctor. Never rendered for a member. -->
+  {#if !data.member && data.controls}
+    <DoctorControls switches={data.switches} schedule={data.schedule} running={data.running}
+      caps={data.controls.caps} findings={data.controls.findings} />
+  {/if}
 
   <!-- ── Technical detail ─────────────────────────────────────────────────
        Everything below is the raw audit trail. Collapsed by default: it is

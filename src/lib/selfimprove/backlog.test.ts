@@ -169,7 +169,7 @@ describe('pickWork', () => {
 
   it('reserves a retry slot even at the propose phase limit of 2', () => {
     // `Math.floor(2 * 1/3)` is 0. A bare proportion would have left features —
-    // which run at maxPullRequests: 2 — never retried at all.
+    // which ran at a limit of 2 — never retried at all.
     const items = [
       item({ slug: 'fresh', kind: 'feature', attempts: 0 }),
       item({ slug: 'other', kind: 'feature', attempts: 0 }),

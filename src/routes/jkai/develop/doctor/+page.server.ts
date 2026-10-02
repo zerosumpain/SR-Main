@@ -13,6 +13,8 @@ import {
 import { getDoctorStatus } from '$lib/workflowdoctor/run';
 import { doctorSchedule } from '$lib/heartbeat/activity-schedule';
 import { triageNow, type TriageResult } from '$lib/workflowdoctor/triage';
+import { listFindings } from '$lib/workflowdoctor/findings';
+import { toFindingView, type FindingView } from '$lib/workflowdoctor/finding-view';
 import {
   COLLECTIONS,
   SETTINGS_ENABLED_KEY,
@@ -235,7 +237,29 @@ export const load: PageServerLoad = async (event) => {
     running: getDoctorStatus().running,
   };
 
-  if (!member) return { ...page, member };
+  if (!member) {
+    // The switches, Run now and undo list folded in from /admin/ai/doctor.
+    // Owner only; a before-image's values never leave the server.
+    const controlFindings: FindingView[] = await listFindings({ limit: FINDING_LIMIT })
+      .then((rows) => rows.map(toFindingView))
+      .catch((err) => {
+        console.error('[workflowdoctor] page: control findings read failed:', errMsg(err));
+        return [];
+      });
+    return {
+      ...page,
+      member,
+      controls: {
+        caps: {
+          breakerFailures: WORK_CAPS.breakerConsecutiveFailures,
+          workflows: WORK_CAPS.maxWorkflowsMutated,
+          fixes: WORK_CAPS.maxAutoFixesTotal,
+          quietHours: WORK_CAPS.humanEditQuietHours,
+        },
+        findings: controlFindings,
+      },
+    };
+  }
   // jkai · develop, read-only for a member: the numbers of each night, never
   // WHICH workflows failed or why. Stories, signatures, silent failures and
   // runaways name the owner's canvases and quote their errors, which touch his
@@ -243,6 +267,7 @@ export const load: PageServerLoad = async (event) => {
   return {
     ...page,
     member,
+    controls: null,
     runs: runs.map(memberDoctorRun),
     stories: [],
     stats: { ...page.stats, costUsd: 0 },

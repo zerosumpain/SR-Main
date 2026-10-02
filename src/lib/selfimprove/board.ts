@@ -167,7 +167,7 @@ export type WorkLane = (typeof WORK_LANES)[number];
 /**
  * Which builder takes a backlog item.
  *
- * Since D3 (2026-09-26) there are two builders: the repo change-request lane,
+ * Since D3 (2026-09-26) there are two builders: the repo lane (a development delivery since 2026-10-02),
  * which takes anything needing code once the owner has accepted its brief, and
  * the monitor generator for watches. The toolsmith and catalogue lanes were
  * retired with the toolsmith; `tool` and `source` items now go to `build`.
@@ -511,6 +511,9 @@ export function isTapped(item: { grooming?: { acceptedAt?: string | null } | nul
 export function artifactHref(ref: string | null): string | null {
   if (!ref) return null;
   if (/^https?:\/\//i.test(ref)) return ref;
+  // A delivery is read on its development page; a bare build (a change
+  // request from before 2026-10-02) has only the build console.
+  if (ref.startsWith('delivery:')) return `/jkai/develop/${ref.slice('delivery:'.length)}`;
   if (ref.startsWith('build:')) return `/jkai/builds/${ref.slice('build:'.length)}`;
   if (ref.startsWith('monitor:')) return '/jkai/daydreams/watches';
   return null;

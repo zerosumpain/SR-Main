@@ -914,7 +914,7 @@ export async function foldItems(slugs: string[], into?: string): Promise<FoldRes
 /**
  * Point an item at a build that already exists, without counting an attempt.
  *
- * `createChangeRequest` hands back the open build for the same idea rather
+ * The delivery lane hands back the live delivery for the same idea rather
  * than starting a second one; nothing new was tried, so the retry budget and
  * `lastError` stay exactly as they were. Best-effort.
  */

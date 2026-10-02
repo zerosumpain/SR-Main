@@ -7,6 +7,17 @@ export async function loadDelivery(buildId: string) {
   const [row] = await db.select().from(jkaiBuildDeliveries).where(eq(jkaiBuildDeliveries.buildId, buildId));
   return row ?? null;
 }
+/**
+ * Where a person reads a build: its development workspace when the build is a
+ * development delivery, else the archive console, which is the only viewer for
+ * sandbox apps, studio explainers and forge runs. Notifications use this
+ * because a phone opens one link, and a feature's brief, preview and retry
+ * live in the workspace.
+ */
+export async function buildPageHref(buildId: string): Promise<string> {
+  const delivery = await loadDelivery(buildId).catch(() => null);
+  return delivery ? `/jkai/develop/${buildId}` : `/jkai/builds/${buildId}`;
+}
 export async function ensureDelivery(buildId: string, area = 'Platform', criteria: string[] = [], options: Parameters<typeof newDelivery>[3] = {}) {
   const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
   if (!build) throw new Error('Build not found');

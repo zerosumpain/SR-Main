@@ -55,7 +55,7 @@ describe('selfimprove finalizeAndNotify', () => {
     expect(notifyOwner).toHaveBeenCalledWith(
       expect.objectContaining({
         category: 'build',
-        url: '/admin/ai/improvement',
+        url: '/jkai/develop/improvement',
         whatsappText: buildWhatsappSummary(data),
       }),
     );
@@ -70,5 +70,14 @@ describe('selfimprove finalizeAndNotify', () => {
     h.persistThrows = true;
     await expect(finalizeAndNotify('run-3', run())).rejects.toThrow('datastore down');
     expect(notifyOwner).not.toHaveBeenCalled();
+  });
+});
+
+describe('buildWhatsappSummary — deliveries', () => {
+  it('leads with a delivery started from the backlog', () => {
+    const data = { ...run(), actions: [{ kind: 'delivery_started' as const, detail: 'delivery abc12345 — "A rail feed"' }] };
+    const msg = buildWhatsappSummary(data);
+    expect(msg).toContain('BUILDING: delivery abc12345 — "A rail feed".');
+    expect(msg).not.toContain('Nothing shipped.');
   });
 });

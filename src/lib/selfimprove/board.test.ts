@@ -436,6 +436,10 @@ describe('artifactHref', () => {
     expect(artifactHref('https://github.com/x/y/pull/9')).toBe('https://github.com/x/y/pull/9');
   });
 
+  it('points a development delivery at its /jkai/develop page', () => {
+    expect(artifactHref('delivery:3f2a91c4')).toBe('/jkai/develop/3f2a91c4');
+  });
+
   it('returns null for a shape it does not recognise rather than a broken link', () => {
     expect(artifactHref('some_tool_name')).toBeNull();
     expect(artifactHref(null)).toBeNull();

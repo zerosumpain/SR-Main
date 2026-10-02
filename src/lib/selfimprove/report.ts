@@ -14,7 +14,9 @@ import {
   type ImprovementRunData,
 } from './types';
 
-const ADMIN_LINK = 'https://strangeramblings.com/admin/ai/improvement';
+// The ledger and its owner controls (the admin page folded in 2026-10-02; the
+// old URL redirects here, so links in past messages still land).
+const IMPROVEMENT_LINK = 'https://strangeramblings.com/jkai/develop/improvement';
 
 function countActions(data: ImprovementRunData, kinds: string[]): number {
   return data.actions.filter((a) => kinds.includes(a.kind)).length;
@@ -66,7 +68,7 @@ export function buildWhatsappSummary(data: ImprovementRunData): string {
   const shipped = data.actions.filter((a) => a.kind === 'tool_shipped');
   const repaired = data.actions.filter((a) => a.kind === 'tool_repaired');
   const prs = data.actions.filter((a) => a.kind === 'pr_opened');
-  const builds = data.actions.filter((a) => a.kind === 'change_requested');
+  const builds = data.actions.filter((a) => a.kind === 'delivery_started' || a.kind === 'change_requested');
   const watches = data.actions.filter((a) => a.kind === 'watch_created');
   const apis = countActions(data, ['api_registered', 'api_verified']);
   const rejected = countActions(data, ['tool_rejected']);
@@ -113,7 +115,7 @@ export function buildWhatsappSummary(data: ImprovementRunData): string {
   if (queued) parts.push(`${queued} queued.`);
   parts.push(`~$${data.costUsd.toFixed(2)}, ${data.llmCalls} calls.`);
 
-  const msg = `${parts.join(' ')}\n${ADMIN_LINK}`;
+  const msg = `${parts.join(' ')}\n${IMPROVEMENT_LINK}`;
   return msg.length > 600 ? msg.slice(0, 597) + '...' : msg;
 }
 
@@ -137,7 +139,7 @@ export async function finalizeAndNotify(runId: string, data: ImprovementRunData)
       category: 'build',
       title: 'Self-improve',
       body: summary,
-      url: new URL(ADMIN_LINK).pathname,
+      url: new URL(IMPROVEMENT_LINK).pathname,
       whatsappText: summary,
       dedupeKey: `selfimprove:${runId}`,
     });

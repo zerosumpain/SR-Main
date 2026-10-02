@@ -2,12 +2,9 @@ import { json } from '@sveltejs/kit';
 import { db } from '$lib/db';
 import { jkaiBuildDeliveries, jkaiBuilds } from '$lib/db/schema';
 import { desc, eq, sql } from 'drizzle-orm';
-import { ensureDelivery } from '$lib/jkai/development-state.server';
+import { createDevelopmentDelivery, DevelopmentModelChoiceError } from '$lib/jkai/development-create.server';
 import { PRODUCT_AREAS, RELEASE_POLICIES } from '$lib/jkai/development';
 import type { ReleasePolicy } from '$lib/jkai/development';
-import { SR_MAIN_GIT_TARGET } from '$lib/jkai/git-targets';
-import { CHANGE_REQUEST_BUDGET } from '$lib/jkai/change-request';
-import { resolveDevelopmentModel } from '$lib/jkai/development-models.server';
 import { isOwnerRequest } from '$lib/server/owner';
 import { memberDeliveryState } from '$lib/member-view';
 import type { RequestHandler } from './$types';
@@ -38,19 +35,16 @@ export const POST: RequestHandler = async ({ request }) => {
   // unrecognised value is refused rather than coerced to something safer-looking.
   const releasePolicy: ReleasePolicy = body.releasePolicy === undefined ? 'preview_only' : body.releasePolicy;
   if (!RELEASE_POLICIES.includes(releasePolicy)) return json({ error: 'Choose where this feature should stop.' }, { status: 400 });
-  let model;
-  try { model = await resolveDevelopmentModel(body.modelId); }
-  catch (e) { return json({ error: (e as Error).message }, { status: 400 }); }
-  const [build] = await db.insert(jkaiBuilds).values({
-    title: body.outcome.trim().split('\n')[0].slice(0, 100), prompt: body.outcome.trim(), status: 'paused',
-    origin: 'manual', planStatus: 'approved', gitTargetConfig: { ...SR_MAIN_GIT_TARGET, openPr: false },
-    budgetConfig: { ...CHANGE_REQUEST_BUDGET }, modelProvider: model.provider, modelId: model.modelId,
-  }).returning();
-  await ensureDelivery(build.id, body.area, [], {
-    commissioned: true,
-    releasePolicy,
-    autopilot: body.autopilot === true,
-    maxRounds: typeof body.maxRounds === 'number' ? body.maxRounds : undefined,
-  });
-  return json({ buildId: build.id }, { status: 201 });
+  let buildId: string;
+  try {
+    ({ buildId } = await createDevelopmentDelivery({
+      outcome: body.outcome, area: body.area, releasePolicy, modelId: body.modelId,
+      autopilot: body.autopilot === true,
+      maxRounds: typeof body.maxRounds === 'number' ? body.maxRounds : undefined,
+    }));
+  } catch (e) {
+    if (e instanceof DevelopmentModelChoiceError) return json({ error: (e as Error).message }, { status: 400 });
+    throw e;
+  }
+  return json({ buildId }, { status: 201 });
 };

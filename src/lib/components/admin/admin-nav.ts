@@ -68,8 +68,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       { label: 'Tools', href: '/admin/ai/tools' },
       { label: 'API Registry', href: '/admin/ai/apis' },
       { label: 'Datastore', href: '/admin/ai/datastore' },
-      { label: 'Improvement', href: '/admin/ai/improvement' },
-      { label: 'Doctor', href: '/admin/ai/doctor' },
       { label: 'Approvals', href: '/admin/ai/approvals' },
     ],
   },
@@ -214,6 +212,12 @@ export const ADMIN_ROUTE_REDIRECTS: Record<string, string> = {
   // of them an extracted app, against a VPS running 30 containers — is gone; the
   // map draws the generated model instead.
   '/admin/ops/architecture': '/admin/estate',
+  // The self-improvement and workflow-doctor control pages folded into their
+  // ledgers on /jkai/develop (2026-10-02), as owner-only controls. Past
+  // WhatsApp summaries link the old addresses; a `#run-<id>` fragment survives
+  // the 308 and opens that run on the ledger.
+  '/admin/ai/improvement': '/jkai/develop/improvement',
+  '/admin/ai/doctor': '/jkai/develop/doctor',
   '/admin/deepdive': '/admin/ai/keys',
   '/admin/login': '/login?callbackUrl=/admin',
 };

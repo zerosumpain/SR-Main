@@ -1,6 +1,6 @@
 import { DEVELOPMENT_LIMITS, developmentDeadline, developmentFailureKind } from './development-cycle';
 import { readdir } from 'node:fs/promises';
-import { loadDelivery, mutateDelivery } from '$lib/jkai/development-state.server';
+import { buildPageHref, loadDelivery, mutateDelivery } from '$lib/jkai/development-state.server';
 import { candidateChanged } from '$lib/jkai/development';
 import { interruptActiveChild } from './interrupt-registry';
 import { db } from '$lib/db';
@@ -2087,7 +2087,7 @@ class Orchestrator {
             await notifyAllSubscribers({
               title: 'Forge PR ready',
               body: publishedRef ? publishedRef : (build.title ?? 'Forge build finished'),
-              url: `/jkai/builds/${buildId}`,
+              url: await buildPageHref(buildId),
             });
           } catch (e) {
             console.warn('[jkai-pwa] push failed', e);
@@ -2122,7 +2122,7 @@ class Orchestrator {
           await notifyAllSubscribers({
             title: 'Studio build complete',
             body: build.title ?? 'jkai studio build finished',
-            url: `/jkai/builds/${buildId}`,
+            url: await buildPageHref(buildId),
           });
         } catch (e) {
           console.warn('[jkai-pwa] push failed', e);
@@ -2150,7 +2150,7 @@ class Orchestrator {
             await notifyAllSubscribers({
               title: 'Build complete',
               body: build.title ?? 'jkai build finished',
-              url: `/jkai/builds/${buildId}`,
+              url: await buildPageHref(buildId),
             });
           } catch (e) {
             console.warn('[jkai-pwa] push failed', e);
@@ -2348,14 +2348,11 @@ class Orchestrator {
     });
 
     try {
-      // A development feature's home is its workspace, not the archive console:
-      // the notification is what a phone opens, and the workspace is where the
-      // brief, the preview and the retry live.
-      const isFeature = Boolean(await loadDelivery(buildId).catch(() => null));
+      // A development feature's home is its workspace, not the archive console.
       await notifyAllSubscribers({
         title: 'Build failed',
         body: (failure.message ?? '').slice(0, 140) || 'jkai build failed',
-        url: isFeature ? `/jkai/develop/${buildId}` : `/jkai/builds/${buildId}`,
+        url: await buildPageHref(buildId),
       });
     } catch (e) {
       console.warn('[jkai-pwa] push failed', e);
