@@ -9,6 +9,7 @@
 // audit here shares, so a model that echoes "[C3]" as rendered has cited C3.
 
 import { resolveCites } from '../cites';
+import { checkPlan, storeAction, type StoredAction } from '../act/plan';
 import type { Candidate } from '../snapshot-types';
 import { OUTCOMES, type Channel, type Outcome } from './questions';
 import type { Card } from './tools';
@@ -62,7 +63,7 @@ export function slugOf(title: string): string {
 export function validateThinkOutput(
   parsed: unknown,
   cards: ReadonlyMap<string, Card>,
-  opts: { maxNotes?: number; allowedOutcomes?: readonly Outcome[]; channel?: Channel } = {},
+  opts: { maxNotes?: number; allowedOutcomes?: readonly Outcome[]; channel?: Channel; today?: string } = {},
 ): ThinkAudit {
   const out: ThinkAudit = { notes: [], rejected: [], citationDrops: 0 };
   const maxNotes = opts.maxNotes ?? MAX_NOTES;
@@ -106,6 +107,18 @@ export function validateThinkOutput(
     }
 
     const cited = resolved.hits.map((id) => cards.get(id)!);
+    // "Do it for me", ready before he taps (`act/plan.ts`). A plan that fails
+    // its checks is dropped — the note still stands.
+    let proposedActions: StoredAction[] = [];
+    if (n.do && opts.today) {
+      const checked = checkPlan(n.do, {
+        noteText: `${title}\n${body}\n${action ?? ''}`,
+        today: opts.today,
+        evidenceText: cited.map((c) => c.text).join('\n'),
+      });
+      if (checked.ok) proposedActions = [storeAction(checked.plan, null)];
+      else out.rejected.push(`note "${label}": do-it plan dropped — ${checked.reason}`);
+    }
     const slug = slugOf(title);
     if (slug.length < 3) { out.rejected.push(`note "${label}": title has no usable words`); continue; }
 
@@ -133,7 +146,7 @@ export function validateThinkOutput(
             : []),
         ],
         dedupeKey: `think:${outcome}:${slug}`,
-        proposedActions: [],
+        proposedActions,
       },
     });
   }

@@ -16,6 +16,8 @@
   import { clock, stamp } from '$lib/daydream/format';
   import type { FeedNote } from '$lib/daydream/think/notes';
   import type { CommissionView } from '$lib/daydream/commissioning';
+  import { invalidateAll } from '$app/navigation';
+  import { postThought } from '$lib/daydream/feed-client';
 
   type Verdict = 'useful' | 'not_useful' | 'never_kind';
   interface Props {
@@ -28,15 +30,25 @@
     onrate: (v: Verdict) => void;
     onprepare: () => void;
     onsavenote: (text: string) => Promise<boolean>;
+    /** His ruling on the claim: wrong (with why — the lesson) or right. */
+    onruling: (verdict: 'wrong' | 'right', why: string) => Promise<boolean>;
     onunmute: () => void;
   }
-  let { n, commission, checksOn, focused = false, focusCommission = false, busy = null, onrate, onprepare, onsavenote, onunmute }: Props = $props();
+  let { n, commission, checksOn, focused = false, focusCommission = false, busy = null, onrate, onprepare, onsavenote, onruling, onunmute }: Props = $props();
 
   let expanded = $state(false);
   let changing = $state(false);
   let noting = $state(false);
   let noteText = $state('');
+  // 'wrong' | 'right' while the ruling form is open.
+  let ruling = $state<'wrong' | 'right' | null>(null);
+  let whyText = $state('');
   let menu = $state(false);
+  // "Do it for me": in flight, what it said back, and the one-time calendar choice.
+  let acting = $state(false);
+  let actMessage = $state<string | null>(null);
+  let calendars = $state<string[] | null>(null);
+  let calendarChoice = $state('');
   // Not reactive: only read inside the window handlers below.
   let moreEl: HTMLDivElement | undefined;
   function closeOutside(e: MouseEvent) {
@@ -46,7 +58,9 @@
   const isBusy = $derived(!!busy && busy.startsWith(n.id));
   const paras = $derived(n.summary.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean));
   const long = $derived(paras.length > 1 || (paras[0]?.length ?? 0) > 260);
-  const decided = $derived(!!n.verdict && !changing);
+  const ownerRuled = $derived(n.review?.by === 'owner' ? n.review.verdict : null);
+  const decided = $derived((!!n.verdict || !!ownerRuled || n.act?.status === 'done' || n.act?.status === 'sent') && !changing);
+  const saidWrong = $derived(n.review?.verdict === 'wrong');
   const canCheck = $derived(checksOn && n.checkable && !commission);
 
   const VERDICT_WORDS: Record<string, string> = {
@@ -64,6 +78,52 @@
     menu = false;
     noting = true;
     noteText = n.ownerNote ?? '';
+  }
+  function startRuling(v: 'wrong' | 'right') {
+    menu = false;
+    noting = false;
+    ruling = v;
+    whyText = '';
+  }
+  async function saveRuling() {
+    if (!ruling) return;
+    const why = whyText.trim();
+    if (ruling === 'wrong' && why.length < 3) return;
+    if (await onruling(ruling, why)) {
+      ruling = null;
+      whyText = '';
+      changing = false;
+    }
+  }
+  type ActOut = { ok: boolean; reason?: string; label?: string; needsCalendar?: boolean; calendars?: string[] };
+  async function act(op: 'do_it' | 'undo_it' | 'send_it') {
+    acting = true;
+    actMessage = null;
+    menu = false;
+    const r = await postThought<ActOut>({ action: op, thoughtId: n.id });
+    if (r.out.needsCalendar) {
+      calendars = r.out.calendars ?? [];
+      calendarChoice = calendars[0] ?? '';
+      actMessage = calendars.length ? null : 'Your calendar could not be reached to choose one. Try again in a minute.';
+    } else if (!r.ok || !r.out.ok) {
+      actMessage = r.out.reason ?? r.error ?? 'That did not work.';
+    } else {
+      calendars = null;
+      await invalidateAll();
+    }
+    acting = false;
+  }
+  async function chooseAndDo() {
+    if (!calendarChoice) return;
+    acting = true;
+    const r = await postThought({ action: 'act_calendar', calendar: calendarChoice });
+    acting = false;
+    if (!r.ok) {
+      actMessage = r.error ?? 'That calendar was not kept.';
+      return;
+    }
+    calendars = null;
+    await act('do_it');
   }
   async function saveNote() {
     const text = noteText.trim();
@@ -128,12 +188,52 @@
 
   {#if n.ownerNote && !noting}<p class="said">You added: “{n.ownerNote}”</p>{/if}
 
+  {#if n.act && (n.act.status === 'done' || n.act.status === 'undone' || n.act.status === 'sent')}
+    <div class="did" class:undone={n.act.status === 'undone'} class:draft={!!n.act.draft && n.act.status === 'done'}>
+      <p class="did-k">{n.act.status === 'undone' ? 'Undone' : n.act.status === 'sent' ? 'Sent' : n.act.draft ? 'Drafted' : 'Done'}</p>
+      <p class="did-v">{n.act.status === 'undone' ? `Taken back: ${n.act.label.replace(/^(Add|Remind you|Move|Draft) /, (m) => m.toLowerCase())}` : n.act.label}</p>
+      {#if n.act.draft && n.act.status === 'done'}
+        <div class="draft-view">
+          <p><span class="dk">To</span> {n.act.draft.to}</p>
+          <p><span class="dk">Subject</span> {n.act.draft.subject}</p>
+          <pre class="draft-body">{n.act.draft.body}</pre>
+        </div>
+        <div class="actions">
+          <button type="button" class="cta sm" disabled={acting} onclick={() => act('send_it')}>{acting ? 'Sending…' : 'Send it'}</button>
+          <a class="btn sm" href={n.act.draft.gmailUrl} target="_blank" rel="noopener noreferrer">Edit in Gmail</a>
+          <button type="button" class="link-btn" disabled={acting} onclick={() => act('undo_it')}>Discard</button>
+        </div>
+      {:else if n.act.status === 'done' && n.act.undoable}
+        <button type="button" class="link-btn" disabled={acting} onclick={() => act('undo_it')}>{acting ? 'Undoing…' : 'Undo'}</button>
+      {/if}
+    </div>
+  {/if}
+
+  {#if n.review}
+    <div class="ruled {n.review.verdict}">
+      <p class="ruled-k">
+        {#if n.review.by === 'owner'}{n.review.verdict === 'wrong' ? 'You said this is wrong' : 'You said this is right'}
+        {:else}{n.review.verdict === 'wrong' ? 'A double-check found this wrong' : n.review.verdict === 'holds' ? 'A double-check found this holds' : 'A double-check could not settle this'}{/if}
+      </p>
+      {#if n.review.reasoning && !(n.review.by === 'owner' && n.review.verdict === 'wrong')}<p class="ruled-v">{n.review.reasoning}</p>{/if}
+      {#if n.review.lesson}<p class="ruled-v lesson">Lesson kept: “{n.review.lesson}”</p>{/if}
+      {#if ruling === null}
+        {#if saidWrong}
+          <button type="button" class="link-btn" disabled={isBusy} onclick={() => startRuling('right')}>{n.review.by === 'owner' ? 'Take that back' : 'Actually, it was right'}</button>
+        {:else}
+          <button type="button" class="link-btn" disabled={isBusy} onclick={() => startRuling('wrong')}>It's wrong — say why</button>
+        {/if}
+      {/if}
+    </div>
+  {/if}
+
   {#if decided}
     <div class="verdict">
-      <span class="v-chip" class:good={n.verdict === 'useful'}>{VERDICT_WORDS[n.verdict ?? ''] ?? 'Answered'}</span>
+      <span class="v-chip" class:good={n.verdict === 'useful'}>{n.verdict ? (VERDICT_WORDS[n.verdict] ?? 'Answered') : ownerRuled === 'wrong' ? 'You said it is wrong' : ownerRuled ? 'You said it is right' : n.act?.status === 'sent' ? 'Sent for you' : n.act?.draft ? 'Drafted for you' : 'Done for you'}</span>
       <span class="v-sub">{n.raised ? 'It messaged you about this' : 'It kept this to the Inbox'}{n.kindMuted ? ' · this kind is muted' : ''}</span>
       <span class="spacer"></span>
       {#if n.kindMuted}<button type="button" class="link-btn" disabled={isBusy} onclick={onunmute}>Unmute this kind</button>{/if}
+      {#if n.act && (n.act.status === 'ready' || n.act.status === 'open' || n.act.status === 'undone')}<button type="button" class="link-btn" disabled={isBusy || acting} onclick={() => act('do_it')}>{acting ? 'Doing it…' : 'Do it for me'}</button>{/if}
       {#if canCheck}<button type="button" class="link-btn" disabled={isBusy} onclick={onprepare}>Double-check it</button>{/if}
       <button type="button" class="link-btn" onclick={() => (changing = true)}>Change</button>
     </div>
@@ -150,7 +250,14 @@
           <button type="button" class="choice check" disabled={isBusy} onclick={onprepare}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12a7 7 0 1 1-2-4.9M19 4v4h-4" /></svg>
             <span class="c-t">Double-check it</span>
-            <span class="c-s">Re-read its sources and report back. Asks your OK first.</span>
+            <span class="c-s">Re-read its sources, then try to prove it wrong. Asks your OK first.</span>
+          </button>
+        {/if}
+        {#if n.act && (n.act.status === 'ready' || n.act.status === 'open')}
+          <button type="button" class="choice doit" disabled={isBusy || acting} onclick={() => act('do_it')}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h11M12 6l6 6-6 6" /></svg>
+            <span class="c-t">{acting ? 'Doing it…' : 'Do it for me'}</span>
+            <span class="c-s">{n.act.label}</span>
           </button>
         {/if}
         <button type="button" class="choice no" disabled={isBusy} onclick={() => rate('not_useful')}>
@@ -162,6 +269,7 @@
           <button type="button" class="choice-more" aria-expanded={menu} onclick={() => (menu = !menu)}>More</button>
           {#if menu}
             <div class="menu" role="menu">
+              {#if !saidWrong}<button type="button" role="menuitem" onclick={() => startRuling('wrong')}>It's wrong — say why</button>{/if}
               <button type="button" role="menuitem" onclick={startNote}>{n.ownerNote ? 'Change your note' : 'Add a note in your own words'}</button>
               <button type="button" role="menuitem" class="danger" disabled={isBusy} onclick={() => rate('never_kind')}>Never show me “{n.outcomeLabel.toLowerCase()}” notes</button>
               {#if changing}<button type="button" role="menuitem" onclick={() => ((changing = false), (menu = false))}>Keep my answer</button>{/if}
@@ -182,6 +290,36 @@
           {busy === `${n.id}:note` ? 'Saving…' : 'Save the note'}
         </button>
         <button type="button" class="btn sm" onclick={() => (noting = false)}>Cancel</button>
+      </div>
+    </div>
+  {/if}
+
+  {#if calendars && calendars.length}
+    <div class="note-form">
+      <label class="field-label" for="act-cal-{n.id}">Which calendar should “Do it for me” use? It asks once.</label>
+      <select id="act-cal-{n.id}" class="text-input" bind:value={calendarChoice}>
+        {#each calendars as c (c)}<option value={c}>{c}</option>{/each}
+      </select>
+      <div class="actions">
+        <button type="button" class="cta sm" disabled={acting || !calendarChoice} onclick={chooseAndDo}>{acting ? 'Doing it…' : 'Use it, and do it'}</button>
+        <button type="button" class="btn sm" onclick={() => (calendars = null)}>Cancel</button>
+      </div>
+    </div>
+  {/if}
+  {#if actMessage}<p class="act-msg" role="status">{actMessage}</p>{/if}
+
+  {#if ruling}
+    <div class="note-form">
+      <label class="field-label" for="why-text-{n.id}">
+        {ruling === 'wrong' ? 'Why is it wrong? jkai keeps this as a lesson and checks it before suggesting something like this again' : 'Why was it right? (optional) — the earlier lesson is withdrawn'}
+      </label>
+      <textarea id="why-text-{n.id}" class="text-input area" rows="3" maxlength="1000" bind:value={whyText}
+        placeholder={ruling === 'wrong' ? 'e.g. one of those is the receipt email for the bank charge, not a second charge' : ''}></textarea>
+      <div class="actions">
+        <button type="button" class="cta sm" disabled={busy === `${n.id}:ruling` || (ruling === 'wrong' && whyText.trim().length < 3)} onclick={saveRuling}>
+          {busy === `${n.id}:ruling` ? 'Saving…' : ruling === 'wrong' ? 'Tell it it’s wrong' : 'Tell it it was right'}
+        </button>
+        <button type="button" class="btn sm" onclick={() => (ruling = null)}>Cancel</button>
       </div>
     </div>
   {/if}
@@ -507,6 +645,106 @@
   .v-sub {
     font-size: var(--fs-label);
     color: var(--text-muted);
+  }
+  .did {
+    margin: 12px 0 0;
+    padding: 10px 12px;
+    border-left: 3px solid var(--success);
+    background: var(--bg-section);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 12px;
+  }
+  .did.undone {
+    border-left-color: var(--line-strong);
+  }
+  .did-k {
+    margin: 0;
+    font-weight: 600;
+    font-size: var(--fs-body-sm);
+    color: var(--success);
+  }
+  .did.undone .did-k {
+    color: var(--text-secondary);
+  }
+  .did.draft {
+    border-left-color: var(--accent);
+  }
+  .did.draft .did-k {
+    color: var(--accent);
+  }
+  .draft-view {
+    flex: 1 1 100%;
+    margin: 6px 0 2px;
+    padding: 10px 12px;
+    border: 1px solid var(--line-strong);
+    background: var(--bg);
+    font-size: var(--fs-body-sm);
+  }
+  .draft-view p {
+    margin: 0 0 4px;
+  }
+  .dk {
+    display: inline-block;
+    min-width: 5em;
+    color: var(--text-secondary);
+  }
+  .draft-body {
+    margin: 8px 0 0;
+    white-space: pre-wrap;
+    font-family: inherit;
+    line-height: 1.5;
+  }
+  .did .actions {
+    flex: 1 1 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+  .did-v {
+    margin: 0;
+    flex: 1 1 16em;
+    font-size: var(--fs-body-sm);
+    line-height: 1.5;
+  }
+  .act-msg {
+    margin: 10px 0 0;
+    font-size: var(--fs-body-sm);
+    color: var(--warn);
+  }
+  .choice.doit svg {
+    color: var(--success);
+  }
+  .ruled {
+    margin: 12px 0 0;
+    padding: 10px 12px;
+    border-left: 3px solid var(--line-strong);
+    background: var(--bg-section);
+  }
+  .ruled.wrong {
+    border-left-color: var(--warn);
+  }
+  .ruled.holds {
+    border-left-color: var(--success);
+  }
+  .ruled-k {
+    margin: 0 0 4px;
+    font-weight: 600;
+    font-size: var(--fs-body-sm);
+  }
+  .ruled.wrong .ruled-k {
+    color: var(--warn);
+  }
+  .ruled-v {
+    margin: 0 0 6px;
+    font-size: var(--fs-body-sm);
+    line-height: 1.5;
+    color: var(--text-secondary);
+  }
+  .ruled-v.lesson {
+    color: var(--text-primary);
   }
   .note-form {
     margin-top: 14px;

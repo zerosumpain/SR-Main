@@ -3,7 +3,7 @@
 // NOT in PUBLIC_PATHS, and must never be: only `/api/daydream/observe` is
 // listed there, as an exact path, precisely so this sibling stays behind the
 // Auth.js gate. Everything here writes the owner's judgements: verdicts on
-// think notes and the on/off switch. (The engine rooms' actions went with them,
+// think notes, his rulings on their claims, and the on/off switch. (The engine rooms' actions went with them,
 // P4 of the 2026-09-25 simplification; the backlog's moved to
 // `/api/jkai/backlog` with the board, 2026-09-26.)
 
@@ -59,6 +59,40 @@ export const POST: RequestHandler = async ({ request }) => {
             { status: 400 },
           );
         }
+      }
+
+      case 'owner_verdict': {
+        // "This is wrong, because …" — or "it was right after all". A ruling
+        // on the CLAIM, not the kind: feedback is untouched. His reason
+        // becomes the lesson the think loop reads (`owner-verdict.ts`).
+        const { parseOwnerVerdict, recordOwnerVerdict } = await import('$lib/daydream/owner-verdict');
+        const parsed = parseOwnerVerdict(body);
+        if (!parsed.ok) return json({ error: parsed.error }, { status: 400 });
+        const result = await recordOwnerVerdict(parsed.thoughtId, parsed.verdict, parsed.why);
+        return json({ ok: true, ...result });
+      }
+
+      case 'do_it':
+      case 'undo_it':
+      case 'send_it': {
+        // "Do it for me": carry the note's step out now — the tap is the
+        // consent (`act/act.server.ts`). Reversible, private kinds only.
+        const thoughtId = str('thoughtId');
+        if (!thoughtId) return json({ error: 'thoughtId is required' }, { status: 400 });
+        const { doIt, undoIt, sendIt } = await import('$lib/daydream/act/act.server');
+        // `send_it` is the guided kind's second tap: a draft he has read.
+        const result = action === 'do_it' ? await doIt(thoughtId) : action === 'send_it' ? await sendIt(thoughtId) : await undoIt(thoughtId);
+        // A refusal is an answer, not a fault: 200 with the reason to show.
+        return json(result);
+      }
+
+      case 'act_calendar': {
+        // The one-time choice of where "Do it for me" writes.
+        const { chooseCalendar } = await import('$lib/daydream/act/act.server');
+        const name = str('calendar');
+        if (!name) return json({ error: 'calendar is required' }, { status: 400 });
+        const result = await chooseCalendar(name);
+        return json(result, { status: result.ok ? 200 : 400 });
       }
 
       case 'set_enabled': {

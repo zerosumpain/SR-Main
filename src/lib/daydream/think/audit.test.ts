@@ -30,6 +30,18 @@ describe('validateThinkOutput', () => {
     expect(n.candidate.evidence.map((e) => e.kind)).toEqual(['think-card', 'think-card']);
   });
 
+  it('carries a ready "do it for me" plan when the note dates it, and drops one it does not', () => {
+    const doIt = { kind: 'calendar_event', title: 'Chase the bike dispatch', date: '2026-10-10', time: null };
+    const bike = note({ title: 'Bike dispatch is overdue', body: 'The shop promised dispatch within a week and nothing has shipped yet.', action: 'Put 10 October in the diary to chase the bike dispatch.', do: doIt });
+    const ok = validateThinkOutput({ notes: [bike] }, cards(1, 2), { today: '2026-10-02' });
+    expect(ok.notes[0].candidate.proposedActions).toHaveLength(1);
+    expect(ok.notes[0].candidate.proposedActions[0].label).toContain('Chase the bike dispatch');
+    const moved = validateThinkOutput({ notes: [{ ...bike, do: { ...doIt, date: '2026-10-11' } }] }, cards(1, 2), { today: '2026-10-02' });
+    expect(moved.notes).toHaveLength(1);
+    expect(moved.notes[0].candidate.proposedActions).toEqual([]);
+    expect(moved.rejected[0]).toMatch(/do-it plan dropped/);
+  });
+
   it('kills a note WHOLE when one citation was never issued', () => {
     // The audit. One real card does not launder an invented one.
     const out = validateThinkOutput({ notes: [note({ cites: ['C1', 'C9'] })] }, cards(1, 2));
