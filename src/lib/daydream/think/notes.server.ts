@@ -52,6 +52,11 @@ const ROW_COLUMNS = {
   createdAt: daydreamThoughts.createdAt,
   deliveredAt: daydreamThoughts.deliveredAt,
   note: daydreamThoughts.note,
+  reviewVerdict: daydreamThoughts.reviewVerdict,
+  reviewReasoning: daydreamThoughts.reviewReasoning,
+  reviewNarrative: daydreamThoughts.reviewNarrative,
+  reviewModel: daydreamThoughts.reviewModel,
+  proposedActions: daydreamThoughts.proposedActions,
 };
 
 /** The newest think rows for the owner, before any reader's rules. */

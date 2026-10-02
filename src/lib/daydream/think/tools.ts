@@ -193,7 +193,7 @@ const LOCAL_DEFINITIONS: Record<LocalTool, () => ToolDefinition['function']> = {
   spend: () => ({
     name: 'spend',
     description:
-      'His verified spend rows (receipts and bank lines that passed verification), totalled by merchant and listed by day.',
+      'His spend, reconciled against the bank: each line is tagged [bank], [PayPal], [bank→PayPal top-up] or [email]. Only bank and PayPal lines are payments; an email is a receipt or heads-up about one and is paired with it; a top-up funds PayPal payments. Totals count payments only.',
     parameters: {
       type: 'object',
       properties: {

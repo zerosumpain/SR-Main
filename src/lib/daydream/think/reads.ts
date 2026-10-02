@@ -14,8 +14,11 @@
 //   diary         the calendar through daydream's own reader, so an event the
 //                 owner excluded ("PE days are kit reminders, not time") never
 //                 reaches a prompt — the same reason ponder reads it that way.
-//   spend         verified `daydream_spend` rows for the owner. The quarantine
-//                 (`verified = false`) is the extractor's whole point.
+//   spend         verified `daydream_spend` rows for the owner, RECONCILED:
+//                 bank and PayPal lines are payments, an email is paperwork
+//                 about one, a bank top-up of PayPal funds PayPal payments
+//                 (`spend/ledger.ts`). The quarantine (`verified = false`) is
+//                 the extractor's whole point.
 //   chat_threads  his recent jkai threads: title, size, when, and his OWN
 //                 opening line. Assistant turns are never carded — they can
 //                 quote a fetched page, and a fetched page is someone else's.
@@ -27,11 +30,13 @@
 
 import { and, desc, eq, gte, ilike, lte, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { conversations, daydreamSpend, intelNotes, intelTimelineEvents, orchestratorChats } from '$lib/db/schema';
+import { conversations, intelNotes, intelTimelineEvents, orchestratorChats } from '$lib/db/schema';
 import { ownerThread } from '$lib/jkai/owner-threads';
 import { OWNER_INTEL_SCOPE, spaceIn } from '$lib/intel-client/scope';
 import { DEFAULT_SUBJECT } from '../types';
 import { localDay } from '../features/build';
+import { formatLedger, sameMerchant } from '../spend/ledger';
+import { loadLedger } from '../spend/ledger.server';
 
 function clampInt(raw: unknown, lo: number, hi: number, dflt: number): number {
   const n = Number(raw);
@@ -129,41 +134,16 @@ export async function spendTool(args: Record<string, unknown>, now = new Date())
   const days = clampInt(args.days, 7, 180, 60);
   const q = query(args.merchant);
   const floor = localDay(new Date(now.getTime() - days * 86_400_000));
-  const rows = await db
-    .select({
-      day: daydreamSpend.day,
-      merchant: daydreamSpend.merchant,
-      amountMinor: daydreamSpend.amountMinor,
-      currency: daydreamSpend.currency,
-    })
-    .from(daydreamSpend)
-    .where(
-      and(
-        eq(daydreamSpend.subject, DEFAULT_SUBJECT),
-        eq(daydreamSpend.verified, true),
-        gte(daydreamSpend.day, floor),
-        q ? ilike(daydreamSpend.merchant, likeTerm(q)) : undefined,
-      ),
-    )
-    .orderBy(desc(daydreamSpend.day))
-    .limit(150);
-  if (!rows.length) return `No verified spend in the last ${days} days${q ? ` matching "${q}"` : ''}. Absence of evidence, not of spending.`;
-
-  const money = (minor: number, cur: string) => `${cur === 'GBP' ? '£' : `${cur} `}${(minor / 100).toFixed(2)}`;
-  const byMerchant = new Map<string, { n: number; total: number; cur: string }>();
-  for (const r of rows) {
-    const m = byMerchant.get(r.merchant) ?? { n: 0, total: 0, cur: r.currency };
-    m.n++;
-    m.total += r.amountMinor;
-    byMerchant.set(r.merchant, m);
-  }
-  const lines = [`Verified spend, last ${days} days: ${rows.length} row(s).`, 'By merchant (count, total):'];
-  for (const [name, m] of [...byMerchant.entries()].sort((a, b) => b[1].total - a[1].total).slice(0, 20)) {
-    lines.push(`  ${name}: ${m.n}× ${money(m.total, m.cur)}`);
-  }
-  lines.push('Rows, newest first:');
-  for (const r of rows.slice(0, 50)) lines.push(`  ${r.day} ${r.merchant} ${money(r.amountMinor, r.currency)}`);
-  return lines.join('\n');
+  // Reconciled BEFORE the merchant filter: a receipt for "Apple" must still
+  // find the bank line, and a top-up its PayPal payments (`ledger.ts`).
+  const lines = await loadLedger(floor);
+  const needle = q.toLowerCase();
+  const text = formatLedger(lines, {
+    days,
+    since: floor,
+    filter: q ? (l) => l.merchant.toLowerCase().includes(needle) || sameMerchant(l.merchant, q) : undefined,
+  });
+  return text || `No verified spend in the last ${days} days${q ? ` matching "${q}"` : ''}. Absence of evidence, not of spending.`;
 }
 
 // ── chat_threads ────────────────────────────────────────────────────────────

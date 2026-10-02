@@ -48,12 +48,10 @@ src/lib/jkai/development-review.server.ts
 # them they are the entire control for the private DfE/Keystone work, private
 # decks and shared conversations.
 src/lib/agent/auth.ts
-src/lib/workflows/scraper/service-auth.ts
+src/lib/scraper/service-auth.ts
 src/lib/projects/guard.ts
 src/lib/projects/visibility.ts
 src/lib/projects/shares.ts
-src/lib/decks/guard.ts
-src/lib/decks/shares.ts
 src/routes/jkai/shared/[token]/+page.server.ts
 # Anonymous fetch relay that returns upstream bodies with `Access-Control-Allow-Origin: *`.
 # Its domain allowlist is the only control, and it is precisely where a generated
@@ -72,8 +70,8 @@ src/routes/api/jkai/cors/[...url]/+server.ts
 # vault's logins for third-party sites. One commit each; feature work for those
 # areas lives in their runners and route handlers, never here.
 src/lib/integrations/crypto.ts
-src/lib/workflows/gmail/crypto.ts
-src/lib/workflows/scraper/crypto.ts
+src/lib/integrations/gmail/crypto.ts
+src/lib/scraper/crypto.ts
 # The same HMAC bridge-token mechanism protected above as src/lib/mcp/**, on a
 # second route pair nobody had noticed: signs/verifies JKAI_BRIDGE_SECRET for the
 # builder sidecar.
@@ -104,7 +102,6 @@ svelte.config.js
 # arbitrary-file, direct-to-production channel that routes around this entire
 # mechanism — including protected-paths.txt itself. This is the one escalation
 # that defeats the gate rather than merely widening tool reach.
-src/lib/workflows/site-tools/tools/node-builder.ts
 # The allowlist of repos an autonomous build may clone, branch and push to, and
 # the second independent repo pin used by the Forge.
 src/lib/jkai/git-targets.ts
@@ -117,17 +114,17 @@ src/lib/jkai/sandbox.ts
 # ── Agent safety rails ─────────────────────────────────────────────────
 # The denylist and confirmation gate are what stop tool-calls doing damage.
 # Self-modification of these must always be a human decision.
-src/lib/workflows/chat/confirmation-gate.ts
+src/lib/jkai/chat/confirmation-gate.ts
 # schedule_tool_at refuses destructive tools; deferred calls fire with no LLM
 # round, no confirmation UI and no user present, and no test covers this guard.
-src/lib/workflows/site-tools/tools/scheduled.ts
+src/lib/tools/tools/scheduled.ts
 # The only in-process sandbox boundary for LLM/user-authored workflow
 # expressions (`new Function`, same process as the server). Both its commits
 # were security hardening.
-src/lib/workflows/nodes/safe-eval.ts
+src/lib/utils/safe-eval.ts
 # Outbound-network boundary for the /jkai chat agent, holding SSRF enforcement
 # that src/lib/server/ssrf-guard.ts does not.
-src/lib/workflows/site-tools/tools/apis.ts
+src/lib/tools/tools/apis.ts
 
 # ── Instruction surfaces ───────────────────────────────────────────────
 # Not code, and not shipped to a browser — which is exactly why these were

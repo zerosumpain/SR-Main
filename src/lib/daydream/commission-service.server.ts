@@ -12,7 +12,7 @@ export function requireCommissioning(): void {
   if (!commissioningEnabled()) throw new CommissionError(503, 'Daydream commissioning is not enabled here yet.');
 }
 export async function thoughtSource(id: string, tx: DbExecutor = db) {
-  const result = await tx.execute(sql`SELECT id,title,explanation,narrative,evidence,note,review_verdict,review_reasoning,status
+  const result = await tx.execute(sql`SELECT id,kind,title,explanation,narrative,evidence,note,review_verdict,review_reasoning,status
     FROM daydream_thoughts WHERE id=${id} AND subject=${DEFAULT_SUBJECT}`);
   const row = result.rows[0];
   if (!row) throw new CommissionError(404, 'Suggestion not found.');
@@ -33,15 +33,15 @@ export async function prepareCommission(thoughtId: string, principal = 'owner') 
   // by the owner before he approves, on the web and on the phone.
   const spec: ImprovementSpec = {
     version: 1, route: 'evidence_refresh', title: `Double-check: ${String(thought.title).slice(0, 160)}`,
-    outcome: 'jkai re-reads the sources this note was based on and gives you a dated report of what they say today.',
+    outcome: 'jkai re-reads the sources this note was based on, then tries to prove its own note wrong, and tells you plainly whether it holds.',
     currentBehaviour: String(thought.narrative || thought.explanation).slice(0, 8000),
-    improvedBehaviour: 'You get the current figures side by side with the note, so you can decide whether it still holds before doing anything about it. It checks the sources again; it does not prove the claim or change anything.',
+    improvedBehaviour: 'You get a verdict — it holds, it was wrong, or it could not settle it — with the doubts it tested and today’s figures. For money, only a bank or PayPal line counts as a payment. If the note was wrong, jkai keeps the lesson so it thinks twice next time.',
     reuseAssessment: ['Uses the same read-only look-ups the note used.', 'Runs on the existing workflow runner, so it carries on if you close the page.', 'Progress arrives in your usual notifications.'],
-    acceptance: ['Every source comes back with today’s answer, or is clearly marked as unavailable.', 'The report keeps the original note and anything you added to it.', 'Nothing is sent, booked, paid, cancelled or changed.'],
-    effects: ['Read the sources listed below again.', 'Save a private report here and notify you when it is ready.'],
-    exclusions: ['It will not treat a receipt and a bank line as two separate payments.', 'No refunds, disputes, cancellations, account changes, new automations or builds.', 'Mail is read as extracted facts only — not as the original invoice.'],
+    acceptance: ['The report opens with a verdict and the reasons for it.', 'Every source comes back with today’s answer, or is clearly marked as unavailable.', 'The report keeps the original note and anything you added to it.', 'Nothing is sent, booked, paid, cancelled or changed.'],
+    effects: ['Read the sources listed below again.', 'Argue against the note, looking up more of your own data if it needs to (read-only).', 'Save a private report here and notify you when it is ready.', 'If the note was wrong, save the lesson as a memory.'],
+    exclusions: ['It will not treat a receipt and a bank line as two separate payments, or a bank top-up of PayPal as a purchase on top of the PayPal payments it covers.', 'No refunds, disputes, cancellations, account changes, new automations or builds.', 'Mail is read as extracted facts only — not as the original invoice.'],
     reads, sourceHash: sourceHash(thought), ownerCorrection: typeof thought.note === 'string' ? thought.note : null,
-    budget: { maxReads: reads.length, maxAttempts: 3, maxWallSeconds: 180 },
+    budget: { maxReads: reads.length, maxAttempts: 3, maxWallSeconds: 240 },
   };
   const specHash = hash(spec);
   const id = await db.transaction(async tx => {

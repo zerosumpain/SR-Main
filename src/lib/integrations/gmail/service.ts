@@ -325,6 +325,41 @@ export class GmailService {
   }
 
   // -------------------------------------------------------------------------
+  // Drafts — written for the owner to read before anything leaves
+  // -------------------------------------------------------------------------
+
+  /** Create a draft. Nothing is sent; `gmail.modify` covers it. */
+  async createDraft(account: GmailAccount, input: SendInput): Promise<{ draftId: string; messageId: string; threadId: string }> {
+    const oauth = await this.getAuthenticatedClient(account);
+    const gmail = this.gmailClientFor(oauth);
+    const raw = Buffer.from(buildRfc822(account.email, input)).toString('base64url');
+    const res = await gmail.users.drafts.create({
+      userId: 'me',
+      requestBody: { message: { raw, threadId: input.threadId } },
+    });
+    return { draftId: res.data.id ?? '', messageId: res.data.message?.id ?? '', threadId: res.data.message?.threadId ?? '' };
+  }
+
+  /** Discard a draft. A draft already sent or deleted is not an error. */
+  async deleteDraft(account: GmailAccount, draftId: string): Promise<void> {
+    const oauth = await this.getAuthenticatedClient(account);
+    const gmail = this.gmailClientFor(oauth);
+    try {
+      await gmail.users.drafts.delete({ userId: 'me', id: draftId });
+    } catch (err) {
+      if ((err as { code?: number })?.code !== 404) throw err;
+    }
+  }
+
+  /** Send a draft exactly as it stands in Gmail — including any edit made there. */
+  async sendDraft(account: GmailAccount, draftId: string): Promise<{ messageId: string; threadId: string }> {
+    const oauth = await this.getAuthenticatedClient(account);
+    const gmail = this.gmailClientFor(oauth);
+    const res = await gmail.users.drafts.send({ userId: 'me', requestBody: { id: draftId } });
+    return { messageId: res.data.id ?? '', threadId: res.data.threadId ?? '' };
+  }
+
+  // -------------------------------------------------------------------------
   // Modify labels on a message
   // -------------------------------------------------------------------------
 
