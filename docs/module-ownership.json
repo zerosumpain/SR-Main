@@ -37,9 +37,12 @@
         "file_embeddings",
         "file_share_token",
         "openrouter_models",
-        "rag_collections",
-        "rag_messages",
         "workflow_files"
+      ],
+      "ownedSchema": "drive",
+      "ownedTables": [
+        "rag_collections",
+        "rag_messages"
       ]
     },
     {
@@ -126,13 +129,16 @@
         "agent_actions",
         "app_settings",
         "openrouter_models",
-        "policy_indicator_snapshots",
         "project_share",
         "project_visibility",
         "workflow_edges",
         "workflow_nodes",
         "workflow_schedules",
         "workflows"
+      ],
+      "ownedSchema": "policy",
+      "ownedTables": [
+        "policy_indicator_snapshots"
       ]
     },
     {
@@ -160,8 +166,6 @@
       "requiredTables": [
         "agent_actions",
         "app_settings",
-        "keystone_intel",
-        "keystone_intel_runs",
         "openrouter_models",
         "project_share",
         "project_visibility",
@@ -169,6 +173,11 @@
         "workflow_nodes",
         "workflow_schedules",
         "workflows"
+      ],
+      "ownedSchema": "dfe",
+      "ownedTables": [
+        "keystone_intel",
+        "keystone_intel_runs"
       ]
     },
     {
@@ -199,12 +208,15 @@
         "openrouter_models",
         "project_share",
         "project_visibility",
-        "standard_registry_entries",
-        "standard_registry_source_runs",
         "workflow_edges",
         "workflow_nodes",
         "workflow_schedules",
         "workflows"
+      ],
+      "ownedSchema": "dsd",
+      "ownedTables": [
+        "standard_registry_entries",
+        "standard_registry_source_runs"
       ]
     },
     {
@@ -410,8 +422,6 @@
         "jkai_memories",
         "jkai_memory_entities",
         "jkai_tool_traces",
-        "keystone_intel",
-        "keystone_intel_runs",
         "mail_embeddings",
         "narrative_item",
         "native_credentials",
@@ -428,13 +438,10 @@
         "pending_workflow_deliveries",
         "planned_routes",
         "platform_events",
-        "policy_indicator_snapshots",
         "project_share",
         "project_visibility",
         "prompt_cache",
         "quick_answer",
-        "rag_collections",
-        "rag_messages",
         "relationship",
         "release_items",
         "releases",
@@ -447,8 +454,6 @@
         "scraper_target_knowledge",
         "source",
         "source_chunk",
-        "standard_registry_entries",
-        "standard_registry_source_runs",
         "synthesis_runs",
         "whatsapp_config",
         "whoop_cycles",
@@ -624,8 +629,6 @@
         "jkai_memories",
         "jkai_memory_entities",
         "jkai_tool_traces",
-        "keystone_intel",
-        "keystone_intel_runs",
         "mail_embeddings",
         "narrative_item",
         "native_credentials",
@@ -642,13 +645,10 @@
         "pending_workflow_deliveries",
         "planned_routes",
         "platform_events",
-        "policy_indicator_snapshots",
         "project_share",
         "project_visibility",
         "prompt_cache",
         "quick_answer",
-        "rag_collections",
-        "rag_messages",
         "relationship",
         "release_items",
         "releases",
@@ -661,8 +661,6 @@
         "scraper_target_knowledge",
         "source",
         "source_chunk",
-        "standard_registry_entries",
-        "standard_registry_source_runs",
         "synthesis_runs",
         "whatsapp_config",
         "whoop_cycles",
