@@ -86,11 +86,11 @@ export const PROJECT_CARDS: ProjectCard[] = [
     href: '/projects/engine-room',
     label: 'Open The Engine Room',
     kind: 'Field study',
-    tag: 'Interactive · This site, explained',
-    title: 'The Engine Room — how this site works',
+    tag: 'Interactive · Three features, explained',
+    title: 'The Engine Room — Daydream, Build and the App',
     blurb:
-      'This site looks like a blog. Underneath it is a personal knowledge engine — an assistant with reach into mail, files and home, a workflow engine with 88 node types, retrieval over documents, a knowledge graph that resolves entities overnight, and a system that rewrites itself while nobody is watching. Four parts, twenty-one pages, and twenty instruments you can operate rather than read: follow one message through six stages and six layers with a live clock and a running bill, pick a model seller and watch what it costs you, try to get machine-written code past the safety scan, or push a change down the deploy pipeline and watch it stop. Mechanisms and mistakes, no secrets.',
-    chips: 'models · caching · RAG · entity resolution · self-improvement · measured',
+      'Three parts of this site that aren’t ordinary. Daydream thinks about my life on spare cycles, one narrow question at a time, and writes down what’s worth my attention. Build turns the ideas I accept into real changes to the site, with a brief, a running preview and tests, and only ever reaches production through a pull request. And the iPhone app carries it all into my pocket, onto the Lock Screen, the watch and Siri. Every stage, limit and count on the pages is read from the running code, so the study changes when the features do.',
+    chips: 'daydream · autonomous builds · codegraph · iPhone · live from the code',
   },
 
 

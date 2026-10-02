@@ -40,7 +40,7 @@ describe('parentHref — the common way back', () => {
     expect(parentHref('/jkai/builds/42')).toBe('/jkai/builds');
     expect(parentHref('/jkai/intel/sources')).toBe('/jkai/intel');
     expect(parentHref('/health/activities/17')).toBe('/health/activities');
-    expect(parentHref('/projects/engine-room/turn/trace')).toBe('/projects/engine-room/turn');
+    expect(parentHref('/projects/engine-room/daydream/inbox')).toBe('/projects/engine-room/daydream');
   });
 
   it('sends a sub-section back to the family above it', () => {
@@ -136,7 +136,7 @@ describe('wearsSharedChrome', () => {
   });
 
   it('leaves every ordinary page wearing the bar', () => {
-    for (const p of ['/', '/blog', '/blog/a-post', '/jkai', '/jkai/intel/sources', '/health', '/health/plan', '/research', '/projects/engine-room/turn', '/admin/ops/costs']) {
+    for (const p of ['/', '/blog', '/blog/a-post', '/jkai', '/jkai/intel/sources', '/health', '/health/plan', '/research', '/projects/engine-room/daydream', '/admin/ops/costs']) {
       expect(wearsSharedChrome(p), `${p} lost its header`).toBe(true);
     }
   });
