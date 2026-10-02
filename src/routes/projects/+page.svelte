@@ -16,7 +16,7 @@
   import HealthShell from '$lib/components/shell/HealthShell.svelte';
   import SectionHead from '$lib/components/shell/SectionHead.svelte';
   import ShareModal from './ShareModal.svelte';
-  import { PROJECT_CARDS, type ProjectCard } from './cards';
+  import type { ProjectCard } from './cards';
   import { resolveProjectCard } from '$lib/jkai/project-card';
   import type { Snippet } from 'svelte';
 
@@ -38,9 +38,9 @@
   let toggling = $state<string | null>(null);
 
   const isPub = (key: string) => isProjectPublic(vis, key);
-  const showCard = (key: string) => data.authenticated || isPub(key);
-
-  const shownCards = $derived([...PROJECT_CARDS.filter((c) => showCard(c.key)), ...data.ownerCards]);
+  // The server has already filtered these against the real visibility map —
+  // the public's `data.visibility` is empty, so it cannot be filtered here.
+  const shownCards = $derived([...data.cards, ...data.ownerCards]);
   const benchCount = $derived(shownCards.length + projects.length);
   const studyCount = $derived(shownCards.filter((c) => /^field study/i.test(c.kind)).length);
 
