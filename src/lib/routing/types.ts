@@ -45,8 +45,9 @@ export const EVENTS_COLLECTION = 'model-routing-events'; // one record per conve
 
 export const SYSTEM_ACTOR = 'system';
 
-export const CRON_EXPR = '0 4 * * *'; // 04:00 daily — after self-improve (heartbeat window closes 03:55), before the morning briefing (06:30)
-export const CRON_TZ = 'Europe/London';
+/** The `model-routing` heartbeat window: after self-improve (its window closes
+ *  03:55), before the morning briefing (06:30). It was a 04:00 croner. */
+export const SCHEDULE_WINDOW = { start: '04:00', end: '04:55', tz: 'Europe/London' } as const;
 
 export const ROUTING_PERMS = {
   read: ['owner', 'jkai', 'system'],
