@@ -207,7 +207,12 @@ const BASELINE_CYCLES = [
 // src/lib/jkai/intel (~70 files, ~12k lines, SR-Jkai-Core owns it) for a thin
 // $lib/intel-client: 6,369 → 6,175. The floor keeps ~175 of headroom under
 // that. A drop to near zero is still what this exists to catch.
-const MIN_EDGES = 6000;
+//
+// Lowered again on 2026-10-02 by the Main slimdown (6000 → 5800). Removing the
+// dead workflow engine (93 files, ~14.7k lines) took it 6,578 → 6,028; the web
+// games lobby, Quick Answer and the dormant briefing producer took it to 5,949
+// across 1,976 files. ~150 of headroom again.
+const MIN_EDGES = 5800;
 
 // ---------------------------------------------------------------------------
 
