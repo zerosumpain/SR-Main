@@ -21,7 +21,6 @@ const WRITES: Array<[string, Record<string, unknown>]> = [
   ['infrastructure-update', {}], ['delegate-agent', {}], ['site-tool', { toolName: 'save_memory' }],
   ['file-write', {}], ['file-delete', {}], ['file-build', { persist: true }],
   ['blog-create', {}], ['blog-update', {}], ['blog', { operation: 'create' }], ['blog', { operation: 'update' }],
-  ['deep-dive-start', {}], ['deep-dive-control', {}], ['deep-dive', { operation: 'start' }],
   ['jkai', { operation: 'start' }], ['jkai', { operation: 'control' }],
   ['home-assistant', { operation: 'call_service' }], ['home-assistant', { operation: 'fire_event' }],
   ['apple-calendar', { operation: 'create' }], ['apple-calendar', { operation: 'update' }], ['apple-calendar', { operation: 'delete' }],

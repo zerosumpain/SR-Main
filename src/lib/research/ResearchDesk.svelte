@@ -1101,8 +1101,8 @@
   }
 
   // Which node types the desk palette offers — scoped to the research set, not
-  // the full workflow palette. 'intelligence' and 'research-result' are excluded
-  // as they render as do-nothing placeholders on the desk.
+  // the full workflow palette. These three are live desk nodes with no workflow
+  // executor; keep them in $lib/canvas/adapter's curated list.
   const DESK_PALETTE_TYPES = [
     'research-chat',
     'research-report',

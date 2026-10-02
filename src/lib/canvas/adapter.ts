@@ -14,7 +14,6 @@ export type NodeKind =
   | 'trigger'
   | 'inspector'
   | 'stats'
-  | 'intelligence'
   | 'webpage'
   | 'builder'
   | 'research-chat'
@@ -175,25 +174,6 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     handles: {
       inputs: [{ id: 'in', kinds: ['any'] }],
       outputs: [{ id: 'out', kinds: ['any'] }],
-    },
-  },
-  {
-    type: 'interactive-step',
-    label: 'Interactive Step',
-    kind: 'agent',
-    group: 'Trigger & Flow',
-    description: 'Pauses the workflow for a human to solve a CAPTCHA, log in, or confirm data. Resumes after the human completes it from the canvas.',
-    defaultConfig: {
-      mode: 'vnc',
-      profile: '',
-      url: '',
-      prompt: 'Please complete the required action',
-      fields: [],
-      timeoutMinutes: 60,
-    },
-    handles: {
-      inputs: [{ id: 'in', kinds: ['any'] }],
-      outputs: [{ id: 'out', kinds: ['json'] }],
     },
   },
   {
@@ -392,49 +372,6 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
 
   // ————————————————————————— Intelligence
   {
-    type: 'intelligence',
-    label: 'Intelligence',
-    kind: 'intelligence',
-    group: 'Intelligence',
-    description: 'Filtered view onto the knowledge graph. Queryable. Spawns deep/quick research.',
-    defaultConfig: {
-      size: { w: 360, h: 440 },
-      query: '',
-      facets: { entityTypes: [], tags: [], timeRange: null, limit: 20, ordering: 'relevant' },
-    },
-    handles: {
-      inputs: [{ id: 'in', kinds: ['text'] }],
-      outputs: [{ id: 'out', kinds: ['intel-session', 'text'] }],
-    },
-  },
-  {
-    type: 'research-result',
-    label: 'Research Result',
-    kind: 'intelligence',
-    group: 'Intelligence',
-    description:
-      'Deep or quick research output. Slowly pulses while running; populates when complete.',
-    defaultConfig: { size: { w: 460, h: 520 }, engine: 'deep', sessionId: '', topic: '' },
-    handles: {
-      inputs: [{ id: 'in', kinds: ['text', 'intel-session'] }],
-      outputs: [{ id: 'result', kinds: ['research-result', 'text'] }],
-    },
-    defaultWeight: 0.2,
-  },
-  {
-    type: 'deep-research',
-    label: 'Deep Research',
-    kind: 'intel',
-    group: 'Intelligence',
-    description: 'DAG-driven deep research (commission via pipeline). Emits researchReport + sources.',
-    defaultConfig: { topic: '{{item.title}}', goals: '', depth: 'medium', pollIntervalMs: 5000, maxWaitMs: 900000 },
-    handles: {
-      inputs: [{ id: 'in', kinds: ['text'] }],
-      outputs: [{ id: 'out', kinds: ['research-result', 'text'] }],
-    },
-    defaultWeight: 0.2,
-  },
-  {
     type: 'research-chat',
     label: 'Research Chat',
     kind: 'research-chat',
@@ -467,19 +404,6 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     group: 'Intelligence',
     description: 'Semantic search over the content of /drive files (text, images, audio). Returns ranked passages.',
     defaultConfig: { query: '{{input.query}}', topK: 5, fileTypes: '' },
-    handles: {
-      inputs: [{ id: 'in', kinds: ['text', 'json', 'any'] }],
-      outputs: [{ id: 'out', kinds: ['json', 'text'] }],
-    },
-    defaultWeight: 0.2,
-  },
-  {
-    type: 'research-search',
-    label: 'Research search (RAG)',
-    kind: 'intel',
-    group: 'Intelligence',
-    description: 'Cross-session semantic search over all deep-dive research materials. Returns ranked passages.',
-    defaultConfig: { query: '{{input.query}}', topK: 8 },
     handles: {
       inputs: [{ id: 'in', kinds: ['text', 'json', 'any'] }],
       outputs: [{ id: 'out', kinds: ['json', 'text'] }],
@@ -525,30 +449,6 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     },
   },
   {
-    type: 'web-scrape',
-    label: 'Web scrape',
-    kind: 'intel',
-    group: 'Intel & Web',
-    description: 'Fetch a URL and extract its readable text content.',
-    defaultConfig: { url: '' },
-    handles: {
-      inputs: [{ id: 'in', kinds: ['url', 'text'] }],
-      outputs: [{ id: 'out', kinds: ['text', 'json'] }],
-    },
-  },
-  {
-    type: 'deep-dive',
-    label: 'Deep-dive research',
-    kind: 'intel',
-    group: 'Intel & Web',
-    description: 'Multi-hop research session; kicks off, run id returned for polling.',
-    defaultConfig: { topic: '' },
-    handles: {
-      inputs: [{ id: 'in', kinds: ['text'] }],
-      outputs: [{ id: 'out', kinds: ['research-result', 'text'] }],
-    },
-  },
-  {
     type: 'webpage',
     label: 'Webpage',
     kind: 'webpage',
@@ -588,30 +488,6 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     defaultConfig: { url: '', profile: '', waitFor: { type: 'networkidle' }, extract: [] },
     handles: {
       inputs: [{ id: 'in', kinds: ['url', 'text', 'any'] }],
-      outputs: [{ id: 'out', kinds: ['json'] }],
-    },
-  },
-  {
-    type: 'stealth-scrape-llm',
-    label: 'Stealth Scrape (LLM Extract)',
-    kind: 'output',
-    group: 'Integrations',
-    description: 'Extracts structured fields from scraped HTML/text via an LLM. Use when CSS selectors are too brittle.',
-    defaultConfig: { sourcePath: '', schema: { type: 'object', properties: {} }, model: '', itemTextPath: '', instructions: '' },
-    handles: {
-      inputs: [{ id: 'in', kinds: ['text', 'json', 'any'] }],
-      outputs: [{ id: 'out', kinds: ['json'] }],
-    },
-  },
-  {
-    type: 'site-mapper',
-    label: 'Site Mapper (LLM)',
-    kind: 'output',
-    group: 'Integrations',
-    description: 'One-shot LLM that generates a reusable scraper playbook (url template + selectors + wait condition) for a new target domain. stealth-scrape then dispatches through the saved playbook automatically on every subsequent run — zero LLM cost on scheduled scrapes.',
-    defaultConfig: { seedUrl: '', goal: '', searchQuery: '', profile: 'default', model: '' },
-    handles: {
-      inputs: [{ id: 'in', kinds: ['any'] }],
       outputs: [{ id: 'out', kinds: ['json'] }],
     },
   },
@@ -1067,7 +943,7 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
 // registered-but-unlisted node was both unreachable from the "+ node" picker
 // AND rendered with no ports. Rather than hand-maintain a mirror that drifts
 // (~19 executable nodes — apple-calendar, approval, the per-operation
-// file/blog/deep-dive primitives — were missing), auto-derive an entry for any
+// file/blog primitives — were missing), auto-derive an entry for any
 // registered node the curated list above doesn't already cover. Excluded:
 // hidden defs (superseded legacy nodes), display-only types (stats/notes), and
 // dynamic-handle nodes whose per-instance ports need bespoke canvas rendering.
@@ -1175,12 +1051,9 @@ export function mapTypeToKind(type: string): NodeKind {
   if (type === 'llm-call' || type === 'llm-router' || type === 'openrouter' || type === 'think')
     return 'llm';
   if (type === 'text-parser' || type === 'validator') return 'parse';
-  if (type === 'intel-write' || type === 'intel-query' || type === 'deep-dive') return 'intel';
-  if (type === 'intelligence' || type === 'research-result') return 'intelligence';
+  if (type === 'intel-write' || type === 'intel-query' || type === 'file-search') return 'intel';
   if (type === 'research-chat') return 'research-chat';
   if (type === 'research-report') return 'research-report';
-  if (type === 'deep-research') return 'intel';
-  if (type === 'file-search' || type === 'research-search') return 'intel';
   if (type === 'webpage') return 'webpage';
   if (type === 'builder-chat' || type === 'builder-pi' || type === 'build-view') return 'builder';
   return 'output';

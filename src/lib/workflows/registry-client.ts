@@ -38,15 +38,11 @@ import { blogDef } from './nodes/blog.def';
 import { jkaiDef } from './nodes/jkai.def';
 import { siteToolDef } from './nodes/site-tool.def';
 import { fileSearchDef } from './nodes/file-search.def';
-import { researchSearchDef } from './nodes/research-search.def';
 import { deckBuildDef } from './nodes/deck-build.def';
 import { apiCallDef } from './nodes/api-call.def';
 import { apiIntegrationDef } from './nodes/api-integration.def';
 import { delegateAgentDef } from './nodes/delegate-agent.def';
-import { deepDiveDef } from './nodes/deep-dive.def';
-import { webScrapeDef } from './nodes/web-scrape.def';
 import { stealthScrapeDef } from './nodes/stealth-scrape.def';
-import { stealthScrapeLlmDef } from './nodes/stealth-scrape-llm.def';
 import { whatsappTriggerDef } from './nodes/whatsapp-trigger.def';
 import { gmailFetchDef } from './nodes/gmail-fetch.def';
 import { gmailSendDef } from './nodes/gmail-send.def';
@@ -55,11 +51,9 @@ import { gmailLabelDef } from './nodes/gmail-label.def';
 import { gmailSearchDef } from './nodes/gmail-search.def';
 import { tavilySearchDef } from './nodes/tavily-search.def';
 import { notifyDef } from './nodes/notify.def';
-import { interactiveStepDef } from './nodes/interactive-step.def';
 // Client-safe `.def.ts` files (type-only imports) for nodes whose main `.ts`
 // executor file pulls in server-only modules — same pattern as the imports
 // above.
-import { siteMapperDef } from './nodes/site-mapper.def';
 import { fileStoreDef } from './nodes/file-store.def';
 import { fileExtractDef } from './nodes/file-extract.def';
 import { appleCalendarDef } from './nodes/apple-calendar.def';
@@ -72,17 +66,18 @@ import { inspectorDef } from './nodes/inspector';
 import { postitDef } from './nodes/postit';
 import { annotationDef } from './nodes/annotation';
 import type { NodeDefinition } from './types';
-import { deepResearchDef } from './nodes/deep-research.def';
 import { chatDef } from './nodes/chat.def';
 import { builderChatDef, builderPiDef, buildViewDef } from './nodes/builder-canvas.def';
 import { fileReadDef, fileWriteDef, fileDeleteDef, fileListDef } from './nodes/file-ops.def';
 import { fileTextExtractDef } from './nodes/file-text-extract.def';
 import { fileBuildDef } from './nodes/file-build.def';
 import { blogListDef, blogGetDef, blogCreateDef, blogUpdateDef } from './nodes/blog-ops.def';
-import { deepDiveStartDef, deepDiveStatusDef, deepDiveReportDef, deepDiveListDef, deepDiveControlDef } from './nodes/deep-dive-ops.def';
-import { researchResultDef } from './nodes/research-result.def';
 
 // Server-backed nodes expose their metadata from client-safe definition modules.
+// Node types SR-Workflows has retired (its src/lib/workflows/retired-nodes.ts:
+// the deep-dive/research nodes, web-scrape, stealth-scrape-llm, site-mapper,
+// interactive-step) are not registered here. `stealth-scrape` stays: its
+// executor still serves /api/scraper/node on homeserv.
 const builtInDefinitions: NodeDefinition[] = [
   manualTriggerDef,
   transformDef,
@@ -119,15 +114,11 @@ const builtInDefinitions: NodeDefinition[] = [
   jkaiDef,
   siteToolDef,
   fileSearchDef,
-  researchSearchDef,
   deckBuildDef,
   apiCallDef,
   apiIntegrationDef,
   delegateAgentDef,
-  deepDiveDef,
-  webScrapeDef,
   stealthScrapeDef,
-  stealthScrapeLlmDef,
   whatsappTriggerDef,
   gmailFetchDef,
   gmailSendDef,
@@ -136,14 +127,10 @@ const builtInDefinitions: NodeDefinition[] = [
   gmailSearchDef,
   tavilySearchDef,
   notifyDef,
-  interactiveStepDef,
   // Reconciled with registered executors (see registry-parity.test.ts).
   builderChatDef,
   builderPiDef,
   buildViewDef,
-  researchResultDef,
-  deepResearchDef,
-  siteMapperDef,
   chatDef,
   triggerDef,
   inspectorDef,
@@ -159,11 +146,6 @@ const builtInDefinitions: NodeDefinition[] = [
   blogGetDef,
   blogCreateDef,
   blogUpdateDef,
-  deepDiveStartDef,
-  deepDiveStatusDef,
-  deepDiveReportDef,
-  deepDiveListDef,
-  deepDiveControlDef,
   postitDef,
   annotationDef,
   appleCalendarDef,
