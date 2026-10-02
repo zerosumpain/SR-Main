@@ -101,6 +101,12 @@ describe('every native route gates itself', () => {
         '/chat/conversations/[id]/messages/+server.ts',
         '/chat/conversations/[id]/model/+server.ts',
         '/companion-pair/+server.ts',
+        // The family alarm: raise, stand down and list active alarms. The
+        // forecast's audience (owner, or a family:circle/admin member via
+        // `peopleViewerOf` + `familyCaller`); everyone else 403s. Standing one
+        // down is the sender or the owner only.
+        '/family/alarm/+server.ts',
+        '/family/alarm/cancel/+server.ts',
         // The travel desk's forecast. Scoped exactly as /home/people is: a
         // Family Circle / Family Admin member gets themselves and their wards.
         '/family/forecast/+server.ts',

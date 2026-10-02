@@ -26,6 +26,13 @@
  * Configuration, all from the VPS `.env` (escrowed in `homeserv-recovery`):
  * `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_BUNDLE_ID`, `APNS_KEY_BASE64` (the .p8,
  * base64) and `APNS_ENV` (the gateway for a token that did not say).
+ *
+ * `APNS_CRITICAL_ALERTS=1` lets the family alarm (`$lib/family/alarm`) send a
+ * CRITICAL alert — it sounds at full volume through silent mode and every
+ * Focus. Off by default and must stay off until Apple has granted the app the
+ * `com.apple.developer.usernotifications.critical-alerts` entitlement and the
+ * provisioning profile carries it; without that, iOS ignores the critical
+ * fields and the alarm rings as time-sensitive.
  */
 
 import { connect, constants, type ClientHttp2Session } from 'node:http2';
@@ -33,8 +40,15 @@ import { createPrivateKey, sign, type KeyObject } from 'node:crypto';
 
 export type ApnsEnv = 'production' | 'sandbox';
 
-/** How loudly. `time-sensitive` breaks through a Focus; the app must hold the entitlement. */
-export type InterruptionLevel = 'passive' | 'active' | 'time-sensitive';
+/**
+ * How loudly. `time-sensitive` breaks through a Focus; the app must hold the
+ * entitlement. `critical` also ignores the mute switch, and needs Apple's
+ * separately granted critical-alerts entitlement (see `APNS_CRITICAL_ALERTS`).
+ */
+export type InterruptionLevel = 'passive' | 'active' | 'time-sensitive' | 'critical';
+
+/** A sound file bundled in the app, or a critical alert's sound (`critical: 1`, volume 0–1). */
+export type PushSound = string | { critical: 1; name: string; volume: number };
 
 export interface PushMessage {
   title: string;
@@ -48,8 +62,10 @@ export interface PushMessage {
   relevance?: number;
   /** A later push with the same id REPLACES this one on the phone. ≤ 64 bytes. */
   collapseId?: string;
+  /** Overrides the default sound: a bundled file name, or a critical sound. */
+  sound?: PushSound;
   /** Read by the app's tap and button handlers. Keys beside `aps`. */
-  userInfo?: Record<string, string>;
+  userInfo?: Record<string, string | number | null>;
   /** Seconds Apple keeps trying a phone that is off. 0 = once, now. */
   ttlSeconds?: number;
   /** Server-only current consent check. Never serialized into APNs payloads. */
@@ -142,7 +158,7 @@ function providerToken(config: ApnsConfig, now = Date.now()): string {
 export function buildPayload(message: PushMessage): string {
   const aps: Record<string, unknown> = {
     alert: { title: message.title.slice(0, 200), body: message.body.slice(0, 1000) },
-    sound: message.level === 'passive' ? undefined : 'default',
+    sound: message.sound ?? (message.level === 'passive' ? undefined : 'default'),
     'interruption-level': message.level ?? 'active',
   };
   if (message.category) aps.category = message.category;

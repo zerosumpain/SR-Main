@@ -110,11 +110,29 @@ export async function deliver(
   return outcome;
 }
 
+/**
+ * The family alarm's private preview. A phone that hides details still has to
+ * RING: the sound, its loudness and how long Apple keeps trying survive, and so
+ * do the ids the app needs to fetch the rest. The name, message and position do
+ * not — the app reads those from `GET /api/native/family/alarm` once opened.
+ */
+const ALARM_PRIVATE: Record<string, { title: string; body: string }> = {
+  'family-alarm': { title: 'Family alarm', body: 'Someone in the family raised the alarm. Open the app to see who and where.' },
+  'family-alarm-cancel': { title: 'Family alarm stood down', body: 'Open the app for details.' },
+};
+const ALARM_KEYS = ['alarmId', 'kind', 'at'] as const;
+
 /** Keep names, counts, locations and arbitrary metadata off private previews. */
 export function privatePush(message: PushMessage): PushMessage {
-  const userInfo: Record<string,string> = {};
+  const userInfo: Record<string, string | number | null> = {};
   if (message.userInfo?.category) userInfo.category = message.userInfo.category;
   if (message.userInfo?.url) userInfo.url = message.userInfo.url;
+  const alarm = message.category ? ALARM_PRIVATE[message.category] : undefined;
+  if (alarm) {
+    for (const key of ALARM_KEYS) if (message.userInfo?.[key] != null) userInfo[key] = message.userInfo[key];
+    return { ...alarm, category: message.category, threadId: message.threadId, collapseId: message.collapseId,
+      level: message.level, sound: message.sound, relevance: message.relevance, ttlSeconds: message.ttlSeconds, userInfo };
+  }
   return { title: 'Strange Ramblings', body: 'You have an update. Open the app to view it.',
     category: message.category, threadId: message.threadId, collapseId: message.collapseId,
     level: 'active', ttlSeconds: 0, userInfo };
