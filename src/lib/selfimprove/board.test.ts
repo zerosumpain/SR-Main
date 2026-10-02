@@ -661,7 +661,9 @@ describe('inflow is computed over the whole population', () => {
       ),
       item({ slug: 'open1', title: 'Open one', source: 'question', createdAt: daysAgo(1) }),
     ];
-    const board = buildBoard({ backlog, tools: [], attemptCeiling: CEILING, settledLimit: 2 });
+    // Pin the clock: the rows are dated relative to NOW, and on the real clock
+    // they age out of the 30-day inflow window (failed from 2026-10-02 onwards).
+    const board = buildBoard({ backlog, tools: [], attemptCeiling: CEILING, settledLimit: 2, now: NOW });
     // The board itself is trimmed…
     expect(board.items.filter((i) => i.backlogStatus === 'shipped')).toHaveLength(2);
     // …and the inflow is not.
