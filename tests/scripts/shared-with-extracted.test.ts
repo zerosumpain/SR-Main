@@ -79,6 +79,8 @@ describe('modules shared with the extracted applications', () => {
       'src/lib/jkai/panel/schema.ts',
       'src/lib/llm/client.ts',
       'src/lib/llm/keys.ts',
+      'src/lib/llm/model-service-client.ts',
+      'src/lib/llm/model-service-contract.ts',
       'src/lib/llm/pricing.ts',
       'src/lib/llm/usage-capture.ts',
       'src/lib/llm/usage-log.ts',
