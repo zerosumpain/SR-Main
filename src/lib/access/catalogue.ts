@@ -128,7 +128,7 @@ export const AREAS: readonly AreaInfo[] = [
   {
     id: 'games',
     label: 'Games',
-    blurb: 'Family games in the iPhone app and at /games on the web: start one, invite the family, join when invited.',
+    blurb: 'Family games in the iPhone app: start one, invite the family, join when invited.',
     open: true,
     levels: { self: 'Play, start games and invite', all: 'Same as self', admin: 'Same as self' },
   },
@@ -494,19 +494,6 @@ const ROUTES: Record<string, Partial<Record<Method, Permission>>> = {
   '/news': { GET: 'news:self' },
   '/news/[source]/[id]': { GET: 'news:self' },
   '/api/news/actions': { POST: 'news:self' },
-
-  // ── games — the web lobby and a table, into the same in-memory rooms the
-  // app plays in. Every route resolves its player through `gamesCaller`
-  // ($lib/games/site-access.server): a room answers only to somebody seated
-  // or invited in it, so reaching the route is not reaching anyone's game.
-  '/games': { GET: 'games:self' },
-  '/games/[id]': { GET: 'games:self' },
-  // The leaderboard: names and the games' hashed ids, no emails.
-  '/games/leaderboard': { GET: 'games:self' },
-  '/api/games': { GET: 'games:self', POST: 'games:self' },
-  '/api/games/leaderboard': { GET: 'games:self' },
-  '/api/games/[id]': { GET: 'games:self', POST: 'games:self' },
-  '/api/games/[id]/stream': { GET: 'games:self' },
 };
 
 /**

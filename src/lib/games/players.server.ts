@@ -1,8 +1,6 @@
-// Who can play: everyone who is the owner or holds `games:self` AND has
-// somewhere to open an invite — a live site pairing (the app polls for it), or
-// the web lobby at /games open in a browser within the last WEB_SEEN_MS (its
-// 5 s poll collects invites the same way). A person with neither could not
-// open an invite, so they are not offered one.
+// Who can play: everyone who is the owner or holds `games:self` AND has a live
+// site pairing, since the app is where invites open (it polls for them). A
+// person without one could not open an invite, so they are not offered one.
 //
 // A player's id is a keyed hash of their email, so the phone never carries
 // anyone else's address, a guessed address cannot be tested against it, and the
@@ -36,31 +34,9 @@ function nameFromEmail(email: string): string {
 const TTL_MS = 60_000;
 let cache: { at: number; players: GamePlayer[] } | null = null;
 
-/**
- * How long a web lobby visit keeps a person invitable. The lobby page polls
- * every 5 s while open, so an open tab keeps renewing this; a closed one lapses
- * and the person drops off everyone's invite list — the same promise a revoked
- * pairing gives. In memory, like the rooms: a restart forgets both.
- */
-export const WEB_SEEN_MS = 15 * 60_000;
-const webSeen = new Map<string, number>();
-
-/**
- * The web lobby was opened (or polled) by this address. A person newly seen
- * drops the roster cache so a host's next poll can already invite them.
- */
-export function noteWebPlayer(email: string, now = Date.now()): void {
-  const e = email.trim().toLowerCase();
-  if (!e) return;
-  const last = webSeen.get(e);
-  webSeen.set(e, now);
-  if (last === undefined || now - last >= WEB_SEEN_MS) cache = null;
-}
-
 /** Tests only. */
 export function _resetPlayers(): void {
   cache = null;
-  webSeen.clear();
 }
 
 export async function gamePlayers(now = Date.now()): Promise<GamePlayer[]> {
@@ -70,10 +46,6 @@ export async function gamePlayers(now = Date.now()): Promise<GamePlayer[]> {
   for (const d of await listAllSiteDevices()) {
     if (d.revokedAt || d.expiresAt.getTime() <= now) continue;
     emails.add(d.ownerEmail.trim().toLowerCase());
-  }
-  for (const [email, at] of webSeen) {
-    if (now - at < WEB_SEEN_MS) emails.add(email);
-    else webSeen.delete(email);
   }
 
   const names = new Map<string, string>();

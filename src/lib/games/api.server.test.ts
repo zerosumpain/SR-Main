@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The roster's sources: one paired phone (Sam's), the owner, and a member who
-// has games access but no phone (Kit). Grants are read per email.
+// has games access but no phone until a test pairs one (Kit). Grants are read
+// per email.
 const h = vi.hoisted(() => ({
   devices: [] as { ownerEmail: string; revokedAt: Date | null; expiresAt: Date }[],
   grants: new Map<string, string[]>(),
@@ -23,11 +24,10 @@ vi.mock('$lib/jkai/chat-access.server', () => ({ reserveUsage: async () => {} })
 
 import { isHttpError } from '@sveltejs/kit';
 import { lobbyFor, roomAct, roomStream, roomView, startGame } from './api.server';
-import { _resetPlayers, noteWebPlayer, playerId, WEB_SEEN_MS } from './players.server';
+import { _resetPlayers, playerId } from './players.server';
 import { _resetRooms } from './rooms.server';
 import { COUNTDOWN_MS } from './liars-dice';
 import type { WireRoom } from './liars-dice';
-import { WEB_GAMES } from './web';
 
 const owner = { email: 'owner@example.test', role: 'owner' as const };
 const sam = { email: 'sam@example.test', role: 'member' as const };
@@ -65,32 +65,31 @@ afterEach(() => {
 });
 
 describe('the roster', () => {
-  it('offers a web-only player once their web lobby has been open, and drops them after it lapses', async () => {
+  it('offers only people with a live paired phone', async () => {
     expect((await lobbyFor(owner)).players.map((p) => p.name)).toEqual(['Sam']);
 
-    noteWebPlayer(kit.email);
+    h.devices.push({ ownerEmail: kit.email, revokedAt: null, expiresAt: new Date(1_800_000_000_000) });
+    _resetPlayers();
     expect((await lobbyFor(owner)).players.map((p) => p.name)).toEqual(['Kit', 'Sam']);
-
-    vi.setSystemTime(Date.now() + WEB_SEEN_MS + 61_000);
-    expect((await lobbyFor(owner)).players.map((p) => p.name)).toEqual(['Sam']);
   });
 
-  it('never offers somebody without games access, however recently they visited', async () => {
-    noteWebPlayer('guest@example.test');
+  it('never offers somebody without games access, even with a paired phone', async () => {
+    h.devices.push({ ownerEmail: 'guest@example.test', revokedAt: null, expiresAt: new Date(1_800_000_000_000) });
+    _resetPlayers();
     expect((await lobbyFor(owner)).players.map((p) => p.name)).toEqual(['Sam']);
   });
 });
 
-describe("the shared door: a web player and an app player at one Liar's Dice table", () => {
-  it('is the same player id whichever door the email came through', async () => {
+describe("a Liar's Dice table between two paired phones", () => {
+  it('derives the player id from the email', async () => {
     const lobby = await lobbyFor(kit);
     expect(lobby.me.id).toBe(playerId(kit.email));
   });
 
-  it('starts, invites, joins and plays a bid through the shared bodies', async () => {
-    noteWebPlayer(kit.email);
+  it('starts, invites, joins and plays a bid', async () => {
+    h.devices.push({ ownerEmail: kit.email, revokedAt: null, expiresAt: new Date(1_800_000_000_000) });
     const kitId = playerId(kit.email);
-    const created = (await startGame(event, owner, { game: 'liars-dice', difficulty: 'medium', dice: 3, invite: [kitId] }, WEB_GAMES)) as WireRoom;
+    const created = (await startGame(event, owner, { game: 'liars-dice', difficulty: 'medium', dice: 3, invite: [kitId] })) as WireRoom;
     expect(created.dicePerPlayer).toBe(3);
     expect(h.pushed).toEqual([created.id]);
 
@@ -124,16 +123,7 @@ describe("the shared door: a web player and an app player at one Liar's Dice tab
     expect(called.phase).toBe('reveal');
   });
 
-  it('refuses a game the web cannot play when the door says so, and not otherwise', async () => {
-    expect(await refusal(startGame(event, owner, { game: 'boggle', difficulty: 'easy' }, WEB_GAMES))).toEqual({
-      status: 400,
-      message: 'Start that game from the app.',
-    });
-    const room = await startGame(event, owner, { game: 'boggle', difficulty: 'easy' });
-    expect(room.id).toMatch(/^g_/);
-  });
-
-  it('creates a Draw & Guess room through the shared helper with its options, as the native door does', async () => {
+  it('creates a Draw & Guess room with its options', async () => {
     const room = (await startGame(event, owner, {
       game: 'draw-guess',
       difficulty: 'medium',
@@ -146,8 +136,6 @@ describe("the shared door: a web player and an app player at one Liar's Dice tab
     expect(room.timeLimitMs).toBe(60_000);
     expect(room.players.find((p) => p.id === playerId(sam.email))?.status).toBe('invited');
     expect(h.pushed).toEqual([(room as unknown as { id: string }).id]);
-    // The web door starts only what it can play.
-    expect((await refusal(startGame(event, owner, { game: 'draw-guess', difficulty: 'easy' }, WEB_GAMES))).status).toBe(400);
   });
 
   it('refuses an invitee who is not on the roster', async () => {
