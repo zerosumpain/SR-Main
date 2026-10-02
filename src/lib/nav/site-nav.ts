@@ -94,24 +94,12 @@ export const CHROME_EXCLUSIONS: { prefix: string; exact?: boolean; why: string }
  * it wears the ordinary bar like everything else.
  */
 
-/** Suffix-matched carve-outs: full-viewport players and machine-read exports. */
+/** Suffix-matched carve-outs: full-viewport surfaces. */
 const EXCLUDED_SUFFIXES = [
-  '/print', // headless-browser PDF + OG poster target; anything above the slides lands in the export
   '/desk', // research desk — fixed inset:0, already wears CommandBar
 ];
 
-/**
- * Deck player: `/decks/<slug>` exactly. DeckShell is `position: fixed; inset: 0`
- * and scales a 1280x720 stage off its measured host, so a 48px bar changes the
- * rendered slide scale. `/decks` and `/decks/<slug>/edit` DO wear the bar.
- */
-function isDeckPlayer(path: string): boolean {
-  const parts = path.split('/').filter(Boolean);
-  return parts.length === 2 && parts[0] === 'decks';
-}
-
 export function wearsSharedChrome(path: string): boolean {
-  if (isDeckPlayer(path)) return false;
   if (EXCLUDED_SUFFIXES.some((s) => path.endsWith(s))) return false;
   return !CHROME_EXCLUSIONS.some((x) => (x.exact ? path === x.prefix : under(x.prefix, path)));
 }
@@ -124,7 +112,6 @@ export function wearsSharedChrome(path: string): boolean {
 export const SITE_ITEMS: NavItem[] = [
   { label: 'Projects', href: '/projects' },
   { label: 'Writing', href: '/blog' },
-  { label: 'Decks', href: '/decks' },
   { label: 'Health', href: '/health' },
   { label: 'Shipped', href: '/releases', ownerOnly: true },
   { label: 'Home', href: '/home', ownerOnly: true },
@@ -282,13 +269,6 @@ export const SECTIONS: NavSection[] = [
     items: [],
   },
   {
-    id: 'decks',
-    label: 'Decks',
-    rootHref: '/decks',
-    match: (p) => under('/decks', p),
-    items: [],
-  },
-  {
     id: 'drive',
     label: 'Drive',
     rootHref: '/drive',
@@ -350,10 +330,10 @@ function isGrouping(path: string): boolean {
 /**
  * A parent you cannot leave is not a parent.
  *
- * `/decks/<slug>/edit` sits one level under the deck PLAYER, which is carved
- * out of shared chrome — a full-viewport `position: fixed; inset: 0` stage with
- * no bar on it. Walking "up" into it strands the reader with nothing but the
- * browser's own back button. So a step that lands on a chrome-less route is
+ * A page can sit one level under a route that is carved out of shared chrome —
+ * a full-viewport `position: fixed; inset: 0` stage with no bar on it. Walking
+ * "up" into it strands the reader with nothing but the browser's own back
+ * button. So a step that lands on a chrome-less route is
  * skipped, the same as a grouping directory: both are places the bar cannot
  * follow you to.
  */
@@ -438,8 +418,8 @@ export function subnavFor(path: string, isOwner = true, reach: readonly string[]
  * John pointed at on /jkai and /health. A section without children (or no
  * section at all, i.e. the landing page) shows the SITE strip instead, which is
  * the nav the main page has always had. Without this fallback the header
- * rendered an empty band on `/`, `/blog`, `/projects`, `/decks` and
- * `/releases` — every top-level page on the site.
+ * rendered an empty band on `/`, `/blog`, `/projects` and `/releases` —
+ * every top-level page on the site.
  */
 export function navCellsFor(path: string, isOwner = true, reach: readonly string[] = []): NavItem[] {
   const own = subnavFor(path, isOwner, reach);

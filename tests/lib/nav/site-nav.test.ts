@@ -125,7 +125,6 @@ describe('wearsSharedChrome', () => {
     expect(wearsSharedChrome('/auth-error')).toBe(false);
     expect(wearsSharedChrome('/deepdive/share/tok123')).toBe(false);
     expect(wearsSharedChrome('/research/abc/desk')).toBe(false);
-    expect(wearsSharedChrome('/decks/my-deck/print')).toBe(false);
   });
 
   it('keeps the shared-conversation page ON the bar', () => {
@@ -134,12 +133,6 @@ describe('wearsSharedChrome', () => {
     // `+page@.svelte` now — reset to the root layout, the way /jkai/run is — so
     // the leak is gone and it wears the ordinary bar like everything else.
     expect(wearsSharedChrome('/jkai/shared/tok123')).toBe(true);
-  });
-
-  it('carves out the deck PLAYER but not the index or the editor', () => {
-    expect(wearsSharedChrome('/decks/my-deck')).toBe(false);
-    expect(wearsSharedChrome('/decks')).toBe(true);
-    expect(wearsSharedChrome('/decks/my-deck/edit')).toBe(true);
   });
 
   it('leaves every ordinary page wearing the bar', () => {
@@ -174,9 +167,9 @@ describe('isItemActive', () => {
 describe('the bar is never empty', () => {
   it('shows the site strip on the main page and every top-level page', () => {
     // The regression this guards: sections without children rendered an empty
-    // band, so /, /blog, /projects, /decks and /releases lost the nav the site
+    // band, so /, /blog, /projects and /releases lost the nav the site
     // has always had. The brief opens by naming that bar as the thing to keep.
-    for (const p of ['/', '/blog', '/projects', '/decks', '/releases']) {
+    for (const p of ['/', '/blog', '/projects', '/releases']) {
       const cells = navCellsFor(p, true).map((i) => i.href);
       expect(cells.length, `${p} rendered an empty nav bar`).toBeGreaterThan(3);
       expect(cells).toContain('/projects');
