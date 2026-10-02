@@ -175,16 +175,6 @@ export const WORK_CAPS = {
   reserveWallMs: 60 * 1000,
 } as const;
 
-/**
- * New theme groupings proposed in one night.
- *
- * Six, not all of them. The first scan of production's queue found 113
- * groupings at once, and a room asking the owner to rule on 113 things is a
- * room he closes. Six a night drains that in under three weeks while leaving
- * the on-demand button in the room for anyone who wants the lot; the scan is
- * free either way, so this caps the ASKING, not the finding.
- */
-export const MAX_THEME_PROPOSALS = 6;
 
 export type PhaseName =
   | 'gather'
