@@ -14,6 +14,9 @@ const RETIRED = [
   'stealth-scrape-llm', 'site-mapper', 'interactive-step', 'web-scrape',
   'deep-dive', 'deep-dive-start', 'deep-dive-status', 'deep-dive-report', 'deep-dive-list', 'deep-dive-control',
   'deep-research', 'quick-answer', 'research-result', 'research-search', 'intelligence', 'gmail-trigger',
+  // Decks were retired from Main on 2026-10-02; the node wrapped a site tool that
+  // no longer exists.
+  'deck-build',
 ];
 
 describe('retired workflow node types', () => {

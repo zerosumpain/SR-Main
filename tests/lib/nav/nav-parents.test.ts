@@ -64,10 +64,9 @@ describe('every back link points at a page that exists', () => {
   });
 
   it('never walks up into a page that has no way out', () => {
-    // The deck editor sits under the deck PLAYER, which is carved out of shared
-    // chrome — full-viewport, no bar. Walking up into it would strand the
-    // reader with only the browser's back button.
-    expect(parentHref('/decks/my-deck/edit')).toBe('/decks');
+    // A route carved out of shared chrome is full-viewport with no bar.
+    // Walking up into it would strand the reader with only the browser's back
+    // button.
     for (const route of ROUTE_SET) {
       const parent = parentHref(route);
       if (parent === null || parent === '/') continue;

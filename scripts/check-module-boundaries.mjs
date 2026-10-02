@@ -149,12 +149,11 @@ const rank = (layer) => LAYERS.indexOf(layer);
 // Each line is the debt, not the design. Fix one and delete the line.
 // ---------------------------------------------------------------------------
 const BASELINE_LAYER = [
-  // Both of these are $lib/workflows/site-tools — the tool registry and the
-  // keyword classifier — which the platform layer reaches up for. site-tools is
+  // This is $lib/workflows/site-tools — the tool registry — which the
+  // platform layer reaches up for. site-tools is
   // a registry of DOMAIN capabilities, so the fix is to invert it: let the
   // domain register its tools with the platform rather than the platform
   // importing the catalogue.
-  'llm -> workflows',
   'routing -> workflows',
 
 ];
@@ -184,7 +183,6 @@ const BASELINE_CYCLES = [
   // between two platform modules. $lib/llm/client asks server/models which
   // model to use; server/models/codex-catalogue asks $lib/llm what it cost.
   'llm <-> server',
-  'llm <-> workflows',
   'mcp <-> toolpolicy',
   'models <-> server',
   'monitors <-> workflows',
@@ -212,7 +210,12 @@ const BASELINE_CYCLES = [
 // dead workflow engine (93 files, ~14.7k lines) took it 6,578 → 6,028; the web
 // games lobby, Quick Answer and the dormant briefing producer took it to 5,949
 // across 1,976 files. ~150 of headroom again.
-const MIN_EDGES = 5800;
+//
+// Lowered on 2026-10-02 by the Decks retirement (5800 → 5500). Deleting the
+// deck routes, $lib/decks, $lib/presentation, the presentation components and
+// the deck site tools (67 files, ~13.8k lines) took it 5,847 → 5,664 across
+// 1,892 files. ~160 of headroom.
+const MIN_EDGES = 5500;
 
 // ---------------------------------------------------------------------------
 

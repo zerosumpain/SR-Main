@@ -30,7 +30,7 @@ export const JKAI_EXTENDED_TOOL: McpTool = {
     // A domain that is absent here is a domain the model does not know it has.
     'blog, health, calendar, workflow, gmail, payments and API integrations, ' +
     'research, scraper, files and drive, datastore, the intel knowledge graph, ' +
-    'build, schedule, monitors, agents, decks, home-assistant, render, ' +
+    'build, schedule, monitors, agents, home-assistant, render, ' +
     'document, image, audio, system domains). Use this when you need a ' +
     'capability beyond the essential tools you can see directly. Workflow: ' +
     'operation="list" to discover (optionally with a "query" — plain words ' +

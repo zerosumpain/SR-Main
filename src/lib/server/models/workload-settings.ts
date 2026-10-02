@@ -246,9 +246,6 @@ export const resolveEmbeddingModel = () => resolveById('embeddings');
 /** Audio transcription for the @files index. Must accept audio input. */
 export const resolveAudioModel = () => resolveById('audio');
 
-/** Deck slide art direction. */
-export const resolveArtDirectorModel = () => resolveById('art-director');
-
 /**
  * Fast research uses an explicit role selection, then the chat selection, the
  * legacy environment setting, or the site default. There is no hidden model

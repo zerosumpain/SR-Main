@@ -61,7 +61,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 // enables them explicitly against its disposable loopback PostgreSQL service.
 // Commissioning uses the isolated local database and the explicitly enabled
 // disposable nightly database; its transactional cases also ran before release.
-const INTEGRATION_FILES = 39;
+// Decks retired 2026-10-02 took src/lib/decks/creation.integration.test.ts with them.
+const INTEGRATION_FILES = 38;
 
 function tracked(pattern: string): string[] {
 	return execFileSync('git', ['ls-files', pattern], { cwd: ROOT, encoding: 'utf8' })

@@ -278,7 +278,6 @@ const OUTBOUND_SEND_TYPES = new Set([
   'gmail-reply',
   'email',
   'blog',
-  'deck-build',
 ]);
 
 /** Nodes that emit a LIST of items fetched from the outside world. Piped

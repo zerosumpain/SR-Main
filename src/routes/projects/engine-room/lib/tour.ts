@@ -88,7 +88,7 @@ export const SURFACES: Surface[] = [
       { label: 'The heartbeat line', what: 'Wearable data, normalised on read, because three devices had three opinions about what a step is.', section: 'reach/feeds' },
       { label: 'One thin surface', what: 'Every entry point is deliberately stupid. None of them holds logic the others lack.', section: 'turn/stream' },
     ],
-    leads: ['blog', 'projects', 'decks', 'jkai', 'drive'],
+    leads: ['blog', 'projects', 'jkai', 'drive'],
   },
   {
     id: 'blog',
@@ -117,21 +117,7 @@ export const SURFACES: Surface[] = [
       { label: 'Autonomously built entries', what: 'Several of these were written end to end by the builder from a single prompt.', section: 'change/nights' },
       { label: 'This very study', what: 'The Engine Room is itself a project page, which is either elegant or a warning sign.', section: 'turn/trace' },
     ],
-    leads: ['home', 'decks', 'builds'],
-  },
-  {
-    id: 'decks',
-    tier: 'front',
-    label: 'Decks',
-    route: '/decks',
-    kicker: 'Public',
-    open: true,
-    line: 'Slide decks generated from a prompt. A slide is a fixed page, so when the words do not fit they are cut rather than scrolled — the one honest thing PowerPoint never does.',
-    features: [
-      { label: 'Overflow is a failure, not a scrollbar', what: 'Text is measured against the stage. Too much content fails loudly instead of quietly running off the bottom.', section: 'reach/decks' },
-      { label: 'Share tokens', what: 'A deck can be handed to someone outside without making it public to everyone.', section: 'reach/keys' },
-    ],
-    leads: ['projects', 'jkai'],
+    leads: ['home', 'builds'],
   },
   {
     id: 'releases',

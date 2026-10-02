@@ -110,7 +110,7 @@ export function primaryDataPath(paths: string[]): string | undefined {
 /**
  * Deterministic best-effort mapping — the LLM-free fallback and the seed for
  * validation. Fills empty templated target fields from the available upstream
- * paths, with a couple of high-value node-pair specials (database, deck-build).
+ * paths, with a high-value node-pair special (database).
  */
 export function heuristicMapping(ctx: MappingContext): {
   actions: MappingAction[];

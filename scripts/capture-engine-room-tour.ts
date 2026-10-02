@@ -122,7 +122,6 @@ const SURFACES: Surface[] = [
   { id: 'home', path: '/', settleMs: 1400, canvasDrawsNoText: true },
   { id: 'blog', path: '/blog', settleMs: 900 },
   { id: 'projects', path: '/projects', settleMs: 900 },
-  { id: 'decks', path: '/decks', settleMs: 900 },
   { id: 'releases', path: '/releases', settleMs: 900 },
 
   // ---- the assistant -------------------------------------------------------

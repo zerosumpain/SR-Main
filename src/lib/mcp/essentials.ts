@@ -43,9 +43,6 @@ export const ESSENTIAL_TOOL_NAMES = new Set<string>([
   // jkai_extended round-trip; the run that thrashed hardest (13 builds, 14
   // deletes, 2026-07-17) never called it once.
   'workflow_lint',
-  // New-presentation path (sr. decks). Same design-first flow: outline agreed
-  // in chat, then one build call — must survive the meta-tool squeeze.
-  'presentation_build_from_spec',
   // API-first answering. `api_search`/`api_call` are the entry points for
   // fetching live/factual data before falling back to model knowledge, and
   // `datastore_query` reads the permanent structured store — all three must

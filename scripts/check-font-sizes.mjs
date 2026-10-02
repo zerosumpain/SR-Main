@@ -46,7 +46,6 @@ const SCOPE = [
   ['src/routes/projects', true],
   ['src/routes/admin', true],
   ['src/routes/blog', true],
-  ['src/routes/decks', true],
   ['src/routes/releases', true],
   ['src/routes/capture', true],
   ['src/routes/research', true],
