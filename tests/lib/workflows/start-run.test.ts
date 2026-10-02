@@ -4,7 +4,6 @@ const state = vi.hoisted(() => ({
   workflow: [{ id: 'wf', name: 'Flow' }] as unknown[],
   nodes: [] as Array<Record<string, unknown>>,
   edges: [] as Array<Record<string, unknown>>,
-  versions: [] as Array<Record<string, unknown>>,
   inserts: [] as Array<{ table: string; values: unknown }>,
 }));
 
@@ -13,7 +12,6 @@ vi.mock('$lib/db/schema', () => ({
   workflowNodes: { __t: 'nodes', workflowId: 'workflowId' },
   workflowEdges: { __t: 'edges', workflowId: 'workflowId' },
   workflowRuns: { __t: 'runs' },
-  workflowVersions: { __t: 'versions', id: 'id', workflowId: 'workflowId', hash: 'hash', definition: 'definition' },
   nodeExecutions: { __t: 'execs' },
 }));
 vi.mock('drizzle-orm', () => ({ eq: () => ({}), and: () => ({}) }));
@@ -22,8 +20,7 @@ vi.mock('$lib/db', () => ({
     select: () => ({
       from: (t: { __t: string }) => ({
         where: () => {
-          const rows = t.__t === 'nodes' ? state.nodes : t.__t === 'edges' ? state.edges
-            : t.__t === 'versions' ? state.versions : state.workflow;
+          const rows = t.__t === 'nodes' ? state.nodes : t.__t === 'edges' ? state.edges : state.workflow;
           const p = Promise.resolve(rows) as Promise<unknown[]> & { limit: () => Promise<unknown[]> };
           p.limit = async () => rows;
           return p;
@@ -41,21 +38,11 @@ vi.mock('$lib/db', () => ({
   },
 }));
 
-const execute = vi.hoisted(() => vi.fn(async () => ({ status: 'completed' })));
-vi.mock('$lib/workflows', () => ({ engine: { execute } }));
-const finaliseRun = vi.hoisted(() => vi.fn(async () => {}));
-vi.mock('$lib/workflows/run-finalise', () => ({ finaliseRun, failRun: vi.fn(async () => {}) }));
-vi.mock('$lib/workflows/observability-bus', () => ({ emitObs: vi.fn() }));
-
 import {
   loadDefinition,
-  definitionHash,
-  pinVersion,
-  loadPinnedDefinition,
   startRun,
   startTriggeredRun,
 } from '$lib/workflows/start-run';
-import { runChainDepth } from '$lib/events/platform-bus';
 
 const inserted = (table: string) => state.inserts.filter((i) => i.table === table).map((i) => i.values);
 
@@ -70,10 +57,7 @@ beforeEach(() => {
     { id: 'e1', sourceNodeId: 't', targetNodeId: 'n', sourceHandle: null, targetHandle: null },
     { id: 'e2', sourceNodeId: 'n', targetNodeId: 'note', sourceHandle: null, targetHandle: null },
   ];
-  state.versions = [];
   state.inserts = [];
-  execute.mockClear();
-  finaliseRun.mockClear();
 });
 afterEach(() => {
   delete process.env.JKAI_RUN_WORKER;
@@ -99,40 +83,6 @@ describe('loadDefinition', () => {
   });
 });
 
-describe('definitionHash', () => {
-  const base = {
-    id: 'wf', name: 'Flow',
-    nodes: [{ id: 'a', type: 'x', label: 'A', position: { x: 0, y: 0 }, config: { p: 1, q: { r: 2, s: 3 } } }],
-    edges: [],
-  };
-  it('ignores positions and key order (jsonb reorders keys)', () => {
-    const moved = { ...base, nodes: [{ ...base.nodes[0], position: { x: 9, y: 9 }, config: { q: { s: 3, r: 2 }, p: 1 } }] };
-    expect(definitionHash(moved)).toBe(definitionHash(base));
-  });
-  it('changes when behaviour can', () => {
-    const edited = { ...base, nodes: [{ ...base.nodes[0], config: { p: 2, q: { r: 2, s: 3 } } }] };
-    expect(definitionHash(edited)).not.toBe(definitionHash(base));
-  });
-});
-
-describe('pinVersion / loadPinnedDefinition', () => {
-  const def = { id: 'wf', name: 'Flow', nodes: [], edges: [] };
-  it('reuses the row for an unchanged graph', async () => {
-    state.versions = [{ id: 'ver-1' }];
-    expect(await pinVersion('wf', def)).toBe('ver-1');
-    expect(inserted('versions')).toHaveLength(0);
-  });
-  it('snapshots a graph it has not seen', async () => {
-    expect(await pinVersion('wf', def)).toBe('ver-new');
-    expect(inserted('versions')[0]).toMatchObject({ workflowId: 'wf', hash: definitionHash(def), definition: def });
-  });
-  it('a pinned run reads its snapshot, not the live graph', async () => {
-    state.versions = [{ definition: { id: 'wf', name: 'Then', nodes: [], edges: [] } }];
-    expect((await loadPinnedDefinition({ workflowId: 'wf', versionId: 'v' }))?.name).toBe('Then');
-    expect((await loadPinnedDefinition({ workflowId: 'wf', versionId: null }))?.name).toBe('Flow');
-  });
-});
-
 const invoke = vi.hoisted(() => vi.fn());
 vi.mock('$lib/workflows/runtime-client', () => ({ invokeWorkflowRuntime: invoke, decodeEngineResult: (r: unknown) => r }));
 describe('remote run handoff', () => {
@@ -141,11 +91,9 @@ describe('remote run handoff', () => {
     expect(await startTriggeredRun('wf', { event: 'test' }, { label: 'event-bus', chainDepth: 3 })).toBe('remote-1');
     expect(invoke).toHaveBeenCalledWith({ action: 'start', options: expect.objectContaining({ workflowId: 'wf', trigger: 'event', input: { event: 'test' }, chainDepth: 3 }) });
     expect(inserted('runs')).toEqual([]);
-    expect(execute).not.toHaveBeenCalled();
   });
   it('surfaces an unavailable owner instead of executing locally', async () => {
     invoke.mockRejectedValue(new Error('Workflows unavailable'));
     await expect(startRun({ workflowId: 'wf', trigger: 'manual' })).rejects.toThrow('Workflows unavailable');
-    expect(execute).not.toHaveBeenCalled();
   });
 });

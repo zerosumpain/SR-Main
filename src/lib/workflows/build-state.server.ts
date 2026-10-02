@@ -1,7 +1,24 @@
 import { and, desc, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { orchestratorChats } from '$lib/db/schema';
-import type { WorkflowVerification } from './test-runs.server';
+
+/** Whether a built workflow lints and what its test run did (recorded by SR-Workflows). */
+export interface WorkflowVerification {
+  lint: { errors: number; warnings: number; issues: string[] };
+  testRun: {
+    runId: string | null;
+    /** completed | completed_with_errors | failed | awaiting_human | timed_out | skipped */
+    status: string;
+    failedNode?: string;
+    error?: string;
+    /** Labels of the side-effecting steps that were stubbed, not run. */
+    stubbed: string[];
+    pinned: string[];
+  };
+  passed: boolean;
+  /** Present when one automatic repair round ran. */
+  repair?: { applied: boolean; summary: string; before: string };
+}
 
 /**
  * Whether a canvas is being built from a description, and how the last build

@@ -1,33 +1,16 @@
-import { invokeWorkflowRuntime, decodeEngineResult, type RemoteStartedRun } from './runtime-client';
-import { createHash } from 'node:crypto';
+import { invokeWorkflowRuntime, decodeEngineResult, type EngineResult, type RemoteStartedRun } from './runtime-client';
 import { db } from '$lib/db';
-import { workflows, workflowNodes, workflowEdges, workflowRuns, workflowVersions, nodeExecutions } from '$lib/db/schema';
-import { and, eq } from 'drizzle-orm';
-import { engine } from '$lib/workflows';
-import { setRunChainDepth } from '$lib/events/platform-bus';
+import { workflows, workflowNodes, workflowEdges } from '$lib/db/schema';
+import { eq } from 'drizzle-orm';
 import { isDisplayOnlyType, type WorkflowDefinition } from './types';
-import type { EngineResult } from './engine';
-import { emitObs } from './observability-bus';
-import { finaliseRun, failRun } from './run-finalise';
-import { stableStringify } from './fix-proposals.server';
 import type { PinnedOutput } from './side-effects';
 
 export type RunMode = 'live' | 'test';
 
 /**
- * The run kernel: the ONE way a run is started, executed and settled.
- *
- * The manual Run button, the scheduler, the webhook route, the event bus, the
- * gmail and whatsapp bridges, canvas chat, the single-node re-run, the
- * `workflow_run` tool (and the native lane through it), sub-workflow children,
- * the run-worker, human resume and crash recovery all come through here. Each
- * used to carry its own copy of "load nodes → shape a definition → insert the
- * run → execute → persist", and the copies had drifted (display-only filtering,
- * the worker switch, pending node rows, pausedAtNodeId, workflow_completed).
- *
- * Every run PINS the definition it started with (`workflow_versions`), so a
- * resume, a recovery after a crash or deploy, or a child run executes that graph
- * rather than whatever the canvas has become since.
+ * Main's door to workflow runs. SR-Workflows loads, executes, pins and settles
+ * every run; Main's callers (the event bus, WhatsApp dispatch, monitors and
+ * commissions) start them through `startRun` / `startTriggeredRun` here.
  */
 
 /**
@@ -66,60 +49,6 @@ export async function loadDefinition(
   };
 }
 
-/**
- * Content hash of what the engine would run. Positions are left out — dragging
- * a node is not a new version — and keys are sorted at every depth, because
- * jsonb hands config back in its own key order.
- *
- * Not the native lane's `graphVersion`: that hashes node version COUNTERS for
- * optimistic concurrency and moves on any write, including ones that change
- * nothing the engine sees. This must change exactly when behaviour can.
- */
-export function definitionHash(def: WorkflowDefinition): string {
-  const byId = <T extends { id: string }>(a: T, b: T) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
-  const canonical = {
-    name: def.name,
-    nodes: [...def.nodes].sort(byId).map((n) => ({ id: n.id, type: n.type, label: n.label, config: n.config })),
-    edges: [...def.edges].sort(byId).map((e) => ({
-      id: e.id, s: e.sourceNodeId, t: e.targetNodeId, sh: e.sourceHandle ?? null, th: e.targetHandle ?? null,
-    })),
-  };
-  return createHash('sha256').update(stableStringify(canonical)).digest('hex');
-}
-
-/**
- * The version row for this definition, created on first sight. Best-effort: a
- * run whose snapshot could not be written still runs, it just resumes against
- * the live graph (the pre-versioning behaviour).
- */
-export async function pinVersion(workflowId: string, def: WorkflowDefinition): Promise<string | null> {
-  try {
-    const hash = definitionHash(def);
-    const find = () => db.select({ id: workflowVersions.id }).from(workflowVersions)
-      .where(and(eq(workflowVersions.workflowId, workflowId), eq(workflowVersions.hash, hash))).limit(1);
-    const [existing] = await find();
-    if (existing) return existing.id;
-    const [created] = await db.insert(workflowVersions)
-      .values({ workflowId, hash, definition: def })
-      .onConflictDoNothing()
-      .returning({ id: workflowVersions.id });
-    return created?.id ?? (await find())[0]?.id ?? null;
-  } catch (err) {
-    console.warn(`[start-run] could not pin a version for ${workflowId}:`, err instanceof Error ? err.message : err);
-    return null;
-  }
-}
-
-/** The definition a run is pinned to; the live graph for a run from before versions existed. */
-export async function loadPinnedDefinition(run: { workflowId: string; versionId?: string | null }): Promise<WorkflowDefinition | null> {
-  if (run.versionId) {
-    const [v] = await db.select({ definition: workflowVersions.definition }).from(workflowVersions)
-      .where(eq(workflowVersions.id, run.versionId)).limit(1);
-    if (v?.definition) return v.definition as WorkflowDefinition;
-  }
-  return loadDefinition(run.workflowId);
-}
-
 export interface ExecuteRunOptions {
   runId: string;
   workflowId: string;
@@ -147,62 +76,6 @@ export interface ExecuteRunOptions {
   mode?: RunMode;
   pins?: Record<string, PinnedOutput>;
   allowSideEffects?: string[];
-}
-
-/**
- * Execute an existing run row to completion and settle it through the one
- * finaliser. Never throws; resolves with the engine result, or null when the
- * engine itself threw (already recorded as a failed run).
- */
-export async function executeRun(o: ExecuteRunOptions): Promise<EngineResult | null> {
-  const label = o.label ?? 'run';
-  const test = o.mode === 'test';
-  const runStartedAt = o.runStartedAt ?? Date.now();
-  if (o.chainDepth) setRunChainDepth(o.runId, o.chainDepth);
-  if (!o.seed) {
-    emitObs('run.started', {
-      workflowId: o.workflowId,
-      runId: o.runId,
-      trigger: o.trigger ?? 'manual',
-      startedAt: new Date(runStartedAt).toISOString(),
-    });
-  }
-  const disarm = o.watchdog ? (await import('./run-helpers')).armRunWatchdog(o.runId, label) : null;
-  try {
-    const result = await engine.execute(
-      o.definition,
-      o.runId,
-      o.input,
-      o.breakpoints,
-      o.workflowId,
-      {
-        selfHealing: test ? false : o.selfHealing,
-        dryRun: test || o.dryRun,
-        child: !!o.parentRunId,
-        ...(test ? { pins: o.pins, allowSideEffects: new Set(o.allowSideEffects ?? []) } : {}),
-      },
-      o.seed?.outputs,
-      o.seed?.handles,
-    );
-    disarm?.();
-    await finaliseRun({
-      workflowId: o.workflowId,
-      runId: o.runId,
-      result,
-      runStartedAt,
-      chainDepth: o.chainDepth,
-      parentRunId: o.parentRunId,
-      seededNodeIds: o.seed ? new Set(Object.keys(o.seed.outputs)) : undefined,
-      label,
-      test,
-    });
-    return result;
-  } catch (err) {
-    disarm?.();
-    console.error(`[${label}] workflow execution threw (runId=${o.runId}):`, err instanceof Error ? err.message : err);
-    await failRun({ workflowId: o.workflowId, runId: o.runId, error: err, label });
-    return null;
-  }
 }
 
 export interface StartRunOptions extends Omit<ExecuteRunOptions, 'runId' | 'definition' | 'input' | 'seed' | 'runStartedAt'> {

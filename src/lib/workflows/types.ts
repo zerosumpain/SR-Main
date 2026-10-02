@@ -1,5 +1,3 @@
-import type { NodeRegistry } from './registry';
-
 export interface Position {
   x: number;
   y: number;
@@ -188,8 +186,6 @@ export interface ExecutionContext {
    */
   /** The id of the node currently executing. */
   _currentNodeId?: string;
-  /** The node registry, for executors that resolve other node types at runtime. */
-  _registry?: NodeRegistry;
 }
 
 export interface NodeExecutor {

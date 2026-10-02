@@ -22,7 +22,6 @@ const ROOT = join(process.cwd(), 'src');
 
 /** Call sites that run code or paths they did not author. */
 const UNTRUSTED_CALL_SITES = [
-  'lib/workflows/nodes/code-execute.ts',
   'routes/api/scraper/profiles/+server.ts',
   'lib/workflows/scraper/runner.ts',
   'lib/workflows/scraper/interactive.ts',

@@ -7,15 +7,13 @@
  * the SAME `resolveInteraction` path the canvas uses, so the run resumes
  * identically in web or worker mode — no HTTP self-hop.
  *
- * Split out from `approval-notify.ts` because it depends on `engine-resume`
- * (→ `$lib/workflows`), and the outbound module is imported eagerly by the node
- * registry; keeping the resume dependency here avoids an import cycle. Only the
- * bridge (loaded lazily at WhatsApp boot) imports this file.
+ * Resolution and resumption run in SR-Workflows through the runtime client.
+ * Only the bridge (loaded lazily at WhatsApp boot) imports this file.
  */
 
 import { db } from '$lib/db';
 import { sql } from 'drizzle-orm';
-import { resolveInteraction } from '$lib/workflows/engine-resume';
+import { resolveInteraction } from '$lib/workflows/runtime-client';
 import { resolveNaming } from '$lib/workflows/run-notifications';
 import { parseApprovalReply, isApprovalTokenExpired } from './approval-tokens';
 import { getOwnerPhone, WA_APPROVAL_SNAPSHOT_KEY, type WaApprovalSnapshot } from './approval-notify';

@@ -15,13 +15,13 @@ Regenerate Main's 25 workflow descriptors from an SR-Workflows checkout with `no
 
 ## Lifecycle and diagnostics
 
-Main no longer runs the legacy Canvas migration, scheduler, reaper or queue worker. Its event-loop watchdog starts in Main's hooks independently of workflow ownership. Remaining engine helpers and node libraries still support Main research, authoring and other callers and are not a bulk deletion target.
+Main no longer runs the legacy Canvas migration, scheduler, reaper or queue worker, and the local engine, node executors, run lifecycle and native workflow backend have been removed. Main keeps node definitions (`*.def.ts`, the combined definition files and `registry-client.ts`) for the Research Desk palette, the doctor and the tools catalogue, plus the helpers its own routes and tools call directly (`template`, `stealth-scrape`, `home-assistant`, `apple-calendar`, `llm-helpers`). Its event-loop watchdog starts in Main's hooks independently of workflow ownership.
 
 The scheduler leader publishes `workflows.worker-status.v1` in the existing `app_settings` JSON column every ten seconds. Main accepts snapshots for 35 seconds. Missing, expired, malformed or unreachable status is unavailable, never a fabricated empty scheduler. Schedule edits remain durable database writes; the owning worker reconciles them within its normal one-minute interval, then publishes its next heartbeat.
 
 ## Authoring kit decision
 
-Keep the Field Study library in Main as the authoring kit prescribed by `CLAUDE.md`. Its appearance in other repositories does not establish exclusive ownership elsewhere. Keep Canvas generator widgets in Main while `node-builder/codegen/panel.ts`, generated imports and node-builder manuals depend on them. Moving either requires changing that authoring contract and its documentation together. This batch makes no move and does not describe either kit as dead code.
+Node authoring belongs to SR-Workflows. The Field Study kit was deleted from Main on 2026-10-01, and the Canvas generator panel widgets were removed with the engine on 2026-10-02.
 
 ## Release order
 

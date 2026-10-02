@@ -410,18 +410,6 @@
       file: 'src/lib/workflows/chat/job-store.ts:142',
     },
     {
-      name: 'Workflow run reaper',
-      cadence: '5 min',
-      desc: 'Scans workflow_runs for rows in running/paused/pending whose heartbeat_at is older than 5 min and marks them failed/abandoned.',
-      file: 'src/lib/workflows/engine-runtime.ts:91',
-    },
-    {
-      name: 'Workflow cron scheduler',
-      cadence: 'per-row cron expression (croner)',
-      desc: 'Reads workflow_schedules where type=cron AND enabled=true at boot, then registers a Cron handle per row. Fires runScheduledWorkflow on each tick.',
-      file: 'src/lib/workflows/scheduler.ts:17',
-    },
-    {
       name: 'Health sync',
       cadence: 'every SYNC_INTERVAL_MS (default 1h), first run +30s after boot',
       desc: 'Pulls Whoop workouts/sleep/recovery/cycles. Updates health_sync_state on each tick.',
@@ -437,7 +425,7 @@
       name: 'Engine event-loop monitor',
       cadence: 'continuous histogram, read on each /api/health/workflow-engine probe',
       desc: 'perf_hooks.monitorEventLoopDelay({resolution:50}). The 60s systemd timer hits the probe; if loopMaxMs ≥ 5000 the probe returns 503 and systemd restarts the service.',
-      file: 'src/lib/workflows/engine-runtime.ts:154',
+      file: 'src/lib/workflows/engine-runtime.ts:19',
     },
   ] as const;
 
