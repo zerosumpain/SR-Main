@@ -41,6 +41,18 @@ export interface EvidenceResult {
   /** This receipt proves a query, never an independently verified purchase. */
   provenance: 'query_result';
 }
+/** The double-check's verdict, as stored on the report. Structural copy of
+ *  `RedTeamReview` so this pure module does not import the ledger. */
+export interface CommissionReview {
+  verdict: 'holds' | 'wrong' | 'unclear';
+  claim: string;
+  challenges: Array<{ doubt: string; finding: string; survives: boolean }>;
+  reasoning: string;
+  lesson: string | null;
+  overruled: string | null;
+  model: string | null;
+  checkedAt: string;
+}
 export interface CommissionView {
   id: string;
   thoughtId: string;
@@ -53,7 +65,9 @@ export interface CommissionView {
   updatedAt: string;
   nextActor: string;
   workflowRunId: string | null;
-  result: { summary: string; evidence: EvidenceResult[] } | null;
+  /** `review` is the second look (`red-team.ts`); absent on reports written
+   *  before it existed, null when it could not run. */
+  result: { summary: string; evidence: EvidenceResult[]; review?: CommissionReview | null } | null;
   error: string | null;
   events: CommissionEvent[];
   url: string;

@@ -68,7 +68,8 @@ try {
   }, { timeout: 90_000, intervals: [500, 1000, 2000] }).toBe('completed');
   assert.ok(completed.result.evidence.length);
   assert.equal(completed.result.evidence[0].provenance, 'query_result');
-  assert.match(completed.result.summary, /does not independently verify/);
+  // No model credentials locally: the second look reports itself missing, never a verdict.
+  assert.match(completed.result.summary, /does not confirm or rule out the note/);
   const run = await db.query('SELECT status,version_id FROM workflow_runs WHERE id=$1', [completed.workflowRunId]);
   assert.ok(run.rows[0].version_id, 'Execution was pinned');
   await expect.poll(async () => (await db.query('SELECT status FROM workflow_runs WHERE id=$1', [completed.workflowRunId])).rows[0]?.status).toBe('completed');

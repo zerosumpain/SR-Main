@@ -47,8 +47,11 @@
 /api/native/companion-policy
 /api/native/connections
 /api/native/daydream
+/api/native/daydream/act
 /api/native/daydream/commissions
 /api/native/daydream/feedback
+/api/native/family/alarm
+/api/native/family/alarm/cancel
 /api/native/family/forecast
 /api/native/family/steps
 /api/native/family/tasks

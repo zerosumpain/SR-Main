@@ -49,6 +49,16 @@ describe('systemPrompt', () => {
     expect(p).toMatch(/CITE OR DIE/);
   });
 
+  it('carries the lessons into a private cycle only, and always the money rule', () => {
+    const lessons = ['WHERE YOU HAVE BEEN WRONG BEFORE.', '  • You said "Two £79 Apple charges". John found it wrong: one was the receipt email.'];
+    const p = systemPrompt({ ...base, question: health, set: 'private', lessons });
+    const r = systemPrompt({ ...base, question: research, set: 'research', profile: [], lessons });
+    expect(p).toMatch(/WHERE YOU HAVE BEEN WRONG BEFORE[\s\S]*receipt email/);
+    expect(r).not.toMatch(/WHERE YOU HAVE BEEN WRONG BEFORE/);
+    expect(p).toMatch(/bank statement is the truth/);
+    expect(p).toMatch(/top-up of PayPal/);
+  });
+
   it('lists what was already said', () => {
     expect(systemPrompt({ ...base, question: health, set: 'private' })).toMatch(/ALREADY SAID[\s\S]*Canva charged twice/);
   });

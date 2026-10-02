@@ -19,7 +19,6 @@ import {
   activities,
   appleHealthMetrics,
   daydreamDayFeatures,
-  daydreamSpend,
   daydreamTrail,
   whoopCycles,
   whoopRecovery,
@@ -351,13 +350,17 @@ export async function buildDayFeatures(
   // spending habit for a nine-year-old.
   let spendReadable = false;
   if (isOwner) try {
-    const rows = await db
-      .select({ day: daydreamSpend.day, total: sql<number>`sum(${daydreamSpend.amountMinor})::int` })
-      .from(daydreamSpend)
-      .where(and(eq(daydreamSpend.verified, true), gte(daydreamSpend.day, localDay(from))))
-      .groupBy(daydreamSpend.day);
+    // Reconciled, not summed raw: a receipt and the bank line it is about are
+    // one payment, and a bank top-up of PayPal is not spend on top of the
+    // PayPal payments it funded (`spend/ledger.ts`).
+    const { loadLedger } = await import('../spend/ledger.server');
+    const since = localDay(from);
+    const totals = new Map<string, number>();
+    for (const l of await loadLedger(since)) {
+      if (l.counts && l.day >= since) totals.set(l.day, (totals.get(l.day) ?? 0) + l.amountMinor);
+    }
     spendReadable = true;
-    for (const r of rows) bucket(r.day).spendMinor = r.total;
+    for (const [day, total] of totals) bucket(day).spendMinor = total;
   } catch (err) {
     result.errors.push(`spend: ${errMsg(err)}`);
   }

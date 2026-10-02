@@ -145,6 +145,16 @@ export const NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
     minIntervalSeconds: 0,
   },
   {
+    id: 'reminder',
+    label: 'Reminders',
+    description: 'Reminders you asked for — "Do it for me" on a daydream note, at the time it said.',
+    // Both: a reminder you asked for has to arrive wherever you are. Each one
+    // is a single scheduled event with its own key, so there is no floor.
+    whatsapp: true,
+    native: true,
+    minIntervalSeconds: 0,
+  },
+  {
     id: 'system',
     label: 'Everything else',
     description: 'Anything that has not been given a category of its own yet.',

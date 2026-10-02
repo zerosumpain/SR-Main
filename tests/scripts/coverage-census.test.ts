@@ -62,7 +62,9 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 // Commissioning uses the isolated local database and the explicitly enabled
 // disposable nightly database; its transactional cases also ran before release.
 // Decks retired 2026-10-02 took src/lib/decks/creation.integration.test.ts with them.
-const INTEGRATION_FILES = 38;
+// Daydream "Do it for me" (act.integration) rides the same gate: the calendar,
+// scheduler and Gmail are stubbed, every row it writes is real.
+const INTEGRATION_FILES = 39;
 
 function tracked(pattern: string): string[] {
 	return execFileSync('git', ['ls-files', pattern], { cwd: ROOT, encoding: 'utf8' })
