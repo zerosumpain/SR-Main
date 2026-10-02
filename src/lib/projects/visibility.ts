@@ -15,7 +15,8 @@
 //    fact). A default the site can trip on its own has to fail closed.
 
 // The hardcoded "Field Study" cards on /projects, keyed by their URL segment
-// (the part after /projects/). These are the ONLY keys that default to public.
+// (the part after /projects/). These are the ONLY keys that can default to
+// public (see PRIVATE_BY_DEFAULT for the exceptions).
 //
 // IMPORTANT: every key rendered by a `visToggle(...)` card in
 // src/routes/projects/+page.svelte MUST appear here, or its public/private
@@ -35,9 +36,17 @@ export const STATIC_PROJECT_KEYS = [
   'policy-engine',
   'archetype',
   'pulse',
+  'field-study-8',
 ] as const;
 
 const STATIC_KEYS: ReadonlySet<string> = new Set(STATIC_PROJECT_KEYS);
+
+// Hand-built pages that must NEVER default to public. A static key normally
+// defaults public, so registering a private working model would publish it the
+// moment the code deployed, before anyone could toggle it off. Listing it here
+// makes the code itself fail closed: private with no `project_visibility` row,
+// public only if the owner explicitly toggles it. Share links still work.
+const PRIVATE_BY_DEFAULT: ReadonlySet<string> = new Set(['field-study-8']);
 
 /** A /projects address: one lowercase URL segment, as `slugifyTitle` produces. */
 const PROJECT_SLUG = /^[a-z0-9][a-z0-9-]*$/;
@@ -77,7 +86,7 @@ export function isProjectSlug(slug: string | null | undefined): slug is string {
 
 /** What a key resolves to when `project_visibility` has no row for it. */
 export function defaultsPublic(key: string): boolean {
-  return isStaticProjectKey(key);
+  return isStaticProjectKey(key) && !PRIVATE_BY_DEFAULT.has(key);
 }
 
 /** An explicit row always wins; otherwise the key's own default applies. */
