@@ -175,16 +175,6 @@ export const WORK_CAPS = {
   reserveWallMs: 60 * 1000,
 } as const;
 
-/**
- * New theme groupings proposed in one night.
- *
- * Six, not all of them. The first scan of production's queue found 113
- * groupings at once, and a room asking the owner to rule on 113 things is a
- * room he closes. Six a night drains that in under three weeks while leaving
- * the on-demand button in the room for anyone who wants the lot; the scan is
- * free either way, so this caps the ASKING, not the finding.
- */
-export const MAX_THEME_PROPOSALS = 6;
 
 export type PhaseName =
   | 'gather'
@@ -409,99 +399,16 @@ export interface ToolAttemptData {
 /** Lifecycle of a queued idea. */
 export type BacklogStatus = 'open' | 'shipped' | 'abandoned';
 
-/** How much implementation work a groomed item is expected to contain. */
-export type BacklogEffort = 'small' | 'medium' | 'large';
-
-/** Delivery risk recorded by the grooming pass. */
-export type BacklogRisk = 'low' | 'medium' | 'high';
-
-/** Whether the brief can be handed to an automated builder without guessing. */
-export type BacklogReadinessStatus = 'draft' | 'needs_input' | 'ready';
-
-export type BacklogRelationKind = 'duplicate' | 'related' | 'blocks' | 'blocked_by';
-
-/** A relationship may only point at another durable backlog slug. */
-export interface BacklogRelation {
-  slug: string;
-  title: string;
-  kind: BacklogItemData['kind'];
-  relation: BacklogRelationKind;
-  reason: string;
-}
-
-/** One turn of the grooming conversation, as stored. */
-export interface BacklogGroomingTurn {
-  role: 'user' | 'assistant';
-  content: string;
-}
-
 /**
- * The structured contract between backlog grooming and every build lane.
- *
- * The accepted brief, its remaining uncertainty and its model provenance are
- * the audit trail a build lane reads; `conversation` is kept alongside it but
- * is never fed to a builder, for the reason this comment used to give for
- * dropping it entirely — a lane must not reconstruct decisions out of chat.
- *
- * It is persisted because the alternative was worse: the editor held the
- * thread in component state, so closing the panel threw away every question
- * the model had asked and every answer given to it, and grooming one item
- * across two sittings was impossible. Bounded at
- * `MAX_GROOMING_CONVERSATION` (in `./grooming`, which is the PURE module a
- * `.svelte` may value-import — see `IDEA_SOURCES` in `./board` for why a
- * constant may not live in this file) so a long argument cannot grow a
- * datastore record without limit.
+ * The groomed brief is the development brief (2026-10-02): its types live with
+ * it in `$lib/jkai/development-brief`, and the backlog's names are kept as
+ * aliases so stored records and their readers did not have to change.
  */
-export interface BacklogGroomingData {
-  problem: string;
-  outcome: string;
-  acceptanceCriteria: string[];
-  constraints: string[];
-  nonGoals: string[];
-  dependencies: string[];
-  implementationNotes: string[];
-  validation: string[];
-  assumptions: string[];
-  openQuestions: string[];
-  decisions: string[];
-  relatedItems: BacklogRelation[];
-  effort: BacklogEffort;
-  risk: BacklogRisk;
-  readiness: {
-    score: number;
-    status: BacklogReadinessStatus;
-    reason: string;
-  };
-  assistantSummary: string;
-  /** The resolved model actually called, not merely the configured setting. */
-  modelId: string;
-  groomedAt: string;
-  /** Set when a person saves the model draft into the backlog record. */
-  acceptedAt?: string;
-  revision: number;
-  /** The thread that produced this brief. Display and continuation only. */
-  conversation?: BacklogGroomingTurn[];
-}
-
-/**
- * A note the owner (or the model, at the owner's request) left on one item.
- *
- * The engine writes receipts — attempts, errors, PR links — and a person
- * could add nothing to a queue row at all. This is the one field on a backlog
- * record that is neither a measurement nor a model output: it is what somebody
- * said about the work.
- *
- * `author` is stamped by the route, never read out of the request body, for
- * the same reason `source` is: a caller must not be able to sign a note as
- * something it is not.
- */
-export interface BacklogNote {
-  /** Unique within the item. Used to delete one without matching on text. */
-  id: string;
-  at: string;
-  author: 'owner' | 'model';
-  text: string;
-}
+export type {
+  BacklogEffort, BacklogRisk, BacklogReadinessStatus, BacklogRelationKind, BacklogRelation,
+  BacklogGroomingTurn, BacklogNote, GroomedBrief as BacklogGroomingData,
+} from '$lib/jkai/development-brief';
+import type { BacklogNote, GroomedBrief as BacklogGroomingData, DeliveryBriefFields } from '$lib/jkai/development-brief';
 
 
 
@@ -677,7 +584,7 @@ export type EpicStatus = 'proposed' | 'accepted' | 'declined';
  */
 export interface EpicData {
   groomingOverrides?: string[];
-  groomingHistory?: import('./backlog-grooming').GroomingAction[];
+  groomingHistory?: import('./backlog-room').GroomingAction[];
   groomingKept?: string[];
   automatic?: boolean;
   deliverableIds?: string[];
@@ -737,7 +644,11 @@ export interface DeliveryRequest {
   /** The intended outcome; the delivery's brief and the build's prompt. */
   outcome: string;
   criteria: string[];
-  brief: Partial<Record<'constraints' | 'dependencies' | 'assumptions' | 'validation' | 'questions', string>>;
+  brief: DeliveryBriefFields['brief'];
+  /** Present when the brief was groomed by the one groomer: the delivery
+   *  starts groomed, and autopilot checks and accepts it rather than
+   *  grooming it again. */
+  grooming?: DeliveryBriefFields['grooming'];
   /** The backlog item's identity, so a second ask for it finds this delivery. */
   backlogSlug: string;
 }

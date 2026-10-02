@@ -112,6 +112,3 @@ export function getTaskStateProvider(kind: string): TaskStateProvider | null {
   return providers[kind] ?? null;
 }
 
-export function listKnownTaskKinds(): string[] {
-  return Object.keys(providers);
-}

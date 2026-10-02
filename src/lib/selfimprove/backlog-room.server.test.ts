@@ -8,17 +8,18 @@ vi.mock('./backlog', () => ({ MAX_ATTEMPTS: 4,
   foldItems: vi.fn(async (slugs: string[], into: string) => { for (const row of h.backlog) if (slugs.includes(row.slug) && row.slug !== into) { row.status = 'abandoned'; row.foldedInto = into; } }),
   setPriority: vi.fn(async (slug: string, priority: number) => { h.backlog.find((i) => i.slug === slug)!.priority = priority; }),
 }));
-vi.mock('./epics', () => ({ listEpics: vi.fn(async () => h.epics) }));
 vi.mock('./seed-apis', () => ({ ensureSystemCollections: vi.fn() }));
 vi.mock('./context', () => ({ loadCustomToolHealth: vi.fn(async () => []) }));
 vi.mock('$lib/datastore', () => ({
+  getCollectionBySlug: vi.fn(async () => ({ id: 'epics' })),
+  queryRecords: vi.fn(async () => ({ records: h.epics.map((data) => ({ data })) })),
   getRecordByKey: vi.fn(async (_: string, slug: string) => ({ data: h.epics.find((e) => e.slug === slug) })),
   upsertRecord: vi.fn(async (collection: string, record: { data: EpicData | BacklogItemData }) => {
     if (collection === 'improvement_backlog') { h.backlog = [...h.backlog.filter((e) => e.slug !== record.data.slug), record.data as BacklogItemData]; return; }
     h.writes++; h.epics = [...h.epics.filter((e) => e.slug !== record.data.slug), record.data as EpicData];
   }),
 }));
-import { loadEpicBacklog, updateEpic, decideBacklogGrooming, overrideBacklogGrooming } from './epic-backlog.server';
+import { loadEpicBacklog, updateEpic, decideBacklogGrooming, overrideBacklogGrooming } from './backlog-room.server';
 import { listBacklog } from './backlog';
 function row(slug: string, title: string): BacklogItemData {
   return { slug, title, detail: 'Synthetic requirement', kind: 'feature', status: 'open', priority: 3, attempts: 0, createdAt: '2026-09-01', updatedAt: '2026-09-01' };
@@ -110,5 +111,18 @@ describe('automatic grooming and overrides', () => {
     const suggestions = (await loadEpicBacklog())[0].suggestions!;
     expect(suggestions).toHaveLength(1);
     expect(suggestions[0]).toMatchObject({ itemId: 'backlog:c', targetId: 'backlog:a' });
+  });
+});
+
+describe('the read-only room (page views)', () => {
+  it('shows the owner the grooming lane without writing an epic or applying a decision', async () => {
+    h.backlog = [row('a', 'Apple calendar event reminders'), row('b', 'Apple calendar event reminders')];
+    const { readBacklogRoom } = await import('./backlog-room.server');
+    const { epics } = await readBacklogRoom({ grooming: true });
+    expect(epics[0].suggestions).toHaveLength(1);
+    expect(h.writes).toBe(0);
+    expect(h.backlog.every((i) => i.status === 'open')).toBe(true);
+    // A member's read carries no grooming lane at all.
+    expect((await readBacklogRoom()).epics[0].suggestions).toBeUndefined();
   });
 });

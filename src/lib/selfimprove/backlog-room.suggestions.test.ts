@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildBoard } from './board';
-import { suggestBacklogGrooming } from './backlog-grooming';
-import { renderBacklogBrief } from './grooming';
+import { suggestBacklogGrooming } from './backlog-room';
+import { renderBacklogBrief } from '$lib/jkai/development-brief';
 import type { BacklogItemData } from './types';
 const row = (slug: string, title: string, extra: Partial<BacklogItemData> = {}): BacklogItemData => ({
   slug, title, detail: title, kind: 'feature', status: 'open', priority: 3, attempts: 0,

@@ -1,17 +1,21 @@
 /**
- * Forge trigger scheduler — cron-scheduled and autonomous (backlog-driven)
- * brass-and-rails builds. Mirrors the workflow cron scheduler
- * (`$lib/workflows/scheduler.ts`):
+ * Forge trigger schedules — cron-scheduled and autonomous (ROADMAP-driven)
+ * brass-and-rails builds, one per enabled `forge_schedules` row.
  *
- *  - leader-elected via a pg advisory lock (its OWN distinct lane,
- *    `FORGE_SCHEDULER_LOCK_LANE`) when the durable run-worker is enabled, so
- *    the lane never double-fires across the web + worker processes;
- *  - one in-memory `croner` `Cron` per enabled `forge_schedules` row;
- *  - a reconcile job (every minute) re-reads the table every ~60s so API
- *    changes (enable/disable/cron edit/delete) propagate without any
- *    cross-process signaling.
+ * Driven by the heartbeat since 2026-10-02 (`forge-schedules`, every minute),
+ * not by an in-memory `croner` job per row plus a reconcile job. Each tick
+ * reads the enabled rows and fires every schedule with an occurrence in the
+ * window since the last tick, so an API edit (enable, disable, cron change,
+ * delete) applies on the next tick with no reconcile loop, and the heartbeat's
+ * pulses, failure budget and pause switch cover Forge like everything else.
  *
- * On fire a job creates a Forge git-target build via `createForgeBuild`
+ * Kept from the croner: the cron is read in the schedule's wall-clock zone
+ * (`cronTimezone`, Europe/London), a fire is skipped while a Forge build is
+ * already running, and a fire that falls while the process is down is not
+ * replayed later. The leader lock is kept too, on its own advisory-lock lane,
+ * when the durable run-worker flag is set.
+ *
+ * On fire a schedule creates a Forge git-target build via `createForgeBuild`
  * (shared with the propose route) and stamps `last_run_at` / `last_build_id`.
  */
 import { Cron } from 'croner';
@@ -21,13 +25,6 @@ import { cronTimezone } from '$lib/workflows/cron-timezone';
 import { eq, and } from 'drizzle-orm';
 import type { ForgeSchedule } from '$lib/db/schema';
 import { createForgeBuild } from '$lib/jkai/forge';
-
-// Tracks active Cron instances keyed by forge_schedules.id (plus the special
-// reconcile job under RECONCILE_KEY).
-const activeJobs = new Map<string, Cron>();
-
-const RECONCILE_KEY = '__forge_reconcile__';
-const RECONCILE_CRON = '*/1 * * * *';
 
 /**
  * The directive the agent receives for an autonomous (backlog-driven) run.
@@ -40,148 +37,80 @@ export const AUTONOMOUS_PROMPT =
   'in the same change. Ensure `npm run gate` passes. If ROADMAP.md is missing, empty, ' +
   'or every item is already checked, make NO changes and stop.';
 
-/** Read-only access to active in-memory cron jobs for diagnostics. */
-export function getActiveJobs(): ReadonlyMap<string, Cron> {
-  return activeJobs;
-}
-
+/**
+ * Kept so `hooks.server.ts` (protected) need not change: the schedule itself
+ * is the heartbeat's `forge-schedules` activity now, which the heartbeat seeds.
+ */
 export async function startForgeScheduler(): Promise<void> {
-  // LEADER ELECTION (mirrors the workflow scheduler): when the durable
-  // run-worker is enabled the Forge cron lane could fire in BOTH the web
-  // process and the worker process. Gate registration on a pg advisory lock
-  // — its OWN distinct lane — so exactly one process owns Forge scheduling.
-  // When the flag is OFF this guard is skipped entirely.
-  if (process.env.JKAI_RUN_WORKER === '1') {
-    const { tryAdvisoryLock, FORGE_SCHEDULER_LOCK_LANE } = await import(
-      '$lib/workflows/leader-lock'
-    );
-    const isLeader = await tryAdvisoryLock(FORGE_SCHEDULER_LOCK_LANE);
-    if (!isLeader) {
-      console.log(
-        '[forge-scheduler] Not forge leader (advisory lock held elsewhere) — skipping registration',
-      );
-      return;
-    }
-    console.log('[forge-scheduler] Acquired forge leader lock');
-  }
-
-  console.log('[forge-scheduler] Starting forge cron scheduler...');
-  const schedules = await db
-    .select()
-    .from(forgeSchedules)
-    .where(eq(forgeSchedules.enabled, true));
-
-  for (const schedule of schedules) {
-    registerForgeJob(schedule);
-  }
-  console.log(`[forge-scheduler] Registered ${schedules.length} forge jobs`);
-
-  // Reconcile loop: re-read the table every ~60s and converge the in-memory
-  // job set onto it, so API mutations propagate without cross-process signals.
-  activeJobs.get(RECONCILE_KEY)?.stop();
-  const reconcileJob = new Cron(RECONCILE_CRON, async () => {
-    try {
-      await reconcileForgeJobs();
-    } catch (err) {
-      console.error('[forge-scheduler] reconcile failed:', err instanceof Error ? err.message : err);
-    }
-  });
-  activeJobs.set(RECONCILE_KEY, reconcileJob);
+  console.log('[forge-scheduler] Forge schedules run on the heartbeat (forge-schedules)');
 }
-
-export function stopForgeScheduler(): void {
-  for (const [, job] of activeJobs) {
-    job.stop();
-  }
-  activeJobs.clear();
-  console.log('[forge-scheduler] All forge jobs stopped');
-}
+export function stopForgeScheduler(): void {}
 
 /**
- * Re-read enabled forge_schedules and converge the in-memory job set: register
- * newly-enabled rows and unregister jobs whose row is now disabled or deleted.
- * The reconcile job itself (RECONCILE_KEY) is never touched.
+ * Did this schedule's cron have an occurrence in `(from, to]`? Null when the
+ * cron cannot be read — the croner skipped such a row with a warning, and so
+ * does the tick. PURE.
  */
-async function reconcileForgeJobs(): Promise<void> {
-  const enabled = await db
-    .select()
-    .from(forgeSchedules)
-    .where(eq(forgeSchedules.enabled, true));
-  const enabledById = new Map(enabled.map((s) => [s.id, s]));
-
-  // Remove jobs that are no longer enabled / no longer exist.
-  for (const id of [...activeJobs.keys()]) {
-    if (id === RECONCILE_KEY) continue;
-    if (!enabledById.has(id)) {
-      activeJobs.get(id)?.stop();
-      activeJobs.delete(id);
-    }
-  }
-
-  // Add jobs for newly-enabled rows.
-  for (const schedule of enabled) {
-    if (!activeJobs.has(schedule.id)) {
-      registerForgeJob(schedule);
-    }
-  }
+export function cronFiredBetween(schedule: Pick<ForgeSchedule, 'cron'> & { timezone?: string }, from: Date, to: Date): boolean | null {
+  let cron: Cron;
+  try { cron = new Cron(schedule.cron, { timezone: cronTimezone(schedule), paused: true }); }
+  catch { return null; }
+  const next = cron.nextRun(from);
+  return next !== null && next.getTime() <= to.getTime();
 }
 
-export function registerForgeJob(schedule: ForgeSchedule): void {
-  // Stop any existing job for this schedule first.
-  activeJobs.get(schedule.id)?.stop();
-  activeJobs.delete(schedule.id);
-
-  // Same reason as the workflow scheduler: no timezone means server local time,
-  // which is UTC on the VPS. A forge schedule is a wall-clock time a human
-  // chose, so it has to be interpreted in theirs.
-  let job: Cron;
-  try {
-    job = new Cron(schedule.cron, { timezone: cronTimezone(schedule) }, async () => {
-      await fireForgeSchedule(schedule);
-    });
-  } catch (err) {
-    console.warn(
-      `[forge-scheduler] Schedule ${schedule.id} has an invalid cron (${schedule.cron}) — skipping:`,
-      err instanceof Error ? err.message : err,
-    );
-    return;
-  }
-
-  activeJobs.set(schedule.id, job);
+let leader: Promise<boolean> | null = null;
+/** One process owns Forge when the run-worker is enabled; decided once, as before. */
+function isForgeLeader(): Promise<boolean> {
+  if (process.env.JKAI_RUN_WORKER !== '1') return Promise.resolve(true);
+  leader ??= import('$lib/workflows/leader-lock').then(({ tryAdvisoryLock, FORGE_SCHEDULER_LOCK_LANE }) => tryAdvisoryLock(FORGE_SCHEDULER_LOCK_LANE));
+  return leader;
 }
 
-async function fireForgeSchedule(schedule: ForgeSchedule): Promise<void> {
+export interface ForgeTick { leader: boolean; due: number; fired: string[]; skipped: string[]; invalid: string[] }
+
+/**
+ * Fire every enabled schedule with an occurrence in `(since, now]`. A row's
+ * own `last_run_at` bounds the window too, so overlapping ticks never fire one
+ * occurrence twice.
+ */
+export async function runForgeSchedules(now: Date, since: Date): Promise<ForgeTick> {
+  const tick: ForgeTick = { leader: await isForgeLeader(), due: 0, fired: [], skipped: [], invalid: [] };
+  if (!tick.leader) return tick;
+  const schedules = await db.select().from(forgeSchedules).where(eq(forgeSchedules.enabled, true));
+  for (const schedule of schedules) {
+    const from = schedule.lastRunAt && schedule.lastRunAt > since ? schedule.lastRunAt : since;
+    const fired = cronFiredBetween(schedule, from, now);
+    if (fired === null) {
+      console.warn(`[forge-scheduler] Schedule ${schedule.id} has an invalid cron (${schedule.cron}) — skipping`);
+      tick.invalid.push(schedule.id);
+      continue;
+    }
+    if (!fired) continue;
+    tick.due += 1;
+    const buildId = await fireForgeSchedule(schedule);
+    (buildId ? tick.fired : tick.skipped).push(schedule.id);
+  }
+  return tick;
+}
+
+/** One fire. Returns the build id, or null when skipped or failed. Never throws. */
+async function fireForgeSchedule(schedule: ForgeSchedule): Promise<string | null> {
   try {
     // Avoid piling up: if a forge build is already running, skip this fire.
-    const [running] = await db
-      .select({ id: jkaiBuilds.id })
-      .from(jkaiBuilds)
-      .where(and(eq(jkaiBuilds.origin, 'forge'), eq(jkaiBuilds.status, 'running')))
-      .limit(1);
+    const [running] = await db.select({ id: jkaiBuilds.id }).from(jkaiBuilds)
+      .where(and(eq(jkaiBuilds.origin, 'forge'), eq(jkaiBuilds.status, 'running'))).limit(1);
     if (running) {
-      console.log(
-        `[forge-scheduler] Forge build ${running.id} already running — skipping schedule ${schedule.id}`,
-      );
-      return;
+      console.log(`[forge-scheduler] Forge build ${running.id} already running — skipping schedule ${schedule.id}`);
+      return null;
     }
-
-    const prompt = resolvePrompt(schedule);
-    const { buildId } = await createForgeBuild({ prompt, trigger: schedule.mode });
-
-    await db
-      .update(forgeSchedules)
-      .set({ lastRunAt: new Date(), lastBuildId: buildId })
-      .where(eq(forgeSchedules.id, schedule.id));
-
-    console.log(
-      `[forge-scheduler] Schedule ${schedule.id} (${schedule.mode}) fired — build ${buildId}`,
-    );
+    const { buildId } = await createForgeBuild({ prompt: resolvePrompt(schedule), trigger: schedule.mode });
+    await db.update(forgeSchedules).set({ lastRunAt: new Date(), lastBuildId: buildId }).where(eq(forgeSchedules.id, schedule.id));
+    console.log(`[forge-scheduler] Schedule ${schedule.id} (${schedule.mode}) fired — build ${buildId}`);
+    return buildId;
   } catch (err) {
-    // Never throw out of the cron callback.
-    console.error(
-      `[forge-scheduler] Schedule ${schedule.id} fire failed:`,
-      err instanceof Error ? err.message : err,
-    );
+    console.error(`[forge-scheduler] Schedule ${schedule.id} fire failed:`, err instanceof Error ? err.message : err);
+    return null;
   }
 }
 

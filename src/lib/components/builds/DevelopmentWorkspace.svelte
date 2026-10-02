@@ -27,7 +27,7 @@
     instructions: Array<{ id: number; content: string; consumedAt: string | null; acknowledgedAt: string | null; dispatchedAt: string | null; cancelledAt: string | null }>;
     notes: Array<{ id: number; content: string }>;
     events: Array<{ id: number; kind: string; createdAt: string }>;
-    lessons: Array<{ id: number; lesson: string; evidence: string; expiresAt: string }>;
+    lessons: Array<{ id: string; lesson: string; evidence: string; expiresAt: string; stale?: boolean }>;
     blocker: string | null;
   };
   let snapshot = $state<Snapshot | null>(null);
@@ -330,7 +330,7 @@
           </fieldset>
         </form>
 
-        <details class="wk-fold"><summary>Verified repository knowledge</summary>{#each snapshot.lessons as item (item.id)}<p class="wk-lesson">{item.lesson}<span class="wk-stamp">{item.evidence} · recheck after {new Date(item.expiresAt).toLocaleDateString()}</span></p>{:else}<p class="wk-muted">No accepted lessons for this product area yet.</p>{/each}</details>
+        <details class="wk-fold"><summary>Verified repository knowledge</summary>{#each snapshot.lessons as item (item.id)}<p class="wk-lesson">{item.lesson}<span class="wk-stamp">{item.evidence} · {item.stale ? 'stale: the files it cites are gone · ' : ''}recheck after {new Date(item.expiresAt).toLocaleDateString()}</span></p>{:else}<p class="wk-muted">No accepted lessons for this product area yet.</p>{/each}</details>
 
       {:else if tab === 'Build'}
         <SectionHead

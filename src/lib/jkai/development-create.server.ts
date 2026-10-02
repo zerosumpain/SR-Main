@@ -19,7 +19,7 @@ import { resolveDevelopmentModel } from './development-models.server';
 import { ensureDelivery, mutateDelivery } from './development-state.server';
 
 /** Brief fields a caller may carry in from an already-groomed source. */
-export type ImportedBrief = Partial<Pick<DeliveryState['brief'], 'constraints' | 'scope' | 'dependencies' | 'assumptions' | 'questions' | 'validation'>>;
+export type ImportedBrief = Partial<Pick<DeliveryState['brief'], 'constraints' | 'scope' | 'dependencies' | 'assumptions' | 'questions' | 'validation' | 'routes' | 'newRoutes' | 'lane'>>;
 
 export interface CreateDeliveryInput {
   /** The intended outcome. Becomes the build prompt and the brief's outcome. */
@@ -33,6 +33,9 @@ export interface CreateDeliveryInput {
   modelId?: unknown;
   criteria?: string[];
   brief?: ImportedBrief;
+  /** The grooming that produced `brief`, when it was groomed elsewhere — the
+   *  backlog's groomed brief is a development brief, so it is not groomed twice. */
+  grooming?: DeliveryState['grooming'];
   /** The improvement-backlog item this delivers, when it came from one. */
   backlogSlug?: string;
 }
@@ -62,9 +65,10 @@ export async function createDevelopmentDelivery(input: CreateDeliveryInput): Pro
     autopilot: input.autopilot === true,
     maxRounds: input.maxRounds,
   });
-  const extras = Object.fromEntries(Object.entries(input.brief ?? {}).filter(([, v]) => typeof v === 'string' && v.trim()));
-  if (Object.keys(extras).length) {
-    await mutateDelivery(build.id, input.backlogSlug ? 'brief_imported_from_backlog' : 'brief_imported', (s) => ({ ...s, brief: { ...s.brief, ...extras } }));
+  const extras = Object.fromEntries(Object.entries(input.brief ?? {}).filter(([, v]) => typeof v === 'string' ? v.trim() : Array.isArray(v) ? v.length : v != null));
+  if (Object.keys(extras).length || input.grooming) {
+    await mutateDelivery(build.id, input.backlogSlug ? 'brief_imported_from_backlog' : 'brief_imported', (s) => ({ ...s, brief: { ...s.brief, ...extras },
+      ...(input.grooming ? { grooming: input.grooming } : {}) }));
   }
   return { buildId: build.id };
 }

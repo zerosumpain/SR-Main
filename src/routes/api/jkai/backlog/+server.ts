@@ -82,10 +82,16 @@ export const POST: RequestHandler = async ({ request }) => {
         if (!title && !detail && !message) {
           return json({ error: 'add a title, brief or question before grooming' }, { status: 400 });
         }
-        const { groomBacklogDraft } = await import('$lib/selfimprove/grooming.server');
+        // The one groomer (`$lib/jkai/development-grooming.server`): the item
+        // is groomed AND checked as the development brief it will become.
+        const { groomBacklogItem } = await import('$lib/jkai/development-brief.server');
+        const { listBacklog } = await import('$lib/selfimprove/backlog');
         try {
-          const result = await groomBacklogDraft({
-            slug: str('slug') || null,
+          const backlog = await listBacklog();
+          const slug = str('slug') || null;
+          const stored = slug ? backlog.find((item) => item.slug === slug) : undefined;
+          const result = await groomBacklogItem({
+            slug,
             title,
             detail,
             kind: str('kind'),
@@ -93,7 +99,7 @@ export const POST: RequestHandler = async ({ request }) => {
             grooming: body.grooming,
             conversation: body.conversation,
             message,
-          });
+          }, backlog, stored?.grooming?.lint);
           return json({ ok: true, ...result });
         } catch (err) {
           return json({ error: errMsg(err) }, { status: 502 });
@@ -110,7 +116,7 @@ export const POST: RequestHandler = async ({ request }) => {
         }
         const epicSlug = str('epicSlug');
         if (epicSlug) {
-          const { loadEpicBacklog } = await import('$lib/selfimprove/epic-backlog.server');
+          const { loadEpicBacklog } = await import('$lib/selfimprove/backlog-room.server');
           if (!(await loadEpicBacklog()).some((e) => e.slug === epicSlug)) return json({ error: 'Epic not found' }, { status: 404 });
         }
         const { createBacklogItem } = await import('$lib/selfimprove/backlog');
@@ -279,7 +285,7 @@ export const POST: RequestHandler = async ({ request }) => {
         // than failing, which would look exactly like a button that worked and
         // found nothing. Idempotent, so this costs one lookup.
         const [{ findThemes }, { ensureSystemCollections }] = await Promise.all([
-          import('$lib/selfimprove/epics'),
+          import('$lib/selfimprove/backlog-room.server'),
           import('$lib/selfimprove/seed-apis'),
         ]);
         await ensureSystemCollections();
@@ -297,7 +303,7 @@ export const POST: RequestHandler = async ({ request }) => {
        */
       case 'backlog_grooming_override': {
         if (typeof body.keepSeparate !== 'boolean' || !str('itemId')) return json({ error: 'itemId and keepSeparate are required' }, { status: 400 });
-        const { setGroomingOverride } = await import('$lib/workflows/backlog-grooming.server');
+        const { setGroomingOverride } = await import('$lib/selfimprove/backlog-room.server');
         await setGroomingOverride(str('itemId'), body.keepSeparate);
         return json({ ok: true });
       }
@@ -315,7 +321,7 @@ export const POST: RequestHandler = async ({ request }) => {
         if (decision !== 'apply' && decision !== 'keep') return json({ error: 'decision must be apply or keep' }, { status: 400 });
         const ids = strList('ids', 'id');
         if (ids.length === 0) return json({ error: 'id or ids is required' }, { status: 400 });
-        const { decideBacklogGroomingMany } = await import('$lib/workflows/backlog-grooming.server');
+        const { decideBacklogGroomingMany } = await import('$lib/selfimprove/backlog-room.server');
         const res = await decideBacklogGroomingMany(ids, decision);
         if (res.failed.length === 0) return json({ ok: true, ...res });
         const [first] = res.failed;
@@ -328,7 +334,7 @@ export const POST: RequestHandler = async ({ request }) => {
       }
 
       case 'epic_update': {
-        const { updateEpic } = await import('$lib/selfimprove/epic-backlog.server');
+        const { updateEpic } = await import('$lib/selfimprove/backlog-room.server');
         await updateEpic(str('slug'), str('title'), str('summary'), body.priority == null ? undefined : Number(body.priority));
         return json({ ok: true });
       }
@@ -337,7 +343,7 @@ export const POST: RequestHandler = async ({ request }) => {
         const slug = str('slug');
         const decision = str('decision');
         if (!slug) return json({ error: 'slug is required' }, { status: 400 });
-        const { decideEpic, ungroupEpic } = await import('$lib/selfimprove/epics');
+        const { decideEpic, ungroupEpic } = await import('$lib/selfimprove/backlog-room.server');
         if (decision === 'ungroup') {
           const res = await ungroupEpic(slug);
           return json(res.failed.length ? { ok: false, ...res, error: res.failed[0].error } : { ok: true, ...res });

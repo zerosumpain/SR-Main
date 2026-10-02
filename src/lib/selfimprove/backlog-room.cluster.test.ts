@@ -5,7 +5,7 @@ import {
   clusterWeight,
   labelFor,
   sharedKeywords,
-} from './cluster';
+} from './backlog-room';
 import { looksSameSubject } from './narrative';
 import type { BacklogItemData } from './types';
 

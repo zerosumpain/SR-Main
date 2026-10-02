@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildBoard } from './board';
-import { buildEpicBacklog } from './epic-backlog';
+import { buildEpicBacklog } from './backlog-room';
 import type { BacklogItemData, EpicData } from './types';
 
 function row(slug: string, title: string, extra: Partial<BacklogItemData> = {}): BacklogItemData {

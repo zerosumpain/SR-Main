@@ -54,7 +54,7 @@ import { errMsg, WORK_CAPS, type BuildLanes, type DeliveryRequest, type RunActio
 import type { Budget } from './run';
 import { isOwnerAccepted, listBacklog, markAttempt, pickWork, recordBuildRef } from './backlog';
 import type { BacklogItemData } from './types';
-import { renderBacklogBrief } from './grooming';
+import { deliveryBriefFrom, renderBacklogBrief } from '$lib/jkai/development-brief';
 
 /** The kinds the repo builder takes. `tool` and `source` joined `feature` when
  *  the toolsmith was retired (D3): a tool is now repo code, built on a branch
@@ -95,25 +95,12 @@ export function deliveryOutcome(item: BacklogItemData, runId: string): string {
   ].join('\n').slice(0, MAX_OUTCOME_CHARS);
 }
 
-const bullets = (xs: readonly string[] | undefined) => (xs ?? []).map((x) => x.trim()).filter(Boolean).map((x) => `- ${x}`).join('\n');
-
 /** The accepted backlog brief, as the fields a development delivery holds.
- *  Grooming on `/jkai/develop` starts from these instead of from a blank. */
+ *  The groomed brief IS the development brief, so the delivery starts from
+ *  it; one groomed before the models were one starts ungroomed and is groomed
+ *  on `/jkai/develop` as before (see `deliveryBriefFrom`). */
 export function deliveryRequest(item: BacklogItemData, runId: string): DeliveryRequest {
-  const g = item.grooming;
-  return {
-    title: item.title,
-    backlogSlug: item.slug,
-    outcome: deliveryOutcome(item, runId),
-    criteria: (g?.acceptanceCriteria ?? []).map((c) => c.trim()).filter(Boolean),
-    brief: g ? {
-      constraints: bullets([...g.constraints, ...g.nonGoals.map((n) => `Not in scope: ${n}`)]),
-      dependencies: bullets(g.dependencies),
-      assumptions: bullets(g.assumptions),
-      validation: bullets(g.validation),
-      questions: bullets(g.openQuestions),
-    } : {},
-  };
+  return { title: item.title, backlogSlug: item.slug, outcome: deliveryOutcome(item, runId), ...deliveryBriefFrom(item.grooming) };
 }
 
 export interface ProposeOpts {

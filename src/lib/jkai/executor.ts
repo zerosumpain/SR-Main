@@ -559,7 +559,7 @@ export async function executeIteration(
     }
   }
 
-  const { loadDelivery, relevantLessons } = await import('$lib/jkai/development-state.server');
+  const { loadDelivery } = await import('$lib/jkai/development-state.server');
   const delivery = await loadDelivery(build.id);
   const contextMessages = buildIterationContext(
     build.prompt,
@@ -654,7 +654,8 @@ export async function executeIteration(
       await logContextAttempt({ buildId: build.id, iterationId: iteration.id, outcome: 'failed', reason: String(error) }).catch(() => {});
       await emitLog(build.id, 'error', `Code context unavailable: ${String(error)}. Continuing with workspace inspection.`, iteration.id);
     }
-    const lessons = await relevantLessons(delivery.state.area);
+    const { areaLessons } = await import('$lib/codegraph/build-lessons.server');
+    const lessons = await areaLessons(delivery.state.area);
     userPrompt = [deliveryPrompt(delivery.state), userPrompt,
       ...lessons.map((l) => `Repository note (recheck against current code; revision ${l.revision}): ${l.lesson}\nEvidence: ${l.evidence}`)].join('\n\n');
   }

@@ -15,6 +15,10 @@ import { activitySync } from './activities/activity-sync';
 import { alexaSignalsSync, alexaVoiceSync, alexaVoiceTopics } from './activities/alexa-voice';
 import { newsBrief } from './activities/news-brief';
 import { familySteps, familySteps4pm } from './activities/family-steps';
+import { backlogGrooming } from './activities/backlog-grooming';
+import { forgeSchedulesActivity } from './activities/forge-schedules';
+import { modelRouting } from './activities/model-routing';
+import { voiceDrift } from './activities/voice-drift';
 
 /**
  * The full set of available heartbeat activity handlers. The engine looks
@@ -41,6 +45,10 @@ const handlers: ActivityHandler[] = [
   alexaVoiceTopics,
   familySteps,
   familySteps4pm,
+  backlogGrooming,
+  forgeSchedulesActivity,
+  modelRouting,
+  voiceDrift,
 ];
 
 const byName = new Map(handlers.map((h) => [h.name, h]));
