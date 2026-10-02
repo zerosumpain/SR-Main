@@ -6993,6 +6993,35 @@ export const familyTask = pgTable(
 
 export type FamilyTask = typeof familyTask.$inferSelect;
 
+// The family alarm: one row per "raise the alarm" pressed on the iPhone app.
+// Written by `$lib/family/alarm.server`; every other family member's phone is
+// pushed and `GET /api/native/family/alarm` lists the active ones (raised in
+// the last 30 minutes, not stood down) for phones that cannot be pushed.
+export const familyAlarm = pgTable(
+  'family_alarm',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    fromEmail: text('from_email').notNull(),
+    /** The name shown at the time, so the list reads without the roster. */
+    fromName: text('from_name').notNull(),
+    /** 'siren' | 'morse' — which sound the phones ring with. */
+    kind: text('kind').notNull(),
+    message: text('message'),
+    lat: doublePrecision('lat'),
+    lon: doublePrecision('lon'),
+    accuracy: doublePrecision('accuracy'),
+    /** People (not phones) it was addressed to, and phones Apple accepted it for. */
+    recipientCount: integer('recipient_count').notNull().default(0),
+    pushedCount: integer('pushed_count').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    cancelledByEmail: text('cancelled_by_email'),
+  },
+  (t) => [index('family_alarm_created_idx').on(t.createdAt), index('family_alarm_from_idx').on(t.fromEmail, t.createdAt)],
+);
+
+export type FamilyAlarm = typeof familyAlarm.$inferSelect;
+
 // Every finished round of a family game, one row per contender — what the
 // games leaderboard (daily / weekly / all-time bests) reads. Written once per
 // round by `$lib/games/results.server` when a room reaches `finished`; a replay

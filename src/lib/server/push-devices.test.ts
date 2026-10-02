@@ -43,3 +43,17 @@ describe('deliver', () => {
     expect(send.mock.calls[2][2]).toBe('sandbox');
   });
 });
+
+describe('privatePush — the family alarm', () => {
+  it('still rings loudly, but keeps the name, message and position off the lock screen', () => {
+    const message = {
+      title: 'Sam raised the alarm', body: 'At Private Place', category: 'family-alarm', threadId: 'family-alarm',
+      level: 'critical' as const, sound: { critical: 1 as const, name: 'sr-siren.caf', volume: 1 }, collapseId: 'alarm-a1',
+      ttlSeconds: 1800, userInfo: { category: 'family-alarm', alarmId: 'a1', kind: 'siren', name: 'Sam', lat: 51.5, lon: -0.1, at: '2026-10-02T12:00:00.000Z' },
+    };
+    const p = privatePush(message);
+    expect(p).toMatchObject({ title: 'Family alarm', level: 'critical', sound: message.sound, collapseId: 'alarm-a1', ttlSeconds: 1800 });
+    expect(p.userInfo).toEqual({ category: 'family-alarm', alarmId: 'a1', kind: 'siren', at: '2026-10-02T12:00:00.000Z' });
+    expect(JSON.stringify(p)).not.toMatch(/Sam|Private Place|51\.5/);
+  });
+});
