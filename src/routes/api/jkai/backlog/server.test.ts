@@ -8,16 +8,18 @@ const mocks = vi.hoisted(() => ({
   createBacklogItem: vi.fn(),
   updateBacklogItem: vi.fn(),
   removeBacklogItem: vi.fn(),
-  groomBacklogDraft: vi.fn(),
+  groomBacklogItem: vi.fn(),
+  listBacklog: vi.fn(),
 }));
 
 vi.mock('$lib/selfimprove/backlog', () => ({
   createBacklogItem: mocks.createBacklogItem,
   updateBacklogItem: mocks.updateBacklogItem,
   removeBacklogItem: mocks.removeBacklogItem,
+  listBacklog: mocks.listBacklog,
 }));
-vi.mock('$lib/selfimprove/grooming.server', () => ({
-  groomBacklogDraft: mocks.groomBacklogDraft,
+vi.mock('$lib/jkai/development-brief.server', () => ({
+  groomBacklogItem: mocks.groomBacklogItem,
 }));
 
 import { POST } from './+server';
@@ -38,7 +40,11 @@ describe('backlog feature management', () => {
     mocks.createBacklogItem.mockResolvedValue({ slug: 'owner-feature' });
     mocks.updateBacklogItem.mockResolvedValue({ slug: 'owner-feature' });
     mocks.removeBacklogItem.mockResolvedValue({ slug: 'owner-feature' });
-    mocks.groomBacklogDraft.mockResolvedValue({
+    mocks.listBacklog.mockResolvedValue([
+      { slug: 'owner-feature', title: 'Owner feature', grooming: { lint: { revision: 2, lane: { lane: 'site' }, findings: [] } } },
+      { slug: 'other', title: 'Other' },
+    ]);
+    mocks.groomBacklogItem.mockResolvedValue({
       assistantMessage: 'I drafted a clear contract.',
       suggestions: { title: 'Owner feature', detail: 'Clearer', kind: 'feature', priority: 2 },
       grooming: { readiness: { score: 88, status: 'ready' } },
@@ -90,7 +96,7 @@ describe('backlog feature management', () => {
     await expect(response.json()).resolves.toEqual({ ok: true, slug: 'owner-feature' });
   });
 
-  it('grooms with a read-only model pass and returns the proposal for review', async () => {
+  it('grooms through the one development groomer, with the stored check as the previous one', async () => {
     const response = await POST(actionEvent({
       action: 'backlog_groom',
       slug: 'owner-feature',
@@ -102,10 +108,10 @@ describe('backlog feature management', () => {
       conversation: [{ role: 'assistant', content: 'What matters most?' }],
     }));
     expect(response.status).toBe(200);
-    expect(mocks.groomBacklogDraft).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mocks.groomBacklogItem).toHaveBeenCalledWith(expect.objectContaining({
       slug: 'owner-feature',
       message: 'Make the acceptance criteria testable.',
-    }));
+    }), expect.arrayContaining([expect.objectContaining({ slug: 'other' })]), { revision: 2, lane: { lane: 'site' }, findings: [] });
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       model: 'default-test-model',

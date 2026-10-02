@@ -82,10 +82,16 @@ export const POST: RequestHandler = async ({ request }) => {
         if (!title && !detail && !message) {
           return json({ error: 'add a title, brief or question before grooming' }, { status: 400 });
         }
-        const { groomBacklogDraft } = await import('$lib/selfimprove/grooming.server');
+        // The one groomer (`$lib/jkai/development-grooming.server`): the item
+        // is groomed AND checked as the development brief it will become.
+        const { groomBacklogItem } = await import('$lib/jkai/development-brief.server');
+        const { listBacklog } = await import('$lib/selfimprove/backlog');
         try {
-          const result = await groomBacklogDraft({
-            slug: str('slug') || null,
+          const backlog = await listBacklog();
+          const slug = str('slug') || null;
+          const stored = slug ? backlog.find((item) => item.slug === slug) : undefined;
+          const result = await groomBacklogItem({
+            slug,
             title,
             detail,
             kind: str('kind'),
@@ -93,7 +99,7 @@ export const POST: RequestHandler = async ({ request }) => {
             grooming: body.grooming,
             conversation: body.conversation,
             message,
-          });
+          }, backlog, stored?.grooming?.lint);
           return json({ ok: true, ...result });
         } catch (err) {
           return json({ error: errMsg(err) }, { status: 502 });

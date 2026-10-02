@@ -71,7 +71,7 @@ import {
   MAX_NEW_IDEAS_PER_NIGHT,
   RECENT_SETTLED_DAYS,
 } from './backlog';
-import { MAX_BACKLOG_NOTES } from './grooming';
+import { MAX_BACKLOG_NOTES } from '$lib/jkai/development-brief';
 import { isTapped } from './board';
 import type { BacklogItemData } from './types';
 

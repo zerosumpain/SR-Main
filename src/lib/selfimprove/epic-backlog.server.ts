@@ -136,7 +136,7 @@ export async function decideBacklogGrooming(id: string, decision: 'apply' | 'kee
   if (!source || !target || source.commissionId || target.commissionId || source.status !== 'open' || target.status !== 'open' || source.attempts || target.attempts) {
     throw new Error('Suggestion changed; delivery started building');
   }
-  const { renderBacklogBrief } = await import('./grooming');
+  const { renderBacklogBrief } = await import('$lib/jkai/development-brief');
   // Save the complete source brief before folding. Retrying overwrites the same
   // key, and every builder consumes these requirements through renderBacklogBrief.
   await upsertRecord(COLLECTIONS.backlog, { key: target.slug, data: asData({ ...target,

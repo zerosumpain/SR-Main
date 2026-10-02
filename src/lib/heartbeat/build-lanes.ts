@@ -43,13 +43,13 @@ export type { BuildLanes, DeliveryRequest, LaneResult } from '$lib/selfimprove/t
  */
 export function liveBuildLanes(): BuildLanes {
   return {
-    async startDelivery({ title, outcome, criteria, brief, backlogSlug }) {
+    async startDelivery({ title, outcome, criteria, brief, grooming, backlogSlug }) {
       const { createDevelopmentDelivery, findBacklogDelivery } = await import('$lib/jkai/development-create.server');
       // The same idea already in development? Hand it back rather than paying twice.
       const live = await findBacklogDelivery(backlogSlug);
       if (live) return { ref: `delivery:${live.buildId}`, label: `existing delivery ${live.buildId.slice(0, 8)}`, reused: true };
       const { buildId } = await createDevelopmentDelivery({
-        title, outcome, criteria, brief, backlogSlug,
+        title, outcome, criteria, brief, grooming, backlogSlug,
         area: 'Platform',
         // A change request opened a PR and stopped; this is the same stop.
         releasePolicy: 'pull_request',

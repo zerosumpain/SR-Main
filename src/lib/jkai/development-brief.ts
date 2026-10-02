@@ -304,3 +304,357 @@ export function autopilotBriefDecision(state: DeliveryState, now: number): Brief
   if (questions.length) return { action: 'answer', questions };
   return { action: 'accept' };
 }
+
+// ── the groomed brief ───────────────────────────────────────────────────────
+//
+// One brief model since 2026-10-02. The improvement backlog used to keep its
+// own (`selfimprove/grooming.ts`) with its own groomer, and an accepted
+// backlog item was re-groomed from scratch once it reached /jkai/develop. Now a
+// groomed backlog item carries the development brief's own fields — target
+// routes, proposed routes, the lane and the brief check — beside the backlog's
+// planning fields (problem, non-goals, effort, risk, relations, notes,
+// conversation), and `deliveryBriefFrom` hands it to a delivery unchanged.
+//
+// Still pure: the backlog editor value-imports the readiness rule and the line
+// helpers from here, so nothing below may reach the database or private env.
+
+export const BRIEF_WORK_KINDS = ['tool', 'feature', 'source', 'watch', 'engine'] as const;
+export type BriefWorkKind = (typeof BRIEF_WORK_KINDS)[number];
+export const BACKLOG_EFFORTS = ['small', 'medium', 'large'] as const;
+export const BACKLOG_RISKS = ['low', 'medium', 'high'] as const;
+export const BACKLOG_RELATIONS = ['duplicate', 'related', 'blocks', 'blocked_by'] as const;
+export type BacklogEffort = (typeof BACKLOG_EFFORTS)[number];
+export type BacklogRisk = (typeof BACKLOG_RISKS)[number];
+export type BacklogRelationKind = (typeof BACKLOG_RELATIONS)[number];
+/** Whether the brief can be handed to an automated builder without guessing. */
+export type BacklogReadinessStatus = 'draft' | 'needs_input' | 'ready';
+
+/** A relationship may only point at another durable backlog slug. */
+export interface BacklogRelation { slug: string; title: string; kind: BriefWorkKind; relation: BacklogRelationKind; reason: string }
+/** One turn of the grooming conversation, as stored. */
+export interface BacklogGroomingTurn { role: 'user' | 'assistant'; content: string }
+/**
+ * A note the owner (or the model, at the owner's request) left on one item.
+ * `author` is stamped by the route, never read out of the request body.
+ */
+export interface BacklogNote { id: string; at: string; author: 'owner' | 'model'; text: string }
+
+/**
+ * The groomed brief: the contract between grooming and every build lane.
+ *
+ * `conversation` is kept for a person resuming the grooming but is never fed
+ * to a builder — a lane must not reconstruct decisions out of chat. `routes`,
+ * `newRoutes`, `lane` and `lint` are the development brief's fields; they are
+ * optional because briefs groomed before the two models were one lack them,
+ * and such a brief is read as it was stored (its delivery grooms it afresh).
+ */
+export interface GroomedBrief {
+  problem: string;
+  outcome: string;
+  acceptanceCriteria: string[];
+  constraints: string[];
+  nonGoals: string[];
+  dependencies: string[];
+  implementationNotes: string[];
+  validation: string[];
+  assumptions: string[];
+  openQuestions: string[];
+  decisions: string[];
+  relatedItems: BacklogRelation[];
+  effort: BacklogEffort;
+  risk: BacklogRisk;
+  readiness: { score: number; status: BacklogReadinessStatus; reason: string };
+  assistantSummary: string;
+  /** The resolved model actually called, not merely the configured setting. */
+  modelId: string;
+  groomedAt: string;
+  /** Set when a person saves the model draft into the backlog record. */
+  acceptedAt?: string;
+  revision: number;
+  /** The thread that produced this brief. Display and continuation only. */
+  conversation?: BacklogGroomingTurn[];
+  /** Existing site paths the feature changes. */
+  routes?: string[];
+  /** Paths the feature proposes to create. */
+  newRoutes?: string[];
+  /** The grooming model's lane proposal. `lint.lane` is the verdict. */
+  lane?: Omit<BriefLane, 'source'>;
+  /** The brief check at grooming. Advisory here: a delivery checks again. */
+  lint?: BriefLint;
+}
+
+/** Turns kept on a record, and notes kept on one. Values a `.svelte` may import. */
+export const MAX_GROOMING_CONVERSATION = 24;
+export const MAX_BACKLOG_NOTES = 100;
+/** One note. Long enough for a paragraph of reasoning, not an essay. */
+export const MAX_NOTE_LENGTH = 2_000;
+
+const MAX_TEXT = 2_000;
+const MAX_LIST_ITEM = 500;
+const MAX_LIST = 20;
+
+const clean = (value: unknown, max = MAX_TEXT) => typeof value === 'string' ? value.trim().slice(0, max) : '';
+
+export function stringList(value: unknown, limit = MAX_LIST): string[] {
+  const input = Array.isArray(value) ? value : typeof value === 'string' ? value.split(/\r?\n/) : [];
+  return [...new Set(input.map((v) => clean(v, MAX_LIST_ITEM)).filter(Boolean))].slice(0, limit);
+}
+
+export const lines = (value: string): string[] => stringList(value);
+
+/** Local site paths only, de-duplicated and normalised. */
+function routeList(value: unknown): string[] {
+  return [...new Set(stringList(value).map(normaliseRoute).filter((r) => r.startsWith('/') && !r.startsWith('//') && !/\s/.test(r)))];
+}
+
+export function calculateReadiness(input: {
+  problem?: unknown; outcome?: unknown; acceptanceCriteria?: unknown; validation?: unknown; implementationNotes?: unknown; openQuestions?: unknown;
+}): GroomedBrief['readiness'] {
+  const problem = clean(input.problem);
+  const outcome = clean(input.outcome);
+  const criteria = stringList(input.acceptanceCriteria);
+  const validation = stringList(input.validation);
+  const notes = stringList(input.implementationNotes);
+  const questions = stringList(input.openQuestions);
+
+  let score = 0;
+  if (problem) score += 20;
+  if (outcome) score += 20;
+  score += Math.min(30, criteria.length * 10);
+  score += Math.min(15, validation.length * 8);
+  score += Math.min(10, notes.length * 5);
+  if (questions.length === 0) score += 5;
+  score -= Math.min(28, questions.length * 7);
+  score = Math.max(0, Math.min(100, score));
+
+  let status: BacklogReadinessStatus = 'draft';
+  if (questions.length > 0) status = 'needs_input';
+  else if (score >= 80) status = 'ready';
+
+  const missing: string[] = [];
+  if (!problem) missing.push('problem');
+  if (!outcome) missing.push('outcome');
+  if (criteria.length < 3) missing.push('acceptance criteria');
+  if (validation.length < 1) missing.push('validation');
+  const reason = questions.length
+    ? `${questions.length} open question${questions.length === 1 ? '' : 's'} still need a decision.`
+    : missing.length
+      ? `Strengthen ${missing.join(', ')} before an automated build.`
+      : 'The problem, outcome, acceptance criteria and validation are explicit.';
+  return { score, status, reason };
+}
+
+export interface GroomingCandidate { slug: string; title: string; kind: BriefWorkKind }
+
+/** One backlog grooming turn's answer: the reply, item suggestions and the draft. */
+export interface GroomingModelResult {
+  assistantMessage: string;
+  suggestions: { title: string; detail: string; kind: BriefWorkKind; priority: number };
+  grooming: GroomedBrief;
+  model: string;
+}
+
+export interface NormaliseGroomingOptions {
+  modelId: string;
+  groomedAt?: string;
+  revision?: number;
+  allowedRelations?: ReadonlyMap<string, GroomingCandidate>;
+  assistantSummary?: string;
+  /** The server's brief check. Only the server states one; see `readLint`. */
+  lint?: BriefLint;
+}
+
+function enumValue<T extends string>(value: unknown, values: readonly T[], fallback: T): T {
+  return values.includes(value as T) ? (value as T) : fallback;
+}
+
+/**
+ * A stored or round-tripped brief check, kept only when it is shaped like one.
+ * Advisory display: a delivery never trusts it, it checks the brief again.
+ */
+function readLint(raw: unknown): BriefLint | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const l = raw as Partial<BriefLint>;
+  if (!l.lane || typeof l.lane !== 'object' || !BRIEF_LANES.includes(l.lane.lane) || !Array.isArray(l.findings)) return undefined;
+  return {
+    revision: Number(l.revision) || 1, at: clean(l.at, 100), routesChecked: l.routesChecked === true,
+    lane: { lane: l.lane.lane, reason: clean(l.lane.reason, 300), source: enumValue(l.lane.source, ['grooming', 'rule', 'unchecked'] as const, 'unchecked'), ...(l.lane.repo ? { repo: clean(l.lane.repo, 100) } : {}) },
+    findings: l.findings.slice(0, 60).filter((f) => f && typeof f === 'object').map((f) => ({
+      kind: enumValue(f.kind, ['route', 'criterion', 'preview', 'lane'] as const, 'criterion'), severity: enumValue(f.severity, ['block', 'warn'] as const, 'warn'),
+      subject: clean(f.subject, 1_000), message: clean(f.message, 500), source: enumValue(f.source, ['rule', 'model'] as const, 'rule'),
+    })),
+    ...(l.judged && typeof l.judged === 'object' ? { judged: { key: clean(l.judged.key, 64), model: clean(l.judged.model, 200) } } : {}),
+  };
+}
+
+/** Turn model JSON or a browser round-trip into the one safe stored shape. */
+export function normaliseGrooming(raw: unknown, options: NormaliseGroomingOptions): GroomedBrief {
+  const obj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const relatedItems: BacklogRelation[] = [];
+  const seen = new Set<string>();
+  for (const value of Array.isArray(obj.relatedItems) ? obj.relatedItems : []) {
+    if (!value || typeof value !== 'object') continue;
+    const rel = value as Record<string, unknown>;
+    const slug = clean(rel.slug, 200);
+    const candidate = options.allowedRelations?.get(slug);
+    // Model-created relations are only accepted when the server supplied that
+    // exact durable id. Persisted round-trips have no map and retain their ids.
+    if (!slug || seen.has(slug) || (options.allowedRelations && !candidate)) continue;
+    relatedItems.push({
+      slug,
+      title: candidate?.title || clean(rel.title, 200) || slug,
+      kind: candidate?.kind ?? enumValue(rel.kind, BRIEF_WORK_KINDS, 'feature'),
+      relation: enumValue<BacklogRelationKind>(rel.relation, BACKLOG_RELATIONS, 'related'),
+      reason: clean(rel.reason, 500),
+    });
+    seen.add(slug);
+    if (relatedItems.length >= 10) break;
+  }
+
+  const core = {
+    problem: clean(obj.problem),
+    outcome: clean(obj.outcome),
+    acceptanceCriteria: stringList(obj.acceptanceCriteria),
+    constraints: stringList(obj.constraints),
+    nonGoals: stringList(obj.nonGoals),
+    dependencies: stringList(obj.dependencies),
+    implementationNotes: stringList(obj.implementationNotes),
+    validation: stringList(obj.validation),
+    assumptions: stringList(obj.assumptions),
+    openQuestions: stringList(obj.openQuestions),
+    decisions: stringList(obj.decisions),
+  };
+  const lane = parseLane(obj.lane);
+  const lint = options.lint ?? readLint(obj.lint);
+
+  return {
+    ...core,
+    relatedItems,
+    effort: enumValue<BacklogEffort>(obj.effort, BACKLOG_EFFORTS, 'medium'),
+    risk: enumValue<BacklogRisk>(obj.risk, BACKLOG_RISKS, 'medium'),
+    // Deterministic, not model-authored, so the UI and the builder agree on
+    // what "ready" means and a persuasive sentence cannot inflate it.
+    readiness: calculateReadiness(core),
+    assistantSummary: clean(options.assistantSummary ?? obj.assistantSummary, 1_000),
+    modelId: clean(options.modelId || obj.modelId, 200),
+    groomedAt: options.groomedAt ?? (clean(obj.groomedAt, 100) || new Date().toISOString()),
+    revision: Math.max(1, Math.round(options.revision ?? (Number(obj.revision) || 1))),
+    conversation: normaliseConversation(obj.conversation),
+    routes: routeList(obj.routes),
+    newRoutes: routeList(obj.newRoutes),
+    ...(lane ? { lane } : {}),
+    ...(lint ? { lint } : {}),
+  };
+}
+
+/** Sanitize and mark the structured draft a person chose to save. */
+export function acceptGrooming(raw: unknown, now = new Date().toISOString()): GroomedBrief {
+  const obj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  return {
+    ...normaliseGrooming(raw, { modelId: clean(obj.modelId, 200), groomedAt: clean(obj.groomedAt, 100) || now, revision: Number(obj.revision) || 1 }),
+    acceptedAt: now,
+  };
+}
+
+/**
+ * The stored shape of a grooming thread. Trimmed from the END, keeping the most
+ * recent turns; a turn whose role is neither `user` nor `assistant` is dropped
+ * rather than coerced — a mislabelled turn read back as the other party is
+ * worse than a missing one.
+ */
+export function normaliseConversation(raw: unknown): BacklogGroomingTurn[] {
+  if (!Array.isArray(raw)) return [];
+  const turns: BacklogGroomingTurn[] = [];
+  for (const value of raw) {
+    if (!value || typeof value !== 'object') continue;
+    const turn = value as Record<string, unknown>;
+    if (turn.role !== 'user' && turn.role !== 'assistant') continue;
+    const content = clean(turn.content, MAX_NOTE_LENGTH);
+    if (content) turns.push({ role: turn.role, content });
+  }
+  return turns.slice(-MAX_GROOMING_CONVERSATION);
+}
+
+/**
+ * One note, sanitised. `author` is NOT read from the input: the caller states
+ * it, so a request cannot sign its content as something it is not.
+ */
+export function normaliseNote(raw: unknown, author: BacklogNote['author'], now = new Date().toISOString()): BacklogNote | null {
+  const obj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const body = clean(typeof raw === 'string' ? raw : obj.text, MAX_NOTE_LENGTH);
+  if (!body) return null;
+  return { id: clean(obj.id, 60) || `n_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`, at: clean(obj.at, 100) || now, author, text: body };
+}
+
+function section(label: string, values: readonly string[] | undefined): string {
+  return values?.length ? `\n${label}:\n${values.map((v) => `- ${v}`).join('\n')}` : '';
+}
+
+/** What `renderBacklogBrief` reads from a backlog item. */
+export interface RenderableBrief {
+  title: string;
+  detail: string;
+  grooming?: GroomedBrief;
+  mergedBrief?: string;
+  absorbedRequirements?: Record<string, string>;
+}
+
+/**
+ * The canonical brief text handed to a build lane. Older rows keep their
+ * original detail until they are groomed; the conversation is never included.
+ */
+export function renderBacklogBrief(item: RenderableBrief): string {
+  const g = item.grooming;
+  const merged = [item.mergedBrief, ...Object.values(item.absorbedRequirements ?? {})].filter(Boolean).map((brief) => `\n\nConsolidated requirements\n${brief}`).join('');
+  if (!g) return `${item.title}\n\n${item.detail}${merged}`.trim();
+  return [
+    `Feature: ${item.title}`,
+    `Problem: ${g.problem || item.detail || 'Not recorded'}`,
+    `Desired outcome: ${g.outcome || item.detail || 'Not recorded'}`,
+    `Delivery profile: ${g.effort} effort · ${g.risk} risk · ${g.readiness.status} (${g.readiness.score}/100)`,
+    section('Acceptance criteria', g.acceptanceCriteria),
+    section('Validation', g.validation),
+    section('Target routes', g.routes),
+    section('New routes', g.newRoutes),
+    section('Constraints', g.constraints),
+    section('Non-goals', g.nonGoals),
+    section('Dependencies', g.dependencies),
+    section('Implementation notes', g.implementationNotes),
+    section('Decisions already made', g.decisions),
+    section('Assumptions to verify', g.assumptions),
+    section('Remaining open questions', g.openQuestions),
+  ].filter(Boolean).join('\n') + merged;
+}
+
+const bullets = (xs: readonly string[] | undefined) => (xs ?? []).map((x) => x.trim()).filter(Boolean).map((x) => `- ${x}`).join('\n');
+
+/** The fields of a delivery brief a groomed brief fills. */
+export type GroomedDeliveryBrief = Partial<Pick<DeliveryState['brief'], 'constraints' | 'dependencies' | 'assumptions' | 'questions' | 'validation' | 'routes' | 'newRoutes' | 'lane'>>;
+
+/**
+ * A groomed brief as a delivery's brief: the same fields, so the delivery
+ * starts from what the owner accepted rather than from a blank. `grooming` is
+ * returned only when the brief was groomed by the one groomer (it has a lane):
+ * then autopilot checks and accepts it instead of grooming it again. A brief
+ * groomed before the models were one has no lane, so its delivery grooms it.
+ */
+export interface DeliveryBriefFields { criteria: string[]; brief: GroomedDeliveryBrief; grooming?: NonNullable<DeliveryState['grooming']> }
+export function deliveryBriefFrom(g: GroomedBrief | undefined): DeliveryBriefFields {
+  if (!g) return { criteria: [], brief: {} };
+  const routes = g.routes ?? [];
+  const newRoutes = g.newRoutes ?? [];
+  return {
+    criteria: g.acceptanceCriteria.map((c) => c.trim()).filter(Boolean),
+    brief: {
+      constraints: bullets([...g.constraints, ...g.nonGoals.map((n) => `Not in scope: ${n}`)]),
+      dependencies: bullets(g.dependencies),
+      assumptions: bullets(g.assumptions),
+      validation: bullets(g.validation),
+      questions: bullets(g.openQuestions),
+      ...(routes.length ? { routes } : {}),
+      ...(newRoutes.length ? { newRoutes } : {}),
+      ...(g.lane ? { lane: g.lane } : {}),
+    },
+    ...(g.lane ? { grooming: { model: g.modelId, at: g.acceptedAt ?? g.groomedAt, summary: g.assistantSummary, by: 'owner' as const } } : {}),
+  };
+}

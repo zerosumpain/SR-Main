@@ -43,7 +43,7 @@ vi.mock('$lib/datastore', () => {
 });
 
 import { mergeEpic, decideEpic, findThemes, listEpics, toEpic, ungroupEpic } from './epics';
-import { renderBacklogBrief } from './grooming';
+import { renderBacklogBrief } from '$lib/jkai/development-brief';
 import { updateBacklogItem } from './backlog';
 import { clusterSlug } from './cluster';
 import type { BacklogItemData, EpicData } from './types';

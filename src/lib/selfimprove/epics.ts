@@ -263,7 +263,7 @@ export async function mergeEpic(slug: string): Promise<{ slug: string; merged: s
     throw new Error('Only unstarted ideas in this theme can be auto-merged');
   }
   if (new Set(members.map((i) => i.kind)).size !== 1) throw new Error('Choose ideas in the same delivery category');
-  const { renderBacklogBrief } = await import('./grooming');
+  const { renderBacklogBrief } = await import('$lib/jkai/development-brief');
   const now = new Date().toISOString();
   const detail = members.map((i) => `## ${i.title}\nSource: ${i.slug}\n${renderBacklogBrief(i)}`).join('\n\n');
   const merged: BacklogItemData = existing ?? {

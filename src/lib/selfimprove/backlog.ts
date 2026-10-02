@@ -27,7 +27,7 @@ import {
 // The channel vocabulary lives in the pure module — see `IDEA_SOURCES` there
 // for why it cannot live in `./types`.
 import { BACKLOG_KINDS, IDEA_SOURCES, type BacklogKind, type IdeaSource } from './board';
-import { MAX_BACKLOG_NOTES, acceptGrooming, normaliseNote } from './grooming';
+import { MAX_BACKLOG_NOTES, acceptGrooming, normaliseNote } from '$lib/jkai/development-brief';
 import { findSameIdea } from './same-idea';
 
 /** An idea as proposed by a producer, before it becomes a record. */

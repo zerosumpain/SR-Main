@@ -57,6 +57,20 @@ describe('createDevelopmentDelivery', () => {
     expect(next.brief.questions).toBeUndefined();
   });
 
+  it('carries an already-groomed backlog brief in whole: routes, lane and its grooming', async () => {
+    const grooming = { model: 'm', at: '2026-10-01T10:00:00.000Z', summary: 's', by: 'owner' as const };
+    await createDevelopmentDelivery({
+      outcome: 'Brief', area: 'Platform', backlogSlug: 'rail', grooming,
+      brief: { routes: ['/news'], newRoutes: [], lane: { lane: 'site', reason: 'Reads site data' } },
+    });
+    const [, , change] = vi.mocked(mutateDelivery).mock.calls[0];
+    const next = change({ brief: { outcome: 'Brief', constraints: '', routes: [], revision: 1, acceptedAt: null } } as unknown as DeliveryState);
+    expect(next.brief.routes).toEqual(['/news']);
+    expect(next.brief).not.toHaveProperty('newRoutes');
+    expect(next.brief.lane).toEqual({ lane: 'site', reason: 'Reads site data' });
+    expect(next.grooming).toEqual(grooming);
+  });
+
   it('reports an unknown model as the caller\'s choice, not a fault', async () => {
     await expect(createDevelopmentDelivery({ outcome: 'x', area: 'News', modelId: 'nope' })).rejects.toBeInstanceOf(DevelopmentModelChoiceError);
     expect(h.inserted).toEqual([]);
