@@ -37,6 +37,6 @@
   .tick { transition: stroke 0.3s var(--d); }
   .mid { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-align: center; }
   .mid b { font-family: var(--er-display); font-weight: 400; font-size: clamp(54px, 8vw, 104px); line-height: 0.9; color: var(--fg); }
-  .mid b span { font-size: 0.45em; color: var(--tone-text); }
+  .mid b span { font-size: max(0.45em, var(--fs-label-xs)); color: var(--tone-text); }
   .mid > span { font-family: var(--er-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em; text-transform: uppercase; color: var(--fg-3); max-width: 16ch; }
 </style>
