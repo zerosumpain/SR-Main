@@ -30,7 +30,7 @@
 //   ha_get_history   GET /api/history/period/…                     read
 //   memory_search    SELECT over jkai_memories (personal scope)    read
 //   health_timeline  service-lane GET to SR-Health                 read
-//   research_web_search   Tavily search, 300-char snippets         read (web)
+//   research_web_search   provider-grounded search, cited pages    read (web)
 //   fetch_url        GET a public URL, private ranges refused      read (web)
 //
 // NOT listed, deliberately: `ha_render_template` (arbitrary Jinja is a larger
