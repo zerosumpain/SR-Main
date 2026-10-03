@@ -122,6 +122,7 @@ export function getToolsetManifest(): Array<{
   tools: Array<{ name: string; description: string }>;
 }> {
   const toolsetDescriptions: Record<string, string> = {
+    tavily: 'Tavily web search — only when John explicitly asks for Tavily. Spends credits.',
     health: 'Health & fitness data — weekly stats, readiness, sleep, training load, timeline',
     activity: 'Personal activity sources connected on /jkai/sources — games and playtime (Steam), listening, archives; grant-gated summaries, search and provenance',
     blog: 'Blog post management — list, create, update, publish/unpublish',
