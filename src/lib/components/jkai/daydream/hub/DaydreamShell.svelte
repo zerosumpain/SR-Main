@@ -13,7 +13,7 @@
   //  * NO grain layer. `body::after` already paints it site-wide at z-100;
   //    /health adds its own only because it needs it UNDER a header of its own.
   //
-  // The masthead is the cover of the magazine: kicker, an Archivo Black
+  // The masthead is the cover of the magazine: kicker, an Inter ExtraBold
   // headline, one standfirst, the live control, and a deck of tiles that says
   // what state the engine is in before a single tab is opened.
   import type { Snippet } from 'svelte';

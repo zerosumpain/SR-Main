@@ -1,4 +1,6 @@
 <script lang="ts">
+  // Shared tokens first, so app.css can still override deliberately.
+  import '$lib/styles/sr-tokens.css';
   import '../app.css';
   import UmamiTracker from '$lib/components/UmamiTracker.svelte';
   import '$lib/styles/nm-tokens.css';

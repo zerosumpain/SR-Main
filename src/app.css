@@ -2,7 +2,7 @@
 /* The Google Fonts request lives in src/app.html as <link> tags, NOT here.
  * Vite strips a bare `@import url(https://…)` out of every built CSS chunk,
  * so declaring it in this file loaded the fonts in dev and silently loaded
- * nothing in production — Archivo Black headlines rendered as Impact on the
+ * nothing in production — the display face rendered as Impact on the
  * live site for as long as this line was the only declaration (fixed
  * 2026-08-30). Change the families or weights in app.html. */
 
@@ -53,25 +53,16 @@
 }
 
 :root {
-  /* Warm brutalist palette — high contrast */
-  --text-primary: #1a1008;
-  --text-secondary: #3d2e1a;
-  --text-muted: rgba(26, 16, 8, 0.65);
-  --text-ghost: rgba(26, 16, 8, 0.45);
+  /* The shared tokens (palette, type scale, spacing, radii, motion) now come
+     from src/lib/styles/sr-tokens.css, generated in SR-Infra design/ from the
+     /health reference style and imported ahead of this file. What stays here
+     is Main-only, or overrides that stay deliberately local. */
 
-  --accent: #c4570a;        /* Burnt orange — punchy, not regal */
-  --accent-hover: #a84808;
-  --accent-tint-04: rgba(196, 87, 10, 0.04);
-  --accent-tint-08: rgba(196, 87, 10, 0.08);
-  --accent-tint-14: rgba(196, 87, 10, 0.14);
-  --accent-tint-20: rgba(196, 87, 10, 0.2);
-  --accent-tint-25: rgba(196, 87, 10, 0.25);
-  --accent-tint-35: rgba(196, 87, 10, 0.35);
-  --accent-tint-50: rgba(196, 87, 10, 0.5);
+  /* Warm brutalist palette — high contrast */
+
   /* The accent, lightened for use ON DARK. --accent at #c4570a scores 2.6:1 on
      the #1a1008 full-bleed sections the health hub uses, which is under the
      floor; this is its partner, not a second accent. Paper keeps --accent. */
-  --accent-on-dark: #e8863a;
 
   /* "Good" olive — the one hue that means a number is going the right way.
      Two values because it is used two ways: --good is text on paper, and
@@ -81,67 +72,32 @@
      only olive used on #1a1008 (20 occurrences); the handoff's token table
      names #6b7f4a, but every appearance of that shade in the reference set is
      on PAPER, next to text this token never has to carry. */
-  --good: #55663a;
-  --good-on-dark: #8a9a5b;
   /* The olive as a hairline: the rhythm badge's border on paper. */
-  --good-line: rgba(107, 127, 74, 0.6);
 
   /* Counter-accent — deep petrol. Sits opposite burnt orange on the wheel at
      the same depth. Editorial counterpoints only: inline links in long-form,
      secondary outlines, data-viz second series, info/neutral status chrome.
      NEVER a primary action — that stays --accent. */
-  --accent-ink: #0e5b66;
-  --accent-ink-hover: #094850;
   /* The petrol's on-dark partner, the third member of the pattern
      --accent/--accent-on-dark and --good/--good-on-dark already set. #0e5b66
      scores 2.4:1 on #1a1008 — it is a DEEP counter-accent, so on ink it stops
      being a colour and becomes a smudge; this lightens it to 8.5:1 without
      moving the hue. Paper keeps --accent-ink. */
-  --accent-ink-on-dark: #7fb8c0;
-  --accent-ink-tint-06: rgba(14, 91, 102, 0.06);
-  --accent-ink-tint-12: rgba(14, 91, 102, 0.12);
-  --accent-ink-tint-22: rgba(14, 91, 102, 0.22);
-  --accent-ink-tint-35: rgba(14, 91, 102, 0.35);
 
-  --bg: #ede4d4;            /* Warm cream, slightly darker */
-  --bg-base: #ede4d4;       /* Alias of --bg for admin layout background */
-  --bg-section: rgba(26, 16, 8, 0.04);  /* Subtle tinted sections */
-  --card-bg: rgba(26, 16, 8, 0.07);
-  --card-border: rgba(26, 16, 8, 0.18);
-  --divider: rgba(26, 16, 8, 0.08);
 
   /* Code blocks — inverted contrast for readability */
-  --code-bg: #1a1008;
-  --code-text: #ede4d4;
-  --code-border: rgba(26, 16, 8, 0.3);
 
   /* Drawer / panel surfaces */
-  --surface-elevated: #e8dece;
-  --surface-overlay: rgba(26, 16, 8, 0.05);
 
   /* Status colours — canonical hues used by pills, banners, step cards.
      The --status-* names are legacy aliases kept for back-compat; new code
      should reference --success / --warn / --info / --error. */
-  --success: #2d7a3a;
-  --success-bg: rgba(45, 122, 58, 0.07);
-  --success-border: rgba(45, 122, 58, 0.5);
-  --warn: #b0892a;
-  --warn-bg: rgba(176, 137, 42, 0.07);
-  --warn-border: rgba(176, 137, 42, 0.5);
   /* "Info" routes to the petrol counter-accent — the palette has no blue. */
-  --info: var(--accent-ink);
-  --info-bg: var(--accent-ink-tint-06);
-  --info-border: var(--accent-ink-tint-35);
-  --error: #c44;
-  --error-bg: rgba(196, 68, 68, 0.07);
-  --error-border: rgba(196, 68, 68, 0.5);
-  --error-hover: #a33;
   --status-error: var(--error);
   --status-success: var(--success);
 
   /* Negative-trend — deep burnt brown for "down/worse" deltas. Warm-family
      (not grey/blue); distinct from --error which is reserved for failures. */
-  --trend-down: #8a3a08;
   /* Channel brand colour — WhatsApp. A sanctioned brand literal, tokenised so
      it is referenced not hard-coded. Chrome only (dots/badges), never a CTA. */
   --wa-green: #25d366;
@@ -166,11 +122,6 @@
   --medal-bronze-bg: rgba(150, 97, 58, 0.16);
   --medal-bronze-line: rgba(150, 97, 58, 0.55);
 
-  --font-display: 'Archivo Black', Impact, sans-serif;
-  --font-brand: 'DM Mono', ui-monospace, monospace;
-  --font-body: 'DM Sans', system-ui, sans-serif;
-  --font-sans: var(--font-body);
-  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
   /* Reading face — the self-hosted Selawik stack, with real Segoe UI behind it.
    *
@@ -191,7 +142,6 @@
    * logs, program output, diffs. Sitewide this is just --font-mono under another
    * name; inside /jkai the two diverge, because there --font-mono is label
    * chrome and gets Selawik. Point code surfaces at this, never at --font-mono. */
-  --font-code: 'JetBrains Mono', ui-monospace, monospace;
 
   /* Type scale (v4 — rem-based, accessible floor).
    *
@@ -206,21 +156,8 @@
    *
    * Adding a step below the floor is a regression; scripts/check-font-sizes.mjs
    * fails the gate if one appears. */
-  --fs-display-xl: 8.25rem;  /* 132px */
-  --fs-display-lg: 6.5rem;   /* 104px */
-  --fs-display-md: 4.5rem;   /* 72px */
-  --fs-display-sm: 2.25rem;  /* 36px */
-  --fs-display-xs: 1.375rem; /* 22px */
-  --fs-body-lg: 1.125rem;    /* 18px */
-  --fs-body: 1rem;           /* 16px — reading copy, and all form controls */
-  --fs-body-sm: 0.9375rem;   /* 15px */
-  --fs-nav: 0.875rem;        /* 14px — nav, secondary copy */
-  --fs-label: 0.8125rem;     /* 13px — mono labels, buttons, meta */
-  --fs-label-xs: 0.75rem;    /* 12px — FLOOR. Nothing smaller. */
 
   /* Layout */
-  --radius-sharp: 2px;
-  --radius-pill: 100px;
   --radius-round: 4px;
 
   /* No elevation shadows — depth comes from borders + background tints.
@@ -229,14 +166,9 @@
   /* Motion tokens — the house tempo, previously scattered inline. Quiet and
      short: "polish, not flourish". Route JS durations through dur() in
      $lib/motion.ts so reduced-motion still collapses them to 0. */
-  --t-fast: 180ms;
-  --t-base: 220ms;
-  --t-slow: 360ms;
-  --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
 
   /* Accent glow — a single lit-dot / focus treatment. Extends the live-dot
      box-shadow so CTAs and "live" indicators read as lit, not flat. */
-  --accent-glow: 0 0 6px rgba(196, 87, 10, 0.5);
   --accent-glow-lg: 0 0 18px rgba(196, 87, 10, 0.32);
 
   /* Grain overlay */
@@ -257,18 +189,10 @@
      rails, cards, headers and shells all landed on the same value, so nothing
      read as being in front of anything else. These are opaque steps mixed from
      the cream base, so stacked panels never compound transparency. */
-  --surface-shell: #e9dfcd;      /* app shell / page frame behind content */
-  --surface-rail: #e3d8c4;       /* side rails, sticky headers, footers */
-  --surface-rail-deep: #e0d4bf;  /* secondary rail (drive/intel right rail) */
-  --surface-card: #f3ebdd;       /* raised card ABOVE --bg (editorial register) */
-  --surface-sunken: rgba(26, 16, 8, 0.035); /* inset bands, section washes */
 
   /* ——— Border scale ———
      Replaces the 1px --divider / 2px --card-border pair. Cell grids read at
      .10–.16; only page-title rules keep the old 2px solid ink. */
-  --line-hair: rgba(26, 16, 8, 0.1);
-  --line: rgba(26, 16, 8, 0.14);
-  --line-strong: rgba(26, 16, 8, 0.16);
   --line-title: var(--text-primary); /* 2px, page headers only */
 
   /* ——— Elevation ———
@@ -279,19 +203,10 @@
   --elev-pop: 0 1px 2px rgba(26, 16, 8, 0.05), 0 12px 28px -18px rgba(26, 16, 8, 0.45);
 
   /* ——— Status ——— aligned with the existing --error/--success set. */
-  --status-ok: var(--accent-ink);
-  --status-run: var(--accent);
-  --status-fail: #b3261e;
 
   /* ——— Numeric type steps ———
      rem-based like the scale above, so a raised browser default still scales
      them (WCAG 2.2 SC 1.4.4). */
-  --fs-display-hero: 6.5rem;  /* 104px — homepage hero, uppercase display */
-  --fs-num-xl: 5.5rem;        /* 88px  — hero BPM numeral */
-  --fs-num-lg: 3.375rem;      /* 54px  — ledger figures */
-  --fs-num-md: 1.4375rem;     /* 23px  — rail metric values */
-  --tracking-label: 0.14em;
-  --tracking-label-wide: 0.16em;
 }
 
 html {
@@ -332,7 +247,7 @@ body {
  *                    this scope exists for — so a shared snapshot has to read in
  *                    the same face as the conversation it is a snapshot of.
  *
- * Only the body/reading token moves. --font-display (Archivo Black headings)
+ * Only the body/reading token moves. --font-display (Inter ExtraBold headings)
  * and --font-mono (JetBrains Mono labels, code, metrics) are unchanged.
  *
  * Selawik leads, not Segoe UI — deliberately. Selawik is self-hosted (see the
@@ -396,7 +311,7 @@ body::after {
   color: var(--text-primary);
 }
 
-/* Display — Archivo Black, the canonical heavy headline (matches design system).
+/* Display — Inter ExtraBold, the canonical heavy headline (shared tokens).
    Used for hero numerals, page titles, section callouts. */
 .display {
   font-family: var(--font-display);

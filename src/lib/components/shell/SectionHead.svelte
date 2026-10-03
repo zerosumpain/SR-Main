@@ -1,6 +1,6 @@
 <script lang="ts">
   // The masthead every section on the health hub opens with: a lettered mono
-  // kicker, a two-line Archivo Black headline, and one paragraph of standfirst
+  // kicker, a two-line Inter ExtraBold headline, and one paragraph of standfirst
   // pushed to the right edge.
   //
   // The headline arrives as an ARRAY OF LINES rather than a string with a
