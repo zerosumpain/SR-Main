@@ -7,7 +7,7 @@
 // and Prettier are both perfectly happy with `font-size: 8px`. So the floor has
 // to be asserted, or it erodes again one component at a time.
 //
-// The floor is 12px / 0.75rem, matching --fs-label-xs in src/app.css. WCAG 2.2
+// The floor is 12px / 0.75rem, matching --fs-label-xs in src/lib/styles/sr-tokens.css. WCAG 2.2
 // sets no explicit minimum size, but text this small fails in practice on two
 // counts: SC 1.4.4 (a px size ignores the reader's browser font-size preference
 // outright) and SC 1.4.10/1.4.12 (sub-16px form fields make mobile Safari
@@ -55,6 +55,7 @@ const SCOPE = [
   ['src/lib/canvas', true],
   ['src/lib/builds', true],
   ['src/app.css', false],
+  ['src/lib/styles/sr-tokens.css', false],
   ['src/lib/styles/nm-tokens.css', false],
   // SiteNav.svelte was retired when the site moved to one shared bar; these two
   // are what render chrome now, and the floor follows the markup.
@@ -153,11 +154,15 @@ for (const file of files) {
   }
 }
 
-const appCss = readFileSync(join(REPO, 'src', 'app.css'), 'utf8');
+// The scale is declared in the shared tokens (src/lib/styles/sr-tokens.css,
+// generated in SR-Infra) since 2026-10-03; app.css may still override a step.
+const tokenCss = ['app.css', 'lib/styles/sr-tokens.css']
+  .map((f) => readFileSync(join(REPO, 'src', f), 'utf8'))
+  .join('\n');
 for (const tok of CANARY_TOKENS) {
-  if (!appCss.includes(`${tok}:`)) {
+  if (!tokenCss.includes(`${tok}:`)) {
     console.error(
-      `check-font-sizes: token ${tok} is gone from src/app.css. The scale was ` +
+      `check-font-sizes: token ${tok} is gone from src/app.css and src/lib/styles/sr-tokens.css. The scale was ` +
         'renamed or removed — update this script rather than deleting the check.'
     );
     process.exit(2);

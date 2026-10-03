@@ -30,7 +30,7 @@ here is one a real build broke. `CLAUDE.md` has the wider picture.
   `onclick`, snippets. No `export let`, `on:click`, `$:` or `<slot>`. The
   `svelte5-pitfalls` skill has the traps.
 - **Design system, not taste.** Tokens in `src/app.css` and
-  `src/lib/styles/nm-tokens.css`; fonts are Archivo Black (display), DM Sans
+  `src/lib/styles/nm-tokens.css`; fonts are Inter ExtraBold (display), DM Sans
   (body), JetBrains Mono (labels), DM Mono (brand mark), and `/jkai` pages use
   Segoe UI for body on purpose. No raw hex colours, no new fonts, nothing under
   12px. New pages wear their family's shell and the one navigation bar — the

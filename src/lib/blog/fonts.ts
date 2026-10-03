@@ -42,7 +42,7 @@ export type FontOption = {
   /** One line of help, shown as the option's title attribute. */
   hint: string;
   /** Offered as a post-level body face. Display and Brand are not: a whole
-   *  article set in Archivo Black is unreadable, and that is not a choice worth
+   *  article set in the display face is unreadable, and that is not a choice worth
    *  making available by accident. Both remain available inline. */
   bodyEligible: boolean;
 };
@@ -73,7 +73,7 @@ export const FONT_OPTIONS: readonly FontOption[] = [
     key: 'display',
     label: 'Display',
     cssVar: 'var(--font-display)',
-    hint: 'Archivo Black — headlines. Inline emphasis only.',
+    hint: 'Inter ExtraBold — headlines. Inline emphasis only.',
     bodyEligible: false,
   },
   {

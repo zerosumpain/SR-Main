@@ -15,12 +15,12 @@ metadata:
 ## Fonts (Google Fonts CDN)
 
 ```html
-<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 ```
 
 | Token | Value | Usage |
 |-------|-------|-------|
-| `--font-display` | `'Archivo Black', Impact, sans-serif` | Page headings, hero text |
+| `--font-display` | `'Inter', system-ui, sans-serif` | Page headings, hero text |
 | `--font-body` | `'DM Sans', system-ui, sans-serif` | Body copy, paragraphs |
 | `--font-mono` | `'JetBrains Mono', ui-monospace, monospace` | Labels, inputs, data, code |
 
@@ -144,7 +144,7 @@ These are the canonical CSS classes from `nm-tokens.css`. Mirror them exactly.
 ## Page Layout
 
 - Max-width ~640px, centered, generous padding (2rem horizontal on desktop, 1rem on mobile).
-- Headings: Archivo Black, ~1.75rem, tight line-height (1.15), slight negative letter-spacing (-0.02em).
+- Headings: Inter ExtraBold (800), ~1.75rem, tight line-height (1.15), slight negative letter-spacing (-0.02em).
 - Subtitle/description: DM Mono, 11px, `--text-ghost`.
 - No rounded corners — everything is sharp/square.
 - No box-shadow except on overlays (optional 4px 4px 0 rgba(0,0,0,0.08)).

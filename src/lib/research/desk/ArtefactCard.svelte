@@ -276,7 +276,7 @@
     color: #faf6ee;
   }
 
-  /* entity variant — black chip, Archivo Black name */
+  /* entity variant — black chip, display-face name */
   .ac[data-variant='entity'] {
     width: auto;
     min-width: 120px;

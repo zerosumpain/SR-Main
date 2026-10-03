@@ -80,7 +80,7 @@
     gap: 8px;
   }
   .ghc-title {
-    font-family: var(--font-display, 'Archivo Black', sans-serif);
+    font-family: var(--font-display);
     font-size: var(--fs-body);
     line-height: 1.15;
     letter-spacing: -0.01em;
