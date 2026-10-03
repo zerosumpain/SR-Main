@@ -1,15 +1,14 @@
-import { getHeroActivity } from '$lib/server/hero-activity';
+import { stepsToday } from '$lib/landing/steps-today.server';
 import { HEALTH_TIMEZONE } from '$lib/constants/health-day';
-import { snapHeroTitle } from '$lib/landing/hero-titles-service';
 import { getReleaseShowcase } from '$lib/releases/public';
+import { loadCapabilityFacts } from '$lib/landing/capabilities.server';
+import { getAllPosts } from '$lib/blog';
 import { isOwnerRequest } from '$lib/server/owner';
 import type { PageServerLoad } from './$types';
-import { getHeroBackgroundSettings, getHeroBackgroundAsset, heroBackgroundAsset } from '$lib/server/hero-background';
-import { HERO_BACKGROUND_DEFAULTS } from '$lib/constants/hero-background';
 
 export const load: PageServerLoad = async ({ fetch, locals, getClientAddress }) => {
-  const activity = await getHeroActivity().catch(() => ({ steps: null, slot: 'default' as const }));
-  const steps = activity.steps ?? 0;
+  // Today's steps in quarter-hours, midnight to 23:59, for the Steps channel.
+  const steps = await stepsToday().catch(() => null);
 
   const dateStr = new Date()
     .toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: HEALTH_TIMEZONE })
@@ -17,37 +16,32 @@ export const load: PageServerLoad = async ({ fetch, locals, getClientAddress }) 
 
   // Streamed (un-awaited) — /api/vitals/state hits an external weather API
   // (Open-Meteo) on every render, so blocking first paint on it stalls the whole
-  // hero. Instead let the shell + a deterministic fallback headline render
-  // immediately; the live vitals and the snapped title stream in a beat later.
-  // The `.catch` keeps the promise from rejecting so the {#await} needs no
-  // {:catch} branch.
+  // hero. Instead let the shell render immediately with dashes; the live
+  // vitals stream in a beat later. The `.catch` keeps the promise from
+  // rejecting.
   const initialVitals = fetch('/api/vitals/state')
     .then((r) => r.json())
     .catch(() => null);
-
-  // heroTitle is cheap to compute (cached DB read) but depends on live vitals,
-  // so it rides the same stream as the vitals it's snapped from.
-  const heroTitle = initialVitals.then((b) =>
-    snapHeroTitle({
-      hr: b?.pulse ?? 60,
-      steps,
-      temp: b?.weather?.temp ?? 15,
-    }),
-  );
 
   // Awaited, NOT streamed. The streaming above exists because /api/vitals/state
   // calls an external weather API on every render; this is a local Postgres read
   // behind a 5-minute memo. More to the point, SvelteKit serialises streamed
   // promises at the end of the body, so streamed data never lands in the SSR
-  // HTML — and a section whose entire job is to make the work visible has to be
-  // visible to crawlers and to visitors with JS off. It sits well below the
-  // fold, so it is not an LCP candidate.
+  // HTML, and the Ship and Releases channels draw from it on first paint.
   const releases = await getReleaseShowcase(90);
 
-  // The "More" index lists a few surfaces that are owner-only or belong to a
-  // private project. Signed in they are useful shortcuts; signed out they were
-  // dead ends (two 404s and two redirects to the login page), which is a poor
-  // showing on the one page that has to work for strangers.
+  // Cadences, the app's endpoint count and Daydream's hit rate: local reads,
+  // memoised and timeboxed in the module, so they cost the front door nothing
+  // noticeable and render server-side with everything else.
+  const capabilities = await loadCapabilityFacts();
+
+  // The two newest posts for the writing strip. Awaited so the links are in the
+  // SSR HTML; a failure just drops the strip.
+  const posts = await getAllPosts()
+    .then((all) => all.slice(0, 2).map((p) => ({ slug: p.slug, title: p.title, publishedAt: p.publishedAt })))
+    .catch(() => []);
+
+  // Owner-only extras: the sync banner below and the footer's Admin link.
   const isOwner = await isOwnerRequest({ locals, getClientAddress }).catch(() => false);
 
   // Owner-only nudge that an account has stopped syncing.
@@ -74,8 +68,5 @@ export const load: PageServerLoad = async ({ fetch, locals, getClientAddress }) 
         .catch(() => null)
     : null;
 
-  const backgroundSettings = await getHeroBackgroundSettings().catch(() => ({ ...HERO_BACKGROUND_DEFAULTS, enabled: false }));
-  const backgroundAsset = await getHeroBackgroundAsset(activity.slot).catch(() => heroBackgroundAsset);
-  return { steps, dateStr, initialVitals, heroTitle, releases, isOwner, syncAttention, mergeablePrs,
-    backgroundSettings, backgroundAsset };
+  return { steps, dateStr, initialVitals, releases, capabilities, posts, isOwner, syncAttention, mergeablePrs };
 };

@@ -1,0 +1,135 @@
+// traces.ts — the waveforms drawn in the landing page's capability monitor.
+//
+// Each trace is an SVG path in a fixed 1000×60 box, drawn with
+// preserveAspectRatio="none" and non-scaling strokes, so the geometry here never
+// needs to know the rendered width. Pure and deterministic: the same inputs give
+// the same path on the server and in the browser, so hydration never redraws.
+//
+// The shapes are signatures, not plots. Each reads as what its capability does
+// (a heartbeat, a think tick on a schedule, a build climbing its stages, deploy
+// spikes, scheduled runs, an assistant at rest), and each is scaled by the one
+// live number that capability has, so an active system visibly looks different.
+
+export const TRACE_W = 1000;
+export const TRACE_H = 60;
+const BASE = 40;
+
+const r1 = (n: number) => Math.round(n * 10) / 10;
+
+/** A PQRST complex per beat. The box is a six-second strip, so 60 bpm draws six beats. */
+export function ecgTrace(bpm: number | null): string {
+  const beats = Math.min(16, Math.max(4, Math.round((bpm ?? 60) / 10)));
+  const span = TRACE_W / beats;
+  const k = span / 125; // the complex was drawn for a 125-wide beat
+  let d = `M0,${BASE}`;
+  for (let i = 0; i < beats; i++) {
+    const o = i * span;
+    const x = (n: number) => r1(o + n * Math.min(1, k));
+    d += ` L${x(30)},${BASE} Q${x(36)},${BASE - 6} ${x(42)},${BASE} L${x(52)},${BASE} L${x(55)},${BASE + 5}`;
+    d += ` L${x(60)},6 L${x(65)},54 L${x(69)},${BASE} L${x(84)},${BASE} Q${x(94)},${BASE - 10} ${x(104)},${BASE}`;
+    d += ` L${r1(o + span)},${BASE}`;
+  }
+  return d;
+}
+
+/** Square pulses on a fixed period: a scheduled job. `lit` raises them. */
+export function tickTrace(count: number, width: number, lit: boolean): string {
+  const n = Math.max(1, Math.round(count));
+  const gap = TRACE_W / n;
+  const h = lit ? 30 : 18;
+  const floor = 48;
+  let d = `M0,${floor}`;
+  for (let i = 0; i < n; i++) {
+    const x = r1(i * gap + gap / 2 - width / 2);
+    d += ` L${x},${floor} L${x},${floor - h} L${r1(x + width)},${floor - h} L${r1(x + width)},${floor}`;
+  }
+  return `${d} L${TRACE_W},${floor}`;
+}
+
+/** A staircase: a build climbing brief → plan → build → verify. `stage` is how far it got, 0–4. */
+export function stairTrace(stage: number): string {
+  const s = Math.min(4, Math.max(0, Math.round(stage)));
+  const floor = 50;
+  let d = `M0,${floor}`;
+  let x = 0;
+  let y = floor;
+  for (let i = 0; i < s; i++) {
+    x += 150;
+    d += ` L${x},${y}`;
+    y -= 10;
+    d += ` L${x},${y}`;
+  }
+  // A finished or idle build drops back to the floor and runs flat.
+  d += ` L${x + 150},${y}`;
+  if (y !== floor) d += ` L${x + 150},${floor}`;
+  return `${d} L${TRACE_W},${floor}`;
+}
+
+/** Deploy spikes from real daily counts, newest on the right, scaled to the busiest day. */
+export function spikeTrace(counts: number[]): string {
+  const floor = 50;
+  const days = counts.slice(-40);
+  if (days.length === 0) return `M0,${floor} L${TRACE_W},${floor}`;
+  const peak = Math.max(1, ...days);
+  const gap = TRACE_W / days.length;
+  let d = `M0,${floor}`;
+  days.forEach((c, i) => {
+    const x = r1(i * gap + gap / 2);
+    const h = c > 0 ? 4 + (c / peak) * 42 : 0;
+    d += h > 0 ? ` L${x - 2},${floor} L${x},${r1(floor - h)} L${x + 2},${floor}` : '';
+  });
+  return `${d} L${TRACE_W},${floor}`;
+}
+
+/** A resting line with a little life in it; amplitude grows with work in flight. */
+export function idleTrace(active: number): string {
+  // Centred mid-box: the two summed sines reach 1.6 × amp, so amp ≤ 11 keeps
+  // the busiest trace inside the 60-high box.
+  const mid = TRACE_H / 2;
+  const amp = active > 0 ? Math.min(11, 5 + active * 2) : 1.6;
+  let d = `M0,${mid}`;
+  for (let x = 10; x <= TRACE_W; x += 10) {
+    d += ` L${x},${r1(mid + Math.sin(x * 0.07) * amp + Math.sin(x * 0.31) * amp * 0.6)}`;
+  }
+  return d;
+}
+
+/**
+ * Today's steps as bars, one per quarter-hour: x = 0 is midnight, x = 1000 is
+ * 23:59. Bars after `nowBin` are the future and draw nothing; the baseline
+ * still runs the whole width so the strip reads as a full day.
+ */
+export function stepsTrace(bins: number[], nowBin: number): string {
+  const floor = 54;
+  const n = bins.length || 96;
+  const peak = Math.max(1, ...bins);
+  const w = TRACE_W / n;
+  let d = `M0,${floor} L${TRACE_W},${floor}`;
+  bins.forEach((v, i) => {
+    if (i > nowBin || v <= 0) return;
+    const x = r1(i * w + w / 2);
+    d += ` M${x},${floor} L${x},${r1(floor - 3 - (v / peak) * 45)}`;
+  });
+  return d;
+}
+
+/** Hour marks for the steps strip: 06:00, 12:00 and 18:00. */
+export function hourMarks(): string {
+  return [6, 12, 18].map((h) => `M${r1((h / 24) * TRACE_W)},56 L${r1((h / 24) * TRACE_W)},60`).join(' ');
+}
+
+/** The release count climbing over the window: `before` releases, then each day's deploys added. */
+export function cumulativeTrace(counts: number[], before: number): string {
+  const top = 8;
+  const floor = 52;
+  if (counts.length === 0) return `M0,${floor} L${TRACE_W},${floor}`;
+  const totals: number[] = [];
+  let run = before;
+  for (const c of counts) totals.push((run += c));
+  const lo = before;
+  const hi = Math.max(lo + 1, run);
+  const step = counts.length > 1 ? TRACE_W / (counts.length - 1) : TRACE_W;
+  return totals
+    .map((t, i) => `${i ? 'L' : 'M'}${r1(i * step)},${r1(floor - ((t - lo) / (hi - lo)) * (floor - top))}`)
+    .join(' ');
+}

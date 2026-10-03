@@ -1,25 +1,23 @@
 <svelte:head>
   <title>Strange Ramblings</title>
-  <meta name="description" content="Building things with code in London. A living canvas." />
+  <meta name="description" content="A personal site that thinks, builds and ships on its own, wired to the heartbeat of the person who runs it." />
   <meta property="og:title" content="Strange Ramblings" />
-  <meta property="og:description" content="Building things with code in London. A living canvas." />
+  <meta property="og:description" content="A personal site that thinks, builds and ships on its own, wired to the heartbeat of the person who runs it." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://strangeramblings.com" />
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="Strange Ramblings" />
-  <meta name="twitter:description" content="Building things with code in London. A living canvas." />
+  <meta name="twitter:description" content="A personal site that thinks, builds and ships on its own, wired to the heartbeat of the person who runs it." />
 </svelte:head>
 
 <script lang="ts">
   import { getContext, onMount } from 'svelte';
   import AccountSyncBanner from '$lib/components/landing/AccountSyncBanner.svelte';
-  import LandingHero from '$lib/components/landing/LandingHero.svelte';
-  import HeroBackground from '$lib/components/landing/HeroBackground.svelte';
-  import VitalSigns from '$lib/components/landing/VitalSigns.svelte';
-  import FeatureIndex from '$lib/components/landing/FeatureIndex.svelte';
-  import ShippedSeam from '$lib/components/landing/ShippedSeam.svelte';
-  import Ecg from '$lib/components/shared/Ecg.svelte';
+  import CapabilityMonitor from '$lib/components/landing/CapabilityMonitor.svelte';
+  import CapabilityLoop from '$lib/components/landing/CapabilityLoop.svelte';
+  import CapabilityGrid from '$lib/components/landing/CapabilityGrid.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
+  import { LiveVitals } from '$lib/landing/live-vitals.svelte';
   import { roundPulse } from '$lib/vitals/state';
   import type { VitalsStore } from '$lib/vitals/store.svelte';
 
@@ -27,71 +25,36 @@
 
   let { data } = $props();
 
+  const live = new LiveVitals();
   let mounted = $state(false);
 
-  // initialVitals is streamed, so it isn't in the SSR HTML — pre-mount uses
-  // sensible defaults and the live store takes over once mounted (onMount seeds
-  // it from the resolved stream, then its own polling keeps it current).
-  let pulse = $derived(mounted ? store.state.pulse : 60);
+  // initialVitals is streamed, so it isn't in the SSR HTML. Until the store is
+  // seeded AND a real heart-rate source is reporting, the page says so with a
+  // dash rather than printing the store's placeholder 60 as if it were live.
+  let bpm = $derived(
+    mounted && store?.state?.sources?.heartRate && store.state.pulse > 0 ? roundPulse(store.state.pulse) : null,
+  );
   let town = $derived(mounted ? store.state.town : undefined);
-  let lastSyncedAt = $derived(mounted ? store.state.lastSyncedAt : undefined);
-
-  // Deterministic copy shown until the snapped heroTitle streams in. Mirrors the
-  // resting-state fallback the title service uses, so it rarely visibly swaps.
-  const FALLBACK_HERO = {
-    primary: 'STILL.',
-    ghost: 'FOR NOW.',
-    strapTemplate:
-      '{bpm} beats, {steps} steps, {temp} of {sky}. The day has not been agreed to yet.',
-  };
-
-  let heroTag = $derived(
-    `RIGHT NOW · ${data.dateStr}` + (town ? ` · ${town.toUpperCase()}` : ''),
+  // Shipping, read off the release showcase — one loader, several readings.
+  let cadence = $derived(data.releases?.cadence ?? []);
+  let days = $derived(cadence.map((d) => ({ date: d.date, count: d.count })));
+  let dayKey = (offset: number) => new Date(Date.now() - offset * 86_400_000).toISOString().slice(0, 10);
+  let deploysToday = $derived(cadence.length ? (cadence.find((d) => d.date === dayKey(0))?.count ?? 0) : null);
+  let deploysYesterday = $derived(cadence.length ? (cadence.find((d) => d.date === dayKey(1))?.count ?? 0) : null);
+  let totals = $derived(data.releases?.totals ?? null);
+  let deploysPerDay = $derived(
+    totals && totals.days > 0 && totals.releases > 0 ? Math.round((totals.releases / totals.days) * 10) / 10 : null,
   );
 
-  let now = $state(Date.now());
-
-  function formatSynced(iso: string | undefined, ref: number): string {
-    if (!iso) return '';
-    const secs = Math.round((ref - Date.parse(iso)) / 1000);
-    if (!Number.isFinite(secs) || secs < 90) return 'just now';
-    const mins = Math.round(secs / 60);
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.round(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    return `${Math.round(hrs / 24)}d ago`;
-  }
-
-  let syncedText = $derived(formatSynced(lastSyncedAt, now));
-
-  // Today's shipping for the vitals rail, read off the same release showcase the
-  // Shipped section below renders — one loader, two readings of it. `peak` is
-  // the busiest day in the window, so the bar is scaled against what a heavy day
-  // actually looks like rather than an invented ceiling.
-  let deploysToday = $derived.by(() => {
-    const cadence = data.releases?.cadence ?? [];
-    if (cadence.length === 0) return null;
-    const todayKey = new Date().toISOString().slice(0, 10);
-    const today = cadence.find((d) => d.date === todayKey)?.count ?? 0;
-    const peak = Math.max(1, ...cadence.map((d) => d.count));
-    const last = data.releases?.totals?.lastDeploy ?? null;
-    const latestAt = last
-      ? new Date(last).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-      : null;
-    return { today, peak, latestAt: today > 0 ? latestAt : null };
-  });
+  const fmtDate = (iso: string | null) =>
+    iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '';
 
   onMount(() => {
-    // initialVitals is streamed from the server load, so seed the store once it
-    // resolves; the store's own polling takes over from there.
     Promise.resolve(data.initialVitals).then((b) => {
       if (b) store.setState(b);
     });
     mounted = true;
-
-    const tick = setInterval(() => (now = Date.now()), 30_000);
-
-    return () => clearInterval(tick);
+    return live.start();
   });
 </script>
 
@@ -102,156 +65,142 @@
      nothing at all. -->
 <AccountSyncBanner summary={data.syncAttention} prs={data.mergeablePrs} />
 
-<!-- HERO — viewport minus nav. Two columns: display type on the page ground,
-     the live rail flush against the right edge on the rail surface. -->
-<section
-  class="hero-sec relative flex flex-col justify-between overflow-hidden"
-  style="min-height: calc(100vh - var(--site-nav-height));"
->
-  <!-- Center — hero copy (left) + live "Vital Signs" tiles (right). heroTitle is
-       streamed; render fallback copy until it lands so the hero paints without
-       waiting on the external weather fetch. The tiles sit at z-10 over the background
-       and stack below the copy on narrow viewports. -->
-  <div class="relative z-10 flex-1 flex items-stretch">
-    <div class="hero-grid">
-      <div class="hero-copy">
-        {#if data.backgroundSettings.enabled && data.backgroundAsset}
-          <HeroBackground settings={data.backgroundSettings} asset={data.backgroundAsset} />
-        {/if}
-        <div class="hero-title"><LandingHero tag={heroTag} /></div>
-      </div>
-      <div class="hero-divider" aria-hidden="true"></div>
-      <aside class="hero-aside">
-        <VitalSigns
-          deploys={deploysToday}
-          heroTitle={data.heroTitle}
-          fallbackHero={FALLBACK_HERO}
-          steps={data.steps}
-        >
-          {#snippet statusBackground()}
-            <Ecg rhr={roundPulse(pulse)} showGrid={false} />
-          {/snippet}
-        </VitalSigns>
-      </aside>
-    </div>
-  </div>
-
-  <!-- Signature bar: what the background is, and when the readings last landed. -->
-  <div class="relative z-10 flex justify-between items-center gap-4 hero-pad hero-sig">
-    <span class="truncate">Signature · Pulse · Live</span>
-    {#if syncedText}<span class="flex-none">Synced {syncedText}</span>{/if}
-  </div>
+<!-- HERO — the site as a patient on a monitor: one ink band holding the title
+     and a live trace per capability. -->
+<section class="hero" aria-label="Live">
+  <CapabilityMonitor
+    meta={`Right now · ${data.dateStr}` + (town ? ` · ${town.toUpperCase()}` : '')}
+    v={live.v}
+    now={live.now}
+    {bpm}
+    facts={data.capabilities}
+    steps={data.steps}
+    releases={totals?.releases || null}
+    {days}
+  />
 </section>
 
-<!-- SHIPPED — the record of every deploy, as one continuous mark. Sits directly
-     under the hero: it is the substance, and "More" is the closer. -->
-<ShippedSeam data={data.releases} />
+<CapabilityGrid
+  v={live.v}
+  now={live.now}
+  {bpm}
+  facts={data.capabilities}
+  {deploysToday}
+  {deploysYesterday}
+  linesWritten={totals?.insertions || null}
+  days={totals?.days || null}
+/>
 
-<!-- MORE — terminal-index of the non-live field studies, tools and writing -->
-<FeatureIndex isOwner={data.isOwner} />
+<CapabilityLoop facts={data.capabilities} {deploysPerDay} releases={totals?.releases || null} />
 
-<!-- FOOTER — dense, utilitarian -->
-<footer class="site-foot flex flex-wrap justify-between items-center gap-4">
-  <p class="brand text-[14px]" style="color: var(--text-muted);">strange ramblings</p>
-  <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
+{#if data.posts.length}
+  <section class="writing" aria-labelledby="writing-h">
+    <h2 id="writing-h" class="writing-k">Also written down</h2>
+    {#each data.posts as p (p.slug)}
+      <a class="writing-post" href="/blog/{p.slug}">
+        <span class="writing-title">{p.title}</span>
+        {#if p.publishedAt}<span class="writing-date">{fmtDate(p.publishedAt)}</span>{/if}
+      </a>
+    {/each}
+    <a class="writing-all" href="/blog">All writing <span aria-hidden="true">→</span></a>
+  </section>
+{/if}
+
+<footer class="site-foot">
+  <p class="brand foot-brand">strange ramblings</p>
+  <nav class="foot-links" aria-label="Footer">
     <a href="https://github.com/jkrup" target="_blank" rel="noopener" class="nav-link">GitHub</a>
     <a href="mailto:john@strangeramblings.com" class="nav-link">Email</a>
-    <a href="/health" class="nav-link">Health</a>
+    <a href="/rss.xml" class="nav-link">RSS</a>
     <a href="https://library.strangeramblings.com" class="nav-link">Library</a>
-    <a href="/admin" class="nav-link">Admin</a>
+    {#if data.isOwner}<a href="/admin" class="nav-link">Admin</a>{/if}
     <a href="/privacy" class="nav-link">Privacy</a>
     <a href="/tos" class="nav-link">Terms</a>
-  </div>
+  </nav>
 </footer>
 
 <style>
-  /* The footer is a rail band, like the nav strip that opens the page — the
-     document closes on the same surface it started on. */
+  .hero {
+    background: var(--text-primary);
+    color: var(--bg);
+  }
+  .writing {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 20px 48px;
+    max-width: 1312px;
+    margin: 72px auto 88px;
+    padding: 28px 32px;
+    box-sizing: border-box;
+    width: calc(100% - 2 * clamp(16px, 4vw, 64px));
+    background: var(--text-primary);
+    color: var(--bg);
+  }
+  .writing-k,
+  .writing-date,
+  .writing-all {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  .writing-k {
+    font-weight: 400;
+    color: var(--accent-on-dark);
+  }
+  .writing-post {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    color: var(--bg);
+    text-decoration: none;
+  }
+  .writing-post:hover .writing-title {
+    color: var(--accent-on-dark);
+  }
+  .writing-title {
+    font-family: var(--font-display);
+    font-size: var(--fs-display-xs);
+    text-transform: uppercase;
+    letter-spacing: -0.02em;
+  }
+  .writing-date {
+    color: rgba(237, 228, 212, 0.6);
+  }
+  .writing-all {
+    margin-left: auto;
+    color: var(--accent-on-dark);
+    text-decoration: none;
+  }
+
+  /* The footer is a rail band, like the nav strip that opens the page. */
   .site-foot {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
     padding: 18px clamp(24px, 5vw, 64px);
     border-top: 1px solid var(--line-strong);
     background: var(--surface-rail);
   }
-
-
-  /* The section owns no horizontal padding of its own: the rail has to reach the
-     right edge, so the padding lives on the columns that need it. */
-  .hero-sec {
-    padding: 0 0 24px;
-  }
-  .hero-pad {
-    padding-inline: clamp(24px, 5vw, 64px);
-  }
-  .hero-sig {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: var(--tracking-label-wide);
-    text-transform: uppercase;
+  .foot-brand {
+    margin: 0;
+    font-size: var(--fs-nav);
     color: var(--text-muted);
   }
-
-  /* Hero splits into copy (left) + the live vitals rail (right) on wide
-     viewports, divided by a hairline, and stacks under 1024px. */
-  .hero-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 1px minmax(280px, 340px);
-    width: 100%;
-    align-items: stretch;
-  }
-  .hero-copy {
-    isolation: isolate;
-    overflow: hidden;
-    min-width: 0;
+  .foot-links {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    padding: clamp(36px, 6vh, 72px) clamp(24px, 4vw, 56px) clamp(28px, 5vh, 56px);
-    position: relative;
-  }
-  /* A warm bloom behind the type — accent from the top left, petrol from the
-     bottom right. */
-  .hero-copy::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background:
-      radial-gradient(80% 70% at 20% 30%, rgba(196, 87, 10, 0.16), transparent 62%),
-      radial-gradient(70% 60% at 85% 85%, rgba(14, 91, 102, 0.14), transparent 60%);
-  }
-  .hero-title {
-    position: relative;
-    z-index: 1;
-    width: 100%;
-  }
-  /* The rail has no ground of its own any more, so there is no value change to
-     divide the columns — the hairline does it again. */
-  .hero-divider {
-    background: var(--line-strong);
-  }
-  .hero-aside {
-    display: flex;
-    min-width: 0;
-  }
-  .hero-aside :global(.vitals) {
-    border-width: 0;
+    gap: 12px 24px;
   }
 
-  @media (max-width: 1024px) {
-    .hero-grid {
-      grid-template-columns: minmax(0, 1fr);
-    }
-    .hero-divider {
-      display: none;
-    }
-    .hero-copy {
-      padding-bottom: clamp(20px, 4vw, 32px);
-    }
-    .hero-aside {
-      padding: 0 clamp(24px, 5vw, 64px) 24px;
-      max-width: 520px;
-    }
-    .hero-aside :global(.vitals) {
-      border-width: 1px;
+  @media (max-width: 900px) {
+    .writing-all {
+      margin-left: 0;
     }
   }
 </style>
