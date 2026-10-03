@@ -1,5 +1,3 @@
-import { db } from '$lib/db';
-import { heroTitles } from '$lib/db/schema';
 import type { Actions, PageServerLoad } from './$types';
 import { fail } from '@sveltejs/kit';
 import { heroBackgroundSchema } from '$lib/server/hero-background-schema';
@@ -14,25 +12,10 @@ export const load: PageServerLoad = async (event) => {
   // Showcase ($lib/server/showcase): not today's step count, nor the activity
   // slot it selects — both are the owner's day.
   const showcase = await isShowcase(event);
-  const rows = await db
-    .select()
-    .from(heroTitles)
-    .orderBy(
-      heroTitles.hrBucket,
-      heroTitles.stepsBucket,
-      heroTitles.tempBucket,
-      heroTitles.id,
-    );
-
-  const generatedAt = rows.reduce<string | null>((latest, r) => {
-    const t = r.generatedAt ? new Date(r.generatedAt).toISOString() : null;
-    return t && (!latest || t > latest) ? t : latest;
-  }, null);
-
   const [backgroundSettings, backgroundAsset, backgroundSources, selected, backgroundJob, backgroundSlots, activityRules, activity] = await Promise.all([
     getHeroBackgroundSettings(), getHeroBackgroundAsset(), heroSourceOptions(), selectedHero(), heroPreparation(), heroSlotAssignments(), getHeroActivityRules(), getHeroActivity(),
   ]);
-  return { rows, count: rows.length, generatedAt, backgroundSlots, activityRules,
+  return { backgroundSlots, activityRules,
     activity: showcase ? { slot: 'default' as const, steps: null } : activity, backgroundSettings, backgroundAsset, backgroundSources, backgroundJob,
     backgroundSource: selected ? { sourceId: selected.sourceId, sourceName: selected.sourceName } : null };
 };

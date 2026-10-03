@@ -65,8 +65,7 @@ export function startHealthWatch(): void {
   running = true;
 
   // A NaN interval makes setInterval fire as fast as it can, which here would
-  // be a service-lane call to Health in a tight loop. Same guard as the
-  // hero-titles scheduler, and for the same reason.
+  // be a service-lane call to Health in a tight loop.
   const raw = parseInt(process.env.HEALTH_WATCH_MS || '', 10);
   const ms = Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_MS;
   console.log(`[health-watch] checking every ${Math.round(ms / 60000)}m`);

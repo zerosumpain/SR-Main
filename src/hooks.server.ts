@@ -2,10 +2,6 @@ import { privacyMaintenance } from '$lib/people/privacy-maintenance';
 import { building } from '$app/environment';
 import { startForgeScheduler, stopForgeScheduler } from '$lib/jkai/forge-scheduler';
 import {
-  startHeroTitlesScheduler,
-  stopHeroTitlesScheduler,
-} from '$lib/landing/hero-titles-scheduler';
-import {
   startDependencyMonitor,
   stopDependencyMonitor,
 } from '$lib/dependencies/monitor.server';
@@ -139,9 +135,6 @@ if (runsService('scheduler')) startForgeScheduler().catch((err) => {
   console.error('[hooks.server] Forge scheduler failed to start:', err);
 });
 
-// Start the landing-page hero-title regeneration scheduler
-if (runsService('scheduler')) startHeroTitlesScheduler();
-
 // Record the public journey and upstream provider state every five minutes,
 // including while nobody has /admin open.
 if (runsService('scheduler')) startDependencyMonitor();
@@ -257,7 +250,6 @@ async function gracefulShutdown() {
   stopHeartbeatEngine();
   stopScheduledEngine();
   stopForgeScheduler();
-  stopHeroTitlesScheduler();
   stopDependencyMonitor();
   stopHealthWatch();
   stopPushDispatch();

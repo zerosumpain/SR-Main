@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { jkaiBuilds, jkaiBuildDeliveries, workflows, workflowRuns, projectVisibility } from '$lib/db/schema';
+import { jkaiBuilds, jkaiBuildDeliveries, workflows, workflowRuns, projectVisibility, heartbeatActions } from '$lib/db/schema';
 import { and, desc, eq, inArray, isNull, like, or, sql } from 'drizzle-orm';
 import { STATIC_PROJECT_KEYS } from '$lib/projects/visibility';
 import { runningJobsByConversation } from '$lib/jkai/chat/activity';
@@ -18,6 +18,9 @@ import { ownerWorkflows } from '$lib/workflows-client/owner-rows';
  * a public /projects/<slug> URL. It deliberately never leaks in-progress build
  * prompts/titles, conversation ids, or canvas slugs/titles.
  *
+ * Daydream is two timestamps and a state off its heartbeat row: when the think
+ * loop last ran and when it is next due. Never a note, a question or a cost.
+ *
  * Health/BPM is NOT here — the Health tile reads the shared vitals store
  * (already public via /api/vitals/state) client-side, with its 5s lerp.
  */
@@ -25,6 +28,8 @@ import { ownerWorkflows } from '$lib/workflows-client/owner-rows';
 const BUILD_CACHE_MS = 10_000;
 const SUMMARY_CACHE_MS = 60_000;
 const PROJECT_SLUG_PATTERN = '^[a-z0-9][a-z0-9-]*$';
+/** The think loop's heartbeat row — `NAME` in $lib/heartbeat/activities/daydream-think. */
+const DAYDREAM_ACTION = 'daydream-think';
 
 // A build counts as "in flight" while in one of these statuses (and not yet
 // published). Mirrors `bucketOf` in $lib/builds/build-status.
@@ -60,6 +65,7 @@ interface VitalsPayload {
     lastShippedHref: string | null;
   };
   canvas: { count: number; lastRunAt: string | null };
+  daydream: { lastRunAt: string | null; nextRunAt: string | null; paused: boolean };
   generatedAt: string;
 }
 
@@ -69,6 +75,7 @@ type PublicSummary = {
   latestPublished: { title: string | null; publishedSlug: string | null } | undefined;
   canvasCount: number;
   canvasLastRunAt: string | null;
+  daydream: VitalsPayload['daydream'];
 };
 
 let buildCache: { at: number; data: LatestBuild } | null = null;
@@ -175,12 +182,28 @@ async function publicSummary(): Promise<PublicSummary> {
       .leftJoin(workflowRuns, eq(workflowRuns.workflowId, workflows.id))
       // The owner's canvases: a member's workflows are not the site's public work.
       .where(and(like(workflows.name, 'canvas:%'), ownerWorkflows())),
-  ]).then(([countRows, publishedRows, canvasRows]) => {
+    db
+      .select({
+        lastRunAt: heartbeatActions.lastRunAt,
+        nextRunAt: heartbeatActions.nextRunAt,
+        status: heartbeatActions.status,
+      })
+      .from(heartbeatActions)
+      .where(eq(heartbeatActions.name, DAYDREAM_ACTION))
+      .limit(1),
+  ]).then(([countRows, publishedRows, canvasRows, daydreamRows]) => {
+    const dd = daydreamRows[0];
     const data: PublicSummary = {
       shippedCount: countRows[0]?.n ?? 0,
       latestPublished: publishedRows[0],
       canvasCount: canvasRows[0]?.n ?? 0,
       canvasLastRunAt: canvasRows[0]?.ts ?? null,
+      daydream: {
+        lastRunAt: dd?.lastRunAt ? dd.lastRunAt.toISOString() : null,
+        nextRunAt: dd?.nextRunAt ? dd.nextRunAt.toISOString() : null,
+        // No row at all reads as paused: the loop is not scheduled here.
+        paused: !dd || dd.status !== 'active',
+      },
     };
     summaryCache = { at: Date.now(), data };
     return data;
@@ -207,6 +230,7 @@ async function compute(): Promise<VitalsPayload> {
         ? new Date(summary.canvasLastRunAt).toISOString()
         : null,
     },
+    daydream: summary.daydream,
     generatedAt: new Date().toISOString(),
   };
 }
@@ -222,6 +246,7 @@ export const GET: RequestHandler = async () => {
       jkai: { activeJobs: 0 },
       builder: { stage: 'idle', active: false, shippedCount: 0, lastShippedTitle: null, lastShippedHref: null },
       canvas: { count: 0, lastRunAt: null },
+      daydream: { lastRunAt: null, nextRunAt: null, paused: true },
       generatedAt: new Date().toISOString(),
     };
   }
