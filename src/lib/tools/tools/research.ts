@@ -473,6 +473,38 @@ register({
   },
 });
 
+// Tavily, on request only. Chat searches through the model's own grounding;
+// this spends a Tavily credit per call, so it lives in its own `tavily` toolset,
+// which jkai loads only when John's message names Tavily (the desk offers it as
+// a "Search deeper with Tavily" button), and jkai refuses the call otherwise.
+register({
+  name: 'tavily_search',
+  description: 'Tavily web search — ONLY when John explicitly asks for Tavily (or a deeper Tavily search). Spends a Tavily credit per call. For any other web lookup, use your own web search.',
+  parameters: {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: 'Search query' },
+      depth: { type: 'string', enum: ['basic', 'advanced'], description: 'advanced costs two credits; use it only if John asked for a thorough search.' },
+    },
+    required: ['query'],
+  },
+  category: 'Deep Dive Research',
+  toolset: 'tavily',
+  handler: async (args) => {
+    const query = String(args.query ?? '').trim();
+    if (!query) return { success: false, error: 'query is required.' };
+    const { search } = await import('$lib/deepdive/tavily');
+    const results = await search(query, { maxResults: 8, searchDepth: args.depth === 'advanced' ? 'advanced' : 'basic' });
+    return {
+      success: true,
+      data: {
+        query,
+        results: results.results.map((r) => ({ title: r.title, url: r.url, snippet: r.content.slice(0, 400), score: r.score })),
+      },
+    };
+  },
+});
+
 function safeHost(url: string): string {
   try { return new URL(url).hostname; } catch { return url; }
 }
