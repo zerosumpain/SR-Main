@@ -11,7 +11,6 @@
     idleTrace,
     stepsTrace,
     hourMarks,
-    cumulativeTrace,
   } from '$lib/landing/traces';
 
   interface Day {
@@ -68,7 +67,6 @@
   let todayKey = $derived(new Date(now).toISOString().slice(0, 10));
   let shipDays = $derived(days.slice(-SHIP_DAYS));
   let deploysToday = $derived(days.length ? (days.find((d) => d.date === todayKey)?.count ?? 0) : null);
-  let windowTotal = $derived(days.reduce((n, d) => n + d.count, 0));
 
   const fmtDay = (iso: string) =>
     new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
@@ -151,12 +149,12 @@
       {
         id: 'releases',
         label: 'Releases',
-        sub: 'over time',
+        sub: `per day · ${days.length || 90} days`,
         tone: 'ink',
         value: releases != null ? releases.toLocaleString('en-GB') : '—',
         unit: 'since March',
-        path: cumulativeTrace(days.map((d) => d.count), Math.max(0, (releases ?? 0) - windowTotal)),
-        detail: `Every release on the record, climbing over the last ${days.length || 90} days. Each one is summarised from its own commit range.`,
+        path: spikeTrace(days.map((d) => d.count), days.length || 90),
+        detail: `Releases per day over the last ${days.length || 90} days, each one summarised from its own commit range.`,
         href: '/releases',
         cta: 'Browse the record',
       },

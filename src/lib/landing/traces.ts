@@ -65,10 +65,10 @@ export function stairTrace(stage: number): string {
   return `${d} L${TRACE_W},${floor}`;
 }
 
-/** Deploy spikes from real daily counts, newest on the right, scaled to the busiest day. */
-export function spikeTrace(counts: number[]): string {
+/** Daily spikes from real counts, newest on the right, scaled to the busiest day in view. */
+export function spikeTrace(counts: number[], window = 40): string {
   const floor = 50;
-  const days = counts.slice(-40);
+  const days = counts.slice(-window);
   if (days.length === 0) return `M0,${floor} L${TRACE_W},${floor}`;
   const peak = Math.max(1, ...days);
   const gap = TRACE_W / days.length;
@@ -116,20 +116,4 @@ export function stepsTrace(bins: number[], nowBin: number): string {
 /** Hour marks for the steps strip: 06:00, 12:00 and 18:00. */
 export function hourMarks(): string {
   return [6, 12, 18].map((h) => `M${r1((h / 24) * TRACE_W)},56 L${r1((h / 24) * TRACE_W)},60`).join(' ');
-}
-
-/** The release count climbing over the window: `before` releases, then each day's deploys added. */
-export function cumulativeTrace(counts: number[], before: number): string {
-  const top = 8;
-  const floor = 52;
-  if (counts.length === 0) return `M0,${floor} L${TRACE_W},${floor}`;
-  const totals: number[] = [];
-  let run = before;
-  for (const c of counts) totals.push((run += c));
-  const lo = before;
-  const hi = Math.max(lo + 1, run);
-  const step = counts.length > 1 ? TRACE_W / (counts.length - 1) : TRACE_W;
-  return totals
-    .map((t, i) => `${i ? 'L' : 'M'}${r1(i * step)},${r1(floor - ((t - lo) / (hi - lo)) * (floor - top))}`)
-    .join(' ');
 }
