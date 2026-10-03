@@ -24,7 +24,6 @@ describe('the callers that have no jobId still exist', () => {
   const callers = [
     'src/lib/integrations/whatsapp/orchestrator-bridge.ts',
     'src/lib/jkai/chat/followup-queue.ts',
-    'src/lib/agents/delegate.ts',
   ];
 
   // They run their turns on SR-Jkai-Core now, through the one client, which

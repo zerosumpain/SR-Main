@@ -44,7 +44,6 @@ import './tools/knowledge';
 import './tools/intel-graph';
 import './tools/mail';
 import './tools/codegraph';
-import './tools/agents';
 import './tools/discovery';
 import './tools/recall';
 import './tools/browser';

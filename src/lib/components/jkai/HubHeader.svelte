@@ -198,7 +198,7 @@
     { label: 'Voice', href: '/home/voice', meta: 'ALEXA LOG' },
   ]);
   const system = $derived<MenuRow[]>([
-    { label: 'Agent team', href: '/jkai/agents', meta: 'AGENTS · PROMPTS' },
+    { label: 'Prompts', href: '/jkai/prompts', meta: 'SYSTEM PROMPT' },
       { label: 'Model defaults', href: '/admin/ai/models', meta: 'ADMIN' },
     {
       label: 'Spend & limits',

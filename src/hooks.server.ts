@@ -468,7 +468,7 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
 
   // JKAI's small ambient/configuration pages were folded into the two places
   // they conceptually belong: background intelligence lives in Daydreams,
-  // while prompts live beside the agents they shape. Keep exact redirects for
+  // while prompts have their own page in SR-Jkai-Core. Keep exact redirects for
   // old bookmarks and notification payloads, but only the destination pages
   // are presented as features. Existing query parameters are retained unless
   // they would override the destination tab.
@@ -477,7 +477,6 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     ['/jkai/monitors', '/jkai/daydreams/watches'],
     ['/jkai/improvement', '/jkai/develop/improvement'],
     ['/jkai/doctor', '/jkai/develop/doctor'],
-    ['/jkai/prompts', '/jkai/agents?tab=prompts'],
     ['/jkai/research', '/research'],
     // The household moved to its own top-level section, /home (2026-09-25).
     ['/jkai/voice', '/home/voice'],
