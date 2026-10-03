@@ -201,7 +201,7 @@ export const SECTIONS: NavSection[] = [
       // so the back link from the audit walks to the hub, not to the catalogue.
       { label: 'Sources', href: '/jkai/sources' },
       { label: 'Activity', href: '/jkai/activity' },
-      { label: 'Agent team', href: '/jkai/agents' },
+      { label: 'Prompts', href: '/jkai/prompts' },
     ],
   },
   {

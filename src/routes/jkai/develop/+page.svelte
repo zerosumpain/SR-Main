@@ -6,7 +6,7 @@
   // the /jkai layout, which already mounts `HubHeader` above the scroll
   // container and `JkaiTabBar` below it; `HealthShell` would add a second site
   // bar and a fixed, full-viewport grain layer inside an `overflow: hidden`
-  // flex shell. `/jkai/agents` is the precedent — same shell, same in-page
+  // flex shell. It uses the shell's in-page
   // `ontab` tabs, page-local scoped styles for the dense content.
   //
   // Two registers on one page, because they answer different questions. The

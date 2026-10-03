@@ -44,7 +44,7 @@
     ontoggleLive?: () => void;
     tabs: ShellTab[];
     active: string;
-    /** For a tab with no `href` — in-page state, the shape /jkai/agents keeps. */
+    /** For a tab with no `href` — in-page state, the shape /jkai/develop keeps. */
     ontab?: (id: string) => void;
     /**
      * Interactive chrome on the right of the RAIL, after the tabs — the

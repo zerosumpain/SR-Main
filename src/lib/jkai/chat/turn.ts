@@ -61,7 +61,6 @@ export interface RemoteTurnOptions {
   thinkingLevel?: ThinkingLevel | null;
   priceSnapshot: PriceSnapshot | null;
   subagentDepth?: number;
-  personaPrompt?: string;
   toolWhitelist?: string[];
   maxRounds?: number;
   useIntelContext?: boolean;
