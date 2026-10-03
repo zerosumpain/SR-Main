@@ -93,8 +93,9 @@ export const AREA_COPY: Record<string, string> = {
 
 export const APP_COPY = {
   hub: {
-    strap: 'What the site can do from a pocket',
-    lede: 'A native iPhone app, a watch app and their widgets, all talking to the same site through one narrow, separately guarded API. It does the things a web page can’t, like noticing a walk start or showing a journey on the Lock Screen.',
+    strap: 'And it all lives in my pocket',
+    headline: ['It lives', 'in my', 'pocket'],
+    lede: 'An iPhone app, a watch app and their widgets all reach the same site through one narrow, guarded doorway. That’s how the site does the things a web page can’t, like noticing a walk start without being opened, or putting a journey on the Lock Screen.',
   },
   surfaces: {
     line: { plain: 'The app is more than its screens. It also lives on the Lock Screen, the Home Screen, the watch and in Siri.', eng: 'Every target and surface on this page is generated from the app’s Swift source and project files.' },

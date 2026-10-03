@@ -144,8 +144,9 @@ export const ACTIVITY_COPY = {
 
 export const BUILD_COPY = {
   hub: {
-    strap: 'How it changes its own code',
-    lede: 'Ideas from daydream, my questions and its own failures land in one backlog. The ones I accept become builds with a brief, a preview and tests, and the only way to production is the same pull request any change takes.',
+    strap: 'It builds the ideas I say yes to',
+    headline: ['It builds', 'its own', 'upgrades'],
+    lede: 'Ideas from daydream, from my questions and from its own mistakes all land in one queue. The ones I accept are built in a private copy of the site, shown to me working, checked the way my own changes are, and only then released, through the same door every change on this site takes.',
   },
   develop: {
     line: { plain: 'An accepted idea becomes a delivery. It’s built in its own copy of the site, shown to me running, and only then released.', eng: 'A delivery is a brief, a worker session, a candidate revision with a preview and per-criterion verdicts, and a release policy.' },

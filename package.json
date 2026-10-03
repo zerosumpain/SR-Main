@@ -138,6 +138,7 @@
     "mapbox-gl": "3.29.0",
     "marked": "^17.0.6",
     "mermaid": "^11.17.2",
+    "motion": "13.5.1",
     "nodemailer": "^10.0.13",
     "openai": "^6.32.0",
     "pdfjs-dist": "^5.4.296",

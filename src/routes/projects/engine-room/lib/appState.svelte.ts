@@ -9,6 +9,8 @@ class AppState {
    */
   narrative = $state<'research' | 'eli5'>('eli5');
   mounted = $state(false);
+  /** The Ask dock. Shared so the top bar and any page can open it. */
+  askOpen = $state(false);
 }
 
 export const app = new AppState();

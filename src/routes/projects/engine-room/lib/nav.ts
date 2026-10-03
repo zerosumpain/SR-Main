@@ -20,7 +20,9 @@ export interface Leaf {
   slug: string;
   /** The feature's name on the site. Also the page's H1 and browser title. */
   label: string;
-  /** One line for hubs and nav. Under 15 words. */
+  /** The question the chapter answers, in the words a visitor would ask it. */
+  ask: string;
+  /** One line for hubs and nav. Under fifteen words. */
   blurb: string;
   /** What you can operate on the page. Shown on hub cards. */
   instrument: string;
@@ -30,11 +32,13 @@ export interface Part {
   id: PartId;
   no: string;
   name: string;
-  /** The question the part answers, in plain words. */
+  /** The part's claim, in plain words. */
   strap: string;
-  /** One line under the hub title. */
+  /** The same claim as display lines for the hub masthead. */
+  headline: string[];
+  /** One paragraph under the hub title. */
   lede: string;
-  /** CSS colour token for the part's accent. */
+  /** CSS colour token for the part's fill. Text uses the surface-safe shade the layout derives. */
   tone: string;
   leaves: Leaf[];
 }
@@ -45,14 +49,17 @@ export const PARTS: Part[] = [
     ...DAYDREAM_COPY.hub,
     no: 'I',
     name: 'Daydream',
-    tone: 'var(--accent)',
+    tone: 'var(--er-amber)',
     leaves: [
-      { slug: 'questions', label: 'Questions', instrument: 'The schedule of what it asks, and what it will ask next',
-        blurb: 'One narrow question per cycle, chosen by the clock' },
-      { slug: 'inbox', label: 'Inbox', instrument: 'Each stage and the double-check, with whose move it is',
-        blurb: 'Every note’s journey, and where I come in' },
-      { slug: 'impact', label: 'Impact', instrument: 'Live weekly verdicts and the funnel from spotted to done',
-        blurb: 'The only score that counts is whether it helped' },
+      { slug: 'questions', label: 'Questions', ask: 'How does it decide what to think about?',
+        instrument: 'Spin the clock, try the grid, see the next questions it will ask',
+        blurb: 'One small question at a time, picked by the clock' },
+      { slug: 'inbox', label: 'Inbox', ask: 'What happens to a note once it’s written?',
+        instrument: 'Follow a note through its stages and try each kind of double-check',
+        blurb: 'Every note’s journey, and the moments it waits for me' },
+      { slug: 'impact', label: 'Impact', ask: 'Is any of it actually useful?',
+        instrument: 'Live weekly verdicts and the funnel from spotted to done',
+        blurb: 'Judged on one score only, whether a note helped' },
     ],
   },
   {
@@ -60,15 +67,19 @@ export const PARTS: Part[] = [
     ...BUILD_COPY.hub,
     no: 'II',
     name: 'Build',
-    tone: 'var(--accent-ink)',
+    tone: 'var(--er-orange)',
     leaves: [
-      { slug: 'backlog', label: 'Backlog', instrument: 'Where ideas come from, and the nightly run that works them',
-        blurb: 'One queue for every idea, worked on overnight' },
-      { slug: 'develop', label: 'Develop', instrument: 'Step a delivery from brief to deployed',
-        blurb: 'An accepted idea, built, previewed and released' },
-      { slug: 'verify', label: 'Verification', instrument: 'The proof chain a build walks before it ships',
-        blurb: 'The same checks my own changes get, then again' },
-      { slug: 'codegraph', label: 'Codegraph', instrument: 'Edge kinds and the arithmetic that ranks a lesson',
+      { slug: 'backlog', label: 'Backlog', ask: 'Where do the ideas come from?',
+        instrument: 'Watch ideas flow into one queue and step through the night shift',
+        blurb: 'One queue for every idea, worked through overnight' },
+      { slug: 'develop', label: 'Develop', ask: 'How does an idea become working code?',
+        instrument: 'Run a delivery down the line, from brief to live',
+        blurb: 'An accepted idea, built, shown to me running, then released' },
+      { slug: 'verify', label: 'Verification', ask: 'How do I know it won’t break the site?',
+        instrument: 'Snap any link in the proof chain and see what stops',
+        blurb: 'The same checks my own changes get, and then again' },
+      { slug: 'codegraph', label: 'Codegraph', ask: 'Does it learn from its mistakes?',
+        instrument: 'Pull the memory graph about and see how lessons are ranked',
         blurb: 'Every build leaves notes for the next one' },
     ],
   },
@@ -77,13 +88,16 @@ export const PARTS: Part[] = [
     ...APP_COPY.hub,
     no: 'III',
     name: 'App',
-    tone: '#2d7a3a',
+    tone: 'var(--er-bronze)',
     leaves: [
-      { slug: 'surfaces', label: 'Surfaces', instrument: 'Pick a place on the phone or watch, see what lives there',
+      { slug: 'surfaces', label: 'Surfaces', ask: 'Where does it show up on my phone?',
+        instrument: 'Point at the phone or the watch and see what lives there',
         blurb: 'Tabs, widgets, the Lock Screen, the watch and Siri' },
-      { slug: 'api', label: 'Native API', instrument: 'Every endpoint the app can call, grouped by what it’s for',
+      { slug: 'api', label: 'Native API', ask: 'How does the phone talk to the site safely?',
+        instrument: 'Pair a phone step by step and browse every doorway it can use',
         blurb: 'One guarded doorway between the phone and the site' },
-      { slug: 'privacy', label: 'Permissions', instrument: 'Each permission and capability, and what it’s for',
+      { slug: 'privacy', label: 'Permissions', ask: 'What does it ask my phone for, and why?',
+        instrument: 'Every permission and capability, and what each is for',
         blurb: 'What it asks the phone for, and why' },
     ],
   },

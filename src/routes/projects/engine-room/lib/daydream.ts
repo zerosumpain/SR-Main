@@ -75,8 +75,9 @@ export const VERDICT_COPY = {
 
 export const DAYDREAM_COPY = {
   hub: {
-    strap: 'What it thinks about while I’m not looking',
-    lede: 'On spare cycles it picks one question about my life, reads only what that question needs, and writes down at most a couple of things worth my attention. I decide what they’re worth.',
+    strap: 'It thinks about my life while I’m busy',
+    headline: ['It thinks', 'while I’m', 'busy'],
+    lede: 'When nobody is using the site, it picks one small question about my life, looks at only what that question needs, and writes me a note if it finds something worth knowing. Most notes aren’t worth much, and that’s fine, because I’m the one who decides.',
   },
   questions: {
     line: { plain: 'It doesn’t browse everything at once. Each cycle asks one narrow question, and a clock decides which.', eng: 'One channel × outcome pair per cycle, chosen by a clock-keyed schedule, with a read-only toolset scoped to that pair.' },

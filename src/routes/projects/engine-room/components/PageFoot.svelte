@@ -1,46 +1,76 @@
 <script lang="ts">
-  // PageFoot — previous/next through the study's reading order, derived from lib/nav.ts so
-  // the order lives in exactly one place.
+  // PageFoot — the end of every page: the real routes this chapter accounts for, then the
+  // way on. Reading order lives in lib/nav.ts, so the next stop is always derived.
   //
-  // Every leaf ends with the routes on the real site it accounts for (OnTheSite). Native API
-  // lists all of the app's endpoints itself, so it doesn't repeat them here.
-  import { page } from '$app/stores';
-  import { B, neighbours } from '../lib/nav';
+  // "Next" is the big target, an ink band in the colour of the part it leads into, carrying
+  // that chapter's question, because a question is a better reason to keep reading than a
+  // title. Native API lists every endpoint itself, so it doesn't repeat them here.
+  import { page } from '$app/state';
+  import { B, neighbours, PARTS } from '../lib/nav';
   import OnTheSite from './OnTheSite.svelte';
+  import Band from './kit/Band.svelte';
 
-  const nav = $derived(neighbours($page.url.pathname));
-  const leaf = $derived($page.url.pathname.replace(/\/$/, '').slice(B.length + 1));
+  const nav = $derived(neighbours(page.url.pathname));
+  const leaf = $derived(page.url.pathname.replace(/\/$/, '').slice(B.length + 1));
   const routes = $derived(
-    leaf === 'app/api' ? [] : (($page.data.facts?.routes ?? []) as Array<{ leaf: string; path: string; kind: 'api' | 'page'; methods: string[]; who: 'owner' | 'members' | 'phone' | 'service'; what: string }>).filter((r) => r.leaf === leaf),
+    leaf === 'app/api' ? [] : ((page.data.facts?.routes ?? []) as Array<{ leaf: string; path: string; kind: 'api' | 'page'; methods: string[]; who: 'owner' | 'members' | 'phone' | 'service'; what: string }>).filter((r) => r.leaf === leaf),
   );
+
+  // What to say about the next stop: a leaf's question, or a part's claim.
+  const nextInfo = $derived.by(() => {
+    const n = nav.next;
+    if (!n) return null;
+    const p = n.part ? PARTS.find((x) => x.id === n.part) : null;
+    const l = p?.leaves.find((x) => n.href.endsWith(`/${x.slug}`));
+    const i = p && l ? p.leaves.indexOf(l) : -1;
+    return {
+      part: p?.id,
+      kicker: p ? (l ? `Next · ${p.no}.${i + 1} · ${p.name}` : `Next · Part ${p.no}`) : 'Next',
+      title: l ? l.label : p ? p.name : n.label,
+      ask: l ? l.ask : p?.strap ?? '',
+    };
+  });
 </script>
 
-<OnTheSite {routes} />
+{#if routes.length}
+  <Band surface="deep" pad="normal">
+    <OnTheSite {routes} />
+  </Band>
+{/if}
 
-<nav class="pf" aria-label="Study navigation">
-  {#if nav.prev}
-    <a class="pf-link prev" href={nav.prev.href}>
-      <span class="pf-dir">← Previous</span>
-      <span class="pf-lab">{nav.prev.label}</span>
+{#if nav.next && nextInfo}
+  <Band surface="ink" part={nextInfo.part} pad="none">
+    <a class="next" href={nav.next.href}>
+      <span class="n-kick">{nextInfo.kicker}</span>
+      <span class="n-title">{nextInfo.title}</span>
+      <span class="n-ask">{nextInfo.ask}</span>
+      <span class="n-arrow" aria-hidden="true">
+        <svg viewBox="0 0 64 32"><path d="M0 16h58M44 2l14 14-14 14" fill="none" stroke="currentColor" stroke-width="3" /></svg>
+      </span>
     </a>
-  {:else}<span></span>{/if}
-  {#if nav.next}
-    <a class="pf-link next" href={nav.next.href}>
-      <span class="pf-dir">Next →</span>
-      <span class="pf-lab">{nav.next.label}</span>
-    </a>
-  {/if}
-</nav>
+  </Band>
+{/if}
+{#if nav.prev}
+  <Band surface="ink" pad="none">
+    <a class="prev" href={nav.prev.href}><span aria-hidden="true">←</span> Back to {nav.prev.label}</a>
+  </Band>
+{/if}
 
 <style>
-  .pf { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-    margin: 26px 0 6px; padding-top: 14px; border-top: 1px solid rgba(28,22,17,0.12); }
-  .pf-link { display: flex; flex-direction: column; gap: 2px; text-decoration: none; max-width: 46ch;
-    padding: 9px 14px; border: 1px solid rgba(28,22,17,0.18); border-radius: var(--radius-sharp);
-    background: rgba(255,255,255,0.5); transition: background 0.13s, border-color 0.13s; }
-  .pf-link:hover { background: rgba(255,255,255,0.85); border-color: rgba(28,22,17,0.36); }
-  .pf-link.next { margin-left: auto; text-align: right; }
-  .pf-dir { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em;
-    text-transform: uppercase; color: var(--accent-ink); }
-  .pf-lab { font-family: var(--fs-serif); font-weight: 600; font-size: var(--fs-body-sm); color: var(--text-primary); line-height: 1.25; }
+  .next { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'k a' 't a' 'q a'; gap: 8px 32px; align-items: center;
+    padding: clamp(40px, 5vw, 72px) 0; text-decoration: none; color: var(--fg); position: relative; }
+  .n-kick { grid-area: k; font-family: var(--er-mono); font-size: var(--fs-label-xs); letter-spacing: 0.18em; text-transform: uppercase; color: var(--tone-text); }
+  .n-title { grid-area: t; font-family: var(--er-display); text-transform: uppercase; font-size: clamp(40px, 7vw, 104px); line-height: 0.92;
+    transition: color 0.3s; }
+  .n-ask { grid-area: q; font-family: var(--er-serif); font-style: italic; font-size: clamp(18px, 1.8vw, 24px); color: var(--fg-2); }
+  .n-arrow { grid-area: a; width: clamp(56px, 7vw, 110px); color: var(--tone-text); transition: transform 0.5s var(--er-ease); }
+  .n-arrow svg { width: 100%; height: auto; display: block; }
+  .next:hover .n-title { color: var(--tone-text); }
+  .next:hover .n-arrow { transform: translateX(12px); }
+  .prev { display: block; padding: 16px 0 18px; border-top: 1px solid var(--rule); font-family: var(--er-mono); font-size: var(--fs-label-xs);
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-3); text-decoration: none; }
+  .prev:hover { color: var(--fg); }
+  @media (max-width: 640px) {
+    .next { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'k' 't' 'q' 'a'; }
+  }
 </style>
