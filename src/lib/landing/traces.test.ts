@@ -39,6 +39,9 @@ describe('landing traces', () => {
     const peaks = (d: string) => points(d).filter(([, y]) => y === 6).length;
     expect(peaks(ecgTrace(60))).toBe(6);
     expect(peaks(ecgTrace(90))).toBe(9);
+    // The exact rate, not the nearest ten: 72 bpm fits a seventh beat at 5.0s.
+    expect(peaks(ecgTrace(72))).toBe(7);
+    expect(peaks(ecgTrace(64))).toBe(6);
     // No live heart rate still draws a calm, plausible trace.
     expect(peaks(ecgTrace(null))).toBe(6);
   });

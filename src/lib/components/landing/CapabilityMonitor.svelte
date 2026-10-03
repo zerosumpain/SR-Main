@@ -23,6 +23,7 @@
     v,
     now,
     bpm,
+    bpmAt,
     facts,
     steps,
     releases,
@@ -35,6 +36,8 @@
     now: number;
     /** Live heart rate, or null when no real HR source is reporting. */
     bpm: number | null;
+    /** When the watch took that reading (ISO), or null with no live reading. */
+    bpmAt: string | null;
     facts: CapabilityFacts;
     steps: StepsToday | null;
     /** All-time release count, or null when the record is unavailable. */
@@ -86,12 +89,12 @@
       {
         id: 'pulse',
         label: 'Pulse',
-        sub: 'Watch and Whoop',
+        sub: bpmAt ? `Apple Watch · ${ago(bpmAt, now)}` : 'Apple Watch',
         tone: 'accent',
         value: bpm != null ? String(bpm) : '—',
         unit: 'bpm',
         path: ecgTrace(bpm),
-        detail: 'The owner’s heart rate, streamed from an Apple Watch and a Whoop strap. The trace beats at the rate it reads.',
+        detail: 'The owner’s heart rate as the Apple Watch last read it, sent up by the phone. The trace beats at exactly that rate.',
         href: '/health',
         cta: 'Health record',
       },
@@ -189,6 +192,7 @@
 </script>
 
 <div class="mon-hero">
+  <div class="mon-in">
   <div class="mon-top">
     <h1 class="mon-title">JK’s<br />strange ramblings</h1>
     <p class="mon-lede">I say things, I do things, and I share things. And look hey, now you see things</p>
@@ -249,21 +253,30 @@
       <a class="detail-cta" href={sel.href}>{sel.cta} <span aria-hidden="true">→</span></a>
     </div>
   </div>
+  </div>
 </div>
 
 <style>
+  /* The page's own 1312px measure, so the monitor lines up with the title
+     above and the grid below and reads as an instrument set into the
+     masthead, not a band that stretches with the screen. On a wide monitor
+     the ink still runs edge to edge; the traces stop at the column. */
   .mon-hero {
-    --col-l: 200px;
-    --col-v: 200px;
+    --col-l: 168px;
+    --col-v: 148px;
+    --line: rgba(237, 228, 212, 0.1);
     background: var(--text-primary);
     color: var(--bg);
+  }
+  .mon-in {
+    max-width: 1312px;
+    margin: 0 auto;
+    padding: 0 clamp(16px, 4vw, 64px) clamp(28px, 5vh, 48px);
   }
 
   /* The masthead: the name on two lines, then the subtitle on one. */
   .mon-top {
-    max-width: 1312px;
-    margin: 0 auto;
-    padding: clamp(20px, 3.5vh, 36px) clamp(16px, 4vw, 64px) clamp(18px, 3vh, 28px);
+    padding: clamp(20px, 3.5vh, 36px) 0 clamp(18px, 3vh, 28px);
   }
   .mon-title {
     margin: 0;
@@ -278,7 +291,6 @@
     font-size: var(--fs-body-lg);
     line-height: 1.4;
     color: rgba(237, 228, 212, 0.82);
-    white-space: nowrap;
   }
   .mon-meta {
     margin: 0;
@@ -290,13 +302,16 @@
   }
 
   /* One row per capability, every trace swept by the same cursor on the same
-     clock, so the stack reads as one instrument. Eight rows fit the height six
-     used to take: 64px a row. */
+     clock, so the stack reads as one instrument. Kept low and quiet: the
+     masthead is the headline, the monitor is the evidence beneath it. */
   .mon {
-    border-top: 1px solid rgba(237, 228, 212, 0.16);
+    border: 1px solid var(--line);
   }
   .row {
     position: relative;
+  }
+  .row + .row .ch {
+    border-top: 1px solid var(--line);
   }
   .ch {
     --tone: var(--bg);
@@ -304,10 +319,9 @@
     grid-template-columns: var(--col-l) minmax(0, 1fr) var(--col-v);
     align-items: stretch;
     width: 100%;
-    height: 64px;
+    height: 44px;
     padding: 0;
     border: 0;
-    border-bottom: 1px solid rgba(237, 228, 212, 0.12);
     background: transparent;
     color: var(--bg);
     font: inherit;
@@ -324,10 +338,10 @@
     --tone: rgba(237, 228, 212, 0.6);
   }
   .ch:hover {
-    background: rgba(237, 228, 212, 0.04);
+    background: rgba(237, 228, 212, 0.03);
   }
   .ch.on {
-    background: rgba(232, 134, 58, 0.08);
+    background: rgba(232, 134, 58, 0.06);
   }
   .ch:focus-visible {
     outline: 2px solid var(--accent-on-dark);
@@ -338,16 +352,15 @@
     display: flex;
     flex-direction: column;
     justify-content: center;
-    gap: 2px;
-    padding: 0 20px;
+    gap: 1px;
+    padding: 0 14px;
     min-width: 0;
   }
-  .ch-l {
-    border-right: 1px solid rgba(237, 228, 212, 0.12);
-  }
   .ch-v {
-    align-items: flex-end;
-    border-left: 1px solid rgba(237, 228, 212, 0.12);
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
   }
   .ch-label,
   .ch-unit,
@@ -363,16 +376,19 @@
   }
   .ch-sub {
     font-size: var(--fs-label-xs);
-    color: rgba(237, 228, 212, 0.55);
+    color: rgba(237, 228, 212, 0.5);
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .ch-unit {
-    color: rgba(237, 228, 212, 0.6);
+    color: rgba(237, 228, 212, 0.5);
+    letter-spacing: 0.08em;
     white-space: nowrap;
   }
   .ch-val {
     font-family: var(--font-mono);
-    font-size: var(--fs-body-lg);
+    font-size: var(--fs-body);
     line-height: 1.1;
     color: var(--tone);
     font-variant-numeric: tabular-nums;
@@ -381,28 +397,34 @@
   .ch-t {
     position: relative;
     overflow: hidden;
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+  }
+  .ch:hover .ch-t,
+  .ch.on .ch-t {
+    opacity: 1;
   }
   .ch-t svg {
     position: absolute;
-    top: 6px;
+    top: 5px;
     left: 0;
     width: 100%;
-    height: calc(100% - 12px);
+    height: calc(100% - 10px);
   }
   .ch-t path {
     stroke: var(--tone);
-    stroke-width: 1.6;
+    stroke-width: 1.25;
   }
   .ch-t path.marks {
-    stroke: rgba(237, 228, 212, 0.35);
+    stroke: rgba(237, 228, 212, 0.3);
     stroke-width: 1;
   }
   .sweep {
     position: absolute;
     top: 0;
     bottom: 0;
-    left: -70px;
-    width: 70px;
+    left: -56px;
+    width: 56px;
     background: linear-gradient(90deg, rgba(26, 16, 8, 0), var(--text-primary) 75%);
     animation: sweep 6s linear infinite;
     pointer-events: none;
@@ -413,9 +435,9 @@
     top: 0;
     right: 0;
     bottom: 0;
-    width: 2px;
+    width: 1px;
     background: var(--accent-on-dark);
-    box-shadow: var(--accent-glow);
+    opacity: 0.8;
   }
   @keyframes sweep {
     to {
@@ -428,7 +450,7 @@
   .days {
     position: absolute;
     top: 0;
-    bottom: 1px;
+    bottom: 0;
     left: var(--col-l);
     right: var(--col-v);
     display: flex;
@@ -437,37 +459,37 @@
     flex: 1;
   }
   .day:hover {
-    background: rgba(232, 134, 58, 0.22);
+    background: rgba(232, 134, 58, 0.2);
     box-shadow: inset 0 -2px 0 var(--accent-on-dark);
   }
 
-  /* The explanation strip: full width, one line where it fits. */
+  /* The explanation: a quiet footer line inside the instrument, not a band. */
   .detail {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 6px 20px;
-    padding: 8px clamp(16px, 4vw, 64px);
-    background: var(--accent-on-dark);
-    color: var(--text-primary);
+    gap: 4px 16px;
+    padding: 6px 6px 6px 14px;
+    border-top: 1px solid var(--line);
+    background: rgba(237, 228, 212, 0.03);
   }
   .detail-k {
     margin: 0;
-    font-weight: 500;
+    color: var(--accent-on-dark);
   }
   .detail-p {
-    flex: 1 1 420px;
+    flex: 1 1 360px;
     margin: 0;
     font-size: var(--fs-body-sm);
     line-height: 1.4;
+    color: rgba(237, 228, 212, 0.72);
   }
   .detail-cta {
     display: inline-flex;
     align-items: center;
     gap: 8px;
     min-height: 44px;
-    padding: 0 18px;
-    background: var(--text-primary);
+    padding: 0 12px;
     color: var(--bg);
     text-decoration: none;
     white-space: nowrap;
@@ -476,18 +498,20 @@
     color: var(--accent-on-dark);
   }
   .detail-cta:focus-visible {
-    outline: 2px solid var(--text-primary);
-    outline-offset: 3px;
+    outline: 2px solid var(--accent-on-dark);
+    outline-offset: -2px;
   }
 
   @media (prefers-reduced-motion: reduce) {
     .sweep {
       display: none;
     }
+    .ch-t {
+      transition: none;
+    }
   }
   @media (max-width: 760px) {
     .mon-lede {
-      white-space: normal;
       font-size: var(--fs-body);
     }
   }
@@ -497,17 +521,20 @@
       --col-v: 96px;
     }
     .ch {
-      height: 56px;
+      height: 48px;
     }
     .ch-l,
     .ch-v {
       padding: 0 10px;
     }
+    .ch-v {
+      flex-direction: column;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 1px;
+    }
     .ch-sub {
       display: none;
-    }
-    .ch-val {
-      font-size: var(--fs-body);
     }
     .ch-unit {
       white-space: normal;

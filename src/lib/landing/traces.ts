@@ -16,20 +16,23 @@ const BASE = 40;
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
-/** A PQRST complex per beat. The box is a six-second strip, so 60 bpm draws six beats. */
+/**
+ * A PQRST complex per beat. The box is a six-second strip, so beats sit
+ * 60/bpm seconds apart at the exact rate read: 60 bpm draws six, 72 draws a
+ * seventh that starts at 5.0s. A complex that would run off the right edge
+ * is left out, as a monitor strip cut mid-beat would show it.
+ */
 export function ecgTrace(bpm: number | null): string {
-  const beats = Math.min(16, Math.max(4, Math.round((bpm ?? 60) / 10)));
-  const span = TRACE_W / beats;
-  const k = span / 125; // the complex was drawn for a 125-wide beat
+  const rate = Math.min(160, Math.max(40, bpm ?? 60));
+  const span = (TRACE_W * 10) / rate; // 6 s strip → 1000 units; one beat = 60/rate s
+  const k = Math.min(1, span / 125); // the complex was drawn for a 125-wide beat
   let d = `M0,${BASE}`;
-  for (let i = 0; i < beats; i++) {
-    const o = i * span;
-    const x = (n: number) => r1(o + n * Math.min(1, k));
+  for (let o = 0; o + 104 * k <= TRACE_W; o += span) {
+    const x = (n: number) => r1(o + n * k);
     d += ` L${x(30)},${BASE} Q${x(36)},${BASE - 6} ${x(42)},${BASE} L${x(52)},${BASE} L${x(55)},${BASE + 5}`;
     d += ` L${x(60)},6 L${x(65)},54 L${x(69)},${BASE} L${x(84)},${BASE} Q${x(94)},${BASE - 10} ${x(104)},${BASE}`;
-    d += ` L${r1(o + span)},${BASE}`;
   }
-  return d;
+  return `${d} L${TRACE_W},${BASE}`;
 }
 
 /** Square pulses on a fixed period: a scheduled job. `lit` raises them. */

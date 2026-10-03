@@ -31,9 +31,14 @@
   // initialVitals is streamed, so it isn't in the SSR HTML. Until the store is
   // seeded AND a real heart-rate source is reporting, the page says so with a
   // dash rather than printing the store's placeholder 60 as if it were live.
+  // Read the target, not the eased state: the eased one counts up from that
+  // placeholder for five seconds, so the first numbers shown are never real.
+  // A reading the feed itself calls stale (over six hours) is not a pulse.
+  let reading = $derived(mounted ? store?.targetState : undefined);
   let bpm = $derived(
-    mounted && store?.state?.sources?.heartRate && store.state.pulse > 0 ? roundPulse(store.state.pulse) : null,
+    reading?.sources?.heartRate && !reading.stale && reading.pulse > 0 ? roundPulse(reading.pulse) : null,
   );
+  let bpmAt = $derived(bpm != null ? (reading?.lastSyncedAt ?? null) : null);
   let town = $derived(mounted ? store.state.town : undefined);
   // Shipping, read off the release showcase — one loader, several readings.
   let cadence = $derived(data.releases?.cadence ?? []);
@@ -54,7 +59,18 @@
       if (b) store.setState(b);
     });
     mounted = true;
-    return live.start();
+    // The layout's store re-reads every fifteen minutes, sized for a header
+    // cell. The landing hero is the one place a pulse is the subject, so it
+    // asks again every two minutes while the tab is visible; the endpoint
+    // serves a sixty-second cache, so this is one cheap read per visitor.
+    const pulse = setInterval(() => {
+      if (!document.hidden) void store.fetchState();
+    }, 120_000);
+    const stop = live.start();
+    return () => {
+      clearInterval(pulse);
+      stop();
+    };
   });
 </script>
 
@@ -73,6 +89,7 @@
     v={live.v}
     now={live.now}
     {bpm}
+    {bpmAt}
     facts={data.capabilities}
     steps={data.steps}
     releases={totals?.releases || null}
