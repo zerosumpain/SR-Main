@@ -60,11 +60,11 @@
     <div class="h-words">
       <span class="er-kicker" {@attach reveal({ y: 10 })}>A field study of strangeramblings.com</span>
       <h1 class="er-display h-title">
-        <span class="ln"><span {@attach reveal({ y: 70, delay: 0 })}>A website</span></span>
-        <span class="ln"><span {@attach reveal({ y: 70, delay: 0.07 })}>that <em data-part="daydream">thinks</em>,</span></span>
-        <span class="ln"><span {@attach reveal({ y: 70, delay: 0.14 })}><em data-part="build">builds</em> itself</span></span>
-        <span class="ln"><span {@attach reveal({ y: 70, delay: 0.21 })}>and lives in</span></span>
-        <span class="ln"><span {@attach reveal({ y: 70, delay: 0.28 })}>my <em data-part="app">pocket</em>.</span></span>
+        <span class="ln"><span {@attach reveal({ y: 70, delay: 0, parent: true })}>A website</span></span>
+        <span class="ln"><span {@attach reveal({ y: 70, delay: 0.07, parent: true })}>that <em data-part="daydream">thinks</em>,</span></span>
+        <span class="ln"><span {@attach reveal({ y: 70, delay: 0.14, parent: true })}><em data-part="build">builds</em> itself</span></span>
+        <span class="ln"><span {@attach reveal({ y: 70, delay: 0.21, parent: true })}>and lives in</span></span>
+        <span class="ln"><span {@attach reveal({ y: 70, delay: 0.28, parent: true })}>my <em data-part="app">pocket</em>.</span></span>
       </h1>
       <p class="h-lede" {@attach reveal({ y: 20, delay: 0.4 })}>{eli ? C.hero.plain : C.hero.eng}</p>
       <div class="h-cta" {@attach reveal({ y: 20, delay: 0.5 })}>

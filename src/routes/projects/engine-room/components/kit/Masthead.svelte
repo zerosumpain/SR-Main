@@ -10,7 +10,7 @@
 
   interface Props {
     kicker?: string;
-    lines: string[];
+    lines: readonly string[];
     /** One sentence or two. Sits at the right edge on wide screens, under on narrow. */
     strap?: string;
     size?: 'hero' | 'xl' | 'lg' | 'md';
@@ -28,7 +28,7 @@
     {#if kicker}<span class="er-kicker" {@attach reveal({ y: 10, duration: 0.6 })}>{kicker}</span>{/if}
     <svelte:element this={level === 1 ? 'h1' : 'h2'} class="er-display mh-title">
       {#each lines as l, i}
-        <span class="ln"><span class="ln-in" {@attach reveal({ y: 60, delay: 0.06 * i, duration: 1 })}>{#each parts(l) as p}{#if p.hl}<span class="hl">{p.t}</span>{:else}{p.t}{/if}{/each}</span></span>
+        <span class="ln"><span class="ln-in" {@attach reveal({ y: 60, delay: 0.06 * i, duration: 1, parent: true })}>{#each parts(l) as p}{#if p.hl}<span class="hl">{p.t}</span>{:else}{p.t}{/if}{/each}</span></span>
       {/each}
     </svelte:element>
   </div>

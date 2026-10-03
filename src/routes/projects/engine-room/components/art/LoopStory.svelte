@@ -146,7 +146,7 @@
     </div>
   </div>
 
-  <ol class="beats" {@attach steps((i) => (active = i), { line: 0.55 })}>
+  <ol class="beats" {@attach steps((i) => (active = i), { line: () => (window.matchMedia('(max-width: 860px)').matches ? 0.12 : 0.55) })}>
     {#each STORY as b, i (b.id)}
       <li class="beat" class:on={i === active} data-step data-part={b.part}>
         <span class="b-no">{String(i + 1).padStart(2, '0')}</span>
@@ -181,7 +181,8 @@
     .stage { top: var(--topH, 0px); z-index: 2; margin: 0 calc(-1 * var(--er-gutter)); }
     .stage-in { border-left: none; border-right: none; padding: 10px var(--er-gutter); }
     svg { max-height: 36vh; margin: 0 auto; }
-    .beat { min-height: 70vh; justify-content: flex-start; padding-top: 6vh; }
+    .beat { min-height: 90vh; justify-content: flex-start; padding-top: 50vh; }
+    .beats { padding-bottom: 0; }
   }
 
   /* ── scene system ── */

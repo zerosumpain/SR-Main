@@ -10,6 +10,9 @@
 
   interface RouteFact { path: string; kind: 'api' | 'page'; methods: string[]; who: Who; what: string }
   let { routes, title = 'Where this lives on the real site', compact = false }: { routes: RouteFact[]; title?: string; compact?: boolean } = $props();
+  const FOLD = 8;
+  let all = $state(false);
+  const visible = $derived(all ? routes : routes.slice(0, FOLD));
 </script>
 
 {#if routes.length}
@@ -17,7 +20,7 @@
     <h2 class="ots-h">{title} <span class="ots-n">{routes.length}</span></h2>
     {#if !compact}<p class="ots-sub">Every page and endpoint this chapter accounts for, as the deployed site serves them. None are public, so none are links.</p>{/if}
     <ul class="ots-list">
-      {#each routes as r (r.path)}
+      {#each visible as r (r.path)}
         <li class="ots-row">
           <span class="ots-sig">
             {#if r.kind === 'api' && r.methods.length}<span class="ots-m">{r.methods.join(' · ')}</span>{:else}<span class="ots-m pg">PAGE</span>{/if}
@@ -28,6 +31,9 @@
         </li>
       {/each}
     </ul>
+    {#if routes.length > FOLD}
+      <button class="ots-more" onclick={() => (all = !all)} aria-expanded={all}>{all ? 'Show fewer' : `Show all ${routes.length}`}</button>
+    {/if}
   </section>
 {/if}
 
@@ -46,6 +52,9 @@
   .ots-what { font-size: var(--fs-label); color: var(--fg-2); line-height: 1.5; }
   .ots-who { font-family: var(--er-mono); font-size: var(--fs-label-xs); color: var(--fg-3); text-align: right; }
   .ots-who[data-who='owner'] { color: var(--you); }
+  .ots-more { margin-top: 14px; background: none; border: 1px solid var(--rule-strong); border-radius: var(--radius-pill); padding: 8px 16px; cursor: pointer;
+    font-family: var(--er-mono); font-size: var(--fs-label-xs); letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg); }
+  .ots-more:hover { border-color: var(--fg); }
   .compact .ots-row { padding: 9px 0; }
   @media (max-width: 760px) {
     .ots-row { grid-template-columns: minmax(0, 1fr); }

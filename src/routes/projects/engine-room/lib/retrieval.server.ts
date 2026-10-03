@@ -11,6 +11,7 @@
 
 import { loadFacts } from './facts.server';
 import { PARTS, href, B } from './nav';
+import { STORY } from './story';
 import { DAYDREAM_COPY, STAGE_ENG, COMMISSION_COPY, ACT_COPY, VERDICT_COPY } from './daydream';
 import { WHO_LABEL } from './routes';
 import {
@@ -55,7 +56,9 @@ function buildChunks(): Chunk[] {
     'Nothing on these pages is copied by hand. Stage names, caps and schedules are imported from the code that runs each feature and change on the next deploy. ' +
     'Explainer text is keyed by the feature\'s own types, so a new stage without a sentence fails the type check, and a drift test pins the rest. ' +
     'Live numbers are totals read from the database every few minutes. The app\'s make-up is a manifest generated from the app\'s own Swift source.');
-  for (const p of PARTS) add('overview', p.id, p.name, href(p.id), `${p.strap}. ${p.lede} Pages: ${list(p.leaves.map((l) => `${l.label} — ${l.blurb}`))}.`);
+  for (const p of PARTS) add('overview', p.id, p.name, href(p.id), `${p.strap}. ${p.lede} Pages: ${list(p.leaves.map((l) => `${l.label} (${l.ask}) — ${l.blurb}`))}.`);
+  add('overview', 'index', 'How a passing thought becomes a feature', B,
+    STORY.map((s, i) => `${i + 1}. ${s.title}. ${s.plain} ${s.eng}`).join(' '));
 
   // Daydream
   const Q = href('daydream', 'questions'), I = href('daydream', 'inbox'), M = href('daydream', 'impact');

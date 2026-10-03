@@ -26,15 +26,17 @@ interface RevealOpts {
   duration?: number;
   /** Share of the element that must be visible first. */
   amount?: number;
+  /** Watch the parent instead: for an element that starts clipped inside an overflow mask. */
+  parent?: boolean;
 }
 
 /** Rise and fade in the first time the element scrolls into view. */
-export function reveal({ y = 28, delay = 0, duration = 0.9, amount = 0.2 }: RevealOpts = {}): Attachment<HTMLElement | SVGElement> {
+export function reveal({ y = 28, delay = 0, duration = 0.9, amount = 0.2, parent = false }: RevealOpts = {}): Attachment<HTMLElement | SVGElement> {
   return (el) => {
     if (still()) return;
     el.style.opacity = '0';
     el.style.transform = `translateY(${y}px)`;
-    const stop = inView(el, () => {
+    const stop = inView(parent && el.parentElement ? el.parentElement : el, () => {
       animate(el, { opacity: [0, 1], transform: [`translateY(${y}px)`, 'translateY(0px)'] }, { duration, delay, ease: EASE });
     }, { amount });
     return () => {
@@ -91,13 +93,13 @@ export function progress(cb: (p: number) => void, offset: [string, string] = ['s
  * Which of a container's `[data-step]` children is in the reading line, for a scrollytelling
  * column. Calls back with the step's index whenever it changes.
  */
-export function steps(cb: (i: number) => void, { line = 0.5 }: { line?: number } = {}): Attachment<HTMLElement> {
+export function steps(cb: (i: number) => void, { line = 0.5 }: { line?: number | (() => number) } = {}): Attachment<HTMLElement> {
   return (el) => {
     const items = [...el.querySelectorAll<HTMLElement>('[data-step]')];
     if (!items.length) return;
     let current = -1;
     const pick = () => {
-      const y = window.innerHeight * line;
+      const y = window.innerHeight * (typeof line === 'function' ? line() : line);
       let best = 0;
       for (let i = 0; i < items.length; i++) if (items[i].getBoundingClientRect().top <= y) best = i;
       if (best !== current) { current = best; cb(best); }

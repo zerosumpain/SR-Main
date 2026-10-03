@@ -35,7 +35,7 @@ export interface Part {
   /** The part's claim, in plain words. */
   strap: string;
   /** The same claim as display lines for the hub masthead. */
-  headline: string[];
+  headline: readonly string[];
   /** One paragraph under the hub title. */
   lede: string;
   /** CSS colour token for the part's fill. Text uses the surface-safe shade the layout derives. */

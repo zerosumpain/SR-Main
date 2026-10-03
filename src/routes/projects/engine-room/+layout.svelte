@@ -85,11 +85,6 @@
     </div>
   </footer>
 
-  {#if !app.askOpen}
-    <button class="ask-fab" onclick={() => (app.askOpen = true)} title="Ask questions about how this system works">
-      <span class="fab-mark" aria-hidden="true">✦</span> Ask the system
-    </button>
-  {/if}
   {#if app.askOpen}
     <button class="ask-scrim" aria-label="Close" onclick={() => (app.askOpen = false)}></button>
     <div class="ask-dock" role="dialog" aria-modal="true" aria-label="Ask the system">
@@ -181,7 +176,8 @@
   .er :global(.er-kicker) { display: block; font-family: var(--er-mono); font-size: var(--fs-label-xs); letter-spacing: 0.18em;
     text-transform: uppercase; color: var(--tone-text); margin: 0 0 12px; }
   .er :global(.er-display) { font-family: var(--er-display); font-weight: 400; text-transform: uppercase;
-    line-height: 0.92; letter-spacing: -0.015em; color: var(--fg); margin: 0; }
+    line-height: 0.92; letter-spacing: -0.015em; color: var(--fg); }
+  :global(:where(.er .er-display)) { margin: 0; }
   .er :global(.er-display .hl) { color: var(--tone-text); }
   .er :global(.er-lede) { font-size: clamp(17px, 1.5vw, 20px); line-height: 1.55; color: var(--fg-2); margin: 0; }
   .er :global(.er-prose) { font-size: var(--fs-body); line-height: 1.65; color: var(--fg-2); }
@@ -221,13 +217,6 @@
   @media (max-width: 900px) { .foot-in { grid-template-columns: minmax(0, 1fr); } }
 
   /* ───────────────────────── Ask ───────────────────────── */
-  .ask-fab { position: fixed; z-index: 60; right: 20px; bottom: 20px; display: inline-flex; align-items: center; gap: 8px;
-    font-family: var(--er-mono); font-size: var(--fs-label); font-weight: 500; letter-spacing: 0.04em; color: var(--er-cream);
-    background: var(--er-ink); border: 1px solid rgba(237, 228, 212, 0.25); border-radius: var(--radius-pill);
-    padding: 12px 18px; cursor: pointer; transition: background 0.2s, border-color 0.2s; }
-  .ask-fab:hover { background: #2a1c10; border-color: var(--er-orange-ink); }
-  .fab-mark { color: var(--er-orange-ink); }
-  @media (min-width: 1021px) { .ask-fab { display: none; } }
   .ask-scrim { position: fixed; inset: 0; z-index: 70; background: rgba(26, 16, 8, 0.45); border: none; cursor: pointer; }
   .ask-dock { position: fixed; z-index: 71; top: 0; right: 0; height: 100vh; height: 100dvh; width: min(480px, 100vw);
     background: var(--er-paper); border-left: 1px solid rgba(26, 16, 8, 0.25); display: flex; flex-direction: column; }

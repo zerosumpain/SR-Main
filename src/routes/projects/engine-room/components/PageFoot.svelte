@@ -34,7 +34,7 @@
 
 {#if routes.length}
   <Band surface="deep" pad="normal">
-    <OnTheSite {routes} />
+    <div class="ots-wrap"><OnTheSite {routes} /></div>
   </Band>
 {/if}
 
@@ -57,6 +57,7 @@
 {/if}
 
 <style>
+  .ots-wrap { border-top: 3px solid var(--fg); padding-top: 26px; }
   .next { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'k a' 't a' 'q a'; gap: 8px 32px; align-items: center;
     padding: clamp(40px, 5vw, 72px) 0; text-decoration: none; color: var(--fg); position: relative; }
   .n-kick { grid-area: k; font-family: var(--er-mono); font-size: var(--fs-label-xs); letter-spacing: 0.18em; text-transform: uppercase; color: var(--tone-text); }

@@ -164,3 +164,42 @@ export const BUILD_COPY = {
     ranking: { plain: 'A lesson that keeps helping rises. One that keeps not helping sinks. Whether it helped is judged by what the build did next, not by a model’s opinion.', eng: 'Serves are resolved mechanically from whether the triggering fingerprint recurred. Rank blends outcome evidence, a verdict weight and staleness of cited paths.' },
   },
 } as const;
+
+/** The redesigned pages' extra words. Same rules: no figures, a twin for every line. */
+export const BACKLOG_COPY = {
+  rivers: { plain: 'one of the ways an idea can reach the queue. However it arrives, it waits in the same line as everything else.', eng: 'an intake channel. Every channel files into the one board, deduplicated by key, so provenance is kept but there is no side door.' },
+  board: { plain: 'Every idea sits in one of these columns, and each column asks one question. Nothing can be dragged into live by hand, because a board that let me claim something shipped would be a board that lies.', eng: 'Work stages are derived, not asserted. Drags into building, verifying or live are refused, and nothing leaves live or verifying, so a shipped row can never be re-queued.' },
+  night: { plain: 'While the house is asleep it works through the night in a fixed order, on a strict allowance.', eng: 'One heartbeat run walks the phases in order under hard budget and work caps.' },
+  heartbeat: { plain: 'The little jobs behind daydream and the builder, each on its own clock. The bright part of a ring is when it may run.', eng: 'Heartbeat registry entries for the daydream and builder activities, with default cadence and active-hours window.' },
+} as const;
+
+export const DEVELOP_COPY = {
+  line: { plain: 'Press play and watch one idea travel the whole line. The stations in blue are where it waits for me.', eng: 'Every delivery stage the builder stores, in order. The petrol stations are the ones that block on the owner.' },
+  track: { plain: 'Every delivery is told how far it may go before it starts. Even the furthest setting never presses merge itself.', eng: 'The release policy bounds the furthest state a delivery can reach. Merge is always CI’s decision, gated by the risk tier.' },
+  lanes: { plain: 'Before anything is built, a brief is sorted into one of these, because only one of them touches this site’s own code.', eng: 'Brief lane classification runs at grooming time and decides which repository and sandbox a delivery gets.' },
+  rounds: { plain: 'Each square is one round of work it may do alone. The bright ones are what it gets by default; it can be allowed more, but never past the last square.', eng: 'Autopilot rounds, default against the hard maximum. An adversary model judges each unattended round.' },
+} as const;
+
+export const VERIFY_EXTRA = {
+  chain: { plain: 'Pick a link and snap it. Everything after a broken link never happens, so nothing reaches the live site on a failed check.', eng: 'Phases run strictly in order and a failure is terminal for the candidate, so later phases never run on a red one.' },
+  snapped: { plain: 'Snapped. Nothing after this point runs, and the live site stays exactly as it was.', eng: 'Failure recorded against the candidate. Downstream phases are skipped and production is untouched.' },
+  whole: { plain: 'The chain is whole, so the change reaches the live site, and the site confirms it is really serving it.', eng: 'All phases green, and the deploy phase confirms production reports the merge commit.' },
+  gates: { plain: 'When a check fails, the failure is filed under the check’s name, so the next build can look up what went wrong last time.', eng: 'Gate names are the fingerprint namespace for codegraph episodes, which is how a failure is matched to earlier fixes.' },
+  reviewer: { plain: 'Every promise in a brief is judged against the exact version I was shown. A second model gives its own verdict beside mine, and it’s recorded whether that reviewer was a different model from the one that wrote the code.', eng: 'Criteria carry a verdict per revision. An adversary assessment records whether its model differs from the author’s, so a build marking its own homework is visible rather than assumed.' },
+} as const;
+
+export const CODEGRAPH_EXTRA = {
+  graph: { plain: 'A sketch of the build’s memory. Drag anything about. Pick a kind of link to see what it joins.', eng: 'A schematic of the typed graph. Node kinds are illustrative; the edge kinds are the live list from the codegraph module.' },
+  nodes: {
+    file: 'a file in the site’s code',
+    test: 'a test that checks something',
+    gate: 'a check a change must pass',
+    episode: 'one past build, and what happened',
+    lesson: 'what was learned from it',
+  },
+  budget: { plain: 'A build can ask its memory questions, but every answer is cut to size so one question can’t crowd out the work.', eng: 'Results are character-budgeted per query, with a hard ceiling, and hop and result limits bound traversal.' },
+} as const;
+
+export const BUILD_HUB_COPY = {
+  live: { plain: 'Everything I have asked it to build, and where each has got to. Totals only.', eng: 'Commissioned deliveries grouped by the development lane the develop page uses. Counts only.' },
+} as const;

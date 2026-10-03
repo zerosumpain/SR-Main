@@ -25,6 +25,22 @@ export const STAGE_ENG = {
   result: 'The commission completes with a report, or the delivery ships. My verdict on the outcome is stored against the note and is what the impact page counts.',
 } satisfies Record<Stage, string>;
 
+/** Whose turn each stage is, for the travelling note on the Inbox page. */
+export const STAGE_TURN = {
+  spotted: { who: 'it', plain: 'Its move. It has written the note and shown its sources.', eng: 'System-owned. The note is stored with audited citations and no verdict.' },
+  decide: { who: 'me', plain: 'My move. Nothing else happens until I answer.', eng: 'Owner-owned. Blocks on a verdict or an approved double-check.' },
+  motion: { who: 'it', plain: 'Its move again. It checks the sources or queues the idea to be built.', eng: 'System-owned. A commission runs, or a build idea waits in the backlog for a slot.' },
+  result: { who: 'me', plain: 'Back to me. I say whether it helped, and that’s the score.', eng: 'Owner-owned. The outcome verdict is stored and counted by the impact page.' },
+} satisfies Record<Stage, Twin & { who: 'me' | 'it' }>;
+
+/** The short promise each kind of "Do it for me" step makes, shown as a badge. */
+export const ACT_BADGE = {
+  calendar_event: 'one tap, can be undone',
+  reminder: 'one tap, can be undone',
+  calendar_move: 'one tap, can be undone',
+  email_draft: 'stops at a draft',
+} satisfies Record<ActKind, string>;
+
 /** What each double-check state means, in both registers. */
 export const COMMISSION_COPY = {
   awaiting_approval: { plain: 'It wants to check something again and is asking me first.', eng: 'A commission was proposed from a note and needs owner approval before it may spend.' },
@@ -78,6 +94,10 @@ export const DAYDREAM_COPY = {
     strap: 'It thinks about my life while I’m busy',
     headline: ['It thinks', 'while I’m', 'busy'],
     lede: 'When nobody is using the site, it picks one small question about my life, looks at only what that question needs, and writes me a note if it finds something worth knowing. Most notes aren’t worth much, and that’s fine, because I’m the one who decides.',
+  },
+  live: {
+    plain: 'Every note it writes is counted here, and most fall away at each step, which is the point. The loop is judged on the few that reach the bottom, not on how much it writes.',
+    eng: 'The impact funnel over the rolling window: notes delivered, rated, rated useful, acted on and resolved. Counts only, computed by the feature’s own impact loader.',
   },
   questions: {
     line: { plain: 'It doesn’t browse everything at once. Each cycle asks one narrow question, and a clock decides which.', eng: 'One channel × outcome pair per cycle, chosen by a clock-keyed schedule, with a read-only toolset scoped to that pair.' },
