@@ -429,7 +429,7 @@ register({
 
 register({
   name: 'research_web_search',
-  description: 'Quick web search for a fact-check or to fill a knowledge gap — lighter than starting a full research session. Returns summarised results.',
+  description: 'Quick web search for a fact-check or to fill a knowledge gap — lighter than starting a full research session. Searched through the model provider\'s own web grounding, so it takes 15-30 seconds; returns a short sourced summary and the pages it cited.',
   parameters: {
     type: 'object',
     properties: {
@@ -440,27 +440,42 @@ register({
   },
   category: 'Deep Dive Research',
   toolset: 'research',
+  // Grounded, not Tavily. This tool was on every jkai chat turn and spent a
+  // Tavily credit per call (45 in the 30 days to 2026-10-03). Codex chat turns
+  // now search natively instead and are not offered it; this is what is left
+  // for everything else, on the same provider grounding the blog tools moved
+  // to. The chat model is preferred when it is Codex, because its grounded
+  // route costs nothing; otherwise the research-fast model's route.
   handler: async (args) => {
-    const { search } = await import('$lib/deepdive/tavily');
-    const results = await search(args.query as string, { maxResults: 5, searchDepth: 'basic' });
-
-    const summarised = results.results.map((r) => ({
-      title: r.title,
-      url: r.url,
-      snippet: r.content.slice(0, 300),
-      score: r.score,
-    }));
-
-    return {
-      success: true,
-      data: {
-        query: args.query,
-        context: args.context || null,
-        results: summarised,
-      },
-    };
+    const query = String(args.query ?? '').trim();
+    if (!query) return { success: false, error: 'query is required.' };
+    const [{ groundedCompletion }, { groundedRoute }, models] = await Promise.all([
+      import('$lib/deepdive/ai'),
+      import('$lib/deepdive/grounding'),
+      import('$lib/server/models/workload-settings'),
+    ]);
+    const chat = await models.resolveChatTurnModel();
+    const model = chat.provider === 'codex'
+      ? (chat.modelId.startsWith('codex/') ? chat.modelId : `codex/${chat.modelId}`)
+      : (await models.resolveResearchFastModel()).modelId;
+    const context = typeof args.context === 'string' && args.context.trim() ? args.context.trim() : null;
+    const { text, citations } = await groundedCompletion(
+      'Search the live web before answering. Prefer primary, official and reputable sources. Answer the query in a few sentences, and cite only pages you actually retrieved; never invent a URL.',
+      context ? `${query}\n\nContext: ${context}` : query,
+      { mode: groundedRoute('fast', model), model, maxTokens: 800 },
+    );
+    const seen = new Set<string>();
+    const results = citations
+      .filter((c) => (seen.has(c.url) ? false : (seen.add(c.url), true)))
+      .slice(0, 8)
+      .map((c, i) => ({ title: c.title?.trim() || safeHost(c.url), url: c.url, score: Math.max(0, 1 - i * 0.05) }));
+    return { success: true, data: { query, context, answer: text.trim(), results } };
   },
 });
+
+function safeHost(url: string): string {
+  try { return new URL(url).hostname; } catch { return url; }
+}
 
 register({
   name: 'research_search',

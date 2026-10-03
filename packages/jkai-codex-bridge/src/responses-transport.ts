@@ -244,6 +244,24 @@ export async function* runStreamedViaResponses(
       continue;
     }
 
+    // The sources the model cited in its answer. With live search on, Codex
+    // mostly SEARCHES rather than opening pages, so the queries above are not
+    // sources; what it relied on arrives as `url_citation` annotations on the
+    // answer text. Kept as page reads so they reach the caller through the same
+    // `annotations` as everything else, title included.
+    if (type === 'response.output_text.annotation.added') {
+      const a = ev.annotation as { type?: string; url?: unknown; title?: unknown } | undefined;
+      const url = a?.type === 'url_citation' && typeof a.url === 'string' ? a.url.trim() : '';
+      if (/^https?:\/\//i.test(url) && !searches.has(`cite:${url}`)) {
+        searches.set(`cite:${url}`, {
+          kind: 'fetch',
+          value: url,
+          ...(typeof a?.title === 'string' && a.title.trim() ? { title: a.title.trim() } : {}),
+        });
+      }
+      continue;
+    }
+
     if (type === 'response.completed') {
       usage = toUsage(ev.response?.usage);
       continue;
