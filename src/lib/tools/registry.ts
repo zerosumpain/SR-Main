@@ -1,6 +1,6 @@
 import { currentExecution, withExecution } from '$lib/jkai/grounding/execution';
 import { retainEvidence } from '$lib/jkai/grounding/evidence.server';
-import { validateArguments } from '$lib/jkai/grounding/schema';
+import { dropEmptyOptionalArguments, validateArguments } from '$lib/jkai/grounding/schema';
 // Tool Registry — Slim Coordinator
 // Types and register() live in registry-internal.ts to avoid circular init with domain modules.
 
@@ -182,6 +182,7 @@ export async function executeTool(
   if ((ctx?.depth ?? 0) > 5) return { success: false, error: 'Nested capability depth exceeded' };
   const tool = tools.find((t) => t.name === name);
   if (!tool) return { success: false, error: `Unknown tool: ${name}` };
+  args = dropEmptyOptionalArguments(tool.parameters, args);
   const issues = validateArguments(tool.parameters, args);
   if (issues.length) return { success: false, error: 'invalid_arguments', data: { issues, inputSchema: tool.parameters } };
   let result: ToolResult;
