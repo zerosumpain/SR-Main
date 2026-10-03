@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cumulativeTrace, ecgTrace, idleTrace, spikeTrace, stairTrace, stepsTrace, tickTrace, TRACE_H, TRACE_W } from './traces';
+import { ecgTrace, idleTrace, spikeTrace, stairTrace, stepsTrace, tickTrace, TRACE_H, TRACE_W } from './traces';
 import { binSteps, STEP_BINS } from './steps';
 import { ago, until } from './live-vitals.svelte';
 
@@ -17,7 +17,7 @@ const ALL = {
   idle: idleTrace(0),
   busy: idleTrace(4),
   steps: stepsTrace(Array.from({ length: 96 }, (_, i) => (i % 7) * 40), 60),
-  releases: cumulativeTrace([2, 0, 5, 7, 1], 1300),
+  releases: spikeTrace(Array.from({ length: 90 }, (_, i) => i % 5), 90),
 };
 
 describe('landing traces', () => {
@@ -96,11 +96,13 @@ describe('steps strip', () => {
   });
 });
 
-describe('releases climb', () => {
-  it('rises monotonically from the left edge to the right', () => {
-    const ys = points(cumulativeTrace([1, 2, 0, 4], 100)).map(([, y]) => y);
-    expect(ys[0]).toBeGreaterThan(ys.at(-1)!);
-    for (let i = 1; i < ys.length; i++) expect(ys[i]).toBeLessThanOrEqual(ys[i - 1]);
+describe('releases per day', () => {
+  it('draws one spike per non-empty day across the whole window', () => {
+    const counts = Array.from({ length: 90 }, (_, i) => (i % 3 === 0 ? 0 : 2));
+    const tops = points(spikeTrace(counts, 90)).filter(([, y]) => y < 50);
+    expect(tops).toHaveLength(60);
+    // The default window stays the Ship channel's forty days.
+    expect(points(spikeTrace(counts)).filter(([, y]) => y < 50).length).toBeLessThanOrEqual(40);
   });
 });
 
