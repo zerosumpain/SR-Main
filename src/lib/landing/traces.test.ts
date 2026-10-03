@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ecgTrace, idleTrace, spikeTrace, stairTrace, stepsTrace, tickTrace, TRACE_H, TRACE_W } from './traces';
+import { ecgTrace, spikeTrace, stepsTrace, tickTrace, TRACE_H, TRACE_W } from './traces';
 import { binSteps, STEP_BINS } from './steps';
 import { ago, until } from './live-vitals.svelte';
 
@@ -12,10 +12,7 @@ const ALL = {
   ecg: ecgTrace(72),
   ecgFast: ecgTrace(180),
   ticks: tickTrace(8, 10, true),
-  stairs: stairTrace(3),
   spikes: spikeTrace([0, 3, 6, 1, 9, 0, 2]),
-  idle: idleTrace(0),
-  busy: idleTrace(4),
   steps: stepsTrace(Array.from({ length: 96 }, (_, i) => (i % 7) * 40), 60),
   releases: spikeTrace(Array.from({ length: 90 }, (_, i) => i % 5), 90),
 };
@@ -39,6 +36,9 @@ describe('landing traces', () => {
     const peaks = (d: string) => points(d).filter(([, y]) => y === 6).length;
     expect(peaks(ecgTrace(60))).toBe(6);
     expect(peaks(ecgTrace(90))).toBe(9);
+    // The exact rate, not the nearest ten: 72 bpm fits a seventh beat at 5.0s.
+    expect(peaks(ecgTrace(72))).toBe(7);
+    expect(peaks(ecgTrace(64))).toBe(6);
     // No live heart rate still draws a calm, plausible trace.
     expect(peaks(ecgTrace(null))).toBe(6);
   });
@@ -53,17 +53,9 @@ describe('landing traces', () => {
 
   it('is deterministic, so SSR and hydration draw the same path', () => {
     expect(ecgTrace(72)).toBe(ecgTrace(72));
-    expect(idleTrace(2)).toBe(idleTrace(2));
+    expect(spikeTrace([1, 4, 2])).toBe(spikeTrace([1, 4, 2]));
   });
 
-  it('lifts the assistant trace only while work is in flight', () => {
-    const spread = (d: string) => {
-      const ys = points(d).map(([, y]) => y);
-      return Math.max(...ys) - Math.min(...ys);
-    };
-    expect(spread(idleTrace(0))).toBeLessThan(6);
-    expect(spread(idleTrace(3))).toBeGreaterThan(15);
-  });
 });
 
 describe('steps strip', () => {

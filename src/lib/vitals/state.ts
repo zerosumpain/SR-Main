@@ -46,8 +46,9 @@ export const VITALS_DEFAULTS: VitalsState = {
   sources: { heartRate: false, weather: false },
 };
 
+/** Whole beats per minute: the reading as the watch took it, not a band around it. */
 export function roundPulse(bpm: number): number {
-  return Math.round(bpm / 5) * 5;
+  return Math.round(bpm);
 }
 
 export function normalizeStrain(strain: number): number {
