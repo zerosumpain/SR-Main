@@ -29,17 +29,19 @@ import { ACT_KINDS } from '$lib/daydream/act/plan';
 import { RED_TEAM_VERDICTS } from '$lib/daydream/red-team';
 import { ROUTE_MANIFEST } from 'virtual:sr-route-manifest';
 
-import { STAGE_ENG, COMMISSION_COPY, DAYDREAM_COPY, ACT_COPY, VERDICT_COPY } from './daydream';
+import { STAGE_ENG, COMMISSION_COPY, DAYDREAM_COPY, ACT_COPY, VERDICT_COPY, STAGE_TURN, ACT_BADGE } from './daydream';
 import { ROUTE_LEDGER, ROUTE_SCOPE } from './routes';
 import {
   SOURCE_COPY, POLICY_COPY, BRIEF_LANE_COPY, EDGE_COPY, GATE_COPY, HEARTBEAT_ACTIVITIES, HIDDEN_ACTIVITIES, ACTIVITY_COPY,
   BUILD_COPY, DELIVERY_COPY, VERIFY_COPY, PHASE_COPY, LANE_COPY,
+  BACKLOG_COPY, DEVELOP_COPY, VERIFY_EXTRA, CODEGRAPH_EXTRA, BUILD_HUB_COPY,
 } from './build';
 import {
   APP, APP_COPY, TAB_COPY, MORE_COPY, WATCH_COPY, BACKGROUND_COPY, PERMISSION_COPY, ENTITLEMENT_COPY,
-  SURFACE_COPY, AREA_COPY,
+  SURFACE_COPY, AREA_COPY, PAIRING_COPY, DOORWAY_COPY,
 } from './app';
 import { REDIRECTS, PARTS, href } from './nav';
+import { STORY, OVERVIEW_COPY } from './story';
 
 const keys = (o: object) => Object.keys(o).sort();
 const sorted = (xs: readonly string[]) => [...xs].sort();
@@ -47,6 +49,8 @@ const sorted = (xs: readonly string[]) => [...xs].sort();
 describe('copy maps cover exactly what the feature declares', () => {
   it.each([
     ['daydream stages', STAGE_ENG, STAGES],
+    ['whose move each stage is', STAGE_TURN, STAGES],
+    ['do it for me badges', ACT_BADGE, ACT_KINDS],
     ['double-check states', COMMISSION_COPY, COMMISSION_STATES],
     ['do it for me kinds', ACT_COPY, ACT_KINDS],
     ['double-check verdicts', VERDICT_COPY, RED_TEAM_VERDICTS],
@@ -152,7 +156,9 @@ describe('explainer copy carries no figures', () => {
       DAYDREAM_COPY, STAGE_ENG, COMMISSION_COPY, BUILD_COPY, DELIVERY_COPY, VERIFY_COPY, PHASE_COPY, LANE_COPY,
       SOURCE_COPY, POLICY_COPY, BRIEF_LANE_COPY, EDGE_COPY, GATE_COPY, ACTIVITY_COPY, APP_COPY, TAB_COPY, MORE_COPY,
       WATCH_COPY, BACKGROUND_COPY, PERMISSION_COPY, ENTITLEMENT_COPY, SURFACE_COPY, AREA_COPY, ACT_COPY, VERDICT_COPY,
-      ROUTE_LEDGER,
+      ROUTE_LEDGER, STORY, OVERVIEW_COPY, STAGE_TURN, ACT_BADGE, PAIRING_COPY, DOORWAY_COPY,
+      BACKLOG_COPY, DEVELOP_COPY, VERIFY_EXTRA, CODEGRAPH_EXTRA, BUILD_HUB_COPY,
+      PARTS: PARTS.map(({ strap, headline, lede, leaves }) => ({ strap, headline, lede, leaves })),
     };
     for (const [name, m] of Object.entries(maps)) strings(m, name, all);
     const offenders = all.filter(([, s]) => /\d/.test(s.replace(ALLOWED, '')));

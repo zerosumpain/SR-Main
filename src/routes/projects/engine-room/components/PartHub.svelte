@@ -1,70 +1,104 @@
 <script lang="ts">
-  // PartHub — the shell for the four part landing pages.
+  // PartHub — the shell for the three part landing pages.
   //
-  // A hub is a menu, not a chapter. It says what the part is for in one line, then hands
-  // over to its pages. Anything that wants a paragraph belongs on a leaf page with a
-  // diagram next to it.
+  // Three bands. A paper hero with the part's claim in display type beside its explainer art,
+  // an ink band for whatever the part can show live, and the chapters as a ranked list, each
+  // led by the question it answers so a visitor can pick by curiosity rather than by jargon.
   import type { Snippet } from 'svelte';
-  import { partById, href, type PartId } from '../lib/nav';
+  import { partById, href, PARTS, type PartId } from '../lib/nav';
+  import { cascade } from '../lib/motion';
+  import Band from './kit/Band.svelte';
+  import Masthead from './kit/Masthead.svelte';
 
   interface Props {
     part: PartId;
-    /** Optional visual that summarises the whole part, shown above the page list. */
+    /** The hero illustration, beside the headline. */
+    art?: Snippet;
+    /** Live figures, set on the ink band under the hero. */
     children?: Snippet;
+    /** Anything after the chapter list. */
+    after?: Snippet;
   }
-  let { part, children }: Props = $props();
+  let { part, art, children, after }: Props = $props();
   const p = $derived(partById(part));
+  const index = $derived(PARTS.findIndex((x) => x.id === part));
 </script>
 
-<header class="ph" style="--tone:{p.tone}">
-  <span class="ph-no">Part {p.no}</span>
-  <h1 class="pe-h1">{p.name}</h1>
-  <p class="ph-strap">{p.strap}</p>
-  <p class="ph-lede">{p.lede}</p>
-</header>
+<Band surface="paper" part={part} pad="hero">
+  <div class="hero" class:has-art={!!art}>
+    <Masthead level={1} size="xl" kicker={`Part ${p.no} of ${PARTS.length} · ${p.name}`} lines={p.headline} />
+    {#if art}<div class="art">{@render art()}</div>{/if}
+    <p class="lede er-lede">{p.lede}</p>
+  </div>
+</Band>
 
 {#if children}
-  <div class="ph-vis">{@render children()}</div>
+  <Band surface="ink" part={part}>{@render children()}</Band>
 {/if}
 
-<nav class="ph-list" style="--tone:{p.tone}" aria-label="Pages in {p.name}">
-  {#each p.leaves as l, i (l.slug)}
-    <a class="leaf" href={href(p.id, l.slug)}>
-      <span class="l-no">{p.no}.{i + 1}</span>
-      <span class="l-main">
-        <b class="l-lab">{l.label}</b>
-        <span class="l-blurb">{l.blurb}</span>
-        <span class="l-inst"><span class="li-mark" aria-hidden="true">◧</span>{l.instrument}</span>
-      </span>
-      <span class="l-go" aria-hidden="true">→</span>
-    </a>
-  {/each}
-</nav>
+<Band surface="paper" part={part}>
+  <div class="ch-head">
+    <span class="er-kicker">Inside {p.name}</span>
+    <h2 class="er-display ch-title">{p.leaves.length} questions, one chapter each</h2>
+  </div>
+  <ol class="list" {@attach cascade()}>
+    {#each p.leaves as l, i (l.slug)}
+      <li>
+        <a class="row" href={href(p.id, l.slug)}>
+          <span class="r-no">{p.no}.{i + 1}</span>
+          <span class="r-ask">
+            <b>{l.ask}</b>
+            <span class="r-lab">{l.label}</span>
+          </span>
+          <span class="r-blurb">{l.blurb}<span class="r-inst">{l.instrument}</span></span>
+          <span class="r-go" aria-hidden="true">
+            <svg viewBox="0 0 32 16" width="32" height="16"><path d="M0 8h29M22 1l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" /></svg>
+          </span>
+        </a>
+      </li>
+    {/each}
+  </ol>
+  {#if after}{@render after()}{/if}
+  {#if index < PARTS.length - 1}
+    {@const nxt = PARTS[index + 1]}
+    <p class="onward">Then <a href={href(nxt.id)} data-part={nxt.id}>Part {nxt.no}, {nxt.name}</a>. {nxt.strap}.</p>
+  {/if}
+</Band>
 
 <style>
-  .ph { margin: 0 0 18px; }
-  .ph-no { display: block; font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.2em;
-    text-transform: uppercase; color: var(--tone); margin-bottom: 6px; }
-  .ph :global(.pe-h1) { margin-bottom: 4px; }
-  .ph-strap { margin: 0 0 10px; font-family: var(--font-mono); font-size: var(--fs-label-xs);
-    letter-spacing: 0.04em; color: rgba(28,22,17,0.55); }
-  .ph-lede { margin: 0; font-size: 16.5px; line-height: 1.55; color: rgba(28,22,17,0.76); }
+  .hero { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 clamp(24px, 4vw, 64px); align-items: end; }
+  .hero.has-art { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); }
+  .hero :global(.mh) { margin-bottom: 28px; }
+  .art { grid-row: span 2; align-self: center; min-width: 0; }
+  .lede { max-width: 58ch; }
+  @media (max-width: 900px) {
+    .hero.has-art { grid-template-columns: minmax(0, 1fr); }
+    .art { grid-row: auto; order: 3; margin-top: 28px; }
+  }
 
-  .ph-vis { margin: 18px 0 22px; }
+  .ch-head { display: flex; flex-direction: column; margin-bottom: 26px; }
+  .ch-title { font-size: clamp(26px, 3vw, 40px); }
 
-  .ph-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; margin-top: 8px; }
-  .leaf { display: flex; align-items: flex-start; gap: 11px; text-decoration: none;
-    border: 1px solid rgba(28,22,17,0.16); border-left: 3px solid var(--tone);
-    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
-    background: rgba(255,255,255,0.5); padding: 13px 14px; transition: background 0.13s, border-color 0.13s; }
-  .leaf:hover { background: rgba(255,255,255,0.85); border-color: rgba(28,22,17,0.34); border-left-color: var(--tone); }
-  .l-no { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--tone); padding-top: 3px; flex-shrink: 0; }
-  .l-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-  .l-lab { font-family: var(--fs-serif); font-weight: 600; font-size: 16.5px; line-height: 1.22; color: var(--text-primary); }
-  .l-blurb { font-size: var(--fs-label); line-height: 1.5; color: rgba(28,22,17,0.7); }
-  .l-inst { display: flex; gap: 5px; margin-top: 3px; font-family: var(--font-mono);
-    font-size: var(--fs-label-xs); line-height: 1.45; color: rgba(28,22,17,0.5); }
-  .li-mark { color: var(--tone); flex-shrink: 0; }
-  .l-go { margin-left: auto; align-self: center; color: rgba(28,22,17,0.3); font-size: var(--fs-body-sm); flex-shrink: 0; }
-  .leaf:hover .l-go { color: var(--tone); }
+  .list { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; background: var(--rule); border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+  .row { display: grid; grid-template-columns: 72px minmax(0, 1.3fr) minmax(0, 1fr) 48px; gap: 8px 24px; align-items: center;
+    padding: clamp(18px, 2.2vw, 30px) 8px; text-decoration: none; color: inherit; background: var(--ground);
+    position: relative; overflow: hidden; transition: background 0.3s; }
+  .row::before { content: ''; position: absolute; inset: 0; background: var(--tone); opacity: 0.08; transform: scaleX(0); transform-origin: left;
+    transition: transform 0.5s var(--er-ease); }
+  .row:hover::before, .row:focus-visible::before { transform: scaleX(1); }
+  .r-no { font-family: var(--er-display); font-size: clamp(26px, 2.6vw, 40px); color: var(--tone-text); line-height: 1; position: relative; }
+  .r-ask { display: flex; flex-direction: column; gap: 6px; position: relative; }
+  .r-ask b { font-family: var(--er-serif); font-weight: 500; font-size: clamp(20px, 2vw, 28px); line-height: 1.2; color: var(--fg); }
+  .r-lab { font-family: var(--er-mono); font-size: var(--fs-label-xs); letter-spacing: 0.14em; text-transform: uppercase; color: var(--fg-3); }
+  .r-blurb { display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-body-sm); line-height: 1.5; color: var(--fg-2); position: relative; }
+  .r-inst { font-family: var(--er-mono); font-size: var(--fs-label-xs); color: var(--tone-text); line-height: 1.5; }
+  .r-go { color: var(--fg-3); transition: transform 0.4s var(--er-ease), color 0.3s; position: relative; justify-self: end; }
+  .row:hover .r-go { transform: translateX(6px); color: var(--tone-text); }
+  @media (max-width: 760px) {
+    .row { grid-template-columns: 48px minmax(0, 1fr); }
+    .r-blurb { grid-column: 2; }
+    .r-go { display: none; }
+  }
+  .onward { margin: 26px 0 0; font-size: var(--fs-body-sm); color: var(--fg-3); }
+  .onward a { color: var(--tone-text); font-weight: 600; text-decoration-thickness: 2px; text-underline-offset: 3px; }
 </style>

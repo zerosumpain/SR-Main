@@ -93,8 +93,9 @@ export const AREA_COPY: Record<string, string> = {
 
 export const APP_COPY = {
   hub: {
-    strap: 'What the site can do from a pocket',
-    lede: 'A native iPhone app, a watch app and their widgets, all talking to the same site through one narrow, separately guarded API. It does the things a web page can’t, like noticing a walk start or showing a journey on the Lock Screen.',
+    strap: 'And it all lives in my pocket',
+    headline: ['It lives', 'in my', 'pocket'],
+    lede: 'An iPhone app, a watch app and their widgets all reach the same site through one narrow, guarded doorway. That’s how the site does the things a web page can’t, like noticing a walk start without being opened, or putting a journey on the Lock Screen.',
   },
   surfaces: {
     line: { plain: 'The app is more than its screens. It also lives on the Lock Screen, the Home Screen, the watch and in Siri.', eng: 'Every target and surface on this page is generated from the app’s Swift source and project files.' },
@@ -106,5 +107,45 @@ export const APP_COPY = {
   },
   privacy: {
     line: { plain: 'Every permission the app asks for, and what it uses it for. Nothing here shows a single person’s data.', eng: 'Usage-description keys and entitlements read from the project, never their values.' },
+  },
+} as const;
+
+/** The pairing walk-through on the Native API page, step by step. Words only. */
+export const PAIRING_COPY = {
+  code: {
+    label: 'A code on the site',
+    plain: 'I ask the site for a pairing code. It shows a short code that stops working after a few minutes, so a photo of it is useless by tea time.',
+    eng: 'An owner-authenticated request mints a one-time pairing code with a short expiry. It is single use and dies on first redemption or at expiry, whichever comes first.',
+  },
+  scan: {
+    label: 'The phone reads it',
+    plain: 'The phone scans the code with its camera and sends it back. That proves the phone was in front of a screen I was signed in to.',
+    eng: 'The app redeems the code over the native API. Possession of a live code is the proof of presence; nothing else about the phone is trusted yet.',
+  },
+  key: {
+    label: 'A key of its own',
+    plain: 'In return the phone gets its own key, which lasts a few months. I can switch any phone off from the site whenever I like.',
+    eng: 'Redemption issues a long-lived device token with a fixed lifetime, revocable per device from the site.',
+  },
+  hash: {
+    label: 'Only a fingerprint kept',
+    plain: 'The site keeps only a fingerprint of that key, never the key itself. If someone stole the database, they still couldn’t pretend to be my phone.',
+    eng: 'Only the SHA-256 of the token is stored and compared, so a database leak can’t be replayed as a credential.',
+  },
+} as const;
+
+/** The doorway explainer: what happens to a request with and without a key. */
+export const DOORWAY_COPY = {
+  paired: {
+    plain: 'A paired phone shows its key at the door, the site checks the fingerprint, and the request goes through to the one area that phone is allowed into.',
+    eng: 'Every native route checks the bearer token’s hash against live, unrevoked devices, then the per-area member grant, before any handler runs.',
+  },
+  stranger: {
+    plain: 'Anything without a valid key is turned away at the door. It never gets near the rest of the site.',
+    eng: 'No token, an expired token or a revoked device is refused at the native gate with an unauthorised response; the handler never runs.',
+  },
+  redacted: {
+    plain: 'If a phone has asked for private notifications, the site sends a plain one that only says there is something to see.',
+    eng: 'Devices that opt into private notifications receive a redacted APNs payload; the detail is fetched over the API after unlock.',
   },
 } as const;

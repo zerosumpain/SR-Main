@@ -1,43 +1,50 @@
 <script lang="ts">
-  // LeafHead — the compact page header for a single-idea page.
+  // LeafHead — the opening band of a chapter.
   //
-  // Replaces StoryMasthead on leaf pages. The old masthead spent about 120 words (a thesis
-  // paragraph plus a three-item "what this section answers" list) before the reader saw
-  // anything at all. Here it is a part label, a title and one sentence — then the instrument.
+  // The feature's own name is the H1, set huge, because that is the word a reader will meet
+  // on the real site. Beside it, the question the chapter answers and one sentence of answer.
+  // An optional art snippet sits under the headline at full width: the chapter's explainer,
+  // seen before any instrument.
+  import type { Snippet } from 'svelte';
   import { app } from '../lib/appState.svelte';
   import { partById, href, type PartId } from '../lib/nav';
+  import { reveal } from '../lib/motion';
+  import Band from './kit/Band.svelte';
+  import Masthead from './kit/Masthead.svelte';
 
   interface Props {
     part: PartId;
     title: string;
-    /** One sentence. Keep it under 30 words — the instrument makes the argument. */
+    /** One sentence. Keep it under thirty words — the instruments make the argument. */
     line: string;
     /** Same sentence without the jargon. */
     lineEli5?: string;
+    art?: Snippet;
   }
-  let { part, title, line, lineEli5 }: Props = $props();
+  let { part, title, line, lineEli5, art }: Props = $props();
   const p = $derived(partById(part));
+  const i = $derived(p.leaves.findIndex((l) => l.label === title));
+  const leaf = $derived(i >= 0 ? p.leaves[i] : null);
   const eli = $derived(app.narrative === 'eli5');
 </script>
 
-<header class="lh" style="--tone:{p.tone}">
-  <a class="lh-part" href={href(p.id)}>
-    <span class="lp-no">Part {p.no}</span>
-    <span class="lp-name">{p.name}</span>
-  </a>
-  <h1 class="pe-h1">{title}</h1>
-  <p class="lh-line">{eli && lineEli5 ? lineEli5 : line}</p>
-</header>
+<Band surface="paper" part={part} pad="hero">
+  <Masthead level={1} size="xl"
+    kicker={`Part ${p.no} · ${p.name}${i >= 0 ? ` — chapter ${i + 1} of ${p.leaves.length}` : ''}`}
+    lines={[title]}>
+    {#snippet aside()}
+      {#if leaf}<p class="er-pull ask">{leaf.ask}</p>{/if}
+      <p class="line">{eli && lineEli5 ? lineEli5 : line}</p>
+      <a class="up" href={href(p.id)}>← All of {p.name}</a>
+    {/snippet}
+  </Masthead>
+  {#if art}<div class="art" {@attach reveal({ y: 30, delay: 0.15 })}>{@render art()}</div>{/if}
+</Band>
 
 <style>
-  .lh { margin: 0 0 16px; }
-  .lh-part { display: inline-flex; align-items: baseline; gap: 7px; text-decoration: none; margin-bottom: 8px; }
-  .lp-no { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.16em;
-    text-transform: uppercase; color: var(--tone); }
-  .lp-name { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.16em;
-    text-transform: uppercase; color: rgba(28,22,17,0.45); }
-  .lh-part:hover .lp-name { color: rgba(28,22,17,0.75); }
-  .lh :global(.pe-h1) { margin-bottom: 8px; }
-  /* Full width under the headline — a measured cap here read as a half-empty page. */
-  .lh-line { margin: 0; font-size: var(--fs-body); line-height: 1.55; color: rgba(28,22,17,0.74); }
+  .ask { margin: 0 0 14px; }
+  .line { margin: 0 0 14px; font-size: var(--fs-body); line-height: 1.6; color: var(--fg-2); }
+  .up { font-family: var(--er-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em; text-transform: uppercase; color: var(--tone-text); text-decoration: none; }
+  .up:hover { text-decoration: underline; }
+  .art { margin-top: clamp(8px, 2vw, 24px); }
 </style>
