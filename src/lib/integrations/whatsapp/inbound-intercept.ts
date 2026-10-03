@@ -57,6 +57,15 @@ export async function interceptOwnerInbound(
   const feedback = await interceptDaydreamFeedback(text ?? '');
   if (feedback.handled) return { handled: true, reply: feedback.reply };
 
+  // Briefing tuning — "briefing less weather" / "briefing more calendar". The
+  // leading word "briefing" is the whole gate (no awaiting state to check), so
+  // it is owner-gated here: a stranger must not steer the owner's briefing.
+  if (isOwnerNumber(from)) {
+    const { interceptBriefingFeedback } = await import('$lib/briefing/wa-feedback');
+    const tuned = await interceptBriefingFeedback(text ?? '');
+    if (tuned.handled) return { handled: true, reply: tuned.reply };
+  }
+
   // D3 — whatsapp-trigger keyword dispatch. Runs AFTER the approval intercept so
   // approve/deny/yes/no always resolve an approval first.
   const { dispatchWhatsAppWorkflow } = await import('./workflow-dispatch');

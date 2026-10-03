@@ -21,6 +21,7 @@
       <dt class="fl-k">{r.label}</dt>
       <dd class="fl-v" class:mono={r.mono}>
         {#if r.href}<a href={r.href}>{r.value}</a>{:else}{r.value}{/if}
+        {#if r.note}<span class="fl-note">{r.note}</span>{/if}
       </dd>
     </div>
   {/each}
@@ -83,6 +84,12 @@
   .fl-v.mono {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
+  }
+  .fl-note {
+    display: block;
+    font-family: var(--font-body);
+    font-size: var(--fs-label-xs);
+    color: var(--text-muted);
   }
   .fl-v a {
     color: var(--accent);

@@ -102,8 +102,19 @@
     <SectionHead
       kicker="{sentLetter} / As sent"
       title={['The message', 'that went out']}
-      strap="The composed summary, verbatim. It may only quote the fact sheet above, so anything here that is not up there is a fault worth reporting."
+      strap="The summary, verbatim. It is written freely and then checked: any number, time or unit not in the fact sheet above and the draft is replaced by the plain facts."
     />
+    {#if detail?.verification && !detail.verification.verified}
+      <div class="card t-watch replaced">
+        <p class="card-kicker">Draft replaced</p>
+        {#if detail.verification.rejectedDraft}
+          <p class="card-body">The written draft stated something the facts do not support ({detail.verification.violations.join('; ')}), so the plain facts were sent instead. The rejected draft:</p>
+          <pre class="sent-block">{detail.verification.rejectedDraft}</pre>
+        {:else}
+          <p class="card-body">No draft was written ({detail.verification.violations.join('; ')}), so the plain facts were sent instead.</p>
+        {/if}
+      </div>
+    {/if}
     {#if briefing.markdown}
       <div class="sent"><ChatMarkdown content={briefing.markdown} /></div>
     {:else}
@@ -127,8 +138,8 @@
     {#if gaps.length}
       <div class="stack tight">
         {#each gaps as gap (gap.section + gap.reason)}
-          <div class="card t-watch">
-            <p class="card-kicker">{gap.section}</p>
+          <div class="card" class:t-watch={!gap.chronic} class:t-quiet={gap.chronic}>
+            <p class="card-kicker">{gap.section}{#if gap.required} · required{/if}{#if gap.chronic} · also missing the day before, left out of the message{/if}</p>
             <p class="card-body">{gap.reason}</p>
           </div>
         {/each}
@@ -192,6 +203,14 @@
   }
   .sent-heading {
     margin-top: clamp(24px, 3vw, 40px);
+  }
+  /* The "draft replaced" notice sits above the message it explains. */
+  .replaced {
+    max-width: 78ch;
+    margin-bottom: 16px;
+  }
+  .replaced .sent-block {
+    margin-top: 10px;
   }
   /* The WhatsApp block, exactly as the phone received it: mono, and WRAPPING —
      a `pre` that does not wrap is the widest descendant of a horizontal scroll
