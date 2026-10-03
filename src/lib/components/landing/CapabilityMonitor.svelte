@@ -221,7 +221,10 @@
      the ink still runs edge to edge; the traces stop at the column. */
   .mon-hero {
     --col-l: 168px;
-    --col-v: 148px;
+    /* Wide enough for the longest reading on one line: "12,345 steps today"
+       or "asleep 07:00–23:00". A narrower column lets the value spill left
+       over the end of its trace. */
+    --col-v: 220px;
     --line: rgba(237, 228, 212, 0.1);
     background: var(--text-primary);
     color: var(--bg);
