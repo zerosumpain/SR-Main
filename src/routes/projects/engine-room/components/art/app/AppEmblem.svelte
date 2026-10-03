@@ -4,7 +4,7 @@
   // along the top wire and pass the door; notifications come back along the bottom one, sent
   // by the site itself. The pieces drawn are the app's own targets from the manifest.
   import { onMount } from 'svelte';
-  import { inView } from 'motion';
+  import { inView } from '../../../lib/motion';
   import { shown, still } from '../../../lib/motion';
 
   interface Props { phones: number; watches: number }

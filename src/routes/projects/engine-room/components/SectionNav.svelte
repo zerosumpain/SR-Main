@@ -7,7 +7,7 @@
   // A hairline in the part's colour runs along the bottom as the page scrolls. Under about
   // a thousand pixels the parts fold into one drawer, which also carries the switch.
   import { page } from '$app/state';
-  import { scroll } from 'motion';
+  import { scroll } from '../lib/motion';
   import { app } from '../lib/appState.svelte';
   import { still } from '../lib/motion';
   import { B, PARTS, href, partById } from '../lib/nav';

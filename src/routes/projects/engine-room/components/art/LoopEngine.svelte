@@ -10,7 +10,7 @@
   // Motion is CSS for the gears and SMIL for the travelling notes; both stop for a reader
   // with reduced motion, and pause when the drawing is off screen.
   import { onMount } from 'svelte';
-  import { inView } from 'motion';
+  import { inView } from '../../lib/motion';
   import { PARTS, href, type PartId } from '../../lib/nav';
   import { still } from '../../lib/motion';
 

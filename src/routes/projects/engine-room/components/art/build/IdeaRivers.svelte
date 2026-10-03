@@ -6,7 +6,7 @@
   // no text at all. Picking a channel lights its stream and names it. Ideas travel the streams
   // while the drawing is on screen, unless the reader has asked for reduced motion.
   import { onMount } from 'svelte';
-  import { inView } from 'motion';
+  import { inView } from '../../../lib/motion';
   import { still } from '../../../lib/motion';
 
   interface Props {

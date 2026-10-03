@@ -6,7 +6,7 @@
   // zero and climb, and only when the reader can see it climbing.
   import { Tween } from 'svelte/motion';
   import { cubicOut } from 'svelte/easing';
-  import { inView } from 'motion';
+  import { inView } from '../../lib/motion';
   import { still } from '../../lib/motion';
 
   interface Props {

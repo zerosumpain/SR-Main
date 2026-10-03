@@ -9,7 +9,7 @@
   import { untrack } from 'svelte';
   import { Tween } from 'svelte/motion';
   import { cubicOut } from 'svelte/easing';
-  import { inView } from 'motion';
+  import { inView } from '../../../lib/motion';
   import { still } from '../../../lib/motion';
 
   interface Slot { at: string; channel: string; outcome: string }
