@@ -6,9 +6,9 @@
 // the same path on the server and in the browser, so hydration never redraws.
 //
 // The shapes are signatures, not plots. Each reads as what its capability does
-// (a heartbeat, a think tick on a schedule, a build climbing its stages, deploy
-// spikes, scheduled runs, an assistant at rest), and each is scaled by the one
-// live number that capability has, so an active system visibly looks different.
+// (a heartbeat, a day on foot, a think tick on a schedule, deploy spikes), and
+// each is scaled by the one live number that capability has, so an active
+// system visibly looks different.
 
 export const TRACE_W = 1000;
 export const TRACE_H = 60;
@@ -49,25 +49,6 @@ export function tickTrace(count: number, width: number, lit: boolean): string {
   return `${d} L${TRACE_W},${floor}`;
 }
 
-/** A staircase: a build climbing brief → plan → build → verify. `stage` is how far it got, 0–4. */
-export function stairTrace(stage: number): string {
-  const s = Math.min(4, Math.max(0, Math.round(stage)));
-  const floor = 50;
-  let d = `M0,${floor}`;
-  let x = 0;
-  let y = floor;
-  for (let i = 0; i < s; i++) {
-    x += 150;
-    d += ` L${x},${y}`;
-    y -= 10;
-    d += ` L${x},${y}`;
-  }
-  // A finished or idle build drops back to the floor and runs flat.
-  d += ` L${x + 150},${y}`;
-  if (y !== floor) d += ` L${x + 150},${floor}`;
-  return `${d} L${TRACE_W},${floor}`;
-}
-
 /** Daily spikes from real counts, newest on the right, scaled to the busiest day in view. */
 export function spikeTrace(counts: number[], window = 40): string {
   const floor = 50;
@@ -82,19 +63,6 @@ export function spikeTrace(counts: number[], window = 40): string {
     d += h > 0 ? ` L${x - 2},${floor} L${x},${r1(floor - h)} L${x + 2},${floor}` : '';
   });
   return `${d} L${TRACE_W},${floor}`;
-}
-
-/** A resting line with a little life in it; amplitude grows with work in flight. */
-export function idleTrace(active: number): string {
-  // Centred mid-box: the two summed sines reach 1.6 × amp, so amp ≤ 11 keeps
-  // the busiest trace inside the 60-high box.
-  const mid = TRACE_H / 2;
-  const amp = active > 0 ? Math.min(11, 5 + active * 2) : 1.6;
-  let d = `M0,${mid}`;
-  for (let x = 10; x <= TRACE_W; x += 10) {
-    d += ` L${x},${r1(mid + Math.sin(x * 0.07) * amp + Math.sin(x * 0.31) * amp * 0.6)}`;
-  }
-  return d;
 }
 
 /**

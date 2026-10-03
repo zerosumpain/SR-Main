@@ -6,9 +6,7 @@
   import {
     ecgTrace,
     tickTrace,
-    stairTrace,
     spikeTrace,
-    idleTrace,
     stepsTrace,
     hourMarks,
   } from '$lib/landing/traces';
@@ -46,12 +44,12 @@
     days: Day[];
   } = $props();
 
-  type ChannelId = 'pulse' | 'steps' | 'daydream' | 'build' | 'ship' | 'releases' | 'canvas' | 'jkai';
+  type ChannelId = 'pulse' | 'steps' | 'daydream' | 'ship' | 'releases';
   interface Channel {
     id: ChannelId;
     label: string;
     sub: string;
-    tone: 'accent' | 'ink' | 'paper' | 'quiet';
+    tone: 'accent' | 'ink';
     value: string;
     unit: string;
     path: string;
@@ -64,7 +62,6 @@
 
   let picked = $state<ChannelId>('pulse');
 
-  const STAGE_STEP: Record<string, number> = { planning: 1, building: 3, ready: 4, shipped: 4 };
   const SHIP_DAYS = 40;
 
   let todayKey = $derived(new Date(now).toISOString().slice(0, 10));
@@ -80,9 +77,6 @@
     const hit = dd.hitRate == null ? null : Math.round(dd.hitRate * 100);
     const live = v?.daydream;
     const next = live && !live.paused ? until(live.nextRunAt, now) : '';
-    const b = v?.builder;
-    const c = v?.canvas;
-    const jobs = v?.jkai.activeJobs ?? 0;
     const hours = `${String(dd.activeHours.start).padStart(2, '0')}:00–${String(dd.activeHours.end).padStart(2, '0')}:00`;
 
     return [
@@ -126,18 +120,6 @@
         cta: 'How Daydream works',
       },
       {
-        id: 'build',
-        label: 'Build',
-        sub: 'brief to pull request',
-        tone: 'paper',
-        value: b ? (b.active ? b.stage : 'idle') : '—',
-        unit: b ? `${b.shippedCount} shipped` : 'builder',
-        path: stairTrace(b?.active ? (STAGE_STEP[b.stage] ?? 2) : 0),
-        detail: 'Accepted ideas go to an autonomous builder: a brief, a running preview, tests and a pull request, through the same gate as everything else.',
-        href: '/projects/engine-room/build',
-        cta: 'How Build works',
-      },
-      {
         id: 'ship',
         label: 'Ship',
         sub: `last ${SHIP_DAYS} days`,
@@ -160,30 +142,6 @@
         detail: `Releases per day over the last ${days.length || 90} days, each one summarised from its own commit range.`,
         href: '/releases',
         cta: 'Browse the record',
-      },
-      {
-        id: 'canvas',
-        label: 'Canvas',
-        sub: 'scheduled flows',
-        tone: 'ink',
-        value: c ? String(c.count) : '—',
-        unit: c?.lastRunAt ? `ran ${ago(c.lastRunAt, now)}` : 'canvases',
-        path: tickTrace(12, 3, !!c?.lastRunAt && now - Date.parse(c.lastRunAt) < 3_600_000),
-        detail: 'A node-based automation engine: mail, the house and the upkeep of this site, each wired as a canvas that fires on its own schedule.',
-        href: '/projects/engine-room',
-        cta: 'See the machinery',
-      },
-      {
-        id: 'jkai',
-        label: 'JKAI',
-        sub: 'the assistant',
-        tone: 'quiet',
-        value: v ? String(jobs) : '—',
-        unit: 'jobs running',
-        path: idleTrace(jobs),
-        detail: 'The assistant at the centre: tools, memory and long-running jobs. The line runs flat while it rests and lifts while it works.',
-        href: '/projects/engine-room',
-        cta: 'See the machinery',
       },
     ];
   });
@@ -333,9 +291,6 @@
   }
   .ch[data-tone='ink'] {
     --tone: var(--accent-ink-on-dark);
-  }
-  .ch[data-tone='quiet'] {
-    --tone: rgba(237, 228, 212, 0.6);
   }
   .ch:hover {
     background: rgba(237, 228, 212, 0.03);
