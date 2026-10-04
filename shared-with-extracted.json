@@ -23,7 +23,7 @@
     },
     "src/lib/server/health-hub-contract.ts": {
       "peer": "zerosumpain/SR-Health",
-      "sha256": "af134ffcad220fb164a42bcde8a8a618e9ae4cb4f75d5d9a4c2af82222e8738b"
+      "sha256": "0b6b2f7956a4a65262830b49099453527856ebcf3857dc53f7ceaaebeb0f34f6"
     },
     "src/lib/file-index/content.ts": {
       "peer": "zerosumpain/SR-Drive",
