@@ -116,4 +116,41 @@ export interface HubDigest {
 
   /** I — the verdict. `headline` is an ARRAY OF LINES, as on the page. */
   verdict: { headline: string[]; body: string[]; quote: string | null; reviewOn: string | null } | null;
+
+  /**
+   * C (owner) — overnight vitals, the Watch beside the WHOOP strap. Each device
+   * is judged only against its own baseline and the two are never averaged;
+   * temperature is a deviation from each device's own baseline. Null when
+   * neither device has a reading. Added 2026-10-04; older servers omit it.
+   */
+  vitals?: {
+    /** One sentence on how to read the pairs, for under the section title. */
+    note: string;
+    rows: Array<{
+      key: 'rhr' | 'breathing' | 'spo2' | 'temperature';
+      label: string;
+      /** Whose reading single-number surfaces take; null where they never substitute. */
+      primary: 'apple' | 'whoop' | null;
+      apple: VitalReading | null;
+      whoop: VitalReading | null;
+      /** "Usually level ± 2 bpm over 28 nights" — null until 14 paired nights. */
+      agreement: string | null;
+      /** Set when last night sits outside the usual gap. */
+      disagree: string | null;
+      tone: HubTone;
+    }>;
+  } | null;
+}
+
+/** One device's overnight reading, as `HubDigest.vitals` carries it. */
+export interface VitalReading {
+  /** "52" — or "+0.31" for temperature, a deviation from the device's own baseline. */
+  display: string;
+  unit: string | null;
+  /** "vs 51 baseline", "vs its own baseline", "first readings". */
+  baseline: string;
+  /** YYYY-MM-DD when the reading is older than yesterday; null when fresh. */
+  asOf: string | null;
+  /** Up to 28 nights, oldest → newest, on the same scale as `display`. */
+  series: number[];
 }
