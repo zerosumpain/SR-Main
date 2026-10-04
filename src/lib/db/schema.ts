@@ -685,6 +685,9 @@ export const appleHealthMetrics = pgTable(
 
     // Metadata
     units: text('units').notNull(), // 'bpm', 'ms', 'count', 'kcal', etc.
+    // The HealthKit source that wrote it (the Watch, the phone, Garmin Connect).
+    // Null for rows from before 2026-10-04 and from the retired webhook.
+    source: text('source'),
 
     // Sync metadata
     syncedAt: integer('synced_at').default(sql`extract(epoch from now())::integer`),
