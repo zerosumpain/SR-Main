@@ -57,6 +57,11 @@ describe('defaultsPublic', () => {
     expect(defaultsPublic('pulse')).toBe(true);
   });
 
+  it('makes the Marbler game public with no row', () => {
+    expect(isStaticProjectKey('marbler')).toBe(true);
+    expect(defaultsPublic('marbler')).toBe(true);
+  });
+
   it('makes an AI build private with no row', () => {
     expect(isStaticProjectKey('compound-interest-calculator')).toBe(false);
     expect(defaultsPublic('compound-interest-calculator')).toBe(false);

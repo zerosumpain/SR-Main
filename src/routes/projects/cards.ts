@@ -57,6 +57,17 @@ export const PROJECT_CARDS: ProjectCard[] = [
       'Build a world, choose your rivals, and play for the frontier. An isometric hex conquest game with configurable maps and players, a reinforcement-learning lab, and a rule forge that turns your ideas into new game mechanics. Play a turn yourself, watch the AI compete, or let it learn through thousands of headless matches.',
     chips: 'turn-based conquest · PyTorch · custom rules · independent app',
   },
+  {
+    key: 'marbler',
+    href: '/projects/marbler/',
+    label: 'Open Marbler',
+    kind: 'Game',
+    tag: 'Playable · WebGL',
+    title: 'Marbler — a marble race built on luck',
+    blurb:
+      'Watch a field of marbles race down a machine generated for this race alone: spinners, cogs, trampolines, wrecking balls, black-hole transporters and lava. Every course is measured with thousands of simulated test drops so a marble makes it top to bottom in one clean attempt only about one time in twenty; fall in the lava and you start again from the top. Pick a favourite and see if luck is on its side.',
+    chips: 'Rapier physics · Pixi · procedural courses · Monte Carlo design',
+  },
 
   {
     key: 'field-study-8',
