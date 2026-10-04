@@ -14,9 +14,13 @@
 // re-process previously-ingested sessions.
 import fs from 'node:fs';
 import crypto from 'node:crypto';
+import os from 'node:os';
 import path from 'node:path';
 
-export const SCHEMA_VERSION = 4;
+// v5 (2026-10-04): subagent transcripts count toward the session (cost, stage
+// cost, touched paths), and worktree folders resolve to the repository they
+// check out, so `sr-main-foo-20261003` reports as strange-rambling-svelte.
+export const SCHEMA_VERSION = 5;
 
 // ── Pricing per MTok (USD). cache_read ~0.1x input; cache_write_5m ~1.25x; 1h ~2x.
 // Keyed by normalised model id prefix. Unknown Claude ids fall back to opus.
@@ -62,6 +66,70 @@ const PROJECT_MAP = {
   '.claude': 'claude-config',
   'home-security': 'home-security',
 };
+
+// Repository (origin basename, lowercased) → project slug, for worktrees and
+// clones whose folder name says nothing about what they check out.
+const REPO_PROJECT = {
+  'sr-main': 'strange-rambling-svelte',
+  strange_rambling_svelte: 'strange-rambling-svelte',
+  'sr-appleapp': 'SR-AppleApp',
+};
+
+// Folder-name fallbacks for a worktree that no longer exists on disk (they are
+// deleted after merge, and a SCHEMA_VERSION bump re-parses old sessions). Order
+// matters: the first matching prefix wins.
+const FOLDER_PROJECT = [
+  [/^(sr-main|wt-|sr-shipped|sr-news|sr-deploy|sr-build|sr-jkai-grounding)/, 'strange-rambling-svelte'],
+  [/^sr-health/, 'sr-health'],
+  [/^sr-jkai/, 'sr-jkai-core'],
+  [/^sr-workflows?/, 'sr-workflows'],
+  [/^sr-drive/, 'sr-drive'],
+  [/^sr-infra/, 'sr-infra'],
+  [/^sr-hex/, 'sr-hex'],
+  [/^sr-policy-engine/, 'sr-policy-engine'],
+  [/^sr-policy/, 'sr-policy-analysis'],
+  [/^sr-apple/, 'SR-AppleApp'],
+];
+
+const repoCache = new Map();
+/**
+ * The GitHub repository a checkout belongs to, or null. Worktrees resolve to
+ * their shared `.git`; a remote that is itself a local path (porkserv clones
+ * clones) is followed, up to three hops, until a github.com URL appears.
+ */
+function repoOfDir(dir, depth = 0) {
+  if (depth > 3) return null;
+  try {
+    const dotGit = path.join(dir, '.git');
+    let common = dotGit;
+    if (fs.statSync(dotGit).isFile()) {
+      // A worktree: `gitdir: /x/.git/worktrees/<name>` → the shared /x/.git.
+      const gitdir = fs.readFileSync(dotGit, 'utf8').match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
+      if (gitdir) common = gitdir.replace(/\/worktrees\/[^/]+\/?$/, '');
+    }
+    const config = fs.readFileSync(path.join(common, 'config'), 'utf8');
+    const urls = [...config.matchAll(/^\s*url\s*=\s*(\S+)/gm)].map((m) => m[1]);
+    const gh = urls.find((u) => /github\.com[:/]/.test(u));
+    if (gh) return path.basename(gh).replace(/\.git$/, '').toLowerCase();
+    const local = urls.find((u) => u.startsWith('/'));
+    if (local) return repoOfDir(local.replace(/\/\.git\/?$/, ''), depth + 1);
+  } catch { /* not a checkout, or gone */ }
+  return null;
+}
+function repoOfFolder(top, home = os.homedir()) {
+  const key = `${home}/${top}`;
+  if (!repoCache.has(key)) repoCache.set(key, repoOfDir(path.join(home, top)));
+  return repoCache.get(key);
+}
+
+/** Project slug for a home-directory top folder. */
+export function projectOfFolder(top, home) {
+  if (PROJECT_MAP[top]) return PROJECT_MAP[top];
+  const repo = repoOfFolder(top, home);
+  if (repo) return REPO_PROJECT[repo] ?? repo;
+  for (const [re, slug] of FOLDER_PROJECT) if (re.test(top)) return slug;
+  return top;
+}
 
 const STOPWORDS = new Set(
   ('a an the and or but if then else for to of in on at by with without from into over under '
@@ -125,6 +193,12 @@ function topDir(p) {
 }
 // A file counts toward project attribution only if it's real project work under
 // the user's home dir — not scratchpad/tmp/system paths.
+function countBashFolders(command, into) {
+  const home = os.homedir().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  for (const m of String(command || '').matchAll(new RegExp(`(?:${home}|~)/([A-Za-z0-9._-]+)/`, 'g'))) {
+    if (!m[1].startsWith('.')) into[m[1]] = (into[m[1]] || 0) + 1;
+  }
+}
 function isProjectFile(p) {
   const s = String(p);
   if (!s.startsWith('/home/')) return false;
@@ -193,12 +267,67 @@ function extractPullRequests(raw) {
   return [...found].filter((n) => n > 0 && n < 100_000).sort((a, b) => a - b);
 }
 
+/**
+ * Add one assistant message's usage to a per-model bucket map and return its
+ * cost. cache_creation splits into 5m (1.25x) and 1h (2x) writes; any
+ * unattributed remainder is billed at the 5m rate.
+ */
+function addUsage(byModel, model, u) {
+  const cc5 = u.cache_creation?.ephemeral_5m_input_tokens ?? 0;
+  const cc1 = u.cache_creation?.ephemeral_1h_input_tokens ?? 0;
+  const ccOther = Math.max(0, (u.cache_creation_input_tokens || 0) - cc5 - cc1);
+  const bm = (byModel[model || '<unknown>'] ??= { input: 0, output: 0, cacheRead: 0, cw5: 0, cw1: 0 });
+  bm.input += u.input_tokens || 0;
+  bm.output += u.output_tokens || 0;
+  bm.cacheRead += u.cache_read_input_tokens || 0;
+  bm.cw5 += cc5 + ccOther;
+  bm.cw1 += cc1;
+  const p = priceFor(model);
+  if (!p) return 0;
+  return ((u.input_tokens || 0) * p.in + (u.output_tokens || 0) * p.out
+    + (u.cache_read_input_tokens || 0) * p.cr + (cc5 + ccOther) * p.cw5 + cc1 * p.cw1) / 1e6;
+}
+
+/**
+ * Every subagent transcript a session spawned: `<dir>/<sessionId>/**\/*.jsonl`.
+ * Claude Code writes Agent-tool and workflow runs there, and their tokens are
+ * billed like any other — leaving them out under-counted porkserv's sessions by
+ * ~43% of their true cost (measured 2026-10-04: $1,014 of subagents on $1,353).
+ */
+export function subagentFiles(file) {
+  const root = path.join(path.dirname(file), path.basename(file, '.jsonl'));
+  const out = [];
+  const walk = (dir) => {
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.isFile() && e.name.endsWith('.jsonl')) out.push(p);
+    }
+  };
+  walk(root);
+  return out.sort();
+}
+
+function editedPath(b) {
+  if (b.name === 'Edit' || b.name === 'Write' || b.name === 'NotebookEdit' || b.name === 'MultiEdit') {
+    return b.input?.file_path || b.input?.notebook_path || null;
+  }
+  return null;
+}
+
 // ── main ─────────────────────────────────────────────────────────────────────
 export function parseTranscript(file, opts = {}) {
   const now = opts.now ?? Date.now();
   const raw = fs.readFileSync(file, 'utf8');
   const stat = fs.statSync(file);
-  const contentHash = crypto.createHash('sha256').update(raw).digest('hex');
+  const subFiles = opts.subagents === false ? [] : subagentFiles(file);
+  const hash = crypto.createHash('sha256').update(raw);
+  for (const f of subFiles) {
+    try { const st = fs.statSync(f); hash.update(`\0${path.basename(f)}:${st.size}:${st.mtimeMs}`); } catch { /* raced */ }
+  }
+  const contentHash = hash.digest('hex');
   const sessionId = path.basename(file, '.jsonl');
 
   const lines = raw.split('\n');
@@ -219,6 +348,7 @@ export function parseTranscript(file, opts = {}) {
   const toolHistogram = {};
   const touchedTop = {};
   const touchedFull = {};
+  const bashTop = {}; // home folders a Bash command named — a fallback project signal
   const skillsUsed = {};
   let userMsgCount = 0;
   let assistantMsgCount = 0;
@@ -249,18 +379,7 @@ export function parseTranscript(file, opts = {}) {
         tok.cacheCreation += u.cache_creation_input_tokens || 0;
         const model = o.message?.model;
         if (model) models.add(model);
-        // Per-model token buckets. cache_creation splits into 5m (1.25x) and 1h
-        // (2x) writes; any unattributed remainder is billed at the 5m rate.
-        const cc5 = u.cache_creation?.ephemeral_5m_input_tokens ?? 0;
-        const cc1 = u.cache_creation?.ephemeral_1h_input_tokens ?? 0;
-        const ccOther = Math.max(0, (u.cache_creation_input_tokens || 0) - cc5 - cc1);
-        const mk = model || '<unknown>';
-        const bm = (byModel[mk] ??= { input: 0, output: 0, cacheRead: 0, cw5: 0, cw1: 0 });
-        bm.input += u.input_tokens || 0;
-        bm.output += u.output_tokens || 0;
-        bm.cacheRead += u.cache_read_input_tokens || 0;
-        bm.cw5 += cc5 + ccOther;
-        bm.cw1 += cc1;
+        addUsage(byModel, model, u);
         for (const b of toolUses(o.message)) {
           toolCallCount++;
           const name = b.name || 'unknown';
@@ -269,27 +388,67 @@ export function parseTranscript(file, opts = {}) {
             const sk = b.input?.skill || '?';
             skillsUsed[sk] = (skillsUsed[sk] || 0) + 1;
           }
-          if (name === 'Edit' || name === 'Write' || name === 'NotebookEdit') {
-            const fp = b.input?.file_path;
-            if (fp && isProjectFile(fp)) {
-              touchedTop[topDir(fp)] = (touchedTop[topDir(fp)] || 0) + 1;
-              touchedFull[fp] = (touchedFull[fp] || 0) + 1;
-            }
+          const fp = editedPath(b);
+          if (fp && isProjectFile(fp)) {
+            touchedTop[topDir(fp)] = (touchedTop[topDir(fp)] || 0) + 1;
+            touchedFull[fp] = (touchedFull[fp] || 0) + 1;
           }
+          if (name === 'Bash') countBashFolders(b.input?.command, bashTop);
         }
       }
     }
   }
 
+  // ── subagents: their tokens are the session's tokens ──
+  const subByModel = {};
+  const subMessages = []; // {ts, costUsd} — placed onto the stage timeline below
+  let subagentCount = 0;
+  for (const f of subFiles) {
+    let sraw;
+    try { sraw = fs.readFileSync(f, 'utf8'); } catch { continue; }
+    let counted = false;
+    for (const line of sraw.split('\n')) {
+      if (!line.trim()) continue;
+      let o;
+      try { o = JSON.parse(line); } catch { continue; }
+      if (o.type !== 'assistant') continue;
+      if (!counted) { subagentCount++; counted = true; }
+      const u = o.message?.usage || {};
+      const model = o.message?.model;
+      if (model && model !== '<synthetic>') models.add(model);
+      tok.input += u.input_tokens || 0;
+      tok.output += u.output_tokens || 0;
+      tok.cacheRead += u.cache_read_input_tokens || 0;
+      tok.cacheCreation += u.cache_creation_input_tokens || 0;
+      const costUsd = addUsage(subByModel, model, u);
+      subMessages.push({ ts: o.timestamp ? Date.parse(o.timestamp) : null, costUsd });
+      for (const b of toolUses(o.message)) {
+        const fp = editedPath(b);
+        if (fp && isProjectFile(fp)) {
+          touchedTop[topDir(fp)] = (touchedTop[topDir(fp)] || 0) + 1;
+          touchedFull[fp] = (touchedFull[fp] || 0) + 1;
+        }
+        if (b.name === 'Bash') countBashFolders(b.input?.command, bashTop);
+      }
+    }
+  }
+
   // ── project attribution ──
-  const topSorted = Object.entries(touchedTop).sort((a, b) => b[1] - a[1]).filter(([k]) => k);
+  // Edits decide; memory and config notes (`.claude/…`) only when nothing else
+  // was edited, because a session that ships a feature and then writes one
+  // memory note is about the feature. A session that worked entirely through
+  // Bash falls back to the folders its commands named.
+  const ranked = (m) => Object.entries(m).filter(([k]) => k).sort((a, b) => b[1] - a[1]);
+  const edits = ranked(touchedTop);
+  const dom = edits.find(([k]) => k !== '.claude')?.[0]
+    ?? ranked(bashTop).find(([k]) => k !== '.claude')?.[0]
+    ?? edits[0]?.[0];
   let project = 'unknown';
-  if (topSorted.length) {
-    const dom = topSorted[0][0];
-    project = PROJECT_MAP[dom] || dom;
+  if (dom) {
+    project = projectOfFolder(dom);
   } else if (cwd) {
     const base = path.basename(cwd);
-    project = PROJECT_MAP[base] || (base === 'john' ? 'homeserv' : base);
+    project = PROJECT_MAP[base] || (base === path.basename(os.homedir()) ? os.hostname().split('.')[0] : projectOfFolder(base));
   }
 
   // ── first substantive user prompt ──
@@ -427,6 +586,21 @@ export function parseTranscript(file, opts = {}) {
   }
   pushSeg();
 
+  // Subagent cost lands on the stage that was open when the subagent ran, so
+  // stage costs still sum to the session estimate.
+  for (const s of stages) s.subagentCostUsd = 0;
+  for (const m of subMessages) {
+    if (!stages.length || !m.costUsd) continue;
+    let target = stages[0];
+    if (m.ts) for (const s of stages) if (s.startedAt && s.startedAt <= m.ts) target = s;
+    target.costUsd += m.costUsd;
+    target.subagentCostUsd += m.costUsd;
+  }
+  for (const s of stages) {
+    s.metadata.subagentCostUsd = Number(s.subagentCostUsd.toFixed(4));
+    delete s.subagentCostUsd;
+  }
+
   // For result/fixes segments with no prose, synthesise rawText from the file list.
   for (const s of stages) {
     if (!s.rawText && s.metadata.files.length) {
@@ -459,30 +633,29 @@ export function parseTranscript(file, opts = {}) {
   // Verified against Anthropic's published API pricing (platform.claude.com/pricing):
   // no long-context premium applies to these models, so a flat per-token rate holds
   // across the full 1M context window.
+  // Each row carries its `source`: the main thread or its subagents.
   const costBreakdown = [];
-  for (const [model, b] of Object.entries(byModel)) {
-    const price = priceFor(model);
-    const totalTok = b.input + b.output + b.cacheRead + b.cw5 + b.cw1;
-    if (price) {
-      const costUsd = (b.input * price.in + b.output * price.out + b.cacheRead * price.cr
-        + b.cw5 * price.cw5 + b.cw1 * price.cw1) / 1e6;
-      estCostUsd += costUsd;
-      costBreakdown.push({
-        model, known: true,
-        tokens: { input: b.input, output: b.output, cacheRead: b.cacheRead, cacheWrite5m: b.cw5, cacheWrite1h: b.cw1 },
-        rates: { input: price.in, output: price.out, cacheRead: price.cr, cacheWrite5m: price.cw5, cacheWrite1h: price.cw1 },
-        costUsd: Number(costUsd.toFixed(4)),
-      });
-    } else if (totalTok > 0) {
-      // genuinely unpriced model with real usage — flag the estimate as partial
-      costKnown = false;
-      costBreakdown.push({
-        model, known: false,
-        tokens: { input: b.input, output: b.output, cacheRead: b.cacheRead, cacheWrite5m: b.cw5, cacheWrite1h: b.cw1 },
-        rates: null, costUsd: 0,
-      });
+  for (const [source, buckets] of [['main', byModel], ['subagent', subByModel]]) {
+    for (const [model, b] of Object.entries(buckets)) {
+      const price = priceFor(model);
+      const totalTok = b.input + b.output + b.cacheRead + b.cw5 + b.cw1;
+      const tokens = { input: b.input, output: b.output, cacheRead: b.cacheRead, cacheWrite5m: b.cw5, cacheWrite1h: b.cw1 };
+      if (price) {
+        const costUsd = (b.input * price.in + b.output * price.out + b.cacheRead * price.cr
+          + b.cw5 * price.cw5 + b.cw1 * price.cw1) / 1e6;
+        estCostUsd += costUsd;
+        costBreakdown.push({
+          model, source, known: true, tokens,
+          rates: { input: price.in, output: price.out, cacheRead: price.cr, cacheWrite5m: price.cw5, cacheWrite1h: price.cw1 },
+          costUsd: Number(costUsd.toFixed(4)),
+        });
+      } else if (totalTok > 0) {
+        // genuinely unpriced model with real usage — flag the estimate as partial
+        costKnown = false;
+        costBreakdown.push({ model, source, known: false, tokens, rates: null, costUsd: 0 });
+      }
+      // else: zero-token pseudo-model (e.g. <synthetic>) — ignore, don't flag cost as partial
     }
-    // else: zero-token pseudo-model (e.g. <synthetic>) — ignore, don't flag cost as partial
   }
   costBreakdown.sort((a, b) => b.costUsd - a.costUsd);
 
@@ -506,7 +679,7 @@ export function parseTranscript(file, opts = {}) {
       userMsgCount, assistantMsgCount, toolCallCount,
       models: [...models],
       tokens: tok,
-      estCostUsd: costKnown ? Number(estCostUsd.toFixed(4)) : Number(estCostUsd.toFixed(4)),
+      estCostUsd: Number(estCostUsd.toFixed(4)),
       costKnown,
       featureTypes,
       termFreq,

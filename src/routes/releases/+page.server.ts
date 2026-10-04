@@ -3,6 +3,7 @@ import { getReleaseShowcase } from '$lib/releases/public';
 import { getReleaseConsole, monthlyReleaseBuckets, parseConsoleFilters, weeklyCadence } from '$lib/releases/console';
 import { isOwnerRequest } from '$lib/server/owner';
 import { getReleaseSessions } from '$lib/releases/sessions.server';
+import { getSpendBand } from '$lib/releases/spend.server';
 import { withPrivateFootprint } from '$lib/releases/private-footprint.server';
 import { isPublicPath } from '$lib/auth';
 import { reachablePages } from '$lib/access/catalogue';
@@ -41,12 +42,18 @@ export const load: PageServerLoad = async (event) => {
     // not carry session prose, prompts or per-stage costs at all — shipping the
     // bytes and hiding them behind {#if owner} is the disclosure this page's
     // whole design exists to prevent.
-    const sessions = await getReleaseSessions(console_.items.map((i) => i.id));
+    const [sessions, spend] = await Promise.all([
+      getReleaseSessions(console_.items.map((i) => i.id)),
+      // What the work cost, over the same date window. Owner-only for the same
+      // reason as `sessions`: titles, costs and PR numbers are the disclosure.
+      getSpendBand({ from: filters.from, to: filters.to }),
+    ]);
     return {
       sourceFootprint: withPrivateFootprint(SOURCE_FOOTPRINT),
       mode: 'owner' as const,
       ...console_,
       sessions,
+      spend,
       today,
       sampleData: process.env.SHIPPED_PREVIEW_SAMPLE_DATA === '1',
     };

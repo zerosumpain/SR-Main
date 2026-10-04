@@ -3,6 +3,7 @@ import { render } from 'svelte/server';
 import ReleasesHub from './ReleasesHub.svelte';
 import { monthlyReleaseBuckets, parseConsoleFilters, weeklyCadence } from '$lib/releases/console';
 import { groupReleaseWork } from './work-groups';
+import { buildSpendBand } from '$lib/releases/spend';
 import type { OwnerReleasesData, PublicReleasesData } from './types';
 
 // /releases serves two documents at one URL, and the anonymous one is the
@@ -162,6 +163,25 @@ function ownerData(over: Partial<OwnerReleasesData> = {}): OwnerReleasesData {
       unlinkedInWindow: 3,
       sessionsWithoutPrs: 41,
     },
+    spend: buildSpendBand(
+      [
+        {
+          id: 'sess-1',
+          title: 'Fold the changelog into the release log',
+          project: 'strange-rambling-svelte',
+          startedAt: '2026-07-29T09:00:00Z',
+          costUsd: 18.42,
+          costKnown: true,
+          prs: [761],
+          touched: [],
+          tokens: { input: 10, cacheRead: 990 },
+          breakdown: [{ model: 'claude-opus-5-5', source: 'subagent', costUsd: 4.2 }],
+          stages: [{ stage: 'result', costUsd: 18.42 }],
+          messageCount: 214,
+        },
+      ],
+      [{ id: 1, deployedAt: '2026-07-29T13:52:00Z', prs: [761], files: [{ path: 'src/routes/releases/+page.svelte', insertions: 40, deletions: 2 }], items: ['Connector health'] }],
+    ),
     ...over,
   };
 }
@@ -227,6 +247,10 @@ describe('the public document', () => {
     // rendered output too, because the type is only half the guarantee.
     const body = html(publicData());
     expect(body).not.toContain('The work behind it');
+    expect(body).not.toContain('What the work');
+    expect(body).not.toContain('Cost of a feature');
+    expect(body).not.toContain('Feature ledger');
+    expect(body).not.toContain('$');
     expect(body).not.toContain('sess-1');
     expect(body).not.toMatch(/pull\/\d+/);
     expect(body.toLowerCase()).not.toContain('pull request');
@@ -272,6 +296,16 @@ describe('the owner document', () => {
     const clean = html(ownerData({ totals: { ...ownerData().totals, pending: 0, failed: 0 } }));
     expect(clean).toContain('Every release in this view has been summarised.');
     expect(clean).not.toContain('Retry');
+  });
+
+  it('shows what the work cost, by feature', () => {
+    expect(body).toContain('What the work');
+    expect(body).toContain('Estimated spend');
+    expect(body).toContain('Cost of a feature');
+    expect(body).toContain('Feature ledger');
+    expect(body).toContain('Shipped (/releases)');
+    expect(body).toContain('$4.20');
+    expect(body).toContain('D / Work and releases');
   });
 
   it('is not indexable copy — it names the full read', () => {

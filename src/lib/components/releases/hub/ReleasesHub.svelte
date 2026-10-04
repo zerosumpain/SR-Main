@@ -3,7 +3,8 @@
   //
   //   A  The record      how much has shipped, and what the queue looks like
   //   B  Cadence         how often it ships, and what those deploys carry
-  //   C  The log         sessions → releases → commits for the owner
+  //   C  The cost        owner only: Claude Code spend, by week and feature
+  //   C/D The log         sessions → releases → commits for the owner
   //
   // Signed out, C is the capability record: the publicly-describable things
   // that went live, grouped by day, complete and indexable. Signed in, C is the
@@ -28,6 +29,7 @@
   import ReleaseFilters from './ReleaseFilters.svelte';
   import CapabilityRecord from './CapabilityRecord.svelte';
   import VersionLog from './VersionLog.svelte';
+  import SpendBand from './SpendBand.svelte';
   import type { ReleasesData, Tile } from './types';
 
   let { data }: { data: ReleasesData } = $props();
@@ -128,7 +130,7 @@
   // ——— C ————————————————————————————————————————————————————————————
   const logKicker = $derived(
     data.mode === 'owner'
-      ? `C / Work and releases · page ${data.filters.page + 1}`
+      ? `D / Work and releases · page ${data.filters.page + 1}`
       : `C / What shipped · ${plural(data.items.length, 'entry', 'entries')}`,
   );
 
@@ -216,6 +218,14 @@
     strap={cadenceStrap}
     filters={data.filters}
   />
+
+  {#if data.mode === 'owner'}
+    <SpendBand
+      spend={data.spend}
+      filters={data.filters}
+      kicker={`C / What it cost · ${plural(data.spend.totals.sessions, 'session', 'sessions')}${data.filters.from || data.filters.to ? ' · filtered window' : ''}`}
+    />
+  {/if}
 
   <section class="c" id="release-log">
     <div class="c-inner">
