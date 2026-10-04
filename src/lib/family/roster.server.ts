@@ -26,9 +26,22 @@ export interface FamilyPerson {
   stepsSharing?: boolean;
 }
 
-export function familyId(email: string): string {
+function familyHash(input: string): string {
   const key = env.AUTH_SECRET || 'sr-family';
-  return 'f_' + createHmac('sha256', key).update(email.trim().toLowerCase()).digest('hex').slice(0, 12);
+  return 'f_' + createHmac('sha256', key).update(input).digest('hex').slice(0, 12);
+}
+
+export function familyId(email: string): string {
+  return familyHash(email.trim().toLowerCase());
+}
+
+/**
+ * The id of a household member who has no email (someone on Life360 only), for
+ * boards keyed by trail subject. Same key and shape as `familyId`; the
+ * `subject:` prefix keeps it from ever colliding with an email's id.
+ */
+export function familySubjectId(subject: string): string {
+  return familyHash('subject:' + subject);
 }
 
 export function nameFromEmail(email: string): string {
