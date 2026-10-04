@@ -117,6 +117,17 @@ export const PROJECT_CARDS: ProjectCard[] = [
     chips: 'pressures · trade-offs · maturity · cited',
   },
   {
+    key: 'data-spine',
+    href: '/projects/data-spine',
+    label: 'Open The Data Spine',
+    kind: 'Field study',
+    tag: 'Interactive · Identity and data flow',
+    title: 'The Data Spine — Know Every Child, Move the Question',
+    blurb:
+      'The case for two improvements to how education data works in England: one identity that follows every child across their life, and a federated network where questions travel to the data and only answers come back, with a receipt for every exchange. Follow a steady childhood and a turbulent one, send questions from DfE, councils, schools and a mayoral authority through the same front door, and weigh the design against seventeen other education systems.',
+    chips: 'identity · federation · trust ledger · benchmark · cited',
+  },
+  {
     key: 'policy-engine',
     href: '/projects/policy-engine',
     label: 'Open Education Policy Modelling',
