@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 /**
- * GET /api/native/today — the `daydream` section. It carries the Noticed
- * card's notes, and its failure costs that card alone, like every section.
+ * GET /api/native/today — the `overnight` section: SR-Health's one-line read of
+ * the Watch beside the strap, and its failure costs that tile alone.
  */
 
 vi.mock('$lib/server/native-auth', () => ({
@@ -11,10 +11,8 @@ vi.mock('$lib/server/native-auth', () => ({
 }));
 vi.mock('$env/dynamic/private', () => ({ env: { AUTH_ALLOWED_EMAILS: 'owner@example.com' } }));
 vi.mock('$lib/server/native-health', () => ({ getNativeHealthSummary: async () => { throw new Error('health down'); } }));
-vi.mock('$lib/server/native-health-vitals', () => ({
-  getNativeHealthVitals: async () => { throw new Error('vitals down'); },
-  todayOvernight: () => null,
-}));
+let vitals: () => Promise<unknown> = async () => null;
+vi.mock('$lib/server/extracted-app', () => ({ getFromExtracted: async () => ({ vitals: await vitals() }) }));
 vi.mock('$lib/server/notify', () => ({ pendingForDevice: async () => [], recentEvents: async () => [] }));
 vi.mock('$lib/news/desk', () => ({ loadNewsDesk: async () => { throw new Error('news down'); } }));
 vi.mock('$lib/connectors/watch-store', () => ({ connectorAttention: async () => ({ items: [], checkedAt: null }) }));
@@ -37,34 +35,39 @@ const note = {
 let notes: () => Promise<unknown[]> = async () => [note];
 vi.mock('$lib/daydream/think/notes.server', () => ({ loadTodayNotes: () => notes() }));
 
-async function today() {
+async function today({ fresh = false } = {}) {
   const mod = await import('../../../../src/routes/api/native/today/+server');
-  const request = new Request('http://x/api/native/today', { headers: { Authorization: 'Bearer t' } });
+  const request = new Request(`http://x/api/native/today${fresh ? '?fresh=1' : ''}`, { headers: { Authorization: 'Bearer t' } });
   const res = await (mod.GET as (e: unknown) => Promise<Response>)({ locals: {}, request, url: new URL(request.url), params: {} });
   return { status: res.status, body: await res.json() };
 }
 
-beforeEach(() => {
+const section = {
+  note: 'n',
+  headline: 'SpO₂ apart last night',
+  brief: 'SpO₂ 96.4 · 92.6%',
+  tone: 'watch',
+  rows: [],
+};
+
+beforeEach(async () => {
   notes = async () => [note];
+  vitals = async () => section;
 });
 
-describe('GET /api/native/today — daydream', () => {
-  it('carries { notes } beside the other sections', async () => {
-    const { status, body } = await today();
-    expect(status).toBe(200);
-    expect(body.daydream).toEqual({ notes: [note] });
-    // Other sections failing did not take this one with them.
-    expect(body.health).toBeNull();
-    expect(body.news).toBeNull();
+describe('GET /api/native/today — overnight', () => {
+  it('carries the headline, the brief and the tone, and nothing to chart', async () => {
+    const { body } = await today();
+    expect(body.overnight).toEqual({ headline: 'SpO₂ apart last night', brief: 'SpO₂ 96.4 · 92.6%', tone: 'watch' });
   });
 
-  it('a failure drops only the daydream section', async () => {
-    notes = async () => {
-      throw new Error('ledger down');
-    };
-    const { status, body } = await today();
+  it('is null when SR-Health has no reading, or fails', async () => {
+    vitals = async () => null;
+    expect((await today({ fresh: true })).body.overnight).toBeNull();
+    vitals = async () => { throw new Error('health down'); };
+    const { status, body } = await today({ fresh: true });
     expect(status).toBe(200);
-    expect(body.daydream).toBeNull();
-    expect(body.alerts).toEqual({ pending: 0, unread: 0, latest: [] });
+    expect(body.overnight).toBeNull();
+    expect(body.daydream).toEqual({ notes: [note] });
   });
 });
