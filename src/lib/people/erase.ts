@@ -50,6 +50,7 @@ import {
   householdJourneyViewer,
   familyStepsEvent,
   familyAlarm,
+  familyMessage,
   familyTask,
   fileShareTokens,
   gameResults,
@@ -117,6 +118,7 @@ export const ACCOUNT_COLUMNS: Record<string, Record<string, Fate | `kept: ${stri
   // Alarms they raised (their message and position) go; one they stood down
   // for somebody else stays, without their address.
   family_alarm: { from_email: 'erase', cancelled_by_email: 'scrub' },
+  family_message: { from_email: 'erase' },
   family_task: {
     assignee_email: 'scrub',
     created_by_email: 'scrub',
@@ -240,6 +242,9 @@ export async function eraseRows(target: EraseTarget, executor: typeof db = db): 
     // The family alarms they raised; their name off any they stood down.
     await tx.delete(familyAlarm).where(inArray(familyAlarm.fromEmail, addrs));
     await tx.update(familyAlarm).set({ cancelledByEmail: null }).where(inArray(familyAlarm.cancelledByEmail, addrs));
+    // Their family messages and replies (replies under their messages go too).
+    const sent = await tx.delete(familyMessage).where(inArray(familyMessage.fromEmail, addrs)).returning({ id: familyMessage.id });
+    if (sent.length) await tx.delete(familyMessage).where(inArray(familyMessage.replyTo, sent.map((m) => m.id)));
 
     // Their games on the family leaderboard.
     await tx.delete(gameResults).where(inArray(gameResults.playerId, addrs.map((a) => playerId(a))));

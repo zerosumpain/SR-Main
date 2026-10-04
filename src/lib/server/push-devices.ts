@@ -119,8 +119,12 @@ export async function deliver(
 const ALARM_PRIVATE: Record<string, { title: string; body: string }> = {
   'family-alarm': { title: 'Family alarm', body: 'Someone in the family raised the alarm. Open the app to see who and where.' },
   'family-alarm-cancel': { title: 'Family alarm stood down', body: 'Open the app for details.' },
+  // "msg family": the reply buttons still work on a private preview, so the
+  // message's id survives; who wrote it and what it says do not.
+  'family-msg': { title: 'Family message', body: 'Someone in the family sent a message. Open the app to read it.' },
+  'family-msg-reply': { title: 'Family message', body: 'Someone replied to your message. Open the app to read it.' },
 };
-const ALARM_KEYS = ['alarmId', 'kind', 'at'] as const;
+const ALARM_KEYS = ['alarmId', 'kind', 'at', 'messageId'] as const;
 
 /** Keep names, counts, locations and arbitrary metadata off private previews. */
 export function privatePush(message: PushMessage): PushMessage {

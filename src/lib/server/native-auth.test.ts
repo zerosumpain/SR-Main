@@ -117,6 +117,9 @@ describe('every native route gates itself', () => {
         // in each handler; SR-Health computes it over the service lane.
         '/family/landgrab/+server.ts',
         '/family/landgrab/changes/+server.ts',
+        // "msg family": the same audience, `familyCaller` in each handler.
+        '/family/messages/+server.ts',
+        '/family/messages/[id]/replies/+server.ts',
         '/family/tasks/+server.ts',
         '/family/tasks/[id]/+server.ts',
         '/games/+server.ts',
