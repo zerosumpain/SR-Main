@@ -13,6 +13,7 @@
     "local-plan-navigator",
     "jkai-core",
     "workflows",
+    "data-spine",
     "hex",
     "main"
   ],
@@ -444,7 +445,7 @@
     {
       "key": "data-spine",
       "repo": "zerosumpain/SR-DataSpine",
-      "status": "planned",
+      "status": "live",
       "audience": "sr-data-spine",
       "releaseDir": "/opt/sr-data-spine",
       "configDir": "/etc/sr-data-spine",
@@ -464,11 +465,14 @@
       "passthroughPatterns": [],
       "queueTriggers": [],
       "note": "The Data Spine field study: a static study and three instruments. The gateway signs Main's project visibility decision (sessionClaims project); the app serves only public, owner and share decisions and 404s the rest. Private by default in Main (PRIVATE_BY_DEFAULT). No database, no worker.",
-      "branch": null,
-      "workflows": [],
-      "executionOwner": null,
-      "migrationAuthor": null,
-      "schemaExecutor": null
+      "branch": "master",
+      "workflows": [
+        ".github/workflows/check.yml",
+        ".github/workflows/release.yml"
+      ],
+      "executionOwner": "The Data Spine field study pages and instruments",
+      "migrationAuthor": "data-spine",
+      "schemaExecutor": "data-spine"
     },
     {
       "key": "hex",
