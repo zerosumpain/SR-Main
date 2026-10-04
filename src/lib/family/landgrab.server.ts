@@ -112,9 +112,19 @@ export interface UpstreamActivity {
   trace: [number, number][] | null;
 }
 
+/** Health's map focus, rebuilt like every other field; anything odd is dropped. */
+function focusOf(f: UpstreamChanges['focus']): NativeLandgrabChanges['focus'] {
+  if (!f) return null;
+  const ok = (n: unknown, lo: number, hi: number) => typeof n === 'number' && Number.isFinite(n) && n >= lo && n <= hi;
+  if (!ok(f.lat, -90, 90) || !ok(f.lon, -180, 180) || !ok(f.radiusM, 100, 50_000)) return null;
+  return { lat: Math.round(f.lat * 1e4) / 1e4, lon: Math.round(f.lon * 1e4) / 1e4, radiusM: Math.round(f.radiusM) };
+}
+
 export interface UpstreamChanges {
   week: { start: string; end: string; current: boolean };
   bounds: { minLat: number; minLon: number; maxLat: number; maxLon: number } | null;
+  /** Where the phone's map opens: a point and a radius Health chooses (home). */
+  focus?: { lat: number; lon: number; radiusM: number } | null;
   people: Array<{ subject: string; colour: string }>;
   hexes: Array<{ id: number; polygon: [number, number][]; owner: string; previous: string | null }>;
   changes: Array<{
@@ -175,6 +185,7 @@ export interface NativeLandgrabChange {
 export interface NativeLandgrabChanges {
   week: { start: string; end: string; current: boolean };
   bounds: { minLat: number; minLon: number; maxLat: number; maxLon: number } | null;
+  focus: { lat: number; lon: number; radiusM: number } | null;
   people: Array<{ id: string; name: string; colour: string }>;
   hexes: Array<{ id: number; polygon: [number, number][]; owner: string; previous: string | null }>;
   changes: NativeLandgrabChange[];
@@ -297,6 +308,7 @@ export function projectChanges(upstream: UpstreamChanges, people: LandgrabPerson
           maxLon: upstream.bounds.maxLon,
         }
       : null,
+    focus: focusOf(upstream.focus),
     people: (upstream.people ?? []).flatMap((p) => {
       const person = map.get(p.subject);
       return person ? [{ id: person.id, name: person.name, colour: p.colour }] : [];
@@ -357,6 +369,7 @@ export async function getFamilyLandgrabChanges(week: string, now = new Date()): 
     return {
       week: { start: week, end, current: today >= week && today <= end },
       bounds: null,
+      focus: null,
       people: [],
       hexes: [],
       changes: [],

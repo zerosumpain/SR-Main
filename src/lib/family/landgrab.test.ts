@@ -73,6 +73,7 @@ const poly = (lat: number, lon: number): [number, number][] =>
 const CHANGES: UpstreamChanges = {
   week: { start: '2026-09-28', end: '2026-10-04', current: true },
   bounds: { minLat: 40.764, minLon: -73.981, maxLat: 40.8, maxLon: -73.949 },
+  focus: { lat: 40.78123, lon: -73.96654, radiusM: 3219 },
   people: [{ subject: 'alex', colour: '#aa0000' }, { subject: 'sam', colour: '#00aa00' }, { subject: 'robin', colour: '#0000aa' }],
   hexes: [
     { id: 0, polygon: poly(40.77, -73.97), owner: 'alex', previous: 'sam' },
@@ -192,6 +193,7 @@ describe('the map of a week', () => {
     });
     expect(body.changes[1]).toMatchObject({ personId: robin, from: [{ id: alex, hexes: 1 }], activity: null });
     expect(body.bounds).toEqual(CHANGES.bounds);
+    expect(body.focus).toEqual({ lat: 40.7812, lon: -73.9665, radiusM: 3219 });
     expect(body).not.toHaveProperty('truncated');
 
     const text = JSON.stringify(body);
@@ -249,7 +251,7 @@ describe('the map of a week', () => {
   it('answers an empty map for an empty household without asking Health (subjects is required there)', async () => {
     h.members = [];
     const body = await getFamilyLandgrabChanges('2026-09-28', new Date('2026-10-02T12:00:00Z'));
-    expect(body).toEqual({ week: { start: '2026-09-28', end: '2026-10-04', current: true }, bounds: null, people: [], hexes: [], changes: [] });
+    expect(body).toEqual({ week: { start: '2026-09-28', end: '2026-10-04', current: true }, bounds: null, focus: null, people: [], hexes: [], changes: [] });
     expect(h.calls).toEqual([]);
   });
 
