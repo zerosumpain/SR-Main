@@ -127,8 +127,9 @@ export interface HubDigest {
     /** One sentence on how to read the pairs, for under the section title. */
     note: string;
     /**
-     * The whole section in a few words, for a small surface such as the
-     * iPhone's Today tile: "Watch and strap agree", "SpO₂ apart last night".
+     * The whole section in a few words, about seventeen characters, for a
+     * small surface such as the iPhone's Sleep analytics tile: "Devices agree",
+     * "SpO₂ apart".
      * Optional: servers before 2026-10-05 omit it.
      */
     headline?: string;
