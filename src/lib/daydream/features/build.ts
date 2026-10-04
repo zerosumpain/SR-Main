@@ -243,11 +243,12 @@ export async function buildDayFeatures(
   // ── Whoop cycles (strain) ── owner only
   if (isOwner) try {
     const rows = await db
-      .select({ startDateLocal: whoopCycles.startDateLocal, strain: whoopCycles.strain })
+      .select({ startDate: whoopCycles.startDate, strain: whoopCycles.strain })
       .from(whoopCycles);
     for (const r of rows) {
-      const day = (r.startDateLocal ?? '').slice(0, 10);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
+      // A cycle starts at sleep onset, the evening BEFORE the day it measures;
+      // twelve hours on lands in that waking day (SR-Health's cycleDay).
+      const day = new Date((r.startDate + 12 * 3600) * 1000).toLocaleDateString('en-CA', { timeZone: LOCAL_TZ });
       const v = strainValue(r.strain);
       if (v != null) bucket(day).strain.push(v);
     }
