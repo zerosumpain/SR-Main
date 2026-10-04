@@ -1,5 +1,6 @@
 // The project visibility/share decision Main signs for an extracted project
-// application (SR-Policy-Engine, SR-DfE-Data-Strategy, SR-Data-Standard-Designer).
+// application (SR-Policy-Engine, SR-DfE-Data-Strategy, SR-Data-Standard-Designer,
+// SR-DataSpine).
 //
 // Those applications used to read `project_visibility` and `project_share`
 // themselves and bump the share's use count from their own process. Now the
@@ -23,6 +24,7 @@ export const PROJECT_AUDIENCES: Readonly<Record<string, string>> = Object.freeze
   'sr-policy-engine': 'policy-engine',
   'sr-dfe-data-strategy': 'dfe-data-strategy',
   'sr-data-standard-designer': 'data-standard-designer',
+  'sr-data-spine': 'data-spine',
 });
 
 export type ProjectAccess = 'public' | 'owner' | 'share' | 'none';
