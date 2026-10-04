@@ -24,7 +24,7 @@ vi.mock('$lib/home/presence/members', () => ({
   listMembers: async () => h.members,
 }));
 
-import { familyId, familySubjectId } from './roster.server';
+import { familyChangeId, familyId, familySubjectId } from './roster.server';
 import {
   LANDGRAB_CHANGES_PATH,
   LANDGRAB_WEEKS_PATH,
@@ -33,7 +33,6 @@ import {
   getFamilyLandgrabWeeks,
   isWeekShape,
   landgrabPeople,
-  rewriteChangeId,
   upstreamStatus,
   type UpstreamChanges,
   type UpstreamWeeks,
@@ -167,7 +166,7 @@ describe('the weekly board', () => {
 });
 
 describe('the map of a week', () => {
-  it('replaces every subject with an id, including inside change ids', async () => {
+  it('replaces every subject with an id, and every change id with an opaque one', async () => {
     const body = await getFamilyLandgrabChanges('2026-09-28');
     const alex = familyId('alex@example.test');
     const sam = familyId('sam@example.test');
@@ -183,7 +182,9 @@ describe('the map of a week', () => {
       [1, alex, null],
       [2, robin, alex],
     ]);
-    expect(body.changes.map((c) => c.id)).toEqual([`trail:${alex}:2026-10-01T09:12`, 'workout:abc']);
+    expect(body.changes.map((c) => c.id)).toEqual([familyChangeId('trail:alex:2026-10-01T09:12'), familyChangeId('workout:abc')]);
+    // Stable across calls, so the phone keeps its selection on a refresh.
+    expect((await getFamilyLandgrabChanges('2026-09-28')).changes.map((c) => c.id)).toEqual(body.changes.map((c) => c.id));
     expect(body.changes[0]).toMatchObject({
       personId: alex, at: '2026-10-01T09:40:00.000Z', won: 2, taken: 1,
       from: [{ id: sam, hexes: 1 }, { id: null, hexes: 1 }], hexIds: [0, 1],
@@ -195,6 +196,18 @@ describe('the map of a week', () => {
 
     const text = JSON.stringify(body);
     for (const leak of ['"subject"', 'stranger', 'robin', 'alex', '"sam', ':sam', '@']) expect(text).not.toContain(leak);
+  });
+
+  it('sends no household subject string anywhere, on either endpoint', async () => {
+    const subjects = MEMBERS.map((m) => m.subject).concat('stranger');
+    const bodies = [
+      JSON.stringify(await getFamilyLandgrabWeeks(6, 'sam@example.test')),
+      JSON.stringify(await getFamilyLandgrabChanges('2026-09-28')),
+    ];
+    for (const text of bodies) {
+      expect(text).not.toContain('"subject"');
+      for (const subject of subjects) expect(text, subject).not.toContain(subject);
+    }
   });
 
   it('holds the trace to the contract ceiling at five decimal places', async () => {
@@ -213,9 +226,11 @@ describe('the map of a week', () => {
 });
 
 describe('small rules', () => {
-  it('rewrites a subject only where it is a whole part of the id', () => {
-    expect(rewriteChangeId('unattributed:sam', 'sam', 'f_1')).toBe('unattributed:f_1');
-    expect(rewriteChangeId('workout:sample', 'sam', 'f_1')).toBe('workout:sample');
+  it('turns a change id into a stable, opaque c_ id', () => {
+    const id = familyChangeId('unattributed:sam');
+    expect(id).toMatch(/^c_[0-9a-f]{16}$/);
+    expect(familyChangeId('unattributed:sam')).toBe(id);
+    expect(familyChangeId('unattributed:alex')).not.toBe(id);
   });
 
   it('accepts only a real calendar date as a week', () => {

@@ -25,7 +25,7 @@
 import { getFromExtracted } from '$lib/server/extracted-app';
 import { downsample } from '$lib/server/native-trails';
 import { listMembers } from '$lib/home/presence/members';
-import { familyId, familySubjectId } from './roster.server';
+import { familyChangeId, familyId, familySubjectId } from './roster.server';
 
 export const LANDGRAB_WEEKS_PATH = '/api/health/landgrab/family/weeks';
 export const LANDGRAB_CHANGES_PATH = '/api/health/landgrab/family/changes';
@@ -144,7 +144,7 @@ export interface NativeLandgrabWeeks {
 }
 
 export interface NativeLandgrabChange {
-  /** Health's change id, with any subject inside it rewritten to the person's id. */
+  /** `c_` + a keyed hash of Health's change id: stable, and carrying no subject. */
   id: string;
   /**
    * Who took the ground, as a phone id. Health calls this `subject`; it cannot
@@ -261,10 +261,9 @@ export function projectChanges(upstream: UpstreamChanges, people: LandgrabPerson
     if (!id) return [];
     return [
       {
-        // The change id carries a subject for trail outings and unattributed
-        // ground (`trail:<subject>:…`, `unattributed:<subject>`) — rewritten
-        // so the subject never reaches the phone.
-        id: rewriteChangeId(c.id, c.subject, id),
+        // Health's change id can carry a subject (`trail:<subject>:…`,
+        // `unattributed:<subject>`), so every one becomes an opaque keyed hash.
+        id: familyChangeId(c.id),
         personId: id,
         at: c.at,
         won: c.won,
@@ -294,19 +293,6 @@ export function projectChanges(upstream: UpstreamChanges, people: LandgrabPerson
     changes,
     ...(upstream.truncated === true ? { truncated: true as const } : {}),
   };
-}
-
-/**
- * `trail:katie:2026-10-01T09:12` → `trail:f_…:2026-10-01T09:12`, and
- * `unattributed:katie` → `unattributed:f_…`. A workout id (`workout:abc`) has
- * no subject in it and is left alone. Any other id that still contains the
- * subject as a `:`-separated part has that part replaced.
- */
-export function rewriteChangeId(changeId: string, subject: string, id: string): string {
-  return changeId
-    .split(':')
-    .map((part) => (part === subject ? id : part))
-    .join(':');
 }
 
 // ——— parameters and failures ——————————————————————————————————————————————

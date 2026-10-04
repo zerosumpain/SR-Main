@@ -24,7 +24,7 @@ vi.mock('$lib/server/native-handler', async (importOriginal) => ({
 
 vi.mock('$lib/home/presence/members', () => ({
   listMembers: async () => [
-    { subject: 'owner', email: 'owner@example.test', displayName: 'Owner' },
+    { subject: 'pat', email: 'owner@example.test', displayName: 'Owner' },
     { subject: 'kid', email: 'kid@example.test', displayName: 'Kid' },
     { subject: 'gran', email: null, displayName: 'Gran' },
   ],
@@ -39,7 +39,7 @@ vi.mock('$lib/server/extracted-app', () => ({
     if (path.startsWith('/api/health/landgrab/family/weeks')) {
       return {
         updatedAt: '2026-10-04T08:00:00.000Z',
-        weeks: [{ start: '2026-09-28', end: '2026-10-04', current: true, people: [row('kid', 1), row('owner', 2), row('gran', 2)] }],
+        weeks: [{ start: '2026-09-28', end: '2026-10-04', current: true, people: [row('kid', 1), row('pat', 2), row('gran', 2)] }],
       };
     }
     return {
@@ -54,7 +54,7 @@ vi.mock('$lib/server/extracted-app', () => ({
   }),
 }));
 
-const { familyId, familySubjectId } = await import('$lib/family/roster.server');
+const { familyChangeId, familyId, familySubjectId } = await import('$lib/family/roster.server');
 const weeksRoute = await import('./+server');
 const changesRoute = await import('./changes/+server');
 
@@ -104,7 +104,7 @@ describe('GET /api/native/family/landgrab', () => {
     const text = JSON.stringify(body);
     expect(text).not.toContain('subject');
     expect(text).not.toContain('@');
-    expect(text).not.toMatch(/"(kid|owner|gran)"/);
+    expect(text).not.toMatch(/"(kid|pat|gran)"/);
   });
 
   it('marks the owner’s own row when the owner’s phone asks', async () => {
@@ -143,10 +143,13 @@ describe('GET /api/native/family/landgrab/changes', () => {
     expect(body.people).toEqual([{ id: kid, name: 'Kid', colour: '#336699' }]);
     expect(body.hexes).toEqual([{ id: 0, polygon: [[40.77, -73.97]], owner: kid, previous: gran }]);
     expect(body.changes).toEqual([
-      { id: `unattributed:${kid}`, personId: kid, at: '2026-10-01T09:00:00.000Z', won: 1, taken: 1, from: [{ id: gran, hexes: 1 }], hexIds: [0], activity: null },
+      { id: familyChangeId('unattributed:kid'), personId: kid, at: '2026-10-01T09:00:00.000Z', won: 1, taken: 1, from: [{ id: gran, hexes: 1 }], hexIds: [0], activity: null },
     ]);
-    expect(JSON.stringify(body)).not.toMatch(/subject|"kid"|"gran"|:kid|@/);
-    expect(h.calls[0]).toBe('/api/health/landgrab/family/changes?week=2026-09-28&subjects=owner%2Ckid%2Cgran');
+    const text = JSON.stringify(body);
+    expect(text).not.toContain('@');
+    // No household subject string anywhere in the body (names are capitalised).
+    for (const subject of ['subject', 'pat', 'kid', 'gran']) expect(text, subject).not.toContain(subject);
+    expect(h.calls[0]).toBe('/api/health/landgrab/family/changes?week=2026-09-28&subjects=pat%2Ckid%2Cgran');
   });
 
   it('refuses a missing or malformed week before asking Health', async () => {
