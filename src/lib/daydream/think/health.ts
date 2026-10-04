@@ -296,12 +296,13 @@ async function whoopByDay(key: string, from: Date): Promise<Map<string, number[]
     }
   } else if (key === 'strain') {
     const rows = await db
-      .select({ startDate: whoopCycles.startDate, startDateLocal: whoopCycles.startDateLocal, strain: whoopCycles.strain })
+      .select({ startDate: whoopCycles.startDate, strain: whoopCycles.strain })
       .from(whoopCycles)
       .where(gte(whoopCycles.startDate, since));
     for (const r of rows) {
-      const head = (r.startDateLocal ?? '').slice(0, 10);
-      const day = /^\d{4}-\d{2}-\d{2}$/.test(head) ? head : localDay(new Date(r.startDate * 1000));
+      // A cycle starts at sleep onset, the evening BEFORE the day it measures;
+      // twelve hours on lands in that waking day (SR-Health's cycleDay).
+      const day = localDay(new Date((r.startDate + 12 * 3600) * 1000));
       // Stored both raw and ×100 by two writers; the value test decides.
       push(day, strainValue(r.strain));
     }

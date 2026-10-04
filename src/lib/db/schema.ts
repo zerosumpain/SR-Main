@@ -446,14 +446,22 @@ export const whoopWorkouts = pgTable('whoop_workouts', {
   kilojoule: doublePrecision('kilojoule').notNull(),
   distanceMeters: doublePrecision('distance_meters'),
   altitudeGainMeters: doublePrecision('altitude_gain_meters'),
+  altitudeChangeMeters: doublePrecision('altitude_change_meters'),
+  // 0-1: the share of the workout the strap actually recorded. Below ~0.9 the
+  // strain, heart rate and zones describe part of the session, not all of it.
+  percentRecorded: doublePrecision('percent_recorded'),
 
-  // Zone durations (milliseconds)
+  // Zone durations (milliseconds). WHOOP v2 sends these as `zone_durations`;
+  // the sync read `zone_duration` until 2026-10-04 and stored zero for all 359.
   zoneZero: integer('zone_zero').notNull(),
   zoneOne: integer('zone_one').notNull(),
   zoneTwo: integer('zone_two').notNull(),
   zoneThree: integer('zone_three').notNull(),
   zoneFour: integer('zone_four').notNull(),
   zoneFive: integer('zone_five').notNull(),
+
+  // WHOOP's own updated_at (unix seconds): moves when WHOOP rescores the record.
+  whoopUpdatedAt: integer('whoop_updated_at'),
 
   // Sync metadata
   syncedAt: integer('synced_at').default(sql`extract(epoch from now())::integer`),
@@ -475,6 +483,8 @@ export const whoopSleep = pgTable('whoop_sleep', {
   startDate: integer('start_date').notNull(),
   endDate: integer('end_date').notNull(),
   startDateLocal: text('start_date_local').notNull(),
+  timezone: text('timezone'),
+  cycleId: text('cycle_id'), // the WHOOP cycle this sleep belongs to (v2)
   nap: boolean('nap').notNull(),
 
   // Sleep stages (milliseconds)
@@ -483,6 +493,9 @@ export const whoopSleep = pgTable('whoop_sleep', {
   totalLight: integer('total_light').notNull(),
   totalSlowWave: integer('total_slow_wave').notNull(),
   totalRem: integer('total_rem').notNull(),
+  // Time in bed the strap could not read (off-wrist, flat battery). Large values
+  // mean the stage totals undercount the night.
+  totalNoData: integer('total_no_data'),
   sleepCycleCount: integer('sleep_cycle_count').notNull(),
   disturbanceCount: integer('disturbance_count').notNull(),
 
@@ -497,6 +510,8 @@ export const whoopSleep = pgTable('whoop_sleep', {
   sleepPerformance: doublePrecision('sleep_performance').notNull(),
   sleepConsistency: doublePrecision('sleep_consistency').notNull(),
   sleepEfficiency: doublePrecision('sleep_efficiency').notNull(),
+
+  whoopUpdatedAt: integer('whoop_updated_at'),
 
   // Sync metadata
   syncedAt: integer('synced_at').default(sql`extract(epoch from now())::integer`),
@@ -521,6 +536,10 @@ export const whoopRecovery = pgTable('whoop_recovery', {
   hrvRmssd: doublePrecision('hrv_rmssd').notNull(), // milliseconds
   spo2: doublePrecision('spo2'), // percentage
   skinTemp: integer('skin_temp'), // celsius * 100
+  // True for the first couple of weeks on a strap: WHOOP is still learning the
+  // baselines, so the score is provisional.
+  userCalibrating: boolean('user_calibrating'),
+  whoopUpdatedAt: integer('whoop_updated_at'),
 
   // Sync metadata
   syncedAt: integer('synced_at').default(sql`extract(epoch from now())::integer`),
@@ -536,7 +555,9 @@ export const whoopCycles = pgTable('whoop_cycles', {
   id: text('id').primaryKey(), // Whoop cycle ID (UUID in v2 API)
   userId: integer('user_id').notNull(),
   startDate: integer('start_date').notNull(), // Unix timestamp
-  endDate: integer('end_date').notNull(),
+  // Null while the cycle is still open (today). The sync wrote 0 here for the
+  // open day and never revisited it until 2026-10-04: 205 of 284 rows.
+  endDate: integer('end_date'),
   startDateLocal: text('start_date_local').notNull(), // ISO string
   timezone: text('timezone').notNull(),
 
@@ -578,6 +599,10 @@ export const whoopCycles = pgTable('whoop_cycles', {
   kilojoule: doublePrecision('kilojoule').notNull(),
   averageHeartrate: integer('average_heartrate').notNull(),
   maxHeartrate: integer('max_heartrate').notNull(),
+  // Steps WHOOP counted across the cycle. A second, independent count beside
+  // Apple's step_count — see docs/apple-whoop-overlap.md before summing them.
+  stepCount: integer('step_count'),
+  whoopUpdatedAt: integer('whoop_updated_at'),
 
   // Sync metadata
   syncedAt: integer('synced_at').default(sql`extract(epoch from now())::integer`),
@@ -588,6 +613,19 @@ export const whoopCycles = pgTable('whoop_cycles', {
 ]);
 
 export type WhoopCycleRecord = typeof whoopCycles.$inferSelect;
+
+/**
+ * WHOOP's body measurement, one row per day it was read. The endpoint only ever
+ * returns the current value, so history exists only because the sync keeps it.
+ * `max_heart_rate` is WHOOP's working maximum — what its zones are cut from.
+ */
+export const whoopBodyMeasurements = pgTable('whoop_body_measurements', {
+  measuredOn: text('measured_on').primaryKey(), // YYYY-MM-DD (UTC) of the read
+  heightMeter: doublePrecision('height_meter'),
+  weightKilogram: doublePrecision('weight_kilogram'),
+  maxHeartRate: integer('max_heart_rate'),
+  syncedAt: integer('synced_at').default(sql`extract(epoch from now())::integer`),
+});
 
 // ==========================================
 // Health Dashboard - Sync State
