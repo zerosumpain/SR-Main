@@ -64,6 +64,8 @@ export function briefingFactRows(facts: BriefingFactRow[]): FactRow[] {
     value: fact.value,
     href: fact.href ?? null,
     mono: isTimeish(fact.value),
+    note: [fact.assessment, fact.repeat ? 'also said yesterday' : null].filter(Boolean).join(' · ') || null,
+    tone: fact.action ? ('action' as const) : undefined,
   }));
 }
 

@@ -45,6 +45,22 @@ export interface BriefingFactRow {
   source: string;
   /** Where the fact can be checked — a room of the hub, a thought's drill. */
   href?: string | null;
+  /** 0–100, how strongly the composer put it forward (from 2026-10-03). */
+  salience?: number;
+  /** The composer's code-written judgement, e.g. "52m shorter than your average". */
+  assessment?: string;
+  /** Asks something of the reader today. */
+  action?: boolean;
+  /** Said word-for-word in the previous day's briefing. */
+  repeat?: boolean;
+}
+
+/** Whether the written summary survived the draft check (from 2026-10-03). */
+export interface BriefingVerification {
+  verified: boolean;
+  usedFallback: boolean;
+  violations: string[];
+  rejectedDraft?: string | null;
 }
 
 /**
@@ -69,8 +85,12 @@ export interface BriefingDetail {
   /** Memories learned inside the configured recency window, newest first. */
   memories?: BriefingMemoryRow[];
   facts: BriefingFactRow[];
-  gaps: Array<{ section: string; reason: string }>;
+  gaps: Array<{ section: string; reason: string; required?: boolean; chronic?: boolean; notify?: boolean }>;
   sources: BriefingSourceRow[];
+  /** weekday / monday / weekend / travel — what the composer led with. */
+  mode?: string | null;
+  ranking?: { mode: string; lead: number; repeats: number; feedbackApplied: string[]; comparedWith: string | null } | null;
+  verification?: BriefingVerification | null;
   /**
    * The Daydreams block exactly as the WhatsApp message carries it (≤ 8 lines).
    * Written by `briefing-compose` from 2026-09-03; absent on older records.

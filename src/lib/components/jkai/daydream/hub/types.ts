@@ -89,4 +89,6 @@ export interface FactRow {
   tone?: Tone;
   /** Mono, for ids and stamps. */
   mono?: boolean;
+  /** A short second line under the value — e.g. how a figure compares. */
+  note?: string | null;
 }
