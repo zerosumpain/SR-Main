@@ -126,6 +126,16 @@ export interface HubDigest {
   vitals?: {
     /** One sentence on how to read the pairs, for under the section title. */
     note: string;
+    /**
+     * The whole section in a few words, for a small surface such as the
+     * iPhone's Today tile: "Watch and strap agree", "SpO₂ apart last night".
+     * Optional: servers before 2026-10-05 omit it.
+     */
+    headline?: string;
+    /** One pair, Watch then WHOOP — the one apart, else resting HR: "RHR 47 · 46 bpm". */
+    brief?: string | null;
+    /** 'watch' when any reading is apart. */
+    tone?: HubTone;
     rows: Array<{
       key: 'rhr' | 'breathing' | 'spo2' | 'temperature';
       label: string;

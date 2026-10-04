@@ -4,6 +4,7 @@ import { db } from '$lib/db';
 import { conversations } from '$lib/db/schema';
 import { withDevice } from '$lib/server/native-handler';
 import { getNativeHealthSummary } from '$lib/server/native-health';
+import { getNativeHealthVitals, todayOvernight } from '$lib/server/native-health-vitals';
 import { pendingForDevice, recentEvents } from '$lib/server/notify';
 import { loadNewsDesk } from '$lib/news/desk';
 import { connectorAttention } from '$lib/connectors/watch-store';
@@ -25,7 +26,7 @@ import { loadTodayNotes } from '$lib/daydream/think/notes.server';
 export const GET: RequestHandler = withDevice(async ({ url }, identity) => {
   const fresh = url.searchParams.get('fresh') === '1';
 
-  const [healthResult, alertsResult, newsResult, threadResult, connectionsResult, daydreamResult] = await Promise.allSettled([
+  const [healthResult, alertsResult, newsResult, threadResult, connectionsResult, daydreamResult, vitalsResult] = await Promise.allSettled([
     getNativeHealthSummary({ fresh }),
     Promise.all([pendingForDevice(5), recentEvents(8)]),
     // `force: false` — the Today card takes whatever the desk last fetched.
@@ -48,6 +49,9 @@ export const GET: RequestHandler = withDevice(async ({ url }, identity) => {
     // The Noticed card: the daydream loop's two newest notes from the last
     // 48 hours that he has not turned down (`think/notes.ts`).
     loadTodayNotes(),
+    // The Overnight tile: the Watch beside the strap, read by SR-Health. Its
+    // own settle, so a slow vitals read costs the tile and nothing else.
+    getNativeHealthVitals({ fresh }),
   ]);
 
   const health = healthResult.status === 'fulfilled' ? healthResult.value : null;
@@ -59,6 +63,9 @@ export const GET: RequestHandler = withDevice(async ({ url }, identity) => {
 
   if (healthResult.status === 'rejected') {
     console.error('[native] today: health unavailable', healthResult.reason);
+  }
+  if (vitalsResult.status === 'rejected') {
+    console.error('[native] today: overnight vitals unavailable', vitalsResult.reason);
   }
   if (daydreamResult.status === 'rejected') {
     console.error('[native] today: daydream notes unavailable', daydreamResult.reason);
@@ -78,6 +85,8 @@ export const GET: RequestHandler = withDevice(async ({ url }, identity) => {
           generatedAt: health.generatedAt,
         }
       : null,
+    // Absent on servers before 2026-10-05; the app decodes a missing key as nil.
+    overnight: vitalsResult.status === 'fulfilled' ? todayOvernight(vitalsResult.value) : null,
     alerts: alerts
       ? {
           pending: alerts[0].length,
