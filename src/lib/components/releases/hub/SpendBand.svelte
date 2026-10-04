@@ -8,7 +8,9 @@
   // Colour jobs, following the dataviz method:
   //  - shipped vs not-shipped is IDENTITY over two series → the site's validated
   //    pair, `--accent` (shipped) and `--accent-ink` (no released PR), with a
-  //    legend, a 2px surface gap between stacked fills, and text in text tokens;
+  //    legend, a 2px surface gap between stacked fills, and text in text tokens.
+  //    Spend whose PRs were never recorded is neither, so it is a neutral grey
+  //    third segment rather than a third hue — "unknown" carries no identity;
   //  - every other bar is MAGNITUDE in one dimension → one hue, direct labels;
   //  - the hour-of-week grid is SEQUENTIAL → one hue stepped light to dark.
   // Weekly and cumulative are different scales, so they are two views of one
@@ -30,7 +32,9 @@
 
   const t = $derived(spend.totals);
   const weeks = $derived(spend.weeks.slice(-40));
-  const peak = $derived(Math.max(1, ...weeks.map((w) => w.linked + w.unlinked)));
+  const peak = $derived(Math.max(1, ...weeks.map((w) => w.linked + w.unlinked + w.unrecorded)));
+  const recorded = $derived(t.linkedUsd + t.unlinkedUsd);
+  const anyUnrecorded = $derived(weeks.some((w) => w.unrecorded > 0));
   const cumPeak = $derived(Math.max(1, ...weeks.map((w) => w.cumulative)));
   const readout = $derived(hover ?? weeks[weeks.length - 1] ?? null);
 
@@ -55,7 +59,11 @@
       value: usd(t.costUsd),
       note: `${t.sessions.toLocaleString('en-GB')} sessions${t.partialSessions ? ` · ${t.partialSessions} partial` : ''}`,
     },
-    { label: 'Became releases', value: usd(t.linkedUsd), note: `${share(t.linkedUsd, t.costUsd)} via ${t.prs} released PRs` },
+    {
+      label: 'Became releases',
+      value: usd(t.linkedUsd),
+      note: `${share(t.linkedUsd, recorded)} of PR-recorded spend · ${t.prs} PRs${t.unrecordedUsd ? ` · ${usd(t.unrecordedUsd)} unrecorded` : ''}`,
+    },
     { label: 'Per released PR', value: t.prs ? usd(t.linkedUsd / t.prs) : '—', note: t.releases ? `${usd(t.linkedUsd / t.releases)} per release` : 'no linked releases' },
     { label: 'Per 1k lines', value: t.churn ? usd((t.linkedUsd / t.churn) * 1000) : '—', note: `${Math.round(t.churn / 1000).toLocaleString('en-GB')}k lines changed` },
     { label: 'Typical session', value: usd(t.medianSessionUsd), note: `median · 90th pct ${usd(t.p90SessionUsd)}` },
@@ -129,6 +137,9 @@
           {#if view === 'weekly'}
             <span class="key"><span class="swatch shipped"></span>Became releases</span>
             <span class="key"><span class="swatch other"></span>No released PR</span>
+            {#if anyUnrecorded}
+              <span class="key"><span class="swatch unrecorded"></span>PR not recorded</span>
+            {/if}
           {:else}
             <span class="key"><span class="swatch shipped"></span>Running total</span>
           {/if}
@@ -136,7 +147,7 @@
             <span class="readout" aria-live="polite">
               {weekLabel(readout.week)} ·
               {#if view === 'weekly'}
-                {usd(readout.linked + readout.unlinked)} · shipped {usd(readout.linked)} · other {usd(readout.unlinked)}
+                {usd(readout.linked + readout.unlinked + readout.unrecorded)} · shipped {usd(readout.linked)} · other {usd(readout.unlinked)}{readout.unrecorded ? ` · not recorded ${usd(readout.unrecorded)}` : ''}
               {:else}
                 {usd(readout.cumulative)} to date
               {/if}
@@ -162,19 +173,19 @@
                 />
               </svg>
             {/if}
-            <div class="cols" class:overlay={view === 'cumulative'} role="list" onpointerleave={() => (hover = null)}>
+            <div class="cols" class:overlay={view === 'cumulative'} role="group" aria-label="Weeks" onpointerleave={() => (hover = null)}>
               {#each weeks as w (w.week)}
                 <a
                   class="col"
-                  role="listitem"
                   href={weekHref(w.week)}
                   aria-current={filters.from === weekDates(w.week).from && filters.to === weekDates(w.week).to ? 'true' : undefined}
-                  aria-label="{w.week}: {usd(w.linked + w.unlinked)}, of which {usd(w.linked)} became releases. Filter to this week."
+                  aria-label="{w.week}: {usd(w.linked + w.unlinked + w.unrecorded)}, of which {usd(w.linked)} became releases{w.unrecorded ? ` and ${usd(w.unrecorded)} has no PR record` : ''}. Filter to this week."
                   onpointerenter={() => (hover = w)}
                   onfocus={() => (hover = w)}
                   onblur={() => (hover = null)}
                 >
                   {#if view === 'weekly'}
+                    <span class="seg unrecorded" style="height: {(w.unrecorded / peak) * 100}%"></span>
                     <span class="seg other" style="height: {(w.unlinked / peak) * 100}%"></span>
                     <span class="seg shipped" style="height: {(w.linked / peak) * 100}%"></span>
                   {/if}
@@ -245,7 +256,7 @@
       {/each}
     </div>
 
-    <FeatureLedger areas={spend.areas} sessions={spend.sessions} />
+    <FeatureLedger areas={spend.areas} groupTotals={spend.groups} sessions={spend.sessions} />
   </div>
 </section>
 
@@ -288,6 +299,7 @@
   .swatch { width: 10px; height: 10px; }
   .swatch.shipped { background: var(--accent); }
   .swatch.other { background: var(--accent-ink); }
+  .swatch.unrecorded, .seg.unrecorded { background: var(--text-ghost); }
   .readout { margin-left: auto; color: var(--text-secondary); }
 
   .plot { position: relative; padding-left: 46px; }

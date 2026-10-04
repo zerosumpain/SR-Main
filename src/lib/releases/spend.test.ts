@@ -160,4 +160,39 @@ describe('buildSpendBand', () => {
     expect(band.insights.some((i) => i.includes('Shipped (/releases)'))).toBe(true);
     expect(band.insights.some((i) => i.includes('20% of session cost went on follow-up fixes'))).toBe(true);
   });
+
+  it('keeps sessions parsed before PR extraction out of the shipped shares', () => {
+    const band = buildSpendBand(
+      [
+        session({ id: 'old', costUsd: 70, schemaVersion: 3, startedAt: '2026-07-01T10:00:00Z' }),
+        session({ id: 'shipped', costUsd: 20, prs: [101], schemaVersion: 5, startedAt: '2026-09-01T10:00:00Z' }),
+        session({ id: 'unshipped', costUsd: 10, schemaVersion: 5, startedAt: '2026-09-02T10:00:00Z' }),
+      ],
+      releases,
+    );
+    expect(band.totals.unrecordedUsd).toBe(70);
+    expect(band.totals.unlinkedUsd).toBe(10);
+    expect(band.totals.linkedUsd).toBe(20);
+    expect(band.weeks[0].unrecorded).toBe(70);
+    expect(band.weeks[0].unlinked).toBe(0);
+    expect(band.sessions.find((x) => x.id === 'old')!.prRecorded).toBe(false);
+    // 10 of the 30 recorded dollars is a third — under the 20% bar it would be, at 10 of 100.
+    expect(band.insights.some((i) => i.startsWith('33% of spend with a PR record'))).toBe(true);
+    expect(band.insights.some((i) => i.includes('$70.00 comes from sessions parsed before PR numbers'))).toBe(true);
+  });
+
+  it('names the same top feature, at the same total, as the ledger group', () => {
+    const band = buildSpendBand(
+      [
+        session({ id: 'a', costUsd: 30, touched: [{ path: 'wt/src/routes/jkai/+page.svelte', count: 1 }] }),
+        session({ id: 'b', costUsd: 25, touched: [{ path: 'wt/src/routes/jkai/intel/x/+page.svelte', count: 1 }] }),
+        session({ id: 'c', costUsd: 40, touched: [{ path: 'wt/src/routes/health/+page.svelte', count: 1 }] }),
+      ],
+      [],
+    );
+    // /health is the biggest single area, but the /jkai family is bigger.
+    expect(band.areas[0].key).toBe('health');
+    expect(band.groups[0]).toMatchObject({ key: 'jkai', costUsd: 55, sessions: 2 });
+    expect(band.insights[0]).toContain('/jkai is the most expensive feature area: $55.00 across 2 sessions');
+  });
 });
