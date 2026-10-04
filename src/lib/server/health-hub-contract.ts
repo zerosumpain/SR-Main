@@ -150,6 +150,34 @@ export interface HubDigest {
       tone: HubTone;
     }>;
   } | null;
+
+  /** C (owner) — the night's sleep, WHOOP beside the Watch. See `SleepDigest`. */
+  sleep?: SleepDigest | null;
+}
+
+/**
+ * The night's sleep for the iPhone's Sleep analytics (owner): WHOOP's last
+ * staged night beside the Watch's, and the week of nights from both. Added
+ * 2026-10-05; older servers omit it.
+ */
+export interface SleepDigest {
+  lastNight: {
+    /** YYYY-MM-DD, the day the night ended on. */
+    date: string;
+    /** WHOOP asleep (deep + light + REM): "7h12m". */
+    asleep: string;
+    /** WHOOP sleep performance, 0–100. */
+    score: number | null;
+    stages: Array<{ key: 'deep' | 'rem' | 'light' | 'awake'; label: string; minutes: number; display: string }>;
+    /** "9 disturbances", "5 sleep cycles", "40m the strap could not read". */
+    detail: string[];
+    /** The Watch's asleep (deep + core + REM) for the same night, when it staged one. */
+    watch: string | null;
+  } | null;
+  /** Up to seven nights, oldest → newest, hours asleep by each device. */
+  nights: Array<{ date: string; whoop: number | null; watch: number | null; score: number | null }>;
+  /** How to read the two devices' totals together. */
+  note: string;
 }
 
 /** One device's overnight reading, as `HubDigest.vitals` carries it. */
