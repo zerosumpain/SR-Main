@@ -11,10 +11,6 @@ vi.mock('$lib/server/native-auth', () => ({
 }));
 vi.mock('$env/dynamic/private', () => ({ env: { AUTH_ALLOWED_EMAILS: 'owner@example.com' } }));
 vi.mock('$lib/server/native-health', () => ({ getNativeHealthSummary: async () => { throw new Error('health down'); } }));
-vi.mock('$lib/server/native-health-vitals', () => ({
-  getNativeHealthVitals: async () => { throw new Error('vitals down'); },
-  todayOvernight: () => null,
-}));
 vi.mock('$lib/server/notify', () => ({ pendingForDevice: async () => [], recentEvents: async () => [] }));
 vi.mock('$lib/news/desk', () => ({ loadNewsDesk: async () => { throw new Error('news down'); } }));
 vi.mock('$lib/connectors/watch-store', () => ({ connectorAttention: async () => ({ items: [], checkedAt: null }) }));
