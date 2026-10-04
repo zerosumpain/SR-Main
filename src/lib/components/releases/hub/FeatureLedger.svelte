@@ -12,14 +12,16 @@
   //
   // Sparklines share ONE time axis — the whole window — so two features can be
   // compared by when their money was spent, not only by how much.
-  import { usd, type FeatureArea, type SpendSession } from '$lib/releases/spend';
+  import { usd, type FeatureArea, type FeatureGroup, type SpendSession } from '$lib/releases/spend';
 
   interface Props {
     areas: FeatureArea[];
+    /** Group totals counted once per session upstream — the insights read the same rows. */
+    groupTotals: FeatureGroup[];
     sessions: SpendSession[];
   }
 
-  let { areas, sessions }: Props = $props();
+  let { areas, groupTotals, sessions }: Props = $props();
 
   let selected = $state<string[]>([]);
   let query = $state('');
@@ -58,15 +60,14 @@
     for (const a of areas) (by.get(a.group) ?? by.set(a.group, []).get(a.group)!).push(a);
     return [...by.entries()]
       .map(([key, children]) => {
-        const keys = new Set(children.map((c) => c.key));
-        const touching = sessions.filter((s) => s.areas.some((a) => keys.has(a.key)));
+        const totals = groupTotals.find((g) => g.key === key);
         const cost = children.reduce((n, c) => n + c.costUsd, 0);
         return {
           key,
           label: children[0].groupLabel,
           costUsd: cost,
-          sessions: children.length === 1 ? children[0].sessions : touching.length,
-          prs: children.length === 1 ? children[0].prs : new Set(touching.flatMap((s) => s.prs)).size,
+          sessions: totals?.sessions ?? children[0].sessions,
+          prs: totals?.prs ?? children[0].prs,
           first: children.map((c) => c.first).filter(Boolean).sort()[0] ?? null,
           last: children.map((c) => c.last).filter(Boolean).sort().at(-1) ?? null,
           linkedShare: cost > 0 ? children.reduce((n, c) => n + c.costUsd * c.linkedShare, 0) / cost : 0,
@@ -171,6 +172,10 @@
     edits: 'edits',
     none: 'no trail',
   };
+
+  function basisLabel(s: SpendSession): string {
+    return s.basis !== 'pull-request' && !s.prRecorded ? 'PR not recorded' : BASIS[s.basis];
+  }
 </script>
 
 <div class="ledger">
@@ -202,7 +207,7 @@
           <li>
             <span class="s-date">{s.date ? new Date(s.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—'}</span>
             <span class="s-title">{s.title}<span class="s-proj">{s.project}</span></span>
-            <span class="s-basis" data-basis={s.basis}>{BASIS[s.basis]}</span>
+            <span class="s-basis" data-basis={s.basis}>{basisLabel(s)}</span>
             <span class="s-cost">{usd(s.costUsd)}</span>
           </li>
         {/each}
@@ -258,7 +263,7 @@
               {/if}
               <span class="s-proj">{m.s.project}</span>
             </span>
-            <span class="s-basis" data-basis={m.s.basis}>{BASIS[m.s.basis]}</span>
+            <span class="s-basis" data-basis={m.s.basis}>{basisLabel(m.s)}</span>
             <span class="s-cost">
               {usd(m.cost)}
               {#if m.share < 0.999}<span class="s-of">{Math.round(m.share * 100)}% of {usd(m.s.costUsd)}</span>{/if}

@@ -21,11 +21,21 @@
  * that belong to one feature (the release log, the changelog and /releases are
  * one thing), and the whole repository for work outside SR-Main.
  *
+ * PR NOT RECORDED is a fourth state, not a kind of "unshipped". Parser
+ * versions before 4 never extracted PR numbers, and the transcripts behind those
+ * sessions (4 Jun – 12 Aug 2026) are gone, so they can never be joined to a
+ * release. Their spend is counted and shown, but kept out of every
+ * shipped/unshipped share — counting it as "no released PR" read as ~$20k of
+ * work that never shipped.
+ *
  * Every cost here is an ESTIMATE: tokens × Anthropic list price, from the
  * transcript. It is what the work would have cost at API rates, not a bill.
  */
 
 export const SITE_PROJECT = 'strange-rambling-svelte';
+
+/** The first parser schema that extracted pull-request numbers from a transcript. */
+export const PR_TRAIL_SCHEMA = 4;
 
 export interface SpendBreakdownRow {
   model: string;
@@ -48,6 +58,8 @@ export interface SpendSessionRow {
   breakdown: SpendBreakdownRow[];
   stages: { stage: string; costUsd: number }[];
   messageCount: number;
+  /** Parser schema the row was ingested with; below PR_TRAIL_SCHEMA its PRs were never recorded. */
+  schemaVersion?: number;
 }
 
 export interface SpendReleaseRow {
@@ -75,6 +87,8 @@ export interface SpendSession {
   releases: number;
   /** How the areas were found — the finder says so beside each row. */
   basis: 'pull-request' | 'edits' | 'none';
+  /** False for sessions parsed before PR extraction existed: shipped or not is unknown. */
+  prRecorded: boolean;
   areas: AreaShare[];
   /** Release item titles shipped by this session's PRs, for the finder's search. */
   items: string[];
@@ -95,8 +109,16 @@ export interface FeatureArea {
   last: string | null;
   /** Cumulative cost by session date: [ISO day, running total]. */
   path: [string, number][];
-  /** Share of this area's cost that came from PR-linked sessions. */
+  /** Share of this area's PR-recorded cost that came from PR-linked sessions. */
   linkedShare: number;
+}
+
+export interface FeatureGroup {
+  key: string;
+  label: string;
+  costUsd: number;
+  sessions: number;
+  prs: number;
 }
 
 export interface SpendWeek {
@@ -104,6 +126,8 @@ export interface SpendWeek {
   start: string;
   linked: number;
   unlinked: number;
+  /** Spend from sessions whose PRs were never recorded. */
+  unrecorded: number;
   cumulative: number;
 }
 
@@ -119,6 +143,8 @@ export interface SpendBand {
     sessions: number;
     linkedUsd: number;
     unlinkedUsd: number;
+    /** Spend from sessions parsed before PR extraction — neither shipped nor unshipped. */
+    unrecordedUsd: number;
     subagentUsd: number;
     /** Sessions parsed before v5 have no subagent split; their share is unknown, not zero. */
     subagentMeasuredSessions: number;
@@ -134,6 +160,8 @@ export interface SpendBand {
   };
   weeks: SpendWeek[];
   areas: FeatureArea[];
+  /** Ledger rows: areas folded into their family, with sessions and PRs counted once. */
+  groups: FeatureGroup[];
   byProject: Slice[];
   byModel: Slice[];
   byStage: Slice[];
@@ -243,6 +271,11 @@ export function touchedAreaOf(path: string, project: string): string {
   return siteAreaOf(inRepo === rel ? rel.split('/').slice(1).join('/') : inRepo);
 }
 
+/** The ledger row an area folds under: `projects` for `projects/engine-room`. */
+export function groupOf(key: string): string {
+  return key.includes('/') && !key.startsWith('repo:') && !key.startsWith('none:') ? key.split('/')[0] : key;
+}
+
 export function areaLabel(key: string): string {
   if (AREA_LABEL[key]) return AREA_LABEL[key];
   if (key.startsWith('repo:')) {
@@ -330,7 +363,7 @@ export function buildSpendBand(
   const rows = sessionRows.filter((s) => inWindow(s.startedAt));
   const sessions: SpendSession[] = [];
   const areaAcc = new Map<string, {
-    cost: number; linked: number; sessions: Set<string>; prs: Set<number>; releases: Set<number>;
+    cost: number; linked: number; unrecorded: number; sessions: Set<string>; prs: Set<number>; releases: Set<number>;
     points: [string, number][]; first: string | null; last: string | null;
   }>();
   const linkedPrs = new Set<number>();
@@ -341,6 +374,8 @@ export function buildSpendBand(
   const weekAcc = new Map<string, SpendWeek>();
   const heat = Array.from({ length: 7 }, () => Array<number>(24).fill(0));
 
+  const groupAcc = new Map<string, { cost: number; sessions: Set<string>; prs: Set<number> }>();
+  let unrecordedUsd = 0;
   let total = 0, linkedUsd = 0, unlinkedUsd = 0, subagentUsd = 0, subagentMeasured = 0;
   let cacheRead = 0, promptTokens = 0, cacheSavings = 0, partial = 0;
 
@@ -379,7 +414,9 @@ export function buildSpendBand(
     }
     const areas = normalise(weights);
     const linked = basis === 'pull-request';
-    if (linked) {
+    const prRecorded = (s.schemaVersion ?? PR_TRAIL_SCHEMA) >= PR_TRAIL_SCHEMA || s.prs.length > 0;
+    if (!linked && !prRecorded) unrecordedUsd += cost;
+    else if (linked) {
       linkedUsd += cost;
       for (const pr of prs) linkedPrs.add(pr);
       for (const id of sessionReleases) {
@@ -391,11 +428,18 @@ export function buildSpendBand(
     const day = s.startedAt?.slice(0, 10) ?? null;
     for (const a of areas) {
       const acc = areaAcc.get(a.key) ?? {
-        cost: 0, linked: 0, sessions: new Set(), prs: new Set(), releases: new Set(), points: [], first: null, last: null,
+        cost: 0, linked: 0, unrecorded: 0, sessions: new Set(), prs: new Set(), releases: new Set(), points: [], first: null, last: null,
       };
       const part = cost * a.share;
       acc.cost += part;
       if (linked) acc.linked += part;
+      else if (!prRecorded) acc.unrecorded += part;
+      const gk = groupOf(a.key);
+      const g = groupAcc.get(gk) ?? { cost: 0, sessions: new Set<string>(), prs: new Set<number>() };
+      g.cost += part;
+      g.sessions.add(s.id);
+      for (const pr of areaPrs.get(a.key) ?? []) g.prs.add(pr);
+      groupAcc.set(gk, g);
       acc.sessions.add(s.id);
       for (const pr of areaPrs.get(a.key) ?? []) acc.prs.add(pr);
       for (const r of areaReleases.get(a.key) ?? []) acc.releases.add(r);
@@ -428,8 +472,10 @@ export function buildSpendBand(
 
     if (s.startedAt) {
       const { week, start } = isoWeek(new Date(s.startedAt));
-      const w = weekAcc.get(week) ?? { week, start, linked: 0, unlinked: 0, cumulative: 0 };
-      if (linked) w.linked += cost; else w.unlinked += cost;
+      const w = weekAcc.get(week) ?? { week, start, linked: 0, unlinked: 0, unrecorded: 0, cumulative: 0 };
+      if (linked) w.linked += cost;
+      else if (!prRecorded) w.unrecorded += cost;
+      else w.unlinked += cost;
       weekAcc.set(week, w);
       const slot = londonSlot(s.startedAt);
       if (slot) heat[slot[0]][slot[1]] += cost;
@@ -451,6 +497,7 @@ export function buildSpendBand(
       prs,
       releases: sessionReleases.size,
       basis,
+      prRecorded,
       areas: areas.slice(0, 6).map((a) => ({ key: a.key, share: Number(a.share.toFixed(3)) })),
       items: [...items],
       subagentUsd: sub,
@@ -466,8 +513,8 @@ export function buildSpendBand(
     let running = 0;
     while (cursor.toISOString().slice(0, 10) <= last) {
       const { week, start } = isoWeek(cursor);
-      const w = weekAcc.get(week) ?? { week, start, linked: 0, unlinked: 0, cumulative: 0 };
-      running += w.linked + w.unlinked;
+      const w = weekAcc.get(week) ?? { week, start, linked: 0, unlinked: 0, unrecorded: 0, cumulative: 0 };
+      running += w.linked + w.unlinked + w.unrecorded;
       weeks.push({ ...w, cumulative: running });
       cursor.setUTCDate(cursor.getUTCDate() + 7);
     }
@@ -483,8 +530,8 @@ export function buildSpendBand(
       return {
         key,
         label: areaLabel(key),
-        group: key.includes('/') ? key.split('/')[0] : key,
-        groupLabel: areaLabel(key.includes('/') ? key.split('/')[0] : key),
+        group: groupOf(key),
+        groupLabel: areaLabel(groupOf(key)),
         costUsd: a.cost,
         sessions: a.sessions.size,
         prs: a.prs.size,
@@ -492,7 +539,7 @@ export function buildSpendBand(
         first: a.first,
         last: a.last,
         path,
-        linkedShare: a.cost > 0 ? a.linked / a.cost : 0,
+        linkedShare: a.cost - a.unrecorded > 0 ? a.linked / (a.cost - a.unrecorded) : 0,
       };
     })
     .sort((a, b) => b.costUsd - a.costUsd);
@@ -512,6 +559,7 @@ export function buildSpendBand(
       sessions: rows.length,
       linkedUsd,
       unlinkedUsd,
+      unrecordedUsd,
       subagentUsd,
       subagentMeasuredSessions: subagentMeasured,
       prs: linkedPrs.size,
@@ -526,6 +574,9 @@ export function buildSpendBand(
     },
     weeks,
     areas,
+    groups: [...groupAcc.entries()]
+      .map(([key, g]) => ({ key, label: areaLabel(key), costUsd: g.cost, sessions: g.sessions.size, prs: g.prs.size }))
+      .sort((a, b) => b.costUsd - a.costUsd),
     byProject: slices(byProject),
     byModel: slices(byModel),
     byStage: slices(byStage),
@@ -546,14 +597,15 @@ export function spendInsights(band: SpendBand): string[] {
   const t = band.totals;
   if (!t.costUsd) return out;
 
-  const top = band.areas.filter((a) => !a.key.startsWith('none:'))[0];
+  // The same grouped row the ledger leads with, so the sentence and the table agree.
+  const top = band.groups.filter((g) => !g.key.startsWith('none:'))[0];
   if (top) {
     out.push(`${top.label} is the most expensive feature area: ${usd(top.costUsd)} across ${top.sessions} session${top.sessions === 1 ? '' : 's'}, ${pct(top.costUsd / t.costUsd)} of all spend.`);
   }
 
   const w = band.weeks;
   if (w.length >= 8) {
-    const sum = (xs: SpendWeek[]) => xs.reduce((n, x) => n + x.linked + x.unlinked, 0);
+    const sum = (xs: SpendWeek[]) => xs.reduce((n, x) => n + x.linked + x.unlinked + x.unrecorded, 0);
     const recent = sum(w.slice(-4));
     const before = sum(w.slice(-8, -4));
     if (before > 0) {
@@ -564,8 +616,12 @@ export function spendInsights(band: SpendBand): string[] {
     }
   }
 
-  if (t.unlinkedUsd / t.costUsd >= 0.2) {
-    out.push(`${pct(t.unlinkedUsd / t.costUsd)} of spend (${usd(t.unlinkedUsd)}) opened no pull request that reached a release — reviews, ops and exploration, or work not yet shipped.`);
+  const recorded = t.linkedUsd + t.unlinkedUsd;
+  if (recorded > 0 && t.unlinkedUsd / recorded >= 0.2) {
+    out.push(`${pct(t.unlinkedUsd / recorded)} of spend with a PR record (${usd(t.unlinkedUsd)}) opened no pull request that reached a release — reviews, ops and exploration, or work not yet shipped.`);
+  }
+  if (t.unrecordedUsd > 0) {
+    out.push(`${usd(t.unrecordedUsd)} comes from sessions parsed before PR numbers were recorded, so whether it shipped is unknown; it is left out of the shipped shares.`);
   }
 
   if (t.subagentMeasuredSessions > 0 && t.subagentUsd > 0) {

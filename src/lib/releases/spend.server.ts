@@ -32,7 +32,7 @@ export async function getSpendBand(window: { from?: string; to?: string }): Prom
   const [sessionResult, stageResult, releaseResult] = await Promise.all([
     db.execute(sql`
       select id, title, project, started_at, est_cost_usd, cost_known, pull_requests,
-             touched_paths, tokens, cost_breakdown, message_count
+             touched_paths, tokens, cost_breakdown, message_count, schema_version
       from claude_sessions
     `),
     db.execute(sql`
@@ -89,6 +89,7 @@ export async function getSpendBand(window: { from?: string; to?: string }): Prom
     breakdown: Array.isArray(r.cost_breakdown) ? (r.cost_breakdown as SpendSessionRow['breakdown']) : [],
     stages: stagesBySession.get(String(r.id)) ?? [],
     messageCount: Number(r.message_count ?? 0),
+    schemaVersion: Number(r.schema_version ?? 1),
   }));
 
   const releases: SpendReleaseRow[] = rowsOf(releaseResult).map((r) => ({
