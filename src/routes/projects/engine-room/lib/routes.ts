@@ -152,6 +152,8 @@ export const ROUTE_LEDGER: Record<string, LedgerEntry> = {
   '/api/native/route-gifts/[id]': phone('app/api', 'Put a received route away'),
   '/api/native/family/forecast': phone('app/api', 'Where each person is likely to be next'),
   '/api/native/family/steps': phone('app/surfaces', 'Today’s family steps board, also on a widget'),
+  '/api/native/family/landgrab': phone('app/surfaces', 'Landgrab ground won and lost each week, beside the steps board'),
+  '/api/native/family/landgrab/changes': phone('app/api', 'The map of a week’s Landgrab: what changed hands, and the outing that took it'),
   '/api/native/family/tasks': phone('app/surfaces', 'The family task list, also on a widget'),
   '/api/native/family/tasks/[id]': phone('app/api', 'Tick off, confirm or send back a task'),
   '/api/native/family/alarm': phone('app/surfaces', 'Raise the alarm on every other family phone'),

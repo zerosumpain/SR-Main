@@ -26,9 +26,32 @@ export interface FamilyPerson {
   stepsSharing?: boolean;
 }
 
-export function familyId(email: string): string {
+function familyHash(input: string, prefix = 'f_', length = 12): string {
   const key = env.AUTH_SECRET || 'sr-family';
-  return 'f_' + createHmac('sha256', key).update(email.trim().toLowerCase()).digest('hex').slice(0, 12);
+  return prefix + createHmac('sha256', key).update(input).digest('hex').slice(0, length);
+}
+
+export function familyId(email: string): string {
+  return familyHash(email.trim().toLowerCase());
+}
+
+/**
+ * The id of a household member who has no email (someone on Life360 only), for
+ * boards keyed by trail subject. Same key and shape as `familyId`; the
+ * `subject:` prefix keeps it from ever colliding with an email's id.
+ */
+export function familySubjectId(subject: string): string {
+  return familyHash('subject:' + subject);
+}
+
+/**
+ * An opaque, stable id for an upstream record whose own id may carry a subject
+ * (a Landgrab change: `unattributed:<subject>`, `trail:<subject>:…`). Same key
+ * as `familyId`, prefix `c_`, so the phone can select by it across refreshes
+ * without ever seeing the subject inside.
+ */
+export function familyChangeId(upstreamId: string): string {
+  return familyHash('change:' + upstreamId, 'c_', 16);
 }
 
 export function nameFromEmail(email: string): string {

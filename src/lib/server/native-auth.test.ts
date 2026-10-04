@@ -113,6 +113,10 @@ describe('every native route gates itself', () => {
         // Family steps and tasks: the owner or a family:circle/admin grant,
         // checked by `familyCaller` in each handler; everyone else 403s.
         '/family/steps/+server.ts',
+        // Landgrab beside the steps board: the same audience, `familyCaller`
+        // in each handler; SR-Health computes it over the service lane.
+        '/family/landgrab/+server.ts',
+        '/family/landgrab/changes/+server.ts',
         '/family/tasks/+server.ts',
         '/family/tasks/[id]/+server.ts',
         '/games/+server.ts',
