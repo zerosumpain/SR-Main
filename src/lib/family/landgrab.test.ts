@@ -211,12 +211,46 @@ describe('the map of a week', () => {
   });
 
   it('holds the trace to the contract ceiling at five decimal places', async () => {
-    const trace = (await getFamilyLandgrabChanges('2026-09-28')).changes[0].activity!.trace;
+    const trace = (await getFamilyLandgrabChanges('2026-09-28')).changes[0].activity!.trace!;
     expect(trace.length).toBe(TRACE_MAX);
     for (const [lat, lon] of trace) {
       expect(Math.round(lat * 1e5) / 1e5).toBe(lat);
       expect(Math.round(lon * 1e5) / 1e5).toBe(lon);
     }
+  });
+
+  it('passes Health’s nulls through: undated unattributed ground, no trace, an unnamed previous holder', async () => {
+    h.respond = () => ({
+      ...CHANGES,
+      hexes: [{ id: 0, polygon: poly(40.77, -73.97), owner: 'sam', previous: null }],
+      changes: [
+        { id: 'unattributed:sam', subject: 'sam', at: null, won: 2, taken: 2, from: [{ subject: null, hexes: 2 }], hexIds: [0], activity: null },
+        {
+          id: 'trail:sam:2026-10-01T09:12:00.000Z', subject: 'sam', at: '2026-10-01T09:30:00.000Z', won: 1, taken: 0, from: [{ subject: null, hexes: 1 }], hexIds: [0],
+          activity: { kind: 'trail', type: null, startedAt: '2026-10-01T09:12:00.000Z', endedAt: null, distanceM: null, durationS: null, loop: true, trace: null },
+        },
+      ],
+    });
+    const body = await getFamilyLandgrabChanges('2026-09-28');
+    const sam = familyId('sam@example.test');
+    expect(body.hexes[0]).toMatchObject({ owner: sam, previous: null });
+    expect(body.changes[0]).toMatchObject({ personId: sam, at: null, from: [{ id: null, hexes: 2 }], activity: null });
+    expect(body.changes[1].activity).toMatchObject({ kind: 'trail', type: null, trace: null });
+  });
+
+  it('asks in lower case and maps Health’s lower-case answer back to a mixed-case subject', async () => {
+    h.members = [{ subject: 'Sam', email: 'sam@example.test', displayName: 'Sam' }];
+    h.respond = () => ({ updatedAt: null, weeks: [{ start: '2026-09-28', end: '2026-10-04', current: true, people: [person('sam')] }] });
+    const body = await getFamilyLandgrabWeeks(1, 'sam@example.test');
+    expect(h.calls[0]).toContain('subjects=sam&');
+    expect(body.weeks[0].people.map((p) => p.id)).toEqual([familyId('sam@example.test')]);
+  });
+
+  it('answers an empty map for an empty household without asking Health (subjects is required there)', async () => {
+    h.members = [];
+    const body = await getFamilyLandgrabChanges('2026-09-28', new Date('2026-10-02T12:00:00Z'));
+    expect(body).toEqual({ week: { start: '2026-09-28', end: '2026-10-04', current: true }, bounds: null, people: [], hexes: [], changes: [] });
+    expect(h.calls).toEqual([]);
   });
 
   it('passes truncated through only when Health set it', async () => {

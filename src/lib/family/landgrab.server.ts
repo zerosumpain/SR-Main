@@ -20,7 +20,13 @@
 //   GET /api/health/landgrab/family/weeks?subjects=…&weeks=N
 //   GET /api/health/landgrab/family/changes?week=YYYY-MM-DD&subjects=…
 //
-// Contract: landgrab-app-contract (2026-10-04), the SR-Main section.
+// Contract: landgrab-app-contract (2026-10-04), the SR-Main section, with what
+// SR-Health actually shipped: `subjects` is required; a subject the ledger has
+// never seen is left out of the answer (so a member with no ground yet has no
+// row — Main does not invent one, since it has neither their colour nor
+// Health's ranking); an unattributed change has `at: null`; a short or fixless
+// outing has `trace: null`; a previous holder outside `subjects` is null.
+// Any non-2xx but 400 (including Health's own 500) is the route's 502.
 
 import { getFromExtracted } from '$lib/server/extracted-app';
 import { downsample } from '$lib/server/native-trails';
@@ -59,7 +65,9 @@ export async function landgrabPeople(): Promise<LandgrabPerson[]> {
   const seen = new Set<string>();
   const people: LandgrabPerson[] = [];
   for (const m of await listMembers()) {
-    const subject = (m.subject ?? '').trim();
+    // Health lower-cases what it is asked for and answers in lower case, so
+    // the map back from its answer is keyed the same way.
+    const subject = (m.subject ?? '').trim().toLowerCase();
     if (!subject || seen.has(subject)) continue;
     seen.add(subject);
     const email = m.email ? m.email.trim().toLowerCase() : null;
@@ -93,13 +101,15 @@ export interface UpstreamWeeks {
 
 export interface UpstreamActivity {
   kind: 'workout' | 'trail';
-  type: 'walk' | 'run' | 'ride' | 'hike' | null;
+  /** `walk` | `run` | `ride` | `hike` today; any string Health sends passes through. */
+  type: string | null;
   startedAt: string;
   endedAt: string | null;
   distanceM: number | null;
   durationS: number | null;
   loop: boolean;
-  trace: [number, number][];
+  /** Null when there is nothing to show: under 600 m after the trim, or no fixes. */
+  trace: [number, number][] | null;
 }
 
 export interface UpstreamChanges {
@@ -110,7 +120,8 @@ export interface UpstreamChanges {
   changes: Array<{
     id: string;
     subject: string;
-    at: string;
+    /** Null for unattributed ground: no capture event to date it by. */
+    at: string | null;
     won: number;
     taken: number;
     from: Array<{ subject: string | null; hexes: number }>;
@@ -152,7 +163,8 @@ export interface NativeLandgrabChange {
    * already has an `id` (the one the app selects by).
    */
   personId: string;
-  at: string;
+  /** Null for unattributed ground. */
+  at: string | null;
   won: number;
   taken: number;
   from: Array<{ id: string | null; hexes: number }>;
@@ -228,7 +240,7 @@ function projectActivity(a: UpstreamActivity | null | undefined): UpstreamActivi
     // Health has already trimmed, thinned and rounded the trace (the share-link
     // rule). The cap and the rounding are held again here because they are the
     // cheap half of that rule and a phone payload is where it matters.
-    trace: Array.isArray(a.trace) ? downsample(a.trace, TRACE_MAX).map((pt) => [coord(pt[0]), coord(pt[1])]) : [],
+    trace: Array.isArray(a.trace) ? downsample(a.trace, TRACE_MAX).map((pt) => [coord(pt[0]), coord(pt[1])]) : null,
   };
 }
 
@@ -265,7 +277,7 @@ export function projectChanges(upstream: UpstreamChanges, people: LandgrabPerson
         // `unattributed:<subject>`), so every one becomes an opaque keyed hash.
         id: familyChangeId(c.id),
         personId: id,
-        at: c.at,
+        at: c.at ?? null,
         won: c.won,
         taken: c.taken,
         from: (c.from ?? []).map((f) => ({ id: idOf(f.subject), hexes: f.hexes })),
@@ -328,8 +340,28 @@ export async function getFamilyLandgrabWeeks(weeks: number, callerEmail: string)
   return projectWeeks(upstream, people, callerEmail);
 }
 
-export async function getFamilyLandgrabChanges(week: string): Promise<NativeLandgrabChanges> {
+/** Monday YYYY-MM-DD → its Sunday. */
+function weekEnd(start: string): string {
+  const d = new Date(`${start}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 6);
+  return d.toISOString().slice(0, 10);
+}
+
+export async function getFamilyLandgrabChanges(week: string, now = new Date()): Promise<NativeLandgrabChanges> {
   const people = await landgrabPeople();
+  // Health requires `subjects` (400 without), and a 400 here would read as a
+  // bad week. An empty household has an empty map.
+  if (people.length === 0) {
+    const end = weekEnd(week);
+    const today = now.toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
+    return {
+      week: { start: week, end, current: today >= week && today <= end },
+      bounds: null,
+      people: [],
+      hexes: [],
+      changes: [],
+    };
+  }
   const query = new URLSearchParams({ week, subjects: people.map((p) => p.subject).join(',') });
   const upstream = await getFromExtracted<UpstreamChanges>('health', `${LANDGRAB_CHANGES_PATH}?${query}`, {
     timeoutMs: TIMEOUT_MS,

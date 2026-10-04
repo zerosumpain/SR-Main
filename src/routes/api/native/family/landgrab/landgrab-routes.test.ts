@@ -122,7 +122,7 @@ describe('GET /api/native/family/landgrab', () => {
 
   it('is a 502 with no stack when Health fails, or has not shipped the endpoint', async () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
-    for (const fail of [new Error('health/api/health/landgrab/family/weeks returned 404'), new Error('connect ECONNREFUSED')]) {
+    for (const fail of [new Error('health/api/health/landgrab/family/weeks returned 404'), new Error('health/api/health/landgrab/family/weeks returned 500'), new Error('connect ECONNREFUSED')]) {
       h.fail = fail;
       const res = await call(weeksRoute.GET);
       expect(res.status).toBe(502);
