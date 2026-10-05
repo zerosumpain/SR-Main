@@ -38,6 +38,7 @@ export const STATIC_PROJECT_KEYS = [
   'pulse',
   'field-study-8',
   'data-spine',
+  'marbler',
 ] as const;
 
 const STATIC_KEYS: ReadonlySet<string> = new Set(STATIC_PROJECT_KEYS);
