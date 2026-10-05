@@ -51,6 +51,7 @@ import {
   familyStepsEvent,
   familyAlarm,
   familyMessage,
+  forecastFeedback,
   familyTask,
   fileShareTokens,
   gameResults,
@@ -119,6 +120,7 @@ export const ACCOUNT_COLUMNS: Record<string, Record<string, Fate | `kept: ${stri
   // for somebody else stays, without their address.
   family_alarm: { from_email: 'erase', cancelled_by_email: 'scrub' },
   family_message: { from_email: 'erase' },
+  forecast_feedback: { reporter_email: 'erase' },
   family_task: {
     assignee_email: 'scrub',
     created_by_email: 'scrub',
@@ -245,6 +247,8 @@ export async function eraseRows(target: EraseTarget, executor: typeof db = db): 
     // Their family messages and replies (replies under their messages go too).
     const sent = await tx.delete(familyMessage).where(inArray(familyMessage.fromEmail, addrs)).returning({ id: familyMessage.id });
     if (sent.length) await tx.delete(familyMessage).where(inArray(familyMessage.replyTo, sent.map((m) => m.id)));
+    // Their "that's wrong" corrections on the forecast.
+    await tx.delete(forecastFeedback).where(inArray(forecastFeedback.reporterEmail, addrs));
 
     // Their games on the family leaderboard.
     await tx.delete(gameResults).where(inArray(gameResults.playerId, addrs.map((a) => playerId(a))));

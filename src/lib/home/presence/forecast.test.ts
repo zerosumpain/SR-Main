@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildForecast,
+  correctedShare,
   departureGrid,
   learnedTravel,
   localClock,
   nextMoves,
   routinesOf,
   watchItems,
+  type ForecastCorrection,
   type Routine,
 } from './forecast';
 import type { LiveState, PresenceInsights, RouteInsight } from './insights';
@@ -144,5 +146,56 @@ describe('the whole forecast', () => {
     expect(f.departures.flat().reduce((a, b) => a + b, 0)).toBe(12);
     const _typed: Routine = f.routines[0];
     expect(_typed.id).toContain('weekday');
+  });
+});
+
+describe('corrections ("that’s wrong")', () => {
+  const now = new Date('2026-09-28T06:45:00Z'); // Monday 07:45 local
+  const routineId = 'alex:home:school:vehicle:weekday';
+  const wrong = (date: string): ForecastCorrection => ({ subject: 'alex', kind: 'routine', routineId, departedAt: null, date });
+
+  it('takes the move off for the rest of the day it was said', () => {
+    const routines = routinesOf([schoolRun()], now, 28);
+    expect(nextMoves(routines, [atHome()], [], now, [wrong('2026-09-28')])).toEqual([]);
+    // Somebody else's routine is untouched.
+    expect(nextMoves(routines, [atHome()], [], now, [{ ...wrong('2026-09-28'), subject: 'sam' }])).toHaveLength(1);
+  });
+
+  it('counts each right correction against the routine afterwards', () => {
+    const [r] = routinesOf([schoolRun()], now, 28);
+    expect(correctedShare(r)).toBeCloseTo(12 / 15);
+    // Two earlier weekdays it did not run on, each said in advance: 12 / (15 + 4).
+    const said = [wrong('2026-09-28'), wrong('2026-09-29')];
+    expect(correctedShare(r, said)).toBeCloseTo(12 / 19);
+    // A correction on a day it ran anyway was wrong itself, and counts for nothing.
+    expect(correctedShare(r, [wrong('2026-09-21')])).toBeCloseTo(12 / 15);
+  });
+
+  it('drops a routine corrected often enough below the share it is offered at', () => {
+    const now2 = new Date('2026-09-29T06:45:00Z');
+    const thin = route({ starts: WEEKDAYS.slice(9, 15).map((d) => `${d}T07:20:00Z`) });
+    const routines = routinesOf([thin], now2, 28);
+    expect(nextMoves(routines, [atHome()], [], now2)).toHaveLength(1);
+    // 6 of 7 weekdays; six corrected days make it 6 / (7 + 12), under 0.35.
+    const days = ['2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04', '2026-09-07', '2026-09-28'].map(wrong);
+    expect(nextMoves(routines, [atHome()], [], now2, days)).toEqual([]);
+  });
+
+  it('hides a live journey somebody said is not going there', () => {
+    const at = new Date('2026-09-28T07:25:00Z');
+    const arrival = { id: 'x', subject: 'alex', person: 'Alex', from: 'Home', to: 'Station', toId: 'station', departedAt: '2026-09-28T07:20:00Z',
+      observedAt: '2026-09-28T07:25:00Z', eta: '2026-09-28T07:37:00Z', earliest: '2026-09-28T07:35:00Z', latest: '2026-09-28T07:40:00Z',
+      minutesLeft: 12, samples: 12, confidence: 'established' as const, returningHome: false };
+    const said: ForecastCorrection = { subject: 'alex', kind: 'arriving', routineId: null, departedAt: arrival.departedAt, date: '2026-09-28' };
+    expect(nextMoves([], [{ ...atHome(), placeId: null }], [arrival], at, [said])).toEqual([]);
+  });
+
+  it('does not call a corrected routine overdue', () => {
+    const late = new Date('2026-09-28T07:55:00Z');
+    const routines = routinesOf([schoolRun()], late, 28);
+    const live = [atHome('alex', '2026-09-28T07:50:00Z')];
+    const input = { routines, routes: [schoolRun()], live, arrivals: [], names: new Map([['alex', 'Alex']]), homeIds: new Set(['home']), now: late };
+    expect(watchItems(input).filter((w) => w.kind === 'overdue')).toHaveLength(1);
+    expect(watchItems({ ...input, corrections: [wrong('2026-09-28')] }).filter((w) => w.kind === 'overdue')).toEqual([]);
   });
 });

@@ -7132,6 +7132,32 @@ export const familyMessage = pgTable(
 
 export type FamilyMessage = typeof familyMessage.$inferSelect;
 
+// "That's wrong" on a family forecast's next move — a long press in the app
+// ("Katie isn't going to the station"). `$lib/home/presence/forecast` reads
+// these back: the move is not offered again that day, and each such day
+// counts against the routine's share. `subject` is the trail subject; `date`
+// the local date it was said on.
+export const forecastFeedback = pgTable(
+  'forecast_feedback',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    subject: text('subject').notNull(),
+    /** 'routine' | 'arriving' — which kind of next move was wrong. */
+    kind: text('kind').notNull(),
+    routineId: text('routine_id'),
+    departedAt: text('departed_at'),
+    /** Where the move said they were going, for reading the list back. */
+    toPlace: text('to_place'),
+    date: text('date').notNull(),
+    note: text('note'),
+    reporterEmail: text('reporter_email').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('forecast_feedback_created_idx').on(t.createdAt), index('forecast_feedback_subject_idx').on(t.subject, t.date)],
+);
+
+export type ForecastFeedback = typeof forecastFeedback.$inferSelect;
+
 // Every finished round of a family game, one row per contender — what the
 // games leaderboard (daily / weekly / all-time bests) reads. Written once per
 // round by `$lib/games/results.server` when a room reaches `finished`; a replay

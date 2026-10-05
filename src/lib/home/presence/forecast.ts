@@ -225,6 +225,49 @@ function ranToday(r: Routine, today: string): boolean {
   return r.dates.includes(today);
 }
 
+// ── Corrections ─────────────────────────────────────────────────────────────
+
+/**
+ * Somebody who knows better saying a next move is wrong ("Katie isn't going
+ * to the station"), from a long press on it in the app. Stored in
+ * `forecast_feedback`; read back here so the forecast learns from it.
+ */
+export interface ForecastCorrection {
+  subject: string;
+  kind: 'routine' | 'arriving';
+  /** The routine the move came from (`kind: 'routine'`). */
+  routineId: string | null;
+  /** The journey's departure (`kind: 'arriving'`), as the move carried it. */
+  departedAt: string | null;
+  /** The local date it was said on. */
+  date: string;
+}
+
+/** Each correction weighs as this many days the routine did not run. */
+export const CORRECTION_WEIGHT = 2;
+
+/** Days on which a routine was called wrong and then did not run. */
+function correctedDays(r: Routine, corrections: readonly ForecastCorrection[]): string[] {
+  const days = corrections
+    .filter((c) => c.kind === 'routine' && c.routineId === r.id && c.subject === r.subject && !r.dates.includes(c.date))
+    .map((c) => c.date);
+  return [...new Set(days)];
+}
+
+/**
+ * How often a routine runs on its days, with corrections counted against it:
+ * a day somebody said "not today" and was right weighs CORRECTION_WEIGHT
+ * misses. PURE.
+ */
+export function correctedShare(r: Routine, corrections: readonly ForecastCorrection[] = []): number {
+  const misses = correctedDays(r, corrections).length * CORRECTION_WEIGHT;
+  return r.of + misses ? r.days / (r.of + misses) : 0;
+}
+
+function correctedToday(r: Routine, corrections: readonly ForecastCorrection[], today: string): boolean {
+  return corrections.some((c) => c.kind === 'routine' && c.routineId === r.id && c.subject === r.subject && c.date === today);
+}
+
 /**
  * Each person's next likely move. A live arrival estimate wins; otherwise
  * the soonest routine that leaves from where they are now, later today, and
@@ -232,11 +275,21 @@ function ranToday(r: Routine, today: string): boolean {
  * unknown — a routine from "home" says nothing about a person who is not
  * there. PURE.
  */
-export function nextMoves(routines: Routine[], live: LiveState[], arrivals: ArrivalInsight[], now: Date): NextMove[] {
+export function nextMoves(
+  routines: Routine[],
+  live: LiveState[],
+  arrivals: ArrivalInsight[],
+  now: Date,
+  corrections: readonly ForecastCorrection[] = [],
+): NextMove[] {
   const clock = localClock(now), dayType = dayTypeOf(clock.weekday);
   const out: NextMove[] = [];
   for (const state of live) {
     const arrival = arrivals.find((a) => a.subject === state.subject);
+    // A journey somebody said is not going there is not offered again.
+    const wrongArrival = arrival && corrections.some((c) =>
+      c.kind === 'arriving' && c.subject === arrival.subject && c.departedAt === arrival.departedAt);
+    if (arrival && wrongArrival) continue;
     if (arrival) {
       out.push({
         subject: state.subject, kind: 'arriving', routineId: null, from: arrival.from, to: arrival.to,
@@ -248,7 +301,10 @@ export function nextMoves(routines: Routine[], live: LiveState[], arrivals: Arri
     if (!state.placeId || state.moving) continue;
     const candidates = routines
       .filter((r) => r.subject === state.subject && r.fromId === state.placeId && r.dayType === dayType)
-      .filter((r) => routineShare(r) >= NEXT_MIN_SHARE && !ranToday(r, clock.date))
+      // Called wrong today: not offered again today, and the day counts
+      // against it from then on (`correctedShare`).
+      .filter((r) => correctedShare(r, corrections) >= NEXT_MIN_SHARE && !ranToday(r, clock.date))
+      .filter((r) => !correctedToday(r, corrections, clock.date))
       .map((r) => ({ r, ahead: clockDelta(r.departureMin, clock.minute) }))
       // Still due: up to the end of its window (a late start is still next).
       .filter(({ r, ahead }) => ahead <= NEXT_HORIZON_MINS && clockDelta(r.window[1], clock.minute) >= -15)
@@ -261,7 +317,8 @@ export function nextMoves(routines: Routine[], live: LiveState[], arrivals: Arri
       leaveAt: new Date(leave).toISOString(),
       arriveFrom: new Date(leave + best.minutes.low * MINUTE).toISOString(),
       arriveTo: new Date(leave + best.minutes.high * MINUTE).toISOString(),
-      days: best.days, of: best.of, dayType, confidence: best.days >= 8 ? 'established' : 'emerging',
+      days: best.days, of: best.of, dayType,
+      confidence: best.days >= 8 && !correctedDays(best, corrections).length ? 'established' : 'emerging',
     });
   }
   return out;
@@ -311,8 +368,10 @@ export function watchItems(input: {
   names: Map<string, string>;
   homeIds: Set<string>;
   now: Date;
+  corrections?: readonly ForecastCorrection[];
 }): WatchItem[] {
   const { routines, routes, live, arrivals, names, homeIds, now } = input;
+  const corrections = input.corrections ?? [];
   const clock = localClock(now), dayType = dayTypeOf(clock.weekday);
   const name = (s: string) => names.get(s) ?? s;
   const out: WatchItem[] = [];
@@ -322,7 +381,9 @@ export function watchItems(input: {
     if (fresh && state.placeId && !state.moving) {
       for (const r of routines) {
         if (r.subject !== state.subject || r.fromId !== state.placeId || r.dayType !== dayType) continue;
-        if (routineShare(r) < OVERDUE_MIN_SHARE || ranToday(r, clock.date)) continue;
+        if (correctedShare(r, corrections) < OVERDUE_MIN_SHARE || ranToday(r, clock.date)) continue;
+        // "Not today", said already: their not leaving is the expected thing.
+        if (correctedToday(r, corrections, clock.date)) continue;
         const late = clockDelta(clock.minute, r.window[1]);
         if (late < OVERDUE_GRACE_MINS || late > 120) continue;
         out.push({
@@ -404,15 +465,21 @@ export interface FamilyForecast {
  * every place of kind home (the grandparents' is someone's home too — never
  * "quiet" there); `mainHome` is the house, whose departures make the pattern.
  */
-export function buildForecast(insights: PresenceInsights, homeIds: Set<string>, now: Date, mainHome: string | null = null): FamilyForecast {
+export function buildForecast(
+  insights: PresenceInsights,
+  homeIds: Set<string>,
+  now: Date,
+  mainHome: string | null = null,
+  corrections: readonly ForecastCorrection[] = [],
+): FamilyForecast {
   const routines = routinesOf(insights.routes, now, insights.days);
   const names = new Map(insights.people.map((p) => [p.subject, p.displayName]));
   return {
     generatedAt: now.toISOString(),
     days: insights.days,
     routines,
-    next: nextMoves(routines, insights.live, insights.arrivals, now),
-    watch: watchItems({ routines, routes: insights.routes, live: insights.live, arrivals: insights.arrivals, names, homeIds, now }),
+    next: nextMoves(routines, insights.live, insights.arrivals, now, corrections),
+    watch: watchItems({ routines, routes: insights.routes, live: insights.live, arrivals: insights.arrivals, names, homeIds, now, corrections }),
     arrivals: insights.arrivals,
     departures: departureGrid(insights.routes, mainHome ? new Set([mainHome]) : homeIds),
   };
