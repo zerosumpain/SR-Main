@@ -7105,6 +7105,33 @@ export const familyAlarm = pgTable(
 
 export type FamilyAlarm = typeof familyAlarm.$inferSelect;
 
+// "msg family" in the iPhone app's chat: a message pushed to every other
+// family member's phone, and their replies (an emoji or a line of text) under
+// it. Written by `$lib/family/messages.server`; a reply's push goes to the
+// message's sender only. `reply_to` is null on a message, its id on a reply.
+export const familyMessage = pgTable(
+  'family_message',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    fromEmail: text('from_email').notNull(),
+    /** The name shown at the time, so the list reads without the roster. */
+    fromName: text('from_name').notNull(),
+    body: text('body').notNull(),
+    replyTo: uuid('reply_to'),
+    /** People (not phones) it was addressed to, and phones Apple accepted it for. */
+    recipientCount: integer('recipient_count').notNull().default(0),
+    pushedCount: integer('pushed_count').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('family_message_created_idx').on(t.createdAt),
+    index('family_message_reply_idx').on(t.replyTo),
+    index('family_message_from_idx').on(t.fromEmail, t.createdAt),
+  ],
+);
+
+export type FamilyMessage = typeof familyMessage.$inferSelect;
+
 // Every finished round of a family game, one row per contender — what the
 // games leaderboard (daily / weekly / all-time bests) reads. Written once per
 // round by `$lib/games/results.server` when a room reaches `finished`; a replay
