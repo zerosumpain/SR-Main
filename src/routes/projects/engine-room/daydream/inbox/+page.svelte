@@ -9,13 +9,14 @@
   import Band from '../../components/kit/Band.svelte';
   import NoteJourney from '../../components/art/daydream/NoteJourney.svelte';
   import VerdictScales from '../../components/art/daydream/VerdictScales.svelte';
-  import { DAYDREAM_COPY as C, STAGE_ENG, STAGE_TURN, COMMISSION_COPY, ACT_COPY, ACT_BADGE, VERDICT_COPY } from '../../lib/daydream';
+  import { DAYDREAM_COPY as C, STAGE_ENG, STAGE_TURN, COMMISSION_COPY, ACT_COPY, ACT_BADGE, VERDICT_COPY, FOLLOW_COPY } from '../../lib/daydream';
   import { app } from '../../lib/appState.svelte';
   import { cascade, reveal } from '../../lib/motion';
   import { words } from '../../lib/format';
   import type { Stage } from '$lib/daydream/think/explain';
   import type { CommissionState } from '$lib/daydream/commissioning';
   import type { ActKind } from '$lib/daydream/act/plan';
+  import type { FollowKind } from '$lib/daydream/act/follow';
   import type { RedTeamVerdict } from '$lib/daydream/red-team';
 
   let { data } = $props();
@@ -91,6 +92,10 @@
             {#if k === 'calendar_event' || k === 'calendar_move'}
               <rect x="6" y="10" width="36" height="32" rx="2" /><path d="M6 19 H42 M15 5 V14 M33 5 V14" />
               {#if k === 'calendar_move'}<path class="acc" d="M16 31 H32 M27 26 L32 31 L27 36" />{:else}<rect class="accf" x="14" y="25" width="10" height="9" />{/if}
+            {:else if k === 'event_hold'}
+              <rect x="6" y="10" width="36" height="32" rx="2" /><path d="M6 19 H42 M15 5 V14 M33 5 V14" /><path class="acc" d="M17 37 V30 a7 7 0 0 1 14 0 V37 L33 39 H15Z" />
+            {:else if k === 'calendar_batch'}
+              <rect x="6" y="10" width="36" height="32" rx="2" /><path d="M6 19 H42 M15 5 V14 M33 5 V14" /><rect class="accf" x="11" y="24" width="7" height="6" /><rect class="accf" x="21" y="24" width="7" height="6" /><rect class="accf" x="31" y="32" width="7" height="6" />
             {:else if k === 'reminder'}
               <path d="M12 34 V22 a12 12 0 0 1 24 0 V34 L40 38 H8Z" /><path class="acc" d="M20 42 H28" />
             {:else}
@@ -108,6 +113,19 @@
       </article>
     {/each}
   </div>
+  {#if f.follow?.length}
+    <div class="further">
+      <h3 class="further-h">Taking it further</h3>
+      <p class="further-l">{eli
+        ? 'Past one step, a note can be researched, built, sketched, watched for, or turned into a message I send myself. Each says what it will use first, because the cost is subscription quota.'
+        : 'Follow-ups beyond the single plan, each priced in subscription quota at the point of the tap. Nothing in this list sends, pays, books or cancels.'}</p>
+      <ul class="further-list">
+        {#each f.follow as o (o.id)}
+          <li><b>{words(o.id)}</b> {t(FOLLOW_COPY[o.id as FollowKind])} <span class="further-c">{o.cost}</span></li>
+        {/each}
+      </ul>
+    </div>
+  {/if}
 </Band>
 
 <Band surface="ink" part="daydream" label="What the double-check can conclude">
@@ -177,4 +195,33 @@
     font-family: var(--er-serif); font-style: italic; font-size: clamp(18px, 1.6vw, 22px); line-height: 1.45; color: var(--fg); }
   .r-k { font-family: var(--er-mono); font-style: normal; font-size: var(--fs-label-xs); letter-spacing: 0.14em; text-transform: uppercase; color: var(--tone-text); padding-top: 6px; }
   @media (max-width: 700px) { .ruling { grid-template-columns: minmax(0, 1fr); } }
+  .further {
+    margin-top: 40px;
+    max-width: 78ch;
+  }
+  .further-h {
+    margin: 0 0 8px;
+    font-size: var(--fs-body);
+    font-weight: 700;
+  }
+  .further-l {
+    margin: 0 0 12px;
+    line-height: 1.6;
+  }
+  .further-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 10px;
+  }
+  .further-list li {
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+  }
+  .further-c {
+    display: block;
+    font-size: var(--fs-label);
+    opacity: 0.75;
+  }
 </style>

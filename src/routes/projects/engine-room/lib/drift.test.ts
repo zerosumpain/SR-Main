@@ -26,10 +26,11 @@ import { RELEASE_POLICIES, BRIEF_LANES } from '$lib/constants/development';
 import { EDGE_KINDS } from '$lib/codegraph/query';
 import { GATE_NAMES } from '$lib/codegraph/gates';
 import { ACT_KINDS } from '$lib/daydream/act/plan';
+import { FOLLOW_KINDS } from '$lib/daydream/act/follow';
 import { RED_TEAM_VERDICTS } from '$lib/daydream/red-team';
 import { ROUTE_MANIFEST } from 'virtual:sr-route-manifest';
 
-import { STAGE_ENG, COMMISSION_COPY, DAYDREAM_COPY, ACT_COPY, VERDICT_COPY, STAGE_TURN, ACT_BADGE } from './daydream';
+import { STAGE_ENG, COMMISSION_COPY, DAYDREAM_COPY, ACT_COPY, VERDICT_COPY, STAGE_TURN, ACT_BADGE, FOLLOW_COPY } from './daydream';
 import { ROUTE_LEDGER, ROUTE_SCOPE } from './routes';
 import {
   SOURCE_COPY, POLICY_COPY, BRIEF_LANE_COPY, EDGE_COPY, GATE_COPY, HEARTBEAT_ACTIVITIES, HIDDEN_ACTIVITIES, ACTIVITY_COPY,
@@ -53,6 +54,7 @@ describe('copy maps cover exactly what the feature declares', () => {
     ['do it for me badges', ACT_BADGE, ACT_KINDS],
     ['double-check states', COMMISSION_COPY, COMMISSION_STATES],
     ['do it for me kinds', ACT_COPY, ACT_KINDS],
+    ['take it further follow-ups', FOLLOW_COPY, FOLLOW_KINDS],
     ['double-check verdicts', VERDICT_COPY, RED_TEAM_VERDICTS],
     ['backlog idea sources', SOURCE_COPY, IDEA_SOURCES],
     ['release policies', POLICY_COPY, RELEASE_POLICIES],

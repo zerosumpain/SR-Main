@@ -18,6 +18,7 @@ import { localDayStart } from '../budget';
 import { DEFAULT_SUBJECT } from '../types';
 import { mutedKinds } from '../thought-store';
 import { loadNoteContexts } from './context.server';
+import { REPLACES_KIND, TOPIC_KINDS, TOPIC_WINDOW_DAYS, replacesEntry, supersededBy, type TopicCandidate } from './topics';
 import { THINK_CADENCE_MS, questionAt, type Channel, type Outcome } from './questions';
 import {
   channelLabel,
@@ -237,4 +238,69 @@ export async function loadEngineStrip(now = new Date()): Promise<EngineStrip> {
     raisedToday,
     next: { channel: next.channel, outcome: next.outcome, question: questionLabel(next.channel, next.outcome) ?? '' },
   };
+}
+
+/**
+ * A new research note replaces older, unanswered notes on the same subject
+ * (`topics.ts`). The older rows are archived with the reason, never deleted;
+ * the new one records what it replaced so the card can say so. Returns how
+ * many were replaced. Soft: a failure here must not cost the cycle.
+ */
+export async function supersedeOnTopic(createdKeys: readonly string[], now = new Date()): Promise<number> {
+  if (createdKeys.length === 0) return 0;
+  const fresh = (await loadThinkRowsByKeys(createdKeys)).filter((r) => (TOPIC_KINDS as readonly string[]).includes(r.kind));
+  if (fresh.length === 0) return 0;
+  const since = new Date(now.getTime() - TOPIC_WINDOW_DAYS * 86_400_000);
+  const rows = await db
+    .select({
+      id: daydreamThoughts.id,
+      kind: daydreamThoughts.kind,
+      title: daydreamThoughts.title,
+      createdAt: daydreamThoughts.createdAt,
+      feedback: daydreamThoughts.feedback,
+      reviewVerdict: daydreamThoughts.reviewVerdict,
+      note: daydreamThoughts.note,
+      proposedActions: daydreamThoughts.proposedActions,
+      status: daydreamThoughts.status,
+      // A check he commissioned is an answer too.
+      checked: sql<boolean>`exists (select 1 from daydream_commissions c where c.thought_id = daydream_thoughts.id)`,
+    })
+    .from(daydreamThoughts)
+    .where(
+      and(
+        inArray(daydreamThoughts.kind, [...TOPIC_KINDS]),
+        eq(daydreamThoughts.subject, DEFAULT_SUBJECT),
+        gte(daydreamThoughts.createdAt, since),
+        inArray(daydreamThoughts.status, ['new', 'delivered', 'seen', 'suppressed']),
+      ),
+    );
+  const older: TopicCandidate[] = rows.map((r) => ({
+    id: r.id,
+    kind: r.kind,
+    title: r.title,
+    createdAt: r.createdAt,
+    answered:
+      !!r.feedback || !!r.reviewVerdict || !!r.note || r.checked === true ||
+      (Array.isArray(r.proposedActions) && (r.proposedActions as Array<{ done?: unknown }>).some((a) => !!a?.done)),
+  }));
+  let replaced = 0;
+  for (const f of fresh) {
+    const gone = supersededBy({ id: f.id, kind: f.kind, title: f.title, createdAt: f.createdAt }, older);
+    if (gone.length === 0) continue;
+    await db.transaction(async (tx) => {
+      await tx
+        .update(daydreamThoughts)
+        .set({ status: 'archived', suppressedReason: `superseded: ${f.id}`, updatedAt: now })
+        .where(inArray(daydreamThoughts.id, gone.map((g) => g.id)));
+      const actions = Array.isArray(f.proposedActions) ? (f.proposedActions as unknown[]) : [];
+      await tx
+        .update(daydreamThoughts)
+        .set({ proposedActions: [...actions.filter((a) => (a as { kind?: unknown })?.kind !== REPLACES_KIND), replacesEntry(gone, now)] as Array<{ kind: string; label: string; payload: string }>, updatedAt: now })
+        .where(eq(daydreamThoughts.id, f.id));
+    });
+    // Each older note is replaced once, by the first new note that claims it.
+    for (const g of gone) g.answered = true;
+    replaced += gone.length;
+  }
+  return replaced;
 }

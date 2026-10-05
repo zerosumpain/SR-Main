@@ -21,6 +21,7 @@ import { ACTIVE_HOURS } from '$lib/daydream/budget';
 import { COMMISSION_STATES, COMMISSION_LABELS, nextActor } from '$lib/daydream/commissioning';
 import { IMPACT_WINDOW_DAYS } from '$lib/daydream/impact';
 import { ACT_KINDS } from '$lib/daydream/act/plan';
+import { FOLLOW_COST, FOLLOW_KINDS } from '$lib/daydream/act/follow';
 import { RED_TEAM_VERDICTS } from '$lib/daydream/red-team';
 import { IDEA_SOURCES, WORK_STAGES, STAGE_META } from '$lib/selfimprove/board';
 import { BUDGET_CAPS, WORK_CAPS } from '$lib/selfimprove/types';
@@ -136,6 +137,7 @@ export function loadFacts(now = new Date()) {
       commissions: COMMISSION_STATES.map((id) => ({ id, label: COMMISSION_LABELS[id], actor: nextActor(id) })),
       impactWindowDays: IMPACT_WINDOW_DAYS,
       actKinds: [...ACT_KINDS],
+      follow: FOLLOW_KINDS.map((id) => ({ id, cost: FOLLOW_COST[id] })),
       checkVerdicts: [...RED_TEAM_VERDICTS],
       upcoming: upcoming(now, 8),
     },

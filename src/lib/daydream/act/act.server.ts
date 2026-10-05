@@ -34,7 +34,9 @@ import {
   toUpdateTimes,
   type ActDone,
   type ActPlan,
+  type BatchPlan,
   type CalendarPlan,
+  type HoldPlan,
   type DraftPlan,
   type MovePlan,
   type ReminderPlan,
@@ -141,6 +143,58 @@ async function scheduleReminder(plan: ReminderPlan, thoughtId: string, now: Date
   });
   if (!scheduled?.success) return { ok: false, reason: `The reminder could not be set: ${why(scheduled)}` };
   return { done: { ...baseDone(now), callback: reminderName(thoughtId), fireAt } };
+}
+
+/** An event held in the diary, and the "book it" reminder before it. If the
+ *  reminder cannot be set the entry is taken back out — a hold that silently
+ *  lost half of what the label promised is worse than a refusal. */
+async function holdEvent(plan: HoldPlan, thoughtId: string, now: Date): Promise<Outcome> {
+  const entry = await addEntry({ kind: 'calendar_event', title: plan.title, date: plan.date, time: plan.time }, thoughtId, now);
+  if ('ok' in entry) return entry;
+  if (!plan.remind) return entry;
+  const reminder = await scheduleReminder(
+    { kind: 'reminder', text: `Book: ${plan.title} (${plan.date}${plan.time ? ` ${plan.time}` : ''})`, date: plan.remind, time: null },
+    thoughtId,
+    now,
+  );
+  if ('ok' in reminder) {
+    if (entry.done.eventId) await tool('apple_calendar_delete', { calendar: entry.done.calendar, eventId: entry.done.eventId }).catch(() => null);
+    return { ok: false, reason: `The diary entry was taken back out because the reminder could not be set: ${reminder.reason}` };
+  }
+  return { calendar: entry.calendar, done: { ...entry.done, callback: reminder.done.callback, fireAt: reminder.done.fireAt } };
+}
+
+/** A plan's sessions, all or none: a failure part-way removes what was written. */
+async function writeBatch(plan: BatchPlan, thoughtId: string, now: Date): Promise<Outcome> {
+  const written: NonNullable<ActDone['batch']> = [];
+  let calendar = '';
+  for (const e of plan.entries) {
+    const one = await addEntry({ kind: 'calendar_event', title: e.title, date: e.date, time: e.time }, thoughtId, now);
+    if ('ok' in one) {
+      for (const w of written) {
+        if (w.eventId) await tool('apple_calendar_delete', { calendar, eventId: w.eventId }).catch(() => null);
+      }
+      return written.length ? { ok: false, reason: `Stopped at “${e.title}” and took the others back out: ${one.reason}` } : one;
+    }
+    calendar = one.calendar ?? calendar;
+    written.push({ uid: one.done.uid, eventId: one.done.eventId, date: e.date, title: e.title });
+  }
+  return { calendar, done: { ...baseDone(now), calendar, batch: written } };
+}
+
+/** Find an entry this note wrote, by its UID, and delete it. Not found is gone
+ *  already — removed by hand, most likely. */
+async function removeEntry(calendar: string, entry: { uid: string; eventId: string | null; date: string; title: string }): Promise<string | null> {
+  let eventId = entry.eventId;
+  if (entry.uid) {
+    const listed = await tool('apple_calendar_list', { calendar, dateRangeStart: entry.date, dateRangeEnd: shiftDay(entry.date, 2), query: entry.title });
+    const events = ((listed?.data as { events?: Array<{ id?: unknown; uid?: unknown }> } | undefined)?.events ?? []);
+    const match = events.find((e) => e.uid === entry.uid);
+    eventId = match && typeof match.id === 'string' ? match.id : listed?.success ? null : eventId;
+  }
+  if (!eventId) return null;
+  const deleted = await tool('apple_calendar_delete', { calendar, eventId });
+  return deleted?.success ? null : `Your calendar did not let it remove “${entry.title}”: ${why(deleted)}`;
 }
 
 interface DiaryRow { id?: unknown; title?: unknown; start?: unknown; end?: unknown; calendar?: unknown; attendees?: unknown; organizer?: unknown }
@@ -282,6 +336,8 @@ export async function doIt(thoughtId: string, now = new Date()): Promise<ActResu
       case 'reminder': outcome = await scheduleReminder(plan, thoughtId, now); break;
       case 'calendar_move': outcome = await moveEntry(plan, now); break;
       case 'email_draft': outcome = await draftReply(plan, thoughtId, now); break;
+      case 'event_hold': outcome = await holdEvent(plan, thoughtId, now); break;
+      case 'calendar_batch': outcome = await writeBatch(plan, thoughtId, now); break;
     }
     if ('ok' in outcome) {
       return outcome.needsCalendar
@@ -366,6 +422,23 @@ export async function undoIt(thoughtId: string, now = new Date()): Promise<ActRe
         if (!done.before || !done.eventId) return { ok: false, reason: 'It did not keep where the entry was, so it cannot put it back.' };
         const restored = await tool('apple_calendar_update', { calendar: done.calendar, eventId: done.eventId, ...toUpdateTimes(done.before) });
         if (!restored?.success) return { ok: false, reason: `Your calendar did not take it back: ${why(restored)}` };
+        break;
+      }
+      case 'event_hold': {
+        const failed = await removeEntry(done.calendar, { uid: done.uid, eventId: done.eventId, date: plan.date, title: plan.title });
+        if (failed) return { ok: false, reason: failed };
+        // A reminder that has already fired has nothing left to cancel.
+        if (done.callback && !(done.fireAt && Date.parse(done.fireAt) <= now.getTime())) {
+          const cancelled = await tool('cancel_scheduled_callback', { name: done.callback });
+          if (!cancelled?.success) return { ok: false, reason: `The entry is out, but the reminder could not be cancelled: ${why(cancelled)}` };
+        }
+        break;
+      }
+      case 'calendar_batch': {
+        for (const entry of done.batch ?? []) {
+          const failed = await removeEntry(done.calendar, entry);
+          if (failed) return { ok: false, reason: failed };
+        }
         break;
       }
       case 'email_draft': {
