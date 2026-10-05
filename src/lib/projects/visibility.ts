@@ -38,6 +38,7 @@ export const STATIC_PROJECT_KEYS = [
   'pulse',
   'field-study-8',
   'data-spine',
+  'supply-chain-monitor',
   'marbler',
 ] as const;
 
@@ -48,7 +49,7 @@ const STATIC_KEYS: ReadonlySet<string> = new Set(STATIC_PROJECT_KEYS);
 // moment the code deployed, before anyone could toggle it off. Listing it here
 // makes the code itself fail closed: private with no `project_visibility` row,
 // public only if the owner explicitly toggles it. Share links still work.
-const PRIVATE_BY_DEFAULT: ReadonlySet<string> = new Set(['field-study-8', 'data-spine']);
+const PRIVATE_BY_DEFAULT: ReadonlySet<string> = new Set(['field-study-8', 'data-spine', 'supply-chain-monitor']);
 
 /** A /projects address: one lowercase URL segment, as `slugifyTitle` produces. */
 const PROJECT_SLUG = /^[a-z0-9][a-z0-9-]*$/;
