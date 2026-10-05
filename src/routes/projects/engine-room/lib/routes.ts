@@ -158,6 +158,7 @@ export const ROUTE_LEDGER: Record<string, LedgerEntry> = {
   '/api/native/family/tasks/[id]': phone('app/api', 'Tick off, confirm or send back a task'),
   '/api/native/family/alarm': phone('app/surfaces', 'Raise the alarm on every other family phone'),
   '/api/native/family/alarm/cancel': phone('app/surfaces', 'Stand an alarm down'),
+  '/api/native/family/forecast/feedback': phone('app/api', 'Say a forecast next move is wrong, so it learns'),
   '/api/native/family/messages': phone('app/surfaces', 'msg family: one line pushed to every other family phone'),
   '/api/native/family/messages/[id]/replies': phone('app/api', 'Answer a family message with an emoji or a line'),
   '/api/native/games': phone('app/surfaces', 'The games lobby: who to invite and what I’m in'),

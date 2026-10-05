@@ -110,6 +110,9 @@ describe('every native route gates itself', () => {
         // The travel desk's forecast. Scoped exactly as /home/people is: a
         // Family Circle / Family Admin member gets themselves and their wards.
         '/family/forecast/+server.ts',
+        // "That's wrong" on a next move: the forecast's own audience, and only
+        // a move that viewer's forecast is showing.
+        '/family/forecast/feedback/+server.ts',
         // Family steps and tasks: the owner or a family:circle/admin grant,
         // checked by `familyCaller` in each handler; everyone else 403s.
         '/family/steps/+server.ts',

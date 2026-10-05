@@ -53,6 +53,7 @@
 /api/native/family/alarm
 /api/native/family/alarm/cancel
 /api/native/family/forecast
+/api/native/family/forecast/feedback
 /api/native/family/landgrab
 /api/native/family/landgrab/changes
 /api/native/family/messages
