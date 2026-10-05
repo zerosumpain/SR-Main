@@ -158,3 +158,19 @@ describe('private-by-default static key (data-spine)', () => {
     expect(isProjectPublic({ 'data-spine': true }, 'data-spine')).toBe(true);
   });
 });
+
+describe('private-by-default static key (supply-chain-monitor)', () => {
+  // Supply Chain Monitor is served by its own app (zerosumpain/supply-chain-monitor),
+  // owner-only; the card must not publish itself on deploy.
+  it('is a static key that defaults private with no project_visibility row', () => {
+    expect(isStaticProjectKey('supply-chain-monitor')).toBe(true);
+    expect(defaultsPublic('supply-chain-monitor')).toBe(false);
+    expect(isProjectPublic({}, 'supply-chain-monitor')).toBe(false);
+  });
+
+  it('is hidden from the public listing and shown to the owner', () => {
+    const items = [{ key: 'supply-chain-monitor' }];
+    expect(filterForViewer(items, {}, false)).toEqual([]);
+    expect(filterForViewer(items, {}, true)).toEqual(items);
+  });
+});

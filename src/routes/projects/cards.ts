@@ -139,6 +139,17 @@ export const PROJECT_CARDS: ProjectCard[] = [
     chips: 'identity · federation · trust ledger · benchmark · cited',
   },
   {
+    key: 'supply-chain-monitor',
+    href: '/projects/supply-chain-monitor',
+    label: 'Open Supply Chain Monitor',
+    kind: 'Working tool',
+    tag: 'Interactive · Supplier risk',
+    title: 'Supply Chain Monitor — a monthly pulse on the suppliers we depend on',
+    blurb:
+      'Scores every supplier our clients rely on across seven dimensions — filed accounts, filings and governance, contracts won and lost on re-tender, share price, news, and the countries, fuel and shipping routes they depend on — with the evidence behind each number. Models how risk travels through the supply chain to each client, and runs scenarios such as a fuel shortage or a Red Sea closure.',
+    chips: 'supplier risk · re-tender losses · supply chain model · scenarios · public data',
+  },
+  {
     key: 'policy-engine',
     href: '/projects/policy-engine',
     label: 'Open Education Policy Modelling',
