@@ -50,6 +50,7 @@
 /api/native/daydream/act
 /api/native/daydream/commissions
 /api/native/daydream/feedback
+/api/native/daydream/follow
 /api/native/family/alarm
 /api/native/family/alarm/cancel
 /api/native/family/forecast

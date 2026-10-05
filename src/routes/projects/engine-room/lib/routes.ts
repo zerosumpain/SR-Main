@@ -131,6 +131,7 @@ export const ROUTE_LEDGER: Record<string, LedgerEntry> = {
   '/api/native/daydream': phone('daydream/inbox', 'Daydream notes on the phone, including the Health tab’s strip'),
   '/api/native/daydream/feedback': phone('daydream/inbox', 'Rate a note, or rule it right or wrong with a reason'),
   '/api/native/daydream/act': phone('daydream/inbox', 'Do it for me: carry out a note’s step, or take it back'),
+  '/api/native/daydream/follow': phone('daydream/inbox', 'Take it further: research, the backlog, a prototype, a watch, a message, a Home Assistant refresh'),
   '/api/native/daydream/commissions': phone('daydream/inbox', 'Ask for and follow a double-check from the phone'),
   '/api/native/health/hub': phone('app/api', 'Everything the health page concludes, for the phone'),
   '/api/native/health/summary': phone('app/surfaces', 'The health figures the widgets and the watch show'),

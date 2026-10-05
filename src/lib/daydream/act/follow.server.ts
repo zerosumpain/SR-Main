@@ -499,3 +499,40 @@ export async function refreshHome(thoughtId: string, chosen: unknown, now = new 
     return { ok: true, message: failed.length ? `Asked Home Assistant to refresh ${ids.length - failed.length}; it refused ${failed.length}.` : `Asked Home Assistant to refresh ${ids.length}. Look again in a minute.` };
   });
 }
+
+// ── One door for every follow-up tap ───────────────────────────────────────
+
+export const FOLLOW_OPS = [
+  'research', 'promote', 'draft_brief', 'accept_build', 'prototype', 'watch', 'unwatch',
+  'message', 'gmail_draft', 'gmail_send', 'gmail_discard', 'home_check', 'home_refresh',
+] as const;
+export type FollowOp = (typeof FOLLOW_OPS)[number];
+
+export function isFollowOp(op: unknown): op is FollowOp {
+  return typeof op === 'string' && (FOLLOW_OPS as readonly string[]).includes(op);
+}
+
+/** The web card's route and the phone's both come through here. `extra`
+ *  carries a watch's wording and the devices picked to refresh. */
+export async function runFollow(
+  thoughtId: string,
+  op: FollowOp,
+  extra: { description?: unknown; entities?: unknown },
+  ports: () => BacklogPorts,
+): Promise<FollowResult> {
+  switch (op) {
+    case 'research': return digDeeper(thoughtId);
+    case 'promote': return promote(thoughtId, ports());
+    case 'draft_brief': return draftBrief(thoughtId, ports());
+    case 'accept_build': return acceptBuild(thoughtId, ports());
+    case 'prototype': return startPrototype(thoughtId);
+    case 'watch': return startWatch(thoughtId, extra.description);
+    case 'unwatch': return stopWatch(thoughtId);
+    case 'message': return draftMessage(thoughtId);
+    case 'gmail_draft': return gmailDraft(thoughtId);
+    case 'gmail_send': return sendGmailDraft(thoughtId);
+    case 'gmail_discard': return discardGmailDraft(thoughtId);
+    case 'home_check': return checkHome(thoughtId);
+    case 'home_refresh': return refreshHome(thoughtId, extra.entities);
+  }
+}

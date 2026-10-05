@@ -47,6 +47,24 @@ vi.mock('$lib/daydream/thought-store', () => ({
   recordFeedback: (...a: unknown[]) => recordFeedback(...(a as [])),
 }));
 
+const runFollow = vi.fn(async (..._a: unknown[]) => ({ ok: true, message: 'Research started', href: '/research/r-1' }));
+vi.mock('$lib/daydream/act/follow.server', () => ({
+  FOLLOW_OPS: ['research', 'watch', 'home_refresh'],
+  isFollowOp: (op: unknown) => typeof op === 'string' && ['research', 'watch', 'home_refresh'].includes(op),
+  runFollow: (...a: unknown[]) => runFollow(...a),
+}));
+vi.mock('$lib/selfimprove/follow-ports.server', () => ({ backlogPorts: () => ({}) }));
+
+async function follow(body: unknown) {
+  const mod = await import('../../../../src/routes/api/native/daydream/follow/+server');
+  const request = new Request('http://x/api/native/daydream/follow', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer t', 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return (mod.POST as (e: unknown) => Promise<Response>)({ locals: {}, request, url: new URL(request.url), params: {} });
+}
+
 async function list(query = '') {
   const mod = await import('../../../../src/routes/api/native/daydream/+server');
   const request = new Request(`http://x/api/native/daydream${query}`, { headers: { Authorization: 'Bearer t' } });
@@ -144,5 +162,29 @@ describe('POST /api/native/daydream/feedback', () => {
     knownKind = null;
     expect((await feedback({ id: 'nope', verdict: 'useful' })).status).toBe(404);
     expect(recordFeedback).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/native/daydream/follow', () => {
+  beforeEach(() => runFollow.mockClear());
+
+  it('runs the tap through the shared service, with the watch wording and picked devices', async () => {
+    const res = await follow({ id: 't-1', op: 'watch', description: 'Tell me when the hall heating drops out', entities: ['climate.hall'] });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, message: 'Research started', href: '/research/r-1' });
+    expect(runFollow.mock.calls[0].slice(0, 3)).toEqual(['t-1', 'watch', { description: 'Tell me when the hall heating drops out', entities: ['climate.hall'] }]);
+  });
+
+  it('401s without a paired device, before anything runs', async () => {
+    device = null;
+    expect((await follow({ id: 't-1', op: 'research' })).status).toBe(401);
+    expect(runFollow).not.toHaveBeenCalled();
+  });
+
+  it('400s an unknown op and 404s a note that is not a think note', async () => {
+    expect((await follow({ id: 't-1', op: 'pay' })).status).toBe(400);
+    knownKind = null;
+    expect((await follow({ id: 'nope', op: 'research' })).status).toBe(404);
+    expect(runFollow).not.toHaveBeenCalled();
   });
 });
