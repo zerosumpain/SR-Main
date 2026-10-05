@@ -13,6 +13,7 @@
   import AreaGlyph from './AreaGlyph.svelte';
   import StageTrack from './StageTrack.svelte';
   import SignOff from './SignOff.svelte';
+  import FollowThrough from './FollowThrough.svelte';
   import { clock, stamp } from '$lib/daydream/format';
   import type { FeedNote } from '$lib/daydream/think/notes';
   import type { CommissionView } from '$lib/daydream/commissioning';
@@ -157,6 +158,13 @@
     </button>
   {/if}
 
+  {#if n.replaces.length}
+    <p class="replaces">
+      Replaces {n.replaces.length === 1 ? 'an earlier note' : `${n.replaces.length} earlier notes`} on the same subject:
+      {#each n.replaces as r, i (r.id)}{i > 0 ? '; ' : ''}<a href={`/jkai/daydreams?note=${encodeURIComponent(r.id)}`}>{r.title}</a>{/each}
+    </p>
+  {/if}
+
   {#if n.next}
     <div class="next">
       <p class="next-k">Suggested next step</p>
@@ -181,7 +189,7 @@
   {#if n.build}
     <p class="build">
       <span class="build-k">Build queue</span>
-      {n.build.status === 'shipped' ? 'Shipped' : n.build.accepted ? 'Accepted — the builder will pick it up' : 'Proposed — accept it in the backlog to have it built'}
+      {n.build.status === 'shipped' ? 'Shipped' : n.build.accepted ? 'Accepted — the builder will pick it up' : 'Proposed — draft and accept its brief below to have it built'}
       · <a href={`/jkai/develop/backlog?item=${encodeURIComponent(n.build.slug)}`}>Open in the backlog</a>
     </p>
   {/if}
@@ -191,7 +199,7 @@
   {#if n.act && (n.act.status === 'done' || n.act.status === 'undone' || n.act.status === 'sent')}
     <div class="did" class:undone={n.act.status === 'undone'} class:draft={!!n.act.draft && n.act.status === 'done'}>
       <p class="did-k">{n.act.status === 'undone' ? 'Undone' : n.act.status === 'sent' ? 'Sent' : n.act.draft ? 'Drafted' : 'Done'}</p>
-      <p class="did-v">{n.act.status === 'undone' ? `Taken back: ${n.act.label.replace(/^(Add|Remind you|Move|Draft) /, (m) => m.toLowerCase())}` : n.act.label}</p>
+      <p class="did-v">{n.act.status === 'undone' ? `Taken back: ${n.act.label.replace(/^(Add|Remind you|Move|Draft|Hold) /, (m) => m.toLowerCase())}` : n.act.label}</p>
       {#if n.act.draft && n.act.status === 'done'}
         <div class="draft-view">
           <p><span class="dk">To</span> {n.act.draft.to}</p>
@@ -279,6 +287,8 @@
       </div>
     </div>
   {/if}
+
+  <FollowThrough noteId={n.id} follow={n.follow} />
 
   {#if noting}
     <div class="note-form">
@@ -482,6 +492,15 @@
   }
   .build a {
     color: var(--accent-ink);
+  }
+  .replaces {
+    margin: 8px 0 0;
+    font-size: var(--fs-label);
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
+  }
+  .replaces a {
+    color: var(--text-secondary);
   }
   .said {
     margin: 12px 0 0;

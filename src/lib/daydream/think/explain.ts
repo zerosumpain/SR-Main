@@ -225,6 +225,8 @@ export interface StageInput {
   build?: { status: string; accepted: boolean } | null;
   /** "Do it for me" carried the step out (and it was not undone). */
   acted?: boolean;
+  /** A follow-up waiting on him, or running without him (`followStage`). */
+  following?: 'decide' | 'motion' | null;
 }
 
 /**
@@ -240,6 +242,8 @@ export function noteStage(i: StageInput): { stage: Stage; bucket: Bucket } {
   if (i.acted) return { stage: 'result', bucket: 'done' };
   if (c && COMMISSION_NEEDS_YOU.has(c)) return { stage: 'decide', bucket: 'decide' };
   if (c && COMMISSION_RUNNING.has(c)) return { stage: 'motion', bucket: 'motion' };
+  if (i.following === 'decide') return { stage: 'decide', bucket: 'decide' };
+  if (i.following === 'motion') return { stage: 'motion', bucket: 'motion' };
   const shipped = i.build?.status === 'shipped';
   const building = !!i.build && i.build.accepted && i.build.status === 'open';
   if (c === 'completed' || shipped) return { stage: 'result', bucket: i.verdict ? 'done' : 'decide' };

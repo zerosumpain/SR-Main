@@ -86,6 +86,19 @@ export const POST: RequestHandler = async ({ request }) => {
         return json(result);
       }
 
+      case 'follow': {
+        // Taking a note further (`act/follow.ts`): research, the backlog, a
+        // prototype, a watch, a message he sends, a Home Assistant refresh.
+        // `op` names the tap; each is the owner's own, on his own note.
+        const thoughtId = str('thoughtId');
+        const op = str('op');
+        if (!thoughtId) return json({ error: 'thoughtId is required' }, { status: 400 });
+        const { isFollowOp, runFollow } = await import('$lib/daydream/act/follow.server');
+        if (!isFollowOp(op)) return json({ error: `unknown follow-up: ${op || '(none)'}` }, { status: 400 });
+        const { backlogPorts } = await import('$lib/selfimprove/follow-ports.server');
+        return json(await runFollow(thoughtId, op, { description: body.description, entities: body.entities }, backlogPorts));
+      }
+
       case 'act_calendar': {
         // The one-time choice of where "Do it for me" writes.
         const { chooseCalendar } = await import('$lib/daydream/act/act.server');

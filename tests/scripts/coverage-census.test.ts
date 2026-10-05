@@ -64,7 +64,9 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 // Decks retired 2026-10-02 took src/lib/decks/creation.integration.test.ts with them.
 // Daydream "Do it for me" (act.integration) rides the same gate: the calendar,
 // scheduler and Gmail are stubbed, every row it writes is real.
-const INTEGRATION_FILES = 39;
+// Its follow-ups (follow.integration, 2026-10-05) ride it too: research worker,
+// builder sidecar, watch generator, model and Home Assistant stubbed.
+const INTEGRATION_FILES = 40;
 
 function tracked(pattern: string): string[] {
 	return execFileSync('git', ['ls-files', pattern], { cwd: ROOT, encoding: 'utf8' })

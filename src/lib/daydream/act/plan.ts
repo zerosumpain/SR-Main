@@ -24,6 +24,14 @@
 //                             a DRAFT: he reads it on the card and sends it
 //                             with a second tap. Undo discards the draft;
 //                             once sent, there is no undo and the card says so.
+//   event_hold      one tap   an event the note found (a walk, a talk, an
+//                             exhibition): the day goes in his diary AND a
+//                             reminder to book lands before it. The reminder's
+//                             day is worked out by CODE (`holdReminderDay`),
+//                             never written by the model. Undo removes both.
+//   calendar_batch  one tap   a health plan's sessions — up to seven diary
+//                             entries, every date named in the note. Written
+//                             all or none; Undo removes the lot.
 //
 // Payments, cancellations, disputes, bookings, other people's accounts and
 // deletions are not on the list and will not be: they cannot be taken back.
@@ -37,7 +45,7 @@
 // looked up by code, never written by the model. A plan that fails a check is
 // refused with the reason; it never acts on a guess.
 
-export const ACT_KINDS = ['calendar_event', 'reminder', 'calendar_move', 'email_draft'] as const;
+export const ACT_KINDS = ['calendar_event', 'reminder', 'calendar_move', 'email_draft', 'event_hold', 'calendar_batch'] as const;
 export type ActKind = (typeof ACT_KINDS)[number];
 
 export interface CalendarPlan {
@@ -79,7 +87,24 @@ export interface DraftPlan {
   body: string;
 }
 
-export type ActPlan = CalendarPlan | ReminderPlan | MovePlan | DraftPlan;
+export interface HoldPlan {
+  kind: 'event_hold';
+  /** The event, as it goes in the diary. */
+  title: string;
+  date: string;
+  time: string | null;
+  /** The day the "book it" reminder fires — set by `holdReminderDay`, never
+   *  by the model; null when the event is too close for one to help. */
+  remind: string | null;
+}
+
+export interface BatchPlan {
+  kind: 'calendar_batch';
+  /** Two to `MAX_BATCH` entries, each on a day the note names. */
+  entries: Array<{ title: string; date: string; time: string | null }>;
+}
+
+export type ActPlan = CalendarPlan | ReminderPlan | MovePlan | DraftPlan | HoldPlan | BatchPlan;
 
 /** What happened when it was carried out, stored beside the plan. */
 export interface ActDone {
@@ -100,6 +125,8 @@ export interface ActDone {
   /** email_draft: the draft, as written, and whether it went. */
   draft?: { id: string; messageId: string; threadId: string; to: string; subject: string; body: string; accountEmail: string };
   sentAt?: string | null;
+  /** calendar_batch: every entry written, for Undo. */
+  batch?: Array<{ uid: string; eventId: string | null; date: string; title: string }>;
 }
 
 /** The `proposed_actions` entry a think note carries. `payload` is the plan
@@ -117,6 +144,10 @@ export const MAX_BODY = 2000;
 export const HORIZON_DAYS = 366;
 export const SLOT_MINUTES = 30;
 export const REMINDER_DEFAULT_TIME = '09:00';
+/** The most diary entries one tap writes. A training week, not a season. */
+export const MAX_BATCH = 7;
+/** How many days before an event the "book it" reminder fires. */
+export const HOLD_REMIND_DAYS_BEFORE = 3;
 
 const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -228,9 +259,51 @@ export function checkPlan(
       if (body.length < 20 || body.length > MAX_BODY) return { ok: false, reason: 'The draft had no usable message.' };
       return { ok: true, plan: { kind: 'email_draft', domain, subject, body } };
     }
+    case 'event_hold': {
+      const title = clean(r.title, MAX_TITLE);
+      if (title.length < 3 || title.length > MAX_TITLE) return { ok: false, reason: 'The event had no usable title.' };
+      const date = typeof r.date === 'string' ? r.date.trim() : '';
+      const bad = checkDate(date, ctx);
+      if (bad) return { ok: false, reason: bad };
+      // The reminder's day is the code's, whatever the draft said.
+      return { ok: true, plan: { kind: 'event_hold', title, date, time, remind: holdReminderDay(date, ctx.today) } };
+    }
+    case 'calendar_batch': {
+      const raw = Array.isArray(r.entries) ? r.entries : [];
+      if (raw.length < 2) return { ok: false, reason: 'A plan of sessions needs at least two of them.' };
+      if (raw.length > MAX_BATCH) return { ok: false, reason: `That is more than ${MAX_BATCH} entries — it writes a week at a time.` };
+      const entries: BatchPlan['entries'] = [];
+      const seen = new Set<string>();
+      for (const e of raw as Array<Record<string, unknown>>) {
+        const title = clean(e?.title, MAX_TITLE);
+        if (title.length < 3 || title.length > MAX_TITLE) return { ok: false, reason: 'One of the sessions had no usable title.' };
+        const date = typeof e?.date === 'string' ? e.date.trim() : '';
+        const bad = checkDate(date, ctx, 'each session');
+        if (bad) return { ok: false, reason: bad };
+        const t = isTime(e?.time) ? (e.time as string).trim() : null;
+        const key = `${date}|${t ?? ''}|${title.toLowerCase()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        entries.push({ title, date, time: t });
+      }
+      if (entries.length < 2) return { ok: false, reason: 'A plan of sessions needs at least two different ones.' };
+      entries.sort((a, b) => (a.date + (a.time ?? '')).localeCompare(b.date + (b.time ?? '')));
+      return { ok: true, plan: { kind: 'calendar_batch', entries } };
+    }
     default:
-      return { ok: false, reason: 'This step is not one it can carry out by itself — it adds diary entries, reminders, diary moves and email drafts.' };
+      return { ok: false, reason: 'This step is not one it can carry out by itself — it adds diary entries, reminders, diary moves, event holds, a week of sessions and email drafts.' };
   }
+}
+
+/**
+ * When the "book it" reminder for an event fires: a few days before it, or
+ * tomorrow if that is already too late, or never when the event is tomorrow
+ * or sooner — by then a reminder is noise. Code's choice, not the model's.
+ */
+export function holdReminderDay(date: string, today: string): string | null {
+  const ahead = dayNumber(date) - dayNumber(today);
+  if (ahead <= 1) return null;
+  return ahead > HOLD_REMIND_DAYS_BEFORE ? shiftDay(date, -HOLD_REMIND_DAYS_BEFORE) : shiftDay(today, 1);
 }
 
 /** "Sat 10 Oct", "Sat 10 Oct, 09:00". */
@@ -252,7 +325,16 @@ export function planLabel(plan: ActPlan, calendar: string | null): string {
       return `Move “${plan.event}” from ${whenWords({ date: plan.from, time: null })} to ${whenWords({ date: plan.to, time: plan.time })}`;
     case 'email_draft':
       return `Draft a reply to ${plan.domain} — you read it here and send it`;
+    case 'event_hold':
+      return `Hold ${whenWords(plan)} for “${plan.title}” in ${calendar ? `your ${calendar} calendar` : 'your diary'}${plan.remind ? `, and remind you to book on ${whenWords({ date: plan.remind, time: REMINDER_DEFAULT_TIME })}` : ''}`;
+    case 'calendar_batch':
+      return `Add ${plan.entries.length} sessions to ${calendar ? `your ${calendar} calendar` : 'your diary'}: ${batchWords(plan)}`;
   }
+}
+
+/** "Mon 12 Oct Easy run · Wed 14 Oct Intervals". */
+export function batchWords(plan: BatchPlan): string {
+  return plan.entries.map((e) => `${whenWords(e)} ${e.title}`).join(' · ');
 }
 
 /** What it says once done. */
@@ -267,6 +349,10 @@ export function doneLabel(stored: StoredAction, plan: ActPlan): string {
       return `Moved “${d?.before?.title ?? plan.event}” to ${whenWords({ date: plan.to, time: plan.time })}`;
     case 'email_draft':
       return d?.sentAt ? `Sent to ${d.draft?.to ?? plan.domain}` : `Drafted a reply to ${d?.draft?.to ?? plan.domain} — read it, then send`;
+    case 'event_hold':
+      return stored.label.replace(/^Hold /, 'Held ').replace(', and remind you', ', and it will remind you');
+    case 'calendar_batch':
+      return stored.label.replace(/^Add /, 'Added ');
   }
 }
 
@@ -386,13 +472,22 @@ const MONTH_WORDS = `(?:${MONTHS.map((m) => `${m}|${m.slice(0, 3)}`).join('|')})
  * Could this step be one it does? Offered only then, so the button is never
  * a tap that ends in "it cannot do that".
  */
-export function looksDoable(step: string | null): boolean {
+export function looksDoable(step: string | null, title = ''): boolean {
   if (!step) return false;
   const t = step.toLowerCase();
   return (
     /\b(diary|calendar|remind|reminder|reschedule|move)\b/.test(t) ||
     /\b(email|e-mail|reply|write to|chase|contact)\b/.test(t) ||
     /\btomorrow\b/.test(t) ||
+    namesADate(t) ||
+    // "Book an adult place" under a title that carries the date — the
+    // Barns Ness walk's shape (2026-10-05): the step says WHAT, the title WHEN.
+    (/\b(book|booking|tickets?|places?|attend|sign up|register|sessions?|training)\b/.test(t) && namesADate(title.toLowerCase()))
+  );
+}
+
+function namesADate(t: string): boolean {
+  return (
     /\b\d{4}-\d{2}-\d{2}\b/.test(t) ||
     new RegExp(`\\b\\d{1,2}(?:st|nd|rd|th)?\\s+(?:of\\s+)?${MONTH_WORDS}\\b|\\b${MONTH_WORDS}\\s+\\d{1,2}\\b`).test(t)
   );
@@ -405,7 +500,7 @@ export function gmailDraftUrl(messageId: string): string {
   return `https://mail.google.com/mail/u/0/#drafts?compose=${encodeURIComponent(messageId)}`;
 }
 
-export function noteAct(actions: unknown, step: string | null): NoteAct | null {
+export function noteAct(actions: unknown, step: string | null, title = ''): NoteAct | null {
   const found = readStored(actions);
   if (found) {
     const { stored, plan } = found;
@@ -416,12 +511,13 @@ export function noteAct(actions: unknown, step: string | null): NoteAct | null {
     if (d?.undoneAt) return { kind: plan.kind, status: 'undone', label: stored.label, doneAt: d.at, draft: null, undoable: false };
     if (d?.sentAt) return { kind: plan.kind, status: 'sent', label: doneLabel(stored, plan), doneAt: d.sentAt, draft, undoable: false };
     if (d) {
+      // A hold's diary entry can still come out after its reminder fired.
       const fired = plan.kind === 'reminder' && !!d.fireAt && Date.parse(d.fireAt) <= Date.now();
       return { kind: plan.kind, status: 'done', label: doneLabel(stored, plan), doneAt: d.at, draft, undoable: !fired };
     }
     return { kind: plan.kind, status: 'ready', label: stored.label, doneAt: null, draft: null, undoable: false };
   }
-  return looksDoable(step)
+  return looksDoable(step, title)
     ? { kind: null, status: 'open', label: 'jkai sets this up itself, now — no more questions.', doneAt: null, draft: null, undoable: false }
     : null;
 }

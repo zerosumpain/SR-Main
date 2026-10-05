@@ -8,6 +8,7 @@
 import type { Stage } from '$lib/daydream/think/explain';
 import type { CommissionState } from '$lib/daydream/commissioning';
 import type { ActKind } from '$lib/daydream/act/plan';
+import type { FollowKind } from '$lib/daydream/act/follow';
 import type { RedTeamVerdict } from '$lib/daydream/red-team';
 
 export interface Twin {
@@ -39,6 +40,8 @@ export const ACT_BADGE = {
   reminder: 'one tap, can be undone',
   calendar_move: 'one tap, can be undone',
   email_draft: 'stops at a draft',
+  event_hold: 'one tap, can be undone',
+  calendar_batch: 'one tap, can be undone',
 } satisfies Record<ActKind, string>;
 
 /** What each double-check state means, in both registers. */
@@ -71,7 +74,48 @@ export const ACT_COPY = {
     plain: 'Writes a reply but stops at a draft, because it would reach another person. I read it and send it with a second tap.',
     eng: 'Guided. Drafts a reply on the note’s source thread. The recipient is looked up by code from the evidence, never written by the model. Sending is a second tap and can’t be undone.',
   },
+  event_hold: {
+    plain: 'Holds the day of something it found for me to go to, and reminds me to book a few days before. Undo removes both.',
+    eng: 'One tap. Creates the event on the note’s own date plus a scheduled reminder whose day is computed by code, never by the model. If the reminder fails the event is removed again.',
+  },
+  calendar_batch: {
+    plain: 'Puts a plan’s sessions in my diary, up to a week of them, all or none. Undo removes the lot.',
+    eng: 'One tap. Two to seven events, every date named in the note. A failure part-way deletes what was written; Undo deletes each by UID.',
+  },
 } satisfies Record<ActKind, Twin>;
+
+/** Taking a note further: each follow-up, in both registers. The cost line
+ *  shown beside it comes from the feature itself (`FOLLOW_COST`). */
+export const FOLLOW_COPY = {
+  research: {
+    plain: 'Starts a short research run on the note, seeded with the pages it read.',
+    eng: 'One tap. Inserts a brief-depth research session with the note’s web sources as seed URLs and starts the worker after the commit.',
+  },
+  promote: {
+    plain: 'Puts a suggestion I backed on the build backlog. It waits there until I accept it.',
+    eng: 'One tap, offered only once the note is rated useful or a double-check says it holds. Goes through the single intake door with a thought citation.',
+  },
+  build: {
+    plain: 'Drafts the build brief so I can read it, and my tap on the brief is the acceptance. It builds overnight, one a night.',
+    eng: 'Guided. The backlog’s own groomer drafts and checks the brief; saving it stamps acceptedAt, which is what the nightly builder picks up.',
+  },
+  prototype: {
+    plain: 'Builds a one-page sketch in the sandbox so I can see if an idea is worth a real build.',
+    eng: 'Guided. A sandbox build with a 45-minute, 1.5M-token ceiling; refused when the subscription window is nearly used.',
+  },
+  watch: {
+    plain: 'Instead of building something, it watches for the thing and tells me when it happens. Stop removes it.',
+    eng: 'One tap after I word it. Generates a scheduled monitor workflow from my description; Stop deletes the workflow.',
+  },
+  message: {
+    plain: 'Drafts a message for me to send myself, opened in WhatsApp or Mail. It never sends one for me.',
+    eng: 'Signpost. One small model call for the text; any number or address comes from a cited source’s text, found by code. A Gmail draft stops for a second tap.',
+  },
+  home: {
+    plain: 'Shows which of my devices have dropped out and asks Home Assistant to refresh the ones I pick.',
+    eng: 'Guided. Reads unavailable entities, then calls only update_entity and reload_config_entry on the ones chosen. Nothing is switched or unlocked.',
+  },
+} satisfies Record<FollowKind, Twin>;
 
 /** The double-check's three answers when it argues against its own note. */
 export const VERDICT_COPY = {

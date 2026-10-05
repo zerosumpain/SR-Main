@@ -35,7 +35,7 @@ import { OUTCOMES, OUTCOME_ASK, questionAt, type Outcome, type Question } from '
 import { MAX_TOOL_CALLS, RESEARCH_SITE_TOOLS, createToolbox, toolSetFor, type ToolSet } from './tools';
 import { MAX_NOTES, MAX_BODY_CHARS, parseReply, validateThinkOutput } from './audit';
 import { DAILY_RAISE_CAP, noteHref } from './notes';
-import { countRaisedToday } from './notes.server';
+import { countRaisedToday, supersedeOnTopic } from './notes.server';
 
 /** Tool rounds at full budget. The activity passes fewer when the budget is
  *  thin — a round is a model call. */
@@ -283,6 +283,13 @@ export async function runThink(
               and ${daydreamThoughts.status} in ('new', 'suppressed')`,
         );
     }
+
+    // A research find about a subject already on the feed replaces the older,
+    // unanswered notes on it — one card per subject, the newest (`topics.ts`).
+    await supersedeOnTopic(persisted.createdKeys, now).catch((err) => {
+      console.error('[daydream] topic supersession failed:', errMsg(err));
+      return 0;
+    });
 
     // ── New notes → the owner ──
     if (persisted.createdKeys.length) {

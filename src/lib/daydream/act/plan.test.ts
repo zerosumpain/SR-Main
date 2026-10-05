@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { beforeTimes, checkPlan, isAllDay, londonToUtc, looksSchedulable, movedTimes, noteAct, noteNamesDate, readStored, storeAction, toCreateArgs, whenWords } from './plan';
+import { MAX_BATCH, beforeTimes, checkPlan, doneLabel, holdReminderDay, isAllDay, londonToUtc, looksDoable, looksSchedulable, movedTimes, noteAct, noteNamesDate, planLabel, readStored, storeAction, toCreateArgs, whenWords } from './plan';
 import { addressOf } from './act.server';
 
 const bike = 'Bike dispatch is late\nThe shop said it would ship within a week.\n\nNext: Put 10 October in the diary to chase the bike dispatch.';
@@ -171,5 +171,73 @@ describe('email_draft', () => {
 
   it('offers the button for a chase or reply step', () => {
     expect(looksSchedulable('Email the shop to chase the dispatch.')).toBe(true);
+  });
+});
+
+// ── 2026-10-05: event holds and a week of sessions ─────────────────────────
+
+const walk =
+  'Book the Dunbar–Barns Ness geology walk on 16 October\nAngus Miller leads a 6 km coastal walk on Friday 16 October 2026 at 11:00. Adult tickets are £25.\n\nNext: Read the walk listing and book an adult place if the route suits.';
+
+describe('event_hold', () => {
+  const today5 = '2026-10-05';
+
+  it('holds the day and sets the reminder itself, three days before', () => {
+    const r = checkPlan({ kind: 'event_hold', title: 'Barns Ness geology walk', date: '2026-10-16', time: '11:00', remind: '2026-10-06' }, { noteText: walk, today: today5 });
+    // The model's own `remind` is ignored: the day is the code's.
+    expect(r).toEqual({ ok: true, plan: { kind: 'event_hold', title: 'Barns Ness geology walk', date: '2026-10-16', time: '11:00', remind: '2026-10-13' } });
+  });
+
+  it('reminds tomorrow when the event is close, and not at all when it is tomorrow', () => {
+    expect(holdReminderDay('2026-10-08', today5)).toBe('2026-10-06');
+    expect(holdReminderDay('2026-10-06', today5)).toBeNull();
+    expect(holdReminderDay('2026-10-05', today5)).toBeNull();
+  });
+
+  it('refuses a day the note never named', () => {
+    expect(checkPlan({ kind: 'event_hold', title: 'Barns Ness walk', date: '2026-11-01', time: null }, { noteText: walk, today: today5 }).ok).toBe(false);
+  });
+
+  it('says exactly what one tap will do', () => {
+    const r = checkPlan({ kind: 'event_hold', title: 'Barns Ness geology walk', date: '2026-10-16', time: '11:00' }, { noteText: walk, today: today5 });
+    if (!r.ok) throw new Error(r.reason);
+    expect(planLabel(r.plan, 'Home')).toBe('Hold Fri 16 Oct, 11:00 for “Barns Ness geology walk” in your Home calendar, and remind you to book on Tue 13 Oct, 09:00');
+    expect(doneLabel(storeAction(r.plan, 'Home'), r.plan)).toMatch(/^Held Fri 16 Oct.*and it will remind you to book/);
+  });
+});
+
+describe('calendar_batch', () => {
+  const plan = 'A gentle week back\nRuns on 12 October and 14 October, a long walk on 17 October.\n\nNext: Put the three sessions in the diary.';
+  const ctx = { noteText: plan, today: '2026-10-05' };
+
+  it('takes up to seven sessions, each on a named day, in date order', () => {
+    const r = checkPlan(
+      { kind: 'calendar_batch', entries: [{ title: 'Long walk', date: '2026-10-17', time: null }, { title: 'Easy run', date: '2026-10-12', time: '07:00' }, { title: 'Easy run', date: '2026-10-14', time: null }] },
+      ctx,
+    );
+    expect(r.ok && r.plan.kind === 'calendar_batch' && r.plan.entries.map((e) => e.date)).toEqual(['2026-10-12', '2026-10-14', '2026-10-17']);
+  });
+
+  it('refuses one session, an unnamed day, or more than a week', () => {
+    expect(checkPlan({ kind: 'calendar_batch', entries: [{ title: 'Easy run', date: '2026-10-12', time: null }] }, ctx).ok).toBe(false);
+    expect(checkPlan({ kind: 'calendar_batch', entries: [{ title: 'Easy run', date: '2026-10-12', time: null }, { title: 'Easy run', date: '2026-10-13', time: null }] }, ctx).ok).toBe(false);
+    const many = Array.from({ length: MAX_BATCH + 1 }, (_, i) => ({ title: `Run ${i}`, date: '2026-10-12', time: null }));
+    expect(checkPlan({ kind: 'calendar_batch', entries: many }, ctx)).toMatchObject({ ok: false, reason: expect.stringContaining('more than') });
+  });
+
+  it('collapses an exact repeat rather than writing it twice', () => {
+    const r = checkPlan({ kind: 'calendar_batch', entries: [{ title: 'Easy run', date: '2026-10-12', time: null }, { title: 'easy run', date: '2026-10-12', time: null }] }, ctx);
+    expect(r).toMatchObject({ ok: false, reason: expect.stringContaining('two different') });
+  });
+});
+
+describe('looksDoable with the title', () => {
+  it('offers the walk: the step says book, the title says when', () => {
+    expect(looksDoable('Read the walk listing and book an adult place if the route suits.', 'Book the Dunbar–Barns Ness geology walk on 16 October')).toBe(true);
+    expect(noteAct([], 'Read the walk listing and book an adult place.', 'Book the walk on 16 October')?.status).toBe('open');
+  });
+
+  it('does not offer a booking step with no date anywhere', () => {
+    expect(looksDoable('Book an adult place if it suits.', 'A geology walk')).toBe(false);
   });
 });

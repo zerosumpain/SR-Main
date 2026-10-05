@@ -14,6 +14,8 @@
 
 import { QUESTION_EVIDENCE_KIND } from './audit';
 import { noteAct, type NoteAct } from '../act/plan';
+import { followStage, noteFollow, type NoteFollow } from '../act/follow';
+import { readReplaces } from './topics';
 import { describeSources, noteStage, sourceText, splitNarrative, type Bucket, type SourceLine, type Stage } from './explain';
 import { CHANNELS, type Channel, type Outcome } from './questions';
 
@@ -393,6 +395,28 @@ export interface FeedNote extends NativeNote {
   /** "Do it for me": what it would do, or did. Null when the step is not
    *  something it can carry out by itself. */
   act: NoteAct | null;
+  /** Taking it further — research, the backlog, a prototype, a watch, a
+   *  message, a Home Assistant refresh (`act/follow.ts`). */
+  follow: NoteFollow;
+  /** Older notes on the same subject this one replaced (`topics.ts`). */
+  replaces: Array<{ id: string; title: string }>;
+}
+
+/** The follow-ups a note gets — the same for the web card and the phone. */
+function followOf(row: ThinkRow, n: NativeNote, split: { summary: string; next: string | null }, review: NoteReview | null, ctx: NoteContext): NoteFollow {
+  return noteFollow({
+    outcome: n.outcome,
+    channel: n.channel,
+    title: row.title,
+    summary: split.summary,
+    next: split.next,
+    verdict: row.feedback,
+    review,
+    sources: describeSources(row.evidence),
+    evidence: row.evidence,
+    build: ctx.build,
+    actions: row.proposedActions,
+  });
 }
 
 /** His own ruling on the claim answers the note as surely as a rating does. */
@@ -404,8 +428,9 @@ export function toFeedNote(row: ThinkRow, muted: ReadonlySet<string>, ctx: NoteC
   const n = toNativeNote(row);
   const split = splitNarrative(n.body);
   const review = noteReview(row);
-  const act = noteAct(row.proposedActions, split.next);
-  const where = noteStage({ verdict: answeredBy(row, review), commissionState: ctx.commission?.state, build: ctx.build, acted: act?.status === 'done' });
+  const act = noteAct(row.proposedActions, split.next, row.title);
+  const follow = followOf(row, n, split, review, ctx);
+  const where = noteStage({ verdict: answeredBy(row, review), commissionState: ctx.commission?.state, build: ctx.build, acted: act?.status === 'done', following: followStage(follow) });
   return {
     ...n,
     outcomeLabel: outcomeLabel(n.outcome),
@@ -427,6 +452,8 @@ export function toFeedNote(row: ThinkRow, muted: ReadonlySet<string>, ctx: NoteC
     build: ctx.build,
     review,
     act,
+    follow,
+    replaces: readReplaces(row.proposedActions),
   };
 }
 
@@ -445,14 +472,18 @@ export interface NativeNoteDetail extends NativeNote {
   commissionState: string | null;
   review: NoteReview | null;
   act: NoteAct | null;
+  /** Taking it further (`act/follow.ts`); an older app ignores it. */
+  follow: NoteFollow;
+  replaces: Array<{ id: string; title: string }>;
 }
 
 export function toNativeDetail(row: ThinkRow, ctx: NoteContext = EMPTY_CONTEXT): NativeNoteDetail {
   const n = toNativeNote(row);
   const split = splitNarrative(n.body);
   const review = noteReview(row);
-  const act = noteAct(row.proposedActions, split.next);
-  const where = noteStage({ verdict: answeredBy(row, review), commissionState: ctx.commission?.state, build: ctx.build, acted: act?.status === 'done' });
+  const act = noteAct(row.proposedActions, split.next, row.title);
+  const follow = followOf(row, n, split, review, ctx);
+  const where = noteStage({ verdict: answeredBy(row, review), commissionState: ctx.commission?.state, build: ctx.build, acted: act?.status === 'done', following: followStage(follow) });
   return {
     ...n,
     summary: split.summary,
@@ -465,5 +496,7 @@ export function toNativeDetail(row: ThinkRow, ctx: NoteContext = EMPTY_CONTEXT):
     commissionState: ctx.commission?.state ?? null,
     review,
     act,
+    follow,
+    replaces: readReplaces(row.proposedActions),
   };
 }
