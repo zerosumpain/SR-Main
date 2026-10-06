@@ -48,6 +48,7 @@ vi.mock('$env/dynamic/private', () => ({
       'sr-drive': 'd'.repeat(40),
       'sr-policy-engine': 'p'.repeat(40),
       'sr-health': 'h'.repeat(40),
+      'sr-supply-chain-monitor': 'm'.repeat(40),
     }),
   },
 }));
@@ -197,6 +198,18 @@ describe('session authority claims', () => {
     state.shareValid = false;
     state.queue.push(priv);
     expect((await (await call('sr-policy-engine', 'p'.repeat(40), { 'x-sr-session-share': 'stale' })).json()).claims.project.access).toBe('none');
+  });
+
+  it('a Supply Chain Monitor share link is checked against its own, private-by-default project', async () => {
+    state.shareValid = true;
+    state.queue.push([]); // no visibility row: private by default
+    const body = await (await call('sr-supply-chain-monitor', 'm'.repeat(40), { 'x-sr-session-share': 'tok' })).json();
+    expect(body.claims.project).toEqual({ key: 'supply-chain-monitor', access: 'share' });
+    expect(state.shareCalls.at(-1)).toEqual(['supply-chain-monitor', 'tok']);
+
+    state.shareValid = false;
+    state.queue.push([]);
+    expect((await (await call('sr-supply-chain-monitor', 'm'.repeat(40))).json()).claims.project.access).toBe('none');
   });
 
   it('only ever answers for the audience\'s own project, and an outage is a 503', async () => {
