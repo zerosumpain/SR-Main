@@ -113,7 +113,7 @@ describe('Resident', () => {
     let sheltered = false;
     for (let i = 0; i < 60 * 120 && !sheltered; i++) {
       r.update(1 / 60);
-      if (r.cloud && r.mode === 'idle' && r.activity === 'umbrella' && !r.umbrella && r.say === '!') soaked = true;
+      if (r.cloud && r.mode === 'idle' && r.activity === 'umbrella' && !r.umbrella && r.bubble?.text === '!') soaked = true;
       if (r.cloud && r.umbrella) sheltered = true;
     }
     expect(soaked).toBe(true);

@@ -7,6 +7,7 @@
 
 import { CALM, type Mood } from './mood';
 import type { Mode } from './rig';
+import { aside, SPECIAL, want, type Line } from './talk';
 import { clampTo, route, type Floor, type Link, type Spot, type World } from './world';
 
 type Climb = Exclude<Link, { type: 'drop' }>;
@@ -32,7 +33,7 @@ type Step =
   | { type: 'link'; link: Link }
   | { type: 'land' }
   | { type: 'do'; act: Mode | 'workout'; dur: number }
-  | { type: 'wave' }
+  | { type: 'wave'; text?: string }
   | { type: 'enter' }
   | { type: 'drive'; x: number }
   | { type: 'exit' }
@@ -99,7 +100,8 @@ export class Resident {
   floor: Floor | null = null;
   inCar = false;
   car: { floor: Floor; x: number; dir: 1 | -1 } | null = null;
-  say: string | null = null;
+  /** What he is saying or thinking, until the session clock passes `until`. */
+  bubble: (Line & { until: number }) | null = null;
   /** A grappling rope while one is out: its line, hook end and loose end. */
   rope: { x: number; top: number; bottom: number } | null = null;
   /** A weather cloud that follows him, and what is falling out of it. */
@@ -116,6 +118,8 @@ export class Resident {
   private view: { top: number; bottom: number } | null = null;
   private viewStill = 0;
   private missing = 0;
+  /** Session time of his next remark while settled. */
+  private nextAside = 0;
   /** The first moment of the umbrella gag, before he reacts. */
   private soaked = false;
 
@@ -148,12 +152,13 @@ export class Resident {
     const keepActivity = this.floor !== null;
     this.place(same || w.floors[0], this.x || w.floors[0].x1 + 40);
     this.inCar = false;
-    this.say = null;
+    this.bubble = null;
     this.rope = null;
     this.prop = null;
     this.cur = null;
     this.steps = [];
-    if (keepActivity) this.start(this.activity === 'drive' ? 'wander' : this.activity);
+    // A resize re-plans the same activity; he has already said why.
+    if (keepActivity) this.start(this.activity === 'drive' ? 'wander' : this.activity, true);
   }
 
   /** The owner's day, re-read every few minutes. */
@@ -198,12 +203,18 @@ export class Resident {
     return { floor, x: floor.x1 + w.margin + 30 + this.random() * Math.max(0, floor.x2 - floor.x1 - 2 * w.margin - 60) };
   }
 
-  start(activity: Activity) {
+  private speak(line: Line | null, seconds: number) {
+    if (line) this.bubble = { ...line, until: this.clock + seconds };
+  }
+
+  start(activity: Activity, quiet = false) {
     const w = this.world;
     if (!w || !this.floor) return;
     this.activity = activity;
-    this.say = null;
+    this.bubble = null;
     this.prop = null;
+    // Mostly he says what he is off to do, and why when jk's day decided it.
+    if (!quiet && this.random() < 0.85) this.speak(want(activity, this.mood.because[activity], this.random), 3);
     if (this.inCar && this.car) {
       // Interrupted mid-drive: he parks where he is and gets out.
       this.car.x = this.x;
@@ -328,8 +339,8 @@ export class Resident {
     const floor = inView.reduce((a, b) => (Math.abs(b.y - mid) < Math.abs(a.y - mid) ? b : a));
     const x = clampTo(w, Math.max(floor.x1, Math.min(floor.x2, this.x)), floor);
     this.prop = null;
-    this.say = null;
     this.activity = 'wander';
+    this.speak({ text: SPECIAL.chasing, kind: 'say' }, 2);
     const far = Math.abs(this.y - floor.y) > (v.bottom - v.top) * 0.8;
     const links = far ? null : route(w, this.floor, this.x, floor);
     if (links) {
@@ -339,7 +350,7 @@ export class Resident {
     } else {
       this.steps = [{ type: 'zip', floor, x, fromAbove: this.y < v.top }];
     }
-    this.steps.push({ type: 'do', act: 'wave', dur: 1.2 });
+    this.steps.push({ type: 'wave', text: SPECIAL.found });
     this.cur = null;
   }
 
@@ -355,6 +366,7 @@ export class Resident {
     }
     this.followCloud(dt);
     this.soaked = false;
+    if (this.bubble && this.clock > this.bubble.until) this.bubble = null;
     if (!this.cur) {
       if (!this.steps.length) this.next();
       const s = this.steps.shift();
@@ -363,6 +375,7 @@ export class Resident {
       if (s.type === 'do') {
         this.actT = 0;
         this.actDur = s.dur;
+        this.nextAside = this.clock + 3 + this.random() * 4;
         if (s.act === 'tv' || s.act === 'sofa') this.prop = { x: this.x, y: this.floor.y };
         if (s.act === 'umbrella') this.cloud = { x: this.x, kind: 'rain', until: this.clock + s.dur + 1 };
       }
@@ -425,6 +438,11 @@ export class Resident {
         this.actT = c.t;
         this.animT += dt;
         this.settled(c);
+        // Now and then a remark about what he is doing.
+        if (this.clock > this.nextAside && !this.bubble) {
+          this.nextAside = this.clock + 9 + this.random() * 8;
+          if (this.random() < 0.6) this.speak(aside(this.activity, !!this.cloud && this.cloud.kind !== 'snow', this.random), 2.6);
+        }
         if (c.t >= c.dur) {
           if (c.act === 'plant') this.plant();
           if (c.act === 'tv' || c.act === 'sofa') this.prop = null;
@@ -434,11 +452,11 @@ export class Resident {
       case 'wave':
         this.mode = 'wave';
         this.animT += dt;
-        this.say = 'hi!';
-        if (c.t > 1.4) {
-          this.say = null;
-          done();
+        if (c.stage === 0) {
+          c.stage = 1;
+          this.speak({ text: c.text ?? SPECIAL.hello, kind: 'say' }, 1.6);
         }
+        if (c.t > 1.4) done();
         break;
       case 'enter':
       case 'exit':
@@ -507,9 +525,8 @@ export class Resident {
         if (c.t < 1.2) {
           this.mode = 'idle';
           this.soaked = true;
-          this.say = c.t > 0.5 ? '!' : null;
+          if (c.t > 0.5 && this.bubble?.text !== SPECIAL.caught) this.speak({ text: SPECIAL.caught, kind: 'say' }, 0.7);
         } else {
-          this.say = null;
           this.mode = 'umbrella';
         }
         return;

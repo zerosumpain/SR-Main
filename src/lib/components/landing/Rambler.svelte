@@ -35,7 +35,7 @@
     let nextId = 0;
     let world: World | null = null;
     let dirty = true;
-    let ink: Ink = { ink: '#1a1008', paper: '#ede4d4', muted: '#6b6158' };
+    let ink: Ink = { ink: '#1a1008', paper: '#ede4d4', muted: '#6b6158', font: 'ui-monospace, monospace' };
     let inkAt = -Infinity;
     let moodAt = -Infinity;
 
@@ -56,7 +56,7 @@
     const readInk = () => {
       const cs = getComputedStyle(document.documentElement);
       const v = (name: string, fallback: string) => cs.getPropertyValue(name).trim() || fallback;
-      ink = { ink: v('--text-primary', ink.ink), paper: v('--bg', ink.paper), muted: v('--text-muted', ink.muted) };
+      ink = { ink: v('--text-primary', ink.ink), paper: v('--bg', ink.paper), muted: v('--text-muted', ink.muted), font: v('--font-mono', ink.font) };
     };
 
     const rebuild = () => {
@@ -137,7 +137,7 @@
       resident.setView(scrollY, scrollY + innerHeight);
       if (!still.matches) resident.update(dt);
       ctx.setTransform(dpr, 0, 0, dpr, -scrollX * dpr, -scrollY * dpr);
-      drawWorld(ctx, world, resident, P, ink);
+      drawWorld(ctx, world, resident, P, ink, { left: scrollX, right: scrollX + innerWidth });
     });
 
     return () => {

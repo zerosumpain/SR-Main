@@ -540,10 +540,7 @@ export function car(dir: 1 | -1, t: number, moving: boolean, driver: Palette | n
   return out;
 }
 
-/** 3×5 pixel glyphs for the few words he says. */
+/** 3×5 pixel glyphs: the Zs that float up while he sleeps. */
 export const GLYPHS: Record<string, string[]> = {
-  h: ['#..', '#..', '##.', '#.#', '#.#'],
-  i: ['#', '.', '#', '#', '#'],
-  '!': ['#', '#', '#', '.', '#'],
   z: ['###', '..#', '.#.', '#..', '###'],
 };

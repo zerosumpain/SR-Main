@@ -3,12 +3,15 @@
 
 import { car, figure, GLYPHS, PALETTE, type Pixel } from './rig';
 import type { Resident } from './resident';
+import { wrap, type Line } from './talk';
 import type { World } from './world';
 
 export interface Ink {
   ink: string;
   paper: string;
   muted: string;
+  /** The site's mono family, for his speech bubbles. */
+  font: string;
 }
 
 const ROPE = '#b58b52';
@@ -70,20 +73,6 @@ function text(ctx: CanvasRenderingContext2D, word: string, x: number, y: number,
   return cx - x - s;
 }
 
-function speech(ctx: CanvasRenderingContext2D, word: string, x: number, bottom: number, P: number, ink: Ink) {
-  const s = Math.max(1, P - 1);
-  const width = [...word].reduce((w, ch) => w + ((GLYPHS[ch]?.[0].length ?? 0) + 1) * s, -s);
-  const w = width + 6 * s;
-  const h = 9 * s;
-  const left = Math.round(x - w / 2);
-  const top = Math.round(bottom - h);
-  ctx.fillStyle = ink.ink;
-  ctx.fillRect(left - s, top - s, w + 2 * s, h + 2 * s);
-  ctx.fillRect(left + 2 * s, top + h, 2 * s, 2 * s);
-  ctx.fillStyle = ink.paper;
-  ctx.fillRect(left, top, w, h);
-  text(ctx, word, left + 3 * s, top + 2 * s, s, ink.ink);
-}
 
 function thought(ctx: CanvasRenderingContext2D, hx: number, hy: number, P: number, t: number, eureka: boolean, ink: Ink) {
   // Two rising puffs, then a cloud holding either ticking dots or a bulb.
@@ -266,8 +255,53 @@ function sweat(ctx: CanvasRenderingContext2D, hx: number, hy: number, P: number,
   }
 }
 
+const BUBBLE_SIZE = 12;
+const BUBBLE_LINE = 15;
+
+/**
+ * A speech bubble (pixel tail pointing at him) or a thought bubble (two dots
+ * rising from his head), kept inside the visible width of the page.
+ */
+function bubble(ctx: CanvasRenderingContext2D, line: Line, x: number, bottom: number, P: number, ink: Ink, view: { left: number; right: number }) {
+  const rows = wrap(line.text);
+  ctx.font = `500 ${BUBBLE_SIZE}px ${ink.font}`;
+  const textW = Math.max(...rows.map((r) => ctx.measureText(r).width));
+  const w = Math.ceil(textW) + 16;
+  const h = rows.length * BUBBLE_LINE + 10;
+  const gap = line.kind === 'think' ? 5 * P : 3 * P;
+  const left = Math.round(Math.max(view.left + 4, Math.min(view.right - w - 4, x - w / 2)));
+  const top = Math.round(bottom - gap - h);
+  ctx.fillStyle = ink.ink;
+  ctx.fillRect(left - 2, top - 2, w + 4, h + 4);
+  ctx.fillStyle = ink.paper;
+  ctx.fillRect(left, top, w, h);
+  const tx = Math.round(Math.max(left + 6, Math.min(left + w - 10, x)));
+  // Tails are paper-filled with an ink rim, so they show on the dark hero too.
+  const dot = (dx: number, dy: number, size: number) => {
+    ctx.fillStyle = ink.ink;
+    ctx.fillRect(dx - 1, dy - 1, size + 2, size + 2);
+    ctx.fillStyle = ink.paper;
+    ctx.fillRect(dx, dy, size, size);
+  };
+  if (line.kind === 'say') {
+    // A stepped pixel tail down toward him.
+    dot(tx, top + h, 2 * P);
+    dot(tx, top + h + 2 * P, P);
+    ctx.fillStyle = ink.paper;
+    ctx.fillRect(tx, top + h - 2, 2 * P, 3);
+  } else {
+    dot(tx, top + h + P + 1, 2 * P);
+    dot(tx + P, top + h + 3 * P + 3, P);
+  }
+  ctx.fillStyle = ink.ink;
+  ctx.textBaseline = 'top';
+  ctx.textAlign = 'left';
+  ctx.font = `${line.kind === 'think' ? 'italic ' : ''}500 ${BUBBLE_SIZE}px ${ink.font}`;
+  rows.forEach((r, i) => ctx.fillText(r, left + 8, top + 6 + i * BUBBLE_LINE));
+}
+
 /** Everything the rambler owns this frame: flowers, car, rope, props, him, weather. */
-export function drawWorld(ctx: CanvasRenderingContext2D, w: World, r: Resident, P: number, ink: Ink) {
+export function drawWorld(ctx: CanvasRenderingContext2D, w: World, r: Resident, P: number, ink: Ink, view: { left: number; right: number }) {
   drawFlowers(ctx, w, r, P);
   if (r.rope) drawRope(ctx, r.rope, P);
   if (r.prop && (r.mode === 'tv' || r.mode === 'sofa')) {
@@ -283,6 +317,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, r: Resident, 
   }
   if (r.inCar) {
     drawCloud(ctx, r, P, null);
+    if (r.bubble && r.car) bubble(ctx, r.bubble, Math.round(r.car.x), Math.round(r.car.floor.y) - 11 * P, P, ink, view);
     return;
   }
 
@@ -320,5 +355,5 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, r: Resident, 
   if (r.mode === 'stressed') scribble(ctx, hx, hy, P, r.animT);
   if (r.mode === 'anxious') sweat(ctx, hx, hy, P, r.animT, dir);
   drawCloud(ctx, r, P, canopy);
-  if (r.say) speech(ctx, r.say, ox + P, oy + (fig.top - 2) * P, P, ink);
+  if (r.bubble) bubble(ctx, r.bubble, ox + P, oy + (fig.top - 1) * P - (canopy ? 9 * P : 0), P, ink, view);
 }
