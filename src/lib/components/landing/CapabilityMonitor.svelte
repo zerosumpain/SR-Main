@@ -158,7 +158,7 @@
     <p class="mon-meta">{meta}</p>
   </div>
 
-  <div class="mon" role="group" aria-label="Live capability monitor" use:scenery={{ spot: 'lookout', at: 0.86, ladder: 'right', compact: true }}>
+  <div class="mon" role="group" aria-label="Live capability monitor" use:scenery={{ spot: 'lookout', at: 0.86 }}>
     {#each channels as c (c.id)}
       <div class="row">
         <button

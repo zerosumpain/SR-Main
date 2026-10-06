@@ -183,7 +183,7 @@
   </header>
   <ul class="caps">
     {#each caps as c, i (c.art)}
-      <li use:scenery={{ spot: SPOTS[c.art], ladder: i === caps.length - 1 ? 'right' : undefined }}>
+      <li use:scenery={{ spot: SPOTS[c.art] }}>
         <a class="cap" data-tone={c.tone} href={c.href}>
           {@render art(c.art)}
           <span class="ihead">{@render icon(c.art)}<span class="num">{String(i + 1).padStart(2, '0')}</span></span>

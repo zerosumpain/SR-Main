@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { CapabilityFacts } from '$lib/landing/capabilities';
+  import { scenery } from '$lib/landing/ramblers/scenery';
 
   let {
     facts,
@@ -57,7 +58,7 @@
 <section class="loop-sec" aria-labelledby="loop-h">
   <header class="cap-hd">
     <h2 id="loop-h" class="cap-h">The loop</h2>
-    <span class="cap-rule"></span>
+    <span class="cap-rule" use:scenery></span>
     <a class="cap-meta" href="/projects/engine-room">How it changes itself →</a>
   </header>
 

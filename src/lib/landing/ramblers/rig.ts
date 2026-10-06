@@ -21,7 +21,11 @@ export type Mode =
   | 'hop'
   | 'land'
   | 'wave'
-  | 'climb';
+  | 'jump'
+  | 'wall'
+  | 'mantle'
+  | 'aim'
+  | 'rope';
 
 export interface Build {
   thigh: number;
@@ -87,6 +91,7 @@ interface Pose {
   lift: number;
   book: boolean;
   rope: number | null;
+  launcher: boolean;
 }
 
 const legReach = (b: Build, l: [number, number]) => b.thigh * Math.cos(l[0] * DEG) + b.shin * Math.cos(l[1] * DEG);
@@ -108,6 +113,7 @@ function poseFor(mode: Mode, t: number, b: Build): Pose {
     lift: 0,
     book: false,
     rope: null,
+    launcher: false,
   };
   switch (mode) {
     case 'idle': {
@@ -231,7 +237,41 @@ function poseFor(mode: Mode, t: number, b: Build): Pose {
       p.nA = [165, 160 + 28 * Math.sin(t * 13)];
       p.fA = [-5, -2];
       break;
-    case 'climb':
+    case 'jump':
+      p.nL = [48, -28];
+      p.fL = [22, -48];
+      p.nA = [165, 172];
+      p.fA = [150, 165];
+      p.hipY = b.thigh + b.shin;
+      break;
+    case 'wall': {
+      // Facing the wall: hands reaching up it in turn, knees up, feet on it.
+      const s = Math.sin(t * TAU * 1.3);
+      p.nA = [148 + 18 * s, 170];
+      p.fA = [148 - 18 * s, 170];
+      p.nL = [62 + 22 * s, -25];
+      p.fL = [62 - 22 * s, -25];
+      p.lean = 10;
+      p.hipY = b.thigh + b.shin;
+      break;
+    }
+    case 'mantle':
+      // Hands on the ledge, one knee coming up over it.
+      p.nA = [160, 115];
+      p.fA = [150, 110];
+      p.nL = [80, -15];
+      p.fL = [15, -10];
+      p.lean = 24;
+      p.hipY = b.thigh + b.shin;
+      break;
+    case 'aim':
+      // Launcher held straight up, sighting along it.
+      p.nA = [176, 178];
+      p.fA = [20, 70];
+      p.look = -1;
+      p.launcher = true;
+      break;
+    case 'rope':
       break;
   }
   if (p.hipY === null) p.hipY = Math.max(legReach(b, p.nL), legReach(b, p.fL));
@@ -240,7 +280,7 @@ function poseFor(mode: Mode, t: number, b: Build): Pose {
 
 /** The character in `mode` at time `t`, facing `dir` (1 right, -1 left). */
 export function figure(mode: Mode, t: number, dir: 1 | -1, b: Build = BUILD, pal: Palette = PALETTE): Figure {
-  if (mode === 'climb') return climbFigure(t, b, pal);
+  if (mode === 'rope') return climbFigure(t, b, pal);
   const p = poseFor(mode, t, b);
   const map = new Map<string, Pixel>();
   const cr = Math.cos(p.rot * DEG);
@@ -309,6 +349,11 @@ export function figure(mode: Mode, t: number, dir: 1 | -1, b: Build = BUILD, pal
   put(hx + 1, hy + p.look, p.eye ? pal.eye : pal.skinD);
   limb(hip, p.nL, b.thigh, b.shin, pal.legs, pal.shoe, true);
   const hand = limb(sh, p.nA, b.upper, b.fore, pal.shirt, pal.skin, false);
+  if (p.launcher) {
+    put(hand[0], hand[1] - 1, '#4a4440');
+    put(hand[0], hand[1] - 2, '#4a4440');
+    put(hand[0] + 1, hand[1] - 1, '#4a4440');
+  }
   if (p.book) {
     const page = Math.floor(t / 2.6) % 2;
     for (let i = 0; i <= 2; i++) for (let j = -2; j <= 0; j++) put(hand[0] + i, hand[1] + j, '#7a2f0a');
@@ -339,7 +384,7 @@ export function figure(mode: Mode, t: number, dir: 1 | -1, b: Build = BUILD, pal
   return { px, head: [headX, headY + shift], top: Math.min(...px.map((q) => q[1])) };
 }
 
-/** Seen from behind while on a ladder: arms and legs alternate rung to rung. */
+/** Seen from behind on a rope: hand over hand, feet gripping below. */
 function climbFigure(t: number, b: Build, pal: Palette): Figure {
   const map = new Map<string, Pixel>();
   const put = (x: number, y: number, c: string) => map.set(`${x},${y}`, [x, y, c]);

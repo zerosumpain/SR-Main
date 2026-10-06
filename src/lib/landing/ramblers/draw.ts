@@ -3,7 +3,6 @@
 
 import { car, figure, GLYPHS, PALETTE, type Pixel } from './rig';
 import type { Resident } from './resident';
-import type { Ladder, World } from './world';
 
 export interface Ink {
   ink: string;
@@ -11,8 +10,9 @@ export interface Ink {
   muted: string;
 }
 
-const WOOD = '#9a6634';
-const WOOD_D = '#6b4320';
+const ROPE = '#b58b52';
+const ROPE_D = '#8a6538';
+const HOOK = '#8c8780';
 const LAMP = '#c4570a';
 const GLOW = '#ffd77a';
 const BLANKET = '#c4570a';
@@ -33,14 +33,20 @@ function block(ctx: CanvasRenderingContext2D, ox: number, oy: number, P: number,
   ctx.globalAlpha = 1;
 }
 
-export function drawLadder(ctx: CanvasRenderingContext2D, l: Ladder, P: number) {
-  const top = l.top.y - 2 * P;
-  const h = l.bot.y - top;
-  ctx.fillStyle = WOOD;
-  ctx.fillRect(l.x - 4 * P, top, P, h);
-  ctx.fillRect(l.x + 3 * P, top, P, h);
-  ctx.fillStyle = WOOD_D;
-  for (let y = l.bot.y - 3 * P; y > l.top.y - P; y -= 4 * P) ctx.fillRect(l.x - 3 * P, y, 6 * P, P);
+// A grappling rope: a braided line, the hook claws at the top.
+function drawRope(ctx: CanvasRenderingContext2D, rope: { x: number; top: number; bottom: number }, P: number) {
+  const x = Math.round(rope.x) - Math.floor(P / 2);
+  const top = Math.round(rope.top);
+  const len = Math.round(rope.bottom) - top;
+  if (len <= 0) return;
+  ctx.fillStyle = ROPE;
+  ctx.fillRect(x, top, P, len);
+  ctx.fillStyle = ROPE_D;
+  for (let y = top + P; y < top + len; y += 3 * P) ctx.fillRect(x, y, P, P);
+  ctx.fillStyle = HOOK;
+  ctx.fillRect(x - 2 * P, top - P, 5 * P, P);
+  ctx.fillRect(x - 2 * P, top - 2 * P, P, P);
+  ctx.fillRect(x + 2 * P, top - 2 * P, P, P);
 }
 
 function text(ctx: CanvasRenderingContext2D, word: string, x: number, y: number, s: number, colour: string) {
@@ -98,9 +104,9 @@ function zs(ctx: CanvasRenderingContext2D, hx: number, hy: number, P: number, t:
   ctx.globalAlpha = 1;
 }
 
-/** Everything the rambler owns this frame: ladders, his car, then him. */
-export function drawWorld(ctx: CanvasRenderingContext2D, w: World, r: Resident, P: number, ink: Ink) {
-  for (const l of w.ladders) drawLadder(ctx, l, P);
+/** Everything the rambler owns this frame: his car, any rope he has out, then him. */
+export function drawWorld(ctx: CanvasRenderingContext2D, r: Resident, P: number, ink: Ink) {
+  if (r.rope) drawRope(ctx, r.rope, P);
 
   if (r.car) {
     const cy = Math.round(r.car.floor.y) - P;

@@ -12,8 +12,6 @@
 
   /** Screen pixels per art pixel: an 18-unit character stands 36px tall. */
   const P = 2;
-  /** Below this width the page is one column; see SceneryOptions.compact. */
-  const COMPACT = 720;
 
   let canvas: HTMLCanvasElement;
 
@@ -22,7 +20,7 @@
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     const still = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const resident = new Resident();
+    const resident = new Resident(Math.random, P);
     const ids = new WeakMap<HTMLElement, number>();
     let nextId = 0;
     let world: World | null = null;
@@ -38,9 +36,7 @@
 
     const rebuild = () => {
       const rects: SceneryRect[] = [];
-      const compact = innerWidth < COMPACT;
       for (const [el, opts] of sceneryElements) {
-        if (compact && !opts.compact) continue;
         const b = el.getBoundingClientRect();
         if (!b.width) continue;
         if (!ids.has(el)) ids.set(el, nextId++);
@@ -49,13 +45,16 @@
           x1: b.left + scrollX,
           x2: b.right + scrollX,
           y: (opts.edge === 'bottom' ? b.bottom : b.top) + scrollY,
+          bottom: b.bottom + scrollY,
           spot: opts.spot,
           at: opts.at,
-          ladder: opts.ladder,
         });
       }
       const pageWidth = document.documentElement.clientWidth;
-      world = rects.length ? buildWorld(rects, { margin: 4 * P, ladderHalf: 4 * P, pageWidth }) : null;
+      // He clears a gap a little taller than himself, and steps off ledges up
+      // to four times his height; deeper than that he abseils.
+      const opts = { margin: 4 * P, standOff: 4 * P, jump: 26 * P, drop: 80 * P, longest: 350 * P, pageWidth };
+      world = rects.length ? buildWorld(rects, opts) : null;
       if (world && world.floors.length) resident.setWorld(world, { asleep: still.matches });
       else world = null;
     };
@@ -108,7 +107,7 @@
       }
       if (!still.matches) resident.update(dt);
       ctx.setTransform(dpr, 0, 0, dpr, -scrollX * dpr, -scrollY * dpr);
-      drawWorld(ctx, world, resident, P, ink);
+      drawWorld(ctx, resident, P, ink);
     });
 
     return () => {

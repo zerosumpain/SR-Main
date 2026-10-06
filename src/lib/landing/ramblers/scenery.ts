@@ -10,16 +10,8 @@ import type { Spot } from './world';
 export interface SceneryOptions {
   spot?: Spot;
   at?: number;
-  /** Lean a ladder against this side, down to whatever floor is below. */
-  ladder?: 'left' | 'right';
   /** Use the element's bottom edge as the floor instead of its top. */
   edge?: 'top' | 'bottom';
-  /**
-   * Keep this element on narrow screens. Everything stacks into one column
-   * there, so ladders between sections would run through text; the rambler
-   * stays in the hero instead.
-   */
-  compact?: boolean;
 }
 
 export const sceneryElements = new Map<HTMLElement, SceneryOptions>();

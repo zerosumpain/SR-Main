@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { Resident, type Activity } from './resident';
 import { buildWorld, type SceneryRect } from './world';
 
+const OPTS = { margin: 8, standOff: 8, jump: 52, drop: 160 };
+
 const RECTS: SceneryRect[] = [
   { key: 1, x1: 100, x2: 1100, y: 100, spot: 'lookout' },
   { key: 2, x1: 100, x2: 600, y: 400, spot: 'desk' },
@@ -17,7 +19,7 @@ function seeded(seed: number) {
 
 describe('Resident', () => {
   it('lives ten minutes without leaving the world', () => {
-    const w = buildWorld(RECTS, { margin: 8, ladderHalf: 8 });
+    const w = buildWorld(RECTS, OPTS);
     const r = new Resident(seeded(7));
     r.setWorld(w);
     const seen = new Set<Activity>();
@@ -34,7 +36,7 @@ describe('Resident', () => {
   });
 
   it('drives off and parks the car back where it was', () => {
-    const w = buildWorld(RECTS, { margin: 8, ladderHalf: 8 });
+    const w = buildWorld(RECTS, OPTS);
     const r = new Resident(seeded(3));
     r.setWorld(w);
     const parked = r.car!.x;
@@ -50,7 +52,7 @@ describe('Resident', () => {
   });
 
   it('sleeps in place when motion is reduced', () => {
-    const w = buildWorld(RECTS, { margin: 8, ladderHalf: 8 });
+    const w = buildWorld(RECTS, OPTS);
     const r = new Resident(seeded(1));
     r.setWorld(w, { asleep: true });
     r.update(0.1);
@@ -59,7 +61,7 @@ describe('Resident', () => {
   });
 
   it('gets out of the car when something else comes up mid-drive', () => {
-    const w = buildWorld(RECTS, { margin: 8, ladderHalf: 8 });
+    const w = buildWorld(RECTS, OPTS);
     const r = new Resident(seeded(5));
     r.setWorld(w);
     r.start('drive');
@@ -70,5 +72,21 @@ describe('Resident', () => {
     r.start('think');
     expect(r.inCar).toBe(false);
     expect(r.car!.x).toBe(at);
+  });
+
+  it('fires a rope up, climbs it, and reels it in behind him', () => {
+    const w = buildWorld(RECTS, OPTS);
+    const r = new Resident(seeded(9));
+    r.setWorld(w, { asleep: true });
+    r.start('lookout');
+    let roped = false;
+    for (let i = 0; i < 60 * 180 && r.mode !== 'lookout'; i++) {
+      r.update(1 / 60);
+      if (r.rope) roped = true;
+    }
+    expect(r.mode).toBe('lookout');
+    expect(r.y).toBe(100);
+    expect(roped).toBe(true);
+    expect(r.rope).toBeNull();
   });
 });

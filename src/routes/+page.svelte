@@ -87,7 +87,7 @@
 <!-- HERO — the site as a patient on a monitor: one ink band holding the title
      and a live trace per capability. -->
 <!-- Its lower edge is also the rambler's ground under the monitor. -->
-<section class="hero" aria-label="Live" use:scenery={{ edge: 'bottom', compact: true }}>
+<section class="hero" aria-label="Live" use:scenery={{ edge: 'bottom' }}>
   <CapabilityMonitor
     meta={`Right now · ${data.dateStr}` + (town ? ` · ${town.toUpperCase()}` : '')}
     v={live.v}
