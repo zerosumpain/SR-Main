@@ -1,4 +1,5 @@
 import { stepsToday } from '$lib/landing/steps-today.server';
+import { ramblerDay } from '$lib/landing/ramblers/day.server';
 import { HEALTH_TIMEZONE } from '$lib/constants/health-day';
 import { getReleaseShowcase } from '$lib/releases/public';
 import { loadCapabilityFacts } from '$lib/landing/capabilities.server';
@@ -9,6 +10,8 @@ import type { PageServerLoad } from './$types';
 export const load: PageServerLoad = async ({ fetch, locals, getClientAddress }) => {
   // Today's steps in quarter-hours, midnight to 23:59, for the Steps channel.
   const steps = await stepsToday().catch(() => null);
+  // Coarse flags about today for the rambler (never totals, times or places).
+  const day = await ramblerDay();
 
   const dateStr = new Date()
     .toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: HEALTH_TIMEZONE })
@@ -68,5 +71,5 @@ export const load: PageServerLoad = async ({ fetch, locals, getClientAddress }) 
         .catch(() => null)
     : null;
 
-  return { steps, dateStr, initialVitals, releases, capabilities, posts, isOwner, syncAttention, mergeablePrs };
+  return { steps, day, dateStr, initialVitals, releases, capabilities, posts, isOwner, syncAttention, mergeablePrs };
 };

@@ -25,7 +25,14 @@ export type Mode =
   | 'wall'
   | 'mantle'
   | 'aim'
-  | 'rope';
+  | 'rope'
+  | 'dig'
+  | 'plant'
+  | 'tv'
+  | 'sofa'
+  | 'stressed'
+  | 'anxious'
+  | 'umbrella';
 
 export interface Build {
   thigh: number;
@@ -51,6 +58,8 @@ export type Pixel = [x: number, y: number, colour: string];
 
 export interface Figure {
   px: Pixel[];
+  /** The near hand, where anything he holds up is drawn. */
+  hand: [number, number];
   /** Centre of the head, for bubbles and Zs. */
   head: [number, number];
   /** Topmost occupied row (negative: above the feet). */
@@ -92,6 +101,7 @@ interface Pose {
   book: boolean;
   rope: number | null;
   launcher: boolean;
+  spade: boolean;
 }
 
 const legReach = (b: Build, l: [number, number]) => b.thigh * Math.cos(l[0] * DEG) + b.shin * Math.cos(l[1] * DEG);
@@ -114,6 +124,7 @@ function poseFor(mode: Mode, t: number, b: Build): Pose {
     book: false,
     rope: null,
     launcher: false,
+    spade: false,
   };
   switch (mode) {
     case 'idle': {
@@ -273,15 +284,83 @@ function poseFor(mode: Mode, t: number, b: Build): Pose {
       break;
     case 'rope':
       break;
+    case 'dig': {
+      // Spade in, lean on it, lever the soil up and out.
+      const s = Math.sin(t * TAU * 0.8);
+      p.lean = 18 + 10 * s;
+      p.nA = [55 + 15 * s, 25 + 15 * s];
+      p.fA = [45 + 15 * s, 15 + 15 * s];
+      p.nL = [20, 0];
+      p.fL = [-8, 0];
+      p.look = 1;
+      p.spade = true;
+      break;
+    }
+    case 'plant': {
+      // One knee down, patting the soil round a seedling.
+      p.hipY = b.thigh;
+      p.nL = [75, 0];
+      p.fL = [-20, -90];
+      p.nA = [40, 15 + 12 * Math.sin(t * 6)];
+      p.fA = [30, 10];
+      p.lean = 30;
+      p.look = 1;
+      break;
+    }
+    case 'tv': {
+      p.hipY = 0;
+      p.nL = [88, 2];
+      p.fL = [82, -2];
+      // Remote held out; now and then a click.
+      p.nA = [40, t % 5 < 0.3 ? 100 : 80];
+      p.fA = [15, 50];
+      break;
+    }
+    case 'sofa':
+      // Reclined, feet out, hands behind his head.
+      p.hipY = 0;
+      p.lean = -18;
+      p.nL = [85, 80];
+      p.fL = [80, 75];
+      p.nA = [175, -60];
+      p.fA = [170, -55];
+      p.eye = t % 6 < 2 ? 0 : p.eye;
+      break;
+    case 'stressed': {
+      // Pacing quickly, hands clamped on his head.
+      const a = t * TAU * 2.4;
+      const s = Math.sin(a);
+      const c = Math.cos(a);
+      p.nL = [26 * s, 26 * s - 40 * Math.max(0, c)];
+      p.fL = [-26 * s, -26 * s - 40 * Math.max(0, -c)];
+      p.nA = [150, -150];
+      p.fA = [140, -140];
+      p.lean = 8;
+      break;
+    }
+    case 'anxious':
+      // Arms crossed tight, one foot tapping.
+      p.nA = [20, 100];
+      p.fA = [15, 95];
+      p.nL = [8, -12 * Math.abs(Math.sin(t * 10))];
+      p.fL = [-2, 0];
+      p.look = Math.floor(t * 2) % 3 === 0 ? 1 : 0;
+      break;
+    case 'umbrella':
+      break;
   }
   if (p.hipY === null) p.hipY = Math.max(legReach(b, p.nL), legReach(b, p.fL));
   return p;
 }
 
+/** Arm angles for holding an umbrella up, whatever the legs are doing. */
+const UMBRELLA_ARM: [number, number] = [165, 176];
+
 /** The character in `mode` at time `t`, facing `dir` (1 right, -1 left). */
-export function figure(mode: Mode, t: number, dir: 1 | -1, b: Build = BUILD, pal: Palette = PALETTE): Figure {
+export function figure(mode: Mode, t: number, dir: 1 | -1, b: Build = BUILD, pal: Palette = PALETTE, umbrella = false): Figure {
   if (mode === 'rope') return climbFigure(t, b, pal);
   const p = poseFor(mode, t, b);
+  if (umbrella || mode === 'umbrella') p.nA = UMBRELLA_ARM;
   const map = new Map<string, Pixel>();
   const cr = Math.cos(p.rot * DEG);
   const sr = Math.sin(p.rot * DEG);
@@ -349,6 +428,13 @@ export function figure(mode: Mode, t: number, dir: 1 | -1, b: Build = BUILD, pal
   put(hx + 1, hy + p.look, p.eye ? pal.eye : pal.skinD);
   limb(hip, p.nL, b.thigh, b.shin, pal.legs, pal.shoe, true);
   const hand = limb(sh, p.nA, b.upper, b.fore, pal.shirt, pal.skin, false);
+  if (p.spade) {
+    // Handle from his hands down to the blade, which bites the ground ahead.
+    line(hand[0], hand[1], hand[0] + 2, 0, '#7a5230');
+    put(hand[0] + 2, 0, '#8c8780');
+    put(hand[0] + 3, 0, '#8c8780');
+    put(hand[0] + 2, -1, '#8c8780');
+  }
   if (p.launcher) {
     put(hand[0], hand[1] - 1, '#4a4440');
     put(hand[0], hand[1] - 2, '#4a4440');
@@ -381,7 +467,8 @@ export function figure(mode: Mode, t: number, dir: 1 | -1, b: Build = BUILD, pal
   if (p.ground) shift -= Math.max(...px.map((q) => q[1]));
   if (shift) px = px.map(([x, y, c]) => [x, y + shift, c]);
   const [headX, headY] = tf(hc[0], hc[1]);
-  return { px, head: [headX, headY + shift], top: Math.min(...px.map((q) => q[1])) };
+  const [handX, handY] = tf(hand[0], hand[1]);
+  return { px, head: [headX, headY + shift], hand: [handX, handY + shift], top: Math.min(...px.map((q) => q[1])) };
 }
 
 /** Seen from behind on a rope: hand over hand, feet gripping below. */
@@ -409,7 +496,7 @@ function climbFigure(t: number, b: Build, pal: Palette): Figure {
   put(1, -liftL, pal.shoe);
   put(-1, -H, pal.legs);
   put(0, -H, pal.legsD);
-  return { px: [...map.values()], head: [0, top - 2], top: top - 4 };
+  return { px: [...map.values()], head: [0, top - 2], hand: [-3, top + 1 - armL], top: top - 4 };
 }
 
 const CAR = {
@@ -453,10 +540,7 @@ export function car(dir: 1 | -1, t: number, moving: boolean, driver: Palette | n
   return out;
 }
 
-/** 3×5 pixel glyphs for the few words he says. */
+/** 3×5 pixel glyphs: the Zs that float up while he sleeps. */
 export const GLYPHS: Record<string, string[]> = {
-  h: ['#..', '#..', '##.', '#.#', '#.#'],
-  i: ['#', '.', '#', '#', '#'],
-  '!': ['#', '#', '#', '.', '#'],
   z: ['###', '..#', '.#.', '#..', '###'],
 };

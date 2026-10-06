@@ -3,7 +3,10 @@
   // drawing a small pixel character who treats elements marked `use:scenery`
   // as floors. It never takes a click (pointer-events: none) and is hidden from
   // assistive tech — it is decoration, and the page reads the same without it.
-  import { onMount } from 'svelte';
+  import { getContext, onMount } from 'svelte';
+  import type { DayFlags } from '$lib/landing/ramblers/day';
+  import { moodFor, type MoodInput } from '$lib/landing/ramblers/mood';
+  import type { VitalsStore } from '$lib/vitals/store.svelte';
   import { drawWorld, type Ink } from '$lib/landing/ramblers/draw';
   import { Resident } from '$lib/landing/ramblers/resident';
   import { onSceneryChange, sceneryElements } from '$lib/landing/ramblers/scenery';
@@ -12,6 +15,13 @@
 
   /** Screen pixels per art pixel: an 18-unit character stands 36px tall. */
   const P = 2;
+
+  /** Coarse flags about the owner's day, from the landing loader. */
+  let { day }: { day: DayFlags } = $props();
+
+  // The site's live readings (pulse, weather, time of day), already polled
+  // for the header; the rambler only reads them.
+  const vitals = getContext<VitalsStore | undefined>('vitals');
 
   let canvas: HTMLCanvasElement;
 
@@ -25,13 +35,28 @@
     let nextId = 0;
     let world: World | null = null;
     let dirty = true;
-    let ink: Ink = { ink: '#1a1008', paper: '#ede4d4', muted: '#6b6158' };
+    let ink: Ink = { ink: '#1a1008', paper: '#ede4d4', muted: '#6b6158', font: 'ui-monospace, monospace' };
     let inkAt = -Infinity;
+    let moodAt = -Infinity;
+
+    // What the day, the weather and his pulse make him feel like doing.
+    const readMood = () => {
+      const s = vitals?.targetState;
+      if (!s) return;
+      const input: MoodInput = {
+        sky: s.sources?.weather ? s.weather.condition : 'cloudy',
+        temp: s.weather.temp,
+        pulse: s.sources?.heartRate && !s.stale && s.pulse > 0 ? s.pulse : null,
+        dayPhase: s.dayPhase,
+        day,
+      };
+      resident.setMood(moodFor(input));
+    };
 
     const readInk = () => {
       const cs = getComputedStyle(document.documentElement);
       const v = (name: string, fallback: string) => cs.getPropertyValue(name).trim() || fallback;
-      ink = { ink: v('--text-primary', ink.ink), paper: v('--bg', ink.paper), muted: v('--text-muted', ink.muted) };
+      ink = { ink: v('--text-primary', ink.ink), paper: v('--bg', ink.paper), muted: v('--text-muted', ink.muted), font: v('--font-mono', ink.font) };
     };
 
     const rebuild = () => {
@@ -105,9 +130,14 @@
         inkAt = now;
         readInk();
       }
+      if (now - moodAt > 30_000) {
+        moodAt = now;
+        readMood();
+      }
+      resident.setView(scrollY, scrollY + innerHeight);
       if (!still.matches) resident.update(dt);
       ctx.setTransform(dpr, 0, 0, dpr, -scrollX * dpr, -scrollY * dpr);
-      drawWorld(ctx, resident, P, ink);
+      drawWorld(ctx, world, resident, P, ink, { left: scrollX, right: scrollX + innerWidth });
     });
 
     return () => {

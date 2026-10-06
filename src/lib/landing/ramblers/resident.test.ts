@@ -89,4 +89,54 @@ describe('Resident', () => {
     expect(roped).toBe(true);
     expect(r.rope).toBeNull();
   });
+
+  it('digs, plants, and leaves a flower behind', () => {
+    const w = buildWorld(RECTS, OPTS);
+    const r = new Resident(seeded(11));
+    r.setWorld(w);
+    r.start('garden');
+    const seen = new Set<string>();
+    for (let i = 0; i < 60 * 120 && r.flowers.length === 0; i++) {
+      r.update(1 / 60);
+      seen.add(r.mode);
+    }
+    expect(seen.has('dig') && seen.has('plant')).toBe(true);
+    expect(r.flowers).toHaveLength(1);
+  });
+
+  it('gets caught by a cloud, then puts his umbrella up', () => {
+    const w = buildWorld(RECTS, OPTS);
+    const r = new Resident(seeded(12));
+    r.setWorld(w);
+    r.start('umbrella');
+    let soaked = false;
+    let sheltered = false;
+    for (let i = 0; i < 60 * 120 && !sheltered; i++) {
+      r.update(1 / 60);
+      if (r.cloud && r.mode === 'idle' && r.activity === 'umbrella' && !r.umbrella && r.bubble?.text === '!') soaked = true;
+      if (r.cloud && r.umbrella) sheltered = true;
+    }
+    expect(soaked).toBe(true);
+    expect(sheltered).toBe(true);
+  });
+
+  it('ropes back into view when the visitor scrolls far away', () => {
+    const w = buildWorld(RECTS, OPTS);
+    const r = new Resident(seeded(13));
+    r.setWorld(w);
+    r.setView(0, 600);
+    r.update(1 / 60);
+    expect(r.y).toBeLessThan(600);
+    // The visitor jumps to the bottom of the page and stays there.
+    r.setView(700, 1300);
+    let roped = false;
+    for (let i = 0; i < 60 * 20; i++) {
+      r.setView(700, 1300);
+      r.update(1 / 60);
+      if (r.rope) roped = true;
+      if (r.y >= 700 && r.y <= 1300 && !r.rope && roped) break;
+    }
+    expect(roped).toBe(true);
+    expect(r.y).toBe(900);
+  });
 });
