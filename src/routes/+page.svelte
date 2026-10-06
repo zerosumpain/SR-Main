@@ -17,6 +17,9 @@
   import CapabilityLoop from '$lib/components/landing/CapabilityLoop.svelte';
   import CapabilityGrid from '$lib/components/landing/CapabilityGrid.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
+  import Rambler from '$lib/components/landing/Rambler.svelte';
+  import { scenery } from '$lib/landing/ramblers/scenery';
+  import { rambler, toggleRambler } from '$lib/landing/ramblers/visibility.svelte';
   import { LiveVitals } from '$lib/landing/live-vitals.svelte';
   import { roundPulse } from '$lib/vitals/state';
   import type { VitalsStore } from '$lib/vitals/store.svelte';
@@ -83,7 +86,8 @@
 
 <!-- HERO — the site as a patient on a monitor: one ink band holding the title
      and a live trace per capability. -->
-<section class="hero" aria-label="Live">
+<!-- Its lower edge is also the rambler's ground under the monitor. -->
+<section class="hero" aria-label="Live" use:scenery={{ edge: 'bottom', compact: true }}>
   <CapabilityMonitor
     meta={`Right now · ${data.dateStr}` + (town ? ` · ${town.toUpperCase()}` : '')}
     v={live.v}
@@ -111,7 +115,7 @@
 <CapabilityLoop facts={data.capabilities} {deploysPerDay} releases={totals?.releases || null} />
 
 {#if data.posts.length}
-  <section class="writing" aria-labelledby="writing-h">
+  <section class="writing" aria-labelledby="writing-h" use:scenery={{ spot: 'bed', at: 0.1 }}>
     <h2 id="writing-h" class="writing-k">Also written down</h2>
     {#each data.posts as p (p.slug)}
       <a class="writing-post" href="/blog/{p.slug}">
@@ -123,7 +127,7 @@
   </section>
 {/if}
 
-<footer class="site-foot">
+<footer class="site-foot" use:scenery={{ spot: 'garage', at: 0.88 }}>
   <p class="brand foot-brand">strange ramblings</p>
   <nav class="foot-links" aria-label="Footer">
     <a href="https://github.com/jkrup" target="_blank" rel="noopener" class="nav-link">GitHub</a>
@@ -133,8 +137,13 @@
     {#if data.isOwner}<a href="/admin" class="nav-link">Admin</a>{/if}
     <a href="/privacy" class="nav-link">Privacy</a>
     <a href="/tos" class="nav-link">Terms</a>
+    <button type="button" class="nav-link rambler-toggle" onclick={toggleRambler}>
+      {rambler.hidden ? 'Bring back the rambler' : 'Tuck in the rambler'}
+    </button>
   </nav>
 </footer>
+
+<Rambler />
 
 <style>
   .hero {
@@ -207,6 +216,11 @@
     margin: 0;
     font-size: var(--fs-nav);
     color: var(--text-muted);
+  }
+  /* A button dressed as the footer links around it. */
+  .rambler-toggle {
+    background: none;
+    cursor: pointer;
   }
   .foot-links {
     display: flex;
