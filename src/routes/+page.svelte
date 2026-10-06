@@ -143,7 +143,7 @@
   </nav>
 </footer>
 
-<Rambler />
+<Rambler day={data.day} />
 
 <style>
   .hero {
