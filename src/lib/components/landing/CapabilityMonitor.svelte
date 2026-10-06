@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { LandingVitals } from '$lib/landing/live-vitals.svelte';
+  import { scenery } from '$lib/landing/ramblers/scenery';
   import { ago, until } from '$lib/landing/live-vitals.svelte';
   import type { CapabilityFacts } from '$lib/landing/capabilities';
   import type { StepsToday } from '$lib/landing/steps';
@@ -157,7 +158,7 @@
     <p class="mon-meta">{meta}</p>
   </div>
 
-  <div class="mon" role="group" aria-label="Live capability monitor">
+  <div class="mon" role="group" aria-label="Live capability monitor" use:scenery={{ spot: 'lookout', at: 0.86 }}>
     {#each channels as c (c.id)}
       <div class="row">
         <button

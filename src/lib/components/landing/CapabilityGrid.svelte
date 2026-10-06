@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { LandingVitals } from '$lib/landing/live-vitals.svelte';
+  import { scenery } from '$lib/landing/ramblers/scenery';
+  import type { Spot } from '$lib/landing/ramblers/world';
   import { ago, until } from '$lib/landing/live-vitals.svelte';
   import type { CapabilityFacts } from '$lib/landing/capabilities';
 
@@ -25,6 +27,9 @@
 
   type Tone = 'orange' | 'petrol' | 'ink' | 'bright' | 'paper-orange' | 'paper-petrol';
   type Art = 'pulse' | 'think' | 'build' | 'ship' | 'canvas' | 'answer' | 'pocket' | 'family';
+  // Where the rambler does things: he works out on the pulse cell, daydreams
+  // on the thinking cell and reads at the build cell.
+  const SPOTS: Partial<Record<Art, Spot>> = { pulse: 'gym', think: 'think', build: 'desk' };
   interface Cap {
     art: Art;
     tone: Tone;
@@ -173,12 +178,12 @@
 <section class="cap-sec" aria-labelledby="caps-h">
   <header class="cap-hd">
     <h2 id="caps-h" class="cap-h">An autonomous brain</h2>
-    <span class="cap-rule"></span>
+    <span class="cap-rule" use:scenery></span>
     <a class="cap-meta" href="/projects/engine-room">How it works →</a>
   </header>
   <ul class="caps">
     {#each caps as c, i (c.art)}
-      <li>
+      <li use:scenery={{ spot: SPOTS[c.art] }}>
         <a class="cap" data-tone={c.tone} href={c.href}>
           {@render art(c.art)}
           <span class="ihead">{@render icon(c.art)}<span class="num">{String(i + 1).padStart(2, '0')}</span></span>
