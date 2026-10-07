@@ -51,7 +51,7 @@ const FIXED: Activity[] = ['lookout', 'stargaze', 'drive'];
 const EPISODES: Episode[] = ['stressed', 'anxious', 'mad', 'surprised', 'fidget', 'shiver', 'yawn', 'celebrate', 'fan'];
 
 /** Page pixels per second. */
-const SPEED = { walk: 34, run: 82, climb: 26, abseil: 80, drive: 120, ride: 70, zip: 260 };
+const SPEED = { walk: 34, run: 60, climb: 26, abseil: 80, drive: 120, ride: 70, zip: 260 };
 
 /** Seconds out of view (with the page still) before he comes looking. */
 const MISSED = 1.2;
