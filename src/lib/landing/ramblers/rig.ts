@@ -256,7 +256,7 @@ export function ik(tx: number, ty: number, b: Build = BUILD): Pair {
  */
 export const GAITS = {
   walk: { sweep: 12, duty: 0.6, lift: 3, reach: 0.985 },
-  run: { sweep: 13, duty: 0.35, lift: 5, reach: 0.95 },
+  run: { sweep: 13, duty: 0.35, lift: 5, reach: 0.975 },
 } as const;
 
 /** Body travel per full cycle (two steps). */
@@ -334,10 +334,11 @@ function sidePose(mode: Mode, t: number, b: Build, ctx: PoseContext): Pose {
         p.lean = 4;
         p.headDy = g.hipY < (b.thigh + b.shin) * 0.95 ? 0.7 : 0;
       } else {
-        p.armA = [45 * sw, 45 * sw + 95];
-        p.armB = [-45 * sw, -45 * sw + 95];
-        p.lean = 14;
-        p.face = 'strain';
+        // An easy jog: nearly upright, elbows bent, arms pumping from the shoulder.
+        p.armA = [32 * sw, 32 * sw + 80];
+        p.armB = [-32 * sw, -32 * sw + 80];
+        p.lean = 5;
+        p.headDy = g.lift > 1 ? -0.5 : 0;
       }
       break;
     }

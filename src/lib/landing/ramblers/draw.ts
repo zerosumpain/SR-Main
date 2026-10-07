@@ -242,16 +242,23 @@ function drawUmbrella(ctx: CanvasRenderingContext2D, hx: number, hy: number, Q: 
   return { x1: hx - 8 * Q, x2: hx + 8 * Q, y: hy - 8 * Q };
 }
 
-function drawSofa(ctx: CanvasRenderingContext2D, ox: number, oy: number, Q: number) {
-  block(ctx, ox, oy, Q, -7, -6, -10, -1, SOFA);
-  block(ctx, ox, oy, Q, -5, 8, -4, -2, SOFA_L);
-  block(ctx, ox, oy, Q, -5, 8, -1, -1, SOFA);
-  block(ctx, ox, oy, Q, 8, 10, -6, -1, SOFA);
-  block(ctx, ox, oy, Q, -7, -7, 0, 0, '#2a2420');
-  block(ctx, ox, oy, Q, 9, 9, 0, 0, '#2a2420');
+/** A box from x0 to x1, mirrored when `dir` is -1, so furniture turns with him. */
+function facing(ctx: CanvasRenderingContext2D, ox: number, oy: number, Q: number, dir: number, x0: number, x1: number, y0: number, y1: number, c: string, alpha = 1) {
+  block(ctx, ox, oy, Q, dir > 0 ? x0 : -x1, dir > 0 ? x1 : -x0, y0, y1, c, alpha);
 }
 
-function drawTv(ctx: CanvasRenderingContext2D, ox: number, oy: number, Q: number, t: number) {
+/** The sofa, its back behind him and its arm at his feet. */
+function drawSofa(ctx: CanvasRenderingContext2D, ox: number, oy: number, Q: number, dir: number) {
+  facing(ctx, ox, oy, Q, dir, -7, -6, -10, -1, SOFA);
+  facing(ctx, ox, oy, Q, dir, -5, 8, -4, -2, SOFA_L);
+  facing(ctx, ox, oy, Q, dir, -5, 8, -1, -1, SOFA);
+  facing(ctx, ox, oy, Q, dir, 8, 10, -6, -1, SOFA);
+  facing(ctx, ox, oy, Q, dir, -7, -7, 0, 0, '#2a2420');
+  facing(ctx, ox, oy, Q, dir, 9, 9, 0, 0, '#2a2420');
+}
+
+/** The telly, in front of him; its glow falls back across the room towards him. */
+function drawTv(ctx: CanvasRenderingContext2D, ox: number, oy: number, Q: number, t: number, dir: number) {
   block(ctx, ox, oy, Q, -2, 2, 0, 0, '#2a2420');
   block(ctx, ox, oy, Q, 0, 0, -2, -1, '#2a2420');
   block(ctx, ox, oy, Q, -5, 5, -11, -3, '#2a2420');
@@ -259,8 +266,7 @@ function drawTv(ctx: CanvasRenderingContext2D, ox: number, oy: number, Q: number
   const scene = Math.floor(t * 1.5);
   for (let x = -4; x <= 4; x++)
     for (let y = -10; y <= -4; y++) block(ctx, ox, oy, Q, x, x, y, y, TV_COLOURS[Math.floor(hash(scene * 31 + (x + 5) * 3 + ((y + 11) >> 1)) * TV_COLOURS.length)]);
-  // Its glow falls back across the room toward him.
-  block(ctx, ox, oy, Q, -16, -6, -10, -2, '#9ec5ff', 0.08 + 0.04 * Math.sin(t * 9));
+  facing(ctx, ox, oy, Q, -dir, 6, 16, -10, -2, '#9ec5ff', 0.08 + 0.04 * Math.sin(t * 9));
 }
 
 /** A stool under him and a little table in front, with a plate or a teapot. */
@@ -421,8 +427,10 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, r: Resident, 
   if (prop && (prop.kind === 'sofa' || prop.kind === 'tv') && SEATED.has(r.mode)) {
     const px = snap(prop.x);
     const py = Math.round(prop.y) - Q;
-    drawSofa(ctx, px, py, Q);
-    if (prop.kind === 'tv') drawTv(ctx, px + 26 * Q, py, Q, r.animT);
+    // He faces the telly: it stands in front of him, the sofa's back behind.
+    const way = r.mode === 'nap' ? 1 : r.dir;
+    drawSofa(ctx, px, py, Q, way);
+    if (prop.kind === 'tv') drawTv(ctx, px + 26 * Q * way, py, Q, r.animT, way);
   }
   if (prop?.kind === 'mat') block(ctx, snap(prop.x), Math.round(prop.y) - Q, Q, -9, 9, 0, 0, MAT);
 

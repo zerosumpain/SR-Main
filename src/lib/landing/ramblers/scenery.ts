@@ -12,6 +12,11 @@ export interface SceneryOptions {
   at?: number;
   /** Use the element's bottom edge as the floor instead of its top. */
   edge?: 'top' | 'bottom';
+  /**
+   * Walk on the tops of the letters rather than the element's box: one floor
+   * per line of text, at the height of its tallest glyphs.
+   */
+  text?: boolean;
 }
 
 export const sceneryElements = new Map<HTMLElement, SceneryOptions>();

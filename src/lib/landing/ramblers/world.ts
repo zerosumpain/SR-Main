@@ -149,7 +149,13 @@ export function buildWorld(rects: SceneryRect[], opts: WorldOptions): World {
     const x = Math.round(ax);
     const common = { ax: x, face, wallBottom };
     world.links.push({ type: kind, from: bot, to: top, fx: clampTo(world, x, bot), tx: clampTo(world, x, top), up: true, ...common });
-    world.links.push({ type: kind, from: top, to: bot, fx: clampTo(world, x, top), tx: clampTo(world, x, bot), up: false, ...common });
+    // Going down he does not climb what he could hop off: within dropping
+    // height he jumps down at the same spot (down a gap, past a side), and
+    // only abseils the tall ones.
+    if (bot.y - top.y <= opts.drop) {
+      const side: -1 | 1 = x >= (top.x1 + top.x2) / 2 ? 1 : -1;
+      world.links.push({ type: 'drop', from: top, to: bot, fx: clampTo(world, x, top), tx: clampTo(world, x, bot), side });
+    } else world.links.push({ type: kind, from: top, to: bot, fx: clampTo(world, x, top), tx: clampTo(world, x, bot), up: false, ...common });
   };
 
   const connect = ({ top, bot, xs }: { top: Floor; bot: Floor; xs: number[] }) => {

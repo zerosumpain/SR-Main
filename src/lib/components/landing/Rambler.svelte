@@ -45,6 +45,20 @@
     return { hour, weekday: !['Sat', 'Sun'].includes(get('weekday')) };
   }
 
+  /**
+   * How far below an inline element's box top its tallest glyphs start: the
+   * font's ascent minus the text's own, measured with the element's font.
+   */
+  function glyphInset(el: HTMLElement) {
+    const cs = getComputedStyle(el);
+    const c = document.createElement('canvas').getContext('2d');
+    if (!c) return 0;
+    c.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    const text = cs.textTransform === 'uppercase' ? (el.textContent ?? '').toUpperCase() : (el.textContent ?? '');
+    const m = c.measureText(text);
+    return Math.max(0, m.fontBoundingBoxAscent - m.actualBoundingBoxAscent);
+  }
+
   onMount(() => {
     loadRamblerPreference();
     const ctx = canvas.getContext('2d');
@@ -111,9 +125,18 @@
       }
       const rects: SceneryRect[] = [];
       for (const [el, opts] of sceneryElements) {
+        if (!ids.has(el)) ids.set(el, nextId++);
+        if (opts.text) {
+          // One floor per line, along the tops of the letters.
+          const lift = glyphInset(el);
+          [...el.getClientRects()].forEach((b, i) => {
+            if (b.width < 24) return;
+            rects.push({ key: 100_000 + ids.get(el)! * 100 + i, x1: b.left + scrollX, x2: b.right + scrollX, y: b.top + lift + scrollY });
+          });
+          continue;
+        }
         const b = el.getBoundingClientRect();
         if (!b.width) continue;
-        if (!ids.has(el)) ids.set(el, nextId++);
         rects.push({
           key: ids.get(el)!,
           x1: b.left + scrollX,
@@ -126,10 +149,10 @@
       }
       const pageWidth = document.documentElement.clientWidth;
       // Thresholds scale with his height (36px when they were tuned): he
-      // clears a gap a little taller than himself and steps off ledges up to
-      // four times his height; deeper than that he abseils.
+      // clears a gap a little taller than himself and hops off ledges up to
+      // about seven times his height; only deeper than that does he abseil.
       const S = (HEIGHT * P) / 36;
-      const opts = { margin: 8 * S, standOff: 8 * S, jump: 52 * S, drop: 160 * S, longest: 700, pageWidth };
+      const opts = { margin: 8 * S, standOff: 8 * S, jump: 52 * S, drop: 260 * S, longest: 700, pageWidth };
       world = rects.length ? buildWorld(rects, opts) : null;
       if (world && world.floors.length) resident.setWorld(world, { asleep: still.matches });
       else world = null;
