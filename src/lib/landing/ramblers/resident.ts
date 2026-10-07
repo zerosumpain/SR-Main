@@ -24,7 +24,7 @@ type Act = Mode | 'workout';
 type Step =
   | { type: 'go'; x: number; gait: 'walk' | 'run' }
   | { type: 'link'; link: Link }
-  | { type: 'land' }
+  | { type: 'land'; hard?: boolean }
   | { type: 'do'; act: Act; dur: number }
   | { type: 'wave'; text?: string }
   | { type: 'enter' }
@@ -280,7 +280,9 @@ export class Resident {
       this.commit = 1;
       return;
     }
-    const spot = SPOT_FOR[activity] ? w.spots[SPOT_FOR[activity]!] : undefined;
+    let spot = SPOT_FOR[activity] ? w.spots[SPOT_FOR[activity]!] : undefined;
+    // He likes sitting on the pulse cell best, when it is on screen.
+    if (activity === 'lookout' && w.spots.gym && this.seen(w.spots.gym.floor) && (!spot || !this.seen(spot.floor) || this.random() < 0.7)) spot = w.spots.gym;
     let floor: Floor;
     let x: number;
     if (activity === 'drive' && this.car) {
@@ -418,7 +420,8 @@ export class Resident {
     if (a !== 'wander' && a === this.activity) return false;
     // Fixed-place activities only when that place is on screen.
     if (a === 'drive') return !!this.car && this.seen(this.car.floor);
-    if (a === 'lookout' || a === 'stargaze') return !!this.world?.spots.lookout && this.seen(this.world.spots.lookout.floor);
+    if (a === 'stargaze') return !!this.world?.spots.lookout && this.seen(this.world.spots.lookout.floor);
+    if (a === 'lookout') return [this.world?.spots.lookout, this.world?.spots.gym].some((sp) => !!sp && this.seen(sp.floor));
     return true;
   };
 
@@ -593,18 +596,20 @@ export class Resident {
           break;
         }
         if (c.stage === 0) {
-          c.vy = -40;
+          // A little hop out from the edge, then down.
+          c.vy = -160;
           c.stage = 1;
         }
         c.vy += 900 * dt;
         this.y += c.vy * dt;
         this.dir = l.side;
         this.x += (l.tx - this.x) * Math.min(1, dt * 5);
-        this.mode = 'fall';
+        this.mode = c.vy < 0 ? 'jump' : 'fall';
         if (this.y >= l.to.y) {
           this.y = l.to.y;
           this.floor = l.to;
-          this.steps.unshift({ type: 'land' });
+          // A big drop gets a deeper, longer landing.
+          this.steps.unshift({ type: 'land', hard: l.to.y - l.from.y > this.height * 2.5 });
           done();
         }
         break;
@@ -615,7 +620,7 @@ export class Resident {
       case 'land':
         // A squash on landing, held just long enough to read.
         this.mode = 'land';
-        if (c.t > 0.2) done();
+        if (c.t > (c.hard ? 0.4 : 0.2)) done();
         break;
       case 'do':
         this.y = f.y;

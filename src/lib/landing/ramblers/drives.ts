@@ -99,7 +99,7 @@ export const EFFECTS: Record<Choice, Effect> = {
   workout: { r: { restless: 0.75, stress: 0.5 }, cost: 0.75 },
   cycle: { r: { restless: 0.6, curious: 0.35, stress: 0.2 }, cost: 0.55 },
   garden: { r: { attention: 0.7, stress: 0.45, restless: 0.3, curious: 0.2 }, cost: 0.35 },
-  lookout: { r: { attention: 0.5, curious: 0.45 }, cost: 0.1, still: true },
+  lookout: { r: { attention: 0.5, curious: 0.45, stress: 0.2 }, cost: 0.1, still: true },
   stargaze: { r: { attention: 0.6, curious: 0.55, stress: 0.2 }, cost: 0.05, still: true },
   study: { r: { work: 0.85, curious: 0.45 }, cost: 0.1, tires: 1, still: true },
   think: { r: { stress: 0.3, work: 0.35, curious: 0.3 }, cost: 0.05, tires: 0.5 },
@@ -311,7 +311,8 @@ function place(a: Choice, s: Drives): number {
     case 'workout':
       return night ? 0.15 : 1;
     case 'lookout':
-      return night && i.sky === 'clear' ? 0.3 : 1;
+      // His favourite perch: sat on the pulse cell, legs dangling.
+      return night && i.sky === 'clear' ? 0.3 : 1.8;
     case 'stargaze':
       return dark && i.sky === 'clear' ? 1.6 : 0;
     case 'sleep':

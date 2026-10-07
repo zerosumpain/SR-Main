@@ -153,7 +153,8 @@
 <div class="mon-hero">
   <div class="mon-in">
   <div class="mon-top">
-    <h1 class="mon-title">JK’s<br />strange ramblings</h1>
+    <!-- The rambler walks along the tops of these letters. -->
+    <h1 class="mon-title">JK’s<br /><span use:scenery={{ text: true }}>strange ramblings</span></h1>
     <p class="mon-lede">I say things, I do things, and I share things. And look hey, now you see things</p>
     <p class="mon-meta">{meta}</p>
   </div>
