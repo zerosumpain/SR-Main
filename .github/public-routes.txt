@@ -104,6 +104,7 @@
 /api/platform/tools/catalogue
 /api/platform/tools/invoke
 /api/platform/workflow-engine
+/api/rambler/day
 /api/releases/ingest
 /api/releases/summarise
 /api/scraper/interactive
@@ -147,6 +148,7 @@
 /projects/hex
 /projects/jkai
 /projects/jkai/[slug]/[...path]
+/rambler
 /rss.xml
 /sitemap.xml
 /tos

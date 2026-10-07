@@ -90,6 +90,11 @@ const PUBLIC_PATHS = [
   // and expired all 404 alike ($lib/home/presence/route-session). A PREFIX, so
   // check-public-routes.mjs is what stops a sibling becoming anonymous.
   '/follow',
+  // The page that explains the landing page's pixel character. Public like the
+  // landing page itself; only one route lives under this prefix.
+  '/rambler',
+  // His coarse day flags (bands only), re-read by a landing page left open.
+  '/api/rambler/day',
 ];
 
 export function isPublicPath(pathname: string): boolean {
