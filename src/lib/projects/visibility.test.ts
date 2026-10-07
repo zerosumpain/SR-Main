@@ -159,6 +159,17 @@ describe('private-by-default static key (data-spine)', () => {
   });
 });
 
+describe('private-by-default static key (local-plan-navigator)', () => {
+  // The Local Plan Navigator is its own app (zerosumpain/local-plan-navigator),
+  // shared by link with people outside the site; registering its card for the
+  // Share button must never publish it.
+  it('is a static key that defaults private with no project_visibility row', () => {
+    expect(isStaticProjectKey('local-plan-navigator')).toBe(true);
+    expect(defaultsPublic('local-plan-navigator')).toBe(false);
+    expect(isProjectPublic({}, 'local-plan-navigator')).toBe(false);
+  });
+});
+
 describe('private-by-default static key (supply-chain-monitor)', () => {
   // Supply Chain Monitor is served by its own app (zerosumpain/supply-chain-monitor),
   // owner-only; the card must not publish itself on deploy.
