@@ -32,6 +32,8 @@
  * transcript. It is what the work would have cost at API rates, not a bill.
  */
 
+import { usdToGbp } from '$lib/utils/cost-format';
+
 export const SITE_PROJECT = 'strange-rambling-svelte';
 
 /** The first parser schema that extracted pull-request numbers from a transcript. */
@@ -329,10 +331,13 @@ function londonSlot(iso: string): [number, number] | null {
   return day < 0 || !Number.isFinite(hour) ? null : [day, hour % 24];
 }
 
-export function usd(n: number): string {
-  if (n >= 1000) return `$${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k`;
-  if (n >= 100) return `$${Math.round(n)}`;
-  return `$${n.toFixed(2)}`;
+/** Formats a USD amount as GBP. Spend is recorded in USD (what Anthropic
+ *  bills); the page reads in pounds, at the site-wide display rate. */
+export function gbp(usdAmount: number): string {
+  const n = usdToGbp(usdAmount);
+  if (n >= 1000) return `£${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k`;
+  if (n >= 100) return `£${Math.round(n)}`;
+  return `£${n.toFixed(2)}`;
 }
 
 function pct(n: number): string {
@@ -600,7 +605,7 @@ export function spendInsights(band: SpendBand): string[] {
   // The same grouped row the ledger leads with, so the sentence and the table agree.
   const top = band.groups.filter((g) => !g.key.startsWith('none:'))[0];
   if (top) {
-    out.push(`${top.label} is the most expensive feature area: ${usd(top.costUsd)} across ${top.sessions} session${top.sessions === 1 ? '' : 's'}, ${pct(top.costUsd / t.costUsd)} of all spend.`);
+    out.push(`${top.label} is the most expensive feature area: ${gbp(top.costUsd)} across ${top.sessions} session${top.sessions === 1 ? '' : 's'}, ${pct(top.costUsd / t.costUsd)} of all spend.`);
   }
 
   const w = band.weeks;
@@ -611,21 +616,21 @@ export function spendInsights(band: SpendBand): string[] {
     if (before > 0) {
       const change = recent / before - 1;
       if (Math.abs(change) >= 0.1) {
-        out.push(`The last four weeks cost ${usd(recent)}, ${change > 0 ? 'up' : 'down'} ${pct(Math.abs(change))} on the four before.`);
+        out.push(`The last four weeks cost ${gbp(recent)}, ${change > 0 ? 'up' : 'down'} ${pct(Math.abs(change))} on the four before.`);
       }
     }
   }
 
   const recorded = t.linkedUsd + t.unlinkedUsd;
   if (recorded > 0 && t.unlinkedUsd / recorded >= 0.2) {
-    out.push(`${pct(t.unlinkedUsd / recorded)} of spend with a PR record (${usd(t.unlinkedUsd)}) opened no pull request that reached a release — reviews, ops and exploration, or work not yet shipped.`);
+    out.push(`${pct(t.unlinkedUsd / recorded)} of spend with a PR record (${gbp(t.unlinkedUsd)}) opened no pull request that reached a release — reviews, ops and exploration, or work not yet shipped.`);
   }
   if (t.unrecordedUsd > 0) {
-    out.push(`${usd(t.unrecordedUsd)} comes from sessions parsed before PR numbers were recorded, so whether it shipped is unknown; it is left out of the shipped shares.`);
+    out.push(`${gbp(t.unrecordedUsd)} comes from sessions parsed before PR numbers were recorded, so whether it shipped is unknown; it is left out of the shipped shares.`);
   }
 
   if (t.subagentMeasuredSessions > 0 && t.subagentUsd > 0) {
-    out.push(`Subagents account for ${usd(t.subagentUsd)} across the ${t.subagentMeasuredSessions} session${t.subagentMeasuredSessions === 1 ? '' : 's'} that record them.`);
+    out.push(`Subagents account for ${gbp(t.subagentUsd)} across the ${t.subagentMeasuredSessions} session${t.subagentMeasuredSessions === 1 ? '' : 's'} that record them.`);
   }
 
   if (t.reworkShare !== null && t.reworkShare >= 0.05) {
@@ -633,16 +638,16 @@ export function spendInsights(band: SpendBand): string[] {
   }
 
   if (t.prs > 0) {
-    out.push(`Shipped work averages ${usd(t.linkedUsd / t.prs)} per released pull request${t.churn > 0 ? ` and ${usd((t.linkedUsd / t.churn) * 1000)} per thousand lines changed` : ''}.`);
+    out.push(`Shipped work averages ${gbp(t.linkedUsd / t.prs)} per released pull request${t.churn > 0 ? ` and ${gbp((t.linkedUsd / t.churn) * 1000)} per thousand lines changed` : ''}.`);
   }
 
   if (t.cacheSavingsUsd > 0 && t.cacheReadShare !== null) {
-    out.push(`Prompt caching served ${pct(t.cacheReadShare)} of input tokens; at uncached input rates the same work would have cost about ${usd(t.cacheSavingsUsd)} more.`);
+    out.push(`Prompt caching served ${pct(t.cacheReadShare)} of input tokens; at uncached input rates the same work would have cost about ${gbp(t.cacheSavingsUsd)} more.`);
   }
 
   const priciest = [...band.sessions].sort((a, b) => b.costUsd - a.costUsd)[0];
   if (priciest && priciest.costUsd >= t.p90SessionUsd * 2 && band.sessions.length >= 10) {
-    out.push(`The single priciest session, “${priciest.title}”, cost ${usd(priciest.costUsd)} — ${Math.round(priciest.costUsd / Math.max(0.01, t.medianSessionUsd))}× the median.`);
+    out.push(`The single priciest session, “${priciest.title}”, cost ${gbp(priciest.costUsd)} — ${Math.round(priciest.costUsd / Math.max(0.01, t.medianSessionUsd))}× the median.`);
   }
   return out;
 }

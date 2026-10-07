@@ -12,7 +12,7 @@
   //
   // Sparklines share ONE time axis — the whole window — so two features can be
   // compared by when their money was spent, not only by how much.
-  import { usd, type FeatureArea, type FeatureGroup, type SpendSession } from '$lib/releases/spend';
+  import { gbp, type FeatureArea, type FeatureGroup, type SpendSession } from '$lib/releases/spend';
 
   interface Props {
     areas: FeatureArea[];
@@ -208,7 +208,7 @@
             <span class="s-date">{s.date ? new Date(s.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—'}</span>
             <span class="s-title">{s.title}<span class="s-proj">{s.project}</span></span>
             <span class="s-basis" data-basis={s.basis}>{basisLabel(s)}</span>
-            <span class="s-cost">{usd(s.costUsd)}</span>
+            <span class="s-cost">{gbp(s.costUsd)}</span>
           </li>
         {/each}
       </ol>
@@ -216,7 +216,7 @@
       <p class="hint">No session matches.</p>
     {:else}
       <div class="found-stats">
-        <div><span class="fs-label">Cumulative cost</span><span class="fs-value">{usd(found.total)}</span></div>
+        <div><span class="fs-label">Cumulative cost</span><span class="fs-value">{gbp(found.total)}</span></div>
         <div><span class="fs-label">Sessions</span><span class="fs-value">{matches.length}</span></div>
         <div><span class="fs-label">Released PRs</span><span class="fs-value">{found.prs}</span></div>
         <div><span class="fs-label">Became releases</span><span class="fs-value">{found.total ? Math.round((found.shipped / found.total) * 100) : 0}%</span></div>
@@ -224,7 +224,7 @@
       </div>
 
       <div class="found-plot">
-        <span class="peak">{usd(found.total)}</span>
+        <span class="peak">{gbp(found.total)}</span>
         <div class="found-box">
           <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
             <path class="line" vector-effect="non-scaling-stroke" d={stepPath(found.path, found.total)} />
@@ -235,7 +235,7 @@
               type="button"
               class="dot"
               style="left: {x(day)}%; bottom: {(v / Math.max(0.01, found.total)) * 100}%"
-              aria-label="{day}: {m.map((mm) => mm.s.title).join('; ')} — {usd(m.reduce((n, mm) => n + mm.cost, 0))}, {usd(v)} to date"
+              aria-label="{day}: {m.map((mm) => mm.s.title).join('; ')} — {gbp(m.reduce((n, mm) => n + mm.cost, 0))}, {gbp(v)} to date"
               onpointerenter={() => (hoverDot = { title: m.map((mm) => mm.s.title).join(' · '), cost: m.reduce((n, mm) => n + mm.cost, 0), date: day })}
               onpointerleave={() => (hoverDot = null)}
               onfocus={() => (hoverDot = { title: m.map((mm) => mm.s.title).join(' · '), cost: m.reduce((n, mm) => n + mm.cost, 0), date: day })}
@@ -245,7 +245,7 @@
         </div>
         <p class="dot-readout" aria-live="polite">
           {#if hoverDot}
-            {new Date(hoverDot.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} · +{usd(hoverDot.cost)} · {hoverDot.title}
+            {new Date(hoverDot.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} · +{gbp(hoverDot.cost)} · {hoverDot.title}
           {:else}
             One step per day with matching work · time axis shared with the ledger
           {/if}
@@ -265,8 +265,8 @@
             </span>
             <span class="s-basis" data-basis={m.s.basis}>{basisLabel(m.s)}</span>
             <span class="s-cost">
-              {usd(m.cost)}
-              {#if m.share < 0.999}<span class="s-of">{Math.round(m.share * 100)}% of {usd(m.s.costUsd)}</span>{/if}
+              {gbp(m.cost)}
+              {#if m.share < 0.999}<span class="s-of">{Math.round(m.share * 100)}% of {gbp(m.s.costUsd)}</span>{/if}
             </span>
           </li>
         {/each}
@@ -331,14 +331,14 @@
         <span class:indent={child}>{label}</span>
       {/if}
     </th>
-    <td class="num strong">{usd(r.costUsd)}</td>
+    <td class="num strong">{gbp(r.costUsd)}</td>
     <td class="bar-col"><span class="track"><span class="fill" style="width: {(r.costUsd / maxCost) * 100}%"></span></span></td>
     <td class="num">{r.sessions}</td>
     <td class="num">{r.prs || '—'}</td>
     <td class="num">{Math.round(r.linkedShare * 100)}%</td>
     <td class="when">{span(r.first, r.last)}</td>
     <td class="spark-cell">
-      <svg class="spark" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="{label}: cumulative {usd(r.costUsd)} from {r.first ?? '—'} to {r.last ?? '—'}">
+      <svg class="spark" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="{label}: cumulative {gbp(r.costUsd)} from {r.first ?? '—'} to {r.last ?? '—'}">
         <path vector-effect="non-scaling-stroke" d={stepPath(r.path, r.costUsd)} />
       </svg>
     </td>

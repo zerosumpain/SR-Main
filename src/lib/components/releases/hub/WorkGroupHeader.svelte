@@ -1,13 +1,15 @@
 <script lang="ts">
+  import { usdToGbp } from '$lib/utils/cost-format';
   import type { WorkGroup } from './work-groups';
 
   let { group }: { group: WorkGroup } = $props();
 
   const stages = ['request', 'design', 'plan', 'result', 'fixes'];
 
-  function money(n: number | null): string {
-    if (n === null) return '—';
-    return n >= 1 ? `$${n.toFixed(2)}` : `${(n * 100).toFixed(1)}¢`;
+  function money(usd: number | null): string {
+    if (usd === null) return '—';
+    const n = usdToGbp(usd);
+    return n >= 1 ? `£${n.toFixed(2)}` : `${(n * 100).toFixed(1)}p`;
   }
 
   function barHeight(cost: number | null, max: number): number {

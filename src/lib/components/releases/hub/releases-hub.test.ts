@@ -250,6 +250,7 @@ describe('the public document', () => {
     expect(body).not.toContain('What the work');
     expect(body).not.toContain('Cost of a feature');
     expect(body).not.toContain('Feature ledger');
+    expect(body).not.toContain('£');
     expect(body).not.toContain('$');
     expect(body).not.toContain('sess-1');
     expect(body).not.toMatch(/pull\/\d+/);
@@ -271,7 +272,7 @@ describe('the owner document', () => {
     expect(body).toContain('2026.07.29.6');
     expect(body).toContain('Connector health monitoring');
     expect(body).toContain('Fold the changelog into the release log');
-    expect(body).toContain('$18.42');
+    expect(body).toContain('£14.55');
     expect(body).toContain('1 commit');
     expect(body).toContain('fix jid normalisation');
     expect(body).toContain('All sources');
@@ -304,7 +305,7 @@ describe('the owner document', () => {
     expect(body).toContain('Cost of a feature');
     expect(body).toContain('Feature ledger');
     expect(body).toContain('Shipped (/releases)');
-    expect(body).toContain('$4.20');
+    expect(body).toContain('£3.32');
     expect(body).toContain('D / Work and releases');
   });
 
