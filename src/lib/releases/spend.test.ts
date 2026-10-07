@@ -178,7 +178,7 @@ describe('buildSpendBand', () => {
     expect(band.sessions.find((x) => x.id === 'old')!.prRecorded).toBe(false);
     // 10 of the 30 recorded dollars is a third — under the 20% bar it would be, at 10 of 100.
     expect(band.insights.some((i) => i.startsWith('33% of spend with a PR record'))).toBe(true);
-    expect(band.insights.some((i) => i.includes('$70.00 comes from sessions parsed before PR numbers'))).toBe(true);
+    expect(band.insights.some((i) => i.includes('£55.30 comes from sessions parsed before PR numbers'))).toBe(true);
   });
 
   it('names the same top feature, at the same total, as the ledger group', () => {
@@ -193,6 +193,6 @@ describe('buildSpendBand', () => {
     // /health is the biggest single area, but the /jkai family is bigger.
     expect(band.areas[0].key).toBe('health');
     expect(band.groups[0]).toMatchObject({ key: 'jkai', costUsd: 55, sessions: 2 });
-    expect(band.insights[0]).toContain('/jkai is the most expensive feature area: $55.00 across 2 sessions');
+    expect(band.insights[0]).toContain('/jkai is the most expensive feature area: £43.45 across 2 sessions');
   });
 });

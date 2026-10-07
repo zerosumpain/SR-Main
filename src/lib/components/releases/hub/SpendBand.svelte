@@ -18,7 +18,7 @@
   import SectionHead from '$lib/components/shell/SectionHead.svelte';
   import FeatureLedger from './FeatureLedger.svelte';
   import { chartHref, weekDates, type ChartFilters } from '$lib/releases/chart-links';
-  import { usd, type SpendBand, type SpendWeek } from '$lib/releases/spend';
+  import { gbp, type SpendBand, type SpendWeek } from '$lib/releases/spend';
 
   interface Props {
     spend: SpendBand;
@@ -56,24 +56,24 @@
   const tiles = $derived([
     {
       label: 'Estimated spend',
-      value: usd(t.costUsd),
+      value: gbp(t.costUsd),
       note: `${t.sessions.toLocaleString('en-GB')} sessions${t.partialSessions ? ` · ${t.partialSessions} partial` : ''}`,
     },
     {
       label: 'Became releases',
-      value: usd(t.linkedUsd),
-      note: `${share(t.linkedUsd, recorded)} of PR-recorded spend · ${t.prs} PRs${t.unrecordedUsd ? ` · ${usd(t.unrecordedUsd)} unrecorded` : ''}`,
+      value: gbp(t.linkedUsd),
+      note: `${share(t.linkedUsd, recorded)} of PR-recorded spend · ${t.prs} PRs${t.unrecordedUsd ? ` · ${gbp(t.unrecordedUsd)} unrecorded` : ''}`,
     },
-    { label: 'Per released PR', value: t.prs ? usd(t.linkedUsd / t.prs) : '—', note: t.releases ? `${usd(t.linkedUsd / t.releases)} per release` : 'no linked releases' },
-    { label: 'Per 1k lines', value: t.churn ? usd((t.linkedUsd / t.churn) * 1000) : '—', note: `${Math.round(t.churn / 1000).toLocaleString('en-GB')}k lines changed` },
-    { label: 'Typical session', value: usd(t.medianSessionUsd), note: `median · 90th pct ${usd(t.p90SessionUsd)}` },
+    { label: 'Per released PR', value: t.prs ? gbp(t.linkedUsd / t.prs) : '—', note: t.releases ? `${gbp(t.linkedUsd / t.releases)} per release` : 'no linked releases' },
+    { label: 'Per 1k lines', value: t.churn ? gbp((t.linkedUsd / t.churn) * 1000) : '—', note: `${Math.round(t.churn / 1000).toLocaleString('en-GB')}k lines changed` },
+    { label: 'Typical session', value: gbp(t.medianSessionUsd), note: `median · 90th pct ${gbp(t.p90SessionUsd)}` },
     {
       label: 'Subagents',
-      value: t.subagentMeasuredSessions ? usd(t.subagentUsd) : '—',
+      value: t.subagentMeasuredSessions ? gbp(t.subagentUsd) : '—',
       note: t.subagentMeasuredSessions ? `in ${t.subagentMeasuredSessions} sessions that record them` : 'recorded from parser v5',
     },
     { label: 'Follow-up fixes', value: t.reworkShare === null ? '—' : `${Math.round(t.reworkShare * 100)}%`, note: 'of stage cost after a first result' },
-    { label: 'Cache reads', value: t.cacheReadShare === null ? '—' : `${Math.round(t.cacheReadShare * 100)}%`, note: `of input · ~${usd(t.cacheSavingsUsd)} avoided` },
+    { label: 'Cache reads', value: t.cacheReadShare === null ? '—' : `${Math.round(t.cacheReadShare * 100)}%`, note: `of input · ~${gbp(t.cacheSavingsUsd)} avoided` },
   ]);
 
   // ——— breakdowns: top entries, the rest folded into "Other" ———————————
@@ -147,9 +147,9 @@
             <span class="readout" aria-live="polite">
               {weekLabel(readout.week)} ·
               {#if view === 'weekly'}
-                {usd(readout.linked + readout.unlinked + readout.unrecorded)} · shipped {usd(readout.linked)} · other {usd(readout.unlinked)}{readout.unrecorded ? ` · not recorded ${usd(readout.unrecorded)}` : ''}
+                {gbp(readout.linked + readout.unlinked + readout.unrecorded)} · shipped {gbp(readout.linked)} · other {gbp(readout.unlinked)}{readout.unrecorded ? ` · not recorded ${gbp(readout.unrecorded)}` : ''}
               {:else}
-                {usd(readout.cumulative)} to date
+                {gbp(readout.cumulative)} to date
               {/if}
             </span>
           {/if}
@@ -159,7 +159,7 @@
           <p class="empty">No sessions in this window.</p>
         {:else}
           <div class="plot">
-            <span class="peak">{usd(view === 'weekly' ? peak : cumPeak)}</span>
+            <span class="peak">{gbp(view === 'weekly' ? peak : cumPeak)}</span>
             {#if view === 'cumulative'}
               <svg class="cum" viewBox="0 0 {weeks.length} 100" preserveAspectRatio="none" aria-hidden="true">
                 <path
@@ -179,7 +179,7 @@
                   class="col"
                   href={weekHref(w.week)}
                   aria-current={filters.from === weekDates(w.week).from && filters.to === weekDates(w.week).to ? 'true' : undefined}
-                  aria-label="{w.week}: {usd(w.linked + w.unlinked + w.unrecorded)}, of which {usd(w.linked)} became releases{w.unrecorded ? ` and ${usd(w.unrecorded)} has no PR record` : ''}. Filter to this week."
+                  aria-label="{w.week}: {gbp(w.linked + w.unlinked + w.unrecorded)}, of which {gbp(w.linked)} became releases{w.unrecorded ? ` and ${gbp(w.unrecorded)} has no PR record` : ''}. Filter to this week."
                   onpointerenter={() => (hover = w)}
                   onfocus={() => (hover = w)}
                   onblur={() => (hover = null)}
@@ -215,8 +215,8 @@
                   class="cell"
                   role="cell"
                   data-step={step(v)}
-                  title="{DAYS[d]} {String(h).padStart(2, '0')}:00 · {usd(v)}"
-                  aria-label="{DAYS[d]} {h}:00, {usd(v)}"
+                  title="{DAYS[d]} {String(h).padStart(2, '0')}:00 · {gbp(v)}"
+                  aria-label="{DAYS[d]} {h}:00, {gbp(v)}"
                 ></span>
               {/each}
             </div>
@@ -228,7 +228,7 @@
         <div class="heat-legend" aria-hidden="true">
           <span>Less</span>
           {#each [1, 2, 3, 4, 5] as s (s)}<span class="cell" data-step={s}></span>{/each}
-          <span>More · peak {usd(heatMax)}</span>
+          <span>More · peak {gbp(heatMax)}</span>
         </div>
       </figure>
 
@@ -247,7 +247,7 @@
                 <div class="row">
                   <span class="row-lbl" title={r.key}>{r.key}</span>
                   <span class="track"><span class="fill" style="width: {(r.costUsd / max) * 100}%"></span></span>
-                  <span class="row-val">{usd(r.costUsd)}</span>
+                  <span class="row-val">{gbp(r.costUsd)}</span>
                 </div>
               {/each}
             </div>
