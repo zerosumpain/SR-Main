@@ -49,6 +49,7 @@ vi.mock('$env/dynamic/private', () => ({
       'sr-policy-engine': 'p'.repeat(40),
       'sr-health': 'h'.repeat(40),
       'sr-supply-chain-monitor': 'm'.repeat(40),
+      'sr-local-plan-navigator': 'l'.repeat(40),
     }),
   },
 }));
@@ -210,6 +211,18 @@ describe('session authority claims', () => {
     state.shareValid = false;
     state.queue.push([]);
     expect((await (await call('sr-supply-chain-monitor', 'm'.repeat(40))).json()).claims.project.access).toBe('none');
+  });
+
+  it('a Local Plan Navigator share link is checked against its own, private-by-default project', async () => {
+    state.shareValid = true;
+    state.queue.push([]); // no visibility row: private by default
+    const body = await (await call('sr-local-plan-navigator', 'l'.repeat(40), { cookie: 'psh_local-plan-navigator=lpn-token' })).json();
+    expect(body.claims.project).toEqual({ key: 'local-plan-navigator', access: 'share' });
+    expect(state.shareCalls.at(-1)).toEqual(['local-plan-navigator', 'lpn-token']);
+
+    state.shareValid = false;
+    state.queue.push([]);
+    expect((await (await call('sr-local-plan-navigator', 'l'.repeat(40))).json()).claims.project.access).toBe('none');
   });
 
   it('only ever answers for the audience\'s own project, and an outage is a 503', async () => {
