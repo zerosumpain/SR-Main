@@ -161,6 +161,17 @@ export const PROJECT_CARDS: ProjectCard[] = [
     chips: 'system dynamics · Monte-Carlo · cited',
   },
   {
+    key: 'local-plan-navigator',
+    href: '/projects/local-plan-navigator',
+    label: 'Open the Local Plan Navigator',
+    kind: 'Prototype',
+    tag: 'GOV.UK-style service · Planning',
+    title: 'Local Plan Navigator — Thirty Months, Three Gateways, One Map',
+    blurb:
+      'A GOV.UK-style prototype for navigating England\'s local plan process, with stage maps, a timeline planner, checklists, cited search and model-assisted answers. Private by default; share it with a link.',
+    chips: 'GOV.UK Frontend · 2026 Regulations · NPPF · cited answers',
+  },
+  {
     key: 'archetype',
     href: '/projects/archetype/',
     label: 'Open Archetype',
