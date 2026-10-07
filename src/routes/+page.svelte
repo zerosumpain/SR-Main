@@ -140,6 +140,7 @@
     <button type="button" class="nav-link rambler-toggle" onclick={toggleRambler}>
       {rambler.hidden ? 'Bring back the rambler' : 'Tuck in the rambler'}
     </button>
+    <a href="/rambler" class="nav-link">How he works</a>
   </nav>
 </footer>
 

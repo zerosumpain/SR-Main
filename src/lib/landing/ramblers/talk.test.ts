@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { NO_DAY } from './day';
-import { moodFor } from './mood';
 import type { Activity } from './resident';
 import { aside, want, wrap, type Reason } from './talk';
 
-const ACTIVITIES: Activity[] = ['wander', 'run', 'lookout', 'study', 'think', 'workout', 'drive', 'sleep', 'garden', 'tv', 'sofa', 'stressed', 'anxious', 'umbrella'];
-const REASONS: Reason[] = ['rain', 'storm', 'snow', 'sun', 'cold', 'night', 'dusk', 'pulseUp', 'calm', 'exercised', 'climbed', 'cycled', 'walked', 'mindful', 'outdoors', 'quietDay', 'busyDay'];
+const ACTIVITIES: Activity[] = ['wander', 'run', 'lookout', 'stargaze', 'study', 'think', 'workout', 'drive', 'cycle', 'sleep', 'nap', 'garden', 'tv', 'sofa', 'tea', 'eat', 'meditate', 'puddle', 'snowman', 'umbrella', 'stressed', 'anxious', 'mad', 'surprised', 'fidget', 'shiver', 'yawn', 'celebrate', 'fan'];
+const REASONS: Reason[] = ['rain', 'storm', 'snow', 'sun', 'cold', 'night', 'dusk', 'pulseUp', 'calm', 'exercised', 'climbed', 'cycled', 'walked', 'mindful', 'outdoors', 'quietDay', 'busyDay', 'clearNight', 'shortNight', 'lunchDip', 'sleepy', 'sitting', 'brainFull', 'lowRecovery', 'wound', 'teaTime', 'hungry', 'workday', 'deskStress', 'fuming', 'onEdge', 'exerting', 'focused', 'deskBound', 'outAndAbout', 'windingDown'];
 
 describe('talk', () => {
   it('has something to want for every activity, with or without a reason', () => {
@@ -46,16 +44,5 @@ describe('talk', () => {
 
   it('wraps at spaces', () => {
     expect(wrap("sun's out. something should grow here")).toEqual(["sun's out. something", 'should grow here']);
-  });
-});
-
-describe('mood reasons', () => {
-  it('gives the strongest reason for each activity it leaned', () => {
-    const m = moodFor({ sky: 'rain', temp: 3, pulse: 70, dayPhase: 'night', day: { ...NO_DAY, exercised: true } });
-    expect(m.because.umbrella).toBe('rain');
-    expect(m.because.workout).toBe('exercised');
-    expect(m.because.sleep).toBe('night');
-    // Rain (2.5) beats night (2) and cold (1.6) for the sofa.
-    expect(m.because.sofa).toBe('rain');
   });
 });

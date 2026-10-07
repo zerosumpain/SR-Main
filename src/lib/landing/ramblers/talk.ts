@@ -27,7 +27,26 @@ export type Reason =
   | 'mindful'
   | 'outdoors'
   | 'quietDay'
-  | 'busyDay';
+  | 'busyDay'
+  | 'clearNight'
+  | 'shortNight'
+  | 'lunchDip'
+  | 'sleepy'
+  | 'sitting'
+  | 'brainFull'
+  | 'lowRecovery'
+  | 'wound'
+  | 'teaTime'
+  | 'hungry'
+  | 'workday'
+  | 'deskStress'
+  | 'fuming'
+  | 'onEdge'
+  | 'exerting'
+  | 'focused'
+  | 'deskBound'
+  | 'outAndAbout'
+  | 'windingDown';
 
 export interface Line {
   text: string;
@@ -39,17 +58,32 @@ const WANT: Record<Activity, string[]> = {
   wander: ['going for a mooch', 'just having a nosey', 'stretching the legs'],
   run: ['cardio. allegedly', 'right, a quick lap', 'running, for some reason'],
   lookout: ['up top for a nosey', 'king of the monitor'],
+  stargaze: ['clear night. telescope', 'off to count stars'],
   study: ['one more chapter, honest', 'reading. ish'],
   think: ['having a think', 'smooth brain, engage'],
   workout: ['gains, theoretically', 'right, exercise. ugh'],
   drive: ['keys, wallet, phone, car', 'popping out in the car'],
+  cycle: ['on yer bike', 'quick spin on the bike'],
   sleep: ['resting my eyes', 'five minutes. tops'],
+  nap: ['power nap. nasa said', 'twenty minutes, max'],
   garden: ['green fingers, allegedly', 'going to grow something'],
   tv: ["what's on the telly", 'just the one episode'],
   sofa: ['feet up, brain off', 'sofa. earned it, probably'],
+  tea: ['kettle on', 'brew time'],
+  eat: ['food. now', 'something on toast'],
+  meditate: ['breathe in. allegedly', 'right, being calm'],
+  puddle: ['puddles, obviously', 'wellies on'],
+  snowman: ['building a lad', 'snowman o clock'],
+  umbrella: ['lovely day for a walk', 'not a cloud in the sky'],
   stressed: ['everything is fine', 'too many tabs open'],
   anxious: ['did i leave the oven on', 'something feels off'],
-  umbrella: ['lovely day for a walk', 'not a cloud in the sky'],
+  mad: ['oh come on', 'brilliant. just brilliant'],
+  surprised: ['what was that'],
+  fidget: ['now what was i doing', 'decisions, decisions'],
+  shiver: ['baltic', 'should have worn a coat'],
+  yawn: ['eyes are going'],
+  celebrate: ['get in', 'look at that'],
+  fan: ['too hot for this', 'is it me or'],
 };
 
 /** Why — said first, when the owner's day is what tipped the choice. */
@@ -71,6 +105,25 @@ const BECAUSE: Record<Reason, string> = {
   outdoors: 'jk saw daylight.',
   quietDay: 'jk barely moved today.',
   busyDay: "jk's legs are done.",
+  clearNight: 'clear sky tonight.',
+  shortNight: 'jk slept badly.',
+  lunchDip: 'post-lunch slump.',
+  sleepy: 'eyes are heavy.',
+  sitting: 'been sat too long.',
+  brainFull: 'brain full.',
+  lowRecovery: 'running on empty.',
+  wound: 'bit wound up.',
+  teaTime: 'tea time.',
+  hungry: 'stomach rumbling.',
+  workday: 'it is a work day.',
+  deskStress: "jk's sat still, pulse racing.",
+  fuming: 'jk is quietly seething.',
+  onEdge: "jk's a bit on edge.",
+  exerting: "jk's on the move.",
+  focused: "jk's in the zone.",
+  deskBound: "jk hasn't moved in ages.",
+  outAndAbout: "jk's out and about.",
+  windingDown: "jk's winding down.",
 };
 
 /** What he mutters while he is at it. */
@@ -86,6 +139,14 @@ const DOING: Partial<Record<Activity, string[]>> = {
   lookout: ['pulse looks alright', 'nice view of the traces'],
   drive: ['mirror, signal, mooch'],
   umbrella: ['typical', 'should have checked the forecast'],
+  tea: ['proper brew, this', 'milk in last, fight me'],
+  eat: ['this is good', 'crumbs everywhere'],
+  nap: ['zzz'],
+  meditate: ['in. and out', 'very calm. very calm'],
+  cycle: ['no hands. no, hands', 'mind the pothole'],
+  stargaze: ['is that a planet', 'that one is a plane'],
+  puddle: ['splosh', 'that one was deep'],
+  snowman: ['he needs a carrot', 'looks a bit like jk'],
 };
 
 const WET = ['proper british weather', 'glad i brought this'];

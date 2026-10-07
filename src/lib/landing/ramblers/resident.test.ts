@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Resident, type Activity } from './resident';
+import { NO_DAY } from './day';
+import { moodFor } from './mood';
 import { buildWorld, type SceneryRect } from './world';
 
 const OPTS = { margin: 8, standOff: 8, jump: 52, drop: 160 };
@@ -113,11 +115,82 @@ describe('Resident', () => {
     let sheltered = false;
     for (let i = 0; i < 60 * 120 && !sheltered; i++) {
       r.update(1 / 60);
-      if (r.cloud && r.mode === 'idle' && r.activity === 'umbrella' && !r.umbrella && r.bubble?.text === '!') soaked = true;
+      if (r.cloud && r.mode === 'surprised' && r.activity === 'umbrella' && !r.umbrella) soaked = true;
       if (r.cloud && r.umbrella) sheltered = true;
     }
     expect(soaked).toBe(true);
     expect(sheltered).toBe(true);
+  });
+
+  it('turns to face the visitor to think, and side on to walk', () => {
+    const w = buildWorld(RECTS, OPTS);
+    const r = new Resident(seeded(21));
+    r.setWorld(w);
+    r.start('think');
+    const views = new Map<string, string>();
+    for (let i = 0; i < 60 * 60 && r.activity === 'think'; i++) {
+      r.update(1 / 60);
+      views.set(r.mode, r.view);
+    }
+    expect(views.get('think')).toBe('front');
+    expect(views.get('walk') ?? views.get('run')).toBe('side');
+  });
+
+  it('loses his temper at most once a visit', () => {
+    const w = buildWorld(RECTS, OPTS);
+    let mads = 0;
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const r = new Resident(seeded(seed));
+      r.setWorld(w);
+      let wasMad = false;
+      let count = 0;
+      // Six dry-day umbrella gags in a row, each left to play out.
+      for (let gag = 0; gag < 6; gag++) {
+        r.start('umbrella');
+        for (let i = 0; i < 60 * 90 && r.activity === 'umbrella'; i++) {
+          r.update(1 / 60);
+          const mad = r.mode === 'mad';
+          if (mad && !wasMad) count++;
+          wasMad = mad;
+        }
+      }
+      expect(count).toBeLessThanOrEqual(1);
+      mads += count;
+    }
+    expect(mads).toBeGreaterThan(0);
+  });
+
+  it('loses it once when jk is sat still with a racing pulse, then stays stressed', () => {
+    const w = buildWorld(RECTS, OPTS);
+    const r = new Resident(seeded(19));
+    r.setWorld(w);
+    r.setMood(moodFor({ sky: 'cloudy', temp: 14, pulse: 118, dayPhase: 'day', day: { ...NO_DAY, moving: 'still' }, hour: 11, weekday: true }));
+    let mads = 0;
+    let stressed = false;
+    let was = false;
+    for (let i = 0; i < 60 * 300; i++) {
+      r.update(1 / 60);
+      const mad = r.mode === 'mad';
+      if (mad && !was) mads++;
+      was = mad;
+      if (r.activity === 'stressed') stressed = true;
+    }
+    expect(mads).toBe(1);
+    expect(stressed).toBe(true);
+  });
+
+  it('is stressed in episodes, not as a hobby, when the pulse is up', () => {
+    const w = buildWorld(RECTS, OPTS);
+    const r = new Resident(seeded(17));
+    r.setWorld(w);
+    r.setMood(moodFor({ sky: 'cloudy', temp: 14, pulse: 115, dayPhase: 'day', day: NO_DAY, hour: 15 }));
+    const seen = new Set<string>();
+    for (let i = 0; i < 60 * 300; i++) {
+      r.update(1 / 60);
+      seen.add(r.activity);
+    }
+    expect(seen.has('stressed')).toBe(true);
+    expect(seen.size).toBeGreaterThanOrEqual(4);
   });
 
   it('ropes back into view when the visitor scrolls far away', () => {
