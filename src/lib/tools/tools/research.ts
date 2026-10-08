@@ -494,7 +494,7 @@ register({
     const query = String(args.query ?? '').trim();
     if (!query) return { success: false, error: 'query is required.' };
     const { search } = await import('$lib/deepdive/tavily');
-    const results = await search(query, { maxResults: 8, searchDepth: args.depth === 'advanced' ? 'advanced' : 'basic' });
+    const results = await search(query, { purpose: 'tool.tavily_search', maxResults: 8, searchDepth: args.depth === 'advanced' ? 'advanced' : 'basic' });
     return {
       success: true,
       data: {

@@ -98,7 +98,7 @@ export async function backfillSourceChunks(opts: {
     try {
       let content = s.snippet ?? '';
       if (opts.refetch) {
-        const fetched = await extractContent(s.url, content);
+        const fetched = await extractContent(s.url, content, { purpose: 'research.source-index' });
         content = fetched.content || content;
       }
       const r = await indexSourceContent(s.sessionId, { id: s.id }, content);

@@ -84,6 +84,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       { label: 'Run log', href: '/admin/ops/actions' },
       { label: 'Costs', href: '/admin/ops/costs' },
       { label: 'Tool usage', href: '/admin/ops/tool-usage' },
+      { label: 'Tavily', href: '/admin/ops/tavily' },
       { label: 'Live', href: '/admin/ops/live' },
     ],
   },

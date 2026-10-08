@@ -115,6 +115,7 @@ export async function runBrief(
   // the cheapest useful result is already in flight while the model thinks.
   const searchOpts = scopeToSearchOptions(scope);
   const rawSearch = search(topic, {
+    purpose: 'research.brief',
     maxResults: 8,
     searchDepth: 'basic',
     ...searchOpts,
@@ -149,6 +150,7 @@ export async function runBrief(
   const settled = await Promise.allSettled(
     queries.map((q) =>
       search(q, {
+        purpose: 'research.brief',
         maxResults: 6,
         searchDepth: 'basic',
         ...searchOpts,

@@ -272,7 +272,7 @@ export async function saveSourceToDrive(
       if (local?.title?.trim()) title = local.title.trim();
 
       if (!text.trim()) {
-        const page = await fetchPageText(source.url);
+        const page = await fetchPageText(source.url, { purpose: 'research.keep-in-drive' });
         text = page.text;
       }
       if (!text.trim()) {
