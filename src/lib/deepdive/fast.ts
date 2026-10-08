@@ -219,6 +219,7 @@ export async function runScan(
   const searchOpts = scopeToSearchOptions(scope);
   // Raw-topic search goes out first and runs while the model writes queries.
   const rawSearch = search(topic, {
+    purpose: 'research.scan',
     maxResults: 5,
     searchDepth: 'basic',
     ...searchOpts,
@@ -241,6 +242,7 @@ export async function runScan(
   const settled = await Promise.allSettled(
     queries.map((q) =>
       search(q, {
+        purpose: 'research.scan',
         maxResults: 5,
         searchDepth: 'basic',
         ...searchOpts,

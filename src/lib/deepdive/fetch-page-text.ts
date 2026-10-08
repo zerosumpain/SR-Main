@@ -34,7 +34,7 @@ export interface FetchPageTextResult {
  * touching real env vars or the network.
  */
 export interface FetchPageTextDeps {
-  tavilyExtract: (urls: string[], signal?: AbortSignal) => Promise<TavilyExtractResponse>;
+  tavilyExtract: (urls: string[], options: { purpose: string; signal?: AbortSignal }) => Promise<TavilyExtractResponse>;
   fetchFn: typeof fetch;
   scraperServiceUrl: string | undefined;
   scraperServiceToken: string | undefined;
@@ -55,14 +55,15 @@ function defaultDeps(): FetchPageTextDeps {
  */
 export async function fetchPageText(
   url: string,
-  opts: { signal?: AbortSignal } = {},
+  /** `purpose` names the caller in the Tavily ledger ($lib/deepdive/tavily-ledger). */
+  opts: { purpose: string; signal?: AbortSignal },
   deps?: FetchPageTextDeps,
 ): Promise<FetchPageTextResult> {
   const { tavilyExtract, fetchFn, scraperServiceUrl, scraperServiceToken } = deps ?? defaultDeps();
 
   // ── Step 1: Tavily Extract ───────────────────────────────────────────────
   try {
-    const tavilyResult = await tavilyExtract([url], opts.signal);
+    const tavilyResult = await tavilyExtract([url], { purpose: opts.purpose, signal: opts.signal });
     const rawContent = tavilyResult.results[0]?.raw_content ?? '';
     if (rawContent.length >= TAVILY_MIN_CHARS) {
       return { text: rawContent.slice(0, MAX_TEXT_CHARS), method: 'tavily' };

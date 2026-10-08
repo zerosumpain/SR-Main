@@ -134,7 +134,7 @@ export async function runPhase1(
       const followUps: string[] = [];
 
       try {
-        const results = await search(query, { maxResults: 10 });
+        const results = await search(query, { purpose: 'research.phase1', maxResults: 10 });
 
         for (const result of results.results) {
           if (seenUrls.has(result.url)) continue;

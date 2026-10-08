@@ -13,17 +13,17 @@ export interface ExtractedContent {
 export async function extractContent(
 	url: string,
 	snippet: string,
-	signal?: AbortSignal,
+	options: { purpose: string; signal?: AbortSignal },
 ): Promise<ExtractedContent> {
 	// Try local extraction first
-	const local = await extractLocal(url, signal);
+	const local = await extractLocal(url, options.signal);
 	if (local && local.content.length >= 200) {
 		return { content: local.content, method: 'local' };
 	}
 
 	// Fall back to Tavily
 	try {
-		const extracted = await tavilyExtract([url], signal);
+		const extracted = await tavilyExtract([url], options);
 		if (extracted.results?.[0]?.raw_content) {
 			return { content: extracted.results[0].raw_content, method: 'tavily' };
 		}

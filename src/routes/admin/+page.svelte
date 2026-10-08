@@ -191,6 +191,12 @@
           <div class="nm-tile-sub">What gets called, what never does, what fails.</div>
           <div class="nm-tile-foot"><span>open</span><span>→</span></div>
         </a>
+        <a class="nm-tile" href={`/admin/ops/tavily`}>
+          <div class="nm-tile-eyebrow">Tavily</div>
+          <div class="nm-tile-title">Search Credits</div>
+          <div class="nm-tile-sub">Which process searched, for what, and when.</div>
+          <div class="nm-tile-foot"><span>open</span><span>→</span></div>
+        </a>
         <a class="nm-tile" href={`/admin/ops/live`}>
           <div class="nm-tile-eyebrow">Live</div>
           <div class="nm-tile-title">Pulse Activity</div>

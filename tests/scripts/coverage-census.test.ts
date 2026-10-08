@@ -66,7 +66,10 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 // scheduler and Gmail are stubbed, every row it writes is real.
 // Its follow-ups (follow.integration, 2026-10-05) ride it too: research worker,
 // builder sidecar, watch generator, model and Home Assistant stubbed.
-const INTEGRATION_FILES = 40;
+// The Tavily ledger (tavily-ledger.integration, 2026-10-08) writes through the
+// real client with Tavily stubbed and reads back through /admin/ops/tavily's
+// queries; it seeds and removes its own rows, so the empty nightly DB suits it.
+const INTEGRATION_FILES = 41;
 
 function tracked(pattern: string): string[] {
 	return execFileSync('git', ['ls-files', pattern], { cwd: ROOT, encoding: 'utf8' })

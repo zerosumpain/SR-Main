@@ -247,7 +247,7 @@ export async function runPhase2(
     // Fetch content — skip extraction if snippet is already rich
     let content = source.snippet ?? '';
     if (content.length < 500) {
-      const result = await extractContent(source.url, content);
+      const result = await extractContent(source.url, content, { purpose: 'research.phase2.source' });
       content = result.content.slice(0, 10000);
       if (result.method !== 'snippet') {
         emitLog(sessionId, '\u{1F4E5}', `Extracted via ${result.method}: ${source.title?.slice(0, 40) ?? source.url}`);
@@ -519,14 +519,16 @@ export async function runPhase2(
           try {
             const liResults = await tavilySearch(
               `site:linkedin.com/in/ "${pe.name}"`,
-              { maxResults: 3, searchDepth: 'basic' },
+              { purpose: 'research.phase2.linkedin', maxResults: 3, searchDepth: 'basic' },
             );
 
             if (liResults.results?.length > 0) {
               const topResult = liResults.results[0];
 
               // Try to extract profile content
-              const profileResult = await extractContent(topResult.url, topResult.content ?? '');
+              const profileResult = await extractContent(topResult.url, topResult.content ?? '', {
+                purpose: 'research.phase2.linkedin',
+              });
               let profileContent = profileResult.content.slice(0, 5000);
 
               if (profileContent) {

@@ -100,7 +100,7 @@ export const POST: RequestHandler = async (event) => {
   // Use the caller's request signal so the fetch is cancelled if the client
   // disconnects, but only for Tavily — the residential path has its own hard
   // 30s timeout inside fetchPageText.
-  const pageTextResult = await fetchPageText(source.url, { signal: request.signal });
+  const pageTextResult = await fetchPageText(source.url, { purpose: 'research.source-summary', signal: request.signal });
 
   // ── Build prompt ─────────────────────────────────────────────────────────
   let system: string;

@@ -120,7 +120,7 @@ export async function runPhase3(
         if (isTimeUp()) break;
 
         try {
-          const results = await search(query, { maxResults: 3 });
+          const results = await search(query, { purpose: 'research.phase3', maxResults: 3 });
 
           for (const result of results.results ?? []) {
             if (shouldStop(sessionId)) break;
