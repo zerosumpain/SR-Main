@@ -3,7 +3,7 @@ import { buildWorld, route, type Link, type SceneryRect } from './world';
 
 const OPTS = { margin: 8, standOff: 8, jump: 52, drop: 160, pageWidth: 1200 };
 
-// A small landing page: a monitor box over the ground, a section rule, two
+// A small landing page: the hero's sentence over the ground, a section rule, two
 // rows of four touching cells and a footer.
 function page(): SceneryRect[] {
   const cells: SceneryRect[] = [];

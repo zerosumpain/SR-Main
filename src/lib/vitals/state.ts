@@ -30,6 +30,13 @@ export interface VitalsState {
   town?: string;
   /** ISO timestamp of the most recent vitals reading. */
   lastSyncedAt?: string;
+  /**
+   * When the latest heart-rate reading itself was taken. Unlike
+   * `lastSyncedAt`, never a WHOOP recovery row's time, so a page that states
+   * how old the pulse is (the landing sentence) is not misled by a newer
+   * recovery score. Absent when there is no heart-rate reading at all.
+   */
+  pulseAt?: string;
 }
 
 export const VITALS_DEFAULTS: VitalsState = {

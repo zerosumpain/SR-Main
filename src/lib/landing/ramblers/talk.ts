@@ -57,7 +57,7 @@ export interface Line {
 const WANT: Record<Activity, string[]> = {
   wander: ['going for a mooch', 'just having a nosey', 'stretching the legs'],
   run: ['cardio. allegedly', 'right, a quick lap', 'running, for some reason'],
-  lookout: ['up top for a nosey', 'king of the monitor'],
+  lookout: ['up top for a nosey', 'somewhere with a view'],
   stargaze: ['clear night. telescope', 'off to count stars'],
   study: ['one more chapter, honest', 'reading. ish'],
   think: ['having a think', 'smooth brain, engage'],
@@ -136,7 +136,7 @@ const DOING: Partial<Record<Activity, string[]>> = {
   sofa: ['this is the life', 'not moving now'],
   stressed: ['this is fine', 'inbox zero, my foot'],
   anxious: ['did i lock the door', 'was that my phone'],
-  lookout: ['pulse looks alright', 'nice view of the traces'],
+  lookout: ['pulse looks alright', 'nice view from up here'],
   drive: ['mirror, signal, mooch'],
   umbrella: ['typical', 'should have checked the forecast'],
   tea: ['proper brew, this', 'milk in last, fight me'],

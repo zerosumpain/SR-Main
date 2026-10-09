@@ -61,6 +61,7 @@ async function computeVitalsState(): Promise<VitalsState> {
     if (latestHR?.value) {
       state.pulse = roundPulse(fromStoredMetric(latestHR.value));
       latestDataTime = latestHR.date;
+      state.pulseAt = new Date(latestHR.date * 1000).toISOString();
       state.sources.heartRate = true;
     }
 

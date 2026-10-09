@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ecgTrace, spikeTrace, stepsTrace, tickTrace, TRACE_H, TRACE_W } from './traces';
+import { BPM_MAX, BPM_MIN, clampBpm, ecgTrace, heartLine, HEART_PX_PER_SECOND, rulerNow, rulerTicks, spikeTrace, stepsTrace, TRACE_H, TRACE_W } from './traces';
 import { binSteps, STEP_BINS } from './steps';
 import { ago, until } from './live-vitals.svelte';
 
@@ -11,7 +11,7 @@ function points(d: string): Array<[number, number]> {
 const ALL = {
   ecg: ecgTrace(72),
   ecgFast: ecgTrace(180),
-  ticks: tickTrace(8, 10, true),
+  ruler: rulerTicks(),
   spikes: spikeTrace([0, 3, 6, 1, 9, 0, 2]),
   steps: stepsTrace(Array.from({ length: 96 }, (_, i) => (i % 7) * 40), 60),
   releases: spikeTrace(Array.from({ length: 90 }, (_, i) => i % 5), 90),
@@ -54,6 +54,7 @@ describe('landing traces', () => {
   it('is deterministic, so SSR and hydration draw the same path', () => {
     expect(ecgTrace(72)).toBe(ecgTrace(72));
     expect(spikeTrace([1, 4, 2])).toBe(spikeTrace([1, 4, 2]));
+    expect(heartLine(72, 1440, 72).d).toBe(heartLine(72, 1440, 72).d);
   });
 
 });
@@ -85,6 +86,90 @@ describe('steps strip', () => {
     const bins = new Array(96).fill(10);
     const strokes = (d: string) => (d.match(/M/g) ?? []).length - 1;
     expect(strokes(stepsTrace(bins, 9))).toBe(10);
+  });
+  it('rules the day with a tick an hour, taller every six', () => {
+    const ticks = points(rulerTicks()).filter(([, y]) => y < TRACE_H);
+    expect(ticks).toHaveLength(25);
+    expect(ticks.filter(([, y]) => y === TRACE_H - 6).map(([x]) => x)).toEqual([0, 250, 500, 750, 1000]);
+  });
+  it('puts now at the end of the quarter-hour in progress, and the pending rest after it', () => {
+    expect(rulerNow(0)).toBe(10.4);
+    expect(rulerNow(47)).toBe(500);
+    expect(rulerNow(95)).toBe(1000);
+    // Out-of-range bins stay on the ruler.
+    expect(rulerNow(-3)).toBe(10.4);
+    expect(rulerNow(400)).toBe(1000);
+    // Every bar drawn sits left of now: the pending stretch is empty.
+    const bins = Array.from({ length: 96 }, () => 50);
+    const bars = points(stepsTrace(bins, 40)).filter(([, y]) => y < 54).map(([x]) => x);
+    expect(Math.max(...bars)).toBeLessThan(rulerNow(40));
+  });
+});
+
+describe('the hero heartbeat line', () => {
+  /** x of every R peak: the highest point of each complex. */
+  const peaks = (d: string) => points(d).filter(([, y]) => y === Math.min(...points(d).map(([, v]) => v)));
+
+  it('lies flat with no fresh reading, and beats with one', () => {
+    expect(heartLine(null, 1440, 72)).toEqual({ d: 'M0,47.5 L1440,47.5', beats: 0, peak: 0 });
+    expect(heartLine(0, 1440, 72).beats).toBe(0);
+    expect(heartLine(52, 1440, 72).beats).toBeGreaterThan(0);
+  });
+
+  it('draws a whole number of beats at a fixed paper speed, so spacing is the rate', () => {
+    // 1440px at 170px a second is an 8.5s strip: 52 bpm fits seven beats, 104 fits fifteen.
+    const slow = heartLine(52, 1440, 72);
+    const fast = heartLine(104, 1440, 72);
+    expect(slow.beats).toBe(Math.round(1440 / HEART_PX_PER_SECOND / (60 / 52)));
+    expect(fast.beats).toBe(15);
+    expect(peaks(slow.d)).toHaveLength(slow.beats);
+    expect(peaks(fast.d)).toHaveLength(fast.beats);
+    // Evenly spaced: every gap between R peaks is the same to a pixel.
+    const xs = peaks(slow.d).map(([x]) => x);
+    const gaps = xs.slice(1).map((x, i) => x - xs[i]);
+    for (const g of gaps) expect(Math.abs(g - 1440 / slow.beats)).toBeLessThanOrEqual(0.2);
+  });
+
+  it('stays inside its box at every width and rate, end to end', () => {
+    for (const [bpm, w, h] of [[40, 390, 56], [52, 1440, 72], [160, 2560, 72], [999, 300, 10]] as const) {
+      const { d } = heartLine(bpm, w, h);
+      const pts = points(d);
+      expect(pts[0]).toEqual([0, pts[0][1]]);
+      expect(pts.at(-1)![0]).toBe(w);
+      for (const [x, y] of pts) {
+        expect(x).toBeGreaterThanOrEqual(0);
+        expect(x).toBeLessThanOrEqual(w);
+        expect(y).toBeGreaterThanOrEqual(0);
+        expect(y).toBeLessThanOrEqual(Math.max(24, h));
+      }
+    }
+  });
+
+  it('draws every rate the watch has sent at that rate, and only clamps the implausible', () => {
+    // On record: 36 to 189 bpm. Both draw as themselves, not as a clamped 40 or 160.
+    expect(heartLine(36, 1440, 72)).not.toEqual(heartLine(40, 1440, 72));
+    expect(heartLine(189, 1440, 72)).not.toEqual(heartLine(160, 1440, 72));
+    expect(heartLine(189, 1440, 72).beats).toBe(Math.round(1440 / HEART_PX_PER_SECOND / (60 / 189)));
+    expect(heartLine(250, 1440, 72)).toEqual(heartLine(BPM_MAX, 1440, 72));
+    expect(heartLine(10, 1440, 72)).toEqual(heartLine(BPM_MIN, 1440, 72));
+    expect(clampBpm(36)).toBe(36);
+    expect(clampBpm(189)).toBe(189);
+  });
+
+  it('keeps every complex whole and apart at the fastest rate it draws', () => {
+    const { d, beats } = heartLine(BPM_MAX, 390, 56);
+    const xs = points(d).map(([x]) => x);
+    for (let i = 1; i < xs.length; i++) expect(xs[i]).toBeGreaterThanOrEqual(xs[i - 1]);
+    expect(beats).toBeGreaterThan(0);
+    // The six-second footnote strip draws one complex per beat: 20 at 200 bpm.
+    expect(points(ecgTrace(BPM_MAX)).filter(([, y]) => y === 6).length).toBe(20);
+  });
+
+  it('reports where the R wave falls along each beat, for things that pulse with the sweep', () => {
+    const { peak } = heartLine(60, 1440, 72);
+    expect(peak).toBeGreaterThan(0.2);
+    expect(peak).toBeLessThan(0.6);
+    expect(heartLine(60, 1440, 72)).toEqual(heartLine(60, 1440, 72));
   });
 });
 

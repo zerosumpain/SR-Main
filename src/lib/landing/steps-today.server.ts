@@ -1,5 +1,5 @@
 // steps-today.server.ts — today's steps as a strip of quarter-hours, for the
-// landing monitor's Steps channel: midnight on the left, 23:59 on the right.
+// landing sentence's steps footnote: midnight on the left, 23:59 on the right.
 //
 // Reads the same Apple Health `step_count` samples, over the same local day
 // (heroDayBounds, the health timezone), that the step total has always used, so
