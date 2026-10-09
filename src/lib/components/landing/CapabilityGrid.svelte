@@ -51,7 +51,7 @@
         art: 'pulse',
         tone: 'orange',
         name: 'Feel a pulse',
-        body: 'Heart rate, sleep and every step stream in from the watch and Whoop, and the monitor above beats with them.',
+        body: 'Heart rate, sleep and every step stream in from the watch and Whoop, and the line above beats with them.',
         status: bpm != null ? `${bpm} bpm now` : 'Heart rate not reporting',
         live: bpm != null,
         href: '/health',

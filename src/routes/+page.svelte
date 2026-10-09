@@ -13,7 +13,7 @@
 <script lang="ts">
   import { getContext, onMount } from 'svelte';
   import AccountSyncBanner from '$lib/components/landing/AccountSyncBanner.svelte';
-  import CapabilityMonitor from '$lib/components/landing/CapabilityMonitor.svelte';
+  import HeroViews from '$lib/components/landing/HeroViews.svelte';
   import CapabilityLoop from '$lib/components/landing/CapabilityLoop.svelte';
   import CapabilityGrid from '$lib/components/landing/CapabilityGrid.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
@@ -21,7 +21,8 @@
   import { scenery } from '$lib/landing/ramblers/scenery';
   import { rambler, toggleRambler } from '$lib/landing/ramblers/visibility.svelte';
   import { LiveVitals } from '$lib/landing/live-vitals.svelte';
-  import { roundPulse } from '$lib/vitals/state';
+  import { readPulse } from '$lib/landing/sentence';
+  import { localToday } from '$lib/constants/health-day';
   import type { VitalsStore } from '$lib/vitals/store.svelte';
 
   const store = getContext<VitalsStore>('vitals');
@@ -32,23 +33,24 @@
   let mounted = $state(false);
 
   // initialVitals is streamed, so it isn't in the SSR HTML. Until the store is
-  // seeded AND a real heart-rate source is reporting, the page says so with a
-  // dash rather than printing the store's placeholder 60 as if it were live.
+  // seeded AND a real heart-rate reading is in, the page says so in words
+  // rather than printing the store's placeholder 60 as if it were live.
   // Read the target, not the eased state: the eased one counts up from that
   // placeholder for five seconds, so the first numbers shown are never real.
-  // A reading the feed itself calls stale (over six hours) is not a pulse.
+  // A reading over six hours old is not a pulse either (readPulse), and its
+  // age is the heart-rate reading's own, never a WHOOP recovery row's.
   let reading = $derived(mounted ? store?.targetState : undefined);
-  let bpm = $derived(
-    reading?.sources?.heartRate && !reading.stale && reading.pulse > 0 ? roundPulse(reading.pulse) : null,
-  );
-  let bpmAt = $derived(bpm != null ? (reading?.lastSyncedAt ?? null) : null);
+  let pulse = $derived(readPulse(reading, live.now));
+  let bpm = $derived(pulse.state === 'fresh' ? pulse.bpm : null);
   let town = $derived(mounted ? store.state.town : undefined);
+  let temp = $derived(reading?.sources?.weather ? reading.weather.temp : null);
   // Shipping, read off the release showcase — one loader, several readings.
-  let cadence = $derived(data.releases?.cadence ?? []);
-  let days = $derived(cadence.map((d) => ({ date: d.date, count: d.count })));
-  let dayKey = (offset: number) => new Date(Date.now() - offset * 86_400_000).toISOString().slice(0, 10);
-  let deploysToday = $derived(cadence.length ? (cadence.find((d) => d.date === dayKey(0))?.count ?? 0) : null);
-  let deploysYesterday = $derived(cadence.length ? (cadence.find((d) => d.date === dayKey(1))?.count ?? 0) : null);
+  // Days are London days (localCadence), the same day as the dateline and the
+  // steps, so "today" never means yesterday in the hour after midnight BST.
+  let days = $derived(data.releases?.localCadence ?? []);
+  let dayKey = (offset: number) => localToday(new Date(live.now - offset * 86_400_000));
+  let deploysToday = $derived(days.length ? (days.find((d) => d.date === dayKey(0))?.count ?? 0) : null);
+  let deploysYesterday = $derived(days.length ? (days.find((d) => d.date === dayKey(1))?.count ?? 0) : null);
   let totals = $derived(data.releases?.totals ?? null);
   let deploysPerDay = $derived(
     totals && totals.days > 0 && totals.releases > 0 ? Math.round((totals.releases / totals.days) * 10) / 10 : null,
@@ -84,20 +86,27 @@
      nothing at all. -->
 <AccountSyncBanner summary={data.syncAttention} prs={data.mergeablePrs} />
 
-<!-- HERO — the site as a patient on a monitor: one ink band holding the title
-     and a live trace per capability. -->
-<!-- Its lower edge is also the rambler's ground under the monitor. -->
+<!-- HERO — the title and the site's live numbers, read as a sentence, a place
+     or notes. Its lower edge is also the rambler's ground. -->
 <section class="hero" aria-label="Live" use:scenery={{ edge: 'bottom' }}>
-  <CapabilityMonitor
-    meta={`Right now · ${data.dateStr}` + (town ? ` · ${town.toUpperCase()}` : '')}
+  <!-- One hero, three readings of the same numbers. The server picked which
+       (a ?view= link, the visitor's own choice, or the hour); HeroViews owns
+       the switch between them. -->
+  <HeroViews
+    choice={data.heroView}
+    component={data.heroComponent}
+    date={data.dateline}
+    {town}
+    {temp}
+    {pulse}
     v={live.v}
     now={live.now}
-    {bpm}
-    {bpmAt}
     facts={data.capabilities}
     steps={data.steps}
-    releases={totals?.releases || null}
-    {days}
+    cadence={days}
+    releases={totals && totals.releases > 0
+      ? { total: totals.releases, firstDeploy: totals.firstDeploy, days: totals.days }
+      : null}
   />
 </section>
 
@@ -150,6 +159,13 @@
   .hero {
     background: var(--text-primary);
     color: var(--bg);
+  }
+  /* Browsers drop the ink band in print; the hero then prints ink on paper. */
+  @media print {
+    .hero {
+      background: none;
+      color: var(--text-primary);
+    }
   }
   .writing {
     display: flex;

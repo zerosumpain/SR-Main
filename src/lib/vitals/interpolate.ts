@@ -35,5 +35,6 @@ export function interpolateVitalsState(
     sources: to.sources,
     town: to.town,
     lastSyncedAt: to.lastSyncedAt,
+    pulseAt: to.pulseAt,
   };
 }

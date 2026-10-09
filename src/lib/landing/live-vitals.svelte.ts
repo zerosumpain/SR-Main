@@ -1,6 +1,6 @@
 // live-vitals.svelte.ts — the landing page's one poll of /api/landing/vitals.
 //
-// Lifted out of the old vitals rail so the capability monitor and the grid
+// Lifted out of the old vitals rail so the hero sentence and the grid
 // below it read the same payload instead of polling twice. The cadence rule is
 // unchanged: live work (a JKAI job or an active build) earns a 15s poll, an idle
 // site a 60s one, and a hidden tab none at all.

@@ -23,6 +23,7 @@ import { releases, releaseItems, projectVisibility } from '$lib/db/schema';
 import { desc, sql } from 'drizzle-orm';
 import { isItemPublic, redactItem } from './public-filter';
 import { correctedStats } from './corrected-facts';
+import { localDayCadence, type LocalDayCount } from './local-days';
 import type { ReleaseItemKind, ReleaseStats } from './types';
 
 /** Release data only changes when a deploy lands, so this can be generous. */
@@ -76,6 +77,8 @@ export interface ShowcaseItem {
 export interface ShowcasePayload {
   totals: ShowcaseTotals;
   cadence: CadenceDay[];
+  /** Deploys per LONDON day, for the landing sentence's "today" (see ./local-days). */
+  localCadence: LocalDayCount[];
   kindMix: KindSlice[];
   items: ShowcaseItem[];
   generatedAt: string;
@@ -122,6 +125,7 @@ const EMPTY: ShowcasePayload = {
     shipped: 0, firstDeploy: null, lastDeploy: null, days: 0,
   },
   cadence: [],
+  localCadence: [],
   kindMix: [],
   items: [],
   generatedAt: new Date(0).toISOString(),
@@ -207,6 +211,7 @@ async function compute(): Promise<ShowcasePayload> {
           : 0,
     },
     cadence: first && last ? denseCadence(dayCounts, shippedByDay, first, last) : [],
+    localCadence: localDayCadence(statRows.map((r) => r.deployedAt)),
     kindMix: [...kindCounts.entries()]
       .map(([kind, count]) => ({ kind, count }))
       .sort((a, b) => b.count - a.count),

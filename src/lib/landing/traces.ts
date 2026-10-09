@@ -1,20 +1,29 @@
-// traces.ts — the waveforms drawn in the landing page's capability monitor.
+// traces.ts — the waveforms drawn in the landing hero: the heartbeat line that
+// runs under the title, and the small exact charts inside its footnotes.
 //
-// Each trace is an SVG path in a fixed 1000×60 box, drawn with
-// preserveAspectRatio="none" and non-scaling strokes, so the geometry here never
-// needs to know the rendered width. Pure and deterministic: the same inputs give
-// the same path on the server and in the browser, so hydration never redraws.
-//
-// The shapes are signatures, not plots. Each reads as what its capability does
-// (a heartbeat, a day on foot, a think tick on a schedule, deploy spikes), and
-// each is scaled by the one live number that capability has, so an active
-// system visibly looks different.
+// Pure and deterministic: the same inputs give the same path on the server and
+// in the browser, so hydration never redraws. The footnote charts live in a
+// fixed 1000×60 box, drawn with preserveAspectRatio="none" and non-scaling
+// strokes, so their geometry never needs to know the rendered width. The hero's
+// line is the exception: it is drawn in real pixels (see heartLine), because a
+// sweep that travels along it has to cross one beat per real heartbeat.
 
 export const TRACE_W = 1000;
 export const TRACE_H = 60;
 const BASE = 40;
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
+const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
+
+/**
+ * The rates the hero can draw. Wide enough for every reading the watch has
+ * sent (36–189 bpm on record), so the line, the sweep and the copy that says
+ * "keeps time at N bpm" agree; only an implausible reading is drawn at the
+ * nearest end, and the hero then stops claiming the rate is exact.
+ */
+export const BPM_MIN = 30;
+export const BPM_MAX = 200;
+export const clampBpm = (bpm: number) => clamp(bpm, BPM_MIN, BPM_MAX);
 
 /**
  * A PQRST complex per beat. The box is a six-second strip, so beats sit
@@ -23,7 +32,7 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
  * is left out, as a monitor strip cut mid-beat would show it.
  */
 export function ecgTrace(bpm: number | null): string {
-  const rate = Math.min(160, Math.max(40, bpm ?? 60));
+  const rate = clampBpm(bpm ?? 60);
   const span = (TRACE_W * 10) / rate; // 6 s strip → 1000 units; one beat = 60/rate s
   const k = Math.min(1, span / 125); // the complex was drawn for a 125-wide beat
   let d = `M0,${BASE}`;
@@ -33,20 +42,6 @@ export function ecgTrace(bpm: number | null): string {
     d += ` L${x(60)},6 L${x(65)},54 L${x(69)},${BASE} L${x(84)},${BASE} Q${x(94)},${BASE - 10} ${x(104)},${BASE}`;
   }
   return `${d} L${TRACE_W},${BASE}`;
-}
-
-/** Square pulses on a fixed period: a scheduled job. `lit` raises them. */
-export function tickTrace(count: number, width: number, lit: boolean): string {
-  const n = Math.max(1, Math.round(count));
-  const gap = TRACE_W / n;
-  const h = lit ? 30 : 18;
-  const floor = 48;
-  let d = `M0,${floor}`;
-  for (let i = 0; i < n; i++) {
-    const x = r1(i * gap + gap / 2 - width / 2);
-    d += ` L${x},${floor} L${x},${floor - h} L${r1(x + width)},${floor - h} L${r1(x + width)},${floor}`;
-  }
-  return `${d} L${TRACE_W},${floor}`;
 }
 
 /** Daily spikes from real counts, newest on the right, scaled to the busiest day in view. */
@@ -84,7 +79,114 @@ export function stepsTrace(bins: number[], nowBin: number): string {
   return d;
 }
 
-/** Hour marks for the steps strip: 06:00, 12:00 and 18:00. */
-export function hourMarks(): string {
-  return [6, 12, 18].map((h) => `M${r1((h / 24) * TRACE_W)},56 L${r1((h / 24) * TRACE_W)},60`).join(' ');
+/**
+ * The ruler under the steps bars: a tick on every hour, taller every six, so
+ * the strip reads as a day laid out like a tape measure.
+ */
+export function rulerTicks(): string {
+  let d = '';
+  for (let h = 0; h <= 24; h++) {
+    const x = r1((h / 24) * TRACE_W);
+    d += `${d ? ' ' : ''}M${x},${TRACE_H} L${x},${TRACE_H - (h % 6 === 0 ? 6 : 3)}`;
+  }
+  return d;
+}
+
+/**
+ * Where "now" falls on the ruler, in the same 1000-wide box: the far edge of
+ * the quarter-hour in progress. Everything to its right is still pending.
+ */
+export function rulerNow(nowBin: number, bins = 96): number {
+  return r1((clamp(nowBin, 0, bins - 1) + 1) * (TRACE_W / bins));
+}
+
+/**
+ * The paper speed of the hero's heartbeat line. Fixed, as a monitor's is, so
+ * the spacing of the beats IS the rate: a slower heart draws them further apart
+ * even when nothing moves (reduced motion, "hold still", print).
+ */
+export const HEART_PX_PER_SECOND = 170;
+
+export interface HeartLine {
+  /** The path, in pixels: `width` across, `height` down. */
+  d: string;
+  /** Whole beats drawn; 0 for the flat line. */
+  beats: number;
+  /**
+   * How far through each beat the R wave peaks, measured ALONG the line as a
+   * share of one beat's length. A sweep that travels the line at a constant
+   * rate (a stroke-dashoffset animation on pathLength=1) reaches the peak at
+   * exactly this phase of the beat, so anything else that pulses with it can
+   * be delayed by the same share of a beat and land on the spike.
+   */
+  peak: number;
+}
+
+/**
+ * The hero's line: one PQRST complex per beat across `width` pixels at the
+ * exact rate read, or a flat line when there is no fresh reading.
+ *
+ * The strip is a whole number of beats long, and every beat is the same shape,
+ * so every beat is the same length along the path. A sweep that crosses the
+ * whole path in `beats` heartbeats therefore crosses one complex per beat,
+ * exactly, with no clock of its own.
+ */
+export function heartLine(bpm: number | null, width: number, height: number): HeartLine {
+  const w = Math.max(1, Math.round(width));
+  const h = Math.max(24, Math.round(height));
+  const base = r1(h * 0.66);
+  if (bpm == null || !(bpm > 0)) return { d: `M0,${base} L${w},${base}`, beats: 0, peak: 0 };
+
+  const beatSec = 60 / clampBpm(bpm);
+  const seconds = clamp(w / HEART_PX_PER_SECOND, 3, 14);
+  const beats = Math.max(1, Math.round(seconds / beatSec));
+  const span = w / beats;
+  // The complex lasts about 0.75s; a heart faster than that squeezes it.
+  const pxs = (span / beatSec) * Math.min(1, beatSec / 0.85);
+
+  // One complex as [command, time from the beat's start (s), y]. Q takes a
+  // control point then an end point; L takes one point.
+  const top = r1(h * 0.06);
+  const dip = r1(h * 0.94);
+  const shape: Array<['L', number, number] | ['Q', number, number, number, number]> = [
+    ['L', 0.12, base],
+    ['Q', 0.17, r1(base - h * 0.12), 0.22, base], // P
+    ['L', 0.3, base],
+    ['L', 0.33, r1(base + h * 0.07)], // Q
+    ['L', 0.37, top], // R
+    ['L', 0.41, dip], // S
+    ['L', 0.44, base],
+    ['L', 0.54, base],
+    ['Q', 0.64, r1(base - h * 0.2), 0.74, base], // T
+  ];
+
+  let d = `M0,${base}`;
+  for (let i = 0; i < beats; i++) {
+    const x = (t: number) => r1(i * span + t * pxs);
+    for (const s of shape) d += s[0] === 'L' ? ` L${x(s[1])},${s[2]}` : ` Q${x(s[1])},${s[2]} ${x(s[3])},${s[4]}`;
+  }
+  d += ` L${w},${base}`;
+
+  // Arc length of one beat up to its R wave, over the whole beat's length.
+  let len = 0;
+  let toPeak = 0;
+  let at: [number, number] = [0, base];
+  const step = (p: [number, number]) => {
+    len += Math.hypot(p[0] - at[0], p[1] - at[1]);
+    at = p;
+  };
+  for (const s of shape) {
+    if (s[0] === 'L') step([s[1] * pxs, s[2]]);
+    else {
+      const [x0, y0] = at;
+      for (let j = 1; j <= 12; j++) {
+        const u = j / 12;
+        const q = (a: number, b: number, c: number) => (1 - u) ** 2 * a + 2 * (1 - u) * u * b + u ** 2 * c;
+        step([q(x0, s[1] * pxs, s[3] * pxs), q(y0, s[2], s[4])]);
+      }
+    }
+    if (s[0] === 'L' && s[2] === top) toPeak = len;
+  }
+  step([span, base]);
+  return { d, beats, peak: Math.round((toPeak / len) * 1000) / 1000 };
 }
