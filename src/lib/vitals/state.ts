@@ -34,7 +34,8 @@ export interface VitalsState {
    * When the latest heart-rate reading itself was taken. Unlike
    * `lastSyncedAt`, never a WHOOP recovery row's time, so a page that states
    * how old the pulse is (the landing sentence) is not misled by a newer
-   * recovery score. Absent when there is no heart-rate reading at all.
+   * recovery score. Absent when there is no heart-rate reading, or only a
+   * stale one: how long the watch has been off is not for the public feed.
    */
   pulseAt?: string;
 }

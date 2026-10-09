@@ -23,6 +23,11 @@
     an id that lives in your browser tab and dies with it, with no IP address and no identity attached.
   </p>
   <p>
+    If you choose how the home page's header reads (sentence, place or notes), a one-word
+    <code>sr_hero_view</code> cookie remembers that choice for a year and holds nothing else. Choose
+    the view the hour would have picked anyway and the cookie is deleted.
+  </p>
+  <p>
     Pages reach you through Cloudflare, and the site runs on a server rented from Hetzner in the EU, so
     both see the ordinary technical details any website request carries, like your IP address, for as
     long as their own logs keep them.
@@ -40,7 +45,7 @@
     name, email address and profile picture, and the site checks the email against the people I've
     invited. If you aren't on that list you're turned away and nothing is kept, apart from a line in the
     server log saying the address tried and was refused. If you are, the site sets a session cookie so
-    you stay signed in, and that's the only cookie it uses.
+    you stay signed in. Apart from the header choice above, that's the only cookie it uses.
   </p>
 
   <h2>If you connect a Gmail account</h2>

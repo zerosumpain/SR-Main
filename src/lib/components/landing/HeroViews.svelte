@@ -48,7 +48,14 @@
   // register as it mounts, and each change tells the rambler to measure again.
   import { tick } from 'svelte';
   import { scenery } from '$lib/landing/ramblers/scenery';
-  import { HERO_VIEWS, defaultHeroView, heroViewCookie, storedChoice, type HeroViewChoice } from '$lib/landing/hero-view';
+  import {
+    HERO_VIEWS,
+    defaultHeroView,
+    heroViewCookie,
+    parseHeroView,
+    storedChoice,
+    type HeroViewChoice,
+  } from '$lib/landing/hero-view';
 
   let {
     choice,
@@ -94,61 +101,79 @@
   type Transition = { finished: Promise<void> };
   type ViewTransitionDoc = Document & { startViewTransition?: (update: () => Promise<void>) => Transition };
 
-  async function pick(next: HeroView) {
-    // The hour's own view clears the choice, so "auto" needs no button of its own.
-    const keep = storedChoice(next, defaultHeroView(new Date()));
+  // Writes the remembered choice, or clears it when there is none to keep.
+  function remember(keep: HeroView | null) {
     document.cookie = heroViewCookie(keep, location.protocol === 'https:');
-    source = keep ? 'cookie' : 'auto';
-    // A ?view= link is a one-visit override; once the visitor chooses, the
-    // address stops claiming a view they have moved away from.
-    if (new URLSearchParams(location.search).has('view')) {
-      // The router's own replaceState, fetched only here: the kit's client is
-      // already loaded by every page, so this costs nothing, and a static
-      // import would charge all of it to the home route's budget. The home
-      // page keeps no shallow-routing state, so there is none to carry over.
-      const { replaceState } = await import('$app/navigation');
-      const url = new URL(location.href);
-      url.searchParams.delete('view');
-      replaceState(url, {});
-    }
-    if (next === view) return;
+  }
 
-    // The latest pick wins if an earlier one is still fetching its view.
+  async function pick(next: HeroView) {
+    // Every click, even one back to the view on screen, outdates a pick that
+    // is still fetching its view: the latest one wins.
     const ask = ++asked;
-    let Next: HeroViewComponent;
-    try {
-      Next = await loadHeroView(next);
-    } catch {
-      // Offline, or a release moved the chunk: a full load of the page
-      // still shows the chosen view (the cookie, or the hour, now says it).
-      location.reload();
-      return;
-    }
-    if (ask !== asked) return;
-    const swap = () => {
-      view = next;
-      View = Next;
-    };
+    // The hour's own view clears the choice, so "auto" needs no button of its own.
+    const had = { source, keep: parseHeroView(document.cookie.match(/(?:^|;\s*)sr_hero_view=([^;]*)/)?.[1]) };
+    const keep = storedChoice(next, defaultHeroView(new Date()));
+    remember(keep);
+    source = keep ? 'cookie' : 'auto';
 
-    const doc = document as ViewTransitionDoc;
-    if (!doc.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      swap();
-      await tick();
-    } else {
-      // Named only while it runs, so the hero is never its own stacking
-      // context otherwise; the class keeps the rest of the page still.
-      const html = document.documentElement;
-      root.style.setProperty('view-transition-name', 'hero-view');
-      html.classList.add('hero-swapping');
-      const t = doc.startViewTransition(async () => {
+    if (next !== view) {
+      let Next: HeroViewComponent;
+      try {
+        Next = await loadHeroView(next);
+      } catch {
+        if (ask !== asked) return;
+        // A release moved the chunk: a full load shows the chosen view (the
+        // cookie, or the hour, now says it). Offline, a reload would only
+        // trade the page for the browser's error screen, so keep the view on
+        // screen and the choice as it was; the next click tries again.
+        if (navigator.onLine) location.reload();
+        else {
+          remember(had.keep);
+          source = had.source;
+        }
+        return;
+      }
+      if (ask !== asked) return;
+      const swap = () => {
+        view = next;
+        View = Next;
+      };
+
+      const doc = document as ViewTransitionDoc;
+      if (!doc.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) {
         swap();
         await tick();
-      });
-      await t.finished.catch(() => {});
-      root.style.removeProperty('view-transition-name');
-      html.classList.remove('hero-swapping');
+      } else {
+        // Named only while it runs, so the hero is never its own stacking
+        // context otherwise; the class keeps the rest of the page still.
+        const html = document.documentElement;
+        root.style.setProperty('view-transition-name', 'hero-view');
+        html.classList.add('hero-swapping');
+        const t = doc.startViewTransition(async () => {
+          swap();
+          await tick();
+        });
+        await t.finished.catch(() => {});
+        root.style.removeProperty('view-transition-name');
+        html.classList.remove('hero-swapping');
+      }
+      requestAnimationFrame(() => requestAnimationFrame(() => (settle += 1)));
     }
-    requestAnimationFrame(() => requestAnimationFrame(() => (settle += 1)));
+
+    // A ?view= link is a one-visit override; once the visitor chooses, the
+    // address stops claiming a view they have moved away from. A real
+    // (replacing) navigation, not a shallow one, so the router's own URL and
+    // the history entry lose it too and Back returns to the visitor's pick.
+    // The reload's data asks the cookie just written, so it names the view
+    // already on screen and the component is the one already loaded. The
+    // router is fetched only here: every page loads it anyway, and a static
+    // import would charge it to the home route's budget.
+    if (ask === asked && new URLSearchParams(location.search).has('view')) {
+      const { goto } = await import('$app/navigation');
+      const url = new URL(location.href);
+      url.searchParams.delete('view');
+      await goto(url, { replaceState: true, noScroll: true, keepFocus: true });
+    }
   }
 </script>
 

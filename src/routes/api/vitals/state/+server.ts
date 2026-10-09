@@ -61,7 +61,11 @@ async function computeVitalsState(): Promise<VitalsState> {
     if (latestHR?.value) {
       state.pulse = roundPulse(fromStoredMetric(latestHR.value));
       latestDataTime = latestHR.date;
-      state.pulseAt = new Date(latestHR.date * 1000).toISOString();
+      // Only a fresh reading's time is published: an old one would tell any
+      // caller exactly how long the watch has been off.
+      if (!isStale(Date.now() / 1000 - latestHR.date)) {
+        state.pulseAt = new Date(latestHR.date * 1000).toISOString();
+      }
       state.sources.heartRate = true;
     }
 
