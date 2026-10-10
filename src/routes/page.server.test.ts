@@ -18,8 +18,9 @@ vi.mock('$lib/server/owner', () => ({ isOwnerRequest: async () => false }));
 const getSetting = vi.fn();
 vi.mock('$lib/server/models/settings', () => ({ getSetting, setSetting: vi.fn(), deleteSetting: vi.fn() }));
 
-const { load } = await import('./+page.server');
 const { DEFAULT_LANDING_TAGLINE } = await import('$lib/constants/landing-tagline');
+// Imported fresh per test: the tagline store remembers its last good line.
+let load: typeof import('./+page.server').load;
 
 function event() {
   const headers: Record<string, string> = {};
@@ -40,8 +41,10 @@ async function run() {
   return { data, headers: e.headers };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   getSetting.mockReset();
+  vi.resetModules();
+  ({ load } = await import('./+page.server'));
 });
 
 describe('landing load: tagline', () => {
@@ -60,6 +63,8 @@ describe('landing load: tagline', () => {
     expect((await run()).data.tagline).toBe(DEFAULT_LANDING_TAGLINE);
   });
 
+  // Not new with the tagline, but the tagline depends on it: a shared cache
+  // would keep serving the old line after a save.
   it('stays out of shared caches, so a saved tagline shows on the next load', async () => {
     getSetting.mockResolvedValue(null);
     expect((await run()).headers['cache-control']).toBe('private, no-cache');

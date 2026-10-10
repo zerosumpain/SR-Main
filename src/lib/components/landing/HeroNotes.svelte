@@ -842,6 +842,13 @@
     .hn-mast {
       width: fit-content;
     }
+    /* The title alone sets the mast's width, so the date stamp keeps its
+       corner beside "JK's" however long the owner's tagline runs: the line
+       wraps under the title rather than widening the mast. (The default line
+       is narrower than the title, so it reads exactly as before.) */
+    .hn-mast :global(.ht-lede) {
+      contain: inline-size;
+    }
     .hn-pulse {
       grid-template-columns: subgrid;
     }

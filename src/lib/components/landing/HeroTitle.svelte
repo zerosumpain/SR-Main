@@ -31,6 +31,9 @@
     font-size: var(--fs-body-lg);
     line-height: 1.4;
     color: rgba(237, 228, 212, 0.82);
+    /* The line is the owner's (up to 200 characters): a pasted URL or other
+       unbroken run wraps inside the column instead of running off a phone. */
+    overflow-wrap: anywhere;
   }
   @media (max-width: 760px) {
     .ht-lede {

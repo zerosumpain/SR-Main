@@ -9,6 +9,7 @@ import { heroActivitySchema } from '$lib/server/hero-slot-policy';
 import { isShowcase } from '$lib/server/showcase';
 import { landingTaglineSchema } from '$lib/server/landing-tagline-schema';
 import { getSavedLandingTagline, saveLandingTagline } from '$lib/server/landing-tagline';
+import { LANDING_TAGLINE_MAX } from '$lib/constants/landing-tagline';
 
 export const load: PageServerLoad = async (event) => {
   // Showcase ($lib/server/showcase): not today's step count, nor the activity
@@ -24,18 +25,18 @@ export const load: PageServerLoad = async (event) => {
 };
 
 export const actions: Actions = {
-  // The masthead's subtitle. "Reset to default" and an empty save both delete
-  // the setting, so the built-in line shows again.
+  // The masthead's subtitle. An empty save (what the panel's "Reset to
+  // default" leaves in the box) deletes the setting, so the built-in line
+  // shows again.
   tagline: async ({ request }) => {
     const form = await request.formData();
-    if (form.get('intent') === 'reset') {
-      await saveLandingTagline('');
-      return { taglineSaved: true, taglineReset: true };
-    }
     const raw = form.get('tagline');
-    const parsed = landingTaglineSchema.safeParse(typeof raw === 'string' ? raw : '');
+    const typed = typeof raw === 'string' ? raw : '';
+    const parsed = landingTaglineSchema.safeParse(typed);
     if (!parsed.success) {
-      return fail(400, { taglineError: parsed.error.issues.map(i => i.message).join(' '), taglineValue: typeof raw === 'string' ? raw : '' });
+      // The typed line goes back so a full-page (no-JS) submit refills the box
+      // with it; capped, so the response never echoes more than the box holds.
+      return fail(400, { taglineError: parsed.error.issues.map(i => i.message).join(' '), taglineValue: typed.slice(0, LANDING_TAGLINE_MAX) });
     }
     await saveLandingTagline(parsed.data);
     return { taglineSaved: true, taglineReset: parsed.data === '' };

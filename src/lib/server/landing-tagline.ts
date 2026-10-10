@@ -8,6 +8,20 @@ import { landingTaglineSchema } from './landing-tagline-schema';
 
 export const LANDING_TAGLINE_KEY = 'landing.tagline';
 
+/**
+ * How long the landing load waits for the read. The pool has five connections
+ * and no acquire timeout, and this read sits in the landing's awaited
+ * Promise.all, so a busy pool would otherwise hold up first paint.
+ */
+export const LANDING_TAGLINE_READ_MS = 300;
+
+/**
+ * The last tagline read successfully in this process, served while a read
+ * fails or runs late so an outage keeps the owner's line rather than flipping
+ * to the default. Undefined until the first good read.
+ */
+let lastGood: string | undefined;
+
 /** The owner's saved tagline, or null when none is saved (or what is saved no longer validates). */
 export async function getSavedLandingTagline(): Promise<string | null> {
   const stored = await getSetting<{ text?: unknown }>(LANDING_TAGLINE_KEY);
@@ -16,14 +30,24 @@ export async function getSavedLandingTagline(): Promise<string | null> {
 }
 
 /**
- * The tagline the masthead shows. Never throws: an unreadable database falls
- * back to the default, so the front page never breaks over its subtitle.
+ * The tagline the masthead shows. Never throws and never waits longer than
+ * LANDING_TAGLINE_READ_MS: a failed or slow read serves the last good line
+ * (or the default before there is one), so the front page never breaks or
+ * stalls over its subtitle.
  */
 export async function getLandingTagline(): Promise<string> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<undefined>((resolve) => {
+    timer = setTimeout(() => resolve(undefined), LANDING_TAGLINE_READ_MS);
+  });
+  const read = getSavedLandingTagline().then(
+    (saved) => (lastGood = saved ?? DEFAULT_LANDING_TAGLINE),
+    () => undefined,
+  );
   try {
-    return (await getSavedLandingTagline()) ?? DEFAULT_LANDING_TAGLINE;
-  } catch {
-    return DEFAULT_LANDING_TAGLINE;
+    return (await Promise.race([read, late])) ?? lastGood ?? DEFAULT_LANDING_TAGLINE;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -35,4 +59,5 @@ export async function getLandingTagline(): Promise<string> {
 export async function saveLandingTagline(text: string): Promise<void> {
   if (!text) await deleteSetting(LANDING_TAGLINE_KEY);
   else await setSetting(LANDING_TAGLINE_KEY, { text });
+  lastGood = text || DEFAULT_LANDING_TAGLINE;
 }

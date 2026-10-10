@@ -31,6 +31,22 @@ describe('landing tagline schema', () => {
     expect(landingTaglineSchema.safeParse(value).success).toBe(false);
   });
 
+  it.each([
+    ['a line separator (U+2028)', 'one\u2028two'],
+    ['a paragraph separator (U+2029)', 'one\u2029two'],
+    ['a right-to-left override (U+202E)', 'abc\u202Edef'],
+    ['a bidi isolate (U+2066)', 'abc\u2066def\u2069'],
+    ['a zero-width space (U+200B)', 'zero\u200Bwidth'],
+    ['a soft hyphen (U+00AD)', 'soft\u00ADhyphen'],
+  ])('rejects %s', (_label, value) => {
+    expect(landingTaglineSchema.safeParse(value).success).toBe(false);
+  });
+
+  it('keeps the zero-width joiner that emoji sequences need', () => {
+    const family = 'Hi from \u{1F468}\u200D\u{1F469}\u200D\u{1F467} and \u{1F3F3}\uFE0F\u200D\u{1F308}';
+    expect(landingTaglineSchema.parse(family)).toBe(family);
+  });
+
   it.each([null, undefined, 42, { text: 'x' }])('rejects a non-string: %j', (value) => {
     expect(landingTaglineSchema.safeParse(value).success).toBe(false);
   });

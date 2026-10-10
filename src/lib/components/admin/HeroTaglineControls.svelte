@@ -1,7 +1,9 @@
 <script lang="ts">
   // The landing masthead's subtitle, the line under "JK's strange ramblings".
-  // Saved to app_settings (`landing.tagline`); an empty save or "Reset to
-  // default" deletes the setting so the built-in line shows again.
+  // Saved to app_settings (`landing.tagline`); saving an empty box deletes
+  // the setting so the built-in line shows again. "Reset to default" only
+  // empties the box, like the animation panel's "Reset controls": nothing
+  // changes until Save, so the owner's line can still be had back by reloading.
   import { enhance } from '$app/forms';
   import { untrack } from 'svelte';
   import { DEFAULT_LANDING_TAGLINE, LANDING_TAGLINE_MAX } from '$lib/constants/landing-tagline';
@@ -12,7 +14,10 @@
     result?: { taglineSaved?: boolean; taglineReset?: boolean; taglineError?: string; taglineValue?: string } | null;
   } = $props();
 
-  let draft = $state(untrack(() => tagline ?? ''));
+  // A failed full-page (no-JS) save comes back with the typed line, so the box
+  // keeps it; with JS, enhance keeps the draft and this runs only once anyway.
+  let draft = $state(untrack(() => result?.taglineValue ?? tagline ?? ''));
+  let unsaved = $derived(draft.trim() !== (tagline ?? ''));
   let saving = $state(false);
 </script>
 
@@ -35,11 +40,11 @@
         placeholder={DEFAULT_LANDING_TAGLINE} bind:value={draft} aria-describedby="hero-tagline-count" />
     </label>
     <p class="summary" id="hero-tagline-count">{draft.length} / {LANDING_TAGLINE_MAX} characters ·
-      {tagline === null ? 'Showing the default.' : 'Showing your saved line.'}</p>
+      {tagline === null ? 'Showing the default.' : 'Showing your saved line.'}{#if unsaved}{' '}Unsaved: press Save tagline.{/if}</p>
     <div class="actions">
       <button class="nm-btn-ghost save" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save tagline'}</button>
-      <button class="nm-btn-ghost" type="submit" name="intent" value="reset" disabled={saving || tagline === null}
-        formnovalidate>Reset to default</button>
+      <button class="nm-btn-ghost" type="button" disabled={saving || draft === ''}
+        onclick={() => { draft = ''; }}>Reset to default</button>
       <a href="/" target="_blank" rel="noreferrer">Open homepage ↗</a>
     </div>
     {#if result?.taglineError}<p role="alert">{result.taglineError}</p>{/if}
