@@ -11,10 +11,9 @@ import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ fetch, locals, getClientAddress, cookies, url, setHeaders }) => {
   // Which way the hero reads: a ?view= link (never remembered), then the
-  // visitor's own choice from the sr_hero_view cookie, then the hour in London
-  // (the place after dusk, notes at the weekend, the sentence on weekdays).
+  // visitor's own choice from the sr_hero_view cookie, then the notes.
   // Chosen here so the first paint already shows it.
-  const heroView = chooseHeroView({ query: url.searchParams.get('view'), cookie: cookies.get(HERO_VIEW_COOKIE), at: new Date() });
+  const heroView = chooseHeroView({ query: url.searchParams.get('view'), cookie: cookies.get(HERO_VIEW_COOKIE) });
 
   // This response differs by visitor (that cookie, the owner's banner and
   // Admin link below) and by the time of day. Nothing caches it today: the

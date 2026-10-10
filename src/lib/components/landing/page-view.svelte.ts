@@ -15,7 +15,6 @@
 import { getContext, setContext, tick, type Component } from 'svelte';
 import {
   HERO_VIEWS,
-  defaultHeroView,
   heroViewCookie,
   parseHeroView,
   storedChoice,
@@ -97,7 +96,7 @@ export class PageView {
   // ?view= link, the reload after the address drops one) resets them.
   /** The view on screen now. */
   view: HeroView = $derived(this.#data().choice.view);
-  /** Why it is on screen: a link, the visitor's cookie, or the hour. */
+  /** Why it is on screen: a link, the visitor's cookie, or the default. */
   source: HeroViewChoice['source'] = $derived(this.#data().choice.source);
   /** The hero component on screen. */
   hero: HeroViewComponent = $derived(this.#data().hero);
@@ -125,7 +124,7 @@ export class PageView {
     return this.#init();
   }
 
-  /** What the server rendered and why, including the hour's own view (`auto`). */
+  /** What the server rendered and why, including the default view (`auto`). */
   get choice(): HeroViewChoice {
     return this.#init().choice;
   }
@@ -146,9 +145,9 @@ export class PageView {
     // Every click, even one back to the view on screen, outdates a pick that
     // is still fetching its view: the latest one wins.
     const ask = ++this.#asked;
-    // The hour's own view clears the choice, so "auto" needs no button of its own.
+    // The default view clears the choice, so "auto" needs no button of its own.
     const had = { source: this.source, keep: parseHeroView(document.cookie.match(/(?:^|;\s*)sr_hero_view=([^;]*)/)?.[1]) };
-    const keep = storedChoice(next, defaultHeroView(new Date()));
+    const keep = storedChoice(next);
     this.#remember(keep);
     this.source = keep ? 'cookie' : 'auto';
 
@@ -159,7 +158,7 @@ export class PageView {
       } catch {
         if (ask !== this.#asked) return;
         // A release moved a chunk: a full load shows the chosen view (the
-        // cookie, or the hour, now says it). Offline, a reload would only
+        // cookie, or the default, now says it). Offline, a reload would only
         // trade the page for the browser's error screen, so keep the view on
         // screen and the choice as it was; the next click tries again. A
         // ?view= in the address would outrank the cookie on the reload, so
