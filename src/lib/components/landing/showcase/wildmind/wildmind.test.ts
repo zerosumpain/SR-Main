@@ -3,12 +3,14 @@ import { createRawSnippet } from 'svelte';
 import { render } from 'svelte/server';
 import WildmindMap from './WildmindMap.svelte';
 import HoldStill from './HoldStill.svelte';
-import { CADENCE, WildmindPoll, along, route } from './wildmind-poll.svelte';
+import { CADENCE, ENGAGED, ENGAGED_MS, WildmindPoll, along, route } from './wildmind-poll.svelte';
 import { fixtureGlass, wildmindFixture } from '$lib/landing/wildmind.fixture';
 import { offlineShowcase, type WildmindShowcase } from '$lib/landing/wildmind';
 
 const NOW = Date.parse('2026-10-10T12:00:00Z');
 const live = () => wildmindFixture(NOW);
+/** Something the actions can listen on, outside a browser. */
+const el = () => new EventTarget() as unknown as Element;
 
 describe('WildmindMap', () => {
   it('draws the traced ground, the markers and the night wash, hidden from assistive tech', () => {
@@ -137,7 +139,7 @@ describe('WildmindPoll', () => {
     const first = live();
     const fetcher = vi.fn(async (_url: string) => answer({ ...first, map: null }));
     const poll = new WildmindPoll(first, { fetch: fetcher as unknown as typeof fetch, now: () => t });
-    const watch = poll.watch({} as Element);
+    const watch = poll.watch(el());
     expect(fetcher).not.toHaveBeenCalled();
     t += CADENCE.live;
     await vi.advanceTimersByTimeAsync(CADENCE.live);
@@ -183,7 +185,7 @@ describe('WildmindPoll', () => {
       const fresh = { ...first.notes!, huts: 3 };
       const fetcher = vi.fn(async (_url: string) => answer({ ...first, map: null, notes: fresh }));
       const poll = new WildmindPoll(first, { view: 'notes', fetch: fetcher as unknown as typeof fetch, now: () => t });
-      const watch = poll.watch({} as Element);
+      const watch = poll.watch(el());
       t += CADENCE.live;
       await vi.advanceTimersByTimeAsync(CADENCE.live);
       expect(String(fetcher.mock.calls[0][0])).toBe(`/api/landing/wildmind?view=notes&have=${encodeURIComponent(first.mapVersion!)}`);
@@ -199,7 +201,7 @@ describe('WildmindPoll', () => {
       const poll = new WildmindPoll(traced, { view: 'notes', fetch: fetcher as unknown as typeof fetch, now: () => NOW });
       // Until then it draws no map rather than the wrong one.
       expect(poll.data?.map).toBeNull();
-      const watch = poll.watch({} as Element);
+      const watch = poll.watch(el());
       await vi.advanceTimersByTimeAsync(0);
       expect(fetcher).toHaveBeenCalledTimes(1);
       expect(String(fetcher.mock.calls[0][0])).toBe('/api/landing/wildmind?view=notes');
@@ -213,7 +215,7 @@ describe('WildmindPoll', () => {
       const fetcher = vi.fn(async (_url: string) => answer(live()));
       const poll = new WildmindPoll(drawn, { fetch: fetcher as unknown as typeof fetch, now: () => NOW });
       expect(poll.data?.map).toBeNull();
-      const watch = poll.watch({} as Element);
+      const watch = poll.watch(el());
       await vi.advanceTimersByTimeAsync(0);
       expect(String(fetcher.mock.calls[0][0])).toBe('/api/landing/wildmind');
       expect(poll.data?.map?.pencil).toBeUndefined();
@@ -231,7 +233,7 @@ describe('WildmindPoll', () => {
       const first = place(live());
       const fetcher = vi.fn(async (_url: string) => answer({ ...first, glass: null, day: 19 }));
       const poll = new WildmindPoll(first, { view: 'place', fetch: fetcher as unknown as typeof fetch, now: () => t });
-      const watch = poll.watch({} as Element);
+      const watch = poll.watch(el());
       expect(fetcher).not.toHaveBeenCalled();
       t += CADENCE.live;
       await vi.advanceTimersByTimeAsync(CADENCE.live);
@@ -258,7 +260,7 @@ describe('WildmindPoll', () => {
       const poll = new WildmindPoll(live(), { view: 'place', fetch: fetcher as unknown as typeof fetch, now: () => NOW });
       expect(poll.data?.map).toBeNull();
       expect(poll.data?.glass ?? null).toBeNull();
-      const watch = poll.watch({} as Element);
+      const watch = poll.watch(el());
       await vi.advanceTimersByTimeAsync(0);
       expect(String(fetcher.mock.calls[0][0])).toBe('/api/landing/wildmind?view=place');
       expect(poll.data?.glass?.cards.length).toBeGreaterThan(2);
@@ -266,7 +268,7 @@ describe('WildmindPoll', () => {
       // A view that draws the map, handed the place's answer, asks for its map at once.
       const traced = vi.fn(async (_url: string) => answer(live()));
       const sentence = new WildmindPoll(place(live()), { fetch: traced as unknown as typeof fetch, now: () => NOW });
-      const w2 = sentence.watch({} as Element);
+      const w2 = sentence.watch(el());
       await vi.advanceTimersByTimeAsync(0);
       expect(String(traced.mock.calls[0][0])).toBe('/api/landing/wildmind');
       expect(sentence.data?.map?.layers.length).toBeGreaterThan(0);
@@ -275,8 +277,213 @@ describe('WildmindPoll', () => {
   });
 
   it('waits longer when the valley is resting or not answering', () => {
-    expect(new WildmindPoll({ ...live(), state: 'resting' }).cadence).toBe(60_000);
-    expect(new WildmindPoll(offlineShowcase()).cadence).toBe(120_000);
-    expect(new WildmindPoll(live()).cadence).toBe(30_000);
+    expect(new WildmindPoll({ ...live(), state: 'resting' }).cadence).toBe(30_000);
+    expect(new WildmindPoll(offlineShowcase()).cadence).toBe(60_000);
+    expect(new WildmindPoll(live()).cadence).toBe(10_000);
+  });
+
+  describe('while a reader handles the map', () => {
+    it('polls every second from the first touch until a minute after the last, then every ten', async () => {
+      vi.useFakeTimers();
+      let t = NOW;
+      const first = live();
+      const fetcher = vi.fn(async (_url: string) => answer({ ...first, map: null }));
+      const poll = new WildmindPoll(first, { fetch: fetcher as unknown as typeof fetch, now: () => t });
+      const node = el();
+      const watch = poll.watch(node);
+      expect(poll.cadence).toBe(CADENCE.live);
+      expect(ENGAGED.live).toBe(1_000);
+
+      // A pointer moving over the map, three seconds in: a quicker poll is already due, so it asks at once.
+      t += 3_000;
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(fetcher).not.toHaveBeenCalled();
+      node.dispatchEvent(new Event('pointermove'));
+      expect(poll.engaged).toBe(true);
+      expect(poll.cadence).toBe(ENGAGED.live);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      // The map is never sent again on the quick cadence.
+      expect(String(fetcher.mock.calls[0][0])).toContain(`have=${encodeURIComponent(first.mapVersion!)}`);
+
+      // Then once a second.
+      for (let i = 0; i < 5; i++) {
+        t += 1_000;
+        await vi.advanceTimersByTimeAsync(1_000);
+      }
+      expect(fetcher).toHaveBeenCalledTimes(6);
+
+      // Focus or a touch keeps it going; each moves the minute on.
+      node.dispatchEvent(new Event('focusin'));
+      const touched = t;
+      while (t < touched + ENGAGED_MS - 1_000) {
+        t += 1_000;
+        await vi.advanceTimersByTimeAsync(1_000);
+      }
+      expect(poll.engaged).toBe(true);
+      const quick = fetcher.mock.calls.length;
+      expect(quick).toBeGreaterThanOrEqual(6 + ENGAGED_MS / 1_000 - 2);
+
+      // A minute after the last, back to every ten seconds.
+      t += 2_000;
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(poll.engaged).toBe(false);
+      const settled = fetcher.mock.calls.length;
+      t += CADENCE.live - 1;
+      await vi.advanceTimersByTimeAsync(CADENCE.live - 1);
+      expect(fetcher.mock.calls.length).toBeLessThanOrEqual(settled + 1);
+      t += CADENCE.live;
+      await vi.advanceTimersByTimeAsync(CADENCE.live);
+      expect(fetcher.mock.calls.length).toBeLessThanOrEqual(settled + 2);
+      watch.destroy();
+
+      // Gone: handling the old element does nothing.
+      node.dispatchEvent(new Event('pointerenter'));
+      t += 5_000;
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(fetcher.mock.calls.length).toBeLessThanOrEqual(settled + 2);
+    });
+
+    it('still stops off screen, in a hidden tab and while held, however busy the reader', async () => {
+      vi.useFakeTimers();
+      let seen: ((e: Array<{ isIntersecting: boolean }>) => void) | null = null;
+      vi.stubGlobal(
+        'IntersectionObserver',
+        class {
+          constructor(cb: (e: Array<{ isIntersecting: boolean }>) => void) {
+            seen = cb;
+          }
+          observe() {}
+          disconnect() {}
+        },
+      );
+      let t = NOW;
+      const first = live();
+      const fetcher = vi.fn(async (_url: string) => answer({ ...first, map: null }));
+      const poll = new WildmindPoll(first, { fetch: fetcher as unknown as typeof fetch, now: () => t });
+      const node = el();
+      const watch = poll.watch(node);
+      seen!([{ isIntersecting: true }]);
+      t += 2_000;
+      node.dispatchEvent(new Event('touchstart'));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+
+      seen!([{ isIntersecting: false }]);
+      for (let i = 0; i < 5; i++) {
+        node.dispatchEvent(new Event('pointermove'));
+        t += 1_000;
+        await vi.advanceTimersByTimeAsync(1_000);
+      }
+      expect(fetcher).toHaveBeenCalledTimes(1);
+
+      seen!([{ isIntersecting: true }]);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      poll.hold(true);
+      for (let i = 0; i < 5; i++) {
+        node.dispatchEvent(new Event('keydown'));
+        t += 1_000;
+        await vi.advanceTimersByTimeAsync(1_000);
+      }
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      watch.destroy();
+      vi.unstubAllGlobals();
+    });
+  });
+
+  describe('the glide', () => {
+    let frames: FrameRequestCallback[] = [];
+    const flush = () => frames.splice(0).forEach((cb) => cb(0));
+    const step = (p: WildmindShowcase['people'][number], dx: number) => ({ ...p, x: p.x + dx, trail: [] });
+    afterEach(() => vi.unstubAllGlobals());
+    const animate = () => {
+      frames = [];
+      vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => frames.push(cb));
+      vi.stubGlobal('cancelAnimationFrame', () => (frames = []));
+    };
+
+    it('walks at an even pace over the whole wait for the next answer, and never stands still between', () => {
+      animate();
+      let t = NOW;
+      const first = live();
+      const poll = new WildmindPoll(first, { now: () => t });
+      const x0 = poll.people[0].x;
+      poll.accept({ ...first, map: null, people: first.people.map((p) => step(p, 2)) });
+      flush();
+      expect(poll.people[0].x).toBeCloseTo(x0, 2);
+      t += CADENCE.live / 4;
+      flush();
+      expect(poll.people[0].x).toBeCloseTo(x0 + 0.5, 2);
+      t += CADENCE.live / 4;
+      flush();
+      expect(poll.people[0].x).toBeCloseTo(x0 + 1, 2);
+      t += CADENCE.live / 2;
+      flush();
+      expect(poll.people[0].x).toBeCloseTo(x0 + 2, 2);
+      expect(frames).toHaveLength(0);
+    });
+
+    it('bends into the quick cadence from where everyone is drawn, without a jump', () => {
+      animate();
+      let t = NOW;
+      const first = live();
+      const poll = new WildmindPoll(first, { now: () => t });
+      const x0 = poll.people[0].x;
+      poll.accept({ ...first, map: null, people: first.people.map((p) => step(p, 2)) });
+      t += CADENCE.live / 2;
+      flush();
+      const mid = poll.people[0].x;
+      expect(mid).toBeCloseTo(x0 + 1, 2);
+
+      // The reader puts a pointer on the map; the next answer comes a second later on the quick cadence.
+      poll.engage();
+      poll.accept({ ...first, map: null, people: first.people.map((p) => step(p, 2.4)) });
+      expect(poll.people[0].x).toBeCloseTo(mid, 2);
+      flush();
+      expect(poll.people[0].x).toBeCloseTo(mid, 2);
+      t += ENGAGED.live / 2;
+      flush();
+      expect(poll.people[0].x).toBeCloseTo((mid + x0 + 2.4) / 2, 2);
+      t += ENGAGED.live / 2;
+      flush();
+      expect(poll.people[0].x).toBeCloseTo(x0 + 2.4, 2);
+    });
+
+    it('takes the answer’s other news at once, mid-glide', () => {
+      animate();
+      const first = live();
+      const poll = new WildmindPoll(first, { now: () => NOW });
+      poll.accept({ ...first, map: null, people: first.people.map((p) => ({ ...step(p, 1), doing: 'talking' })) });
+      expect(poll.people.map((p) => p.doing)).toEqual(first.people.map(() => 'talking'));
+      expect(poll.people[0].x).toBeCloseTo(first.people[0].x, 2);
+    });
+
+    it('jumps instead under prefers-reduced-motion', () => {
+      animate();
+      vi.stubGlobal('matchMedia', (q: string) => ({ matches: q.includes('reduce') }));
+      const first = live();
+      const poll = new WildmindPoll(first, { now: () => NOW });
+      const moved = first.people.map((p) => step(p, 2));
+      poll.accept({ ...first, map: null, people: moved });
+      expect(poll.people.map((p) => p.x)).toEqual(moved.map((p) => p.x));
+      expect(frames).toHaveLength(0);
+    });
+
+    it('lands and stops when held', () => {
+      animate();
+      let t = NOW;
+      const first = live();
+      const poll = new WildmindPoll(first, { now: () => t });
+      const moved = first.people.map((p) => step(p, 2));
+      poll.accept({ ...first, map: null, people: moved });
+      t += 1_000;
+      flush();
+      poll.hold(true);
+      expect(poll.people.map((p) => p.x)).toEqual(moved.map((p) => p.x));
+      t += 1_000;
+      flush();
+      expect(frames).toHaveLength(0);
+    });
   });
 });

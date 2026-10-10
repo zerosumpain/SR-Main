@@ -10,7 +10,7 @@ vi.mock('$app/environment', () => ({
 }));
 
 import { GET } from './+server';
-import { MAX_BYTES, loadWildmind, pinFixtureState, resetWildmind, wildmindShowcase } from '$lib/landing/wildmind.server';
+import { MAX_BYTES, RETRY_MS, TTL_MS, loadWildmind, pinFixtureState, readWildmind, resetWildmind, wildmindShowcase } from '$lib/landing/wildmind.server';
 import type { WildmindShowcase } from '$lib/landing/wildmind';
 
 const URL_ = 'http://wildmind.test:5397/api/public/snapshot';
@@ -44,7 +44,7 @@ describe('GET /api/landing/wildmind', () => {
   it('answers 200 offline, without asking anyone, when Wildmind is not configured', async () => {
     const { res, body } = await call();
     expect(res.status).toBe(200);
-    expect(res.headers.get('cache-control')).toBe('public, max-age=15, stale-while-revalidate=60');
+    expect(res.headers.get('cache-control')).toBe('public, max-age=1, stale-while-revalidate=5');
     expect(body.state).toBe('offline');
     expect(body.map).toBeNull();
     expect(upstream).not.toHaveBeenCalled();
@@ -112,6 +112,29 @@ describe('GET /api/landing/wildmind', () => {
     const map = JSON.stringify((await call()).body).length;
     expect(held).toBeLessThan(full / 3);
     expect(held).toBeLessThan(map / 3);
+  });
+
+  it('sends no terrain, layers, relief or contour paths again on ?have=, in any view, however often it is asked', async () => {
+    h.env.WILDMIND_SNAPSHOT_URL = URL_;
+    const full = (await call()).body;
+    const glass = (await call('?view=place')).body.glass!;
+    const paths = [full.map!.seen, full.map!.relief, ...full.map!.layers.map((l) => l.d), ...glass.cards.map((c) => JSON.stringify(c)), glass.bands]
+      .filter((d): d is string => !!d && d.length > 24)
+      .map((d) => d.slice(0, 24));
+    expect(paths.length).toBeGreaterThan(3);
+    const have = `have=${encodeURIComponent(recorded.terrainVersion)}`;
+    for (const q of [`?${have}`, `?view=notes&${have}`, `?view=place&${have}`]) {
+      for (let i = 0; i < 3; i++) {
+        const { res, body } = await call(q);
+        const text = JSON.stringify(body);
+        expect(body.map, q).toBeNull();
+        expect(body.glass ?? null, q).toBeNull();
+        expect(body).not.toHaveProperty('terrain');
+        for (const d of paths) expect(text, q).not.toContain(d);
+        expect(text.length, q).toBeLessThan(6_000);
+        expect(res.headers.get('cache-control')).toBe('public, max-age=1, stale-while-revalidate=5');
+      }
+    }
   });
 
   it('ignores a malformed ?have= and never sends it upstream', async () => {
@@ -184,6 +207,41 @@ describe('loadWildmind', () => {
       throw new TypeError('fetch failed: redirect mode is set to error');
     });
     await expect(loadWildmind(new Date(), URL_)).rejects.toThrow(/redirect/);
+  });
+});
+
+describe('readWildmind', () => {
+  const at = (ms: number) => new Date(Date.parse('2026-10-10T12:00:00Z') + ms);
+
+  it('asks Wildmind at most about once a second, however many read at once', async () => {
+    h.env.WILDMIND_SNAPSHOT_URL = URL_;
+    expect(TTL_MS).toBeLessThan(1_000);
+    expect(TTL_MS).toBeGreaterThanOrEqual(500);
+    // A crowd in the same instant shares one read.
+    await Promise.all(Array.from({ length: 50 }, () => readWildmind(at(0))));
+    expect(upstream).toHaveBeenCalledTimes(1);
+    // Within the TTL, still that one.
+    await Promise.all(Array.from({ length: 20 }, (_, i) => readWildmind(at((i * (TTL_MS - 1)) / 20))));
+    expect(upstream).toHaveBeenCalledTimes(1);
+    // A crowd polling every second for ten seconds: one read a second.
+    for (let s = 1; s <= 10; s++) await Promise.all(Array.from({ length: 30 }, (_, i) => readWildmind(at(s * 1_000 + i * 10))));
+    expect(upstream).toHaveBeenCalledTimes(11);
+  });
+
+  it('leaves Wildmind alone for a minute after a failure, answering from the last good read', async () => {
+    h.env.WILDMIND_SNAPSHOT_URL = URL_;
+    const good = await readWildmind(at(0));
+    expect(good?.snap.status).toBe('running');
+    upstream.mockImplementation(async () => new Response('down', { status: 502 }));
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(await readWildmind(at(2_000))).toBe(good);
+    expect(upstream).toHaveBeenCalledTimes(2);
+    for (let t = 3_000; t < 2_000 + RETRY_MS; t += 1_000) expect(await readWildmind(at(t))).toBe(good);
+    expect(upstream).toHaveBeenCalledTimes(2);
+    await readWildmind(at(2_000 + RETRY_MS));
+    expect(upstream).toHaveBeenCalledTimes(3);
+    expect(log).toHaveBeenCalledTimes(2);
+    log.mockRestore();
   });
 });
 

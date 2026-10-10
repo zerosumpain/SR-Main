@@ -9,10 +9,10 @@
 // ever passed upstream, redirects are refused, the body is capped and checked
 // by parseSnapshot before anything is kept.
 //
-// Each process asks at most once per TTL however many people are reading (the
-// memo shares the read in flight), answers from the last good read for a
-// minute after a failure, and never makes the front door wait more than the
-// showcase budget. The terrain is held by version and asked for with ?have=,
+// Each process asks at most once per TTL (just under a second) however many
+// people are reading (the memo shares the read in flight), answers from the
+// last good read for a minute after a failure, and never makes the front door
+// wait more than the showcase budget. The terrain is held by version and asked for with ?have=,
 // so the steady pull is the small live layer only.
 
 import { dev } from '$app/environment';
@@ -119,11 +119,29 @@ export async function loadWildmind(now: Date, base = env.WILDMIND_SNAPSHOT_URL):
   return { snap: rest, terrain, fetchedAt: now.getTime(), traced };
 }
 
+/**
+ * How long one read answers for. Just under a second, so a reader handling
+ * the map (polling every second) sees the valley move, while the process asks
+ * Wildmind at most about once a second however many people poll (its public
+ * listener allows three a second per address). The read in flight is shared,
+ * and a failure is answered from the last good read for RETRY_MS before
+ * Wildmind is asked again.
+ */
+export const TTL_MS = 900;
+/** After a failed read, ask again no sooner than this. */
+export const RETRY_MS = 60_000;
+/**
+ * The poll route's caching, matched to the memo: a reader polling every
+ * second while they handle the map gets each new frame, and a shared cache
+ * may answer a burst from one.
+ */
+export const CACHE_CONTROL = 'public, max-age=1, stale-while-revalidate=5';
+
 export const readWildmind = memoised<WildmindRead | null>((now) => loadWildmind(now), {
   name: 'wildmind',
-  ttlMs: 20_000,
+  ttlMs: TTL_MS,
   budgetMs: 400,
-  retryMs: 60_000,
+  retryMs: RETRY_MS,
   fallback: null,
 });
 
