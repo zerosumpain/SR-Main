@@ -1,3 +1,5 @@
+<svelte:options css="injected" />
+
 <script lang="ts">
   // The ring round the pulse (HeroNotes), in three takes. One shows at a
   // time; while the pen keeps time the stylesheet swaps to the next on each R

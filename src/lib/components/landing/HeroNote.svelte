@@ -1,3 +1,5 @@
+<svelte:options css="injected" />
+
 <script lang="ts" module>
   import type { StepsToday } from '$lib/landing/steps';
   import type { CalendarMonth, DayCount, Think } from '$lib/landing/rhythm';

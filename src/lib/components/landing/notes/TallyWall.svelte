@@ -1,3 +1,5 @@
+<svelte:options css="injected" />
+
 <script lang="ts">
   // The last forty days of deploys tallied on the wall: a stroke per deploy,
   // a gate for every five, a week to a line (Monday first, so the quiet

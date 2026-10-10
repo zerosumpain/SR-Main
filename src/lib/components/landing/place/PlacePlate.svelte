@@ -1,3 +1,5 @@
+<svelte:options css="injected" />
+
 <script lang="ts">
   // The place's one plate (HeroPlace): the dateline, then whichever label is
   // open explained with its link, else the key, then the lamp's caption and

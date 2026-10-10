@@ -6,7 +6,7 @@
 // `drift.test.ts` does instead: every tab, surface, permission, entitlement and native area
 // in the manifests must have a line here, and every line here must still exist there.
 
-import manifest from './app-manifest.json';
+import manifest from '$lib/native/app-manifest.json';
 import type { Twin } from './daydream';
 
 export const APP = manifest;

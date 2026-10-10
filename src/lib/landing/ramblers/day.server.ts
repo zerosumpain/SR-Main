@@ -45,7 +45,7 @@ async function appleFlags(now: Date): Promise<DayFlags> {
 }
 
 /** Last night: the latest main sleep that ended in the past eighteen hours. Durations are milliseconds. */
-async function lastNight(nowSec: number) {
+export async function lastNight(nowSec: number) {
   try {
     const [row] = await db
       .select({ inBed: whoopSleep.totalInBed, awake: whoopSleep.totalAwake })
@@ -59,7 +59,8 @@ async function lastNight(nowSec: number) {
   }
 }
 
-async function todaysRecovery(nowSec: number) {
+/** Today's recovery: the latest WHOOP score from the past day, as a band. */
+export async function todaysRecovery(nowSec: number) {
   try {
     const [row] = await db
       .select({ score: whoopRecovery.recoveryScore })

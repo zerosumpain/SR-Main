@@ -21,7 +21,7 @@
   };
   const wake = $derived(arc(132, deg(activeHours.start), deg(activeHours.end)));
   // One tick per thinking slot across the waking day.
-  const slots = $derived(Math.floor(((activeHours.end - activeHours.start) * 60) / cadence));
+  const slots = $derived(Math.ceil(((activeHours.end - activeHours.start) * 60) / cadence));
   let slow = $state(false);
 </script>
 

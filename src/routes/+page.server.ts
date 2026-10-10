@@ -3,6 +3,7 @@ import { ramblerDay } from '$lib/landing/ramblers/day.server';
 import { HEALTH_TIMEZONE } from '$lib/constants/health-day';
 import { getReleaseShowcase } from '$lib/releases/public';
 import { loadCapabilityFacts } from '$lib/landing/capabilities.server';
+import { loadShowcase } from '$lib/landing/showcase.server';
 import { getAllPosts } from '$lib/blog';
 import { isOwnerRequest } from '$lib/server/owner';
 import { HERO_VIEW_COOKIE, chooseHeroView } from '$lib/landing/hero-view';
@@ -24,11 +25,6 @@ export const load: PageServerLoad = async ({ fetch, locals, getClientAddress, co
   // neither costs the back/forward cache the way `no-store` would.
   setHeaders({ 'cache-control': 'private, no-cache' });
 
-  // Today's steps in quarter-hours, midnight to 23:59, for the steps footnote.
-  const steps = await stepsToday().catch(() => null);
-  // Coarse flags about today for the rambler (never totals, times or places).
-  const day = await ramblerDay();
-
   // The hero's dateline, "Fri 9 Oct", in the owner's day (set in capitals by CSS).
   const dateline = new Date()
     .toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: HEALTH_TIMEZONE })
@@ -43,23 +39,39 @@ export const load: PageServerLoad = async ({ fetch, locals, getClientAddress, co
     .then((r) => r.json())
     .catch(() => null);
 
-  // Awaited, NOT streamed. The streaming above exists because /api/vitals/state
-  // calls an external weather API on every render; this is a local Postgres read
-  // behind a 5-minute memo. More to the point, SvelteKit serialises streamed
-  // promises at the end of the body, so streamed data never lands in the SSR
-  // HTML, and the sentence's ship and release words draw from it on first paint.
-  const releases = await getReleaseShowcase(90);
+  // Coarse flags about today for the rambler (never totals, times or places).
+  // Started once and shared: the showcase reads its sleep and recovery bands
+  // from the same reading rather than asking the database twice.
+  const dayReading = ramblerDay();
 
-  // Cadences, the app's endpoint count and Daydream's hit rate: local reads,
-  // memoised and timeboxed in the module, so they cost the front door nothing
-  // noticeable and render server-side with everything else.
-  const capabilities = await loadCapabilityFacts();
-
-  // The two newest posts for the writing strip. Awaited so the links are in the
-  // SSR HTML; a failure just drops the strip.
-  const posts = await getAllPosts()
-    .then((all) => all.slice(0, 2).map((p) => ({ slug: p.slug, title: p.title, publishedAt: p.publishedAt })))
-    .catch(() => []);
+  // Everything below is awaited, NOT streamed, and independent, so it is read
+  // in parallel: the slowest read sets first paint, not the sum of them.
+  const [steps, day, releases, capabilities, showcase, posts] = await Promise.all([
+    // Today's steps in quarter-hours, midnight to 23:59, for the steps footnote.
+    stepsToday().catch(() => null),
+    dayReading,
+    // Awaited, NOT streamed. The streaming above exists because /api/vitals/state
+    // calls an external weather API on every render; this is a local Postgres read
+    // behind a 5-minute memo. More to the point, SvelteKit serialises streamed
+    // promises at the end of the body, so streamed data never lands in the SSR
+    // HTML, and the sentence's ship and release words draw from it on first paint.
+    getReleaseShowcase(90),
+    // Cadences, the app's endpoint count and Daydream's hit rate: local reads,
+    // memoised and timeboxed in the module, so they cost the front door nothing
+    // noticeable and render server-side with everything else.
+    loadCapabilityFacts(),
+    // The showcase below the hero: Daydream's week and impact, the health
+    // record as totals and bands, and what the app is made of. Each part is
+    // memoised and timeboxed in the module (a slow one renders as dashes, never
+    // a slow page), and awaited so the figures are in the SSR HTML that the
+    // count-ups start from.
+    loadShowcase(new Date(), { day: dayReading }),
+    // The two newest posts for the writing strip. Awaited so the links are in the
+    // SSR HTML; a failure just drops the strip.
+    getAllPosts()
+      .then((all) => all.slice(0, 2).map((p) => ({ slug: p.slug, title: p.title, publishedAt: p.publishedAt })))
+      .catch(() => []),
+  ]);
 
   // Owner-only extras: the sync banner below and the footer's Admin link.
   const isOwner = await isOwnerRequest({ locals, getClientAddress }).catch(() => false);
@@ -88,5 +100,5 @@ export const load: PageServerLoad = async ({ fetch, locals, getClientAddress, co
         .catch(() => null)
     : null;
 
-  return { heroView, steps, day, dateline, initialVitals, releases, capabilities, posts, isOwner, syncAttention, mergeablePrs };
+  return { heroView, steps, day, dateline, initialVitals, releases, capabilities, showcase, posts, isOwner, syncAttention, mergeablePrs };
 };

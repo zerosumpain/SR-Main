@@ -1,3 +1,5 @@
+<svelte:options css="injected" />
+
 <script lang="ts">
   // The landing page's header block as a marked-up sheet: the title stays
   // put, and the site's live numbers are inked around it as marginalia. The

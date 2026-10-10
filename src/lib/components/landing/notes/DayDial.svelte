@@ -1,3 +1,5 @@
+<svelte:options css="injected" />
+
 <script lang="ts">
   // The daydreamer's wait as a small dial (HeroNotes): a hand-drawn face,
   // hatched for the time still to wait till the next think. Nothing is shaded

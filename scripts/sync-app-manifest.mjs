@@ -23,7 +23,7 @@ import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const OUT = resolve(HERE, '../src/routes/projects/engine-room/lib/app-manifest.json');
+const OUT = resolve(HERE, '../src/lib/native/app-manifest.json');
 const args = process.argv.slice(2);
 const check = args.includes('--check');
 const ROOT = resolve(args.find((a) => !a.startsWith('--')) ?? process.env.SR_APPLE_IOS ?? '/home/john/sr-apple-ux-20261002/ios');

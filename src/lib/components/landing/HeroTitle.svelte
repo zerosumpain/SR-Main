@@ -1,3 +1,5 @@
+<svelte:options css="injected" />
+
 <script lang="ts">
   // The landing masthead every hero view shares: the name on two lines, then
   // the subtitle. Kept in one place because the rambler walks along the tops

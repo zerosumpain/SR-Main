@@ -1,3 +1,5 @@
+<svelte:options css="injected" />
+
 <script lang="ts">
   // The notes sheet typed up (HeroNotes): every reading as a plain term,
   // value and note, in the sentence's order. Shown by "fair copy", and what

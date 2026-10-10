@@ -1,3 +1,5 @@
+<svelte:options css="injected" />
+
 <script lang="ts">
   // One note's explanation (HeroNotes), run in as a note is set: its number
   // and head, the words, then the link. Open, it hangs at the foot of the

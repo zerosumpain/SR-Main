@@ -1,3 +1,5 @@
+<svelte:options css="injected" />
+
 <script lang="ts">
   // The foot of the notes sheet (HeroNotes): the caption with the pen's
   // tempo, then the switches, "hold still" and "fair copy". On a wide sheet

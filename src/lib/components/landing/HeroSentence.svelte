@@ -1,3 +1,5 @@
+<svelte:options css="injected" />
+
 <script lang="ts">
   // The landing page's header block: the title, then the site's live numbers
   // read out as one sentence instead of a dashboard. A heartbeat line runs
