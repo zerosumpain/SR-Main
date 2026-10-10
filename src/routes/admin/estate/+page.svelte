@@ -20,6 +20,7 @@
 
   let tab = $state<'model' | 'estate' | 'surface'>('model');
   let query = $state('');
+  let estateQuery = $state('');
   let gateFilter = $state<'all' | GateClass>('all');
 
   // $derived, not const: a plain capture would freeze these at first load and
@@ -62,6 +63,13 @@
         (gateFilter === 'all' || r.gate === gateFilter) &&
         (!q || r.path.toLowerCase().includes(q)),
     );
+  });
+
+  const filteredEstateGroups = $derived.by(() => {
+    const q = estateQuery.trim().toLowerCase();
+    return data.groups
+      .map(([host, items]) => [host, q ? items.filter((e) => e.label.toLowerCase().includes(q)) : items] as const)
+      .filter(([, items]) => items.length > 0);
   });
 
   const probed = $derived(endpoints.filter((e) => e.probeId));
@@ -145,7 +153,7 @@
   <!-- ---------------------------------------------------------- analysis -->
   <section class="nm-sec">
     <div class="nm-sec-hd"><span class="sr-label-tight">Analysis</span></div>
-    <div class="grid">
+    <div class="analysis-grid">
       <div class="tile">
         <span class="k">Catalogued</span>
         <span class="v">{endpoints.length} endpoints</span>
@@ -379,7 +387,19 @@
       {/if}
     </section>
   {:else if tab === 'estate'}
-    {#each data.groups as [host, items] (host)}
+    <section class="nm-sec">
+      <div class="filters">
+        <input
+          class="nm-text-input" type="search" placeholder="Filter services by name…"
+          bind:value={estateQuery} aria-label="Filter services by name"
+        />
+        <button class="nm-btn-ghost" type="button" onclick={() => (estateQuery = '')}>Clear filter</button>
+      </div>
+      {#if filteredEstateGroups.length === 0}
+        <p class="nm-empty">No services match.</p>
+      {/if}
+    </section>
+    {#each filteredEstateGroups as [host, items] (host)}
       <section class="nm-sec">
         <div class="nm-sec-hd">
           <span class="sr-label-tight">{data.hostLabels[host as EstateHost]}</span>
@@ -483,7 +503,7 @@
     color: var(--text-ghost);
     align-self: center;
   }
-  .grid {
+  .analysis-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
     gap: 0.75rem;
