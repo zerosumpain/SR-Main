@@ -69,12 +69,47 @@ describe('landing tagline store', () => {
     expect(setSetting).not.toHaveBeenCalled();
   });
 
-  it('serves the default, without waiting, when the read hangs', async () => {
+  it('serves the default when the first read hangs past the cold wait, then waits only the short time', async () => {
     vi.useFakeTimers();
     getSetting.mockReturnValue(new Promise(() => {}));
-    const shown = getLandingTagline();
+    let settled = false;
+    const first = getLandingTagline().finally(() => (settled = true));
     await vi.advanceTimersByTimeAsync(store.LANDING_TAGLINE_READ_MS);
-    expect(await shown).toBe(DEFAULT_LANDING_TAGLINE);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(store.LANDING_TAGLINE_COLD_READ_MS - store.LANDING_TAGLINE_READ_MS);
+    expect(await first).toBe(DEFAULT_LANDING_TAGLINE);
+
+    const next = getLandingTagline();
+    await vi.advanceTimersByTimeAsync(store.LANDING_TAGLINE_READ_MS);
+    expect(await next).toBe(DEFAULT_LANDING_TAGLINE);
+  });
+
+  it('gives the first read after a restart longer, so a slow cold read still shows the owner’s line', async () => {
+    vi.useFakeTimers();
+    getSetting.mockReturnValueOnce(
+      new Promise((resolve) => setTimeout(() => resolve({ text: 'The owner’s line.' }), 600)),
+    );
+    const shown = getLandingTagline();
+    await vi.advanceTimersByTimeAsync(600);
+    expect(await shown).toBe('The owner’s line.');
+
+    // Warm now: a hung read falls back after the short wait, to the owner's line.
+    getSetting.mockReturnValueOnce(new Promise(() => {}));
+    const next = getLandingTagline();
+    await vi.advanceTimersByTimeAsync(store.LANDING_TAGLINE_READ_MS);
+    expect(await next).toBe('The owner’s line.');
+  });
+
+  it('does not let a read that began before a save overwrite the saved line', async () => {
+    let finishOldRead!: (v: unknown) => void;
+    getSetting.mockReturnValueOnce(new Promise((resolve) => (finishOldRead = resolve)));
+    const before = getLandingTagline();
+    await saveLandingTagline('Just saved.');
+    finishOldRead({ text: 'The old line.' });
+    expect(await before).toBe('The old line.');
+
+    getSetting.mockRejectedValue(new Error('connection refused'));
+    expect(await getLandingTagline()).toBe('Just saved.');
   });
 
   it('keeps the last good line through a failed or hung read', async () => {
