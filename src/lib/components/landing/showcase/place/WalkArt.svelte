@@ -1,7 +1,7 @@
 <svelte:options css="injected" />
 
 <script lang="ts" module>
-  /** The long walk's fixed geometry, in its 1000 × 600 scene. */
+  /** The long walk's fixed geometry, in its 1000 × 600 scene: `cottage` is the town house, `window` its front window. */
   export const WALK = {
     h: 600,
     ground: 560,
@@ -14,18 +14,23 @@
 </script>
 
 <script lang="ts">
-  // The health record, drawn: a hillside of contour lines with the year on
-  // foot coming down it as one long path (a post every milestone; no day is
-  // marked on it, the path being distance, not time), a festoon of lanterns for the month's recovery readings, a
-  // row of trees for the last thirty days of steps with a dashed line at ten
-  // thousand, a moon filling with the week's sleep, and a cottage whose
-  // window glows once a beat while the pulse is fresh. A picture only;
-  // PlaceScene's labels carry every number.
-  import type { Band, Tree, Walk } from '$lib/landing/showcase-place';
+  // The health record, drawn as a walk through the city: the year on foot is
+  // one long elevated walkway, a linear park winding down between the towers
+  // (a distance marker every milestone; no day is marked on it, the walkway
+  // being distance, not time), a festoon of lights over the street for the
+  // month's recovery readings, a row of street trees for the last thirty
+  // days of steps with a dashed line at ten thousand, a moon over the towers
+  // filling with the week's sleep (still there by day, pale, as the moon so
+  // often is), and a town house whose front window glows once a beat while
+  // the pulse is fresh. A picture only; PlaceScene's labels carry every number.
+  import { along, samplePath, WALK_POINTS, type Band, type Tree, type Walk } from '$lib/landing/showcase-place';
+  import { landmark, skyline } from '$lib/landing/showcase-city';
+  import type { Box } from '$lib/landing/showcase-place';
   import { scenery } from '$lib/landing/ramblers/scenery';
+  import CityRow from './CityRow.svelte';
+  import SafeMask from './SafeMask.svelte';
 
   let {
-    lines,
     path,
     trees,
     tenK,
@@ -34,8 +39,9 @@
     string,
     moonLit,
     glow,
+    light,
+    quiet = [],
   }: {
-    lines: string[];
     path: Walk;
     trees: Tree[];
     /** The ten-thousand line's height, or null with no trees. */
@@ -47,9 +53,14 @@
     moonLit: { share: number; d: string } | null;
     /** The window glows: a fresh pulse is in. */
     glow: boolean;
+    /** Where the sun stands and how far its shadows run. */
+    light: { side: 'east' | 'west'; reach: number };
+    /** Where the labels stand: no tower window is lit behind them. */
+    quiet?: Box[];
   } = $props();
 
   const { cx, cy, r } = WALK.moon;
+  const G = WALK.ground;
   const base = WALK.trees.y + WALK.trees.h;
   const c = WALK.cottage;
   const w = WALK.window;
@@ -60,9 +71,30 @@
     { x: WALK.string.from[0], w: span * 0.1, y: WALK.string.from[1] + WALK.string.sag * 0.18 },
     { x: WALK.string.to[0] - span * 0.1, w: span * 0.1, y: WALK.string.to[1] + WALK.string.sag * 0.18 },
   ];
+  // The charts: the street trees with their ten-thousand line, and the
+  // festoon. No scenery window is lit among them and no glint or sunlit face
+  // runs through them, so the only lights there are the readings.
+  const CHARTS = [
+    { x: WALK.trees.x - 10, y: WALK.trees.y - 40, w: WALK.trees.w + 20, h: WALK.trees.h + 44 },
+    { x: WALK.string.from[0] - 8, y: WALK.string.from[1] - 10, w: span + 16, h: WALK.string.sag + 34 },
+  ];
+  let hush = $derived([...quiet, ...CHARTS]);
+  // A park street: lower blocks set wider apart, plain fronts, a diagrid
+  // tower the one landmark. Low under the heading, clear of the town house,
+  // unlit behind the type.
+  const MARK = landmark('diagrid', 470, 54, 330, G);
+  let FAR = $derived(skyline({ quiet: hush, seed: 21, street: 'park', from: -700, to: 1700, base: G, lo: 120, hi: 300, wide: [34, 80], gap: [4, 18], clear: [[462, 532]], low: [[660, 1060, 260]], dark: [[640, 1060]], litShare: 0.12 }));
+  let NEAR = $derived(skyline({ quiet: hush, seed: 22, street: 'park', from: -700, to: 1700, base: G, lo: 70, hi: 210, wide: [50, 104], gap: [16, 44], clear: [[-6, 186]], low: [[660, 1060, 200]], dark: [[640, 1060]], litShare: 0.2 }));
+  // The park on the walkway: planting along its rail.
+  const SAMPLES = samplePath(WALK_POINTS);
+  const PLANTS = Array.from({ length: 46 }, (_, i) => along(SAMPLES, (i + 0.5) / 46));
+  // Piers under the lowest run, down to the street.
+  const [a, b] = [WALK_POINTS[6], WALK_POINTS[7]];
+  const PIERS = [150, 300, 450].map((x) => `M${x},${Math.round(a[1] + ((x - a[0]) * (b[1] - a[1])) / (b[0] - a[0]) + 5)}V${G}`).join('');
 </script>
 
 <svg viewBox="0 0 1000 {WALK.h}" preserveAspectRatio="none" focusable="false">
+  <SafeMask id="sp-wl-safe" side="r" h={WALK.h} boxes={hush} />
   <defs>
     <!-- The path draws itself: a solid stroke revealing the dotted trail. -->
     <mask id="sp-wl-reveal" maskUnits="userSpaceOnUse" x="0" y="0" width="1000" height={WALK.h}>
@@ -75,19 +107,23 @@
     </radialGradient>
   </defs>
 
-  <!-- The hillside: contour lines, texture only. -->
-  <g class="wk-lines">
-    {#each lines as d, i (i)}<path {d} />{/each}
-  </g>
-
-  <!-- Sleep: the moon, filling towards full. -->
+  <!-- Sleep: the moon over the towers, filling towards full. -->
   <g class="wk-moon" data-part="sleep">
     <circle class="mo-ring" {cx} {cy} {r} />
     {#if moonLit && moonLit.d}<path class="mo-lit" d={moonLit.d} />{/if}
   </g>
 
-  <!-- The year on foot and its milestones. -->
+  <!-- The street: a layer back, then the towers the walkway winds between. -->
+  <CityRow line={FAR} far side={light.side} base={G} safe="sp-wl-safe" mark={MARK} glow={300} />
+  <CityRow line={NEAR} side={light.side} reach={light.reach} base={G} safe="sp-wl-safe" />
+  <path class="wk-pier" d={PIERS} />
+
+  <!-- The year on foot: the elevated walkway, its planting and its distance markers. -->
   <g class="wk-walk" data-part="km">
+    <path class="wk-edge" d={path.d} />
+    <path class="wk-deck" d={path.d} />
+    <path class="wk-rail" d={path.d} />
+    {#each PLANTS as [x, y], i (i)}<circle class="wk-plant" cx={x} cy={y - 4.5} r={i % 3 ? 2 : 2.8} />{/each}
     <path class="wk-trail" d={path.d} mask="url(#sp-wl-reveal)" />
     {#each path.posts as p, i (i)}
       <path class="wk-post" d="M{p.x},{p.y - 1} V{p.y - 9}" style:--i={i} />
@@ -96,10 +132,11 @@
     <path class="wk-gate" d="M{path.end[0] - 6},{path.end[1] + 8} V{path.end[1] - 6} M{path.end[0] + 6},{path.end[1] + 8} V{path.end[1] - 6} M{path.end[0] - 7},{path.end[1] - 2} H{path.end[0] + 7} M{path.end[0] - 7},{path.end[1] + 3} H{path.end[0] + 7}" />
   </g>
 
-  <!-- Recovery: thirty lanterns on a string, good mornings first. -->
+  <!-- Recovery: thirty lights on a festoon over the street, good mornings first. -->
   <g class="wk-lamps" data-part="recovery">
     {#if lamps.length}
-      <path class="wk-pole" d="M{WALK.string.from[0]},{WALK.string.from[1] - 6} V{WALK.trees.y} M{WALK.string.to[0]},{WALK.string.to[1] - 6} V{WALK.trees.y}" />
+      <path class="wk-pole" d="M{WALK.string.from[0]},{WALK.string.from[1] - 6} V{G} M{WALK.string.to[0]},{WALK.string.to[1] - 6} V{G}" />
+      <path class="wk-pole-cap" d="M{WALK.string.from[0] - 4},{WALK.string.from[1] - 6} h8 M{WALK.string.to[0] - 4},{WALK.string.to[1] - 6} h8" />
       <path class="wk-string" d={string} />
       {#each lamps as l, i (i)}
         <g class="lamp" data-band={l.band} style:--i={i}>
@@ -112,15 +149,13 @@
     {/if}
   </g>
 
-  <!-- The last thirty days: a tree a day, as tall as its steps. -->
+  <!-- The last thirty days: a street tree a day, as tall as its steps. -->
   <g class="wk-trees" data-part="over">
+    <rect class="wk-verge" x={WALK.trees.x - 8} y={base - 2} width={WALK.trees.w + 14} height="4" />
     {#each trees as t (t.i)}
-      <path
-        class="tree"
-        class:over={t.over}
-        d="M{t.x},{base - t.h} L{t.x + tw / 2},{base - 4} L{t.x - tw / 2},{base - 4} Z"
-      />
-      <path class="trunk" d="M{t.x},{base - 4} V{base}" />
+      {@const cr = Math.max(1.6, Math.min(tw / 2, t.h / 2.4))}
+      <path class="trunk" d="M{t.x},{base - t.h + cr} V{base}" />
+      <circle class="tree" class:over={t.over} cx={t.x} cy={base - t.h + cr} r={cr} />
       {#if t.tallest}<circle class="tree-top" cx={t.x} cy={base - t.h - 4} r="2.6" />{/if}
     {/each}
     {#if tenK != null}
@@ -128,15 +163,23 @@
     {/if}
   </g>
 
-  <!-- Today: the cottage, its window glowing with the pulse. -->
+  <!-- Today: the town house, its front window glowing with the pulse. -->
   <g class="wk-home" data-part="today">
-    <rect class="co-wall" x={c.x + 6} y={c.wall} width={c.w - 12} height={WALK.ground - c.wall} />
-    <path class="co-roof" d="M{c.x},{c.wall + 2} L{c.x + c.w / 2},{c.peak} L{c.x + c.w},{c.wall + 2} Z" />
-    <rect class="co-chim" x={c.x + c.w * 0.72} y={c.peak + 6} width="10" height="22" />
-    <rect class="co-door" x={c.x + c.w - 46} y={c.wall + 26} width="18" height={WALK.ground - c.wall - 26} />
+    <!-- A modern terrace: flat roof and a glass balustrade, a full-width glazed upper floor, a set-back roof room. -->
+    <rect class="co-wall" x={c.x + 6} y={c.peak} width={c.w - 12} height={G - c.peak} />
+    <rect class="co-face" x={light.side === 'east' ? c.x + 6 : c.x + c.w - 18} y={c.peak} width="12" height={G - c.peak} />
+    <rect class="co-sun" mask="url(#sp-wl-safe)" x={light.side === 'east' ? c.x + 6 : c.x + c.w - 18} y={c.peak} width="12" height={G - c.peak} />
+    <rect class="co-room" x={c.x + c.w * 0.5} y={c.peak - 18} width="44" height="18" />
+    <path class="co-rail" d="M{c.x + 4},{c.peak - 9} H{c.x + c.w * 0.5} M{c.x + 4},{c.peak - 9} V{c.peak}" />
+    <rect class="co-slab" x={c.x + 2} y={c.peak - 3} width={c.w - 4} height="5" />
+    <rect class="co-upper" x={c.x + 14} y={c.peak + 10} width={c.w - 28} height="36" />
+    <path class="co-mull" d="M{c.x + 14 + (c.w - 28) / 4},{c.peak + 10} v36 M{c.x + c.w / 2},{c.peak + 10} v36 M{c.x + 14 + ((c.w - 28) * 3) / 4},{c.peak + 10} v36" />
+    <path class="co-upper-lit" d="M{c.x + 16},{c.peak + 12}h{(c.w - 28) / 4 - 4}v32h{-((c.w - 28) / 4 - 4)}Z" />
+    <rect class="co-slab" x={c.x + 4} y={c.wall - 2} width={c.w - 8} height="4" />
+    <rect class="co-door" x={c.x + c.w - 46} y={c.wall + 26} width="18" height={G - c.wall - 26} />
     {#if glow}<circle class="co-halo" cx={w.x + w.w / 2} cy={w.y + w.h / 2} r="40" clip-path="url(#sp-wl-sky)" />{/if}
     <rect class="co-win" class:lit={glow} x={w.x} y={w.y} width={w.w} height={w.h} />
-    <path class="co-bars" d="M{w.x + w.w / 2},{w.y} V{w.y + w.h} M{w.x},{w.y + w.h / 2} H{w.x + w.w}" />
+    <path class="co-bars" d="M{w.x + w.w / 2},{w.y} V{w.y + w.h}" />
   </g>
 </svg>
 <!-- The lantern string's two flat ends, by the poles, are steps for the
@@ -162,21 +205,40 @@
       display: none;
     }
   }
-  .wk-lines path {
-    fill: none;
-    stroke: rgba(127, 184, 192, 0.12);
-    stroke-width: 1;
-  }
-  .wk-lines path:nth-child(4n + 1) {
-    stroke: rgba(127, 184, 192, 0.2);
-  }
   .mo-ring {
-    fill: #0e1112;
+    fill: var(--city-disc, #0e1112);
     stroke: rgba(237, 228, 212, 0.45);
     stroke-width: 1;
   }
+  /* By day the moon is a pale cool disc in the blue, never a second sun; its share still reads. */
   .mo-lit {
-    fill: #efe6d6;
+    fill: var(--city-moon, #efe6d6);
+    opacity: calc(0.45 + 0.55 * var(--moon, 1));
+  }
+  .wk-pier {
+    stroke: var(--city-deck, #15171b);
+    stroke-width: 5;
+  }
+  .wk-edge {
+    fill: none;
+    stroke: rgba(237, 228, 212, 0.2);
+    stroke-width: 11;
+    stroke-linejoin: round;
+  }
+  .wk-deck {
+    fill: none;
+    stroke: var(--city-deck, #15171b);
+    stroke-width: 9;
+    stroke-linejoin: round;
+  }
+  .wk-rail {
+    fill: none;
+    stroke: rgba(237, 228, 212, 0.3);
+    stroke-width: 0.8;
+    transform: translateY(-6px);
+  }
+  .wk-plant {
+    fill: #2c4a3c;
   }
   .wk-reveal {
     fill: none;
@@ -204,9 +266,11 @@
     stroke: rgba(237, 228, 212, 0.55);
     stroke-width: 1.2;
   }
-  .wk-pole {
-    stroke: rgba(237, 228, 212, 0.22);
-    stroke-width: 1.2;
+  /* The festoon's poles run down past the labels: a hairline, no lighter than a tower's edge. */
+  .wk-pole,
+  .wk-pole-cap {
+    stroke: rgba(237, 228, 212, 0.16);
+    stroke-width: 1.4;
   }
   .wk-string {
     fill: none;
@@ -235,15 +299,17 @@
   .la-half {
     fill: var(--good-on-dark);
   }
+  .wk-verge {
+    fill: var(--city-deck, #15171b);
+  }
   .tree {
     fill: #121a19;
-    stroke: rgba(237, 228, 212, 0.34);
+    stroke: rgba(237, 228, 212, 0.4);
     stroke-width: 0.9;
-    stroke-linejoin: round;
   }
   .tree.over {
     fill: #2b4a4e;
-    stroke: rgba(127, 184, 192, 0.75);
+    stroke: rgba(127, 184, 192, 0.85);
   }
   .trunk {
     stroke: rgba(237, 228, 212, 0.34);
@@ -258,26 +324,46 @@
     stroke-dasharray: 4 4;
   }
   .co-wall {
-    fill: #1d1611;
+    fill: var(--city-body, #0c1018);
     stroke: rgba(237, 228, 212, 0.32);
     stroke-width: 0.9;
   }
-  .co-roof {
-    fill: #120d0a;
-    stroke: rgba(237, 228, 212, 0.42);
-    stroke-width: 0.9;
-    stroke-linejoin: round;
+  .co-face {
+    fill: var(--city-shade, #080b11);
   }
-  .co-chim {
-    fill: #1d1611;
+  .co-sun {
+    fill: var(--city-sunlit, #cfe0ec);
+    opacity: var(--city-sun-on, 0);
+  }
+  .co-rail {
+    fill: none;
+    stroke: rgba(191, 227, 231, 0.4);
+    stroke-width: 0.9;
+  }
+  .co-mull {
     stroke: rgba(237, 228, 212, 0.3);
+    stroke-width: 1;
+  }
+  .co-slab,
+  .co-room {
+    fill: var(--city-deck, #15171b);
+    stroke: rgba(237, 228, 212, 0.4);
     stroke-width: 0.8;
+  }
+  .co-upper {
+    fill: var(--city-glass, #0d121b);
+    stroke: rgba(237, 228, 212, 0.26);
+    stroke-width: 0.8;
+  }
+  .co-upper-lit {
+    fill: #f6c47a;
+    opacity: calc(var(--windows, 1) * 0.6);
   }
   .co-door {
     fill: #070504;
   }
   .co-win {
-    fill: #1b130d;
+    fill: #11161d;
     stroke: rgba(237, 228, 212, 0.4);
     stroke-width: 0.9;
   }
@@ -289,7 +375,7 @@
     opacity: 0.5;
   }
   .co-bars {
-    stroke: #1b130d;
+    stroke: #11161d;
     stroke-width: 2;
   }
 

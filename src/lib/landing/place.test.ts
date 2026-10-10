@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { binOf, cloud, contrast, footpath, lampFor, ridge, skyAt, starfield, sunAltitude, town, TOWN_DAYS } from './place';
+import { binOf, cloud, contrast, footpath, lampFor, ridge, skyAt, skyVars, starfield, sunAltitude, town, TOWN_DAYS } from './place';
+import { DAY_TONE_ALT, luminance, over } from './sky';
 import { shipDays } from './rhythm';
 
 const at = (iso: string) => Date.parse(iso);
@@ -30,19 +31,172 @@ describe('the sky', () => {
     expect(skyAt(-2, false).stars).toBe(0);
     expect(skyAt(-9, false).stars).toBeGreaterThan(0);
     expect(skyAt(-30, false).stars).toBe(1);
+    // Astronomical twilight already thins them, so -12° is not the dead of night.
+    expect(skyAt(-15, true).stars).toBe(1);
+    expect(skyAt(-12, true).stars).toBeLessThan(0.8);
   });
 
-  it('stays dark enough for every text colour on it, at every hour', () => {
-    const cream: [number, number, number] = [237, 228, 212];
-    for (let alt = -40; alt <= 60; alt += 0.5) {
-      const s = skyAt(alt, false);
+  // Every altitude the sky can take, a degree at a time, climbing and sinking.
+  const sweep = () => {
+    const out: Array<{ alt: number; rising: boolean; s: ReturnType<typeof skyAt> }> = [];
+    for (let alt = -30; alt <= 70; alt++) for (const rising of [true, false]) out.push({ alt, rising, s: skyAt(alt, rising) });
+    return out;
+  };
+  const cream: [number, number, number] = [237, 228, 212];
+  const rgb = (h: string): [number, number, number] => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)) as [number, number, number];
+
+  const ink: [number, number, number] = [26, 16, 8];
+
+  it('keeps every piece of text on the sky at 4.5:1, at every altitude, rising and setting', () => {
+    const check = (s: ReturnType<typeof skyAt>, at: string) => {
+      // Cream on the deep sky, ink on the pale daytime one (HeroPlace's --type).
+      const type = s.tone === 'light' ? ink : cream;
       for (const bg of [s.top, s.mid, s.low]) {
-        // Unit and caption text is cream at 72%; the kickers are the two on-dark accents.
-        expect(contrast([...cream, 0.72], bg)).toBeGreaterThanOrEqual(4.5);
-        expect(contrast([232, 134, 58], bg)).toBeGreaterThanOrEqual(4.5);
-        expect(contrast([127, 184, 192], bg)).toBeGreaterThanOrEqual(4.5);
+        // The title and values at full; the faintest on-sky type at 72%.
+        for (const a of [1, 0.86, 0.82, 0.78, 0.74, 0.72])
+          expect(contrast([...type, a], bg), `${s.tone} type ${a} at ${at} on ${bg}`).toBeGreaterThanOrEqual(4.5);
+        // The kickers, the dateline and the plate's link, in the tone's own accents.
+        expect(contrast(rgb(s.accent), bg), `accent at ${at} on ${bg}`).toBeGreaterThanOrEqual(4.5);
+        expect(contrast(rgb(s.accentInk), bg), `accent ink at ${at} on ${bg}`).toBeGreaterThanOrEqual(4.5);
+      }
+    };
+    for (const { alt, rising, s } of sweep()) check(s, `${alt}° ${rising ? 'rising' : 'setting'}`);
+    // Half degrees too, the old range, so no blend between keys slips through.
+    for (let alt = -40; alt <= 70; alt += 0.5) for (const rising of [true, false]) check(skyAt(alt, rising), `${alt}°`);
+  });
+
+  it('turns type from cream to ink in one step, at the same altitude climbing and sinking', () => {
+    for (const rising of [true, false]) {
+      for (let alt = -40; alt <= 70; alt += 0.5) expect(skyAt(alt, rising).tone).toBe(alt >= DAY_TONE_ALT ? 'light' : 'dark');
+      // Either side of the step the two palettes are far apart: no half-way sky for either tone.
+      expect(luminance(skyAt(DAY_TONE_ALT, rising).top)).toBeGreaterThan(luminance(skyAt(DAY_TONE_ALT - 0.5, rising).top) * 4);
+    }
+    // The day accents are the deep ones; the night's are the site's on-dark ones.
+    expect(skyAt(30, true).accent).toBe('#6e2c06');
+    expect(skyAt(30, true).accentInk).toBe('#164651');
+  });
+
+  it('keeps the site\'s own on-dark accents until the sky gets light', () => {
+    for (const alt of [-40, -18, -12, -8]) {
+      expect(skyAt(alt, true).accent).toBe('#e8863a');
+      expect(skyAt(alt, false).accentInk).toBe('#7fb8c0');
+    }
+    // By day they are a shade lighter, the same hues.
+    expect(skyAt(30, true).accent).not.toBe('#e8863a');
+  });
+
+  it('keeps the ground and the walk below at 4.5:1 for the page\'s own on-dark type', () => {
+    // The showcase's chapter skies (PlaceShowcase.svelte), each under the day's wash.
+    const chapters = ['#0e1517', '#0f181b', '#111916', '#121a17', '#0f1513', '#15100e', '#1a1210', '#22160f', '#11171a', '#131b1d', '#161f20'];
+    for (const { alt, rising, s } of sweep()) {
+      const grounds = [s.ground, s.street, over(s.wash, s.street), ...chapters.map((c) => over(s.wash, c))];
+      for (const bg of grounds) {
+        const at = `${alt}° ${rising ? 'rising' : 'setting'} on ${bg}`;
+        // The faintest type below the hero is cream at 55% (the preview stamp).
+        expect(contrast([...cream, 0.55], bg), `cream at ${at}`).toBeGreaterThanOrEqual(4.5);
+        expect(contrast([232, 134, 58], bg), `accent at ${at}`).toBeGreaterThanOrEqual(4.5);
+        expect(contrast([127, 184, 192], bg), `accent ink at ${at}`).toBeGreaterThanOrEqual(4.5);
       }
     }
+  });
+
+  it('reads as day by day: a clear blue overhead and a light skyline', () => {
+    const night = skyAt(-30, false);
+    for (const alt of [14, 30, 45, 60]) {
+      const s = skyAt(alt, true);
+      const [r, g, b] = rgb(s.top);
+      expect(b - r, `blue at ${alt}°`).toBeGreaterThan(90);
+      expect(b).toBeGreaterThan(g);
+      expect(luminance(s.top)).toBeGreaterThan(luminance(night.top) * 10);
+      // The haze along the skyline is a pale, bright horizon.
+      expect(luminance(over(s.haze, s.low))).toBeGreaterThan(0.3);
+      // A pale daytime sky, not a deep one: midday must not pass for dusk.
+      for (const c of [s.top, s.mid, s.low]) expect(luminance(c), `${c} at ${alt}°`).toBeGreaterThan(0.4);
+      expect(s.tone).toBe('light');
+      expect(s.daylight).toBeGreaterThan(0.9);
+      expect(s.windows).toBeLessThan(0.2);
+    }
+    // A fuller blue overhead as the sun climbs.
+    expect(rgb(skyAt(60, true).top)[2]).toBeGreaterThan(rgb(skyAt(14, true).top)[2]);
+    // Night is ink, every star out, every window strong.
+    expect(luminance(night.top)).toBeLessThan(0.005);
+    expect(night.stars).toBe(1);
+    expect(night.windows).toBe(1);
+    expect(night.daylight).toBe(0);
+  });
+
+  it('warms the skyline at the turn of the day, redder at sunset than at sunrise', () => {
+    for (const alt of [-1, 1, 3]) {
+      const rise = rgb(over(skyAt(alt, true).haze, skyAt(alt, true).low));
+      const set = rgb(over(skyAt(alt, false).haze, skyAt(alt, false).low));
+      // Warm: more red than blue in the glow, and the sunset's the redder.
+      expect(rise[0]).toBeGreaterThan(rise[2]);
+      expect(set[0]).toBeGreaterThan(set[2]);
+      expect(set[1] / set[0]).toBeLessThan(rise[1] / rise[0]);
+    }
+    expect(skyAt(1, true).warmth).toBe(1);
+    expect(skyAt(-20, true).warmth).toBe(0);
+    expect(skyAt(40, true).warmth).toBe(0);
+    expect(skyAt(8, false).warmth).toBeGreaterThan(0.3);
+  });
+
+  it('names the blue hour and the golden hour', () => {
+    expect(skyAt(-4, true).word).toBe('blue hour');
+    expect(skyAt(-4, false).word).toBe('blue hour');
+    expect(skyAt(8, true).word).toBe('golden hour');
+    expect(skyAt(-9, true).word).toBe('dawn');
+    expect(skyAt(-20, true).word).toBe('night');
+  });
+
+  it('eases from one degree to the next, with no jump anywhere', () => {
+    for (const rising of [true, false]) {
+      let prev = skyAt(-31, rising);
+      for (let alt = -30; alt <= 70; alt++) {
+        const s = skyAt(alt, rising);
+        // The one deliberate step: the tone change (tested above).
+        if (s.tone !== prev.tone) {
+          prev = s;
+          continue;
+        }
+        for (const k of ['top', 'mid', 'low'] as const) {
+          const d = rgb(s[k]).map((v, i) => Math.abs(v - rgb(prev[k])[i]));
+          expect(Math.max(...d), `${k} at ${alt}°`).toBeLessThanOrEqual(16);
+        }
+        expect(s.daylight).toBeGreaterThanOrEqual(prev.daylight);
+        expect(s.windows).toBeLessThanOrEqual(prev.windows);
+        prev = s;
+      }
+    }
+  });
+
+  it('carries a light model the scenery can read, every field in range', () => {
+    for (const { rising, s } of sweep()) {
+      for (const v of [s.stars, s.daylight, s.warmth, s.windows, s.moon, s.sunY]) {
+        expect(v).toBeGreaterThanOrEqual(0);
+        expect(v).toBeLessThanOrEqual(1);
+      }
+      expect(s.side).toBe(rising ? 'east' : 'west');
+      for (const c of [s.top, s.mid, s.low, s.ground, s.street, s.sun, s.accent, s.accentInk]) expect(c).toMatch(/^#[0-9a-f]{6}$/);
+      for (const c of [s.haze, s.wash]) expect(c).toMatch(/^rgba\(\d+,\d+,\d+,[\d.]+\)$/);
+    }
+    expect(skyAt(-1.5, true).sunUp).toBe(false);
+    expect(skyAt(0, true).sunUp).toBe(true);
+    expect(skyAt(70, true).sunY).toBe(1);
+    expect(skyAt(-10, true).sunY).toBe(0);
+    expect(skyAt(-30, true).moon).toBe(1);
+    expect(skyAt(20, true).moon).toBe(0);
+  });
+
+  it('hands the sky to CSS as custom properties, and nothing about where', () => {
+    const v = skyVars(skyAt(5, false));
+    for (const k of ['--sky-top', '--sky-mid', '--sky-low', '--sky-haze', '--sky-ground', '--sky-street', '--sky-wash', '--sky-sun', '--sky-accent', '--sky-accent-ink', '--stars', '--daylight', '--warmth', '--windows', '--moon', '--sun-y', '--sun-x'])
+      expect(v).toContain(`${k}:`);
+    expect(v).not.toMatch(/lat|lon|zone|offset/i);
+    // The sun stands left of centre while it climbs, right while it sinks.
+    const x = (s: string) => Number(s.match(/--sun-x:(\d+)%/)![1]);
+    expect(x(skyVars(skyAt(5, true)))).toBeLessThan(50);
+    expect(x(v)).toBeGreaterThan(50);
+    expect(x(skyVars(skyAt(70, true)))).toBe(50);
   });
 
   it('scatters the same stars on the server and in the browser', () => {
@@ -79,9 +233,21 @@ describe('the ridge', () => {
     expect(Math.max(...ys)).toBeLessThanOrEqual(100);
     expect(a.d.startsWith('M0,100')).toBe(true);
     expect(a.d.endsWith('Z')).toBe(true);
-    // The far range never dips in front of the near one.
-    const far = [...a.far.matchAll(/,(-?[\d.]+)/g)].map((m) => Number(m[1]));
-    expect(far.every((v, i) => v <= ys[i] + 0.01)).toBe(true);
+    // Towers stand across the whole width, the first at the left edge, the last to the right.
+    const xs = [...a.d.matchAll(/[MH](-?[\d.]+)/g)].map((m) => Number(m[1]));
+    expect(Math.min(...xs)).toBe(0);
+    expect(Math.max(...xs)).toBe(1000);
+    // The farther range stands up behind: its tallest is at least the near's.
+    const tops = (d: string) => [...d.matchAll(/V(-?[\d.]+)H/g)].map((m) => Number(m[1]));
+    expect(Math.min(...tops(a.far))).toBeLessThanOrEqual(Math.min(...tops(a.d)) + 0.01);
+    expect(a.lights).toMatch(/^M/);
+  });
+
+  it('stands its towers as tall as the busiest day under them', () => {
+    // One busy day among quiet ones: the near range's tallest tower is that day's.
+    const r = ridge(record('2026-03-01', '2026-10-09', (i) => (i === 90 ? 40 : 1)), '2026-10-09')!;
+    const tops = [...r.d.matchAll(/V(-?[\d.]+)H/g)].map((m) => Number(m[1]));
+    expect(Math.min(...tops)).toBeLessThan(60);
   });
 
   it('pins its label on the highest crest in its right-hand third', () => {

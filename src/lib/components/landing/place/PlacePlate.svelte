@@ -21,7 +21,7 @@
     /** The label being explained, if any, and its plate. */
     shown: NoteId | null;
     note: Plate | null;
-    /** What the lamp is doing, in words. */
+    /** What the beacon is doing, in words. */
     caption: string;
     /** Something moves, so "hold still" is offered. */
     stirs: boolean;
@@ -73,7 +73,7 @@
     width: var(--plate-w);
     margin-top: 10px;
     padding: 2px 0 0 16px;
-    border-left: 1px solid rgba(237, 228, 212, 0.24);
+    border-left: 1px solid rgba(var(--type), 0.24);
   }
   .pl-date,
   .pl-head {
@@ -95,7 +95,7 @@
     margin: 2px 0 0;
     font-size: 15px;
     line-height: 1.45;
-    color: rgba(237, 228, 212, 0.86);
+    color: rgba(var(--type), 0.86);
     text-wrap: pretty;
   }
   .pl-key {
@@ -104,7 +104,7 @@
     font-style: italic;
     font-size: 17px;
     line-height: 1.4;
-    color: rgba(237, 228, 212, 0.82);
+    color: rgba(var(--type), 0.82);
   }
   .pl-link {
     position: relative;
@@ -139,7 +139,7 @@
     font-size: var(--fs-label-xs);
     line-height: 1.6;
     letter-spacing: 0.06em;
-    color: rgba(237, 228, 212, 0.72);
+    color: rgba(var(--type), 0.72);
   }
   .pl-hold {
     position: relative;
@@ -151,7 +151,7 @@
     background: none;
     font: inherit;
     letter-spacing: inherit;
-    color: var(--on-ink-80);
+    color: rgba(var(--type), 0.86);
     cursor: pointer;
   }
   .pl-hold::after {
@@ -185,6 +185,10 @@
      label never moves the hero's lower edge or anything under it. */
   @media (max-width: 759px) {
     .pl-plate {
+      /* Under the picture, on the ground, which is dark at every hour. */
+      --type: 237, 228, 212;
+      --accent-on-dark: #e8863a;
+      --accent-ink-on-dark: #7fb8c0;
       grid-area: plate;
       width: auto;
       height: var(--plate-h);

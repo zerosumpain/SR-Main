@@ -73,18 +73,18 @@ describe('the plate', () => {
     expect(p.releases.text).toMatch(/Fri 20 Mar to Sun 30 Aug/);
   });
 
-  it('says the lamp is dark rather than make a pulse up', () => {
+  it('says the beacon is dark rather than make a pulse up', () => {
     const p = placePlates({ ...base, pulse: { state: 'stale', at: ago(600) } });
     expect(p.pulse.head).toBe('Pulse · Apple Watch · no fresh reading');
-    expect(p.pulse.text).toMatch(/lamp stays dark/);
+    expect(p.pulse.text).toMatch(/beacon stays dark/);
   });
 
-  it('owns up when a rate is past what the lamp keeps', () => {
+  it('owns up when a rate is past what the beacon keeps', () => {
     const p = placePlates({ ...base, pulse: { state: 'fresh', bpm: 22, at: ago(2) } });
     expect(p.pulse.text).toMatch(/flashes at 30, the nearest it can/);
   });
 
-  it('says the lamp holds steady rather than flash more than three times a second', () => {
+  it('says the beacon holds steady rather than flash more than three times a second', () => {
     expect(placePlates({ ...base, pulse: { state: 'fresh', bpm: 189, at: ago(2) } }).pulse.text).toMatch(/holds steady/);
     expect(placePlates({ ...base, pulse: { state: 'fresh', bpm: 230, at: ago(2) } }).pulse.text).toMatch(/holds steady/);
     expect(placePlates({ ...base, pulse: { state: 'fresh', bpm: 120, at: ago(2) } }).pulse.text).toMatch(/once a beat/);
@@ -106,12 +106,12 @@ describe('the plate', () => {
 
 describe('the caption', () => {
   it('shows the real rate, and qualifies a rate the lamp can only approach', () => {
-    expect(lampCaption(null, false)).toBe('the lamp is dark: no fresh pulse to keep');
-    expect(lampCaption(52, false)).toBe('the lamp keeps time at 52 bpm');
-    expect(lampCaption(22, false)).toBe('the lamp keeps time at 30 bpm, as near as it draws');
-    expect(lampCaption(250, false)).toBe('at 250 bpm the lamp holds steady, too quick to flash');
+    expect(lampCaption(null, false)).toBe('the beacon is dark: no fresh pulse to keep');
+    expect(lampCaption(52, false)).toBe('the beacon keeps time at 52 bpm');
+    expect(lampCaption(22, false)).toBe('the beacon keeps time at 30 bpm, as near as it draws');
+    expect(lampCaption(250, false)).toBe('at 250 bpm the beacon holds steady, too quick to flash');
     expect(lampCaption(189, false)).toMatch(/^at 189 bpm/);
-    expect(lampCaption(250, true)).toBe('the lamp is lit for 250 bpm, and keeps still');
+    expect(lampCaption(250, true)).toBe('the beacon is lit for 250 bpm, and keeps still');
   });
 });
 

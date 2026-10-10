@@ -1,29 +1,36 @@
 <svelte:options css="injected" />
 
 <script lang="ts">
-  // The landing page's header block, drawn as a place: the title hangs in a
-  // dusk sky over a small landscape made of the site's live numbers. Read the
-  // horizon left to right as then to now: a ridge of every release day from
-  // the first to six weeks ago, a terrace of the last forty days (a house a
-  // day, a lit window per deploy), and a lighthouse whose lamp keeps the last
-  // heart rate. Today's steps run along the shore on the day's own scale, and
-  // the next daydream gathers as a cloud beside the title. The sky is the real
-  // light over the north of England just now, held dark for the type.
+  // The landing page's header block, drawn as a place: the title hangs in the
+  // sky over a small modern city made of the site's live numbers. Read the
+  // skyline left to right as then to now: a distant skyline of every release
+  // day from the first to six weeks ago, a street of the last forty days (a
+  // building a day, a lit pane per deploy), and the tallest tower, whose beacon
+  // keeps the last heart rate. Today's steps run along the promenade on the
+  // day's own scale, and the next daydream gathers as a cloud beside the title.
+  // The sky, and the light on the city, is the real light where the owner is
+  // just now (the server sends only the sun's height and whether it climbs,
+  // never where), or over the north of England when it has none to give: warm
+  // windows and silhouettes at night, the low sun catching one side of every
+  // tower at either end of the day, sunlit glass under a pale sky by day, when
+  // the type on the sky turns from cream to ink (sky.ts `tone`).
   //
   // Each reading is a small label pinned to its part of the picture. Pointing
   // at one, focusing it or tapping it lights that part, dims the rest and puts
   // its explanation in the one plate, so there is no key to read first.
   //
-  // Only two things move, both CSS off `--beat` (60/bpm seconds): the lamp, and
-  // a brief rain when a think fires. The lamp never flashes more than three
-  // times a second: lub-dub to 90 a minute, one flash a beat to 180, then lit
-  // and steady. Both stop with no fresh reading, when the reader asks ("hold
+  // Only two things move, both CSS off `--beat` (60/bpm seconds): the beacon
+  // (`lamp` below), and a brief rain when a think fires. The beacon never
+  // flashes more than three times a second: lub-dub to 90 a minute, one flash
+  // a beat to 180, then lit and steady. Both stop with no fresh reading, when the reader asks ("hold
   // still"), off screen, in a hidden tab and under prefers-reduced-motion; the
   // rain pauses rather than restarts. Everything the rambler stands on is static.
   import { onMount, tick } from 'svelte';
   import type { CapabilityFacts } from '$lib/landing/capabilities';
   import type { LandingVitals } from '$lib/landing/live-vitals.svelte';
-  import { binOf, cloud, footpath, lampFor, ridge, skyAt, starfield, sunAltitude, town as terrace } from '$lib/landing/place';
+  import { binOf, cloud, footpath, lampFor, ridge, skyAt, skyVars, starfield } from '$lib/landing/place';
+  import { city, cityLight, cityVars } from '$lib/landing/place-city';
+  import { skyLight, type OwnerSun } from '$lib/landing/sun';
   import { lampCaption, placePlates, placeTags, tagLine } from '$lib/landing/place-copy';
   import { shipDays, shipStats, type DayCount } from '$lib/landing/rhythm';
   import { londonHour, NOTES, readDaydream, type NoteId, type Pulse } from '$lib/landing/sentence';
@@ -32,7 +39,9 @@
   import { localToday } from '$lib/constants/health-day';
   import HeroTitle from './HeroTitle.svelte';
   import PlaceCloud from './place/PlaceCloud.svelte';
+  import PlaceLabels from './place/PlaceLabels.svelte';
   import PlacePlate from './place/PlacePlate.svelte';
+  import PlaceSkyProps from './place/PlaceSkyProps.svelte';
   import PlaceWorld from './place/PlaceWorld.svelte';
 
   let {
@@ -46,6 +55,7 @@
     steps,
     cadence,
     releases,
+    sun = null,
   }: {
     /** "Fri 9 Oct", London time. */
     date: string;
@@ -63,6 +73,8 @@
     cadence: DayCount[];
     /** All releases on record and the first deploy, or null when the record is unavailable. */
     releases: { total: number; firstDeploy: string | null; days: number } | null;
+    /** The sun where the owner is (whole degrees, rising or not), or null for the default sky. */
+    sun?: OwnerSun | null;
   } = $props();
 
   let root: HTMLElement;
@@ -85,13 +97,33 @@
   // The owner's day, as the dateline and the steps keep it.
   let todayKey = $derived(localToday(new Date(now)));
   let hour = $derived(londonHour(now));
-  let sky = $derived(skyAt(sunAltitude(now), hour < 12));
+  // The light where the owner is, from the server's sun; the north of England
+  // (and the London morning) when it has none to give.
+  let light = $derived(skyLight(sun, now, hour < 12));
+  let sky = $derived(skyAt(light.alt, light.morning));
+  // The sky and the city's light on it, as custom properties: nothing about where.
+  let lightVars = $derived(`${skyVars(sky)};${cityVars(cityLight(sky))}`);
+  // A sun low enough to stand in the skyline's haze, where no text sits.
+  let lowSun = $derived(sky.sunUp && sky.sunY < 0.12);
+  // Type turns from cream to ink in one step (sky.ts DAY_TONE_ALT). The sky
+  // eases between two lights, but never across that step: for the frame it
+  // happens in, nothing transitions, so type never sits on a half-changed sky.
+  let snap = $state(false);
+  let lastTone: string | undefined;
+  $effect.pre(() => {
+    const tone = sky.tone;
+    if (lastTone !== undefined && tone !== lastTone) {
+      snap = true;
+      requestAnimationFrame(() => requestAnimationFrame(() => (snap = false)));
+    }
+    lastTone = tone;
+  });
   const stars = starfield();
 
   let days = $derived(cadence.length ? shipDays(cadence, todayKey) : []);
   let stats = $derived(shipStats(days));
   let hills = $derived(ridge(cadence, todayKey));
-  let houses = $derived(days.length ? terrace(days) : null);
+  let houses = $derived(days.length ? city(days) : null);
   let path = $derived(footpath(steps, binOf(hour)));
   let daydream = $derived(readDaydream(v, facts.daydream, now));
   let weather = $derived(cloud(daydream, facts.daydream.cadenceMinutes));
@@ -233,6 +265,8 @@
   });
 </script>
 
+<PlaceSkyProps />
+
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="pl"
@@ -241,11 +275,11 @@
   data-lamp={lamp}
   data-focus={shown ?? undefined}
   data-sky={sky.word}
+  data-tone={sky.tone}
+  data-snap={snap ? '' : undefined}
+  data-side={sky.side}
+  style={lightVars}
   style:--beat="{beat.toFixed(4)}s"
-  style:--sky-top={sky.top}
-  style:--sky-mid={sky.mid}
-  style:--sky-low={sky.low}
-  style:--stars={sky.stars}
   {onkeydown}
   {onfocusout}
   {onpointerover}
@@ -269,47 +303,13 @@
       <!-- The sky beside the title: the next daydream, gathering. -->
       <PlaceCloud {weather} />
 
-      <!-- The landscape. Its parts are pictures; every number is in a label. -->
+      <!-- The city. Its parts are pictures; every number is in a label. -->
       <div class="pl-world">
-        <PlaceWorld {hills} {houses} {bpm} {path} />
+        <PlaceWorld {hills} {houses} {bpm} {path} sun={lowSun} />
       </div>
 
       <!-- The readings, in the sentence's order: real buttons pinned to their parts. -->
-      {#each NOTES as id (id)}
-        {@const t = tags[id]}
-        {@const anchored =
-          (id === 'releases' && hills) || (id === 'ship' && houses)}
-        <div
-          class="pl-tag"
-          data-part={id}
-          data-dash={t.spoken ? '' : undefined}
-          data-loose={(id === 'releases' || id === 'ship') && !anchored ? '' : undefined}
-          style:--px={id === 'releases' && hills ? hills.pin.x : undefined}
-          style:--py={id === 'releases' && hills ? hills.pin.y : undefined}
-          style:--bx={id === 'ship' && houses ? houses.blocks[1].x / 1000 + houses.blocks[1].w / 2000 : undefined}
-          style:--by={id === 'ship' && houses ? 1 - houses.blocks[1].top / 100 : undefined}
-          style:--bx0={id === 'ship' && houses ? houses.blocks[0].x / 1000 + houses.blocks[0].w / 2000 : undefined}
-          style:--by0={id === 'ship' && houses ? 1 - houses.blocks[0].top / 100 : undefined}
-          data-on={shown === id ? '' : undefined}
-        >
-          <i class="pl-lead" aria-hidden="true"></i>
-          <button
-            type="button"
-            aria-expanded={pinned === id}
-            aria-controls="pl-plate"
-            aria-describedby="pl-hint-{id}"
-            onclick={(e) => choose(e, id)}
-            onfocus={(e) => onfocus(e, id)}
-          >
-            <span class="k">{t.kicker}</span>
-            <span class="vu"
-              >{#if t.spoken}<span class="v" aria-hidden="true">{t.value}</span><span class="vh">{t.spoken}</span
-                >{:else}<span class="v">{t.value}</span>{/if}{#if t.unit}{' '}<span class="u">{t.unit}</span>{/if}</span
-            >
-            {#if t.sub}<span class="s"><span class="vh">, </span>{t.sub}</span>{/if}
-          </button>
-        </div>
-      {/each}
+      <PlaceLabels {tags} {hills} {houses} {shown} {pinned} {choose} {onfocus} />
       <!-- Read only through each label's aria-describedby, never in reading order. -->
       <div hidden>
         {#each NOTES as id (id)}<span id="pl-hint-{id}">{plates[id].hint}</span>{/each}
@@ -350,44 +350,85 @@
     --below: 0px;
     --ridge-l: 0%;
     --ridge-w: 55%;
-    --ridge-h: 132px;
+    --ridge-h: 90px;
     --town-l: 56.5%;
     --town-w: 30.5%;
-    --town-h: 112px;
-    --lh-w: 66px;
-    --lh-h: 220px;
+    --town-h: 180px;
+    --lh-w: 84px;
+    --lh-h: 280px;
+    /* The pavement between the street's foot and the promenade. */
+    --kerb: 8px;
     --lh-b: calc(var(--ground) - 8px);
     --cloud-l: 66%;
     --cloud-t: 50px;
     --cloud-w: 150px;
     /* Where the labels' text stands, up from the bottom of the picture. */
     --rel-y: calc(var(--world) - 96px);
-    --ship-y: 200px;
+    --ship-y: 262px;
     --pulse-lead: 34px;
     /* The releases label's widest, which the plate keeps clear of. */
     --rel-w: 270px;
     --plate-w: min(33%, 430px, calc(var(--ridge-l) + var(--ridge-w) - var(--rel-w)));
-    --cream: #ede4d4;
-    --ink-sky: #0b0806;
+    /* Type on the sky: cream on the deep sky, ink on the pale daytime one
+       (data-tone, below). Anything on the ground puts cream back. */
+    --type: 237, 228, 212;
+    --cream: rgb(var(--type));
+    --ink-sky: var(--sky-ground, #0b0806);
+    /* The on-sky accents in the tone's own shades (sky.ts): on-dark orange
+       and petrol on the deep sky, deep burnt orange and petrol on the pale. */
+    --accent-on-dark: var(--sky-accent, #e8863a);
+    --accent-ink-on-dark: var(--sky-accent-ink, #7fb8c0);
+    /* How high the skyline's haze stands over the ground: behind the
+       buildings, under the labels' type. */
+    --haze-h: 150px;
 
     position: relative;
     isolation: isolate;
     overflow: hidden;
     color: var(--cream);
+    /* The sky, then the haze along the skyline (warmest on the sun's side),
+       then the ground. The colours ease over a couple of seconds when a
+       vitals poll moves the light (the stops are registered as colours in
+       PlaceSkyProps so they can). */
     background:
+      radial-gradient(ellipse 60% 100% at var(--sun-x, 50%) 100%, var(--sky-haze), transparent) left 0 bottom calc(var(--below) + var(--ground) - 1px) /
+        100% var(--haze-h) no-repeat,
+      linear-gradient(0deg, var(--sky-haze), transparent) left 0 bottom calc(var(--below) + var(--ground) - 1px) / 100%
+        calc(var(--haze-h) * 0.7) no-repeat,
       linear-gradient(180deg, var(--sky-top) 0%, var(--sky-mid) 48%, var(--sky-low) 100%) top / 100% calc(100% - var(--below)) no-repeat,
       var(--ink-sky);
+    transition:
+      --sky-top 2s ease,
+      --sky-mid 2s ease,
+      --sky-low 2s ease,
+      --sky-haze 2s ease,
+      --sky-ground 2s ease,
+      --city-glass 2s ease,
+      --city-stone 2s ease,
+      --city-metal 2s ease,
+      --city-glaze 2s ease,
+      --city-near 2s ease,
+      --city-far 2s ease,
+      --city-cloud 2s ease;
   }
-  .vh {
-    position: absolute !important;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-    border: 0;
+  .pl[data-tone='light'] {
+    --type: 26, 16, 8;
+  }
+  .pl[data-tone='light'] :global(.ht-lede) {
+    color: rgba(var(--type), 0.82);
+  }
+  /* The view switch hangs over the sky on a desktop (HeroViews). */
+  @media (min-width: 761px) {
+    :global(.hv:has(> .pl[data-tone='light']) .hv-bar) {
+      --on-ink-55: rgba(26, 16, 8, 0.72);
+      --on-ink-80: rgba(26, 16, 8, 0.86);
+      --bg: #1a1008;
+      --accent-on-dark: #6e2c06;
+    }
+  }
+  .pl[data-snap],
+  .pl[data-snap] :global(*) {
+    transition: none !important;
   }
 
   /* Full bleed: the stars and the shore run the width of the screen; the
@@ -429,247 +470,6 @@
     height: var(--world);
   }
 
-  /* -------------------------------------------------------------- labels */
-
-  /* A label sits on its anchor (a zero-size box at the point it names); the
-     leader runs up from that point to the text. */
-  .pl-tag {
-    position: absolute;
-    z-index: 3;
-    width: 0;
-    height: 0;
-    --lead: 0px;
-  }
-  .pl-lead {
-    position: absolute;
-    left: 0;
-    bottom: 0;
-    width: 1px;
-    height: var(--lead);
-    background: rgba(237, 228, 212, 0.42);
-  }
-  .pl-lead::after {
-    content: '';
-    position: absolute;
-    left: -2px;
-    bottom: -2px;
-    width: 5px;
-    height: 5px;
-    border-radius: 100px;
-    background: var(--cream);
-  }
-  .pl-tag button {
-    --tone: var(--accent-on-dark);
-    position: absolute;
-    left: -1px;
-    bottom: var(--lead);
-    display: block;
-    min-width: 44px;
-    margin: 0;
-    padding: 0 0 4px 9px;
-    border: 0;
-    border-left: 1px solid rgba(237, 228, 212, 0.42);
-    background: none;
-    font: inherit;
-    text-align: left;
-    white-space: nowrap;
-    color: var(--cream);
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-  }
-  /* Right-handed: the text hangs to the left of its leader. */
-  .pl-tag[data-part='releases'] button,
-  .pl-tag[data-part='pulse'] button {
-    left: auto;
-    right: -1px;
-    padding: 0 9px 4px 0;
-    border-left: 0;
-    border-right: 1px solid rgba(237, 228, 212, 0.42);
-    text-align: right;
-  }
-  .pl-tag button::after {
-    content: '';
-    position: absolute;
-    inset: -6px -8px -2px -6px;
-  }
-  .pl-tag[data-part='daydream'] button,
-  .pl-tag[data-part='releases'] button {
-    --tone: var(--accent-ink-on-dark);
-  }
-  .pl-tag button:focus-visible {
-    outline: 2px solid var(--accent-on-dark);
-    outline-offset: 4px;
-  }
-  .k {
-    display: block;
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    line-height: 1.5;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--tone);
-  }
-  .vu {
-    display: block;
-    line-height: 1.15;
-  }
-  .v {
-    font-family: var(--font-display);
-    font-weight: 800;
-    font-size: 24px;
-    letter-spacing: -0.02em;
-    font-variant-numeric: tabular-nums;
-    color: var(--cream);
-  }
-  .u {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: rgba(237, 228, 212, 0.78);
-  }
-  .s {
-    display: block;
-    margin-top: 2px;
-    font-size: 13px;
-    line-height: 1.3;
-    color: rgba(237, 228, 212, 0.74);
-  }
-  .pl-tag[data-dash] .v {
-    color: rgba(237, 228, 212, 0.72);
-  }
-  .pl-tag button:hover .k,
-  .pl-tag[data-on] .k {
-    text-decoration: underline;
-    text-decoration-thickness: 1px;
-    text-underline-offset: 3px;
-  }
-  .pl[data-focus] .pl-lead {
-    opacity: 0.4;
-  }
-  .pl[data-focus='pulse'] [data-part='pulse'] .pl-lead,
-  .pl[data-focus='steps'] [data-part='steps'] .pl-lead,
-  .pl[data-focus='daydream'] [data-part='daydream'] .pl-lead,
-  .pl[data-focus='ship'] [data-part='ship'] .pl-lead,
-  .pl[data-focus='releases'] [data-part='releases'] .pl-lead {
-    opacity: 1;
-  }
-
-  /* Releases: pinned to the highest crest in the ridge's last third, its text
-     standing at the ridge's end where the town begins, the leader elbowing
-     across to it. Wherever the crest falls, the text keeps clear of the plate. */
-  .pl-tag[data-part='releases'] {
-    left: calc(var(--ridge-l) + var(--ridge-w) * var(--px, 0.85));
-    width: calc(var(--ridge-w) * (1 - var(--px, 0.85)));
-    bottom: calc(var(--below) + var(--ground) + var(--ridge-h) * var(--py, 0));
-    --lead: calc(var(--rel-y) - var(--ground) - var(--ridge-h) * var(--py, 0));
-  }
-  .pl-tag[data-part='releases']::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: var(--lead);
-    height: 1px;
-    background: rgba(237, 228, 212, 0.42);
-  }
-  .pl[data-focus]:not([data-focus='releases']) .pl-tag[data-part='releases']::before {
-    opacity: 0.4;
-  }
-  .pl-tag[data-part='releases'] button {
-    width: max-content;
-    max-width: calc(var(--rel-w) - 24px);
-    white-space: normal;
-  }
-  .pl-tag[data-part='releases'] .v {
-    white-space: nowrap;
-  }
-  /* Ship: pinned to the roof of the town's second block. */
-  .pl-tag[data-part='ship'] {
-    left: calc(var(--town-l) + var(--town-w) * var(--bx, 0.1));
-    bottom: calc(var(--below) + var(--ground) + var(--town-h) * var(--by, 0));
-    --lead: calc(var(--ship-y) - var(--ground) - var(--town-h) * var(--by, 0));
-  }
-  /* With no record there is nothing to pin to: the label stands on the shore. */
-  .pl-tag[data-loose] {
-    bottom: calc(var(--below) + var(--ground) + 16px);
-    --lead: 0px;
-  }
-  .pl-tag[data-loose] .pl-lead {
-    display: none;
-  }
-  .pl-tag[data-part='releases'][data-loose] {
-    left: 50%;
-    width: 0;
-  }
-  .pl-tag[data-loose]::before {
-    display: none;
-  }
-  /* Pulse: up and to the left of the lamp, its leader dropping to the
-     lantern, and clear of the gallery where the rambler comes to stand. */
-  .pl-tag[data-part='pulse'] {
-    left: calc(100% - var(--lh-w) / 2);
-    bottom: calc(var(--below) + var(--lh-b) + var(--lh-h) * 0.8225 + 8px);
-    --lead: var(--pulse-lead);
-  }
-  .pl-tag[data-part='pulse'] button {
-    right: 46px;
-  }
-  .pl-tag[data-part='pulse'] .pl-lead::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 47px;
-    height: 1px;
-    background: inherit;
-  }
-  /* Steps: on the shore under the path, on one line. */
-  .pl-tag[data-part='steps'] {
-    left: 0;
-    bottom: calc(var(--below) + 21px);
-  }
-  .pl-tag[data-part='steps'] .pl-lead {
-    display: none;
-  }
-  .pl-tag[data-part='steps'] button {
-    bottom: auto;
-    top: 0;
-    transform: translateY(-50%);
-    padding: 0;
-    border: 0;
-  }
-  .pl-tag[data-part='steps'] :is(.k, .vu, .s) {
-    display: inline;
-  }
-  .pl-tag[data-part='steps'] .k {
-    margin-right: 10px;
-  }
-  .pl-tag[data-part='steps'] .v {
-    font-size: 20px;
-  }
-  /* Daydream: off the cloud's right shoulder. */
-  .pl-tag[data-part='daydream'] {
-    left: calc(var(--cloud-l) + var(--cloud-w) + 6px);
-    top: calc(var(--cloud-t) + var(--cloud-w) * 0.28);
-    --lead: 22px;
-  }
-  .pl-tag[data-part='daydream'] .pl-lead {
-    bottom: auto;
-    top: 0;
-    width: var(--lead);
-    height: 1px;
-  }
-  .pl-tag[data-part='daydream'] .pl-lead::after {
-    left: -3px;
-    bottom: -2px;
-  }
-  .pl-tag[data-part='daydream'] button {
-    left: calc(var(--lead) + 6px);
-    bottom: auto;
-    top: 0;
-    transform: translateY(-24px);
-  }
 
   .pl-print {
     display: none;
@@ -683,10 +483,6 @@
     .pl {
       --rel-w: 190px;
     }
-    .pl-tag[data-part='releases'] .u {
-      display: block;
-      margin-top: 2px;
-    }
   }
   /* A tablet keeps the desktop's picture, plate in the sky and all, so the
      hero stays about the sentence's height: the ridge widens under the plate,
@@ -696,27 +492,25 @@
     .pl {
       --world: max(372px, calc(700px - 36vw));
       --ridge-w: 60%;
-      --ridge-h: 118px;
+      --ridge-h: 84px;
       --town-l: 61.5%;
       --town-w: calc(38.5% - var(--lh-w) - 14px);
-      --town-h: 100px;
+      --town-h: 136px;
       --rel-y: 250px;
       --rel-w: 180px;
-      --ship-y: 166px;
-      --pulse-lead: 40px;
-      --lh-w: 57px;
-      --lh-h: 190px;
+      --ship-y: 190px;
+      --pulse-lead: 46px;
+      --lh-w: 66px;
+      --lh-h: 220px;
       /* The cloud comes in from the right far enough for its label's longest words. */
       --cloud-l: min(63%, calc(100% - var(--cloud-w) - 212px));
+      /* The labels stand lower here: the haze keeps under them. */
+      --haze-h: 104px;
       --cloud-t: 40px;
       --cloud-w: clamp(96px, 12vw, 124px);
     }
     .pl {
       --plate-w: min(40%, calc(var(--ridge-l) + var(--ridge-w) - var(--rel-w)));
-    }
-    .pl-tag[data-part='ship'] .u {
-      display: block;
-      margin-top: 2px;
     }
   }
   /* A phone: the plate leaves the sky for the ground under the picture, at a
@@ -729,63 +523,28 @@
       --world: 360px;
       --ground: 52px;
       --ridge-w: 44%;
-      --ridge-h: 104px;
+      --ridge-h: 72px;
       --town-l: 45.5%;
-      --town-w: 40%;
-      --town-h: 84px;
-      --lh-w: 42px;
-      --lh-h: 140px;
+      --town-w: calc(54.5% - var(--lh-w) - 8px);
+      --town-h: 100px;
+      --lh-w: 45px;
+      --lh-h: 150px;
+      --kerb: 6px;
       --rel-y: 170px;
       --rel-w: 170px;
-      --ship-y: 146px;
-      --pulse-lead: 44px;
+      --ship-y: 150px;
+      --pulse-lead: 36px;
       --plate-h: 206px;
       --pad-b: 16px;
       --below: calc(var(--plate-h) + 8px + var(--pad-b));
       --cloud-l: 0px;
       --cloud-w: 96px;
+      --haze-h: 84px;
       --cloud-t: auto;
     }
     .pl-box {
       grid-template-areas: 'top' 'world' 'plate';
       padding-bottom: var(--pad-b);
-    }
-    .pl-tag[data-part='daydream'] {
-      left: calc(var(--cloud-w) + 14px);
-      top: auto;
-      bottom: calc(var(--below) + var(--world) - 66px);
-    }
-    .pl-tag[data-part='daydream'] .pl-lead {
-      display: none;
-    }
-    .pl-tag[data-part='daydream'] button {
-      left: 0;
-      top: auto;
-      bottom: 0;
-      transform: none;
-    }
-    /* Ship stands on the town's first block, clear of the lighthouse. */
-    .pl-tag[data-part='ship'] {
-      left: calc(var(--town-l) + var(--town-w) * var(--bx0, 0.06));
-      bottom: calc(var(--below) + var(--ground) + var(--town-h) * var(--by0, 0));
-      --lead: calc(var(--ship-y) - var(--ground) - var(--town-h) * var(--by0, 0));
-    }
-    .pl-tag[data-part='ship'] .s {
-      display: none;
-    }
-    .pl-tag[data-part='pulse'] .s {
-      width: 8.5em;
-      margin-left: auto;
-      white-space: normal;
-    }
-    .v {
-      font-size: 20px;
-    }
-    .pl-tag[data-part='steps'] {
-      bottom: calc(var(--below) + 15px);
-    }
-    .pl-tag[data-part='steps'] .v {
-      font-size: 18px;
     }
   }
   /* The narrowest phones wrap the plate's words onto more lines; a wide one
@@ -801,6 +560,12 @@
     }
   }
 
+  @media (prefers-reduced-motion: reduce) {
+    .pl {
+      transition: none;
+    }
+  }
+
   /* Print: ink on paper. The picture does not survive the trip, so the title,
      the dateline and every reading print as text with its explanation. */
   @media print {
@@ -810,10 +575,10 @@
       color: #1a1008;
     }
     .pl-stars,
-    .pl-world,
-    .pl-tag {
+    .pl-world {
       display: none;
     }
+
     .pl-box {
       grid-template-areas: 'top' 'plate' 'print';
       padding-bottom: 0;

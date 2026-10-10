@@ -21,7 +21,9 @@
   import { scenery } from '$lib/landing/ramblers/scenery';
   import { rambler, toggleRambler } from '$lib/landing/ramblers/visibility.svelte';
   import { LiveVitals } from '$lib/landing/live-vitals.svelte';
-  import { readPulse } from '$lib/landing/sentence';
+  import { londonHour, readPulse } from '$lib/landing/sentence';
+  import { groundAt } from '$lib/landing/sky-ground';
+  import { skyLight } from '$lib/landing/sun';
   import { localToday } from '$lib/constants/health-day';
   import type { VitalsStore } from '$lib/vitals/store.svelte';
   import type { BuildShowcase } from '$lib/landing/showcase';
@@ -51,6 +53,17 @@
   let pulse = $derived(readPulse(reading, live.now));
   let town = $derived(mounted ? store.state.town : undefined);
   let temp = $derived(reading?.sources?.weather ? reading.weather.temp : null);
+  // The sun where he is, for the place view's sky: the newest of the vitals
+  // poll and the page's own load, each only an altitude and whether it climbs.
+  // A dev ?sun= pin (sunPinned) wins over the poll so screenshots hold still.
+  let sun = $derived(data.sunPinned ? data.sun : (reading?.sun ?? data.sun ?? null));
+  // The place view carries that light's ground on down the page: the sky's
+  // own ground (sky.ts), read from sky-ground.ts so this eager chunk never
+  // carries the whole sky, which stays in the place view's lazy chunks.
+  let placeGround = $derived.by(() => {
+    if (page.view !== 'place') return undefined;
+    return groundAt(skyLight(sun, live.now, londonHour(live.now) < 12).alt);
+  });
   // Shipping, read off the release showcase — one loader, several readings.
   // Days are London days (localCadence), the same day as the dateline and the
   // steps, so "today" never means yesterday in the hour after midnight BST.
@@ -116,6 +129,7 @@
     {town}
     {temp}
     {pulse}
+    {sun}
     v={live.v}
     now={live.now}
     facts={data.capabilities}
@@ -130,7 +144,7 @@
 <!-- Everything below the hero follows its view: the showcase is told in the
      same style (each view's own chunk, swapped with the hero), and the
      writing strip and footer take a light coat of it. -->
-<div class="below" data-view={page.view}>
+<div class="below" data-view={page.view} style:--sky-ground={placeGround}>
   <ShowcaseViews
     {page}
     data={data.showcase}
@@ -138,6 +152,7 @@
     v={live.v}
     now={live.now}
     {pulse}
+    {sun}
     steps={data.steps}
     cadence={days}
     facts={data.capabilities}
@@ -198,8 +213,17 @@
     color: var(--text-primary);
   }
   .below[data-view='place'] {
-    background: var(--place-night);
+    /* --sky-ground is the live sky's ground (registered as a colour by the
+       place hero's PlaceSkyProps, so a change of light eases); --place-night
+       is its night. */
+    background: var(--sky-ground, var(--place-night));
     color: var(--bg);
+    transition: --sky-ground 2s ease;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .below[data-view='place'] {
+      transition: none;
+    }
   }
   .below[data-view='notes'] {
     background: var(--bg) repeating-linear-gradient(transparent 0 31px, var(--line-hair) 31px 32px);

@@ -1,12 +1,14 @@
 // place.ts — the geometry of the landing hero's "place" view: the day drawn as
-// a small dusk landscape under the title.
+// a small city under the title, in the light where the owner is.
 //
-// One horizon, read left to right as then to now: a ridge of every release day
-// from the first to six weeks ago, then a terrace of forty houses, one per day
-// of the last forty (a lit window per deploy), then a lighthouse whose lamp
-// keeps the last heart rate. Today's steps run along the shore underneath on a
-// day's own scale, and the next daydream gathers as a cloud in the sky. The
-// ridge stops where the town begins, so no day is drawn twice.
+// One skyline, read left to right as then to now: a distant skyline (the
+// "ridge") of every release day from the first to six weeks ago, then a street
+// of forty buildings, one per day of the last forty (a lit pane per deploy;
+// ./place-city), then the tallest tower, whose beacon keeps the last heart
+// rate. Today's steps run along the promenade underneath on a day's own scale,
+// and the next daydream gathers as a cloud in the sky. The far skyline stops
+// where the street begins, so no day is drawn twice. The showcase's works yard
+// keeps the older terrace (`town`) below.
 //
 // Pure: dates and counts in, path strings out, in fixed boxes the view scales
 // with CSS (x across 1000 units, y in each layer's own units), so the server
@@ -26,67 +28,15 @@ const DAY_MS = 86_400_000;
 
 /* -------------------------------------------------------------------- sky */
 
-/**
- * The sun's altitude in degrees for an instant, over the north of England
- * (about 54.5°N, 1.5°W). Low-precision solar position, good to a fraction of a
- * degree, which is all a sky colour needs. The place is approximate on purpose:
- * the town in the dateline is the only location the page shows.
- */
-export function sunAltitude(ms: number, lat = 54.5, lon = -1.5): number {
-  const rad = Math.PI / 180;
-  const d = ms / DAY_MS - 10957.5; // days from J2000
-  const g = (357.529 + 0.98560028 * d) * rad;
-  const q = 280.459 + 0.98564736 * d;
-  const L = (q + 1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g)) * rad;
-  const e = (23.439 - 3.6e-7 * d) * rad;
-  const ra = Math.atan2(Math.cos(e) * Math.sin(L), Math.cos(L));
-  const dec = Math.asin(Math.sin(e) * Math.sin(L));
-  const gmst = (((18.697374558 + 24.06570982441908 * d) % 24) + 24) % 24;
-  const ha = (gmst * 15 + lon) * rad - ra;
-  const la = lat * rad;
-  return Math.asin(Math.sin(la) * Math.sin(dec) + Math.cos(la) * Math.cos(dec) * Math.cos(ha)) / rad;
-}
+// The sun's position lives in ./sun (the owner's sun is worked out on the
+// server from it); re-exported so this module's callers keep one import.
+export { sunAltitude } from './sun';
 
-export interface Sky {
-  /** Three stops, zenith to horizon, as #rrggbb. */
-  top: string;
-  mid: string;
-  low: string;
-  /** "night", "dawn", "sunrise", "daylight", "sunset", "dusk". */
-  word: string;
-  /** How much of the starfield shows, 0..1. */
-  stars: number;
-}
-
-// Clamped dark at every hour so cream type keeps its contrast (place.test.ts
-// checks every stop): only the low sky warms at the turn of the day, and the
-// daytime sky is a deep slate rather than blue.
-const STOPS: Array<[number, [string, string, string]]> = [
-  [-16, ['#0b0806', '#100c0a', '#161114']],
-  [-9, ['#0d0907', '#140f0d', '#231512']],
-  [-3, ['#0f0b09', '#1a120f', '#381c12']],
-  [3, ['#11100e', '#1f1712', '#40221a']],
-  [16, ['#0f1719', '#142023', '#1c2c2f']],
-];
+// The sky itself (its colours at every sun altitude, and the light model the
+// scenery reads from it) lives in ./sky; re-exported for the same reason.
+export { skyAt, skyVars, type Sky, type SkyWord } from './sky';
 
 const hex = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
-function mix(a: string, b: string, t: number): string {
-  const A = hex(a);
-  const B = hex(b);
-  return `#${A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0')).join('')}`;
-}
-
-/** The sky for a sun altitude; `morning` picks dawn over dusk for the same light. */
-export function skyAt(alt: number, morning: boolean): Sky {
-  let i = 0;
-  while (i < STOPS.length - 1 && alt >= STOPS[i + 1][0]) i++;
-  const [a0, A] = STOPS[i];
-  const [b0, B] = STOPS[Math.min(i + 1, STOPS.length - 1)];
-  const t = b0 === a0 ? 0 : clamp((alt - a0) / (b0 - a0), 0, 1);
-  const [top, mid, low] = A.map((c, k) => mix(c, B[k], t));
-  const word = alt > 6 ? 'daylight' : alt > -1 ? (morning ? 'sunrise' : 'sunset') : alt > -12 ? (morning ? 'dawn' : 'dusk') : 'night';
-  return { top, mid, low, word, stars: Math.round(clamp((-alt - 4) / 10, 0, 1) * 100) / 100 };
-}
 
 /** A fixed scatter of stars in a 1000×300 box, kept off the bottom third where the hills are. */
 export function starfield(n = 46): Array<[number, number, number]> {
@@ -98,15 +48,17 @@ export function starfield(n = 46): Array<[number, number, number]> {
 /* ------------------------------------------------------------------ ridge */
 
 export interface Ridge {
-  /** The near range, filled, in a 1000×100 box with its baseline at y = 100. */
+  /** The near range of distant towers, filled, in a 1000×100 box with the street at y = 100. */
   d: string;
-  /** Its crest alone, for the rim light. */
+  /** Their rooftops alone, for the rim light. */
   crest: string;
-  /** The far range behind it: the same days' local highs, softened, so the ridge has depth. */
+  /** The farther range behind them: the same days' local highs, softened, so the skyline has depth. */
   far: string;
-  /** Two fainter contours under the near crest, the same profile lowered, like an engraving's strata. */
-  strata: string;
-  /** The highest crest point in the right-hand third, where the label pins: x in 0..1, y up from the base in 0..1. */
+  /** A scatter of window lights in the near range, for the night (a texture, not a count). */
+  lights: string;
+  /** Masts on a few of the near roofs, stroked. */
+  masts: string;
+  /** The highest rooftop in the right-hand third, where the label pins: x in 0..1, y up from the base in 0..1. */
   pin: { x: number; y: number };
   /** First and last day drawn, YYYY-MM-DD. */
   from: string;
@@ -129,15 +81,43 @@ function soften(v: number[], k: number): number[] {
   });
 }
 
+/** A fixed repeatable stream, so the far city's columns stand in the same places every day. */
+function stream(seed: number) {
+  let s = seed;
+  return () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646;
+}
+
 /**
- * Releases per day from the first to the day before the terrace begins, as a
- * mountain ridge: each day's height is √count of the busiest day's, so one
+ * Columns across the 1000-wide box, widths between `lo` and `hi`, each as tall
+ * as the highest of the days it stands over (`v` in 0..1, one per day).
+ */
+function columns(v: number[], seed: number, lo: number, hi: number, gaps: number) {
+  const rnd = stream(seed);
+  const n = v.length;
+  const out: Array<{ x: number; w: number; h: number; r: number }> = [];
+  for (let x = 0; x < 1000; ) {
+    let w = lo + rnd() * (hi - lo);
+    if (1000 - (x + w) < lo) w = 1000 - x;
+    const a = Math.floor((x / 1000) * n);
+    const b = Math.min(n - 1, Math.max(a, Math.ceil(((x + w) / 1000) * n) - 1));
+    let h = 0;
+    for (let i = a; i <= b; i++) h = Math.max(h, v[i]);
+    out.push({ x, w, h, r: rnd() });
+    x += w + (rnd() < 0.6 ? gaps * (0.5 + rnd()) : 0);
+  }
+  return out;
+}
+
+/**
+ * Releases per day from the first to the day before the near city begins, as
+ * a distant skyline: each day's height is √count of the busiest day's, so one
  * huge day reads as a peak rather than flattening the rest. The near range is
- * the days lightly blended (five at a time) so it reads as land, not a bar
- * chart; the far range behind is the same days averaged over a fortnight and
- * raised, so a busy spell stands up behind as a massif. Null only when no day
- * precedes the town (a record of forty days or fewer): even one earlier day
- * gets its peak, so the plate never claims the town holds days it doesn't.
+ * the days lightly blended (five at a time), stood up as towers, so it reads
+ * as a city, not a bar chart; the farther range behind is the same days
+ * averaged over a fortnight and raised, so a busy spell stands up behind as a
+ * cluster. Null only when no day precedes the city (a record of forty days or
+ * fewer): even one earlier day gets its tower, so the plate never claims the
+ * city holds days it doesn't.
  */
 export function ridge(cadence: DayCount[], todayKey: string): Ridge | null {
   if (!cadence.length) return null;
@@ -147,21 +127,49 @@ export function ridge(cadence: DayCount[], todayKey: string): Ridge | null {
   const peak = Math.sqrt(Math.max(1, ...days.map((d) => d.count)));
   const raw = days.map((d) => Math.sqrt(d.count) / peak);
   const near = soften(raw, 2);
-  const far = soften(raw, 9).map((h, i) => Math.max(Math.min(1, h * 1.4), near[i]));
+  const farV = soften(raw, 9).map((h, i) => Math.max(Math.min(1, h * 1.4), near[i]));
   const n = near.length;
-  const xs = near.map((_, i) => r1(((i + 0.5) / n) * 1000));
-  const y = (h: number, k = 1) => r1(100 - 4 - h * 92 * k);
-  const line = (v: number[], k = 1) => v.map((h, i) => `${i ? 'L' : 'M'}${xs[i]},${y(h, k)}`).join(' ');
-  // The foot rises from the baseline at both ends, so the ridge sits on the land.
-  const fill = (v: number[]) => `M0,100 L0,96 ${line(v).replace(/^M/, 'L')} L1000,96 L1000,100 Z`;
-  let best = Math.floor(n * 0.66);
-  for (let i = best; i < n; i++) if (near[i] > near[best]) best = i;
+  const y = (h: number) => r1(100 - 4 - h * 92);
+  const box = (x: number, top: number, w: number) => `M${r1(x)},100V${top}H${r1(x + w)}V100Z`;
+
+  const nearCols = columns(near, 7919, 10, 24, 3);
+  let d = '';
+  let crest = '';
+  let lights = '';
+  let masts = '';
+  for (const c of nearCols) {
+    const top = y(c.h);
+    // A few step in at the top, as towers do.
+    const step = c.r < 0.3 && top < 70 && c.w > 14;
+    if (step) {
+      const i = c.w * 0.2;
+      const sh = r1(Math.min(96, top + 4));
+      d += `M${r1(c.x)},100V${sh}H${r1(c.x + i)}V${top}H${r1(c.x + c.w - i)}V${sh}H${r1(c.x + c.w)}V100Z`;
+      crest += `M${r1(c.x)},${sh}H${r1(c.x + i)}V${top}H${r1(c.x + c.w - i)}V${sh}H${r1(c.x + c.w)}`;
+    } else {
+      d += box(c.x, top, c.w);
+      crest += `M${r1(c.x)},${top}H${r1(c.x + c.w)}`;
+    }
+    if (c.r > 0.82 && top < 60) masts += `M${r1(c.x + c.w / 2)},${top}V${r1(Math.max(1, top - 6 - c.r * 6))}`;
+    // Windows on a grid, a few lit: rows every 7 units, columns every 5.
+    const lit = stream(Math.round(c.x * 31) + 11);
+    for (let wy = step ? top + 6 : top + 4; wy < 92; wy += 6)
+      for (let wx = c.x + 2.5; wx < c.x + c.w - 2.5; wx += 4) if (lit() < 0.18) lights += `M${r1(wx)},${r1(wy)}h1.4v1.4h-1.4Z`;
+  }
+  const far = columns(farV, 104729, 14, 34, 2)
+    .map((c) => box(c.x, y(c.h), c.w))
+    .join('');
+
+  // The pin: the tallest rooftop in the right-hand third.
+  let best = nearCols.find((c) => c.x + c.w / 2 >= 660) ?? nearCols[nearCols.length - 1];
+  for (const c of nearCols) if (c.x + c.w / 2 >= 660 && c.h > best.h) best = c;
   return {
-    d: fill(near),
-    crest: line(near),
-    far: fill(far),
-    strata: `${line(near, 0.62)} ${line(near, 0.3)}`,
-    pin: { x: Math.round(xs[best]) / 1000, y: Math.round(4 + near[best] * 92) / 100 },
+    d,
+    crest,
+    far,
+    lights,
+    masts,
+    pin: { x: Math.round(best.x + best.w / 2) / 1000, y: Math.round(4 + best.h * 92) / 100 },
     from: days[0].date,
     to: days[n - 1].date,
     days: n,
@@ -259,7 +267,7 @@ export interface Path {
   now: number;
 }
 
-/** Today's steps along the shore: midnight at the left, 23:59 at the right, nothing after now. */
+/** Today's steps along the promenade: midnight at the left, 23:59 at the right, nothing after now. */
 export function footpath(s: StepsToday | null, nowBin: number): Path {
   const now = rulerNow(s?.nowBin ?? nowBin);
   if (!s || s.total == null) return { marks: '', now };

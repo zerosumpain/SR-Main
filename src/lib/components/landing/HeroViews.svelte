@@ -1,9 +1,13 @@
 <script module lang="ts">
   import type { Component, ComponentProps } from 'svelte';
   import type HeroSentence from './HeroSentence.svelte';
+  import type { OwnerSun } from '$lib/landing/sun';
 
-  /** The props every view takes, identically. */
-  export type HeroProps = ComponentProps<typeof HeroSentence>;
+  /**
+   * The props every view takes, identically, plus the owner's sun, which only
+   * the place view draws (its sky); the others ignore it.
+   */
+  export type HeroProps = ComponentProps<typeof HeroSentence> & { sun?: OwnerSun | null };
   export type HeroViewComponent = Component<HeroProps>;
 </script>
 

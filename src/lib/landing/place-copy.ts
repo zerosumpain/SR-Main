@@ -6,7 +6,7 @@
 // words: a dash until a reading is real, a stale pulse that never says for how
 // long, steps that are "none yet" rather than zero, a daydreamer that is
 // asleep, thinking now or switched off. The explanations are the sentence's
-// footnotes, retold for the picture ("the lamp" where they say "the line").
+// footnotes, retold for the picture ("the beacon" where they say "the line").
 // Pure, so every state is a unit test (place-copy.test.ts).
 
 import type { CapabilityFacts } from './capabilities';
@@ -141,16 +141,16 @@ export function tagLine(t: Tag): string {
 }
 
 /**
- * The line under the plate saying what the lamp is doing. Any rate it shows is
- * the real one; only a lamp that flashes says the rate it flashes at, and then
+ * The line under the plate saying what the beacon is doing. Any rate it shows is
+ * the real one; only a beacon that flashes says the rate it flashes at, and then
  * owns up when that is the nearest it can draw.
  */
 export function lampCaption(bpm: number | null, reduced: boolean): string {
-  if (bpm == null) return 'the lamp is dark: no fresh pulse to keep';
+  if (bpm == null) return 'the beacon is dark: no fresh pulse to keep';
   const drawn = clampBpm(bpm);
-  if (reduced) return `the lamp is lit for ${bpm} bpm, and keeps still`;
-  if (lampFor(drawn) === 'steady') return `at ${bpm} bpm the lamp holds steady, too quick to flash`;
-  return `the lamp keeps time at ${drawn} bpm${drawn === bpm ? '' : ', as near as it draws'}`;
+  if (reduced) return `the beacon is lit for ${bpm} bpm, and keeps still`;
+  if (lampFor(drawn) === 'steady') return `at ${bpm} bpm the beacon holds steady, too quick to flash`;
+  return `the beacon keeps time at ${drawn} bpm${drawn === bpm ? '' : ', as near as it draws'}`;
 }
 
 /** All five, in the sentence's reading order. */
@@ -184,12 +184,12 @@ export interface PlateInput {
   stats: ShipStats;
   /** Null (or no releases) when the record is unavailable. */
   releases: { total: number; days: number } | null;
-  /** The first and last day the ridge draws, or null with no ridge. */
+  /** The first and last day the far skyline draws, or null with none. */
   ridge: { from: string; to: string } | null;
 }
 
 /** The plate for a part drawn from the release record while the record is away. */
-function away(kicker: 'Ship' | 'Releases', part: 'town' | 'ridge'): Plate {
+function away(kicker: 'Ship' | 'Releases', part: 'street' | 'far skyline'): Plate {
   return {
     hint: kicker === 'Ship' ? 'Deploys today.' : 'Every release on record.',
     head: `${kicker} · the record isn’t answering`,
@@ -215,21 +215,21 @@ export function placePlates(p: PlateInput): Record<NoteId, Plate> {
       text:
         'My heart rate as the Apple Watch last read it, sent up by the phone. ' +
         (drawn == null
-          ? 'With no fresh reading the lamp stays dark rather than make one up.'
+          ? 'With no fresh reading the beacon stays dark rather than make one up.'
           : lamp === 'steady'
-            ? 'Above 180 a minute a flash would come more than three times a second, so the lamp holds steady instead.'
+            ? 'Above 180 a minute a flash would come more than three times a second, so the beacon holds steady instead.'
             : drawn !== bpm
-              ? `The lamp keeps ${BPM_MIN} to ${BPM_MAX} a minute, so it flashes at ${drawn}, the nearest it can.`
+              ? `The beacon keeps ${BPM_MIN} to ${BPM_MAX} a minute, so it flashes at ${drawn}, the nearest it can.`
               : lamp === 'lubdub'
-                ? 'The lighthouse flashes at exactly that rate, twice a beat like the heart.'
-                : 'The lighthouse flashes once a beat at exactly that rate.'),
+                ? 'The beacon on the tallest tower flashes at exactly that rate, twice a beat like the heart.'
+                : 'The beacon on the tallest tower flashes once a beat at exactly that rate.'),
       href: '/health',
       cta: 'Health record',
     },
     steps: {
       hint: 'Steps since midnight, from the phone.',
       head: 'Steps · 00:00 → 23:59 · a mark per quarter-hour',
-      text: 'Today on foot along the shore, each mark as tall as its quarter-hour’s steps: midnight at the left, 23:59 at the right. Nothing is drawn after now; the rest is pending.',
+      text: 'Today on foot along the promenade, each mark as tall as its quarter-hour’s steps: midnight at the left, 23:59 at the right. Nothing is drawn after now; the rest is pending.',
       href: '/health',
       cta: 'Health record',
     },
@@ -242,15 +242,15 @@ export function placePlates(p: PlateInput): Record<NoteId, Plate> {
       href: '/projects/engine-room/daydream',
       cta: 'How Daydream works',
     },
-    // With the record down there is no town and no ridge, and nothing to count:
+    // With the record down there is no street and no far skyline, and nothing to count:
     // the plate says so rather than state zeros, as the sentence does.
     ship: !n
-      ? away('Ship', 'town')
+      ? away('Ship', 'street')
       : {
           hint: 'Deploys today.',
           head: `Ship · ${p.days.at(-1)?.count ?? 0} today · ${p.days.at(-2)?.count ?? 0} yesterday · last ${n} days`,
           text:
-            `A house a day for ${n} days, a lit window per deploy, today outlined on the right. ` +
+            `A building a day for ${n} days, a lit pane per deploy, today outlined on the right. ` +
             (busiest
               ? `${p.stats.total.toLocaleString('en-GB')} in ${n} days, the busiest ${busiest.count} on ${dayName(busiest.date)}, and ${p.stats.quiet} days with none.`
               : `Nothing in ${n} days.`),
@@ -259,13 +259,13 @@ export function placePlates(p: PlateInput): Record<NoteId, Plate> {
         },
     releases:
       !p.releases || p.releases.total <= 0
-        ? away('Releases', 'ridge')
+        ? away('Releases', 'far skyline')
         : {
             hint: 'Every release on record.',
             head: `Releases · ${p.releases.total.toLocaleString('en-GB')} over ${p.releases.days} days`,
             text: p.ridge
-              ? `The ridge is releases a day from ${dayName(p.ridge.from)} to ${dayName(p.ridge.to)}, higher for busier, each summarised from its own commit range. It stops where the town takes over, so no day is drawn twice.`
-              : 'Releases a day since the first, each summarised from its own commit range. The record is too young for a ridge yet; the town holds all of it.',
+              ? `The far skyline is releases a day from ${dayName(p.ridge.from)} to ${dayName(p.ridge.to)}, taller for busier, each summarised from its own commit range. It stops where the street takes over, so no day is drawn twice.`
+              : 'Releases a day since the first, each summarised from its own commit range. The record is too young for a far skyline yet; the street holds all of it.',
             href: '/releases',
             cta: 'Browse the record',
           },

@@ -122,9 +122,10 @@
   --medal-bronze-bg: rgba(150, 97, 58, 0.16);
   --medal-bronze-line: rgba(150, 97, 58, 0.55);
 
-  /* The landing page's night: the place view's sky and the ground it carries
-     on down the page below the hero. The same in both themes (it is a
-     picture's sky, not chrome); text on it uses the *-on-dark tokens. */
+  /* The landing page's night: the place view's ground, carried on down the
+     page below the hero. The same in both themes (it is a picture's ground,
+     not chrome); text on it uses the *-on-dark tokens. The live page sets it
+     from the sky (sky.ts `ground`): this ink at night, a blue-grey by day. */
   --place-night: #0b0806;
 
 

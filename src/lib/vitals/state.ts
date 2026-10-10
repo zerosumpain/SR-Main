@@ -38,6 +38,15 @@ export interface VitalsState {
    * stale one: how long the watch has been off is not for the public feed.
    */
   pulseAt?: string;
+  /**
+   * The sun where he is, for the landing place view's sky: altitude in whole
+   * degrees and whether it is climbing (the shape of OwnerSun in
+   * $lib/landing/sun, written out here so this module does not import the
+   * landing page). Worked out on the server from the position rounded to half
+   * a degree; never a coordinate. Null before Home Assistant has ever given a
+   * position.
+   */
+  sun?: { alt: number; rising: boolean } | null;
 }
 
 export const VITALS_DEFAULTS: VitalsState = {

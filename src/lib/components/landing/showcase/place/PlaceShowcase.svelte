@@ -1,41 +1,49 @@
 <svelte:options css="injected" />
 
 <script lang="ts">
-  // The place's showcase: the night walk on down the page from the hero's
-  // landscape. Four scenes, each drawn like the hero (a hand-built picture,
+  // The place's showcase: the walk on down the page from the hero, through
+  // the city in the hero's own light (the sky's colours and the city's, from
+  // the owner's sun: night, the blue hour, a low sun or full day). Four
+  // scenes, each drawn like the hero (a hand-built picture,
   // every reading a real label pinned to its part on a leader line, one plate
   // that explains whichever label is open), then a fingerpost.
   //
-  //   1. The observatory (Daydream), heading left, the hill on the right.
+  //   1. The observatory (Daydream), heading left, a domed observatory on
+  //      the roof of the tallest tower on the right, the street below.
   //      Headline: questions it asked itself this week, counting up while the
   //      stars come on one by one, a star a question. Labels: hours in the
   //      dome (its lit slit, its panels the areas of life), look-ups (the
   //      telescope), claims struck out (crossed stars), worth reading (a
   //      constellation of twelve weeks of verdicts), shipped (shooting stars)
-  //      and the next think (the hero's cloud). The rules under the plate.
-  //      Rambler: the heading, the observatory's terrace ('think'), the ground.
+  //      and the next think (the hero's cloud). By day the stars stay, as
+  //      points on the dome's star chart. The rules under the plate.
+  //      Rambler: the heading, the roof deck ('think'), the ground.
   //   2. The long walk (Health), heading right. Headline: steps since
-  //      January, counting up while the path of the year's kilometres draws
-  //      itself down the hill. Labels: km on foot (best day on the path),
-  //      days over ten thousand (a tree a day for the last thirty, the dashed
-  //      line), recovery (thirty lanterns by band, shape as well as colour),
-  //      sleep (the moon) and today (an hour to a bar; the cottage window
-  //      glows with a fresh pulse, with "hold still"). Rambler: the heading
-  //      ('gym', where he checks his pulse), the cottage roof, the ground.
-  //   3. The house with a light on (the app), heading left. Headline: the
-  //      app's doorways into the site, a lit window each in the block,
+  //      January, counting up while the elevated walkway of the year's
+  //      kilometres draws itself down between the towers. Labels: km on foot
+  //      (best day on the walkway), days over ten thousand (a street tree a
+  //      day for the last thirty, the dashed line), recovery (thirty festoon
+  //      lights by band, shape as well as colour), sleep (the moon) and today
+  //      (an hour to a bar; the town house's window glows with a fresh pulse,
+  //      with "hold still"). Rambler: the heading ('gym', where he checks his
+  //      pulse), the festoon's ends, the ground.
+  //   3. The flat with a light on (the app), heading left. Headline: the
+  //      app's doorways into the site, a pane each in the office tower,
   //      lighting one by one. Labels: iPhone tabs, Apple Watch Readiness,
   //      Siri phrases (the mast), the Lock Screen Live Activity and widgets,
   //      family games, the areas. Pairing under the plate. Rambler: the
-  //      heading, the block's roof, the ground.
-  //   4. The works (shipping), heading right. Headline: releases. A crane
-  //      lowers today's deploys as crates; the town's last weeks; the
-  //      builder's lit sign; a star on the jib for Daydream's ideas. Rambler:
-  //      the heading, the site hut ('desk'), the ground.
-  //   5. A fingerpost: run on a schedule, answer back, track the family.
+  //      heading, the tower's roof, the ground.
+  //   4. The works (shipping), heading right. Headline: releases. A tower
+  //      crane over a site between glass towers lowers today's deploys as
+  //      crates; the town's last weeks; the builder's lit sign; a star on the
+  //      jib for Daydream's ideas. Rambler: the heading, the site cabins
+  //      ('desk'), the ground.
+  //   5. A wayfinding totem: run on a schedule, answer back, track the family.
   //
   // Ids are prefixed 'sp-' so nothing collides with the hero's.
-  import { cloud, skyAt, sunAltitude, town } from '$lib/landing/place';
+  import { cloud, skyAt, skyVars, town } from '$lib/landing/place';
+  import { cityLight, cityVars, quietBoxes, windowGrid } from '$lib/landing/showcase-city';
+  import { skyLight } from '$lib/landing/sun';
   import { daydreamTag } from '$lib/landing/place-copy';
   import { londonHour, readDaydream } from '$lib/landing/sentence';
   import { shipDays } from '$lib/landing/rhythm';
@@ -43,28 +51,28 @@
   import type { ShowcaseProps } from '$lib/landing/showcase';
   import { beatFor, formatFigure } from '$lib/landing/showcase-motion';
   import {
-    appWords,
     constellation,
-    contours,
     crates,
-    daydreamWords,
     domePanels,
-    healthWords,
     hourly,
-    labelBox,
     lanterns,
     meteors,
     moon,
     questionSky,
-    signposts,
     slitShare,
     stepTrees,
     stringPath,
     walk,
     windows,
+  } from '$lib/landing/showcase-place';
+  import {
+    appWords,
+    daydreamWords,
+    healthWords,
+    signposts,
     worksWords,
     type Tag,
-  } from '$lib/landing/showcase-place';
+  } from '$lib/landing/showcase-place-words';
   import { localToday } from '$lib/constants/health-day';
   import PlaceScene, { type Pin, type PinnedTag } from './PlaceScene.svelte';
   import ObservatoryArt, { OBS } from './ObservatoryArt.svelte';
@@ -73,11 +81,15 @@
   import WorksArt, { WORKS } from './WorksArt.svelte';
   import Fingerpost from './Fingerpost.svelte';
 
-  let { data, build, v, now, pulse, steps, cadence, facts }: ShowcaseProps = $props();
+  let { data, build, v, now, pulse, steps, cadence, facts, sun = null }: ShowcaseProps = $props();
 
   let todayKey = $derived(localToday(new Date(now)));
   // The hero's live sky, so the walk down begins under the same light.
-  let heroSky = $derived(skyAt(sunAltitude(now), londonHour(now) < 12));
+  let heroLight = $derived(skyLight(sun, now, londonHour(now) < 12));
+  let heroSky = $derived(skyAt(heroLight.alt, heroLight.morning));
+  // The city in that light, and where the sun stands for the scenes' sunlit faces and shadows.
+  let city = $derived(cityLight(heroSky, heroLight.alt));
+  let lit = $derived({ side: heroSky.side, reach: city.reach });
   const pin = (t: Tag, p: Pin, extra: Partial<PinnedTag> = {}): PinnedTag => ({ ...t, ...p, ...extra });
 
   /* ------------------------------------------------------- the observatory */
@@ -96,11 +108,11 @@
     const last = rated.at(-1) ?? { x: 900, y: 205 };
     const fall = falls.at(-1);
     return {
-      next: { x: OBS.cloud.x, y: OBS.cloud.y + 40, dir: 'side', lead: 20, hang: 'l', tone: 'ink' } as Pin,
-      useful: { x: last.x, y: last.y, dir: 'up', lead: 26, hang: 'l', tone: 'ink' } as Pin,
+      next: { x: OBS.cloud.x, y: OBS.cloud.y + 32, dir: 'side', lead: 20, hang: 'l', tone: 'ink' } as Pin,
+      useful: { x: last.x, y: last.y, dir: 'up', lead: 12, hang: 'l', tone: 'ink' } as Pin,
       // On a tablet the next think rides higher and the verdicts' label lower, clear of each other.
       nextN: { y: OBS.cloud.y + 20 },
-      usefulN: { lead: 14 },
+      usefulN: { lead: 12 },
       dome: { x: OBS.dome.cx - OBS.dome.r * 0.6, y: OBS.dome.cy - OBS.dome.r * 0.8, dir: 'up', lead: 44, hang: 'l', tone: 'accent' } as Pin,
       lookups: { x: OBS.terrace.x - 4, y: OBS.terrace.y + 38, dir: 'side', lead: 24, hang: 'l', tone: 'ink' } as Pin,
       shipped: fall ? ({ x: fall.x2, y: fall.y2, dir: 'down', lead: 14, hang: 'r', tone: 'accent' } as Pin) : null,
@@ -111,7 +123,8 @@
       { x: 690, y: 290, w: 200, h: 140 },
       { x: 846, y: 10, w: 154, h: 104 },
       { x: STRUCK_AT.x - 6, y: STRUCK_AT.y + 6, w: 176, h: 70 },
-      ...[ddPins.next, ddPins.useful, ddPins.dome, ddPins.lookups, ddPins.shipped].flatMap((p) => (p ? [labelBox(p)] : [])),
+      // Each label's words at every width it is drawn at (quietBoxes), so no star sits among them.
+      ...quietBoxes([ddPins.next, ddPins.useful, ddPins.dome, ddPins.lookups, ...(ddPins.shipped ? [ddPins.shipped] : [])]),
     ], [STRUCK_AT.x, STRUCK_AT.y]),
   );
   let ddw = $derived(daydreamWords(dd, sky, next, daydreamTag(next)));
@@ -134,7 +147,6 @@
 
   /* --------------------------------------------------------- the long walk */
 
-  const LINES = contours(15, 18, 548, 11);
   let h = $derived(data.health);
   let path = $derived(walk(h.kmYear));
   let rows = $derived(stepTrees(h.steps30, WALK.trees));
@@ -163,6 +175,7 @@
 
   let a = $derived(data.app);
   let lights = $derived(windows(a.nativeEndpoints, 6, HOUSE.windows));
+  let grid = $derived(windowGrid(a.nativeEndpoints, 6, HOUSE.windows));
   let aw = $derived(appWords(a));
   let aTags = $derived.by(() => {
     const by = Object.fromEntries(aw.tags.map((t) => [t.id, t])) as Record<string, Tag>;
@@ -174,8 +187,8 @@
       pin(by.areas, { x: HOUSE.block.x + HOUSE.block.w - 23, y: HOUSE.block.y - 16, dir: 'up', lead: 30, hang: 'r' }),
       pin(by.games, { x: c.x + c.w / 2, y: c.wall - 30, dir: 'up', lead: 262, hang: 'l' }, { narrow: { lead: 200 } }),
       pin(by.siri, { x: HOUSE.mast.x - 6, y: HOUSE.mast.top + 6, dir: 'side', lead: 16, hang: 'l', tone: 'ink' }),
-      pin(by.phone, { x: ph.x + ph.w / 2, y: ph.y, dir: 'up', lead: 112, hang: 'l' }, { narrow: { wrap: 11 } }),
-      pin(by.lock, { x: w.x + w.w, y: w.y, dir: 'up', lead: 104, hang: 'r' }),
+      pin(by.phone, { x: ph.x + ph.w / 2, y: ph.y, dir: 'up', lead: 128, hang: 'l' }, { narrow: { wrap: 11, lead: 128 } }),
+      pin(by.lock, { x: w.x + w.w, y: w.y, dir: 'up', lead: 120, hang: 'r' }, { narrow: { lead: 104 } }),
       pin(by.watch, { x: HOUSE.watch.x + HOUSE.watch.w, y: HOUSE.watch.y + 6, dir: 'side', lead: 118, hang: 'r', tone: 'good' }),
     ];
   });
@@ -209,7 +222,7 @@
   let arms = $derived(signposts(v, now, ago));
 </script>
 
-<div class="sp" style:--sky-low={heroSky.low}>
+<div class="sp" data-sky={heroSky.word} style="{skyVars(heroSky)};{cityVars(city)}">
   {#if data.fixture}<p class="sp-fixture">preview figures</p>{/if}
 
   <div class="sp-band" data-band="observatory">
@@ -220,7 +233,7 @@
       zone={[340, 1000]}
       ground={OBS.ground}
       tone="ink"
-      land="#0c1213"
+      land="var(--city-ground)"
       head={{ ...ddw.head, figure: sky.asked }}
       tags={ddTags}
       key={ddw.key}
@@ -236,6 +249,8 @@
           slit={slitShare(dd.week?.hours, dd.rules.activeHours)}
           {falls}
           {weather}
+          light={lit}
+          quiet={quietBoxes(ddTags)}
         />
       {/snippet}
     </PlaceScene>
@@ -249,19 +264,18 @@
       zone={[0, 660]}
       ground={WALK.ground}
       tone="accent"
-      land="#0e1412"
+      land="var(--city-ground)"
       head={hw.head}
       spot="gym"
       tags={hTags}
       key={hw.key}
       more={{ href: '/health', cta: 'The whole record' }}
       {beat}
-      beatCaption={bpm == null ? '' : `The cottage window glows once a beat, at ${formatFigure(bpm)} bpm.`}
-      beatStill={bpm == null ? '' : `The cottage window is lit for a pulse of ${formatFigure(bpm)} bpm.`}
+      beatCaption={bpm == null ? '' : `The front window glows once a beat, at ${formatFigure(bpm)} bpm.`}
+      beatStill={bpm == null ? '' : `The front window is lit for a pulse of ${formatFigure(bpm)} bpm.`}
     >
       {#snippet art()}
         <WalkArt
-          lines={LINES}
           {path}
           trees={rows.trees}
           tenK={rows.line}
@@ -270,6 +284,8 @@
           string={STRING}
           {moonLit}
           glow={bpm != null}
+          light={lit}
+          quiet={quietBoxes(hTags)}
         />
       {/snippet}
     </PlaceScene>
@@ -283,7 +299,7 @@
       zone={[340, 1000]}
       ground={HOUSE.ground}
       tone="accent"
-      land="#120e0c"
+      land="var(--city-ground)"
       head={{ ...aw.head, figure: a.nativeEndpoints }}
       tags={aTags}
       key={aw.key}
@@ -291,7 +307,7 @@
       more={{ href: '/projects/engine-room/app', cta: 'How the app works' }}
     >
       {#snippet art()}
-        <HouseArt {lights} />
+        <HouseArt {lights} {grid} light={lit} quiet={quietBoxes(aTags)} />
       {/snippet}
     </PlaceScene>
   </div>
@@ -304,6 +320,7 @@
       zone={[0, 660]}
       ground={WORKS.ground}
       tone="ink"
+      land="var(--city-ground)"
       last
       head={{ ...ww.head, figure: build.releases }}
       tags={wTags}
@@ -311,7 +328,7 @@
       more={{ href: '/projects/engine-room/build', cta: 'How it builds' }}
     >
       {#snippet art()}
-        <WorksArt {houses} {load} busy={!!builder?.active} dreamt={(build.fromDaydream ?? 0) > 0} />
+        <WorksArt {houses} {load} busy={!!builder?.active} dreamt={(build.fromDaydream ?? 0) > 0} light={lit} quiet={quietBoxes(wTags)} />
       {/snippet}
     </PlaceScene>
   </div>
@@ -324,8 +341,11 @@
 <style>
   .sp {
     --gut: clamp(16px, 4vw, 64px);
+    /* The street-level ground under the hero's sky (sky.ts): night ink, a
+       blue-grey by day. PlaceScene's land falls back to it too. */
+    --place-night: var(--sky-ground, #0b0806);
     position: relative;
-    background: #0b0806;
+    background: var(--place-night);
     color: #ede4d4;
   }
   .sp-fixture {
@@ -338,30 +358,37 @@
     font-size: var(--fs-label-xs);
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: var(--on-ink-55);
+    color: rgba(237, 228, 212, 0.86);
   }
-  /* One night, walked down through. The first sky starts from the hero's
-     live sky and deepens to night over its first few hundred pixels. Each
-     scene's ground (PlaceScene's land) runs on to the end of its chapter, and
-     the next chapter's sky starts straight behind it, lighter than the land,
-     so every chapter boundary is a horizon rather than a seam of ink: deep
-     blue over the observatory, a green-grey hillside for the walk, a warm
-     dusk behind the house, slate over the works. Only the works' ground ends
-     on a hard rule, and the fingerpost stands on the night's own ink. */
+  /* One walk down through the owner's light. Every chapter's sky is the
+     owner's own (showcase-city cityLight: its middle at the top of the
+     chapter, the sky over the skyline at its foot, gilded by a low sun),
+     with only a hint of the chapter's own hue: deep blue over the
+     observatory, a green over the walkway's park, warm behind the flats,
+     slate over the works. So night is navy, the blue hour blue, a low sun
+     gold and the day cobalt all the way down, never a fixed colour. Each scene's street
+     (PlaceScene's land) runs on to the end of its chapter, and the next
+     chapter's sky starts straight behind it, so every chapter boundary is a
+     skyline rather than a seam. Only the works' street ends on a hard rule;
+     the totem stands beyond it under the works' sky, on its own pavement. */
   .sp-band {
-    background: #0b0806;
+    background: var(--place-night);
   }
   .sp-band[data-band='observatory'] {
-    background: linear-gradient(180deg, var(--sky-low, #161114) 0, #0e1517 480px, #0f181b 100%);
+    background: linear-gradient(180deg, var(--city-sky-observatory-top) 0, var(--city-sky-observatory-low) 100%);
   }
   .sp-band[data-band='walk'] {
-    background: linear-gradient(180deg, #111916 0, #121a17 60%, #0f1513 100%);
+    background: linear-gradient(180deg, var(--city-sky-walk-top) 0, var(--city-sky-walk-low) 100%);
   }
   .sp-band[data-band='house'] {
-    background: linear-gradient(180deg, #15100e 0, #1a1210 70%, #22160f 100%);
+    background: linear-gradient(180deg, var(--city-sky-house-top) 0, var(--city-sky-house-low) 100%);
   }
   .sp-band[data-band='works'] {
-    background: linear-gradient(180deg, #11171a 0, #131b1d 70%, #161f20 100%);
+    background: linear-gradient(180deg, var(--city-sky-works-top) 0, var(--city-sky-works-low) 100%);
+  }
+  /* The totem stands under the same sky as the works, on its own strip of pavement. */
+  .sp-band[data-band='sign'] {
+    background: linear-gradient(180deg, var(--city-sky-works-top) 0, var(--city-sky-works-low) 100%);
   }
   @media print {
     .sp,

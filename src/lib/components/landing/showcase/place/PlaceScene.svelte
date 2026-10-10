@@ -5,7 +5,7 @@
 </script>
 
 <script lang="ts">
-  // One chapter of the place's night walk, told the way the hero tells the
+  // One chapter of the place's walk through the city, told the way the hero tells the
   // day: a hand-drawn scene (the `art` snippet, an aria-hidden SVG in a
   // 1000-wide box) with every reading pinned to its part on a leader line as
   // real text, and one plate that explains whichever label is open. Pointing
@@ -31,7 +31,7 @@
   import { scenery } from '$lib/landing/ramblers/scenery';
   import type { Spot } from '$lib/landing/ramblers/world';
   import { belowFold, COUNT_MS, formatFigure, onScreen, prefersReducedMotion, tweenValue } from '$lib/landing/showcase-motion';
-  import { tagLine } from '$lib/landing/showcase-place';
+  import { tagLine } from '$lib/landing/showcase-place-words';
   import PlaceTags, { type PinnedTag } from './PlaceTags.svelte';
 
   let {
@@ -400,7 +400,7 @@
   .sp-dash {
     font-size: 40px;
     line-height: 1;
-    color: rgba(237, 228, 212, 0.72);
+    color: rgba(237, 228, 212, 0.86);
     font-weight: 400;
     font-family: var(--font-body);
   }
@@ -409,7 +409,7 @@
     margin-top: 4px;
     letter-spacing: 0.06em;
     text-transform: none;
-    color: rgba(237, 228, 212, 0.72);
+    color: rgba(237, 228, 212, 0.86);
   }
   /* Held unseen until the trigger, then it counts up as the picture plays. */
   .sp-scene[data-arm] .sp-n:not(.sp-dash) {
@@ -434,7 +434,7 @@
     line-height: 1.5;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: rgba(237, 228, 212, 0.78);
+    color: rgba(237, 228, 212, 0.86);
   }
 
   /* ---------------------------------------------------------- the picture */
@@ -519,7 +519,7 @@
     font-style: italic;
     font-size: 17px;
     line-height: 1.4;
-    color: rgba(237, 228, 212, 0.82);
+    color: rgba(237, 228, 212, 0.86);
   }
   .sp-say {
     display: grid;
@@ -542,7 +542,7 @@
     font-size: var(--fs-label-xs);
     line-height: 1.6;
     letter-spacing: 0.04em;
-    color: rgba(237, 228, 212, 0.72);
+    color: rgba(237, 228, 212, 0.86);
   }
   .sp-cap {
     display: flex;
@@ -561,7 +561,7 @@
     background: none;
     font: inherit;
     letter-spacing: inherit;
-    color: var(--on-ink-80);
+    color: rgba(237, 228, 212, 0.86);
     cursor: pointer;
   }
   .sp-hold:hover,
