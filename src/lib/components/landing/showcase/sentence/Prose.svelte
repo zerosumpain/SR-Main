@@ -5,7 +5,10 @@
   // laid out by layoutRun so each card follows the sentence that opened it.
   // A value word with a note is a real button set as type (dotted underline,
   // a mono note number after it); one with a link is a link; one with neither
-  // is just the figure in its tone. Rendered inside the chapter's <p>, so the
+  // is just the figure in its tone. A person's name (an id of wm-who-…) is
+  // not a figure: it keeps the prose's face, in its person's colour and small
+  // capitals, so the prose doubles as the map's key without claiming to be a
+  // live number. Rendered inside the chapter's <p>, so the
   // markup below is kept on tight lines: whitespace here is whitespace in
   // the sentence.
   import { layoutRun, type Seg } from '$lib/landing/showcase-sentence';
@@ -34,10 +37,18 @@
       >{p.end ?? ''}<sup aria-hidden="true">{p.n}</sup></span
     >{:else if p.href}<a class="ss-w ss-link" data-tone={p.tone} href={p.href}>{p.word}</a>{:else}<span
       class="ss-w ss-plain"
+      class:ss-who={p.id.startsWith('wm-who-')}
       data-tone={p.tone}>{p.word}</span
     >{/if}{/each}
 
 <style>
+  .ss-w.ss-who {
+    font-family: inherit;
+    font-weight: 600;
+    font-size: inherit;
+    font-variant-caps: small-caps;
+    letter-spacing: 0.02em;
+  }
   .ss-nb {
     white-space: nowrap;
   }

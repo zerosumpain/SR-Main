@@ -71,7 +71,7 @@ export const load: PageServerLoad = async ({ fetch, locals, getClientAddress, co
     // memoised and timeboxed in the module (a slow one renders as dashes, never
     // a slow page), and awaited so the figures are in the SSR HTML that the
     // count-ups start from.
-    loadShowcase(new Date(), { day: dayReading }),
+    loadShowcase(new Date(), { day: dayReading, view: heroView.view }),
     // The two newest posts for the writing strip. Awaited so the links are in the
     // SSR HTML; a failure just drops the strip.
     getAllPosts()

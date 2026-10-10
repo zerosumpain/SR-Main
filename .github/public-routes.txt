@@ -33,6 +33,7 @@
 /api/jkai/tools/manifest
 /api/landing/hero-media
 /api/landing/vitals
+/api/landing/wildmind
 /api/maps/config
 /api/mcp
 /api/mcp/local

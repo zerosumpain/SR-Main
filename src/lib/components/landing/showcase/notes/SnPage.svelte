@@ -14,6 +14,11 @@
   //
   // The page's readings typed up (SnFair) wait under the lede: shown in place
   // of the drawings when the hero's fair copy is on, and in print.
+  //
+  // A page with no link out (Wildmind's) closes on a line of marginalia
+  // instead, on the foot's last rule. A lede's `aside` is a last sentence
+  // about the drawing (Wildmind's shirt joke), so it goes where the drawing
+  // goes: not in print, not in the fair copy.
   import type { Snippet } from 'svelte';
   import type { FairRow } from '$lib/landing/showcase-notes';
   import { scenery } from '$lib/landing/ramblers/scenery';
@@ -29,7 +34,7 @@
     children,
   }: {
     id: string;
-    page: { kicker: string; head: string; lede: string; href: string; more: string };
+    page: { kicker: string; head: string; lede: string; aside?: string; href?: string; more?: string; close?: string };
     spot?: Spot;
     fair: FairRow[];
     children: Snippet;
@@ -42,15 +47,21 @@
     <div class="sp-body">
       <header class="sp-top" use:scenery={{ spot, at: 0.2 }}>
         <h2 id="sn-{id}-h">{page.head}</h2>
-        <p class="sp-lede">{page.lede}</p>
+        <p class="sp-lede">{page.lede}{#if page.aside}<span class="sp-aside">{` ${page.aside}`}</span>{/if}</p>
       </header>
       <SnFair rows={fair} label="{page.head}, typed up" />
       <div class="sp-draw">
         {@render children()}
       </div>
-      <p class="sp-foot">
-        <a class="sn-more" href={page.href}>{page.more} <span aria-hidden="true">→</span></a>
-      </p>
+      {#if page.href}
+        <p class="sp-foot">
+          <a class="sn-more" href={page.href}>{page.more} <span aria-hidden="true">→</span></a>
+        </p>
+      {:else if page.close}
+        <div class="sp-foot"><p class="sn-a sp-close">{page.close}</p></div>
+      {:else}
+        <div class="sp-foot"></div>
+      {/if}
     </div>
   </div>
 </section>
@@ -164,6 +175,7 @@
     }
     .sp-k,
     .sp-draw,
+    .sp-aside,
     .sp-foot {
       display: none;
     }
@@ -183,7 +195,7 @@
       color: #1a1008;
     }
   }
-  :global(body:has(.hn[data-fair])) .sp-draw {
+  :global(body:has(.hn[data-fair])) :is(.sp-draw, .sp-aside) {
     display: none;
   }
 </style>

@@ -13,6 +13,7 @@
   // chapter can draw its margin chart in once as its figure counts up.
   import type { Visual } from '$lib/landing/showcase-sentence';
   import { dayName } from '$lib/landing/rhythm';
+  import { countWord } from '$lib/landing/sentence';
 
   let { visual: v, compact = false }: { visual: Visual; compact?: boolean } = $props();
 
@@ -124,6 +125,28 @@
         ><i class="ss-sw ss-low"></i>low</span
       ></span
     >
+  </span>
+{:else if v.kind === 'lives'}
+  <!-- Wildmind's line: a bar a life, oldest at the top, as long as it lasted; the open one is this life. -->
+  <span class="ss-vh">{v.summary}</span>
+  <span class="ss-vis ss-lives" class:ss-compact={compact} aria-hidden="true">
+    {#if v.more > 0}<span class="ss-ends ss-more">and {countWord(v.more)} before them</span>{/if}
+    {#each v.rows as r, i (i)}
+      {@const x = Math.round(r.share * 1000) / 10}
+      <span class="ss-life ss-g" class:ss-open={r.open} style:--i={i * 3}>
+        <svg viewBox="0 0 100 8" preserveAspectRatio="none" focusable="false">
+          <rect class="ss-lb" x="0" y="2" width={x} height="4" />
+          {#if r.open}<line class="ss-tail" x1={x} y1="4" x2={Math.min(100, x + 14)} y2="4" />{:else}<line
+              class="ss-end"
+              x1={x}
+              y1="0"
+              x2={x}
+              y2="8"
+            />{/if}
+        </svg>
+        <span class="ss-ends">{r.label}</span>
+      </span>
+    {/each}
   </span>
 {:else if v.kind === 'quotes'}
   <span class="ss-vis ss-quotes" class:ss-compact={compact}>
@@ -364,6 +387,49 @@
     background: linear-gradient(transparent 50%, var(--tone) 50%);
   }
 
+  /* Wildmind's lives: ended bars in grey with an ink tick, the open one in tone. */
+  .ss-lives {
+    max-width: 420px;
+  }
+  .ss-life {
+    display: block;
+    margin-bottom: 10px;
+  }
+  .ss-lives svg {
+    height: 8px;
+  }
+  .ss-lives .ss-ends {
+    justify-content: flex-start;
+    margin-top: 4px;
+  }
+  .ss-open .ss-ends {
+    color: var(--tone);
+  }
+  .ss-lives .ss-more {
+    margin: 0 0 10px;
+  }
+  .ss-lb {
+    fill: var(--fg2);
+    opacity: 0.55;
+  }
+  .ss-open .ss-lb {
+    fill: var(--tone);
+    opacity: 1;
+  }
+  .ss-end,
+  .ss-tail {
+    stroke-width: 1.5;
+    vector-effect: non-scaling-stroke;
+  }
+  .ss-end {
+    stroke: var(--fg);
+  }
+  .ss-tail {
+    stroke: var(--tone);
+    stroke-dasharray: 1 3;
+    stroke-linecap: round;
+  }
+
   /* Siri's phrases, set as said; the app's lists, set as type. */
   .ss-quotes {
     display: grid;
@@ -434,6 +500,20 @@
     /* Backgrounds don't print by default: the swatches keep their fills
        (print-color-adjust), and each also differs by its border, so the key
        still reads if a printer drops them anyway. */
+    .ss-lb {
+      fill: #1a1008;
+      opacity: 0.4;
+    }
+    .ss-open .ss-lb {
+      opacity: 1;
+    }
+    .ss-end,
+    .ss-tail {
+      stroke: #1a1008;
+    }
+    .ss-open .ss-ends {
+      color: #1a1008;
+    }
     .ss-sw {
       border-color: #1a1008;
       -webkit-print-color-adjust: exact;

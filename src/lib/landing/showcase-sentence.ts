@@ -78,7 +78,8 @@ export type Visual =
   | { kind: 'bands'; marks: Band[]; summary: string }
   | { kind: 'deploys'; cells: DeployCell[]; summary: string }
   | { kind: 'quotes'; lines: string[] }
-  | { kind: 'list'; items: string[] };
+  | { kind: 'list'; items: string[] }
+  | { kind: 'lives'; rows: { label: string; share: number; open: boolean }[]; more: number; summary: string };
 
 export interface Note {
   head: string;
@@ -117,7 +118,7 @@ export interface Marginal {
 }
 
 export interface ChapterCopy {
-  id: 'daydream' | 'health' | 'app' | 'build';
+  id: 'daydream' | 'health' | 'app' | 'build' | 'wildmind';
   /** Its place in the essay, from one (a screen reader hears "Chapter three"). */
   nth: number;
   numeral: string;
@@ -132,7 +133,8 @@ export interface ChapterCopy {
   p1: Seg[];
   /** The second movement, under a small mono subhead; null when there's nothing to say. */
   p2: { sub: string; segs: Seg[] } | null;
-  link: { href: string; text: string };
+  /** The way on; Wildmind has none. */
+  link?: { href: string; text: string };
 }
 
 /* ---------------------------------------------------------------- figures */
@@ -867,10 +869,10 @@ export function standfirst(chapters: ChapterCopy[]): string {
 
 /* ----------------------------------------------------------- the assembly */
 
-/** Every chapter in reading order, footnotes numbered on from the hero's. */
-export function sentenceChapters(p: ShowcaseProps): ChapterCopy[] {
+/** Every chapter in reading order (`extra` after the builder), footnotes numbered on from the hero's. */
+export function sentenceChapters(p: ShowcaseProps, extra: ChapterCopy[] = []): ChapterCopy[] {
   const ctx: Ctx = { ...p, todayKey: localToday(new Date(p.now)) };
-  return numberNotes([daydreamChapter(ctx), healthChapter(ctx), appChapter(ctx), buildChapter(ctx)]);
+  return numberNotes([daydreamChapter(ctx), healthChapter(ctx), appChapter(ctx), buildChapter(ctx), ...extra]);
 }
 
 /** Numbers every footnoted word in reading order, starting after the hero's. */
@@ -896,6 +898,7 @@ export function chapterStrings(c: ChapterCopy): string[] {
           ...('summary' in s.note.visual ? [s.note.visual.summary] : []),
           ...(s.note.visual.kind === 'list' ? s.note.visual.items : []),
           ...(s.note.visual.kind === 'quotes' ? s.note.visual.lines : []),
+          ...(s.note.visual.kind === 'lives' ? s.note.visual.rows.map((r) => r.label) : []),
         ]
       : [],
   );
@@ -909,7 +912,7 @@ export function chapterStrings(c: ChapterCopy): string[] {
     plainText(c.p1),
     c.p2?.sub ?? '',
     c.p2 ? plainText(c.p2.segs) : '',
-    c.link.text,
+    c.link?.text ?? '',
     ...notes,
   ].filter(Boolean);
 }
