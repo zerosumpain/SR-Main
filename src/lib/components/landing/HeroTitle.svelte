@@ -5,11 +5,17 @@
   // the subtitle. Kept in one place because the rambler walks along the tops
   // of "strange ramblings" — the span carrying the text floor must stay real,
   // static inline text in every view, and the page's only h1.
+  //
+  // The subtitle is the owner's to edit (/admin/content/hero, stored as the
+  // `landing.tagline` setting; the landing load supplies the default when it
+  // is unset). It is plain text and always rendered as text, never as HTML.
   import { scenery } from '$lib/landing/ramblers/scenery';
+
+  let { tagline }: { tagline: string } = $props();
 </script>
 
 <h1 class="ht-title">JK’s<br /><span use:scenery={{ text: true }}>strange ramblings</span></h1>
-<p class="ht-lede">I say things, I do things, and I share things. And look hey, now you see things</p>
+<p class="ht-lede">{tagline}</p>
 
 <style>
   .ht-title {
@@ -25,6 +31,9 @@
     font-size: var(--fs-body-lg);
     line-height: 1.4;
     color: rgba(237, 228, 212, 0.82);
+    /* The line is the owner's (up to 200 characters): a pasted URL or other
+       unbroken run wraps inside the column instead of running off a phone. */
+    overflow-wrap: anywhere;
   }
   @media (max-width: 760px) {
     .ht-lede {

@@ -64,6 +64,7 @@
     steps,
     cadence,
     releases,
+    tagline,
   }: {
     /** "Fri 9 Oct", London time. */
     date: string;
@@ -81,6 +82,8 @@
     cadence: DayCount[];
     /** All releases on record and the first deploy, or null when the record is unavailable. */
     releases: { total: number; firstDeploy: string | null; days: number } | null;
+    /** The masthead's subtitle (HeroTitle): the owner's line from /admin/content/hero, or the default. */
+    tagline: string;
   } = $props();
 
   let root: HTMLElement;
@@ -275,7 +278,7 @@
     <div class="hn-grid">
       <div class="hn-mast">
         <!-- The rambler walks along the tops of these letters. -->
-        <HeroTitle />
+        <HeroTitle {tagline} />
         <!-- The date, stamped in the empty corner beside "JK's". Not scenery: it is rotated. -->
         <DateStamp {date} {place} />
       </div>
@@ -838,6 +841,17 @@
     }
     .hn-mast {
       width: fit-content;
+    }
+    /* However long the owner's tagline runs, the line wraps rather than
+       widening the mast, so the date stamp keeps its corner beside "JK's".
+       The line still counts for exactly the default line's width: the
+       default measures 624px at --fs-body-lg (18px), which is 34.67em, and
+       the title is narrower than that below about 1225px. Without the
+       intrinsic size the default would wrap and pull the stamp left at
+       1100-1224px. Re-measure if DEFAULT_LANDING_TAGLINE changes. */
+    .hn-mast :global(.ht-lede) {
+      contain: inline-size;
+      contain-intrinsic-inline-size: 34.7em;
     }
     .hn-pulse {
       grid-template-columns: subgrid;
