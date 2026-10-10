@@ -31,6 +31,17 @@ describe('/projects owner-only cards', () => {
   });
 
   it('points each card at its own /projects address', () => {
-    for (const c of OWNER_ONLY_CARDS) expect(c.href).toBe(`/projects/${c.key}`);
+    for (const c of OWNER_ONLY_CARDS.filter((c) => !c.external)) expect(c.href).toBe(`/projects/${c.key}`);
+  });
+
+  it('sends an external card to an absolute address off the site', () => {
+    for (const c of OWNER_ONLY_CARDS.filter((c) => c.external)) {
+      expect(c.href).toMatch(/^https?:\/\//);
+      expect(c.href).not.toMatch(/strangeramblings\.com/);
+    }
+  });
+
+  it('allows external links on owner-only cards only', () => {
+    expect(PROJECT_CARDS.filter((c) => c.external).map((c) => c.key)).toEqual([]);
   });
 });

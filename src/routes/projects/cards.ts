@@ -43,6 +43,12 @@ export interface ProjectCard {
    * there for why the visibility toggle is the wrong instrument for them.
    */
   ownerOnly?: true;
+  /**
+   * `href` leaves the site for a service that runs elsewhere (on the tailnet),
+   * so the card has no /projects page of its own. Owner-only cards only:
+   * `owner-cards.test.ts` holds every other card to its /projects address.
+   */
+  external?: true;
 }
 
 export const PROJECT_CARDS: ProjectCard[] = [
