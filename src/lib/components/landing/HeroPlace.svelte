@@ -1,3 +1,5 @@
+<svelte:options css="injected" />
+
 <script lang="ts">
   // The landing page's header block, drawn as a place: the title hangs in a
   // dusk sky over a small landscape made of the site's live numbers. Read the

@@ -1,3 +1,5 @@
+<svelte:options css="injected" />
+
 <script lang="ts">
   // The place's landscape (HeroPlace): the ridge of every release day, the
   // terrace of the last forty, the lighthouse that keeps the last heart rate

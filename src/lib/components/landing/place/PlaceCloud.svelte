@@ -1,3 +1,5 @@
+<svelte:options css="injected" />
+
 <script lang="ts">
   // The place's sky beside the title (HeroPlace): the next daydream as a
   // cloud, filling as the wait runs out, raining once onto the title when a

@@ -1,3 +1,5 @@
+<svelte:options css="injected" />
+
 <script lang="ts">
   // The date, stamped in the empty corner beside "JK's" (HeroNotes), with the
   // town and the temperature under it once the feed has said. Rubber-stamp

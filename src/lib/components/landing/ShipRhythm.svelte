@@ -1,3 +1,5 @@
+<svelte:options css="injected" />
+
 <script lang="ts">
   // The last forty days of shipping as a line of type under the sentence: a
   // numeral per day, a dot for a quiet one, brighter for busier, today

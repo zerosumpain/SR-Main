@@ -193,10 +193,13 @@ function questionLabel(channel: string | null, outcome: string | null): string |
   return channel && outcome ? `${channelLabel(channel)} · ${outcomeLabel(outcome).toLowerCase()}` : null;
 }
 
-const THINK_ACTION = 'daydream-think';
+/** The heartbeat action the think loop runs as. */
+export const THINK_ACTION = 'daydream-think';
+/** Pulse outcomes of a think that ran (asked its question), as opposed to one skipped. */
+export const THINK_RAN_OUTCOMES = ['ok', 'error'] as const;
 
 export async function loadEngineStrip(now = new Date()): Promise<EngineStrip> {
-  const ran = inArray(heartbeatPulses.outcome, ['ok', 'error']);
+  const ran = inArray(heartbeatPulses.outcome, [...THINK_RAN_OUTCOMES]);
   const [lastRows, cycleRows, raisedToday] = await Promise.all([
     db
       .select({

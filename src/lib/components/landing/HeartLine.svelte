@@ -1,3 +1,5 @@
+<svelte:options css="injected" />
+
 <script lang="ts">
   // The hero's heartbeat: one full-bleed line under the title, drawn at the
   // exact rate the watch last read and swept by a travelling head that crosses

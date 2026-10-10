@@ -1,204 +1,80 @@
 <script module lang="ts">
   import type { Component, ComponentProps } from 'svelte';
-  import type { HeroView } from '$lib/landing/hero-view';
   import type HeroSentence from './HeroSentence.svelte';
 
   /** The props every view takes, identically. */
   export type HeroProps = ComponentProps<typeof HeroSentence>;
   export type HeroViewComponent = Component<HeroProps>;
-
-  // Each view is its own chunk: a page loads the one it shows (the route's
-  // universal load awaits it, so it hydrates with nothing missing) and the
-  // others only when the visitor reaches for the switch.
-  const LOADERS: Record<HeroView, () => Promise<{ default: HeroViewComponent }>> = {
-    sentence: () => import('./HeroSentence.svelte'),
-    place: () => import('./HeroPlace.svelte'),
-    notes: () => import('./HeroNotes.svelte'),
-  };
-  const loading = new Map<HeroView, Promise<HeroViewComponent>>();
-
-  /** A view's component, fetched once and shared by every later ask. */
-  export function loadHeroView(view: HeroView): Promise<HeroViewComponent> {
-    let p = loading.get(view);
-    if (!p) {
-      p = LOADERS[view]().then((m) => m.default);
-      // A failed fetch (offline, a deploy moved the chunk) may be tried again.
-      p.catch(() => loading.delete(view));
-      loading.set(view, p);
-    }
-    return p;
-  }
 </script>
 
 <script lang="ts">
   // One hero, three ways to read it: the same live numbers told as a
-  // sentence, drawn as a place, or kept as notes. This component owns only the
-  // choice: a quiet "read it as" switch in the hero's top corner, the cookie
-  // that remembers it, and the swap. Each view renders its own masthead
-  // (HeroTitle) and takes the identical props, passed straight through.
+  // sentence, drawn as a place, or kept as notes. This component is the
+  // switch: a quiet "read it as" control in the hero's top corner. The choice
+  // itself (the view on screen, the cookie that remembers it, loading each
+  // view's chunks and the swap) lives in the page's PageView
+  // (./page-view.svelte), so the showcase below the hero follows it too. Each
+  // view renders its own masthead (HeroTitle) and takes the identical props,
+  // passed straight through.
   //
   // The server picks the first view ($lib/landing/hero-view: a ?view= link,
   // then the visitor's cookie, then the hour), so the page arrives already
-  // showing it and nothing flashes. A click swaps the component in place,
-  // crossfading the hero alone for 180ms where the browser can (View
-  // Transitions), and not at all under prefers-reduced-motion.
+  // showing it and nothing flashes. A click swaps the hero and the showcase
+  // in place, crossfading the two of them for 180ms where the browser can
+  // (View Transitions), and not at all under prefers-reduced-motion.
   //
   // The rambler's floors follow on their own: the outgoing view's
   // `use:scenery` elements unregister as it unmounts, the incoming one's
   // register as it mounts, and each change tells the rambler to measure again.
-  import { tick } from 'svelte';
   import { scenery } from '$lib/landing/ramblers/scenery';
-  import {
-    HERO_VIEWS,
-    defaultHeroView,
-    heroViewCookie,
-    parseHeroView,
-    storedChoice,
-    type HeroViewChoice,
-  } from '$lib/landing/hero-view';
+  import { HERO_VIEWS } from '$lib/landing/hero-view';
+  import type { PageView } from './page-view.svelte';
 
   let {
-    choice,
-    component,
+    page,
     ...hero
   }: {
-    /** What the server rendered and why. */
-    choice: HeroViewChoice;
-    /** That view's component, already loaded by the route. */
-    component: HeroViewComponent;
+    /** The page's live view choice, shared with the showcase below. */
+    page: PageView;
   } & HeroProps = $props();
 
-  let root: HTMLElement;
-
-  // Follows the server's answer until the visitor picks; a fresh load (a new
-  // ?view= link, say) resets it.
-  let view = $derived(choice.view);
-  let source = $derived(choice.source);
-  let View = $derived(component);
-
-  // Fetch the other views as soon as a hand or a focus heads for the switch,
-  // so a pick rarely waits on the network. Nobody who never reaches for it
-  // downloads them.
-  function warm() {
-    for (const k of HERO_VIEWS) void loadHeroView(k).catch(() => {});
-  }
+  let View = $derived(page.hero);
 
   // Read only through the switch's aria-describedby.
   let how = $derived(
-    source === 'cookie'
-      ? `Kept as you chose it. Choose ${choice.auto} to go back to the view that suits the hour.`
-      : source === 'query'
+    page.source === 'cookie'
+      ? `Kept as you chose it. Choose ${page.choice.auto} to go back to the view that suits the hour.`
+      : page.source === 'query'
         ? 'Set by the link you followed, for this visit only.'
         : 'Chosen for the hour in Britain: the place after dark, notes at the weekend, the sentence on weekdays.',
   );
-
-  // A zero-size, hidden scenery mark: it is never a floor (the rambler skips
-  // anything with no width), but updating it asks him to measure the page
-  // again once the incoming view has settled its own layout.
-  let settle = $state(0);
-  let asked = 0;
-
-  type Transition = { finished: Promise<void> };
-  type ViewTransitionDoc = Document & { startViewTransition?: (update: () => Promise<void>) => Transition };
-
-  // Writes the remembered choice, or clears it when there is none to keep.
-  function remember(keep: HeroView | null) {
-    document.cookie = heroViewCookie(keep, location.protocol === 'https:');
-  }
-
-  async function pick(next: HeroView) {
-    // Every click, even one back to the view on screen, outdates a pick that
-    // is still fetching its view: the latest one wins.
-    const ask = ++asked;
-    // The hour's own view clears the choice, so "auto" needs no button of its own.
-    const had = { source, keep: parseHeroView(document.cookie.match(/(?:^|;\s*)sr_hero_view=([^;]*)/)?.[1]) };
-    const keep = storedChoice(next, defaultHeroView(new Date()));
-    remember(keep);
-    source = keep ? 'cookie' : 'auto';
-
-    if (next !== view) {
-      let Next: HeroViewComponent;
-      try {
-        Next = await loadHeroView(next);
-      } catch {
-        if (ask !== asked) return;
-        // A release moved the chunk: a full load shows the chosen view (the
-        // cookie, or the hour, now says it). Offline, a reload would only
-        // trade the page for the browser's error screen, so keep the view on
-        // screen and the choice as it was; the next click tries again.
-        if (navigator.onLine) location.reload();
-        else {
-          remember(had.keep);
-          source = had.source;
-        }
-        return;
-      }
-      if (ask !== asked) return;
-      const swap = () => {
-        view = next;
-        View = Next;
-      };
-
-      const doc = document as ViewTransitionDoc;
-      if (!doc.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        swap();
-        await tick();
-      } else {
-        // Named only while it runs, so the hero is never its own stacking
-        // context otherwise; the class keeps the rest of the page still.
-        const html = document.documentElement;
-        root.style.setProperty('view-transition-name', 'hero-view');
-        html.classList.add('hero-swapping');
-        const t = doc.startViewTransition(async () => {
-          swap();
-          await tick();
-        });
-        await t.finished.catch(() => {});
-        root.style.removeProperty('view-transition-name');
-        html.classList.remove('hero-swapping');
-      }
-      requestAnimationFrame(() => requestAnimationFrame(() => (settle += 1)));
-    }
-
-    // A ?view= link is a one-visit override; once the visitor chooses, the
-    // address stops claiming a view they have moved away from. A real
-    // (replacing) navigation, not a shallow one, so the router's own URL and
-    // the history entry lose it too and Back returns to the visitor's pick.
-    // The reload's data asks the cookie just written, so it names the view
-    // already on screen and the component is the one already loaded. The
-    // router is fetched only here: every page loads it anyway, and a static
-    // import would charge it to the home route's budget.
-    if (ask === asked && new URLSearchParams(location.search).has('view')) {
-      const { goto } = await import('$app/navigation');
-      const url = new URL(location.href);
-      url.searchParams.delete('view');
-      await goto(url, { replaceState: true, noScroll: true, keepFocus: true });
-    }
-  }
 </script>
 
-<div class="hv" bind:this={root}>
+<div class="hv">
   <div class="hv-bar">
     <div
       class="hv-switch"
       role="group"
       aria-label="Read the live numbers as"
       aria-describedby="hv-how"
-      onpointerenter={warm}
-      onfocusin={warm}
-      ontouchstart={warm}
+      onpointerenter={page.warm}
+      onfocusin={page.warm}
+      ontouchstart={page.warm}
     >
       <span class="hv-k" aria-hidden="true">read it as:</span>
       {#each HERO_VIEWS as k, i (k)}
         {#if i}<span class="hv-dot" aria-hidden="true">·</span>{/if}
-        <button type="button" class="hv-b" aria-pressed={view === k} onclick={() => pick(k)}>{k}</button>
+        <button type="button" class="hv-b" aria-pressed={page.view === k} onclick={() => page.pick(k)}>{k}</button>
       {/each}
     </div>
     <span id="hv-how" hidden>{how}</span>
   </div>
 
   <View {...hero} />
-  <span class="hv-settle" hidden use:scenery={{ at: settle }}></span>
+  <!-- A zero-size, hidden scenery mark: it is never a floor (the rambler skips
+       anything with no width), but updating it after a swap asks him to
+       measure the page again once the incoming view has settled its layout. -->
+  <span class="hv-settle" hidden use:scenery={{ at: page.settle }}></span>
 </div>
 
 <style>
@@ -303,7 +179,14 @@
     }
   }
 
-  /* The swap: only the hero crossfades. The rest of the page settles at once
+  /* Named only while a swap runs, so the hero is never its own stacking
+     context otherwise. */
+  :global(html.hero-swapping) .hv {
+    view-transition-name: hero-view;
+  }
+
+  /* The swap: only the hero and the showcase (ShowcaseViews) crossfade. The
+     rest of the page settles at once
      rather than fading through itself, and the rambler stays live and on top
      instead of being frozen into the page's snapshot under the hero. */
   :global(html.hero-swapping::view-transition-old(root)),

@@ -27,6 +27,7 @@ src/lib/jkai/sandbox.changed-files.test.ts
 src/lib/jkai/sandbox.contained-lane.test.ts
 src/lib/jkai/studio-gate.test.ts
 src/lib/jkai/studio.test.ts
+src/lib/landing/showcase-place.test.ts
 src/lib/llm/keys.test.ts
 src/lib/llm/model-service-client.test.ts
 src/lib/models/workloads.test.ts

@@ -1,3 +1,5 @@
+<svelte:options css="injected" />
+
 <script lang="ts">
   // Today's steps pencilled onto a ruler of the day: midnight at the left
   // end, 23:59 at the right, a stroke per quarter-hour that had steps, and the

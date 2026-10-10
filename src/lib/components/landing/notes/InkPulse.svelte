@@ -1,3 +1,5 @@
+<svelte:options css="injected" />
+
 <script lang="ts">
   // The notes view's heartbeat: a hand-inked ECG that underlines the title
   // and runs on into the ring round the reading. The stroke is static, its
