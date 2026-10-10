@@ -47,23 +47,48 @@
   //                 today, ideas from Daydream; then lines written
   //        floors   the opening rule (spot: desk), the second movement
   //   ~    a heartbeat rule
-  //   v.   And the rest · one closing sentence whose value words are links
+  //   v.   Wildmind · "It makes things up to stay alive" (orange; only when
+  //        the site is set to read Wildmind)
+  //        figure   things invented in this valley
+  //        margin   game day, season, weather and the models; the line of
+  //                 lives as bars beside the first movement
+  //        prose    what it is, the day (footnote: the valley's clock), places
+  //                 on the map, the latest invention, the referee
+  //        plate    then the map of the valley in the main column
+  //                 (SsWildmind), its caption, the people lines and "hold
+  //                 still" in the margin, parting the two movements
+  //        prose    "The family tree": the lives before, lessons, habit
+  //        floors   the opening rule, the ledge above the first movement, the
+  //                 second movement (the plate is not a floor)
+  //   ~    a heartbeat rule
+  //   vi.  And the rest · one closing sentence whose value words are links
   //
   // The flash: each headline figure counts up once on first view while a
   // highlighter stroke sweeps behind it; the server and reduced motion show
   // the final figure with the stroke drawn. Each chapter's margin carries one
   // small exact chart, always in view. The only continuous motion is the
   // heartbeat rules' sweep, on a fresh pulse only, paused off screen, with a
-  // "hold still" beside each; only the first says the rate in words.
+  // "hold still" beside each; only the first says the rate in words. The
+  // Wildmind map polls and glides while it is on screen, and the same one
+  // "hold still" stops it along with the heartbeat rules.
+  import { untrack } from 'svelte';
   import type { ShowcaseProps } from '$lib/landing/showcase';
   import { codaSegments, sentenceChapters, standfirst } from '$lib/landing/showcase-sentence';
+  import { wildmindChapter } from '$lib/landing/showcase-sentence-wildmind';
+  import { WildmindPoll } from '../wildmind/wildmind-poll.svelte';
   import Chapter from './Chapter.svelte';
   import Coda from './Coda.svelte';
   import EcgRule from './EcgRule.svelte';
+  import SsWildmind from './SsWildmind.svelte';
 
   let props: ShowcaseProps = $props();
 
-  let chapters = $derived(sentenceChapters(props));
+  // Wildmind, only when the site reads it: the server's answer first, then the poll's.
+  const initial = untrack(() => props.data.wildmind);
+  const poll = initial ? new WildmindPoll(initial) : null;
+  let wm = $derived(poll?.data ?? null);
+
+  let chapters = $derived(sentenceChapters(props, wm ? [wildmindChapter(wm)] : []));
   let coda = $derived(codaSegments(props));
   let lede = $derived(standfirst(chapters));
   let bpm = $derived(props.pulse.state === 'fresh' ? props.pulse.bpm : null);
@@ -74,6 +99,18 @@
 
   const toggle = (id: string) => (open = open === id ? null : id);
   const hold = () => (held = !held);
+
+  // One switch for the page: holding still stops the heartbeat and the valley alike.
+  $effect(() => {
+    const h = held;
+    untrack(() => poll?.hold(h));
+  });
+  // The poll runs while the Wildmind chapter is on screen in a visible tab.
+  const watchValley = (node: HTMLElement) => {
+    if (!poll) return;
+    const a = poll.watch(node);
+    return () => a.destroy();
+  };
 
   // Escape closes the open note from anywhere inside it and puts focus back on its word.
   function onkeydown(e: KeyboardEvent) {
@@ -88,6 +125,7 @@
     health: { rule: undefined, p2: 'gym' },
     app: { rule: undefined, p2: undefined },
     build: { rule: 'desk', p2: undefined },
+    wildmind: { rule: undefined, p2: undefined },
   } as const;
 </script>
 
@@ -105,17 +143,28 @@
         <Chapter {c} {open} ontoggle={toggle} ruleSpot={SPOTS[c.id].rule} p2Spot={SPOTS[c.id].p2} />
       </div>
     {:else}
-      <div class="ss-leaf" class:ss-after-band={c.id === 'build'}>
-        <Chapter {c} {open} ontoggle={toggle} ruleSpot={SPOTS[c.id].rule} p2Spot={SPOTS[c.id].p2} />
+      <div class="ss-leaf" class:ss-after-band={c.id === 'build'} {@attach c.id === 'wildmind' ? watchValley : null}>
+        <Chapter
+          {c}
+          {open}
+          ontoggle={toggle}
+          ruleSpot={SPOTS[c.id].rule}
+          p2Spot={SPOTS[c.id].p2}
+          plate={c.id === 'wildmind' && wm?.map ? valley : undefined}
+        />
       </div>
-      {#if c.id === 'daydream' || c.id === 'build'}
+      {#if c.id === 'daydream' || c.id === 'build' || c.id === 'wildmind'}
         <div class="ss-between"><EcgRule {bpm} {held} onhold={hold} caption={c.id === 'daydream'} /></div>
       {/if}
     {/if}
   {/each}
 
-  <div class="ss-leaf ss-last"><Coda segs={coda} /></div>
+  <div class="ss-leaf ss-last"><Coda segs={coda} nth={chapters.length + 1} /></div>
 </div>
+
+{#snippet valley()}
+  {#if wm && poll}<SsWildmind w={wm} people={poll.people} {held} onhold={hold} />{/if}
+{/snippet}
 
 <style>
   .ss {

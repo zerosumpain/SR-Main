@@ -21,7 +21,17 @@
   // column with clear air above it, while the text
   // keeps a lane (--lane) clear at the column's right-hand end. His ropes
   // between floors hang in that lane, so they never run through the words.
-  import { onMount, untrack } from 'svelte';
+  //
+  // A chapter may carry a plate (Wildmind's map): a full-width row between
+  // the first movement and the second, its caption in the margin and its
+  // picture in the main column, so the reader is told what it is before being
+  // shown it, and it parts the two movements as a break. It is not a floor;
+  // the ledge above the first movement and the second movement's floor below
+  // it stand either side. On a phone the order is headline, figure, first
+  // movement, plate, chart, second movement; on a desktop the chart sits in
+  // the margin beside the second movement, which is the paragraph it belongs
+  // to, rather than a whole plate above it.
+  import { onMount, untrack, type Snippet } from 'svelte';
   import type { Spot } from '$lib/landing/ramblers/world';
   import { scenery } from '$lib/landing/ramblers/scenery';
   import { belowFold, countUp, firstView, prefersReducedMotion } from '$lib/landing/showcase-motion';
@@ -36,6 +46,7 @@
     ontoggle,
     ruleSpot,
     p2Spot,
+    plate,
   }: {
     c: ChapterCopy;
     open: string | null;
@@ -44,6 +55,8 @@
     ruleSpot?: Spot;
     /** A named rambler spot on the second movement (gym). */
     p2Spot?: Spot;
+    /** A plate after the figure (a map with its caption in the margin). */
+    plate?: Snippet;
   } = $props();
 
   let value = $derived(c.figure.value);
@@ -74,6 +87,7 @@
   class="ss-ch"
   data-ground={c.ground}
   data-tone={c.tone}
+  data-plate={plate ? '' : undefined}
   data-armed={armed && !seen ? '' : undefined}
   data-seen={armed && seen ? '' : undefined}
   aria-labelledby="ss-{c.id}-h"
@@ -97,7 +111,7 @@
   {#if value != null}
     <div class="ss-fig" bind:this={figEl} use:firstView={() => (seen = true)}>
       <p class="ss-figp">
-        <span class="ss-n" style:--em={figureEms(text)}
+        <span class="ss-n" style:--em={figureEms(text)} data-lone={text.length === 1 ? '' : undefined}
           ><span class="ss-mark" aria-hidden="true"></span><span class="ss-nv" {@attach armed ? counter : null}>{text}</span></span
         >
         <span class="ss-unit">{c.figure.unit}</span>
@@ -106,6 +120,10 @@
   {:else}
     <!-- No figure: one quiet mono line, not a giant empty slot. -->
     <p class="ss-none"><span aria-hidden="true">— {c.figure.unit}</span><span class="ss-vh">{c.figure.unit}, {c.figure.spoken}</span></p>
+  {/if}
+
+  {#if plate}
+    <div class="ss-plate-row">{@render plate()}</div>
   {/if}
 
   {#if c.margin}
@@ -129,7 +147,7 @@
       <p class="ss-prose"><Prose segs={c.p2.segs} {open} {ontoggle} /></p>
     </div>
   {/if}
-  <a class="ss-on" href={c.link.href}>{c.link.text} <span aria-hidden="true">→</span></a>
+  {#if c.link}<a class="ss-on" href={c.link.href}>{c.link.text} <span aria-hidden="true">→</span></a>{/if}
 </section>
 
 <style>
@@ -313,6 +331,12 @@
        never climbs more than a few pixels across the digits. */
     --tilt: calc(-1.9deg / var(--em, 2));
   }
+  /* A lone digit: a little past it and thinner, so the mark stays a stroke
+     (about four to one) rather than a block beside the figure. */
+  .ss-n[data-lone] .ss-mark {
+    right: -0.16em;
+    height: 0.2em;
+  }
   .ss-ch[data-armed] .ss-mark {
     transform: rotate(var(--tilt)) scaleX(0);
   }
@@ -376,6 +400,15 @@
       opacity: 0;
       transform: scaleY(0);
     }
+  }
+
+  /* The plate: a row of its own, wide as the chapter (it keeps the columns itself). */
+  .ss-plate-row {
+    grid-area: plate;
+    min-width: 0;
+  }
+  .ss-ch[data-plate] {
+    grid-template-areas: 'rule' 'kick' 'side' 'head' 'fig' 'ledge' 'body' 'plate' 'mv' 'p2' 'on';
   }
 
   /* Halfway down the chapter, a floor with clear air above it. */
@@ -463,6 +496,25 @@
     }
     .ss-head {
       margin-top: 22px;
+    }
+    /* With a plate the chart waits for the paragraph it belongs to: it sits
+       in the margin beside the second movement (overlaying that floor's
+       empty margin end), not a plate away from it beside the first. */
+    .ss-ch[data-plate] {
+      grid-template-areas: 'rule rule' 'kick head' 'side fig' 'ledge ledge' '. body' 'plate plate' 'p2 p2' '. on';
+    }
+    .ss-ch[data-plate] .ss-mv {
+      grid-row: p2;
+      grid-column: 1;
+      /* Level with the subhead, below the floor's clear air, and over the
+         floor's box (which comes later), so it can still be selected. */
+      position: relative;
+      z-index: 1;
+      margin-top: 68px;
+      padding-top: 0;
+    }
+    .ss-ch[data-plate] .ss-plate-row {
+      margin-top: clamp(40px, 4vw, 60px);
     }
     .ss-p2 {
       padding-left: calc(var(--margin) + 32px);

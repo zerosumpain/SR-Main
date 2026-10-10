@@ -3,19 +3,22 @@
 <script lang="ts">
   // The essay's last word: the rest of what the site does, in a couple of
   // sentences whose value words are links rather than footnotes, as an index
-  // at the back of a feature would be. Set as a fifth chapter (rule, numeral,
+  // at the back of a feature would be. Set as a last chapter (rule, numeral,
   // headline at chapter scale), with the same rope lane at the right.
   import { scenery } from '$lib/landing/ramblers/scenery';
+  import { countWord } from '$lib/landing/sentence';
   import type { Seg } from '$lib/landing/showcase-sentence';
   import Prose from './Prose.svelte';
 
-  let { segs }: { segs: Seg[] } = $props();
+  /** Its place in the essay: after however many chapters ran (five, or six with Wildmind). */
+  let { segs, nth = 5 }: { segs: Seg[]; nth?: number } = $props();
+  const NUMERALS = ['i.', 'ii.', 'iii.', 'iv.', 'v.', 'vi.', 'vii.', 'viii.'];
 </script>
 
 <section class="ss-coda" aria-labelledby="ss-rest-h">
   <div class="ss-rule" use:scenery></div>
   <p class="ss-kick">
-    <span class="ss-num" aria-hidden="true">v.</span><span class="ss-vh">Chapter five, </span><span class="ss-label">Everything else</span>
+    <span class="ss-num" aria-hidden="true">{NUMERALS[nth - 1] ?? ''}</span><span class="ss-vh">Chapter {countWord(nth)}, </span><span class="ss-label">Everything else</span>
   </p>
   <h2 id="ss-rest-h" class="ss-head">And the rest</h2>
   <p class="ss-prose"><Prose {segs} open={null} ontoggle={() => {}} /></p>

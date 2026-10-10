@@ -16,6 +16,8 @@ export const PUBLIC_API_PATHS = [
   '/api/landing/hero-media',
   // Public repository commit/tree ids only.
   '/api/version',
+  // Wildmind's valley for the landing page: names, enums and counts, never free text.
+  '/api/landing/wildmind',
 ] as const;
 
 export function isPublicApiPath(pathname: string): boolean {

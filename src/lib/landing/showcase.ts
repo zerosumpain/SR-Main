@@ -151,6 +151,8 @@ export interface ShowcaseData {
   app: AppShowcase;
   /** True only in a local preview running on fixture figures. */
   fixture?: boolean;
+  /** Wildmind's valley; absent or null when it is not configured (then there is no chapter). */
+  wildmind?: import('./wildmind').WildmindShowcase | null;
 }
 
 /** The props every view's showcase takes, identically. */

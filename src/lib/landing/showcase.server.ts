@@ -48,6 +48,7 @@ import {
   type ThinkWeekRow,
 } from './showcase-data';
 import type { AppShowcase, DaydreamShowcase, HealthShowcase, ShowcaseData } from './showcase';
+import { wildmindShowcase, type WildmindView } from './wildmind.server';
 
 export type { ShowcaseData };
 
@@ -225,7 +226,12 @@ function wantsFixture(): boolean {
 export interface LoadShowcaseOptions {
   /** The page's own rambler reading, so the bands cost no second query. */
   day?: Promise<DayFlags>;
+  /** The view the page is rendered in: the notes get Wildmind's map drawn their way on the server. */
+  view?: string;
 }
+
+/** The Wildmind drawing a page view wants from the server (only the notes draw theirs there). */
+const wildmindView = (view: string | undefined): WildmindView | null => (view === 'notes' ? 'notes' : null);
 
 export async function loadShowcase(now = new Date(), opts: LoadShowcaseOptions = {}): Promise<ShowcaseData> {
   const rules = daydreamRules();
@@ -235,21 +241,24 @@ export async function loadShowcase(now = new Date(), opts: LoadShowcaseOptions =
   if (wantsFixture()) {
     const { showcaseFixture } = await import('./showcase.fixture');
     const f = showcaseFixture(localToday(now));
-    return { daydream: { ...f.daydream, rules }, health: f.health, app: appFacts(), fixture: true };
+    const wildmind = await wildmindShowcase(now, null, wildmindView(opts.view));
+    return { daydream: { ...f.daydream, rules }, health: f.health, app: appFacts(), fixture: true, ...(wildmind ? { wildmind } : {}) };
   }
 
-  const [week, impact, steps, km, whoop, band] = await Promise.all([
+  const [week, impact, steps, km, whoop, band, wildmind] = await Promise.all([
     thinkWeek(now),
     daydreamImpact(now),
     stepsYear(now),
     kmYear(now),
     whoopMonth(now),
     bands(now, opts.day),
+    wildmindShowcase(now, null, wildmindView(opts.view)),
   ]);
 
   return {
     daydream: { week, impact, rules },
     health: { ...steps, kmYear: km, ...whoop, bands: band, kinds: null },
     app: appFacts(),
+    ...(wildmind ? { wildmind } : {}),
   };
 }

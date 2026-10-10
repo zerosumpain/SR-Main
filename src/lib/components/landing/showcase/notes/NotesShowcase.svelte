@@ -47,7 +47,20 @@
   //                ticked down with the live bench; Daydream's shipped ideas
   //                on a sticky note (tilted, not a floor)
   //      floors    the page head (spot 'desk'), today's deploys, checklist
-  //   5  The rest, "Also in this notebook" (SnCoda)
+  //   5  Wildmind, "Meanwhile, in the valley" (SnWildmind), only when the
+  //      page has Wildmind at all (data.wildmind)
+  //      the map   the valley as the two of them have seen it, pencilled into
+  //                the book inside a hand-drawn neat line, the unexplored
+  //                world left as ruled paper behind a broken pencil edge;
+  //                huts that stand together as one hatched camp; the people
+  //                tagged where they stand, the places they're near and a
+  //                few more named on rubbed-clear paper, a key for every
+  //                mark, the valley's day stamped across the foot; kept live
+  //                while on screen (hold still stops it)
+  //      then      things invented, ringed; ideas the referee turned down,
+  //                struck out; places found; the family tree on the lines
+  //      floors    the page head, the map's label row, the readings
+  //   6  The rest, "Also in this notebook" (SnCoda)
   //      three links with hand-drawn arrows: canvases, JKAI, the family
   //      floors    the page head, the row of links
   //
@@ -67,6 +80,7 @@
   import SnApp from './SnApp.svelte';
   import SnBuild from './SnBuild.svelte';
   import SnCoda from './SnCoda.svelte';
+  import SnWildmind from './SnWildmind.svelte';
 
   // `cadence` is the hero's; the build page reads the release record through `build`.
   let { data, build, v, now, pulse, steps, facts }: ShowcaseProps = $props();
@@ -82,6 +96,7 @@
     <SnHealth h={data.health} {pulse} {steps} {now} fair={fair.health} />
     <SnApp app={data.app} fair={fair.app} />
     <SnBuild b={build} {v} {now} fair={fair.build} />
+    {#if data.wildmind}<SnWildmind w={data.wildmind} />{/if}
     <SnCoda {v} {now} fair={fair.rest} />
   </div>
 </div>

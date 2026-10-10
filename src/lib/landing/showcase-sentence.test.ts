@@ -44,6 +44,9 @@ import type { LandingVitals } from './live-vitals.svelte';
 import { showcaseFixture } from './showcase.fixture';
 import { NOTES } from './sentence';
 import { thinkSchedule } from './rhythm';
+import { wildmindChapter } from './showcase-sentence-wildmind';
+import { wildmindFixture } from './wildmind.fixture';
+import { offlineShowcase } from './wildmind';
 
 // 14:30 London on a Saturday in October (BST).
 const NOW = Date.parse('2026-10-10T13:30:00Z');
@@ -430,7 +433,7 @@ describe('the chapters, with every figure in', () => {
     );
     const hrefs = words(segs).map((w) => w.href ?? '');
     expect(hrefs).toEqual(['/projects/engine-room', '', '/projects/engine-room', '/projects/engine-room/app']);
-    const links = [...cs.map((c) => c.link.href), ...cs.flatMap((c) => allWords(c).map((w) => w.note?.href ?? '')), ...hrefs];
+    const links = [...cs.map((c) => c.link?.href ?? ''), ...cs.flatMap((c) => allWords(c).map((w) => w.note?.href ?? '')), ...hrefs];
     expect(links.some((h) => h.startsWith('/releases'))).toBe(false);
   });
 });
@@ -522,7 +525,11 @@ describe('honest empty states', () => {
 });
 
 describe('copy rules', () => {
-  const sets = [allStrings(sentenceChapters(full())), allStrings(sentenceChapters(empty()))];
+  // Wildmind's chapter is held to the same rules, live and not answering.
+  const sets = [
+    allStrings(sentenceChapters(full(), [wildmindChapter(wildmindFixture(NOW))])),
+    allStrings(sentenceChapters(empty(), [wildmindChapter(offlineShowcase())])),
+  ];
   const coda = [plainText(codaSegments(full())), plainText(codaSegments(empty()))];
 
   it('never exclaims, and never puts a colon in prose', () => {
@@ -621,5 +628,24 @@ describe('numberNotes', () => {
   it('starts wherever it is told', () => {
     const cs = numberNotes([daydreamChapter(ctx(full()))], 1);
     expect(allWords(cs[0]).find((w) => w.note)?.n).toBe(1);
+  });
+});
+
+describe('with Wildmind as a fifth chapter', () => {
+  const wm = wildmindChapter(wildmindFixture(NOW));
+  const cs = sentenceChapters(full(), [wm]);
+  const numbers = (c: ChapterCopy) => [...c.p1, ...(c.p2?.segs ?? [])].flatMap((s) => (s.t === 'word' && s.n != null ? [s.n] : []));
+
+  it('follows the builder, and its notes number on from the builder’s', () => {
+    expect(cs.map((c) => c.id)).toEqual(['daydream', 'health', 'app', 'build', 'wildmind']);
+    const before = cs.slice(0, 4).flatMap(numbers);
+    const own = numbers(cs[4]);
+    expect(own[0]).toBe(Math.max(...before) + 1);
+    expect(own).toEqual(own.map((_, i) => own[0] + i));
+  });
+
+  it('makes the standfirst say five chapters, and the other four unchanged', () => {
+    expect(standfirst(cs)).toMatch(/^That’s the short version\. The long one runs to five chapters and /);
+    expect(cs.slice(0, 4)).toEqual(sentenceChapters(full()));
   });
 });
