@@ -1,0 +1,691 @@
+/* post-prose.css: the body of a post on the notes paper.
+ *
+ * The companion of post-paper.css (the sheet, the heading block, the foot,
+ * the widths and print), split from it only to keep each file a readable
+ * length; PostSheet loads both. How the ruling works, and why every text
+ * block carries its own band, is set out at the top of post-paper.css.
+ */
+
+/* ===================================================================
+   The prose. ProseContent's root carries `.pp-prose`; it is a subgrid of
+   the sheet, so each block lands in a named column (main by default).
+   =================================================================== */
+
+.pp-prose {
+  grid-column: bleed;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-content: start;
+  min-width: 0;
+  font-family: var(--prose-font, var(--font-read));
+  font-size: var(--np-s);
+  line-height: var(--np-l);
+  color: var(--text-primary);
+  counter-reset: pp-sec sidenote;
+}
+
+:where(.pp-prose > *) {
+  grid-column: main;
+  min-width: 0;
+  margin: 0;
+}
+
+/* Text on the rules: the band, and one blank rule after each block. */
+.pp-prose > :where(p, ul, ol, dl, blockquote, hr) {
+  border-image: var(--pp-band) fill 0 / 0 / 0 var(--np-bleed, 100vw);
+}
+
+.pp-prose > p,
+.pp-prose > dl {
+  padding: 0 0 var(--np-l);
+  hyphens: auto;
+  -webkit-hyphens: auto;
+  /* No hyphen in a word under seven letters, and three each side of it: a
+     narrow column otherwise ends four lines running on a hyphen. */
+  hyphenate-limit-chars: 7 3 3;
+}
+.pp-prose > p {
+  /* No one-word last line. */
+  text-wrap: pretty;
+}
+
+.pp-prose p {
+  margin: 0;
+}
+
+/* The first line of the piece in small capitals, as a fair copy opens. Not
+   all-small-caps: none of the body faces has real small capitals, so the
+   browser shrinks every letter to about seventy per cent; with `small-caps`
+   the capitals stay full size and the line still reads as text. The inline
+   face change is line-height 0 so the line keeps the body's pitch. */
+.pp-prose > p:first-of-type::first-line {
+  font-variant-caps: small-caps;
+  letter-spacing: 0.04em;
+  line-height: 0;
+}
+/* In the monospaced face shrunken capitals look exactly like the theme's mono
+   labels, and a reader skips labels. The opening line stays plain there. */
+[data-np-font='mono'] .pp-prose > p:first-of-type::first-line {
+  font-variant-caps: normal;
+  letter-spacing: 0;
+}
+
+/* --------------------------------------------------------- headings */
+
+/* An h1 in a post's body (the sanitiser lets one through, and a markdown
+   `#` line makes one) is dressed as a section heading, unnumbered, so the
+   margin's numbers still match the section rail's. */
+.pp-prose > :is(h1, h2) {
+  --pp-fs: calc(1.875rem * var(--np-scale));
+  padding-top: var(--np-l);
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+  color: var(--text-primary);
+}
+.pp-prose > h2 {
+  counter-increment: pp-sec;
+}
+/* The section's number in the margin, against the rule, as a kicker sits. */
+.pp-prose > h2::before {
+  content: counter(pp-sec, decimal-leading-zero);
+  /* Empty alternative text: a screen reader reads the heading, not "zero
+     one" before it. (The line above is the fallback where `/ ""` is not
+     understood.) */
+  content: counter(pp-sec, decimal-leading-zero) / '';
+  display: inline-block;
+  box-sizing: border-box;
+  width: calc(var(--rule-gap) + var(--pp-kick) + 3rem);
+  margin-left: calc(-1 * (var(--rule-gap) + var(--pp-kick) + 3rem));
+  padding-right: calc(var(--rule-gap) + var(--pp-kick));
+  font-family: var(--font-mono);
+  font-size: var(--fs-label-xs);
+  font-weight: 400;
+  /* Its own face in the heading's line: a short box, so it never grows the
+     line past the pitch. */
+  line-height: 1;
+  letter-spacing: 0.14em;
+  text-align: right;
+  color: var(--np-pen-text);
+}
+
+.pp-prose > h3 {
+  --pp-fs: calc(1.375rem * var(--np-scale));
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.pp-prose > :is(h4, h5, h6) {
+  --pp-fs: var(--fs-label-xs);
+  font-family: var(--font-mono);
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--np-pen-ink);
+}
+.pp-prose > :is(h5, h6) {
+  letter-spacing: 0.08em;
+  text-transform: none;
+  color: var(--text-muted);
+}
+
+.pp-prose > :is(h1, h2, h3, h4, h5, h6) {
+  /* The sticky title bar would otherwise cover a heading scrolled to. */
+  scroll-margin-top: calc(var(--site-nav-height, 48px) + 3.5rem);
+}
+
+/* --------------------------------------------------------- links */
+
+.pp-prose a {
+  color: var(--np-pen-ink);
+  text-decoration: underline;
+  text-decoration-color: var(--np-pen);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 5px;
+}
+.pp-prose a:hover {
+  color: var(--text-primary);
+  text-decoration-thickness: 2px;
+}
+
+/* ------------------------------------------------- standfirst and quotes */
+
+.pp-prose > aside.standfirst {
+  --pp-fs: calc(1.25rem * var(--np-scale));
+  position: relative;
+  padding-bottom: var(--np-l);
+  font-family: var(--fs-serif);
+  font-optical-sizing: auto;
+  font-style: italic;
+  color: var(--text-secondary);
+}
+/* A bracket pencilled in the gutter beside it. */
+.pp-prose > aside.standfirst::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  bottom: calc(var(--np-l) + 4px);
+  left: calc(-0.5 * var(--rule-gap) - 2px);
+  width: 6px;
+  border: 2px solid var(--np-pen);
+  border-right: none;
+  opacity: 0.8;
+}
+.pp-prose > aside.standfirst p {
+  padding: 0;
+}
+
+.pp-prose > blockquote {
+  position: relative;
+  padding-left: 1.5em;
+  font-family: var(--fs-serif);
+  font-optical-sizing: auto;
+  font-style: italic;
+  color: var(--text-secondary);
+}
+.pp-prose > blockquote p {
+  padding-bottom: var(--np-l);
+}
+/* A double petrol rule down its left side, the margin's echo. */
+.pp-prose > blockquote::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  bottom: calc(var(--np-l) + 4px);
+  left: 0.2em;
+  width: 4px;
+  border-left: 1px solid var(--np-pen-ink);
+  border-right: 1px solid var(--np-pen-ink);
+  opacity: 0.6;
+}
+
+.pp-prose > aside.pull-quote {
+  grid-column: main-start / note-end;
+  justify-self: start;
+  position: relative;
+  max-width: 42rem;
+  margin: var(--np-l) 0;
+  padding: calc(var(--np-l) / 2) 28px;
+  background: var(--np-card);
+  box-shadow:
+    0 0 0 1px var(--line-strong),
+    0 16px 28px -20px rgba(26, 16, 8, 0.45);
+  transform: rotate(-0.8deg);
+  font-family: var(--fs-serif);
+  font-optical-sizing: auto;
+  font-style: italic;
+  font-size: calc(1.5rem * var(--np-scale));
+  line-height: var(--np-l);
+  color: var(--text-primary);
+}
+/* Its drawing pin. */
+.pp-prose > aside.pull-quote::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  width: 13px;
+  height: 13px;
+  margin-left: -6px;
+  border-radius: 100px;
+  background: radial-gradient(circle at 35% 35%, #f6b37a 0 2px, var(--accent-on-dark) 3px, #b2561a 100%);
+}
+.pp-prose > aside.pull-quote p {
+  padding: 0;
+}
+
+/* ----------------------------------------------------------- lists */
+
+.pp-prose > :is(ul, ol) {
+  padding: 0 0 var(--np-l) 1.6em;
+}
+.pp-prose ul {
+  list-style: disc;
+}
+.pp-prose ol {
+  list-style: decimal;
+}
+.pp-prose li {
+  margin: 0;
+  padding-left: 0.2em;
+}
+.pp-prose li > :is(ul, ol) {
+  padding: 0 0 0 1.4em;
+}
+.pp-prose ul ul {
+  list-style: circle;
+}
+.pp-prose li > p {
+  padding: 0;
+}
+.pp-prose ul > li::marker {
+  color: var(--np-pen);
+}
+.pp-prose ol > li::marker {
+  color: var(--np-pen-ink);
+}
+
+/* -------------------------------------------------------------- hr */
+
+/* Three pencil dots resting on a rule, a blank rule after. */
+.pp-prose > hr {
+  box-sizing: content-box;
+  height: var(--np-l);
+  padding: 0 0 var(--np-l);
+  border: 0;
+}
+.pp-prose > hr::before {
+  content: '';
+  display: block;
+  width: 6px;
+  height: 6px;
+  margin: calc(var(--np-y) - 7px) auto 0;
+  border-radius: 100px;
+  background: var(--np-pen);
+  box-shadow:
+    -24px 0 0 var(--np-pen),
+    24px 0 0 var(--np-pen);
+}
+
+/* ------------------------------------------------------ inline things */
+
+.pp-prose :not(pre) > code {
+  padding: 0 0.3em;
+  border-radius: 2px;
+  background: var(--np-card);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font-family: var(--font-code);
+  font-size: max(0.875em, var(--fs-label-xs));
+  hyphens: manual;
+  -webkit-hyphens: manual;
+}
+
+.pp-prose mark,
+.pp-prose mark.hl {
+  padding: 0 0.15em;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: inherit;
+}
+.pp-prose mark.hl-warm {
+  background: color-mix(in srgb, var(--warn, #b4632e) 26%, transparent);
+}
+.pp-prose mark.hl-cool {
+  background: color-mix(in srgb, var(--accent-ink) 18%, transparent);
+}
+
+.pp-prose .small-caps {
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.06em;
+}
+
+.pp-prose ins {
+  text-decoration-color: var(--np-pen-ink);
+}
+
+.pp-prose sup.ref-mark {
+  margin-left: 0.1em;
+  font-family: var(--font-mono);
+  font-size: max(0.7em, var(--fs-label-xs));
+}
+.pp-prose sup.ref-mark a {
+  color: var(--np-pen-ink);
+  text-decoration: none;
+}
+
+/* --------------------------------------------------------- sidenotes */
+
+.pp-prose .sidenote {
+  counter-increment: sidenote;
+}
+.pp-prose .sidenote::before {
+  content: counter(sidenote);
+  padding-left: 0.1em;
+  font-family: var(--font-mono);
+  font-size: max(0.7em, var(--fs-label-xs));
+  vertical-align: super;
+  line-height: 0;
+  color: var(--np-pen-ink);
+}
+
+/* Wide screens: marginalia in the right-hand column, on the rules. The
+   negative foot margin keeps a long note from stretching its paragraph (a
+   grid item contains its floats), and the stacking lifts it over the next
+   block's band when it runs on past its paragraph. */
+.pp-prose .sidenote-body {
+  float: right;
+  clear: right;
+  position: relative;
+  z-index: 1;
+  width: var(--note-col);
+  margin: 0 calc(-1 * (var(--note-col) + var(--col-gap))) -100vh 0;
+  font-family: var(--fs-serif);
+  font-optical-sizing: auto;
+  font-style: italic;
+  /* Follows the reader's text size, as the pitch it sits on does. */
+  font-size: calc(var(--fs-body-sm) * var(--np-scale, 1));
+  line-height: var(--np-l);
+  color: var(--text-secondary);
+  text-align: left;
+  hyphens: none;
+}
+.pp-prose .sidenote-body::before {
+  content: counter(sidenote) '  ';
+  line-height: 0;
+  font-family: var(--font-mono);
+  font-style: normal;
+  font-size: var(--fs-label-xs);
+  color: var(--np-pen-ink);
+}
+
+/* -------------------------------------------------------- call-outs */
+
+/* Card stock with its own feint, which starts a padding's depth down so its
+   lines sit under the card's own writing. Whole rules tall by construction:
+   half a rule each end is one rule, and the writing inside is on the pitch. */
+.pp-prose > :is(aside.callout, aside.callout-note, aside.callout-warn, aside.callout-aside, aside.callout-key),
+.pp-prose > section.interactive {
+  margin: var(--np-l) 0 calc(var(--np-l) + var(--np-snap, 0px));
+  /* Half a rule each end: whole rules tall at every text size. */
+  padding: calc(var(--np-l) / 2) 20px calc(var(--np-l) / 2) 24px;
+  /* The feint inside the writing only; the card's stock to its edges. */
+  background:
+    var(--np-lines) content-box,
+    linear-gradient(var(--np-card), var(--np-card)) border-box;
+  box-shadow:
+    inset 3px 0 0 var(--np-pen-ink),
+    0 0 0 1px var(--line-strong);
+  font-size: calc(1rem * var(--np-scale));
+  color: var(--text-primary);
+}
+.pp-prose > aside.callout-key {
+  background:
+    var(--np-lines) content-box,
+    linear-gradient(color-mix(in srgb, var(--accent) 7%, var(--np-card)), color-mix(in srgb, var(--accent) 7%, var(--np-card)))
+      border-box;
+  box-shadow:
+    inset 4px 0 0 var(--np-pen),
+    0 0 0 1px var(--line-strong);
+}
+.pp-prose > aside.callout-warn {
+  box-shadow:
+    inset 3px 0 0 var(--warn),
+    0 0 0 1px var(--warn-border, var(--line-strong));
+}
+.pp-prose > aside.callout-aside {
+  box-shadow:
+    inset 3px 0 0 var(--line-strong),
+    0 0 0 1px var(--line-strong);
+  color: var(--text-secondary);
+}
+.pp-prose > section.interactive {
+  box-shadow: 0 0 0 1px var(--line-strong);
+  outline: 1px dashed color-mix(in srgb, var(--accent-ink) 45%, transparent);
+  outline-offset: -7px;
+}
+.pp-prose > :is(aside, section) p {
+  padding-bottom: var(--np-l);
+}
+.pp-prose > :is(aside, section) > :last-child {
+  padding-bottom: 0;
+}
+
+/* ------------------------------------------- odd-height furniture */
+
+/* Everything below is snapped to a whole number of rules by snap-blocks.ts,
+   through the foot margin, so the card itself is the size it is. */
+.pp-prose > :is(figure, table, pre, details, iframe, video) {
+  margin: var(--np-l) 0 calc(var(--np-l) + var(--np-snap, 0px));
+  padding-bottom: 0;
+}
+
+/* One blank rule between a block of text and the furniture after it, and
+   between two pieces of furniture, not two: the paragraph's own blank line
+   (or the first block's foot margin) is already the gap. */
+.pp-prose
+  > :is(p, ul, ol, dl, blockquote, hr, figure, table, pre, details, iframe, video, aside[class*='callout'], section)
+  + :is(figure, table, pre, details, iframe, video, aside[class*='callout'], section) {
+  margin-top: 0;
+}
+
+/* Figures: a photograph mounted on card and pasted in. */
+.pp-prose > figure {
+  position: relative;
+  padding: 10px 10px 0;
+  background: var(--np-card);
+  box-shadow:
+    0 0 0 1px var(--line-strong),
+    0 14px 26px -20px rgba(26, 16, 8, 0.45);
+}
+.pp-prose figure img,
+.pp-prose figure video {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  border: 0;
+}
+.pp-prose figcaption {
+  padding: 8px 4px 12px;
+  font-family: var(--fs-serif);
+  font-optical-sizing: auto;
+  font-style: italic;
+  font-size: var(--fs-body-sm);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+.pp-prose > figure.wide,
+.pp-prose > table,
+.pp-prose > pre {
+  grid-column: wide;
+}
+/* A floated figure, on a wide screen: a snapshot pasted in the right-hand
+   margin beside the passage before it, rather than a half-width picture
+   alone on its row with a hole of empty lines beside it. Auto-placement puts
+   it in the row of the block before it; the negative foot margin keeps it
+   from stretching that row (as a sidenote does), and the stacking lifts it
+   over the next blocks' ruled bands. Below the three-column width it takes
+   the full measure (post-paper.css). */
+.pp-prose > figure.align-left,
+.pp-prose > figure.align-right {
+  grid-column: note;
+  align-self: start;
+  z-index: 1;
+  width: auto;
+  margin: 0 0 -100vh;
+}
+/* Edge to edge of the sheet, over the margin rule, as a print pasted across
+   the page would be. Its caption sits back in the reading column. */
+.pp-prose > figure.bleed {
+  grid-column: bleed;
+  z-index: 2;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+.pp-prose > figure.bleed img,
+.pp-prose > figure.bleed video {
+  max-height: 78vh;
+  object-fit: cover;
+}
+.pp-prose > figure.bleed figcaption {
+  width: fit-content;
+  max-width: var(--measure);
+  margin-left: calc(var(--gut) + var(--rail-col) + var(--rule-gap));
+  padding: 6px 12px 8px;
+  background: var(--np-card);
+}
+.pp-prose > figure.gallery {
+  display: grid;
+  /* Two across on a phone rather than a stack of full-width pictures. */
+  grid-template-columns: repeat(auto-fit, minmax(min(8rem, 100%), 1fr));
+  gap: 10px;
+}
+.pp-prose > figure.gallery img {
+  height: 100%;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px var(--line);
+}
+.pp-prose > figure.gallery img:nth-of-type(odd) {
+  transform: rotate(-0.7deg);
+}
+.pp-prose > figure.gallery img:nth-of-type(even) {
+  transform: rotate(0.6deg);
+}
+.pp-prose > figure.gallery figcaption {
+  grid-column: 1 / -1;
+}
+.pp-prose > figure.project-embed {
+  padding: 0;
+}
+.pp-prose > figure.project-embed iframe {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border: 0;
+}
+.pp-prose > figure.project-embed figcaption {
+  padding: 8px 12px;
+  box-shadow: inset 0 1px 0 var(--line-strong);
+  font-family: var(--font-mono);
+  font-style: normal;
+  font-size: var(--fs-label-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--np-pen-ink);
+}
+.pp-prose > figure.project-embed figcaption a {
+  color: var(--np-pen-ink);
+}
+/* A picture written straight into a paragraph (Markdown without a title). */
+.pp-prose > p:has(> img) {
+  border-image: none;
+  margin-bottom: calc(var(--np-l) + var(--np-snap, 0px));
+  padding-bottom: 0;
+}
+.pp-prose > p > img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+.pp-prose > video,
+.pp-prose > iframe {
+  width: 100%;
+  border: 0;
+}
+
+/* Tables: a ledger on card stock, each row one rule tall, the row lines
+   drawn under the cells rather than as borders that would add height. */
+.pp-prose > table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--np-card);
+  box-shadow: 0 0 0 1px var(--line-strong);
+  font-size: calc(var(--fs-body-sm) * var(--np-scale));
+  line-height: var(--np-l);
+}
+.pp-prose th,
+.pp-prose td {
+  padding: 0 14px;
+  text-align: left;
+  vertical-align: top;
+}
+.pp-prose th {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label-xs);
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--np-pen-ink);
+  background: linear-gradient(to top, var(--np-pen-ink) 0 1px, transparent 1px);
+}
+.pp-prose td {
+  color: var(--text-secondary);
+  background: linear-gradient(to top, var(--line) 0 1px, transparent 1px);
+}
+.pp-prose tr:last-child td {
+  background: none;
+}
+
+/* Code: card stock, a petrol margin, no ruling behind the characters. */
+/* The scroll shadows (--pp-scroll-bg) show only when a long line runs past
+   the card's edge. */
+.pp-prose > pre {
+  overflow-x: auto;
+  padding: 16px 20px 16px 24px;
+  background: var(--pp-scroll-bg, var(--np-card));
+  box-shadow:
+    inset 3px 0 0 var(--np-pen-ink),
+    0 0 0 1px var(--line-strong);
+  font-family: var(--font-code);
+  font-size: calc(0.875rem * var(--np-scale));
+  line-height: calc(0.75 * var(--np-l));
+  tab-size: 2;
+}
+.pp-prose pre code {
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  font-size: inherit;
+}
+/* The highlighter's comment and string inks fail on cream (2.9:1, 4.2:1);
+   the keyword's orange too (3.5:1). Darker inks of the same roles here. */
+.pp-prose :is(.hljs-comment, .hljs-quote) {
+  color: var(--text-muted);
+}
+.pp-prose :is(.hljs-string, .hljs-regexp, .hljs-addition, .hljs-attribute) {
+  color: var(--good);
+}
+.pp-prose :is(.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-doctag, .hljs-name) {
+  color: var(--accent-hover);
+}
+html[data-reading-theme='night'] .pp-prose :is(.hljs-string, .hljs-regexp, .hljs-addition, .hljs-attribute) {
+  color: var(--success);
+}
+
+/* Details: a folded slip. Opening it moves only what is below it. */
+.pp-prose > details {
+  background: var(--np-card);
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+.pp-prose details > summary {
+  position: relative;
+  display: block;
+  padding: 0 16px;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-label-xs);
+  line-height: var(--np-l);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--np-pen-ink);
+  cursor: pointer;
+}
+.pp-prose details > summary::-webkit-details-marker {
+  display: none;
+}
+.pp-prose details > summary::before {
+  content: '+';
+  display: inline-block;
+  width: 1.4em;
+  color: var(--np-pen-text);
+}
+.pp-prose details[open] > summary::before {
+  content: '\2212';
+}
+.pp-prose details > summary::after {
+  content: '';
+  position: absolute;
+  inset: -6px 0;
+}
+.pp-prose details > :not(summary) {
+  padding: 0 16px;
+}
+.pp-prose details > p {
+  padding-bottom: var(--np-l);
+}
+

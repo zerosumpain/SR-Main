@@ -1,0 +1,21 @@
+/* reading.css: two site-wide rules the blog's reading work added, kept out of
+ * app.css (which is past the thousand-line rule). Imported straight after
+ * app.css in the root layout, so each one still wins over the app.css rule it
+ * qualifies. */
+
+/* No glide on in-page jumps (contents, footnotes, any #hash) for a reader
+   who has asked the page to keep still. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* The site bar is painted in --text-primary on --bg (ink on cream), which
+   the night theme inverts into a cream bar with cream links. It is chrome,
+   not page: pinned to its ink ground and on-dark text in every theme. */
+html[data-reading-theme='night'] .site-nav-bar {
+  background: #1a1008;
+  color: #ede4d4;
+  --chrome-ink: #ede4d4;
+}
