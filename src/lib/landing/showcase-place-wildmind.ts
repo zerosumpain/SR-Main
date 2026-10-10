@@ -211,12 +211,8 @@ export const SPECK_CAP = 160;
  */
 export const GALLERY_LIGHT = {
   wallNight: '#1b1510',
-  /**
-   * By day: a dark neutral room, darker than the street as a real gallery is
-   * by day, so the lit model is the brightest thing through the reflections
-   * (GlassArt adds a trace of the sun's colour and a low glow on the floor).
-   */
-  wallDay: '#1f1f22',
+  /** By day: a warm daylit room (GlassArt adds a little of the sun's colour, and the light gathering low). */
+  wallDay: '#41382d',
   lamp: '#ffd9a0',
   /** A pool of lamplight on the back wall: its centre, height, and alpha at its centre and halfway out (radial stops 0 and 0.55). */
   pool: { cy: 352, ry: 150, rx: 100, peak: 0.36, half: 0.12 },
@@ -246,13 +242,13 @@ export function wordsGround(): string {
 
 /**
  * The back wall where the people's words stand at its brightest by day: the
- * daylit wall with as much of the sun's colour as GlassArt gives it (4% of
+ * daylit wall with as much of the sun's colour as GlassArt gives it (15% of
  * the city's sunlit tone at its strongest, --city-sun-on 0.44, taken as a
  * pale gold) and the lamps at their daytime glow (--gl-on 0.22).
  */
 export function dayWordsGround(): string {
   const over = (base: number[], top: number[], k: number) => base.map((v, i) => v * (1 - k) + top[i] * k);
-  const sunlit = over(hexRgb(GALLERY_LIGHT.wallDay), hexRgb('#ffe6b8'), 0.04 * 0.44);
+  const sunlit = over(hexRgb(GALLERY_LIGHT.wallDay), hexRgb('#ffe6b8'), 0.15 * 0.44);
   const c = over(sunlit, hexRgb(GALLERY_LIGHT.lamp), 0.22 * poolAlpha(WORDS_BAND.y + WORDS_BAND.h));
   return `#${c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
 }
