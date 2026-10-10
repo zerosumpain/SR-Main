@@ -534,6 +534,13 @@
       --col: 40%;
     }
   }
+  /* Stacked, the rambler's nearest floor under the plate is the next band's heading: room enough under the
+     plate for him and a three-line greeting there, clear of its last lines and the hold-still switch. */
+  @media (max-width: 1099px) {
+    .sp-band[data-band='wildmind'] :global(.sp-scene) {
+      padding-bottom: 96px;
+    }
+  }
   /* The totem stands under the same sky as the last chapter, on its own strip of pavement. */
   .sp-band[data-band='sign'] {
     background: linear-gradient(180deg, var(--city-sky-works-top) 0, var(--city-sky-works-low) 100%);

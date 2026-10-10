@@ -172,10 +172,10 @@
         <stop offset="1" stop-color="#ff9a3a" stop-opacity="0" />
       </radialGradient>
       <clipPath id="sp-wm-boardclip"><rect x={BX - 6} y={BY - 6} width={BOARD.w + 12} height={BOARD.d + 13} /></clipPath>
-      <!-- By day the light through the window gathers low in the room, never where the people's words stand. -->
+      <!-- By day a little of the light through the window glows on the floor; the room above it stays dark. -->
       <linearGradient id="sp-wm-day" x1="0" y1="0" x2="0" y2="1">
-        <stop offset=".36" stop-color="#e9d2ac" stop-opacity="0" />
-        <stop offset="1" stop-color="#e9d2ac" stop-opacity=".16" />
+        <stop offset=".72" stop-color="#e9d2ac" stop-opacity="0" />
+        <stop offset="1" stop-color="#e9d2ac" stop-opacity=".09" />
       </linearGradient>
       <pattern id="sp-wm-grid" patternUnits="userSpaceOnUse" x={BX} y={BY} width={GRID.w} height={GRID.h}>
         <path class="gl-grid" d="M0,0H{GRID.w}M0,0V{GRID.h}" />
@@ -391,8 +391,8 @@
     --gm-tree: #6c8253;
     --gm-tree-hi: #98ad72;
     --gm-speck: #2b2420;
-    /* Daylight in the gallery: its own warm interior, a little of the sun's colour in it with the sun out. */
-    --gl-sunk: calc(var(--city-sun-on, 0) * 15%);
+    /* Daylight in the gallery: a trace of the sun's colour on its dark wall with the sun out (the room stays darker than the street). */
+    --gl-sunk: calc(var(--city-sun-on, 0) * 4%);
     position: absolute;
     inset: 0;
   }
@@ -446,7 +446,7 @@
   .gl-wall {
     fill: color-mix(in srgb, var(--gl-wall-night) calc(var(--windows, 0) * 100%), color-mix(in srgb, var(--city-sunlit, #dbe4e7) var(--gl-sunk), var(--gl-wall-day)));
   }
-  /* The daylight through the window, falling to the floor. */
+  /* The daylight through the window, a low glow on the floor only. */
   .gl-daylight {
     opacity: calc(1 - var(--windows, 0));
   }
@@ -464,16 +464,16 @@
     opacity: var(--gl-spot, 1);
   }
   .gl-pl {
-    fill: color-mix(in srgb, #1b1713 calc(var(--windows, 0) * 100%), #514637);
+    fill: color-mix(in srgb, #1b1713 calc(var(--windows, 0) * 100%), #29231c);
   }
   .gl-pl-top {
-    fill: color-mix(in srgb, #2e271f calc(var(--windows, 0) * 100%), #706150);
+    fill: color-mix(in srgb, #2e271f calc(var(--windows, 0) * 100%), #3b3227);
   }
   .gl-pl-lamp {
     opacity: var(--gl-on);
   }
   .gl-pl-sun {
-    opacity: calc(var(--city-sun-on, 0) * 1.6);
+    opacity: calc(var(--city-sun-on, 0) * 0.7);
   }
   .gl-pl-skirt {
     fill: #0d0b09;
@@ -500,10 +500,10 @@
     }
   }
   .gl-board {
-    fill: color-mix(in srgb, #221d18 calc(var(--windows, 0) * 100%), #40362b);
+    fill: color-mix(in srgb, #221d18 calc(var(--windows, 0) * 100%), #211c17);
   }
   .gl-board-front {
-    fill: color-mix(in srgb, #110e0b calc(var(--windows, 0) * 100%), #241e17);
+    fill: color-mix(in srgb, #110e0b calc(var(--windows, 0) * 100%), #100d0a);
   }
   .gl-grid {
     fill: none;
@@ -517,7 +517,7 @@
   }
   .gl-sunpatch {
     fill: #ffe9c4;
-    opacity: calc(var(--city-sun-on, 0) * 0.62);
+    opacity: calc(var(--city-sun-on, 0) * 0.26);
   }
 
   /* ---- the vitrine */
