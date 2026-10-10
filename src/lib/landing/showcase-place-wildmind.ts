@@ -56,7 +56,8 @@ const BOARD_FRONT = 479;
  * `window` (the bed at 548), the `fascia` over it, the `plinth` and the
  * `vitrine` on it, the model's `board` (back-left corner; BOARD.w × BOARD.d),
  * the line the people's words stand on (`labelY`, on the gallery's back
- * wall, above the vitrine) and where their leaders turn (`jogY`), the three
+ * wall, above the vitrine) and where their leaders turn (`jogY`, at the
+ * words' foot, so a leader that must jog runs along under them), the three
  * track `spots`, the `door` the walk's footpath ends at, the paused card,
  * and the part kept when the picture is cropped (`zone` on a tablet, the
  * tighter `phoneZone` on a phone, where the model fills the width).
@@ -73,7 +74,8 @@ export const GALLERY = {
   labelY: 268,
   /** How far down the glass the sky's reflection reaches by day: above the people's words. */
   skyStrip: 32,
-  jogY: 278,
+  /** Where a leader turns along to its label: right under the words, well clear of the vitrine's back edge. */
+  jogY: 268,
   spots: [596, 710, 824],
   door: { x: 984, w: 40, top: 300 },
   card: { x: 520, y: 494, w: 76, h: 42 },
@@ -125,7 +127,8 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
 /** The leader from a figure to its label's anchor on the back wall. */
 export function leaderPath(x: number, y: number, at: number): string {
   if (Math.abs(x - at) < 0.5) return `M${r1(x)},${r1(y)}V${GALLERY.labelY}`;
-  return `M${r1(x)},${r1(y)}V${GALLERY.jogY}H${r1(at)}V${GALLERY.labelY}`;
+  const turn = `M${r1(x)},${r1(y)}V${GALLERY.jogY}H${r1(at)}`;
+  return GALLERY.jogY === GALLERY.labelY ? turn : `${turn}V${GALLERY.labelY}`;
 }
 
 /**
@@ -208,7 +211,8 @@ export const SPECK_CAP = 160;
  */
 export const GALLERY_LIGHT = {
   wallNight: '#1b1510',
-  wallDay: '#101722',
+  /** By day: a warm daylit room (GlassArt adds a little of the sun's colour, and the light gathering low). */
+  wallDay: '#41382d',
   lamp: '#ffd9a0',
   /** A pool of lamplight on the back wall: its centre, height, and alpha at its centre and halfway out (radial stops 0 and 0.55). */
   pool: { cy: 352, ry: 150, rx: 100, peak: 0.36, half: 0.12 },
@@ -233,6 +237,19 @@ export function wordsGround(): string {
   const a = poolAlpha(WORDS_BAND.y + WORDS_BAND.h);
   const over = (base: number[], top: number[], k: number) => base.map((v, i) => v * (1 - k) + top[i] * k);
   const c = over(over([wr, wg, wb], [lr, lg, lb], a), [lr, lg, lb], GALLERY_LIGHT.cone);
+  return `#${c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
+}
+
+/**
+ * The back wall where the people's words stand at its brightest by day: the
+ * daylit wall with as much of the sun's colour as GlassArt gives it (15% of
+ * the city's sunlit tone at its strongest, --city-sun-on 0.44, taken as a
+ * pale gold) and the lamps at their daytime glow (--gl-on 0.22).
+ */
+export function dayWordsGround(): string {
+  const over = (base: number[], top: number[], k: number) => base.map((v, i) => v * (1 - k) + top[i] * k);
+  const sunlit = over(hexRgb(GALLERY_LIGHT.wallDay), hexRgb('#ffe6b8'), 0.15 * 0.44);
+  const c = over(sunlit, hexRgb(GALLERY_LIGHT.lamp), 0.22 * poolAlpha(WORDS_BAND.y + WORDS_BAND.h));
   return `#${c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
 }
 

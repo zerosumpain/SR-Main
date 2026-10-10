@@ -21,6 +21,12 @@
   // stills and dulls it; offline puts a dust sheet over the vitrine and the
   // gallery down to one spot, the plaque engraved but unlit. A picture only:
   // PlaceScene's labels carry every word, and its summary says it in text.
+  //
+  // Layers: each SVG's drawing is wrapped in plain groups, so when a label
+  // is open PlaceScene's fall-back dims the group and it multiplies with the
+  // sun- and lamp-driven opacities inside (a day-only layer stays out at
+  // night, and the other way round). The plinth and its plate are the
+  // plaque's part (`data-part="latest"`), lit when the plaque is open.
   import { shadows, skyline } from '$lib/landing/showcase-city';
   import { seeded, type Box } from '$lib/landing/showcase-place';
   import { GALLERY, GALLERY_LIGHT, type Figure, type HutSpot, type PersonAnchor } from '$lib/landing/showcase-place-wildmind';
@@ -136,7 +142,7 @@
   let shown = $derived(state !== 'offline');
 </script>
 
-<div class="gl" data-state={state}>
+<div class="gl" data-state={state} style:--gl-wall-night={GALLERY_LIGHT.wallNight} style:--gl-wall-day={GALLERY_LIGHT.wallDay}>
   <svg class="gl-layer gl-back" viewBox="0 0 1000 {GALLERY.h}" preserveAspectRatio="none" aria-hidden="true" focusable="false">
     <SafeMask id="sp-wm-safe" side="l" h={GALLERY.h} boxes={quiet} />
     <defs>
@@ -166,11 +172,17 @@
         <stop offset="1" stop-color="#ff9a3a" stop-opacity="0" />
       </radialGradient>
       <clipPath id="sp-wm-boardclip"><rect x={BX - 6} y={BY - 6} width={BOARD.w + 12} height={BOARD.d + 13} /></clipPath>
+      <!-- By day the light through the window gathers low in the room, never where the people's words stand. -->
+      <linearGradient id="sp-wm-day" x1="0" y1="0" x2="0" y2="1">
+        <stop offset=".36" stop-color="#e9d2ac" stop-opacity="0" />
+        <stop offset="1" stop-color="#e9d2ac" stop-opacity=".16" />
+      </linearGradient>
       <pattern id="sp-wm-grid" patternUnits="userSpaceOnUse" x={BX} y={BY} width={GRID.w} height={GRID.h}>
         <path class="gl-grid" d="M0,0H{GRID.w}M0,0V{GRID.h}" />
       </pattern>
     </defs>
 
+    <g>
     <CityRow line={FAR} far side={light.side} base={G} safe="sp-wm-safe" glow={300} />
     <CityRow line={NEAR} side={light.side} reach={light.reach} base={G} safe="sp-wm-safe" />
     {#if shade}<path class="gl-shadow" d={shade} />{/if}
@@ -185,6 +197,7 @@
 
     <!-- Inside: the back wall, the pools of lamplight on it, the floor, the track and its spots. -->
     <rect class="gl-wall" x={W.x} y={W.y} width={W.w} height={W.h} />
+    <rect class="gl-daylight" x={W.x} y={W.y} width={W.w} height={W.h} fill="url(#sp-wm-day)" />
     <g class="gl-lit">
       {#each SPOTS as x, i (x)}<ellipse class="gl-pool" data-spot={i} cx={x} cy={P.cy} rx={P.rx} ry={P.ry} fill="url(#sp-wm-pool)" />{/each}
       <rect x={W.x} y={BED - 34} width={W.w} height="34" fill="url(#sp-wm-floor)" />
@@ -198,7 +211,10 @@
       </g>
     {/each}
 
-    <!-- The plinth, its plate (the plaque's words stand on it as a label), and the model's board. -->
+    </g>
+
+    <!-- The plinth and its plate (the plaque's words stand on it as a label): the plaque's part. -->
+    <g data-part="latest">
     <ellipse class="gl-pl-shadow" cx={mid} cy={BED - 1} rx={PL.w / 2 + 34} ry="5" />
     <rect class="gl-pl-top" x={PL.x - 4} y={PL.top - 3} width={PL.w + 8} height="3" />
     <rect class="gl-pl" x={PL.x} y={PL.top} width={PL.w} height={BED - PL.top} />
@@ -210,11 +226,16 @@
       <rect class="in" x={mid - 57.5} y={PL.top + 15.5} width="115" height="27" rx="1" />
       <path class="eng" d="M{mid - 26},{PL.top + 22}h52M{mid - 44},{PL.top + 29.5}h88M{mid - 32},{PL.top + 36.5}h64" />
     </g>
+    </g>
+
+    <!-- The model's board. -->
+    <g>
     <rect class="gl-board-front" x={BX - 6} y={BY + BOARD.d} width={BOARD.w + 12} height="7" />
     <rect class="gl-board" x={BX - 6} y={BY - 6} width={BOARD.w + 12} height={BOARD.d + 6} />
     <rect x={BX} y={BY} width={BOARD.w} height={BOARD.d} fill="url(#sp-wm-grid)" />
     <!-- By day the sun comes in through the window and lies across the board, the model standing in it. -->
     <path class="gl-sunpatch" d={sunPatch} clip-path="url(#sp-wm-boardclip)" />
+    </g>
   </svg>
 
   {#if shown}
@@ -263,8 +284,16 @@
       </mask>
       <clipPath id="sp-wm-win"><rect x={W.x} y={W.y} width={W.w} height={W.h} /></clipPath>
       <clipPath id="sp-wm-vit"><rect x={V.x} y={V.back} width={V.w} height={V.foot - V.back} /></clipPath>
+      <!-- The vitrine's front edge catches the light most at its corners, least across the model behind it. -->
+      <linearGradient id="sp-wm-edge" gradientUnits="userSpaceOnUse" x1={V.x} y1="0" x2={V.x + V.w} y2="0">
+        <stop class="gl-edge-stop" offset="0" />
+        <stop class="gl-edge-stop" offset=".16" stop-opacity=".3" />
+        <stop class="gl-edge-stop" offset=".84" stop-opacity=".3" />
+        <stop class="gl-edge-stop" offset="1" />
+      </linearGradient>
     </defs>
 
+    <g>
     <!-- The lamps' warmth over the model after dark, and the daylight through the window on it by day. -->
     {#if shown}
       <rect class="gl-warm" x={V.x - 40} y={V.back - 40} width={V.w + 80} height={PL.top - V.back + 60} fill="url(#sp-wm-warm)" />
@@ -283,7 +312,7 @@
       d="M{V.x},{V.back}H{V.x + V.w}M{V.x},{V.back}V{V.back + VH}M{V.x + V.w},{V.back}V{V.back + VH}M{V.x},{V.back + VH}H{V.x + 30}M{V.x + V.w},{V.back + VH}H{V.x + V.w - 30}"
     />
     <path class="gl-edge" d="M{V.x},{V.back}V{V.foot}M{V.x + V.w},{V.back}V{V.foot}" />
-    <path class="gl-edge hi" d="M{V.x},{V.front}H{V.x + V.w}" />
+    <path class="gl-edge hi" d="M{V.x},{V.front}H{V.x + V.w}" stroke="url(#sp-wm-edge)" />
     <path class="gl-glint" d="M{V.x + V.w},{V.back}V{V.foot}M{V.x},{V.front}H{V.x + V.w}" />
 
     {#if state === 'offline'}
@@ -340,6 +369,7 @@
       <circle cx="940" cy={G - 52} r="6.4" />
       <path d="M934.4,{G - 40}l-16,-14l2.4,-2.8l16,12z" />
     </g>
+    </g>
   </svg>
 
   <!-- The fascia's lettering, and the paused card's: words in the drawing, said elsewhere in text. -->
@@ -361,6 +391,8 @@
     --gm-tree: #6c8253;
     --gm-tree-hi: #98ad72;
     --gm-speck: #2b2420;
+    /* Daylight in the gallery: its own warm interior, a little of the sun's colour in it with the sun out. */
+    --gl-sunk: calc(var(--city-sun-on, 0) * 15%);
     position: absolute;
     inset: 0;
   }
@@ -412,7 +444,11 @@
 
   /* ---- inside */
   .gl-wall {
-    fill: color-mix(in srgb, #1b1510 calc(var(--windows, 0) * 100%), #101722);
+    fill: color-mix(in srgb, var(--gl-wall-night) calc(var(--windows, 0) * 100%), color-mix(in srgb, var(--city-sunlit, #dbe4e7) var(--gl-sunk), var(--gl-wall-day)));
+  }
+  /* The daylight through the window, falling to the floor. */
+  .gl-daylight {
+    opacity: calc(1 - var(--windows, 0));
   }
   .gl-lit {
     opacity: var(--gl-on);
@@ -422,13 +458,16 @@
     fill: #0b0a09;
   }
   .gl-cone {
-    opacity: var(--windows, 0);
+    opacity: calc(var(--windows, 0) * var(--gl-spot, 1));
+  }
+  .gl-pool {
+    opacity: var(--gl-spot, 1);
   }
   .gl-pl {
-    fill: color-mix(in srgb, #1b1713 calc(var(--windows, 0) * 100%), #2a231c);
+    fill: color-mix(in srgb, #1b1713 calc(var(--windows, 0) * 100%), #514637);
   }
   .gl-pl-top {
-    fill: color-mix(in srgb, #2e271f calc(var(--windows, 0) * 100%), #4a3f33);
+    fill: color-mix(in srgb, #2e271f calc(var(--windows, 0) * 100%), #706150);
   }
   .gl-pl-lamp {
     opacity: var(--gl-on);
@@ -461,10 +500,10 @@
     }
   }
   .gl-board {
-    fill: #221d18;
+    fill: color-mix(in srgb, #221d18 calc(var(--windows, 0) * 100%), #40362b);
   }
   .gl-board-front {
-    fill: #110e0b;
+    fill: color-mix(in srgb, #110e0b calc(var(--windows, 0) * 100%), #241e17);
   }
   .gl-grid {
     fill: none;
@@ -502,9 +541,11 @@
     stroke-width: 0.6;
   }
   .gl-edge.hi {
-    stroke: color-mix(in srgb, var(--gl-lamp) calc(var(--windows, 0) * 100%), #f4f8fb);
     stroke-width: 1.1;
     opacity: calc(0.45 + 0.45 * var(--windows, 0));
+  }
+  .gl-edge-stop {
+    stop-color: color-mix(in srgb, var(--gl-lamp) calc(var(--windows, 0) * 100%), #f4f8fb);
   }
   .gl-glint {
     fill: none;
@@ -635,11 +676,11 @@
   .gl-held.still {
     filter: saturate(0.5) brightness(0.8);
   }
-  /* Between lives the lights drop to the two outer spots; offline to the middle one. */
+  /* Between lives the lights drop to the two outer spots; offline to the middle one (a factor on each light's own opacity). */
   .gl[data-state='between-lives'] [data-spot='1'],
   .gl[data-state='offline'] [data-spot='0'],
   .gl[data-state='offline'] [data-spot='2'] {
-    opacity: 0.1;
+    --gl-spot: 0.1;
   }
   .gl[data-state='offline'] .gl-lit {
     opacity: calc(var(--gl-on) * 0.6);

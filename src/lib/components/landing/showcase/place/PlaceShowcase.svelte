@@ -58,7 +58,7 @@
   import { shipDays } from '$lib/landing/rhythm';
   import { ago } from '$lib/landing/live-vitals.svelte';
   import type { ShowcaseProps } from '$lib/landing/showcase';
-  import { beatFor, formatFigure } from '$lib/landing/showcase-motion';
+  import { beatFor, formatFigure, prefersReducedMotion } from '$lib/landing/showcase-motion';
   import {
     constellation,
     crates,
@@ -255,15 +255,45 @@
     const at = onBoard(glassAt(glass, bands, x, y));
     return { x: Math.round(at.x * 10) / 10, y: Math.round(at.y * 10) / 10 };
   };
-  // The figures follow the poll frame by frame through a glide; nothing else does.
-  let figures = $derived<Figure[]>(
-    poll && glass
-      ? poll.people.flatMap((p) => {
-          const at = stand(p.x, p.y);
+  // The figures follow the poll frame by frame through a glide; nothing else does. Where each stands on
+  // the board, and the card under it (its lift), apart: stepping onto a higher card eases up, never jumps.
+  let standing = $derived(
+    poll && glass && bands
+      ? poll.people.map((p) => {
+          const at = glassAt(glass, bands, p.x, p.y);
+          const on = onBoard({ x: at.x, y: at.y + at.lift });
           // 'asleep' is DOING.sleeping (wildmind.ts), the word the server sends.
-          return at ? [{ id: p.id, x: at.x, y: at.y, asleep: p.doing === 'asleep', alive: p.alive }] : [];
+          return { id: p.id, x: Math.round(on.x * 10) / 10, y: on.y, lift: at.lift, asleep: p.doing === 'asleep', alive: p.alive };
         })
       : [],
+  );
+  /** The lift each figure is drawn at: eased toward the card under it over LIFT_MS. */
+  const LIFT_MS = 320;
+  let lifted = $state<Record<string, number>>({});
+  let liftKey = $derived(standing.map((f) => `${f.id}:${f.lift}`).join('|'));
+  let liftFrame = 0;
+  $effect(() => {
+    void liftKey;
+    const want = untrack(() => Object.fromEntries(standing.map((f) => [f.id, f.lift])));
+    const from = untrack(() => lifted);
+    const moving = Object.keys(want).filter((id) => from[id] != null && Math.abs(from[id] - want[id]) > 0.05);
+    cancelAnimationFrame(liftFrame);
+    if (!moving.length || prefersReducedMotion()) {
+      lifted = want;
+      return;
+    }
+    const t0 = performance.now();
+    const step = (t: number) => {
+      const k = Math.min(1, (t - t0) / LIFT_MS);
+      const e = k * k * (3 - 2 * k);
+      lifted = Object.fromEntries(Object.entries(want).map(([id, to]) => [id, from[id] == null ? to : from[id] + (to - from[id]) * e]));
+      if (k < 1) liftFrame = requestAnimationFrame(step);
+    };
+    liftFrame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(liftFrame);
+  });
+  let figures = $derived<Figure[]>(
+    standing.map((f) => ({ id: f.id, x: f.x, y: Math.round((f.y - (lifted[f.id] ?? f.lift)) * 10) / 10, asleep: f.asleep, alive: f.alive })),
   );
   let wmAnchors = $derived(peopleAnchors(figures.map((f) => ({ id: f.id, x: f.x, y: f.y - (f.alive ? figureTop(f.asleep) : 2) }))));
   let wmHuts = $derived(
@@ -411,6 +441,7 @@
         tone="accent"
         land="var(--city-ground)"
         last
+        noPlateFloor
         head={wmw.head}
         tags={wmTags}
         key={wmw.key}
@@ -418,7 +449,7 @@
         close={wmw.close}
         summary={wmw.summary}
         print={wmw.print}
-        live={{ held: poll.held, onhold: () => poll.hold(), controls: 'sp-wm-model', caption: wmw.captions }}
+        live={wm.state === 'offline' ? undefined : { held: poll.held, onhold: () => poll.hold(), controls: 'sp-wm-model', caption: wmw.captions }}
       >
         {#snippet art()}
           <GlassArt

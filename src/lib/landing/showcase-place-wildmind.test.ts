@@ -12,6 +12,7 @@ import {
   HUT_CAP,
   WORDS_BAND,
   creamOn,
+  dayWordsGround,
   figureTop,
   gatherHuts,
   leaderPath,
@@ -265,7 +266,9 @@ describe('the gallery', () => {
 
   it('draws each leader from the figure to its words, jogging only when the anchor moved', () => {
     expect(leaderPath(700, 420, 700)).toBe(`M700,420V${GALLERY.labelY}`);
-    expect(leaderPath(880.04, 420, 770)).toBe(`M880,420V${GALLERY.jogY}H770V${GALLERY.labelY}`);
+    expect(leaderPath(880.04, 420, 770)).toBe(`M880,420V${GALLERY.labelY}H770`);
+    // The jog runs under the words, well clear of the vitrine's back edge (no doubled rule over the lid).
+    expect(GALLERY.vitrine.back - GALLERY.jogY).toBeGreaterThanOrEqual(12);
     const [a] = peopleAnchors([{ id: 'main', x: 600, y: 410 }]);
     expect(a).toMatchObject({ hang: 'r', at: 600, lead: `M600,410V${GALLERY.labelY}` });
     expect(figureTop(false)).toBeGreaterThan(figureTop(true));
@@ -310,6 +313,14 @@ describe('the gallery’s light', () => {
   it('keeps the people’s words at 4.5:1 or better on the back wall, under the lamps at full night', () => {
     expect(creamOn(wordsGround())).toBeGreaterThanOrEqual(4.5);
     expect(creamOn(GALLERY_LIGHT.wallDay)).toBeGreaterThanOrEqual(7);
+  });
+
+  it('lights the room warm by day, and still keeps the words at 4.5:1 at its brightest', () => {
+    // Daylit, not the night's navy: a warm wall well up from the night's.
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(GALLERY_LIGHT.wallDay.slice(i, i + 2), 16));
+    expect(r).toBeGreaterThan(b);
+    expect(r + g + b).toBeGreaterThan(150);
+    expect(creamOn(dayWordsGround())).toBeGreaterThanOrEqual(4.5);
   });
 
   it('pools the lamplight below the words, fading out above them', () => {

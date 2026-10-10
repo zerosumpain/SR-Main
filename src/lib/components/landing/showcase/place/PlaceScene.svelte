@@ -58,6 +58,7 @@
     beatCaption = '',
     beatStill = '',
     loosePlate = false,
+    noPlateFloor = false,
     land = 'var(--place-night)',
     last = false,
   }: {
@@ -111,9 +112,19 @@
     last?: boolean;
     /** The plate keeps out of the picture's sky even on a desktop. */
     loosePlate?: boolean;
+    /**
+     * The rambler never stands on the plate: where the heading carries a
+     * dateline close above it (or a phone's label list), his greeting would
+     * cover those words. He keeps to the heading and the ground.
+     */
+    noPlateFloor?: boolean;
   } = $props();
 
   let root: HTMLElement;
+  // The plate's top is a floor for the rambler, unless the chapter keeps him off it (his greeting would cover the heading's last line).
+  function plateFloor(node: HTMLElement) {
+    return noPlateFloor ? undefined : scenery(node, {});
+  }
   let armed = $state(false);
   let play = $state(false);
   let away = $state(false);
@@ -277,23 +288,36 @@
       </div>
 
       <!-- The one plate: what the picture is, or the open label explained. -->
-      <div class="sp-plate" use:scenery>
+      <div class="sp-plate" use:plateFloor>
         {#if head.aside}<p class="sp-aside">{head.aside}</p>{/if}
-        <div class="sp-say" id="{id}-say">
-          <!-- Every text the plate can show, laid in the same place unseen, so it is
-               always as tall as its longest and opening a label never moves the page. -->
-          <p class="sp-sizer sp-key" aria-hidden="true">{key}</p>
-          {#each tags as t (t.id)}<p class="sp-sizer" aria-hidden="true">{t.note}</p>{/each}
-          <p class="sp-live" class:sp-key={!shownTag} aria-live="polite">{shownTag ? shownTag.note : key}</p>
-        </div>
         <!-- The rules, then (with no link out) the closing line, then what the live picture is
              doing, run on, and the switch that holds it still at the end of the line. -->
-        {#if rules || liveSays || (!more && close) || live}
-          <p class="sp-rules">
-            {[rules, more ? '' : close, liveSays].filter(Boolean).join(' ')}
-            {#if live}<span class="sp-cap-live"><HoldStill held={live.held} onhold={live.onhold} controls={live.controls} pressed /></span>{/if}
-          </p>
-        {/if}
+        {#snippet rulesLine(ghost: boolean)}
+          {#if rules || liveSays || (!more && close) || live}
+            <p class="sp-rules">
+              {[rules, more ? '' : close, liveSays].filter(Boolean).join(' ')}
+              {#if live}<span class="sp-cap-live"
+                  >{#if ghost}<span class="sp-ghost">hold still</span>{:else}<HoldStill
+                      held={live.held}
+                      onhold={live.onhold}
+                      controls={live.controls}
+                      pressed
+                    />{/if}</span
+                >{/if}
+            </p>
+          {/if}
+        {/snippet}
+        <div class="sp-say" id="{id}-say">
+          <!-- Every text the plate can show, with the rules under it, laid in the same place
+               unseen, so it is always as tall as its longest, opening a label never moves the
+               page, and the room left over falls below the rules, not between the paragraphs. -->
+          <div class="sp-sizer" aria-hidden="true"><p class="sp-note sp-key">{key}</p>{@render rulesLine(true)}</div>
+          {#each tags as t (t.id)}<div class="sp-sizer" aria-hidden="true"><p class="sp-note">{t.note}</p>{@render rulesLine(true)}</div>{/each}
+          <div class="sp-now">
+            <p class="sp-note sp-live" class:sp-key={!shownTag} aria-live="polite">{shownTag ? shownTag.note : key}</p>
+            {@render rulesLine(false)}
+          </div>
+        </div>
         {#if beat != null}
           <p class="sp-cap">
             <span>{reduced || held ? beatStill || beatCaption : beatCaption}</span>
@@ -471,6 +495,7 @@
   /* The chapter's own clock under the figure (the valley's day, never ours). */
   .sp-date {
     margin: 6px 0 0;
+    text-wrap: balance;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     line-height: 1.5;
@@ -576,8 +601,13 @@
   .sp-say {
     display: grid;
   }
-  .sp-say > p {
+  .sp-say > div {
     grid-area: 1 / 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .sp-note {
     margin: 0;
     font-size: 15px;
     line-height: 1.45;
@@ -586,6 +616,11 @@
   }
   .sp-sizer {
     visibility: hidden;
+  }
+  /* The switch's room in a sizer's rules line: its icon, gap and padding round the same words. */
+  .sp-ghost {
+    display: inline-block;
+    padding: 2px 4px 2px 20px;
   }
   .sp-rules,
   .sp-cap {
@@ -670,7 +705,7 @@
     .sp-scene {
       --col: 35%;
     }
-    .sp-say > p {
+    .sp-note {
       font-size: 14px;
     }
   }
@@ -715,7 +750,7 @@
     .sp-plate {
       margin-top: 26px;
     }
-    .sp-say > p {
+    .sp-note {
       font-size: 14px;
     }
     .sp-aside {

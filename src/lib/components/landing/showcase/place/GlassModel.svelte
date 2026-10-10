@@ -12,6 +12,7 @@
   // the pieces' layer alone. Every fill is a token, set by GlassArt.
   import { FIGURE, GALLERY, type Figure, type HutSpot, type PersonAnchor } from '$lib/landing/showcase-place-wildmind';
   import type { WildmindGlass } from '$lib/landing/wildmind-glass';
+  import { lifeOf } from '$lib/landing/wildmind';
   import { untrack } from 'svelte';
 
   let {
@@ -41,9 +42,12 @@
     return `rgb(${LO.map((v, k) => Math.round(v + (HI[k] - v) * t)).join(',')})`;
   };
 
-  // A new terrain version (a new life, or a valley grown) fades in; the first one is simply there.
-  const first = untrack(() => glass?.version ?? null);
-  let fresh = $derived(!!glass && glass.version !== first);
+  // A new valley (a new life, or the ground itself changed) fades in; the first one is simply there.
+  // The same valley grown (only more of it seen) is redrawn in place, never blinked out.
+  const life = (g: WildmindGlass | null) => (g ? (lifeOf(g.version) ?? g.version) : null);
+  const first = untrack(() => life(glass));
+  let valley = $derived(life(glass));
+  let fresh = $derived(!!glass && valley !== first);
 
   /** The specks, as one path of round dots. */
   let specks = $derived(animals.map((a) => `M${Math.round(a.x * 10) / 10} ${Math.round(a.y * 10) / 10}h0`).join(''));
@@ -52,9 +56,12 @@
 
 <svg class="gl-layer gm" viewBox="0 0 1000 {GALLERY.h}" preserveAspectRatio="none" aria-hidden="true" focusable="false">
   {#if glass}
-    {#key glass.version}
-      <g class="gm-model" class:fresh transform="translate({B.x} {B.y})">
-        <path class="gm-contact" d={glass.cards[0]?.d ?? ''} transform="translate(1.6 2.6)" />
+    <!-- The outer group is the one a label's fall-back dims; the fade and the flourish run inside it. -->
+    <g class="gm-model" transform="translate({B.x} {B.y})">
+      {#key valley}
+      <g class="gm-valley" class:fresh>
+        <!-- The model's shadow on the board: laid with the first card, so an armed vitrine is a clean empty board. -->
+        <g class="gm-card" style:--i={0}><path class="gm-contact" d={glass.cards[0]?.d ?? ''} transform="translate(1.6 2.6)" /></g>
         {#each glass.cards as c, i (i)}
           {#if c.d}
             <g class="gm-card" style:--i={i}>
@@ -75,7 +82,8 @@
           {/if}
         {/each}
       </g>
-    {/key}
+      {/key}
+    </g>
   {/if}
 </svg>
 
@@ -164,7 +172,7 @@
     stroke: var(--gm-water);
     stroke-width: 0.55;
   }
-  .gm-model.fresh {
+  .gm-valley.fresh {
     animation: gm-fresh 900ms ease-out both;
   }
   @keyframes gm-fresh {
@@ -274,7 +282,7 @@
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    .gm-model.fresh,
+    .gm-valley.fresh,
     .gm-card,
     .gp {
       animation: none !important;
