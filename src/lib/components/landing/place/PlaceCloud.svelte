@@ -4,7 +4,10 @@
   // The place's sky beside the title (HeroPlace): the next daydream as a
   // cloud, filling as the wait runs out, raining once onto the title when a
   // think fires, lying low as mist out of hours and struck faint when off.
-  // A picture only; HeroPlace's daydream label carries the words.
+  // A picture only; HeroPlace's daydream label carries the words. It is
+  // weather, so it wears the light: ink at night, a slate underside in the
+  // low light, warmed at either end of the day, and white on the daytime sky
+  // (place-city.ts sets --city-cloud*).
   import type { CloudMode } from '$lib/landing/place';
   import { scenery } from '$lib/landing/ramblers/scenery';
 
@@ -66,29 +69,30 @@
     overflow: visible;
   }
   .cl-body {
-    fill: #0f1213;
-    opacity: 0.75;
+    fill: var(--city-cloud, #0f1213);
+    opacity: 0.9;
   }
   .cl-fill {
-    fill: #456c70;
+    fill: var(--city-cloud-fill, #4f7d82);
   }
   .cl-line {
-    stroke: #bfe3e7;
+    stroke: var(--city-cloud-line, #bfe3e7);
     stroke-width: 1.4;
   }
   .cl-rim circle {
     fill: none;
-    stroke: #7fb8c0;
+    stroke: var(--city-cloud-rim, #7fb8c0);
     stroke-width: 1.3;
   }
   .cl-fog {
     fill: none;
-    stroke: rgba(127, 184, 192, 0.5);
+    stroke: var(--city-cloud-rim, #7fb8c0);
+    stroke-opacity: 0.6;
     stroke-width: 3;
     stroke-linecap: round;
   }
   .pl-cloud[data-mode='late'] .cl-fill {
-    fill: #3a4b4d;
+    fill: color-mix(in srgb, var(--city-cloud-fill, #4f7d82) 62%, var(--city-cloud, #0f1213));
   }
   .pl-cloud[data-mode='off'] .cl-body {
     opacity: 0.3;
@@ -120,7 +124,7 @@
     width: 1.5px;
     height: 10px;
     border-radius: 2px;
-    background: #bfe3e7;
+    background: var(--city-cloud-line, #bfe3e7);
     transform: rotate(14deg);
     opacity: 0.55;
     animation: pl-fall calc(var(--beat) * 1.4) linear calc(var(--i) * var(--beat) * 0.17) 5;

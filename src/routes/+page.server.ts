@@ -4,6 +4,9 @@ import { HEALTH_TIMEZONE } from '$lib/constants/health-day';
 import { getReleaseShowcase } from '$lib/releases/public';
 import { loadCapabilityFacts } from '$lib/landing/capabilities.server';
 import { loadShowcase } from '$lib/landing/showcase.server';
+import { ownerSun } from '$lib/landing/sun.server';
+import { sunOverride } from '$lib/landing/sun';
+import { dev } from '$app/environment';
 import { getAllPosts } from '$lib/blog';
 import { isOwnerRequest } from '$lib/server/owner';
 import { HERO_VIEW_COOKIE, chooseHeroView } from '$lib/landing/hero-view';
@@ -45,7 +48,11 @@ export const load: PageServerLoad = async ({ fetch, locals, getClientAddress, co
 
   // Everything below is awaited, NOT streamed, and independent, so it is read
   // in parallel: the slowest read sets first paint, not the sum of them.
-  const [steps, day, releases, capabilities, showcase, posts] = await Promise.all([
+  // Dev only: ?sun=<degrees>&rising=<0|1> pins the place view's sky so
+  // screenshots hold still (null, and the address ignored, in production).
+  const pinnedSun = sunOverride(url.searchParams, dev);
+
+  const [steps, day, releases, capabilities, showcase, posts, sun] = await Promise.all([
     // Today's steps in quarter-hours, midnight to 23:59, for the steps footnote.
     stepsToday().catch(() => null),
     dayReading,
@@ -70,6 +77,13 @@ export const load: PageServerLoad = async ({ fetch, locals, getClientAddress, co
     getAllPosts()
       .then((all) => all.slice(0, 2).map((p) => ({ slug: p.slug, title: p.title, publishedAt: p.publishedAt })))
       .catch(() => []),
+    // Where the sun stands for the owner just now, for the place view's sky:
+    // an altitude in whole degrees and whether it is climbing, worked out on
+    // the server from his position rounded to half a degree. Never the
+    // position itself. Read from the location already known, never waiting;
+    // only the place view, on a server that has never had a position, waits
+    // for the first (up to 400ms). Null draws the default sky.
+    pinnedSun ?? ownerSun(new Date(), { wait: heroView.view === 'place' }),
   ]);
 
   // Owner-only extras: the sync banner below and the footer's Admin link.
@@ -99,5 +113,21 @@ export const load: PageServerLoad = async ({ fetch, locals, getClientAddress, co
         .catch(() => null)
     : null;
 
-  return { heroView, steps, day, dateline, initialVitals, releases, capabilities, showcase, posts, isOwner, syncAttention, mergeablePrs };
+  return {
+    heroView,
+    steps,
+    day,
+    dateline,
+    initialVitals,
+    releases,
+    capabilities,
+    showcase,
+    posts,
+    isOwner,
+    syncAttention,
+    mergeablePrs,
+    sun,
+    // True only when the dev override above set `sun`: it then wins over the live poll.
+    sunPinned: pinnedSun != null,
+  };
 };

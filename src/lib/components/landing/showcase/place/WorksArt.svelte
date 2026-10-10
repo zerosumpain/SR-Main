@@ -1,7 +1,7 @@
 <svelte:options css="injected" />
 
 <script lang="ts" module>
-  /** The works' fixed geometry, in its 1000 × 500 scene. */
+  /** The works' fixed geometry, in its 1000 × 500 scene: `tower` is the glass tower beside the site. */
   export const WORKS = {
     h: 500,
     ground: 468,
@@ -11,23 +11,32 @@
     crane: { x: 584, top: 40, jib: 74, from: 236, to: 652 },
     hook: { x: 386, y: 166 },
     hut: { x: 470, y: 430, w: 92 },
+    tower: { x: 606, w: 60, top: 136 },
   } as const;
 </script>
 
 <script lang="ts">
-  // Shipping, drawn: the edge of the town from the hero (a house a day, a lit
-  // window per deploy), a new building going up in scaffolding with the
-  // builder's sign lit on it, and a crane lowering today's deploys as crates
-  // on its hook. A star sits on the tip of the jib for the ideas that fell in
-  // from Daydream. A picture only; PlaceScene's labels carry every number.
+  // Shipping, drawn: a building site between the glass towers. The hero's
+  // town at its edge, its recent weeks (a block a week, a lit window per
+  // deploy: lamp-lit by night, bright glass by day), a new block going up
+  // in its concrete frame behind the hoarding with the builder's sign lit
+  // on it, and a tower crane lowering today's deploys as crates on its hook.
+  // A star sits on the tip of the jib for the ideas that fell in from
+  // Daydream. A picture only; PlaceScene's labels carry every number.
   import type { Town } from '$lib/landing/place';
+  import { landmark, skyline } from '$lib/landing/showcase-city';
+  import type { Box } from '$lib/landing/showcase-place';
   import { scenery } from '$lib/landing/ramblers/scenery';
+  import CityRow from './CityRow.svelte';
+  import SafeMask from './SafeMask.svelte';
 
   let {
     houses,
     load,
     busy,
     dreamt,
+    light,
+    quiet = [],
   }: {
     /** The last weeks as a terrace, or null with no record. */
     houses: Town | null;
@@ -37,6 +46,10 @@
     busy: boolean;
     /** Some of Daydream's ideas have shipped: the star on the jib is lit. */
     dreamt: boolean;
+    /** Where the sun stands and how far its shadows run. */
+    light: { side: 'east' | 'west'; reach: number };
+    /** Where the labels stand: no tower window is lit behind them. */
+    quiet?: Box[];
   } = $props();
 
   const t = WORKS.town;
@@ -69,10 +82,40 @@
   })();
   const sparkle = (x: number, y: number, k: number) =>
     `M${x},${y - k * 2.2} L${x + k * 0.5},${y - k * 0.5} L${x + k * 2.2},${y} L${x + k * 0.5},${y + k * 0.5} L${x},${y + k * 2.2} L${x - k * 0.5},${y + k * 0.5} L${x - k * 2.2},${y} L${x - k * 0.5},${y - k * 0.5} Z`;
+  const tw = WORKS.tower;
+  // The glass tower beside the site is the works' landmark: tapering to a spire, a beacon on it after dark.
+  const SPIRE = landmark('taper', tw.x, tw.w, G - tw.top, G);
+  // The finished floors' glazing, and the frame's slabs above them.
+  const SLABS = Array.from({ length: 3 }, (_, i) => `M${bd.x - 4},${bd.done - 38 * i}H${bd.x + bd.w + 4}`).join('');
+  // The street behind the site: unlit behind the heading and plate.
+  // The terrace's lit windows are deploys: no scenery window is lit behind them, nor round the crates.
+  const CHARTS = [
+    { x: t.x - 8, y: t.y - 36, w: t.w + 16, h: t.h + 36 },
+    { x: hk.x - 40, y: hk.y - 4, w: 80, h: 120 },
+  ];
+  let hush = $derived([...quiet, ...CHARTS]);
+  // A mixed street: glass behind the site, all sorts of crowns.
+  // Behind the site, a slab with a lantern on its crown, lit after dark.
+  const CROWN = landmark('crown', 480, 56, 300, G);
+  let FAR = $derived(skyline({ quiet: hush, seed: 41, street: 'glass', from: -700, to: 1700, base: G, lo: 110, hi: 300, wide: [28, 64], gap: [2, 10], clear: [[474, 542]], dark: [[640, 1060]], litShare: 0.14 }));
+  let NEAR = $derived(skyline({ quiet: hush, seed: 42, street: 'mixed', from: -700, to: 1700, base: G, lo: 70, hi: 230, wide: [40, 84], gap: [8, 26], clear: [[-12, 690]], low: [[660, 1060, 170]], dark: [[640, 1060]], litShare: 0.22 }));
+  let east = $derived(light.side === 'east');
   let rows = $derived(load.boxes.length ? Math.max(...load.boxes.map((b) => -b.y)) + 1 : 0);
 </script>
 
 <svg viewBox="0 0 1000 {WORKS.h}" preserveAspectRatio="none" focusable="false">
+  <SafeMask id="sp-wk-safe" side="r" h={WORKS.h} boxes={hush} />
+  <CityRow line={FAR} far side={light.side} base={G} safe="sp-wk-safe" mark={CROWN} glow={260} />
+  <CityRow line={NEAR} side={light.side} reach={light.reach} base={G} safe="sp-wk-safe" />
+  <!-- The glass tower beside the site, tapering to a spire. -->
+  <g class="wo-tower">
+    <path class="tw-body" d={SPIRE.d} />
+    <path class="tw-fins" d={SPIRE.marks} />
+    <g mask="url(#sp-wk-safe)">
+      <path class="tw-beacon" d={SPIRE.glow} />
+      <path class="tw-glint" d={east ? `M${tw.x + 0.6},${G}L${tw.x + tw.w * 0.22},${Math.round(tw.top + (G - tw.top) * 0.1)}` : `M${tw.x + tw.w - 0.6},${G}L${tw.x + tw.w * 0.78},${Math.round(tw.top + (G - tw.top) * 0.1)}`} />
+    </g>
+  </g>
   <!-- The walk's footpath, on in behind the town to the site hut's door. -->
   <path class="wo-trail" d="M-2000,{G - 3} H{hut.x + hut.w - 19}" />
   <!-- The edge of the town: the hero's terrace, its most recent weeks. -->
@@ -87,12 +130,18 @@
     </g>
   {/if}
 
-  <!-- The new building: finished floors, scaffolding above, the sign on the front. -->
+  <!-- The new block: glazed floors done, its concrete frame and scaffold above, the sign on the front. -->
   <g class="wo-build" data-part="lines">
+    <!-- The floors poured but not yet glazed: shadowed inside, the lift core standing up through them. -->
+    <rect class="bd-inside" x={bd.x} y={bd.top} width={bd.w} height={bd.done - bd.top} />
+    <rect class="bd-core" x={bd.x + bd.w * 0.62} y={bd.top - 12} width="22" height={bd.done - bd.top + 12} />
     <rect class="bd-done" x={bd.x} y={bd.done} width={bd.w} height={G - bd.done} />
-    <path class="bd-wins" d="M{bd.x + 14},{bd.done + 16} h12 v10 h-12 Z M{bd.x + 44},{bd.done + 16} h12 v10 h-12 Z M{bd.x + 80},{bd.done + 16} h12 v10 h-12 Z M{bd.x + 110},{bd.done + 16} h12 v10 h-12 Z" />
+    <path class="bd-wins" d="M{bd.x + 6},{bd.done + 12} h{bd.w - 12} v18 h{-(bd.w - 12)} Z" />
+    <path class="bd-slab" d={SLABS} />
     <path class="bd-scaf" d={scaffold} />
   </g>
+  <!-- The hoarding round the site. -->
+  <rect class="wo-hoard" x={bd.x - 14} y={G - 14} width={hut.x - bd.x + 10} height="14" />
   <g class="wo-sign" data-part="builder" data-busy={busy ? '' : undefined}>
     <path class="sg-hang" d="M{s.x + 10},{s.y} V{s.y - 10} M{s.x + s.w - 10},{s.y} V{s.y - 10}" />
     <rect class="sg-glow" x={s.x - 10} y={s.y - 8} width={s.w + 20} height={s.h + 16} rx="12" />
@@ -130,9 +179,10 @@
     </g>
   </g>
 
-  <!-- The site hut: the builder's desk. -->
+  <!-- The site cabins: the builder's desk. -->
   <g class="wo-hut">
     <rect class="hu-body" x={hut.x} y={hut.y} width={hut.w} height={G - hut.y} />
+    <path class="hu-ribs" d="M{hut.x + 46},{hut.y}V{G} M{hut.x},{hut.y + 19}H{hut.x + hut.w}" />
     <rect class="hu-win" x={hut.x + 12} y={hut.y + 10} width="26" height="12" />
     <rect class="hu-door" x={hut.x + hut.w - 26} y={hut.y + 8} width="14" height={G - hut.y - 8} />
   </g>
@@ -145,7 +195,7 @@
   style:top="{(bd.top / WORKS.h) * 100}%"
   use:scenery
 ></span>
-<!-- He sits at the site hut to read. -->
+<!-- He sits on the site cabins to read. -->
 <span
   class="wo-desk"
   style:left="{(hut.x / 1000) * 100}%"
@@ -159,8 +209,28 @@
     position: absolute;
     height: 1px;
   }
+  .tw-body {
+    fill: var(--city-body, #0c1018);
+    stroke: rgba(237, 228, 212, 0.26);
+    stroke-width: 0.9;
+  }
+  .tw-beacon {
+    fill: #f6dca8;
+    opacity: calc(0.3 + 0.6 * var(--windows, 1));
+  }
+  .tw-fins {
+    fill: none;
+    stroke: rgba(237, 228, 212, 0.1);
+    stroke-width: 1;
+  }
+  .tw-glint {
+    fill: none;
+    stroke: var(--city-glint, #f08a3c);
+    stroke-width: 1.3;
+    opacity: var(--city-glint-on, 0);
+  }
   .t-block {
-    fill: #120d0a;
+    fill: var(--city-body, #120d0a);
     stroke: rgba(237, 228, 212, 0.22);
     stroke-width: 1;
     vector-effect: non-scaling-stroke;
@@ -169,18 +239,38 @@
     fill: rgba(237, 228, 212, 0.07);
   }
   .t-lit {
-    fill: #f0a24e;
+    fill: var(--city-pane, #f0a24e);
   }
   .t-lit2 {
-    fill: #f6cf8a;
+    fill: var(--city-pane2, #f6cf8a);
   }
   .bd-done {
-    fill: #1d1611;
+    fill: var(--city-deck, #15171b);
     stroke: rgba(237, 228, 212, 0.3);
     stroke-width: 0.9;
   }
   .bd-wins {
-    fill: rgba(237, 228, 212, 0.08);
+    fill: var(--city-glass, #0d121b);
+    stroke: rgba(237, 228, 212, 0.18);
+    stroke-width: 0.7;
+  }
+  .bd-inside {
+    fill: var(--city-shade, #080b11);
+    opacity: 0.86;
+  }
+  .bd-core {
+    fill: var(--city-deck, #15171b);
+    stroke: rgba(237, 228, 212, 0.26);
+    stroke-width: 0.8;
+  }
+  .bd-slab {
+    stroke: rgba(237, 228, 212, 0.42);
+    stroke-width: 2.2;
+  }
+  .wo-hoard {
+    fill: var(--city-deck, #15171b);
+    stroke: rgba(237, 228, 212, 0.3);
+    stroke-width: 0.8;
   }
   .bd-scaf {
     fill: none;
@@ -192,7 +282,7 @@
     stroke-width: 1;
   }
   .sg-board {
-    fill: #1b130d;
+    fill: #0d1116;
     stroke: rgba(127, 184, 192, 0.7);
     stroke-width: 1.1;
   }
@@ -222,12 +312,12 @@
     stroke-linejoin: round;
   }
   .cr-weight {
-    fill: #2c2119;
+    fill: #262a31;
     stroke: rgba(237, 228, 212, 0.35);
     stroke-width: 0.8;
   }
   .cr-cab {
-    fill: #2c2119;
+    fill: #262a31;
     stroke: rgba(232, 134, 58, 0.72);
     stroke-width: 1;
   }
@@ -243,7 +333,7 @@
     fill: #bfe3e7;
   }
   .cr-trolley {
-    fill: #2c2119;
+    fill: #262a31;
     stroke: rgba(232, 134, 58, 0.72);
     stroke-width: 1;
   }
@@ -267,12 +357,17 @@
     stroke-width: 1;
   }
   .hu-body {
-    fill: #1d1611;
+    fill: var(--city-deck, #15171b);
     stroke: rgba(237, 228, 212, 0.34);
+    stroke-width: 0.9;
+  }
+  .hu-ribs {
+    stroke: rgba(237, 228, 212, 0.22);
     stroke-width: 0.9;
   }
   .hu-win {
     fill: #f0a24e;
+    opacity: calc(0.35 + 0.65 * var(--windows, 1));
   }
   .wo-trail {
     fill: none;

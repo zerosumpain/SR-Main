@@ -13,41 +13,42 @@ import {
   BIG_STAR,
   WALK_POINTS,
   along,
-  appWords,
-  bandWord,
   constellation,
-  contours,
   countDelay,
   crates,
   dayWords,
-  daydreamWords,
   domePanels,
-  figure,
-  healthWords,
   hourly,
   labelBox,
   lanterns,
-  listWords,
   meteors,
   milestoneStep,
   moon,
-  plural,
   questionSky,
   samplePath,
   scatter,
   seeded,
-  signposts,
   slitShare,
   smoothPath,
   stepTrees,
   stringPath,
-  tagLine,
   trend,
   walk,
   windows,
+} from './showcase-place';
+import {
+  appWords,
+  bandWord,
+  daydreamWords,
+  figure,
+  healthWords,
+  listWords,
+  plural,
+  signposts,
+  tagLine,
   worksWords,
   type Tag,
-} from './showcase-place';
+} from './showcase-place-words';
 
 const TODAY = '2026-10-10';
 const fx = showcaseFixture(TODAY);
@@ -149,7 +150,7 @@ function noColons(all: string[]) {
  * is handed. None may hold a digit.
  */
 function copyLiterals(): string[] {
-  const src = readFileSync(fileURLToPath(new URL('./showcase-place.ts', import.meta.url)), 'utf8');
+  const src = readFileSync(fileURLToPath(new URL('./showcase-place-words.ts', import.meta.url)), 'utf8');
   const region = src.slice(src.indexOf('/* copy:start'), src.indexOf('/* copy:end'));
   const out: string[] = [];
   let i = 0;
@@ -463,12 +464,6 @@ describe('lanterns, moon and hourly', () => {
     expect(h[11]).toBeNull();
     expect(hourly(null)).toBeNull();
     expect(hourly({ bins, total: null, nowBin: 41 })).toBeNull();
-  });
-  it('draws contour lines past both edges', () => {
-    const c = contours(5, 0, 500, 3);
-    expect(c).toHaveLength(5);
-    for (const d of c) expect(d).toMatch(/^M-2000,[\d.]+ L[\d.]+,/), expect(d).toMatch(/L3000,[\d.]+$/);
-    expect(contours(5, 0, 500, 3)).toEqual(c);
   });
 });
 

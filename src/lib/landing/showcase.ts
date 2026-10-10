@@ -21,6 +21,7 @@ import type { LandingVitals } from './live-vitals.svelte';
 import type { Pulse } from './sentence';
 import type { StepsToday } from './steps';
 import type { LocalDayCount } from '$lib/releases/local-days';
+import type { OwnerSun } from './sun';
 
 /** Daydream, the site's idle-hours thinking. */
 export interface DaydreamShowcase {
@@ -166,4 +167,9 @@ export interface ShowcaseProps {
   /** London-day deploy counts (the hero's cadence). */
   cadence: LocalDayCount[];
   facts: CapabilityFacts;
+  /**
+   * The sun where the owner is (whole degrees, rising or not), or null for the
+   * default sky. Only the place view draws it; the others ignore it.
+   */
+  sun?: OwnerSun | null;
 }

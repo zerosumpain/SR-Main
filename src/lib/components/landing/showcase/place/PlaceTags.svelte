@@ -1,7 +1,7 @@
 <svelte:options css="injected" />
 
 <script lang="ts" module>
-  import type { Tag } from '$lib/landing/showcase-place';
+  import type { Tag } from '$lib/landing/showcase-place-words';
 
   /** Where a label pins to its scene, in the scene's own units (1000 wide, `h` high). */
   export interface Pin {
@@ -272,7 +272,7 @@
     font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: rgba(237, 228, 212, 0.78);
+    color: rgba(237, 228, 212, 0.86);
   }
   .s {
     display: block;
@@ -284,7 +284,7 @@
     font-size: 13px;
     line-height: 1.3;
     white-space: normal;
-    color: rgba(237, 228, 212, 0.74);
+    color: rgba(237, 228, 212, 0.86);
   }
   .sp-tag[data-hang='l'] .s {
     margin-left: auto;
@@ -293,7 +293,7 @@
   .sp-tag[data-dash] .v {
     font-family: var(--font-body);
     font-weight: 400;
-    color: rgba(237, 228, 212, 0.72);
+    color: rgba(237, 228, 212, 0.86);
   }
   .spark {
     display: block;
