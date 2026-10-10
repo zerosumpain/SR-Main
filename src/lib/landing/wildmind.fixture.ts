@@ -63,7 +63,7 @@ export function fixtureSnapshot(now: number, state?: string): WildmindSnapshotV1
         : { ...main, x: at[0], z: at[1], activity: 'walking', trail },
       ...others.map((p) => ({ ...p, activity: 'working' as const })),
     ],
-    stats: ended ? { ...base.stats, earlierLives: [{ days: day, cause: 'cold' as const }, ...base.stats.earlierLives] } : base.stats,
+    stats: ended ? { ...base.stats, earlierLives: [{ n: null, days: day, cause: 'cold' as const }, ...base.stats.earlierLives] } : base.stats,
   };
 }
 

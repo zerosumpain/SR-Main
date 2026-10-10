@@ -302,3 +302,148 @@ describe('the Wildmind chapter', () => {
     expect(noted(c).find((s) => s.id === 'wm-latest')?.word).toBe('the reed basket');
   });
 });
+
+describe('the line with lives left out', () => {
+  // Wildmind leaves some lives out of earlierLives, so it can have gaps. The
+  // copy names each life by its own n, counts only the lives listed, and
+  // without numbers names none of the earlier ones and counts none before.
+  const day1 = { day: 1, generation: 6 };
+  /** Production on 2026-10-10: the sixth life on day one, only the first's death listed. */
+  const numbered = base({ ...day1, earlierLives: [{ n: 1, days: 32, cause: 'cold' }] });
+  const unnumbered = base({ ...day1, earlierLives: [{ days: 32, cause: 'cold' }] });
+  const deadMain = base().people.map((p) => (p.id === 'main' ? { ...p, alive: false, doing: 'dead' } : p));
+
+  it('names the production line by its own numbers', () => {
+    const v = lifeRows(numbered)!;
+    expect(v.rows.map((r) => r.label)).toEqual(['first · 32 days · the cold', 'sixth · day one · this one']);
+    expect(v.more).toBe(0);
+    expect(v.before).toBeNull();
+    expect(v.summary).toBe('Six lives so far. The first lasted 32 days and died of the cold, and this one is on day one.');
+    expect(p2(wildmindChapter(numbered))).toMatch(
+      /^This JKai is the sixth of the line\. The first lasted 32 days and died of the cold\. Each time one dies/,
+    );
+  });
+
+  it('names no earlier life in the production line without numbers', () => {
+    const v = lifeRows(unnumbered)!;
+    expect(v.rows.map((r) => r.label)).toEqual(['32 days · the cold', 'sixth · day one · this one']);
+    expect(v.before).toBeNull();
+    expect(v.summary).toBe('Six lives so far. One lasted 32 days and died of the cold, and this one is on day one.');
+    expect(p2(wildmindChapter(unnumbered))).toMatch(
+      /^This JKai is the sixth of the line\. One before them lasted 32 days and died of the cold\. Each time one dies/,
+    );
+  });
+
+  it('never counts the lives left out, nor says anything is missing', () => {
+    for (const w of [numbered, unnumbered]) {
+      const all = [...chapterStrings(wildmindChapter(w)), lifeRows(w)!.summary].join(' ');
+      expect(all).not.toMatch(/fifth|four before|five before|left off|anything from|missing|hidden|bug|void/);
+    }
+  });
+
+  it('names a gap in the middle by each life’s own number, and counts only those listed', () => {
+    const w = base({
+      generation: 9,
+      earlierLives: [
+        { n: 8, days: 10, cause: 'cold' },
+        { n: 7, days: 20, cause: null },
+        { n: 5, days: 30, cause: 'thirst' },
+        { n: 2, days: 40, cause: 'starvation' },
+      ],
+    });
+    const v = lifeRows(w)!;
+    expect(v.rows.map((r) => r.label)).toEqual([
+      'second · 40 days · hunger',
+      'fifth · 30 days · thirst',
+      'seventh · 20 days',
+      'eighth · ten days · the cold',
+      'ninth · day 18 · this one',
+    ]);
+    expect(v.more).toBe(0);
+    expect(v.summary).toMatch(/^Nine lives so far\. The second lasted 40 days and died of hunger, the fifth lasted 30 days/);
+    expect(p2(wildmindChapter(w))).toContain('This JKai is the ninth of the line. The four before them lasted anything from ten days to 40 days.');
+    const three = base({ generation: 9, earlierLives: w.earlierLives.slice(0, 2) });
+    expect(p2(wildmindChapter(three))).toContain(
+      'This JKai is the ninth of the line. The seventh lasted 20 days, and the eighth lasted ten days and died of the cold.',
+    );
+    // More listed than six bars: the ghost line counts the listed ones left off the top.
+    const many = base({ generation: 20, earlierLives: [19, 17, 16, 15, 14, 12, 11, 3].map((n) => ({ n, days: n, cause: null })) });
+    expect(lifeRows(many)!.more).toBe(3);
+    expect(lifeRows(many)!.before).toBe('and three before them');
+    expect(lifeRows(many)!.summary).toMatch(/^20 lives so far\. The three before are left off\. The 14th lasted 14 days, /);
+    expect(p2(wildmindChapter(many))).toContain('The eight before them lasted anything from three days to 19 days.');
+  });
+
+  it('never gives a range from one length to the same length', () => {
+    const same = base({ generation: 9, earlierLives: [8, 6, 4, 2].map((n) => ({ n, days: 32, cause: 'cold' as const })) });
+    expect(p2(wildmindChapter(same))).toContain('The four before them each lasted 32 days.');
+    const loose = base({ generation: 9, earlierLives: [1, 2, 3, 4].map(() => ({ days: 32, cause: 'cold' as const })) });
+    expect(p2(wildmindChapter(loose))).toContain('This JKai is the ninth of the line. Earlier ones each lasted 32 days.');
+  });
+
+  it('without numbers, names none of several earlier lives and counts none before', () => {
+    const w = base({ generation: 9, earlierLives: [{ days: 3, cause: null }, { days: 32, cause: 'cold' }] });
+    expect(lifeRows(w)!.summary).toBe(
+      'Nine lives so far. One lasted 32 days and died of the cold, a later one lasted three days, and this one is on day 18.',
+    );
+    expect(p2(wildmindChapter(w))).toContain('This JKai is the ninth of the line. One before them lasted 32 days and died of the cold, and a later one lasted three days.');
+    const long = base({ generation: 12, earlierLives: [1, 2, 3, 4, 5, 6, 7].map((d) => ({ days: d * 3, cause: null })) });
+    expect(lifeRows(long)!.before).toBe('and others before them');
+    expect(lifeRows(long)!.summary).toMatch(/^12 lives so far\. Earlier ones are left off\. One lasted 15 days, a later one lasted 12 days, another lasted nine days/);
+    expect(p2(wildmindChapter(long))).toContain('Earlier ones lasted anything from three days to 21 days.');
+  });
+
+  it('between lives, ends on the life just ended, with or without numbers', () => {
+    const ended = { state: 'between-lives' as const, generation: 6, day: 5, people: deadMain };
+    const n = base({ ...ended, earlierLives: [{ n: 6, days: 5, cause: 'thirst' }, { n: 1, days: 32, cause: 'cold' }] });
+    const u = base({ ...ended, earlierLives: [{ days: 5, cause: 'thirst' }, { days: 32, cause: 'cold' }] });
+    expect(lifeRows(n)!.rows.map((r) => r.label)).toEqual(['first · 32 days · the cold', 'sixth · five days · thirst']);
+    expect(lifeRows(u)!.rows.map((r) => r.label)).toEqual(['32 days · the cold', 'sixth · five days · thirst']);
+    expect(lifeRows(u)!.summary).toBe('Six lives so far. One lasted 32 days and died of the cold, and the sixth lasted five days and died of thirst.');
+    expect(p1(wildmindChapter(n))).toContain('JKai died of thirst on day five');
+    expect(p1(wildmindChapter(u))).toContain('JKai died of thirst on day five');
+    expect(p2(wildmindChapter(n))).toMatch(/^That JKai was the sixth of the line\. The first lasted 32 days and died of the cold\. Claude is reading back/);
+    expect(p2(wildmindChapter(u))).toMatch(/^That JKai was the sixth of the line\. One before them lasted 32 days and died of the cold\. Claude is reading back/);
+    // The life just ended left out of the list: no cause is borrowed from an older one.
+    const gone = base({ ...ended, earlierLives: [{ n: 1, days: 32, cause: 'cold' }] });
+    expect(p1(wildmindChapter(gone))).toContain('JKai died on day five');
+    expect(p2(wildmindChapter(gone))).toMatch(/^That JKai was the sixth of the line\. The first lasted 32 days and died of the cold\./);
+    expect(lifeRows(gone)!.rows.map((r) => r.label)).toEqual(['first · 32 days · the cold']);
+  });
+
+  it('reads an unbroken numbered line exactly as an unnumbered one', () => {
+    const number = (w: WildmindShowcase): WildmindShowcase => {
+      const top = w.state === 'between-lives' ? w.generation! : w.generation! - 1;
+      return { ...w, earlierLives: w.earlierLives.map((l, j) => ({ ...l, n: top - j })) };
+    };
+    const lines = [
+      base(),
+      base({ generation: 1, earlierLives: [] }),
+      base({ generation: 9, earlierLives: [5, 40, 3, 12, 0.5, 8, 22, 1].map((days) => ({ days, cause: 'cold' as const })) }),
+      base({ generation: 7, earlierLives: [5, 40, 3, 12, 0.5, 8].map((days) => ({ days, cause: null })) }),
+      base({ state: 'between-lives', people: deadMain, earlierLives: [{ days: 18, cause: 'cold' }, ...base().earlierLives] }),
+    ];
+    for (const w of lines) {
+      expect(lifeRows(number(w))).toEqual(lifeRows(w));
+      expect(chapterStrings(wildmindChapter(number(w)))).toEqual(chapterStrings(wildmindChapter(w)));
+    }
+    expect(lifeRows(number(base()))!.summary).toBe(
+      'Three lives so far. The first lasted 32 days and died of the cold, the second lasted three days and died of hunger, and this one is on day 18.',
+    );
+  });
+
+  it('keeps the gapped lines free of digits in their words', () => {
+    const cases = [
+      numbered,
+      unnumbered,
+      base({ generation: 9, day: 1, refused: 2, earlierLives: [{ n: 7, days: 3, cause: null }, { n: 2, days: 1, cause: 'cold' }] }),
+      base({ generation: 9, day: 1, refused: 2, earlierLives: [3, 4, 5, 6, 7, 8, 9].map((d) => ({ days: d, cause: null })) }),
+    ];
+    for (const w of cases) {
+      const figs = [w.day, w.generation, w.refused, w.invented, ...w.earlierLives.map((l) => Math.round(l.days))].map(String).sort((a, b) => b.length - a.length);
+      let s = [...chapterStrings(wildmindChapter(w)), lifeRows(w)!.summary, lifeRows(w)!.before ?? ''].join(' ');
+      for (const f of figs) s = s.split(f).join('');
+      expect(s).not.toMatch(/\d/);
+    }
+  });
+});

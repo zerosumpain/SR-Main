@@ -110,7 +110,8 @@ export interface WildmindSnapshotV1 {
   fires: Array<[number, number]>;
   stats: {
     generation: number;
-    earlierLives: Array<{ days: number; cause: Cause | null }>;
+    /** Newest first. `n` is the life's generation, null on every life when any is missing or out of order. */
+    earlierLives: Array<{ n: number | null; days: number; cause: Cause | null }>;
     invented: number;
     latest: Array<{ name: string; kind: DefKind | null; day: number; by: 'main' | 'companion' }>;
     refused: number;
@@ -196,8 +197,12 @@ export interface WildmindShowcase {
   placesFound: number | null;
   exploredTiles: number | null;
   generation: number | null;
-  /** Newest first. */
-  earlierLives: Array<{ days: number; cause: Cause | null }>;
+  /**
+   * Newest first. Wildmind leaves some lives out, so the list can have gaps:
+   * `n` is each life's generation when Wildmind numbered every one of them
+   * (strictly descending), and null or absent otherwise. See lineOfLives.
+   */
+  earlierLives: Array<{ n?: number | null; days: number; cause: Cause | null }>;
   habitShare: 'most' | 'about-half' | 'some' | null;
   /** Display names ("Haiku"), or "a Claude model". */
   models: { mind: string; designer: string } | null;
@@ -418,6 +423,18 @@ function parsePerson(raw: unknown): WildmindSnapshotPerson {
   };
 }
 
+/**
+ * Each earlier life's generation (`n`, an integer from one to the generation),
+ * kept only when every life has one and they run strictly down, newest first;
+ * otherwise every `n` is null and the list reads as unnumbered. A bad `n` never
+ * fails the read: the lives still draw, just without their numbers.
+ */
+function numbered<L extends { n: unknown }>(generation: number, lives: L[]): Array<Omit<L, 'n'> & { n: number | null }> {
+  const ns = lives.map((l) => int(l.n, 1, generation));
+  const ok = ns.every((n, i) => n !== undefined && (i === 0 || n < (ns[i - 1] as number)));
+  return lives.map((l, i) => ({ ...l, n: ok ? (ns[i] as number) : null }));
+}
+
 function parseStats(raw: unknown): WildmindSnapshotV1['stats'] {
   const s = need(isObj(raw) ? raw : undefined, 'stats');
   const built = isObj(s.built) ? s.built : {};
@@ -427,10 +444,13 @@ function parseStats(raw: unknown): WildmindSnapshotV1['stats'] {
   const model = (v: unknown) => (typeof v === 'string' && v.length <= 64 ? v : '');
   return {
     generation: need(int(s.generation, 1, 1_000_000), 'stats.generation'),
-    earlierLives: need(list(s.earlierLives, CAPS.earlierLives), 'stats.earlierLives').map((l) => {
-      const o = need(isObj(l) ? l : undefined, 'life');
-      return { days: Math.round(need(num(o.days, 0, 1_000_000), 'life.days') * 10) / 10, cause: oneOf(CAUSES, o.cause) ?? null };
-    }),
+    earlierLives: numbered(
+      need(int(s.generation, 1, 1_000_000), 'stats.generation'),
+      need(list(s.earlierLives, CAPS.earlierLives), 'stats.earlierLives').map((l) => {
+        const o = need(isObj(l) ? l : undefined, 'life');
+        return { n: o.n, days: Math.round(need(num(o.days, 0, 1_000_000), 'life.days') * 10) / 10, cause: oneOf(CAUSES, o.cause) ?? null };
+      }),
+    ),
     invented: need(int(s.invented, 0, COUNT), 'stats.invented'),
     latest: need(list(s.latest, CAPS.latest), 'stats.latest').flatMap((l) => {
       const o = need(isObj(l) ? l : undefined, 'latest');
@@ -669,7 +689,7 @@ export function project(
     placesFound: s.placesFound,
     exploredTiles: s.exploredTiles,
     generation: s.generation,
-    earlierLives: s.earlierLives.map((l) => ({ days: l.days, cause: l.cause })),
+    earlierLives: s.earlierLives.map((l) => ({ n: l.n, days: l.days, cause: l.cause })),
     habitShare: habitShare(s.choices),
     models: { mind: modelName(s.models.mind), designer: modelName(s.models.designer) },
     met: s.milestones.met,
