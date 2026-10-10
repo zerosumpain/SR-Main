@@ -4,6 +4,7 @@ import { HEALTH_TIMEZONE } from '$lib/constants/health-day';
 import { getReleaseShowcase } from '$lib/releases/public';
 import { loadCapabilityFacts } from '$lib/landing/capabilities.server';
 import { loadShowcase } from '$lib/landing/showcase.server';
+import { pinFixtureState } from '$lib/landing/wildmind.server';
 import { ownerSun } from '$lib/landing/sun.server';
 import { sunOverride } from '$lib/landing/sun';
 import { dev } from '$app/environment';
@@ -52,6 +53,8 @@ export const load: PageServerLoad = async ({ fetch, locals, getClientAddress, co
   // Dev only: ?sun=<degrees>&rising=<0|1> pins the place view's sky so
   // screenshots hold still (null, and the address ignored, in production).
   const pinnedSun = sunOverride(url.searchParams, dev);
+  // Dev only, with the preview's fixture: ?wm=<state> pins Wildmind's state for this page and its polls.
+  pinFixtureState(url.searchParams.get('wm'), dev);
 
   const [steps, day, releases, capabilities, showcase, posts, sun, tagline] = await Promise.all([
     // Today's steps in quarter-hours, midnight to 23:59, for the steps footnote.

@@ -33,12 +33,14 @@
   import { belowFold, COUNT_MS, formatFigure, onScreen, prefersReducedMotion, tweenValue } from '$lib/landing/showcase-motion';
   import { tagLine } from '$lib/landing/showcase-place-words';
   import PlaceTags, { type PinnedTag } from './PlaceTags.svelte';
+  import HoldStill from '../wildmind/HoldStill.svelte';
 
   let {
     id,
     side,
     h,
     zone,
+    phoneZone,
     ground,
     tone,
     head,
@@ -47,6 +49,10 @@
     key,
     rules,
     more,
+    close,
+    summary,
+    live,
+    print = [],
     art,
     beat = null,
     beatCaption = '',
@@ -63,10 +69,13 @@
     h: number;
     /** The part of the scene with the story in it, [from, to] across, kept when cropped. */
     zone: [number, number];
+    /** A tighter crop for a phone, where the picture is narrowest (the zone when unset). */
+    phoneZone?: [number, number];
     /** Where the ground is, down the scene: the rambler's floor. */
     ground: number;
     tone: 'accent' | 'ink';
-    head: { kicker: string; title: string; unit: string; aside?: string; figure: number | null; decimals?: number };
+    /** `dateline`: a mono line under the figure (the valley's own day, Wildmind's chapter). */
+    head: { kicker: string; title: string; unit: string; aside?: string; figure: number | null; decimals?: number; dateline?: string };
     /** The rambler's named spot, on the heading. */
     spot?: Spot;
     tags: PinnedTag[];
@@ -74,7 +83,21 @@
     key: string;
     /** A standing line under the plate (the rules of the thing), or nothing. */
     rules?: string;
-    more: { href: string; cta: string };
+    /** The link out under the plate; or, with none, `close`: a closing line run on from the rules. */
+    more?: { href: string; cta: string };
+    close?: string;
+    /** The picture's text equivalent, said beside it (never live). */
+    summary?: string;
+    /**
+     * A picture that keeps itself current (Wildmind's poll): what the picture
+     * is doing, said at the end of the rules while things move, once held and
+     * under reduced motion (null: nothing said), and the "hold still" switch
+     * after it. Unlike the beat's, the switch stays under reduced motion,
+     * since the content still updates by itself.
+     */
+    live?: { held: boolean; onhold: () => void; controls: string; caption: { moving: string; held: string; reduced: string } | null };
+    /** More lines for the printed list, after the readings. */
+    print?: Array<{ dt: string; dd: string }>;
     art: Snippet;
     /** `--beat` for a fresh pulse, or null: nothing beats without one. */
     beat?: string | null;
@@ -103,6 +126,7 @@
   let shown = $derived(peek ?? pinned ?? hover);
   let shownTag = $derived(shown ? (tags.find((t) => t.id === shown) ?? null) : null);
   let beating = $derived(beat != null && !held && !away && !reduced);
+  let liveSays = $derived(live?.caption ? (live.held ? live.caption.held : reduced ? live.caption.reduced : live.caption.moving) : '');
 
   // A scene whose figure is already in view (or scrolled past) when the page
   // hydrates keeps the finished picture and the final figure the server
@@ -207,6 +231,8 @@
   style:--h={h}
   style:--z0={zone[0]}
   style:--zw={zone[1] - zone[0]}
+  style:--pz0={phoneZone?.[0]}
+  style:--pzw={phoneZone ? phoneZone[1] - phoneZone[0] : undefined}
   style:--ground={ground}
   style:--land={land}
   data-last={last ? '' : undefined}
@@ -230,9 +256,11 @@
             <span class="sp-u">{head.unit}<span class="vh">, </span><span class="sp-why">not answering just now</span></span>
           {/if}
         </p>
+        {#if head.dateline}<p class="sp-date">{head.dateline}</p>{/if}
       </div>
 
       <div class="sp-stage">
+        {#if summary}<p class="vh">{summary}</p>{/if}
         <div class="sp-pic">
           <!-- The ground runs the width of the screen and on down to the chapter's
                end, where the next scene's sky begins behind it. -->
@@ -258,7 +286,14 @@
           {#each tags as t (t.id)}<p class="sp-sizer" aria-hidden="true">{t.note}</p>{/each}
           <p class="sp-live" class:sp-key={!shownTag} aria-live="polite">{shownTag ? shownTag.note : key}</p>
         </div>
-        {#if rules}<p class="sp-rules">{rules}</p>{/if}
+        <!-- The rules, then (with no link out) the closing line, then what the live picture is
+             doing, run on, and the switch that holds it still at the end of the line. -->
+        {#if rules || liveSays || (!more && close) || live}
+          <p class="sp-rules">
+            {[rules, more ? '' : close, liveSays].filter(Boolean).join(' ')}
+            {#if live}<span class="sp-cap-live"><HoldStill held={live.held} onhold={live.onhold} controls={live.controls} pressed /></span>{/if}
+          </p>
+        {/if}
         {#if beat != null}
           <p class="sp-cap">
             <span>{reduced || held ? beatStill || beatCaption : beatCaption}</span>
@@ -270,19 +305,26 @@
             </button>
           </p>
         {/if}
-        <a class="sp-more" href={more.href}>{more.cta} <span aria-hidden="true">→</span></a>
+        {#if more}<a class="sp-more" href={more.href}>{more.cta} <span aria-hidden="true">→</span></a>{/if}
       </div>
     </div>
 
     <!-- Print: the picture does not survive the trip, so every reading prints as text. -->
-    <dl class="sp-print">
-      <dt>{head.figure == null ? '—' : formatFigure(head.figure, head.decimals ?? 0)} {head.unit}</dt>
-      <dd>{key}</dd>
-      {#each tags as t (t.id)}
-        <dt>{tagLine(t)}</dt>
-        <dd>{t.note}</dd>
-      {/each}
-    </dl>
+    <div class="sp-print">
+      <dl>
+        <dt>{head.figure == null ? '—' : formatFigure(head.figure, head.decimals ?? 0)} {head.unit}</dt>
+        <dd>{key}</dd>
+        {#each tags as t (t.id)}
+          <dt>{tagLine(t)}</dt>
+          <dd>{t.note}</dd>
+        {/each}
+        {#each print as p, i (i)}
+          <dt>{p.dt}</dt>
+          <dd>{p.dd}</dd>
+        {/each}
+      </dl>
+      {#if !more && close}<p>{close}</p>{/if}
+    </div>
   </div>
 </section>
 
@@ -425,6 +467,16 @@
     to {
       opacity: 1;
     }
+  }
+  /* The chapter's own clock under the figure (the valley's day, never ours). */
+  .sp-date {
+    margin: 6px 0 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    line-height: 1.5;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--tone);
   }
   .sp-u {
     max-width: 22em;
@@ -577,6 +629,15 @@
     height: 9px;
     fill: currentColor;
   }
+  /* Wildmind's switch: the shared HoldStill, in this scene's colours, at the end of the plate's last line. */
+  .sp-cap-live {
+    --wm-hold: rgba(237, 228, 212, 0.86);
+    --wm-hold-on: var(--tone);
+    --wm-focus: var(--tone);
+    display: inline-block;
+    margin-left: 4px;
+    white-space: nowrap;
+  }
   .sp-more {
     align-self: flex-start;
     display: inline-flex;
@@ -647,6 +708,10 @@
   }
   /* A phone: the labels come off the picture into a list under it (PlaceTags). */
   @media (max-width: 759px) {
+    .sp-scene {
+      --x0: var(--pz0, var(--z0));
+      --vw: var(--pzw, var(--zw));
+    }
     .sp-plate {
       margin-top: 26px;
     }
@@ -693,6 +758,9 @@
     .sp-frame {
       display: block;
     }
+    .sp-date {
+      display: none;
+    }
     .sp-print {
       display: block;
       margin: 8px 0 0;
@@ -704,8 +772,15 @@
       margin-top: 6px;
       font-weight: 700;
     }
-    .sp-print dd {
+    .sp-print dl {
       margin: 0;
+    }
+    .sp-print dd,
+    .sp-print p {
+      margin: 0;
+    }
+    .sp-print p {
+      margin-top: 6px;
     }
   }
 </style>

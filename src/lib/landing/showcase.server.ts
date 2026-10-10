@@ -226,12 +226,12 @@ function wantsFixture(): boolean {
 export interface LoadShowcaseOptions {
   /** The page's own rambler reading, so the bands cost no second query. */
   day?: Promise<DayFlags>;
-  /** The view the page is rendered in: the notes get Wildmind's map drawn their way on the server. */
+  /** The view the page is rendered in: the notes and the place get Wildmind drawn their way on the server. */
   view?: string;
 }
 
-/** The Wildmind drawing a page view wants from the server (only the notes draw theirs there). */
-const wildmindView = (view: string | undefined): WildmindView | null => (view === 'notes' ? 'notes' : null);
+/** The Wildmind drawing a page view wants from the server: the notes' pencilled map, the place's model under glass. */
+const wildmindView = (view: string | undefined): WildmindView | null => (view === 'notes' || view === 'place' ? view : null);
 
 export async function loadShowcase(now = new Date(), opts: LoadShowcaseOptions = {}): Promise<ShowcaseData> {
   const rules = daydreamRules();

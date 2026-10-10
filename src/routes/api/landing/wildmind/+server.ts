@@ -12,8 +12,9 @@ import { WILDMIND_VIEWS, wildmindShowcase, type WildmindView } from '$lib/landin
  * unconfigured or silent Wildmind is `offline`, never an error. `?have=` is the
  * map version the page already holds; when it matches, the paths are left out.
  * `?view=notes` asks for the map drawn the notes view's way (pencilled, with
- * the words placed); any other value is ignored. Nothing from the request but
- * those two is used, and neither ever goes upstream.
+ * the words placed), `?view=place` for the model under glass instead of the
+ * map (also left out on ?have=); any other value is ignored. Nothing from the
+ * request but those two is used, and neither ever goes upstream.
  */
 
 const VERSION = /^[A-Za-z0-9._:-]{1,64}$/;

@@ -30,37 +30,38 @@ import {
   type Tone,
   type Visual,
 } from './showcase-sentence';
-import { MODEL_FALLBACK, type TerrainClass, type Weather, type WildmindMap, type WildmindPerson, type WildmindShowcase } from './wildmind';
+import { MODEL_FALLBACK, type TerrainClass, type WildmindMap, type WildmindShowcase } from './wildmind';
 import { frameRect } from './wildmind-frame';
 import {
+  WEATHER_ADJ,
   andList,
   causeWord,
   counted as placesWord,
   daysWord,
   doingWord,
   habitWord,
+  isStill,
+  lastedClause,
   lineOfLives,
+  livesSentence,
   mainName,
   mapSummary,
   modelsLine,
   ordinalWord,
+  pastDoing,
+  sentenceCase,
+  sorted,
   unnumberedWord,
 } from './wildmind-words';
+
+// Shared with the place view, so they live in the view-agnostic module;
+// re-exported here for the sentence view and its tests.
+export { WEATHER_ADJ, sentenceCase } from './wildmind-words';
 
 const T = (s: string): Seg => ({ t: 'text', s });
 const W = (id: string, word: string, note?: Note, tone: Tone = 'accent'): Seg => ({ t: 'word', id, word, tone, note });
 /** A name in its person's colour, as the disc on the map: the prose doubles as the key. */
 const N = (id: 'main' | 'companion', name: string): Seg => ({ t: 'word', id: `wm-who-${id}`, word: name, tone: id === 'main' ? 'accent' : 'ink' });
-
-/** The weather after "a … day". */
-export const WEATHER_ADJ: Record<Weather, string> = {
-  clear: 'clear',
-  cloudy: 'cloudy',
-  rain: 'wet',
-  storm: 'stormy',
-  snow: 'snowy',
-  fog: 'foggy',
-};
 
 /** Scale bar lengths and their words. */
 export const SCALE_WORDS: ReadonlyArray<[number, string]> = [
@@ -161,13 +162,7 @@ function convexHull(pts: Array<[number, number]>): Array<[number, number]> {
   return [...lower.slice(0, -1), ...upper.slice(0, -1)];
 }
 
-/** "reed basket" from "Reed basket" or "Reed Basket": every word lower case but an acronym ("UV"). */
-export function sentenceCase(name: string): string {
-  return name.replace(/\S+/g, (word) => (/^[A-Z0-9]{2,}$/.test(word.replace(/[^A-Za-z0-9]/g, '')) ? word : word.toLowerCase()));
-}
-
 const isLive = (w: WildmindShowcase) => w.state === 'live' || w.state === 'resting';
-const sorted = (w: WildmindShowcase) => [...w.people].sort((a, b) => (a.id === b.id ? 0 : a.id === 'main' ? -1 : 1));
 
 /** "thinks with Haiku and invents with Sonnet", only when both models are on the allow-list. */
 function modelsSide(w: WildmindShowcase): SideLine[] {
@@ -203,12 +198,6 @@ function stateSide(w: WildmindShowcase): SideLine[] {
     default:
       return [{ text: NOT_ANSWERING }];
   }
-}
-
-/** "the fifth lasted 32 days and died of the cold", or, without its number, "one lasted …". */
-function lastedClause(who: string, l: { days: number; cause: WildmindShowcase['earlierLives'][number]['cause'] }): string {
-  const cause = causeWord(l.cause);
-  return `${who} lasted ${daysWord(l.days)}${cause ? ` and died of ${cause}` : ''}`;
 }
 
 /**
@@ -261,15 +250,6 @@ export interface PlateWords {
   grid: number;
   scale: { metres: number; word: string };
   keys: Array<'wood' | 'wet' | 'water' | 'high' | 'camp' | 'built' | 'animals'>;
-}
-
-/** The map is a still, not the valley now: between lives, stale, or paused. */
-const isStill = (w: WildmindShowcase) => w.state === 'between-lives' || w.state === 'stale' || w.state === 'paused';
-
-/** What someone was doing when the map was last drawn: "Wren was at work near Bittern Beds". */
-function pastDoing(p: WildmindPerson, ended: boolean): string {
-  if (!p.alive) return ended ? `${p.name} died` : `${p.name} was dead`;
-  return p.near ? `${p.name} was ${p.doing} near ${p.near}` : `${p.name} was ${p.doing}`;
 }
 
 /**
@@ -331,20 +311,8 @@ export function plateWords(w: WildmindShowcase): PlateWords | null {
  * of the generation, and a life without its number goes without one.
  */
 function lifeClauses(w: WildmindShowcase): Seg[] {
-  const line = lineOfLives(w);
-  const before = [...line.before].reverse();
-  const k = before.length;
-  if (!k) return [];
-  if (k >= 4) {
-    const days = before.map((l) => l.days);
-    const [lo, hi] = [daysWord(Math.min(...days)), daysWord(Math.max(...days))];
-    const who = line.numbered ? `The ${countWord(k)} before them` : 'Earlier ones';
-    return [T(lo === hi ? ` ${who} each lasted ${lo}.` : ` ${who} lasted anything from ${lo} to ${hi}.`)];
-  }
-  let unnumbered = 0;
-  const parts = before.map((l) => [T(lastedClause(l.n != null ? `the ${ordinalWord(l.n)}` : unnumberedWord(unnumbered++, 'one before them'), l))]);
-  const joined = joinClauses(parts, ', and ').map((s) => (s.t === 'text' ? s.s : '')).join('');
-  return [T(` ${joined.charAt(0).toUpperCase()}${joined.slice(1)}.`)];
+  const said = livesSentence(w);
+  return said ? [T(` ${said}`)] : [];
 }
 
 const CLOSE = 'I’ll write up how it all works once it stops surprising me.';

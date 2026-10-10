@@ -4,7 +4,7 @@ import { render } from 'svelte/server';
 import WildmindMap from './WildmindMap.svelte';
 import HoldStill from './HoldStill.svelte';
 import { CADENCE, WildmindPoll, along, route } from './wildmind-poll.svelte';
-import { wildmindFixture } from '$lib/landing/wildmind.fixture';
+import { fixtureGlass, wildmindFixture } from '$lib/landing/wildmind.fixture';
 import { offlineShowcase, type WildmindShowcase } from '$lib/landing/wildmind';
 
 const NOW = Date.parse('2026-10-10T12:00:00Z');
@@ -219,6 +219,58 @@ describe('WildmindPoll', () => {
       expect(poll.data?.map?.pencil).toBeUndefined();
       expect(poll.data?.map?.layers.length).toBeGreaterThan(0);
       watch.destroy();
+    });
+  });
+
+  describe('for the place view', () => {
+    const place = (w: WildmindShowcase): WildmindShowcase => ({ ...w, map: null, glass: fixtureGlass() });
+
+    it('asks with ?view=place, keeps its model across answers that leave it out, and swaps it for a new version', async () => {
+      vi.useFakeTimers();
+      let t = NOW;
+      const first = place(live());
+      const fetcher = vi.fn(async (_url: string) => answer({ ...first, glass: null, day: 19 }));
+      const poll = new WildmindPoll(first, { view: 'place', fetch: fetcher as unknown as typeof fetch, now: () => t });
+      const watch = poll.watch({} as Element);
+      expect(fetcher).not.toHaveBeenCalled();
+      t += CADENCE.live;
+      await vi.advanceTimersByTimeAsync(CADENCE.live);
+      expect(String(fetcher.mock.calls[0][0])).toBe(`/api/landing/wildmind?view=place&have=${encodeURIComponent(first.mapVersion!)}`);
+      expect(poll.data?.glass).toBe(first.glass);
+      expect(poll.data?.day).toBe(19);
+      const grown = { ...first.glass!, version: 'v2' };
+      poll.accept({ ...first, mapVersion: 'v2', glass: grown });
+      expect(poll.data?.glass).toBe(grown);
+      watch.destroy();
+    });
+
+    it('keeps the last model and says stale when Wildmind goes quiet', () => {
+      const first = place(live());
+      const poll = new WildmindPoll(first, { view: 'place' });
+      poll.accept(offlineShowcase());
+      expect(poll.data?.state).toBe('stale');
+      expect(poll.data?.glass).toBe(first.glass);
+    });
+
+    it('asks for its model at once when it starts with an answer drawn for another view, and the others refuse its answer', async () => {
+      vi.useFakeTimers();
+      const fetcher = vi.fn(async (_url: string) => answer(place(live())));
+      const poll = new WildmindPoll(live(), { view: 'place', fetch: fetcher as unknown as typeof fetch, now: () => NOW });
+      expect(poll.data?.map).toBeNull();
+      expect(poll.data?.glass ?? null).toBeNull();
+      const watch = poll.watch({} as Element);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(String(fetcher.mock.calls[0][0])).toBe('/api/landing/wildmind?view=place');
+      expect(poll.data?.glass?.cards.length).toBeGreaterThan(2);
+      watch.destroy();
+      // A view that draws the map, handed the place's answer, asks for its map at once.
+      const traced = vi.fn(async (_url: string) => answer(live()));
+      const sentence = new WildmindPoll(place(live()), { fetch: traced as unknown as typeof fetch, now: () => NOW });
+      const w2 = sentence.watch({} as Element);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(String(traced.mock.calls[0][0])).toBe('/api/landing/wildmind');
+      expect(sentence.data?.map?.layers.length).toBeGreaterThan(0);
+      w2.destroy();
     });
   });
 

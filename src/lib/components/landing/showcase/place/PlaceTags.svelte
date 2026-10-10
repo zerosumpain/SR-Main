@@ -9,7 +9,10 @@
     y: number;
     /** Leader length in px: up from the point, down from it, or across ('side'). */
     lead: number;
-    dir?: 'up' | 'down' | 'side';
+    /** 'plate': no leader, the words centred on the point on a bronze plate (a plaque on a plinth). */
+    dir?: 'up' | 'down' | 'side' | 'plate';
+    /** No dot at the point: the scene draws the leader's first stretch itself. */
+    bare?: boolean;
     /** Which way the text hangs off its leader. */
     hang: 'l' | 'r';
     tone?: 'accent' | 'ink' | 'good';
@@ -25,7 +28,8 @@
     lead?: number;
     wrap?: number;
   }
-  export type PinnedTag = Tag & Pin & { spark?: Array<number | null> | null; narrow?: NarrowPin };
+  /** `long`: a value that can run to several words (an invention's name) wraps at 11em, a size down. */
+  export type PinnedTag = Tag & Pin & { spark?: Array<number | null> | null; narrow?: NarrowPin; long?: boolean };
 </script>
 
 <script lang="ts">
@@ -65,6 +69,8 @@
       data-hang={t.hang}
       data-tone={t.tone ?? tone}
       data-dash={t.spoken ? '' : undefined}
+      data-long={t.long ? '' : undefined}
+      data-bare={t.bare ? '' : undefined}
       data-on={shown === t.id ? '' : undefined}
       style:--x-w={pos(t.x)}
       style:--y-w={pos(t.y)}
@@ -289,6 +295,63 @@
   .sp-tag[data-hang='l'] .s {
     margin-left: auto;
   }
+  /* A long value (an invention's name) wraps on its own measure, a size down. */
+  .sp-tag[data-long] .vu {
+    width: max-content;
+    max-width: 11em;
+    font-size: 20px;
+    white-space: normal;
+  }
+  .sp-tag[data-long] .v {
+    font-size: 20px;
+    /* A name, not a figure: tabular spacing would set its hyphens apart. */
+    font-variant-numeric: normal;
+  }
+  .sp-tag[data-hang='l'][data-long] .vu {
+    margin-left: auto;
+  }
+  /* The scene draws this leader's start (from a moving figure), so the anchor carries no dot of its own. */
+  .sp-tag[data-bare] .sp-lead::after {
+    display: none;
+  }
+  /* A plaque: the words centred on the point, on a bronze plate with an engraved rule inside its edge. */
+  .sp-tag[data-dir='plate'] .sp-lead {
+    display: none;
+  }
+  .sp-tag[data-dir='plate'] button {
+    top: 0;
+    bottom: auto;
+    left: 0;
+    transform: translate(-50%, -50%);
+    min-height: 0;
+    padding: 5px 16px 6px;
+    border: 1px solid #9c7a46;
+    border-radius: 2px;
+    outline: 1px solid rgba(214, 176, 106, 0.32);
+    outline-offset: -4px;
+    background: linear-gradient(180deg, #33281a, #211910);
+    text-align: center;
+    text-shadow: none;
+  }
+  .sp-tag[data-dir='plate'] button:focus-visible {
+    outline: 2px solid var(--tone);
+    outline-offset: 4px;
+  }
+  .sp-tag[data-dir='plate'] .k {
+    color: #e2bd78;
+  }
+  .sp-tag[data-dir='plate'] .s,
+  .sp-tag[data-dir='plate'][data-long] .vu {
+    margin: 1px auto 0;
+  }
+  /* An invention's name on the plaque runs on one line where it can, and balanced where it can't. */
+  .sp-tag[data-dir='plate'][data-long] .vu {
+    max-width: 17em;
+    text-wrap: balance;
+  }
+  .sp-tag[data-dir='plate'] .s {
+    font-size: 12px;
+  }
   /* A reading that is not in: a light dash, never a bar the weight of a figure. */
   .sp-tag[data-dash] .v {
     font-family: var(--font-body);
@@ -373,9 +436,25 @@
       text-align: left;
       white-space: normal;
     }
-    .sp-tag[data-hang] .s {
+    .sp-tag[data-hang] :is(.s, .vu) {
       width: auto;
       margin-left: 0;
+    }
+    /* A plaque in the list is a label like the others, its kicker in its tone. */
+    .sp-tags .sp-tag[data-dir='plate'][data-hang] button {
+      outline: 0;
+      border-radius: 0;
+      background: none;
+    }
+    .sp-tags .sp-tag[data-dir='plate'][data-hang] button:focus-visible {
+      outline: 2px solid var(--tone);
+      outline-offset: 4px;
+    }
+    .sp-tag[data-dir='plate'] .k {
+      color: var(--tone);
+    }
+    .sp-tag[data-dir='plate'] .s {
+      font-size: 13px;
     }
     .sp-tag[data-hang] .spark {
       margin-left: 0;

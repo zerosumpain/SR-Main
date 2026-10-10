@@ -11,9 +11,11 @@
 // offline answer after a good one keeps the last map and says it is stale.
 //
 // The notes view polls with ?view=notes and gets its map pencilled and its
-// words placed by the server (notes-sheet.server.ts). A view holding a map
-// drawn for the other kind (after the reader switches views) asks for its
-// own at once.
+// words placed by the server (notes-sheet.server.ts); the place view polls
+// with ?view=place and gets the model under glass (wildmind-glass.server.ts)
+// in place of the map. Each view's drawing comes back only when it changed,
+// as the map does. A view holding a drawing made for another kind (after the
+// reader switches views) asks for its own at once.
 //
 // Motion: each person glides along their reported trail over about two
 // seconds (eased out), so nobody is drawn crossing a lake they walked round.
@@ -83,8 +85,8 @@ const easeOut = (t: number) => 1 - (1 - t) ** 3;
 export interface WildmindPollOptions {
   /** Where to poll; default /api/landing/wildmind. */
   url?: string;
-  /** 'notes' for the notes view's drawing (pencilled map, placed words); unset for the traced map. */
-  view?: 'notes';
+  /** 'notes' for the notes view's drawing (pencilled map, placed words), 'place' for the model under glass; unset for the traced map. */
+  view?: 'notes' | 'place';
   /** Injectable for tests. */
   fetch?: typeof fetch;
   now?: () => number;
@@ -107,25 +109,36 @@ export class WildmindPoll {
   #frame = 0;
   #inflight = false;
   #needMap = false;
-  #notes: boolean;
+  #view: 'notes' | 'place' | null;
 
   constructor(initial: WildmindShowcase | null, opts: WildmindPollOptions = {}) {
-    this.#notes = opts.view === 'notes';
-    // A map drawn for the other kind of view is no map here: the first poll asks for this view's, straight away.
-    const fits = !initial?.map || this.fits(initial);
-    this.data = fits ? initial : initial && { ...initial, map: null, notes: null };
+    this.#view = opts.view ?? null;
+    // A drawing made for another kind of view is no drawing here: the first poll asks for this view's, straight away.
+    const fits = !initial || initial.mapVersion == null || this.fits(initial);
+    this.data = fits ? initial : initial && { ...initial, map: null, notes: null, glass: null };
     this.people = initial?.people ?? [];
     const base = opts.url ?? '/api/landing/wildmind';
-    this.#url = this.#notes ? `${base}?view=notes` : base;
+    this.#url = this.#view ? `${base}?view=${this.#view}` : base;
     this.#fetch = opts.fetch ?? ((...a) => fetch(...a));
     this.#now = opts.now ?? (() => Date.now());
     this.#needMap = !fits;
     this.#last = fits ? this.#now() : -Infinity;
   }
 
-  /** Whether an answer's map is drawn for this view: pencilled with its sheet for the notes, traced for the others. */
-  fits(w: Pick<WildmindShowcase, 'map' | 'notes'>): boolean {
-    return this.#notes ? !!w.map?.pencil && !!w.notes : !w.map?.pencil;
+  /**
+   * Whether an answer carries this view's drawing: the pencilled map with its
+   * sheet for the notes, the model for the place, the traced map for the others.
+   */
+  fits(w: Pick<WildmindShowcase, 'map' | 'notes' | 'glass'>): boolean {
+    if (this.#view === 'notes') return !!w.map?.pencil && !!w.notes;
+    if (this.#view === 'place') return !!w.glass;
+    return !!w.map && !w.map.pencil;
+  }
+
+  /** This view's drawing in an answer, and its version: the model for the place, the map for the others. */
+  #drawing(w: WildmindShowcase | null): { version: string } | null {
+    if (!w) return null;
+    return this.#view === 'place' ? (w.glass ?? null) : (w.map ?? null);
   }
 
   /** The current cadence (ms). */
@@ -170,7 +183,7 @@ export class WildmindPoll {
     this.#inflight = true;
     this.#last = this.#now();
     try {
-      const have = !this.#needMap && this.data?.map ? this.data.mapVersion : null;
+      const have = !this.#needMap && this.#drawing(this.data) ? this.data!.mapVersion : null;
       const url = have ? `${this.#url}${this.#url.includes('?') ? '&' : '?'}have=${encodeURIComponent(have)}` : this.#url;
       // no-cache: the route's max-age lets a browser answer a poll from its own
       // copy of the last one (and revalidate behind it, a second request);
@@ -185,25 +198,27 @@ export class WildmindPoll {
     }
   }
 
-  /** Take a new answer: keep the held map when it is left out, and move the people. */
+  /** Take a new answer: keep the held drawing when it is left out, and move the people. */
   accept(next: WildmindShowcase): void {
     if (this.held || !next || typeof next !== 'object' || !next.state) return;
     // An answer drawn for another kind of view (it should not happen) is not drawn here.
-    if (next.map && !this.fits(next)) return;
+    if ((next.map || next.glass) && !this.fits(next)) return;
     const prev = this.data;
+    const had = this.#drawing(prev);
     let merged: WildmindShowcase;
-    if (next.state === 'offline' && prev?.map) {
+    if (next.state === 'offline' && had) {
       // Silent after a good answer: keep the last picture and say so.
-      merged = { ...prev, state: 'stale' };
-    } else if (!next.map && prev?.map && next.mapVersion === prev.mapVersion) {
-      merged = { ...next, map: prev.map };
+      merged = { ...prev!, state: 'stale' };
+    } else if (!this.#drawing(next) && had && next.mapVersion === prev!.mapVersion) {
+      merged = this.#view === 'place' ? { ...next, glass: prev!.glass } : { ...next, map: prev!.map };
     } else {
       merged = next;
-      // The server left the map out for a version this page does not hold: ask in full next time.
-      this.#needMap = !next.map && next.mapVersion !== null;
+      // The server left the drawing out for a version this page does not hold: ask in full next time.
+      this.#needMap = !this.#drawing(next) && next.mapVersion !== null;
     }
-    if (merged.map) this.#needMap = false;
-    const mapChanged = !!prev?.map && merged.map?.version !== prev.map.version;
+    const now = this.#drawing(merged);
+    if (now) this.#needMap = false;
+    const mapChanged = !!had && now?.version !== had.version;
     this.data = merged;
     this.#move(merged.people, mapChanged);
   }

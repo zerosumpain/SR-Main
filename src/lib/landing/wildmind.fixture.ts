@@ -10,10 +10,16 @@
 // unattended half speed (a day every sixteen minutes, cycling through four
 // days), JKai takes a slow walk round his camp, and Wren works at hers.
 // LANDING_WILDMIND_STATE picks the chapter's state (live, resting, paused,
-// between-lives, stale, offline) for screenshots of each.
+// between-lives, stale, offline) for screenshots of each, and two more for
+// the place view's model: `asleep` (a clear night in the valley, both of
+// them asleep) and `young` (a valley only a day old, from the between-lives
+// recording: a small first patch on a bare board).
 
 import recorded from './fixtures/wildmind-day16.json';
+import youngRecorded from './fixtures/wildmind-between-lives.json';
 import { offlineShowcase, parseSnapshot, project, type WildmindShowcase, type WildmindSnapshotV1 } from './wildmind';
+import type { WildmindGlass } from './wildmind-glass';
+import { glassCached } from './wildmind-glass.server';
 import { traceCached } from './wildmind-trace.server';
 
 const DAY = 1440;
@@ -40,6 +46,19 @@ function walkAt(minute: number, x: number, z: number): [number, number] {
 }
 
 const base = parseSnapshot(recorded);
+const youngBase = parseSnapshot(youngRecorded);
+
+/** A valley a day old: the between-lives recording's ground, with both of them up and about on it. */
+function youngSnapshot(): WildmindSnapshotV1 | null {
+  if (!youngBase) return null;
+  return {
+    ...youngBase,
+    status: 'running',
+    time: { ...youngBase.time, daylight: 1, weather: 'clear' },
+    people: youngBase.people.map((p) => ({ ...p, alive: true, activity: p.id === 'main' ? ('working' as const) : ('idle' as const) })),
+    stats: { ...youngBase.stats, generation: youngBase.stats.generation + 1 },
+  };
+}
 
 /** The recorded snapshot at `now`, with the preview's clock, walk and state. */
 export function fixtureSnapshot(now: number, state?: string): WildmindSnapshotV1 | null {
@@ -52,16 +71,22 @@ export function fixtureSnapshot(now: number, state?: string): WildmindSnapshotV1
   const home = { x: main.x, z: main.z };
   const at = walkAt(minute, home.x, home.z);
   const trail = Array.from({ length: 12 }, (_, i) => walkAt(minute - (12 - i) * 5, home.x, home.z));
+  if (state === 'young') return youngSnapshot();
   const ended = state === 'between-lives';
+  const asleep = state === 'asleep';
   return {
     ...base,
     status: ended ? 'between-lives' : state === 'resting' ? 'resting' : state === 'paused' ? 'paused' : 'running',
-    time: { ...base.time, day, season, dayOfSeason: (day % 10) + 1, hour: Math.floor(hour), daylight: daylight(hour, season) },
+    time: asleep
+      ? { ...base.time, day, season, dayOfSeason: (day % 10) + 1, hour: 23, daylight: 0, weather: 'clear' }
+      : { ...base.time, day, season, dayOfSeason: (day % 10) + 1, hour: Math.floor(hour), daylight: daylight(hour, season) },
     people: [
       ended
         ? { ...main, activity: 'dead', alive: false, trail: [] }
-        : { ...main, x: at[0], z: at[1], activity: 'walking', trail },
-      ...others.map((p) => ({ ...p, activity: 'working' as const })),
+        : asleep
+          ? { ...main, activity: 'sleeping', trail: [] }
+          : { ...main, x: at[0], z: at[1], activity: 'walking', trail },
+      ...others.map((p) => ({ ...p, activity: asleep ? ('sleeping' as const) : ('working' as const) })),
     ],
     stats: ended ? { ...base.stats, earlierLives: [{ n: null, days: day, cause: 'cold' as const }, ...base.stats.earlierLives] } : base.stats,
   };
@@ -73,5 +98,15 @@ export function wildmindFixture(now: number, state?: string): WildmindShowcase {
   const snap = fixtureSnapshot(now, state);
   if (!snap) return offlineShowcase();
   const fetchedAt = state === 'stale' ? now - 10 * 60_000 : now;
-  return project(snap, fetchedAt, now, traceCached(base.terrain, base.terrainVersion));
+  const ground = state === 'young' && youngBase?.terrain ? youngBase : base;
+  return project(snap, fetchedAt, now, traceCached(ground.terrain!, ground.terrainVersion));
+}
+
+/** The place view's model of the fixture's valley in the given state (the young valley's own for `young`). */
+export function fixtureGlass(state?: string): WildmindGlass | null {
+  const ground = state === 'young' && youngBase?.terrain ? youngBase : base;
+  if (state === 'offline' || !ground?.terrain) return null;
+  const traced = traceCached(ground.terrain, ground.terrainVersion);
+  if (!traced) return null;
+  return glassCached(ground.terrain, ground.terrainVersion, traced.frame.per / ground.terrain.step)?.glass ?? null;
 }

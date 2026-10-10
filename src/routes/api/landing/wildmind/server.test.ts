@@ -10,7 +10,7 @@ vi.mock('$app/environment', () => ({
 }));
 
 import { GET } from './+server';
-import { MAX_BYTES, loadWildmind, resetWildmind, wildmindShowcase } from '$lib/landing/wildmind.server';
+import { MAX_BYTES, loadWildmind, pinFixtureState, resetWildmind, wildmindShowcase } from '$lib/landing/wildmind.server';
 import type { WildmindShowcase } from '$lib/landing/wildmind';
 
 const URL_ = 'http://wildmind.test:5397/api/public/snapshot';
@@ -85,6 +85,33 @@ describe('GET /api/landing/wildmind', () => {
     // Any other view is ignored, and neither ever goes upstream.
     expect((await call('?view=%3Cscript%3E')).body.map?.pencil).toBeUndefined();
     for (const [u] of upstream.mock.calls) expect(String(u)).not.toMatch(/view|script/);
+  });
+
+  it('builds the place view’s model under glass instead of the map, and leaves it out on ?have=', async () => {
+    h.env.WILDMIND_SNAPSHOT_URL = URL_;
+    const place = await call('?view=place');
+    expect(place.body.map).toBeNull();
+    expect(place.body.glass?.version).toBe(recorded.terrainVersion);
+    expect(place.body.mapVersion).toBe(recorded.terrainVersion);
+    expect(place.body.glass?.cards.length).toBeGreaterThan(2);
+    expect(place.body.people).toHaveLength(2);
+    const held = await call(`?view=place&have=${encodeURIComponent(recorded.terrainVersion)}`);
+    expect(held.body.glass).toBeNull();
+    expect(held.body.map).toBeNull();
+    expect(held.body.people).toHaveLength(2);
+    // The other views never carry it.
+    expect((await call()).body).not.toHaveProperty('glass');
+    expect((await call('?view=notes')).body).not.toHaveProperty('glass');
+    for (const [u] of upstream.mock.calls) expect(String(u)).not.toMatch(/view|place/);
+  });
+
+  it('keeps the place view’s poll lean: the model only with the version it does not hold', async () => {
+    h.env.WILDMIND_SNAPSHOT_URL = URL_;
+    const full = JSON.stringify((await call('?view=place')).body).length;
+    const held = JSON.stringify((await call(`?view=place&have=${encodeURIComponent(recorded.terrainVersion)}`)).body).length;
+    const map = JSON.stringify((await call()).body).length;
+    expect(held).toBeLessThan(full / 3);
+    expect(held).toBeLessThan(map / 3);
   });
 
   it('ignores a malformed ?have= and never sends it upstream', async () => {
@@ -179,5 +206,30 @@ describe('the local preview fixture', () => {
   it('is never used outside dev', async () => {
     h.env.LANDING_SHOWCASE_FIXTURE = '1';
     expect(await wildmindShowcase(new Date())).toBeNull();
+  });
+
+  it('takes a state pinned by a preview’s ?wm=, in dev with the fixture only', async () => {
+    h.dev = true;
+    h.env.LANDING_SHOWCASE_FIXTURE = '1';
+    pinFixtureState('paused', true);
+    expect((await wildmindShowcase(new Date()))?.state).toBe('paused');
+    pinFixtureState('asleep', true);
+    const asleep = await wildmindShowcase(new Date(), null, 'place');
+    expect(asleep?.state).toBe('live');
+    expect(asleep?.people.every((p) => p.doing === 'asleep')).toBe(true);
+    expect(asleep?.glass?.cards.length).toBeGreaterThan(2);
+    pinFixtureState('young', true);
+    const young = await wildmindShowcase(new Date(), null, 'place');
+    expect(young?.glass?.version).not.toBe(asleep?.glass?.version);
+    // Unknown values are ignored; 'env' hands it back.
+    pinFixtureState('<script>', true);
+    expect((await wildmindShowcase(new Date()))?.mapVersion).toBe(young?.mapVersion);
+    pinFixtureState('env', true);
+    expect((await wildmindShowcase(new Date()))?.state).toBe('live');
+    // Outside dev it does nothing at all.
+    h.dev = false;
+    pinFixtureState('offline', false);
+    h.dev = true;
+    expect((await wildmindShowcase(new Date()))?.state).toBe('live');
   });
 });

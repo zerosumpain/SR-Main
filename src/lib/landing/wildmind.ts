@@ -218,6 +218,14 @@ export interface WildmindShowcase {
    * that view, or its poll with ?view=notes); `map` is then the pencilled map.
    */
   notes?: WildmindNotesSheet | null;
+  /**
+   * The place view's model under glass (wildmind-glass.ts), built on the
+   * server once per terrain version. Only when the place view asked for it
+   * (its SSR, or its poll with ?view=place); `map` is then null, since the
+   * place view never draws the flat map. Null on a ?have= hit (the page keeps
+   * its own) and with nothing seen.
+   */
+  glass?: import('./wildmind-glass').WildmindGlass | null;
 }
 
 /** The notes view's map, ready to draw (with the pencilled `map` beside it). */
