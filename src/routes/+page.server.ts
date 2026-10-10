@@ -10,6 +10,7 @@ import { dev } from '$app/environment';
 import { getAllPosts } from '$lib/blog';
 import { isOwnerRequest } from '$lib/server/owner';
 import { HERO_VIEW_COOKIE, chooseHeroView } from '$lib/landing/hero-view';
+import { getLandingTagline } from '$lib/server/landing-tagline';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ fetch, locals, getClientAddress, cookies, url, setHeaders }) => {
@@ -52,7 +53,7 @@ export const load: PageServerLoad = async ({ fetch, locals, getClientAddress, co
   // screenshots hold still (null, and the address ignored, in production).
   const pinnedSun = sunOverride(url.searchParams, dev);
 
-  const [steps, day, releases, capabilities, showcase, posts, sun] = await Promise.all([
+  const [steps, day, releases, capabilities, showcase, posts, sun, tagline] = await Promise.all([
     // Today's steps in quarter-hours, midnight to 23:59, for the steps footnote.
     stepsToday().catch(() => null),
     dayReading,
@@ -84,6 +85,10 @@ export const load: PageServerLoad = async ({ fetch, locals, getClientAddress, co
     // only the place view, on a server that has never had a position, waits
     // for the first (up to 400ms). Null draws the default sky.
     pinnedSun ?? ownerSun(new Date(), { wait: heroView.view === 'place' }),
+    // The line under the title, the owner's from /admin/content/hero. One
+    // app_settings read behind the settings module's 30s cache (a save there
+    // clears it), and never a throw: an unreadable database shows the default.
+    getLandingTagline(),
   ]);
 
   // Owner-only extras: the sync banner below and the footer's Admin link.
@@ -127,6 +132,7 @@ export const load: PageServerLoad = async ({ fetch, locals, getClientAddress, co
     syncAttention,
     mergeablePrs,
     sun,
+    tagline,
     // True only when the dev override above set `sun`: it then wins over the live poll.
     sunPinned: pinnedSun != null,
   };

@@ -135,6 +135,7 @@
     facts={data.capabilities}
     steps={data.steps}
     cadence={days}
+    tagline={data.tagline}
     releases={totals && totals.releases > 0
       ? { total: totals.releases, firstDeploy: totals.firstDeploy, days: totals.days }
       : null}

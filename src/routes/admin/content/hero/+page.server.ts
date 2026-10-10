@@ -7,20 +7,39 @@ import { heroSourceOptions, selectedHero, heroPreparation, heroSlotAssignments }
 import { getHeroActivity, getHeroActivityRules, saveHeroActivityRules } from '$lib/server/hero-activity';
 import { heroActivitySchema } from '$lib/server/hero-slot-policy';
 import { isShowcase } from '$lib/server/showcase';
+import { landingTaglineSchema } from '$lib/server/landing-tagline-schema';
+import { getSavedLandingTagline, saveLandingTagline } from '$lib/server/landing-tagline';
 
 export const load: PageServerLoad = async (event) => {
   // Showcase ($lib/server/showcase): not today's step count, nor the activity
   // slot it selects — both are the owner's day.
   const showcase = await isShowcase(event);
-  const [backgroundSettings, backgroundAsset, backgroundSources, selected, backgroundJob, backgroundSlots, activityRules, activity] = await Promise.all([
+  const [backgroundSettings, backgroundAsset, backgroundSources, selected, backgroundJob, backgroundSlots, activityRules, activity, tagline] = await Promise.all([
     getHeroBackgroundSettings(), getHeroBackgroundAsset(), heroSourceOptions(), selectedHero(), heroPreparation(), heroSlotAssignments(), getHeroActivityRules(), getHeroActivity(),
+    getSavedLandingTagline(),
   ]);
-  return { backgroundSlots, activityRules,
+  return { backgroundSlots, activityRules, tagline,
     activity: showcase ? { slot: 'default' as const, steps: null } : activity, backgroundSettings, backgroundAsset, backgroundSources, backgroundJob,
     backgroundSource: selected ? { sourceId: selected.sourceId, sourceName: selected.sourceName } : null };
 };
 
 export const actions: Actions = {
+  // The masthead's subtitle. "Reset to default" and an empty save both delete
+  // the setting, so the built-in line shows again.
+  tagline: async ({ request }) => {
+    const form = await request.formData();
+    if (form.get('intent') === 'reset') {
+      await saveLandingTagline('');
+      return { taglineSaved: true, taglineReset: true };
+    }
+    const raw = form.get('tagline');
+    const parsed = landingTaglineSchema.safeParse(typeof raw === 'string' ? raw : '');
+    if (!parsed.success) {
+      return fail(400, { taglineError: parsed.error.issues.map(i => i.message).join(' '), taglineValue: typeof raw === 'string' ? raw : '' });
+    }
+    await saveLandingTagline(parsed.data);
+    return { taglineSaved: true, taglineReset: parsed.data === '' };
+  },
   activity: async ({ request }) => {
     const form = await request.formData();
     const parsed = heroActivitySchema.safeParse({ averageSteps: Number(form.get('averageSteps')), veryActiveSteps: Number(form.get('veryActiveSteps')) });

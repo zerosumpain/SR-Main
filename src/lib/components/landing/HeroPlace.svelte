@@ -55,6 +55,7 @@
     steps,
     cadence,
     releases,
+    tagline,
     sun = null,
   }: {
     /** "Fri 9 Oct", London time. */
@@ -73,6 +74,8 @@
     cadence: DayCount[];
     /** All releases on record and the first deploy, or null when the record is unavailable. */
     releases: { total: number; firstDeploy: string | null; days: number } | null;
+    /** The masthead's subtitle (HeroTitle): the owner's line from /admin/content/hero, or the default. */
+    tagline: string;
     /** The sun where the owner is (whole degrees, rising or not), or null for the default sky. */
     sun?: OwnerSun | null;
   } = $props();
@@ -297,7 +300,7 @@
     <div class="pl-box">
       <div class="pl-top">
         <!-- The rambler walks along the tops of these letters. -->
-        <HeroTitle />
+        <HeroTitle {tagline} />
       </div>
 
       <!-- The sky beside the title: the next daydream, gathering. -->

@@ -64,6 +64,7 @@
     steps,
     cadence,
     releases,
+    tagline,
   }: {
     /** "Fri 9 Oct", London time. */
     date: string;
@@ -81,6 +82,8 @@
     cadence: DayCount[];
     /** All releases on record and the first deploy, or null when the record is unavailable. */
     releases: { total: number; firstDeploy: string | null; days: number } | null;
+    /** The masthead's subtitle (HeroTitle): the owner's line from /admin/content/hero, or the default. */
+    tagline: string;
   } = $props();
 
   let root: HTMLElement;
@@ -275,7 +278,7 @@
     <div class="hn-grid">
       <div class="hn-mast">
         <!-- The rambler walks along the tops of these letters. -->
-        <HeroTitle />
+        <HeroTitle {tagline} />
         <!-- The date, stamped in the empty corner beside "JK's". Not scenery: it is rotated. -->
         <DateStamp {date} {place} />
       </div>
