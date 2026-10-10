@@ -1,0 +1,850 @@
+/* post-paper.css: a blog post on the notes paper (PostSheet + ProseContent).
+ *
+ * Loaded by PostSheet.svelte, after post-prose.css (the body's own rules,
+ * which the width and print rules at the foot of this file override), so
+ * only the post and the share-link preview carry it. Every selector is `pp-` prefixed (or sits under `.pp-prose`), so
+ * the sheet is inert if it lingers after a client-side navigation.
+ *
+ * THE RULING, AND WHY TEXT NEVER CROSSES IT. The sheet is ruled from its top
+ * (the kit's `--np-lines`, one feint per `--np-l`, sat just under the body
+ * face's baseline at `--np-y`). Every TEXT block also carries its own band of
+ * ruled paper, anchored at its own top and carried sideways across the whole
+ * sheet (`border-image … fill`, ink overflow, clipped by the sheet): an
+ * OPAQUE band, paper with the feint drawn in, so it covers the sheet's ruling
+ * rather than doubling it. A block whose height the browser decides (a
+ * figure, a table, code) can therefore never put the paragraph after it off
+ * its lines: that paragraph's band starts again from its own first line.
+ * snap-blocks.ts then keeps those odd blocks a whole number of rules tall, so
+ * the sheet's own ruling beside them is in step too. Without JavaScript the
+ * worst case is a margin whose lines jog by a few pixels beside a picture;
+ * the writing is on its lines either way.
+ *
+ * Headings and other faces sit on the rules by a computed nudge (`.pp-set`):
+ * the box moves by `--pp-shift` with a margin (never `top`, which would lift it
+ * into the positioned paint layer and let its band cover the next block's
+ * first line) and its band is redrawn that much higher so the lines stay put.
+ * Every container these sit in is a grid or a flex column, where margins do
+ * not collapse, so the nudge and its undo always add up to nothing.
+ */
+
+/* ---------------------------------------------------------------- tokens */
+
+.pp-sheet {
+  /* The feint as a solid colour on this paper, for the opaque bands. */
+  --pp-feint: color-mix(in srgb, rgb(14 91 102) 16%, var(--np-paper));
+  --pp-band: repeating-linear-gradient(
+    to bottom,
+    var(--np-paper) 0 var(--np-y),
+    var(--pp-feint) var(--np-y) calc(var(--np-y) + 1px),
+    var(--np-paper) calc(var(--np-y) + 1px) var(--np-l)
+  );
+
+  /* The columns. The margin column holds the stamp, the reading time and the
+     contents; the margin rule is its right-hand edge. */
+  --gut: clamp(16px, 4vw, 64px);
+  --rail-col: 13rem;
+  --rule-gap: 2rem;
+  --measure: var(--reader-measure, 35rem);
+  --col-gap: 2.75rem;
+  --note-col: 15rem;
+  --np-margin-x: calc(var(--gut) + var(--rail-col));
+  /* How far right of the margin rule a kicker's words stop. */
+  --pp-kick: 22px;
+  /* The shadow at the edge of a box that scrolls sideways (code, a table on
+     a phone), where more of it is hidden. */
+  --pp-scroll-shade: rgba(26, 16, 8, 0.24);
+  /* Card stock that covers the shadow until the box is scrolled (the covers
+     scroll with the content, the shadows stay put). */
+  --pp-scroll-bg:
+    linear-gradient(to right, var(--np-card) 40%, transparent) left center / 3rem 100% no-repeat local,
+    linear-gradient(to left, var(--np-card) 40%, transparent) right center / 3rem 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, var(--pp-scroll-shade), transparent) left center / 14px 100% no-repeat
+      scroll,
+    radial-gradient(farthest-side at 100% 50%, var(--pp-scroll-shade), transparent) right center / 14px 100%
+      no-repeat scroll,
+    var(--np-card);
+}
+/* The orange that WRITES on the paper (kickers, section numbers, the date),
+   a shade darker than the kit's so small mono caps clear 4.5:1 with room to
+   spare: about 5.9:1 on paper and 6.1:1 on sepia, the contents pages' pen. */
+.pp-sheet {
+  --np-pen-text: #8f3c06;
+}
+html[data-reading-theme='sepia'] .pp-sheet {
+  --pp-feint: color-mix(in srgb, rgb(14 91 102) 15%, var(--np-paper));
+}
+/* Night paper keeps the kit's own (lighter) pen. */
+html[data-reading-theme='night'] .pp-sheet {
+  --np-pen-text: var(--accent);
+  --pp-feint: color-mix(in srgb, rgb(127 184 192) 13%, var(--np-paper));
+  --pp-scroll-shade: rgba(0, 0, 0, 0.7);
+}
+
+/* ------------------------------------------------------------ the desk */
+
+.pp-desk {
+  padding-bottom: calc(2 * var(--np-l, 32px));
+}
+
+/* ----------------------------------------------------------- the sheet */
+
+.pp-sheet {
+  display: grid;
+  grid-template-columns:
+    [bleed-start] var(--gut)
+    [rail-start] var(--rail-col)
+    [rail-end] var(--rule-gap)
+    [main-start wide-start] minmax(0, var(--measure))
+    [main-end] var(--col-gap)
+    [note-start] minmax(0, var(--note-col))
+    [note-end wide-end] minmax(var(--gut), 1fr)
+    [bleed-end];
+  align-content: start;
+  max-width: calc(
+    2 * var(--gut) + var(--rail-col) + var(--rule-gap) + var(--measure) + var(--col-gap) + var(--note-col)
+  );
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: calc(2 * var(--np-l)) 0 calc(3 * var(--np-l));
+  /* Clips the bands' sideways bleed at the paper's edge. `clip`, not
+     `hidden`: it makes no scroll container, so the sticky contents still
+     stick. */
+  overflow: clip;
+  background-image: var(--np-lines);
+  font-family: var(--font-body);
+}
+
+.pp-head,
+.pp-body,
+.pp-foot,
+.pp-sources {
+  grid-column: bleed;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-content: start;
+}
+
+/* A block on the rules: an opaque band of ruled paper from its own top. */
+.pp-band {
+  border-image: var(--pp-band) fill 0 / 0 / 0 var(--np-bleed, 100vw);
+}
+
+/* A block in another face or size set on the rules. Inputs: --pp-fs (size),
+   --pp-n (rules per line), --pp-kf (the face's baseline ratio: Inter, Fraunces
+   and JetBrains Mono 0.36, DM Sans 0.34, Selawik 0.39). */
+.pp-set,
+.pp-prose > :where(h1, h2, h3, h4, h5, h6, aside.standfirst) {
+  --pp-n: 1;
+  --pp-kf: 0.36;
+  --pp-fs: var(--np-s);
+  --pp-shift: round(
+    calc(
+      (var(--pp-n) - 1) * var(--np-l) + var(--np-y) - 0.1 * var(--np-s) - var(--pp-n) * var(--np-l) / 2 -
+        var(--pp-kf) * var(--pp-fs)
+    ),
+    1px
+  );
+  /* One rule per LINE, not per pitch: a line --pp-n rules tall keeps only
+     the rule under its baseline (the page's rule --pp-n - 1 pitches down
+     from the line's top), so a tall line is never crossed by the rules it
+     spans. With --pp-n at one this is the page's own ruling. */
+  --pp-p: calc(var(--pp-n) * var(--np-l));
+  --pp-y: mod(calc(var(--np-y) + (var(--pp-n) - 1) * var(--np-l) - var(--pp-shift)), var(--pp-p));
+  margin-top: var(--pp-shift);
+  margin-bottom: calc(-1 * var(--pp-shift));
+  font-size: var(--pp-fs);
+  line-height: var(--pp-p);
+  border-image: repeating-linear-gradient(
+      to bottom,
+      var(--np-paper) 0 var(--pp-y),
+      var(--pp-feint) var(--pp-y) calc(var(--pp-y) + 1px),
+      var(--np-paper) calc(var(--pp-y) + 1px) var(--pp-p)
+    )
+    fill 0 / 0 / 0 var(--np-bleed, 100vw);
+}
+
+/* ----------------------------------------------------- the heading block */
+
+.pp-title-block {
+  grid-column: main-start / note-end;
+  grid-row: 1;
+  /* A flex column: no margin collapsing, so each .pp-set nudge cancels. */
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding-bottom: var(--np-l);
+}
+
+.pp-title {
+  --pp-n: 2;
+  --pp-fs: clamp(46px, 2.6vw + 22px, 60px);
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+  color: var(--text-primary);
+  overflow-wrap: break-word;
+  /* Its band reaches right, and left only as far as the margin rule: the
+     margin keeps the sheet's every-pitch ruling, which the stamp and the
+     reading time stand on. */
+  border-image-outset: 0 var(--np-bleed, 100vw) 0 var(--rule-gap);
+}
+
+.pp-lede {
+  --pp-fs: calc(1.3125rem * var(--np-scale));
+  max-width: min(100%, 38rem);
+  font-family: var(--fs-serif);
+  font-optical-sizing: auto;
+  font-style: italic;
+  font-weight: 400;
+  color: var(--text-secondary);
+  text-wrap: pretty;
+  hyphenate-limit-chars: 7 3 3;
+}
+
+.pp-tags {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 1.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-label-xs);
+  line-height: var(--np-l);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.pp-tags > li {
+  display: flex;
+  align-items: center;
+  height: var(--np-l);
+}
+
+.pp-tag {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 44px;
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+/* A 44px target that leaves the rule it sits on alone. */
+.pp-tag::after {
+  content: '';
+  position: absolute;
+  inset: -6px -4px;
+}
+.pp-tag:hover {
+  color: var(--np-pen-ink);
+  text-decoration: underline;
+  text-decoration-color: var(--np-pen);
+  text-underline-offset: 6px;
+}
+
+/* The preview's draft note, stuck above the title. */
+.pp-banner {
+  align-self: flex-start;
+  max-width: 26rem;
+  margin: 0 0 calc(var(--np-l) + var(--np-snap, 0px));
+  padding: 0;
+}
+.pp-banner .np-sticky {
+  padding: 10px 16px 12px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-label-xs);
+  line-height: 1.5;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* The margin. */
+.pp-meta {
+  grid-column: rail;
+  grid-row: 1;
+  /* Above the title's bands, which bleed across the margin, and above the
+     contents card below it, which the reader's open panel overlaps. */
+  position: relative;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding-right: var(--pp-kick);
+}
+
+.pp-stamp {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  height: calc(2 * var(--np-l));
+}
+/* The stamp is inked over the rules, so it covers them. */
+.pp-stamp .np-stamp {
+  background: var(--np-paper);
+}
+
+.pp-read {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  height: var(--np-l);
+  margin: 0;
+  line-height: var(--np-l);
+  white-space: nowrap;
+}
+.pp-read-n {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--fs-body-lg);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+.pp-read-u {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--np-pen-text);
+}
+
+.pp-ctl {
+  display: flex;
+  align-items: center;
+  height: var(--np-l);
+  margin-top: var(--np-l);
+}
+
+/* The margin's running kicker: phones and tablets only, where the stamp
+   leaves the margin for the line above the title. */
+.pp-kicker {
+  display: none;
+}
+
+/* ------------------------------------------------------------ the cover */
+
+.pp-cover {
+  grid-column: main-start / note-end;
+  position: relative;
+  margin: 0 0 calc(var(--np-l) + var(--np-snap, 0px));
+  padding: 0;
+  box-shadow:
+    0 0 0 1px var(--line-strong),
+    0 16px 30px -22px rgba(26, 16, 8, 0.45);
+}
+.pp-cover img {
+  display: block;
+  width: 100%;
+  max-height: 60vh;
+  object-fit: cover;
+}
+/* Masking tape over the top edge: a photograph stuck into the book. */
+.pp-cover::before,
+.pp-prose > figure:first-of-type:not(.bleed)::before {
+  content: '';
+  position: absolute;
+  top: -11px;
+  left: 50%;
+  z-index: 1;
+  width: min(120px, 30%);
+  height: 22px;
+  background: var(--np-tape);
+  transform: translateX(-50%) rotate(-2deg);
+  pointer-events: none;
+}
+
+/* ----------------------------------------------------- body and contents */
+
+.pp-rail {
+  grid-column: rail;
+  grid-row: 1;
+  /* The prose shares this row so its bleed figures (z-index 2) can cross
+     the margin; the contents card stays above them as it sticks past. */
+  position: relative;
+  z-index: 3;
+}
+
+.pp-prose-wrap {
+  grid-column: bleed;
+  grid-row: 1;
+  display: grid;
+  grid-template-columns: subgrid;
+  min-width: 0;
+}
+
+.pp-end-sentinel {
+  grid-column: main;
+  height: 0;
+}
+
+/* ------------------------------------------------------------- the foot */
+
+.pp-endmark {
+  grid-column: main;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: calc(2 * var(--np-l));
+}
+
+.pp-sources {
+  grid-column: rail-start / main-end;
+  padding-top: var(--np-l);
+}
+.pp-sources-h {
+  grid-column: rail;
+  align-self: start;
+  /* Above the list's band, which bleeds back across the margin. */
+  position: relative;
+  z-index: 1;
+}
+.pp-sources-list {
+  grid-column: main;
+  min-width: 0;
+  padding-bottom: var(--np-l);
+}
+.pp-sources-list ol.footnotes {
+  margin: 0;
+  padding-left: 1.6rem;
+  list-style: decimal;
+  font-family: var(--font-body);
+  font-size: var(--fs-label);
+  line-height: var(--np-l);
+  color: var(--text-muted);
+}
+.pp-sources-list ol.footnotes li::marker {
+  color: var(--np-pen-ink);
+}
+.pp-sources-list ol.footnotes a {
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 5px;
+  word-break: break-word;
+}
+.pp-sources-list ol.footnotes a:hover {
+  color: var(--np-pen-ink);
+  text-decoration-color: var(--np-pen);
+}
+
+.pp-foot-main {
+  grid-column: main;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* The owner's strip: a sticky note on the page. Fixed light in every
+   reading theme, so its inks are fixed too (petrol #0e5b66 is 5:1 on it). */
+.pp-owner {
+  align-self: flex-start;
+  margin: var(--np-l) 0 calc(var(--np-l) + var(--np-snap, 0px));
+  padding: 0;
+}
+.pp-owner .np-sticky {
+  margin: 0;
+  max-width: 30rem;
+  font-family: var(--font-mono);
+  font-size: var(--fs-label-xs);
+  line-height: 1.6;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.pp-owner a {
+  display: inline-block;
+  min-height: 44px;
+  line-height: 44px;
+  color: #0e5b66;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* The way back: a page corner turned down. */
+.pp-turn {
+  position: relative;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  height: var(--np-l);
+  margin-top: var(--np-l);
+  padding: 0 1.75rem 0 0.9rem;
+  background: linear-gradient(225deg, transparent 0 11px, var(--np-card) 11px);
+  font-family: var(--font-mono);
+  font-size: var(--fs-label-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--np-pen-ink);
+  text-decoration: none;
+}
+.pp-turn::before {
+  /* The turned-down corner. */
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 15px;
+  height: 15px;
+  background: linear-gradient(225deg, transparent 0 50%, var(--surface-rail-deep) 50%);
+  box-shadow: -1px 1px 2px rgba(26, 16, 8, 0.12);
+}
+.pp-turn::after {
+  content: '';
+  position: absolute;
+  inset: -6px 0;
+}
+.pp-turn:hover {
+  color: var(--text-primary);
+}
+
+/* Below the sheet, on the desk. */
+.pp-page-foot {
+  display: flex;
+  gap: 1.5rem;
+  padding: 0.5rem var(--gut, 16px) 1.5rem;
+  border-top: 1px dashed var(--text-secondary);
+}
+.pp-page-foot a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+/* ------------------------------------------------------------ focus */
+
+.pp-sheet :is(a, button, summary, input, textarea):focus-visible,
+.pp-prose > :is(table, pre)[tabindex]:focus-visible,
+.pp-page-foot a:focus-visible {
+  outline: 2px solid var(--accent-hover);
+  outline-offset: 4px;
+  border-radius: 2px;
+}
+
+/* ================================================================ widths */
+
+/* Tablets: no right-hand column; the margin narrows to the landing's. */
+@media (max-width: 1180px) {
+  .pp-sheet {
+    --rail-col: 56px;
+    --col-gap: 0px;
+    --note-col: 0px;
+    grid-template-columns:
+      [bleed-start] var(--gut)
+      [rail-start] var(--rail-col)
+      [rail-end] var(--rule-gap)
+      [main-start wide-start note-start] minmax(0, var(--measure))
+      [main-end wide-end note-end] minmax(var(--gut), 1fr)
+      [bleed-end];
+    max-width: none;
+  }
+
+  .pp-title-block {
+    grid-column: main;
+    grid-row: 2;
+  }
+
+  /* The margin's contents move to the line above the title: the stamp, the
+     reading time and the controls on one double rule. */
+  /* The stamp takes both rules; the reading time and the controls sit on
+     the second, one rule tall, so the figures stand on a line rather than
+     floating between two. */
+  .pp-meta {
+    grid-column: main;
+    grid-row: 1;
+    flex-direction: row;
+    align-items: flex-end;
+    gap: 1.25rem;
+    height: calc(2 * var(--np-l));
+    padding-right: 0;
+  }
+  .pp-ctl {
+    margin: 0 0 0 auto;
+  }
+
+  .pp-kicker {
+    display: block;
+    grid-column: rail;
+    grid-row: 1 / span 2;
+    position: relative;
+    z-index: 1;
+    padding: 4px 0 0;
+    line-height: 1.4;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    justify-self: center;
+    align-self: start;
+  }
+
+  .pp-cover {
+    grid-column: main;
+  }
+
+  .pp-rail {
+    grid-column: main;
+  }
+  .pp-prose-wrap {
+    grid-row: 2;
+  }
+
+  .pp-sources-h {
+    padding: 4px 0 0;
+    line-height: 1.4;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    justify-self: center;
+  }
+
+  /* Marginalia become slips between the lines: card stock, set on the rules,
+     whole rules tall, so the paragraph keeps its pitch around them. */
+  .pp-prose .sidenote-body {
+    display: block;
+    float: none;
+    width: auto;
+    margin: 0;
+    padding: 0 12px 0 14px;
+    background-color: var(--np-card);
+    background-image: var(--np-lines);
+    box-shadow: inset 3px 0 0 var(--np-pen-ink);
+    font-size: var(--fs-body);
+  }
+
+  .pp-prose > aside.pull-quote {
+    grid-column: main;
+  }
+
+  /* No right-hand margin to paste a floated figure in: the full measure. */
+  .pp-prose > figure.align-left,
+  .pp-prose > figure.align-right {
+    grid-column: main;
+    z-index: auto;
+    margin: var(--np-l) 0 calc(var(--np-l) + var(--np-snap, 0px));
+  }
+}
+
+/* Phones: the landing's thirty-pixel margin, the paper to the screen's edge. */
+@media (max-width: 760px) {
+  .pp-sheet {
+    --gut: 0px;
+    --rail-col: 30px;
+    --rule-gap: 14px;
+    --pp-kick: 6px;
+    grid-template-columns:
+      [bleed-start] 0px
+      [rail-start] var(--rail-col)
+      [rail-end] var(--rule-gap)
+      [main-start wide-start note-start] minmax(0, var(--measure))
+      [main-end wide-end note-end] minmax(20px, 1fr)
+      [bleed-end];
+  }
+
+  /* One rule a line, so the type is a size that leaves air in the rule. */
+  .pp-title {
+    --pp-n: 1;
+    --pp-fs: clamp(28px, 7.6vw, 30px);
+    letter-spacing: -0.03em;
+  }
+  .pp-lede {
+    --pp-fs: calc(1.1875rem * var(--np-scale));
+  }
+  .pp-prose > :is(h1, h2) {
+    --pp-fs: calc(1.625rem * var(--np-scale));
+  }
+
+  .pp-meta {
+    gap: 0.9rem;
+  }
+  /* The figure says the reading time on its own where the line is short. */
+  .pp-read > svg.np-tally {
+    display: none;
+  }
+
+  .pp-prose > figure.bleed figcaption {
+    margin-left: calc(var(--rail-col) + var(--rule-gap));
+    margin-right: 20px;
+  }
+  /* A table scrolls sideways rather than wrap every cell onto two rules;
+     the shadow at its edge says there is more (pre has it everywhere). */
+  .pp-prose > table {
+    display: block;
+    overflow-x: auto;
+    max-width: 100%;
+    background: var(--pp-scroll-bg);
+  }
+  .pp-prose :is(th, td) {
+    white-space: nowrap;
+  }
+  .pp-prose > aside.pull-quote {
+    padding: calc(var(--np-l) / 2) 20px;
+    transform: rotate(-0.5deg);
+  }
+  .pp-prose > aside.standfirst::before {
+    left: -9px;
+    width: 4px;
+  }
+}
+
+/* ============================================================ print */
+
+/* A post prints as ink on white: no feint, no bands, no margin, no cards,
+   no tilt; the title, date, body, figures and sources stay. */
+@media print {
+  /* White paper whatever the reading theme: night and sepia set the page's
+     own ground on <html> and <body>, and the grain is a screen texture.
+     Scoped by :has so this sheet stays inert if it lingers after a
+     client-side navigation. */
+  html:has(.pp-sheet),
+  html:has(.pp-sheet) body {
+    background: #fff !important;
+  }
+  html:has(.pp-sheet) body::after {
+    display: none !important;
+  }
+  .pp-desk {
+    padding: 0;
+    background: #fff !important;
+  }
+  /* Paper sizes, not the reader's screen sizes: the chosen text size and
+     the thirty-two pixel pitch would print double-spaced. The pitch becomes
+     the print line, so every rule-sized gap becomes one printed line. */
+  .pp-sheet {
+    --reader-scale: 1 !important;
+    --np-s: 11pt !important;
+    --np-l: 16.5pt !important;
+    font-size: 11pt;
+  }
+  .pp-sheet[data-np-font='mono'] {
+    --np-s: 10pt !important;
+  }
+  .pp-prose {
+    max-width: 40em;
+    font-size: 11pt;
+    line-height: 1.5;
+  }
+  .pp-sheet[data-np-font='mono'] .pp-prose {
+    font-size: 10pt;
+  }
+  .pp-title {
+    font-size: 24pt;
+    line-height: 1.15;
+  }
+  .pp-lede {
+    font-size: 13pt;
+    line-height: 1.4;
+  }
+  .pp-prose > :is(h1, h2, h3, h4, h5, h6) {
+    line-height: 1.25;
+    break-after: avoid;
+    break-inside: avoid;
+  }
+  .pp-prose > :is(h1, h2) {
+    font-size: 16pt;
+  }
+  .pp-prose > h3 {
+    font-size: 13pt;
+  }
+  .pp-prose > :is(h1, h2, h3, h4) + * {
+    break-before: avoid;
+  }
+  .pp-prose p,
+  .pp-prose li {
+    orphans: 3;
+    widows: 3;
+  }
+  .pp-prose :is(code, mark, figcaption) {
+    background: none !important;
+    box-shadow: none !important;
+  }
+  /* A table keeps its row rules, in ink, whatever the theme drew them in. */
+  .pp-prose :is(th, td) {
+    background: none !important;
+    border-bottom: 1px solid #b8ada0;
+  }
+  .pp-prose th {
+    border-bottom-color: #1a1008;
+  }
+  .pp-prose > pre {
+    white-space: pre-wrap;
+    line-height: 1.4;
+  }
+  .pp-sheet,
+  .pp-head,
+  .pp-body,
+  .pp-foot,
+  .pp-sources,
+  .pp-prose-wrap,
+  .pp-prose {
+    display: block;
+    max-width: none;
+    min-height: 0;
+    padding: 0;
+    background: none !important;
+    color: #1a1008;
+  }
+  .pp-sheet *,
+  .pp-sheet ::before,
+  .pp-sheet ::after,
+  .pp-sheet ::marker {
+    border-image: none !important;
+    color: #1a1008 !important;
+  }
+  .pp-set,
+  .pp-prose > :is(h1, h2, h3, h4, h5, h6, aside.standfirst) {
+    margin: 0 0 0.4em;
+  }
+  .pp-prose > :is(h1, h2) {
+    margin-top: 1.2em;
+  }
+  .pp-prose > h2::before,
+  .pp-kicker,
+  .pp-ctl,
+  .pp-rail,
+  .pp-foot-main,
+  .pp-endmark,
+  .pp-banner,
+  .pp-page-foot,
+  .pp-read > svg.np-tally,
+  .pp-cover::before,
+  .pp-prose > figure::before,
+  .pp-prose > aside.pull-quote::before,
+  .pp-prose > blockquote::before,
+  .pp-prose > aside.standfirst::before {
+    display: none !important;
+  }
+  .pp-meta {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 1rem;
+    padding: 0;
+  }
+  .pp-stamp {
+    height: auto;
+  }
+  .pp-stamp .np-stamp {
+    background: none;
+  }
+  .pp-prose :is(figure, table, pre, details, aside, section) {
+    margin: 1em 0;
+    background: none !important;
+    box-shadow: none !important;
+    outline: none;
+    transform: none !important;
+    break-inside: avoid;
+  }
+  .pp-prose .sidenote-body {
+    float: none;
+    display: block;
+    width: auto;
+    margin: 0.4em 0;
+    background: none;
+    box-shadow: none;
+  }
+  .pp-prose a {
+    text-decoration-color: #1a1008;
+  }
+}
+
+/* The print margin for the sheet's pages. (An @page rule cannot be scoped to
+   a page that holds a post; a plain margin is right for any page.) */
+@page {
+  margin: 18mm 20mm;
+}

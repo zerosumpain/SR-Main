@@ -1,0 +1,87 @@
+/* contents.css — the type that sits on the rules of the blog's contents pages
+ * (/blog and /blog/tag/[tag]). Global, but every selector is a `cs-` class,
+ * so it is inert anywhere else. Loaded by ContentsSheet, so only pages that
+ * draw a contents sheet carry it.
+ *
+ * `.cs-on` puts one block of type ON the rules: its line box is `--n` rules
+ * tall and its first baseline lands a tenth of the body size above the rule,
+ * the same place the kit's `.np-set` puts it. It nudges with margins rather
+ * than `top`, so it never becomes a containing block: a title link's
+ * stretched hit area (`::after`) still reaches the whole row.
+ *
+ *   --fs  its font size      --kf  its face's baseline ratio (Inter, Fraunces,
+ *   --n   rules per line           JetBrains Mono 0.36; DM Sans 0.34)
+ */
+.cs-on {
+  --n: 1;
+  --kf: 0.36;
+  --cs-shift: round(
+    calc(
+      (var(--n) - 1) * var(--np-l) + var(--np-y) - 0.1 * var(--np-s) - var(--n) * var(--np-l) / 2 - var(--kf) *
+        var(--fs, var(--np-s))
+    ),
+    1px
+  );
+  margin-top: var(--cs-shift);
+  margin-bottom: calc(-1 * var(--cs-shift));
+  font-size: var(--fs, var(--np-s));
+  line-height: calc(var(--n) * var(--np-l));
+}
+
+/* A line more than one rule tall (a display heading) crosses the rules it
+ * spans. `.cs-tall` lays an opaque band of ruled ground over its own box,
+ * with one rule per LINE, under its baseline, so the letters stand clear.
+ * The band reaches right to the sheet's edge and left to the margin rule
+ * (`--cs-out`; the cover reaches left only), so the margin keeps every rule.
+ *
+ *   --cs-ground  the ground it covers   --cs-feint  the rule, as a solid colour
+ */
+.cs-tall {
+  --cs-p: calc(var(--n) * var(--np-l));
+  --cs-y: mod(calc(var(--np-y) + (var(--n) - 1) * var(--np-l) - var(--cs-shift)), var(--cs-p));
+  border-image: repeating-linear-gradient(
+      to bottom,
+      var(--cs-ground) 0 var(--cs-y),
+      var(--cs-feint) var(--cs-y) calc(var(--cs-y) + 1px),
+      var(--cs-ground) calc(var(--cs-y) + 1px) var(--cs-p)
+    )
+    fill 0 / 0 / var(--cs-out, 0 100vw 0 var(--cs-pad, 0px));
+}
+
+/* The landing's "read on" link: mono caps in the darker orange, a pen line
+   under it, a 44px target. */
+.cs-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  min-height: 44px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-label-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--np-pen-text, var(--accent-hover));
+}
+.cs-more span:not([aria-hidden]) {
+  border-bottom: 1px solid currentColor;
+}
+.cs-more:hover {
+  color: var(--np-pen-ink, var(--accent-ink));
+}
+
+/* One focus ring for every link on the sheet. */
+.cs :is(a, button):focus-visible {
+  outline: 2px solid var(--accent-hover);
+  outline-offset: 4px;
+  border-radius: 2px;
+}
+
+@media print {
+  .cs-on {
+    margin: 0;
+    line-height: 1.4;
+  }
+  .cs-tall {
+    border-image: none;
+  }
+}

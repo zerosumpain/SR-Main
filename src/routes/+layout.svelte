@@ -2,6 +2,7 @@
   // Shared tokens first, so app.css can still override deliberately.
   import '$lib/styles/sr-tokens.css';
   import '../app.css';
+  import '$lib/styles/reading.css';
   import UmamiTracker from '$lib/components/UmamiTracker.svelte';
   import '$lib/styles/nm-tokens.css';
   import { onMount, setContext } from 'svelte';
@@ -110,7 +111,7 @@
      carry a second `--site-nav-height: 56px` at the same specificity, decided
      purely by stylesheet order, while twelve places did arithmetic on the token
      — the landing hero and the admin sub-nav's sticky
-     offset, ProseContent's scroll-margin. Two values for one measurement is a
+     offset, a blog post's heading scroll-margin. Two values for one measurement is a
      bug waiting for a stylesheet to be reordered. */
   :global(:root) {
     --site-nav-height: 48px;
