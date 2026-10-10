@@ -36,49 +36,82 @@ export interface MemoOptions<T> {
   retryMs?: number;
   /** Where the failure line goes; injectable for tests. */
   log?: (line: string) => void;
+  /**
+   * Stale-while-revalidate: past the TTL, an answer younger than this is
+   * given at once while a fresh read runs behind it, so a warm memo never
+   * keeps a request waiting. Defaults to ttlMs (a read past the TTL waits,
+   * up to budgetMs).
+   */
+  staleMs?: number;
+  /**
+   * A monotonic millisecond clock that times each read, so an answer is
+   * dated from when it landed, not when it was asked for (a read slower than
+   * the TTL still earns memo hits). Injectable for tests.
+   */
+  clock?: () => number;
 }
 
 /**
  * One memoised, timeboxed, failure-tolerant read. Concurrent callers share the
  * read in flight, a read that outlives the budget still lands in the memo for
  * the next caller, and a failure answers with the last good value (or the
- * fallback when there never was one) and writes one console line.
+ * fallback when there never was one) and writes one console line. An answer
+ * is dated from when its read finished; with staleMs past the TTL, an answer
+ * still that young is given at once while the next read runs behind it.
  */
 export function memoised<T>(load: (now: Date) => Promise<T>, opts: MemoOptions<T>) {
   const retryMs = opts.retryMs ?? 60_000;
+  const staleMs = Math.max(opts.staleMs ?? opts.ttlMs, opts.ttlMs);
+  const clock = opts.clock ?? (() => performance.now());
   const log = opts.log ?? ((line: string) => console.error(line));
   let last: { at: number; value: T } | null = null;
   let failedAt: number | null = null;
   let inflight: Promise<T> | null = null;
+  /** Bumped by reset, so a read that lands after it is dropped. */
+  let generation = 0;
 
   const read = (now: Date): Promise<T> => {
     const t = now.getTime();
-    if (last && t - last.at < opts.ttlMs) return Promise.resolve(last.value);
+    const age = last ? t - last.at : Infinity;
+    if (last && age < opts.ttlMs) return Promise.resolve(last.value);
     if (failedAt !== null && t - failedAt < retryMs) return Promise.resolve(last?.value ?? opts.fallback);
     if (!inflight) {
+      const started = clock();
+      const gen = generation;
+      // Dated from when the read lands: `now` plus the time it took.
+      const landed = () => t + Math.max(0, clock() - started);
       inflight = Promise.resolve()
         .then(() => load(now))
         .then((value) => {
-          last = { at: t, value };
-          failedAt = null;
+          if (gen === generation) {
+            last = { at: landed(), value };
+            failedAt = null;
+          }
           return value;
         })
         .catch((err: unknown) => {
-          failedAt = t;
+          if (gen === generation) failedAt = landed();
           log(`[landing] showcase ${opts.name} unavailable: ${(err instanceof Error ? err.message : String(err)).split('\n')[0]}`);
           return last?.value ?? opts.fallback;
         })
         .finally(() => {
-          inflight = null;
+          if (gen === generation) inflight = null;
         });
     }
+    // Warm: answer now and let the read refresh the memo behind this request.
+    if (last && age < staleMs) return Promise.resolve(last.value);
     return within(inflight, opts.budgetMs, last?.value ?? opts.fallback);
   };
   /** Forget everything (tests only). */
   read.reset = () => {
+    generation++;
     last = null;
     failedAt = null;
     inflight = null;
+  };
+  /** The read in flight, settled (tests only): resolves once any background refresh has landed. */
+  read.settled = async (): Promise<void> => {
+    await inflight;
   };
   return read;
 }

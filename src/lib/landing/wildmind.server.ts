@@ -12,8 +12,11 @@
 // Each process asks at most once per TTL (just under a second) however many
 // people are reading (the memo shares the read in flight), answers from the
 // last good read for a minute after a failure, and never makes the front door
-// wait more than the showcase budget. The terrain is held by version and asked for with ?have=,
-// so the steady pull is the small live layer only.
+// wait more than the showcase budget. Once warm it never makes anyone wait at
+// all: a read up to STALE_MS old is answered at once while the next one is
+// fetched behind the request, so only a cold process (or one nobody has asked
+// for STALE_MS) waits on Wildmind. The terrain is held by version and asked for
+// with ?have=, so the steady pull is the small live layer only.
 //
 // Drawing: Wildmind's terrain version moves with every tile either of them
 // sees, so while they explore it can move every second. The drawing (the
@@ -164,11 +167,20 @@ export async function loadWildmind(now: Date, base = env.WILDMIND_SNAPSHOT_URL):
  * How long one read answers for. Just under a second, so a reader handling
  * the map (polling every second) sees the valley move, while the process asks
  * Wildmind at most about once a second however many people poll (its public
- * listener allows three a second per address). The read in flight is shared,
+ * listener allows three a second per address). The read in flight is shared
+ * (and, warm, answered from the read before it: STALE_MS),
  * and a failure is answered from the last good read for RETRY_MS before
  * Wildmind is asked again.
  */
 export const TTL_MS = 900;
+/**
+ * How old a read may be and still be answered at once while a fresh one is
+ * fetched behind the request (stale-while-revalidate): the page render and
+ * the poll never wait on Wildmind while the memo is warm. Older than this
+ * (nobody has asked in a while), a request waits up to the budget as a cold
+ * one does.
+ */
+export const STALE_MS = 20_000;
 /** After a failed read, ask again no sooner than this. */
 export const RETRY_MS = 60_000;
 /**
@@ -181,6 +193,7 @@ export const CACHE_CONTROL = 'public, max-age=1, stale-while-revalidate=5';
 export const readWildmind = memoised<WildmindRead | null>((now) => loadWildmind(now), {
   name: 'wildmind',
   ttlMs: TTL_MS,
+  staleMs: STALE_MS,
   budgetMs: 400,
   retryMs: RETRY_MS,
   fallback: null,

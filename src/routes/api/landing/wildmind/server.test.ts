@@ -15,6 +15,7 @@ import {
   FIXTURE_COOKIE,
   MAX_BYTES,
   RETRY_MS,
+  STALE_MS,
   TTL_MS,
   loadWildmind,
   pinFixtureState,
@@ -227,8 +228,24 @@ describe('loadWildmind', () => {
   });
 });
 
+/**
+ * The memo dates a read from when it lands (performance.now); held still
+ * here so the synthetic clocks below are the only time that passes.
+ */
+const holdClock = () => {
+  beforeEach(() => void vi.spyOn(performance, 'now').mockReturnValue(0));
+  afterEach(() => vi.restoreAllMocks());
+};
+/** A read once any refresh behind the last request has landed: what the next request is answered with. */
+const fresh = async (d: Date) => {
+  await readWildmind(d);
+  await readWildmind.settled();
+  return readWildmind(d);
+};
+
 describe('readWildmind', () => {
   const at = (ms: number) => new Date(Date.parse('2026-10-10T12:00:00Z') + ms);
+  holdClock();
 
   it('asks Wildmind at most about once a second, however many read at once', async () => {
     h.env.WILDMIND_SNAPSHOT_URL = URL_;
@@ -241,17 +258,45 @@ describe('readWildmind', () => {
     await Promise.all(Array.from({ length: 20 }, (_, i) => readWildmind(at((i * (TTL_MS - 1)) / 20))));
     expect(upstream).toHaveBeenCalledTimes(1);
     // A crowd polling every second for ten seconds: one read a second.
-    for (let s = 1; s <= 10; s++) await Promise.all(Array.from({ length: 30 }, (_, i) => readWildmind(at(s * 1_000 + i * 10))));
+    for (let s = 1; s <= 10; s++) {
+      await Promise.all(Array.from({ length: 30 }, (_, i) => readWildmind(at(s * 1_000 + i * 10))));
+      await readWildmind.settled();
+    }
     expect(upstream).toHaveBeenCalledTimes(11);
+  });
+
+  it('never keeps a request waiting on a slow Wildmind once warm, and reads behind it', async () => {
+    h.env.WILDMIND_SNAPSHOT_URL = URL_;
+    expect(STALE_MS).toBeGreaterThan(TTL_MS);
+    const warm = await fresh(at(0));
+    expect(warm?.snap.status).toBe('running');
+    // Wildmind turns slow (longer than the page budget).
+    const quick = upstream.getMockImplementation() as (input: URL | string) => Promise<Response>;
+    upstream.mockImplementation(async (input: URL | string) => {
+      await new Promise((r) => setTimeout(r, 600));
+      return quick(input);
+    });
+    const started = Date.now();
+    // Past the TTL: answered from the warm read at once while the next is fetched.
+    expect(await readWildmind(at(2_000))).toBe(warm);
+    // A page render a moment later, within the TTL of that request: no wait, no second read.
+    expect((await wildmindShowcase(at(2_100), null, 'place'))?.state).toBeDefined();
+    expect(await readWildmind(at(2_500))).toBe(warm);
+    expect(Date.now() - started).toBeLessThan(200);
+    expect(upstream).toHaveBeenCalledTimes(2);
+    await readWildmind.settled();
+    const next = await readWildmind(at(2_600));
+    expect(next).not.toBe(warm);
+    expect(upstream).toHaveBeenCalledTimes(2);
   });
 
   it('leaves Wildmind alone for a minute after a failure, answering from the last good read', async () => {
     h.env.WILDMIND_SNAPSHOT_URL = URL_;
-    const good = await readWildmind(at(0));
+    const good = await fresh(at(0));
     expect(good?.snap.status).toBe('running');
     upstream.mockImplementation(async () => new Response('down', { status: 502 }));
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
-    expect(await readWildmind(at(2_000))).toBe(good);
+    expect(await fresh(at(2_000))).toBe(good);
     expect(upstream).toHaveBeenCalledTimes(2);
     for (let t = 3_000; t < 2_000 + RETRY_MS; t += 1_000) expect(await readWildmind(at(t))).toBe(good);
     expect(upstream).toHaveBeenCalledTimes(2);
@@ -264,6 +309,7 @@ describe('readWildmind', () => {
 
 describe('the drawing, while the valley grows', () => {
   const at = (ms: number) => new Date(Date.parse('2026-10-10T12:00:00Z') + ms);
+  holdClock();
   const [seed, explored, rev] = recorded.terrainVersion.split('.');
   /** Wildmind answering with a version that moves on with every read, as while they explore. */
   const exploring = (version: (n: number) => string) => {
@@ -283,7 +329,7 @@ describe('the drawing, while the valley grows', () => {
     const traces = new Set<unknown>();
     const span = 60_000;
     for (let t = 0; t <= span; t += 1_000) {
-      const read = await readWildmind(at(t));
+      const read = await fresh(at(t));
       drawn.add(read!.snap.terrainVersion);
       traces.add(read!.traced);
       // The page is told the version drawn, and the map it is told of is that one.
@@ -301,7 +347,7 @@ describe('the drawing, while the valley grows', () => {
     const versions = [recorded.terrainVersion, `${seed}.${Number(explored) + 1}.${rev}`, `${Number(seed) + 1}.${explored}.${rev}`, `${Number(seed) + 1}.${explored}.${rev}x`];
     exploring((n) => versions[Math.min(n, versions.length - 1)]);
     const seen = [];
-    for (let t = 0; t < 4_000; t += 1_000) seen.push((await readWildmind(at(t)))!.snap.terrainVersion);
+    for (let t = 0; t < 4_000; t += 1_000) seen.push((await fresh(at(t)))!.snap.terrainVersion);
     expect(seen).toEqual([versions[0], versions[0], versions[2], versions[3]]);
   });
 
@@ -317,8 +363,8 @@ describe('the drawing, while the valley grows', () => {
       }
       return new Response(JSON.stringify(body));
     });
-    expect((await readWildmind(at(0)))!.snap.terrainVersion).toBe(recorded.terrainVersion);
-    expect((await readWildmind(at(1_000)))!.snap.terrainVersion).toBe(grown);
+    expect((await fresh(at(0)))!.snap.terrainVersion).toBe(recorded.terrainVersion);
+    expect((await fresh(at(1_000)))!.snap.terrainVersion).toBe(grown);
   });
 });
 
