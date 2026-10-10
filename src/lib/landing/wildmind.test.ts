@@ -101,6 +101,52 @@ describe('parseSnapshot', () => {
   });
 });
 
+describe('earlier lives with their generation numbers', () => {
+  /** The production shape on 2026-10-10: the sixth life, with only the first's death listed. */
+  const production = (lives: unknown[]) => {
+    const o = clone();
+    o.stats.generation = 6;
+    o.stats.earlierLives = lives;
+    return o;
+  };
+
+  it('keeps each life’s own n when every life has a valid one, strictly descending', () => {
+    const s = parseSnapshot(production([{ n: 1, days: 32, cause: 'cold' }]))!;
+    expect(s.stats.earlierLives).toEqual([{ n: 1, days: 32, cause: 'cold' }]);
+    const gaps = parseSnapshot(
+      production([
+        { n: 5, days: 3, cause: null },
+        { n: 3, days: 8, cause: 'thirst' },
+        { n: 1, days: 32, cause: 'cold' },
+      ]),
+    )!;
+    expect(gaps.stats.earlierLives.map((l) => l.n)).toEqual([5, 3, 1]);
+  });
+
+  it('carries n through to the showcase', () => {
+    const s = parseSnapshot(production([{ n: 1, days: 32, cause: 'cold' }]))!;
+    const w = project(s, NOW, NOW, traceGrid(s.terrain!, s.terrainVersion));
+    expect(w.generation).toBe(6);
+    expect(w.earlierLives).toEqual([{ n: 1, days: 32, cause: 'cold' }]);
+  });
+
+  it.each([
+    ['absent', [{ days: 32, cause: 'cold' }]],
+    ['absent on one life', [{ n: 3, days: 3, cause: null }, { days: 32, cause: 'cold' }]],
+    ['zero', [{ n: 0, days: 32, cause: 'cold' }]],
+    ['over the generation', [{ n: 7, days: 32, cause: 'cold' }]],
+    ['not a whole number', [{ n: 1.5, days: 32, cause: 'cold' }]],
+    ['a string', [{ n: '1', days: 32, cause: 'cold' }]],
+    ['repeated', [{ n: 2, days: 3, cause: null }, { n: 2, days: 32, cause: 'cold' }]],
+    ['ascending', [{ n: 1, days: 32, cause: 'cold' }, { n: 3, days: 3, cause: null }]],
+  ])('reads the whole list as unnumbered when n is %s, without failing the read', (_, lives) => {
+    const s = parseSnapshot(production(lives));
+    expect(s).not.toBeNull();
+    expect(s!.stats.earlierLives.map((l) => l.n)).toEqual(lives.map(() => null));
+    expect(s!.stats.earlierLives.map((l) => l.days)).toEqual(lives.map((l) => l.days));
+  });
+});
+
 describe('boundName', () => {
   it.each([
     ['Reed basket', 'Reed basket'],

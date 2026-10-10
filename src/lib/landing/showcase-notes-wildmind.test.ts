@@ -100,6 +100,21 @@ const CASES: WildmindShowcase[] = [
   at({ day: null, season: null, weather: null }),
   at({ night: 0.9, weather: "rain" }),
   at({ people: [] }),
+  // Lives left out: numbered, unnumbered, and between lives.
+  at({ generation: 6, day: 1, earlierLives: [{ n: 1, days: 32, cause: "cold" }] }),
+  at({ generation: 6, day: 1, earlierLives: [{ days: 32, cause: "cold" }] }),
+  at({
+    generation: 9,
+    earlierLives: [8, 7, 5, 2].map((n) => ({ n, days: n * 3, cause: null })),
+  }),
+  at({
+    state: "between-lives",
+    generation: 6,
+    earlierLives: [
+      { days: 5, cause: "thirst" },
+      { days: 32, cause: "cold" },
+    ],
+  }),
 ];
 
 /** Strip every figure the data put in; any digit left is a literal in the copy. */
@@ -290,10 +305,12 @@ describe("the family tree", () => {
   });
 
   it("sums up the lives past three in a ghost line and numbers on from them", () => {
+    // Unbroken: all eight lives before the ninth are listed. (Five unnumbered
+    // lives for the ninth would be a line with lives left out; see below.)
     const t = familyLines(
       at({
         generation: 9,
-        earlierLives: [5, 4, 3, 2, 1].map((d) => ({
+        earlierLives: [5, 4, 3, 2, 1, 1, 1, 1].map((d) => ({
           days: d * 7,
           cause: "cold" as const,
         })),
@@ -336,6 +353,171 @@ describe("the family tree", () => {
   it("is not drawn without a generation", () => {
     expect(familyLines(offlineShowcase())).toBeNull();
     expect(familyLines(at({ generation: null }))).toBeNull();
+  });
+});
+
+describe("the family tree with lives left out", () => {
+  // Wildmind leaves some lives out of earlierLives. Each line is named and
+  // numbered by its own n, the ghost line counts only listed lives, and
+  // without numbers no earlier life is named and none are counted before.
+  const lines = (w: WildmindShowcase) =>
+    familyLines(w)!.items.map((i) => [i.kind, i.text, i.n]);
+  const fair = (w: WildmindShowcase) =>
+    wildmindFair(w).find((r) => r.k === "Earlier lives")?.v;
+  /** Production on 2026-10-10: the sixth life on day one, only the first's death listed. */
+  const numbered = at({
+    generation: 6,
+    day: 1,
+    earlierLives: [{ n: 1, days: 32, cause: "cold" }],
+  });
+  const unnumbered = at({
+    generation: 6,
+    day: 1,
+    earlierLives: [{ days: 32, cause: "cold" }],
+  });
+
+  it("names the production line by its own numbers", () => {
+    expect(lines(numbered)).toEqual([
+      ["life", "the first lasted 32 days and died of the cold", 1],
+      ["living", "this one, on their first day", 6],
+    ]);
+    expect(familyLines(numbered)!.note).toMatch(/^when one dies/);
+    expect(fair(numbered)).toBe("the first, 32 days, the cold");
+  });
+
+  it("names no earlier life in the production line without numbers", () => {
+    expect(lines(unnumbered)).toEqual([
+      ["life", "an earlier one lasted 32 days and died of the cold", null],
+      ["living", "this one, on their first day", 6],
+    ]);
+    expect(fair(unnumbered)).toBe("32 days, the cold");
+  });
+
+  it("never counts the lives left out, nor says anything is missing", () => {
+    for (const w of [numbered, unnumbered]) {
+      const all = [...everything(w), ...wildmindFair(w).map((r) => r.v)].join(
+        " ",
+      );
+      expect(all).not.toMatch(
+        /fifth|before them|anything from|missing|hidden|bug|void/,
+      );
+    }
+  });
+
+  it("numbers a gap in the middle by each life, counting only those listed", () => {
+    const w = at({
+      generation: 9,
+      earlierLives: [
+        { n: 8, days: 10, cause: "cold" },
+        { n: 7, days: 20, cause: null },
+        { n: 5, days: 30, cause: "thirst" },
+        { n: 2, days: 40, cause: "starvation" },
+      ],
+    });
+    expect(lines(w)).toEqual([
+      ["ghost", "and one before them", undefined],
+      ["life", "the fifth lasted 30 days and died of thirst", 5],
+      ["life", "the seventh lasted 20 days", 7],
+      ["life", "the eighth lasted ten days and died of the cold", 8],
+      ["living", "this one, 16 days in so far", 9],
+    ]);
+    expect(fair(w)).toBe(
+      "the second, 40 days, hunger; the fifth, 30 days, thirst; the seventh, 20 days; the eighth, ten days, the cold",
+    );
+    const unnumberedMany = at({
+      generation: 9,
+      earlierLives: [1, 2, 3, 4].map((d) => ({ days: d, cause: null })),
+    });
+    expect(familyLines(unnumberedMany)!.items[0]).toEqual({
+      kind: "ghost",
+      text: "and others before them",
+    });
+    expect(
+      familyLines(unnumberedMany)!.items.filter((i) => i.kind === "life"),
+    ).toEqual(
+      [3, 2, 1].map((d) => ({
+        kind: "life",
+        text: `an earlier one lasted ${d === 1 ? "a day" : d === 2 ? "two days" : "three days"}`,
+        n: null,
+      })),
+    );
+  });
+
+  it("between lives, closes on the life just ended, with or without numbers", () => {
+    const ended = { state: "between-lives" as const, generation: 6, day: 5 };
+    const n = at({
+      ...ended,
+      earlierLives: [
+        { n: 6, days: 5, cause: "thirst" },
+        { n: 1, days: 32, cause: "cold" },
+      ],
+    });
+    const u = at({
+      ...ended,
+      earlierLives: [
+        { days: 5, cause: "thirst" },
+        { days: 32, cause: "cold" },
+      ],
+    });
+    expect(lines(n)).toEqual([
+      ["life", "the first lasted 32 days and died of the cold", 1],
+      ["ended", "the sixth lasted five days and died of thirst", 6],
+      ["ghost", "the seventh, next in line", undefined],
+    ]);
+    expect(lines(u)).toEqual([
+      ["life", "an earlier one lasted 32 days and died of the cold", null],
+      ["ended", "the sixth lasted five days and died of thirst", 6],
+      ["ghost", "the seventh, next in line", undefined],
+    ]);
+    expect(stateNote(n)).toBe(
+      "JKai died of thirst on day five. The seventh of the line is next.",
+    );
+    expect(stateNote(u)).toBe(stateNote(n));
+    expect(fair(u)).toBe("32 days, the cold; the sixth, five days, thirst");
+    // The life just ended left out: nothing ends the list, and no cause is borrowed.
+    const gone = at({
+      ...ended,
+      earlierLives: [{ n: 1, days: 32, cause: "cold" }],
+    });
+    expect(lines(gone)).toEqual([
+      ["life", "the first lasted 32 days and died of the cold", 1],
+      ["ghost", "the seventh, next in line", undefined],
+    ]);
+    expect(stateNote(gone)).toBe(
+      "JKai died on day five. The seventh of the line is next.",
+    );
+  });
+
+  it("reads an unbroken numbered line exactly as an unnumbered one", () => {
+    const number = (w: WildmindShowcase): WildmindShowcase => {
+      const top =
+        w.state === "between-lives" ? w.generation! : w.generation! - 1;
+      return {
+        ...w,
+        earlierLives: w.earlierLives.map((l, j) => ({ ...l, n: top - j })),
+      };
+    };
+    const unbroken = [
+      live,
+      at({ generation: 1, earlierLives: [], day: 1 }),
+      at({
+        generation: 9,
+        earlierLives: [5, 4, 3, 2, 1, 1, 1, 1].map((d) => ({
+          days: d * 7,
+          cause: "cold" as const,
+        })),
+      }),
+      at({
+        state: "between-lives",
+        earlierLives: [{ days: 16, cause: "cold" }, ...live.earlierLives],
+      }),
+    ];
+    for (const w of unbroken) {
+      expect(familyLines(number(w))).toEqual(familyLines(w));
+      expect(familyLines(w)!.items.every((i) => !("n" in i))).toBe(true);
+      expect(wildmindFair(number(w))).toEqual(wildmindFair(w));
+      expect(stateNote(number(w))).toEqual(stateNote(w));
+    }
   });
 });
 

@@ -13,7 +13,6 @@
   // chapter can draw its margin chart in once as its figure counts up.
   import type { Visual } from '$lib/landing/showcase-sentence';
   import { dayName } from '$lib/landing/rhythm';
-  import { countWord } from '$lib/landing/sentence';
 
   let { visual: v, compact = false }: { visual: Visual; compact?: boolean } = $props();
 
@@ -130,7 +129,7 @@
   <!-- Wildmind's line: a bar a life, oldest at the top, as long as it lasted; the open one is this life. -->
   <span class="ss-vh">{v.summary}</span>
   <span class="ss-vis ss-lives" class:ss-compact={compact} aria-hidden="true">
-    {#if v.more > 0}<span class="ss-ends ss-more">and {countWord(v.more)} before them</span>{/if}
+    {#if v.before}<span class="ss-ends ss-more">{v.before}</span>{/if}
     {#each v.rows as r, i (i)}
       {@const x = Math.round(r.share * 1000) / 10}
       <span class="ss-life ss-g" class:ss-open={r.open} style:--i={i * 3}>

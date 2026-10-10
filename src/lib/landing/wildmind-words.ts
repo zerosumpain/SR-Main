@@ -33,6 +33,54 @@ export function daysWord(days: number): string {
   return n === 1 ? 'a day' : `${countWord(n)} days`;
 }
 
+/** An earlier life with its place in the line: `n` is its generation, null when that isn't known. */
+export type PlacedLife = { n: number | null; days: number; cause: Cause | null };
+
+export interface LineOfLives {
+  /** Every listed life, newest first (earlierLives' order), each with its generation when known. */
+  lives: PlacedLife[];
+  /** The list runs back unbroken from this life (or the one just ended) to the first. */
+  unbroken: boolean;
+  /** Every listed life has its generation, so each can be called "the fifth". */
+  numbered: boolean;
+  /** Between lives, the life that has just ended, when it is listed. */
+  ended: PlacedLife | null;
+  /** The lives before this one (or before the one just ended), newest first. */
+  before: PlacedLife[];
+}
+
+/**
+ * Where each earlier life sits in the line. Wildmind leaves some lives out, so
+ * earlierLives runs unbroken back from this generation (or, between lives,
+ * from the one just ended, which leads it) only when every life's own `n` says
+ * so, or, with no numbers, when its length says so. Otherwise each life keeps
+ * its own `n` when every one has a valid one, strictly descending, and failing
+ * that none has a number (between lives the one leading the list is still the
+ * one just ended). The copy then describes only the lives listed.
+ */
+export function lineOfLives(w: Pick<WildmindShowcase, 'state' | 'generation' | 'earlierLives'>): LineOfLives {
+  const g = w.generation;
+  const between = w.state === 'between-lives';
+  const list = w.earlierLives;
+  const top = g == null ? null : between ? g : g - 1;
+  const valid = (n: unknown, i: number): boolean =>
+    typeof n === 'number' && Number.isInteger(n) && n >= 1 && (g == null || n <= g) && (i === 0 || n < (list[i - 1].n as number));
+  const own = list.every((l, i) => valid(l.n, i));
+  const lives: PlacedLife[] = list.map((l, j) => ({
+    n: own ? (l.n as number) : top != null && list.length === top ? top - j : between && j === 0 && g != null ? g : null,
+    days: l.days,
+    cause: l.cause,
+  }));
+  const unbroken = top != null && lives.length === top && lives.every((l, j) => l.n === top - j);
+  const ended = between && lives.length && (lives[0].n == null || lives[0].n === g) ? lives[0] : null;
+  return { lives, unbroken, numbered: lives.every((l) => l.n != null), ended, before: ended ? lives.slice(1) : lives };
+}
+
+/** An earlier life without its number, in turn: "one", "a later one", "another". */
+export function unnumberedWord(i: number, first = 'one'): string {
+  return i === 0 ? first : i === 1 ? 'a later one' : 'another';
+}
+
 /** The weather as a word that follows "it's" or "a … day". */
 export const WEATHER_WORD: Record<Weather, string> = {
   clear: 'clear',
@@ -90,8 +138,7 @@ export function stateLine(w: WildmindShowcase): string | null {
     case 'paused':
       return "The valley's paused just now.";
     case 'between-lives': {
-      const life = w.earlierLives[0];
-      const cause = causeWord(life?.cause);
+      const cause = causeWord(lineOfLives(w).ended?.cause);
       const name = mainName(w);
       const when = w.day != null ? ` on day ${countWord(w.day)}` : '';
       const died = cause ? `${name} died of ${cause}${when}.` : `${name} died${when}.`;

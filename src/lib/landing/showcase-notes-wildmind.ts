@@ -26,6 +26,7 @@ import {
   causeWord,
   daysWord,
   doingWord,
+  lineOfLives,
   mainName,
   ordinalWord,
 } from "./wildmind-words";
@@ -111,7 +112,7 @@ export function stateNote(
     case "paused":
       return "the valley’s paused just now, so everyone’s stopped where they stood.";
     case "between-lives": {
-      const cause = causeWord(w.earlierLives[0]?.cause);
+      const cause = causeWord(lineOfLives(w).ended?.cause);
       const when = w.day != null ? ` on day ${countWord(w.day)}` : "";
       const died = cause
         ? `${mainName(w)} died of ${cause}${when}.`
@@ -396,26 +397,36 @@ export function placesLine(n: number | null, written: boolean): string | null {
 export interface TreeItem {
   kind: "life" | "living" | "ended" | "ghost";
   text: string;
+  /**
+   * The item's number in the margin, when the lines don't simply count on
+   * from `start` (a line with lives left out): the generation, or null for a
+   * life whose generation isn't known (no number is written). Absent when
+   * they do.
+   */
+  n?: number | null;
 }
 
-/** An earlier life in a line: "the first lasted 32 days and died of the cold". */
+/** An earlier life in a line: "the first lasted 32 days and died of the cold", or "an earlier one lasted …" without its number. */
 function lifeLine(
-  n: number,
+  n: number | null,
   life: {
     days: number;
     cause: WildmindShowcase["earlierLives"][number]["cause"];
   },
 ): string {
   const cause = causeWord(life.cause);
-  return `the ${ordinalWord(n)} lasted ${daysWord(life.days)}${cause ? ` and died of ${cause}` : ""}`;
+  const who = n != null ? `the ${ordinalWord(n)}` : "an earlier one";
+  return `${who} lasted ${daysWord(life.days)}${cause ? ` and died of ${cause}` : ""}`;
 }
 
 /**
- * The family tree, oldest first, on the lines: at most three earlier lives
- * (a ghost line sums up any before them), then this one. Between lives the
- * one that just ended (earlierLives[0]) closes the list, and a ghost line
- * says the next is on its way. `start` is the first counted item's number.
- * Null when the generation is not known.
+ * The family tree, oldest first, on the lines: at most three listed earlier
+ * lives (a ghost line sums up the listed ones before them), then this one.
+ * Between lives the one that just ended closes the list, and a ghost line
+ * says the next is on its way. Each life is named by its own generation
+ * (lineOfLives); one whose generation isn't known goes without. `start` is
+ * the first counted item's number, and when the line has lives left out each
+ * item carries its own `n` instead. Null when the generation is not known.
  */
 export function familyLines(
   w: Pick<WildmindShowcase, "state" | "generation" | "earlierLives" | "day">,
@@ -423,18 +434,24 @@ export function familyLines(
   const g = w.generation;
   if (g == null || w.state === "offline") return null;
   const ended = w.state === "between-lives";
-  // The ordinal of earlierLives[j] (newest first): between lives the newest is this generation.
-  const top = ended ? g : g - 1;
-  const shown = w.earlierLives.slice(0, TREE_CAP);
-  const before = Math.max(0, top - shown.length);
+  const line = lineOfLives(w);
+  const shown = line.lives.slice(0, TREE_CAP);
+  const before = line.lives.length - shown.length;
+  // An unbroken line counts on from `start`; any other numbers each item.
+  const own = (n: number | null) => (line.unbroken ? {} : { n });
   const items: TreeItem[] = [];
   if (before > 0)
-    items.push({ kind: "ghost", text: `and ${countWord(before)} before them` });
-  [...shown].reverse().forEach((life, i) => {
-    const n = top - (shown.length - 1 - i);
     items.push({
-      kind: ended && i === shown.length - 1 ? "ended" : "life",
-      text: lifeLine(n, life),
+      kind: "ghost",
+      text: line.numbered
+        ? `and ${countWord(before)} before them`
+        : "and others before them",
+    });
+  [...shown].reverse().forEach((life) => {
+    items.push({
+      kind: life === line.ended ? "ended" : "life",
+      text: lifeLine(life.n, life),
+      ...own(life.n),
     });
   });
   if (ended)
@@ -451,12 +468,18 @@ export function familyLines(
           : w.day <= 1
             ? "this one, on their first day"
             : `this one, ${countWord(w.day)} days in so far`,
+      ...own(g),
     });
   const note =
     g > 1 || ended
       ? "when one dies, Claude reads back over the life and leaves the next a few lessons, which is roughly how families work too."
       : "they’re the first of the line, so nobody’s had to pass anything on yet.";
-  return { start: top - shown.length + 1, items, note };
+  const top = ended ? g : g - 1;
+  return {
+    start: line.unbroken ? top - shown.length + 1 : (shown.at(-1)?.n ?? g),
+    items,
+    note,
+  };
 }
 
 export const TREE_ABSENT = "the family tree isn’t answering just now.";
@@ -474,14 +497,15 @@ export function wildmindFair(w: WildmindShowcase): FairRow[] {
       ? `a ${WEATHER_ADJ[w.weather]} ${isNight(w) ? "night" : "day"}`
       : null,
   ].filter(Boolean);
-  const lives = [...w.earlierLives]
+  const lives = [...lineOfLives(w).lives]
     .reverse()
-    .map((l, i, all) => {
-      const g = w.generation ?? all.length + 1;
-      const n =
-        (w.state === "between-lives" ? g : g - 1) - (all.length - 1 - i);
+    .map((l) => {
       const cause = causeWord(l.cause);
-      return [`the ${ordinalWord(n)}`, daysWord(l.days), cause]
+      return [
+        l.n != null ? `the ${ordinalWord(l.n)}` : null,
+        daysWord(l.days),
+        cause,
+      ]
         .filter(Boolean)
         .join(", ");
     })

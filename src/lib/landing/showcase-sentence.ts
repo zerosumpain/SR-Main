@@ -79,7 +79,15 @@ export type Visual =
   | { kind: 'deploys'; cells: DeployCell[]; summary: string }
   | { kind: 'quotes'; lines: string[] }
   | { kind: 'list'; items: string[] }
-  | { kind: 'lives'; rows: { label: string; share: number; open: boolean }[]; more: number; summary: string };
+  | {
+      kind: 'lives';
+      rows: { label: string; share: number; open: boolean }[];
+      /** Listed lives left off the top. */
+      more: number;
+      /** The line over the bars for those, or null with none. */
+      before: string | null;
+      summary: string;
+    };
 
 export interface Note {
   head: string;
@@ -898,7 +906,7 @@ export function chapterStrings(c: ChapterCopy): string[] {
           ...('summary' in s.note.visual ? [s.note.visual.summary] : []),
           ...(s.note.visual.kind === 'list' ? s.note.visual.items : []),
           ...(s.note.visual.kind === 'quotes' ? s.note.visual.lines : []),
-          ...(s.note.visual.kind === 'lives' ? s.note.visual.rows.map((r) => r.label) : []),
+          ...(s.note.visual.kind === 'lives' ? [...s.note.visual.rows.map((r) => r.label), s.note.visual.before ?? ''] : []),
         ]
       : [],
   );

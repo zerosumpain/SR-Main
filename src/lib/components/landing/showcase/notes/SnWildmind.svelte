@@ -108,7 +108,10 @@
       {#if tree}
         <ol class="wm-tree" style:counter-reset="wm-life {tree.start - 1}">
           {#each tree.items as it, i (i)}
-            <li data-kind={it.kind}>{it.text}{#if it.kind === 'living'}<span class="wm-dot" aria-hidden="true"></span>{/if}</li>
+            <li
+              data-kind={it.kind}
+              data-unnumbered={it.n === null ? '' : undefined}
+              style:counter-set={it.n != null ? `wm-life ${it.n}` : undefined}>{it.text}{#if it.kind === 'living'}<span class="wm-dot" aria-hidden="true"></span>{/if}</li>
           {/each}
         </ol>
         <p class="sn-a wm-gap">{tree.note}</p>
@@ -128,7 +131,8 @@
   - .wm-name: An invented thing's name, upright inside the italic aside, as a title is set.
   - .wm-small svg, .wm-blank: The small readings: a drawing two rules tall above the figure
     (Daydream's measures).
-  - .wm-tree: The family tree, oldest first, numbered in the margin's orange.
+  - .wm-tree: The family tree, oldest first, numbered in the margin's orange. With lives
+    left out, each item sets its own number (counter-set) and a life with none is unnumbered.
 -->
 
 <style>
@@ -239,7 +243,8 @@
     color: var(--text-ghost);
     counter-increment: none;
   }
-  .wm-tree li[data-kind='ghost']::before {
+  .wm-tree li[data-kind='ghost']::before,
+  .wm-tree li[data-unnumbered]::before {
     content: none;
   }
   .wm-dot {

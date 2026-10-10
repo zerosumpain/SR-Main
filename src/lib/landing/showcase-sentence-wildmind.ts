@@ -32,7 +32,20 @@ import {
 } from './showcase-sentence';
 import { MODEL_FALLBACK, type TerrainClass, type Weather, type WildmindMap, type WildmindPerson, type WildmindShowcase } from './wildmind';
 import { frameRect } from './wildmind-frame';
-import { andList, causeWord, counted as placesWord, daysWord, doingWord, habitWord, mainName, mapSummary, modelsLine, ordinalWord } from './wildmind-words';
+import {
+  andList,
+  causeWord,
+  counted as placesWord,
+  daysWord,
+  doingWord,
+  habitWord,
+  lineOfLives,
+  mainName,
+  mapSummary,
+  modelsLine,
+  ordinalWord,
+  unnumberedWord,
+} from './wildmind-words';
 
 const T = (s: string): Seg => ({ t: 'text', s });
 const W = (id: string, word: string, note?: Note, tone: Tone = 'accent'): Seg => ({ t: 'word', id, word, tone, note });
@@ -192,44 +205,53 @@ function stateSide(w: WildmindShowcase): SideLine[] {
   }
 }
 
-/** The lives before the current one (or the one just ended), oldest first. */
-function livesBefore(w: WildmindShowcase) {
-  const before = w.state === 'between-lives' ? w.earlierLives.slice(1) : w.earlierLives;
-  return [...before].reverse();
+/** "the fifth lasted 32 days and died of the cold", or, without its number, "one lasted …". */
+function lastedClause(who: string, l: { days: number; cause: WildmindShowcase['earlierLives'][number]['cause'] }): string {
+  const cause = causeWord(l.cause);
+  return `${who} lasted ${daysWord(l.days)}${cause ? ` and died of ${cause}` : ''}`;
 }
 
-/** The line as bars, oldest first: every earlier life, then this one (open) unless between lives. At most six. */
+/**
+ * The line as bars, oldest first: every listed earlier life, then this one
+ * (open) unless between lives. At most six; `more` counts the listed lives
+ * left off the top. Each bar takes its own life's ordinal (lineOfLives), and
+ * a life whose number isn't known goes without one.
+ */
 export function lifeRows(w: WildmindShowcase): Extract<Visual, { kind: 'lives' }> | null {
   if (w.generation == null) return null;
-  const ended = [...w.earlierLives].reverse().map((l) => ({ days: l.days, cause: l.cause, open: false }));
-  const open = w.state !== 'between-lives' && w.day != null ? [{ days: w.day, cause: null, open: true }] : [];
+  const line = lineOfLives(w);
+  const ended = [...line.lives].reverse().map((l) => ({ n: l.n, days: l.days, cause: l.cause, open: false }));
+  const open = w.state !== 'between-lives' && w.day != null ? [{ n: w.generation, days: w.day, cause: null, open: true }] : [];
   const all = [...ended, ...open];
   const shown = all.slice(-6);
   if (!shown.length) return null;
-  const more = Math.max(0, w.generation - shown.length);
+  const more = all.length - shown.length;
   const longest = Math.max(1, ...shown.map((r) => r.days));
-  const first = w.generation - shown.length + 1;
-  const rows = shown.map((r, i) => {
-    const ord = ordinalWord(first + i);
+  const rows = shown.map((r) => {
+    const ord = r.n != null ? [ordinalWord(r.n)] : [];
     const cause = causeWord(r.cause);
     return {
-      label: r.open ? `${ord} · day ${countWord(w.day ?? 0)} · this one` : [ord, daysWord(r.days), ...(cause ? [cause] : [])].join(' · '),
+      label: r.open ? `${ord[0]} · day ${countWord(w.day ?? 0)} · this one` : [...ord, daysWord(r.days), ...(cause ? [cause] : [])].join(' · '),
       share: Math.round((r.days / longest) * 1000) / 1000,
       open: r.open,
     };
   });
-  const said = shown.map((r, i) => {
-    const ord = ordinalWord(first + i);
+  let unnumbered = 0;
+  const said = shown.map((r) => {
     if (r.open) return `this one is on day ${countWord(w.day ?? 0)}`;
-    const cause = causeWord(r.cause);
-    return `the ${ord} lasted ${daysWord(r.days)}${cause ? ` and died of ${cause}` : ''}`;
+    return lastedClause(r.n != null ? `the ${ordinalWord(r.n)}` : unnumberedWord(unnumbered++), r);
   });
   const told = said.length > 1 ? `${said.slice(0, -1).join(', ')}, and ${said[said.length - 1]}` : said[0];
   const summary =
     `${capWord(w.generation)} ${w.generation === 1 ? 'life' : 'lives'} so far.` +
-    (more ? ` The ${more === 1 ? 'one' : countWord(more)} before ${more === 1 ? 'is' : 'are'} left off.` : '') +
+    (more
+      ? line.numbered
+        ? ` The ${more === 1 ? 'one' : countWord(more)} before ${more === 1 ? 'is' : 'are'} left off.`
+        : ' Earlier ones are left off.'
+      : '') +
     ` ${told.charAt(0).toUpperCase()}${told.slice(1)}.`;
-  return { kind: 'lives', rows, more, summary };
+  const before = more ? (line.numbered ? `and ${countWord(more)} before them` : 'and others before them') : null;
+  return { kind: 'lives', rows, more, before, summary };
 }
 
 export interface PlateWords {
@@ -302,21 +324,25 @@ export function plateWords(w: WildmindShowcase): PlateWords | null {
   };
 }
 
-/** "the first lasted 32 days and died of the cold", for each life before this one. */
+/**
+ * "the first lasted 32 days and died of the cold", for each listed life before
+ * this one (or before the one just ended), by its own ordinal; four or more
+ * are summed up as a range. Counts and ranges are of the lives listed, never
+ * of the generation, and a life without its number goes without one.
+ */
 function lifeClauses(w: WildmindShowcase): Seg[] {
-  const gen = w.generation ?? 1;
-  const n = gen - 1;
-  const before = livesBefore(w);
-  if (!n || !before.length) return [];
-  if (n >= 4) {
+  const line = lineOfLives(w);
+  const before = [...line.before].reverse();
+  const k = before.length;
+  if (!k) return [];
+  if (k >= 4) {
     const days = before.map((l) => l.days);
-    return [T(` The ${countWord(n)} before them lasted anything from ${daysWord(Math.min(...days))} to ${daysWord(Math.max(...days))}.`)];
+    const [lo, hi] = [daysWord(Math.min(...days)), daysWord(Math.max(...days))];
+    const who = line.numbered ? `The ${countWord(k)} before them` : 'Earlier ones';
+    return [T(lo === hi ? ` ${who} each lasted ${lo}.` : ` ${who} lasted anything from ${lo} to ${hi}.`)];
   }
-  const first = n - before.length + 1;
-  const parts = before.map((l, i) => {
-    const cause = causeWord(l.cause);
-    return [T(`the ${ordinalWord(first + i)} lasted ${daysWord(l.days)}${cause ? ` and died of ${cause}` : ''}`)];
-  });
+  let unnumbered = 0;
+  const parts = before.map((l) => [T(lastedClause(l.n != null ? `the ${ordinalWord(l.n)}` : unnumberedWord(unnumbered++, 'one before them'), l))]);
   const joined = joinClauses(parts, ', and ').map((s) => (s.t === 'text' ? s.s : '')).join('');
   return [T(` ${joined.charAt(0).toUpperCase()}${joined.slice(1)}.`)];
 }
@@ -367,7 +393,7 @@ export function wildmindChapter(w: WildmindShowcase): ChapterCopy {
     else if (w.state === 'paused') p1.push(T(' It’s '), day(), T(' of this life, and the valley’s paused just now.'));
     else if (w.state === 'stale') p1.push(T(' This is how the valley stood on '), day(), T(', and it isn’t answering just now.'));
     else {
-      const cause = causeWord(w.earlierLives[0]?.cause);
+      const cause = causeWord(lineOfLives(w).ended?.cause);
       p1.push(T(' '), N('main', main), T(cause ? ` died of ${cause} on ` : ' died on '), day(), T(', and the next of the line wakes up in a fresh valley shortly.'));
     }
   }
