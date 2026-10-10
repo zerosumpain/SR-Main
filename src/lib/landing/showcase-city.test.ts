@@ -36,7 +36,7 @@ const light = (alt: number, rising: boolean) => cityLight(skyAt(alt, rising), al
 const ALL: Array<{ at: string; c: CityLight }> = ALTS.flatMap((alt) =>
   [true, false].map((rising) => ({ at: `${alt}° ${rising ? 'rising' : 'setting'}`, c: light(alt, rising) })),
 );
-const CHAPTERS: Chapter[] = ['observatory', 'walk', 'house', 'works'];
+const CHAPTERS: Chapter[] = ['observatory', 'walk', 'house', 'works', 'wildmind'];
 
 /** The faintest cream any of the showcase's type is set in. */
 const CREAM = [237, 228, 212, 0.86];

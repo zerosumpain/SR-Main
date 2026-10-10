@@ -182,6 +182,13 @@ export interface WildmindShowcase {
   /** Null on a ?have= hit (the client keeps its own) and before any map. */
   map: WildmindMap | null;
   mapVersion: string | null;
+  /**
+   * A short key for where the map sits in the valley (frameKey): the same key
+   * across two map versions means a position in map units stands for the same
+   * place in both, so the page can walk people on from where they were.
+   * Optional; null or absent before any map.
+   */
+  frame?: string | null;
   people: WildmindPerson[];
   /** Species words the animals index into (SPECIES only; others become "animal"). */
   species: string[];
@@ -218,6 +225,14 @@ export interface WildmindShowcase {
    * that view, or its poll with ?view=notes); `map` is then the pencilled map.
    */
   notes?: WildmindNotesSheet | null;
+  /**
+   * The place view's model under glass (wildmind-glass.ts), built on the
+   * server once per terrain version. Only when the place view asked for it
+   * (its SSR, or its poll with ?view=place); `map` is then null, since the
+   * place view never draws the flat map. Null on a ?have= hit (the page keeps
+   * its own) and with nothing seen.
+   */
+  glass?: import('./wildmind-glass').WildmindGlass | null;
 }
 
 /** The notes view's map, ready to draw (with the pencilled `map` beside it). */
@@ -618,6 +633,34 @@ export function toMap(frame: MapFrame, x: number, z: number): [number, number] {
 }
 
 /**
+ * A short, opaque key for a frame (no world coordinates leave the server):
+ * equal keys mean map units stand for the same places.
+ */
+export function frameKey(frame: MapFrame): string {
+  let h = 0x811c9dc5;
+  for (const c of `${frame.x0},${frame.z0},${frame.per}`) h = Math.imul(h ^ c.charCodeAt(0), 0x01000193);
+  return (h >>> 0).toString(36);
+}
+
+/**
+ * Whether terrain version `b` is version `a`'s valley with only more of it
+ * seen. Wildmind's versions are `seed.explored.rev`, and only the middle
+ * count moves as the two of them explore; a new seed (a new life) or a new
+ * rev (the ground itself changed) is a different valley, as is any version
+ * in another shape.
+ */
+export function grownOnly(a: string, b: string): boolean {
+  const la = lifeOf(a);
+  return la !== null && la === lifeOf(b);
+}
+
+/** A terrain version without its explored count (`seed.rev`): the same for every version of one valley as it grows, null for a version in another shape. */
+export function lifeOf(version: string): string | null {
+  const m = /^(.+)\.(\d+)\.([^.]+)$/.exec(version);
+  return m ? `${m[1]}.${m[3]}` : null;
+}
+
+/**
  * A checked snapshot to what the browser gets. `traced` is the map for the
  * snapshot's terrain version (from the tracer), or null when there is none.
  * Positions become map units; anything off the map is left out.
@@ -669,6 +712,7 @@ export function project(
     night: r2(1 - snap.time.daylight),
     map,
     mapVersion: map ? map.version : null,
+    frame: frame ? frameKey(frame) : null,
     people,
     species,
     animals: snap.animals.flatMap(([i, x, z, tame]) => {

@@ -93,13 +93,14 @@ export function scatter(n: number, area: Box, avoid: Box[], seed: number, gap = 
  * `ppu` is px per scene unit (about 1.1 to 1.2 across the widths that pin).
  */
 export function labelBox(
-  p: { x: number; y: number; lead: number; dir?: 'up' | 'down' | 'side'; hang: 'l' | 'r' },
+  p: { x: number; y: number; lead: number; dir?: 'up' | 'down' | 'side' | 'plate'; hang: 'l' | 'r' },
   w = 190,
   h = 70,
   ppu = 1.1,
 ): Box {
   const lead = p.lead / ppu;
   const dir = p.dir ?? 'up';
+  if (dir === 'plate') return { x: p.x - w / 2, y: p.y, w, h };
   if (dir === 'side') {
     const x = p.hang === 'r' ? p.x + lead : p.x - lead - w;
     return { x, y: p.y - h / 2, w, h };

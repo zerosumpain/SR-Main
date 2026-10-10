@@ -170,3 +170,66 @@ export function mapSummary(w: WildmindShowcase, hasMap = w.map != null): string 
   const doing = w.people.map((p) => doingWord(p));
   return `A map of ${who}${where}.${doing.length ? ` ${andList(doing)}.` : ''}`;
 }
+
+// ── Shared by the views that set the chapter as prose and as a picture ──────
+// (the sentence view's essay, the place view's model under glass). Here, not
+// in either view's module, so neither view's chunk carries the other's code.
+
+/** The weather after "a … day". */
+export const WEATHER_ADJ: Record<Weather, string> = {
+  clear: 'clear',
+  cloudy: 'cloudy',
+  rain: 'wet',
+  storm: 'stormy',
+  snow: 'snowy',
+  fog: 'foggy',
+};
+
+/** "reed basket" from "Reed basket" or "Reed Basket": every word lower case but an acronym ("UV"). */
+export function sentenceCase(name: string): string {
+  return name.replace(/\S+/g, (word) => (/^[A-Z0-9]{2,}$/.test(word.replace(/[^A-Za-z0-9]/g, '')) ? word : word.toLowerCase()));
+}
+
+/** The people in a fixed order: the main character first. */
+export const sorted = <P extends Pick<WildmindPerson, 'id'>>(w: { people: P[] }): P[] =>
+  [...w.people].sort((a, b) => (a.id === b.id ? 0 : a.id === 'main' ? -1 : 1));
+
+/** The picture is a still, not the valley now: between lives, stale, or paused. */
+export const isStill = (w: Pick<WildmindShowcase, 'state'>) => w.state === 'between-lives' || w.state === 'stale' || w.state === 'paused';
+
+/** What someone was doing when the picture was last drawn: "Wren was at work near Bittern Beds". */
+export function pastDoing(p: Pick<WildmindPerson, 'name' | 'doing' | 'alive' | 'near'>, ended: boolean): string {
+  if (!p.alive) return ended ? `${p.name} died` : `${p.name} was dead`;
+  return p.near ? `${p.name} was ${p.doing} near ${p.near}` : `${p.name} was ${p.doing}`;
+}
+
+/** "the fifth lasted 32 days and died of the cold", or, without its number, "one lasted …". */
+export function lastedClause(who: string, l: { days: number; cause: Cause | null }): string {
+  const cause = causeWord(l.cause);
+  return `${who} lasted ${daysWord(l.days)}${cause ? ` and died of ${cause}` : ''}`;
+}
+
+/**
+ * The lives before this one (or before the one just ended) in a sentence:
+ * "The first lasted 32 days and died of the cold, and the second lasted three
+ * days and died of hunger." Each listed life by its own ordinal (lineOfLives);
+ * four or more are summed up as a range. Counts and ranges are of the lives
+ * listed, never of the generation, and a life without its number goes
+ * without one. Empty when none are listed.
+ */
+export function livesSentence(w: Pick<WildmindShowcase, 'state' | 'generation' | 'earlierLives'>): string {
+  const line = lineOfLives(w);
+  const before = [...line.before].reverse();
+  const k = before.length;
+  if (!k) return '';
+  if (k >= 4) {
+    const days = before.map((l) => l.days);
+    const [lo, hi] = [daysWord(Math.min(...days)), daysWord(Math.max(...days))];
+    const who = line.numbered ? `The ${countWord(k)} before them` : 'Earlier ones';
+    return lo === hi ? `${who} each lasted ${lo}.` : `${who} lasted anything from ${lo} to ${hi}.`;
+  }
+  let unnumbered = 0;
+  const parts = before.map((l) => lastedClause(l.n != null ? `the ${ordinalWord(l.n)}` : unnumberedWord(unnumbered++, 'one before them'), l));
+  const joined = parts.map((p, i) => (i === 0 ? p : `${i === parts.length - 1 ? ', and ' : ', '}${p}`)).join('');
+  return `${joined.charAt(0).toUpperCase()}${joined.slice(1)}.`;
+}

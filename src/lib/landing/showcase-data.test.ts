@@ -34,7 +34,7 @@ describe('within', () => {
 });
 
 describe('memoised', () => {
-  const opts = { name: 'test', ttlMs: 1000, budgetMs: 50, fallback: null as number | null };
+  const opts = { name: 'test', ttlMs: 1000, budgetMs: 50, fallback: null as number | null, clock: () => 0 };
   const at = (ms: number) => new Date(ms);
 
   it('reuses a good answer for the TTL, then reads again', async () => {
@@ -78,6 +78,54 @@ describe('memoised', () => {
     expect(log).toHaveBeenCalledTimes(1);
     expect(log.mock.calls[0][0]).toMatch(/showcase test unavailable: relation does not exist/);
     expect(await read(at(1200))).toBe(5);
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it('dates an answer from when its read landed, so a read slower than the TTL still earns hits', async () => {
+    let clockMs = 0;
+    const load = vi.fn(async () => {
+      clockMs += 1500;
+      return 4;
+    });
+    const read = memoised(load, { ...opts, clock: () => clockMs });
+    expect(await read(at(0))).toBe(4);
+    // Asked at 0, landed at 1500: still fresh at 2400.
+    expect(await read(at(2400))).toBe(4);
+    expect(load).toHaveBeenCalledTimes(1);
+    await read(at(2500));
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it('with staleMs, answers a warm request at once and refreshes behind it', async () => {
+    let n = 0;
+    const load = vi.fn(() => later(200, ++n));
+    const read = memoised(load, { ...opts, staleMs: 20_000 });
+    // Cold: waits up to the budget, then keeps the late answer.
+    expect(await read(at(0))).toBeNull();
+    await read.settled();
+    // Past the TTL but warm: answered from the last read without waiting for the slow one.
+    const t0 = performance.now();
+    expect(await read(at(1500))).toBe(1);
+    expect(performance.now() - t0).toBeLessThan(opts.budgetMs);
+    // A second request inside the TTL while that refresh runs: no wait, no second read.
+    expect(await read(at(1600))).toBe(1);
+    expect(load).toHaveBeenCalledTimes(2);
+    await read.settled();
+    expect(await read(at(1700))).toBe(2);
+    expect(load).toHaveBeenCalledTimes(2);
+    // Older than staleMs: waits again (up to the budget), as a cold read does.
+    expect(await read(at(40_000))).toBe(2);
+    expect(load).toHaveBeenCalledTimes(3);
+    await read.settled();
+  });
+
+  it('drops a read that lands after a reset', async () => {
+    const load = vi.fn(() => later(30, 6));
+    const read = memoised(load, opts);
+    void read(at(0));
+    read.reset();
+    await later(50, null);
+    expect(await read(at(10))).toBe(6);
     expect(load).toHaveBeenCalledTimes(2);
   });
 

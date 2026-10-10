@@ -226,12 +226,14 @@ function wantsFixture(): boolean {
 export interface LoadShowcaseOptions {
   /** The page's own rambler reading, so the bands cost no second query. */
   day?: Promise<DayFlags>;
-  /** The view the page is rendered in: the notes get Wildmind's map drawn their way on the server. */
+  /** The view the page is rendered in: the notes and the place get Wildmind drawn their way on the server. */
   view?: string;
+  /** Dev only: the preview fixture's Wildmind state this browser pinned with ?wm= (wildmind.server.ts). */
+  wildmindState?: string;
 }
 
-/** The Wildmind drawing a page view wants from the server (only the notes draw theirs there). */
-const wildmindView = (view: string | undefined): WildmindView | null => (view === 'notes' ? 'notes' : null);
+/** The Wildmind drawing a page view wants from the server: the notes' pencilled map, the place's model under glass. */
+const wildmindView = (view: string | undefined): WildmindView | null => (view === 'notes' || view === 'place' ? view : null);
 
 export async function loadShowcase(now = new Date(), opts: LoadShowcaseOptions = {}): Promise<ShowcaseData> {
   const rules = daydreamRules();
@@ -241,7 +243,7 @@ export async function loadShowcase(now = new Date(), opts: LoadShowcaseOptions =
   if (wantsFixture()) {
     const { showcaseFixture } = await import('./showcase.fixture');
     const f = showcaseFixture(localToday(now));
-    const wildmind = await wildmindShowcase(now, null, wildmindView(opts.view));
+    const wildmind = await wildmindShowcase(now, null, wildmindView(opts.view), opts.wildmindState);
     return { daydream: { ...f.daydream, rules }, health: f.health, app: appFacts(), fixture: true, ...(wildmind ? { wildmind } : {}) };
   }
 
@@ -252,7 +254,7 @@ export async function loadShowcase(now = new Date(), opts: LoadShowcaseOptions =
     kmYear(now),
     whoopMonth(now),
     bands(now, opts.day),
-    wildmindShowcase(now, null, wildmindView(opts.view)),
+    wildmindShowcase(now, null, wildmindView(opts.view), opts.wildmindState),
   ]);
 
   return {

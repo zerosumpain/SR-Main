@@ -38,7 +38,16 @@
   //      crates; the town's last weeks; the builder's lit sign; a star on the
   //      jib for Daydream's ideas. Rambler: the heading, the site cabins
   //      ('desk'), the ground.
-  //   5. A wayfinding totem: run on a schedule, answer back, track the family.
+  //   5. Wildmind (only when the site reads it), heading left: a gallery at
+  //      the end of the street, and in its window, under a glass vitrine on a
+  //      plinth, a planning model of the valley the two people with Claude
+  //      for minds have seen, a layer of card for every step of height, the
+  //      two of them painted on it where they are now (the poll moves them).
+  //      Headline: things invented, counting up while the cards are laid.
+  //      Labels: the two of them (on the gallery's back wall, joined to their
+  //      figures through the lid) and the latest thing made up (the bronze
+  //      plaque on the plinth). Rambler: the heading, the plate, the ground.
+  //   6. A wayfinding totem: run on a schedule, answer back, track the family.
   //
   // Ids are prefixed 'sp-' so nothing collides with the hero's.
   import { cloud, skyAt, skyVars, town } from '$lib/landing/place';
@@ -49,7 +58,7 @@
   import { shipDays } from '$lib/landing/rhythm';
   import { ago } from '$lib/landing/live-vitals.svelte';
   import type { ShowcaseProps } from '$lib/landing/showcase';
-  import { beatFor, formatFigure } from '$lib/landing/showcase-motion';
+  import { beatFor, formatFigure, prefersReducedMotion } from '$lib/landing/showcase-motion';
   import {
     constellation,
     crates,
@@ -74,6 +83,21 @@
     type Tag,
   } from '$lib/landing/showcase-place-words';
   import { localToday } from '$lib/constants/health-day';
+  import { onDestroy, untrack } from 'svelte';
+  import {
+    GALLERY,
+    SPECK_CAP,
+    figureTop,
+    gatherHuts,
+    onBoard,
+    peopleAnchors,
+    wildmindPins,
+    wildmindPlaceWords,
+    type Figure,
+  } from '$lib/landing/showcase-place-wildmind';
+  import { decodeBands, glassAt } from '$lib/landing/wildmind-glass';
+  import { WildmindPoll } from '../wildmind/wildmind-poll.svelte';
+  import GlassArt from './GlassArt.svelte';
   import PlaceScene, { type Pin, type PinnedTag } from './PlaceScene.svelte';
   import ObservatoryArt, { OBS } from './ObservatoryArt.svelte';
   import WalkArt, { WALK } from './WalkArt.svelte';
@@ -217,6 +241,78 @@
     return Object.keys(pins).flatMap((k) => (by[k] ? [pin(by[k], pins[k])] : []));
   });
 
+  /* ------------------------------------------------------------- Wildmind */
+
+  // Only when the site reads it: the server's answer first, then the poll's (the model under glass, no flat map).
+  const poll = untrack(() => (data.wildmind ? new WildmindPoll(data.wildmind, { view: 'place' }) : null));
+  onDestroy(() => poll?.destroy());
+  let wm = $derived(poll?.data ?? null);
+  let glass = $derived(wm?.glass ?? null);
+  let bands = $derived(glass ? decodeBands(glass) : null);
+  /** A point on the valley's map, standing on the model, in the scene. */
+  const stand = (x: number, y: number) => {
+    if (!glass || !bands) return null;
+    const at = onBoard(glassAt(glass, bands, x, y));
+    return { x: Math.round(at.x * 10) / 10, y: Math.round(at.y * 10) / 10 };
+  };
+  // The figures follow the poll frame by frame through a glide; nothing else does. Where each stands on
+  // the board, and the card under it (its lift), apart: stepping onto a higher card eases up, never jumps.
+  let standing = $derived(
+    poll && glass && bands
+      ? poll.people.map((p) => {
+          const at = glassAt(glass, bands, p.x, p.y);
+          const on = onBoard({ x: at.x, y: at.y + at.lift });
+          // 'asleep' is DOING.sleeping (wildmind.ts), the word the server sends.
+          return { id: p.id, x: Math.round(on.x * 10) / 10, y: on.y, lift: at.lift, asleep: p.doing === 'asleep', alive: p.alive };
+        })
+      : [],
+  );
+  /** The lift each figure is drawn at: eased toward the card under it over LIFT_MS. */
+  const LIFT_MS = 320;
+  let lifted = $state<Record<string, number>>({});
+  let liftKey = $derived(standing.map((f) => `${f.id}:${f.lift}`).join('|'));
+  let liftFrame = 0;
+  $effect(() => {
+    void liftKey;
+    const want = untrack(() => Object.fromEntries(standing.map((f) => [f.id, f.lift])));
+    const from = untrack(() => lifted);
+    const moving = Object.keys(want).filter((id) => from[id] != null && Math.abs(from[id] - want[id]) > 0.05);
+    cancelAnimationFrame(liftFrame);
+    if (!moving.length || prefersReducedMotion()) {
+      lifted = want;
+      return;
+    }
+    const t0 = performance.now();
+    const step = (t: number) => {
+      const k = Math.min(1, (t - t0) / LIFT_MS);
+      const e = k * k * (3 - 2 * k);
+      lifted = Object.fromEntries(Object.entries(want).map(([id, to]) => [id, from[id] == null ? to : from[id] + (to - from[id]) * e]));
+      if (k < 1) liftFrame = requestAnimationFrame(step);
+    };
+    liftFrame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(liftFrame);
+  });
+  let figures = $derived<Figure[]>(
+    standing.map((f) => ({ id: f.id, x: f.x, y: Math.round((f.y - (lifted[f.id] ?? f.lift)) * 10) / 10, asleep: f.asleep, alive: f.alive })),
+  );
+  let wmAnchors = $derived(peopleAnchors(figures.map((f) => ({ id: f.id, x: f.x, y: f.y - (f.alive ? figureTop(f.asleep) : 2) }))));
+  let wmHuts = $derived(
+    gatherHuts(
+      (wm?.structures ?? []).flatMap(([x, y, done, on, cls]) => {
+        const at = cls === 'fire' ? null : stand(x, y);
+        return at ? [{ x: at.x, y: at.y, lit: on === 1, done: done === 1 }] : [];
+      }),
+      figures,
+    ),
+  );
+  let wmFires = $derived((wm?.fires ?? []).flatMap(([x, y]) => stand(x, y) ?? []));
+  let wmAnimals = $derived((wm?.animals ?? []).slice(0, SPECK_CAP).flatMap(([x, y]) => stand(x, y) ?? []));
+  let wmw = $derived(wm ? wildmindPlaceWords(wm) : null);
+  let wmTags = $derived(wmw ? (wildmindPins(wmw.tags, wmAnchors) as PinnedTag[]) : []);
+  // Where the sun stands across the sky (skyVars' --sun-x), for the glare on the gallery's glass.
+  let sunX = $derived(50 + (heroSky.side === 'east' ? -1 : 1) * 36 * (1 - heroSky.sunY));
+  const watchValley = (node: HTMLElement) => (poll ? poll.watch(node) : {});
+
   /* ------------------------------------------------------- the fingerpost */
 
   let arms = $derived(signposts(v, now, ago));
@@ -321,7 +417,7 @@
       ground={WORKS.ground}
       tone="ink"
       land="var(--city-ground)"
-      last
+      last={!wm}
       head={{ ...ww.head, figure: build.releases }}
       tags={wTags}
       key={ww.key}
@@ -333,7 +429,47 @@
     </PlaceScene>
   </div>
 
-  <div class="sp-band" data-band="sign">
+  {#if poll && wm && wmw}
+    <div class="sp-band" data-band="wildmind" use:watchValley>
+      <PlaceScene
+        id="sp-wm"
+        side="l"
+        h={GALLERY.h}
+        zone={GALLERY.zone}
+        phoneZone={GALLERY.phoneZone}
+        ground={GALLERY.ground}
+        tone="accent"
+        land="var(--city-ground)"
+        last
+        noPlateFloor
+        head={wmw.head}
+        tags={wmTags}
+        key={wmw.key}
+        rules={wmw.rules}
+        close={wmw.close}
+        summary={wmw.summary}
+        print={wmw.print}
+        live={wm.state === 'offline' ? undefined : { held: poll.held, onhold: () => poll.hold(), controls: 'sp-wm-model', caption: wmw.captions }}
+      >
+        {#snippet art()}
+          <GlassArt
+            state={wm.state}
+            {glass}
+            {figures}
+            huts={wmHuts}
+            fires={wmFires}
+            animals={wmAnimals}
+            anchors={wmAnchors}
+            plaque={wmTags.some((t) => t.id === 'latest')}
+            light={lit}
+            {sunX}
+          />
+        {/snippet}
+      </PlaceScene>
+    </div>
+  {/if}
+
+  <div class="sp-band" data-band="sign" data-after={wm ? 'wildmind' : undefined}>
     <Fingerpost {arms} />
   </div>
 </div>
@@ -386,14 +522,37 @@
   .sp-band[data-band='works'] {
     background: linear-gradient(180deg, var(--city-sky-works-top) 0, var(--city-sky-works-low) 100%);
   }
-  /* The totem stands under the same sky as the works, on its own strip of pavement. */
+  .sp-band[data-band='wildmind'] {
+    background: linear-gradient(180deg, var(--city-sky-wildmind-top) 0, var(--city-sky-wildmind-low) 100%);
+  }
+  /* Its plate carries the "hold still" row and the closing line too: a shade wider on a narrow desktop, so it stays clear of the heading. */
+  .sp-band[data-band='wildmind'] :global(.sp-scene) {
+    --col: 37%;
+  }
+  @media (max-width: 1299px) {
+    .sp-band[data-band='wildmind'] :global(.sp-scene) {
+      --col: 40%;
+    }
+  }
+  /* Stacked, the rambler's nearest floor under the plate is the next band's heading: room enough under the
+     plate for him and a three-line greeting there, clear of its last lines and the hold-still switch. */
+  @media (max-width: 1099px) {
+    .sp-band[data-band='wildmind'] :global(.sp-scene) {
+      padding-bottom: 96px;
+    }
+  }
+  /* The totem stands under the same sky as the last chapter, on its own strip of pavement. */
   .sp-band[data-band='sign'] {
     background: linear-gradient(180deg, var(--city-sky-works-top) 0, var(--city-sky-works-low) 100%);
+  }
+  .sp-band[data-band='sign'][data-after='wildmind'] {
+    background: linear-gradient(180deg, var(--city-sky-wildmind-top) 0, var(--city-sky-wildmind-low) 100%);
   }
   @media print {
     .sp,
     .sp-band,
-    .sp-band[data-band] {
+    .sp-band[data-band],
+    .sp-band[data-band][data-after] {
       background: none;
       color: #1a1008;
     }

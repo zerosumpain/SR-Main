@@ -105,14 +105,16 @@ const SURFACES = {
 
 export type Surface = keyof typeof SURFACES;
 
-/** The four chapters, each with its own street and a hint of its own sky. */
-export type Chapter = 'observatory' | 'walk' | 'house' | 'works';
+/** The chapters, each with its own street and a hint of its own sky (Wildmind's only when the site reads it). */
+export type Chapter = 'observatory' | 'walk' | 'house' | 'works' | 'wildmind';
 /** A chapter's own hue, a tint over the owner's sky: never more than an eighth of it. */
 const TINT: Record<Chapter, string> = {
   observatory: '#0a2a66',
   walk: '#16382c',
   house: '#4a2a1c',
   works: '#24323e',
+  // Petrol over the gallery street: clear of the walk's park green and the works' slate.
+  wildmind: '#123640',
 };
 const TINT_SHARE = 0.12;
 
@@ -576,7 +578,7 @@ function union(boxes: Box[]): Box {
  * tablet's cropped picture (1.5). Generous, since a label's second line can run long.
  */
 export function quietBoxes(
-  pins: Array<{ x: number; y: number; lead: number; dir?: 'up' | 'down' | 'side'; hang: 'l' | 'r'; narrow?: { x?: number; y?: number; lead?: number } }>,
+  pins: Array<{ x: number; y: number; lead: number; dir?: 'up' | 'down' | 'side' | 'plate'; hang: 'l' | 'r'; narrow?: { x?: number; y?: number; lead?: number } }>,
 ): Box[] {
   const at = (p: Parameters<typeof labelBox>[0]) => union([labelBox(p, 250, 96, 1), labelBox(p, 250, 96, 1.6)]);
   return pins.flatMap((p) => {

@@ -10,7 +10,8 @@
   //
   // Everything comes from the poll's latest answer (WildmindPoll, which starts
   // from what the server rendered), so the readings, the caption and the fair
-  // copy move with the map. The map comes pencilled and its words placed by
+  // copy move with the map. Handling the map or the readings under it polls
+  // quicker for a while (poll.watch on the sheet, poll.interact here). The map comes pencilled and its words placed by
   // the server (notes-sheet.server.ts, ?view=notes), so none of that code is
   // in this chunk. Names only (the people, the places, the things invented);
   // nothing any mind wrote ever reaches this page.
@@ -64,7 +65,7 @@
 <SnPage id="wm" {page} {fair}>
   <SnWildmindSheet {w} {map} {sheet} people={poll.people} held={poll.held} onhold={() => poll.hold()} watch={poll.watch} />
 
-  <div class="wm-read" use:scenery use:snap>
+  <div class="wm-read" use:scenery use:snap use:poll.interact>
     <div class="wm-hl">
       <SnFigure
         f={fig(w.invented)}
