@@ -108,7 +108,7 @@
      or notes. Its lower edge is also the rambler's ground. -->
 <section class="hero" aria-label="Live" use:scenery={{ edge: 'bottom' }}>
   <!-- One hero, three readings of the same numbers. The server picked which
-       (a ?view= link, the visitor's own choice, or the hour); HeroViews owns
+       (a ?view= link, the visitor's own choice, or the notes); HeroViews owns
        the switch between them. -->
   <HeroViews
     {page}

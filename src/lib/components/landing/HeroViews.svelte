@@ -18,7 +18,7 @@
   // passed straight through.
   //
   // The server picks the first view ($lib/landing/hero-view: a ?view= link,
-  // then the visitor's cookie, then the hour), so the page arrives already
+  // then the visitor's cookie, then the notes), so the page arrives already
   // showing it and nothing flashes. A click swaps the hero and the showcase
   // in place, crossfading the two of them for 180ms where the browser can
   // (View Transitions), and not at all under prefers-reduced-motion.
@@ -43,10 +43,10 @@
   // Read only through the switch's aria-describedby.
   let how = $derived(
     page.source === 'cookie'
-      ? `Kept as you chose it. Choose ${page.choice.auto} to go back to the view that suits the hour.`
+      ? `Kept as you chose it. Choose ${page.choice.auto} to go back to the default.`
       : page.source === 'query'
         ? 'Set by the link you followed, for this visit only.'
-        : 'Chosen for the hour in Britain: the place after dark, notes at the weekend, the sentence on weekdays.',
+        : 'The notes are the default. Choose another to keep it.',
   );
 </script>
 
