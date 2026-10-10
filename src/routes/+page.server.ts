@@ -53,8 +53,8 @@ export const load: PageServerLoad = async ({ fetch, locals, getClientAddress, co
   // Dev only: ?sun=<degrees>&rising=<0|1> pins the place view's sky so
   // screenshots hold still (null, and the address ignored, in production).
   const pinnedSun = sunOverride(url.searchParams, dev);
-  // Dev only, with the preview's fixture: ?wm=<state> pins Wildmind's state for this page and its polls.
-  pinFixtureState(url.searchParams.get('wm'), dev);
+  // Dev only, with the preview's fixture: ?wm=<state> pins Wildmind's state for this browser's page and polls.
+  const wildmindState = pinFixtureState(cookies, url.searchParams.get('wm'), dev);
 
   const [steps, day, releases, capabilities, showcase, posts, sun, tagline] = await Promise.all([
     // Today's steps in quarter-hours, midnight to 23:59, for the steps footnote.
@@ -75,7 +75,7 @@ export const load: PageServerLoad = async ({ fetch, locals, getClientAddress, co
     // memoised and timeboxed in the module (a slow one renders as dashes, never
     // a slow page), and awaited so the figures are in the SSR HTML that the
     // count-ups start from.
-    loadShowcase(new Date(), { day: dayReading, view: heroView.view }),
+    loadShowcase(new Date(), { day: dayReading, view: heroView.view, wildmindState }),
     // The two newest posts for the writing strip. Awaited so the links are in the
     // SSR HTML; a failure just drops the strip.
     getAllPosts()

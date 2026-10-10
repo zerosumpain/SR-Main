@@ -203,6 +203,16 @@ describe('buildGlass on the day-sixteen valley', () => {
     }
   });
 
+  it('stands every cell on a card that is drawn, and sends no empty card on top', () => {
+    const bands = decodeBands(g);
+    expect(g.cards[g.cards.length - 1].d.length).toBeGreaterThan(0);
+    for (let k = 0; k < bands.length; k++) if (bands[k] > 0) expect(g.cards[bands[k]].d.length, `cell ${k}`).toBeGreaterThan(0);
+    // Also where harder simplification drops bigger specks.
+    const noise = buildGlass(terrain(150, 120, (i, j) => ((i * 7 + j * 13) % 5 === 0 ? 4 : 0.5 + ((i * j) % 7) * 0.4)), 'noise')!.glass;
+    const nb = decodeBands(noise);
+    for (let k = 0; k < nb.length; k++) if (nb[k] > 0) expect(noise.cards[nb[k]].d.length).toBeGreaterThan(0);
+  });
+
   it('is small enough to send once per version', () => {
     expect(gzipSync(JSON.stringify(g)).length).toBeLessThan(10 * 1024);
   });

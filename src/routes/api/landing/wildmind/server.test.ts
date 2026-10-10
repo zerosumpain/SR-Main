@@ -10,12 +10,29 @@ vi.mock('$app/environment', () => ({
 }));
 
 import { GET } from './+server';
-import { MAX_BYTES, RETRY_MS, TTL_MS, loadWildmind, pinFixtureState, readWildmind, resetWildmind, wildmindShowcase } from '$lib/landing/wildmind.server';
+import {
+  DRAW_HOLD_MS,
+  FIXTURE_COOKIE,
+  MAX_BYTES,
+  RETRY_MS,
+  TTL_MS,
+  loadWildmind,
+  pinFixtureState,
+  pinnedFixtureState,
+  readWildmind,
+  resetWildmind,
+  wildmindShowcase,
+} from '$lib/landing/wildmind.server';
 import type { WildmindShowcase } from '$lib/landing/wildmind';
 
 const URL_ = 'http://wildmind.test:5397/api/public/snapshot';
-const call = async (q = '') => {
-  const res = await GET({ url: new URL(`http://site.test/api/landing/wildmind${q}`) } as never);
+/** A cookie jar as SvelteKit's `cookies` reads and writes it. */
+const jar = (init: Record<string, string> = {}) => {
+  const m = new Map(Object.entries(init));
+  return { get: (k: string) => m.get(k), set: (k: string, v: string) => void m.set(k, v), delete: (k: string) => void m.delete(k), m };
+};
+const call = async (q = '', cookies = jar()) => {
+  const res = await GET({ url: new URL(`http://site.test/api/landing/wildmind${q}`), cookies } as never);
   return { res, body: (await res.json()) as WildmindShowcase };
 };
 const withoutTerrain = () => {
@@ -245,6 +262,66 @@ describe('readWildmind', () => {
   });
 });
 
+describe('the drawing, while the valley grows', () => {
+  const at = (ms: number) => new Date(Date.parse('2026-10-10T12:00:00Z') + ms);
+  const [seed, explored, rev] = recorded.terrainVersion.split('.');
+  /** Wildmind answering with a version that moves on with every read, as while they explore. */
+  const exploring = (version: (n: number) => string) => {
+    let n = 0;
+    upstream.mockImplementation(async (input: URL | string) => {
+      const v = version(n++);
+      const have = new URL(String(input)).searchParams.get('have');
+      const body = have === v ? { ...withoutTerrain(), terrainVersion: v } : { ...structuredClone(recorded), terrainVersion: v };
+      return new Response(JSON.stringify(body));
+    });
+  };
+
+  it('is drawn again at most once per DRAW_HOLD_MS while only the explored count moves', async () => {
+    h.env.WILDMIND_SNAPSHOT_URL = URL_;
+    exploring((n) => `${seed}.${Number(explored) + n}.${rev}`);
+    const drawn = new Set<string>();
+    const traces = new Set<unknown>();
+    const span = 60_000;
+    for (let t = 0; t <= span; t += 1_000) {
+      const read = await readWildmind(at(t));
+      drawn.add(read!.snap.terrainVersion);
+      traces.add(read!.traced);
+      // The page is told the version drawn, and the map it is told of is that one.
+      const page = await wildmindShowcase(at(t), null, 'place');
+      expect(page?.mapVersion).toBe(read!.snap.terrainVersion);
+      expect(page?.glass?.version).toBe(read!.snap.terrainVersion);
+    }
+    expect(upstream.mock.calls.length).toBeGreaterThan(50);
+    expect(drawn.size).toBeLessThanOrEqual(Math.ceil(span / DRAW_HOLD_MS) + 1);
+    expect(traces.size).toBe(drawn.size);
+  });
+
+  it('takes a new life or a changed ground at once', async () => {
+    h.env.WILDMIND_SNAPSHOT_URL = URL_;
+    const versions = [recorded.terrainVersion, `${seed}.${Number(explored) + 1}.${rev}`, `${Number(seed) + 1}.${explored}.${rev}`, `${Number(seed) + 1}.${explored}.${rev}x`];
+    exploring((n) => versions[Math.min(n, versions.length - 1)]);
+    const seen = [];
+    for (let t = 0; t < 4_000; t += 1_000) seen.push((await readWildmind(at(t)))!.snap.terrainVersion);
+    expect(seen).toEqual([versions[0], versions[0], versions[2], versions[3]]);
+  });
+
+  it('takes a grown valley at once when someone would stand off the held map', async () => {
+    h.env.WILDMIND_SNAPSHOT_URL = URL_;
+    const grown = `${seed}.${Number(explored) + 1}.${rev}`;
+    let n = 0;
+    upstream.mockImplementation(async () => {
+      const body = structuredClone(recorded) as typeof recorded;
+      if (n++) {
+        body.terrainVersion = grown;
+        body.people[0].x = body.terrain.origin[0] - 5;
+      }
+      return new Response(JSON.stringify(body));
+    });
+    expect((await readWildmind(at(0)))!.snap.terrainVersion).toBe(recorded.terrainVersion);
+    expect((await readWildmind(at(1_000)))!.snap.terrainVersion).toBe(grown);
+  });
+});
+
 describe('the local preview fixture', () => {
   it('stands in only in dev with the fixture flag and no address', async () => {
     h.dev = true;
@@ -266,28 +343,34 @@ describe('the local preview fixture', () => {
     expect(await wildmindShowcase(new Date())).toBeNull();
   });
 
-  it('takes a state pinned by a preview’s ?wm=, in dev with the fixture only', async () => {
+  it('takes a state pinned by a preview’s ?wm= for that browser alone, in dev with the fixture only', async () => {
     h.dev = true;
     h.env.LANDING_SHOWCASE_FIXTURE = '1';
-    pinFixtureState('paused', true);
-    expect((await wildmindShowcase(new Date()))?.state).toBe('paused');
-    pinFixtureState('asleep', true);
-    const asleep = await wildmindShowcase(new Date(), null, 'place');
+    const mine = jar();
+    expect(pinFixtureState(mine, 'paused', true)).toBe('paused');
+    expect(mine.m.get(FIXTURE_COOKIE)).toBe('paused');
+    // The page's polls carry the cookie; another browser on the same preview is untouched.
+    expect((await call('', mine)).body.state).toBe('paused');
+    expect((await call('', jar())).body.state).toBe('live');
+    // A page load without ?wm= keeps the browser's pin.
+    expect(pinFixtureState(mine, null, true)).toBe('paused');
+    expect(pinFixtureState(mine, 'asleep', true)).toBe('asleep');
+    const asleep = await wildmindShowcase(new Date(), null, 'place', pinnedFixtureState(mine));
     expect(asleep?.state).toBe('live');
     expect(asleep?.people.every((p) => p.doing === 'asleep')).toBe(true);
     expect(asleep?.glass?.cards.length).toBeGreaterThan(2);
-    pinFixtureState('young', true);
-    const young = await wildmindShowcase(new Date(), null, 'place');
+    pinFixtureState(mine, 'young', true);
+    const young = await wildmindShowcase(new Date(), null, 'place', pinnedFixtureState(mine));
     expect(young?.glass?.version).not.toBe(asleep?.glass?.version);
     // Unknown values are ignored; 'env' hands it back.
-    pinFixtureState('<script>', true);
-    expect((await wildmindShowcase(new Date()))?.mapVersion).toBe(young?.mapVersion);
-    pinFixtureState('env', true);
-    expect((await wildmindShowcase(new Date()))?.state).toBe('live');
+    expect(pinFixtureState(mine, '<script>', true)).toBe('young');
+    expect(await wildmindShowcase(new Date(), null, null, '<script>')).toMatchObject({ state: 'live' });
+    expect(pinFixtureState(mine, 'env', true)).toBeUndefined();
+    expect(mine.m.has(FIXTURE_COOKIE)).toBe(false);
     // Outside dev it does nothing at all.
     h.dev = false;
-    pinFixtureState('offline', false);
-    h.dev = true;
-    expect((await wildmindShowcase(new Date()))?.state).toBe('live');
+    const prod = jar({ [FIXTURE_COOKIE]: 'offline' });
+    expect(pinFixtureState(prod, 'offline', false)).toBeUndefined();
+    expect(pinnedFixtureState(prod, false)).toBeUndefined();
   });
 });

@@ -19,10 +19,14 @@
 // Caps: the grid is at most MAX_GLASS_ACROSS cells across (wider valleys are
 // averaged in blocks), the outlines at most MAX_POINTS points in all (past
 // it they are simplified harder and specks dropped, then traced again), the
-// trees at most MAX_TREES, the cards at most MAX_CARDS. On the day-16 valley
-// that is nine cards and some fifteen hundred points; about eleven KiB raw,
-// four gzipped, sent only when the terrain version changes. Server only; the
-// last two versions are cached.
+// trees at most MAX_TREES, the cards at most MAX_CARDS. Every cell stands on
+// the highest card whose kept outline holds it, and a top card left with no
+// outline is not sent. On the day-16 fixture that is six cards, some nine
+// hundred outline points and as many trees: about twenty-four KB raw, seven
+// gzipped (the live valley about twenty and seven), the trees about half of
+// it, sent only when the drawn terrain version changes (wildmind.server.ts
+// holds one while the valley only grows). Server only; the last two versions
+// are cached.
 
 import { BOARD, TILT, encodeBands, type GlassCard, type WildmindGlass } from './wildmind-glass';
 import type { WildmindTerrain } from './wildmind';
@@ -284,6 +288,33 @@ export function march(w: number, h: number, field: (i: number, j: number) => num
   return rings;
 }
 
+/**
+ * Which cells' centres lie inside a set of rings (even-odd), by scanline:
+ * a cell (i, j) has its centre at (i + 0.5, j + 0.5) in the rings' units.
+ */
+export function fill(w: number, h: number, rings: Pt[][]): Uint8Array {
+  const out = new Uint8Array(w * h);
+  const xs: number[] = [];
+  for (let j = 0; j < h; j++) {
+    const y = j + 0.5;
+    xs.length = 0;
+    for (const r of rings)
+      for (let k = 0; k < r.length; k++) {
+        const [ax, ay] = r[k];
+        const [bx, by] = r[(k + 1) % r.length];
+        if (ay <= y === by <= y) continue;
+        xs.push(ax + ((y - ay) / (by - ay)) * (bx - ax));
+      }
+    xs.sort((a, b) => a - b);
+    for (let q = 0; q + 1 < xs.length; q += 2) {
+      const i0 = Math.max(0, Math.ceil(xs[q] - 0.5));
+      const i1 = Math.min(w - 1, Math.ceil(xs[q + 1] - 0.5) - 1);
+      for (let i = i0; i <= i1; i++) out[j * w + i] = 1;
+    }
+  }
+  return out;
+}
+
 /** A ring's signed area (cell units squared). */
 export function ringArea(r: Pt[]): number {
   let a = 0;
@@ -402,15 +433,6 @@ export function buildGlass(terrain: WildmindTerrain, version: string, perMapUnit
   if (BASE_LIFT + span * dz > MAX_LIFT) dz = (MAX_LIFT - BASE_LIFT) / span;
   const lifts = ts.map((t) => r1(BASE_LIFT + (t - FLOOR_M) * dz));
 
-  // The card each cell stands on.
-  const band = new Uint8Array(w * h);
-  for (let k = 0; k < w * h; k++) {
-    if (!seen[k]) continue;
-    let b = 0;
-    for (let c = 1; c < ts.length; c++) if (height[k] >= ts[c]) b = c;
-    band[k] = b;
-  }
-
   // The outlines, simplified harder until they fit.
   const fields = ts.map((t, c) => (i: number, j: number) => {
     const k = j * w + i;
@@ -424,6 +446,18 @@ export function buildGlass(terrain: WildmindTerrain, version: string, perMapUnit
     rings = raw.map((card) => card.filter((r) => Math.abs(ringArea(r)) >= minArea).map((r) => simplifyRing(r, eps)).filter((r) => r.length >= 3));
     points = rings.reduce((n, card) => n + card.reduce((m, r) => m + r.length, 0), 0);
     if (points <= MAX_POINTS) break;
+  }
+
+  // The card each cell stands on: the highest its height reaches whose kept
+  // outline holds it, so nothing stands on a speck that was dropped.
+  const band = new Uint8Array(w * h);
+  const holds = rings.map((card, c) => (c ? fill(w, h, card) : null));
+  for (let k = 0; k < w * h; k++) {
+    if (!seen[k]) continue;
+    let b = 0;
+    for (let c = 1; c < ts.length; c++) if (height[k] >= ts[c]) b = c;
+    while (b > 0 && !holds[b]![k]) b--;
+    band[k] = b;
   }
 
   // Trees: lichen balls on wooded cells, as many as fit the cap, on the card they stand on.
@@ -441,7 +475,8 @@ export function buildGlass(terrain: WildmindTerrain, version: string, perMapUnit
       const k = j * w + i;
       if (!seen[k]) continue;
       const c = band[k];
-      if (grid.wood[k]) {
+      // No trees in the water: a wood on a speck too small to keep stands on the water card.
+      if (grid.wood[k] && c) {
         const n = Math.floor(perCell) + (hash(i, j, 0) < perCell % 1 ? 1 : 0);
         for (let q = 0; q < n && trees.length < MAX_TREES; q++) {
           const big = hash(i, j, q * 3 + 1) < 0.45 ? 1 : 0;
@@ -455,7 +490,10 @@ export function buildGlass(terrain: WildmindTerrain, version: string, perMapUnit
     }
   trees.sort((a, b) => a.y - b.y);
 
-  const cards: GlassCard[] = ts.map((_, c) => {
+  // A top card with nothing left to draw is not sent (nothing stands on it now).
+  let n = ts.length;
+  while (n > 1 && !rings[n - 1].length) n--;
+  const cards: GlassCard[] = ts.slice(0, n).map((_, c) => {
     const card: GlassCard = { lift: lifts[c], d: smoothPath(rings[c], toBoard) };
     const mine = trees.filter((t) => t.c === c);
     if (mine.length) card.wood = [0, 1].map((big) => dots(mine.filter((t) => t.big === big))) as [string, string];

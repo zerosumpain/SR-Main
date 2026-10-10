@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { offlineShowcase } from '$lib/landing/wildmind';
-import { CACHE_CONTROL, WILDMIND_VIEWS, wildmindShowcase, type WildmindView } from '$lib/landing/wildmind.server';
+import { CACHE_CONTROL, WILDMIND_VIEWS, pinnedFixtureState, wildmindShowcase, type WildmindView } from '$lib/landing/wildmind.server';
 
 /**
  * Public, read-only: Wildmind's valley for the landing page's poll.
@@ -14,15 +14,17 @@ import { CACHE_CONTROL, WILDMIND_VIEWS, wildmindShowcase, type WildmindView } fr
  * `?view=notes` asks for the map drawn the notes view's way (pencilled, with
  * the words placed), `?view=place` for the model under glass instead of the
  * map (also left out on ?have=); any other value is ignored. Nothing from the
- * request but those two is used, and neither ever goes upstream.
+ * request but those two is used, and neither ever goes upstream. (In a local
+ * preview only, the fixture's state a browser pinned with ?wm= is read from
+ * its cookie: pinnedFixtureState, nothing in production.)
  */
 
 const VERSION = /^[A-Za-z0-9._:-]{1,64}$/;
 
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async ({ url, cookies }) => {
   const have = url.searchParams.get('have');
   const view = url.searchParams.get('view');
   const known = WILDMIND_VIEWS.find((v): v is WildmindView => v === view) ?? null;
-  const body = (await wildmindShowcase(new Date(), have && VERSION.test(have) ? have : null, known)) ?? offlineShowcase();
+  const body = (await wildmindShowcase(new Date(), have && VERSION.test(have) ? have : null, known, pinnedFixtureState(cookies))) ?? offlineShowcase();
   return json(body, { headers: { 'cache-control': CACHE_CONTROL } });
 };

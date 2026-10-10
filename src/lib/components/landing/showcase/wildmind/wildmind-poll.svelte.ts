@@ -6,11 +6,16 @@
 // the one the server rendered, so nothing is fetched until a cadence has
 // passed: ten seconds while live, half a minute while resting, paused or
 // between lives, a minute while stale or offline (CADENCE). While a reader is
-// handling the map or its chapter (a pointer over it or moving on it, a touch,
-// keyboard focus inside it) it polls every second while live, and more often
-// in the other states too (ENGAGED), until a minute after the last such touch
-// (ENGAGED_MS). None at all off screen, in a hidden tab or while the reader
-// asks it to hold still. A failed poll keeps what is drawn. The map paths come
+// handling the map or its chapter (a mouse moving on it, a press or a tap,
+// keyboard focus or a key inside it: never a page merely scrolled under a
+// resting pointer, or a swipe that scrolls) it polls every second while live,
+// and more often in the other states too (ENGAGED), until a minute after the
+// last such touch (ENGAGED_MS); a pointer resting over it after handling it
+// stretches that to two minutes at most (HOVER_HOLD_MS), never for good.
+// None at all off screen, in a hidden tab or while the reader asks it to hold
+// still. A view mounted again with the page's answer it was first given (a
+// reader switching views and back) polls as soon as that answer is a cadence
+// old, not a cadence after the switch. A failed poll keeps what is drawn. The map paths come
 // back only when the map changed (?have=); an offline answer after a good one
 // keeps the last map and says it is stale. The server reads Wildmind at most
 // about once a second however many people poll (wildmind.server.ts).
@@ -22,17 +27,30 @@
 // as the map does. A view holding a drawing made for another kind (after the
 // reader switches views) asks for its own at once.
 //
-// Motion: each answer starts a glide from wherever each person is drawn now
-// (mid-glide or not) to where the answer puts them, at an even pace over the
-// whole wait until the next answer, so they never stop between answers and a
-// change of cadence (or an answer that comes early) bends the path without a
-// jump. They walk their reported trail, so nobody is drawn crossing a lake
-// they walked round; with no usable trail a short hop glides straight and a
-// long one jumps. Under prefers-reduced-motion the newest frame simply
-// replaces the old. Off screen the glide lands and stops.
+// Motion: an answer that moves someone starts a glide from wherever each
+// person is drawn now (mid-glide or not) to where the answer puts them, at
+// an even pace over as long as their reported places took to change (never
+// shorter than the cadence, at most a live cadence), plus half of whatever of
+// the last glide is still to run (a backlog is caught up at no more than twice
+// the pace). A glide that would end after the quick cadence lapses lasts until
+// the first answer on the slower one, so they never stand waiting for it. An
+// answer that moves nobody (Wildmind rounds places, so at the quick cadence
+// most don't) leaves a running glide running, and walks anyone drawn short of
+// it (held mid-glide) the rest of the way. So they never stand still between
+// answers, and a change of cadence bends the path without a jump or a
+// sprint. Back after a while away (off screen, a hidden tab, held) for more
+// than two cadences, they are put where the answer says, not raced there. They walk their reported trail, so nobody is
+// drawn crossing a lake they walked round; with no usable trail a short hop
+// glides straight and a long one jumps, as everything does when the map moves
+// under them (a new valley, or one seen from a new corner). Under
+// prefers-reduced-motion the newest frame simply replaces the old. Off screen
+// the glide lands and stops; held, it stops where it is.
 
 import { onScreen, prefersReducedMotion } from '$lib/landing/showcase-motion';
-import type { WildmindPerson, WildmindShowcase, WildmindState } from '$lib/landing/wildmind';
+import { grownOnly, type WildmindPerson, type WildmindShowcase, type WildmindState } from '$lib/landing/wildmind';
+
+/** When each page answer was first shown by a view (a view mounted again with it knows its age). */
+const FIRST_SHOWN = new WeakMap<object, number>();
 
 /** How long to wait between polls in each state. */
 export const CADENCE: Record<WildmindState, number> = {
@@ -54,8 +72,17 @@ export const ENGAGED: Record<WildmindState, number> = {
 };
 /** How long the quicker cadence lasts after the reader last touched, pointed at or focused the map. */
 export const ENGAGED_MS = 60_000;
-/** The events that count as handling the map or its chapter. */
-export const ENGAGE_EVENTS = ['pointerenter', 'pointermove', 'pointerdown', 'touchstart', 'focusin', 'keydown'] as const;
+/** The longest a pointer resting over the map after handling it keeps the quicker cadence, from the last handling. */
+export const HOVER_HOLD_MS = 2 * ENGAGED_MS;
+/**
+ * The events that count as handling the map or its chapter: a mouse moving
+ * on it (not within SCROLL_QUIET_MS of the page scrolling, when it is the page
+ * that moved), a press with a mouse or pen, a tap finished (a swipe that
+ * scrolls is cancelled instead), focus or a key inside it.
+ */
+export const ENGAGE_EVENTS = ['pointermove', 'pointerdown', 'pointerup', 'focusin', 'keydown'] as const;
+/** A pointer move this soon after the page scrolled is the page moving under a resting pointer. */
+export const SCROLL_QUIET_MS = 150;
 /** The longest straight hop (map units) that glides without a trail; longer ones jump. */
 export const HOP = 3;
 
@@ -128,7 +155,24 @@ export class WildmindPoll {
   #inflight = false;
   #needMap = false;
   #engagedUntil = -Infinity;
+  /** The pointer is over the map, and the reader has handled it since it came: engaged until it leaves, or HOVER_HOLD_MS after the last handling. */
+  #hovering = false;
+  #hoverHeld = false;
+  #handledAt = -Infinity;
+  /** Stopped polling a while (off screen, hidden, held): a first answer long after the last is put straight, not raced to. */
+  #away = false;
+  #acceptedAt: number;
+  /** What was left of the glide when the reader held it still: carrying on walks it. */
+  #heldLeft = 0;
+  #scrolledAt = -Infinity;
+  #destroyed = false;
+  /** Where the running glide ends (the last answer's people), and when their places last changed. */
+  #target: WildmindPerson[] = [];
+  #changedAt: number;
+  #glideEnds = 0;
   #view: 'notes' | 'place' | null;
+  /** The people the running glide walks (their news replaced in place by an answer that moves nobody). */
+  #glideNext: WildmindPerson[] = [];
 
   constructor(initial: WildmindShowcase | null, opts: WildmindPollOptions = {}) {
     this.#view = opts.view ?? null;
@@ -141,7 +185,14 @@ export class WildmindPoll {
     this.#fetch = opts.fetch ?? ((...a) => fetch(...a));
     this.#now = opts.now ?? (() => Date.now());
     this.#needMap = !fits;
-    this.#last = fits ? this.#now() : -Infinity;
+    // An answer a view was given before (the page's, when a reader switches back) is as old as when it was first shown.
+    const t = this.#now();
+    const shown = initial ? FIRST_SHOWN.get(initial) : undefined;
+    if (initial && shown == null) FIRST_SHOWN.set(initial, t);
+    this.#last = fits ? (shown ?? t) : -Infinity;
+    this.#target = this.people;
+    this.#changedAt = shown ?? t;
+    this.#acceptedAt = shown ?? t;
   }
 
   /**
@@ -162,7 +213,18 @@ export class WildmindPoll {
 
   /** Whether a reader has handled the map or its chapter within the last ENGAGED_MS. */
   get engaged(): boolean {
-    return this.#now() < this.#engagedUntil;
+    return this.#engagedAt(this.#now());
+  }
+
+  /** Whether the quicker cadence still applies at `t`, if nobody touches the map again. */
+  #engagedAt(t: number): boolean {
+    return t < this.#lapse();
+  }
+
+  /** When the quicker cadence lapses if nobody touches the map again. */
+  #lapse(): number {
+    const resting = this.#hovering && this.#hoverHeld ? this.#handledAt + HOVER_HOLD_MS : -Infinity;
+    return Math.max(this.#engagedUntil, resting);
   }
 
   /** The current cadence (ms): quicker while a reader is handling the map. */
@@ -178,21 +240,58 @@ export class WildmindPoll {
    */
   engage = () => {
     const was = this.engaged;
-    this.#engagedUntil = this.#now() + ENGAGED_MS;
+    this.#handledAt = this.#now();
+    this.#engagedUntil = this.#handledAt + ENGAGED_MS;
+    if (this.#hovering) this.#hoverHeld = true;
     if (!was && this.#timer) this.#schedule();
   };
 
+  /** Whether an event is the reader handling the map, rather than the page moving under a still pointer. */
+  #deliberate(e: Event): boolean {
+    const p = e as Partial<PointerEvent>;
+    if (e.type === 'pointermove') {
+      if (p.pointerType && p.pointerType !== 'mouse' && p.pointerType !== 'pen') return false;
+      if (p.movementX === 0 && p.movementY === 0) return false;
+      return this.#now() - this.#scrolledAt > SCROLL_QUIET_MS;
+    }
+    // A touch counts once it is a tap (pointerup); its pointerdown may yet turn into a scroll.
+    if (e.type === 'pointerdown') return p.pointerType !== 'touch';
+    if (e.type === 'pointerup') return p.pointerType === 'touch';
+    return true;
+  }
+
   /**
-   * An action for an element whose handling counts as engagement (a pointer
-   * over it or moving on it, a touch, keyboard focus or a key inside it).
+   * An action for an element whose handling counts as engagement (a mouse
+   * moving on it, a press, a tap, keyboard focus or a key inside it); the
+   * quicker cadence then lasts while the pointer stays over it, and a minute
+   * after it last did.
    *   <div use:poll.interact>
    */
   interact = (node: Element) => {
-    const on = () => this.engage();
+    const on = (e: Event) => {
+      if (this.#deliberate(e)) this.engage();
+    };
+    const enter = (e: Event) => {
+      if ((e as Partial<PointerEvent>).pointerType !== 'touch') this.#hovering = true;
+    };
+    const leave = () => {
+      // A mouse taken off the map is handling it (a page scrolled from under a resting one is not), while still engaged.
+      const now = this.#now();
+      if (this.#hoverHeld && this.engaged && now - this.#scrolledAt > SCROLL_QUIET_MS) this.#engagedUntil = Math.max(this.#engagedUntil, now + ENGAGED_MS);
+      this.#hovering = false;
+      this.#hoverHeld = false;
+    };
+    const scrolled = () => (this.#scrolledAt = this.#now());
     for (const e of ENGAGE_EVENTS) node.addEventListener(e, on, { passive: true });
+    node.addEventListener('pointerenter', enter, { passive: true });
+    node.addEventListener('pointerleave', leave, { passive: true });
+    if (typeof window !== 'undefined') window.addEventListener('scroll', scrolled, { passive: true, capture: true });
     return {
       destroy: () => {
         for (const e of ENGAGE_EVENTS) node.removeEventListener(e, on);
+        node.removeEventListener('pointerenter', enter);
+        node.removeEventListener('pointerleave', leave);
+        if (typeof window !== 'undefined') window.removeEventListener('scroll', scrolled, { capture: true });
       },
     };
   };
@@ -215,17 +314,27 @@ export class WildmindPoll {
     };
   };
 
-  /** Hold still (true), carry on (false), or toggle. Carrying on polls at once if one is due. */
+  /** Hold still (true): everyone stops where they are drawn; carry on (false), or toggle. Carrying on polls at once if one is due. */
   hold = (on: boolean = !this.held) => {
+    if (on === this.held) return;
     this.held = on;
     if (on) {
       this.#clear();
-      this.#stopGlide(true);
-    } else this.#schedule();
+      this.#heldLeft = this.#frame ? Math.max(0, this.#glideEnds - this.#now()) : 0;
+      this.#stopGlide(false);
+      this.#away = true;
+    } else {
+      // Walk the rest of the glide that was held, from where they stand, in the time it had left.
+      const left = this.#heldLeft;
+      this.#heldLeft = 0;
+      if (left > 0) this.#glide(this.#glideNext, this.#routesTo(this.#glideNext, false), left, this.#now());
+      this.#schedule();
+    }
   };
 
-  /** Stop everything (also called by watch's destroy). */
+  /** Stop everything for good (also called by watch's destroy): an answer still on its way is dropped. */
   destroy(): void {
+    this.#destroyed = true;
     this.#visible = false;
     this.#clear();
     this.#stopGlide(true);
@@ -233,7 +342,7 @@ export class WildmindPoll {
 
   /** One poll now. Keeps what is drawn on any failure. */
   async poll(): Promise<void> {
-    if (this.#inflight) return;
+    if (this.#inflight || this.#destroyed) return;
     this.#inflight = true;
     this.#last = this.#now();
     try {
@@ -254,7 +363,7 @@ export class WildmindPoll {
 
   /** Take a new answer: keep the held drawing when it is left out, and move the people. */
   accept(next: WildmindShowcase): void {
-    if (this.held || !next || typeof next !== 'object' || !next.state) return;
+    if (this.#destroyed || this.held || !next || typeof next !== 'object' || !next.state) return;
     // An answer drawn for another kind of view (it should not happen) is not drawn here.
     if ((next.map || next.glass) && !this.fits(next)) return;
     const prev = this.data;
@@ -272,10 +381,15 @@ export class WildmindPoll {
     }
     const now = this.#drawing(merged);
     if (now) this.#needMap = false;
-    const mapChanged = !!had && now?.version !== had.version;
+    // A new drawing moves the ground under them unless it is the same valley, grown, in the same frame.
+    const moved = !!had && !!now && now.version !== had.version && !(grownOnly(had.version, now.version) && !!prev?.frame && prev.frame === merged.frame);
+    // Back after a while away: whatever they did meanwhile is not raced through.
+    const t = this.#now();
+    const away = this.#away && t - this.#acceptedAt > 2 * CADENCE[merged.state];
+    this.#away = false;
+    this.#acceptedAt = t;
     this.data = merged;
-    // The glide lasts until the next answer is due, at the cadence that answer will be asked at.
-    this.#move(merged.people, mapChanged, this.cadence);
+    this.#move(merged.people, moved || away);
   }
 
   /** The people `t` ms into a glide of `ms` along `routes` (linear: an even pace the whole way). */
@@ -289,24 +403,74 @@ export class WildmindPoll {
     });
   }
 
-  #move(next: WildmindPerson[], jump: boolean, ms: number): void {
-    this.#stopGlide(false);
-    // From where each person is drawn now, mid-glide or not, so a new answer never jumps anyone.
+  /** Whether an answer puts everyone where the last one did (the running glide's end). */
+  #same(next: WildmindPerson[]): boolean {
+    const was = this.#target;
+    return next.length === was.length && next.every((p, i) => p.id === was[i].id && p.x === was[i].x && p.y === was[i].y && p.alive === was[i].alive);
+  }
+
+  /** Whether everyone is drawn where `next` puts them. */
+  #drawnAt(next: WildmindPerson[]): boolean {
+    const drawn = new Map(this.people.map((p) => [p.id, p]));
+    return next.every((p) => {
+      const d = drawn.get(p.id);
+      return !d || (Math.abs(d.x - p.x) < 0.01 && Math.abs(d.y - p.y) < 0.01);
+    });
+  }
+
+  /** Each person's way from where they are drawn now to where `next` puts them (null: put straight there). */
+  #routesTo(next: WildmindPerson[], jump: boolean): Array<Pt[] | null> {
     const from = new Map(this.people.map((p) => [p.id, [p.x, p.y] as Pt]));
-    const routes = next.map((p) => {
+    return next.map((p) => {
       const f = from.get(p.id);
       return f && !jump && p.alive ? route(f, p) : null;
     });
+  }
+
+  #move(next: WildmindPerson[], jump: boolean): void {
+    const t0 = this.#now();
+    const same = !jump && this.#same(next);
+    if (same && (this.#frame !== 0 || this.#drawnAt(next))) {
+      // Nobody moved: the glide runs on to where it was going, and the rest of the news is taken where they stand.
+      const drawn = new Map(this.people.map((p) => [p.id, p]));
+      this.#target = next;
+      this.#glideNext = next;
+      this.people = next.map((p) => {
+        const d = drawn.get(p.id);
+        return d ? { ...p, x: d.x, y: d.y, heading: d.heading } : p;
+      });
+      return;
+    }
+    // As long as their places took to change (at least a cadence, at most a live one), plus half what is left of the
+    // last glide (a backlog caught up at no more than twice the pace). Nobody drawn short of an unchanged answer
+    // (a glide cut off) changed place since: they walk the rest at the same reckoning.
+    const cad = this.cadence;
+    const since = Math.min(Math.max(t0 - this.#changedAt, cad), Math.max(cad, CADENCE.live));
+    const left = this.#frame ? Math.max(0, this.#glideEnds - t0) : 0;
+    let ms = since + left / 2;
+    // Ending after the quicker cadence lapses: last until the first answer on the slower one, never standing to wait for it.
+    if (this.#engagedAt(t0) && !this.#engagedAt(t0 + ms)) ms = Math.max(ms, this.#lapse() - t0 + CADENCE[this.data?.state ?? 'offline']);
+    this.#target = next;
+    if (!same) this.#changedAt = t0;
+    // From where each person is drawn now, mid-glide or not, so a new answer never jumps anyone.
+    const routes = this.#routesTo(next, jump);
+    this.#stopGlide(false);
+    this.#glide(next, routes, ms, t0);
+  }
+
+  /** Walk everyone along `routes` to `next` over `ms` from `start` (or put them there, when nothing can or need move). */
+  #glide(next: WildmindPerson[], routes: Array<Pt[] | null>, ms: number, start: number): void {
+    this.#glideNext = next;
     if (prefersReducedMotion() || typeof requestAnimationFrame !== 'function' || routes.every((r) => !r)) {
       this.people = next;
       return;
     }
-    const start = this.#now();
+    this.#glideEnds = start + ms;
     // The answer's other news (what they are doing, who is alive) at once, where they stand now.
     this.people = WildmindPoll.at(next, routes, 0, ms);
     const step = () => {
       const t = this.#now() - start;
-      const drawn = WildmindPoll.at(next, routes, t, ms);
+      const drawn = WildmindPoll.at(this.#glideNext, routes, t, ms);
       // Only when someone has moved a drawn step: a slow walk redraws a few times a second, not every frame.
       const moved = drawn.some((p, i) => p.x !== this.people[i]?.x || p.y !== this.people[i]?.y);
       if (moved || t >= ms) this.people = drawn;
@@ -326,6 +490,7 @@ export class WildmindPoll {
     if (v) this.#schedule();
     else {
       this.#clear();
+      this.#away = true;
       // Nobody watches a glide off screen: land it, and the next answer starts from there.
       this.#stopGlide(true);
     }
@@ -338,7 +503,7 @@ export class WildmindPoll {
 
   #schedule(): void {
     this.#clear();
-    if (!this.#visible || this.held || this.#inflight) return;
+    if (this.#destroyed || !this.#visible || this.held || this.#inflight) return;
     const wait = Math.max(0, this.cadence - (this.#now() - this.#last));
     this.#timer = setTimeout(() => void this.poll(), wait);
   }
