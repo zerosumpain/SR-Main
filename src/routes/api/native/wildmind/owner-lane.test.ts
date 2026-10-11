@@ -381,11 +381,37 @@ describe('POST /api/native/wildmind/whisper', () => {
   });
 
   it('allows three a minute from one phone, then says slow-down without asking', async () => {
-    for (let i = 0; i < 3; i++) expect((await post({ text: `Look east ${i}` })).res.status).toBe(202);
-    const { res, body } = await post({ text: 'Look east again' });
+    const key = (i: number) => ({ 'idempotency-key': `3f2504e0-4f89-41d3-9a0c-0305e82c34${String(i).padStart(2, '0')}` });
+    for (let i = 0; i < 3; i++) expect((await post({ text: `Look east ${i}` }, key(i))).res.status).toBe(202);
+    const { res, body } = await post({ text: 'Look east again' }, key(3));
     expect(res.status).toBe(429);
     expect(body).toEqual({ error: 'slow-down' });
     expect(Number(res.headers.get('retry-after'))).toBeGreaterThanOrEqual(1);
     expect(upstream).toHaveBeenCalledTimes(3);
+  });
+
+  it('charges the phone once per key, so retries of one whisper always reach Wildmind', async () => {
+    next = () => {
+      throw new DOMException('timed out', 'TimeoutError');
+    };
+    for (let i = 0; i < 3; i++) expect((await post({ text: 'Look east' })).body).toEqual({ error: 'offline' });
+    next = null; // Wildmind replays its first answer to the same key
+    const { res, body } = await post({ text: 'Look east' });
+    expect(res.status).toBe(202);
+    expect(body.logId).toBe(31);
+    expect(upstream).toHaveBeenCalledTimes(4);
+    for (const [, init] of upstream.mock.calls as Array<[string, RequestInit]>) {
+      expect((init.headers as Record<string, string>)['idempotency-key']).toBe(KEY);
+    }
+  });
+
+  it('still charges a new key from the same phone', async () => {
+    expect((await post({ text: 'Look east' })).res.status).toBe(202);
+    expect((await post({ text: 'Look east' })).res.status).toBe(202); // a retry: free
+    expect((await post({ text: 'Two' }, { 'idempotency-key': '3f2504e0-4f89-41d3-9a0c-0305e82c3302' })).res.status).toBe(202);
+    expect((await post({ text: 'Three' }, { 'idempotency-key': '3f2504e0-4f89-41d3-9a0c-0305e82c3303' })).res.status).toBe(202);
+    const { res } = await post({ text: 'Four' }, { 'idempotency-key': '3f2504e0-4f89-41d3-9a0c-0305e82c3304' });
+    expect(res.status).toBe(429);
+    expect(upstream).toHaveBeenCalledTimes(4);
   });
 });

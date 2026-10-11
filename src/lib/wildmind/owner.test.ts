@@ -131,10 +131,22 @@ describe('InventionsSchema', () => {
       refused: Array.from({ length: 40 }, (_, i) => ({ when: `Day ${i}, 10:00`, text: 'Too heavy.' })),
     });
     expect(out.inventions).toHaveLength(2);
+    expect(out.inventions[0].notes).toEqual(['trimmed']);
     expect(out.inventions[0]).not.toHaveProperty('visual');
     expect(out.inventions[0]).not.toHaveProperty('effects');
     expect(out.inventions[1].kind).toBe('food');
     expect(out.refused).toHaveLength(30);
+  });
+
+  it('keeps all twelve referee notes Wildmind stores, and no more', () => {
+    const notes = Array.from({ length: 14 }, (_, i) => `note ${i + 1}`);
+    const out = InventionsSchema.parse({
+      v: 1,
+      valley,
+      inventions: [{ id: 'kiln', name: 'Kiln', kind: 'building', description: null, inventor: 'JKai', day: 9, placed: true, summary: null, notes, rationale: null }],
+      refused: [],
+    });
+    expect(out.inventions[0].notes).toEqual(notes.slice(0, 12));
   });
 });
 

@@ -34,6 +34,15 @@ describe('the Wildmind owner lane stays off the public page', () => {
       .map((f) => relative(ROOT, f));
     expect(importers.length).toBeGreaterThan(0);
     for (const f of importers) expect(f).toMatch(/^src\/routes\/api\/native\/wildmind\/[a-z]+\/\+server\.ts$/);
-    for (const f of importers) expect(readFileSync(join(ROOT, f), 'utf8')).toContain('withDevice(');
+    for (const f of importers) {
+      const src = readFileSync(join(ROOT, f), 'utf8');
+      // Owner-only: no member-capable wrapper anywhere, and every exported verb
+      // is wrapped in withDevice (the owner gate) at its declaration.
+      expect(src, f).not.toMatch(/withNativeAccess\s*\(/);
+      expect(src, f).not.toMatch(/export\s*\{[^}]*\b(?:GET|POST|PUT|PATCH|DELETE|fallback)\b/);
+      const verbs = [...src.matchAll(/export\s+(?:const|function|async\s+function)\s+(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b[^\n]*/g)];
+      expect(verbs.length, f).toBeGreaterThan(0);
+      for (const [line] of verbs) expect(line, f).toMatch(/^export const (?:GET|POST|PUT|PATCH|DELETE)\b[^=]*=\s*withDevice\(/);
+    }
   });
 });

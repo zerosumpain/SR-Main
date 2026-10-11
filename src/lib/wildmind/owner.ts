@@ -174,7 +174,7 @@ export const InventionsSchema = z.object({
       day: optInt,
       placed: flag,
       summary: optText(600),
-      notes: list(text(300), 10),
+      notes: list(text(300), 12), // Wildmind keeps 12 referee notes
       rationale: optText(TEXT_MAX),
     }),
     200,
