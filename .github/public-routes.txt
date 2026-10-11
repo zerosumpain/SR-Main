@@ -54,6 +54,8 @@
 /api/native/daydream/follow
 /api/native/family/alarm
 /api/native/family/alarm/cancel
+/api/native/family/backlog
+/api/native/family/backlog/[id]
 /api/native/family/forecast
 /api/native/family/forecast/feedback
 /api/native/family/landgrab

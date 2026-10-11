@@ -107,6 +107,10 @@ describe('every native route gates itself', () => {
         // down is the sender or the owner only.
         '/family/alarm/+server.ts',
         '/family/alarm/cancel/+server.ts',
+        // The family backlog (Share → SR): the same audience, `familyCaller`
+        // in each handler; everyone else 403s.
+        '/family/backlog/+server.ts',
+        '/family/backlog/[id]/+server.ts',
         // The travel desk's forecast. Scoped exactly as /home/people is: a
         // Family Circle / Family Admin member gets themselves and their wards.
         '/family/forecast/+server.ts',
