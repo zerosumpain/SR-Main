@@ -156,11 +156,22 @@ export function cleanUrl(u: URL): string {
   return out.toString().replace(/\?$/u, '');
 }
 
+/**
+ * The TikTok video id a link names, or null. A followed short link names no
+ * author (`/@/video/<id>`), so the id is the only thing two shares of one
+ * video are sure to have in common.
+ */
+function tiktokId(u: URL): string | null {
+  return /\/(?:video|photo)\/(\d{5,25})(?:\/|$)/u.exec(u.pathname)?.[1] ?? null;
+}
+
 /** The key two shares of the same thing have in common: scheme, `www.`, case of host and a trailing slash ignored. */
 export function canonicalKey(cleaned: string): string {
   const u = new URL(cleaned);
   const v = providerOf(u) === 'youtube' ? youtubeId(u) : null;
   if (v) return `youtube:${v}`;
+  const t = providerOf(u) === 'tiktok' ? tiktokId(u) : null;
+  if (t) return `tiktok:${t}`;
   const path = u.pathname.replace(/\/+$/u, '');
   return `${bareHost(u)}${path}${u.search}`;
 }

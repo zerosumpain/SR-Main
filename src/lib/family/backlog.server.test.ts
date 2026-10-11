@@ -40,9 +40,9 @@ describe('followShortLink', () => {
   });
 
   it('prepares a short link as the cleaned video it leads to', async () => {
-    const f = fetcher({ 'https://vm.tiktok.com/': { finalUrl: 'https://www.tiktok.com/@a/video/123?_r=1' } });
+    const f = fetcher({ 'https://vm.tiktok.com/': { finalUrl: 'https://www.tiktok.com/@a/video/12345?_r=1' } });
     expect(await prepareLink(new URL('https://vm.tiktok.com/ZNabc/'), f.fn)).toMatchObject({
-      url: 'https://www.tiktok.com/@a/video/123', key: 'tiktok.com/@a/video/123',
+      url: 'https://www.tiktok.com/@a/video/12345', key: 'tiktok:12345',
     });
   });
 });
@@ -64,6 +64,12 @@ describe('describeLink', () => {
   it('falls back to the page for anything else', async () => {
     const f = fetcher({ 'https://example.com/': { body: '<meta property="og:title" content="Day out"><meta property="og:image" content="https://example.com/a.jpg">' } });
     expect(await describeLink('https://example.com/trip', f.fn)).toEqual({ title: 'Day out', siteName: null, thumbnailUrl: 'https://example.com/a.jpg' });
+  });
+
+  it('never reads a TikTok page, whose title is the same for every video', async () => {
+    const f = fetcher({ 'https://www.tiktok.com/': { body: '<title>TikTok - Make Your Day</title>' } });
+    expect(await describeLink('https://www.tiktok.com/@/video/12345', f.fn)).toEqual({ title: null, siteName: null, thumbnailUrl: null });
+    expect(f.asked).toEqual([`https://www.tiktok.com/oembed?url=${encodeURIComponent('https://www.tiktok.com/@/video/12345')}`]);
   });
 
   it('answers nothing, never throws, when every fetch fails or is not HTML', async () => {

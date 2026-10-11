@@ -70,6 +70,10 @@ describe('links', () => {
     expect(a).toBe('youtube:abcdefghijk');
     expect(b).toBe(a);
     expect(canonicalKey('https://www.example.com/a/')).toBe(canonicalKey('http://example.com/a'));
+    // A followed short link names no author; the full link does.
+    expect(canonicalKey('https://www.tiktok.com/@/video/7544795947813932310'))
+      .toBe(canonicalKey('https://www.tiktok.com/@someone/video/7544795947813932310'));
+    expect(canonicalKey('https://www.tiktok.com/@someone/video/7544795947813932310')).toBe('tiktok:7544795947813932310');
   });
 });
 

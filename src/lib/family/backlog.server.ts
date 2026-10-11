@@ -140,6 +140,10 @@ export async function describeLink(cleaned: string, fetcher: Fetcher = guardedPu
   const work = (async () => {
     const first = await oembed(cleaned, fetcher);
     if (first.title && first.thumbnailUrl) return first;
+    // A TikTok page is rendered in the browser: what a fetch gets is the
+    // site's own "TikTok - Make Your Day" for every video. Better no title
+    // (the shared caption, or the host, stands in) than that one.
+    if (providerOf(new URL(cleaned)) === 'tiktok') return first;
     const second = await page(cleaned, fetcher);
     return {
       title: first.title ?? second.title,
