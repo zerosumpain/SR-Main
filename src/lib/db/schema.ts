@@ -7076,6 +7076,69 @@ export const familyTask = pgTable(
 
 export type FamilyTask = typeof familyTask.$inferSelect;
 
+// The family backlog: links, videos and ideas anyone in the family shares
+// into the iPhone app ("Share → SR") for the family to watch, read or do
+// together. `canonical_url` is the link with its tracking parameters removed,
+// so the same video shared twice is one row. `for_email` null = everyone.
+// `status`: 'new' → 'done' (watched/read/done) or 'dismissed' (not for us),
+// either back to 'new'; 'deleted' is a soft delete.
+export const familyBacklogItem = pgTable(
+  'family_backlog_item',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** 'video' | 'page' | 'idea' */
+    kind: text('kind').notNull(),
+    url: text('url'),
+    canonicalUrl: text('canonical_url'),
+    /** 'youtube' | 'tiktok' | 'instagram' | 'web' — null for an idea */
+    provider: text('provider'),
+    title: text('title'),
+    siteName: text('site_name'),
+    thumbnailUrl: text('thumbnail_url'),
+    note: text('note'),
+    forEmail: text('for_email'),
+    addedByEmail: text('added_by_email').notNull(),
+    /** 'new' | 'done' | 'dismissed' | 'deleted' */
+    status: text('status').notNull().default('new'),
+    doneByEmail: text('done_by_email'),
+    doneAt: timestamp('done_at', { withTimezone: true }),
+    /** The family task an idea was turned into (`family_task.id`), if it was. */
+    taskId: uuid('task_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('family_backlog_item_status_idx').on(t.status, t.createdAt),
+    index('family_backlog_item_canonical_idx').on(t.canonicalUrl),
+  ],
+);
+
+export type FamilyBacklogItem = typeof familyBacklogItem.$inferSelect;
+
+// One person's answer to a backlog item: an emoji from msg family's quick set.
+// One per person per item; a second replaces the first. No foreign key — the
+// item is soft-deleted, never removed, except by account erasure, which
+// deletes these with it.
+export const familyBacklogReaction = pgTable(
+  'family_backlog_reaction',
+  {
+    itemId: uuid('item_id').notNull(),
+    email: text('email').notNull(),
+    emoji: text('emoji').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.itemId, t.email] })],
+);
+
+// Who wants the backlog's evening round-up (off unless they turn it on), and
+// the London day it last went, so a second tick that evening sends nothing.
+export const familyBacklogPref = pgTable('family_backlog_pref', {
+  email: text('email').primaryKey(),
+  digest: boolean('digest').notNull().default(false),
+  digestSentOn: date('digest_sent_on', { mode: 'string' }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 // The family alarm: one row per "raise the alarm" pressed on the iPhone app.
 // Written by `$lib/family/alarm.server`; every other family member's phone is
 // pushed and `GET /api/native/family/alarm` lists the active ones (raised in

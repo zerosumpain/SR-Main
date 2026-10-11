@@ -57,6 +57,8 @@ export const load: PageServerLoad = async (event) => {
     members: family.value ?? [],
     /** False when the viewer may not see the household's people at all. */
     showPeople: family.value !== null || family.error !== null,
+    /** The family backlog's big-screen page is the owner's for now (see /home/backlog). */
+    showBacklog: access.level === 'owner',
     familyError: family.error,
     house: house.value ?? emptyHouseSummary(1),
     houseError: house.error,

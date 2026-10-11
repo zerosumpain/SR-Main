@@ -15,6 +15,7 @@ import { activitySync } from './activities/activity-sync';
 import { alexaSignalsSync, alexaVoiceSync, alexaVoiceTopics } from './activities/alexa-voice';
 import { newsBrief } from './activities/news-brief';
 import { familySteps, familySteps4pm } from './activities/family-steps';
+import { familyBacklogDigest } from './activities/family-backlog';
 import { backlogGrooming } from './activities/backlog-grooming';
 import { forgeSchedulesActivity } from './activities/forge-schedules';
 import { modelRouting } from './activities/model-routing';
@@ -45,6 +46,7 @@ const handlers: ActivityHandler[] = [
   alexaVoiceTopics,
   familySteps,
   familySteps4pm,
+  familyBacklogDigest,
   backlogGrooming,
   forgeSchedulesActivity,
   modelRouting,
