@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Resident, type Activity } from './resident';
+import { cueBeats, visitBeats, type Topic } from './exhibits';
 import { NO_DAY } from './day';
 import { moodFor } from './mood';
 import { buildWorld, type SceneryRect } from './world';
@@ -211,5 +212,99 @@ describe('Resident', () => {
     }
     expect(roped).toBe(true);
     expect(r.y).toBe(900);
+  });
+
+  describe('visiting the page', () => {
+    // Two sections: one round the floor at 400, one round the floor at 700.
+    const sections = [
+      { topic: 'health' as Topic, box: { x1: 100, x2: 1100, top: 390, bottom: 650 }, focus: { x: 800, y: 500 } },
+      { topic: 'build' as Topic, box: { x1: 100, x2: 1100, top: 690, bottom: 880 }, focus: { x: 300, y: 760 } },
+    ];
+    const setup = (seed = 3) => {
+      const r = new Resident(seeded(seed));
+      r.setWorld(buildWorld(RECTS, OPTS));
+      r.setExhibits(sections, (t) => visitBeats(t, () => ({ health: { kmYear: 1704 } }), seeded(seed)));
+      return r;
+    };
+
+    it('finds where to stand at each section', () => {
+      expect(setup().exhibitTopics).toEqual(['health', 'build']);
+    });
+
+    it('goes to the section the visitor is reading, and talks about it there', () => {
+      const r = setup();
+      r.setView(300, 800);
+      const said: string[] = [];
+      let arrived = false;
+      for (let i = 0; i < 60 * 90 && !arrived; i++) {
+        r.update(1 / 60);
+        if (r.bubble) said.push(r.bubble.text);
+        if (r.topic === 'health' && r.mode === 'flex') arrived = true;
+      }
+      expect(arrived).toBe(true);
+      expect(r.floor?.y).toBe(400);
+      expect(Math.abs(r.x - 800)).toBeLessThan(2);
+      // The first line of the visit is about the figure on show.
+      for (let i = 0; i < 30; i++) r.update(1 / 60);
+      expect(r.bubble?.text).toMatch(/1,704 km|steps|posing/);
+    });
+
+    it('carries on with a visit when the page re-lays itself out', () => {
+      const r = setup();
+      r.setView(300, 800);
+      for (let i = 0; i < 60 * 90 && !(r.topic === 'health' && r.mode === 'flex'); i++) r.update(1 / 60);
+      expect(r.mode).toBe('flex');
+      // A rebuild mid-beat (as the sections' figures count up).
+      r.setWorld(buildWorld(RECTS, OPTS));
+      r.setExhibits(sections, (t) => visitBeats(t, () => ({}), seeded(3)));
+      const modes = new Set<string>();
+      for (let i = 0; i < 60 * 12; i++) {
+        r.update(1 / 60);
+        if (r.topic === 'health') modes.add(r.mode);
+      }
+      expect(modes.has('pushup')).toBe(true);
+    });
+
+    it('does not visit a section off screen', () => {
+      const r = setup();
+      r.setView(0, 300);
+      expect(r.visit('build')).toBe(false);
+      const r2 = setup();
+      r2.setView(0, 300);
+      for (let i = 0; i < 60 * 30; i++) r2.update(1 / 60);
+      expect(r2.topic).toBeNull();
+    });
+
+    it('reacts to the visitor where he stands', () => {
+      const r = setup();
+      r.setView(0, 1000);
+      for (let i = 0; i < 60; i++) r.update(1 / 60);
+      // Let any climb finish first.
+      for (let i = 0; i < 60 * 10 && r.mode !== 'idle' && r.mode !== 'walk' && r.mode !== 'run'; i++) r.update(1 / 60);
+      const floor = r.floor;
+      r.react(cueBeats('view', () => 0));
+      let surprised = false;
+      for (let i = 0; i < 60 * 3 && !surprised; i++) {
+        r.update(1 / 60);
+        surprised = r.mode === 'surprised';
+      }
+      expect(surprised).toBe(true);
+      expect(r.floor).toBe(floor);
+      expect(r.bubble?.text).toBe('ooh. redecorating');
+    });
+
+    it('holds still with the page, and carries on after', () => {
+      const r = setup();
+      r.setView(0, 1000);
+      for (let i = 0; i < 120; i++) r.update(1 / 60);
+      r.freeze(true, { text: 'statues, is it', kind: 'say' });
+      const at = [r.x, r.y, r.mode];
+      for (let i = 0; i < 600; i++) r.update(1 / 60);
+      expect([r.x, r.y, r.mode]).toEqual(at);
+      expect(r.bubble).toBeNull();
+      r.freeze(false);
+      for (let i = 0; i < 60 * 20; i++) r.update(1 / 60);
+      expect(r.clock).toBeGreaterThan(20);
+    });
   });
 });

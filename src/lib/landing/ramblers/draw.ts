@@ -50,6 +50,8 @@ export const ACCENT: Partial<Record<Mode, Accent>> = {
   shiver: 'cold',
   fan: 'hot',
   yawn: 'sleepy',
+  pulse: 'heart',
+  clap: 'pleased',
 };
 
 /** Modes where he sits on a seat four prop units up. */
@@ -488,7 +490,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, r: Resident, 
   const accent = ACCENT[r.mode];
   let raise = 0;
   if (accent) {
-    const marks = accents(accent, r.animT, fig.head, fig.crown, dir);
+    const marks = accents(accent, r.animT, fig.head, fig.crown, dir, r.bpm ?? 60);
     paintAccent(ctx, marks, ox, oy, P, ink);
     if (marks.length) raise = Math.max(0, fig.top - Math.min(...marks.map((m) => m[1]))) * P;
   }

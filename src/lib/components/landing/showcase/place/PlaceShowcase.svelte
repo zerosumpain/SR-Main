@@ -321,7 +321,7 @@
 <div class="sp" data-sky={heroSky.word} style="{skyVars(heroSky)};{cityVars(city)}">
   {#if data.fixture}<p class="sp-fixture">preview figures</p>{/if}
 
-  <div class="sp-band" data-band="observatory">
+  <div class="sp-band" data-band="observatory" data-rambler="daydream">
     <PlaceScene
       id="sp-dd"
       side="l"
@@ -352,7 +352,7 @@
     </PlaceScene>
   </div>
 
-  <div class="sp-band" data-band="walk">
+  <div class="sp-band" data-band="walk" data-rambler="health">
     <PlaceScene
       id="sp-hl"
       side="r"
@@ -387,7 +387,7 @@
     </PlaceScene>
   </div>
 
-  <div class="sp-band" data-band="house">
+  <div class="sp-band" data-band="house" data-rambler="app">
     <PlaceScene
       id="sp-ap"
       side="l"
@@ -408,7 +408,7 @@
     </PlaceScene>
   </div>
 
-  <div class="sp-band" data-band="works">
+  <div class="sp-band" data-band="works" data-rambler="build">
     <PlaceScene
       id="sp-wk"
       side="r"

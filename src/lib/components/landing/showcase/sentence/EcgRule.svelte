@@ -93,7 +93,7 @@
     <p class="ss-cap">
       {#if caption}<span>{reduced || held ? `drawn at ${drawn} bpm` : `keeping time at ${drawn} bpm`}</span>{/if}
       {#if !reduced}
-        <button type="button" class="ss-hold" aria-pressed={held} onclick={onhold}>
+        <button type="button" class="ss-hold" data-rambler-cue="hold" aria-pressed={held} onclick={onhold}>
           <svg viewBox="0 0 10 10" aria-hidden="true" focusable="false">
             {#if held}<path d="M2 1 L9 5 L2 9 Z" />{:else}<path d="M1.5 1h2.5v8H1.5zM6 1h2.5v8H6z" />{/if}
           </svg>

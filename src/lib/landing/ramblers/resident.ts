@@ -8,6 +8,7 @@
 
 import { Animator } from './animator';
 import { CHOICES, commitment, episodeReason, pick, reasonFor, rebase, relieve, score, startDrives, states, torn, type Choice, type Drives } from './drives';
+import { anchorFor, type Anchor, type Beat, type Box, type Topic } from './exhibits';
 import { CALM, type Mood } from './mood';
 import { FRONT_MODES, type Face, type Mode, type Pose, type View } from './rig';
 import { aside, SPECIAL, want, type Line, type Reason } from './talk';
@@ -17,7 +18,8 @@ type Climb = Exclude<Link, { type: 'drop' }>;
 
 /** Short states he shows rather than chooses. */
 export type Episode = 'stressed' | 'anxious' | 'mad' | 'surprised' | 'fidget' | 'shiver' | 'yawn' | 'celebrate' | 'fan';
-export type Activity = Choice | Episode;
+/** `visit` is a look at one of the page's sections, or a reaction to the visitor. */
+export type Activity = Choice | Episode | 'visit';
 
 type Act = Mode | 'workout';
 
@@ -25,7 +27,7 @@ type Step =
   | { type: 'go'; x: number; gait: 'walk' | 'run' }
   | { type: 'link'; link: Link }
   | { type: 'land'; hard?: boolean }
-  | { type: 'do'; act: Act; dur: number }
+  | { type: 'do'; act: Act; dur: number; say?: Beat['say']; dir?: -1 | 1 }
   | { type: 'wave'; text?: string }
   | { type: 'enter' }
   | { type: 'stall' }
@@ -56,6 +58,20 @@ const SPEED = { walk: 34, run: 60, climb: 26, abseil: 80, drive: 120, ride: 70, 
 /** Seconds out of view (with the page still) before he comes looking. */
 const MISSED = 1.2;
 const FLOWERS = ['#d2402a', '#e8b21f', '#8a5bb0', '#f2ede4', '#e86aa0'];
+/** Seconds before he visits the same section again. */
+const REVISIT = 150;
+/** Seconds of the visitor resting on a section before he comes over to it. */
+const DWELL = 2.2;
+/** Activities a visitor resting on a section may interrupt. */
+const IDLE_ACTIVITIES: Activity[] = ['wander', 'run', 'lookout', 'think', 'fidget'];
+
+/** A section of the page he can visit, and the part of it worth looking at. */
+export interface Exhibit {
+  topic: Topic;
+  box: Box;
+  focus: { x: number; y: number };
+}
+
 /** Art pixels tall, standing. */
 export const HEIGHT = 39;
 
@@ -112,6 +128,23 @@ export class Resident {
   drives: Drives = startDrives(CALM.input);
   /** The pose to draw this frame. */
   pose: Pose | null = null;
+  /** jk's pulse when it is fresh, for the heart he feels for. */
+  bpm: number | null = null;
+  /** The section he is visiting, if any. */
+  topic: Topic | null = null;
+  /** Holding still because the visitor asked the page to. */
+  held = false;
+  private exhibits: Exhibit[] = [];
+  private script: ((t: Topic) => Beat[]) | null = null;
+  private visited: Partial<Record<Topic, number>> = {};
+  private visitEnded = -Infinity;
+  private beats: Beat[] = [];
+  /** A reaction to the visitor waiting for him to be somewhere he can stop. */
+  private cue: { beats: Beat[]; until: number } | null = null;
+  /** Where the current plan ends up. */
+  private dest: Floor | null = null;
+  /** A visit a page rebuild interrupted: picked up again once the sections are re-read. */
+  private resume: { topic: Topic | null; beats: Beat[] } | null = null;
   readonly anim: Animator;
   private steps: Step[] = [];
   private cur: Running | null = null;
@@ -153,6 +186,9 @@ export class Resident {
   /** Adopt a (re)built world, keeping him on the floor he was on where possible. */
   setWorld(w: World, opts: { asleep?: boolean } = {}) {
     const prevKeys = this.floor?.keys ?? null;
+    // A visit in progress carries on after the rebuild (setExhibits picks it
+    // up): the page re-lays itself out as figures count up, mid-visit.
+    this.resume = this.activity === 'visit' ? { topic: this.topic, beats: this.remainingBeats() } : null;
     this.world = w;
     const garage = w.spots.garage;
     if (garage) this.car = { floor: garage.floor, x: this.car && this.car.floor.keys[0] === garage.floor.keys[0] ? clampTo(w, this.car.x, garage.floor) : garage.x, dir: this.car?.dir ?? -1 };
@@ -173,11 +209,12 @@ export class Resident {
     this.stalling = false;
     this.bubble = null;
     this.rope = null;
+    this.dest = null;
     this.prop = null;
     this.cur = null;
     this.steps = [];
     // A resize re-plans the same activity; he has already said why.
-    if (keepActivity) this.start(this.activity === 'drive' || this.activity === 'cycle' ? 'wander' : this.activity, true);
+    if (keepActivity) this.start(this.activity === 'drive' || this.activity === 'cycle' || this.activity === 'visit' ? 'wander' : this.activity, true);
   }
 
   /** The owner's day, re-read every so often. */
@@ -198,6 +235,89 @@ export class Resident {
   /** Something good happened in jk's day while the visitor was here. */
   celebrate() {
     this.pending = 'celebrate';
+  }
+
+  /**
+   * The page's sections, read off the page with the world (each one's box,
+   * in page coordinates), and what he does at each.
+   */
+  setExhibits(list: { topic: Topic; box: Box; focus: { x: number; y: number } }[], script: (t: Topic) => Beat[]) {
+    const w = this.world;
+    this.script = script;
+    this.exhibits = [];
+    if (!w) return;
+    // Only sections he could stand in somewhere.
+    for (const e of list) if (anchorFor(w, e.box, e.focus)) this.exhibits.push(e);
+    const r = this.resume;
+    this.resume = null;
+    if (!r || !r.beats.length || !this.floor) return;
+    const ex = r.topic ? this.exhibits.find((e) => e.topic === r.topic) : undefined;
+    const at = ex && this.standAt(ex);
+    if (r.topic && !at) return;
+    this.beats = r.beats;
+    this.start('visit', true, undefined, r.topic && at ? { topic: r.topic, anchor: at } : undefined);
+  }
+
+  /** What is left of the visit under way: the beat he is in (already said) and those to come. */
+  private remainingBeats(): Beat[] {
+    const out: Beat[] = [];
+    const c = this.cur;
+    if (c?.type === 'do' && c.dur - c.t > 0.5) out.push({ mode: c.act === 'workout' ? 'skip' : c.act, dur: c.dur - c.t });
+    for (const s of this.steps) if (s.type === 'do') out.push({ mode: s.act === 'workout' ? 'skip' : s.act, dur: s.dur, say: s.say });
+    // Still on his way there, that is every beat, lines and all.
+    return out;
+  }
+
+  /** The sections he can get to, for the explainer and tests. */
+  get exhibitTopics(): Topic[] {
+    return this.exhibits.map((e) => e.topic);
+  }
+
+  /** Go and look at a section. False if it is not on this page or he cannot reach it. */
+  visit(topic: Topic) {
+    const ex = this.exhibits.find((e) => e.topic === topic);
+    const at = ex && (this.standAt(ex, true) ?? this.standAt(ex));
+    if (!ex || !at || !this.script || !this.world || !this.floor) return false;
+    this.beats = this.script(topic);
+    this.start('visit', true, undefined, { topic, anchor: at });
+    return true;
+  }
+
+  /**
+   * Where to stand at a section: the floor through it nearest the part worth
+   * looking at, among those on screen (a tall section's top may be long gone).
+   * `inView` also rules out floors he could only reach by a route that leaves
+   * the screen (over a header above it, say), which would lose the visitor.
+   */
+  private standAt(e: Exhibit, inView = false): Anchor | null {
+    const w = this.world;
+    if (!w) return null;
+    const v = this.view_;
+    const y = v ? Math.max(v.top + this.height, Math.min(v.bottom - 40, e.focus.y)) : e.focus.y;
+    const onScreen = (f: Floor) => {
+      if (!inView || !this.floor || f === this.floor) return true;
+      const links = route(w, this.floor, this.x, f);
+      return !!links && links.every((l) => this.seen(l.to));
+    };
+    // Climbing to another floor costs him the walk; staying put is free.
+    const extra = (f: Floor) => (!this.seen(f) || !onScreen(f) ? Infinity : f === this.floor ? 0 : 150 + Math.abs(f.y - this.y) * 0.3);
+    return anchorFor(w, e.box, { x: e.focus.x, y }, extra) ?? (v ? null : anchorFor(w, e.box, e.focus));
+  }
+
+  /**
+   * React to something the visitor did. If he is mid-climb or driving it
+   * waits until he is back on his feet.
+   */
+  react(beats: Beat[]) {
+    if (!beats.length) return;
+    // Out of sight (running back to the visitor, say), it keeps for a few seconds.
+    this.cue = { beats, until: this.clock + 4 };
+  }
+
+  /** Hold still with the page (true) or carry on (false), with something to say about it. */
+  freeze(on: boolean, line?: Line | null) {
+    this.held = on;
+    if (line && this.visible()) this.speak(line, 2.6);
   }
 
   /** The visitor's pointer, in page coordinates: he follows it with his eyes. */
@@ -239,10 +359,12 @@ export class Resident {
   }
 
   /** Start an activity. `reason` is what tipped it, for his thought bubble. */
-  start(activity: Activity, quiet = false, reason?: Reason) {
+  start(activity: Activity, quiet = false, reason?: Reason, to?: { topic: Topic; anchor: Anchor }) {
     const w = this.world;
     if (!w || !this.floor) return;
     this.finishActivity();
+    if (this.activity === 'visit') this.visitEnded = this.clock;
+    this.topic = to?.topic ?? null;
     // Whatever he was in the middle of stops here.
     this.cur = null;
     this.rope = null;
@@ -264,6 +386,7 @@ export class Resident {
     // Episodes happen where he stands.
     if ((EPISODES as Activity[]).includes(activity)) {
       this.steps = [];
+      this.dest = this.floor;
       const len: Record<Episode, [number, number]> = {
         stressed: [4, 5],
         anxious: [4, 6],
@@ -288,6 +411,13 @@ export class Resident {
     if (activity === 'drive' && this.car) {
       floor = this.car.floor;
       x = this.car.x;
+    } else if (to) {
+      floor = to.anchor.floor;
+      x = to.anchor.x;
+    } else if (activity === 'visit') {
+      // A reaction to the visitor happens where he stands.
+      floor = this.floor;
+      x = this.x;
     } else if (spot && (this.seen(spot.floor) || FIXED.includes(activity))) {
       floor = spot.floor;
       x = spot.x;
@@ -305,6 +435,7 @@ export class Resident {
       floor = this.floor;
       x = clampTo(w, x, floor);
     }
+    this.dest = floor;
     // A long trip is a jog: at walking pace, crossing a wide page takes most
     // of a minute and he would spend his life commuting.
     let distance = 0;
@@ -392,6 +523,13 @@ export class Resident {
       case 'puddle':
         settle('puddle', 4, 6);
         break;
+      case 'visit': {
+        // Facing the interesting part, or straight on when it is under him.
+        const face = to?.anchor.face || undefined;
+        for (const b of this.beats) this.steps.push({ type: 'do', act: b.mode, dur: b.dur, say: b.say, dir: face });
+        this.beats = [];
+        break;
+      }
       case 'umbrella':
         // The tantrum, when there is one, comes after the soaking.
         this.gagMad = !this.madUsed && this.random() < 0.5;
@@ -456,12 +594,35 @@ export class Resident {
       if (s.cold && this.random() < 0.3 && this.episode('shiver', 30)) return;
       if (s.hot && this.random() < 0.3 && this.episode('fan', 30)) return;
     }
+    // A section on screen he has not looked at lately: mostly he goes and has a look.
+    const ex = this.exhibitInView();
+    if (ex && (this.visited[ex.topic] === undefined || this.random() < 0.35) && this.visit(ex.topic)) return;
     const scored = score(this.drives, this.hab, this.allowed);
     if (torn(scored) && this.random() < 0.5 && !(EPISODES as Activity[]).includes(was) && this.episode('fidget', 30)) return;
     const o = pick(scored, this.random);
     if (!o) return this.start('wander');
     this.commit = commitment(this.drives, o);
     this.start(o.a, false, reasonFor(this.drives, o));
+  }
+
+  /**
+   * The section filling the middle of the screen, if he can stand there and
+   * has not looked at it in the last couple of minutes.
+   */
+  private exhibitInView(): Exhibit | null {
+    const v = this.view_;
+    if (!v || !this.exhibits.length) return null;
+    const mid = (v.top + v.bottom) / 2;
+    const quarter = (v.bottom - v.top) / 4;
+    let best: Exhibit | null = null;
+    for (const e of this.exhibits) {
+      const last = this.visited[e.topic];
+      if (last !== undefined && this.clock - last < REVISIT) continue;
+      if (e.box.top > mid + quarter || e.box.bottom < mid - quarter || !this.standAt(e)) continue;
+      const d = Math.abs((e.box.top + e.box.bottom) / 2 - mid);
+      if (!best || d < Math.abs((best.box.top + best.box.bottom) / 2 - mid)) best = e;
+    }
+    return best;
   }
 
   /** Off screen too long: run back into view, or rope in if it is far. */
@@ -474,11 +635,14 @@ export class Resident {
     const floor = inView.reduce((a, b) => (Math.abs(b.y - mid) < Math.abs(a.y - mid) ? b : a));
     const x = clampTo(w, Math.max(floor.x1, Math.min(floor.x2, this.x)), floor);
     this.finishActivity();
+    if (this.activity === 'visit') this.visitEnded = this.clock;
+    this.topic = null;
     this.prop = null;
     this.riding = false;
     this.activity = 'wander';
     this.startedAt = this.clock;
     this.speak({ text: SPECIAL.chasing, kind: 'say' }, 2);
+    this.dest = floor;
     const far = Math.abs(this.y - floor.y) > (v.bottom - v.top) * 0.8;
     const links = far ? null : route(w, this.floor, this.x, floor);
     if (links) {
@@ -495,12 +659,31 @@ export class Resident {
   update(dt: number) {
     if (!this.world || !this.floor) return;
     this.clock += dt;
+    if (this.held) {
+      // Stock still with the page: only his speech bubble runs out.
+      if (this.bubble && this.clock > this.bubble.until) this.bubble = null;
+      return;
+    }
     this.viewStill += dt;
     this.missing = this.visible() ? 0 : this.missing + dt;
     const busy = this.cur && (this.cur.type === 'link' || this.cur.type === 'zip' || this.cur.type === 'drive' || this.cur.type === 'enter' || this.cur.type === 'exit' || this.cur.type === 'stall');
-    if (this.view_ && this.missing > MISSED && this.viewStill > 0.5 && !busy) {
+    // On his way somewhere on screen, the route may dip out of view for a moment.
+    const enRoute = !!this.dest && this.seen(this.dest) && this.missing < 6;
+    if (this.view_ && this.missing > MISSED && this.viewStill > 0.5 && !busy && !enRoute) {
       this.missing = 0;
       this.chase();
+    }
+    // The visitor did something: react once he is on his feet.
+    const footed = !busy && !this.inCar && !this.riding && (!this.cur || this.cur.type === 'go' || this.cur.type === 'do' || this.cur.type === 'wave');
+    if (this.cue && this.clock > this.cue.until) this.cue = null;
+    if (this.cue && footed && this.visible()) {
+      this.beats = this.cue.beats;
+      this.cue = null;
+      this.start('visit', true);
+    } else if (footed && this.viewStill > DWELL && this.clock - this.visitEnded > 6 && IDLE_ACTIVITIES.includes(this.activity)) {
+      // The visitor has stopped on a section he has not looked at yet: over he comes.
+      const ex = this.exhibitInView();
+      if (ex && this.visited[ex.topic] === undefined) this.visit(ex.topic);
     }
     this.followCloud(dt);
     if (this.bubble && this.clock > this.bubble.until) this.bubble = null;
@@ -519,6 +702,15 @@ export class Resident {
           s.act === 'tv' ? 'tv' : s.act === 'sofa' || s.act === 'nap' ? 'sofa' : s.act === 'tea' || s.act === 'eat' ? 'table' : s.act === 'meditate' ? 'mat' : s.act === 'puddle' ? 'puddle' : null;
         if (kind) this.prop = { x: this.x, y: this.floor.y, kind };
         if (s.act === 'umbrella') this.cloud = { x: this.x, kind: 'rain', until: this.clock + s.dur + 1 };
+        if (s.dir) this.dir = s.dir;
+        // A visit counts once he is there, not when he sets off.
+        if (this.topic) this.visited[this.topic] = this.clock;
+        if (s.say) {
+          // A visit's own lines, read now so a live figure is current; no
+          // asides over the top of them.
+          this.speak(s.say(), Math.max(2.6, Math.min(s.dur, 4.5)));
+          this.nextAside = this.clock + s.dur + 1;
+        }
       }
     }
     this.step(this.cur!, dt);

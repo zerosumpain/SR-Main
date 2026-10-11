@@ -84,6 +84,7 @@ const WANT: Record<Activity, string[]> = {
   yawn: ['eyes are going'],
   celebrate: ['get in', 'look at that'],
   fan: ['too hot for this', 'is it me or'],
+  visit: ['ooh, what is this', 'let us have a look'],
 };
 
 /** Why — said first, when the owner's day is what tipped the choice. */
