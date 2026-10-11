@@ -98,6 +98,7 @@
 /api/native/route-session/[id]/fixes
 /api/native/session
 /api/native/today
+/api/native/wildmind
 /api/platform/backlog/intake
 /api/platform/daydream/briefing
 /api/platform/models/config
