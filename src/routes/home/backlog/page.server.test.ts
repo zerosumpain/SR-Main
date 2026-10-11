@@ -7,6 +7,7 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock('$lib/family/access.server', () => ({ webFamilyCaller: async () => h.caller }));
+vi.mock('$lib/server/viewer', () => ({ viewerOf: async () => ({ kind: h.caller?.parent ? 'owner' : 'member' }) }));
 vi.mock('$lib/family/roster.server', () => ({
   familyRoster: async () => [{ id: 'f_owner', email: 'owner@example.test', name: 'Owner', parent: true, pilot: true }],
   familyId: (e: string) => `f_${e.split('@')[0]}`,
@@ -59,6 +60,14 @@ describe('/home/backlog', () => {
     const data = (await page.load({ locals: {}, setHeaders: () => {} } as never)) as { items: unknown[] };
     expect(data.items).toHaveLength(1);
     expect(JSON.stringify(data)).not.toContain('@example.test');
+  });
+
+  it('opens for a Family Circle member, who gets no "up" link to /home', async () => {
+    h.caller = { email: 'kid@example.test', parent: false };
+    h.items.set('b1', base());
+    const data = (await page.load({ locals: {}, setHeaders: () => {} } as never)) as { owner: boolean; me: { parent: boolean } };
+    expect(data).toMatchObject({ owner: false, me: { parent: false } });
+    expect(await page.actions.done(form('b1'))).toEqual({ moved: 'b1' });
   });
 
   it('marks watched and back, and 409s a stale move', async () => {

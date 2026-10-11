@@ -90,7 +90,7 @@
   {tabs}
   active={shelf}
   ontab={(id) => (shelf = id as Shelf)}
-  navBack={data.me.parent}
+  navBack={data.owner}
   footer={['strangeramblings.com/home/backlog', 'Shared from the SR app', 'The family only']}
 >
   <div class="bl">

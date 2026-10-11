@@ -236,6 +236,7 @@ export const SECTIONS: NavSection[] = [
     items: [
       { label: 'Now', href: '/home', ownerOnly: true, match: (p) => p === '/home' },
       { label: 'People', href: '/home/people', ownerOnly: true },
+      { label: 'Backlog', href: '/home/backlog', ownerOnly: true },
       { label: 'Voice', href: '/home/voice', ownerOnly: true },
       { label: 'Echoes', href: '/home/echoes', ownerOnly: true },
       { label: 'Devices', href: '/home/devices', ownerOnly: true },

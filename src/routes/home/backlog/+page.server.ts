@@ -1,18 +1,16 @@
 import { error, fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { webFamilyCaller } from '$lib/family/access.server';
+import { viewerOf } from '$lib/server/viewer';
 import { familyId, familyPersonFor, familyRoster } from '$lib/family/roster.server';
 import { isAction, listsOf, toWire, transition } from '$lib/family/backlog';
 import { applyTransition, getItem, loadItems, loadReactions } from '$lib/family/backlog.server';
 
 // The family backlog for a big screen — the television, a laptop on the sofa.
 //
-// OWNER-ONLY for now, by omission: the route is not in $lib/access/catalogue,
-// so the hook turns every member away before this load runs. Opening it to
-// Family Circle is one catalogue line — but that module is duplicated in four
-// extracted apps (tests/scripts/shared-with-extracted.test.ts), so it is a
-// change in five repositories, not one. `webFamilyCaller` below is already
-// written for that day.
+// Open to the owner and Family Circle (`$lib/access/catalogue`); the hook lets
+// only those reach it, and `webFamilyCaller` here is the second lock and the
+// one that says who they are.
 // The same list the phone reads (`/api/native/family/backlog`), the same
 // rules, and the same "people are ids" shape, so no address reaches the
 // browser. Adding stays on the phone ("Share → SR"): this page is for
@@ -31,6 +29,8 @@ export const load: PageServerLoad = async (event) => {
   const wire = (i: Parameters<typeof toWire>[0]) => toWire(i, familyId, reactions);
   return {
     me: { id: me.id, parent: caller.parent },
+    /** "One level up" is /home, which needs the `home` area: only the owner's for certain. */
+    owner: (await viewerOf(event)).kind === 'owner',
     people,
     items: lists.items.map(wire),
     finished: lists.finished.map(wire),

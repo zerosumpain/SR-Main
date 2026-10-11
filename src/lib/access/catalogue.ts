@@ -361,6 +361,11 @@ const ROUTES: Record<string, Partial<Record<Method, Permission>>> = {
   // no email — the day is read for the SESSION's email (`ownDayOf`), so the
   // route can only ever answer with the caller's own track and health.
   '/api/home/people/my-day': { GET: 'family:circle' },
+  // The family backlog on a big screen: the list, "pick one for tonight", and
+  // done / not for us / back on the list (form actions). The load and every
+  // action resolve the caller through `webFamilyCaller`; adding stays on the
+  // phone. No address reaches the page — people are ids, as in the app.
+  '/home/backlog': { GET: 'family:circle', POST: 'family:circle' },
 
   // ── research — runs a member may read, start and change. Every route here
   // resolves the session through `requireResearchSession` (or the list through
