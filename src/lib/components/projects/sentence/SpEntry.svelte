@@ -12,7 +12,7 @@
   // thing rather than a better one. An entry the public cannot see says so
   // in the margin and opens on a dashed rule instead of a solid one.
   import type { Snippet } from 'svelte';
-  import { entryNumber, splitTitle } from '$lib/projects/sentence';
+  import { entryNumber, splitTitle } from './sentence';
   import type { ProjectEntry } from '$lib/projects/views';
 
   let {

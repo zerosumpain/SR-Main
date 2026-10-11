@@ -17,7 +17,7 @@
   // Pure props to markup: nothing is fetched and nothing moves but the line
   // drawing itself in once.
   import type { ProjectsViewProps } from '$lib/projects/views';
-  import { bridgeLine, handHeading } from '$lib/projects/sentence';
+  import { bridgeLine, handHeading } from './sentence';
   import SpBand from './SpBand.svelte';
   import SpChapter from './SpChapter.svelte';
 

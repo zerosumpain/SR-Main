@@ -12,7 +12,7 @@
   // every building, label and leader is placed in shares of it and nothing
   // is measured. Two fits are drawn (wide, and narrow for a phone, where
   // the buildings are slimmer rather than smaller); CSS shows one.
-  import { range, shortName, type Street } from '$lib/projects/place';
+  import { range, shortName, type Street } from './place';
   import PpBuilding from './PpBuilding.svelte';
 
   let { s, owner }: { s: Street; owner: boolean } = $props();

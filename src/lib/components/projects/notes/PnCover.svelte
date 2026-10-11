@@ -11,7 +11,7 @@
   // the server and the browser draw the same marks and nothing moves.
   import type { Snippet } from 'svelte';
   import { GATE_PITCH, inkLine, inkRing, inkTally, rng } from '$lib/landing/notes-ink';
-  import { benchAside, handAside, tallyRows } from '$lib/projects/notes';
+  import { benchAside, handAside, tallyRows } from './notes';
   import type { ProjectCounts } from '$lib/projects/views';
   import PnDot from './PnDot.svelte';
 

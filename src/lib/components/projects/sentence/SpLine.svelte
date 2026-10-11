@@ -7,7 +7,7 @@
   // says the same in words, so the colour is never the only signal). It draws
   // itself in once, left to right, and then keeps still; reduced motion and
   // print skip the flourish. Decoration: aria-hidden.
-  import { benchLine } from '$lib/projects/sentence';
+  import { benchLine } from './sentence';
   import type { ProjectEntry } from '$lib/projects/views';
 
   let { sections }: { sections: ProjectEntry['section'][] } = $props();

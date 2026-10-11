@@ -9,7 +9,7 @@
   // link to its paragraph further down. The dateline and the count hang in a
   // margin column on a desktop and fold in above the sentence on a phone.
   import type { Snippet } from 'svelte';
-  import { benchSentence, splitTitle } from '$lib/projects/sentence';
+  import { benchSentence, splitTitle } from './sentence';
   import { sayCount, type ProjectCounts, type ProjectEntry, type ProjectFamily } from '$lib/projects/views';
   import SpLine from './SpLine.svelte';
 

@@ -7,7 +7,7 @@
   // on a row of dark towers and a kerb, so the next begins behind a skyline
   // rather than at a seam. The New Town, empty, says so plainly.
   import type { Snippet } from 'svelte';
-  import { range, type Quarter } from '$lib/projects/place';
+  import { range, type Quarter } from './place';
   import { plural, type ProjectEntry } from '$lib/projects/views';
   import PpPlot from './PpPlot.svelte';
 

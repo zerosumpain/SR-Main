@@ -8,7 +8,7 @@
   // sit above it.
   import type { Snippet } from 'svelte';
   import type { ProjectEntry } from '$lib/projects/views';
-  import { facade, range, shapeOf } from '$lib/projects/place';
+  import { facade, range, shapeOf } from './place';
   import PpBuilding from './PpBuilding.svelte';
 
   let { e, index, controls }: { e: ProjectEntry; index: number; controls: Snippet<[ProjectEntry]> } = $props();

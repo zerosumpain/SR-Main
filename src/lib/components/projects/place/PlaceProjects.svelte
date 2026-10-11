@@ -15,7 +15,7 @@
   // its own. Pointing at a building raises its name; that is all.
   import type { ProjectsViewProps } from '$lib/projects/views';
   import { plural } from '$lib/projects/views';
-  import { facade, quarters, street, QUARTERS, type Facade } from '$lib/projects/place';
+  import { facade, quarters, street, QUARTERS, type Facade } from './place';
   import PpBuilding from './PpBuilding.svelte';
   import PpQuarter from './PpQuarter.svelte';
   import PpStreet from './PpStreet.svelte';

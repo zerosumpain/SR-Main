@@ -11,7 +11,7 @@
 // keeps its building from one visit to the next.
 
 import { seeded } from '$lib/landing/place-city';
-import { facade, VARIANTS, type Facade, type Variant } from '$lib/components/projects/place/facade';
+import { facade, VARIANTS, type Facade, type Variant } from './facade';
 import type { ProjectCounts, ProjectEntry, ProjectFamily } from './views';
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
@@ -90,7 +90,7 @@ export function shortName(title: string): string {
 /* ------------------------------------------------------------ buildings */
 
 // The drawings themselves (one per family) live beside the view that fills them.
-export { facade, type Facade, type Material, type Variant } from '$lib/components/projects/place/facade';
+export { facade, type Facade, type Material, type Variant } from './facade';
 
 /** A building's variant, width share and height share: its family's, varied by its key. */
 export function shapeOf(e: Pick<ProjectEntry, 'key' | 'family'>, index: number): { variant: Variant; weight: number; height: number } {

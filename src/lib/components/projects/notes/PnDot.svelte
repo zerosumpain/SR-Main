@@ -6,7 +6,7 @@
   // PencilDot, coloured by family rather than by word). Decoration only: the
   // family's word is always written beside it.
   import { inkRing, rng } from '$lib/landing/notes-ink';
-  import { FAMILY_PENCIL, hashKey } from '$lib/projects/notes';
+  import { FAMILY_PENCIL, hashKey } from './notes';
   import type { ProjectFamily } from '$lib/projects/views';
 
   let { family, on = 'paper', seed = 1 }: { family: ProjectFamily; on?: 'paper' | 'ink'; seed?: number } = $props();

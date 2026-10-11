@@ -6,7 +6,7 @@
   // holds it carries the link and the words. The colours are the home page's
   // daylight city (pale stone, blue glass, slate metal) with the site's
   // orange for the funfair and the cranes, and petrol for a finished product.
-  import type { Facade } from '$lib/projects/place';
+  import type { Facade } from './place';
 
   let { f, hidden = false, fit = 'stretch' }: {
     f: Facade;

@@ -16,7 +16,7 @@
   // card takes the click, and the owner's controls sit above that layer.
   import type { Snippet } from 'svelte';
   import { inkRing, rng } from '$lib/landing/notes-ink';
-  import { cardId, chipList, fixingFor, hashKey, tiltFor } from '$lib/projects/notes';
+  import { cardId, chipList, fixingFor, hashKey, tiltFor } from './notes';
   import type { ProjectEntry } from '$lib/projects/views';
   import PnDot from './PnDot.svelte';
 

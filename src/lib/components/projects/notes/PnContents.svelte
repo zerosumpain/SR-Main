@@ -7,7 +7,7 @@
   // dot. Each name points at its card further down the sheet. Hand-built
   // first, then the agent's, under a pencilled heading of their own.
   import type { ProjectEntry } from '$lib/projects/views';
-  import { cardId, shortTitle } from '$lib/projects/notes';
+  import { cardId, shortTitle } from './notes';
   import PnDot from './PnDot.svelte';
 
   let { hand, agent }: { hand: ProjectEntry[]; agent: ProjectEntry[] } = $props();
