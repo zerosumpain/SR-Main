@@ -1,4 +1,4 @@
--- The family backlog's table for Main's restricted runtime role.
+-- The family backlog's tables for Main's restricted runtime role.
 -- `drizzle-kit push` creates `family_backlog_item` as the owner when this
 -- release ships, and a new table gets NO automatic grant — so without this
 -- every share from the app is "permission denied" inside the handler.
@@ -10,6 +10,12 @@ DO $$ BEGIN
   IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'sr_main_runtime') THEN
     IF to_regclass('public.family_backlog_item') IS NOT NULL THEN
       GRANT SELECT, INSERT, UPDATE, DELETE ON public.family_backlog_item TO sr_main_runtime;
+    END IF;
+    IF to_regclass('public.family_backlog_reaction') IS NOT NULL THEN
+      GRANT SELECT, INSERT, UPDATE, DELETE ON public.family_backlog_reaction TO sr_main_runtime;
+    END IF;
+    IF to_regclass('public.family_backlog_pref') IS NOT NULL THEN
+      GRANT SELECT, INSERT, UPDATE, DELETE ON public.family_backlog_pref TO sr_main_runtime;
     END IF;
   END IF;
 END $$;

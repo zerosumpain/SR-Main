@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   canonicalKey,
+  digestItems,
+  digestText,
+  forYouText,
+  londonDay,
+  parseReaction,
+  pushName,
+  reactionText,
   cleanUrl,
   decodeEntities,
   findUrl,
@@ -23,7 +30,7 @@ function item(over: Partial<BacklogRecord> = {}): BacklogRecord {
   return {
     id: 'b1', kind: 'video', url: 'https://www.youtube.com/watch?v=abcdefghijk', canonicalUrl: 'youtube:abcdefghijk',
     provider: 'youtube', title: 'A video', siteName: 'YouTube', thumbnailUrl: null, note: null, forEmail: null,
-    addedByEmail: 'kid@example.test', status: 'new', doneByEmail: null, doneAt: null,
+    addedByEmail: 'kid@example.test', status: 'new', doneByEmail: null, doneAt: null, taskId: null,
     createdAt: new Date('2026-10-01T00:00:00Z'), updatedAt: new Date('2026-10-01T00:00:00Z'), ...over,
   };
 }
@@ -176,5 +183,69 @@ describe('lists and wire', () => {
     const w = toWire(item({ forEmail: 'owner@example.test', doneByEmail: 'kid@example.test' }), (e) => `f_${e.split('@')[0]}`);
     expect(JSON.stringify(w)).not.toContain('@example.test');
     expect(w).toMatchObject({ forId: 'f_owner', addedById: 'f_kid', doneById: 'f_kid' });
+  });
+});
+
+describe('turning an item into a task', () => {
+  it('takes it off the list as done, once', () => {
+    const now = new Date('2026-10-11T12:00:00Z');
+    const kid = { email: 'kid@example.test', parent: false };
+    expect(transition(item({ kind: 'idea' }), 'to_task', kid, now)).toMatchObject({ ok: true, value: { from: 'new', patch: { status: 'done', doneByEmail: kid.email } } });
+    expect(transition(item({ status: 'done' }), 'to_task', kid, now)).toMatchObject({ ok: false, status: 409 });
+    expect(transition(item({ status: 'done', taskId: 't1' }), 'reopen', kid, now)).toMatchObject({ ok: true, value: { patch: { taskId: null } } });
+  });
+});
+
+describe('reactions', () => {
+  it("takes msg family's quick set, or null", () => {
+    expect(parseReaction({ emoji: '👍' })).toEqual({ ok: true, value: '👍' });
+    expect(parseReaction({ emoji: null })).toEqual({ ok: true, value: null });
+    expect(parseReaction({ emoji: '🍕' })).toMatchObject({ ok: false, status: 400 });
+    expect(parseReaction({})).toMatchObject({ ok: false });
+  });
+
+  it('groups them on the wire by emoji, as ids', () => {
+    const idOf = (e: string) => `f_${e.split('@')[0]}`;
+    const w = toWire(item(), idOf, [
+      { itemId: 'b1', email: 'kid@example.test', emoji: '❤️' },
+      { itemId: 'b1', email: 'owner@example.test', emoji: '👍' },
+      { itemId: 'b1', email: 'other@example.test', emoji: '👍' },
+      { itemId: 'b2', email: 'other@example.test', emoji: '😂' },
+    ]);
+    expect(w.reactions).toEqual([
+      { emoji: '👍', by: ['f_owner', 'f_other'] },
+      { emoji: '❤️', by: ['f_kid'] },
+    ]);
+  });
+});
+
+describe('push words', () => {
+  it('names the thing and who shared it', () => {
+    expect(forYouText('Kit', item({ provider: 'tiktok', note: 'so funny' }))).toEqual({ title: 'Kit shared a TikTok for you', body: 'A video — “so funny”' });
+    expect(forYouText('Kit', item({ kind: 'idea', title: 'Whitby', url: null, provider: null })).title).toBe('Kit shared an idea for you');
+    expect(pushName(item({ title: null, url: 'https://www.example.com/x' }))).toBe('example.com');
+    expect(reactionText('Robin', '❤️', item())).toEqual({ title: 'Robin ❤️', body: 'On A video' });
+  });
+
+  it('rounds up what others added in the last day, still on the list', () => {
+    const since = new Date('2026-10-10T19:00:00Z');
+    const items = [
+      item({ id: 'a', title: 'One', addedByEmail: 'kid@example.test', createdAt: new Date('2026-10-11T08:00:00Z') }),
+      item({ id: 'b', title: 'Two', addedByEmail: 'kid@example.test', createdAt: new Date('2026-10-11T09:00:00Z') }),
+      item({ id: 'c', title: 'Three', addedByEmail: 'kid@example.test', createdAt: new Date('2026-10-11T10:00:00Z') }),
+      item({ id: 'mine', addedByEmail: 'owner@example.test', createdAt: new Date('2026-10-11T10:00:00Z') }),
+      item({ id: 'old', addedByEmail: 'kid@example.test', createdAt: new Date('2026-10-09T10:00:00Z') }),
+      item({ id: 'done', status: 'done', addedByEmail: 'kid@example.test', createdAt: new Date('2026-10-11T10:00:00Z') }),
+    ];
+    const picked = digestItems(items, 'owner@example.test', since);
+    expect(picked.map((i) => i.id)).toEqual(['c', 'b', 'a']);
+    expect(digestText(picked)).toEqual({ title: '3 new on the family backlog', body: 'Three, Two and 1 more' });
+    expect(digestText(picked.slice(0, 1))).toEqual({ title: 'New on the family backlog', body: 'Three' });
+    expect(digestText([])).toBeNull();
+  });
+
+  it('keys the round-up by the London day', () => {
+    expect(londonDay(new Date('2026-10-11T23:30:00Z'))).toBe('2026-10-12');
+    expect(londonDay(new Date('2026-12-11T23:30:00Z'))).toBe('2026-12-11');
   });
 });

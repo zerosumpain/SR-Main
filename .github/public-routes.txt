@@ -56,6 +56,8 @@
 /api/native/family/alarm/cancel
 /api/native/family/backlog
 /api/native/family/backlog/[id]
+/api/native/family/backlog/[id]/reaction
+/api/native/family/backlog/digest
 /api/native/family/forecast
 /api/native/family/forecast/feedback
 /api/native/family/landgrab

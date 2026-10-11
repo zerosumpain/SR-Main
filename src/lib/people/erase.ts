@@ -54,6 +54,8 @@ import {
   forecastFeedback,
   familyTask,
   familyBacklogItem,
+  familyBacklogPref,
+  familyBacklogReaction,
   fileShareTokens,
   gameResults,
   gmailAccounts,
@@ -132,6 +134,8 @@ export const ACCOUNT_COLUMNS: Record<string, Record<string, Fate | `kept: ${stri
   // What they shared to the family backlog goes; their name comes off what
   // was shared for them or what they marked done.
   family_backlog_item: { added_by_email: 'erase', for_email: 'scrub', done_by_email: 'scrub' },
+  family_backlog_reaction: { email: 'erase' },
+  family_backlog_pref: { email: 'erase' },
   gmail_accounts: { email: 'erase', principal_id: 'erase' },
   activity_principals: { external_ref: 'erase' },
   jkai_conversations: { principal_id: 'erase' },
@@ -255,7 +259,10 @@ export async function eraseRows(target: EraseTarget, executor: typeof db = db): 
     await tx.delete(forecastFeedback).where(inArray(forecastFeedback.reporterEmail, addrs));
 
     // What they shared to the family backlog; their name off the rest.
-    await tx.delete(familyBacklogItem).where(inArray(familyBacklogItem.addedByEmail, addrs));
+    const shared = await tx.delete(familyBacklogItem).where(inArray(familyBacklogItem.addedByEmail, addrs)).returning({ id: familyBacklogItem.id });
+    if (shared.length) await tx.delete(familyBacklogReaction).where(inArray(familyBacklogReaction.itemId, shared.map((i) => i.id)));
+    await tx.delete(familyBacklogReaction).where(inArray(familyBacklogReaction.email, addrs));
+    await tx.delete(familyBacklogPref).where(inArray(familyBacklogPref.email, addrs));
     await tx.update(familyBacklogItem).set({ forEmail: null }).where(inArray(familyBacklogItem.forEmail, addrs));
     await tx.update(familyBacklogItem).set({ doneByEmail: null }).where(inArray(familyBacklogItem.doneByEmail, addrs));
 

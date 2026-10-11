@@ -7,6 +7,8 @@
 // Anyone in the family shares a link, a video or a line of text into the
 // iPhone app ("Share → SR"); everyone in the family sees the list.
 
+import { REACTIONS } from './messages';
+
 export type BacklogKind = 'video' | 'page' | 'idea';
 export type BacklogProvider = 'youtube' | 'tiktok' | 'instagram' | 'web';
 export type BacklogStatus = 'new' | 'done' | 'dismissed' | 'deleted';
@@ -34,8 +36,16 @@ export interface BacklogRecord {
   status: string;
   doneByEmail: string | null;
   doneAt: Date | null;
+  taskId: string | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/** One person's emoji on an item (a row of `family_backlog_reaction`). */
+export interface ReactionRecord {
+  itemId: string;
+  email: string;
+  emoji: string;
 }
 
 export interface Actor {
@@ -304,7 +314,7 @@ export function parsePageMeta(html: string, pageUrl: string): LinkMeta {
 
 // ── The list and its rules ─────────────────────────────────────────────────
 
-export const ACTIONS = ['done', 'dismiss', 'reopen', 'delete'] as const;
+export const ACTIONS = ['done', 'dismiss', 'reopen', 'delete', 'to_task'] as const;
 export type Action = (typeof ACTIONS)[number];
 
 export function isAction(v: unknown): v is Action {
@@ -313,13 +323,15 @@ export function isAction(v: unknown): v is Action {
 
 export interface Transition {
   from: string;
-  patch: Partial<Pick<BacklogRecord, 'status' | 'doneByEmail' | 'doneAt'>>;
+  patch: Partial<Pick<BacklogRecord, 'status' | 'doneByEmail' | 'doneAt' | 'taskId'>>;
 }
 
 /**
  * Who may do what, from which state. Anyone in the family marks something
  * watched (done), not for us (dismiss) or back on the list (reopen); only
- * whoever shared it, or a parent, deletes it. PURE.
+ * whoever shared it, or a parent, deletes it. Anyone turns something still
+ * on the list into a family task (`to_task`): it leaves the list as done, and
+ * the route adds the task and its id. PURE.
  */
 export function transition(item: BacklogRecord, action: Action, actor: Actor, now: Date): Valid<Transition> | Invalid {
   const from = item.status;
@@ -328,9 +340,12 @@ export function transition(item: BacklogRecord, action: Action, actor: Actor, no
     case 'dismiss':
       if (from !== 'new') return { ok: false, status: 409, error: 'That is already off the list.' };
       return { ok: true, value: { from, patch: { status: action === 'done' ? 'done' : 'dismissed', doneByEmail: actor.email, doneAt: now } } };
+    case 'to_task':
+      if (from !== 'new') return { ok: false, status: 409, error: 'That is already off the list.' };
+      return { ok: true, value: { from, patch: { status: 'done', doneByEmail: actor.email, doneAt: now } } };
     case 'reopen':
       if (from !== 'done' && from !== 'dismissed') return { ok: false, status: 409, error: 'That is already on the list.' };
-      return { ok: true, value: { from, patch: { status: 'new', doneByEmail: null, doneAt: null } } };
+      return { ok: true, value: { from, patch: { status: 'new', doneByEmail: null, doneAt: null, taskId: null } } };
     case 'delete':
       if (item.addedByEmail !== actor.email && !actor.parent) {
         return { ok: false, status: 403, error: 'Only whoever shared it, or a parent, can delete it.' };
@@ -365,12 +380,17 @@ export interface BacklogWire {
   status: 'new' | 'done' | 'dismissed';
   doneById: string | null;
   doneAt: string | null;
+  /** The family task it became, if an idea was turned into one. */
+  taskId: string | null;
+  /** Each emoji with who chose it, in REACTIONS order. */
+  reactions: { emoji: string; by: string[] }[];
   createdAt: string;
   updatedAt: string;
 }
 
 /** What the phone gets: people as ids, never an address. PURE. */
-export function toWire(item: BacklogRecord, idOf: (email: string) => string): BacklogWire {
+export function toWire(item: BacklogRecord, idOf: (email: string) => string, reactions: ReactionRecord[] = []): BacklogWire {
+  const mine = reactions.filter((r) => r.itemId === item.id);
   return {
     id: item.id,
     kind: item.kind as BacklogKind,
@@ -385,7 +405,75 @@ export function toWire(item: BacklogRecord, idOf: (email: string) => string): Ba
     status: item.status as BacklogWire['status'],
     doneById: item.doneByEmail ? idOf(item.doneByEmail) : null,
     doneAt: item.doneAt ? item.doneAt.toISOString() : null,
+    taskId: item.taskId ?? null,
+    reactions: REACTIONS.map((emoji) => ({ emoji, by: mine.filter((r) => r.emoji === emoji).map((r) => idOf(r.email)) })).filter(
+      (r) => r.by.length > 0,
+    ),
     createdAt: item.createdAt.toISOString(),
     updatedAt: item.updatedAt.toISOString(),
   };
+}
+
+// ── Reactions ──────────────────────────────────────────────────────────────
+
+/** `{ emoji }`: one of msg family's quick set, or null to take yours back. PURE. */
+export function parseReaction(input: unknown): Valid<string | null> | Invalid {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return bad('Body must be JSON');
+  const emoji = (input as Record<string, unknown>).emoji;
+  if (emoji === null) return { ok: true, value: null };
+  if (typeof emoji === 'string' && (REACTIONS as readonly string[]).includes(emoji)) return { ok: true, value: emoji };
+  return bad(`Pick one of ${REACTIONS.join(' ')}.`);
+}
+
+// ── What a push says ───────────────────────────────────────────────────────
+
+/** What an item is called in a notification: its title, its site, or "an idea". */
+export function pushName(item: Pick<BacklogRecord, 'title' | 'url' | 'kind'>): string {
+  if (item.title) return clip(item.title, 80);
+  if (item.url) {
+    try {
+      return new URL(item.url).hostname.replace(/^www\./u, '');
+    } catch {
+      /* fall through */
+    }
+  }
+  return item.kind === 'idea' ? 'an idea' : 'a link';
+}
+
+function thing(item: Pick<BacklogRecord, 'kind' | 'provider'>): string {
+  if (item.kind === 'idea') return 'an idea';
+  if (item.kind === 'video') return item.provider === 'tiktok' ? 'a TikTok' : 'a video';
+  return 'a link';
+}
+
+/** To the person something was shared for. */
+export function forYouText(adderName: string, item: Pick<BacklogRecord, 'title' | 'url' | 'kind' | 'provider' | 'note'>): { title: string; body: string } {
+  const body = item.note ? `${pushName(item)} — “${clip(item.note, 80)}”` : pushName(item);
+  return { title: `${adderName} shared ${thing(item)} for you`, body };
+}
+
+/** To whoever shared it, when somebody answers with an emoji. */
+export function reactionText(name: string, emoji: string, item: Pick<BacklogRecord, 'title' | 'url' | 'kind'>): { title: string; body: string } {
+  return { title: `${name} ${emoji}`, body: `On ${pushName(item)}` };
+}
+
+/** Items for one person's evening round-up: still on the list, added since `since`, by somebody else. PURE. */
+export function digestItems(items: BacklogRecord[], email: string, since: Date): BacklogRecord[] {
+  return items
+    .filter((i) => i.status === 'new' && i.addedByEmail !== email && i.createdAt.getTime() >= since.getTime())
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+}
+
+/** The round-up's words: how many, and the first two by name. Null when there is nothing. */
+export function digestText(items: BacklogRecord[]): { title: string; body: string } | null {
+  if (!items.length) return null;
+  const names = items.slice(0, 2).map(pushName);
+  const more = items.length - names.length;
+  const body = more > 0 ? `${names.join(', ')} and ${more} more` : names.join(' and ');
+  return { title: items.length === 1 ? 'New on the family backlog' : `${items.length} new on the family backlog`, body };
+}
+
+/** The calendar day in London, YYYY-MM-DD — the digest's once-a-day key. */
+export function londonDay(now: Date): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
 }

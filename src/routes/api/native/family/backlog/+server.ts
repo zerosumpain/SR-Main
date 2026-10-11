@@ -3,14 +3,26 @@ import type { RequestHandler } from './$types';
 import { withNativeAccess } from '$lib/server/native-handler';
 import { familyCaller } from '$lib/family/access.server';
 import { familyId, familyPersonFor, familyRoster } from '$lib/family/roster.server';
+import { REACTIONS } from '$lib/family/messages';
 import { kindOf, listsOf, NOT_FAMILY, parseShare, providerOf, toWire } from '$lib/family/backlog';
-import { createItem, describeLink, findByKey, loadItems, prepareLink } from '$lib/family/backlog.server';
+import {
+  createItem,
+  describeLink,
+  findByKey,
+  getDigest,
+  loadItems,
+  loadReactions,
+  notifyForYou,
+  prepareLink,
+} from '$lib/family/backlog.server';
 
 /**
  * GET /api/native/family/backlog — the family backlog: `items` still to watch,
  * read or do (newest first) and `finished`, done or dismissed in the last 30
  * days. Everyone in the family sees the same list; `forId` marks who a thing
- * was shared for. People are ids; the phone names them from `people`.
+ * was shared for, `reactions` who answered with which emoji. `digest` is
+ * whether the caller gets the evening round-up. People are ids; the phone
+ * names them from `people`.
  */
 export const GET: RequestHandler = withNativeAccess('any', async (event, identity, role) => {
   const caller = await familyCaller(event, identity, role);
@@ -20,10 +32,13 @@ export const GET: RequestHandler = withNativeAccess('any', async (event, identit
   const people = roster.map((p) => ({ id: p.id, name: p.name }));
   if (!roster.some((p) => p.email === me.email)) people.push({ id: me.id, name: me.name });
   const lists = listsOf(await loadItems(), new Date());
-  const wire = (i: Parameters<typeof toWire>[0]) => toWire(i, familyId);
+  const reactions = await loadReactions([...lists.items, ...lists.finished].map((i) => i.id));
+  const wire = (i: Parameters<typeof toWire>[0]) => toWire(i, familyId, reactions);
   return {
     me: { id: me.id, parent: caller.parent },
     people,
+    quickReactions: [...REACTIONS],
+    digest: await getDigest(caller.email),
     items: lists.items.map(wire),
     finished: lists.finished.map(wire),
   };
@@ -35,6 +50,7 @@ export const GET: RequestHandler = withNativeAccess('any', async (event, identit
  * followed) and described (title, site, picture) before it is stored; the
  * same link shared again answers the existing item with `duplicate: true`
  * (200) instead of adding it twice. Text with no link is an idea. 201 on add.
+ * Shared FOR somebody else, that person is pushed; nobody else is.
  */
 export const POST: RequestHandler = withNativeAccess('any', async (event, identity, role) => {
   const caller = await familyCaller(event, identity, role);
@@ -54,6 +70,7 @@ export const POST: RequestHandler = withNativeAccess('any', async (event, identi
       kind: 'idea', url: null, canonicalUrl: null, provider: null, title: s.title, siteName: null,
       thumbnailUrl: null, note: s.note, forEmail, addedByEmail: caller.email,
     });
+    void notifyForYou(item);
     return json({ item: toWire(item, familyId), duplicate: false }, { status: 201 });
   }
 
@@ -74,5 +91,6 @@ export const POST: RequestHandler = withNativeAccess('any', async (event, identi
     forEmail,
     addedByEmail: caller.email,
   });
+  void notifyForYou(item);
   return json({ item: toWire(item, familyId), duplicate: false }, { status: 201 });
 });

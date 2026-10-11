@@ -127,6 +127,9 @@
         <RollupGrid cells={people} min={180} />
       {/if}
       <p class="more"><a class="link" href="/home/people">Today's movements and each person's patterns →</a></p>
+      {#if data.showBacklog}
+        <p class="more"><a class="link" href="/home/backlog">What the family wants to watch — the backlog →</a></p>
+      {/if}
     </div>
   </section>
   {/if}

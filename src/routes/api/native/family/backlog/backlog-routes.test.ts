@@ -7,6 +7,10 @@ const h = vi.hoisted(() => ({
   items: new Map<string, BacklogRecord>(),
   created: [] as Array<Record<string, unknown>>,
   described: [] as string[],
+  reactions: [] as Array<{ itemId: string; email: string; emoji: string }>,
+  pushed: [] as string[],
+  digest: new Map<string, boolean>(),
+  tasks: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock('$lib/server/native-handler', () => ({
@@ -60,6 +64,30 @@ vi.mock('$lib/family/backlog.server', async () => {
       h.items.set(row.id, row);
       return row;
     },
+    loadReactions: async (ids: string[]) => h.reactions.filter((r) => ids.includes(r.itemId)),
+    setReaction: async (itemId: string, email: string, emoji: string | null) => {
+      const i = h.reactions.findIndex((r) => r.itemId === itemId && r.email === email);
+      const before = i >= 0 ? h.reactions[i].emoji : null;
+      if (i >= 0) h.reactions.splice(i, 1);
+      if (emoji) h.reactions.push({ itemId, email, emoji });
+      return before !== emoji;
+    },
+    notifyForYou: async (item: BacklogRecord) => {
+      if (item.forEmail && item.forEmail !== item.addedByEmail) h.pushed.push(`for:${item.forEmail}`);
+      return 1;
+    },
+    notifyReaction: async (item: BacklogRecord, who: string, emoji: string) => {
+      if (item.addedByEmail !== who) h.pushed.push(`react:${item.addedByEmail}:${emoji}`);
+      return 1;
+    },
+    getDigest: async (email: string) => h.digest.get(email) ?? false,
+    setDigest: async (email: string, on: boolean) => void h.digest.set(email, on),
+    setTaskId: async (id: string, taskId: string) => {
+      const cur = h.items.get(id)!;
+      const next = { ...cur, taskId };
+      h.items.set(id, next);
+      return next;
+    },
     applyTransition: async (id: string, t: { from: string; patch: Partial<BacklogRecord> }) => {
       const cur = h.items.get(id);
       if (!cur || cur.status !== t.from) return null;
@@ -70,17 +98,32 @@ vi.mock('$lib/family/backlog.server', async () => {
   };
 });
 
+vi.mock('$lib/family/tasks.server', () => ({
+  createTask: async (fields: Record<string, unknown>, by: string) => {
+    h.tasks.push({ ...fields, by });
+    return {
+      id: '00000000-0000-4000-8000-000000000001', title: fields.title, notes: fields.notes ?? null, deadline: null,
+      assigneeEmail: fields.assigneeEmail ?? null, createdByEmail: by, status: 'open', doneByEmail: null, doneAt: null,
+      sentBackNote: null, sentBackAt: null, confirmedByEmail: null, confirmedAt: null, rewardKind: null, rewardPence: null,
+      rewardNote: null, rewardPaidAt: null, rewardPaidByEmail: null, createdAt: new Date(), updatedAt: new Date(),
+    };
+  },
+  notifyTaskChange: async () => 1,
+}));
+
 function base(over: Partial<BacklogRecord> = {}): BacklogRecord {
   return {
     id: 'b1', kind: 'page', url: 'https://example.com/a', canonicalUrl: 'example.com/a', provider: 'web', title: 'A page',
     siteName: null, thumbnailUrl: null, note: null, forEmail: null, addedByEmail: 'kid@example.test', status: 'new',
-    doneByEmail: null, doneAt: null, createdAt: new Date('2026-10-10T00:00:00Z'), updatedAt: new Date('2026-10-10T00:00:00Z'),
+    doneByEmail: null, doneAt: null, taskId: null, createdAt: new Date('2026-10-10T00:00:00Z'), updatedAt: new Date('2026-10-10T00:00:00Z'),
     ...over,
   };
 }
 
 const list = await import('./+server');
 const one = await import('./[id]/+server');
+const react = await import('./[id]/reaction/+server');
+const digest = await import('./digest/+server');
 
 const post = (body: unknown) =>
   list.POST({ request: new Request('http://x/api/native/family/backlog', { method: 'POST', body: JSON.stringify(body) }), locals: {} } as never);
@@ -93,7 +136,16 @@ beforeEach(() => {
   h.items.clear();
   h.created.length = 0;
   h.described.length = 0;
+  h.reactions.length = 0;
+  h.pushed.length = 0;
+  h.digest.clear();
+  h.tasks.length = 0;
 });
+
+const reactTo = (id: string, body: unknown) =>
+  react.POST({ params: { id }, request: new Request('http://x', { method: 'POST', body: JSON.stringify(body) }), locals: {} } as never);
+const putDigest = (body: unknown) =>
+  digest.PUT({ request: new Request('http://x', { method: 'PUT', body: JSON.stringify(body) }), locals: {} } as never);
 
 describe('GET /api/native/family/backlog', () => {
   it('refuses anyone outside the family', async () => {
@@ -181,5 +233,68 @@ describe('PATCH /api/native/family/backlog/[id]', () => {
     h.items.set('b1', base({ status: 'dismissed' }));
     expect((await patch('b1', { action: 'done' })).status).toBe(409);
     expect((await patch('b1', { action: 'explode' })).status).toBe(400);
+  });
+});
+
+describe('pushes on share', () => {
+  it('pushes the person it was for, and nobody when it is for everyone or yourself', async () => {
+    await post({ text: 'Whitby', forId: 'f_kid' });
+    await post({ text: 'Coast' });
+    await post({ text: 'Mine', forId: 'f_owner' });
+    expect(h.pushed).toEqual(['for:kid@example.test']);
+  });
+});
+
+describe('reactions', () => {
+  it('sets, replaces and takes back an emoji, pushing the sharer only for a change', async () => {
+    h.items.set('b1', base());
+    const first = await (await reactTo('b1', { emoji: '👍' })).json();
+    expect(first.item.reactions).toEqual([{ emoji: '👍', by: ['f_owner'] }]);
+    await reactTo('b1', { emoji: '👍' });
+    await reactTo('b1', { emoji: '❤️' });
+    expect(h.pushed).toEqual(['react:kid@example.test:👍', 'react:kid@example.test:❤️']);
+    const gone = await (await reactTo('b1', { emoji: null })).json();
+    expect(gone.item.reactions).toEqual([]);
+  });
+
+  it('never pushes you about your own share, and refuses odd emoji and strangers', async () => {
+    h.items.set('b1', base());
+    h.role = 'member';
+    await reactTo('b1', { emoji: '😂' });
+    expect(h.pushed).toEqual([]);
+    expect((await reactTo('b1', { emoji: '🍕' })).status).toBe(400);
+    expect((await reactTo('nope', { emoji: '👍' })).status).toBe(404);
+    h.family = false;
+    expect((await reactTo('b1', { emoji: '👍' })).status).toBe(403);
+  });
+});
+
+describe('the evening round-up switch', () => {
+  it('is off until turned on, and GET says which', async () => {
+    let body = await (await list.GET({ locals: {} } as never)).json();
+    expect(body.digest).toBe(false);
+    expect(await (await putDigest({ on: true })).json()).toEqual({ digest: true });
+    body = await (await list.GET({ locals: {} } as never)).json();
+    expect(body.digest).toBe(true);
+    expect(body.quickReactions).toContain('👍');
+    expect((await putDigest({ on: 'yes' })).status).toBe(400);
+  });
+});
+
+describe('to_task', () => {
+  it('makes a family task for whoever it was for, with the note and link, and takes it off the list', async () => {
+    h.items.set('b1', base({ kind: 'idea', title: 'Go to Whitby', url: null, note: 'Half term', forEmail: 'kid@example.test' }));
+    const res = await (await patch('b1', { action: 'to_task' })).json();
+    expect(res.item).toMatchObject({ status: 'done', taskId: '00000000-0000-4000-8000-000000000001' });
+    expect(res.task).toMatchObject({ title: 'Go to Whitby' });
+    expect(h.tasks[0]).toMatchObject({ title: 'Go to Whitby', notes: 'Half term', assigneeEmail: 'kid@example.test', by: 'owner@example.test' });
+    expect((await patch('b1', { action: 'to_task' })).status).toBe(409);
+    expect(h.tasks).toHaveLength(1);
+  });
+
+  it('puts the link in the notes of a task made from a link', async () => {
+    h.items.set('b1', base({ title: null }));
+    await patch('b1', { action: 'to_task' });
+    expect(h.tasks[0]).toMatchObject({ title: 'example.com', notes: 'https://example.com/a' });
   });
 });
