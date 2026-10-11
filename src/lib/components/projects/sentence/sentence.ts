@@ -6,7 +6,7 @@
 // The sentence never says "no games": a family with nothing in it drops its
 // clause, as a writer would, rather than report an absence.
 
-import { plural, sayCount, type ProjectCounts, type ProjectEntry, type ProjectFamily } from './views';
+import { plural, sayCount, type ProjectCounts, type ProjectEntry, type ProjectFamily } from '$lib/projects/views';
 
 export type Seg =
   | { t: 'text'; s: string }

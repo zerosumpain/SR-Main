@@ -71,7 +71,7 @@ describe('/projects index load', () => {
     expect(data.cards).toHaveLength(PROJECT_CARDS.length);
   });
 
-  it('reads the landing page's view choice: a ?view= link, then the cookie, then the notes', async () => {
+  it("reads the landing page's view choice: a ?view= link, then the cookie, then the notes", async () => {
     expect((await run()).view).toMatchObject({ view: 'notes', source: 'auto' });
     expect((await run({ cookie: 'place' })).view).toMatchObject({ view: 'place', source: 'cookie' });
     expect((await run({ cookie: 'place', query: 'sentence' })).view).toMatchObject({ view: 'sentence', source: 'query' });

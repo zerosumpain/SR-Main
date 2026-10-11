@@ -12,7 +12,7 @@
 
 import { seeded } from '$lib/landing/place-city';
 import { facade, VARIANTS, type Facade, type Variant } from './facade';
-import type { ProjectCounts, ProjectEntry, ProjectFamily } from './views';
+import type { ProjectCounts, ProjectEntry, ProjectFamily } from '$lib/projects/views';
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
 const rect = (x: number, y: number, w: number, h: number) => (w <= 0 || h <= 0 ? '' : `M${r1(x)},${r1(y)}h${r1(w)}v${r1(h)}h${r1(-w)}Z`);

@@ -5,7 +5,7 @@
 // project's key, so the server and the browser draw the same page and the
 // rules are unit tests (notes.test.ts).
 
-import { plural, sayCount, type ProjectCounts, type ProjectEntry, type ProjectFamily } from './views';
+import { plural, sayCount, type ProjectCounts, type ProjectEntry, type ProjectFamily } from '$lib/projects/views';
 
 /** The family, as the word pencilled beside its dot. */
 export const FAMILY_WORD: Record<ProjectFamily, string> = {

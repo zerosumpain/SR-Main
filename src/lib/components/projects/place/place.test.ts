@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { facade, GEOMETRY, quarters, shapeOf, shortName, street } from './place';
-import { countEntries, toEntries, type ProjectCard } from './views';
+import { countEntries, toEntries, type ProjectCard } from '$lib/projects/views';
 
 const card = (key: string, kind: string, extra: Partial<ProjectCard> = {}): ProjectCard => ({
   key,

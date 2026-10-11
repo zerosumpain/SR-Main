@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ProjectCard, ProjectEntry } from './views';
+import type { ProjectCard, ProjectEntry } from '$lib/projects/views';
 import { benchLine, benchSentence, bridgeLine, entryNumber, handHeading, splitTitle, type Seg } from './sentence';
 
 const say = (segs: Seg[]) => segs.map((s) => (s.t === 'text' ? s.s : s.word + (s.t === 'fig' ? (s.end ?? '') : ''))).join('');
@@ -107,7 +107,7 @@ describe('SentenceProjects (server render)', async () => {
   const { render } = await import('svelte/server');
   const { createRawSnippet } = await import('svelte');
   const { default: SentenceProjects } = await import('$lib/components/projects/sentence/SentenceProjects.svelte');
-  const { toEntries, countEntries } = await import('./views');
+  const { toEntries, countEntries } = await import('$lib/projects/views');
 
   const card = (key: string, kind: string, extra: Partial<ProjectCard> = {}): ProjectCard => ({
     key,

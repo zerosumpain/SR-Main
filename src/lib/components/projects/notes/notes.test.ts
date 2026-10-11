@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { benchAside, cardId, chipList, fixingFor, handAside, shortTitle, tallyRows, tiltFor } from './notes';
-import type { ProjectCounts } from './views';
+import type { ProjectCounts } from '$lib/projects/views';
 
 const counts = (over: Partial<ProjectCounts> = {}): ProjectCounts => ({
   bench: 15,
