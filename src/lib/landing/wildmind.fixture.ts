@@ -17,7 +17,7 @@
 
 import recorded from './fixtures/wildmind-day16.json';
 import youngRecorded from './fixtures/wildmind-between-lives.json';
-import { offlineShowcase, parseSnapshot, project, type WildmindShowcase, type WildmindSnapshotV1 } from './wildmind';
+import { offlineShowcase, parseSnapshot, project, type WildmindShowcase, type WildmindSnapshotV1, type WildmindTerrain } from './wildmind';
 import type { WildmindGlass } from './wildmind-glass';
 import { glassCached } from './wildmind-glass.server';
 import { traceCached } from './wildmind-trace.server';
@@ -109,4 +109,18 @@ export function fixtureGlass(state?: string): WildmindGlass | null {
   const traced = traceCached(ground.terrain, ground.terrainVersion);
   if (!traced) return null;
   return glassCached(ground.terrain, ground.terrainVersion, traced.frame.per / ground.terrain.step)?.glass ?? null;
+}
+
+/**
+ * The preview's Wildmind as a raw read, for the phone's own route
+ * (wildmind-native.server.ts): the snapshot without its terrain, the terrain
+ * it stands on, and when it was "read". Null for `offline`.
+ */
+export function fixtureRead(now: number, state?: string): { snap: WildmindSnapshotV1; terrain: WildmindTerrain; fetchedAt: number } | null {
+  if (state === 'offline') return null;
+  const ground = state === 'young' && youngBase?.terrain ? youngBase : base;
+  const full = fixtureSnapshot(now, state);
+  if (!full || !ground?.terrain) return null;
+  const { terrain: _, ...snap } = full;
+  return { snap: { ...snap, terrainVersion: ground.terrainVersion }, terrain: ground.terrain, fetchedAt: state === 'stale' ? now - 10 * 60_000 : now };
 }

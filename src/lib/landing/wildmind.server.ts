@@ -235,7 +235,8 @@ export function showcaseFrom(read: WildmindRead | null, now: number, have?: stri
   return finish(project(read.snap, read.fetchedAt, now, traced), have, view, () => glassFor(read.terrain, read.snap.terrainVersion, traced));
 }
 
-function wantsFixture(): boolean {
+/** Dev only: the recorded fixture stands in for an unset WILDMIND_SNAPSHOT_URL (LANDING_SHOWCASE_FIXTURE=1). */
+export function wantsFixture(): boolean {
   return dev && env.LANDING_SHOWCASE_FIXTURE === '1';
 }
 

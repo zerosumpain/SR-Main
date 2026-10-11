@@ -166,6 +166,7 @@ export const ROUTE_LEDGER: Record<string, LedgerEntry> = {
   '/api/native/games/[id]': phone('app/api', 'One game room, and making a move'),
   '/api/native/games/[id]/stream': phone('app/api', 'A game room, live'),
   '/api/native/games/leaderboard': phone('app/api', 'The family’s games boards'),
+  '/api/native/wildmind': phone('app/surfaces', 'The Wildmind valley, its people and their family tree, drawn natively'),
   '/api/native/review-demo': { hidden: 'Exists only for the App Store’s reviewers, so they never see real family data.' },
 };
 

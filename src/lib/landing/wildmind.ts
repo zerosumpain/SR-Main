@@ -264,6 +264,11 @@ export const DOING: Record<Activity, string> = {
 };
 export const DOING_UNKNOWN = 'busy';
 
+/** A person's DOING word: "dead" once dead, "busy" for an activity this build does not know. */
+export function doingOf(p: Pick<WildmindSnapshotPerson, 'activity' | 'alive'>): string {
+  return p.alive ? (p.activity ? DOING[p.activity] : DOING_UNKNOWN) : DOING.dead;
+}
+
 /** What someone died of: "died of {word}". */
 export const CAUSE: Record<Cause, string> = {
   starvation: 'hunger',
@@ -693,7 +698,7 @@ export function project(
       x: pos[0],
       y: pos[1],
       heading: r2(p.heading),
-      doing: p.alive ? (p.activity ? DOING[p.activity] : DOING_UNKNOWN) : DOING.dead,
+      doing: doingOf(p),
       alive: p.alive,
       thinking: p.thinking,
       near: p.near,
