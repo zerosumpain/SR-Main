@@ -42,6 +42,14 @@ describe('validateThinkOutput', () => {
     expect(moved.rejected[0]).toMatch(/do-it plan dropped/);
   });
 
+  it('keeps the model\'s "until" when it is a real day ahead, and drops it otherwise — the note stands', () => {
+    const at = (until: unknown) => validateThinkOutput({ notes: [note({ until })] }, cards(1, 2), { today: '2026-10-11' }).notes[0];
+    expect(at('2026-10-16').until).toBe('2026-10-16');
+    expect(at('2026-10-01').until).toBeNull();
+    expect(at('next week').until).toBeNull();
+    expect(at(undefined).until).toBeNull();
+  });
+
   it('kills a note WHOLE when one citation was never issued', () => {
     // The audit. One real card does not launder an invented one.
     const out = validateThinkOutput({ notes: [note({ cites: ['C1', 'C9'] })] }, cards(1, 2));

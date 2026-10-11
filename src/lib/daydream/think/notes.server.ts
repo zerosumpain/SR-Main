@@ -20,6 +20,7 @@ import { mutedKinds } from '../thought-store';
 import { loadNoteContexts } from './context.server';
 import { REPLACES_KIND, TOPIC_KINDS, TOPIC_WINDOW_DAYS, replacesEntry, supersededBy, type TopicCandidate } from './topics';
 import { THINK_CADENCE_MS, questionAt, type Channel, type Outcome } from './questions';
+import { dayToStored, keptUntil } from './shelf';
 import {
   channelLabel,
   inScope,
@@ -58,6 +59,7 @@ const ROW_COLUMNS = {
   reviewNarrative: daydreamThoughts.reviewNarrative,
   reviewModel: daydreamThoughts.reviewModel,
   proposedActions: daydreamThoughts.proposedActions,
+  relevantUntil: daydreamThoughts.relevantUntil,
 };
 
 /** The newest think rows for the owner, before any reader's rules. */
@@ -102,7 +104,7 @@ export async function loadFeedNotes(opts: { days?: number; now?: Date } = {}): P
   const [rows, muted] = await Promise.all([loadThinkRows({ since, limit: 400 }), mutedKinds()]);
   const shown = rows.filter(isOnFeed);
   const ctx = await loadNoteContexts(shown);
-  return shown.map((r) => toFeedNote(r, muted, ctx.get(r.id)));
+  return shown.map((r) => toFeedNote(r, muted, ctx.get(r.id), now));
 }
 
 /** The phone's Daydream page: its notes with stage, next step and sources,
@@ -306,4 +308,41 @@ export async function supersedeOnTopic(createdKeys: readonly string[], now = new
     replaced += gone.length;
   }
   return replaced;
+}
+
+// ── Past its date (`shelf.ts`) ─────────────────────────────────────────────
+
+/** Statuses a note may be filed from. Anything else is already filed away or
+ *  was put off by him, and filing must not overwrite that. */
+const FILEABLE_STATUSES = ['new', 'delivered', 'seen', 'suppressed'];
+export const FILED_STALE_REASON = 'past its date: filed by owner';
+
+/**
+ * File notes the feed flags as past their date: `expired`, which every reader
+ * already keeps off the feed and the think loop treats as protected. Not a
+ * verdict — it says nothing about whether the kind was any good, so the
+ * learned weights do not move. Only ids the feed flags RIGHT NOW are filed;
+ * a stale page cannot file a note that has since been answered.
+ */
+export async function fileStale(ids: readonly string[] | 'all', now = new Date()): Promise<number> {
+  const flagged = (await loadFeedNotes({ now })).filter((n) => n.stale && (ids === 'all' || ids.includes(n.id))).map((n) => n.id);
+  if (flagged.length === 0) return 0;
+  const done = await db
+    .update(daydreamThoughts)
+    .set({ status: 'expired', suppressedReason: FILED_STALE_REASON, updatedAt: now })
+    .where(and(inArray(daydreamThoughts.id, flagged), inArray(daydreamThoughts.status, FILEABLE_STATUSES)))
+    .returning({ id: daydreamThoughts.id });
+  return done.length;
+}
+
+/** "Still relevant": keep it off the flag for another fortnight. Returns the
+ *  day it is now kept to, or null when the id is not a think note. */
+export async function keepCurrent(id: string, now = new Date()): Promise<string | null> {
+  const day = keptUntil(now);
+  const done = await db
+    .update(daydreamThoughts)
+    .set({ relevantUntil: dayToStored(day), updatedAt: now })
+    .where(and(eq(daydreamThoughts.id, id), THINK_KIND))
+    .returning({ id: daydreamThoughts.id });
+  return done.length ? day : null;
 }

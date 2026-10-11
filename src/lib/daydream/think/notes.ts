@@ -16,6 +16,7 @@ import { QUESTION_EVIDENCE_KIND } from './audit';
 import { noteAct, type NoteAct } from '../act/plan';
 import { followStage, noteFollow, type NoteFollow } from '../act/follow';
 import { readReplaces } from './topics';
+import { stalenessOf, type Staleness } from './shelf';
 import { describeSources, noteStage, sourceText, splitNarrative, type Bucket, type SourceLine, type Stage } from './explain';
 import { CHANNELS, type Channel, type Outcome } from './questions';
 
@@ -163,6 +164,8 @@ export interface ThinkRow {
   reviewModel?: string | null;
   /** `proposed_actions` — a "Do it for me" plan and what became of it. */
   proposedActions?: unknown;
+  /** A stated last day it matters (`shelf.ts`). Optional like the review. */
+  relevantUntil?: Date | null;
 }
 
 /** A ruling on a note's CLAIM — apart from feedback, which is about its kind. */
@@ -400,6 +403,8 @@ export interface FeedNote extends NativeNote {
   follow: NoteFollow;
   /** Older notes on the same subject this one replaced (`topics.ts`). */
   replaces: Array<{ id: string; title: string }>;
+  /** Probably past its date, and why — or null (`shelf.ts`). */
+  stale: Staleness | null;
 }
 
 /** The follow-ups a note gets — the same for the web card and the phone. */
@@ -424,7 +429,7 @@ function answeredBy(row: ThinkRow, review: NoteReview | null): string | null {
   return row.feedback ?? (review?.by === 'owner' ? `ruled_${review.verdict}` : null);
 }
 
-export function toFeedNote(row: ThinkRow, muted: ReadonlySet<string>, ctx: NoteContext = EMPTY_CONTEXT): FeedNote {
+export function toFeedNote(row: ThinkRow, muted: ReadonlySet<string>, ctx: NoteContext = EMPTY_CONTEXT, now = new Date()): FeedNote {
   const n = toNativeNote(row);
   const split = splitNarrative(n.body);
   const review = noteReview(row);
@@ -454,6 +459,7 @@ export function toFeedNote(row: ThinkRow, muted: ReadonlySet<string>, ctx: NoteC
     act,
     follow,
     replaces: readReplaces(row.proposedActions),
+    stale: stalenessOf(row, { stage: where.stage, now }),
   };
 }
 
@@ -475,9 +481,11 @@ export interface NativeNoteDetail extends NativeNote {
   /** Taking it further (`act/follow.ts`); an older app ignores it. */
   follow: NoteFollow;
   replaces: Array<{ id: string; title: string }>;
+  /** Probably past its date (`shelf.ts`); an older app ignores it. */
+  stale: Staleness | null;
 }
 
-export function toNativeDetail(row: ThinkRow, ctx: NoteContext = EMPTY_CONTEXT): NativeNoteDetail {
+export function toNativeDetail(row: ThinkRow, ctx: NoteContext = EMPTY_CONTEXT, now = new Date()): NativeNoteDetail {
   const n = toNativeNote(row);
   const split = splitNarrative(n.body);
   const review = noteReview(row);
@@ -498,5 +506,6 @@ export function toNativeDetail(row: ThinkRow, ctx: NoteContext = EMPTY_CONTEXT):
     act,
     follow,
     replaces: readReplaces(row.proposedActions),
+    stale: stalenessOf(row, { stage: where.stage, now }),
   };
 }

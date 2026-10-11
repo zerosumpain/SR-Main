@@ -12,6 +12,7 @@ import { resolveCites } from '../cites';
 import { checkPlan, storeAction, type StoredAction } from '../act/plan';
 import type { Candidate } from '../snapshot-types';
 import { OUTCOMES, type Channel, type Outcome } from './questions';
+import { parseUntil } from './shelf';
 import type { Card } from './tools';
 
 export const MAX_NOTES = 2;
@@ -37,6 +38,9 @@ export interface ThinkNote {
   title: string;
   body: string;
   action: string | null;
+  /** The last day it is likely to matter, by the model's own estimate
+   *  (`YYYY-MM-DD`), or null. A bad date is dropped, never repaired. */
+  until: string | null;
   citedCardIds: string[];
   candidate: Candidate;
 }
@@ -127,6 +131,7 @@ export function validateThinkOutput(
       title,
       body,
       action,
+      until: opts.today ? parseUntil(n.until, opts.today) : null,
       citedCardIds: resolved.hits,
       candidate: {
         kind: `think_${outcome}`,

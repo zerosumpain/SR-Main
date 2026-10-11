@@ -36,6 +36,7 @@ import { MAX_TOOL_CALLS, RESEARCH_SITE_TOOLS, createToolbox, toolSetFor, type To
 import { MAX_NOTES, MAX_BODY_CHARS, parseReply, validateThinkOutput } from './audit';
 import { DAILY_RAISE_CAP, noteHref } from './notes';
 import { countRaisedToday, supersedeOnTopic } from './notes.server';
+import { dayToStored } from './shelf';
 
 /** Tool rounds at full budget. The activity passes fewer when the budget is
  *  thin — a round is a model call. */
@@ -168,11 +169,12 @@ export function systemPrompt(opts: {
     `1. Use the tools to look. Every result comes back as a card with an id like [C3]. You have ${opts.rounds} rounds and ${MAX_TOOL_CALLS} tool calls; ask for several things in one round when you can.`,
     '2. CITE OR DIE: every note lists the card ids it rests on in "cites". Every number, date, name or amount in a note must appear in a cited card. A note citing a card you were not given is deleted whole, not fixed.',
     '3. When you are done, reply with ONE JSON object and nothing else:',
-    '   {"notes":[{"outcome":"...","title":"...","body":"...","cites":["C1","C3"],"action":"...","do":null}]}',
+    '   {"notes":[{"outcome":"...","title":"...","body":"...","cites":["C1","C3"],"action":"...","until":"YYYY-MM-DD","do":null}]}',
     `   title ≤ 90 chars, plain. body ≤ ${MAX_BODY_CHARS - 100} chars: what you found, the figures, and why it matters to him. action (optional, ≤ 200 chars): the one specific thing to do. No greeting, no emoji, second person.`,
     '   PLAIN ENGLISH: he reads this on a phone between other things. Lead the body with what it means for him, then the figures. A statistic is said in words first — "no real link between X and Y (r −0.04 over 62 days)", never a bare "r=-0.04, n=62, p=0.783". No internal names (tool names, card ids, entity ids) in the title, body or action.',
     '   do (optional): when the action is something jkai can do for him with one tap, give it as one of these, so he can have it done. Every date must be one the body or action states; time "HH:MM" only if stated. Otherwise null.',
     ...KIND_SHAPES.map((k) => `     ${k}`),
+    '   until (optional): the last day this note is worth acting on — the event, deadline or renewal it is about, or when the pattern will be stale. A date on or after today. null if it keeps.',
     `4. At most ${MAX_NOTES} notes. Fewer, sharper.`,
   ].join('\n');
 }
@@ -277,7 +279,7 @@ export async function runThink(
     for (const n of audit.notes) {
       await db
         .update(daydreamThoughts)
-        .set({ narrative: narrativeOf(n.body, n.action), verified: true, updatedAt: now })
+        .set({ narrative: narrativeOf(n.body, n.action), verified: true, ...(n.until ? { relevantUntil: dayToStored(n.until) } : {}), updatedAt: now })
         .where(
           sql`${daydreamThoughts.dedupeKey} = ${n.candidate.dedupeKey}
               and ${daydreamThoughts.status} in ('new', 'suppressed')`,
