@@ -89,7 +89,7 @@ export const AREA_COPY: Record<string, string> = {
   'route-session': 'sharing a live walk',
   session: 'checking a device is still trusted',
   today: 'the Today screen',
-  wildmind: 'the Wildmind valley, drawn on the phone',
+  wildmind: 'the Wildmind valley on the phone: its map, its talk, its inventions and whispers',
 };
 
 export const APP_COPY = {
