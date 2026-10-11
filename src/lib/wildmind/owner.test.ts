@@ -3,6 +3,7 @@ import {
   ChronicleSchema,
   InventionsSchema,
   TalkSchema,
+  TEXT_MAX,
   WhisperAcceptedSchema,
   WhispersSchema,
   chronicleId,
@@ -69,7 +70,7 @@ describe('TalkSchema', () => {
     expect(out.entries[1].to).toBeNull();
   });
 
-  it('caps the text at 1200 and the page at 200 entries', () => {
+  it('caps the text at TEXT_MAX and the page at 200 entries', () => {
     const out = TalkSchema.parse({
       v: 1,
       valley,
@@ -79,7 +80,7 @@ describe('TalkSchema', () => {
       more: true,
     });
     expect(out.entries).toHaveLength(200);
-    expect(out.entries[0].text.length).toBe(1200);
+    expect(out.entries[0].text.length).toBe(TEXT_MAX);
   });
 
   it('refuses a body that is not version 1 or has no valley seed', () => {
@@ -114,7 +115,7 @@ describe('ChronicleSchema', () => {
     expect(s).not.toContain('SYSTEM PROMPT');
     expect(s).not.toContain('SECRET');
     expect(out).not.toHaveProperty('guardrails');
-    expect(out.now?.lastThought?.length).toBe(1200);
+    expect(out.now?.lastThought?.length).toBe(TEXT_MAX);
     expect(out.now?.values[0].rules).toEqual([{ effect: 'prefer', verb: 'give', target: 'food' }]);
   });
 });

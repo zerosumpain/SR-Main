@@ -23,8 +23,13 @@
 
 import { z } from 'zod';
 
-/** The longest prose kept: a speech, thought, diary or description. */
-export const TEXT_MAX = 1200;
+/**
+ * The longest prose kept: a speech, thought, diary or description. Wildmind
+ * caps a diary's own words at 1200 code points and keeps its "Wren's diary,
+ * day N: " opening in front, so the room above 1200 is for that opening (and
+ * for characters that take two UTF-16 units).
+ */
+export const TEXT_MAX = 1600;
 /** The longest whisper John may send (Wildmind's own limit). */
 export const WHISPER_MAX = 240;
 
