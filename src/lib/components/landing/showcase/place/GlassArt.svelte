@@ -32,6 +32,7 @@
   import { GALLERY, GALLERY_LIGHT, type Figure, type HutSpot, type PersonAnchor } from '$lib/landing/showcase-place-wildmind';
   import type { WildmindState } from '$lib/landing/wildmind';
   import { BOARD, TILT, type WildmindGlass } from '$lib/landing/wildmind-glass';
+  import { scenery } from '$lib/landing/ramblers/scenery';
   import CityRow from './CityRow.svelte';
   import SafeMask from './SafeMask.svelte';
   import GlassModel from './GlassModel.svelte';
@@ -377,6 +378,15 @@
   {#if state === 'paused'}
     <p class="gl-card-words" aria-hidden="true">Back<br />shortly</p>
   {/if}
+  <!-- The gallery roof is a floor for him: he sits up there to watch the valley. -->
+  <span
+    class="gl-roof"
+    style:left="{(Bd.x / 1000) * 100}%"
+    style:width="{((Bd.r - Bd.x) / 1000) * 100}%"
+    style:top="{((Bd.top - 6) / GALLERY.h) * 100}%"
+    data-rambler-focus
+    use:scenery
+  ></span>
 </div>
 
 <style>
@@ -395,6 +405,10 @@
     --gl-sunk: calc(var(--city-sun-on, 0) * 15%);
     position: absolute;
     inset: 0;
+  }
+  .gl-roof {
+    position: absolute;
+    height: 1px;
   }
   .gl :global(.gl-layer) {
     position: absolute;

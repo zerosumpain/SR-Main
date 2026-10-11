@@ -430,7 +430,7 @@
   </div>
 
   {#if poll && wm && wmw}
-    <div class="sp-band" data-band="wildmind" use:watchValley>
+    <div class="sp-band" data-band="wildmind" data-rambler="wildmind" use:watchValley>
       <PlaceScene
         id="sp-wm"
         side="l"

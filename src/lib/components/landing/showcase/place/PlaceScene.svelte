@@ -321,7 +321,7 @@
         {#if beat != null}
           <p class="sp-cap">
             <span>{reduced || held ? beatStill || beatCaption : beatCaption}</span>
-            <button type="button" class="sp-hold" aria-pressed={held} onclick={() => (held = !held)}>
+            <button type="button" class="sp-hold" data-rambler-cue="hold" aria-pressed={held} onclick={() => (held = !held)}>
               <svg viewBox="0 0 10 10" aria-hidden="true" focusable="false">
                 {#if held}<path d="M2 1 L9 5 L2 9 Z" />{:else}<path d="M1.5 1h2.5v8H1.5zM6 1h2.5v8H6z" />{/if}
               </svg>
