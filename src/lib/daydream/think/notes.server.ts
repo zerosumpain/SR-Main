@@ -109,18 +109,24 @@ export async function loadFeedNotes(opts: { days?: number; now?: Date } = {}): P
 
 /** The phone's Daydream page: its notes with stage, next step and sources,
  *  and the pipeline counted over EVERY note the phone may show — not just the
- *  page it was sent — so "3 to decide" is the truth, not the page's share. */
-export async function loadNativeDetail(opts: { limit: number }): Promise<{
+ *  page it was sent — so "3 to decide" is the truth, not the page's share.
+ *  `stale` counts the notes past their date the same way: they are older than
+ *  the forty the page holds, so the phone cannot count them itself.
+ *  `staleOnly` sends just those notes, for the phone's "past their date" list. */
+export async function loadNativeDetail(opts: { limit: number; staleOnly?: boolean; now?: Date }): Promise<{
   notes: NativeNoteDetail[];
   pipeline: Record<'decide' | 'motion' | 'done', number>;
+  stale: number;
 }> {
+  const now = opts.now ?? new Date();
   const [rows, muted] = await Promise.all([loadThinkRows({ limit: 300 }), mutedKinds()]);
   const shown = rows.filter((r) => isForPhone(r, muted));
   const ctx = await loadNoteContexts(shown);
-  const all = shown.map((r) => toNativeDetail(r, ctx.get(r.id)));
+  const all = shown.map((r) => toNativeDetail(r, ctx.get(r.id), now));
   const pipeline = { decide: 0, motion: 0, done: 0 };
   for (const n of all) pipeline[n.bucket]++;
-  return { notes: all.slice(0, opts.limit), pipeline };
+  const past = all.filter((n) => n.stale);
+  return { notes: (opts.staleOnly ? past : all).slice(0, opts.limit), pipeline, stale: past.length };
 }
 
 /** One note by id, for `?note=` when it sits outside the loaded window. */

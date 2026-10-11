@@ -21,6 +21,9 @@ import { errMsg } from '$lib/daydream/types';
  * plain-English parts (summary, next step, sources) and where it is in the
  * four stages, and the answer carries `pipeline` counts and the `impact`
  * card. All additive — a build that does not ask gets the fixed shape.
+ *
+ * `stale` (with detail) is how many notes are past their date
+ * (`think/shelf.ts`); `&stale=1` sends only those notes.
  */
 export const GET: RequestHandler = withDevice(async ({ url }) => {
   const scope = parseScope(url.searchParams.get('scope'));
@@ -31,13 +34,13 @@ export const GET: RequestHandler = withDevice(async ({ url }) => {
     return { notes: await loadNativeNotes({ scope, limit }) };
   }
   const limit = clampLimit(url.searchParams.get('limit'), NATIVE_DETAIL_DEFAULT, NATIVE_DETAIL_MAX);
-  const [{ notes, pipeline }, impact] = await Promise.all([
-    loadNativeDetail({ limit }),
+  const [{ notes, pipeline, stale }, impact] = await Promise.all([
+    loadNativeDetail({ limit, staleOnly: url.searchParams.get('stale') === '1' }),
     // The card is a nicety; a failed read costs the card, never the notes.
     loadImpact().catch((err) => {
       console.error('[daydream] native impact failed:', errMsg(err));
       return null;
     }),
   ]);
-  return { notes, pipeline, impact: impact ? toNativeImpact(impact.impact) : null };
+  return { notes, pipeline, stale, impact: impact ? toNativeImpact(impact.impact) : null };
 });
