@@ -47,9 +47,9 @@ describe('shelfOf', () => {
     expect(shelfOf(base)).toEqual({ until: '2026-10-16', basis: 'date' });
   });
 
-  it('falls back to the shelf life of its kind', () => {
-    expect(shelfOf({ ...base, narrative: 'Nothing dated here.' })).toEqual({ until: '2026-10-26', basis: 'age' });
-    expect(shelfOf({ ...base, kind: 'think_unknown', narrative: 'x' })).toEqual({ until: '2026-11-04', basis: 'age' });
+  it('falls back to three days for any kind', () => {
+    expect(shelfOf({ ...base, narrative: 'Nothing dated here.' })).toEqual({ until: '2026-10-08', basis: 'age' });
+    expect(shelfOf({ ...base, kind: 'think_build', narrative: 'x' })).toEqual({ until: '2026-10-08', basis: 'age' });
   });
 });
 
@@ -68,6 +68,12 @@ describe('stalenessOf', () => {
   it('never flags a note past Spotted', () => {
     const now = at('2026-10-25T08:00:00Z');
     for (const stage of ['decide', 'motion', 'result']) expect(stalenessOf(walk, { stage, now })).toBeNull();
+  });
+
+  it('flags an undated note on its fourth day, not its third', () => {
+    const idea = { kind: 'think_build', title: 'A tidier backlog', narrative: 'Group the open items.', createdAt: at('2026-10-05T09:00:00Z') };
+    expect(stalenessOf(idea, { ...open, now: at('2026-10-08T20:00:00Z') })).toBeNull();
+    expect(stalenessOf(idea, { ...open, now: at('2026-10-09T08:00:00Z') })?.basis).toBe('age');
   });
 
   it('says how old an undated note is', () => {

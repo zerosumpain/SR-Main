@@ -16,7 +16,7 @@
 //      written — an event, a deadline, a renewal. A date already past when the
 //      note was written is the data it read ("you spent £40 on 3 October"),
 //      not a date the note is about, so it does not count;
-//   3. a shelf life for its kind, counted from when it was written.
+//   3. a short shelf life, counted from when it was written.
 //
 // Days are London days compared as `YYYY-MM-DD` strings: "past its date" is a
 // calendar question, and a timestamp comparison would flag a note at 23:00 the
@@ -24,20 +24,15 @@
 
 export const LOCAL_TZ = 'Europe/London';
 
-/** Days an undated note of each kind is likely to matter, from when it was
- *  written. Starting guesses, not measurements: a proposed week is stale in a
- *  fortnight, a build idea keeps. Anything unlisted gets the default. */
-export const KIND_SHELF_DAYS: Record<string, number> = {
-  think_health_plan: 10,
-  think_research: 21,
-  think_suggest: 21,
-  think_efficiency: 30,
-  think_quality_of_life: 30,
-  think_money_analysis: 30,
-  think_correlate: 45,
-  think_build: 60,
-};
-export const DEFAULT_SHELF_DAYS = 30;
+/** Days an undated note is likely to matter, from when it was written.
+ *
+ * Three, for every kind. The first cut (10 days for a health plan up to 60
+ * for a build idea) flagged almost nothing in production: on 11 October all
+ * 275 notes were under 16 days old and 151 unanswered ones over three, and
+ * those were the ones he called timed out. The loop writes ~20 a day, so a
+ * note nobody has answered in three days has been buried by newer ones. A
+ * note that names a later date still lasts until that date. */
+export const SHELF_DAYS = 3;
 
 /** How far ahead a named date may be and still count as the note's subject. */
 const MAX_AHEAD_DAYS = 366;
@@ -140,7 +135,7 @@ export function shelfOf(row: ShelfInput): Shelf {
   const written = localDayOf(row.createdAt);
   const event = eventDayOf(`${row.title}\n${row.narrative ?? row.explanation ?? ''}`, written);
   if (event) return { until: event, basis: 'date' };
-  return { until: addDays(written, KIND_SHELF_DAYS[row.kind] ?? DEFAULT_SHELF_DAYS), basis: 'age' };
+  return { until: addDays(written, SHELF_DAYS), basis: 'age' };
 }
 
 export interface Staleness {
