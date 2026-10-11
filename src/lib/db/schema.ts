@@ -6361,6 +6361,10 @@ export const daydreamThoughts = pgTable(
      *  'quiet_hours', 'kind_muted', 'evidence_unverified'. */
     suppressedReason: text('suppressed_reason'),
     snoozeUntil: timestamp('snooze_until', { withTimezone: true }),
+    // The last London day a think note is likely to matter, when something said
+    // so: the think loop's own estimate, or the owner's "Still relevant". Null
+    // means work it out from the note (`think/shelf.ts`). Stored at midday UTC.
+    relevantUntil: timestamp('relevant_until', { withTimezone: true }),
     proposedActions: jsonb('proposed_actions')
       .$type<Array<{ kind: string; label: string; payload: string }>>()
       .notNull()

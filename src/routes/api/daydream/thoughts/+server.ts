@@ -61,6 +61,25 @@ export const POST: RequestHandler = async ({ request }) => {
         }
       }
 
+      case 'file_stale': {
+        // "File it" on a note flagged past its date, or every flagged note at
+        // once (`all: true`). The server re-reads which notes are flagged.
+        const { fileStale } = await import('$lib/daydream/think/notes.server');
+        const thoughtId = str('thoughtId');
+        if (body.all !== true && !thoughtId) return json({ error: 'thoughtId or all is required' }, { status: 400 });
+        const filed = await fileStale(body.all === true ? 'all' : [thoughtId]);
+        return json({ ok: true, filed });
+      }
+
+      case 'keep_current': {
+        const { keepCurrent } = await import('$lib/daydream/think/notes.server');
+        const thoughtId = str('thoughtId');
+        if (!thoughtId) return json({ error: 'thoughtId is required' }, { status: 400 });
+        const until = await keepCurrent(thoughtId);
+        if (!until) return json({ error: 'no such note' }, { status: 404 });
+        return json({ ok: true, until });
+      }
+
       case 'owner_verdict': {
         // "This is wrong, because …" — or "it was right after all". A ruling
         // on the CLAIM, not the kind: feedback is untouched. His reason

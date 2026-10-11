@@ -44,6 +44,7 @@
     motion: byBucket.motion,
     result: byBucket.done,
   });
+  const staleCount = $derived(data.notes.filter((n) => n.stale).length);
   const visible = $derived(data.notes.filter((n) => filter === 'all' || n.bucket === filter || recent.has(n.id)));
   const groups = $derived(groupByDay(visible));
   // A card shows its note's newest check — unless a `?commission=` link named
@@ -112,6 +113,15 @@
     const ok = await act({ action: 'owner_verdict', thoughtId: n.id, verdict, why }, `${n.id}:ruling`);
     if (ok) say(verdict === 'wrong' ? 'Got it — it will keep that as a lesson and think twice next time.' : 'Got it — that lesson is withdrawn.');
     return ok;
+  }
+  // Past its date (`think/shelf.ts`). Filing is not a verdict: the kind's
+  // weight does not move. The card leaves the list, so it is not kept in view.
+  async function fileStale(n: FeedNote | null) {
+    const ok = await act(n ? { action: 'file_stale', thoughtId: n.id } : { action: 'file_stale', all: true }, n ? `${n.id}:file` : 'file-all');
+    if (ok) say(n ? 'Filed — it is off the Inbox.' : 'Filed — the notes past their date are off the Inbox.');
+  }
+  async function keep(n: FeedNote) {
+    if (await act({ action: 'keep_current', thoughtId: n.id }, `${n.id}:keep`)) say('Kept — it will not be flagged for another fortnight.');
   }
   async function prepare(n: FeedNote) {
     busy = `${n.id}:prepare`;
@@ -189,6 +199,12 @@
       </div>
     </div>
 
+    {#if staleCount > 0 && filter !== 'motion' && filter !== 'done'}
+      <p class="past-all">
+        <span>{staleCount === 1 ? 'One note looks' : `${staleCount} notes look`} past {staleCount === 1 ? 'its' : 'their'} date and still unanswered.</span>
+        <button type="button" class="link-btn" disabled={busy === 'file-all'} onclick={() => fileStale(null)}>{busy === 'file-all' ? 'Filing…' : staleCount === 1 ? 'File it' : 'File them all'}</button>
+      </p>
+    {/if}
     {#if data.commissionError}<p class="err" role="alert">{data.commissionError}</p>{/if}
     {#if actionError}<p class="err" role="alert">{actionError}</p>{/if}
 
@@ -226,6 +242,8 @@
                 onsavenote={(text) => act({ action: 'add_note', thoughtId: n.id, text }, `${n.id}:note`)}
                 onruling={(verdict, why) => rule(n, verdict, why)}
                 onunmute={() => act({ action: 'unmute_kind', kind: n.kind }, `${n.id}:unmute`)}
+                onfile={() => fileStale(n)}
+                onkeep={() => keep(n)}
               />
             </li>
           {/each}
@@ -348,6 +366,36 @@
   .seg-btn[aria-selected='true'] .seg-n {
     background: var(--accent);
     color: var(--bg);
+  }
+
+  /* ── Past their date ── */
+  .past-all {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 14px;
+    margin: 14px 0 0;
+    padding: 8px 12px;
+    border-left: 3px solid var(--warn);
+    background: var(--bg-section);
+    font-size: var(--fs-body-sm);
+    color: var(--text-secondary);
+  }
+  .link-btn {
+    background: none;
+    border: 0;
+    padding: 2px 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .link-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
 
   /* ── The list ── */

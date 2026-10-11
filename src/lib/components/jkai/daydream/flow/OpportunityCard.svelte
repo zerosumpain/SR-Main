@@ -34,8 +34,11 @@
     /** His ruling on the claim: wrong (with why — the lesson) or right. */
     onruling: (verdict: 'wrong' | 'right', why: string) => Promise<boolean>;
     onunmute: () => void;
+    /** Past its date: file it away, or keep it a fortnight longer. */
+    onfile: () => void;
+    onkeep: () => void;
   }
-  let { n, commission, checksOn, focused = false, focusCommission = false, busy = null, onrate, onprepare, onsavenote, onruling, onunmute }: Props = $props();
+  let { n, commission, checksOn, focused = false, focusCommission = false, busy = null, onrate, onprepare, onsavenote, onruling, onunmute, onfile, onkeep }: Props = $props();
 
   let expanded = $state(false);
   let changing = $state(false);
@@ -146,6 +149,17 @@
     <StageTrack stage={n.stage} />
     <span class="time" title={stamp(n.createdAt)}>{clock(n.createdAt)}</span>
   </header>
+
+  {#if n.stale}
+    <div class="past" role="note">
+      <p class="past-k">Probably past its date</p>
+      <p class="past-v">{n.stale.why}</p>
+      <span class="past-acts">
+        <button type="button" class="link-btn" disabled={isBusy} onclick={onfile}>File it</button>
+        <button type="button" class="link-btn" disabled={isBusy} onclick={onkeep}>Still relevant</button>
+      </span>
+    </div>
+  {/if}
 
   <h3 class="opp-title">{n.title}</h3>
 
@@ -664,6 +678,35 @@
   .v-sub {
     font-size: var(--fs-label);
     color: var(--text-muted);
+  }
+  /* Past its date: a flag, not a verdict — the warn edge says "look at
+     this", the choices are the same small links the verdict row uses. */
+  .past {
+    margin: 0 0 10px;
+    padding: 8px 12px;
+    border-left: 3px solid var(--warn);
+    background: var(--bg-section);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 12px;
+  }
+  .past-k {
+    margin: 0;
+    font-weight: 600;
+    font-size: var(--fs-body-sm);
+    color: var(--warn);
+  }
+  .past-v {
+    margin: 0;
+    flex: 1 1 16em;
+    font-size: var(--fs-body-sm);
+    line-height: 1.5;
+    color: var(--text-secondary);
+  }
+  .past-acts {
+    display: inline-flex;
+    gap: 14px;
   }
   .did {
     margin: 12px 0 0;
