@@ -31,6 +31,7 @@
 import { dev } from '$app/environment';
 import type { Cookies } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
+import { cappedText } from '$lib/wildmind/http.server';
 import { memoised } from './showcase-data';
 import { grownOnly, offlineShowcase, parseSnapshot, project, toMap, type WildmindShowcase, type WildmindSnapshotV1, type WildmindTerrain } from './wildmind';
 import { traceCached, type Traced } from './wildmind-trace.server';
@@ -99,30 +100,6 @@ function drawingFor(snap: WildmindSnapshotV1, terrain: WildmindTerrain, now: num
   if (d && (d.version === snap.terrainVersion || (grownOnly(d.version, snap.terrainVersion) && now - d.at < DRAW_HOLD_MS && everyoneOn(snap, d.traced)))) return d;
   drawn = { version: snap.terrainVersion, terrain, traced: traceCached(terrain, snap.terrainVersion), at: now };
   return drawn;
-}
-
-/** The body as text, refused once it passes `max` bytes. */
-async function cappedText(res: Response, max: number): Promise<string> {
-  const length = Number(res.headers.get('content-length'));
-  if (Number.isFinite(length) && length > max) {
-    await res.body?.cancel().catch(() => {});
-    throw new Error('too large');
-  }
-  if (!res.body) return '';
-  const reader = res.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > max) {
-      await reader.cancel().catch(() => {});
-      throw new Error('too large');
-    }
-    chunks.push(value);
-  }
-  return Buffer.concat(chunks).toString('utf8');
 }
 
 async function fetchSnapshot(base: string, have: string | null): Promise<WildmindSnapshotV1> {

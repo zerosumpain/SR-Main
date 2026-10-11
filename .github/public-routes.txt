@@ -99,6 +99,11 @@
 /api/native/session
 /api/native/today
 /api/native/wildmind
+/api/native/wildmind/chronicle
+/api/native/wildmind/inventions
+/api/native/wildmind/talk
+/api/native/wildmind/whisper
+/api/native/wildmind/whispers
 /api/platform/backlog/intake
 /api/platform/daydream/briefing
 /api/platform/models/config

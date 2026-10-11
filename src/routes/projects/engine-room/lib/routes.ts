@@ -167,6 +167,11 @@ export const ROUTE_LEDGER: Record<string, LedgerEntry> = {
   '/api/native/games/[id]/stream': phone('app/api', 'A game room, live'),
   '/api/native/games/leaderboard': phone('app/api', 'The family’s games boards'),
   '/api/native/wildmind': phone('app/surfaces', 'The Wildmind valley, its people and their family tree, drawn natively'),
+  '/api/native/wildmind/talk': phone('app/surfaces', 'What the Wildmind people said, thought and wrote, newest first'),
+  '/api/native/wildmind/chronicle': phone('app/surfaces', 'One Wildmind life so far: its timeline, its diary and where it stands now'),
+  '/api/native/wildmind/inventions': phone('app/surfaces', 'Everything invented in the valley, and the ideas the referee refused'),
+  '/api/native/wildmind/whispers': phone('app/api', 'Whether JKai has heard a whisper yet, and what he thought next'),
+  '/api/native/wildmind/whisper': phone('app/api', 'Whisper a thought to JKai from the phone'),
   '/api/native/review-demo': { hidden: 'Exists only for the App Store’s reviewers, so they never see real family data.' },
 };
 
