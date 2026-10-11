@@ -32,12 +32,22 @@ vi.mock('$lib/server/access', () => ({ isOwnerEmail: (e?: string | null) => e ==
 const { load } = await import('./+page.server');
 const { PROJECT_CARDS } = await import('./cards');
 
-const run = () => (load as any)({ locals: { auth: async () => (email ? { user: { email } } : null) } });
+let headers: Record<string, string> = {};
+const run = (opts: { query?: string; cookie?: string } = {}) => {
+  const url = new URL(`https://strangeramblings.com/projects${opts.query ? `?view=${opts.query}` : ''}`);
+  return (load as any)({
+    url,
+    cookies: { get: (name: string) => (name === 'sr_hero_view' ? opts.cookie : undefined) },
+    setHeaders: (h: Record<string, string>) => Object.assign(headers, h),
+    locals: { auth: async () => (email ? { user: { email } } : null) },
+  });
+};
 
 describe('/projects index load', () => {
   beforeEach(() => {
     email = null;
     visRows = [];
+    headers = {};
   });
 
   it('withholds a card toggled private from the public', async () => {
@@ -59,5 +69,17 @@ describe('/projects index load', () => {
     visRows = [{ projectKey: 'policy-engine', isPublic: false }];
     const data = await run();
     expect(data.cards).toHaveLength(PROJECT_CARDS.length);
+  });
+
+  it("reads the landing page's view choice: a ?view= link, then the cookie, then the notes", async () => {
+    expect((await run()).view).toMatchObject({ view: 'notes', source: 'auto' });
+    expect((await run({ cookie: 'place' })).view).toMatchObject({ view: 'place', source: 'cookie' });
+    expect((await run({ cookie: 'place', query: 'sentence' })).view).toMatchObject({ view: 'sentence', source: 'query' });
+    expect((await run({ cookie: 'nonsense' })).view).toMatchObject({ view: 'notes', source: 'auto' });
+  });
+
+  it('keeps the page out of shared caches, because it differs by cookie and viewer', async () => {
+    await run();
+    expect(headers['cache-control']).toBe('private, no-cache');
   });
 });

@@ -5,10 +5,22 @@ import { resolveVisibilityMap, isProjectPublic, isProjectSlug } from '$lib/proje
 import { isOwnerEmail } from '$lib/server/access';
 import { OWNER_ONLY_CARDS } from './owner-cards.server';
 import { PROJECT_CARDS } from './cards';
+import { HERO_VIEW_COOKIE, chooseHeroView } from '$lib/landing/hero-view';
+import { HEALTH_TIMEZONE } from '$lib/constants/health-day';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async (event) => {
   const session = await event.locals.auth();
+  // Which way the index reads: the landing page's own choice (a ?view= link,
+  // then the sr_hero_view cookie, then the notes), so the first paint already
+  // shows it. The HTML depends on that cookie (and on who is signed in), so
+  // keep it out of every shared cache, as the home page does.
+  const view = chooseHeroView({ query: event.url.searchParams.get('view'), cookie: event.cookies.get(HERO_VIEW_COOKIE) });
+  event.setHeaders({ 'cache-control': 'private, no-cache' });
+  // "Sun 11 Oct", in the owner's day, for a view's dateline or date stamp.
+  const dateline = new Date()
+    .toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: HEALTH_TIMEZONE })
+    .replace(',', '');
   // Only the owner sees private projects + the visibility/remove controls; a
   // signed-in guest (non-owner) sees the same public listing as the public.
   const authenticated = isOwnerEmail(session?.user?.email);
@@ -86,5 +98,5 @@ export const load: PageServerLoad = async (event) => {
 
   // The visibility map names every private project's slug: the owner's toggles
   // only, never the public's.
-  return { projects, cards, authenticated, visibility: authenticated ? visibility : {}, ownerCards: authenticated ? OWNER_ONLY_CARDS : [] };
+  return { view, dateline, projects, cards, authenticated, visibility: authenticated ? visibility : {}, ownerCards: authenticated ? OWNER_ONLY_CARDS : [] };
 };

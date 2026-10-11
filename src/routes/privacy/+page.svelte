@@ -23,9 +23,9 @@
     an id that lives in your browser tab and dies with it, with no IP address and no identity attached.
   </p>
   <p>
-    If you choose how the home page's header reads (sentence, place or notes), a one-word
+    If you choose how the home page and the projects page read (sentence, place or notes), a one-word
     <code>sr_hero_view</code> cookie remembers that choice for a year and holds nothing else. Choose
-    the view the hour would have picked anyway and the cookie is deleted.
+    the notes, which is what everyone sees by default, and the cookie is deleted.
   </p>
   <p>
     Pages reach you through Cloudflare, and the site runs on a server rented from Hetzner in the EU, so
