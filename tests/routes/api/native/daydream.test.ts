@@ -25,9 +25,10 @@ const note = {
 };
 const loadNativeNotes = vi.fn(async (_opts: { scope: string; limit: number }) => [note]);
 let knownKind: string | null = 'think_health_plan';
-const loadNativeDetail = vi.fn(async (_opts: { limit: number }) => ({
+const loadNativeDetail = vi.fn(async (_opts: { limit: number; staleOnly?: boolean }) => ({
   notes: [{ ...note, summary: 'Three nights under six hours.', next: null, sources: [], stage: 'spotted', bucket: 'decide', checkable: false, commissionId: null, commissionState: null }],
   pipeline: { decide: 1, motion: 0, done: 0 },
+  stale: 4,
 }));
 let impactFails = false;
 vi.mock('$lib/daydream/impact.server', () => ({
@@ -39,7 +40,7 @@ vi.mock('$lib/daydream/impact.server', () => ({
 }));
 vi.mock('$lib/daydream/think/notes.server', () => ({
   loadNativeNotes: (opts: { scope: string; limit: number }) => loadNativeNotes(opts),
-  loadNativeDetail: (opts: { limit: number }) => loadNativeDetail(opts),
+  loadNativeDetail: (opts: { limit: number; staleOnly?: boolean }) => loadNativeDetail(opts),
   thinkNoteKind: async () => knownKind,
 }));
 const recordFeedback = vi.fn(async () => ({ kind: 'think_health_plan', muted: false }));
@@ -95,9 +96,10 @@ describe('GET /api/native/daydream?detail=1', () => {
     const res = await list('?detail=1');
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(loadNativeDetail).toHaveBeenCalledWith({ limit: 40 });
+    expect(loadNativeDetail).toHaveBeenCalledWith({ limit: 40, staleOnly: false });
     expect(loadNativeNotes).not.toHaveBeenCalled();
     expect(body.pipeline).toEqual({ decide: 1, motion: 0, done: 0 });
+    expect(body.stale).toBe(4);
     expect(body.notes[0]).toMatchObject({ id: 't-1', bucket: 'decide', stage: 'spotted' });
     expect(body.impact).toMatchObject({ windowDays: 28, hitRate: null });
     expect(body.impact.weeks).toHaveLength(12);
@@ -107,6 +109,10 @@ describe('GET /api/native/daydream?detail=1', () => {
     const body = await (await list('?detail=1')).json();
     expect(body.impact).toBeNull();
     expect(body.notes).toHaveLength(1);
+  });
+  it('asks for only the notes past their date with stale=1', async () => {
+    await list('?detail=1&stale=1&limit=80');
+    expect(loadNativeDetail).toHaveBeenCalledWith({ limit: 80, staleOnly: true });
   });
   it('ignores detail on a scoped read', async () => {
     await list('?detail=1&scope=health');
