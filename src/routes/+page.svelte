@@ -19,6 +19,7 @@
   import PageHeader from '$lib/components/PageHeader.svelte';
   import Rambler from '$lib/components/landing/Rambler.svelte';
   import { scenery } from '$lib/landing/ramblers/scenery';
+  import { valleyFrom, type ExhibitFacts } from '$lib/landing/ramblers/exhibits';
   import { rambler, toggleRambler } from '$lib/landing/ramblers/visibility.svelte';
   import { LiveVitals } from '$lib/landing/live-vitals.svelte';
   import { londonHour, readPulse } from '$lib/landing/sentence';
@@ -87,6 +88,35 @@
     fromDaydream: data.showcase.daydream.impact?.shipped ?? null,
   });
 
+  // What the sections are showing, for the rambler to talk about when he
+  // visits one: the same figures the page prints, read as he speaks.
+  const ramblerFacts = (): ExhibitFacts => {
+    const s = data.showcase;
+    return {
+      bpm: pulse.state === 'fresh' ? pulse.bpm : null,
+      stepsToday: data.steps?.total ?? null,
+      deploysToday,
+      daydream: {
+        questions: s.daydream.week?.questions,
+        hours: s.daydream.week?.hours,
+        struckOut: s.daydream.week?.struckOut,
+        hitRate: s.daydream.impact?.hitRate,
+        shipped: s.daydream.impact?.shipped,
+      },
+      health: {
+        stepsYear: s.health.stepsYear,
+        kmYear: s.health.kmYear,
+        daysOver10k: s.health.daysOver10k,
+        sleep: s.health.bands.sleep,
+        recovery: s.health.bands.recovery,
+      },
+      app: { tabs: s.app.tabs, watchPages: s.app.watchPages, widgets: s.app.widgets.length, games: s.app.games },
+      build: { releases: build.releases, linesWritten: build.linesWritten, deploysPerDay: build.deploysPerDay, fromDaydream: build.fromDaydream },
+      valley: valleyFrom(s.wildmind),
+      posts: data.posts.map((p) => p.title),
+    };
+  };
+
   const fmtDate = (iso: string | null) =>
     iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '';
 
@@ -119,7 +149,7 @@
 
 <!-- HERO — the title and the site's live numbers, read as a sentence, a place
      or notes. Its lower edge is also the rambler's ground. -->
-<section class="hero" aria-label="Live" use:scenery={{ edge: 'bottom' }}>
+<section class="hero" aria-label="Live" data-rambler="hero" use:scenery={{ edge: 'bottom' }}>
   <!-- One hero, three readings of the same numbers. The server picked which
        (a ?view= link, the visitor's own choice, or the notes); HeroViews owns
        the switch between them. -->
@@ -160,7 +190,7 @@
   />
 
   {#if data.posts.length}
-    <section class="writing" aria-labelledby="writing-h" use:scenery={{ spot: 'bed', at: 0.1 }}>
+    <section class="writing" aria-labelledby="writing-h" data-rambler="writing" use:scenery={{ spot: 'bed', at: 0.1 }}>
       <h2 id="writing-h" class="writing-k">Also written down</h2>
       {#each data.posts as p (p.slug)}
         <a class="writing-post" href="/blog/{p.slug}">
@@ -172,7 +202,7 @@
     </section>
   {/if}
 
-  <footer class="site-foot" use:scenery={{ spot: 'garage', at: 0.88 }}>
+  <footer class="site-foot" data-rambler="footer" use:scenery={{ spot: 'garage', at: 0.88 }}>
     <p class="brand foot-brand">strange ramblings</p>
     <nav class="foot-links" aria-label="Footer">
       <a href="https://github.com/jkrup" target="_blank" rel="noopener" class="nav-link">GitHub</a>
@@ -182,15 +212,15 @@
       {#if data.isOwner}<a href="/admin" class="nav-link">Admin</a>{/if}
       <a href="/privacy" class="nav-link">Privacy</a>
       <a href="/tos" class="nav-link">Terms</a>
-      <button type="button" class="nav-link rambler-toggle" onclick={toggleRambler}>
+      <button type="button" class="nav-link rambler-toggle" data-rambler-hover="tuck" onclick={toggleRambler}>
         {rambler.hidden ? 'Bring back the rambler' : 'Tuck in the rambler'}
       </button>
-      <a href="/rambler" class="nav-link">How he works</a>
+      <a href="/rambler" class="nav-link" data-rambler-hover="explain">How he works</a>
     </nav>
   </footer>
 </div>
 
-<Rambler day={data.day} />
+<Rambler day={data.day} facts={ramblerFacts} valleyVersion={data.showcase.wildmind?.mapVersion ?? null} />
 
 <style>
   .hero {

@@ -14,7 +14,7 @@
   let { tagline }: { tagline: string } = $props();
 </script>
 
-<h1 class="ht-title">JK’s<br /><span use:scenery={{ text: true }}>strange ramblings</span></h1>
+<h1 class="ht-title">JK’s<br /><span data-rambler-focus use:scenery={{ text: true }}>strange ramblings</span></h1>
 <p class="ht-lede">{tagline}</p>
 
 <style>

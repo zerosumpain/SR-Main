@@ -39,6 +39,11 @@
     { mode: 'puddle', label: 'Puddles', view: 'side', note: 'when it rains' },
     { mode: 'skip', label: 'Work out', view: 'side', note: 'restless, wound up' },
     { mode: 'sleep', label: 'Sleep', view: 'side', note: 'night, and a heavy day' },
+    { mode: 'pulse', label: 'Feel the beat', view: 'front', note: 'at my pulse, live' },
+    { mode: 'point', label: 'Show you', view: 'side', note: 'a section of the page' },
+    { mode: 'flex', label: 'Flex', view: 'front', note: 'the health record' },
+    { mode: 'phone', label: 'On the phone', view: 'side', note: 'the app' },
+    { mode: 'clap', label: 'Applaud', view: 'front', note: 'a ship, a good day in the valley' },
   ];
   const SEATED = new Set<Mode>(['tea', 'eat', 'sofa', 'study']);
 

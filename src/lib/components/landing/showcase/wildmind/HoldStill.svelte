@@ -23,7 +23,7 @@
   } = $props();
 </script>
 
-<button type="button" class="wm-hold" data-held={held ? '' : undefined} aria-controls={controls}
+<button type="button" class="wm-hold" data-rambler-cue="hold" data-held={held ? '' : undefined} aria-controls={controls}
   aria-pressed={pressed ? held : undefined}
   onclick={onhold}
 >

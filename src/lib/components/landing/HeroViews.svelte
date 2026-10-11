@@ -68,7 +68,7 @@
       <span class="hv-k" aria-hidden="true">read it as:</span>
       {#each HERO_VIEWS as k, i (k)}
         {#if i}<span class="hv-dot" aria-hidden="true">·</span>{/if}
-        <button type="button" class="hv-b" aria-pressed={page.view === k} onclick={() => page.pick(k)}>{k}</button>
+        <button type="button" class="hv-b" data-rambler-cue="view" aria-pressed={page.view === k} onclick={() => page.pick(k)}>{k}</button>
       {/each}
     </div>
     <span id="hv-how" hidden>{how}</span>

@@ -85,6 +85,7 @@
 
 <section
   class="ss-ch"
+  data-rambler={c.id}
   data-ground={c.ground}
   data-tone={c.tone}
   data-plate={plate ? '' : undefined}

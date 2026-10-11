@@ -6,7 +6,7 @@
 
 import { GLYPHS, type Pixel } from './rig';
 
-export type Accent = 'stressed' | 'mad' | 'surprised' | 'confused' | 'think' | 'pleased' | 'cold' | 'hot' | 'sleepy';
+export type Accent = 'stressed' | 'mad' | 'surprised' | 'confused' | 'think' | 'pleased' | 'cold' | 'hot' | 'sleepy' | 'heart';
 
 /** Placeholder colour the overlay replaces with the page's text colour. */
 export const INK = 'ink';
@@ -64,11 +64,16 @@ function burst(out: Pixel[], cx: number, cy: number, w: number, h: number, spike
   }
 }
 
+const HEART = ['.##.##.', '#######', '#######', '.#####.', '..###..', '...#...'];
+const HEART_BIG = ['.##..##.', '########', '########', '########', '.######.', '..####..', '...##...'];
+
 /**
  * The accent for a state, `t` seconds in. `head` is the centre of his head and
  * `crown` its top middle, both from the drawn figure; `dir` is where he faces.
+ * `bpm` paces the heart: a beat is a quick swell and a smaller second one,
+ * lub-dub, then rest until the next.
  */
-export function accents(kind: Accent, t: number, head: [number, number], crown: [number, number], dir: 1 | -1 = 1): Pixel[] {
+export function accents(kind: Accent, t: number, head: [number, number], crown: [number, number], dir: 1 | -1 = 1, bpm = 60): Pixel[] {
   const out: Pixel[] = [];
   const [hx, hy] = head;
   const top = crown[1];
@@ -134,6 +139,15 @@ export function accents(kind: Accent, t: number, head: [number, number], crown: 
       const y = hy - 2 + Math.round(k * 7);
       out.push([x, y, BLUE], [x, y + 1, BLUE], [x - dir, y + 1, BLUE]);
       for (const i of [-1, 0, 1]) if ((t * 2 + i) % 1 < 0.5) out.push([hx + i * 4, top - 3 - (i === 0 ? 1 : 0), GOLD]);
+      break;
+    }
+    case 'heart': {
+      const phase = (t * Math.max(30, Math.min(200, bpm))) / 60 % 1;
+      const big = phase < 0.12 || (phase > 0.22 && phase < 0.3);
+      const rows = big ? HEART_BIG : HEART;
+      const x0 = hx + 8 * dir - Math.floor(rows[0].length / 2);
+      const y0 = top - 4 - rows.length;
+      rows.forEach((row, r) => [...row].forEach((on, c) => on === '#' && out.push([x0 + c, y0 + r, r === 1 && c === 1 ? '#f08a7a' : RED])));
       break;
     }
     case 'sleepy': {

@@ -6,19 +6,29 @@
   // same without it. One small link follows his body, so clicking him (and
   // only him) opens /rambler, the page that explains how he works; keyboard
   // and screen-reader visitors get the footer's "How he works" link instead.
+  //
+  // The page's sections are marked `data-rambler="<topic>"` (exhibits.ts); he
+  // visits the one the visitor is reading and talks about what it shows, and
+  // buttons marked `data-rambler-cue` (the view switch, fair copy, the hold
+  // buttons) and links marked `data-rambler-hover` get a reaction.
   import { getContext, onMount } from 'svelte';
   import { HEALTH_TIMEZONE } from '$lib/constants/health-day';
   import type { DayFlags } from '$lib/landing/ramblers/day';
   import { moodFor, type MoodInput } from '$lib/landing/ramblers/mood';
   import type { VitalsStore } from '$lib/vitals/store.svelte';
   import { drawWorld, type Ink } from '$lib/landing/ramblers/draw';
+  import { cueBeats, isTopic, valleyFrom, valleyNews, visitBeats, type Box, type Cue, type ExhibitFacts, type Topic, type ValleyFacts } from '$lib/landing/ramblers/exhibits';
+  import type { WildmindShowcase } from '$lib/landing/wildmind';
   import { HEIGHT, Resident } from '$lib/landing/ramblers/resident';
   import { onSceneryChange, sceneryElements } from '$lib/landing/ramblers/scenery';
   import { loadRamblerPreference, rambler } from '$lib/landing/ramblers/visibility.svelte';
   import { buildWorld, type SceneryRect, type World } from '$lib/landing/ramblers/world';
 
-  /** Coarse flags about the owner's day, from the landing loader. */
-  let { day }: { day: DayFlags } = $props();
+  /**
+   * Coarse flags about the owner's day, from the landing loader; and what the
+   * page's sections are showing, read each time he speaks about one.
+   */
+  let { day, facts = () => ({}), valleyVersion = null }: { day: DayFlags; facts?: () => ExhibitFacts; valleyVersion?: string | null } = $props();
 
   // The site's live readings (pulse, weather, time of day), already polled
   // for the header; the rambler only reads them.
@@ -75,6 +85,8 @@
     let inkAt = -Infinity;
     let moodAt = -Infinity;
     let dayAt = performance.now();
+    // Hold buttons the visitor has pressed: he holds still while any is down.
+    const holds = new Set<Element>();
 
     // What the day, the weather and his pulse make him feel like doing.
     const readMood = () => {
@@ -154,8 +166,55 @@
       const S = (HEIGHT * P) / 36;
       const opts = { margin: 8 * S, standOff: 8 * S, jump: 52 * S, drop: 260 * S, longest: 700, pageWidth };
       world = rects.length ? buildWorld(rects, opts) : null;
-      if (world && world.floors.length) resident.setWorld(world, { asleep: still.matches });
-      else world = null;
+      // A hold button that left with the old view lets go.
+      for (const el of holds) if (!el.isConnected) holds.delete(el);
+      if (!holds.size && resident.held) resident.freeze(false);
+      if (world && world.floors.length) {
+        resident.setWorld(world, { asleep: still.matches });
+        resident.setExhibits(readExhibits(), (t) => visitBeats(t, readFacts));
+      } else world = null;
+    };
+
+    // The page's sections, each with the part worth looking at.
+    const readExhibits = () => {
+      const out: { topic: Topic; box: Box; focus: { x: number; y: number } }[] = [];
+      for (const el of document.querySelectorAll<HTMLElement>('[data-rambler]')) {
+        const topic = el.dataset.rambler;
+        if (!isTopic(topic)) continue;
+        const b = el.getBoundingClientRect();
+        if (!b.width || !b.height) continue;
+        const box = { x1: b.left + scrollX, x2: b.right + scrollX, top: b.top + scrollY, bottom: b.bottom + scrollY };
+        const f = el.querySelector<HTMLElement>('[data-rambler-focus]')?.getBoundingClientRect();
+        const focus = f?.width
+          ? { x: (f.left + f.right) / 2 + scrollX, y: (f.top + f.bottom) / 2 + scrollY }
+          : { x: (box.x1 + box.x2) / 2, y: box.top + Math.min(160, (box.bottom - box.top) / 3) };
+        out.push({ topic, box, focus });
+      }
+      return out;
+    };
+
+    // Wildmind's valley moves while he watches it: re-read it now and then
+    // during a visit (the same public endpoint the chapter polls, without the
+    // map), and react to anything that happened.
+    let valley: ValleyFacts | null = null;
+    let valleyAt = -Infinity;
+    const readFacts = (): ExhibitFacts => {
+      const f = facts();
+      if (typeof f.bpm === 'number') resident.bpm = f.bpm;
+      return { ...f, valley: valley ?? f.valley ?? null };
+    };
+    const readValley = async () => {
+      try {
+        const q = valleyVersion ? `?have=${encodeURIComponent(valleyVersion)}` : '';
+        const r = await fetch(`/api/landing/wildmind${q}`, { headers: { accept: 'application/json' } });
+        if (!r.ok) return;
+        const next = valleyFrom((await r.json()) as WildmindShowcase);
+        const news = valleyNews(valley ?? facts().valley ?? null, next);
+        valley = next;
+        if (news && resident.topic === 'wildmind') resident.react(news);
+      } catch {
+        // Offline: he talks about the valley as the page drew it.
+      }
     };
 
     const markDirty = () => (dirty = true);
@@ -178,6 +237,39 @@
       }
     };
     window.addEventListener('pointermove', onPointer, { passive: true });
+
+    // The visitor's own clicks: the view switch, fair copy, the hold buttons.
+    // Read the button's state as it was before the click: that says which way it is going.
+    const isOn = (el: Element) => el.getAttribute('aria-pressed') === 'true' || el.hasAttribute('data-held');
+    const onClick = (e: MouseEvent) => {
+      const el = (e.target as Element | null)?.closest?.('[data-rambler-cue]');
+      if (!el || rambler.hidden) return;
+      const cue = el.getAttribute('data-rambler-cue');
+      const was = isOn(el);
+      if (cue === 'hold') {
+        if (was) holds.delete(el);
+        else holds.add(el);
+        const line = cueBeats(holds.size ? 'hold' : 'unhold')[0].say?.() ?? null;
+        if (holds.size > 0 !== resident.held) resident.freeze(holds.size > 0, still.matches ? null : line);
+        return;
+      }
+      if (still.matches) return;
+      if (cue === 'view' && !was) resident.react(cueBeats('view'));
+      if (cue === 'fair') resident.react(cueBeats(was ? 'unfair' : 'fair'));
+    };
+    document.addEventListener('click', onClick, true);
+    // Hovering the links about him: once a while each.
+    const hovered: Partial<Record<Cue, number>> = {};
+    const onOver = (e: PointerEvent) => {
+      if (e.pointerType !== 'mouse' || rambler.hidden || still.matches) return;
+      const cue = (e.target as Element | null)?.closest?.('[data-rambler-hover]')?.getAttribute('data-rambler-hover');
+      if ((cue === 'tuck' || cue === 'explain') && e.timeStamp - (hovered[cue] ?? -Infinity) > 15_000) {
+        hovered[cue] = e.timeStamp;
+        resident.react(cueBeats(cue));
+      }
+    };
+    document.addEventListener('pointerover', onOver, { passive: true });
+    let wasHidden = rambler.hidden;
     // Development only: `rambler.start('mad')` in the console to watch one.
     if (import.meta.env.DEV) Object.defineProperty(window, 'rambler', { configurable: true, get: () => resident });
 
@@ -198,6 +290,11 @@
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, w, h);
       link.style.display = 'none';
+      if (rambler.hidden !== wasHidden) {
+        // Brought back from the footer: he says hello.
+        if (wasHidden && !still.matches) resident.react(cueBeats('back'));
+        wasHidden = rambler.hidden;
+      }
       if (rambler.hidden) return;
       if (dirty) {
         dirty = false;
@@ -211,10 +308,16 @@
       if (now - moodAt > 30_000) {
         moodAt = now;
         readMood();
+        const bpm = facts().bpm;
+        resident.bpm = typeof bpm === 'number' ? bpm : null;
       }
       if (now - dayAt > 600_000) {
         dayAt = now;
         void readDay();
+      }
+      if (resident.topic === 'wildmind' && now - valleyAt > 12_000) {
+        valleyAt = now;
+        void readValley();
       }
       resident.setView(scrollY, scrollY + innerHeight);
       resident.update(still.matches ? 0 : dt);
@@ -236,6 +339,8 @@
       offScenery();
       still.removeEventListener('change', markDirty);
       window.removeEventListener('pointermove', onPointer);
+      document.removeEventListener('click', onClick, true);
+      document.removeEventListener('pointerover', onOver);
     };
   });
 </script>

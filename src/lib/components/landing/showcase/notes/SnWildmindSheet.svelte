@@ -132,7 +132,7 @@
   {#if camp}<path class="wm-camp" d={camp} />{/if}
 {/snippet}
 
-<figure class="wm-fig" use:scenery use:snap use:watch>
+<figure class="wm-fig" data-rambler-focus use:scenery use:snap use:watch>
   <div class="wm-lrow">
     <p class="sn-l">{label}</p>
     {#if still}<span class="wm-hs"><HoldStill {held} {onhold} controls={frameId} /></span>{/if}

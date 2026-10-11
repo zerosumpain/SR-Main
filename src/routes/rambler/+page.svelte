@@ -90,6 +90,30 @@
   </section>
 
   <section>
+    <h2>What he makes of the page</h2>
+    <p>
+      The home page isn't only floors to him. Each part of it is something to go and have a look at, and when you stop to
+      read one he wanders over and has his say about it, using the figures that part is already showing and nothing else.
+    </p>
+    <ul>
+      <li>At the top he puts a hand on his chest and feels for my pulse, in time with the real one when it's fresh.</li>
+      <li>At Daydream he has a think of his own and compares notes. His ideas are mostly about biscuits.</li>
+      <li>At the health record he flexes, has a go at a push-up and comments on how I slept.</li>
+      <li>At the app he gets his phone out, and can never find a signal.</li>
+      <li>At the shipping record he points out how much has gone out and gives it a round of applause.</li>
+      <li>
+        At Wildmind he sits on the edge and watches the valley, says who's up to what, and claps or holds his head depending on
+        how they're getting on. If they invent something while he's watching, he celebrates.
+      </li>
+      <li>At the writing he picks a title and reads it, and at the very bottom he tells you that's the lot.</li>
+    </ul>
+    <p>
+      He notices you too. Switch how the page reads and he asks who moved everything, turn on the fair copy and he's rude about
+      my handwriting, and press any of the hold buttons and he holds still with the page.
+    </p>
+  </section>
+
+  <section>
     <h2>What he knows about my day, and what he doesn't</h2>
     <ul>
       <li>The time and weather where I am, and my pulse when the reading is fresh.</li>

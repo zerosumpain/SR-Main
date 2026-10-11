@@ -55,12 +55,17 @@ export type Mode =
   | 'fidget'
   | 'shiver'
   | 'celebrate'
-  | 'umbrella';
+  | 'umbrella'
+  | 'point'
+  | 'phone'
+  | 'clap'
+  | 'flex'
+  | 'pulse';
 
 export type View = 'side' | 'front' | 'back';
 
 /** Modes drawn front on once he has settled into them. */
-export const FRONT_MODES: readonly Mode[] = ['idle', 'look', 'think', 'yawn', 'meditate', 'wave', 'stressed', 'anxious', 'mad', 'surprised', 'fidget', 'shiver', 'celebrate', 'fan'];
+export const FRONT_MODES: readonly Mode[] = ['idle', 'look', 'think', 'yawn', 'meditate', 'wave', 'stressed', 'anxious', 'mad', 'surprised', 'fidget', 'shiver', 'celebrate', 'fan', 'clap', 'flex', 'pulse'];
 
 export interface Build {
   thigh: number;
@@ -160,6 +165,8 @@ export interface Props {
   /** A snowball he is rolling, its radius. */
   ball?: number;
   telescope?: boolean;
+  /** A phone held up in front of his face, its screen lit. */
+  phone?: boolean;
 }
 
 /**
@@ -372,6 +379,23 @@ function sidePose(mode: Mode, t: number, b: Build, ctx: PoseContext): Pose {
       p.lean = 6;
       p.face = t % 6 < 0.15 ? 'blink' : 'neutral';
       break;
+    case 'point':
+      // Showing you something: the near arm out straight towards it, bobbing
+      // as if to say "that one".
+      p.armA = [74 + 5 * Math.max(0, Math.sin(t * 5)), 80];
+      p.armB = [-6, -2];
+      p.face = 'happy';
+      break;
+    case 'phone': {
+      // Phone up in front of his face, a thumb going.
+      const tap = Math.floor(t * 4) % 3 === 0;
+      p.armA = [40, tap ? 132 : 138];
+      p.armB = [30, 125];
+      p.headDy = 0.6;
+      p.props.phone = true;
+      p.face = t % 5 < 0.15 ? 'blink' : 'neutral';
+      break;
+    }
     case 'think':
       p.armA = [20, 165];
       p.armB = [18, 80];
@@ -745,6 +769,32 @@ function frontPose(mode: Mode, t: number, b: Build, ctx: PoseContext): Pose {
       p.armBk = 0.5;
       p.face = 'hot';
       break;
+    case 'clap': {
+      // Applause: forearms in to meet in front of his chest, three a second.
+      const apart = Math.abs(Math.sin(t * 9.5));
+      p.armA = [-8, mix(-98, -58, apart)];
+      p.armB = [-8, mix(-98, -58, apart)];
+      p.lift = apart < 0.2 ? 1 : 0;
+      p.face = 'happy';
+      break;
+    }
+    case 'flex': {
+      // Both arms up, biceps out, held and squeezed.
+      const squeeze = Math.sin(t * 4) > 0 ? 1 : 0;
+      p.armA = [92, 172 - squeeze * 14];
+      p.armB = [92, 172 - squeeze * 14];
+      p.legA = [8, 0];
+      p.legB = [8, 0];
+      p.face = squeeze ? 'strain' : 'happy';
+      break;
+    }
+    case 'pulse':
+      // A hand over his heart, feeling for the beat.
+      p.armB = [-22, -128];
+      p.armBk = 0.8;
+      p.armA = [8 + breath * 2, 4];
+      p.face = 'calm';
+      break;
     default:
       // Stood looking out at you, breathing.
       p.armA = [8 + breath * 2, 4];
@@ -985,6 +1035,9 @@ function drawSide(p: Pose, dir: 1 | -1, b: Build, pal: Palette, ex: Extras): Fig
   if (pr.launcher) for (let j = 1; j <= 4; j++) {
     put(hand[0], hand[1] - j, '#4a4440');
     put(hand[0] + 1, hand[1] - j, j > 2 ? '#4a4440' : '#6a6460');
+  }
+  if (pr.phone) {
+    for (let j = -5; j <= 0; j++) for (let i = 0; i <= 2; i++) put(hand[0] + i, hand[1] + j - 1, j === -5 || j === 0 || i === 0 ? '#2a2420' : '#9fd3e0');
   }
   if (pr.telescope) {
     line(hand[0] - 2, hand[1] + 1, hand[0] + 6, hand[1] - 5, '#3a5f9a', 2);

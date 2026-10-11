@@ -40,7 +40,7 @@
   </div>
   <div class="hn-ctl">
     {#if hold}
-      <button type="button" class="hn-ctl-b hn-hold" aria-pressed={held} onclick={() => (held = !held)}>
+      <button type="button" class="hn-ctl-b hn-hold" data-rambler-cue="hold" aria-pressed={held} onclick={() => (held = !held)}>
         <svg viewBox="0 0 10 10" aria-hidden="true" focusable="false">
           {#if held}<path d="M2 1 L9 5 L2 9 Z" />{:else}<path d="M1.5 1h2.5v8H1.5zM6 1h2.5v8H6z" />{/if}
         </svg>
@@ -48,7 +48,7 @@
       </button>
     {/if}
     <!-- The lowest ledge, a short drop above the hero's bottom edge. -->
-    <button type="button" class="hn-ctl-b" aria-pressed={typed} onclick={onfair}><span use:scenery={{ text: true }}>fair copy</span></button>
+    <button type="button" class="hn-ctl-b" data-rambler-cue="fair" aria-pressed={typed} onclick={onfair}><span use:scenery={{ text: true }}>fair copy</span></button>
   </div>
 </div>
 

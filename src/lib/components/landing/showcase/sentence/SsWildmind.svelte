@@ -41,6 +41,7 @@
   import { smoothMap } from '$lib/landing/wildmind-smooth';
   import { builtMarks, plateFrame, plateSummary, plateWords } from '$lib/landing/showcase-sentence-wildmind';
   import { belowFold, firstView, prefersReducedMotion } from '$lib/landing/showcase-motion';
+  import { scenery } from '$lib/landing/ramblers/scenery';
   import WildmindMap from '../wildmind/WildmindMap.svelte';
   import HoldStill from '../wildmind/HoldStill.svelte';
 
@@ -115,7 +116,8 @@
     <p class="ss-vh">{plateSummary(w)}</p>
     <p class="ss-pl-lab">{words.label}</p>
 
-    <div class="ss-pl-fig">
+    <!-- The map's top edge is a floor: the rambler sits on it to watch the valley. -->
+    <div class="ss-pl-fig" data-rambler-focus use:scenery>
       <div class="ss-pl-box" bind:clientWidth={boxW} style:--gx={pc(grid / frame.w)} style:--gy={pc(grid / frame.h)}>
         <WildmindMap
           map={drawn}

@@ -26,6 +26,9 @@
   import SnFair from './SnFair.svelte';
   import { snap } from './snap';
 
+  /** Which of the rambler's visits each page is (ramblers/exhibits.ts); the last page has none. */
+  const RAMBLER_TOPIC: Record<string, string> = { dd: 'daydream', hl: 'health', ap: 'app', bd: 'build', wm: 'wildmind' };
+
   let {
     id,
     page,
@@ -41,7 +44,7 @@
   } = $props();
 </script>
 
-<section class="sp" aria-labelledby="sn-{id}-h" use:snap>
+<section class="sp" aria-labelledby="sn-{id}-h" data-rambler={RAMBLER_TOPIC[id]} use:snap>
   <div class="sp-in">
     <p class="sp-k" aria-hidden="true">{page.kicker}</p>
     <div class="sp-body">
