@@ -20,7 +20,7 @@ import { mutedKinds } from '../thought-store';
 import { loadNoteContexts } from './context.server';
 import { REPLACES_KIND, TOPIC_KINDS, TOPIC_WINDOW_DAYS, replacesEntry, supersededBy, type TopicCandidate } from './topics';
 import { THINK_CADENCE_MS, questionAt, type Channel, type Outcome } from './questions';
-import { dayToStored, keptUntil } from './shelf';
+import { dayToStored, keptUntil, sweepDue } from './shelf';
 import {
   channelLabel,
   inScope,
@@ -322,6 +322,20 @@ export async function supersedeOnTopic(createdKeys: readonly string[], now = new
  *  was put off by him, and filing must not overwrite that. */
 const FILEABLE_STATUSES = ['new', 'delivered', 'seen', 'suppressed'];
 export const FILED_STALE_REASON = 'past its date: filed by owner';
+/** The sweep's own reason, so its filings can be counted, and put back with
+ *  one UPDATE, apart from his. */
+export const SWEPT_STALE_REASON = 'past its date: filed automatically';
+
+/** Set `expired` on the given notes, from a fileable status only. */
+async function expireNotes(ids: readonly string[], reason: string, now: Date): Promise<number> {
+  if (ids.length === 0) return 0;
+  const done = await db
+    .update(daydreamThoughts)
+    .set({ status: 'expired', suppressedReason: reason, updatedAt: now })
+    .where(and(inArray(daydreamThoughts.id, [...ids]), inArray(daydreamThoughts.status, FILEABLE_STATUSES)))
+    .returning({ id: daydreamThoughts.id });
+  return done.length;
+}
 
 /**
  * File notes the feed flags as past their date: `expired`, which every reader
@@ -332,13 +346,20 @@ export const FILED_STALE_REASON = 'past its date: filed by owner';
  */
 export async function fileStale(ids: readonly string[] | 'all', now = new Date()): Promise<number> {
   const flagged = (await loadFeedNotes({ now })).filter((n) => n.stale && (ids === 'all' || ids.includes(n.id))).map((n) => n.id);
-  if (flagged.length === 0) return 0;
-  const done = await db
-    .update(daydreamThoughts)
-    .set({ status: 'expired', suppressedReason: FILED_STALE_REASON, updatedAt: now })
-    .where(and(inArray(daydreamThoughts.id, flagged), inArray(daydreamThoughts.status, FILEABLE_STATUSES)))
-    .returning({ id: daydreamThoughts.id });
-  return done.length;
+  return expireNotes(flagged, FILED_STALE_REASON, now);
+}
+
+/**
+ * The sweep: file every note that has carried the flag, unanswered, for more
+ * than `SWEEP_GRACE_DAYS`. The same read as the Inbox, so it can only file
+ * what he was shown flagged, and the same rule as "File it". Returns the
+ * filed titles for the pulse.
+ */
+export async function sweepStale(now = new Date()): Promise<{ filed: number; flagged: number; titles: string[] }> {
+  const flagged = (await loadFeedNotes({ now })).filter((n) => n.stale);
+  const due = flagged.filter((n) => sweepDue(n.stale, now));
+  const filed = await expireNotes(due.map((n) => n.id), SWEPT_STALE_REASON, now);
+  return { filed, flagged: flagged.length, titles: due.map((n) => n.title) };
 }
 
 /** "Still relevant": keep it off the flag for another fortnight. Returns the

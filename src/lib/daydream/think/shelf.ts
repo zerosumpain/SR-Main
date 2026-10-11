@@ -36,6 +36,10 @@ export const SHELF_DAYS = 3;
 
 /** How far ahead a named date may be and still count as the note's subject. */
 const MAX_AHEAD_DAYS = 366;
+/** Days a note may carry the flag, unanswered, before the sweep files it.
+ *  A week: long enough that a flag is seen at least once on an ordinary
+ *  week's visits, short enough that the Inbox does not fill with flags. */
+export const SWEEP_GRACE_DAYS = 7;
 /** "Still relevant" keeps a note off the flag for this long. */
 export const KEEP_DAYS = 14;
 
@@ -190,4 +194,11 @@ export function parseUntil(raw: unknown, today: string): string | null {
   const day = iso(Number(m[1]), Number(m[2]), Number(m[3]));
   if (!day || day < today || daysBetween(today, day) > MAX_AHEAD_DAYS) return null;
   return day;
+}
+
+/** Has this flag been up long enough for the sweep to file the note? Only a
+ *  flagged note can be swept, so everything `stalenessOf` protects — anything
+ *  answered or under way — is protected here too. */
+export function sweepDue(stale: Pick<Staleness, 'until'> | null, now: Date): boolean {
+  return !!stale && daysBetween(stale.until, localDayOf(now)) > SWEEP_GRACE_DAYS;
 }
