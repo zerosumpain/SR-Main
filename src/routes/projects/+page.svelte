@@ -18,6 +18,7 @@
   import type { ProjectCard } from './cards';
   import { resolveProjectCard } from '$lib/jkai/project-card';
   import ViewSwitch from '$lib/components/projects/ViewSwitch.svelte';
+  import ProjectsFoot from '$lib/components/projects/ProjectsFoot.svelte';
   import { ProjectsView } from '$lib/components/projects/projects-view.svelte';
   import { countEntries, toEntries, type ProjectEntry } from '$lib/projects/views';
 
@@ -184,15 +185,9 @@
   <ViewSwitch page={view} />
 {/snippet}
 
-<HealthShell
-  path="/projects"
-  unifiedNav
-  footer={[
-    'strangeramblings.com/projects · the workbench',
-    `${counts.bench} projects · ${counts.studies} field studies`,
-    'some by hand, some by an agent',
-  ]}
->
+<!-- No footer strip from the shell: the page closes with the home page's
+     footer, in the view on screen (ProjectsFoot). -->
+<HealthShell path="/projects" unifiedNav>
   <div class="pv">
     <View
       hand={entries.hand}
@@ -205,6 +200,7 @@
       {switcher}
     />
   </div>
+  <ProjectsFoot view={view.view} owner={data.authenticated} />
 </HealthShell>
 
 {#if shareModal}
