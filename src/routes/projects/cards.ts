@@ -15,41 +15,10 @@
 // STATIC_PROJECT_KEYS or its toggle silently 400s. `registry-cards.test.ts`
 // guards that parity against this array.
 
-export interface ProjectCard {
-  /** Visibility key. Must match the key the server reports for this project. */
-  key: string;
-  href: string;
-  /** Accessible name for the card's full-bleed link. */
-  label: string;
-  /** The accent eyebrow — `Field Study №6`, `Tool`, `Reference`. */
-  kind: string;
-  /** The muted counterpart on the line below the eyebrow. */
-  tag: string;
-  title: string;
-  blurb: string;
-  /** The mono strip along the foot of the card. */
-  chips: string;
-  /**
-   * A finished product rather than a study or a toy — the card is marked in ink
-   * instead of accent so it reads as a different KIND of thing at a glance, not
-   * as a more important one. See `.pc.product` in `+page.svelte`.
-   */
-  product?: true;
-  /**
-   * Hidden from the public outright: no visibility key, no public/private
-   * toggle and no Share button, because there is no state in which this card
-   * should be seen by anyone but the owner. Cards carrying it live in
-   * `./owner-cards.server.ts` and are NOT in PROJECT_CARDS — see the note
-   * there for why the visibility toggle is the wrong instrument for them.
-   */
-  ownerOnly?: true;
-  /**
-   * `href` leaves the site for a service that runs elsewhere (on the tailnet),
-   * so the card has no /projects page of its own. Owner-only cards only:
-   * `owner-cards.test.ts` holds every other card to its /projects address.
-   */
-  external?: true;
-}
+// The card's shape lives in $lib/projects/views beside the three views that
+// draw it; re-exported so every existing import keeps working.
+import type { ProjectCard } from '$lib/projects/views';
+export type { ProjectCard };
 
 export const PROJECT_CARDS: ProjectCard[] = [
   {

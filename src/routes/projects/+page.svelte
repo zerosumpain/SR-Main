@@ -2,23 +2,24 @@
   import { isProjectPublic } from '$lib/projects/visibility';
   // Projects — the index of everything built on this site.
   //
-  // Wears the /health editorial system, the same way /research, /news and
-  // /drive do: `HealthShell` with `unifiedNav`, an ink cover band carrying the
-  // count deck, then paper sections opened by `SectionHead`.
+  // Read three ways, like the landing page: as a sentence, as a place, or as
+  // notes ($lib/components/projects/<view>/). This file keeps everything the
+  // views share and none of the drawing: which cards this viewer may see (the
+  // server decided), the owner's visibility toggles, Share and Remove, and the
+  // "read it as" switch. Every view takes the same props
+  // ($lib/projects/views) and renders the owner's controls through ONE
+  // snippet, so the controls cannot drift apart between views.
   //
-  // Two sections, and the split is the one the page's own standfirst already
-  // made: what was built by hand, and what an agent built from a single
-  // prompt. The fifteen hand-built cards moved out to `./cards.ts` — they were
-  // fifteen copies of one 37-line block, each with its own inline font sizes,
-  // which is exactly how a page drifts out of the design system one card at a
-  // time. Both kinds now render through ONE snippet, so they cannot diverge.
+  // Two sections in every view, the split the page's standfirst makes: what
+  // was built by hand (`./cards.ts`) and what an agent built from a prompt.
   import type { PageData } from './$types';
   import HealthShell from '$lib/components/shell/HealthShell.svelte';
-  import SectionHead from '$lib/components/shell/SectionHead.svelte';
   import ShareModal from './ShareModal.svelte';
   import type { ProjectCard } from './cards';
   import { resolveProjectCard } from '$lib/jkai/project-card';
-  import type { Snippet } from 'svelte';
+  import ViewSwitch from '$lib/components/projects/ViewSwitch.svelte';
+  import { ProjectsView } from '$lib/components/projects/projects-view.svelte';
+  import { countEntries, toEntries, type ProjectEntry } from '$lib/projects/views';
 
   let { data }: { data: PageData } = $props();
   let projects = $state(data.projects);
@@ -41,8 +42,16 @@
   // The server has already filtered these against the real visibility map —
   // the public's `data.visibility` is empty, so it cannot be filtered here.
   const shownCards = $derived([...data.cards, ...data.ownerCards]);
-  const benchCount = $derived(shownCards.length + projects.length);
-  const studyCount = $derived(shownCards.filter((c) => /^field study/i.test(c.kind)).length);
+  // The agent-built cards keep their build id and source beside them, for Remove.
+  const builds = $derived(new Map(projects.map((p) => [p.slug!, p])));
+  // The public is only ever sent public cards, and its empty map would read an
+  // agent build's slug as private, so only the owner's entries ask the map.
+  const entries = $derived(toEntries(shownCards, projects.map(agentCard), data.authenticated ? isPub : () => true));
+  const counts = $derived(countEntries(entries.hand, entries.agent));
+
+  // The view on screen. Follows the route's data until the visitor picks.
+  const view = new ProjectsView(() => ({ choice: data.view, component: data.viewComponent }));
+  const View = $derived(view.component);
 
   async function toggleVisibility(key: string) {
     const next = !isPub(key);
@@ -128,54 +137,51 @@
   <meta property="og:url" content="https://strangeramblings.com/projects" />
 </svelte:head>
 
-{#snippet visToggle(key: string, href: string, title: string)}
+<!-- The owner's controls for one entry, in every view. The public gets
+     nothing here at all. -->
+{#snippet controls(e: ProjectEntry)}
   {#if data.authenticated}
+    {@const build = e.section === 'agent' ? builds.get(e.key) : undefined}
     <span class="owner-controls">
-      {#if !isPub(key)}<span class="chip private">Private</span>{/if}
-      <button
-        class="ctl"
-        onclick={() => (shareModal = { key, href, title })}
-        title="Create a secure share link — opens this project for a recipient even while private"
-      >
-        Share
-      </button>
-      <button
-        class="ctl"
-        onclick={() => toggleVisibility(key)}
-        disabled={toggling === key}
-        title={isPub(key)
-          ? 'Visible to the public — click to make private'
-          : 'Hidden from the public — click to make public'}
-      >
-        {toggling === key ? '…' : isPub(key) ? 'Public' : 'Private'}
-      </button>
+      {#if e.ownerOnly}
+        <!-- No toggle and no Share: this card has no `project_visibility` key,
+             so the toggle would 400, and a share link would hand out the page. -->
+        <span class="ctl-chip private">Owner only</span>
+      {:else}
+        {#if !isPub(e.key)}<span class="ctl-chip private">Private</span>{/if}
+        <button
+          class="ctl"
+          onclick={() => (shareModal = { key: e.key, href: e.href, title: e.title })}
+          title="Create a secure share link — opens this project for a recipient even while private"
+        >
+          Share
+        </button>
+        <button
+          class="ctl"
+          onclick={() => toggleVisibility(e.key)}
+          disabled={toggling === e.key}
+          title={isPub(e.key)
+            ? 'Visible to the public — click to make private'
+            : 'Hidden from the public — click to make public'}
+        >
+          {toggling === e.key ? '…' : isPub(e.key) ? 'Public' : 'Private'}
+        </button>
+      {/if}
+      {#if build}
+        <button
+          class="ctl danger"
+          onclick={() => removeProject(build.id, build.slug!, build.source)}
+          disabled={removing === build.id}
+        >
+          {removing === build.id ? 'Removing…' : build.source === 'repo' ? 'Remove card' : 'Remove'}
+        </button>
+      {/if}
     </span>
   {/if}
 {/snippet}
 
-<!-- One card, both kinds. `extra` is the AI-built card's remove button; the
-     hand-built cards pass nothing. -->
-{#snippet card(c: ProjectCard, extra?: Snippet)}
-  <li class="pc" class:product={c.product}>
-    <a class="pc-hit" href={c.href} aria-label={c.label}></a>
-    <div class="pc-eyebrow">
-      <span class="pc-kind">{c.kind}</span>
-      <span class="pc-tag">{c.tag}</span>
-    </div>
-    <h3 class="pc-title">{c.title}</h3>
-    <p class="pc-blurb">{c.blurb}</p>
-    <div class="pc-foot">
-      <span class="chip">{c.chips}</span>
-      {#if c.ownerOnly}
-        <!-- No toggle and no Share: this card has no `project_visibility` key,
-             so the toggle would 400, and a share link would hand out the page. -->
-        <span class="chip private">Owner only</span>
-      {:else}
-        {@render visToggle(c.key, c.href, c.title)}
-      {/if}
-      {#if extra}{@render extra()}{/if}
-    </div>
-  </li>
+{#snippet switcher()}
+  <ViewSwitch page={view} />
 {/snippet}
 
 <HealthShell
@@ -183,98 +189,22 @@
   unifiedNav
   footer={[
     'strangeramblings.com/projects · the workbench',
-    `${benchCount} projects · ${studyCount} field studies`,
+    `${counts.bench} projects · ${counts.studies} field studies`,
     'some by hand, some by an agent',
   ]}
 >
-  <section class="lede">
-    <div class="lede-inner">
-      <div class="lede-copy">
-        <p class="eyebrow">Field studies · tools · games</p>
-        <h1>THINGS I'VE BUILT.<br /><span>SOME OF THEM WORK.</span></h1>
-        <p class="standfirst">
-          Interactive field studies, strategy games and data tools, several of them digging into how
-          government and education data fits together. Some made by hand, some built autonomously by
-          an AI agent from a single prompt — those carry an "AI Built" mark.
-        </p>
-      </div>
-
-      <dl class="bench-summary" aria-label="Projects summary">
-        <div>
-          <dt>On the bench</dt>
-          <dd>{String(benchCount).padStart(2, '0')}</dd>
-          <small>Live and playable</small>
-        </div>
-        <div>
-          <dt>Field studies</dt>
-          <dd>{String(studyCount).padStart(2, '0')}</dd>
-          <small>Long-form, interactive</small>
-        </div>
-        <div>
-          <dt>Agent built</dt>
-          <dd>{String(projects.length).padStart(2, '0')}</dd>
-          <small>From a single prompt</small>
-        </div>
-      </dl>
-    </div>
-  </section>
-
-  <section class="sec">
-    <div class="sec-inner">
-      <SectionHead
-        kicker="01 / Built by hand"
-        title={['THE FIELD', 'STUDIES & TOOLS']}
-        strap="Long-form arguments you can operate rather than read, and a few tools that had a job to do."
-      />
-
-      {#if shownCards.length === 0}
-        <p class="empty">Nothing published yet.</p>
-      {:else}
-        <ul class="grid">
-          {#each shownCards as c (c.key)}
-            {@render card(c)}
-          {/each}
-        </ul>
-      {/if}
-    </div>
-  </section>
-
-  {#if projects.length || data.authenticated}
-    <section class="sec tinted">
-      <div class="sec-inner">
-        <SectionHead
-          kicker="02 / Built autonomously"
-          title={['WRITTEN BY', 'AN AGENT']}
-          strap="One prompt in, a working page out. The iteration count is how many passes it took."
-        />
-
-        {#if projects.length === 0}
-          <p class="empty">No AI-built projects yet.</p>
-        {:else}
-          <ul class="grid">
-            {#each projects as project (project.id)}
-              {#snippet removeBtn()}
-                {#if data.authenticated}
-                  <button
-                    class="ctl danger"
-                    onclick={() => removeProject(project.id, project.slug!, project.source)}
-                    disabled={removing === project.id}
-                  >
-                    {removing === project.id
-                      ? 'Removing…'
-                      : project.source === 'repo'
-                        ? 'Remove card'
-                        : 'Remove'}
-                  </button>
-                {/if}
-              {/snippet}
-              {@render card(agentCard(project), removeBtn)}
-            {/each}
-          </ul>
-        {/if}
-      </div>
-    </section>
-  {/if}
+  <div class="pv">
+    <View
+      hand={entries.hand}
+      agent={entries.agent}
+      showAgent={projects.length > 0 || data.authenticated}
+      {counts}
+      owner={data.authenticated}
+      dateline={data.dateline}
+      {controls}
+      {switcher}
+    />
+  </div>
 </HealthShell>
 
 {#if shareModal}
@@ -287,268 +217,28 @@
 {/if}
 
 <style>
-  /* --- Cover: the ink band --- */
-  .lede {
-    padding: clamp(28px, 3.5vw, 48px) clamp(20px, 3vw, 44px);
-    background: var(--text-primary);
-    color: var(--bg);
-    border-bottom: 1px solid rgba(237, 228, 212, 0.16);
-  }
-  .lede-inner {
-    display: grid;
-    grid-template-columns: minmax(0, 1.15fr) minmax(420px, 0.85fr);
-    align-items: end;
-    gap: clamp(32px, 5vw, 72px);
-    width: min(1400px, 100%);
-    margin: 0 auto;
-  }
-  .lede-copy {
-    min-width: 0;
-  }
-  .eyebrow {
-    margin: 0 0 12px;
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    font-weight: 500;
-    letter-spacing: var(--tracking-label-wide);
-    text-transform: uppercase;
-    color: var(--accent-on-dark);
-  }
-  h1 {
-    margin: 0;
-    font-family: var(--font-display);
-    font-size: clamp(2.4rem, 4.4vw, 4.1rem);
-    font-weight: 900;
-    line-height: 0.88;
-    letter-spacing: -0.04em;
-    color: var(--bg);
-    text-wrap: balance;
-  }
-  h1 span {
-    color: transparent;
-    -webkit-text-stroke: 1.5px var(--bg);
-  }
-  .standfirst {
-    max-width: 56ch;
-    margin: 18px 0 0;
-    font-size: var(--fs-body);
-    line-height: 1.5;
-    color: rgba(237, 228, 212, 0.7);
-  }
-
-  .bench-summary {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0;
-    margin: 0;
-    border-top: 1px solid rgba(237, 228, 212, 0.16);
-    border-left: 1px solid rgba(237, 228, 212, 0.16);
-  }
-  .bench-summary > div {
-    min-width: 0;
-    padding: 14px;
-    border-right: 1px solid rgba(237, 228, 212, 0.16);
-    border-bottom: 1px solid rgba(237, 228, 212, 0.16);
-    background: rgba(237, 228, 212, 0.04);
-  }
-  .bench-summary dt {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    font-weight: 500;
-    letter-spacing: var(--tracking-label-wide);
-    text-transform: uppercase;
-    color: rgba(237, 228, 212, 0.55);
-  }
-  .bench-summary dd {
-    margin: 8px 0 5px;
-    font-family: var(--font-display);
-    font-size: clamp(1.65rem, 2.4vw, 2.4rem);
-    font-weight: 900;
-    line-height: 0.9;
-    letter-spacing: -0.03em;
-    color: var(--bg);
-    font-variant-numeric: tabular-nums;
-  }
-  .bench-summary small {
-    display: block;
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    line-height: 1.3;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--accent-on-dark);
-  }
-
-  /* --- Paper sections, on /health's band rhythm --- */
-  .sec {
-    padding: clamp(44px, 5vw, 76px) clamp(20px, 3vw, 44px);
-    border-bottom: 2px solid rgba(26, 16, 8, 0.12);
-  }
-  /* The band rule separates one section from the NEXT. The last one is
-     followed by the ink footer, which separates itself — left in, it draws a
-     stray rule across the empty space a short page leaves above the foot. */
-  section.sec:last-of-type {
-    border-bottom: none;
-  }
-  .sec.tinted {
-    background: var(--bg-section);
-  }
-  .sec-inner {
-    max-width: 1400px;
-    margin: 0 auto;
-  }
-
-  .empty {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    text-transform: uppercase;
-    letter-spacing: var(--tracking-label);
-    color: var(--text-muted);
-    padding: 30px 2px;
-  }
-
-  .grid {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: clamp(12px, 1.4vw, 18px);
-  }
-
-  /* The card: square, shadowless, a hairline that goes to ink on hover — the
-     same object the deck shelf and the canvas cards are. */
-  .pc {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    padding: 22px;
-    background: var(--surface-card);
-    border: 1px solid var(--card-border);
-    transition: border-color var(--t-base) var(--ease-out);
-  }
-  .pc:hover {
-    border-color: var(--text-primary);
-  }
-
-  /* A product, not a study or a toy. The whole difference is the hue: ink
-     instead of accent, on the same cream card, with the same hairline and the
-     same geometry. `--accent-ink` is the repo's designated partner to
-     `--accent` and is already checked for colour-vision safety against it, so
-     this reads as a second voice in the existing palette rather than a colour
-     someone reached for — see the note on `--accent-ink` in app.css.
-
-     The left edge does the work at a glance. It is 3px because 2px reads as a
-     rendering artefact at the top of a grid of hairline boxes, and because the
-     card's own 1px border stays visible underneath it. */
-  .pc.product {
-    border-left: 3px solid var(--accent-ink);
-  }
-  .pc.product:hover {
-    border-color: var(--accent-ink);
-  }
-  .pc.product .pc-kind {
-    color: var(--accent-ink);
-  }
-  .pc.product:hover .pc-title {
-    color: var(--accent-ink);
-  }
-  /* Full-bleed hit area UNDER the controls, so the owner's buttons still get
-     their own clicks — everything interactive in the foot sits above it. */
-  .pc-hit {
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-  }
-
-  /* Two stacked lines, always. Side by side they fit on one line for a short
-     kind ("TOOL") and wrap onto two for a long one ("FIELD STUDY №6"), so
-     cards in the same row started their titles at different heights — the
-     grid's own alignment was being decided by the length of an eyebrow. */
-  .pc-eyebrow {
-    display: grid;
-    gap: 4px;
-    margin-bottom: 12px;
-  }
-  .pc-kind,
-  .pc-tag {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    text-transform: uppercase;
-  }
-  .pc-kind {
-    letter-spacing: var(--tracking-label-wide);
-    color: var(--accent);
-  }
-  .pc-tag {
-    letter-spacing: var(--tracking-label);
-    color: var(--text-ghost);
-  }
-
-  .pc-title {
-    font-family: var(--font-display);
-    font-size: 20px;
-    line-height: 1.08;
-    letter-spacing: -0.02em;
-    text-transform: uppercase;
-    color: var(--text-primary);
-    margin: 0 0 12px;
-    transition: color var(--t-base) var(--ease-out);
-  }
-  .pc:hover .pc-title {
-    color: var(--accent);
-  }
-  .pc-blurb {
-    font-size: var(--fs-nav);
-    line-height: 1.55;
-    color: var(--text-secondary);
-    margin: 0 0 18px;
-    text-wrap: pretty;
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-
-  /* Pinned to the foot, so every card in a row ends on the same line. */
-  .pc-foot {
-    margin-top: auto;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-    position: relative;
-    z-index: 1;
-  }
-  .chip {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: var(--tracking-label);
-    text-transform: uppercase;
-    color: var(--text-muted);
-    background: var(--bg-section);
-    padding: 3px 7px;
-  }
-  .chip.private {
-    color: var(--error);
-    background: var(--error-bg);
-  }
-
+  /* The owner's controls, shared by every view. A view recolours them for its
+     own paper or sky through --pc-ctl-ink (words), --pc-ctl-line (the box)
+     and --pc-ctl-hot (hover). */
   .owner-controls {
-    display: flex;
+    display: inline-flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 8px;
-    margin-left: auto;
+    position: relative;
+    z-index: 2;
+  }
+  .ctl,
+  .ctl-chip {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
   }
   .ctl {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: var(--tracking-label);
-    text-transform: uppercase;
-    color: var(--text-secondary);
+    color: var(--pc-ctl-ink, var(--text-secondary));
     background: none;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--pc-ctl-line, var(--card-border));
     border-radius: 0;
     padding: 4px 8px;
     cursor: pointer;
@@ -557,8 +247,12 @@
       color var(--t-base) var(--ease-out);
   }
   .ctl:hover {
-    border-color: var(--accent);
-    color: var(--accent);
+    border-color: var(--pc-ctl-hot, var(--accent));
+    color: var(--pc-ctl-hot, var(--accent));
+  }
+  .ctl:focus-visible {
+    outline: 2px solid var(--pc-ctl-hot, var(--accent));
+    outline-offset: 2px;
   }
   .ctl:disabled {
     opacity: 0.5;
@@ -570,22 +264,28 @@
   }
   .ctl.danger:hover {
     background: var(--error-bg);
+  }
+  .ctl-chip {
+    padding: 3px 7px;
+  }
+  .ctl-chip.private {
     color: var(--error);
-    border-color: var(--error);
+    background: var(--error-bg);
   }
 
-  @media (max-width: 900px) {
-    .lede-inner {
-      grid-template-columns: minmax(0, 1fr);
-      align-items: start;
-    }
+  /* Named only while a swap runs, so the views crossfade and the nav and
+     footer stay still. */
+  :global(html.projects-swapping) .pv {
+    view-transition-name: projects-view;
   }
-  @media (max-width: 520px) {
-    .grid {
-      grid-template-columns: minmax(0, 1fr);
-    }
-    .bench-summary {
-      grid-template-columns: minmax(0, 1fr);
-    }
+  :global(html.projects-swapping::view-transition-old(root)),
+  :global(html.projects-swapping::view-transition-new(root)) {
+    animation: none;
+  }
+  :global(html.projects-swapping::view-transition-group(projects-view)),
+  :global(html.projects-swapping::view-transition-old(projects-view)),
+  :global(html.projects-swapping::view-transition-new(projects-view)) {
+    animation-duration: 180ms;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   }
 </style>
