@@ -30,8 +30,9 @@ describe('/projects owner-only cards', () => {
     for (const c of OWNER_ONLY_CARDS) expect(c.ownerOnly).toBe(true);
   });
 
-  it('points each card at its own /projects address', () => {
-    for (const c of OWNER_ONLY_CARDS.filter((c) => !c.external)) expect(c.href).toBe(`/projects/${c.key}`);
+  it('points each card at its own address on the site', () => {
+    // An app the site routes to its own root path (Wildmind's /wildmind/) is on the site too.
+    for (const c of OWNER_ONLY_CARDS.filter((c) => !c.external)) expect([`/projects/${c.key}`, `/${c.key}/`]).toContain(c.href);
   });
 
   it('sends an external card to an absolute address off the site', () => {

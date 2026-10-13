@@ -21,20 +21,21 @@ import type { ProjectCard } from './cards';
 // private-by-default card (PRIVATE_BY_DEFAULT in $lib/projects/visibility), so
 // the owner can hand it out with a /projects share link.
 export const OWNER_ONLY_CARDS: ProjectCard[] = [
-  // Wildmind runs in porkserv's local Docker stack and is reachable only on the
-  // tailnet. It spends Claude credit on every thought, so the site links to it
-  // and never proxies it: there is no /projects/wildmind page to make public.
+  // Wildmind runs on porkserv and is served at /wildmind/ through the site's
+  // tunnel (SR-Infra registry `wildmind`). It checks every request with Main's
+  // session authority itself: the owner gets the whole app, anyone else signed
+  // in a read-only view, and nobody the login. The card stays owner-only; the
+  // owner hands out the address.
   {
     key: 'wildmind',
-    href: 'http://100.83.68.108:5395/',
-    label: 'Open Wildmind on porkserv',
+    href: '/wildmind/',
+    label: 'Open Wildmind',
     kind: 'Simulation',
-    tag: 'Live · Tailnet only',
+    tag: 'Live · signed-in guests watch',
     title: 'Wildmind — survivors who invent',
     blurb:
       'Two characters, JKai and a companion, whose minds are Claude, survive in an open world that grows as they explore. Every tool, building and vehicle is designed by the model, checked against what they have actually discovered, and drawn from primitive shapes in the browser. Nothing is pre-made, and spaceflight is possible but a very long way off.',
     chips: 'Three.js · Claude · open world · independent app',
     ownerOnly: true,
-    external: true,
   },
 ];
