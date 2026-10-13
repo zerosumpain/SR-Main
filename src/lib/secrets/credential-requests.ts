@@ -195,12 +195,13 @@ export const CREDENTIAL_REQUEST_SPECS: Record<string, CredentialRequestSpec> = {
   // live token, on both Search Box and Directions). Widening it to fix that
   // would publish an unrestricted token to every visitor. Two tokens, two jobs.
   //
-  // Bound to Search Box only: render_map's place-name geocoding is the one
-  // server-side Mapbox caller. The travel toolset (directions, matrix,
-  // isochrones) stays retired; widening this binding is a deliberate act.
+  // Bound to Search Box (render_map's place-name geocoding) and, since
+  // 2026-10-13, Directions + Matrix for the trip planner's live drive ETAs
+  // (`$lib/trips/routing.server`). Isochrones stay retired; widening this
+  // binding further is a deliberate act.
   'mapbox-api': {
     provider: 'mapbox-api',
-    title: 'Mapbox (place-name geocoding)',
+    title: 'Mapbox (place-name geocoding and live ETAs)',
     helpUrl: 'https://account.mapbox.com/access-tokens/',
     assemble: 'single',
     fields: [
@@ -227,8 +228,9 @@ export const CREDENTIAL_REQUEST_SPECS: Record<string, CredentialRequestSpec> = {
       // already right — stated rather than left implicit so widening it later
       // is a deliberate act.
       allowedMethods: ['GET', 'HEAD'],
-      allowedPathPrefixes: ['/search/searchbox/v1/'],
-      notes: 'Server-side Mapbox: place-name geocoding for render_map. Never sent to a browser.',
+      allowedPathPrefixes: ['/search/searchbox/v1/', '/directions/v5/', '/directions-matrix/v1/'],
+      notes:
+        'Server-side Mapbox: place-name geocoding for render_map and live drive ETAs for the trip planner. Never sent to a browser.',
     },
   },
 

@@ -28,10 +28,11 @@ describe('mapbox-api credential spec', () => {
     expect(spec.binding.injection).toEqual({ kind: 'query', name: 'access_token' });
   });
 
-  it('is bound to Mapbox Search Box only — the one endpoint render_map uses', () => {
-    // Directions, matrix and isochrone went with the retired travel toolset.
+  it('is bound to Search Box, Directions and Matrix only', () => {
+    // Search Box for render_map; Directions + Matrix for the trip planner's
+    // live drive ETAs (2026-10-13). Isochrones stay retired.
     expect(spec.binding.allowedHosts).toEqual(['api.mapbox.com']);
-    expect(spec.binding.allowedPathPrefixes).toEqual(['/search/searchbox/v1/']);
+    expect(spec.binding.allowedPathPrefixes).toEqual(['/search/searchbox/v1/', '/directions/v5/', '/directions-matrix/v1/']);
   });
 
   it('stays read-only — every endpoint used is a GET', () => {
