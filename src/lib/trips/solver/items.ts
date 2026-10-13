@@ -35,6 +35,10 @@ export interface Item {
   durationMin: number;
   /** Hard start minute (booked slot, fixed time, locked stop). */
   fixedStartMin: number | null;
+  /** Hard end minute (a locked stop being re-timed keeps its planned end). */
+  fixedEndMin: number | null;
+  /** Re-planning only: show this planned arrival for a locked stop, whatever the timing. */
+  heldArriveMin: number | null;
   locked: boolean;
   bookingId: string | null;
   priority: Priority | null;
@@ -120,6 +124,8 @@ export function wishItem(wish: Wish, date: LocalDate, bookings: Booking[]): Item
     location: wish.place?.location ?? null,
     durationMin: visitMin(wish, booking),
     fixedStartMin,
+    fixedEndMin: null,
+    heldArriveMin: null,
     locked: fixedStartMin !== null || wish.locked,
     bookingId,
     priority: wish.priority,
@@ -146,6 +152,8 @@ export function mealItem(date: LocalDate, kind: MealKind, rules: PaceRules): Ite
     location: null,
     durationMin: Math.round(w.durationSec / 60),
     fixedStartMin: null,
+    fixedEndMin: null,
+    heldArriveMin: null,
     locked: false,
     bookingId: null,
     priority: null,
@@ -171,7 +179,7 @@ export function pointOfStop(stop: PlannedStop, stayId: string | null): string | 
 
 /**
  * Rebuild an item from an already-planned stop, keeping its planned visit
- * length. A locked stop keeps its planned start as a hard start.
+ * length. A locked stop keeps its planned start and end as hard times.
  */
 export function itemFromStop(
   stop: PlannedStop,
@@ -194,6 +202,8 @@ export function itemFromStop(
       location: null,
       durationMin,
       fixedStartMin: stop.locked ? startMin : null,
+      fixedEndMin: stop.locked ? stop.departMin : null,
+      heldArriveMin: null,
       locked: stop.locked,
       bookingId: null,
       priority: null,
@@ -214,6 +224,8 @@ export function itemFromStop(
     location: stop.location,
     durationMin,
     fixedStartMin: stop.locked ? startMin : null,
+    fixedEndMin: stop.locked ? stop.departMin : null,
+    heldArriveMin: null,
     locked: stop.locked,
     bookingId: stop.bookingId,
     priority: wish?.priority ?? null,

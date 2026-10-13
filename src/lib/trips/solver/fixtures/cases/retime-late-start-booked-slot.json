@@ -400,7 +400,7 @@
           "lng": 12.4922
         },
         "arriveMin": 593,
-        "departMin": 773,
+        "departMin": 750,
         "waitSec": 0,
         "locked": true,
         "bookingId": "bk-colosseum",
@@ -415,8 +415,8 @@
           "lat": 41.8902,
           "lng": 12.4922
         },
-        "arriveMin": 783,
-        "departMin": 843,
+        "arriveMin": 760,
+        "departMin": 820,
         "waitSec": 0,
         "locked": false,
         "bookingId": null,
@@ -431,9 +431,9 @@
           "lat": 41.8894,
           "lng": 12.47
         },
-        "arriveMin": 866,
+        "arriveMin": 843,
         "departMin": 1110,
-        "waitSec": 9240,
+        "waitSec": 10620,
         "locked": false,
         "bookingId": null,
         "warnings": []

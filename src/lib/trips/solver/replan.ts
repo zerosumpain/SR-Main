@@ -5,15 +5,29 @@
 // retimeDay(day, fromIndex, startMin, input): keeps stops before `fromIndex`
 // exactly as they are and re-times the rest in the same order, setting off
 // towards `stops[fromIndex]` at `startMin` (fromIndex 0 = leave the stay at
-// startMin). Each re-timed stop keeps its planned visit length; locked stops
-// keep their planned start (arrive early → wait, late → warning). Nothing is
-// dropped or reordered; warnings are recomputed.
+// startMin). Each re-timed stop keeps its planned visit length; a locked stop
+// keeps its planned start and end (arrive early → wait; late → its real
+// arrival and a "Booked for … — you arrive …" warning, end unchanged).
+// Nothing is dropped or reordered; warnings are recomputed.
 //
-// replanDay(input): up to three options, best first:
-//   shift  — keep everything, push it back (or bring it forward)
-//   drop   — when the shifted day has problems, drop nices (closed-on-arrival
-//            first, then lowest value) until it works
-//   swap / reorder — re-order what is left (locked stops stay put)
+// replanDay(input): up to three options, best first. Locked/booked stops
+// NEVER move in any option — they keep their planned arriveMin, waitSec and
+// departMin:
+//   - Missed slot: a locked stop we cannot reach by its start + 30 min
+//     (MISSED_SLOT_GRACE_MIN), going straight there, leaves every option's
+//     day, is listed in every option's `dropped`, and every option's day
+//     warnings start with "Missed your 09:30 <title> slot".
+//   - Late inside the grace: the stop keeps its planned times and gets
+//     "Booked for 09:30 — you arrive 09:43"; shift label "Go straight to …".
+//   - Unlocked stops that would make a later locked stop late are moved to
+//     just after it (shift, reorder) or, in the drop option, the
+//     lowest-value nice among them is dropped first (`repair`).
+// Options:
+//   shift  — same order, re-timed from now (with the moves above)
+//   drop   — when the shift has problems or had to move stops: drop nices
+//            (squeezing a slot first, then closed-on-arrival, then lowest
+//            value) until it works
+//   swap / reorder — re-order what is left, then the same repair
 // Ranked by simulated cost plus a penalty per dropped nice; identical days
 // are offered once. The phone ports this file to Swift, so it sticks to
 // simple integer minute arithmetic.
@@ -21,7 +35,7 @@
 import type { Booking, PlannedDay, PlannedStop, ReplanOption, Stay, Wish } from '../model';
 import { fmtMin, cmp } from './calendar';
 import { itemFromStop, pointOfStop, type DayFrame, type Item } from './items';
-import { makeContext, type SolverContext } from './matrix';
+import { chooseLeg, legFromPosition, makeContext, type SolverContext } from './matrix';
 import { orderDay } from './order';
 import {
   COST,
@@ -113,8 +127,9 @@ export function retimeDay(
   return toPlannedDay(frame, sim);
 }
 
+/** Problems dropping a nice can fix (lateness for a slot is `repair`'s job). */
 function hasProblems(sim: Simulation): boolean {
-  return sim.overrunMin > 0 || sim.issues.length > 0;
+  return sim.overrunMin > 0 || sim.issues.some((x) => x.kind !== 'late-for-slot');
 }
 
 function joinNames(names: string[]): string {
@@ -132,6 +147,69 @@ const KIND_RANK: Record<ReplanOption['kind'], number> = {
   reorder: 2,
   drop: 3,
 };
+
+/** A booked/locked stop more than this late is a missed slot. */
+export const MISSED_SLOT_GRACE_MIN = 30;
+
+interface Repaired {
+  seq: Item[];
+  sim: Simulation;
+  dropped: Item[];
+  /** [moved stop, the locked stop it now follows]. */
+  moved: Array<[Item, Item]>;
+}
+
+/**
+ * Make a sequence respect its locked stops. While a locked stop would be
+ * late because of unlocked stops before it (since the previous locked stop),
+ * either drop the lowest-value nice among them (`dropFirst`) or move the last
+ * of them to just after the locked stop. A locked stop that is late with
+ * nothing before it to remove stays, with its "Booked for" warning — only
+ * possible within the missed-slot grace period.
+ */
+function repair(
+  ctx: SolverContext,
+  frame: DayFrame,
+  start: SimStart,
+  seq: Item[],
+  dropFirst: boolean,
+): Repaired {
+  let current = [...seq];
+  const dropped: Item[] = [];
+  const moved: Array<[Item, Item]> = [];
+  for (let guard = 0; guard < 4 * seq.length + 4; guard++) {
+    const sim = simulate(ctx, frame, start, current);
+    let fixed = false;
+    let prevLocked = -1;
+    for (let k = 0; k < current.length; k++) {
+      const item = current[k];
+      if (!item.locked) continue;
+      const late = sim.issues.some((x) => x.itemId === item.id && x.kind === 'late-for-slot');
+      const between = current.slice(prevLocked + 1, k).filter((i) => !i.locked);
+      if (late && between.length) {
+        const nice = dropFirst ? between.filter(droppable).sort(byLowestValue)[0] : undefined;
+        if (nice) {
+          current = current.filter((i) => i !== nice);
+          dropped.push(nice);
+        } else {
+          // Move the last sight rather than a meal: a meal after the slot
+          // would only run late.
+          const sights = between.filter((i) => i.kind === 'wish');
+          const mover = (sights.length ? sights : between)[(sights.length ? sights : between).length - 1];
+          const rest = current.filter((i) => i !== mover);
+          const at = rest.indexOf(item);
+          current = [...rest.slice(0, at + 1), mover, ...rest.slice(at + 1)];
+          moved.push([mover, item]);
+        }
+        fixed = true;
+        break;
+      }
+      prevLocked = k;
+    }
+    if (!fixed) return { seq: current, sim, dropped, moved };
+  }
+  return { seq: current, sim: simulate(ctx, frame, start, current), dropped, moved };
+}
 
 export function replanDay(input: ReplanInput): ReplanOption[] {
   const { day } = input;
@@ -159,8 +237,32 @@ export function replanDay(input: ReplanInput): ReplanOption[] {
   if (stillThere && input.nowMin > last.departMin) last.departMin = input.nowMin;
 
   const start = startAfter(prefix, day, leave);
-  const items = toItems(pending, day, input.wishes, input.bookings, ctx);
   if (input.position && at < 0) start.fromPosition = input.position;
+  let items = toItems(pending, day, input.wishes, input.bookings, ctx);
+
+  // Missed slots: a locked stop we cannot reach within the grace period
+  // even going straight there. It leaves today's plan, is listed in every
+  // option's `dropped`, and every option's day carries a warning.
+  const direct = (item: Item): number => {
+    if (item.point === null) return leave;
+    if (start.fromPosition)
+      return leave + Math.ceil(legFromPosition(ctx, start.fromPosition, item.point).durationSec / 60);
+    if (start.fromPoint === null) return leave;
+    return leave + Math.ceil(chooseLeg(ctx, start.fromPoint, item.point).durationSec / 60);
+  };
+  const missed = items.filter(
+    (i) => i.locked && i.fixedStartMin !== null && direct(i) > i.fixedStartMin + MISSED_SLOT_GRACE_MIN,
+  );
+  items = items
+    .filter((i) => !missed.includes(i))
+    .map((i) => {
+      const planned = i.locked ? pending.find((p) => p.id === i.id) : undefined;
+      return planned ? { ...i, heldArriveMin: planned.arriveMin } : i;
+    });
+  const missedWarnings = missed.map(
+    (m) => `Missed your ${fmtMin(m.fixedStartMin as number)} ${m.title} slot`,
+  );
+  const missedIds = missed.map((m) => m.wishId ?? m.id);
 
   const options: Array<ReplanOption & { score: number }> = [];
   const make = (
@@ -171,40 +273,55 @@ export function replanDay(input: ReplanInput): ReplanOption[] {
     dropped: string[],
   ) => {
     const planned = toPlannedDay(frame, sim);
+    planned.warnings = [...missedWarnings, ...planned.warnings];
     const end = planned.stops.length ? planned.stops[planned.stops.length - 1].departMin : 0;
     options.push({
       id,
       label,
       kind,
       day: planned,
-      dropped,
+      dropped: [...missedIds, ...dropped],
       endsLaterMin: end - oldEnd,
       score: sim.cost + dropped.length * COST.droppedNice,
     });
   };
+  const repairSeq = (seq: Item[], dropFirst: boolean) => repair(ctx, frame, start, seq, dropFirst);
+  const movedNote = (moved: Array<[Item, Item]>) =>
+    moved.length
+      ? `, ${joinNames(moved.map(([m]) => (m.kind === 'meal' ? m.title.toLowerCase() : m.title)))} after the ${joinNames(
+          [...new Set(moved.map(([, anchor]) => anchor.title))],
+        )} slot`
+      : '';
 
-  // 1. Shift: same order, re-timed from now.
-  const shift = simulate(ctx, frame, start, items);
-  const firstPending = pending[0];
-  const firstNew = firstPending ? shift.stops.find((s) => s.id === firstPending.id) : undefined;
-  const delay = firstPending && firstNew ? firstNew.arriveMin - firstPending.arriveMin : 0;
-  make(
-    'shift',
-    'shift',
-    delay > 0
-      ? `Push everything back ${delay} min`
-      : delay < 0
-        ? `Bring everything forward ${-delay} min`
-        : 'Keep the plan as it is',
-    shift,
-    [],
+  // 1. Shift: same order, re-timed from now. Unlocked stops are pushed back
+  // only as far as the next locked stop allows; whatever no longer fits
+  // before a slot moves to just after it.
+  const shift = repairSeq(items, false);
+  const firstFree = pending.find((p) => !p.locked && shift.sim.stops.some((s) => s.id === p.id));
+  const firstNew = firstFree ? shift.sim.stops.find((s) => s.id === firstFree.id) : undefined;
+  const delay = firstFree && firstNew ? firstNew.arriveMin - firstFree.arriveMin : 0;
+  const lateSlot = items.find(
+    (i) => i.locked && shift.sim.issues.some((x) => x.itemId === i.id && x.kind === 'late-for-slot'),
   );
+  const shiftLabel = missed.length
+    ? `Carry on without the missed ${joinNames(missed.map((m) => m.title))} slot`
+    : lateSlot
+      ? `Go straight to the ${lateSlot.title} — about ${direct(lateSlot) - (lateSlot.fixedStartMin as number)} min late`
+      : delay > 0
+        ? `Push ${items.some((i) => i.locked) ? 'the rest' : 'everything'} back ${delay} min`
+        : delay < 0
+          ? `Bring everything forward ${-delay} min`
+          : 'Keep the plan as it is';
+  make('shift', 'shift', `${shiftLabel}${movedNote(shift.moved)}`, shift.sim, []);
 
-  // 2. Drop nices until the day works.
-  if (hasProblems(shift)) {
-    let current = items;
-    let sim = shift;
-    const gone: Item[] = [];
+  // 2. Drop nices until the day works: first those squeezing a slot, then
+  // any that would be closed on arrival, then the lowest value.
+  if (hasProblems(shift.sim) || shift.moved.length) {
+    const first = repairSeq(items, true);
+    let current = first.seq;
+    let sim = first.sim;
+    const gone: Item[] = [...first.dropped];
+    let moved = first.moved;
     while (hasProblems(sim)) {
       const candidates = current.filter(droppable);
       if (!candidates.length) break;
@@ -213,32 +330,39 @@ export function replanDay(input: ReplanInput): ReplanOption[] {
         .sort(byLowestValue);
       const victim = closed[0] ?? [...candidates].sort(byLowestValue)[0];
       gone.push(victim);
-      current = current.filter((c) => c !== victim);
-      sim = simulate(ctx, frame, start, current);
+      const next = repairSeq(
+        current.filter((c) => c !== victim),
+        true,
+      );
+      current = next.seq;
+      sim = next.sim;
+      gone.push(...next.dropped);
+      moved = next.moved;
     }
     if (gone.length) {
       const names = gone.map((g) => g.title);
       make(
         `drop:${gone.map((g) => g.id).join(',')}`,
         'drop',
-        `Drop ${joinNames(names)} (nice-to-have${names.length > 1 ? 's' : ''})`,
+        `Drop ${joinNames(names)} (nice-to-have${names.length > 1 ? 's' : ''})${movedNote(moved)}`,
         sim,
         gone.map((g) => g.wishId ?? g.id),
       );
     }
   }
 
-  // 3. Re-order what is left (meals re-slotted, anchors stay put).
+  // 3. Re-order what is left (meals re-slotted, locked stops stay put).
   const wishItems = items.filter((i) => i.kind === 'wish');
   const meals = items.filter((i) => i.kind === 'meal');
   if (wishItems.length > 1) {
     const cost = (seq: Item[]) => withMeals(ctx, frame, start, seq, meals).sim.cost;
     const ordered = orderDay(wishItems, cost);
-    const { seq, sim } = withMeals(ctx, frame, start, ordered, meals);
+    const placed = withMeals(ctx, frame, start, ordered, meals).seq;
+    const { seq, sim } = repairSeq(placed, false);
     const before = wishItems.map((i) => i.id);
-    const after = ordered.map((i) => i.id);
-    const sameSequence = items.map((i) => i.id).join('|') === seq.map((i) => i.id).join('|');
-    if (sim.cost < shift.cost && !sameSequence) {
+    const after = seq.filter((i) => i.kind === 'wish').map((i) => i.id);
+    const sameSequence = shift.seq.map((i) => i.id).join('|') === seq.map((i) => i.id).join('|');
+    if (sim.cost < shift.sim.cost && !sameSequence) {
       const swapped =
         before.length >= 2 &&
         before[0] === after[1] &&

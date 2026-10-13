@@ -97,16 +97,69 @@ describe('replanDay', () => {
 
   it('never moves a locked booked slot', () => {
     const options = replanDay(replanCase('replan-locked-slot'));
-    expect(options.length).toBe(3);
+    expect(options.length).toBeGreaterThanOrEqual(2);
     for (const o of options) {
       const b = stopOf(o.day, 'borghese')!;
       expect(b.locked).toBe(true);
-      const onTime = startOf(b) === 15 * 60 && b.warnings.length === 0;
-      const lateWarned = b.warnings.some((w) => w.startsWith('Booked for 15:00 — you arrive'));
-      expect(onTime || lateWarned).toBe(true);
+      expect(startOf(b)).toBe(15 * 60);
+      expect(b.departMin).toBe(17 * 60);
+      expect(b.warnings).toEqual([]);
     }
     expect(options[0].kind).toBe('drop');
-    expect(startOf(stopOf(options[0].day, 'borghese')!)).toBe(15 * 60);
+  });
+
+  it('a missed slot leaves the plan with a warning and is listed as dropped', () => {
+    const input = replanCase('replan-missed-slot');
+    const options = replanDay(input);
+    expect(options.length).toBeGreaterThanOrEqual(1);
+    expect(options[0].label).toBe('Carry on without the missed Colosseum and Roman Forum slot');
+    for (const o of options) {
+      expect(stopOf(o.day, 'colosseum')).toBeUndefined();
+      expect(o.dropped).toContain('colosseum');
+      expect(o.day.warnings).toContain('Missed your 09:30 Colosseum and Roman Forum slot');
+      for (const s of o.day.stops.slice(1)) expect(s.arriveMin).toBeGreaterThanOrEqual(input.nowMin);
+    }
+  });
+
+  it('late inside the grace period: the slot keeps its times and warns', () => {
+    const options = replanDay(replanCase('replan-late-for-slot'));
+    expect(options[0].label).toBe('Go straight to the Colosseum and Roman Forum — about 13 min late');
+    for (const o of options) {
+      const c = stopOf(o.day, 'colosseum')!;
+      expect(startOf(c)).toBe(9 * 60 + 30);
+      expect(c.warnings).toEqual(['Booked for 09:30 — you arrive 09:43']);
+      expect(o.dropped).not.toContain('colosseum');
+    }
+  });
+
+  it('moves what no longer fits before a slot to after it, or drops nices', () => {
+    const options = replanDay(replanCase('replan-squeezed-before-slot'));
+    for (const o of options) expect(startOf(stopOf(o.day, 'borghese')!)).toBe(15 * 60);
+    expect(options[0].kind).toBe('drop');
+    const shift = options.find((o) => o.kind === 'shift')!;
+    expect(shift.label).toMatch(/after the Borghese Gallery slot$/);
+    expect(shift.dropped).toEqual([]);
+  });
+
+  it('PROPERTY: no option of any case moves a locked or booked stop', () => {
+    for (const c of cases.filter((x) => x.fn === 'replanDay')) {
+      const input = replanCase(c.name);
+      const planned = new Map(input.day.stops.filter((s) => s.locked).map((s) => [s.id, s]));
+      for (const o of replanDay(input)) {
+        for (const s of o.day.stops.filter((x) => x.locked)) {
+          const was = planned.get(s.id)!;
+          const label = `${c.name} / ${o.id} / ${s.id}`;
+          expect(was, label).toBeDefined();
+          expect(s.arriveMin, label).toBe(was.arriveMin);
+          expect(s.waitSec, label).toBe(was.waitSec);
+          if (s.id !== input.atStopId) expect(s.departMin, label).toBe(was.departMin);
+        }
+        // A locked stop that is gone must be reported.
+        for (const id of planned.keys()) {
+          if (!stopOf(o.day, id)) expect(o.dropped, `${c.name} / ${o.id}`).toContain(id);
+        }
+      }
+    }
   });
 
   it('offers "Swap the next two" when the next two are the wrong way round', () => {

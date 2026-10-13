@@ -1,0 +1,484 @@
+{
+  "name": "replan-missed-slot",
+  "description": "Colosseum day, 12:00, nothing done: the 09:30 slot is missed. It leaves the plan with a warning; nothing locked moves.",
+  "fn": "replanDay",
+  "input": {
+    "trip": {
+      "id": "trip-rome",
+      "ownerEmail": "owner@example.com",
+      "title": "Rome in October",
+      "destination": "Rome, Italy",
+      "timeZone": "Europe/Rome",
+      "startDate": "2026-10-27",
+      "endDate": "2026-10-30",
+      "pace": "normal",
+      "modes": ["walk", "transit"],
+      "status": "planned",
+      "notes": null
+    },
+    "stays": [
+      {
+        "id": "campo",
+        "name": "Apartment by Campo de' Fiori",
+        "address": "Via dei Cappellari, Rome (illustrative)",
+        "location": {
+          "lat": 41.8952,
+          "lng": 12.4716
+        },
+        "fromDate": "2026-10-27",
+        "toDate": "2026-10-31",
+        "checkInMin": 900,
+        "checkOutMin": 600
+      }
+    ],
+    "wishes": [
+      {
+        "id": "colosseum",
+        "title": "Colosseum and Roman Forum",
+        "place": {
+          "name": "Colosseum and Roman Forum",
+          "location": {
+            "lat": 41.8902,
+            "lng": 12.4922
+          },
+          "osmId": null,
+          "address": null
+        },
+        "priority": "must",
+        "durationSec": 10800,
+        "partOfDay": "any",
+        "fixedDate": null,
+        "fixedStartMin": null,
+        "locked": false,
+        "suggested": false,
+        "skipped": false,
+        "facts": {
+          "openingHoursText": "Mo-Su 08:30-17:00",
+          "hours": {
+            "1": [
+              {
+                "openMin": 510,
+                "closeMin": 1020
+              }
+            ],
+            "2": [
+              {
+                "openMin": 510,
+                "closeMin": 1020
+              }
+            ],
+            "3": [
+              {
+                "openMin": 510,
+                "closeMin": 1020
+              }
+            ],
+            "4": [
+              {
+                "openMin": 510,
+                "closeMin": 1020
+              }
+            ],
+            "5": [
+              {
+                "openMin": 510,
+                "closeMin": 1020
+              }
+            ],
+            "6": [
+              {
+                "openMin": 510,
+                "closeMin": 1020
+              }
+            ],
+            "7": [
+              {
+                "openMin": 510,
+                "closeMin": 1020
+              }
+            ]
+          },
+          "closedDates": [],
+          "bookingRequired": true,
+          "bookAheadDays": 30,
+          "bookingUrl": null,
+          "officialUrl": null,
+          "priceText": null,
+          "typicalVisitSec": null,
+          "summary": null,
+          "sources": [],
+          "checkedAt": null,
+          "depth": "manual",
+          "unknown": []
+        },
+        "note": null,
+        "sortHint": 1
+      },
+      {
+        "id": "trastevere",
+        "title": "Trastevere in the evening",
+        "place": {
+          "name": "Trastevere in the evening",
+          "location": {
+            "lat": 41.8894,
+            "lng": 12.47
+          },
+          "osmId": null,
+          "address": null
+        },
+        "priority": "nice",
+        "durationSec": 5400,
+        "partOfDay": "evening",
+        "fixedDate": null,
+        "fixedStartMin": null,
+        "locked": false,
+        "suggested": false,
+        "skipped": false,
+        "facts": {
+          "openingHoursText": "24/7",
+          "hours": {
+            "1": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "2": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "3": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "4": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "5": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "6": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "7": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ]
+          },
+          "closedDates": [],
+          "bookingRequired": null,
+          "bookAheadDays": null,
+          "bookingUrl": null,
+          "officialUrl": null,
+          "priceText": null,
+          "typicalVisitSec": null,
+          "summary": null,
+          "sources": [],
+          "checkedAt": null,
+          "depth": "manual",
+          "unknown": []
+        },
+        "note": null,
+        "sortHint": 12
+      }
+    ],
+    "bookings": [
+      {
+        "id": "bk-colosseum",
+        "wishId": "colosseum",
+        "title": "Colosseum, Forum and Palatine — timed entry",
+        "date": "2026-10-28",
+        "startMin": 570,
+        "endMin": null,
+        "reference": "ILLUSTRATIVE-1",
+        "url": null,
+        "documentId": null,
+        "status": "booked"
+      }
+    ],
+    "matrix": {
+      "points": ["colosseum", "trastevere", "stay:campo"],
+      "seconds": {
+        "walk": [
+          [0, 1794, 1749],
+          [1794, 0, 642],
+          [1749, 642, 0]
+        ],
+        "transit": [
+          [0, 1378, 1366],
+          [1378, 0, 1071],
+          [1366, 1071, 0]
+        ]
+      },
+      "metres": {
+        "walk": [
+          [0, 2392, 2332],
+          [2392, 0, 856],
+          [2332, 856, 0]
+        ],
+        "transit": [
+          [0, 2392, 2332],
+          [2392, 0, 856],
+          [2332, 856, 0]
+        ]
+      },
+      "estimated": {
+        "walk": true,
+        "transit": true
+      }
+    },
+    "day": {
+      "date": "2026-10-28",
+      "stayId": "campo",
+      "stops": [
+        {
+          "id": "stay:2026-10-28:start",
+          "kind": "stay",
+          "wishId": null,
+          "title": "Apartment by Campo de' Fiori",
+          "location": {
+            "lat": 41.8952,
+            "lng": 12.4716
+          },
+          "arriveMin": 540,
+          "departMin": 540,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": []
+        },
+        {
+          "id": "colosseum",
+          "kind": "wish",
+          "wishId": "colosseum",
+          "title": "Colosseum and Roman Forum",
+          "location": {
+            "lat": 41.8902,
+            "lng": 12.4922
+          },
+          "arriveMin": 563,
+          "departMin": 750,
+          "waitSec": 420,
+          "locked": true,
+          "bookingId": "bk-colosseum",
+          "warnings": []
+        },
+        {
+          "id": "meal:2026-10-28:lunch",
+          "kind": "meal",
+          "wishId": null,
+          "title": "Lunch",
+          "location": {
+            "lat": 41.8902,
+            "lng": 12.4922
+          },
+          "arriveMin": 760,
+          "departMin": 820,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": []
+        },
+        {
+          "id": "trastevere",
+          "kind": "wish",
+          "wishId": "trastevere",
+          "title": "Trastevere in the evening",
+          "location": {
+            "lat": 41.8894,
+            "lng": 12.47
+          },
+          "arriveMin": 843,
+          "departMin": 1110,
+          "waitSec": 10620,
+          "locked": false,
+          "bookingId": null,
+          "warnings": []
+        },
+        {
+          "id": "stay:2026-10-28:end",
+          "kind": "stay",
+          "wishId": null,
+          "title": "Apartment by Campo de' Fiori",
+          "location": {
+            "lat": 41.8952,
+            "lng": 12.4716
+          },
+          "arriveMin": 1131,
+          "departMin": 1131,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": []
+        }
+      ],
+      "legs": [
+        {
+          "fromStopId": "stay:2026-10-28:start",
+          "toStopId": "colosseum",
+          "mode": "transit",
+          "durationSec": 1366,
+          "distanceM": 2332,
+          "estimated": true,
+          "line": null
+        },
+        {
+          "fromStopId": "colosseum",
+          "toStopId": "meal:2026-10-28:lunch",
+          "mode": "walk",
+          "durationSec": 0,
+          "distanceM": 0,
+          "estimated": false,
+          "line": null
+        },
+        {
+          "fromStopId": "meal:2026-10-28:lunch",
+          "toStopId": "trastevere",
+          "mode": "transit",
+          "durationSec": 1378,
+          "distanceM": 2392,
+          "estimated": true,
+          "line": null
+        },
+        {
+          "fromStopId": "trastevere",
+          "toStopId": "stay:2026-10-28:end",
+          "mode": "walk",
+          "durationSec": 642,
+          "distanceM": 856,
+          "estimated": true,
+          "line": null
+        }
+      ],
+      "warnings": []
+    },
+    "nowMin": 720,
+    "position": null,
+    "atStopId": null,
+    "doneStopIds": []
+  },
+  "expected": [
+    {
+      "id": "shift",
+      "label": "Carry on without the missed Colosseum and Roman Forum slot",
+      "kind": "shift",
+      "day": {
+        "date": "2026-10-28",
+        "stayId": "campo",
+        "stops": [
+          {
+            "id": "stay:2026-10-28:start",
+            "kind": "stay",
+            "wishId": null,
+            "title": "Apartment by Campo de' Fiori",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 540,
+            "departMin": 720,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "meal:2026-10-28:lunch",
+            "kind": "meal",
+            "wishId": null,
+            "title": "Lunch",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 720,
+            "departMin": 780,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "trastevere",
+            "kind": "wish",
+            "wishId": "trastevere",
+            "title": "Trastevere in the evening",
+            "location": {
+              "lat": 41.8894,
+              "lng": 12.47
+            },
+            "arriveMin": 791,
+            "departMin": 1110,
+            "waitSec": 13740,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "stay:2026-10-28:end",
+            "kind": "stay",
+            "wishId": null,
+            "title": "Apartment by Campo de' Fiori",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 1131,
+            "departMin": 1131,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          }
+        ],
+        "legs": [
+          {
+            "fromStopId": "stay:2026-10-28:start",
+            "toStopId": "meal:2026-10-28:lunch",
+            "mode": "walk",
+            "durationSec": 0,
+            "distanceM": 0,
+            "estimated": false,
+            "line": null
+          },
+          {
+            "fromStopId": "meal:2026-10-28:lunch",
+            "toStopId": "trastevere",
+            "mode": "walk",
+            "durationSec": 642,
+            "distanceM": 856,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "trastevere",
+            "toStopId": "stay:2026-10-28:end",
+            "mode": "walk",
+            "durationSec": 642,
+            "distanceM": 856,
+            "estimated": true,
+            "line": null
+          }
+        ],
+        "warnings": ["Missed your 09:30 Colosseum and Roman Forum slot"]
+      },
+      "dropped": ["colosseum"],
+      "endsLaterMin": 0
+    }
+  ]
+}

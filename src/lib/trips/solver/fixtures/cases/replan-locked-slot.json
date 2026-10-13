@@ -661,9 +661,9 @@
               "lat": 41.9142,
               "lng": 12.4921
             },
-            "arriveMin": 869,
+            "arriveMin": 885,
             "departMin": 1020,
-            "waitSec": 1860,
+            "waitSec": 900,
             "locked": true,
             "bookingId": "bk-borghese",
             "warnings": []
@@ -738,9 +738,9 @@
       "endsLaterMin": 0
     },
     {
-      "id": "reorder",
-      "label": "Reorder the rest of the day",
-      "kind": "reorder",
+      "id": "shift",
+      "label": "Push the rest back 40 min, Castel Sant'Angelo after the Borghese Gallery slot",
+      "kind": "shift",
       "day": {
         "date": "2026-10-30",
         "stayId": "campo",
@@ -818,9 +818,9 @@
               "lat": 41.9142,
               "lng": 12.4921
             },
-            "arriveMin": 810,
+            "arriveMin": 885,
             "departMin": 1020,
-            "waitSec": 5400,
+            "waitSec": 900,
             "locked": true,
             "bookingId": "bk-borghese",
             "warnings": []
@@ -918,188 +918,6 @@
       },
       "dropped": [],
       "endsLaterMin": 115
-    },
-    {
-      "id": "shift",
-      "label": "Push everything back 40 min",
-      "kind": "shift",
-      "day": {
-        "date": "2026-10-30",
-        "stayId": "campo",
-        "stops": [
-          {
-            "id": "stay:2026-10-30:start",
-            "kind": "stay",
-            "wishId": null,
-            "title": "Apartment by Campo de' Fiori",
-            "location": {
-              "lat": 41.8952,
-              "lng": 12.4716
-            },
-            "arriveMin": 540,
-            "departMin": 540,
-            "waitSec": 0,
-            "locked": false,
-            "bookingId": null,
-            "warnings": []
-          },
-          {
-            "id": "pincio",
-            "kind": "wish",
-            "wishId": "pincio",
-            "title": "Pincio terrace, Villa Borghese",
-            "location": {
-              "lat": 41.9113,
-              "lng": 12.4797
-            },
-            "arriveMin": 564,
-            "departMin": 659,
-            "waitSec": 0,
-            "locked": false,
-            "bookingId": null,
-            "warnings": []
-          },
-          {
-            "id": "campo-market",
-            "kind": "wish",
-            "wishId": "campo-market",
-            "title": "Campo de' Fiori market",
-            "location": {
-              "lat": 41.8956,
-              "lng": 12.4722
-            },
-            "arriveMin": 683,
-            "departMin": 713,
-            "waitSec": 0,
-            "locked": false,
-            "bookingId": null,
-            "warnings": []
-          },
-          {
-            "id": "castel",
-            "kind": "wish",
-            "wishId": "castel",
-            "title": "Castel Sant'Angelo",
-            "location": {
-              "lat": 41.9031,
-              "lng": 12.4663
-            },
-            "arriveMin": 739,
-            "departMin": 829,
-            "waitSec": 0,
-            "locked": false,
-            "bookingId": null,
-            "warnings": []
-          },
-          {
-            "id": "meal:2026-10-30:lunch",
-            "kind": "meal",
-            "wishId": null,
-            "title": "Lunch",
-            "location": {
-              "lat": 41.9031,
-              "lng": 12.4663
-            },
-            "arriveMin": 839,
-            "departMin": 899,
-            "waitSec": 0,
-            "locked": false,
-            "bookingId": null,
-            "warnings": ["Late lunch — starts 13:59"]
-          },
-          {
-            "id": "borghese",
-            "kind": "wish",
-            "wishId": "borghese",
-            "title": "Borghese Gallery",
-            "location": {
-              "lat": 41.9142,
-              "lng": 12.4921
-            },
-            "arriveMin": 925,
-            "departMin": 1045,
-            "waitSec": 0,
-            "locked": true,
-            "bookingId": "bk-borghese",
-            "warnings": ["Booked for 15:00 — you arrive 15:25"]
-          },
-          {
-            "id": "stay:2026-10-30:end",
-            "kind": "stay",
-            "wishId": null,
-            "title": "Apartment by Campo de' Fiori",
-            "location": {
-              "lat": 41.8952,
-              "lng": 12.4716
-            },
-            "arriveMin": 1082,
-            "departMin": 1082,
-            "waitSec": 0,
-            "locked": false,
-            "bookingId": null,
-            "warnings": []
-          }
-        ],
-        "legs": [
-          {
-            "fromStopId": "stay:2026-10-30:start",
-            "toStopId": "pincio",
-            "mode": "transit",
-            "durationSec": 1397,
-            "distanceM": 2485,
-            "estimated": true,
-            "line": null
-          },
-          {
-            "fromStopId": "pincio",
-            "toStopId": "campo-market",
-            "mode": "transit",
-            "durationSec": 1382,
-            "distanceM": 2409,
-            "estimated": true,
-            "line": null
-          },
-          {
-            "fromStopId": "campo-market",
-            "toStopId": "castel",
-            "mode": "walk",
-            "durationSec": 942,
-            "distanceM": 1256,
-            "estimated": true,
-            "line": null
-          },
-          {
-            "fromStopId": "castel",
-            "toStopId": "meal:2026-10-30:lunch",
-            "mode": "walk",
-            "durationSec": 0,
-            "distanceM": 0,
-            "estimated": false,
-            "line": null
-          },
-          {
-            "fromStopId": "meal:2026-10-30:lunch",
-            "toStopId": "borghese",
-            "mode": "transit",
-            "durationSec": 1541,
-            "distanceM": 3206,
-            "estimated": true,
-            "line": null
-          },
-          {
-            "fromStopId": "borghese",
-            "toStopId": "stay:2026-10-30:end",
-            "mode": "transit",
-            "durationSec": 1604,
-            "distanceM": 3522,
-            "estimated": true,
-            "line": null
-          }
-        ],
-        "warnings": []
-      },
-      "dropped": [],
-      "endsLaterMin": 25
     }
   ]
 }
