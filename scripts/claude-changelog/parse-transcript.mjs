@@ -89,6 +89,7 @@ const FOLDER_PROJECT = [
   [/^sr-policy-engine/, 'sr-policy-engine'],
   [/^sr-policy/, 'sr-policy-analysis'],
   [/^sr-apple/, 'SR-AppleApp'],
+  [/^wildmind/, 'wildmind'],
 ];
 
 const repoCache = new Map();

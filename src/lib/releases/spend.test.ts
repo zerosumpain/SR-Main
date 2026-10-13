@@ -59,6 +59,7 @@ describe('feature areas', () => {
     expect(touchedAreaOf('strange_rambling_svelte/.worktrees/w/src/routes/health/a.ts', 'strange-rambling-svelte')).toBe('health');
     expect(touchedAreaOf('sr-health-x/src/a.ts', 'sr-health')).toBe('repo:sr-health');
     expect(areaLabel('repo:sr-health')).toBe('SR-Health');
+    expect(areaLabel('repo:wildmind')).toBe('Wildmind');
   });
 });
 

@@ -219,6 +219,7 @@ const REPO_LABEL: Record<string, string> = {
   'sr-hex': 'SR-Hex',
   'sr-policy-engine': 'Policy Engine',
   'sr-policy-analysis': 'Policy Analysis',
+  wildmind: 'Wildmind',
 };
 
 function alias(segment: string): string {
