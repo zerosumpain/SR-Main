@@ -273,3 +273,34 @@ describe('the request timeout', () => {
     expect(passed.aborted).toBe(false);
   });
 });
+
+describe('directions and matrix (restored 2026-10-13, live-only)', () => {
+  it('routes through waypoints in order on the traffic profile for drive', async () => {
+    withToken();
+    const fetchMock = stubFetch({ code: 'Ok', routes: [{ distance: 1200, duration: 300, duration_typical: 280, geometry: { coordinates: [[12.47, 41.89], [12.49, 41.9]] } }] });
+    const { directions } = await loadMapbox();
+    const route = await directions({ mode: 'drive', coordinates: [[12.47, 41.89], [12.49, 41.9]] });
+    const url = calledUrl(fetchMock);
+    expect(url.pathname).toBe('/directions/v5/mapbox/driving-traffic/12.47,41.89;12.49,41.9');
+    expect(url.searchParams.get('geometries')).toBe('geojson');
+    expect(route).toEqual({ distanceM: 1200, durationS: 300, durationTypicalS: 280, coordinates: [[12.47, 41.89], [12.49, 41.9]] });
+  });
+
+  it('asks a matrix with sources and destinations and refuses past the cap', async () => {
+    withToken();
+    const fetchMock = stubFetch({ code: 'Ok', durations: [[0, 60], [70, 0]] });
+    const { matrix } = await loadMapbox();
+    const out = await matrix({ mode: 'walk', coordinates: [[1, 2], [3, 4]], sources: [0, 1], destinations: [0, 1] });
+    const url = calledUrl(fetchMock);
+    expect(url.pathname).toBe('/directions-matrix/v1/mapbox/walking/1,2;3,4');
+    expect(url.searchParams.get('sources')).toBe('0;1');
+    expect(out).toEqual({ durations: [[0, 60], [70, 0]], distances: null });
+    const eleven = Array.from({ length: 11 }, (_, i) => [i, i] as [number, number]);
+    await expect(matrix({ mode: 'drive', coordinates: eleven })).rejects.toThrow(/10 points/);
+  });
+
+  it('says navigation results are live-only', async () => {
+    const { MAPBOX_NAVIGATION_IS_LIVE_ONLY } = await loadMapbox();
+    expect(MAPBOX_NAVIGATION_IS_LIVE_ONLY).toBe(true);
+  });
+});
