@@ -19,8 +19,9 @@
 // simple integer minute arithmetic.
 
 import type { Booking, PlannedDay, PlannedStop, ReplanOption, Stay, Wish } from '../model';
+import { fmtMin, cmp } from './calendar';
 import { itemFromStop, pointOfStop, type DayFrame, type Item } from './items';
-import { legFromPosition, makeContext, type SolverContext } from './matrix';
+import { makeContext, type SolverContext } from './matrix';
 import { orderDay } from './order';
 import {
   COST,
@@ -33,7 +34,7 @@ import {
   type SimStart,
   type Simulation,
 } from './timing';
-import type { ReplanInput, RetimeInput } from './index';
+import type { ReplanInput, RetimeInput } from './types';
 
 function frameFor(ctx: SolverContext, day: PlannedDay, stays: Stay[]): DayFrame {
   return {
@@ -151,14 +152,15 @@ export function replanDay(input: ReplanInput): ReplanOption[] {
   const pending = body.slice(h + 1).filter((s) => !done.has(s.id) && s.kind !== 'stay');
   const last = prefix[prefix.length - 1];
   const stillThere = last !== undefined && (at >= 0 || last.kind === 'stay');
-  const leave = stillThere ? Math.max(input.nowMin, last.departMin) : input.nowMin;
-  if (stillThere && leave > last.departMin) last.departMin = leave;
+  // Still at a stop (or the stay): set off once the visit and its buffer are
+  // over, or now if that has passed. Otherwise we are already on the move.
+  const bufferMin = last?.kind === 'wish' ? Math.round(ctx.rules.bufferSec / 60) : 0;
+  const leave = stillThere ? Math.max(input.nowMin, last.departMin + bufferMin) : input.nowMin;
+  if (stillThere && input.nowMin > last.departMin) last.departMin = input.nowMin;
 
   const start = startAfter(prefix, day, leave);
   const items = toItems(pending, day, input.wishes, input.bookings, ctx);
-  if (input.position && at < 0 && items.length && items[0].point !== null) {
-    start.firstLeg = legFromPosition(ctx, input.position, items[0].point);
-  }
+  if (input.position && at < 0) start.fromPosition = input.position;
 
   const options: Array<ReplanOption & { score: number }> = [];
   const make = (
@@ -232,23 +234,28 @@ export function replanDay(input: ReplanInput): ReplanOption[] {
   if (wishItems.length > 1) {
     const cost = (seq: Item[]) => withMeals(ctx, frame, start, seq, meals).sim.cost;
     const ordered = orderDay(wishItems, cost);
-    const { sim } = withMeals(ctx, frame, start, ordered, meals);
+    const { seq, sim } = withMeals(ctx, frame, start, ordered, meals);
     const before = wishItems.map((i) => i.id);
     const after = ordered.map((i) => i.id);
-    if (sim.cost < shift.cost && before.join('|') !== after.join('|')) {
+    const sameSequence = items.map((i) => i.id).join('|') === seq.map((i) => i.id).join('|');
+    if (sim.cost < shift.cost && !sameSequence) {
       const swapped =
         before.length >= 2 &&
         before[0] === after[1] &&
         before[1] === after[0] &&
         before.slice(2).join('|') === after.slice(2).join('|');
       if (swapped) make('swap', 'swap', 'Swap the next two', sim, []);
-      else make('reorder', 'reorder', 'Reorder the rest of the day', sim, []);
+      else if (before.join('|') === after.join('|')) {
+        const moved = sim.stops.filter((s) => s.kind === 'meal' && meals.some((m) => m.id === s.id));
+        const label = moved.length
+          ? `Move ${joinNames(moved.map((m) => `${m.title.toLowerCase()} to ${fmtMin(m.arriveMin + Math.round(m.waitSec / 60))}`))}`
+          : 'Reorder the rest of the day';
+        make('reorder', 'reorder', label, sim, []);
+      } else make('reorder', 'reorder', 'Reorder the rest of the day', sim, []);
     }
   }
 
-  options.sort(
-    (a, b) => a.score - b.score || KIND_RANK[a.kind] - KIND_RANK[b.kind] || a.id.localeCompare(b.id),
-  );
+  options.sort((a, b) => a.score - b.score || KIND_RANK[a.kind] - KIND_RANK[b.kind] || cmp(a.id, b.id));
   const seen = new Set<string>();
   const out: ReplanOption[] = [];
   for (const o of options) {

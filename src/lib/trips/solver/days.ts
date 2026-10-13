@@ -11,7 +11,7 @@
 // goes on its cheapest day and carries a warning.
 
 import type { Booking, DroppedWish, LocalDate, Wish } from '../model';
-import { dayLabel } from './calendar';
+import { dayLabel, cmp } from './calendar';
 import { windowsOn } from './hours';
 import { pinnedDate, visitMin, bookedSlot, type DayFrame } from './items';
 import { chooseLeg, stayPoint, type SolverContext } from './matrix';
@@ -80,7 +80,7 @@ export function assignDays(
 
   const plannable = wishes
     .filter((w) => !w.suggested && !w.skipped)
-    .sort((a, b) => a.sortHint - b.sortHint || a.id.localeCompare(b.id));
+    .sort((a, b) => a.sortHint - b.sortHint || cmp(a.id, b.id));
   const free: Wish[] = [];
   for (const wish of plannable) {
     if (!wish.place) {
@@ -113,7 +113,7 @@ export function assignDays(
       openDays(a).length - openDays(b).length ||
       visitMin(b, null) - visitMin(a, null) ||
       a.sortHint - b.sortHint ||
-      a.id.localeCompare(b.id)
+      cmp(a.id, b.id)
     );
   });
 

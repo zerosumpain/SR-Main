@@ -7,6 +7,7 @@
 // run) until no move lowers the cost. First improvement wins and moves are
 // tried in a fixed order, so the result is deterministic. Sized for ≤ ~12.
 
+import { cmp } from './calendar';
 import type { Item } from './items';
 
 export type SequenceCost = (seq: Item[]) => number;
@@ -27,7 +28,7 @@ function anchorsInOrder(seq: Item[]): boolean {
 export function byInsertionOrder(a: Item, b: Item): number {
   const pa = a.priority === 'must' ? 0 : 1;
   const pb = b.priority === 'must' ? 0 : 1;
-  return pa - pb || a.sortHint - b.sortHint || a.id.localeCompare(b.id);
+  return pa - pb || a.sortHint - b.sortHint || cmp(a.id, b.id);
 }
 
 /** Cheapest insertion of `item` into `seq` (earliest position on ties). */
@@ -97,7 +98,7 @@ export function improve(seq: Item[], cost: SequenceCost): Item[] {
 export function orderDay(items: Item[], cost: SequenceCost): Item[] {
   const anchors = items
     .filter((i) => i.fixedStartMin !== null)
-    .sort((a, b) => (a.fixedStartMin as number) - (b.fixedStartMin as number) || a.id.localeCompare(b.id));
+    .sort((a, b) => (a.fixedStartMin as number) - (b.fixedStartMin as number) || cmp(a.id, b.id));
   const flex = items.filter((i) => i.fixedStartMin === null).sort(byInsertionOrder);
   let seq = anchors;
   for (const item of flex) seq = insertCheapest(seq, item, cost).seq;

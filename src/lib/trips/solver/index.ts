@@ -4,56 +4,21 @@
 // no randomness; ties break on ids. Contract:
 // docs/superpowers/specs/2026-10-13-trips.md ("Solver API").
 
-import type {
-  Booking,
-  DroppedWish,
-  LatLng,
-  LocalDate,
-  PlannedDay,
-  ReplanOption,
-  SolvedPlan,
-  Stay,
-  TravelMatrix,
-  Trip,
-  Wish,
-} from '../model';
-import { datesBetween, dayLabel } from './calendar';
+import type { DroppedWish, LocalDate, PlannedDay, ReplanOption, SolvedPlan, Stay, Wish } from '../model';
+import { datesBetween, dayLabel, cmp } from './calendar';
 import { assignDays } from './days';
 import { closedOn } from './hours';
 import { wishItem, type DayFrame, type Item } from './items';
 import { makeContext } from './matrix';
 import { COST, fitDay, type FitResult } from './timing';
 import { replanDay as replanDayImpl, retimeDay as retimeDayImpl } from './replan';
+import type { ReplanInput, RetimeInput, SolverInput } from './types';
 
-export interface SolverInput {
-  trip: Pick<Trip, 'id' | 'timeZone' | 'startDate' | 'endDate' | 'pace' | 'modes'>;
-  stays: Stay[];
-  /** Suggested and skipped wishes are ignored. */
-  wishes: Wish[];
-  /** Status 'booked' with date + startMin = a hard window. */
-  bookings: Booking[];
-  /** Points are wish ids + `stay:<id>`. */
-  matrix: TravelMatrix;
-}
-
-export interface ReplanInput extends SolverInput {
-  /** The day as currently planned. */
-  day: PlannedDay;
-  /** Local minutes now. */
-  nowMin: number;
-  /** Where the phone is. */
-  position: LatLng | null;
-  /** Stop the phone is at, if any. */
-  atStopId: string | null;
-  /** Visited or skipped already. */
-  doneStopIds: string[];
-}
-
-export type RetimeInput = Omit<ReplanInput, 'day' | 'nowMin' | 'position' | 'atStopId' | 'doneStopIds'>;
+export type { SolverInput, ReplanInput, RetimeInput } from './types';
 
 /** The stay for a night: the stay covering it, else the one checking out that morning. */
 export function stayFor(stays: Stay[], date: LocalDate): Stay | null {
-  const sorted = [...stays].sort((a, b) => a.fromDate.localeCompare(b.fromDate) || a.id.localeCompare(b.id));
+  const sorted = [...stays].sort((a, b) => cmp(a.fromDate, b.fromDate) || cmp(a.id, b.id));
   return (
     sorted.find((s) => s.fromDate <= date && date < s.toDate) ?? sorted.find((s) => s.toDate === date) ?? null
   );
@@ -91,7 +56,7 @@ export function solveTrip(input: SolverInput): SolvedPlan {
   const retry = [...dropReasons.keys()]
     .map((id) => byId.get(id))
     .filter((w): w is Wish => w !== undefined)
-    .sort((a, b) => a.sortHint - b.sortHint || a.id.localeCompare(b.id));
+    .sort((a, b) => a.sortHint - b.sortHint || cmp(a.id, b.id));
   for (const wish of retry) {
     const from = dropReasons.get(wish.id)?.date;
     for (const frame of frames) {

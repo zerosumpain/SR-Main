@@ -10,9 +10,9 @@
 // All times are whole local minutes; a leg's seconds round UP to minutes.
 
 import type { DroppedWish, LatLng, PlannedDay, PlannedLeg, PlannedStop } from '../model';
-import { dayLabel, fmtMin } from './calendar';
+import { dayLabel, fmtMin, cmp } from './calendar';
 import { mealItem, type DayFrame, type Item, type MealKind } from './items';
-import { chooseLeg, stayPoint, type LegChoice, type SolverContext } from './matrix';
+import { chooseLeg, legFromPosition, stayPoint, type LegChoice, type SolverContext } from './matrix';
 import { orderDay } from './order';
 
 /** Cost weights, in minutes-equivalent. Lower total = better day. */
@@ -61,8 +61,8 @@ export interface SimStart {
   fromStopId: string | null;
   /** Local minute we set off. */
   departMin: number;
-  /** Replace the first leg's figures (e.g. from the phone's position). */
-  firstLeg?: LegChoice | null;
+  /** Where the phone actually is: the first leg is estimated from here. */
+  fromPosition?: LatLng | null;
   /** Fresh day: leave the stay earlier when the first stop is a slot we'd miss. */
   leaveEarlyForSlot?: boolean;
 }
@@ -163,7 +163,7 @@ export function simulate(ctx: SolverContext, frame: DayFrame, start: SimStart, i
   const travel = (to: string | null, toStopId: string): number => {
     if (prevStopId === null) return 0;
     let c: LegChoice;
-    if (first && start.firstLeg) c = start.firstLeg;
+    if (first && start.fromPosition && to !== null) c = legFromPosition(ctx, start.fromPosition, to);
     else if (point === null || to === null) c = ZERO_LEG;
     else c = chooseLeg(ctx, point, to);
     first = false;
@@ -340,7 +340,7 @@ export function mealsFor(frame: DayFrame, ctx: SolverContext, skip: Set<string> 
 
 /** Lowest value first: the person's later-listed nices go first, then id. */
 export function byLowestValue(a: Item, b: Item): number {
-  return b.sortHint - a.sortHint || b.id.localeCompare(a.id);
+  return b.sortHint - a.sortHint || cmp(b.id, a.id);
 }
 
 export function droppable(item: Item): boolean {

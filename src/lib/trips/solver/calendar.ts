@@ -72,3 +72,8 @@ export function fmtMin(min: number): string {
   const m = ((Math.round(min) % 1440) + 1440) % 1440;
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
+
+/** Plain code-unit string order — never locale-dependent, so Swift can match it. */
+export function cmp(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}

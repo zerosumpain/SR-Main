@@ -1,0 +1,1040 @@
+{
+  "name": "replan-on-time",
+  "description": "At Piazza Navona exactly on time: carry on as planned.",
+  "fn": "replanDay",
+  "input": {
+    "trip": {
+      "id": "trip-rome",
+      "ownerEmail": "owner@example.com",
+      "title": "Rome in October",
+      "destination": "Rome, Italy",
+      "timeZone": "Europe/Rome",
+      "startDate": "2026-10-27",
+      "endDate": "2026-10-30",
+      "pace": "normal",
+      "modes": ["walk", "transit"],
+      "status": "planned",
+      "notes": null
+    },
+    "stays": [
+      {
+        "id": "campo",
+        "name": "Apartment by Campo de' Fiori",
+        "address": "Via dei Cappellari, Rome (illustrative)",
+        "location": {
+          "lat": 41.8952,
+          "lng": 12.4716
+        },
+        "fromDate": "2026-10-27",
+        "toDate": "2026-10-31",
+        "checkInMin": 900,
+        "checkOutMin": 600
+      }
+    ],
+    "wishes": [
+      {
+        "id": "pantheon",
+        "title": "Pantheon",
+        "place": {
+          "name": "Pantheon",
+          "location": {
+            "lat": 41.8986,
+            "lng": 12.4769
+          },
+          "osmId": null,
+          "address": null
+        },
+        "priority": "must",
+        "durationSec": 2700,
+        "partOfDay": "any",
+        "fixedDate": null,
+        "fixedStartMin": null,
+        "locked": false,
+        "suggested": false,
+        "skipped": false,
+        "facts": {
+          "openingHoursText": "Mo-Su 09:00-19:00",
+          "hours": {
+            "1": [
+              {
+                "openMin": 540,
+                "closeMin": 1140
+              }
+            ],
+            "2": [
+              {
+                "openMin": 540,
+                "closeMin": 1140
+              }
+            ],
+            "3": [
+              {
+                "openMin": 540,
+                "closeMin": 1140
+              }
+            ],
+            "4": [
+              {
+                "openMin": 540,
+                "closeMin": 1140
+              }
+            ],
+            "5": [
+              {
+                "openMin": 540,
+                "closeMin": 1140
+              }
+            ],
+            "6": [
+              {
+                "openMin": 540,
+                "closeMin": 1140
+              }
+            ],
+            "7": [
+              {
+                "openMin": 540,
+                "closeMin": 1140
+              }
+            ]
+          },
+          "closedDates": [],
+          "bookingRequired": null,
+          "bookAheadDays": null,
+          "bookingUrl": null,
+          "officialUrl": null,
+          "priceText": null,
+          "typicalVisitSec": null,
+          "summary": null,
+          "sources": [],
+          "checkedAt": null,
+          "depth": "manual",
+          "unknown": []
+        },
+        "note": null,
+        "sortHint": 5
+      },
+      {
+        "id": "trevi",
+        "title": "Trevi Fountain",
+        "place": {
+          "name": "Trevi Fountain",
+          "location": {
+            "lat": 41.9009,
+            "lng": 12.4833
+          },
+          "osmId": null,
+          "address": null
+        },
+        "priority": "must",
+        "durationSec": 1200,
+        "partOfDay": "any",
+        "fixedDate": null,
+        "fixedStartMin": null,
+        "locked": false,
+        "suggested": false,
+        "skipped": false,
+        "facts": {
+          "openingHoursText": "24/7",
+          "hours": {
+            "1": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "2": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "3": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "4": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "5": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "6": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "7": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ]
+          },
+          "closedDates": [],
+          "bookingRequired": null,
+          "bookAheadDays": null,
+          "bookingUrl": null,
+          "officialUrl": null,
+          "priceText": null,
+          "typicalVisitSec": null,
+          "summary": null,
+          "sources": [],
+          "checkedAt": null,
+          "depth": "manual",
+          "unknown": []
+        },
+        "note": null,
+        "sortHint": 6
+      },
+      {
+        "id": "navona",
+        "title": "Piazza Navona",
+        "place": {
+          "name": "Piazza Navona",
+          "location": {
+            "lat": 41.8992,
+            "lng": 12.4731
+          },
+          "osmId": null,
+          "address": null
+        },
+        "priority": "must",
+        "durationSec": 1800,
+        "partOfDay": "any",
+        "fixedDate": null,
+        "fixedStartMin": null,
+        "locked": false,
+        "suggested": false,
+        "skipped": false,
+        "facts": {
+          "openingHoursText": "24/7",
+          "hours": {
+            "1": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "2": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "3": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "4": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "5": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "6": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "7": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ]
+          },
+          "closedDates": [],
+          "bookingRequired": null,
+          "bookAheadDays": null,
+          "bookingUrl": null,
+          "officialUrl": null,
+          "priceText": null,
+          "typicalVisitSec": null,
+          "summary": null,
+          "sources": [],
+          "checkedAt": null,
+          "depth": "manual",
+          "unknown": []
+        },
+        "note": null,
+        "sortHint": 7
+      },
+      {
+        "id": "capitoline",
+        "title": "Capitoline Museums",
+        "place": {
+          "name": "Capitoline Museums",
+          "location": {
+            "lat": 41.893,
+            "lng": 12.4828
+          },
+          "osmId": null,
+          "address": null
+        },
+        "priority": "nice",
+        "durationSec": 7200,
+        "partOfDay": "any",
+        "fixedDate": null,
+        "fixedStartMin": null,
+        "locked": false,
+        "suggested": false,
+        "skipped": false,
+        "facts": {
+          "openingHoursText": "Mo-Su 09:30-19:30",
+          "hours": {
+            "1": [
+              {
+                "openMin": 570,
+                "closeMin": 1170
+              }
+            ],
+            "2": [
+              {
+                "openMin": 570,
+                "closeMin": 1170
+              }
+            ],
+            "3": [
+              {
+                "openMin": 570,
+                "closeMin": 1170
+              }
+            ],
+            "4": [
+              {
+                "openMin": 570,
+                "closeMin": 1170
+              }
+            ],
+            "5": [
+              {
+                "openMin": 570,
+                "closeMin": 1170
+              }
+            ],
+            "6": [
+              {
+                "openMin": 570,
+                "closeMin": 1170
+              }
+            ],
+            "7": [
+              {
+                "openMin": 570,
+                "closeMin": 1170
+              }
+            ]
+          },
+          "closedDates": [],
+          "bookingRequired": null,
+          "bookAheadDays": null,
+          "bookingUrl": null,
+          "officialUrl": null,
+          "priceText": null,
+          "typicalVisitSec": null,
+          "summary": null,
+          "sources": [],
+          "checkedAt": null,
+          "depth": "manual",
+          "unknown": []
+        },
+        "note": null,
+        "sortHint": 9
+      },
+      {
+        "id": "spanish-steps",
+        "title": "Spanish Steps",
+        "place": {
+          "name": "Spanish Steps",
+          "location": {
+            "lat": 41.9058,
+            "lng": 12.4823
+          },
+          "osmId": null,
+          "address": null
+        },
+        "priority": "nice",
+        "durationSec": 1800,
+        "partOfDay": "any",
+        "fixedDate": null,
+        "fixedStartMin": null,
+        "locked": false,
+        "suggested": false,
+        "skipped": false,
+        "facts": {
+          "openingHoursText": "24/7",
+          "hours": {
+            "1": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "2": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "3": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "4": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "5": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "6": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "7": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ]
+          },
+          "closedDates": [],
+          "bookingRequired": null,
+          "bookAheadDays": null,
+          "bookingUrl": null,
+          "officialUrl": null,
+          "priceText": null,
+          "typicalVisitSec": null,
+          "summary": null,
+          "sources": [],
+          "checkedAt": null,
+          "depth": "manual",
+          "unknown": []
+        },
+        "note": null,
+        "sortHint": 11
+      },
+      {
+        "id": "ghetto",
+        "title": "Jewish Ghetto and Portico d'Ottavia",
+        "place": {
+          "name": "Jewish Ghetto and Portico d'Ottavia",
+          "location": {
+            "lat": 41.8925,
+            "lng": 12.4777
+          },
+          "osmId": null,
+          "address": null
+        },
+        "priority": "nice",
+        "durationSec": 2700,
+        "partOfDay": "any",
+        "fixedDate": null,
+        "fixedStartMin": null,
+        "locked": false,
+        "suggested": false,
+        "skipped": false,
+        "facts": {
+          "openingHoursText": "24/7",
+          "hours": {
+            "1": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "2": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "3": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "4": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "5": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "6": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "7": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ]
+          },
+          "closedDates": [],
+          "bookingRequired": null,
+          "bookAheadDays": null,
+          "bookingUrl": null,
+          "officialUrl": null,
+          "priceText": null,
+          "typicalVisitSec": null,
+          "summary": null,
+          "sources": [],
+          "checkedAt": null,
+          "depth": "manual",
+          "unknown": []
+        },
+        "note": null,
+        "sortHint": 13
+      }
+    ],
+    "bookings": [],
+    "matrix": {
+      "points": ["navona", "pantheon", "spanish-steps", "trevi", "capitoline", "ghetto", "stay:campo"],
+      "seconds": {
+        "walk": [
+          [0, 314, 1031, 844, 1032, 816, 450],
+          [314, 0, 894, 574, 772, 665, 565],
+          [1031, 894, 0, 537, 1388, 1489, 1438],
+          [844, 574, 537, 0, 857, 1017, 1129],
+          [1032, 772, 1388, 857, 0, 416, 935],
+          [816, 665, 1489, 1017, 416, 0, 573],
+          [450, 565, 1438, 1129, 935, 573, 0]
+        ],
+        "transit": [
+          [0, 984, 1175, 1125, 1175, 1118, 1020],
+          [984, 0, 1138, 1053, 1106, 1077, 1051],
+          [1175, 1138, 0, 1043, 1270, 1297, 1283],
+          [1125, 1053, 1043, 0, 1129, 1171, 1201],
+          [1175, 1106, 1270, 1129, 0, 1011, 1149],
+          [1118, 1077, 1297, 1171, 1011, 0, 1053],
+          [1020, 1051, 1283, 1201, 1149, 1053, 0]
+        ]
+      },
+      "metres": {
+        "walk": [
+          [0, 418, 1375, 1125, 1376, 1088, 600],
+          [418, 0, 1192, 765, 1029, 886, 753],
+          [1375, 1192, 0, 716, 1851, 1985, 1917],
+          [1125, 765, 716, 0, 1143, 1356, 1505],
+          [1376, 1029, 1851, 1143, 0, 554, 1246],
+          [1088, 886, 1985, 1356, 554, 0, 764],
+          [600, 753, 1917, 1505, 1246, 764, 0]
+        ],
+        "transit": [
+          [0, 418, 1375, 1125, 1376, 1088, 600],
+          [418, 0, 1192, 765, 1029, 886, 753],
+          [1375, 1192, 0, 716, 1851, 1985, 1917],
+          [1125, 765, 716, 0, 1143, 1356, 1505],
+          [1376, 1029, 1851, 1143, 0, 554, 1246],
+          [1088, 886, 1985, 1356, 554, 0, 764],
+          [600, 753, 1917, 1505, 1246, 764, 0]
+        ]
+      },
+      "estimated": {
+        "walk": true,
+        "transit": true
+      }
+    },
+    "day": {
+      "date": "2026-10-27",
+      "stayId": "campo",
+      "stops": [
+        {
+          "id": "stay:2026-10-27:start",
+          "kind": "stay",
+          "wishId": null,
+          "title": "Apartment by Campo de' Fiori",
+          "location": {
+            "lat": 41.8952,
+            "lng": 12.4716
+          },
+          "arriveMin": 540,
+          "departMin": 540,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": []
+        },
+        {
+          "id": "navona",
+          "kind": "wish",
+          "wishId": "navona",
+          "title": "Piazza Navona",
+          "location": {
+            "lat": 41.8992,
+            "lng": 12.4731
+          },
+          "arriveMin": 548,
+          "departMin": 578,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": []
+        },
+        {
+          "id": "pantheon",
+          "kind": "wish",
+          "wishId": "pantheon",
+          "title": "Pantheon",
+          "location": {
+            "lat": 41.8986,
+            "lng": 12.4769
+          },
+          "arriveMin": 594,
+          "departMin": 639,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": []
+        },
+        {
+          "id": "spanish-steps",
+          "kind": "wish",
+          "wishId": "spanish-steps",
+          "title": "Spanish Steps",
+          "location": {
+            "lat": 41.9058,
+            "lng": 12.4823
+          },
+          "arriveMin": 664,
+          "departMin": 694,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": []
+        },
+        {
+          "id": "trevi",
+          "kind": "wish",
+          "wishId": "trevi",
+          "title": "Trevi Fountain",
+          "location": {
+            "lat": 41.9009,
+            "lng": 12.4833
+          },
+          "arriveMin": 713,
+          "departMin": 733,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": []
+        },
+        {
+          "id": "meal:2026-10-27:lunch",
+          "kind": "meal",
+          "wishId": null,
+          "title": "Lunch",
+          "location": {
+            "lat": 41.9009,
+            "lng": 12.4833
+          },
+          "arriveMin": 743,
+          "departMin": 803,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": []
+        },
+        {
+          "id": "capitoline",
+          "kind": "wish",
+          "wishId": "capitoline",
+          "title": "Capitoline Museums",
+          "location": {
+            "lat": 41.893,
+            "lng": 12.4828
+          },
+          "arriveMin": 818,
+          "departMin": 938,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": []
+        },
+        {
+          "id": "ghetto",
+          "kind": "wish",
+          "wishId": "ghetto",
+          "title": "Jewish Ghetto and Portico d'Ottavia",
+          "location": {
+            "lat": 41.8925,
+            "lng": 12.4777
+          },
+          "arriveMin": 955,
+          "departMin": 1000,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": []
+        },
+        {
+          "id": "stay:2026-10-27:end",
+          "kind": "stay",
+          "wishId": null,
+          "title": "Apartment by Campo de' Fiori",
+          "location": {
+            "lat": 41.8952,
+            "lng": 12.4716
+          },
+          "arriveMin": 1020,
+          "departMin": 1020,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": []
+        }
+      ],
+      "legs": [
+        {
+          "fromStopId": "stay:2026-10-27:start",
+          "toStopId": "navona",
+          "mode": "walk",
+          "durationSec": 450,
+          "distanceM": 600,
+          "estimated": true,
+          "line": null
+        },
+        {
+          "fromStopId": "navona",
+          "toStopId": "pantheon",
+          "mode": "walk",
+          "durationSec": 314,
+          "distanceM": 418,
+          "estimated": true,
+          "line": null
+        },
+        {
+          "fromStopId": "pantheon",
+          "toStopId": "spanish-steps",
+          "mode": "walk",
+          "durationSec": 894,
+          "distanceM": 1192,
+          "estimated": true,
+          "line": null
+        },
+        {
+          "fromStopId": "spanish-steps",
+          "toStopId": "trevi",
+          "mode": "walk",
+          "durationSec": 537,
+          "distanceM": 716,
+          "estimated": true,
+          "line": null
+        },
+        {
+          "fromStopId": "trevi",
+          "toStopId": "meal:2026-10-27:lunch",
+          "mode": "walk",
+          "durationSec": 0,
+          "distanceM": 0,
+          "estimated": false,
+          "line": null
+        },
+        {
+          "fromStopId": "meal:2026-10-27:lunch",
+          "toStopId": "capitoline",
+          "mode": "walk",
+          "durationSec": 857,
+          "distanceM": 1143,
+          "estimated": true,
+          "line": null
+        },
+        {
+          "fromStopId": "capitoline",
+          "toStopId": "ghetto",
+          "mode": "walk",
+          "durationSec": 416,
+          "distanceM": 554,
+          "estimated": true,
+          "line": null
+        },
+        {
+          "fromStopId": "ghetto",
+          "toStopId": "stay:2026-10-27:end",
+          "mode": "walk",
+          "durationSec": 573,
+          "distanceM": 764,
+          "estimated": true,
+          "line": null
+        }
+      ],
+      "warnings": []
+    },
+    "nowMin": 578,
+    "position": null,
+    "atStopId": "navona",
+    "doneStopIds": []
+  },
+  "expected": [
+    {
+      "id": "shift",
+      "label": "Keep the plan as it is",
+      "kind": "shift",
+      "day": {
+        "date": "2026-10-27",
+        "stayId": "campo",
+        "stops": [
+          {
+            "id": "stay:2026-10-27:start",
+            "kind": "stay",
+            "wishId": null,
+            "title": "Apartment by Campo de' Fiori",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 540,
+            "departMin": 540,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "navona",
+            "kind": "wish",
+            "wishId": "navona",
+            "title": "Piazza Navona",
+            "location": {
+              "lat": 41.8992,
+              "lng": 12.4731
+            },
+            "arriveMin": 548,
+            "departMin": 578,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "pantheon",
+            "kind": "wish",
+            "wishId": "pantheon",
+            "title": "Pantheon",
+            "location": {
+              "lat": 41.8986,
+              "lng": 12.4769
+            },
+            "arriveMin": 594,
+            "departMin": 639,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "spanish-steps",
+            "kind": "wish",
+            "wishId": "spanish-steps",
+            "title": "Spanish Steps",
+            "location": {
+              "lat": 41.9058,
+              "lng": 12.4823
+            },
+            "arriveMin": 664,
+            "departMin": 694,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "trevi",
+            "kind": "wish",
+            "wishId": "trevi",
+            "title": "Trevi Fountain",
+            "location": {
+              "lat": 41.9009,
+              "lng": 12.4833
+            },
+            "arriveMin": 713,
+            "departMin": 733,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "meal:2026-10-27:lunch",
+            "kind": "meal",
+            "wishId": null,
+            "title": "Lunch",
+            "location": {
+              "lat": 41.9009,
+              "lng": 12.4833
+            },
+            "arriveMin": 743,
+            "departMin": 803,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "capitoline",
+            "kind": "wish",
+            "wishId": "capitoline",
+            "title": "Capitoline Museums",
+            "location": {
+              "lat": 41.893,
+              "lng": 12.4828
+            },
+            "arriveMin": 818,
+            "departMin": 938,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "ghetto",
+            "kind": "wish",
+            "wishId": "ghetto",
+            "title": "Jewish Ghetto and Portico d'Ottavia",
+            "location": {
+              "lat": 41.8925,
+              "lng": 12.4777
+            },
+            "arriveMin": 955,
+            "departMin": 1000,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "stay:2026-10-27:end",
+            "kind": "stay",
+            "wishId": null,
+            "title": "Apartment by Campo de' Fiori",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 1020,
+            "departMin": 1020,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          }
+        ],
+        "legs": [
+          {
+            "fromStopId": "stay:2026-10-27:start",
+            "toStopId": "navona",
+            "mode": "walk",
+            "durationSec": 450,
+            "distanceM": 600,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "navona",
+            "toStopId": "pantheon",
+            "mode": "walk",
+            "durationSec": 314,
+            "distanceM": 418,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "pantheon",
+            "toStopId": "spanish-steps",
+            "mode": "walk",
+            "durationSec": 894,
+            "distanceM": 1192,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "spanish-steps",
+            "toStopId": "trevi",
+            "mode": "walk",
+            "durationSec": 537,
+            "distanceM": 716,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "trevi",
+            "toStopId": "meal:2026-10-27:lunch",
+            "mode": "walk",
+            "durationSec": 0,
+            "distanceM": 0,
+            "estimated": false,
+            "line": null
+          },
+          {
+            "fromStopId": "meal:2026-10-27:lunch",
+            "toStopId": "capitoline",
+            "mode": "walk",
+            "durationSec": 857,
+            "distanceM": 1143,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "capitoline",
+            "toStopId": "ghetto",
+            "mode": "walk",
+            "durationSec": 416,
+            "distanceM": 554,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "ghetto",
+            "toStopId": "stay:2026-10-27:end",
+            "mode": "walk",
+            "durationSec": 573,
+            "distanceM": 764,
+            "estimated": true,
+            "line": null
+          }
+        ],
+        "warnings": []
+      },
+      "dropped": [],
+      "endsLaterMin": 0
+    }
+  ]
+}
