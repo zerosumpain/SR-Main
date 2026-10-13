@@ -136,6 +136,8 @@ export const ACCOUNT_COLUMNS: Record<string, Record<string, Fate | `kept: ${stri
   family_backlog_item: { added_by_email: 'erase', for_email: 'scrub', done_by_email: 'scrub' },
   family_backlog_reaction: { email: 'erase' },
   family_backlog_pref: { email: 'erase' },
+  // Owner only until phase 5 (D2): a member cannot own or reach a trip.
+  trip: { owner_email: 'kept: owner-only (trips, D2)' },
   gmail_accounts: { email: 'erase', principal_id: 'erase' },
   activity_principals: { external_ref: 'erase' },
   jkai_conversations: { principal_id: 'erase' },
