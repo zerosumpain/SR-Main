@@ -231,8 +231,14 @@ export function simulate(ctx: SolverContext, frame: DayFrame, start: SimStart, i
       const miss = begin < from ? from - begin : begin >= to ? begin - to + 1 : 0;
       if (miss > 0) cost += COST.partOfDayMiss + Math.min(miss, COST.partOfDayMaxMin) * COST.partOfDayPerMin;
     }
-    waitMin += begin - arrive;
-    const depart = begin + item.durationMin;
+    waitMin += Math.max(0, begin - arrive);
+    // Re-planning holds a locked stop's planned times: the slot never moves,
+    // and lateness shows only as the "Booked for … — you arrive …" warning.
+    const held = item.heldArriveMin !== null && item.fixedStartMin !== null;
+    if (held) begin = item.fixedStartMin as number;
+    const shownArrive = held ? (item.heldArriveMin as number) : arrive;
+    // A locked stop being re-timed keeps its planned end, even when late.
+    const depart = item.fixedEndMin !== null ? Math.max(item.fixedEndMin, begin) : begin + item.durationMin;
     const location = item.location ?? prevLocation;
     stops.push({
       id: item.id,
@@ -240,9 +246,9 @@ export function simulate(ctx: SolverContext, frame: DayFrame, start: SimStart, i
       wishId: item.wishId,
       title: item.title,
       location: location ? { ...location } : null,
-      arriveMin: arrive,
+      arriveMin: shownArrive,
       departMin: depart,
-      waitSec: (begin - arrive) * 60,
+      waitSec: (begin - shownArrive) * 60,
       locked: item.locked,
       bookingId: item.bookingId,
       warnings,

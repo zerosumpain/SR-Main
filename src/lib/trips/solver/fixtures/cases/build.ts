@@ -159,6 +159,36 @@ export function buildCaseInputs(): CaseInput[] {
     });
   }
   {
+    const { input, day } = dayInput('2026-10-28');
+    cases.push({
+      name: 'replan-missed-slot',
+      description:
+        'Colosseum day, 12:00, nothing done: the 09:30 slot is missed. It leaves the plan with a warning; nothing locked moves.',
+      fn: 'replanDay',
+      input: { ...input, day, nowMin: 12 * 60, position: null, atStopId: null, doneStopIds: [] },
+    });
+  }
+  {
+    const { input, day } = dayInput('2026-10-28');
+    cases.push({
+      name: 'replan-late-for-slot',
+      description:
+        'Colosseum day, still at the stay at 09:20: 13 minutes late for the 09:30 slot (inside the 30-minute grace). The slot keeps its planned times and carries a warning.',
+      fn: 'replanDay',
+      input: { ...input, day, nowMin: 9 * 60 + 20, position: null, atStopId: null, doneStopIds: [] },
+    });
+  }
+  {
+    const { input, day } = dayInput('2026-10-30');
+    cases.push({
+      name: 'replan-squeezed-before-slot',
+      description:
+        'Borghese day, still at the stay at 11:30: what no longer fits before the 15:00 slot moves after it or is dropped.',
+      fn: 'replanDay',
+      input: { ...input, day, nowMin: 11 * 60 + 30, position: null, atStopId: null, doneStopIds: [] },
+    });
+  }
+  {
     const { input, day } = dayInput('2026-10-27', (inp) => {
       const capitoline = inp.wishes.find((w) => w.id === 'capitoline');
       if (capitoline?.facts) capitoline.facts.closedDates = ['2026-10-27'];
