@@ -104,6 +104,7 @@ describe('project of a folder', () => {
     const home = join(dir, 'empty-home');
     expect(parser.projectOfFolder('sr-main-landing-20261003', home)).toBe('strange-rambling-svelte');
     expect(parser.projectOfFolder('sr-health-worker-20260926', home)).toBe('sr-health');
+    expect(parser.projectOfFolder('wildmind-lowpoly', home)).toBe('wildmind');
     expect(parser.projectOfFolder('marbler', home)).toBe('marbler');
   });
 });
