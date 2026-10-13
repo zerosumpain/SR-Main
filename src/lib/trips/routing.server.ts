@@ -46,13 +46,15 @@ const ORS_PROFILE: Partial<Record<TravelMode, string>> = { walk: 'foot-walking',
 /** ORS free plan: 3,500 matrix elements per request; stay well under it. */
 const ORS_MAX_POINTS = 50;
 const TRANSITOUS = 'https://api.transitous.org/api/v1/plan';
-/** Transitous asks to be used lightly: at most this many itinerary requests per build, serialised. */
-const TRANSIT_REQUESTS_PER_BUILD = 24;
+/** Transitous asks to be used lightly: at most this many itinerary requests per background fill, serialised. */
+const TRANSIT_REQUESTS_PER_BUILD = 120;
 const TRANSIT_GAP_MS = 250;
 /** Below this straight-line distance a "transit" leg is a walk; not worth a timetable query. */
 const TRANSIT_MIN_M = 700;
 /** Lines fetched per solve; the rest stay straight until the next solve fills them. */
 const LINES_PER_SOLVE = 40;
+/** Of which timetable queries (slow): a few per solve; the rest stay straight until a later solve. */
+const TRANSIT_LINES_PER_SOLVE = 4;
 const USER_AGENT = 'StrangeRamblingsTrips/1.0 (+https://strangeramblings.com)';
 const TIMEOUT_MS = 12_000;
 
@@ -213,6 +215,29 @@ async function transitousPlan(a: LatLng, b: LatLng, departIso: string): Promise<
 
 // ── The stored matrix ──────────────────────────────────────────────────────
 
+let filling = false;
+
+/** Fetch missing transit pairs into the cache, in the background, one run at a time. */
+async function fillTransit(pairs: Array<[RoutePoint, RoutePoint]>, departIso: string): Promise<void> {
+  if (filling) return;
+  filling = true;
+  try {
+    const key = cacheKeyFor('transit');
+    const cache = await readCache(key);
+    for (const [i, [a, b]] of pairs.slice(0, TRANSIT_REQUESTS_PER_BUILD).entries()) {
+      const hit = await transitousPlan(a.location, b.location, departIso);
+      // A miss (no coverage, a timeout) is not cached: it stays estimated and is asked again next time.
+      if (hit) cache[pairKey(a.location, b.location)] = { at: Date.now(), s: hit.s, m: hit.m };
+      if (i % 10 === 9) await writeCache(key, cache);
+    }
+    await writeCache(key, cache);
+  } catch (err) {
+    console.warn('[trips/routing] transit fill failed:', (err as Error)?.message);
+  } finally {
+    filling = false;
+  }
+}
+
 export interface MatrixBuild {
   matrix: TravelMatrix;
   /** One line per mode: where its figures came from. */
@@ -252,34 +277,23 @@ export async function buildStoredMatrix(
       }
     }
     if (mode === 'transit' && missing()) {
-      const day = timetableDate(trip.startDate, localDateIn(trip.timeZone, new Date()));
-      const departIso = localToIso(day, 10 * 60, trip.timeZone);
-      let asked = 0;
-      let answered = 0;
+      // Timetable queries are slow (about a second each) and Transitous asks
+      // to be used lightly, so they never hold up an edit: short hops are
+      // walks, pairs already cached are used, and the rest are estimated now
+      // and fetched in the background for the next solve. Hops too short
+      // for a bus are never asked: the solver walks them anyway.
+      const wanted: Array<[RoutePoint, RoutePoint]> = [];
       for (const a of points) {
         for (const b of points) {
-          if (a === b) continue;
-          const key = pairKey(a.location, b.location);
-          if (answers.has(key)) continue;
-          const crow = estimateLeg(a.location, b.location, 'walk').metres / 1.3;
-          if (crow < TRANSIT_MIN_M) {
-            // Short hops are walks; the solver walks them anyway.
-            const walk = estimateLeg(a.location, b.location, 'walk');
-            answers.set(key, { s: walk.seconds, m: walk.metres });
-            continue;
-          }
-          if (asked >= TRANSIT_REQUESTS_PER_BUILD) continue;
-          asked++;
-          const hit = await transitousPlan(a.location, b.location, departIso);
-          if (hit) {
-            answered++;
-            answers.set(key, { s: hit.s, m: hit.m });
-            cache[key] = { at: Date.now(), s: hit.s, m: hit.m };
-          }
+          if (a === b || answers.has(pairKey(a.location, b.location))) continue;
+          if (estimateLeg(a.location, b.location, 'walk').metres / 1.3 >= TRANSIT_MIN_M) wanted.push([a, b]);
         }
       }
-      if (answered) await writeCache(cacheKey, cache);
-      source = answered ? 'Transitous' : asked ? 'Transitous (no answer)' : 'cache';
+      if (wanted.length) {
+        const day = timetableDate(trip.startDate, localDateIn(trip.timeZone, new Date()));
+        void fillTransit(wanted, localToIso(day, 10 * 60, trip.timeZone));
+        source = 'Transitous, more being fetched';
+      }
     }
 
     const est = estimate.seconds[mode] ? mode : 'walk';
@@ -320,6 +334,7 @@ export async function attachLegLines(plan: SolvedPlan, previous: SolvedPlan | nu
     }
   }
   let fetched = 0;
+  let transitFetched = 0;
   const days: PlannedDay[] = [];
   for (const day of plan.days) {
     const legs: PlannedLeg[] = [];
@@ -339,6 +354,10 @@ export async function attachLegLines(plan: SolvedPlan, previous: SolvedPlan | nu
       if (!line && fetched < LINES_PER_SOLVE) {
         fetched++;
         if (leg.mode === 'transit') {
+          if (transitFetched++ >= TRANSIT_LINES_PER_SOLVE) {
+            legs.push(leg);
+            continue;
+          }
           const departIso = localToIso(timetableDate(trip.startDate, localDateIn(trip.timeZone, new Date())), 10 * 60, trip.timeZone);
           line = (await transitousPlan(a, b, departIso))?.line ?? null;
         } else {

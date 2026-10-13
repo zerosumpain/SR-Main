@@ -33,7 +33,7 @@ beforeEach(() => {
   h.created = [];
 });
 
-async function status(p: Promise<Response>): Promise<number> {
+async function status(p: Response | Promise<Response>): Promise<number> {
   try {
     return (await p).status;
   } catch (err) {

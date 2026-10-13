@@ -136,18 +136,23 @@ async function lookupPlace(osmId: string): Promise<OsmPlace | null> {
   return placeFromNominatim(rows[0]);
 }
 
+/** Overpass, with one retry: the public instance answers 504 when busy. */
 async function overpass(query: string): Promise<unknown> {
-  try {
-    const res = await fetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST',
-      headers: { 'User-Agent': USER_AGENT, 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ data: query }),
-      signal: AbortSignal.timeout(25_000),
-    });
-    return res.ok ? await res.json() : null;
-  } catch {
-    return null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const res = await fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        headers: { 'User-Agent': USER_AGENT, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ data: query }),
+        signal: AbortSignal.timeout(25_000),
+      });
+      if (res.ok) return await res.json();
+    } catch {
+      /* retry once */
+    }
+    if (attempt === 1) await new Promise((r) => setTimeout(r, 3_000));
   }
+  return null;
 }
 
 // ── One wish ───────────────────────────────────────────────────────────────

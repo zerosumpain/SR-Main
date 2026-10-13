@@ -373,34 +373,36 @@ export async function latestPhonePlan(tripId: string): Promise<Omit<StoredPlan, 
 }
 
 /**
- * Append a plan version: `version` is one more than the newest, decided inside
- * the insert so two writers cannot both take the same number (the unique key
- * refuses the loser, which retries once).
+ * Append a plan version: `version` is one more than the newest. Writers for
+ * one trip are serialised by a transaction-scoped advisory lock on the trip,
+ * so two concurrent edits get consecutive numbers rather than a clash (the
+ * unique key stays as the backstop).
  */
 export async function appendPlan(
   tripId: string,
   p: { source: PlanSource; inputHash: string; plan: SolvedPlan; matrix: TravelMatrix | null; changes: string[] },
 ): Promise<StoredPlan> {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      const [row] = await db
-        .insert(tripPlan)
-        .values({
-          tripId,
-          version: sql`(select coalesce(max(${tripPlan.version}), 0) + 1 from ${tripPlan} where ${tripPlan.tripId} = ${tripId})`,
-          source: p.source,
-          inputHash: p.inputHash,
-          plan: p.plan as unknown as Record<string, unknown>,
-          matrix: p.matrix as unknown as Record<string, unknown> | null,
-          changes: p.changes,
-        })
-        .returning();
-      await db.update(trip).set({ updatedAt: new Date(), status: sql`case when ${trip.status} = 'draft' then 'planned' else ${trip.status} end` }).where(eq(trip.id, tripId));
-      return toPlan(row);
-    } catch (err) {
-      if (attempt >= 3 || !/trip_plan_trip_version_key|duplicate key/i.test(String((err as Error)?.message ?? err))) throw err;
-    }
-  }
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`trip_plan:${tripId}`}))`);
+    const [{ top }] = await tx.select({ top: max(tripPlan.version) }).from(tripPlan).where(eq(tripPlan.tripId, tripId));
+    const [row] = await tx
+      .insert(tripPlan)
+      .values({
+        tripId,
+        version: (top ?? 0) + 1,
+        source: p.source,
+        inputHash: p.inputHash,
+        plan: p.plan as unknown as Record<string, unknown>,
+        matrix: p.matrix as unknown as Record<string, unknown> | null,
+        changes: p.changes,
+      })
+      .returning();
+    await tx
+      .update(trip)
+      .set({ updatedAt: new Date(), status: sql`case when ${trip.status} = 'draft' then 'planned' else ${trip.status} end` })
+      .where(eq(trip.id, tripId));
+    return toPlan(row);
+  });
 }
 
 // ── Events (idempotent on clientId) ────────────────────────────────────────
