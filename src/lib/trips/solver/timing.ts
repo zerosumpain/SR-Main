@@ -10,7 +10,7 @@
 // All times are whole local minutes; a leg's seconds round UP to minutes.
 
 import type { DroppedWish, LatLng, PlannedDay, PlannedLeg, PlannedStop } from '../model';
-import { dayLabel, fmtMin } from './calendar';
+import { dayLabel, fmtMin, cmp } from './calendar';
 import { mealItem, type DayFrame, type Item, type MealKind } from './items';
 import { chooseLeg, legFromPosition, stayPoint, type LegChoice, type SolverContext } from './matrix';
 import { orderDay } from './order';
@@ -340,7 +340,7 @@ export function mealsFor(frame: DayFrame, ctx: SolverContext, skip: Set<string> 
 
 /** Lowest value first: the person's later-listed nices go first, then id. */
 export function byLowestValue(a: Item, b: Item): number {
-  return b.sortHint - a.sortHint || b.id.localeCompare(a.id);
+  return b.sortHint - a.sortHint || cmp(b.id, a.id);
 }
 
 export function droppable(item: Item): boolean {

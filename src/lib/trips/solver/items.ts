@@ -15,6 +15,7 @@ import type {
   Stay,
   Wish,
 } from '../model';
+import { cmp } from './calendar';
 import { windowsOn } from './hours';
 import { stayPoint } from './matrix';
 
@@ -59,9 +60,9 @@ export function bookedSlot(wishId: string, bookings: Booking[]): Booking | null 
     .filter((b) => b.wishId === wishId && b.status === 'booked' && b.date !== null && b.startMin !== null)
     .sort(
       (a, b) =>
-        (a.date as string).localeCompare(b.date as string) ||
+        cmp(a.date as string, b.date as string) ||
         (a.startMin as number) - (b.startMin as number) ||
-        a.id.localeCompare(b.id),
+        cmp(a.id, b.id),
     );
   return slots[0] ?? null;
 }

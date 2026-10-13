@@ -19,7 +19,7 @@
 // simple integer minute arithmetic.
 
 import type { Booking, PlannedDay, PlannedStop, ReplanOption, Stay, Wish } from '../model';
-import { fmtMin } from './calendar';
+import { fmtMin, cmp } from './calendar';
 import { itemFromStop, pointOfStop, type DayFrame, type Item } from './items';
 import { makeContext, type SolverContext } from './matrix';
 import { orderDay } from './order';
@@ -255,9 +255,7 @@ export function replanDay(input: ReplanInput): ReplanOption[] {
     }
   }
 
-  options.sort(
-    (a, b) => a.score - b.score || KIND_RANK[a.kind] - KIND_RANK[b.kind] || a.id.localeCompare(b.id),
-  );
+  options.sort((a, b) => a.score - b.score || KIND_RANK[a.kind] - KIND_RANK[b.kind] || cmp(a.id, b.id));
   const seen = new Set<string>();
   const out: ReplanOption[] = [];
   for (const o of options) {
