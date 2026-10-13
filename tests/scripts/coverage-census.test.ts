@@ -69,7 +69,10 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 // The Tavily ledger (tavily-ledger.integration, 2026-10-08) writes through the
 // real client with Tavily stubbed and reads back through /admin/ops/tavily's
 // queries; it seeds and removes its own rows, so the empty nightly DB suits it.
-const INTEGRATION_FILES = 41;
+// The trip store (trips/store.integration, 2026-10-13) checks plan versions are
+// numbered without clashes under concurrent appends and that phone events are
+// idempotent; it creates and removes its own rows under a throwaway owner.
+const INTEGRATION_FILES = 42;
 
 function tracked(pattern: string): string[] {
 	return execFileSync('git', ['ls-files', pattern], { cwd: ROOT, encoding: 'utf8' })
