@@ -639,6 +639,18 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
     reason:
       'Follows the site default: one ~2k-token call per game, and wrong "facts" are the one failure a quiz cannot hide, so it is not pinned to a cheaper model than the default. The server marks answers; the model only drafts.',
   },
+  {
+    id: 'trips-reader',
+    scope: 'site',
+    label: 'Trip planner reader',
+    blurb: 'Turns "what do you want to do?" into trip wishes, and reads one web search per wish into its fact sheet.',
+    key: 'trips.reader.model',
+    fallbackModelId: DEFAULT_EXTRACTION_MODEL_ID,
+    requires: null,
+    catalogue: 'tools',
+    reason:
+      'Pinned cheap on purpose (D4, the brief scan): mechanical JSON against a fixed schema, one short call per wish, and every answer is checked — links must appear in the search results and not be a reseller, and the person confirms each wish. The money belongs in the search, not the reading.',
+  },
 ];
 
 export const WORKLOADS: WorkloadDef[] = [...SITE_WORKLOADS];
