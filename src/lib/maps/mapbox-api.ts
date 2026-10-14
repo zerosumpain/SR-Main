@@ -4,12 +4,22 @@
 // paying the Nominatim tax for work an account we already hold does better and
 // faster.
 //
-// Restored 2026-10-01 from #871 (d6ee4eea0) for render_map ONLY. The original
+// Restored 2026-10-01 from #871 (d6ee4eea0) for render_map. The original
 // file also carried directions, isochrones, travel-time matrices and reverse
-// search for the travel toolset and the daydream place-namer; those stay
-// retired, so their clients were left out. Restore them from d6ee4eea0^ if they
-// ever come back, together with widening the `mapbox-api` binding in
-// `$lib/secrets/credential-requests`.
+// search for the travel toolset and the daydream place-namer. Directions and
+// the matrix came back on 2026-10-13 for the trip planner (`$lib/trips/
+// routing.server`), with the `mapbox-api` binding in
+// `$lib/secrets/credential-requests` widened to their two path prefixes.
+// Isochrones and reverse search stay retired; restore them from d6ee4eea0^.
+//
+// DIRECTIONS AND MATRIX RESULTS ARE LIVE-ONLY. Mapbox Product Terms (21 July
+// 2026) §2.10.1: "Customer shall not export, download, cache or store results
+// from any request to a Navigation API" — Directions and Matrix are Navigation
+// APIs. So nothing returned by `directions()` or `matrix()` may be written to
+// a database, an `app_settings` cache or a stored plan. The trip planner keeps
+// openrouteservice / estimated figures in its stored plans and asks Mapbox only
+// for a live drive ETA shown once and thrown away. See
+// MAPBOX_NAVIGATION_IS_LIVE_ONLY below.
 //
 // WHY THIS IS A SECOND TOKEN, and not the one in Admin → Connections.
 //
@@ -88,6 +98,12 @@ export const MAPBOX_API_KEY_HELP =
  * `if (hit) cache(hit)` is what anyone would write next. See the file header.
  */
 export const MAPBOX_GEOCODES_ARE_TEMPORARY = true;
+
+/**
+ * Whether a Directions or Matrix result may be stored. It may not (Product
+ * Terms §2.10.1). Same reason for a named constant as the one above.
+ */
+export const MAPBOX_NAVIGATION_IS_LIVE_ONLY = true;
 
 export class MapboxApiError extends Error {
   constructor(
@@ -349,4 +365,137 @@ export async function forwardGeocode(
   };
   const features = Array.isArray(data?.features) ? data.features : [];
   return features.map(toPlace).filter((p): p is MapboxPlace => p !== null);
+}
+
+// ---------------------------------------------------------------------------
+// Navigation — directions and matrices (restored from d6ee4eea0^, 2026-10-13)
+//
+// LIVE-ONLY: see MAPBOX_NAVIGATION_IS_LIVE_ONLY. Never cache what these return.
+// ---------------------------------------------------------------------------
+
+/**
+ * The travel modes we ask Mapbox for, mapped to its profiles. `drive` is the
+ * traffic-aware profile deliberately: an ETA that ignores traffic is the wrong
+ * answer to every question anyone asks with it.
+ */
+export const MAPBOX_PROFILES = {
+  drive: 'mapbox/driving-traffic',
+  drive_free_flow: 'mapbox/driving',
+  walk: 'mapbox/walking',
+  cycle: 'mapbox/cycling',
+} as const;
+
+export type MapboxMode = keyof typeof MAPBOX_PROFILES;
+
+/** Mapbox caps a Directions or Matrix request at 25 coordinates (10 with traffic). */
+export const MAX_WAYPOINTS = 25;
+export const MAX_WAYPOINTS_WITH_TRAFFIC = 10;
+
+export function maxWaypointsFor(mode: MapboxMode): number {
+  return mode === 'drive' ? MAX_WAYPOINTS_WITH_TRAFFIC : MAX_WAYPOINTS;
+}
+
+export interface MapboxRoute {
+  distanceM: number;
+  durationS: number;
+  /** Duration ignoring live traffic, when the profile reported one. */
+  durationTypicalS: number | null;
+  /** [lng, lat] pairs — GeoJSON order. */
+  coordinates: [number, number][];
+}
+
+function num(v: unknown): number | null {
+  const n = Number(v);
+  return v !== null && v !== undefined && Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Route through a run of waypoints in the order given. The order is the
+ * caller's decision and Mapbox honours it exactly.
+ */
+export async function directions(opts: {
+  mode: MapboxMode;
+  /** [lng, lat] pairs, in visiting order. Two or more. */
+  coordinates: [number, number][];
+  signal?: AbortSignal;
+}): Promise<MapboxRoute> {
+  const profile = MAPBOX_PROFILES[opts.mode];
+  if (!profile) throw new MapboxApiError(`Unknown travel mode "${opts.mode}"`);
+  const coords = opts.coordinates ?? [];
+  if (coords.length < 2) throw new MapboxApiError(`A route needs at least two waypoints; got ${coords.length}.`);
+  const cap = maxWaypointsFor(opts.mode);
+  if (coords.length > cap) throw new MapboxApiError(`Mapbox allows ${cap} waypoints for ${opts.mode}; got ${coords.length}.`);
+
+  const path = `/directions/v5/${profile}/${coords.map((c) => `${c[0]},${c[1]}`).join(';')}`;
+  const data = (await mapboxGet(path, { geometries: 'geojson', overview: 'full', steps: 'false' }, opts.signal)) as {
+    code?: string;
+    message?: string;
+    routes?: Array<{ distance?: unknown; duration?: unknown; duration_typical?: unknown; geometry?: { coordinates?: unknown } }>;
+  };
+  if (data?.code && data.code !== 'Ok') {
+    throw new MapboxApiError(`Mapbox directions: ${data.code}${data.message ? ` — ${data.message}` : ''}`);
+  }
+  const r = Array.isArray(data?.routes) ? data.routes[0] : null;
+  const geometry = r?.geometry?.coordinates;
+  if (!r || !Array.isArray(geometry) || !geometry.length) throw new MapboxApiError('Mapbox returned no route');
+  return {
+    distanceM: num(r.distance) ?? 0,
+    durationS: num(r.duration) ?? 0,
+    durationTypicalS: num(r.duration_typical),
+    coordinates: geometry as [number, number][],
+  };
+}
+
+export interface MapboxMatrix {
+  /** durations[i][j] — seconds from sources[i] to destinations[j], null if unreachable. */
+  durations: (number | null)[][];
+  /** distances[i][j] — metres, when distance was asked for. */
+  distances: (number | null)[][] | null;
+}
+
+/**
+ * Travel time (and optionally distance) from every source to every destination
+ * in one request. Each cell is an element against the monthly allowance.
+ */
+export async function matrix(opts: {
+  mode: MapboxMode;
+  /** [lng, lat] pairs. */
+  coordinates: [number, number][];
+  /** Indices into `coordinates`. Omit for "every point to every point". */
+  sources?: number[];
+  destinations?: number[];
+  includeDistance?: boolean;
+  signal?: AbortSignal;
+}): Promise<MapboxMatrix> {
+  const profile = MAPBOX_PROFILES[opts.mode];
+  if (!profile) throw new MapboxApiError(`Unknown travel mode "${opts.mode}"`);
+  const coords = opts.coordinates ?? [];
+  const cap = maxWaypointsFor(opts.mode);
+  if (coords.length < 2) throw new MapboxApiError(`A matrix needs at least two points; got ${coords.length}.`);
+  if (coords.length > cap) throw new MapboxApiError(`Mapbox allows ${cap} points for ${opts.mode}; got ${coords.length}.`);
+  // Mapbox does not serve `distance` on the traffic profile and refuses the
+  // whole request rather than returning durations alone.
+  if (opts.includeDistance && opts.mode === 'drive') {
+    throw new MapboxApiError('Mapbox cannot return distances on the live-traffic profile.');
+  }
+
+  const path = `/directions-matrix/v1/${profile}/${coords.map((c) => `${c[0]},${c[1]}`).join(';')}`;
+  const params: Record<string, string> = { annotations: opts.includeDistance ? 'duration,distance' : 'duration' };
+  if (opts.sources?.length) params.sources = opts.sources.join(';');
+  if (opts.destinations?.length) params.destinations = opts.destinations.join(';');
+
+  const data = (await mapboxGet(path, params, opts.signal)) as {
+    code?: string;
+    message?: string;
+    durations?: unknown;
+    distances?: unknown;
+  };
+  if (data?.code && data.code !== 'Ok') {
+    throw new MapboxApiError(`Mapbox matrix: ${data.code}${data.message ? ` — ${data.message}` : ''}`);
+  }
+  if (!Array.isArray(data?.durations)) throw new MapboxApiError('Mapbox matrix returned no durations');
+  return {
+    durations: data.durations as (number | null)[][],
+    distances: Array.isArray(data?.distances) ? (data.distances as (number | null)[][]) : null,
+  };
 }

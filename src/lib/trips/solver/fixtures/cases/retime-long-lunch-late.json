@@ -1,0 +1,746 @@
+{
+  "name": "retime-long-lunch-late",
+  "description": "Thursday: leaving the Vatican 45 minutes late, the long lunch (which replaces lunch) starts after 13:30 and warns as a late lunch.",
+  "fn": "retimeDay",
+  "input": {
+    "trip": {
+      "id": "trip-rome",
+      "ownerEmail": "owner@example.com",
+      "title": "Rome in October",
+      "destination": "Rome, Italy",
+      "timeZone": "Europe/Rome",
+      "startDate": "2026-10-27",
+      "endDate": "2026-10-30",
+      "pace": "normal",
+      "modes": ["walk", "transit"],
+      "status": "planned",
+      "notes": null
+    },
+    "stays": [
+      {
+        "id": "campo",
+        "name": "Apartment by Campo de' Fiori",
+        "address": "Via dei Cappellari, Rome (illustrative)",
+        "location": {
+          "lat": 41.8952,
+          "lng": 12.4716
+        },
+        "fromDate": "2026-10-27",
+        "toDate": "2026-10-31",
+        "checkInMin": 900,
+        "checkOutMin": 600
+      }
+    ],
+    "wishes": [
+      {
+        "id": "vatican",
+        "title": "Vatican Museums",
+        "place": {
+          "name": "Vatican Museums",
+          "location": {
+            "lat": 41.9065,
+            "lng": 12.4536
+          },
+          "osmId": null,
+          "address": null
+        },
+        "priority": "must",
+        "durationSec": 12600,
+        "partOfDay": "any",
+        "fixedDate": null,
+        "fixedStartMin": null,
+        "locked": false,
+        "suggested": false,
+        "skipped": false,
+        "facts": {
+          "openingHoursText": "Mo-Sa 08:00-19:00; Su off",
+          "hours": {
+            "1": [
+              {
+                "openMin": 480,
+                "closeMin": 1140
+              }
+            ],
+            "2": [
+              {
+                "openMin": 480,
+                "closeMin": 1140
+              }
+            ],
+            "3": [
+              {
+                "openMin": 480,
+                "closeMin": 1140
+              }
+            ],
+            "4": [
+              {
+                "openMin": 480,
+                "closeMin": 1140
+              }
+            ],
+            "5": [
+              {
+                "openMin": 480,
+                "closeMin": 1140
+              }
+            ],
+            "6": [
+              {
+                "openMin": 480,
+                "closeMin": 1140
+              }
+            ],
+            "7": []
+          },
+          "closedDates": [],
+          "bookingRequired": true,
+          "bookAheadDays": 30,
+          "bookingUrl": null,
+          "officialUrl": null,
+          "priceText": null,
+          "typicalVisitSec": null,
+          "summary": null,
+          "sources": [],
+          "checkedAt": null,
+          "depth": "manual",
+          "unknown": []
+        },
+        "note": null,
+        "sortHint": 2
+      },
+      {
+        "id": "trastevere",
+        "title": "Trastevere in the evening",
+        "place": {
+          "name": "Trastevere in the evening",
+          "location": {
+            "lat": 41.8894,
+            "lng": 12.47
+          },
+          "osmId": null,
+          "address": null
+        },
+        "priority": "nice",
+        "durationSec": 5400,
+        "partOfDay": "evening",
+        "fixedDate": null,
+        "fixedStartMin": null,
+        "locked": false,
+        "suggested": false,
+        "skipped": false,
+        "facts": {
+          "openingHoursText": "24/7",
+          "hours": {
+            "1": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "2": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "3": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "4": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "5": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "6": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "7": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ]
+          },
+          "closedDates": [],
+          "bookingRequired": null,
+          "bookAheadDays": null,
+          "bookingUrl": null,
+          "officialUrl": null,
+          "priceText": null,
+          "typicalVisitSec": null,
+          "summary": null,
+          "sources": [],
+          "checkedAt": null,
+          "depth": "manual",
+          "unknown": []
+        },
+        "note": null,
+        "sortHint": 12
+      },
+      {
+        "id": "trastevere-lunch",
+        "title": "Long lunch in Trastevere",
+        "place": {
+          "name": "Long lunch in Trastevere",
+          "location": {
+            "lat": 41.889,
+            "lng": 12.4693
+          },
+          "osmId": null,
+          "address": null
+        },
+        "priority": "must",
+        "durationSec": 7200,
+        "partOfDay": "any",
+        "fixedDate": "2026-10-29",
+        "fixedStartMin": null,
+        "locked": false,
+        "suggested": false,
+        "skipped": false,
+        "facts": {
+          "openingHoursText": "Mo-Su 12:00-15:30",
+          "hours": {
+            "1": [
+              {
+                "openMin": 720,
+                "closeMin": 930
+              }
+            ],
+            "2": [
+              {
+                "openMin": 720,
+                "closeMin": 930
+              }
+            ],
+            "3": [
+              {
+                "openMin": 720,
+                "closeMin": 930
+              }
+            ],
+            "4": [
+              {
+                "openMin": 720,
+                "closeMin": 930
+              }
+            ],
+            "5": [
+              {
+                "openMin": 720,
+                "closeMin": 930
+              }
+            ],
+            "6": [
+              {
+                "openMin": 720,
+                "closeMin": 930
+              }
+            ],
+            "7": [
+              {
+                "openMin": 720,
+                "closeMin": 930
+              }
+            ]
+          },
+          "closedDates": [],
+          "bookingRequired": null,
+          "bookAheadDays": null,
+          "bookingUrl": null,
+          "officialUrl": null,
+          "priceText": null,
+          "typicalVisitSec": null,
+          "summary": null,
+          "sources": [],
+          "checkedAt": null,
+          "depth": "manual",
+          "unknown": []
+        },
+        "note": null,
+        "sortHint": 15,
+        "replacesMeal": "lunch"
+      }
+    ],
+    "bookings": [
+      {
+        "id": "bk-vatican",
+        "wishId": "vatican",
+        "title": "Vatican Museums — timed entry",
+        "date": "2026-10-29",
+        "startMin": 540,
+        "endMin": null,
+        "reference": "ILLUSTRATIVE-2",
+        "url": null,
+        "documentId": null,
+        "status": "booked"
+      }
+    ],
+    "matrix": {
+      "points": ["vatican", "trastevere-lunch", "trastevere", "stay:campo"],
+      "seconds": {
+        "walk": [
+          [0, 2282, 2278, 1901],
+          [2282, 0, 71, 698],
+          [2278, 71, 0, 642],
+          [1901, 698, 642, 0]
+        ],
+        "transit": [
+          [0, 1508, 1507, 1407],
+          [1508, 0, 919, 1086],
+          [1507, 919, 0, 1071],
+          [1407, 1086, 1071, 0]
+        ]
+      },
+      "metres": {
+        "walk": [
+          [0, 3042, 3037, 2534],
+          [3042, 0, 95, 930],
+          [3037, 95, 0, 856],
+          [2534, 930, 856, 0]
+        ],
+        "transit": [
+          [0, 3042, 3037, 2534],
+          [3042, 0, 95, 930],
+          [3037, 95, 0, 856],
+          [2534, 930, 856, 0]
+        ]
+      },
+      "estimated": {
+        "walk": true,
+        "transit": true
+      }
+    },
+    "day": {
+      "date": "2026-10-29",
+      "stayId": "campo",
+      "stops": [
+        {
+          "id": "stay:2026-10-29:start",
+          "kind": "stay",
+          "wishId": null,
+          "title": "Apartment by Campo de' Fiori",
+          "location": {
+            "lat": 41.8952,
+            "lng": 12.4716
+          },
+          "arriveMin": 486,
+          "departMin": 486,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": [],
+          "stage": "morning"
+        },
+        {
+          "id": "meal:2026-10-29:breakfast",
+          "kind": "meal",
+          "wishId": null,
+          "title": "Breakfast",
+          "location": {
+            "lat": 41.8952,
+            "lng": 12.4716
+          },
+          "arriveMin": 486,
+          "departMin": 516,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": [],
+          "stage": "morning"
+        },
+        {
+          "id": "vatican",
+          "kind": "wish",
+          "wishId": "vatican",
+          "title": "Vatican Museums",
+          "location": {
+            "lat": 41.9065,
+            "lng": 12.4536
+          },
+          "arriveMin": 540,
+          "departMin": 750,
+          "waitSec": 0,
+          "locked": true,
+          "bookingId": "bk-vatican",
+          "warnings": [],
+          "stage": "morning"
+        },
+        {
+          "id": "trastevere-lunch",
+          "kind": "wish",
+          "wishId": "trastevere-lunch",
+          "title": "Long lunch in Trastevere",
+          "location": {
+            "lat": 41.889,
+            "lng": 12.4693
+          },
+          "arriveMin": 786,
+          "departMin": 906,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": [],
+          "stage": "lunch"
+        },
+        {
+          "id": "stay:2026-10-29:rest",
+          "kind": "stay",
+          "wishId": null,
+          "title": "Free time at Apartment by Campo de' Fiori",
+          "location": {
+            "lat": 41.8952,
+            "lng": 12.4716
+          },
+          "arriveMin": 928,
+          "departMin": 1140,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": [],
+          "stage": "afternoon"
+        },
+        {
+          "id": "meal:2026-10-29:dinner",
+          "kind": "meal",
+          "wishId": null,
+          "title": "Dinner",
+          "location": {
+            "lat": 41.8952,
+            "lng": 12.4716
+          },
+          "arriveMin": 1140,
+          "departMin": 1215,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": [],
+          "stage": "evening"
+        },
+        {
+          "id": "trastevere",
+          "kind": "wish",
+          "wishId": "trastevere",
+          "title": "Trastevere in the evening",
+          "location": {
+            "lat": 41.8894,
+            "lng": 12.47
+          },
+          "arriveMin": 1226,
+          "departMin": 1316,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": [],
+          "stage": "evening"
+        },
+        {
+          "id": "stay:2026-10-29:end",
+          "kind": "stay",
+          "wishId": null,
+          "title": "Apartment by Campo de' Fiori",
+          "location": {
+            "lat": 41.8952,
+            "lng": 12.4716
+          },
+          "arriveMin": 1337,
+          "departMin": 1337,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": [],
+          "stage": "evening"
+        }
+      ],
+      "legs": [
+        {
+          "fromStopId": "stay:2026-10-29:start",
+          "toStopId": "meal:2026-10-29:breakfast",
+          "mode": "walk",
+          "durationSec": 0,
+          "distanceM": 0,
+          "estimated": false,
+          "line": null
+        },
+        {
+          "fromStopId": "meal:2026-10-29:breakfast",
+          "toStopId": "vatican",
+          "mode": "transit",
+          "durationSec": 1407,
+          "distanceM": 2534,
+          "estimated": true,
+          "line": null
+        },
+        {
+          "fromStopId": "vatican",
+          "toStopId": "trastevere-lunch",
+          "mode": "transit",
+          "durationSec": 1508,
+          "distanceM": 3042,
+          "estimated": true,
+          "line": null
+        },
+        {
+          "fromStopId": "trastevere-lunch",
+          "toStopId": "stay:2026-10-29:rest",
+          "mode": "walk",
+          "durationSec": 698,
+          "distanceM": 930,
+          "estimated": true,
+          "line": null
+        },
+        {
+          "fromStopId": "stay:2026-10-29:rest",
+          "toStopId": "meal:2026-10-29:dinner",
+          "mode": "walk",
+          "durationSec": 0,
+          "distanceM": 0,
+          "estimated": false,
+          "line": null
+        },
+        {
+          "fromStopId": "meal:2026-10-29:dinner",
+          "toStopId": "trastevere",
+          "mode": "walk",
+          "durationSec": 642,
+          "distanceM": 856,
+          "estimated": true,
+          "line": null
+        },
+        {
+          "fromStopId": "trastevere",
+          "toStopId": "stay:2026-10-29:end",
+          "mode": "walk",
+          "durationSec": 642,
+          "distanceM": 856,
+          "estimated": true,
+          "line": null
+        }
+      ],
+      "warnings": []
+    },
+    "fromIndex": 3,
+    "startMin": 805
+  },
+  "expected": {
+    "date": "2026-10-29",
+    "stayId": "campo",
+    "stops": [
+      {
+        "id": "stay:2026-10-29:start",
+        "kind": "stay",
+        "wishId": null,
+        "title": "Apartment by Campo de' Fiori",
+        "location": {
+          "lat": 41.8952,
+          "lng": 12.4716
+        },
+        "arriveMin": 486,
+        "departMin": 486,
+        "waitSec": 0,
+        "locked": false,
+        "bookingId": null,
+        "warnings": [],
+        "stage": "morning"
+      },
+      {
+        "id": "meal:2026-10-29:breakfast",
+        "kind": "meal",
+        "wishId": null,
+        "title": "Breakfast",
+        "location": {
+          "lat": 41.8952,
+          "lng": 12.4716
+        },
+        "arriveMin": 486,
+        "departMin": 516,
+        "waitSec": 0,
+        "locked": false,
+        "bookingId": null,
+        "warnings": [],
+        "stage": "morning"
+      },
+      {
+        "id": "vatican",
+        "kind": "wish",
+        "wishId": "vatican",
+        "title": "Vatican Museums",
+        "location": {
+          "lat": 41.9065,
+          "lng": 12.4536
+        },
+        "arriveMin": 540,
+        "departMin": 750,
+        "waitSec": 0,
+        "locked": true,
+        "bookingId": "bk-vatican",
+        "warnings": [],
+        "stage": "morning"
+      },
+      {
+        "id": "trastevere-lunch",
+        "kind": "wish",
+        "wishId": "trastevere-lunch",
+        "title": "Long lunch in Trastevere",
+        "location": {
+          "lat": 41.889,
+          "lng": 12.4693
+        },
+        "arriveMin": 831,
+        "departMin": 951,
+        "waitSec": 0,
+        "locked": false,
+        "bookingId": null,
+        "warnings": ["Late lunch — starts 13:51"],
+        "stage": "lunch"
+      },
+      {
+        "id": "stay:2026-10-29:rest",
+        "kind": "stay",
+        "wishId": null,
+        "title": "Free time at Apartment by Campo de' Fiori",
+        "location": {
+          "lat": 41.8952,
+          "lng": 12.4716
+        },
+        "arriveMin": 973,
+        "departMin": 1140,
+        "waitSec": 0,
+        "locked": false,
+        "bookingId": null,
+        "warnings": [],
+        "stage": "afternoon"
+      },
+      {
+        "id": "meal:2026-10-29:dinner",
+        "kind": "meal",
+        "wishId": null,
+        "title": "Dinner",
+        "location": {
+          "lat": 41.8952,
+          "lng": 12.4716
+        },
+        "arriveMin": 1140,
+        "departMin": 1215,
+        "waitSec": 0,
+        "locked": false,
+        "bookingId": null,
+        "warnings": [],
+        "stage": "evening"
+      },
+      {
+        "id": "trastevere",
+        "kind": "wish",
+        "wishId": "trastevere",
+        "title": "Trastevere in the evening",
+        "location": {
+          "lat": 41.8894,
+          "lng": 12.47
+        },
+        "arriveMin": 1226,
+        "departMin": 1316,
+        "waitSec": 0,
+        "locked": false,
+        "bookingId": null,
+        "warnings": [],
+        "stage": "evening"
+      },
+      {
+        "id": "stay:2026-10-29:end",
+        "kind": "stay",
+        "wishId": null,
+        "title": "Apartment by Campo de' Fiori",
+        "location": {
+          "lat": 41.8952,
+          "lng": 12.4716
+        },
+        "arriveMin": 1337,
+        "departMin": 1337,
+        "waitSec": 0,
+        "locked": false,
+        "bookingId": null,
+        "warnings": [],
+        "stage": "evening"
+      }
+    ],
+    "legs": [
+      {
+        "fromStopId": "stay:2026-10-29:start",
+        "toStopId": "meal:2026-10-29:breakfast",
+        "mode": "walk",
+        "durationSec": 0,
+        "distanceM": 0,
+        "estimated": false,
+        "line": null
+      },
+      {
+        "fromStopId": "meal:2026-10-29:breakfast",
+        "toStopId": "vatican",
+        "mode": "transit",
+        "durationSec": 1407,
+        "distanceM": 2534,
+        "estimated": true,
+        "line": null
+      },
+      {
+        "fromStopId": "vatican",
+        "toStopId": "trastevere-lunch",
+        "mode": "transit",
+        "durationSec": 1508,
+        "distanceM": 3042,
+        "estimated": true,
+        "line": null
+      },
+      {
+        "fromStopId": "trastevere-lunch",
+        "toStopId": "stay:2026-10-29:rest",
+        "mode": "walk",
+        "durationSec": 698,
+        "distanceM": 930,
+        "estimated": true,
+        "line": null
+      },
+      {
+        "fromStopId": "stay:2026-10-29:rest",
+        "toStopId": "meal:2026-10-29:dinner",
+        "mode": "walk",
+        "durationSec": 0,
+        "distanceM": 0,
+        "estimated": false,
+        "line": null
+      },
+      {
+        "fromStopId": "meal:2026-10-29:dinner",
+        "toStopId": "trastevere",
+        "mode": "walk",
+        "durationSec": 642,
+        "distanceM": 856,
+        "estimated": true,
+        "line": null
+      },
+      {
+        "fromStopId": "trastevere",
+        "toStopId": "stay:2026-10-29:end",
+        "mode": "walk",
+        "durationSec": 642,
+        "distanceM": 856,
+        "estimated": true,
+        "line": null
+      }
+    ],
+    "warnings": []
+  }
+}

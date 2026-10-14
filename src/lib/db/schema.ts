@@ -7338,3 +7338,207 @@ export const daydreamCommissionOutbox = pgTable('daydream_commission_outbox', {
   check('daydream_commission_outbox_kind_check', sql`${t.kind} IN ('notification','dispatch')`),
   index('daydream_commission_outbox_pending_idx').on(t.availableAt).where(sql`${t.deliveredAt} IS NULL`),
 ]);
+
+// ── Trips — planner on the site, companion on the phone (2026-10-13) ────────
+// Spec: docs/superpowers/specs/2026-10-13-trips.md; shapes: $lib/trips/model.
+// Wishes, stays and bookings are CONSTRAINTS; `trip_plan` holds SOLVED plan
+// versions, append-only, never edited by hand. Owner only until phase 5 (D2),
+// so `owner_email` is always an allow-listed owner. No foreign keys, as the
+// family tables: `$lib/trips/store.server` deletes a trip's rows together.
+export const trip = pgTable(
+  'trip',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ownerEmail: text('owner_email').notNull(),
+    title: text('title').notNull(),
+    destination: text('destination').notNull(),
+    /** IANA zone; every local date/minute on the trip is in it. */
+    timeZone: text('time_zone').notNull(),
+    startDate: date('start_date', { mode: 'string' }).notNull(),
+    endDate: date('end_date', { mode: 'string' }).notNull(),
+    /** 'relaxed' | 'normal' | 'packed' */
+    pace: text('pace').notNull().default('normal'),
+    /** TravelMode[] */
+    modes: jsonb('modes').$type<string[]>().notNull().default(['walk']),
+    /** 'draft' | 'planned' | 'active' | 'done' */
+    status: text('status').notNull().default('draft'),
+    notes: text('notes'),
+    /** v2.1: { [LocalDate]: 'light' | 'normal' | 'full' } — how full each day should be. */
+    dayLoads: jsonb('day_loads').$type<Partial<Record<string, 'light' | 'normal' | 'full'>>>(),
+    /** The background research job's progress, for the page to poll. */
+    research: jsonb('research').$type<Record<string, unknown>>(),
+    /** v2: TripGuide — city know-how (getting around, taxis, tickets), model-written once. */
+    guide: jsonb('guide').$type<Record<string, unknown>>(),
+    /** v3: TravellerProfile — what the planner already knows (owner's memory, knowledge, family), with sources. */
+    profile: jsonb('profile').$type<Record<string, unknown>>(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('trip_owner_idx').on(t.ownerEmail, t.startDate)],
+);
+
+export const tripStay = pgTable(
+  'trip_stay',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tripId: uuid('trip_id').notNull(),
+    name: text('name').notNull(),
+    address: text('address'),
+    lat: doublePrecision('lat').notNull(),
+    lng: doublePrecision('lng').notNull(),
+    fromDate: date('from_date', { mode: 'string' }).notNull(),
+    toDate: date('to_date', { mode: 'string' }).notNull(),
+    checkInMin: integer('check_in_min'),
+    checkOutMin: integer('check_out_min'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('trip_stay_trip_idx').on(t.tripId)],
+);
+
+export const tripWish = pgTable(
+  'trip_wish',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tripId: uuid('trip_id').notNull(),
+    title: text('title').notNull(),
+    /** { name, location: {lat,lng}, osmId, address } — OSM/Nominatim only, never a Mapbox result. */
+    place: jsonb('place').$type<Record<string, unknown>>(),
+    /** 'must' | 'nice' */
+    priority: text('priority').notNull().default('nice'),
+    durationSec: integer('duration_sec'),
+    /** 'morning' | 'afternoon' | 'evening' | 'any' */
+    partOfDay: text('part_of_day').notNull().default('any'),
+    fixedDate: date('fixed_date', { mode: 'string' }),
+    fixedStartMin: integer('fixed_start_min'),
+    locked: boolean('locked').notNull().default(false),
+    suggested: boolean('suggested').notNull().default(false),
+    skipped: boolean('skipped').notNull().default(false),
+    /** Facts (model.ts) — sources, checked date and unknowns travel with it. */
+    facts: jsonb('facts').$type<Record<string, unknown>>(),
+    note: text('note'),
+    sortHint: integer('sort_hint').notNull().default(0),
+    /** v2.1: 'lunch' | 'dinner' — this wish IS that day's meal (the automatic stop is dropped). */
+    replacesMeal: text('replaces_meal'),
+    /** v2: StopGuide — what to know when you're there, model-written from facts. */
+    guide: jsonb('guide').$type<Record<string, unknown>>(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('trip_wish_trip_idx').on(t.tripId)],
+);
+
+export const tripBooking = pgTable(
+  'trip_booking',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tripId: uuid('trip_id').notNull(),
+    wishId: uuid('wish_id'),
+    title: text('title').notNull(),
+    date: date('date', { mode: 'string' }),
+    startMin: integer('start_min'),
+    endMin: integer('end_min'),
+    reference: text('reference'),
+    url: text('url'),
+    /** Drive file id for the ticket. */
+    documentId: text('document_id'),
+    /** 'to-book' | 'booked' | 'cancelled' */
+    status: text('status').notNull().default('to-book'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('trip_booking_trip_idx').on(t.tripId)],
+);
+
+// Append-only: a new edit is a new version. `matrix` is the TravelMatrix the
+// plan was solved against — openrouteservice, Transitous or estimated figures
+// only, never Mapbox (Product Terms §2.10.1; see the spec's D1 storage check).
+export const tripPlan = pgTable(
+  'trip_plan',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tripId: uuid('trip_id').notNull(),
+    version: integer('version').notNull(),
+    /** 'site' | 'phone' | 'replan' | 'seed' */
+    source: text('source').notNull(),
+    inputHash: text('input_hash').notNull(),
+    plan: jsonb('plan').$type<Record<string, unknown>>().notNull(),
+    matrix: jsonb('matrix').$type<Record<string, unknown>>(),
+    changes: jsonb('changes').$type<string[]>().notNull().default([]),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique('trip_plan_trip_version_key').on(t.tripId, t.version)],
+);
+
+// v2: the planning conversation. The trip is developed by talking to a model;
+// `ops` are the TripOps it applied (or a form edit recorded as ops, role
+// 'event'), `plan_version` the version that turn produced.
+export const tripMessage = pgTable(
+  'trip_message',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tripId: uuid('trip_id').notNull(),
+    /** 'user' | 'assistant' | 'event' */
+    role: text('role').notNull(),
+    text: text('text').notNull(),
+    ops: jsonb('ops').$type<unknown[]>().notNull().default([]),
+    planVersion: integer('plan_version'),
+    /** 'site' | 'phone' */
+    surface: text('surface').notNull().default('site'),
+    /** v3: ResearchStep[] — what the planner looked up during this turn. */
+    research: jsonb('research').$type<unknown[]>(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('trip_message_trip_idx').on(t.tripId, t.createdAt)],
+);
+
+// v3: getting there and back — flights, trains and the like. The solver frames
+// the arrival and departure days with them; times are local to each end.
+export const tripTransport = pgTable(
+  'trip_transport',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tripId: uuid('trip_id').notNull(),
+    /** 'flight' | 'train' | 'coach' | 'ferry' | 'car' */
+    kind: text('kind').notNull(),
+    /** 'outbound' | 'return' | 'internal' */
+    direction: text('direction').notNull(),
+    carrier: text('carrier'),
+    number: text('number'),
+    /** { name, code, location, timeZone } — location from OpenStreetMap, never the model. */
+    fromPlace: jsonb('from_place').$type<Record<string, unknown>>().notNull(),
+    toPlace: jsonb('to_place').$type<Record<string, unknown>>().notNull(),
+    departDate: date('depart_date', { mode: 'string' }).notNull(),
+    departMin: integer('depart_min').notNull(),
+    arriveDate: date('arrive_date', { mode: 'string' }).notNull(),
+    arriveMin: integer('arrive_min').notNull(),
+    /** 'stated' | 'researched' | 'live' */
+    confidence: text('confidence').notNull().default('stated'),
+    status: text('status'),
+    delayMin: integer('delay_min'),
+    bookingRef: text('booking_ref'),
+    sources: jsonb('sources').$type<Array<{ url: string; title: string | null }>>().notNull().default([]),
+    checkedAt: timestamp('checked_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('trip_transport_trip_idx').on(t.tripId)],
+);
+
+// What happened on the day, from the phone. Idempotent on the phone's clientId.
+export const tripEvent = pgTable(
+  'trip_event',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tripId: uuid('trip_id').notNull(),
+    clientId: text('client_id').notNull(),
+    kind: text('kind').notNull(),
+    stopId: text('stop_id'),
+    wishId: text('wish_id'),
+    at: timestamp('at', { withTimezone: true }).notNull(),
+    detail: jsonb('detail').$type<Record<string, unknown>>(),
+    /** The plan version this event produced, for option-applied. */
+    planVersion: integer('plan_version'),
+    receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique('trip_event_trip_client_key').on(t.tripId, t.clientId)],
+);

@@ -195,12 +195,13 @@ export const CREDENTIAL_REQUEST_SPECS: Record<string, CredentialRequestSpec> = {
   // live token, on both Search Box and Directions). Widening it to fix that
   // would publish an unrestricted token to every visitor. Two tokens, two jobs.
   //
-  // Bound to Search Box only: render_map's place-name geocoding is the one
-  // server-side Mapbox caller. The travel toolset (directions, matrix,
-  // isochrones) stays retired; widening this binding is a deliberate act.
+  // Bound to Search Box (render_map's place-name geocoding) and, since
+  // 2026-10-13, Directions + Matrix for the trip planner's live drive ETAs
+  // (`$lib/trips/routing.server`). Isochrones stay retired; widening this
+  // binding further is a deliberate act.
   'mapbox-api': {
     provider: 'mapbox-api',
-    title: 'Mapbox (place-name geocoding)',
+    title: 'Mapbox (place-name geocoding and live ETAs)',
     helpUrl: 'https://account.mapbox.com/access-tokens/',
     assemble: 'single',
     fields: [
@@ -227,8 +228,39 @@ export const CREDENTIAL_REQUEST_SPECS: Record<string, CredentialRequestSpec> = {
       // already right — stated rather than left implicit so widening it later
       // is a deliberate act.
       allowedMethods: ['GET', 'HEAD'],
-      allowedPathPrefixes: ['/search/searchbox/v1/'],
-      notes: 'Server-side Mapbox: place-name geocoding for render_map. Never sent to a browser.',
+      allowedPathPrefixes: ['/search/searchbox/v1/', '/directions/v5/', '/directions-matrix/v1/'],
+      notes:
+        'Server-side Mapbox: place-name geocoding for render_map and live drive ETAs for the trip planner. Never sent to a browser.',
+    },
+  },
+
+  // Flight status for the trip planner's flight_lookup (v3): AeroDataBox on
+  // RapidAPI, whose Basic plan is free for a few hundred lookups a month.
+  // DORMANT until registered — the planner falls back to a web search and
+  // marks the times 'researched'. Read-only, one host, one path prefix.
+  aerodatabox: {
+    provider: 'aerodatabox',
+    title: 'AeroDataBox (flight status for the trip planner)',
+    helpUrl: 'https://rapidapi.com/aedbx-aedbx/api/aerodatabox',
+    assemble: 'single',
+    fields: [
+      {
+        key: 'value',
+        label: 'RapidAPI key',
+        type: 'password',
+        required: true,
+        placeholder: 'your X-RapidAPI-Key',
+        help: 'Subscribe to AeroDataBox on RapidAPI (the Basic plan is free), then copy the X-RapidAPI-Key shown on its endpoints page.',
+      },
+    ],
+    binding: {
+      handle: 'aerodatabox',
+      source: 'vault',
+      injection: { kind: 'header', name: 'X-RapidAPI-Key' },
+      allowedHosts: ['aerodatabox.p.rapidapi.com'],
+      allowedMethods: ['GET', 'HEAD'],
+      allowedPathPrefixes: ['/flights/'],
+      notes: 'Scheduled times and terminals for flights the trip planner looks up. Never sent to a browser.',
     },
   },
 

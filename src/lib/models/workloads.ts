@@ -639,6 +639,30 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
     reason:
       'Follows the site default: one ~2k-token call per game, and wrong "facts" are the one failure a quiz cannot hide, so it is not pinned to a cheaper model than the default. The server marks answers; the model only drafts.',
   },
+  {
+    id: 'trips-reader',
+    scope: 'site',
+    label: 'Trip planner reader',
+    blurb: 'Turns "what do you want to do?" into trip wishes, and reads one web search per wish into its fact sheet.',
+    key: 'trips.reader.model',
+    fallbackModelId: DEFAULT_EXTRACTION_MODEL_ID,
+    requires: null,
+    catalogue: 'tools',
+    reason:
+      'Pinned cheap on purpose (D4, the brief scan): mechanical JSON against a fixed schema, one short call per wish, and every answer is checked — links must appear in the search results and not be a reseller, and the person confirms each wish. The money belongs in the search, not the reading. Also writes the stored guidance (how to do each leg, what to know at each stop, the city guide).',
+  },
+  {
+    id: 'trips-planner',
+    scope: 'site',
+    label: 'Trip planner conversation',
+    blurb: 'The planning conversation on /trips and in the app: reads the trip, answers, and changes it through validated operations.',
+    key: 'trips.planner.model',
+    fallbackModelId: null,
+    requires: null,
+    catalogue: 'tools',
+    reason:
+      'Follows the site default deliberately: this is the product\'s brain — it leads the intake, proposes, explains warnings and re-plans on request — so it gets a capable model, not the cheap extraction one. One call per turn; every operation it returns is validated server-side before anything changes.',
+  },
 ];
 
 export const WORKLOADS: WorkloadDef[] = [...SITE_WORKLOADS];
