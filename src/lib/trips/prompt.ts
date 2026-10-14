@@ -7,7 +7,8 @@
 // zone and, from the phone, what the phone has noticed. Then the last ~30
 // messages. PURE.
 
-import type { Booking, LocalDate, Observation, SolvedPlan, Stay, TransportSegment, TravellerProfile, Trip, TripMessage, Wish } from './model';
+import { DAY_STAGES, DAY_STAGE_LABEL, type Booking, type LocalDate, type Observation, type SolvedPlan, type Stay, type TransportSegment, type TravellerProfile, type Trip, type TripMessage, type Wish } from './model';
+import { dayBrief } from './stages';
 import { AGENT_GUIDANCE } from './agent';
 import { profileText } from './profile';
 
@@ -25,7 +26,8 @@ How to work:
 - Explain the plan: when the plan has warnings, dropped wishes or bookings due soon, say what and why in plain words, and offer the fix as a quick reply ("The Borghese needs booking about 3 weeks ahead — add it to the checklist?").
 - Re-develop on request ("swap the Vatican to the morning"): change the wishes (priority, day, part of day, lock, skip) and let the solver re-plan. Bookings the person has made are hard slots; do not move them unless asked.
 - "Make <day> lighter", "a rest day", "an easy morning": set that day's load with setTrip {"dayLoads": {"<date>": "light"}} (it merges with the other days; "full" lets a day run long, "normal" resets it). Do not delete wishes to lighten a day unless asked; nice-to-haves move or drop on their own.
-- A meal that IS an activity ("a long lunch in Trastevere on Thursday", "dinner at Roscioli"): add ONE wish with "replacesMeal": "lunch" or "dinner", its "fixedDate", and a duration; the automatic lunch/dinner stop that day is then dropped. Do not also add a separate meal.
+- Think about each day in its four stages — breakfast & morning, lunch, afternoon, dinner & evening — and talk in them ("for Wednesday lunch…", "Thursday evening is free"). Every day has a planned breakfast (at the stay unless a wish replaces it), lunch and dinner.
+- A meal that IS an activity ("breakfast at a café in Monti", "a long lunch in Trastevere on Thursday", "dinner at Roscioli"): add ONE wish with "replacesMeal": "breakfast", "lunch" or "dinner", its "fixedDate", and a duration; the automatic meal stop that day is then dropped. Do not also add a separate meal.
 - Use what you already know about them (the profile below) without being asked, and say when you did ("you prefer walking, so…"). When they state a LASTING preference ("we never do early starts", "my partner is vegetarian"), save it with a "remember" op and say in the reply that you will remember it; correct the profile with "updateProfile" when they tell you something in it is wrong. Never remember one-off trip details.
 - Getting there and back: when they mention a flight, train or similar, record it with "addTransport" so the arrival and departure days are framed by it. Times they give are "stated"; times you found are "researched".
 - Never book anything and never claim to have booked. Never invent a booking link, phone number or price: only use links already in the trip (researched facts, the trip guide) or ones the person gave you. If you do not know, say so and offer to research (op "research").
@@ -41,8 +43,8 @@ Answer ONLY with one JSON object:
   {"op":"addStay","name","placeQuery","fromDate" (first night),"toDate" (morning of departure),"checkInMin","checkOutMin"}
   {"op":"updateStay","id","fields":{"name"?,"fromDate"?,"toDate"?,"checkInMin"?,"checkOutMin"?,"placeQuery"?}}
   {"op":"removeStay","id"}
-  {"op":"addWish","wish":{"title","placeQuery","priority" ("must"|"nice"),"durationMin","partOfDay" ("morning"|"afternoon"|"evening"|"any"),"fixedDate","fixedStartMin","note","replacesMeal" ("lunch"|"dinner"|null)}}
-  {"op":"updateWish","id","fields":{"title"?,"placeQuery"?,"priority"?,"durationMin"?,"partOfDay"?,"fixedDate"? (null = any day),"fixedStartMin"?,"note"?,"locked"?,"skipped"?,"replacesMeal"? ("lunch"|"dinner"|null),"suggested"? (only false: accept a suggestion)}}
+  {"op":"addWish","wish":{"title","placeQuery","priority" ("must"|"nice"),"durationMin","partOfDay" ("morning"|"afternoon"|"evening"|"any"),"fixedDate","fixedStartMin","note","replacesMeal" ("breakfast"|"lunch"|"dinner"|null)}}
+  {"op":"updateWish","id","fields":{"title"?,"placeQuery"?,"priority"?,"durationMin"?,"partOfDay"?,"fixedDate"? (null = any day),"fixedStartMin"?,"note"?,"locked"?,"skipped"?,"replacesMeal"? ("breakfast"|"lunch"|"dinner"|null),"suggested"? (only false: accept a suggestion)}}
   {"op":"removeWish","id"}
   {"op":"addBooking","booking":{"wishId","title","date","startMin","endMin","reference","url","documentId":null,"status" ("to-book"|"booked"|"cancelled")}}
   {"op":"updateBooking","id","fields":{"status"?,"reference"?,"date"?,"startMin"?,"endMin"?,"url"?}}
@@ -111,6 +113,8 @@ export function planSummary(plan: SolvedPlan | null, wishes: Wish[]): string {
   const title = new Map(wishes.map((w) => [w.id, w.title]));
   const lines: string[] = [];
   for (const d of plan.days) {
+    const brief = dayBrief(d);
+    lines.push(`${day(d.date)} by stage: ${DAY_STAGES.map((st) => `${DAY_STAGE_LABEL[st]}: ${brief[st].join(', ') || 'free'}`).join(' | ')}`);
     const stops = d.stops
       .filter((s) => s.kind !== 'stay')
       .map((s) => {

@@ -190,7 +190,7 @@ export function parseStayInput(body: unknown, trip: { startDate: LocalDate; endD
 }
 
 export interface WishInput {
-  replacesMeal?: 'lunch' | 'dinner' | null;
+  replacesMeal?: 'breakfast' | 'lunch' | 'dinner' | null;
   title: string;
   priority: Priority;
   durationSec: number | null;
@@ -233,8 +233,8 @@ export interface WishPatch {
   note?: string | null;
   sortHint?: number;
   place?: { name: string; location: LatLng; osmId: string | null; address: string | null } | null;
-  /** v2.1: this wish IS that day's lunch or dinner. */
-  replacesMeal?: 'lunch' | 'dinner' | null;
+  /** v2.1: this wish IS that day's breakfast (v4), lunch or dinner. */
+  replacesMeal?: 'breakfast' | 'lunch' | 'dinner' | null;
 }
 
 /** An edit to a wish: only the keys present change. `suggested` can only be cleared (accept). */
@@ -291,8 +291,8 @@ export function parseWishPatch(body: unknown): Parsed<WishPatch> {
   }
   if ('replacesMeal' in body) {
     if (body.replacesMeal === null || body.replacesMeal === '') out.replacesMeal = null;
-    else if (body.replacesMeal !== 'lunch' && body.replacesMeal !== 'dinner') return bad('A wish can replace lunch or dinner.');
-    else out.replacesMeal = body.replacesMeal;
+    else if (!['breakfast', 'lunch', 'dinner'].includes(body.replacesMeal as string)) return bad('A wish can replace breakfast, lunch or dinner.');
+    else out.replacesMeal = body.replacesMeal as 'breakfast' | 'lunch' | 'dinner';
   }
   if ('sortHint' in body) {
     const n = Number(body.sortHint);

@@ -222,14 +222,14 @@ describe('v2.1: day loads and meal-replacing wishes', () => {
     const r = await applyOps(
       [
         { op: 'addWish', wish: { title: 'Long lunch in Trastevere', placeQuery: 'Pantheon, Rome', fixedDate: '2026-10-29', durationMin: 120, replacesMeal: 'lunch' } },
-        { op: 'addWish', wish: { title: 'Brunch', replacesMeal: 'breakfast' } },
+        { op: 'addWish', wish: { title: 'Brunch', replacesMeal: 'elevenses' } },
         { op: 'updateWish', id: 'w-pan', fields: { replacesMeal: null } },
       ],
       ctx(),
       fx,
     );
     expect(added).toEqual(['lunch']);
-    expect(r.rejected.map((x) => x.reason)).toEqual(['A wish can replace lunch or dinner.']);
+    expect(r.rejected.map((x) => x.reason)).toEqual(['A wish can replace breakfast, lunch or dinner.']);
     expect(r.applied.map((o) => o.op)).toEqual(['addWish', 'updateWish']);
   });
 });

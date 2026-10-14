@@ -55,5 +55,10 @@ export const load: PageServerLoad = async (event) => {
     profile: trip.profile,
     guide: trip.guide,
     today,
+    /** v4: the studio's open tab — ?day=YYYY-MM-DD, else the overview. */
+    initialDay: (() => {
+      const d = event.url.searchParams.get('day');
+      return d && /^\d{4}-\d{2}-\d{2}$/.test(d) && latest?.plan.days.some((x) => x.date === d) ? d : 'overview';
+    })(),
   };
 };

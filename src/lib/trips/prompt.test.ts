@@ -95,7 +95,7 @@ describe('planSummary', () => {
       score: 0,
     } as never;
     expect(planSummary(plan, [wish({ id: 'x', title: 'Trevi' })])).toBe(
-      'Tue 27 Oct: 10:00–12:00 Borghese Gallery (transit 25 min) [Closed on Mondays] | warnings: Long day\nNot planned: Trevi (no time)',
+      'Tue 27 Oct by stage: Breakfast & morning: Borghese Gallery | Lunch: free | Afternoon: free | Dinner & evening: free\nTue 27 Oct: 10:00–12:00 Borghese Gallery (transit 25 min) [Closed on Mondays] | warnings: Long day\nNot planned: Trevi (no time)',
     );
   });
 });
