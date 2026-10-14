@@ -84,10 +84,26 @@ export function solveFrames(
   specs: FrameSpec[],
   wishes: Wish[],
   bookings: Booking[],
-  opts: { shedMustsFromFirst?: boolean } = {},
+  opts: {
+    shedMustsFromFirst?: boolean;
+    /** Stability (see SolverInput.previous): the current plan to change as little as possible. */
+    previous?: SolvedPlan;
+  } = {},
 ): SolvedFrames {
   const frames = specs.map((s) => s.frame);
-  const assignment = assignDays(ctx, frames, wishes, bookings);
+  // Stability: where each wish sits in the current plan; wishes the current
+  // plan dropped stay dropped unless a day can take them without dropping
+  // anything (the second-chance pass below).
+  const previousDay = opts.previous ? previousDays(opts.previous) : undefined;
+  const wasDropped = new Map(
+    (opts.previous?.dropped ?? [])
+      .filter((d) => !previousDay?.has(d.wishId))
+      .map((d) => [d.wishId, d.reason] as const),
+  );
+  const toAssign = wasDropped.size
+    ? wishes.filter((w) => !wasDropped.has(w.id) || pinnedDate(w, bookings) !== null)
+    : wishes;
+  const assignment = assignDays(ctx, frames, toAssign, bookings, previousDay);
   const itemFor = (spec: FrameSpec, wish: Wish) =>
     holdItem(wishItem(wish, spec.frame.date, bookings, ctx.rules), spec.held.get(wish.id));
   const fit = (spec: FrameSpec, list: Item[]) => fitDay(ctx, spec.frame, list, spec.start, spec.skipMeals);
@@ -127,6 +143,12 @@ export function solveFrames(
 
   // Second chance: a nice dropped from a full day may fit on another day.
   const byId = new Map(wishes.map((w) => [w.id, w]));
+  for (const [wishId, reason] of wasDropped) {
+    const w = byId.get(wishId);
+    if (w && !w.suggested && !w.skipped && w.place && pinnedDate(w, bookings) === null) {
+      dropReasons.set(wishId, { reason, date: '' });
+    }
+  }
   const tryOn = (wish: Wish, skip: LocalDate | undefined, needNoOverrun: boolean): boolean => {
     for (const spec of specs) {
       const date = spec.frame.date;
@@ -221,7 +243,10 @@ export function solveFrames(
   for (const [wishId, { reason }] of dropReasons) {
     dropped.push({
       wishId,
-      reason: frames.length > 1 ? `${reason}; no other day had room` : reason,
+      reason:
+        frames.length > 1 && !reason.endsWith('no other day had room')
+          ? `${reason}; no other day had room`
+          : reason,
     });
   }
 
@@ -250,11 +275,19 @@ export function solveFrames(
 }
 
 /** Plan the whole trip. */
+/** Each wish's day in a plan. */
+export function previousDays(plan: Pick<SolvedPlan, 'days'>): Map<string, LocalDate> {
+  const out = new Map<string, LocalDate>();
+  for (const d of plan.days)
+    for (const s of d.stops) if (s.kind === 'wish' && s.wishId) out.set(s.wishId, d.date);
+  return out;
+}
+
 export function solveTrip(input: SolverInput): SolvedPlan {
   const { trip, stays, wishes, bookings, matrix } = input;
   const ctx = makeContext(trip, stays, wishes, matrix, input.transport ?? []);
   const specs = makeFrames(ctx, trip, stays).map((frame) => freshSpec(frame));
-  const solved = solveFrames(ctx, specs, wishes, bookings);
+  const solved = solveFrames(ctx, specs, wishes, bookings, { previous: input.previous });
   const warnings = [...solved.warnings];
   for (const b of bookings) {
     if (b.status !== 'booked' || b.wishId !== null || !b.date) continue;

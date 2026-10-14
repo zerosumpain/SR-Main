@@ -301,7 +301,10 @@ export function replanTrip(input: TripReplanInput): TripReplanOption[] {
       ),
     };
     const specs = [todaySpec, ...laterOld.map((d) => freshSpec(laterFrame(d.date), heldOf(d)))];
-    const solved = solveFrames(ctx, specs, pool, bookings, { shedMustsFromFirst: true });
+    const solved = solveFrames(ctx, specs, pool, bookings, {
+      shedMustsFromFirst: true,
+      previous: input.previous,
+    });
     const days = solved.days.map((d, i) =>
       i === 0 ? { ...d, warnings: [...sit.missedWarnings, ...d.warnings] } : d,
     );

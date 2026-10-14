@@ -83,6 +83,13 @@ export function assignDays(
   frames: DayFrame[],
   wishes: Wish[],
   bookings: Booking[],
+  /**
+   * Stability: each wish's day in the current plan. A wish stays on that day
+   * when it is still valid there (open, part of day reachable, meal not
+   * taken, light-day capacity); only new or no-longer-valid wishes are placed
+   * by cost, after the kept ones. Absent = place everything by cost.
+   */
+  previousDay?: ReadonlyMap<string, LocalDate>,
 ): DayAssignment {
   const byDate = new Map<LocalDate, Wish[]>(frames.map((f) => [f.date, []]));
   const load = new Map<LocalDate, number>(frames.map((f) => [f.date, 0]));
@@ -168,7 +175,15 @@ export function assignDays(
     });
   };
 
-  for (const wish of free) {
+  // With a previous plan, wishes that had a day are placed first, so new
+  // ones see the kept loads.
+  const order = previousDay
+    ? [
+        ...free.filter((w) => frames.some((f) => f.date === previousDay.get(w.id))),
+        ...free.filter((w) => !frames.some((f) => f.date === previousDay.get(w.id))),
+      ]
+    : free;
+  for (const wish of order) {
     let candidates = openDays(wish);
     if (!candidates.length) {
       if (wish.priority === 'nice') {
@@ -195,6 +210,11 @@ export function assignDays(
     };
     const allowed = candidates.filter((f) => fits(f) && !mealTaken(wish, f) && reachesPart(f));
     if (allowed.length) candidates = allowed;
+    const kept = previousDay ? allowed.find((f) => f.date === previousDay.get(wish.id)) : undefined;
+    if (kept) {
+      add(wish, kept);
+      continue;
+    }
     for (const frame of candidates) {
       const cap = capacityMin(ctx, frame);
       const before = load.get(frame.date) ?? 0;
