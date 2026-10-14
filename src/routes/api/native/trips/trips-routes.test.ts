@@ -19,6 +19,7 @@ const h = vi.hoisted(() => ({
   created: [] as string[],
   suggestions: new Map<string, Record<string, unknown>>(),
   events: [] as string[],
+  logged: [] as string[],
 }));
 
 vi.mock('$lib/server/native-handler', () => ({
@@ -88,8 +89,8 @@ vi.mock('$lib/trips/store.server', () => ({
 vi.mock('$lib/trips/plan.server', async () => {
   const { bundleEtag } = await import('$lib/trips/bundle');
   return {
-    tripBundle: async (_trip: unknown, access: unknown) => {
-      const body = { trip: { id: TRIP_ID }, access, profile: { travellers: [] } };
+    tripBundle: async (_trip: unknown, opts: { access: unknown; viewerEmail: string; creator: { id: string; name: string } }) => {
+      const body = { trip: { id: TRIP_ID, createdById: opts.creator.id, createdByName: opts.creator.name }, access: opts.access, viewer: opts.viewerEmail, profile: { travellers: [] } };
       return { ...body, etag: bundleEtag(body as never) };
     },
     applyEvents: async (_trip: unknown, events: Array<{ clientId: string }>) => {
@@ -105,6 +106,7 @@ vi.mock('$lib/trips/converse.server', () => ({
     h.conversed.push(input);
     return { reply: 'ok', applied: [], rejected: [], quickReplies: [], planVersion: 1, changes: [], messages: [] };
   },
+  logEdit: async (_t: string, text: string) => void h.logged.push(text),
   applyAndReplan: async (_trip: unknown, ops: unknown[]) => {
     h.applied.push(...ops);
     return { applied: ops, rejected: [], planVersion: 8 };
@@ -141,6 +143,7 @@ beforeEach(() => {
   h.created = [];
   h.suggestions = new Map();
   h.events = [];
+  h.logged = [];
 });
 
 describe('outside the family', () => {
@@ -166,6 +169,9 @@ describe('the family', () => {
     expect(await (await list.GET(ev())).json()).toEqual({ trips: [{ id: TRIP_ID, title: 'Rome' }] });
     const b = await (await one.GET(ev({ id: TRIP_ID }))).json();
     expect(b.access).toEqual({ canEdit: false, canApprove: false, canSuggest: true, role: 'member' });
+    // The creator by family id and name; the bundle is built for this caller's thread.
+    expect(b.trip).toEqual({ id: TRIP_ID, createdById: 'f_owner', createdByName: 'owner' });
+    expect(b.viewer).toBe(KID);
     as(PARENT);
     expect((await (await one.GET(ev({ id: TRIP_ID }))).json()).access).toEqual({ canEdit: true, canApprove: true, canSuggest: true, role: 'parent' });
   });
@@ -220,6 +226,15 @@ describe('suggestions', () => {
     expect(h.applied).toEqual([{ op: 'addWish', wish: expect.objectContaining({ title: 'Gelato at Giolitti', fixedDate: '2026-10-28', partOfDay: 'afternoon' }) }]);
     expect(h.pushes).toEqual([{ to: [KID], body: 'parent approved your Gelato at Giolitti for Wed 28 Oct afternoon' }]);
     expect((await decide.POST(ev({ id: TRIP_ID, sid: SID }, post({ action: 'reject' })))).status).toBe(409);
+  });
+
+  it('a rejection is a plan-history event, not the parent’s chat', async () => {
+    as(KID);
+    await suggestions.POST(ev({ id: TRIP_ID }, post(suggestion)));
+    as(PARENT);
+    expect(await (await decide.POST(ev({ id: TRIP_ID, sid: SID }, post({ action: 'reject' })))).json()).toMatchObject({ status: 'rejected' });
+    expect(h.logged).toEqual(["parent turned down kid's suggestion: Gelato at Giolitti for Wed 28 Oct afternoon."]);
+    expect(h.applied).toEqual([]);
   });
 
   it('only the suggester withdraws, while it is pending', async () => {

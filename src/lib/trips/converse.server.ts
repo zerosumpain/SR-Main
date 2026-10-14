@@ -36,6 +36,7 @@ import {
   latestPlan,
   loadState,
   recentMessages,
+  viewerOf,
   saveBooking,
   updateStay,
   updateTrip,
@@ -54,7 +55,7 @@ export interface ConverseInput {
    * used only when `isOwner`; someone who cannot edit gets advice only — the
    * planner's ops are not applied. Default: the site's owner, who may edit.
    */
-  caller?: { isOwner: boolean; canEdit: boolean; name: string | null; email?: string };
+  caller?: { isOwner: boolean; canEdit: boolean; name: string | null; email?: string; personId?: string | null };
   observation?: Observation | null;
   position?: LatLng | null;
 }
@@ -109,8 +110,16 @@ function effectsFor(trip: TripRecord, messageId: string | null = null, ownerEmai
 
 export async function converse(trip: TripRecord, input: ConverseInput): Promise<ConverseTurn> {
   const text = input.text.trim().slice(0, 4000);
-  const [state, latest, history, transport] = await Promise.all([loadState(trip.id), latestPlan(trip.id), recentMessages(trip.id, 30), listTransport(trip.id)]);
   const caller = input.caller ?? { isOwner: true, canEdit: true, name: null };
+  // v5: the turn belongs to its speaker's own thread; the model sees only
+  // that thread and the plan changes everyone sees — never another person's chat.
+  const author = { email: (caller.email ?? trip.ownerEmail).trim().toLowerCase(), id: caller.personId ?? null };
+  const [state, latest, history, transport] = await Promise.all([
+    loadState(trip.id),
+    latestPlan(trip.id),
+    recentMessages(trip.id, viewerOf(trip, author.email), 30),
+    listTransport(trip.id),
+  ]);
   // What the planner already knows (v3): gathered once, on the owner's first
   // turn. Anyone else's prompt gets the travellers alone (v5): the owner's
   // memory never reaches another family member.
@@ -118,7 +127,7 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
     ? (trip.profile ?? (await gatherProfile(trip, { asOwner: true, ownerEmail: caller.email ?? trip.ownerEmail }).catch(() => null)))
     : travellersOnly(trip.profile);
   const userAt = new Date();
-  const userMessage = await addMessage(trip.id, { role: 'user', text, ops: [], planVersion: null, surface: input.surface, at: userAt });
+  const userMessage = await addMessage(trip.id, { role: 'user', text, ops: [], planVersion: null, surface: input.surface, at: userAt, author });
 
   const ctx: PlannerContext = {
     trip,
@@ -154,7 +163,7 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
   }
 
   if (!answer) {
-    const reply = await addMessage(trip.id, { role: 'assistant', text: NO_PLANNER, ops: [], planVersion: null, surface: input.surface, at: new Date(userAt.getTime() + 1), research: lookups });
+    const reply = await addMessage(trip.id, { role: 'assistant', text: NO_PLANNER, ops: [], planVersion: null, surface: input.surface, at: new Date(userAt.getTime() + 1), research: lookups, author });
     return { reply: NO_PLANNER, applied: [], rejected: [], quickReplies: [], planVersion: latest?.version ?? null, changes: [], research: lookups, messages: [userMessage, reply] };
   }
 
@@ -260,6 +269,7 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
     surface: input.surface,
     at: new Date(userAt.getTime() + 1),
     research: lookups,
+    author,
   });
   return {
     reply: reply.text,
@@ -358,9 +368,20 @@ export async function applyAndReplan(
   return { applied: result.applied, rejected: result.rejected, planVersion };
 }
 
-/** A form edit, logged so the model sees it on its next turn. */
-export async function logEdit(tripId: string, text: string, ops: TripMessage['ops'], planVersion: number | null, surface: 'site' | 'phone' = 'site'): Promise<void> {
-  await addMessage(tripId, { role: 'event', text, ops, planVersion, surface }).catch((err) =>
+/**
+ * A form edit, logged so the model sees it on its next turn. A plan change
+ * (no `author`) is shown to the whole family; pass the asker as `author` for
+ * an event that belongs to one person's thread (an ideas request).
+ */
+export async function logEdit(
+  tripId: string,
+  text: string,
+  ops: TripMessage['ops'],
+  planVersion: number | null,
+  surface: 'site' | 'phone' = 'site',
+  author: { email: string; id: string | null } | null = null,
+): Promise<void> {
+  await addMessage(tripId, { role: 'event', text, ops, planVersion, surface, author }).catch((err) =>
     console.warn('[trips] could not log the edit:', (err as Error)?.message),
   );
 }

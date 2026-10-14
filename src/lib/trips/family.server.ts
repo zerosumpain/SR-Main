@@ -16,7 +16,7 @@ import { getOwnerEmails, isOwnerEmail } from '$lib/server/access';
 import { pushToEmails } from '$lib/server/push-devices';
 import type { PushMessage } from '$lib/server/apns';
 import { dayLabel } from './changes';
-import { applyAndReplan } from './converse.server';
+import { applyAndReplan, logEdit } from './converse.server';
 import { suggestionWish, tripAccess } from './family';
 import { DAY_STAGE_LABEL, type DayStage, type TripAccess, type WishDraft } from './model';
 import { addSuggestion, decideSuggestion, getSuggestion, getTripById, type SuggestionRecord, type TripRecord } from './store.server';
@@ -51,6 +51,12 @@ export async function familyTrip(
   const trip = await getTripById(id);
   if (!trip) return json({ error: 'No such trip.' }, { status: 404 });
   return { caller, trip, access: tripAccess(trip.ownerEmail, caller) };
+}
+
+/** Who created a trip, as the family knows them: roster id and name, never the email. */
+export async function tripCreator(trip: Pick<TripRecord, 'ownerEmail'>): Promise<{ id: string; name: string }> {
+  const p = await familyPersonFor(trip.ownerEmail, false);
+  return { id: p.id, name: p.name };
 }
 
 // ── Pushes ─────────────────────────────────────────────────────────────────
@@ -140,6 +146,10 @@ export async function decide(
   if (!access.canApprove) return { status: 403, body: { error: 'A parent decides suggestions.' } };
   const done = await decideSuggestion(trip.id, id, action === 'approve' ? 'approved' : 'rejected', { email: caller.email, id: caller.personId });
   if (!done) return { status: 409, body: { error: 'Someone got there first.' } };
+  if (action === 'reject') {
+    // A plan-history event everyone sees (not the parent's chat): who turned down what.
+    await logEdit(trip.id, `${caller.name} turned down ${done.byName}'s suggestion: ${done.wish.title} for ${slotName(done)}.`, [], null, 'phone');
+  }
   let planVersion: number | null = null;
   let applied = 0;
   if (action === 'approve') {

@@ -7486,6 +7486,15 @@ export const tripMessage = pgTable(
     surface: text('surface').notNull().default('site'),
     /** v3: ResearchStep[] — what the planner looked up during this turn. */
     research: jsonb('research').$type<unknown[]>(),
+    /**
+     * v5: who said it (lower-cased email; server-side only, never on the
+     * wire). Each caller sees only their own thread; null on a `user` or
+     * `assistant` row is the creator's (rows from before v5). `event` rows
+     * with no author are plan changes, shown to the whole family.
+     */
+    authorEmail: text('author_email'),
+    /** v5: the speaker's family roster id. */
+    authorId: text('author_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('trip_message_trip_idx').on(t.tripId, t.createdAt)],

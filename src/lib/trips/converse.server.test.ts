@@ -14,6 +14,7 @@ const h = vi.hoisted(() => ({
   research2: [] as Array<{ tool: string; summary: string; sources: unknown[] }>,
   gathered: 0,
   remembered: [] as unknown[],
+  viewers: [] as unknown[],
 }));
 
 // The agentic first call is the same fake planner; its reply is the JSON text.
@@ -70,7 +71,11 @@ const TRIP = {
 vi.mock('./store.server', () => ({
   loadState: async () => ({ stays: [], wishes: h.wishes, bookings: [] }),
   latestPlan: async () => ({ version: 4, plan: BEFORE }),
-  recentMessages: async () => [],
+  recentMessages: async (_t: string, viewer: unknown) => {
+    h.viewers.push(viewer);
+    return [];
+  },
+  viewerOf: (t: { ownerEmail: string }, email: string) => ({ email, isCreator: email === t.ownerEmail }),
   getTrip: async () => TRIP,
   addMessage: async (_t: string, m: (typeof h.messages)[number]) => {
     h.messages.push(m);
@@ -104,6 +109,7 @@ beforeEach(() => {
   h.research2 = [];
   h.gathered = 0;
   h.remembered = [];
+  h.viewers = [];
 });
 
 /** A fake planner: the first call answers the person, a second one is the check. */
@@ -255,6 +261,12 @@ describe('v5: a family member talking to the planner', () => {
     expect(prompt).toContain('You');
     expect(prompt).toContain('THIS PERSON CANNOT CHANGE THE TRIP');
     expect(h.gathered).toBe(0);
+    // Their own thread only: the history read is theirs, and both turns are stored as theirs.
+    expect(h.viewers).toEqual([{ email: 'kid@example.test', isCreator: false }]);
+    expect(h.messages.map((m) => (m as { author?: unknown }).author)).toEqual([
+      { email: 'kid@example.test', id: null },
+      { email: 'kid@example.test', id: null },
+    ]);
   });
 
   it('a member without edit rights gets advice: no ops applied, nothing remembered, no re-solve', async () => {

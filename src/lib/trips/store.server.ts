@@ -6,7 +6,7 @@
 // above here sees a database row. Every read takes the owner's email: a trip
 // that is not theirs reads as missing.
 
-import { and, asc, desc, eq, inArray, max, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, max, or, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { trip, tripBooking, tripEvent, tripMessage, tripPlan, tripStay, tripSuggestion, tripTransport, tripWish } from '$lib/db/schema';
 import type {
@@ -511,12 +511,16 @@ export async function setStopGuide(tripId: string, wishId: string, guide: StopGu
     .where(and(eq(tripWish.tripId, tripId), eq(tripWish.id, wishId)));
 }
 
+/** Ops that carry what someone said about themselves: never shown beside a shared event. */
+const PRIVATE_OPS = new Set(['remember', 'updateProfile']);
+
 function toMessage(r: typeof tripMessage.$inferSelect): TripMessage {
+  const ops = (r.ops ?? []) as TripOp[];
   return {
     id: r.id,
     role: r.role as TripMessage['role'],
     text: r.text,
-    ops: (r.ops ?? []) as TripOp[],
+    ops: r.role === 'event' ? ops.filter((o) => !PRIVATE_OPS.has(o.op)) : ops,
     planVersion: r.planVersion,
     surface: r.surface as TripMessage['surface'],
     createdAt: r.createdAt.toISOString(),
@@ -524,12 +528,30 @@ function toMessage(r: typeof tripMessage.$inferSelect): TripMessage {
   };
 }
 
-/** The last `limit` messages, oldest first. */
-export async function recentMessages(tripId: string, limit = 50): Promise<TripMessage[]> {
+/**
+ * Whose conversation to read (v5): each caller sees only their own thread —
+ * their messages and the replies to them — plus the plan-change events
+ * everyone sees. The creator also gets the rows from before authors were
+ * stored (author null).
+ */
+export interface MessageViewer {
+  email: string;
+  isCreator: boolean;
+}
+
+export const viewerOf = (trip: Pick<TripRecord, 'ownerEmail'>, email: string): MessageViewer => ({
+  email: email.trim().toLowerCase(),
+  isCreator: email.trim().toLowerCase() === trip.ownerEmail.trim().toLowerCase(),
+});
+
+/** The last `limit` messages this viewer may see, oldest first. */
+export async function recentMessages(tripId: string, viewer: MessageViewer, limit = 50): Promise<TripMessage[]> {
+  const mine = eq(tripMessage.authorEmail, viewer.email);
+  const shared = and(isNull(tripMessage.authorEmail), viewer.isCreator ? sql`true` : eq(tripMessage.role, 'event'));
   const rows = await db
     .select()
     .from(tripMessage)
-    .where(eq(tripMessage.tripId, tripId))
+    .where(and(eq(tripMessage.tripId, tripId), or(mine, shared)))
     .orderBy(desc(tripMessage.createdAt), desc(tripMessage.id))
     .limit(limit);
   return rows.reverse().map(toMessage);
@@ -537,7 +559,12 @@ export async function recentMessages(tripId: string, limit = 50): Promise<TripMe
 
 export async function addMessage(
   tripId: string,
-  m: Pick<TripMessage, 'role' | 'text' | 'ops' | 'planVersion' | 'surface'> & { at?: Date; research?: ResearchStep[] },
+  m: Pick<TripMessage, 'role' | 'text' | 'ops' | 'planVersion' | 'surface'> & {
+    at?: Date;
+    research?: ResearchStep[];
+    /** v5: the speaker, whose thread this is; null for a plan change everyone sees. */
+    author?: { email: string; id: string | null } | null;
+  },
 ): Promise<TripMessage> {
   const [row] = await db
     .insert(tripMessage)
@@ -549,6 +576,8 @@ export async function addMessage(
       planVersion: m.planVersion,
       surface: m.surface,
       research: m.research?.length ? (m.research as unknown[]) : null,
+      authorEmail: m.author ? m.author.email.trim().toLowerCase() : null,
+      authorId: m.author?.id ?? null,
       ...(m.at ? { createdAt: m.at } : {}),
     })
     .returning();

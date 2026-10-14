@@ -15,5 +15,5 @@ export const POST: RequestHandler = withNativeAccess('any', async (event, identi
   if (ft instanceof Response) return ft;
   const parsed = parseIdeasAsk(await event.request.json().catch(() => null));
   if (!parsed.ok) return json({ error: parsed.error }, { status: 400 });
-  return findIdeas(ft.trip, parsed.value, 'phone', { asOwner: ft.caller.isOwner });
+  return findIdeas(ft.trip, parsed.value, 'phone', { asOwner: ft.caller.isOwner, author: { email: ft.caller.email, id: ft.caller.personId } });
 });

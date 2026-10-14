@@ -45,7 +45,7 @@ export async function findIdeas(
   trip: TripRecord,
   ask: { date: string; stage: DayStage; afterStopId?: string | null; beforeStopId?: string | null },
   surface: 'site' | 'phone' = 'site',
-  deps: { agent?: typeof agentTurn; place?: typeof findPlaceLoosely; asOwner?: boolean } = {},
+  deps: { agent?: typeof agentTurn; place?: typeof findPlaceLoosely; asOwner?: boolean; author?: { email: string; id: string | null } } = {},
 ): Promise<IdeasResult> {
   const latest = await latestPlan(trip.id);
   if (!latest) return { gap: null, ideas: [], rejected: [], note: 'There is no plan yet to find a gap in.', research: [] };
@@ -129,6 +129,8 @@ export async function findIdeas(
     [],
     null,
     surface,
+    // The asker's own thread (v5): the reasons may echo their profile.
+    deps.author ?? { email: trip.ownerEmail, id: null },
   );
   return { gap, ideas, rejected, note, research };
 }

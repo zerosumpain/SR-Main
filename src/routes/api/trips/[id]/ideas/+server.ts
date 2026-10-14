@@ -10,8 +10,8 @@ import { parseIdeasAsk } from '$lib/trips/intake';
  * Nothing is saved; "Add this" goes through POST /api/trips/:id/wishes.
  */
 export const POST: RequestHandler = async (event) => {
-  const { trip } = await ownerTrip(event);
+  const { owner, trip } = await ownerTrip(event);
   const parsed = parseIdeasAsk(await readJson(event));
   if (!parsed.ok) return json({ error: parsed.error }, { status: 400 });
-  return json(await findIdeas(trip, parsed.value, 'site'));
+  return json(await findIdeas(trip, parsed.value, 'site', { asOwner: true, author: { email: owner, id: null } }));
 };

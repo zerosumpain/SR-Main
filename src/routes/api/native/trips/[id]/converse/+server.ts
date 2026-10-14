@@ -28,6 +28,6 @@ export const POST: RequestHandler = withNativeAccess('any', async (event, identi
     surface: 'phone',
     observation: observation.value,
     position,
-    caller: { isOwner: ft.caller.isOwner, canEdit: ft.access.canEdit, name: ft.caller.name, email: ft.caller.email },
+    caller: { isOwner: ft.caller.isOwner, canEdit: ft.access.canEdit, name: ft.caller.name, email: ft.caller.email, personId: ft.caller.personId },
   });
 });

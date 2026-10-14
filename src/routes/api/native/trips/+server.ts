@@ -28,6 +28,6 @@ export const POST: RequestHandler = withNativeAccess('any', async (event, identi
   const text = typeof body?.text === 'string' ? body.text.trim() : '';
   if (!text) return json({ error: 'Say where and when — the planner takes it from there.' }, { status: 400 });
   const trip = await createTrip(caller.email, draftTrip(localDateIn('Europe/London', new Date())));
-  const turn = await converse(trip, { text, surface: 'phone', caller: { isOwner: caller.isOwner, canEdit: true, name: caller.name, email: caller.email } });
+  const turn = await converse(trip, { text, surface: 'phone', caller: { isOwner: caller.isOwner, canEdit: true, name: caller.name, email: caller.email, personId: caller.personId } });
   return json({ id: trip.id, ...turn }, { status: 201 });
 });

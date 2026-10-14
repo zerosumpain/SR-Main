@@ -56,6 +56,7 @@ import {
   familyBacklogItem,
   trip,
   tripSuggestion,
+  tripMessage,
   familyBacklogPref,
   familyBacklogReaction,
   fileShareTokens,
@@ -143,6 +144,8 @@ export const ACCOUNT_COLUMNS: Record<string, Record<string, Fate | `kept: ${stri
   // their name comes off the ones they decided.
   trip: { owner_email: 'scrub' },
   trip_suggestion: { by_email: 'erase', by_id: 'erase', decided_by_email: 'scrub', decided_by_id: 'scrub' },
+  // Their own conversation with the planner goes (each person's thread is theirs alone).
+  trip_message: { author_email: 'erase', author_id: 'erase' },
   gmail_accounts: { email: 'erase', principal_id: 'erase' },
   activity_principals: { external_ref: 'erase' },
   jkai_conversations: { principal_id: 'erase' },
@@ -277,6 +280,7 @@ export async function eraseRows(target: EraseTarget, executor: typeof db = db): 
     const keeper = getOwnerEmails()[0]?.trim().toLowerCase();
     if (keeper) await tx.update(trip).set({ ownerEmail: keeper }).where(inArray(trip.ownerEmail, addrs));
     await tx.delete(tripSuggestion).where(inArray(tripSuggestion.byEmail, addrs));
+    await tx.delete(tripMessage).where(inArray(tripMessage.authorEmail, addrs));
     await tx.update(tripSuggestion).set({ decidedByEmail: null, decidedById: null }).where(inArray(tripSuggestion.decidedByEmail, addrs));
 
     // Their games on the family leaderboard.

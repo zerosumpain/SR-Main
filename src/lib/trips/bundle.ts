@@ -44,8 +44,14 @@ export interface BundlePlan {
   changes: string[];
 }
 
+/**
+ * v5: the trip as the phone sees it — who created it as a family id and
+ * name, never an email.
+ */
+export type WireTrip = Omit<Trip, 'ownerEmail'> & { createdById: string; createdByName: string };
+
 export interface TripBundle {
-  trip: Trip;
+  trip: WireTrip;
   stays: Stay[];
   wishes: Wish[];
   bookings: Booking[];
@@ -53,7 +59,10 @@ export interface TripBundle {
   matrices: Record<LocalDate, TravelMatrix>;
   /** v2: every point, for a simple offline pull-forward on the phone. */
   tripMatrix: TravelMatrix | null;
-  /** v2: the planning conversation, last 50, oldest first. */
+  /**
+   * v2: the planning conversation, last 50, oldest first. v5: this caller's
+   * own thread only, plus the plan-change events everyone sees.
+   */
   messages: TripMessage[];
   /** v2: the city guide. */
   guide: TripGuide | null;
