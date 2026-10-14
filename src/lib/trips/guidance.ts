@@ -56,6 +56,12 @@ export function legsLacking(plan: SolvedPlan, dates: LocalDate[], cache: Guidanc
   return out;
 }
 
+/** Every day of the plan, the next two first: the order a full guidance run takes. */
+export function guidanceOrder(plan: SolvedPlan, today: LocalDate): LocalDate[] {
+  const first = guidanceDates(plan, today);
+  return [...first, ...plan.days.map((d) => d.date).filter((d) => !first.includes(d))];
+}
+
 /** The two days guidance is made for after a solve: today and tomorrow when under way, else the first two. */
 export function guidanceDates(plan: SolvedPlan, today: LocalDate): LocalDate[] {
   const dates = plan.days.map((d) => d.date);
@@ -282,6 +288,18 @@ function allowedLinks(raw: unknown, allowed: Set<string>): GuideLink[] {
     if (url && label && allowed.has(url) && !out.some((o) => o.url === url)) out.push({ label, url });
   }
   return out.slice(0, 4);
+}
+
+export const STOP_GUIDES_SYSTEM = `You write the "when you get there" card for each place one day of a trip visits, from the researched facts given for each. Per place: a one-sentence "summary", then up to 5 short practical "tips": how entry works, tickets (timed entry? show on phone?), dress code if a place of worship, the best entrance or quietest time, what not to miss, how long people usually spend. Only what the facts support or what is widely known and stable about the place; if unsure, leave it out. Never write a link, price or opening time that is not in that place's facts. British English, no emoji.
+Answer ONLY with JSON: {"places": [{"i": number, "summary": string, "tips": string[], "links": [{"label": string, "url": string}]}]} — links ONLY copied from that place's facts.`;
+
+/** One day's places in one call: the batched form of the stop guide (v2.1, latency). */
+export function readStopGuides(raw: unknown, facts: Array<Facts | null>, now: string): Array<StopGuide | null> {
+  const places = (raw as { places?: unknown } | null)?.places;
+  return facts.map((f, i) => {
+    const p = Array.isArray(places) ? places.find((x) => (x as { i?: unknown })?.i === i) : null;
+    return p ? readStopGuide(p, f, now) : null;
+  });
 }
 
 export function readStopGuide(raw: unknown, facts: Facts | null, now: string): StopGuide | null {

@@ -157,3 +157,19 @@ describe('model-written guides keep only known links', () => {
     expect(invented?.taxi).toEqual({ how: 'Call', links: [], phone: null });
   });
 });
+
+describe('batched guidance (v2.1)', () => {
+  it('reads one day of stop guides from one answer, links per place', async () => {
+    const { readStopGuides, guidanceOrder } = await import('./guidance');
+    const f1 = { ...emptyFacts(), officialUrl: 'https://pantheon.example/' };
+    const out = readStopGuides(
+      { places: [{ i: 1, summary: 'Second.', tips: [], links: [{ label: 'x', url: 'https://pantheon.example/' }] }, { i: 0, summary: 'First.', tips: ['Go early'], links: [] }] },
+      [f1, null, null],
+      'n',
+    );
+    expect(out.map((g) => g?.summary ?? null)).toEqual(['First.', 'Second.', null]);
+    expect(out[0]?.links).toEqual([{ label: 'Official site', url: 'https://pantheon.example/' }]);
+    expect(out[1]?.links).toEqual([]); // that link belongs to another place's facts
+    expect(guidanceOrder(plan(), '2026-10-28')).toEqual(['2026-10-28', '2026-10-29', '2026-10-27']);
+  });
+});

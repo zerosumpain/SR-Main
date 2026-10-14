@@ -25,12 +25,13 @@ import {
   legsLacking,
   LEG_GUIDE_SYSTEM,
   readLegWords,
-  readStopGuide,
+  readStopGuides,
   readTripGuide,
+  guidanceOrder,
   routerGuidance,
   stepsFromMotis,
   stepsFromOrs,
-  STOP_GUIDE_SYSTEM,
+  STOP_GUIDES_SYSTEM,
   stopGuidePrompt,
   transitFromMotis,
   TRIP_GUIDE_SYSTEM,
@@ -43,10 +44,8 @@ import { getTrip, latestPlan, loadState, setStopGuide, setTripGuide, type TripRe
 
 const USER_AGENT = 'StrangeRamblingsTrips/1.0 (+https://strangeramblings.com)';
 const TIMEOUT_MS = 12_000;
-/** Model-written stop guides per run; the rest wait for the next. */
-const STOP_GUIDES_PER_RUN = 12;
-/** Legs routed per run (each may be a Transitous or ORS request). */
-const LEGS_PER_RUN = 40;
+/** Legs routed per day (each may be a Transitous or ORS request). */
+const LEGS_PER_DAY = 20;
 
 const cacheKey = (tripId: string) => `trips.guidance.${tripId}`;
 
@@ -173,7 +172,7 @@ export async function ensureTripGuide(trip: TripRecord): Promise<TripRecord['gui
 
 export async function ensureLegGuidance(trip: TripRecord, plan: SolvedPlan, dates: LocalDate[]): Promise<number> {
   const cache = await readGuidance(trip.id);
-  const lacking = legsLacking(plan, dates, cache).slice(0, LEGS_PER_RUN);
+  const lacking = legsLacking(plan, dates, cache).slice(0, LEGS_PER_DAY * Math.max(1, dates.length));
   if (!lacking.length) return 0;
   const now = new Date().toISOString();
   const byDay = new Map<LocalDate, Array<{ key: string; g: LegGuidance }>>();
@@ -230,36 +229,45 @@ export async function ensureLegGuidance(trip: TripRecord, plan: SolvedPlan, date
       console.warn('[trips/guidance] leg words unavailable, router text kept:', (err as Error)?.message);
     }
     items.forEach((x, i) => (cache[x.key] = polished[i]));
+    // Written day by day, so the first days show while later ones are made.
+    await writeGuidance(trip.id, cache);
   }
-  await writeGuidance(trip.id, cache);
   return lacking.length;
 }
 
 // ── Stop guides ────────────────────────────────────────────────────────────
 
-export async function ensureStopGuides(trip: TripRecord, plan: SolvedPlan): Promise<number> {
+/** Stop guides for the planned places of some days: ONE model call per day. */
+export async function ensureStopGuides(trip: TripRecord, plan: SolvedPlan, dates: LocalDate[]): Promise<number> {
   const { wishes } = await loadState(trip.id);
-  const planned = new Set(plan.days.flatMap((d) => d.stops.map((s) => s.wishId)).filter(Boolean));
-  const todo = wishes.filter((w) => planned.has(w.id) && !w.guide).slice(0, STOP_GUIDES_PER_RUN);
+  const byId = new Map(wishes.map((w) => [w.id, w]));
+  const done = new Set<string>();
   let made = 0;
-  for (const w of todo) {
+  for (const date of dates) {
+    const day = plan.days.find((d) => d.date === date);
+    const todo = (day?.stops ?? [])
+      .map((s) => (s.wishId ? byId.get(s.wishId) : undefined))
+      .filter((w): w is NonNullable<typeof w> => !!w && !w.guide && !done.has(w.id));
+    if (!todo.length) continue;
+    todo.forEach((w) => done.add(w.id));
     try {
       const raw = await jsonCall(
         'trips-reader',
         [
-          { role: 'system', content: STOP_GUIDE_SYSTEM },
-          { role: 'user', content: stopGuidePrompt(w.title, w.place?.name ?? null, trip.destination, w.facts) },
+          { role: 'system', content: STOP_GUIDES_SYSTEM },
+          { role: 'user', content: todo.map((w, i) => `[${i}] ${stopGuidePrompt(w.title, w.place?.name ?? null, trip.destination, w.facts)}`).join('\n\n') },
         ],
-        { maxTokens: 700, temperature: 0 },
+        { maxTokens: 400 + 350 * todo.length, temperature: 0 },
       );
-      const guide = readStopGuide(raw, w.facts, new Date().toISOString());
-      if (guide) {
-        await setStopGuide(trip.id, w.id, guide);
+      const guides = readStopGuides(raw, todo.map((w) => w.facts), new Date().toISOString());
+      for (const [i, g] of guides.entries()) {
+        if (!g) continue;
+        await setStopGuide(trip.id, todo[i].id, g);
         made++;
       }
     } catch (err) {
       console.warn('[trips/guidance] no model for stop guides:', (err as Error)?.message);
-      break; // no model: do not try the rest one by one
+      break; // no model: do not try the other days
     }
   }
   return made;
@@ -270,9 +278,10 @@ export async function ensureStopGuides(trip: TripRecord, plan: SolvedPlan): Prom
 const running = new Set<string>();
 
 /**
- * Guidance for a trip in the background: the city guide, then legs for
- * `dates` (default: today and the next day), then stop guides. One run per
- * trip at a time; a second request while one runs is dropped.
+ * Guidance for a trip in the background, never awaited by a request: the city
+ * guide, then for each day (today and the next first) its legs and its
+ * stops. One run per trip at a time; a second request while one runs is
+ * dropped — the next page view or solve picks up what is still missing.
  */
 export function startGuidance(owner: string, tripId: string, dates: LocalDate[] | 'next-two' | 'all' = 'next-two'): void {
   if (running.has(tripId)) return;
@@ -286,14 +295,15 @@ export function startGuidance(owner: string, tripId: string, dates: LocalDate[] 
         await ensureTripGuide(trip);
         trip = (await getTrip(owner, tripId)) ?? trip;
       }
+      const today = localDateIn(trip.timeZone, new Date());
       const wanted =
-        dates === 'all'
-          ? latest.plan.days.map((d) => d.date)
-          : dates === 'next-two'
-            ? guidanceDates(latest.plan, localDateIn(trip.timeZone, new Date()))
-            : dates;
-      await ensureLegGuidance(trip, latest.plan, wanted);
-      await ensureStopGuides(trip, latest.plan);
+        dates === 'all' ? guidanceOrder(latest.plan, today) : dates === 'next-two' ? guidanceDates(latest.plan, today) : dates;
+      // Day by day, next two first: each day's legs (routing + one call),
+      // then its stops (one call), so the days people need soonest are ready first.
+      for (const date of wanted) {
+        await ensureLegGuidance(trip, latest.plan, [date]);
+        await ensureStopGuides(trip, latest.plan, [date]);
+      }
     } catch (err) {
       console.warn('[trips/guidance] run failed:', (err as Error)?.message);
     } finally {
