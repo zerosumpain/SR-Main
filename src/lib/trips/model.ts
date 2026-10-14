@@ -417,7 +417,13 @@ export type TripOp =
   | { op: 'addBooking'; booking: Omit<Booking, 'id'> }
   | { op: 'updateBooking'; id: string; fields: Partial<Omit<Booking, 'id'>> }
   | { op: 'research'; wishIds: string[]; depth: 'brief' | 'deep' }
-  | { op: 'suggestNearby'; near: string | null; theme: string | null };
+  | { op: 'suggestNearby'; near: string | null; theme: string | null }
+  | { op: 'addTransport'; segment: Omit<TransportSegment, 'id'> }
+  | { op: 'updateTransport'; id: string; fields: Partial<Omit<TransportSegment, 'id'>> }
+  | { op: 'removeTransport'; id: string }
+  /** Save a LASTING preference the person stated to JKAI memory (owner-confirmed in the reply). */
+  | { op: 'remember'; text: string; category: 'preferences' | 'people' | 'health' | 'places' }
+  | { op: 'updateProfile'; profile: Partial<Omit<TravellerProfile, 'gatheredAt'>> };
 
 /** One turn's answer from the planner. */
 export interface ConverseResult {
@@ -429,6 +435,8 @@ export interface ConverseResult {
   quickReplies: string[];
   planVersion: number | null;
   changes: string[];
+  /** v3: what the planner looked up this turn. */
+  research?: ResearchStep[];
 }
 
 /** What the phone saw that made it think the person is off the plan. */
@@ -460,4 +468,72 @@ export interface TripReplanOption {
   moved: Array<{ wishId: string; from: LocalDate | null; to: LocalDate }>;
   /** One or two plain sentences: why this option. Model-written when online. */
   explanation: string;
+}
+
+// ── v3: what the planner already knows, getting there and back, its own research ──
+
+/**
+ * A flight, train or similar that brings the person to, from or between
+ * places on the trip. The solver uses it to frame days: the arrival day
+ * starts after `arrive` + exit time + transfer; the departure day ends at
+ * `depart` − check-in lead − transfer.
+ */
+export interface TransportSegment {
+  id: string;
+  kind: 'flight' | 'train' | 'coach' | 'ferry' | 'car';
+  direction: 'outbound' | 'return' | 'internal';
+  carrier: string | null;
+  /** e.g. "LS1235", "FR8346". */
+  number: string | null;
+  from: { name: string; code: string | null; location: LatLng | null; timeZone: string };
+  to: { name: string; code: string | null; location: LatLng | null; timeZone: string };
+  /** Local to `from.timeZone`. */
+  departDate: LocalDate;
+  departMin: number;
+  /** Local to `to.timeZone`. */
+  arriveDate: LocalDate;
+  arriveMin: number;
+  /** How sure we are of the times. 'stated' = the person said; 'researched' = found online; 'live' = a status feed on the day. */
+  confidence: 'stated' | 'researched' | 'live';
+  /** Live status when known: delays move the arrival day's start. */
+  status: 'scheduled' | 'delayed' | 'departed' | 'landed' | 'cancelled' | null;
+  /** Minutes late per the latest status, when known. */
+  delayMin: number | null;
+  bookingRef: string | null;
+  sources: Array<{ url: string; title: string | null }>;
+  checkedAt: string | null;
+}
+
+/** Minutes from landing to leaving the airport, and arriving before departure. */
+export const TRANSPORT_LEADS: Record<TransportSegment['kind'], { exitMin: number; checkInLeadMin: number }> = {
+  flight: { exitMin: 40, checkInLeadMin: 120 },
+  train: { exitMin: 10, checkInLeadMin: 20 },
+  coach: { exitMin: 10, checkInLeadMin: 15 },
+  ferry: { exitMin: 30, checkInLeadMin: 60 },
+  car: { exitMin: 0, checkInLeadMin: 0 },
+};
+
+/**
+ * What the planner already knows about the people travelling, gathered from
+ * the owner's JKAI memory, knowledge search and the family roster. A snapshot
+ * on the trip so the model sees it every turn and the owner can see and
+ * correct it. Every item names where it came from.
+ */
+export interface TravellerProfile {
+  travellers: Array<{ name: string; relation: string | null; notes: string[] }>;
+  /** "Prefers walking to taxis", "Vegetarian", "Hates early starts", "Likes a long lunch". */
+  preferences: Array<{ text: string; source: 'memory' | 'knowledge' | 'family' | 'conversation'; ref: string | null }>;
+  /** Hard constraints: dietary, mobility, health. */
+  constraints: Array<{ text: string; source: 'memory' | 'knowledge' | 'family' | 'conversation'; ref: string | null }>;
+  /** Past trips or places that tell us something. */
+  history: string[];
+  gatheredAt: string;
+}
+
+/** One thing the planner looked up during a turn, shown under its reply. */
+export interface ResearchStep {
+  tool: string;
+  /** Plain words: "Looked up LS1235 Newcastle → Rome on 27 Oct". */
+  summary: string;
+  sources: Array<{ url: string; title: string | null }>;
 }
