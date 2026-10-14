@@ -91,7 +91,14 @@ export interface Trip {
   modes: TravelMode[];
   status: TripStatus;
   notes: string | null;
+  /**
+   * v2.1: how full each day should be. 'light' ≈ 60% of the pace's active
+   * time and ends 90 min earlier; 'full' lets the day run to its end. Missing = 'normal'.
+   */
+  dayLoads?: Partial<Record<LocalDate, DayLoad>>;
 }
+
+export type DayLoad = 'light' | 'normal' | 'full';
 
 /** Accommodation for a run of nights. Each day starts and ends here. */
 export interface Stay {
@@ -163,6 +170,11 @@ export interface Wish {
   facts: Facts | null;
   note: string | null;
   sortHint: number;
+  /**
+   * v2.1: this wish IS that day's lunch/dinner — the solver drops the automatic
+   * meal stop and places this wish inside the meal window.
+   */
+  replacesMeal?: 'lunch' | 'dinner' | null;
   /** v2: what to know when you're there (model-written from facts). */
   guide?: StopGuide | null;
 }
@@ -387,6 +399,7 @@ export interface WishDraft {
   fixedDate: LocalDate | null;
   fixedStartMin: number | null;
   note: string | null;
+  replacesMeal?: 'lunch' | 'dinner' | null;
 }
 
 /**
@@ -394,7 +407,7 @@ export interface WishDraft {
  * validated, then the trip re-solves once. Ids refer to existing rows.
  */
 export type TripOp =
-  | { op: 'setTrip'; fields: Partial<Pick<Trip, 'title' | 'destination' | 'timeZone' | 'startDate' | 'endDate' | 'pace' | 'modes' | 'notes'>> }
+  | { op: 'setTrip'; fields: Partial<Pick<Trip, 'title' | 'destination' | 'timeZone' | 'startDate' | 'endDate' | 'pace' | 'modes' | 'notes' | 'dayLoads'>> }
   | { op: 'addStay'; name: string; placeQuery: string; fromDate: LocalDate; toDate: LocalDate; checkInMin: number | null; checkOutMin: number | null }
   | { op: 'updateStay'; id: string; fields: Partial<Pick<Stay, 'name' | 'fromDate' | 'toDate' | 'checkInMin' | 'checkOutMin'>> & { placeQuery?: string } }
   | { op: 'removeStay'; id: string }
