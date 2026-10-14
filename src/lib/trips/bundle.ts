@@ -18,6 +18,7 @@ import type {
   TravelMatrix,
   Trip,
   TripStatus,
+  TravellerProfile,
   Wish,
 } from './model';
 
@@ -56,6 +57,8 @@ export interface TripBundle {
   guide: TripGuide | null;
   /** v3: getting there and back — the first and last stage cards. */
   transport: TransportSegment[];
+  /** v3: what the planner knows about the travellers, with sources. */
+  profile: TravellerProfile | null;
   etag: string;
 }
 

@@ -219,6 +219,7 @@ export async function tripBundle(trip: TripRecord): Promise<TripBundle> {
     messages,
     guide: trip.guide,
     transport,
+    profile: trip.profile,
   };
   return { ...body, etag: bundleEtag(body) };
 }
