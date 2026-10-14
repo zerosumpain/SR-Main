@@ -43,6 +43,16 @@ export async function jsonCall(
       { signal: AbortSignal.timeout(opts.timeoutMs ?? 60_000), maxRetries: 1 },
     );
   // Literal tags, so the cost ledger's registry check can see them.
-  const res = workload === 'trips-planner' ? await withActivity('trips-planner', call) : await withActivity('trips-reader', call);
-  return parseLooseJson(res.choices[0]?.message?.content ?? '');
+  const once = () => (workload === 'trips-planner' ? withActivity('trips-planner', call) : withActivity('trips-reader', call));
+  // An answer that is not JSON (empty, cut off) is asked for once more before
+  // the caller's no-model path takes over.
+  for (let attempt = 1; ; attempt++) {
+    const res = await once();
+    const choice = res.choices[0];
+    const content = choice?.message?.content ?? '';
+    const parsed = parseLooseJson(content);
+    if (parsed && typeof parsed === 'object') return parsed;
+    console.warn(`[trips/llm] ${workload}: unusable answer (attempt ${attempt}, finish=${choice?.finish_reason}, chars=${content.length})`);
+    if (attempt >= 2) throw new Error(`${workload} returned no JSON`);
+  }
 }

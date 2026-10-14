@@ -103,7 +103,7 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
 
   let answer: ReturnType<typeof readPlannerAnswer> | null = null;
   try {
-    answer = readPlannerAnswer(await jsonCall('trips-planner', plannerMessages(ctx, text), { maxTokens: 2500, timeoutMs: 120_000 }));
+    answer = readPlannerAnswer(await jsonCall('trips-planner', plannerMessages(ctx, text), { maxTokens: 4000, timeoutMs: 120_000 }));
   } catch (err) {
     console.warn('[trips/converse] planner unavailable:', (err as Error)?.message);
   }
