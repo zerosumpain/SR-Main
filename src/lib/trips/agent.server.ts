@@ -20,7 +20,7 @@ import { newBudget, PLANNER_TOOLS, readAeroDataBox, researchStep, spend } from '
 import { localDateIn, localToIso, timetableDate } from './routing';
 import type { LatLng, ResearchStep, Stay, TravelMode, Wish } from './model';
 import { estimateLeg, windowsOn } from '$lib/trips/solver';
-import { findPlace } from './research.server';
+import { findPlace, findPlaceLoosely } from './research.server';
 import type { TripRecord } from './store.server';
 
 const USER_AGENT = 'StrangeRamblingsTrips/1.0 (+https://strangeramblings.com)';
@@ -61,7 +61,7 @@ async function locate(name: string, ctx: AgentContext): Promise<{ name: string; 
   if (/^stay$/i.test(n) && ctx.stays[0]) return { name: ctx.stays[0].name, location: ctx.stays[0].location };
   const w = ctx.wishes.find((x) => x.id === n || x.title.toLowerCase() === n.toLowerCase());
   if (w?.place) return { name: w.place.name, location: w.place.location };
-  const p = await findPlace(/,/.test(n) ? n : `${n}, ${ctx.trip.destination}`, ctx.stays[0]?.location ?? null);
+  const p = await findPlaceLoosely(n, ctx.trip.destination, ctx.stays[0]?.location ?? null);
   return p ? { name: p.name, location: p.location } : null;
 }
 
@@ -105,7 +105,7 @@ export const LIVE_TOOLS: AgentTools = {
         return { content: clip(text, 4000), sources: [{ url: res.finalUrl, title: null }] };
       }
       case 'find_place': {
-        const p = await findPlace(s('query'), ctx.stays[0]?.location ?? null);
+        const p = await findPlaceLoosely(s('query'), ctx.trip.destination, ctx.stays[0]?.location ?? null);
         if (!p) return { content: 'Not found on OpenStreetMap.', error: 'not found' };
         return { content: JSON.stringify(p), summary: p.name, sources: p.website ? [{ url: p.website, title: p.name }] : [] };
       }

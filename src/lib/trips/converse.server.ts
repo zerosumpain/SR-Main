@@ -20,7 +20,7 @@ import { jsonCall } from './llm.server';
 import { applyOps, knownUrlsOf, readPlannerAnswer, urlsIn, type ApplyResult, type OpEffects } from './ops';
 import { replan } from './plan.server';
 import { plannerMessages, type PlannerContext } from './prompt';
-import { findPlace, startResearch, suggestNearby } from './research.server';
+import { findPlace, findPlaceLoosely, startResearch, suggestNearby } from './research.server';
 import {
   addMessage,
   addStay,
@@ -72,8 +72,7 @@ function effectsFor(trip: TripRecord, messageId: string | null = null): OpEffect
     },
     saveProfile: (profile) => saveProfile(trip.id, profile),
     resolvePlace: async (query, near) => {
-      const q = /,/.test(query) || !trip.destination ? query : `${query}, ${trip.destination}`;
-      const p = await findPlace(q, near);
+      const p = await findPlaceLoosely(query, trip.destination, near);
       return p ? { name: p.name, location: p.location, osmId: p.osmId, address: p.address } : null;
     },
     setTrip: (fields) => updateTrip(trip.id, fields),

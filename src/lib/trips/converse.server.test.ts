@@ -44,6 +44,7 @@ vi.mock('./llm.server', () => ({
 }));
 vi.mock('./research.server', () => ({
   findPlace: async (q: string) => (q.startsWith('Pantheon') ? { name: 'Pantheon', location: { lat: 41.8986, lng: 12.4769 }, osmId: 'way/1', address: 'Piazza della Rotonda' } : null),
+  findPlaceLoosely: async (q: string) => (q.startsWith('Pantheon') ? { name: 'Pantheon', location: { lat: 41.8986, lng: 12.4769 }, osmId: 'way/1', address: 'Piazza della Rotonda' } : null),
   startResearch: async (...args: unknown[]) => {
     h.research.push(args[2]);
     return true;

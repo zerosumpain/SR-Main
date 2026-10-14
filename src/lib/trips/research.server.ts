@@ -26,6 +26,7 @@ import {
   placeFromNominatim,
   readDraftWishes,
   readFacts,
+  placeQueries,
   searchQuery,
   suggestionsFromOverpass,
   WISHES_SYSTEM,
@@ -92,6 +93,15 @@ async function nominatim(path: string, params: Record<string, string>): Promise<
       return [];
     }
   });
+}
+
+/** Try `placeQueries` in turn until one is found (each one Nominatim request, paced). */
+export async function findPlaceLoosely(query: string, destination: string | null, near: LatLng | null): Promise<OsmPlace | null> {
+  for (const q of placeQueries(query, destination)) {
+    const hit = await findPlace(q, near);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 /** Find a wish's place near the trip (a ~20 km box round `near` when known). */

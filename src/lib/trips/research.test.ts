@@ -117,3 +117,16 @@ describe('free text', () => {
     expect(searchQuery({ title: 'Borghese', place: null }, { destination: 'Rome' }, 'deep')).toContain('how far in advance');
   });
 });
+
+describe('placeQueries', () => {
+  it('tries the name, without codes, the street after a business name, then the name alone', async () => {
+    const { placeQueries } = await import('./research');
+    expect(placeQueries('Rome Fiumicino Airport FCO', 'Rome')).toEqual(['Rome Fiumicino Airport FCO, Rome', 'Rome Fiumicino Airport']);
+    expect(placeQueries("Hotel Campo de' Fiori, Via del Biscione 6, Rome", 'Rome')).toEqual([
+      "Hotel Campo de' Fiori, Via del Biscione 6, Rome",
+      "Via del Biscione 6, Rome",
+      "Hotel Campo de' Fiori",
+    ]);
+    expect(placeQueries('Pantheon', 'New trip')).toEqual(['Pantheon']);
+  });
+});

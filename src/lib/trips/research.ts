@@ -352,3 +352,27 @@ export function readDraftWishes(raw: unknown): DraftWish[] {
   }
   return out;
 }
+
+/**
+ * The searches to try for a place name, best first: as given (with the
+ * destination appended when it has no comma), without airport/station codes,
+ * the address part after a business name ("Hotel X, Via Y 6, Rome" → "Via Y
+ * 6, Rome"), then the name alone. Nominatim matches literally, so a hotel it
+ * does not know is still placed by its street.
+ */
+export function placeQueries(query: string, destination: string | null): string[] {
+  const q = query.trim().replace(/\s+/g, ' ');
+  const dest = destination && destination !== 'New trip' ? destination : null;
+  const out: string[] = [];
+  const add = (x: string) => {
+    const t = x.trim().replace(/^,|,$/g, '').trim();
+    if (t.length >= 3 && !out.includes(t)) out.push(t);
+  };
+  add(/,/.test(q) || !dest ? q : `${q}, ${dest}`);
+  const noCode = q.replace(/\b[A-Z]{3}\b/g, '').replace(/\s+/g, ' ').trim();
+  add(noCode);
+  const parts = q.split(',').map((p) => p.trim()).filter(Boolean);
+  if (parts.length > 1) add(parts.slice(1).join(', '));
+  add(parts[0].replace(/\b[A-Z]{3}\b/g, '').trim());
+  return out.slice(0, 4);
+}
