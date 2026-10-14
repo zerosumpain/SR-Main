@@ -54,6 +54,8 @@ import {
   forecastFeedback,
   familyTask,
   familyBacklogItem,
+  trip,
+  tripSuggestion,
   familyBacklogPref,
   familyBacklogReaction,
   fileShareTokens,
@@ -70,7 +72,7 @@ import {
   workflowInteractions,
   workflows,
 } from '$lib/db/schema';
-import { isOwnerEmail } from '$lib/server/access';
+import { getOwnerEmails, isOwnerEmail } from '$lib/server/access';
 import { asList } from '$lib/server/grants';
 import { notifyOwner } from '$lib/server/notify';
 import { enqueueIntelJob } from '$lib/intel-client/outbox';
@@ -136,8 +138,11 @@ export const ACCOUNT_COLUMNS: Record<string, Record<string, Fate | `kept: ${stri
   family_backlog_item: { added_by_email: 'erase', for_email: 'scrub', done_by_email: 'scrub' },
   family_backlog_reaction: { email: 'erase' },
   family_backlog_pref: { email: 'erase' },
-  // Owner only until phase 5 (D2): a member cannot own or reach a trip.
-  trip: { owner_email: 'kept: owner-only (trips, D2)' },
+  // v5: a family member may create a trip (a family record): it passes to the
+  // site owner rather than vanishing from everyone's plans. Their suggestions go;
+  // their name comes off the ones they decided.
+  trip: { owner_email: 'scrub' },
+  trip_suggestion: { by_email: 'erase', by_id: 'erase', decided_by_email: 'scrub', decided_by_id: 'scrub' },
   gmail_accounts: { email: 'erase', principal_id: 'erase' },
   activity_principals: { external_ref: 'erase' },
   jkai_conversations: { principal_id: 'erase' },
@@ -267,6 +272,12 @@ export async function eraseRows(target: EraseTarget, executor: typeof db = db): 
     await tx.delete(familyBacklogPref).where(inArray(familyBacklogPref.email, addrs));
     await tx.update(familyBacklogItem).set({ forEmail: null }).where(inArray(familyBacklogItem.forEmail, addrs));
     await tx.update(familyBacklogItem).set({ doneByEmail: null }).where(inArray(familyBacklogItem.doneByEmail, addrs));
+
+    // Trips they created pass to the site owner; their suggestions go; their name off decisions.
+    const keeper = getOwnerEmails()[0]?.trim().toLowerCase();
+    if (keeper) await tx.update(trip).set({ ownerEmail: keeper }).where(inArray(trip.ownerEmail, addrs));
+    await tx.delete(tripSuggestion).where(inArray(tripSuggestion.byEmail, addrs));
+    await tx.update(tripSuggestion).set({ decidedByEmail: null, decidedById: null }).where(inArray(tripSuggestion.decidedByEmail, addrs));
 
     // Their games on the family leaderboard.
     await tx.delete(gameResults).where(inArray(gameResults.playerId, addrs.map((a) => playerId(a))));

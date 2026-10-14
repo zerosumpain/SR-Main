@@ -25,7 +25,7 @@ export const POST: RequestHandler = async (event) => {
   const text = body && typeof body === 'object' && typeof (body as { text?: unknown }).text === 'string' ? (body as { text: string }).text.trim() : '';
   if (text) {
     const trip = await createTrip(owner, draftTrip(localDateIn('Europe/London', new Date())));
-    const turn = await converse(trip, { text, surface: 'site' });
+    const turn = await converse(trip, { text, surface: 'site', caller: { isOwner: true, canEdit: true, name: null, email: owner } });
     return json({ id: trip.id, ...turn }, { status: 201 });
   }
   const parsed = parseTripInput(body);

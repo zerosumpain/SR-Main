@@ -10,9 +10,10 @@
 import { solveTrip, replanDay, replanTrip } from '$lib/trips/solver';
 import { bundleEtag, canonicalJson, dayMatrices, sha256, stayPoint, type TripBundle } from './bundle';
 import { diffPlans, keepRunningDay, replaceDay } from './changes';
-import type { LocalDate, Observation, PlannedDay, PlanSource, ReplanOption, SolvedPlan, TripEvent, TripReplanOption } from './model';
+import type { LocalDate, Observation, PlannedDay, PlanSource, ReplanOption, SolvedPlan, TripAccess, TripEvent, TripReplanOption } from './model';
 import { startGuidance, withGuidance } from './guidance.server';
 import { jsonCall } from './llm.server';
+import { planFullness, wireTravellers, withAlternatives } from './family';
 import { NARRATIVE_SYSTEM, planSummary } from './prompt';
 import { localDateIn, type RoutePoint } from './routing';
 import { attachLegLines, buildStoredMatrix } from './routing.server';
@@ -21,7 +22,9 @@ import {
   appendPlan,
   latestPhonePlan,
   latestPlan,
+  listSuggestions,
   listTransport,
+  suggestionWire,
   loadState,
   recentMessages,
   recordEvents,
@@ -213,9 +216,17 @@ export async function applyEvents(trip: TripRecord, events: TripEvent[]): Promis
  * matrices, the last 50 messages and the city guide. The ETag covers all of
  * it, so a new message or new guidance changes it.
  */
-export async function tripBundle(trip: TripRecord): Promise<TripBundle> {
-  const [state, latest, messages, transport] = await Promise.all([loadState(trip.id), latestPlan(trip.id), recentMessages(trip.id, 50), listTransport(trip.id)]);
-  const plan = latest ? await withGuidance(trip.id, latest.plan) : null;
+export async function tripBundle(trip: TripRecord, access: TripAccess = { canEdit: true, canApprove: true, canSuggest: true, role: 'creator' }): Promise<TripBundle> {
+  const [state, latest, messages, transport, suggestions] = await Promise.all([
+    loadState(trip.id),
+    latestPlan(trip.id),
+    recentMessages(trip.id, 50),
+    listTransport(trip.id),
+    listSuggestions(trip.id),
+  ]);
+  // Each leg carries its walk / public transport / taxi alternatives (v5).
+  const plan = latest ? withAlternatives(await withGuidance(trip.id, latest.plan), latest.matrix) : null;
+  const replaces = new Map(state.wishes.filter((w) => w.replacesMeal).map((w) => [w.id, w.replacesMeal as 'breakfast' | 'lunch' | 'dinner']));
   const body: Omit<TripBundle, 'etag'> = {
     trip: tripOnly(trip),
     stays: state.stays,
@@ -227,7 +238,11 @@ export async function tripBundle(trip: TripRecord): Promise<TripBundle> {
     messages,
     guide: trip.guide,
     transport,
-    profile: trip.profile,
+    // Travellers only: no memory text on the wire, for anyone (v5).
+    profile: trip.profile ? { travellers: wireTravellers(trip.profile) } : null,
+    access,
+    suggestions: suggestions.map(suggestionWire),
+    fullness: latest ? planFullness(latest.plan, trip.pace, trip.dayLoads ?? {}, replaces) : {},
   };
   return { ...body, etag: bundleEtag(body) };
 }

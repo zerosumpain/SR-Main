@@ -10,9 +10,9 @@ import { converse } from '$lib/trips/converse.server';
  * two stored messages.
  */
 export const POST: RequestHandler = async (event) => {
-  const { trip } = await ownerTrip(event);
+  const { owner, trip } = await ownerTrip(event);
   const body = (await readJson(event)) as { text?: unknown } | null;
   const text = typeof body?.text === 'string' ? body.text.trim() : '';
   if (!text) return json({ error: 'Say something to the planner.' }, { status: 400 });
-  return json(await converse(trip, { text, surface: 'site' }));
+  return json(await converse(trip, { text, surface: 'site', caller: { isOwner: true, canEdit: true, name: null, email: owner } }));
 };

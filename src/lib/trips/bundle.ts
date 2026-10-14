@@ -18,7 +18,9 @@ import type {
   TravelMatrix,
   Trip,
   TripStatus,
-  TravellerProfile,
+  TripAccess,
+  TripSuggestion,
+  DayFullness,
   Wish,
 } from './model';
 
@@ -57,9 +59,26 @@ export interface TripBundle {
   guide: TripGuide | null;
   /** v3: getting there and back — the first and last stage cards. */
   transport: TransportSegment[];
-  /** v3: what the planner knows about the travellers, with sources. */
-  profile: TravellerProfile | null;
+  /**
+   * v5: the travellers ONLY — names, relations, ages, roster ids. No memory
+   * text (preferences, constraints, history, sources) ever goes on the wire,
+   * for anyone, the owner included.
+   */
+  profile: { travellers: BundleTraveller[] } | null;
+  /** v5: what this caller may do (creator edits, parents approve, everyone suggests). */
+  access: TripAccess;
+  /** v5: pending suggestions and the last 20 decided, newest first. */
+  suggestions: TripSuggestion[];
+  /** v5: how full each day is. */
+  fullness: Record<LocalDate, DayFullness>;
   etag: string;
+}
+
+export interface BundleTraveller {
+  name: string;
+  relation: string | null;
+  age: number | null;
+  personId: string | null;
 }
 
 /** Matrix point id for a stay. */

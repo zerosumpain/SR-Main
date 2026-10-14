@@ -8,7 +8,7 @@
 
 import { and, asc, desc, eq, inArray, max, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { trip, tripBooking, tripEvent, tripMessage, tripPlan, tripStay, tripTransport, tripWish } from '$lib/db/schema';
+import { trip, tripBooking, tripEvent, tripMessage, tripPlan, tripStay, tripSuggestion, tripTransport, tripWish } from '$lib/db/schema';
 import type {
   Booking,
   Facts,
@@ -28,6 +28,10 @@ import type {
   TransportSegment,
   TravellerProfile,
   ResearchStep,
+  TripSuggestion,
+  SuggestionStatus,
+  DayStage,
+  WishDraft,
   TripStatus,
   Wish,
 } from './model';
@@ -157,12 +161,22 @@ function toPlan(r: PlanRow): StoredPlan {
 
 // ── Trips ──────────────────────────────────────────────────────────────────
 
-export async function listTrips(owner: string): Promise<TripSummary[]> {
+/**
+ * The trips a caller may see. v5: trips are open to the whole family, so this
+ * is every trip; the caller's rights on each are decided by `tripAccess`.
+ * (`_viewer` stays in the signature: every caller has already been checked as
+ * the owner or a family member.)
+ */
+export async function listTrips(_viewer: string): Promise<TripSummary[]> {
+  return listAllTrips();
+}
+
+/** v5: every trip, for the family's phone lane (trips are open to the whole family). */
+export async function listAllTrips(): Promise<TripSummary[]> {
   const rows = await db
     .select({ t: trip, version: max(tripPlan.version) })
     .from(trip)
     .leftJoin(tripPlan, eq(tripPlan.tripId, trip.id))
-    .where(eq(trip.ownerEmail, owner))
     .groupBy(trip.id)
     .orderBy(desc(trip.startDate), asc(trip.title));
   return rows.map(({ t, version }) => ({
@@ -178,10 +192,16 @@ export async function listTrips(owner: string): Promise<TripSummary[]> {
   }));
 }
 
-export async function getTrip(owner: string, id: string): Promise<TripRecord | null> {
+/** v5: a trip by id, whoever created it (the caller's access is decided by `tripAccess`). */
+export async function getTripById(id: string): Promise<TripRecord | null> {
   if (!isUuid(id)) return null;
-  const [row] = await db.select().from(trip).where(and(eq(trip.id, id), eq(trip.ownerEmail, owner))).limit(1);
+  const [row] = await db.select().from(trip).where(eq(trip.id, id)).limit(1);
   return row ? toTrip(row) : null;
+}
+
+/** A trip by id for a caller already checked as the owner or family (v5: trips are open to the family). */
+export async function getTrip(_viewer: string, id: string): Promise<TripRecord | null> {
+  return getTripById(id);
 }
 
 export async function createTrip(owner: string, input: TripInput): Promise<TripRecord> {
@@ -205,6 +225,7 @@ export async function deleteTrip(id: string): Promise<void> {
     await tx.delete(tripEvent).where(eq(tripEvent.tripId, id));
     await tx.delete(tripMessage).where(eq(tripMessage.tripId, id));
     await tx.delete(tripTransport).where(eq(tripTransport.tripId, id));
+    await tx.delete(tripSuggestion).where(eq(tripSuggestion.tripId, id));
     await tx.delete(tripPlan).where(eq(tripPlan.tripId, id));
     await tx.delete(tripBooking).where(eq(tripBooking.tripId, id));
     await tx.delete(tripWish).where(eq(tripWish.tripId, id));
@@ -603,4 +624,78 @@ export async function deleteTransport(tripId: string, id: string): Promise<boole
   if (!isUuid(id)) return false;
   const gone = await db.delete(tripTransport).where(and(eq(tripTransport.tripId, tripId), eq(tripTransport.id, id))).returning({ id: tripTransport.id });
   return gone.length > 0;
+}
+
+// ── v5: suggestions ────────────────────────────────────────────────────────
+
+type SuggestionRow = typeof tripSuggestion.$inferSelect;
+
+export interface SuggestionRecord extends TripSuggestion {
+  byEmail: string;
+}
+
+function toSuggestion(r: SuggestionRow): SuggestionRecord {
+  return {
+    id: r.id,
+    tripId: r.tripId,
+    byId: r.byId,
+    byName: r.byName,
+    byEmail: r.byEmail,
+    date: r.date,
+    stage: r.stage as DayStage,
+    wish: r.wish as unknown as WishDraft,
+    note: r.note,
+    fitText: r.fitText,
+    status: r.status as SuggestionStatus,
+    decidedById: r.decidedById,
+    decidedAt: r.decidedAt ? r.decidedAt.toISOString() : null,
+    createdAt: r.createdAt.toISOString(),
+  };
+}
+
+/** The wire shape: never an email. */
+export function suggestionWire(s: SuggestionRecord): TripSuggestion {
+  const { byEmail: _e, ...rest } = s;
+  return rest;
+}
+
+/** Pending suggestions and the last `decided` decided ones, newest first. */
+export async function listSuggestions(tripId: string, decided = 20): Promise<SuggestionRecord[]> {
+  const rows = await db.select().from(tripSuggestion).where(eq(tripSuggestion.tripId, tripId)).orderBy(desc(tripSuggestion.createdAt), desc(tripSuggestion.id));
+  const pending = rows.filter((r) => r.status === 'pending');
+  const done = rows.filter((r) => r.status !== 'pending').slice(0, decided);
+  return [...pending, ...done].map(toSuggestion);
+}
+
+export async function getSuggestion(tripId: string, id: string): Promise<SuggestionRecord | null> {
+  if (!isUuid(id)) return null;
+  const [row] = await db.select().from(tripSuggestion).where(and(eq(tripSuggestion.tripId, tripId), eq(tripSuggestion.id, id))).limit(1);
+  return row ? toSuggestion(row) : null;
+}
+
+export async function addSuggestion(
+  tripId: string,
+  s: { byEmail: string; byId: string; byName: string; date: string; stage: DayStage; wish: WishDraft; note: string | null; fitText: string | null },
+): Promise<SuggestionRecord> {
+  const [row] = await db
+    .insert(tripSuggestion)
+    .values({ tripId, ...s, wish: s.wish as unknown as Record<string, unknown> })
+    .returning();
+  return toSuggestion(row);
+}
+
+/** Move a PENDING suggestion to a decision; null when it was no longer pending (someone got there first). */
+export async function decideSuggestion(
+  tripId: string,
+  id: string,
+  status: Exclude<SuggestionStatus, 'pending'>,
+  by: { email: string; id: string } | null,
+): Promise<SuggestionRecord | null> {
+  if (!isUuid(id)) return null;
+  const [row] = await db
+    .update(tripSuggestion)
+    .set({ status, decidedByEmail: by?.email ?? null, decidedById: by?.id ?? null, decidedAt: new Date() })
+    .where(and(eq(tripSuggestion.tripId, tripId), eq(tripSuggestion.id, id), eq(tripSuggestion.status, 'pending')))
+    .returning();
+  return row ? toSuggestion(row) : null;
 }

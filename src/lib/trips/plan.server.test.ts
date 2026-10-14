@@ -57,7 +57,12 @@ vi.mock('./store.server', () => ({
   updateTrip: async (_t: string, p: { status?: string }) => {
     if (p.status) h.status = p.status;
   },
-  tripOnly: (t: unknown) => t,
+  tripOnly: (t: Record<string, unknown>) => {
+    const { research: _r, updatedAt: _u, guide: _g, profile: _p, ...rest } = t;
+    return rest;
+  },
+  listSuggestions: async () => [],
+  suggestionWire: (s: Record<string, unknown>) => s,
   recentMessages: async () => h.messages,
   listTransport: async () => [],
 }));
@@ -170,6 +175,29 @@ describe('the phone', () => {
     const c = await tripBundle(trip());
     expect(c.messages).toHaveLength(1);
     expect(c.etag).not.toBe(a.etag);
+  });
+
+  it('puts the travellers on the wire and never a memory — for anyone (v5)', async () => {
+    await replan(trip());
+    const profile = {
+      travellers: [
+        { name: 'You', relation: null, notes: ['NOTE-SECRET-1'], age: 44, personId: null },
+        { name: 'Sam', relation: 'son', notes: ['NOTE-SECRET-2'], age: 9, personId: 'f_sam' },
+      ],
+      preferences: [{ text: 'PREF-SECRET walks everywhere', source: 'memory', ref: 'MEM-REF-1' }],
+      constraints: [{ text: 'CONSTRAINT-SECRET no nuts', source: 'family', ref: 'MEM-REF-2' }],
+      history: ['HISTORY-SECRET Paris 2024'],
+      gatheredAt: '2026-10-13T00:00:00Z',
+    };
+    const b = await tripBundle({ ...trip(), profile }, { canEdit: false, canApprove: false, canSuggest: true, role: 'member' });
+    expect(b.profile).toEqual({ travellers: [{ name: 'You', relation: null, age: 44, personId: null }, { name: 'Sam', relation: 'son', age: 9, personId: 'f_sam' }] });
+    expect(b.access.role).toBe('member');
+    const wire = JSON.stringify(b);
+    for (const secret of ['SECRET', 'MEM-REF', 'preferences', 'constraints', 'history', 'gatheredAt', '"source"']) expect(wire).not.toContain(secret);
+    // Every planned day has a fullness, and every leg its alternatives.
+    const days = b.plan!.plan.days;
+    expect(Object.keys(b.fullness).sort()).toEqual(days.map((d) => d.date).sort());
+    for (const d of days) for (const leg of d.legs) expect(leg.alternatives?.map((a) => a.mode)).toEqual(['walk', 'transit', 'taxi']);
   });
 
   it('applies a whole-trip option (detail.days) as one phone version', async () => {

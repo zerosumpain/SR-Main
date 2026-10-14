@@ -232,6 +232,8 @@ export interface PlannedLeg {
   line: LatLng[] | null;
   /** v2: how to actually do this leg. Null until guidance has been generated. */
   guidance?: LegGuidance | null;
+  /** v5: walk / public transport / taxi times for this leg, for the phone's mode picker (bundle only). */
+  alternatives?: LegAlternative[];
 }
 
 export interface PlannedDay {

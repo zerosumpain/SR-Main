@@ -27,6 +27,10 @@ DO $$ BEGIN
     IF to_regclass('public.trip_event') IS NOT NULL THEN
       GRANT SELECT, INSERT, UPDATE, DELETE ON public.trip_event TO sr_main_runtime;
     END IF;
+    -- v5 (2026-10-14): family members' suggestions for a trip's slots.
+    IF to_regclass('public.trip_suggestion') IS NOT NULL THEN
+      GRANT SELECT, INSERT, UPDATE, DELETE ON public.trip_suggestion TO sr_main_runtime;
+    END IF;
     -- v3 (2026-10-14): getting there and back. trip.profile and
     -- trip_message.research are columns, covered by the table grants.
     IF to_regclass('public.trip_transport') IS NOT NULL THEN

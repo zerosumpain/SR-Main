@@ -477,3 +477,40 @@ export function parseIdeasAsk(body: unknown): Parsed<IdeasAsk> {
   if (!(DAY_STAGES as readonly unknown[]).includes(body.stage)) return bad('stage is morning, lunch, afternoon or evening.');
   return ok({ date: body.date, stage: body.stage as DayStage, afterStopId: text(body.afterStopId, 200), beforeStopId: text(body.beforeStopId, 200) });
 }
+
+export interface SuggestionInput {
+  date: LocalDate;
+  stage: DayStage;
+  wish: { title: string; placeQuery: string | null; priority: 'must' | 'nice'; durationMin: number | null; partOfDay: PartOfDay; fixedDate: LocalDate | null; fixedStartMin: number | null; note: string | null; replacesMeal?: 'breakfast' | 'lunch' | 'dinner' | null };
+  note: string | null;
+  fitText: string | null;
+}
+
+/** v5 "Make a suggestion": `{ date, stage, wish, note?, fitText? }`. The wish is checked like a planner op's. */
+export function parseSuggestionInput(body: unknown, readDraft: (raw: unknown) => { ok: true; draft: SuggestionInput['wish'] } | { ok: false; reason: string }): Parsed<SuggestionInput> {
+  if (!isObj(body)) return bad('Send { date, stage, wish }.');
+  if (!isLocalDate(body.date)) return bad('date must be a local date.');
+  if (!(DAY_STAGES as readonly unknown[]).includes(body.stage)) return bad('stage is morning, lunch, afternoon or evening.');
+  const d = readDraft(body.wish);
+  if (!d.ok) return bad(d.reason);
+  return ok({ date: body.date, stage: body.stage as DayStage, wish: d.draft, note: text(body.note, 400), fitText: text(body.fitText, 300) });
+}
+
+export interface RouteQuery {
+  from: string;
+  to: string;
+  mode: TravelMode;
+  date: LocalDate;
+}
+
+/** v5 `GET …/route?from=&to=&mode=&date=`. */
+export function parseRouteQuery(q: URLSearchParams): Parsed<RouteQuery> {
+  const from = text(q.get('from'), 200);
+  const to = text(q.get('to'), 200);
+  const mode = q.get('mode') as TravelMode;
+  const date = q.get('date');
+  if (!from || !to) return bad('Give ?from= and ?to= stop ids.');
+  if (!TRAVEL_MODES.includes(mode)) return bad('mode is walk, cycle, drive, transit or taxi.');
+  if (!isLocalDate(date)) return bad('Give ?date=YYYY-MM-DD.');
+  return ok({ from, to, mode, date });
+}

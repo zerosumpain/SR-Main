@@ -243,3 +243,35 @@ describe('v3: profile, research and memory', () => {
     expect(h.replans).toEqual([]); // remembering is not a plan change
   });
 });
+
+describe('v5: a family member talking to the planner', () => {
+  const kid = { isOwner: false, canEdit: false, name: 'Sam', email: 'kid@example.test' };
+
+  it('never puts the owner’s memories in a member’s prompt — travellers only', async () => {
+    h.model = () => ({ reply: 'Gelato is a good idea.', ops: [], quickReplies: [] });
+    await converse(TRIP, { text: 'Can we get gelato?', surface: 'phone', caller: kid });
+    const prompt = h.seen[0].map((m) => m.content).join('\n');
+    expect(prompt).not.toContain('Prefers walking to taxis');
+    expect(prompt).toContain('You');
+    expect(prompt).toContain('THIS PERSON CANNOT CHANGE THE TRIP');
+    expect(h.gathered).toBe(0);
+  });
+
+  it('a member without edit rights gets advice: no ops applied, nothing remembered, no re-solve', async () => {
+    h.model = (m) =>
+      isCheck(m)
+        ? { ok: true, reply: 'ok', ops: [] }
+        : { reply: 'Ask a parent.', ops: [{ op: 'remember', text: 'Sam loves gelato', category: 'preferences' }, { op: 'setPace', pace: 'relaxed' }], quickReplies: [] };
+    const r = await converse(TRIP, { text: 'Remember I love gelato and slow down', surface: 'phone', caller: kid });
+    expect(r.applied).toEqual([]);
+    expect(h.remembered).toEqual([]);
+    expect(h.replans).toEqual([]);
+  });
+
+  it('a member who created the trip edits it, but still never writes the owner’s memory', async () => {
+    h.model = (m) => (isCheck(m) ? { ok: true, reply: 'ok', ops: [] } : { reply: 'Noted.', ops: [{ op: 'remember', text: 'Sam loves gelato', category: 'preferences' }], quickReplies: [] });
+    await converse({ ...TRIP, ownerEmail: 'kid@example.test', profile: null }, { text: 'I love gelato', surface: 'phone', caller: { ...kid, canEdit: true } });
+    expect(h.remembered).toEqual([]);
+    expect(h.gathered).toBe(0);
+  });
+});

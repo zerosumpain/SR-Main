@@ -7524,6 +7524,34 @@ export const tripTransport = pgTable(
   (t) => [index('trip_transport_trip_idx').on(t.tripId)],
 );
 
+// v5: a family member's suggestion for a slot of a trip, waiting for a parent.
+// `by_email` / `decided_by_email` never go on the wire (the phone gets roster
+// ids and names); approving one adds the wish through the normal ops path.
+export const tripSuggestion = pgTable(
+  'trip_suggestion',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tripId: uuid('trip_id').notNull(),
+    byEmail: text('by_email').notNull(),
+    byId: text('by_id').notNull(),
+    byName: text('by_name').notNull(),
+    date: date('date', { mode: 'string' }).notNull(),
+    /** 'morning' | 'lunch' | 'afternoon' | 'evening' */
+    stage: text('stage').notNull(),
+    /** WishDraft */
+    wish: jsonb('wish').$type<Record<string, unknown>>().notNull(),
+    note: text('note'),
+    fitText: text('fit_text'),
+    /** 'pending' | 'approved' | 'rejected' | 'withdrawn' */
+    status: text('status').notNull().default('pending'),
+    decidedByEmail: text('decided_by_email'),
+    decidedById: text('decided_by_id'),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('trip_suggestion_trip_idx').on(t.tripId, t.status)],
+);
+
 // What happened on the day, from the phone. Idempotent on the phone's clientId.
 export const tripEvent = pgTable(
   'trip_event',

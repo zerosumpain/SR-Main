@@ -9,7 +9,7 @@ import { gatherProfile } from '$lib/trips/profile.server';
  * said in this trip's conversation is kept.
  */
 export const POST: RequestHandler = async (event) => {
-  const { trip } = await ownerTrip(event);
-  const profile = await gatherProfile(trip);
+  const { owner, trip } = await ownerTrip(event);
+  const profile = await gatherProfile(trip, { asOwner: true, ownerEmail: owner });
   return json({ profile });
 };

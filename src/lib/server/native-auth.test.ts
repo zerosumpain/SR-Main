@@ -155,15 +155,18 @@ describe('every native route gates itself', () => {
         '/route-session/[id]/+server.ts',
         '/route-session/[id]/end/+server.ts',
         '/route-session/[id]/fixes/+server.ts',
-        // Trips (spec 2026-10-13): `withNativeAccess` per the phone wire
-        // contract, but OWNER ONLY until phase 5 (D2) — `nativeTripOwner`
-        // refuses every member with 403 in each handler.
+        // Trips (spec 2026-10-13, v5): open to the family — `nativeTripCaller`
+        // (familyCaller) in each handler; anyone outside the family 403s, and
+        // edits/approvals are gated per trip by `tripAccess`.
         '/trips/+server.ts',
         '/trips/[id]/+server.ts',
         '/trips/[id]/converse/+server.ts',
         '/trips/[id]/events/+server.ts',
         '/trips/[id]/ideas/+server.ts',
         '/trips/[id]/replan/+server.ts',
+        '/trips/[id]/route/+server.ts',
+        '/trips/[id]/suggestions/+server.ts',
+        '/trips/[id]/suggestions/[sid]/+server.ts',
       ].sort(),
     );
     // And none of them keeps an owner-only handler beside it by accident.

@@ -18,7 +18,7 @@ export const load: PageServerLoad = async (event) => {
   if (!trip) error(404, 'No such trip.');
   event.setHeaders({ 'cache-control': 'private, no-store' });
   // What I know about you (v3): gathered in the background the first time, never awaited here.
-  if (!trip.profile) void gatherProfile(trip).catch(() => {});
+  if (!trip.profile) void gatherProfile(trip, { asOwner: true, ownerEmail: owner }).catch(() => {});
   const [state, latest, versions, events, messages, transport] = await Promise.all([
     loadState(trip.id),
     latestPlan(trip.id),
