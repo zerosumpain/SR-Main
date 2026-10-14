@@ -16,6 +16,7 @@ import {
   type Stay,
   type TravelMatrix,
   type TravelMode,
+  type TransportSegment,
   type Trip,
   type Wish,
 } from '../model';
@@ -37,6 +38,8 @@ export interface SolverContext {
   /** Matrix point key → coordinates, for estimated fallbacks. */
   locations: Map<string, LatLng>;
   cache: Map<string, LegChoice>;
+  /** v3: flights/trains that frame the arrival and departure days. */
+  transport: TransportSegment[];
   /** v2.1: per-date load ('light' | 'normal' | 'full'); missing = normal. */
   dayLoads: Partial<Record<LocalDate, DayLoad>>;
 }
@@ -48,6 +51,7 @@ export function makeContext(
   stays: Stay[],
   wishes: Wish[],
   matrix: TravelMatrix,
+  transport: TransportSegment[] = [],
 ): SolverContext {
   const index = new Map<string, number>();
   matrix.points.forEach((p, i) => {
@@ -56,6 +60,10 @@ export function makeContext(
   const locations = new Map<string, LatLng>();
   for (const s of stays) locations.set(stayPoint(s.id), s.location);
   for (const w of wishes) if (w.place) locations.set(w.id, w.place.location);
+  for (const t of transport) {
+    if (t.from.location) locations.set(`transport:${t.id}:from`, t.from.location);
+    if (t.to.location) locations.set(`transport:${t.id}:to`, t.to.location);
+  }
   return {
     rules: PACE_RULES[trip.pace] ?? PACE_RULES.normal,
     modes: TRAVEL_MODES.filter((m) => m === 'walk' || trip.modes.includes(m)),
@@ -64,6 +72,7 @@ export function makeContext(
     locations,
     cache: new Map(),
     dayLoads: trip.dayLoads ?? {},
+    transport,
   };
 }
 

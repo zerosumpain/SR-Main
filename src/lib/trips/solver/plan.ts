@@ -17,7 +17,7 @@ import type {
   Trip,
   Wish,
 } from '../model';
-import { cmp, datesBetween, dayLabel } from './calendar';
+import { cmp, datesBetween, dayLabel, fmtMin } from './calendar';
 import { assignDays } from './days';
 import { closedOn } from './hours';
 import { dayFrame, pinnedDate, wishItem, type DayFrame, type Item } from './items';
@@ -40,7 +40,7 @@ export function makeFrames(
   from: LocalDate = trip.startDate,
 ): DayFrame[] {
   return datesBetween(from > trip.startDate ? from : trip.startDate, trip.endDate).map((date) =>
-    dayFrame(ctx.rules, ctx.dayLoads, date, stayFor(stays, date)),
+    dayFrame(ctx, date, stayFor(stays, date)),
   );
 }
 
@@ -95,8 +95,27 @@ export function solveFrames(
   const items = new Map<LocalDate, Item[]>();
   const fits = new Map<LocalDate, FitResult>();
   const dropReasons = new Map<string, { reason: string; date: LocalDate }>();
+  const travelClash: DroppedWish[] = [];
   for (const spec of specs) {
-    const list = (assignment.byDate.get(spec.frame.date) ?? []).map((w) => itemFor(spec, w));
+    let list = (assignment.byDate.get(spec.frame.date) ?? []).map((w) => itemFor(spec, w));
+    // v3: a booked/fixed time while you're still landing or already leaving
+    // can't happen — drop it with the reason rather than overlap the journey.
+    const fr = spec.frame;
+    if (fr.arrival || fr.departure) {
+      const clash = list.filter(
+        (i) =>
+          i.fixedStartMin !== null &&
+          ((fr.arrival && i.fixedStartMin < fr.dayStartMin) ||
+            (fr.departure && i.fixedStartMin + i.durationMin > fr.dayEndMin)),
+      );
+      for (const c of clash) {
+        travelClash.push({
+          wishId: c.wishId ?? c.id,
+          reason: `Booked for ${fmtMin(c.fixedStartMin as number)} on ${dayLabel(fr.date)}, but you're travelling then`,
+        });
+      }
+      list = list.filter((i) => !clash.includes(i));
+    }
     const f = fit(spec, list);
     for (const d of f.dropped) dropReasons.set(d.wishId, { reason: d.reason, date: spec.frame.date });
     items.set(
@@ -198,7 +217,7 @@ export function solveFrames(
   if (opts.shedMustsFromFirst && specs.length > 1) shed(specs[0]);
   for (const spec of specs) if (spec.frame.load === 'light') shed(spec);
 
-  const dropped: DroppedWish[] = [...assignment.dropped];
+  const dropped: DroppedWish[] = [...assignment.dropped, ...travelClash];
   for (const [wishId, { reason }] of dropReasons) {
     dropped.push({
       wishId,
@@ -233,7 +252,7 @@ export function solveFrames(
 /** Plan the whole trip. */
 export function solveTrip(input: SolverInput): SolvedPlan {
   const { trip, stays, wishes, bookings, matrix } = input;
-  const ctx = makeContext(trip, stays, wishes, matrix);
+  const ctx = makeContext(trip, stays, wishes, matrix, input.transport ?? []);
   const specs = makeFrames(ctx, trip, stays).map((frame) => freshSpec(frame));
   const solved = solveFrames(ctx, specs, wishes, bookings);
   const warnings = [...solved.warnings];

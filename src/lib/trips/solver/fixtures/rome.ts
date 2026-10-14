@@ -6,7 +6,16 @@
 // checked against the venues. The matrix is a distance × factor estimate
 // (see ../estimate.ts), not routed.
 
-import type { Booking, Facts, Stay, TravelMatrix, Trip, Wish } from '../../model';
+import type {
+  Booking,
+  Facts,
+  Stay,
+  TransportSegment,
+  TravelMatrix,
+  TravelMode,
+  Trip,
+  Wish,
+} from '../../model';
 import { estimateMatrix } from '../estimate';
 import { stayPoint } from '../matrix';
 import { makeWish } from './build';
@@ -165,4 +174,100 @@ export function romeInput() {
     bookings: Booking[];
     matrix: TravelMatrix;
   };
+}
+
+// ── v3: getting there and back (ILLUSTRATIVE flights and transfer times) ────
+
+const FIUMICINO = { lat: 41.8003, lng: 12.2389 };
+
+export const ROME_TRANSPORT: TransportSegment[] = [
+  {
+    id: 'out',
+    kind: 'flight',
+    direction: 'outbound',
+    carrier: 'Jet2',
+    number: 'LS1235',
+    from: {
+      name: 'Newcastle',
+      code: 'NCL',
+      location: { lat: 55.0375, lng: -1.6917 },
+      timeZone: 'Europe/London',
+    },
+    to: { name: 'Rome Fiumicino', code: 'FCO', location: FIUMICINO, timeZone: 'Europe/Rome' },
+    departDate: '2026-10-27',
+    departMin: 7 * 60 + 35,
+    arriveDate: '2026-10-27',
+    arriveMin: 11 * 60 + 5,
+    confidence: 'stated',
+    status: 'scheduled',
+    delayMin: null,
+    bookingRef: null,
+    sources: [],
+    checkedAt: null,
+  },
+  {
+    id: 'back',
+    kind: 'flight',
+    direction: 'return',
+    carrier: 'Jet2',
+    number: 'LS1236',
+    from: { name: 'Rome Fiumicino', code: 'FCO', location: FIUMICINO, timeZone: 'Europe/Rome' },
+    to: {
+      name: 'Newcastle',
+      code: 'NCL',
+      location: { lat: 55.0375, lng: -1.6917 },
+      timeZone: 'Europe/London',
+    },
+    departDate: '2026-10-30',
+    departMin: 18 * 60 + 40,
+    arriveDate: '2026-10-30',
+    arriveMin: 20 * 60 + 40,
+    confidence: 'stated',
+    status: 'scheduled',
+    delayMin: null,
+    bookingRef: null,
+    sources: [],
+    checkedAt: null,
+  },
+];
+
+/**
+ * The Rome trip with flights: check-in 15:00 / check-out 10:00, the Borghese
+ * slot moved to Friday 10:00 (the 15:00 slot would clash with the flight
+ * home), and the matrix extended with the airport. Airport transfers are
+ * set by hand — Leonardo Express + a short hop ≈ 60 min, a taxi ≈ 50 min —
+ * because the city estimate factors don't fit a 30 km airport run.
+ */
+export function romeTransportInput(delayMin: number | null = null) {
+  const input = romeInput();
+  input.stays[0].checkInMin = 15 * 60;
+  input.stays[0].checkOutMin = 10 * 60;
+  const borghese = input.bookings.find((b) => b.id === 'bk-borghese');
+  if (borghese) {
+    borghese.startMin = 10 * 60;
+    borghese.endMin = 12 * 60;
+  }
+  const transport: TransportSegment[] = JSON.parse(JSON.stringify(ROME_TRANSPORT));
+  transport[0].delayMin = delayMin;
+  if (delayMin) transport[0].status = 'delayed';
+  const points = [
+    ...romePoints(input.wishes, input.stays),
+    { id: 'transport:out:to', location: FIUMICINO },
+    { id: 'transport:back:from', location: FIUMICINO },
+  ];
+  const matrix = estimateMatrix(points, ['walk', 'transit', 'taxi']);
+  const airport = new Set(['transport:out:to', 'transport:back:from']);
+  const AIRPORT_SEC: Partial<Record<TravelMode, number>> = { transit: 60 * 60, drive: 50 * 60 };
+  points.forEach((a, i) =>
+    points.forEach((b, j) => {
+      if (i === j || airport.has(a.id) === airport.has(b.id)) return;
+      for (const mode of ['transit', 'drive'] as const) {
+        const row = matrix.seconds[mode];
+        if (row) row[i][j] = AIRPORT_SEC[mode] as number;
+      }
+      const walk = matrix.seconds.walk;
+      if (walk) walk[i][j] = null; // nobody walks from the airport
+    }),
+  );
+  return { ...input, matrix, transport };
 }

@@ -51,10 +51,19 @@ import {
 import type { ReplanInput, RetimeInput } from './types';
 
 function frameFor(ctx: SolverContext, day: PlannedDay, stays: Stay[]): DayFrame {
-  return dayFrame(ctx.rules, ctx.dayLoads, day.date, stays.find((s) => s.id === day.stayId) ?? null);
+  return dayFrame(ctx, day.date, stays.find((s) => s.id === day.stayId) ?? null);
 }
 
-const isEndStay = (s: PlannedStop) => s.kind === 'stay' && s.id.endsWith(':end');
+/** The stops that close a day: back at the stay, then (v3) off to a flight/train. */
+const isEndStay = (s: PlannedStop) =>
+  (s.kind === 'stay' && s.id.endsWith(':end')) || (s.kind === 'transport' && s.id.endsWith(':depart'));
+
+/** How many stops open the day (stay start, check-out, or a landing + bag drop). */
+function leadingCount(body: PlannedStop[]): number {
+  let n = 0;
+  while (n < body.length && (body[n].kind === 'stay' || body[n].kind === 'transport')) n++;
+  return n;
+}
 
 /** The matrix point we are at after a run of stops (meals sit where the stop before was). */
 function pointAfter(prefix: PlannedStop[], stayId: string | null): string | null {
@@ -85,7 +94,7 @@ function toItems(
 ): Item[] {
   const byId = new Map(wishes.map((w) => [w.id, w]));
   return stops
-    .filter((s) => s.kind !== 'stay')
+    .filter((s) => s.kind !== 'stay' && s.kind !== 'transport')
     .map((s) => itemFromStop(s, day.date, byId, bookings, ctx.rules));
 }
 
@@ -96,15 +105,17 @@ export function retimeDay(
   input: RetimeInput,
 ): PlannedDay {
   if (day.stops.length === 0) return { ...day, stops: [], legs: [], warnings: [...day.warnings] };
-  const ctx = makeContext(input.trip, input.stays, input.wishes, input.matrix);
+  const ctx = makeContext(input.trip, input.stays, input.wishes, input.matrix, input.transport ?? []);
   const frame = frameFor(ctx, day, input.stays);
   const body = day.stops.filter((s) => !isEndStay(s));
   const i = Math.max(0, Math.min(Math.trunc(fromIndex), body.length));
   let start: SimStart;
   let rest: PlannedStop[];
-  if (i === 0 && body[0]?.kind === 'stay' && frame.stay) {
+  const lead = leadingCount(body);
+  if (i < lead && frame.stay) {
+    // Re-time from the day's opening (stay start, or a landing + bag drop).
     start = freshStart(frame, startMin, false);
-    rest = body.slice(1);
+    rest = body.slice(lead);
   } else if (i === 0) {
     start = {
       prefixStops: [],
@@ -231,7 +242,7 @@ export interface Situation {
 
 export function situation(input: ReplanInput): Situation {
   const { day } = input;
-  const ctx = makeContext(input.trip, input.stays, input.wishes, input.matrix);
+  const ctx = makeContext(input.trip, input.stays, input.wishes, input.matrix, input.transport ?? []);
   const frame = frameFor(ctx, day, input.stays);
   const done = new Set(input.doneStopIds);
   const body = day.stops.filter((s) => !isEndStay(s));
@@ -239,23 +250,37 @@ export function situation(input: ReplanInput): Situation {
 
   // Where we are in the day.
   const at = input.atStopId ? body.findIndex((s) => s.id === input.atStopId) : -1;
+  const lead = leadingCount(body);
   let h = at;
   if (at < 0) {
-    h = body[0]?.kind === 'stay' ? 0 : -1;
+    h = lead - 1;
     while (h + 1 < body.length && done.has(body[h + 1].id)) h++;
   }
-  const prefix = body.slice(0, h + 1).map((s) => ({ ...s, warnings: [...s.warnings] }));
-  const pending = body.slice(h + 1).filter((s) => !done.has(s.id) && s.kind !== 'stay');
+  const pending = body
+    .slice(h + 1)
+    .filter((s) => !done.has(s.id) && s.kind !== 'stay' && s.kind !== 'transport');
+  // v3: still before the first sight on an arrival day — rebuild the landing,
+  // transfer and bag drop from the segment (a delay re-frames the day).
+  const reframe = frame.arrival !== undefined && h < lead;
+  const fresh = reframe ? freshStart(frame) : null;
+  const prefix = (fresh ? fresh.prefixStops : body.slice(0, h + 1)).map((s) => ({
+    ...s,
+    warnings: [...s.warnings],
+  }));
   const last = prefix[prefix.length - 1];
   const stillThere = last !== undefined && (at >= 0 || last.kind === 'stay');
   // Still at a stop (or the stay): set off once the visit and its buffer are
   // over, or now if that has passed. Otherwise we are already on the move.
   const bufferMin = last?.kind === 'wish' ? Math.round(ctx.rules.bufferSec / 60) : 0;
-  const leave = stillThere ? Math.max(input.nowMin, last.departMin + bufferMin) : input.nowMin;
-  if (stillThere && input.nowMin > last.departMin) last.departMin = input.nowMin;
+  const leave = fresh
+    ? Math.max(input.nowMin, fresh.departMin)
+    : stillThere
+      ? Math.max(input.nowMin, last.departMin + bufferMin)
+      : input.nowMin;
+  if (!fresh && stillThere && input.nowMin > last.departMin) last.departMin = input.nowMin;
 
-  const start = startAfter(prefix, day, leave);
-  if (input.position && at < 0) start.fromPosition = input.position;
+  const start = fresh ? { ...fresh, prefixStops: prefix, departMin: leave } : startAfter(prefix, day, leave);
+  if (input.position && at < 0 && !fresh) start.fromPosition = input.position;
   const all = toItems(pending, day, input.wishes, input.bookings, ctx);
 
   // Missed slots: a locked stop we cannot reach within the grace period
@@ -271,8 +296,13 @@ export function situation(input: ReplanInput): Situation {
   const missed = all.filter(
     (i) => i.locked && i.fixedStartMin !== null && direct(i) > i.fixedStartMin + MISSED_SLOT_GRACE_MIN,
   );
+  // A meal whose whole window is already over by the time we set off is
+  // skipped (e.g. a delayed landing), with a warning.
+  const lateMeals = all.filter(
+    (i) => i.kind === 'meal' && i.windows !== null && i.windows.every((w) => w.closeMin <= leave),
+  );
   const items = all
-    .filter((i) => !missed.includes(i))
+    .filter((i) => !missed.includes(i) && !lateMeals.includes(i))
     .map((i) => {
       const planned = i.locked ? pending.find((p) => p.id === i.id) : undefined;
       return planned ? { ...i, heldArriveMin: planned.arriveMin } : i;
@@ -288,7 +318,13 @@ export function situation(input: ReplanInput): Situation {
     start,
     items,
     missed,
-    missedWarnings: missed.map((m) => `Missed your ${fmtMin(m.fixedStartMin as number)} ${m.title} slot`),
+    missedWarnings: [
+      ...missed.map((m) => `Missed your ${fmtMin(m.fixedStartMin as number)} ${m.title} slot`),
+      ...lateMeals.map(
+        (m) =>
+          `No time for ${m.title.toLowerCase()} — it's past ${fmtMin(Math.max(...(m.windows ?? []).map((w) => w.closeMin)))}; grab something on the way`,
+      ),
+    ],
     missedIds: missed.map((m) => m.wishId ?? m.id),
     direct,
     oldEnd,

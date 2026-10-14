@@ -185,8 +185,7 @@ export function replanTrip(input: TripReplanInput): TripReplanOption[] {
   for (const d of [input.day, ...laterOld]) for (const id of wishIdsOf(d)) oldDate.set(id, d.date);
   const laterFrame = (date: LocalDate): DayFrame =>
     dayFrame(
-      ctx.rules,
-      ctx.dayLoads,
+      ctx,
       date,
       input.stays.find((s) => s.id === laterOld.find((d) => d.date === date)?.stayId) ?? null,
     );
