@@ -38,14 +38,16 @@ beforeEach(() => {
 
 describe('gatherProfile', () => {
   it('uses the owner’s memories only — never one from a member’s conversation', async () => {
-    const p = await gatherProfile(trip('owner@example.test'));
+    const p = await gatherProfile(trip('owner@example.test'), { asOwner: true });
     expect(p?.preferences.map((x) => x.text)).toEqual(['Prefers walking to taxis']);
     expect(JSON.stringify(h.saved)).not.toContain('Disneyland');
     expect(p?.travellers.map((t) => t.name)).toEqual(['You', 'Sam']);
   });
 
-  it('refuses a trip whose owner is not the site owner', async () => {
-    expect(await gatherProfile(trip('kid@example.test'))).toBeNull();
+  it('refuses a trip whose owner is not the site owner, and any caller who is not the owner', async () => {
+    expect(await gatherProfile(trip('kid@example.test'), { asOwner: true })).toBeNull();
+    expect(await gatherProfile(trip('owner@example.test'), { asOwner: false })).toBeNull();
+    expect(await gatherProfile(trip('owner@example.test'))).toBeNull();
     expect(h.saved).toEqual([]);
   });
 });

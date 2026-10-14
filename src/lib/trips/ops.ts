@@ -180,7 +180,7 @@ function wishPatchFrom(fields: Obj): { ok: true; patch: WishPatch; placeQuery: s
   return { ok: true, patch: parsed.value, placeQuery: 'placeQuery' in fields ? str(fields.placeQuery, 200) : null };
 }
 
-function draftFrom(raw: unknown): { ok: true; draft: WishDraft } | { ok: false; reason: string } {
+export function draftFrom(raw: unknown): { ok: true; draft: WishDraft } | { ok: false; reason: string } {
   if (!isObj(raw)) return { ok: false, reason: 'addWish needs a wish object.' };
   const title = str(raw.title, 160);
   if (!title) return { ok: false, reason: 'A wish needs a title.' };

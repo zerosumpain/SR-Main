@@ -55,12 +55,18 @@ async function ownerKnowledge(query: string): Promise<KnowledgeRow[]> {
 
 async function roster(): Promise<RosterRow[]> {
   const { familyRoster } = await import('$lib/family/roster.server');
-  return (await familyRoster()).map((p) => ({ name: p.name, email: p.email, parent: p.parent }));
+  return (await familyRoster()).map((p) => ({ name: p.name, email: p.email, parent: p.parent, id: p.id }));
 }
 
-/** Gather and store the profile. Each source degrades on its own; a trip not owned by an owner gets nothing. */
-export async function gatherProfile(trip: TripRecord): Promise<TravellerProfile | null> {
-  if (!isOwnerEmail(trip.ownerEmail)) return null;
+/**
+ * Gather and store the profile from the OWNER's memory. Only ever called when
+ * the owner is the one asking (`asOwner`) — v5 trips may be created by any
+ * family member, and their turns never trigger a read of the owner's memory.
+ * Each source degrades on its own.
+ */
+export async function gatherProfile(trip: TripRecord, opts: { asOwner: boolean; ownerEmail?: string } = { asOwner: false }): Promise<TravellerProfile | null> {
+  const owner = opts.ownerEmail ?? trip.ownerEmail;
+  if (!opts.asOwner || !isOwnerEmail(owner)) return null;
   const [memories, knowledge, people] = await Promise.all([
     ownerMemories().catch((err) => {
       console.warn('[trips/profile] memory unavailable:', (err as Error)?.message);
@@ -69,7 +75,7 @@ export async function gatherProfile(trip: TripRecord): Promise<TravellerProfile 
     ownerKnowledge(`${trip.destination} holiday travel trip`).catch(() => []),
     roster().catch(() => []),
   ]);
-  const profile = buildProfile({ memories, knowledge, roster: people, ownerEmail: trip.ownerEmail, now: new Date().toISOString(), previous: trip.profile });
+  const profile = buildProfile({ memories, knowledge, roster: people, ownerEmail: owner, now: new Date().toISOString(), previous: trip.profile });
   await db.update(tripTable).set({ profile: profile as unknown as Record<string, unknown> }).where(eq(tripTable.id, trip.id));
   return profile;
 }

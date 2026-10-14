@@ -57,8 +57,19 @@ vi.mock('./store.server', () => ({
   updateTrip: async (_t: string, p: { status?: string }) => {
     if (p.status) h.status = p.status;
   },
-  tripOnly: (t: unknown) => t,
-  recentMessages: async () => h.messages,
+  tripOnly: (t: Record<string, unknown>) => {
+    const { research: _r, updatedAt: _u, guide: _g, profile: _p, ...rest } = t;
+    return rest;
+  },
+  viewerOf: (t: { ownerEmail: string }, email: string) => ({ email, isCreator: email === t.ownerEmail }),
+  listSuggestions: async () => [],
+  suggestionWire: (s: Record<string, unknown>) => s,
+  // The store's thread rule (author column) is tested against the database in
+  // store.integration.test.ts; here the stub honours it on an `author` field.
+  recentMessages: async (_t: string, viewer: { email: string; isCreator: boolean }) =>
+    (h.messages as Array<{ author?: string | null; role: string }>)
+      .filter((m) => (m.author ? m.author === viewer.email : viewer.isCreator || m.role === 'event'))
+      .map(({ author: _a, ...m }) => m),
   listTransport: async () => [],
 }));
 
@@ -74,6 +85,8 @@ vi.mock('./routing.server', async () => {
 });
 
 const { applyEvents, fallbackNarrative, replan, storePhoneDay, storePhoneDays, tripBundle, tripReplan } = await import('./plan.server');
+
+const OWNER_VIEW = { access: { canEdit: true, canApprove: true, canSuggest: true, role: 'creator' as const }, viewerEmail: 'owner@example.com', creator: { id: 'f_owner', name: 'Owner' } };
 
 function trip() {
   const t = romeInput().trip;
@@ -155,8 +168,8 @@ describe('the phone', () => {
 
   it('bundles per-day matrices of that day’s stops plus its stay, with a stable ETag', async () => {
     await replan(trip());
-    const a = await tripBundle(trip());
-    const b = await tripBundle(trip());
+    const a = await tripBundle(trip(), OWNER_VIEW);
+    const b = await tripBundle(trip(), OWNER_VIEW);
     expect(a.etag).toBe(b.etag);
     const day = a.plan!.plan.days[0];
     const m = a.matrices[day.date];
@@ -167,9 +180,49 @@ describe('the phone', () => {
     expect(a.tripMatrix?.points.length).toBeGreaterThan(m.points.length);
     expect(a.messages).toEqual([]);
     h.messages = [{ id: 'm1', role: 'user', text: 'hi', ops: [], planVersion: null, surface: 'phone', createdAt: '2026-10-14T09:00:00Z' }];
-    const c = await tripBundle(trip());
+    const c = await tripBundle(trip(), OWNER_VIEW);
     expect(c.messages).toHaveLength(1);
     expect(c.etag).not.toBe(a.etag);
+  });
+
+  it('puts the travellers on the wire and never a memory — for anyone (v5)', async () => {
+    await replan(trip());
+    const profile = {
+      travellers: [
+        { name: 'You', relation: null, notes: ['NOTE-SECRET-1'], age: 44, personId: null },
+        { name: 'Sam', relation: 'son', notes: ['NOTE-SECRET-2'], age: 9, personId: 'f_sam' },
+      ],
+      preferences: [{ text: 'PREF-SECRET walks everywhere', source: 'memory', ref: 'MEM-REF-1' }],
+      constraints: [{ text: 'CONSTRAINT-SECRET no nuts', source: 'family', ref: 'MEM-REF-2' }],
+      history: ['HISTORY-SECRET Paris 2024'],
+      gatheredAt: '2026-10-13T00:00:00Z',
+    };
+    // The owner's thread mentions a preference; a member's bundle must carry none of it.
+    h.messages = [
+      { id: 'm1', role: 'user', text: 'PREF-SECRET I hate early starts', ops: [], planVersion: null, surface: 'site', createdAt: '2026-10-14T09:00:00Z', author: 'o@example.test' },
+      { id: 'm2', role: 'assistant', text: 'Noted PREF-SECRET.', ops: [{ op: 'remember', text: 'PREF-SECRET', category: 'preferences' }], planVersion: null, surface: 'site', createdAt: '2026-10-14T09:00:01Z', author: 'o@example.test' },
+      { id: 'm3', role: 'user', text: 'Legacy owner turn PREF-SECRET', ops: [], planVersion: null, surface: 'site', createdAt: '2026-10-14T09:00:02Z', author: null },
+      { id: 'm4', role: 'event', text: 'Added Gelato.', ops: [], planVersion: 2, surface: 'phone', createdAt: '2026-10-14T09:00:03Z', author: null },
+      { id: 'm5', role: 'user', text: 'Can we get gelato?', ops: [], planVersion: null, surface: 'phone', createdAt: '2026-10-14T09:00:04Z', author: 'kid@example.test' },
+    ];
+    const member = { access: { canEdit: false, canApprove: false, canSuggest: true, role: 'member' as const }, viewerEmail: 'kid@example.test', creator: { id: 'f_owner', name: 'John' } };
+    const b = await tripBundle({ ...trip(), ownerEmail: 'o@example.test', profile }, member);
+    expect(b.messages.map((m) => m.id)).toEqual(['m4', 'm5']);
+    expect(b.trip).toMatchObject({ createdById: 'f_owner', createdByName: 'John' });
+    expect(b.trip).not.toHaveProperty('ownerEmail');
+    expect(b.profile).toEqual({ travellers: [{ name: 'You', relation: null, age: 44, personId: null }, { name: 'Sam', relation: 'son', age: 9, personId: 'f_sam' }] });
+    expect(b.access.role).toBe('member');
+    const wire = JSON.stringify(b);
+    expect(wire).not.toContain('@');
+    for (const secret of ['SECRET', 'MEM-REF', 'preferences', 'constraints', 'history', 'gatheredAt', '"source"']) expect(wire).not.toContain(secret);
+    // Every planned day has a fullness, and every leg its alternatives.
+    const days = b.plan!.plan.days;
+    expect(Object.keys(b.fullness).sort()).toEqual(days.map((d) => d.date).sort());
+    for (const d of days) for (const leg of d.legs) expect(leg.alternatives?.map((a) => a.mode)).toEqual(['walk', 'transit', 'taxi']);
+    // The creator sees their own thread (and the rows from before authors), still with no email on the wire.
+    const own = await tripBundle({ ...trip(), ownerEmail: 'o@example.test', profile }, { ...member, viewerEmail: 'o@example.test', access: { canEdit: true, canApprove: true, canSuggest: true, role: 'creator' } });
+    expect(own.messages.map((m) => m.id)).toEqual(['m1', 'm2', 'm3', 'm4']);
+    expect(JSON.stringify(own)).not.toContain('@');
   });
 
   it('applies a whole-trip option (detail.days) as one phone version', async () => {

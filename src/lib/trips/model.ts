@@ -232,6 +232,8 @@ export interface PlannedLeg {
   line: LatLng[] | null;
   /** v2: how to actually do this leg. Null until guidance has been generated. */
   guidance?: LegGuidance | null;
+  /** v5: walk / public transport / taxi times for this leg, for the phone's mode picker (bundle only). */
+  alternatives?: LegAlternative[];
 }
 
 export interface PlannedDay {
@@ -525,7 +527,7 @@ export const TRANSPORT_LEADS: Record<TransportSegment['kind'], { exitMin: number
  * correct it. Every item names where it came from.
  */
 export interface TravellerProfile {
-  travellers: Array<{ name: string; relation: string | null; notes: string[] }>;
+  travellers: Array<{ name: string; relation: string | null; notes: string[]; /** v5: age in years when known. */ age?: number | null; /** v5: family roster id when the traveller is a family member. */ personId?: string | null }>;
   /** "Prefers walking to taxis", "Vegetarian", "Hates early starts", "Likes a long lunch". */
   preferences: Array<{ text: string; source: 'memory' | 'knowledge' | 'family' | 'conversation'; ref: string | null }>;
   /** Hard constraints: dietary, mobility, health. */
@@ -559,3 +561,53 @@ export const DAY_STAGE_LABEL: Record<DayStage, string> = {
   afternoon: 'Afternoon',
   evening: 'Dinner & evening',
 };
+
+// ── v5: family trips, suggestions, how full a day is, leg alternatives ──────
+
+/** What the caller may do with a trip. Sent on every phone bundle. */
+export interface TripAccess {
+  /** Created the trip: edits freely. */
+  canEdit: boolean;
+  /** A parent in the family: approves or rejects suggestions (and may edit). */
+  canApprove: boolean;
+  /** Any family member: may suggest something for a slot. */
+  canSuggest: boolean;
+  role: 'creator' | 'parent' | 'member';
+}
+
+export type SuggestionStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn';
+
+/** A family member's proposal for a slot, waiting for a parent. */
+export interface TripSuggestion {
+  id: string;
+  tripId: string;
+  /** Family roster id + display name of who suggested it. Never an email on the wire. */
+  byId: string;
+  byName: string;
+  date: LocalDate;
+  stage: DayStage;
+  wish: WishDraft;
+  /** Why they suggest it, and the fit line from the idea check when it came from "Make a suggestion". */
+  note: string | null;
+  fitText: string | null;
+  status: SuggestionStatus;
+  decidedById: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+}
+
+/** How full a day is: active (non-meal, non-free) minutes against the day's capacity. */
+export interface DayFullness {
+  activeMin: number;
+  capacityMin: number;
+  /** 0–100+, rounded. Over 100 = overfull. */
+  pct: number;
+  band: 'empty' | 'light' | 'balanced' | 'full' | 'overfull';
+}
+
+/** One way of doing a leg, for the phone's mode picker. */
+export interface LegAlternative {
+  mode: TravelMode;
+  durationSec: number;
+  estimated: boolean;
+}

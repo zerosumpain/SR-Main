@@ -109,6 +109,9 @@
 /api/native/trips/[id]/events
 /api/native/trips/[id]/ideas
 /api/native/trips/[id]/replan
+/api/native/trips/[id]/route
+/api/native/trips/[id]/suggestions
+/api/native/trips/[id]/suggestions/[sid]
 /api/native/wildmind
 /api/native/wildmind/chronicle
 /api/native/wildmind/inventions

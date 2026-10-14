@@ -144,6 +144,9 @@ export interface PlannerContext {
   /** v3 */
   transport?: TransportSegment[];
   profile?: TravellerProfile | null;
+  /** v5: the person talking cannot change this trip — advice only, no ops. */
+  adviceOnly?: boolean;
+  callerName?: string | null;
 }
 
 /** The trip as it stands, as one user-role context message. */
@@ -152,6 +155,10 @@ export function contextText(c: PlannerContext): string {
   const lines = [
     `TRIP (as it stands; the person is talking to you on the ${c.surface === 'phone' ? 'phone, possibly while out' : 'website'})`,
     `Now in the trip's zone: ${c.nowText}`,
+    ...(c.callerName ? [`Talking to: ${c.callerName}`] : []),
+    ...(c.adviceOnly
+      ? ['THIS PERSON CANNOT CHANGE THE TRIP: give advice only and return "ops": []. If they want something added, tell them to use "Make a suggestion" on that slot so a parent can approve it.']
+      : []),
     `Destination: ${t.destination} | ${day(t.startDate)} to ${day(t.endDate)} (${t.startDate} → ${t.endDate}) | zone ${t.timeZone} | pace ${t.pace} | getting about: ${t.modes.join(', ')}${t.notes ? ` | notes: ${t.notes}` : ''}`,
     `Day loads: ${Object.keys(t.dayLoads ?? {}).length ? Object.entries(t.dayLoads ?? {}).map(([d, l]) => `${day(d)} ${l}`).join(', ') : 'all normal'}`,
     '',

@@ -14,6 +14,7 @@ const h = vi.hoisted(() => ({
   research2: [] as Array<{ tool: string; summary: string; sources: unknown[] }>,
   gathered: 0,
   remembered: [] as unknown[],
+  viewers: [] as unknown[],
 }));
 
 // The agentic first call is the same fake planner; its reply is the JSON text.
@@ -70,7 +71,11 @@ const TRIP = {
 vi.mock('./store.server', () => ({
   loadState: async () => ({ stays: [], wishes: h.wishes, bookings: [] }),
   latestPlan: async () => ({ version: 4, plan: BEFORE }),
-  recentMessages: async () => [],
+  recentMessages: async (_t: string, viewer: unknown) => {
+    h.viewers.push(viewer);
+    return [];
+  },
+  viewerOf: (t: { ownerEmail: string }, email: string) => ({ email, isCreator: email === t.ownerEmail }),
   getTrip: async () => TRIP,
   addMessage: async (_t: string, m: (typeof h.messages)[number]) => {
     h.messages.push(m);
@@ -104,6 +109,7 @@ beforeEach(() => {
   h.research2 = [];
   h.gathered = 0;
   h.remembered = [];
+  h.viewers = [];
 });
 
 /** A fake planner: the first call answers the person, a second one is the check. */
@@ -241,5 +247,43 @@ describe('v3: profile, research and memory', () => {
     expect(h.remembered).toEqual([{ text: 'We never do early starts', category: 'preferences', messageId: 'm1', ownerEmail: 'o@example.test' }]);
     expect(r.applied).toEqual([{ op: 'remember', text: 'We never do early starts', category: 'preferences' }]);
     expect(h.replans).toEqual([]); // remembering is not a plan change
+  });
+});
+
+describe('v5: a family member talking to the planner', () => {
+  const kid = { isOwner: false, canEdit: false, name: 'Sam', email: 'kid@example.test' };
+
+  it('never puts the owner’s memories in a member’s prompt — travellers only', async () => {
+    h.model = () => ({ reply: 'Gelato is a good idea.', ops: [], quickReplies: [] });
+    await converse(TRIP, { text: 'Can we get gelato?', surface: 'phone', caller: kid });
+    const prompt = h.seen[0].map((m) => m.content).join('\n');
+    expect(prompt).not.toContain('Prefers walking to taxis');
+    expect(prompt).toContain('You');
+    expect(prompt).toContain('THIS PERSON CANNOT CHANGE THE TRIP');
+    expect(h.gathered).toBe(0);
+    // Their own thread only: the history read is theirs, and both turns are stored as theirs.
+    expect(h.viewers).toEqual([{ email: 'kid@example.test', isCreator: false }]);
+    expect(h.messages.map((m) => (m as { author?: unknown }).author)).toEqual([
+      { email: 'kid@example.test', id: null },
+      { email: 'kid@example.test', id: null },
+    ]);
+  });
+
+  it('a member without edit rights gets advice: no ops applied, nothing remembered, no re-solve', async () => {
+    h.model = (m) =>
+      isCheck(m)
+        ? { ok: true, reply: 'ok', ops: [] }
+        : { reply: 'Ask a parent.', ops: [{ op: 'remember', text: 'Sam loves gelato', category: 'preferences' }, { op: 'setPace', pace: 'relaxed' }], quickReplies: [] };
+    const r = await converse(TRIP, { text: 'Remember I love gelato and slow down', surface: 'phone', caller: kid });
+    expect(r.applied).toEqual([]);
+    expect(h.remembered).toEqual([]);
+    expect(h.replans).toEqual([]);
+  });
+
+  it('a member who created the trip edits it, but still never writes the owner’s memory', async () => {
+    h.model = (m) => (isCheck(m) ? { ok: true, reply: 'ok', ops: [] } : { reply: 'Noted.', ops: [{ op: 'remember', text: 'Sam loves gelato', category: 'preferences' }], quickReplies: [] });
+    await converse({ ...TRIP, ownerEmail: 'kid@example.test', profile: null }, { text: 'I love gelato', surface: 'phone', caller: { ...kid, canEdit: true } });
+    expect(h.remembered).toEqual([]);
+    expect(h.gathered).toBe(0);
   });
 });

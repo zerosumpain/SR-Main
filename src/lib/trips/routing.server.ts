@@ -26,7 +26,7 @@ import { db } from '$lib/db';
 import { appSettings } from '$lib/db/schema';
 import { estimateMatrix, estimateLeg } from '$lib/trips/solver';
 import { decodePolyline, fromLngLat, simplifyLine } from './geo';
-import type { LatLng, LocalDate, PlannedDay, PlannedLeg, SolvedPlan, TravelMatrix, TravelMode } from './model';
+import { TAXI_PICKUP_SEC, type LatLng, type LocalDate, type PlannedDay, type PlannedLeg, type SolvedPlan, type TravelMatrix, type TravelMode } from './model';
 import {
   assembleMode,
   localToIso,
@@ -434,3 +434,58 @@ export async function liveDriveLegs(day: PlannedDay): Promise<{ available: boole
     }),
   };
 }
+
+const TAXI_PICKUP = TAXI_PICKUP_SEC;
+
+// ── v5: a route for any mode, for the phone's mode picker (display only) ────
+
+export interface ModeRoute {
+  line: LatLng[];
+  durationSec: number;
+  distanceM: number | null;
+  estimated: boolean;
+}
+
+type RouteCache = Record<string, ModeRoute & { at: number }>;
+const routeCacheKey = (tripId: string) => `trips.routes.${tripId}`;
+
+/**
+ * One leg by a chosen mode: openrouteservice for walk/cycle/drive/taxi,
+ * Transitous for public transport, else a straight line with a distance
+ * estimate. Never a Mapbox figure (D1). Cached per trip by mode and places,
+ * like the legs. A taxi is the drive plus the pickup wait.
+ */
+export async function routeFor(tripId: string, mode: TravelMode, a: LatLng, b: LatLng, departIso: string): Promise<ModeRoute> {
+  const key = `${mode}|${pairKey(a, b)}`;
+  let cache: RouteCache = {};
+  try {
+    const [row] = await db.select().from(appSettings).where(eq(appSettings.key, routeCacheKey(tripId)));
+    cache = ((row?.value as RouteCache | undefined) ?? {}) as RouteCache;
+  } catch {
+    cache = {};
+  }
+  const hit = cache[key];
+  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return { line: hit.line, durationSec: hit.durationSec, distanceM: hit.distanceM, estimated: hit.estimated };
+
+  let out: ModeRoute | null = null;
+  if (mode === 'transit') {
+    const t = await transitousPlan(a, b, departIso);
+    if (t?.s != null) out = { line: t.line ?? [a, b], durationSec: t.s, distanceM: t.m, estimated: !t.line };
+  } else {
+    const r = await orsLine(mode === 'taxi' ? 'drive' : mode, a, b);
+    if (r) out = { line: r.line, durationSec: Math.round(r.s) + (mode === 'taxi' ? TAXI_PICKUP : 0), distanceM: Math.round(r.m), estimated: false };
+  }
+  if (!out) {
+    const e = estimateLeg(a, b, mode === 'taxi' ? 'drive' : mode);
+    out = { line: [a, b], durationSec: e.seconds + (mode === 'taxi' ? TAXI_PICKUP : 0), distanceM: e.metres, estimated: true };
+  }
+  cache[key] = { ...out, at: Date.now() };
+  const kept = Object.fromEntries(Object.entries(cache).sort((x, y) => y[1].at - x[1].at).slice(0, 300));
+  await db
+    .insert(appSettings)
+    .values({ key: routeCacheKey(tripId), value: kept })
+    .onConflictDoUpdate({ target: appSettings.key, set: { value: kept, updatedAt: new Date() } })
+    .catch(() => {});
+  return out;
+}
+

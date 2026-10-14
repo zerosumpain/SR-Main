@@ -15,6 +15,7 @@ import { CHECK_SYSTEM, checkPrompt, readCheck, turnDiff } from './check';
 import type { ConverseResult, LatLng, Observation, ResearchStep, SolvedPlan, TripMessage, TripOp } from './model';
 import { agentTurn } from './agent.server';
 import { gatherProfile, rememberStated, saveProfile } from './profile.server';
+import { travellersOnly } from './profile';
 import { parseLooseJson } from './research';
 import { jsonCall } from './llm.server';
 import { applyOps, knownUrlsOf, readPlannerAnswer, urlsIn, type ApplyResult, type OpEffects } from './ops';
@@ -35,6 +36,7 @@ import {
   latestPlan,
   loadState,
   recentMessages,
+  viewerOf,
   saveBooking,
   updateStay,
   updateTrip,
@@ -48,6 +50,12 @@ export const NO_PLANNER =
 export interface ConverseInput {
   text: string;
   surface: 'site' | 'phone';
+  /**
+   * v5: who is talking. The owner's memory (the full profile, `remember`) is
+   * used only when `isOwner`; someone who cannot edit gets advice only — the
+   * planner's ops are not applied. Default: the site's owner, who may edit.
+   */
+  caller?: { isOwner: boolean; canEdit: boolean; name: string | null; email?: string; personId?: string | null };
   observation?: Observation | null;
   position?: LatLng | null;
 }
@@ -61,15 +69,20 @@ function nowText(timeZone: string, now = new Date()): string {
 }
 
 /** The effects the ops may have, bound to one trip (and the message that asked, for `remember`). */
-function effectsFor(trip: TripRecord, messageId: string | null = null): OpEffects {
+function effectsFor(trip: TripRecord, messageId: string | null = null, ownerEmail: string | null = trip.ownerEmail): OpEffects {
   return {
     addTransport: (seg) => addTransport(trip.id, seg),
     updateTransport: (id, fields) => updateTransport(trip.id, id, fields),
     removeTransport: async (id) => void (await deleteTransport(trip.id, id)),
-    remember: async (text, category) => {
-      if (!messageId) throw new Error('remember needs the message it came from');
-      return rememberStated({ text, category, messageId, ownerEmail: trip.ownerEmail });
-    },
+    // Only the owner's own statements are remembered (and only into the owner's memory).
+    ...(ownerEmail
+      ? {
+          remember: async (text: string, category: 'preferences' | 'people' | 'health' | 'places') => {
+            if (!messageId) throw new Error('remember needs the message it came from');
+            return rememberStated({ text, category, messageId, ownerEmail });
+          },
+        }
+      : {}),
     saveProfile: (profile) => saveProfile(trip.id, profile),
     resolvePlace: async (query, near) => {
       const p = await findPlaceLoosely(query, trip.destination, near);
@@ -97,11 +110,24 @@ function effectsFor(trip: TripRecord, messageId: string | null = null): OpEffect
 
 export async function converse(trip: TripRecord, input: ConverseInput): Promise<ConverseTurn> {
   const text = input.text.trim().slice(0, 4000);
-  const [state, latest, history, transport] = await Promise.all([loadState(trip.id), latestPlan(trip.id), recentMessages(trip.id, 30), listTransport(trip.id)]);
-  // What the planner already knows (v3): gathered once, on the first turn.
-  const profile = trip.profile ?? (await gatherProfile(trip).catch(() => null));
+  const caller = input.caller ?? { isOwner: true, canEdit: true, name: null };
+  // v5: the turn belongs to its speaker's own thread; the model sees only
+  // that thread and the plan changes everyone sees — never another person's chat.
+  const author = { email: (caller.email ?? trip.ownerEmail).trim().toLowerCase(), id: caller.personId ?? null };
+  const [state, latest, history, transport] = await Promise.all([
+    loadState(trip.id),
+    latestPlan(trip.id),
+    recentMessages(trip.id, viewerOf(trip, author.email), 30),
+    listTransport(trip.id),
+  ]);
+  // What the planner already knows (v3): gathered once, on the owner's first
+  // turn. Anyone else's prompt gets the travellers alone (v5): the owner's
+  // memory never reaches another family member.
+  const profile = caller.isOwner
+    ? (trip.profile ?? (await gatherProfile(trip, { asOwner: true, ownerEmail: caller.email ?? trip.ownerEmail }).catch(() => null)))
+    : travellersOnly(trip.profile);
   const userAt = new Date();
-  const userMessage = await addMessage(trip.id, { role: 'user', text, ops: [], planVersion: null, surface: input.surface, at: userAt });
+  const userMessage = await addMessage(trip.id, { role: 'user', text, ops: [], planVersion: null, surface: input.surface, at: userAt, author });
 
   const ctx: PlannerContext = {
     trip,
@@ -117,6 +143,8 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
     position: input.position ?? null,
     transport,
     profile,
+    adviceOnly: !caller.canEdit,
+    callerName: caller.name,
   };
 
   // The agentic turn (v3): the planner may look things up first, within its budget.
@@ -135,7 +163,7 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
   }
 
   if (!answer) {
-    const reply = await addMessage(trip.id, { role: 'assistant', text: NO_PLANNER, ops: [], planVersion: null, surface: input.surface, at: new Date(userAt.getTime() + 1), research: lookups });
+    const reply = await addMessage(trip.id, { role: 'assistant', text: NO_PLANNER, ops: [], planVersion: null, surface: input.surface, at: new Date(userAt.getTime() + 1), research: lookups, author });
     return { reply: NO_PLANNER, applied: [], rejected: [], quickReplies: [], planVersion: latest?.version ?? null, changes: [], research: lookups, messages: [userMessage, reply] };
   }
 
@@ -145,10 +173,11 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
     ...history.filter((m) => m.role === 'user').flatMap((m) => urlsIn(m.text)),
     ...seenUrls,
   ]);
+  // Advice only (v5): a family member who cannot edit gets the reply, never the ops.
   const result = await applyOps(
-    answer.ops,
+    caller.canEdit ? answer.ops : [],
     { trip, stays: state.stays, wishes: state.wishes, bookings: state.bookings, knownUrls: known, transport, profile },
-    effectsFor(trip, userMessage.id),
+    effectsFor(trip, userMessage.id, caller.isOwner ? (caller.email ?? trip.ownerEmail) : null),
   );
   const before: SolvedPlan | null = latest?.plan ?? null;
   const source = input.surface === 'phone' ? 'phone' : 'site';
@@ -181,7 +210,7 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
       planVersion = solved.version;
       finalPlan = solved.plan;
       // Check and correct (v2.1): the second and last model call of the turn.
-      const correction = await checkAndCorrect(trip, text, answer.reply, result, before, solved.plan, known, userMessage.id);
+      const correction = await checkAndCorrect(trip, text, answer.reply, result, before, solved.plan, known, userMessage.id, caller.isOwner ? (caller.email ?? trip.ownerEmail) : null);
       if (correction) {
         if (correction.reply) replyText = correction.reply;
         if (correction.result) {
@@ -240,6 +269,7 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
     surface: input.surface,
     at: new Date(userAt.getTime() + 1),
     research: lookups,
+    author,
   });
   return {
     reply: reply.text,
@@ -275,6 +305,7 @@ async function checkAndCorrect(
   after: SolvedPlan,
   known: Set<string>,
   messageId: string,
+  memoryOwner: string | null,
 ): Promise<{ reply: string | null; result: ApplyResult | null } | null> {
   const state = await loadState(trip.id);
   const titles = Object.fromEntries(state.wishes.map((w) => [w.id, w.title]));
@@ -299,14 +330,58 @@ async function checkAndCorrect(
   const result = await applyOps(
     check.ops,
     { trip: fresh, stays: state.stays, wishes: state.wishes, bookings: state.bookings, knownUrls: known, transport: await listTransport(trip.id), profile: fresh.profile },
-    effectsFor(fresh, messageId),
+    effectsFor(fresh, messageId, memoryOwner),
   );
   return { reply: check.reply, result };
 }
 
-/** A form edit, logged so the model sees it on its next turn. */
-export async function logEdit(tripId: string, text: string, ops: TripMessage['ops'], planVersion: number | null, surface: 'site' | 'phone' = 'site'): Promise<void> {
-  await addMessage(tripId, { role: 'event', text, ops, planVersion, surface }).catch((err) =>
+/**
+ * Apply ops outside a conversation turn — an approved suggestion (v5) — through
+ * the same validation and effects, re-solve once, and log it as an `event`
+ * message so the planner sees it. Never touches memory.
+ */
+export async function applyAndReplan(
+  trip: TripRecord,
+  ops: unknown[],
+  opts: { surface: 'site' | 'phone'; eventText: string },
+): Promise<{ applied: ApplyResult['applied']; rejected: ApplyResult['rejected']; planVersion: number | null }> {
+  const [state, transport, latest] = await Promise.all([loadState(trip.id), listTransport(trip.id), latestPlan(trip.id)]);
+  const result = await applyOps(
+    ops,
+    { trip, stays: state.stays, wishes: state.wishes, bookings: state.bookings, knownUrls: knownUrlsOf(state.wishes), transport, profile: trip.profile },
+    effectsFor(trip, null, null),
+  );
+  let planVersion = latest?.version ?? null;
+  if (result.changed) {
+    const fresh = (await getTrip(trip.ownerEmail, trip.id)) ?? trip;
+    try {
+      planVersion = (await replan(fresh, 'site')).plan.version;
+    } catch (err) {
+      console.error('[trips] re-plan after an approved suggestion failed:', err);
+    }
+  }
+  const ids = result.research.flatMap((r) => r.wishIds);
+  if (ids.length) {
+    void startResearch(trip.ownerEmail, trip.id, { wishIds: ids, depth: 'brief' }).catch(() => {});
+  }
+  await logEdit(trip.id, opts.eventText, result.applied, result.changed ? planVersion : null, opts.surface);
+  return { applied: result.applied, rejected: result.rejected, planVersion };
+}
+
+/**
+ * A form edit, logged so the model sees it on its next turn. A plan change
+ * (no `author`) is shown to the whole family; pass the asker as `author` for
+ * an event that belongs to one person's thread (an ideas request).
+ */
+export async function logEdit(
+  tripId: string,
+  text: string,
+  ops: TripMessage['ops'],
+  planVersion: number | null,
+  surface: 'site' | 'phone' = 'site',
+  author: { email: string; id: string | null } | null = null,
+): Promise<void> {
+  await addMessage(tripId, { role: 'event', text, ops, planVersion, surface, author }).catch((err) =>
     console.warn('[trips] could not log the edit:', (err as Error)?.message),
   );
 }

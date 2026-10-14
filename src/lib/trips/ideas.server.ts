@@ -15,7 +15,7 @@ import { logEdit } from './converse.server';
 import { computeGap, ideaDraft, IDEAS_SYSTEM, ideasPrompt, readIdeas, verifyIdea, type Gap, type IdeaDraft, type Verdict } from './ideas';
 import { DAY_STAGE_LABEL, type DayStage, type ResearchStep, type Wish, type WishDraft } from './model';
 import { solverInput } from './plan.server';
-import { profileText } from './profile';
+import { profileText, travellersOnly } from './profile';
 import { parseLooseJson } from './research';
 import { findPlaceLoosely } from './research.server';
 import { latestPlan, listTransport, type TripRecord } from './store.server';
@@ -45,7 +45,7 @@ export async function findIdeas(
   trip: TripRecord,
   ask: { date: string; stage: DayStage; afterStopId?: string | null; beforeStopId?: string | null },
   surface: 'site' | 'phone' = 'site',
-  deps: { agent?: typeof agentTurn; place?: typeof findPlaceLoosely } = {},
+  deps: { agent?: typeof agentTurn; place?: typeof findPlaceLoosely; asOwner?: boolean; author?: { email: string; id: string | null } } = {},
 ): Promise<IdeasResult> {
   const latest = await latestPlan(trip.id);
   if (!latest) return { gap: null, ideas: [], rejected: [], note: 'There is no plan yet to find a gap in.', research: [] };
@@ -63,7 +63,8 @@ export async function findIdeas(
     destination: trip.destination,
     otherDays: latest.plan.days.filter((d) => d.date !== gap.date).map((d) => ({ date: d.date, titles: d.stops.filter((s) => s.kind === 'wish').map((s) => s.title) })),
     dropped: latest.plan.dropped.map((d) => titles.get(d.wishId) ?? d.wishId),
-    profileText: profileText(trip.profile),
+    // Only the owner's own asks see the owner's memory; anyone else gets the travellers (v5).
+    profileText: profileText(deps.asOwner === false ? travellersOnly(trip.profile) : trip.profile),
     guideText: trip.guide ? [trip.guide.gettingAround, trip.guide.transitTickets].filter(Boolean).join(' ') : null,
     transportText: transport.length ? transport.map((t) => `${t.direction} ${t.kind} ${t.number ?? ''} ${t.from.name} ${t.departDate} ${hhmm(t.departMin)} → ${t.to.name} ${t.arriveDate} ${hhmm(t.arriveMin)}`).join('; ') : null,
   });
@@ -128,6 +129,8 @@ export async function findIdeas(
     [],
     null,
     surface,
+    // The asker's own thread (v5): the reasons may echo their profile.
+    deps.author ?? { email: trip.ownerEmail, id: null },
   );
   return { gap, ideas, rejected, note, research };
 }

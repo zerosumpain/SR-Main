@@ -8,11 +8,12 @@
 // Same input, same plan: an edit that changes nothing appends nothing.
 
 import { solveTrip, replanDay, replanTrip } from '$lib/trips/solver';
-import { bundleEtag, canonicalJson, dayMatrices, sha256, stayPoint, type TripBundle } from './bundle';
+import { bundleEtag, canonicalJson, dayMatrices, sha256, stayPoint, type TripBundle, type WireTrip } from './bundle';
 import { diffPlans, keepRunningDay, replaceDay } from './changes';
-import type { LocalDate, Observation, PlannedDay, PlanSource, ReplanOption, SolvedPlan, TripEvent, TripReplanOption } from './model';
+import type { LocalDate, Observation, PlannedDay, PlanSource, ReplanOption, SolvedPlan, TripAccess, TripEvent, TripReplanOption } from './model';
 import { startGuidance, withGuidance } from './guidance.server';
 import { jsonCall } from './llm.server';
+import { planFullness, wireTravellers, withAlternatives } from './family';
 import { NARRATIVE_SYSTEM, planSummary } from './prompt';
 import { localDateIn, type RoutePoint } from './routing';
 import { attachLegLines, buildStoredMatrix } from './routing.server';
@@ -21,9 +22,12 @@ import {
   appendPlan,
   latestPhonePlan,
   latestPlan,
+  listSuggestions,
   listTransport,
+  suggestionWire,
   loadState,
   recentMessages,
+  viewerOf,
   recordEvents,
   setEventPlanVersion,
   tripOnly,
@@ -213,11 +217,34 @@ export async function applyEvents(trip: TripRecord, events: TripEvent[]): Promis
  * matrices, the last 50 messages and the city guide. The ETag covers all of
  * it, so a new message or new guidance changes it.
  */
-export async function tripBundle(trip: TripRecord): Promise<TripBundle> {
-  const [state, latest, messages, transport] = await Promise.all([loadState(trip.id), latestPlan(trip.id), recentMessages(trip.id, 50), listTransport(trip.id)]);
-  const plan = latest ? await withGuidance(trip.id, latest.plan) : null;
+/** The trip for the phone: the creator by family id and name, never by email (v5). */
+export function wireTrip(trip: TripRecord, creator: { id: string; name: string }): WireTrip {
+  const { ownerEmail: _e, ...rest } = tripOnly(trip);
+  return { ...rest, createdById: creator.id, createdByName: creator.name };
+}
+
+/**
+ * The phone's offline bundle for one caller (v5): their access, their own
+ * conversation thread (plus the plan changes everyone sees), and the creator
+ * as a family id and name — no email and no memory text anywhere in it.
+ */
+export async function tripBundle(
+  trip: TripRecord,
+  opts: { access: TripAccess; viewerEmail: string; creator: { id: string; name: string } },
+): Promise<TripBundle> {
+  const { access } = opts;
+  const [state, latest, messages, transport, suggestions] = await Promise.all([
+    loadState(trip.id),
+    latestPlan(trip.id),
+    recentMessages(trip.id, viewerOf(trip, opts.viewerEmail), 50),
+    listTransport(trip.id),
+    listSuggestions(trip.id),
+  ]);
+  // Each leg carries its walk / public transport / taxi alternatives (v5).
+  const plan = latest ? withAlternatives(await withGuidance(trip.id, latest.plan), latest.matrix) : null;
+  const replaces = new Map(state.wishes.filter((w) => w.replacesMeal).map((w) => [w.id, w.replacesMeal as 'breakfast' | 'lunch' | 'dinner']));
   const body: Omit<TripBundle, 'etag'> = {
-    trip: tripOnly(trip),
+    trip: wireTrip(trip, opts.creator),
     stays: state.stays,
     wishes: state.wishes,
     bookings: state.bookings,
@@ -227,7 +254,11 @@ export async function tripBundle(trip: TripRecord): Promise<TripBundle> {
     messages,
     guide: trip.guide,
     transport,
-    profile: trip.profile,
+    // Travellers only: no memory text on the wire, for anyone (v5).
+    profile: trip.profile ? { travellers: wireTravellers(trip.profile) } : null,
+    access,
+    suggestions: suggestions.map(suggestionWire),
+    fullness: latest ? planFullness(latest.plan, trip.pace, trip.dayLoads ?? {}, replaces) : {},
   };
   return { ...body, etag: bundleEtag(body) };
 }

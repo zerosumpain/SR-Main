@@ -6,9 +6,9 @@
 // above here sees a database row. Every read takes the owner's email: a trip
 // that is not theirs reads as missing.
 
-import { and, asc, desc, eq, inArray, max, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, max, or, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { trip, tripBooking, tripEvent, tripMessage, tripPlan, tripStay, tripTransport, tripWish } from '$lib/db/schema';
+import { trip, tripBooking, tripEvent, tripMessage, tripPlan, tripStay, tripSuggestion, tripTransport, tripWish } from '$lib/db/schema';
 import type {
   Booking,
   Facts,
@@ -28,6 +28,10 @@ import type {
   TransportSegment,
   TravellerProfile,
   ResearchStep,
+  TripSuggestion,
+  SuggestionStatus,
+  DayStage,
+  WishDraft,
   TripStatus,
   Wish,
 } from './model';
@@ -157,12 +161,22 @@ function toPlan(r: PlanRow): StoredPlan {
 
 // ── Trips ──────────────────────────────────────────────────────────────────
 
-export async function listTrips(owner: string): Promise<TripSummary[]> {
+/**
+ * The trips a caller may see. v5: trips are open to the whole family, so this
+ * is every trip; the caller's rights on each are decided by `tripAccess`.
+ * (`_viewer` stays in the signature: every caller has already been checked as
+ * the owner or a family member.)
+ */
+export async function listTrips(_viewer: string): Promise<TripSummary[]> {
+  return listAllTrips();
+}
+
+/** v5: every trip, for the family's phone lane (trips are open to the whole family). */
+export async function listAllTrips(): Promise<TripSummary[]> {
   const rows = await db
     .select({ t: trip, version: max(tripPlan.version) })
     .from(trip)
     .leftJoin(tripPlan, eq(tripPlan.tripId, trip.id))
-    .where(eq(trip.ownerEmail, owner))
     .groupBy(trip.id)
     .orderBy(desc(trip.startDate), asc(trip.title));
   return rows.map(({ t, version }) => ({
@@ -178,10 +192,16 @@ export async function listTrips(owner: string): Promise<TripSummary[]> {
   }));
 }
 
-export async function getTrip(owner: string, id: string): Promise<TripRecord | null> {
+/** v5: a trip by id, whoever created it (the caller's access is decided by `tripAccess`). */
+export async function getTripById(id: string): Promise<TripRecord | null> {
   if (!isUuid(id)) return null;
-  const [row] = await db.select().from(trip).where(and(eq(trip.id, id), eq(trip.ownerEmail, owner))).limit(1);
+  const [row] = await db.select().from(trip).where(eq(trip.id, id)).limit(1);
   return row ? toTrip(row) : null;
+}
+
+/** A trip by id for a caller already checked as the owner or family (v5: trips are open to the family). */
+export async function getTrip(_viewer: string, id: string): Promise<TripRecord | null> {
+  return getTripById(id);
 }
 
 export async function createTrip(owner: string, input: TripInput): Promise<TripRecord> {
@@ -205,6 +225,7 @@ export async function deleteTrip(id: string): Promise<void> {
     await tx.delete(tripEvent).where(eq(tripEvent.tripId, id));
     await tx.delete(tripMessage).where(eq(tripMessage.tripId, id));
     await tx.delete(tripTransport).where(eq(tripTransport.tripId, id));
+    await tx.delete(tripSuggestion).where(eq(tripSuggestion.tripId, id));
     await tx.delete(tripPlan).where(eq(tripPlan.tripId, id));
     await tx.delete(tripBooking).where(eq(tripBooking.tripId, id));
     await tx.delete(tripWish).where(eq(tripWish.tripId, id));
@@ -490,12 +511,16 @@ export async function setStopGuide(tripId: string, wishId: string, guide: StopGu
     .where(and(eq(tripWish.tripId, tripId), eq(tripWish.id, wishId)));
 }
 
+/** Ops that carry what someone said about themselves: never shown beside a shared event. */
+const PRIVATE_OPS = new Set(['remember', 'updateProfile']);
+
 function toMessage(r: typeof tripMessage.$inferSelect): TripMessage {
+  const ops = (r.ops ?? []) as TripOp[];
   return {
     id: r.id,
     role: r.role as TripMessage['role'],
     text: r.text,
-    ops: (r.ops ?? []) as TripOp[],
+    ops: r.role === 'event' ? ops.filter((o) => !PRIVATE_OPS.has(o.op)) : ops,
     planVersion: r.planVersion,
     surface: r.surface as TripMessage['surface'],
     createdAt: r.createdAt.toISOString(),
@@ -503,12 +528,30 @@ function toMessage(r: typeof tripMessage.$inferSelect): TripMessage {
   };
 }
 
-/** The last `limit` messages, oldest first. */
-export async function recentMessages(tripId: string, limit = 50): Promise<TripMessage[]> {
+/**
+ * Whose conversation to read (v5): each caller sees only their own thread —
+ * their messages and the replies to them — plus the plan-change events
+ * everyone sees. The creator also gets the rows from before authors were
+ * stored (author null).
+ */
+export interface MessageViewer {
+  email: string;
+  isCreator: boolean;
+}
+
+export const viewerOf = (trip: Pick<TripRecord, 'ownerEmail'>, email: string): MessageViewer => ({
+  email: email.trim().toLowerCase(),
+  isCreator: email.trim().toLowerCase() === trip.ownerEmail.trim().toLowerCase(),
+});
+
+/** The last `limit` messages this viewer may see, oldest first. */
+export async function recentMessages(tripId: string, viewer: MessageViewer, limit = 50): Promise<TripMessage[]> {
+  const mine = eq(tripMessage.authorEmail, viewer.email);
+  const shared = and(isNull(tripMessage.authorEmail), viewer.isCreator ? sql`true` : eq(tripMessage.role, 'event'));
   const rows = await db
     .select()
     .from(tripMessage)
-    .where(eq(tripMessage.tripId, tripId))
+    .where(and(eq(tripMessage.tripId, tripId), or(mine, shared)))
     .orderBy(desc(tripMessage.createdAt), desc(tripMessage.id))
     .limit(limit);
   return rows.reverse().map(toMessage);
@@ -516,7 +559,12 @@ export async function recentMessages(tripId: string, limit = 50): Promise<TripMe
 
 export async function addMessage(
   tripId: string,
-  m: Pick<TripMessage, 'role' | 'text' | 'ops' | 'planVersion' | 'surface'> & { at?: Date; research?: ResearchStep[] },
+  m: Pick<TripMessage, 'role' | 'text' | 'ops' | 'planVersion' | 'surface'> & {
+    at?: Date;
+    research?: ResearchStep[];
+    /** v5: the speaker, whose thread this is; null for a plan change everyone sees. */
+    author?: { email: string; id: string | null } | null;
+  },
 ): Promise<TripMessage> {
   const [row] = await db
     .insert(tripMessage)
@@ -528,6 +576,8 @@ export async function addMessage(
       planVersion: m.planVersion,
       surface: m.surface,
       research: m.research?.length ? (m.research as unknown[]) : null,
+      authorEmail: m.author ? m.author.email.trim().toLowerCase() : null,
+      authorId: m.author?.id ?? null,
       ...(m.at ? { createdAt: m.at } : {}),
     })
     .returning();
@@ -603,4 +653,78 @@ export async function deleteTransport(tripId: string, id: string): Promise<boole
   if (!isUuid(id)) return false;
   const gone = await db.delete(tripTransport).where(and(eq(tripTransport.tripId, tripId), eq(tripTransport.id, id))).returning({ id: tripTransport.id });
   return gone.length > 0;
+}
+
+// ── v5: suggestions ────────────────────────────────────────────────────────
+
+type SuggestionRow = typeof tripSuggestion.$inferSelect;
+
+export interface SuggestionRecord extends TripSuggestion {
+  byEmail: string;
+}
+
+function toSuggestion(r: SuggestionRow): SuggestionRecord {
+  return {
+    id: r.id,
+    tripId: r.tripId,
+    byId: r.byId,
+    byName: r.byName,
+    byEmail: r.byEmail,
+    date: r.date,
+    stage: r.stage as DayStage,
+    wish: r.wish as unknown as WishDraft,
+    note: r.note,
+    fitText: r.fitText,
+    status: r.status as SuggestionStatus,
+    decidedById: r.decidedById,
+    decidedAt: r.decidedAt ? r.decidedAt.toISOString() : null,
+    createdAt: r.createdAt.toISOString(),
+  };
+}
+
+/** The wire shape: never an email. */
+export function suggestionWire(s: SuggestionRecord): TripSuggestion {
+  const { byEmail: _e, ...rest } = s;
+  return rest;
+}
+
+/** Pending suggestions and the last `decided` decided ones, newest first. */
+export async function listSuggestions(tripId: string, decided = 20): Promise<SuggestionRecord[]> {
+  const rows = await db.select().from(tripSuggestion).where(eq(tripSuggestion.tripId, tripId)).orderBy(desc(tripSuggestion.createdAt), desc(tripSuggestion.id));
+  const pending = rows.filter((r) => r.status === 'pending');
+  const done = rows.filter((r) => r.status !== 'pending').slice(0, decided);
+  return [...pending, ...done].map(toSuggestion);
+}
+
+export async function getSuggestion(tripId: string, id: string): Promise<SuggestionRecord | null> {
+  if (!isUuid(id)) return null;
+  const [row] = await db.select().from(tripSuggestion).where(and(eq(tripSuggestion.tripId, tripId), eq(tripSuggestion.id, id))).limit(1);
+  return row ? toSuggestion(row) : null;
+}
+
+export async function addSuggestion(
+  tripId: string,
+  s: { byEmail: string; byId: string; byName: string; date: string; stage: DayStage; wish: WishDraft; note: string | null; fitText: string | null },
+): Promise<SuggestionRecord> {
+  const [row] = await db
+    .insert(tripSuggestion)
+    .values({ tripId, ...s, wish: s.wish as unknown as Record<string, unknown> })
+    .returning();
+  return toSuggestion(row);
+}
+
+/** Move a PENDING suggestion to a decision; null when it was no longer pending (someone got there first). */
+export async function decideSuggestion(
+  tripId: string,
+  id: string,
+  status: Exclude<SuggestionStatus, 'pending'>,
+  by: { email: string; id: string } | null,
+): Promise<SuggestionRecord | null> {
+  if (!isUuid(id)) return null;
+  const [row] = await db
+    .update(tripSuggestion)
+    .set({ status, decidedByEmail: by?.email ?? null, decidedById: by?.id ?? null, decidedAt: new Date() })
+    .where(and(eq(tripSuggestion.tripId, tripId), eq(tripSuggestion.id, id), eq(tripSuggestion.status, 'pending')))
+    .returning();
+  return row ? toSuggestion(row) : null;
 }
