@@ -68,6 +68,11 @@ export async function solverInput(trip: TripRecord, previous: StoredPlan | null,
     bookings: state.bookings,
     matrix: built.matrix,
     transport,
+    // Stable re-plans: the solver changes as little as possible from the
+    // latest stored plan. Every site re-solve comes through here — edits, the
+    // conversation, "Re-plan now", ideas' dry runs, the phone's whole-trip
+    // re-plan — so all of them keep unrelated days where they were.
+    ...(previous ? { previous: previous.plan } : {}),
   };
   return { input, state, routingNotes: built.notes };
 }
@@ -89,7 +94,10 @@ export async function replan(
 ): Promise<{ plan: StoredPlan; created: boolean }> {
   const previous = await latestPlan(trip.id);
   const { input, state, routingNotes } = await solverInput(trip, previous);
-  const inputHash = sha256(canonicalJson(input));
+  // The hash is of the CONSTRAINTS: `previous` is the stored plan itself, so
+  // including it would make every re-solve look new and append a version.
+  const { previous: _prev, ...constraints } = input;
+  const inputHash = sha256(canonicalJson(constraints));
   if (previous && previous.inputHash === inputHash && source !== 'seed') return { plan: previous, created: false };
 
   let plan: SolvedPlan = solveTrip(input);

@@ -100,3 +100,17 @@ describe('the ideas prompt and answer', () => {
     expect(ideaDraft(r.ideas[0], lunch)).toMatchObject({ fixedDate: '2026-10-27', replacesMeal: 'lunch', partOfDay: 'any', priority: 'nice' });
   });
 });
+
+describe('stable verification (previous plan)', () => {
+  it('adding a short idea moves nothing else once the solver keeps the stored days', () => {
+    const gap = computeGap(plan, '2026-10-28', 'afternoon')!;
+    const wish: Wish = {
+      id: 'idea:0', title: "Sant'Ignazio", place: { name: "Sant'Ignazio", location: { lat: 41.8991, lng: 12.4797 }, osmId: null, address: null },
+      priority: 'nice', durationSec: 2400, partOfDay: 'afternoon', fixedDate: '2026-10-28', fixedStartMin: null, locked: false, suggested: false, skipped: false, facts: null, note: null, sortHint: 0,
+    };
+    // Without the stored plan the solver reshuffles other days; with it, none move.
+    expect(verifyIdea(input, wish, gap, plan).moves.length).toBeGreaterThan(0);
+    const stable = { ...input, previous: plan };
+    expect(verifyIdea(stable, wish, gap, solveTrip(stable))).toMatchObject({ fits: true, moves: [], pushesOut: [], landedStage: 'afternoon' });
+  });
+});
