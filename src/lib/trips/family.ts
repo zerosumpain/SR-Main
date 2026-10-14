@@ -96,6 +96,8 @@ export function legAlternatives(fromId: string, toId: string, day: PlannedDay, m
       out.push({ mode, durationSec: e.seconds + (mode === 'taxi' ? 8 * 60 : 0), estimated: true });
     }
   }
+  // Same place (a zero walk): no pickup wait for a taxi you would not take.
+  if (out[0]?.mode === 'walk' && out[0].durationSec === 0) return out.map((x) => ({ ...x, durationSec: 0 }));
   return out;
 }
 

@@ -75,6 +75,8 @@ describe('legAlternatives', () => {
   it('estimates everything without a matrix, and nothing for an unknown stop', () => {
     expect(legAlternatives('stay:2026-10-28:start', 'pantheon', day, null).every((a) => a.estimated)).toBe(true);
     expect(legAlternatives('nope', 'pantheon', day, null)).toEqual([]);
+    // Same place: nothing to travel, by any mode.
+    expect(legAlternatives('pantheon', 'pantheon', day, matrix).map((a) => a.durationSec)).toEqual([0, 0, 0]);
   });
 });
 
