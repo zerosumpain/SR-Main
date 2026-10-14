@@ -192,7 +192,7 @@ export const LIVE_TOOLS: AgentTools = {
 export async function agentTurn(
   messages: Array<Record<string, unknown>>,
   ctx: AgentContext,
-  opts: { tools?: AgentTools; client?: { client: OpenAI; model: string }; timeoutMs?: number } = {},
+  opts: { tools?: AgentTools; client?: { client: OpenAI; model: string }; timeoutMs?: number; finalPrompt?: string } = {},
 ): Promise<AgentResult> {
   let llm = opts.client;
   if (!llm) {
@@ -211,7 +211,7 @@ export async function agentTurn(
     tools: PLANNER_TOOLS,
     // Six lookups at most, so seven rounds is enough; a forced final answers.
     maxRounds: 7,
-    forceFinal: { prompt: 'Answer now with the JSON object only (reply, ops, quickReplies) — no more lookups.' },
+    forceFinal: { prompt: opts.finalPrompt ?? 'Answer now with the JSON object only (reply, ops, quickReplies) — no more lookups.' },
     temperature: 0.2,
     maxTokens: 4000,
     activity: 'trips-planner',

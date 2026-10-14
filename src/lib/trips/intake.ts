@@ -6,6 +6,8 @@
 // the clean value or a sentence to show. PURE.
 
 import {
+  DAY_STAGES,
+  type DayStage,
   TRAVEL_MODES,
   type BookingStatus,
   type LatLng,
@@ -191,6 +193,8 @@ export function parseStayInput(body: unknown, trip: { startDate: LocalDate; endD
 
 export interface WishInput {
   replacesMeal?: 'breakfast' | 'lunch' | 'dinner' | null;
+  /** A place already resolved on OpenStreetMap (an accepted idea). */
+  place?: { name: string; location: LatLng; osmId: string | null; address: string | null } | null;
   title: string;
   priority: Priority;
   durationSec: number | null;
@@ -217,6 +221,7 @@ export function parseWishInput(body: unknown): Parsed<WishInput> {
     fixedStartMin: p.fixedStartMin ?? null,
     note: p.note ?? null,
     replacesMeal: p.replacesMeal ?? null,
+    place: p.place ?? null,
   });
 }
 
@@ -456,4 +461,19 @@ export function parseReplanBody(body: unknown): Parsed<ReplanBody> {
     atStopId: text(body.atStopId, 200),
     doneStopIds: done,
   });
+}
+
+export interface IdeasAsk {
+  date: LocalDate;
+  stage: DayStage;
+  afterStopId: string | null;
+  beforeStopId: string | null;
+}
+
+/** "Ask for an idea": `{ date, stage, afterStopId?, beforeStopId? }`. */
+export function parseIdeasAsk(body: unknown): Parsed<IdeasAsk> {
+  if (!isObj(body)) return bad('Send { date, stage }.');
+  if (!isLocalDate(body.date)) return bad('date must be a local date.');
+  if (!(DAY_STAGES as readonly unknown[]).includes(body.stage)) return bad('stage is morning, lunch, afternoon or evening.');
+  return ok({ date: body.date, stage: body.stage as DayStage, afterStopId: text(body.afterStopId, 200), beforeStopId: text(body.beforeStopId, 200) });
 }

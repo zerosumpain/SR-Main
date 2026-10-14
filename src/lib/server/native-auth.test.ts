@@ -162,6 +162,7 @@ describe('every native route gates itself', () => {
         '/trips/[id]/+server.ts',
         '/trips/[id]/converse/+server.ts',
         '/trips/[id]/events/+server.ts',
+        '/trips/[id]/ideas/+server.ts',
         '/trips/[id]/replan/+server.ts',
       ].sort(),
     );

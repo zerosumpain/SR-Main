@@ -41,7 +41,7 @@ function titlesOf(wishes: Array<{ id: string; title: string }>): Record<string, 
 }
 
 /** The solver's input for a trip as it stands, plus the wishes left out for want of a place. */
-async function solverInput(trip: TripRecord, previous: StoredPlan | null, opts: { reuseMatrix?: boolean } = {}) {
+export async function solverInput(trip: TripRecord, previous: StoredPlan | null, opts: { reuseMatrix?: boolean } = {}) {
   const [state, transport] = await Promise.all([loadState(trip.id), listTransport(trip.id)]);
   // Wishes with no place yet have no matrix point; the solver drops them with
   // a reason (a must with a warning), and the page says "needs a place".
