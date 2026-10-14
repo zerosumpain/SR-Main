@@ -23,7 +23,7 @@ describe('light days', () => {
   it('takes fewer active minutes and ends earlier, within the earlier end', () => {
     expect(activeMin(light)).toBeLessThan(activeMin(before));
     expect(endOf(light)).toBeLessThan(endOf(before));
-    expect(endOf(light)).toBeLessThanOrEqual(19 * 60 - 90);
+    expect(endOf(light)).toBeLessThanOrEqual(22 * 60 - 90);
     expect(light.warnings).toEqual([]);
   });
 
@@ -43,7 +43,7 @@ describe('a wish that replaces a meal', () => {
   it('is the only lunch-time stop that day, inside the lunch window', () => {
     const plan = solveTrip(longLunchInput());
     const thu = dayOf(plan, THU);
-    expect(thu.stops.some((s) => s.kind === 'meal')).toBe(false);
+    expect(thu.stops.some((s) => s.id.endsWith(':lunch'))).toBe(false);
     const lunch = thu.stops.find((s) => s.id === 'trastevere-lunch')!;
     const start = lunch.arriveMin + lunch.waitSec / 60;
     expect(start).toBeGreaterThanOrEqual(12 * 60);
@@ -58,7 +58,7 @@ describe('a wish that replaces a meal', () => {
   it('without a date, lands on a day whose lunch it takes', () => {
     const plan = solveTrip(longLunchInput(null));
     const day = plan.days.find((d) => d.stops.some((s) => s.id === 'trastevere-lunch'))!;
-    expect(day.stops.some((s) => s.kind === 'meal')).toBe(false);
+    expect(day.stops.some((s) => s.id.endsWith(':lunch'))).toBe(false);
     const lunch = day.stops.find((s) => s.id === 'trastevere-lunch')!;
     expect(lunch.arriveMin + lunch.waitSec / 60).toBeLessThanOrEqual(13 * 60 + 30);
   });

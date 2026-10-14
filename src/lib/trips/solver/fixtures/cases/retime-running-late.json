@@ -1,6 +1,6 @@
 {
   "name": "retime-running-late",
-  "description": "Leave the Pantheon 25 minutes late; the rest of the day slides back in the same order.",
+  "description": "Leave Pantheon 25 minutes late; the rest of the day slides back in the same order.",
   "fn": "retimeDay",
   "input": {
     "trip": {
@@ -594,12 +594,30 @@
             "lat": 41.8952,
             "lng": 12.4716
           },
-          "arriveMin": 540,
+          "arriveMin": 510,
+          "departMin": 510,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": [],
+          "stage": "morning"
+        },
+        {
+          "id": "meal:2026-10-27:breakfast",
+          "kind": "meal",
+          "wishId": null,
+          "title": "Breakfast",
+          "location": {
+            "lat": 41.8952,
+            "lng": 12.4716
+          },
+          "arriveMin": 510,
           "departMin": 540,
           "waitSec": 0,
           "locked": false,
           "bookingId": null,
-          "warnings": []
+          "warnings": [],
+          "stage": "morning"
         },
         {
           "id": "navona",
@@ -615,7 +633,8 @@
           "waitSec": 0,
           "locked": false,
           "bookingId": null,
-          "warnings": []
+          "warnings": [],
+          "stage": "morning"
         },
         {
           "id": "pantheon",
@@ -631,7 +650,8 @@
           "waitSec": 0,
           "locked": false,
           "bookingId": null,
-          "warnings": []
+          "warnings": [],
+          "stage": "morning"
         },
         {
           "id": "spanish-steps",
@@ -647,7 +667,8 @@
           "waitSec": 0,
           "locked": false,
           "bookingId": null,
-          "warnings": []
+          "warnings": [],
+          "stage": "morning"
         },
         {
           "id": "trevi",
@@ -663,7 +684,8 @@
           "waitSec": 0,
           "locked": false,
           "bookingId": null,
-          "warnings": []
+          "warnings": [],
+          "stage": "morning"
         },
         {
           "id": "meal:2026-10-27:lunch",
@@ -679,7 +701,8 @@
           "waitSec": 0,
           "locked": false,
           "bookingId": null,
-          "warnings": []
+          "warnings": [],
+          "stage": "lunch"
         },
         {
           "id": "capitoline",
@@ -695,7 +718,8 @@
           "waitSec": 0,
           "locked": false,
           "bookingId": null,
-          "warnings": []
+          "warnings": [],
+          "stage": "afternoon"
         },
         {
           "id": "ghetto",
@@ -711,7 +735,42 @@
           "waitSec": 0,
           "locked": false,
           "bookingId": null,
-          "warnings": []
+          "warnings": [],
+          "stage": "afternoon"
+        },
+        {
+          "id": "stay:2026-10-27:rest",
+          "kind": "stay",
+          "wishId": null,
+          "title": "Free time at Apartment by Campo de' Fiori",
+          "location": {
+            "lat": 41.8952,
+            "lng": 12.4716
+          },
+          "arriveMin": 1020,
+          "departMin": 1140,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": [],
+          "stage": "afternoon"
+        },
+        {
+          "id": "meal:2026-10-27:dinner",
+          "kind": "meal",
+          "wishId": null,
+          "title": "Dinner",
+          "location": {
+            "lat": 41.8952,
+            "lng": 12.4716
+          },
+          "arriveMin": 1140,
+          "departMin": 1215,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": [],
+          "stage": "evening"
         },
         {
           "id": "stay:2026-10-27:end",
@@ -722,17 +781,27 @@
             "lat": 41.8952,
             "lng": 12.4716
           },
-          "arriveMin": 1020,
-          "departMin": 1020,
+          "arriveMin": 1215,
+          "departMin": 1215,
           "waitSec": 0,
           "locked": false,
           "bookingId": null,
-          "warnings": []
+          "warnings": [],
+          "stage": "evening"
         }
       ],
       "legs": [
         {
           "fromStopId": "stay:2026-10-27:start",
+          "toStopId": "meal:2026-10-27:breakfast",
+          "mode": "walk",
+          "durationSec": 0,
+          "distanceM": 0,
+          "estimated": false,
+          "line": null
+        },
+        {
+          "fromStopId": "meal:2026-10-27:breakfast",
           "toStopId": "navona",
           "mode": "walk",
           "durationSec": 450,
@@ -796,17 +865,35 @@
         },
         {
           "fromStopId": "ghetto",
-          "toStopId": "stay:2026-10-27:end",
+          "toStopId": "stay:2026-10-27:rest",
           "mode": "walk",
           "durationSec": 573,
           "distanceM": 764,
           "estimated": true,
           "line": null
+        },
+        {
+          "fromStopId": "stay:2026-10-27:rest",
+          "toStopId": "meal:2026-10-27:dinner",
+          "mode": "walk",
+          "durationSec": 0,
+          "distanceM": 0,
+          "estimated": false,
+          "line": null
+        },
+        {
+          "fromStopId": "meal:2026-10-27:dinner",
+          "toStopId": "stay:2026-10-27:end",
+          "mode": "walk",
+          "durationSec": 0,
+          "distanceM": 0,
+          "estimated": false,
+          "line": null
         }
       ],
       "warnings": []
     },
-    "fromIndex": 3,
+    "fromIndex": 4,
     "startMin": 674
   },
   "expected": {
@@ -822,12 +909,30 @@
           "lat": 41.8952,
           "lng": 12.4716
         },
-        "arriveMin": 540,
+        "arriveMin": 510,
+        "departMin": 510,
+        "waitSec": 0,
+        "locked": false,
+        "bookingId": null,
+        "warnings": [],
+        "stage": "morning"
+      },
+      {
+        "id": "meal:2026-10-27:breakfast",
+        "kind": "meal",
+        "wishId": null,
+        "title": "Breakfast",
+        "location": {
+          "lat": 41.8952,
+          "lng": 12.4716
+        },
+        "arriveMin": 510,
         "departMin": 540,
         "waitSec": 0,
         "locked": false,
         "bookingId": null,
-        "warnings": []
+        "warnings": [],
+        "stage": "morning"
       },
       {
         "id": "navona",
@@ -843,7 +948,8 @@
         "waitSec": 0,
         "locked": false,
         "bookingId": null,
-        "warnings": []
+        "warnings": [],
+        "stage": "morning"
       },
       {
         "id": "pantheon",
@@ -859,7 +965,8 @@
         "waitSec": 0,
         "locked": false,
         "bookingId": null,
-        "warnings": []
+        "warnings": [],
+        "stage": "morning"
       },
       {
         "id": "spanish-steps",
@@ -875,7 +982,8 @@
         "waitSec": 0,
         "locked": false,
         "bookingId": null,
-        "warnings": []
+        "warnings": [],
+        "stage": "morning"
       },
       {
         "id": "trevi",
@@ -891,7 +999,8 @@
         "waitSec": 0,
         "locked": false,
         "bookingId": null,
-        "warnings": []
+        "warnings": [],
+        "stage": "morning"
       },
       {
         "id": "meal:2026-10-27:lunch",
@@ -907,7 +1016,8 @@
         "waitSec": 0,
         "locked": false,
         "bookingId": null,
-        "warnings": []
+        "warnings": [],
+        "stage": "lunch"
       },
       {
         "id": "capitoline",
@@ -923,7 +1033,8 @@
         "waitSec": 0,
         "locked": false,
         "bookingId": null,
-        "warnings": []
+        "warnings": [],
+        "stage": "afternoon"
       },
       {
         "id": "ghetto",
@@ -939,7 +1050,42 @@
         "waitSec": 0,
         "locked": false,
         "bookingId": null,
-        "warnings": []
+        "warnings": [],
+        "stage": "afternoon"
+      },
+      {
+        "id": "stay:2026-10-27:rest",
+        "kind": "stay",
+        "wishId": null,
+        "title": "Free time at Apartment by Campo de' Fiori",
+        "location": {
+          "lat": 41.8952,
+          "lng": 12.4716
+        },
+        "arriveMin": 1045,
+        "departMin": 1140,
+        "waitSec": 0,
+        "locked": false,
+        "bookingId": null,
+        "warnings": [],
+        "stage": "afternoon"
+      },
+      {
+        "id": "meal:2026-10-27:dinner",
+        "kind": "meal",
+        "wishId": null,
+        "title": "Dinner",
+        "location": {
+          "lat": 41.8952,
+          "lng": 12.4716
+        },
+        "arriveMin": 1140,
+        "departMin": 1215,
+        "waitSec": 0,
+        "locked": false,
+        "bookingId": null,
+        "warnings": [],
+        "stage": "evening"
       },
       {
         "id": "stay:2026-10-27:end",
@@ -950,17 +1096,27 @@
           "lat": 41.8952,
           "lng": 12.4716
         },
-        "arriveMin": 1045,
-        "departMin": 1045,
+        "arriveMin": 1215,
+        "departMin": 1215,
         "waitSec": 0,
         "locked": false,
         "bookingId": null,
-        "warnings": []
+        "warnings": [],
+        "stage": "evening"
       }
     ],
     "legs": [
       {
         "fromStopId": "stay:2026-10-27:start",
+        "toStopId": "meal:2026-10-27:breakfast",
+        "mode": "walk",
+        "durationSec": 0,
+        "distanceM": 0,
+        "estimated": false,
+        "line": null
+      },
+      {
+        "fromStopId": "meal:2026-10-27:breakfast",
         "toStopId": "navona",
         "mode": "walk",
         "durationSec": 450,
@@ -1024,11 +1180,29 @@
       },
       {
         "fromStopId": "ghetto",
-        "toStopId": "stay:2026-10-27:end",
+        "toStopId": "stay:2026-10-27:rest",
         "mode": "walk",
         "durationSec": 573,
         "distanceM": 764,
         "estimated": true,
+        "line": null
+      },
+      {
+        "fromStopId": "stay:2026-10-27:rest",
+        "toStopId": "meal:2026-10-27:dinner",
+        "mode": "walk",
+        "durationSec": 0,
+        "distanceM": 0,
+        "estimated": false,
+        "line": null
+      },
+      {
+        "fromStopId": "meal:2026-10-27:dinner",
+        "toStopId": "stay:2026-10-27:end",
+        "mode": "walk",
+        "durationSec": 0,
+        "distanceM": 0,
+        "estimated": false,
         "line": null
       }
     ],

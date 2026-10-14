@@ -9,7 +9,6 @@ import type {
   DayHours,
   DayLoad,
   LocalDate,
-  PaceRules,
   PartOfDay,
   PlannedStop,
   Priority,
@@ -19,6 +18,7 @@ import type {
 import { cmp } from './calendar';
 import { windowsOn } from './hours';
 import { stayPoint, type SolverContext } from './matrix';
+import type { MealWindow, SolverRules } from './rules';
 import {
   STAY_HANDLING_MIN,
   arrivalFrame,
@@ -31,7 +31,7 @@ import {
 
 export const DEFAULT_VISIT_MIN = 60;
 
-export type MealKind = 'lunch' | 'dinner';
+export type MealKind = 'breakfast' | 'lunch' | 'dinner';
 
 export interface Item {
   /** Stop id: the wish id or `meal:<date>:lunch|dinner`. */
@@ -72,6 +72,11 @@ export interface DayFrame {
   dayEndMin: number;
   /** v2.1: how full the day should be (light ends earlier and takes less). */
   load?: DayLoad;
+  /**
+   * v4: sightseeing should finish by this minute; the day itself (dinner,
+   * evening, back at the stay) runs to `dayEndMin`. Defaults to `dayEndMin`.
+   */
+  activeEndMin?: number;
   /** v3: the day starts with a landing, transfer and bag drop. */
   arrival?: ArrivalFrame;
   /** v3: the day ends by leaving the stay for a flight/train. */
@@ -98,6 +103,7 @@ export function dayFrame(ctx: SolverContext, date: LocalDate, stay: Stay | null)
     stay,
     dayStartMin: rules.dayStartMin,
     dayEndMin: load === 'light' ? rules.dayEndMin - LIGHT_DAY_EARLIER_MIN : rules.dayEndMin,
+    activeEndMin: load === 'light' ? rules.activeEndMin - LIGHT_DAY_EARLIER_MIN : rules.activeEndMin,
     load,
   };
   if (arrives && stay) {
@@ -107,19 +113,17 @@ export function dayFrame(ctx: SolverContext, date: LocalDate, stay: Stay | null)
   if (leaves && stay) {
     frame.departure = departureFrame(ctx, leaves, stay);
     frame.dayEndMin = Math.min(frame.dayEndMin, frame.departure.leaveMin - STAY_HANDLING_MIN);
+    frame.activeEndMin = Math.min(frame.activeEndMin ?? frame.dayEndMin, frame.dayEndMin);
   }
   return frame;
 }
 
-/** Dinner window for a wish that replaces dinner when the pace plans none. */
-const FALLBACK_DINNER = { fromMin: 19 * 60, toMin: 21 * 60, durationSec: 75 * 60 };
-
 /** The meal window a meal-replacing wish must start in: [fromMin, latest start]. */
 export function replacedMealWindow(
-  rules: PaceRules,
+  rules: SolverRules,
   kind: MealKind,
 ): { fromMin: number; latestStartMin: number } {
-  const w = (kind === 'lunch' ? rules.lunch : rules.dinner) ?? FALLBACK_DINNER;
+  const w = mealWindow(rules, kind);
   return { fromMin: w.fromMin, latestStartMin: w.toMin - Math.round(w.durationSec / 60) };
 }
 
@@ -127,7 +131,7 @@ export function replacedMealWindow(
  * Opening windows for a wish on a date. A meal-replacing wish is narrowed to
  * start inside its meal window (it may run on past the window's end).
  */
-export function wishWindows(wish: Wish, date: LocalDate, rules: PaceRules | null): DayHours | null {
+export function wishWindows(wish: Wish, date: LocalDate, rules: SolverRules | null): DayHours | null {
   const windows = windowsOn(wish.facts, date);
   if (!wish.replacesMeal || !rules) return windows;
   const meal = replacedMealWindow(rules, wish.replacesMeal);
@@ -192,7 +196,7 @@ export function wishItem(
   wish: Wish,
   date: LocalDate,
   bookings: Booking[],
-  rules: PaceRules | null = null,
+  rules: SolverRules | null = null,
 ): Item {
   const booking = bookedSlot(wish.id, bookings);
   const windows = wishWindows(wish, date, rules);
@@ -227,18 +231,24 @@ export function wishItem(
   };
 }
 
-export function mealWindow(rules: PaceRules, kind: MealKind) {
-  return kind === 'lunch' ? rules.lunch : rules.dinner;
+export function mealWindow(rules: SolverRules, kind: MealKind): MealWindow {
+  return kind === 'breakfast' ? rules.breakfast : kind === 'lunch' ? rules.lunch : rules.dinner;
 }
 
-export function mealItem(date: LocalDate, kind: MealKind, rules: PaceRules): Item | null {
+export const MEAL_TITLE: Record<MealKind, string> = {
+  breakfast: 'Breakfast',
+  lunch: 'Lunch',
+  dinner: 'Dinner',
+};
+
+export function mealItem(date: LocalDate, kind: MealKind, rules: SolverRules): Item | null {
   const w = mealWindow(rules, kind);
   if (!w) return null;
   return {
     id: `meal:${date}:${kind}`,
     kind: 'meal',
     wishId: null,
-    title: kind === 'lunch' ? 'Lunch' : 'Dinner',
+    title: MEAL_TITLE[kind],
     point: null,
     location: null,
     durationMin: Math.round(w.durationSec / 60),
@@ -258,6 +268,7 @@ export function mealItem(date: LocalDate, kind: MealKind, rules: PaceRules): Ite
 }
 
 export function mealKindOf(stopId: string): MealKind | null {
+  if (stopId.endsWith(':breakfast')) return 'breakfast';
   if (stopId.endsWith(':lunch')) return 'lunch';
   if (stopId.endsWith(':dinner')) return 'dinner';
   return null;
@@ -283,7 +294,7 @@ export function itemFromStop(
   date: LocalDate,
   wishes: Map<string, Wish>,
   bookings: Booking[],
-  rules: PaceRules,
+  rules: SolverRules,
 ): Item {
   const startMin = stop.arriveMin + Math.round(stop.waitSec / 60);
   const durationMin = Math.max(0, stop.departMin - startMin);

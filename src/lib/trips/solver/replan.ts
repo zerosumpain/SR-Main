@@ -58,10 +58,16 @@ function frameFor(ctx: SolverContext, day: PlannedDay, stays: Stay[]): DayFrame 
 const isEndStay = (s: PlannedStop) =>
   (s.kind === 'stay' && s.id.endsWith(':end')) || (s.kind === 'transport' && s.id.endsWith(':depart'));
 
-/** How many stops open the day (stay start, check-out, or a landing + bag drop). */
+const isOpening = (s: PlannedStop) =>
+  s.kind === 'stay' || s.kind === 'transport' || (s.kind === 'meal' && s.id.endsWith(':breakfast'));
+
+/**
+ * How many stops open the day: stay start, breakfast at the stay and
+ * check-out, or a landing + bag drop.
+ */
 function leadingCount(body: PlannedStop[]): number {
   let n = 0;
-  while (n < body.length && (body[n].kind === 'stay' || body[n].kind === 'transport')) n++;
+  while (n < body.length && isOpening(body[n]) && !(body[n].kind === 'meal' && n === 0)) n++;
   return n;
 }
 
@@ -261,6 +267,9 @@ export function situation(input: ReplanInput): Situation {
     .filter((s) => !done.has(s.id) && s.kind !== 'stay' && s.kind !== 'transport');
   // v3: still before the first sight on an arrival day — rebuild the landing,
   // transfer and bag drop from the segment (a delay re-frames the day).
+  // Done stops at the end of the history that were planned to start after
+  // now were skipped, not visited: they leave the day.
+  while (h >= lead && h !== at && done.has(body[h].id) && body[h].arriveMin > input.nowMin) h--;
   const reframe = frame.arrival !== undefined && h < lead;
   const fresh = reframe ? freshStart(frame) : null;
   const prefix = (fresh ? fresh.prefixStops : body.slice(0, h + 1)).map((s) => ({
@@ -268,7 +277,7 @@ export function situation(input: ReplanInput): Situation {
     warnings: [...s.warnings],
   }));
   const last = prefix[prefix.length - 1];
-  const stillThere = last !== undefined && (at >= 0 || last.kind === 'stay');
+  const stillThere = last !== undefined && (at >= 0 || isOpening(last));
   // Still at a stop (or the stay): set off once the visit and its buffer are
   // over, or now if that has passed. Otherwise we are already on the move.
   const bufferMin = last?.kind === 'wish' ? Math.round(ctx.rules.bufferSec / 60) : 0;

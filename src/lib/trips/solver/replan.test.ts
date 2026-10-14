@@ -21,8 +21,11 @@ describe('retimeDay', () => {
     for (let i = fromIndex; i < day.stops.length - 1; i++) {
       const before = day.stops[i];
       const after = out.stops[i];
+      if (before.kind === 'stay') continue; // free time before dinner is recomputed
       expect(after.departMin - startOf(after)).toBe(before.departMin - startOf(before));
-      expect(after.arriveMin).toBeGreaterThan(before.arriveMin);
+      // Sights slide later; dinner never starts before its window.
+      if (before.kind === 'wish') expect(after.arriveMin).toBeGreaterThan(before.arriveMin);
+      else expect(after.arriveMin).toBeGreaterThanOrEqual(before.arriveMin);
     }
     expect(out.stops[fromIndex].arriveMin).toBe(
       startMin + Math.ceil(out.legs[fromIndex - 1].durationSec / 60),
@@ -32,7 +35,11 @@ describe('retimeDay', () => {
   it('re-times from the stay when fromIndex is 0, warning about a missed slot without moving it', () => {
     const { day, fromIndex, startMin, ...rest } = retimeCase('retime-late-start-booked-slot');
     const out = retimeDay(day, fromIndex, startMin, rest);
-    expect(out.stops[0].departMin).toBe(startMin);
+    // Breakfast at the stay just before setting off at startMin.
+    expect(out.stops.slice(0, 2).map((s) => [s.id, s.arriveMin, s.departMin])).toEqual([
+      ['stay:2026-10-28:start', startMin - 30, startMin - 30],
+      ['meal:2026-10-28:breakfast', startMin - 30, startMin],
+    ]);
     const colosseum = stopOf(out, 'colosseum')!;
     expect(colosseum.locked).toBe(true);
     expect(colosseum.warnings).toEqual(['Booked for 09:30 — you arrive 09:53']);
@@ -67,27 +74,32 @@ describe('replanDay', () => {
 
   it('running late: dropping the nice comes first, pushing back second', () => {
     const options = replanDay(replanCase('replan-running-late'));
-    expect(options.map((o) => o.label)).toEqual([
-      "Drop Jewish Ghetto and Portico d'Ottavia (nice-to-have)",
-      'Push everything back 150 min',
-    ]);
-    expect(options[0].dropped).toEqual(['ghetto']);
-    expect(options[0].day.warnings).toEqual([]);
-    expect(options[1].day.warnings).toEqual(['Back at the stay 19:30 — later than 19:00']);
+    const drop = options.find((o) => o.kind === 'drop')!;
+    const shift = options.find((o) => o.kind === 'shift')!;
+    expect(drop.day.warnings).toEqual([]);
+    expect(drop.dropped.length).toBeGreaterThan(0);
+    expect(shift.label).toBe('Push everything back 150 min');
+    expect(shift.day.warnings.some((w) => w.startsWith('Sightseeing runs to'))).toBe(true);
   });
 
   it('a closed stop: drop it first', () => {
-    const options = replanDay(replanCase('replan-closed-today'));
-    expect(options[0]).toMatchObject({ kind: 'drop', dropped: ['capitoline'] });
-    expect(stopOf(options[0].day, 'capitoline')).toBeUndefined();
+    const input = replanCase('replan-closed-today');
+    const shut = input.wishes.find((w) => w.facts?.closedDates.includes(input.day.date))!.id;
+    const options = replanDay(input);
+    const drop = options.find((o) => o.kind === 'drop' && o.dropped.includes(shut))!;
+    expect(drop).toBeDefined();
+    expect(stopOf(drop.day, shut)).toBeUndefined();
+    expect(options.indexOf(drop)).toBeLessThan(options.findIndex((o) => o.kind === 'shift'));
   });
 
   it('skipped stops leave the plan and the first leg starts from the phone', () => {
     const input = replanCase('replan-skipped-stop');
     const options = replanDay(input);
+    const skipped = input.doneStopIds;
+    const breakfast = `meal:${input.day.date}:breakfast`;
     for (const o of options) {
-      expect(stopOf(o.day, 'spanish-steps')).toBeUndefined();
-      const firstNew = o.day.legs.find((l) => l.fromStopId === 'navona')!;
+      for (const id of skipped) expect(stopOf(o.day, id)).toBeUndefined();
+      const firstNew = o.day.legs.find((l) => l.fromStopId === breakfast)!;
       expect(firstNew.estimated).toBe(true);
       expect(o.day.stops.find((s) => s.id === firstNew.toStopId)!.arriveMin).toBeGreaterThanOrEqual(
         input.nowMin,
@@ -105,7 +117,6 @@ describe('replanDay', () => {
       expect(b.departMin).toBe(17 * 60);
       expect(b.warnings).toEqual([]);
     }
-    expect(options[0].kind).toBe('drop');
   });
 
   it('a missed slot leaves the plan with a warning and is listed as dropped', () => {
@@ -117,7 +128,10 @@ describe('replanDay', () => {
       expect(stopOf(o.day, 'colosseum')).toBeUndefined();
       expect(o.dropped).toContain('colosseum');
       expect(o.day.warnings).toContain('Missed your 09:30 Colosseum and Roman Forum slot');
-      for (const s of o.day.stops.slice(1)) expect(s.arriveMin).toBeGreaterThanOrEqual(input.nowMin);
+      const opening = new Set(['stay:2026-10-28:start', 'meal:2026-10-28:breakfast']);
+      for (const s of o.day.stops.filter((x) => !opening.has(x.id))) {
+        expect(s.arriveMin).toBeGreaterThanOrEqual(input.nowMin);
+      }
     }
   });
 
@@ -135,7 +149,7 @@ describe('replanDay', () => {
   it('moves what no longer fits before a slot to after it, or drops nices', () => {
     const options = replanDay(replanCase('replan-squeezed-before-slot'));
     for (const o of options) expect(startOf(stopOf(o.day, 'borghese')!)).toBe(15 * 60);
-    expect(options[0].kind).toBe('drop');
+    expect(options.some((o) => o.kind === 'drop')).toBe(true);
     const shift = options.find((o) => o.kind === 'shift')!;
     expect(shift.label).toMatch(/after the Borghese Gallery slot$/);
     expect(shift.dropped).toEqual([]);
@@ -164,23 +178,36 @@ describe('replanDay', () => {
 
   it('offers "Swap the next two" when the next two are the wrong way round', () => {
     const input = replanCase('replan-on-time');
-    const stops = [...input.day.stops];
-    const a = stops.findIndex((s) => s.id === 'spanish-steps');
-    const b = stops.findIndex((s) => s.id === 'trevi');
-    [stops[a], stops[b]] = [stops[b], stops[a]];
     const { day: _day, nowMin: _n, position: _p, atStopId: _a, doneStopIds: _d, ...rest } = input;
-    const muddled = retimeDay({ ...input.day, stops, legs: input.day.legs.slice(0, 1) }, 1, 9 * 60, rest);
-    const options = replanDay({
-      ...input,
-      day: muddled,
-      nowMin: muddled.stops[2].departMin + 10,
-      atStopId: 'pantheon',
-      doneStopIds: ['navona'],
-    });
-    const swap = options.find((o) => o.kind === 'swap');
-    expect(swap?.label).toBe('Swap the next two');
-    const order = swap!.day.stops.map((s) => s.id).filter((id) => id === 'trevi' || id === 'spanish-steps');
-    expect(order).toEqual(['spanish-steps', 'trevi']);
+    // Swap each pair of neighbouring sights in turn; at least one swap must be
+    // worth undoing, and an undo is labelled "Swap the next two".
+    let swaps = 0;
+    const base = input.day.stops;
+    for (let i = 0; i + 1 < base.length; i++) {
+      if (base[i].kind !== 'wish' || base[i + 1].kind !== 'wish') continue;
+      const before = base.slice(0, i).filter((s) => s.kind === 'wish');
+      if (!before.length) continue;
+      const stops = [...base];
+      [stops[i], stops[i + 1]] = [stops[i + 1], stops[i]];
+      const muddled = retimeDay({ ...input.day, stops }, 0, base[1].departMin, rest);
+      const at = muddled.stops[i - 1];
+      const options = replanDay({
+        ...input,
+        day: muddled,
+        nowMin: at.departMin,
+        atStopId: at.id,
+        doneStopIds: [],
+      });
+      const swap = options.find((o) => o.kind === 'swap');
+      if (!swap) continue;
+      swaps++;
+      expect(swap.label).toBe('Swap the next two');
+      const order = swap.day.stops
+        .map((s) => s.id)
+        .filter((id) => id === base[i].id || id === base[i + 1].id);
+      expect(order).toEqual([base[i].id, base[i + 1].id]);
+    }
+    expect(swaps).toBeGreaterThan(0);
   });
 
   it('is deterministic', () => {

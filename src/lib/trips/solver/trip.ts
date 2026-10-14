@@ -271,8 +271,9 @@ export function replanTrip(input: TripReplanInput): TripReplanOption[] {
     });
   }
 
-  // 2. Resolve the rest of the trip from now.
-  {
+  // 2. Resolve the rest of the trip from now (not when they have just reached
+  // a later stop out of order — pull-forward covers that).
+  if (input.observation?.kind !== 'out-of-order') {
     const gone = new Set<string>([
       ...earlier,
       ...input.doneStopIds,

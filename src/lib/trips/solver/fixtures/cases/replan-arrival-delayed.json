@@ -1994,7 +1994,8 @@
           "waitSec": 0,
           "locked": false,
           "bookingId": null,
-          "warnings": []
+          "warnings": [],
+          "stage": "morning"
         },
         {
           "id": "stay:2026-10-27:bags",
@@ -2010,7 +2011,8 @@
           "waitSec": 0,
           "locked": false,
           "bookingId": null,
-          "warnings": ["Check-in from 15:00 — any time this evening"]
+          "warnings": ["Check-in from 15:00 — any time this evening"],
+          "stage": "morning"
         },
         {
           "id": "meal:2026-10-27:lunch",
@@ -2026,23 +2028,8 @@
           "waitSec": 0,
           "locked": false,
           "bookingId": null,
-          "warnings": []
-        },
-        {
-          "id": "spanish-steps",
-          "kind": "wish",
-          "wishId": "spanish-steps",
-          "title": "Spanish Steps",
-          "location": {
-            "lat": 41.9058,
-            "lng": 12.4823
-          },
-          "arriveMin": 864,
-          "departMin": 894,
-          "waitSec": 0,
-          "locked": false,
-          "bookingId": null,
-          "warnings": []
+          "warnings": [],
+          "stage": "lunch"
         },
         {
           "id": "pantheon",
@@ -2053,12 +2040,47 @@
             "lat": 41.8986,
             "lng": 12.4769
           },
-          "arriveMin": 919,
-          "departMin": 964,
+          "arriveMin": 850,
+          "departMin": 895,
           "waitSec": 0,
           "locked": false,
           "bookingId": null,
-          "warnings": []
+          "warnings": [],
+          "stage": "afternoon"
+        },
+        {
+          "id": "trastevere",
+          "kind": "wish",
+          "wishId": "trastevere",
+          "title": "Trastevere in the evening",
+          "location": {
+            "lat": 41.8894,
+            "lng": 12.47
+          },
+          "arriveMin": 925,
+          "departMin": 1110,
+          "waitSec": 5700,
+          "locked": false,
+          "bookingId": null,
+          "warnings": [],
+          "stage": "afternoon"
+        },
+        {
+          "id": "meal:2026-10-27:dinner",
+          "kind": "meal",
+          "wishId": null,
+          "title": "Dinner",
+          "location": {
+            "lat": 41.8894,
+            "lng": 12.47
+          },
+          "arriveMin": 1120,
+          "departMin": 1215,
+          "waitSec": 1200,
+          "locked": false,
+          "bookingId": null,
+          "warnings": [],
+          "stage": "evening"
         },
         {
           "id": "stay:2026-10-27:end",
@@ -2069,12 +2091,13 @@
             "lat": 41.8952,
             "lng": 12.4716
           },
-          "arriveMin": 984,
-          "departMin": 984,
+          "arriveMin": 1226,
+          "departMin": 1226,
           "waitSec": 0,
           "locked": false,
           "bookingId": null,
-          "warnings": []
+          "warnings": [],
+          "stage": "evening"
         }
       ],
       "legs": [
@@ -2098,28 +2121,37 @@
         },
         {
           "fromStopId": "meal:2026-10-27:lunch",
-          "toStopId": "spanish-steps",
-          "mode": "walk",
-          "durationSec": 1438,
-          "distanceM": 1917,
-          "estimated": true,
-          "line": null
-        },
-        {
-          "fromStopId": "spanish-steps",
           "toStopId": "pantheon",
           "mode": "walk",
-          "durationSec": 894,
-          "distanceM": 1192,
+          "durationSec": 565,
+          "distanceM": 753,
           "estimated": true,
           "line": null
         },
         {
           "fromStopId": "pantheon",
+          "toStopId": "trastevere",
+          "mode": "walk",
+          "durationSec": 1142,
+          "distanceM": 1523,
+          "estimated": true,
+          "line": null
+        },
+        {
+          "fromStopId": "trastevere",
+          "toStopId": "meal:2026-10-27:dinner",
+          "mode": "walk",
+          "durationSec": 0,
+          "distanceM": 0,
+          "estimated": false,
+          "line": null
+        },
+        {
+          "fromStopId": "meal:2026-10-27:dinner",
           "toStopId": "stay:2026-10-27:end",
           "mode": "walk",
-          "durationSec": 565,
-          "distanceM": 753,
+          "durationSec": 642,
+          "distanceM": 856,
           "estimated": true,
           "line": null
         }
@@ -2154,7 +2186,8 @@
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "afternoon"
           },
           {
             "id": "stay:2026-10-27:bags",
@@ -2170,23 +2203,8 @@
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": ["Check-in from 15:00 — any time this evening"]
-          },
-          {
-            "id": "spanish-steps",
-            "kind": "wish",
-            "wishId": "spanish-steps",
-            "title": "Spanish Steps",
-            "location": {
-              "lat": 41.9058,
-              "lng": 12.4823
-            },
-            "arriveMin": 924,
-            "departMin": 954,
-            "waitSec": 0,
-            "locked": false,
-            "bookingId": null,
-            "warnings": []
+            "warnings": ["Check-in from 15:00 — any time this evening"],
+            "stage": "afternoon"
           },
           {
             "id": "pantheon",
@@ -2197,12 +2215,47 @@
               "lat": 41.8986,
               "lng": 12.4769
             },
-            "arriveMin": 979,
-            "departMin": 1024,
+            "arriveMin": 910,
+            "departMin": 955,
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "afternoon"
+          },
+          {
+            "id": "trastevere",
+            "kind": "wish",
+            "wishId": "trastevere",
+            "title": "Trastevere in the evening",
+            "location": {
+              "lat": 41.8894,
+              "lng": 12.47
+            },
+            "arriveMin": 985,
+            "departMin": 1110,
+            "waitSec": 2100,
+            "locked": false,
+            "bookingId": null,
+            "warnings": [],
+            "stage": "afternoon"
+          },
+          {
+            "id": "meal:2026-10-27:dinner",
+            "kind": "meal",
+            "wishId": null,
+            "title": "Dinner",
+            "location": {
+              "lat": 41.8894,
+              "lng": 12.47
+            },
+            "arriveMin": 1120,
+            "departMin": 1215,
+            "waitSec": 1200,
+            "locked": false,
+            "bookingId": null,
+            "warnings": [],
+            "stage": "evening"
           },
           {
             "id": "stay:2026-10-27:end",
@@ -2213,12 +2266,13 @@
               "lat": 41.8952,
               "lng": 12.4716
             },
-            "arriveMin": 1044,
-            "departMin": 1044,
+            "arriveMin": 1226,
+            "departMin": 1226,
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "evening"
           }
         ],
         "legs": [
@@ -2233,28 +2287,37 @@
           },
           {
             "fromStopId": "stay:2026-10-27:bags",
-            "toStopId": "spanish-steps",
-            "mode": "walk",
-            "durationSec": 1438,
-            "distanceM": 1917,
-            "estimated": true,
-            "line": null
-          },
-          {
-            "fromStopId": "spanish-steps",
             "toStopId": "pantheon",
             "mode": "walk",
-            "durationSec": 894,
-            "distanceM": 1192,
+            "durationSec": 565,
+            "distanceM": 753,
             "estimated": true,
             "line": null
           },
           {
             "fromStopId": "pantheon",
+            "toStopId": "trastevere",
+            "mode": "walk",
+            "durationSec": 1142,
+            "distanceM": 1523,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "trastevere",
+            "toStopId": "meal:2026-10-27:dinner",
+            "mode": "walk",
+            "durationSec": 0,
+            "distanceM": 0,
+            "estimated": false,
+            "line": null
+          },
+          {
+            "fromStopId": "meal:2026-10-27:dinner",
             "toStopId": "stay:2026-10-27:end",
             "mode": "walk",
-            "durationSec": 565,
-            "distanceM": 753,
+            "durationSec": 642,
+            "distanceM": 856,
             "estimated": true,
             "line": null
           }
@@ -2264,7 +2327,7 @@
         ]
       },
       "dropped": [],
-      "endsLaterMin": 60
+      "endsLaterMin": 0
     }
   ]
 }
