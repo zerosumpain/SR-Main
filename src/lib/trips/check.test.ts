@@ -24,6 +24,14 @@ describe('check', () => {
     expect(diffText(turnDiff(before, before))).toBe('The schedule did not change.');
   });
 
+  it('names wishes that moved to another day, with their ids, so the check can pin them back', () => {
+    const before = { days: [day('2026-10-27', [s('lunch', 'meal', 750, 810)]), day('2026-10-29', [s('stpeters', 'wish', 600, 675)])], dropped: [], warnings: [], score: 0 };
+    const after = { days: [day('2026-10-27', [s('lunch', 'meal', 750, 810), s('stpeters', 'wish', 900, 975)]), day('2026-10-29', [s('long-lunch', 'wish', 750, 870)])], dropped: [], warnings: [], score: 0 };
+    const diff = turnDiff(before, after, { stpeters: "St Peter's Basilica" });
+    expect(diff.moved).toEqual([{ wishId: 'stpeters', title: "St Peter's Basilica", from: '2026-10-29', to: '2026-10-27' }]);
+    expect(diffText(diff)).toContain("Moved to another day: St Peter's Basilica [stpeters] Thu 29 Oct (2026-10-29) → Tue 27 Oct (2026-10-27)");
+  });
+
   it('reads the verdict: ops make it a correction', () => {
     expect(readCheck({ ok: true, reply: ' Fine. ', ops: [] })).toEqual({ ok: true, reply: 'Fine.', ops: [] });
     expect(readCheck({ ok: true, reply: 'x', ops: [{ op: 'research' }] }).ok).toBe(false);

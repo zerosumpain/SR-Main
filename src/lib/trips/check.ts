@@ -30,6 +30,8 @@ export interface DayChange {
 
 export interface TurnDiff {
   days: DayChange[];
+  /** Wishes now planned on a different day than before — often a side effect the person did not ask for. */
+  moved: Array<{ wishId: string; title: string; from: string; to: string }>;
   newlyDropped: Array<{ title: string; reason: string }>;
   noLongerDropped: string[];
 }
@@ -70,8 +72,21 @@ export function turnDiff(before: SolvedPlan | null, after: SolvedPlan, titles: R
   const was = new Set((before?.dropped ?? []).map((d) => d.wishId));
   const now = new Set(after.dropped.map((d) => d.wishId));
   const name = (id: string) => titles[id] ?? id;
+  const dayOf = (plan: SolvedPlan | null) => {
+    const m = new Map<string, { date: string; title: string }>();
+    for (const d of plan?.days ?? []) for (const st of d.stops) if (st.wishId) m.set(st.wishId, { date: d.date, title: st.title });
+    return m;
+  };
+  const was2 = dayOf(before);
+  const moved: TurnDiff['moved'] = [];
+  for (const [wishId, a] of dayOf(after)) {
+    const b = was2.get(wishId);
+    if (b && b.date !== a.date) moved.push({ wishId, title: titles[wishId] ?? a.title, from: b.date, to: a.date });
+  }
+  moved.sort((x, y) => (x.title < y.title ? -1 : x.title > y.title ? 1 : 0));
   return {
     days,
+    moved,
     newlyDropped: after.dropped.filter((d) => !was.has(d.wishId)).map((d) => ({ title: name(d.wishId), reason: d.reason })),
     noLongerDropped: [...was].filter((id) => !now.has(id)).map(name),
   };
@@ -82,7 +97,7 @@ const hm = (m: number) => `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0
 
 /** The diff as a few lines the model reads. */
 export function diffText(diff: TurnDiff): string {
-  if (!diff.days.length && !diff.newlyDropped.length && !diff.noLongerDropped.length) return 'The schedule did not change.';
+  if (!diff.days.length && !diff.newlyDropped.length && !diff.noLongerDropped.length && !diff.moved.length) return 'The schedule did not change.';
   const lines = diff.days.map((d) => {
     const b = d.before;
     const a = d.after;
@@ -93,6 +108,9 @@ export function diffText(diff: TurnDiff): string {
     if (d.removed.length) parts.push(`removed ${d.removed.join(', ')}`);
     return parts.join('; ');
   });
+  if (diff.moved.length) {
+    lines.push(`Moved to another day: ${diff.moved.map((m) => `${m.title} [${m.wishId}] ${dayLabel(m.from)} (${m.from}) → ${dayLabel(m.to)} (${m.to})`).join('; ')}`);
+  }
   if (diff.newlyDropped.length) lines.push(`Newly not planned: ${diff.newlyDropped.map((d) => `${d.title} (${d.reason})`).join('; ')}`);
   if (diff.noLongerDropped.length) lines.push(`Planned again: ${diff.noLongerDropped.join(', ')}`);
   return lines.join('\n');
@@ -100,7 +118,7 @@ export function diffText(diff: TurnDiff): string {
 
 export const CHECK_SYSTEM = `You are the trip planner checking your own work. You changed a trip through operations and the solver re-planned it. You are given what the person asked, what you told them, the operations that were applied, and how the schedule actually changed (per day: active time, end time, stops added and removed; wishes newly not planned).
 
-Decide whether the result really does what they asked ("lighter" means less active time or an earlier end; "add X on Thursday" means X is on Thursday's list; and so on).
+Decide whether the result really does what they asked ("lighter" means less active time or an earlier end; "add X on Thursday" means X is on Thursday's list; and so on), and whether it did anything they did NOT ask for. In particular, a wish "moved to another day" that the request was not about is a side effect: pin it back to its old day with {"op":"updateWish","id","fields":{"fixedDate":"<old date>"}} if it still fits, or say plainly in the reply that it moved and why.
 - If it does: {"ok": true, "reply": your reply to the person (you may tighten the first one so it matches what actually happened), "ops": []}.
 - If it does not and another change would fix it: {"ok": false, "reply": a reply describing what you are now doing, "ops": [one round of corrective ops, same format as before]}. You get ONE round; no further check follows.
 - If it cannot be met (a booked slot, opening hours, too little time): {"ok": false, "reply": say plainly what could not be done and why, and offer an alternative, "ops": []}.
